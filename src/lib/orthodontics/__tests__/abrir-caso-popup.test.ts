@@ -30,8 +30,8 @@ test("es una VENTANA centrada, no un cajón pegado a la derecha", () => {
   assert.doesNotMatch(CAJON, /<aside/);
   assert.doesNotMatch(CAJON, /orto\.cajon\b|orto\.cajonAncho|cajonPieReparto/, "ya no usa las clases del cajón lateral");
   // Sigue cerrando con el velo y con Escape (el mismo hook de foco de los demás cajones), y el foco entra al diálogo.
-  assert.match(CAJON, /<div className=\{orto\.velo\} onClick=\{props\.onClose\} aria-hidden \/>/);
-  assert.match(CAJON, /useCajon<HTMLDivElement>\(props\.onClose\)/);
+  assert.match(CAJON, /<div className=\{orto\.velo\} onClick=\{\(\) => cerrarRef\.current\(\)\} aria-hidden \/>/);
+  assert.match(CAJON, /useCajon<HTMLDivElement>\(\(\) => cerrarRef\.current\(\)\)/);
   assert.match(CAJON, /tabIndex=\{-1\}/);
   // Centrada: el marco reparte al centro y solo la ventana recibe clics (el resto cae en el velo).
   assert.match(CSS, /\.marco \{[^}]*align-items: center;[^}]*justify-content: center;[^}]*pointer-events: none;/);
@@ -121,10 +121,50 @@ test("el paso 1 monta el PasoDiagnostico de ws1-t8 (el mismo de «Editar diagnó
   // Se valida ANTES de pasar al plan y el error lleva a la sección donde está.
   assert.match(CAJON, /const dxListo = diagnosticoParaEnviar\(\);\s*if \(dxListo\.ok === false\) \{[\s\S]*?setSeccionDx\(dxListo\.seccion\);/);
   // Editar: los dos pasos se abren, el de Diagnóstico guarda con updateDiagnosis y la ventana la abre «Editar» del resumen.
-  assert.match(CAJON, /await updateDiagnosis\(\{ diagnosisId: props\.existingDiagnosisId, \.\.\.r\.peticion \}\)/);
+  assert.match(CAJON, /await updateDiagnosis\(\{ diagnosisId: props\.existingDiagnosisId, \.\.\.peticionDx \}\)/);
   assert.match(CAJON, /useDiagnosticoCompleto\(editarDx \? props\.existingDiagnosisId : null\)/);
   const cliente = sinComentarios(leer(`${REDISENO}/OrthodonticsRedesignClient.tsx`));
   assert.match(cliente, /pasoInicial=\{drawer\?\.kind === "edit-diagnosis" \? "diagnostico" : "plan"\}/);
+});
+
+test("editar: UN solo «Guardar cambios» guarda los dos pasos JUNTOS (nada se pierde al saltar de paso) y cerrar con cambios pregunta", () => {
+  const g = CAJON.slice(CAJON.indexOf("const guardarCambios = async"), CAJON.indexOf("const submit = async"));
+  assert.ok(g.length > 200);
+  // Se valida todo ANTES de escribir; con el plan de por medio, el diagnóstico VA con el plan (una transacción en el servidor).
+  const validaDx = g.indexOf('peticionDelDiagnostico(dx, "editar")');
+  const validaPlan = g.indexOf("!canSubmit");
+  const conPlan = g.indexOf("await enviarPlanEditado(peticionDx)");
+  const soloDx = g.indexOf("await updateDiagnosis(");
+  assert.ok(validaDx > 0 && validaPlan > validaDx && conPlan > validaPlan && soloDx > conPlan);
+  assert.match(g, /const quierePlan = paso === "plan" \|\| planTocado;/);
+  assert.match(CAJON, /const dxTocado = editarDx && dxInicial !== null && JSON\.stringify\(dx\) !== dxInicial;/);
+  assert.match(CAJON, /diagnostico: peticionDx && props\.existingDiagnosisId \? \{ diagnosisId: props\.existingDiagnosisId, peticion: peticionDx \} : null/);
+  // Los dos pasos guardan por la misma función.
+  assert.match(CAJON, /if \(editarDx\) \{\s*await guardarCambios\(\);\s*return;\s*\}/);
+  assert.match(CAJON, /Hay cambios sin guardar\. ¿Cerrar sin guardar\?/);
+  assert.match(CAJON, /"Guardar cambios"/);
+  // Quien recibe el envío usa la acción única cuando viene el diagnóstico.
+  const tab = sinComentarios(leer(`${REDISENO}/OrthodonticsPatientTab.tsx`));
+  assert.match(tab, /if \(p\.diagnostico\) \{[\s\S]*?await guardarDiagnosticoYPlan\(\{ \.\.\.datosDelPlan, diagnosisId: p\.diagnostico\.diagnosisId, diagnostico: p\.diagnostico\.peticion \}\)/);
+});
+
+test("guardarDiagnosticoYPlan: valida los dos sin escribir, escribe en UNA transacción y deja cada movimiento", () => {
+  const a = sinComentarios(leer("app/actions/orthodontics/guardarDiagnosticoYPlan.ts"));
+  assert.match(a, /^"use server";/m);
+  assert.match(a, /getOrthoActionContext\(\)/, "permiso de escritura y clínica de la sesión");
+  const prepPlan = a.indexOf("prepararGuardadoDelPlan(ctx, o)");
+  const prepDx = a.indexOf("prepararGuardadoDelDiagnostico(ctx,");
+  const escribe = a.indexOf("aplicarPlanDetalle({");
+  assert.ok(prepPlan > 0 && prepDx > prepPlan && escribe > prepDx, "primero se valida todo, después se escribe");
+  assert.match(a, /diagnosisId !== caso\.diagnosisId\) return fail\("Diagnóstico no encontrado"\)/, "el diagnóstico tiene que ser el del caso");
+  assert.match(a, /dxPrep\.preparado\.patientId !== caso\.patientId/);
+  assert.match(a, /enLaTransaccion: dx\s*\?\s*async \(tx\) => \{\s*resultadoDx = await ejecutarGuardadoDelDiagnostico\(dx, tx\);/);
+  // El movimiento del diagnóstico se registra DESPUÉS de confirmar la transacción.
+  assert.ok(a.indexOf("await movimientoDelDiagnostico(guardadoDx)") > escribe);
+  const lib = sinComentarios(leer("lib/orthodontics/plan-detalle-guardar.ts"));
+  assert.match(lib, /if \(args\.enLaTransaccion\) await args\.enLaTransaccion\(tx\);/);
+  // «Editar plan» solo y el guardado único validan con la MISMA función.
+  assert.match(sinComentarios(leer("app/actions/orthodontics/guardarPlanDeTratamiento.ts")), /prepararGuardadoDelPlan\(ctx, input\)/);
 });
 
 test("al abrir el caso, el diagnóstico completo se guarda enseguida con el mismo servidor de «Editar diagnóstico»; si falla, el caso sigue abierto y se dice", () => {

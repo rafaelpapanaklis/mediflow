@@ -41,7 +41,6 @@ import {
   ANGLE_OPCIONES,
   FASE_OPCIONES,
   PATRON_OPCIONES,
-  RESUMEN_MINIMO,
   SECCIONES_DEL_PASO,
   avanceDelPaso,
   leerNumero,
@@ -684,12 +683,11 @@ function Registros({
 
 function Resumen({ f, set, modo }: { f: FormularioDelDiagnostico; set: Set; modo: "abrir" | "editar" }) {
   const n = f.clinicalSummary.trim().length;
-  const falta = n > 0 ? n < RESUMEN_MINIMO : modo === "editar";
   return (
     <section className={dx.dxGrupo}>
       <Campo
         etiqueta="Resumen diagnóstico"
-        pista={<span className={`${dx.dxContador} ${falta ? dx.dxContadorFalta : ""}`}>{n < RESUMEN_MINIMO ? `${n}/${RESUMEN_MINIMO} mínimo` : `${n} caracteres`}</span>}
+        pista={<span className={dx.dxContador}>{n === 1 ? "1 carácter" : `${n} caracteres`}</span>}
         ancho
       >
         <textarea
@@ -700,7 +698,7 @@ function Resumen({ f, set, modo }: { f: FormularioDelDiagnostico; set: Set; modo
           onChange={(e) => set({ clinicalSummary: e.target.value })}
         />
       </Campo>
-      {modo === "abrir" ? <p className={dx.dxContenidoSub}>Puede quedar para después: el caso se abre sin él.</p> : null}
+      <p className={dx.dxContenidoSub}>Opcional{modo === "abrir" ? ": el caso se abre sin él" : ""}. Sin mínimo de caracteres.</p>
     </section>
   );
 }

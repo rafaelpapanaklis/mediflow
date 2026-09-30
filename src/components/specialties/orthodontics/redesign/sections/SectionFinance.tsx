@@ -524,6 +524,7 @@ export function SectionFinance(props: SectionFinanceProps) {
           reposicionesRestantes={Math.max(0, panel.billingDelCaso.includedReplacementsTotal - panel.billingDelCaso.includedReplacementsUsed)}
           borradorBase={panel.borradorInicial}
           catalogo={panel.catalogoDeExtras}
+          procedimientosFaltantes={panel.procedimientosFaltantes}
           rediseno={panel.redisenoFacturas}
           clinicTaxMode={panel.clinicTaxMode}
           onClose={() => setDrawer(null)}

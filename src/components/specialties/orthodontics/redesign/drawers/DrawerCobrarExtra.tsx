@@ -12,10 +12,12 @@
 // liga la factura al caso y, si se marcó como incluida, descuenta el cupo.
 
 import { useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { borradorDeExtra, type ConceptoDeExtra } from "@/lib/orthodontics/cobro/borrador-factura";
+import { avisoDeProcedimientoFaltante } from "@/lib/orthodontics/plan-detalle";
 import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import { registrarExtraCobrado } from "@/app/actions/orthodontics/cobro/registrarExtraCobrado";
 import { useCajon } from "../atoms/useCajon";
@@ -29,6 +31,8 @@ export interface DrawerCobrarExtraProps {
   /** H7: el editor de factura arranca con concepto, precio y doctor (como «Abrir plan de pago»). */
   borradorBase?: BorradorDeFactura | null;
   catalogo?: ConceptoDeExtra[];
+  /** ws1-t12: lo que el plan eligió y el catálogo no tiene: se dice, con enlace para agregarlo. */
+  procedimientosFaltantes?: string[];
   rediseno?: boolean;
   clinicTaxMode?: string | null;
   onClose: () => void;
@@ -97,6 +101,16 @@ export function DrawerCobrarExtra(props: DrawerCobrarExtraProps) {
           <div className="rounded-[10px] border border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta-2)] p-3 text-xs text-[color:var(--pr-texto-2)]">
             Reposiciones incluidas en el plan que quedan: <strong className="tabular-nums">{props.reposicionesRestantes}</strong>
           </div>
+
+          {(props.procedimientosFaltantes ?? []).map((item) => (
+            <p key={item} className="flex items-start gap-2 rounded-[10px] border border-[color:var(--pr-borde)] bg-[color:var(--pr-tarjeta-2)] p-3 text-xs text-[color:var(--pr-texto-2)]" role="status">
+              <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0 text-[color:var(--pr-alerta)]" aria-hidden />
+              <span>
+                {avisoDeProcedimientoFaltante(item)}{" "}
+                <Link href="/dashboard/procedures" target="_blank" className="underline">Abrir Procedimientos</Link>
+              </span>
+            </p>
+          ))}
 
           {catalogo.length > 0 ? (
             <label className="block text-[13px] text-[color:var(--pr-texto-2)]">

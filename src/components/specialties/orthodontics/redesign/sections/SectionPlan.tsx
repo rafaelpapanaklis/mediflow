@@ -100,18 +100,11 @@ function PrescriptionBlock({
         ) : null}
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <PrescriptionTile
-          label="Tipo"
-          value={treatment.appliance.type ?? "—"}
-          accent
-        />
+        {/* Solo lo que tiene dato: nada de «Cementado —» ni «Notas —». */}
+        {treatment.appliance.type ? <PrescriptionTile label="Tipo" value={treatment.appliance.type} accent /> : null}
         <PrescriptionTile label="Prescripción / slot" value={slot} mono />
-        <PrescriptionTile label="Cementado" value={bonding} />
-        <PrescriptionTile
-          label="Notas"
-          value={treatment.appliance.notes ?? "—"}
-          subtle
-        />
+        {treatment.appliance.bonding ? <PrescriptionTile label="Cementado" value={bonding} /> : null}
+        {treatment.appliance.notes ? <PrescriptionTile label="Notas" value={treatment.appliance.notes} subtle /> : null}
       </div>
     </div>
   );

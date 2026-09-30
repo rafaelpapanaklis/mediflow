@@ -9,6 +9,7 @@
 // (con «Cobrar» si hay permiso de cobro) o facturado.
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { Banknote, Plus, X } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/app/actions/orthodontics/procedimientosDeHoja";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { CANTIDAD_MAXIMA } from "@/lib/orthodontics/procedimientos-de-visita";
+import { avisoDeProcedimientoFaltante } from "@/lib/orthodontics/plan-detalle";
 import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
 import orto from "../orto.module.css";
@@ -54,6 +56,7 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
   const [lineas, setLineas] = useState<LineaParaVista[]>([]);
   const [puedeCobrar, setPuedeCobrar] = useState(false);
   const [pendientes, setPendientes] = useState<number[]>([]);
+  const [faltantes, setFaltantes] = useState<string[]>([]);
   const [cargado, setCargado] = useState(false);
   const [error, setError] = useState(false);
   const [cobrando, setCobrando] = useState<string | null>(null);
@@ -71,6 +74,7 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
       setLineas(res.data.lineas);
       setPuedeCobrar(res.data.puedeCobrar);
       setPendientes(res.data.extraccionesPendientes ?? []);
+      setFaltantes(res.data.procedimientosFaltantes ?? []);
       setCargado(true);
       // La primera vez, lo elegido parte de lo que la hoja ya tenía guardado.
       if (!soloLectura && seleccion === undefined) {
@@ -251,6 +255,12 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
               })}
             </div>
           )}
+          {faltantes.map((item) => (
+            <p key={item} className="text-[12px] text-[color:var(--pr-texto-3)]" role="status">
+              {avisoDeProcedimientoFaltante(item)}{" "}
+              <Link href="/dashboard/procedures" target="_blank" className="underline">Abrir Procedimientos</Link>
+            </p>
+          ))}
           {disponibles.length > 0 ? (
             <label className="flex items-center gap-2 text-[12.5px]">
               <Plus size={14} strokeWidth={1.75} aria-hidden />

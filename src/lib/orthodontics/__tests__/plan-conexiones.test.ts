@@ -115,13 +115,17 @@ test("el SQL es aditivo, plano e idempotente: sin DO, sin DROP de tablas ni colu
 });
 
 test("las acciones nuevas: «use server» solo exporta funciones async, la clínica sale de la sesión y el permiso va primero", () => {
-  for (const f of ["guardarPlanDeTratamiento.ts", "guardarOpcionesDelPlan.ts", "cargarOpcionesDelPlan.ts", "cobro/cambiarCostoDelCaso.ts"]) {
+  for (const f of ["guardarPlanDeTratamiento.ts", "guardarDiagnosticoYPlan.ts", "guardarOpcionesDelPlan.ts", "cargarOpcionesDelPlan.ts", "cobro/cambiarCostoDelCaso.ts"]) {
     const a = sinComentarios(leer(`app/actions/orthodontics/${f}`));
     assert.match(a, /^"use server";/m, f);
     assert.deepEqual([...a.matchAll(/^export (?!async function)(\w+ ?\w*)/gm)].map((m) => m[1]).filter((x) => !/^type\b|^interface\b/.test(x)), [], f);
     assert.doesNotMatch(a, /clinicId: (input|args|o)\b|input\??\.clinicId|args\??\.clinicId/, `${f}: la clínica no viene del cliente`);
   }
-  assert.ok(leer("app/actions/orthodontics/guardarPlanDeTratamiento.ts").indexOf("getOrthoActionContext()") < leer("app/actions/orthodontics/guardarPlanDeTratamiento.ts").indexOf("prisma."));
+  // El permiso va antes de tocar nada (la validación y el caso los lee `prepararGuardadoDelPlan`, ya con la sesión).
+  for (const f of ["guardarPlanDeTratamiento.ts", "guardarDiagnosticoYPlan.ts"]) {
+    const t = leer(`app/actions/orthodontics/${f}`);
+    assert.ok(t.indexOf("getOrthoActionContext()") > 0 && t.indexOf("getOrthoActionContext()") < t.indexOf("prepararGuardadoDelPlan("), f);
+  }
   assert.ok(leer("app/actions/orthodontics/cobro/cambiarCostoDelCaso.ts").indexOf('getOrthoBillingActionContext("billing.edit")') < leer("app/actions/orthodontics/cobro/cambiarCostoDelCaso.ts").indexOf("prisma."));
   // Configuración de la clínica: permiso de ajustes, no clínico.
   assert.match(leer("app/actions/orthodontics/guardarOpcionesDelPlan.ts"), /getOrthoConfigActionContext\(\)/);
@@ -157,4 +161,24 @@ test("nadie del módulo abre «Abrir caso» ni «Editar plan» por otra ventana:
   const cliente = sinComentarios(leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx"));
   assert.match(cliente, /<DrawerNewCase\s+modo="editar"/);
   assert.match(cliente, /vista=\{props\.planDeTratamiento\}/);
+});
+
+test("segunda pasada (t9): «Cobrar extra» y la hoja avisan del procedimiento que falta; nada de filas vacías; un solo movimiento al guardar el plan", () => {
+  const panel = sinComentarios(leer("app/actions/orthodontics/cobro/cargarPanelDeCobro.ts"));
+  assert.match(panel, /procedimientosFaltantes = procedimientosQueFaltanEnElCatalogo\(planDetalle, filasCatalogo\.filter\(\(f\) => f\.isActive\)\)/);
+  assert.match(sinComentarios(leer("app/actions/orthodontics/procedimientosDeHoja.ts")), /procedimientosFaltantes: procedimientosQueFaltanEnElCatalogo\(planDetalle, catalogo\)/);
+  const cobrar = sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerCobrarExtra.tsx"));
+  assert.match(cobrar, /avisoDeProcedimientoFaltante\(item\)/);
+  assert.match(cobrar, /href="\/dashboard\/procedures"/);
+  // Tubos/bandas/cementación y aparatología: solo filas con dato.
+  const plan = sinComentarios(leer("components/specialties/orthodontics/redesign/sections/SectionPlanDeTratamiento.tsx"));
+  assert.match(plan, /\{d\.bandasSuperiores \|\| d\.bandasInferiores \? \(/);
+  assert.match(plan, /\{d\.cementacionInferiorAnterior \|\| d\.cementacionInferiorPosterior \? \(/);
+  const aparatologia = sinComentarios(leer("components/specialties/orthodontics/redesign/sections/SectionPlan.tsx"));
+  assert.match(aparatologia, /treatment\.appliance\.bonding \? <PrescriptionTile label="Cementado"/);
+  assert.match(aparatologia, /treatment\.appliance\.notes \? <PrescriptionTile label="Notas"/);
+  // Un «Guardar plan» que solo cambió el plan completo no llama a updateTreatmentPlan (dejaba su propio movimiento genérico).
+  const tab = sinComentarios(leer("components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx"));
+  assert.match(tab, /if \(p\.columnasCambiaron\) \{\s*const cols = await updateTreatmentPlan\(/);
+  assert.match(sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx")), /const columnasCambiaron =/);
 });

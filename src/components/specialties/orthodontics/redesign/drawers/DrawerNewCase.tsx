@@ -231,6 +231,16 @@ export interface DrawerEditarPlanSubmit {
     installedAt?: string | null;
     iprRequired: boolean;
   };
+  /**
+   * false = ninguna de las columnas de arriba cambió: quien guarda NO llama a `updateTreatmentPlan` (cada llamada deja
+   * su propio movimiento «Actualizó el plan…»: un «Guardar plan» que solo cambió el plan completo dejaba dos filas).
+   */
+  columnasCambiaron: boolean;
+  /**
+   * Solo al editar con el diagnóstico cambiado: quien guarda lo manda JUNTO con el plan completo
+   * (`guardarDiagnosticoYPlan`, una sola transacción) para que ningún paso pierda lo suyo.
+   */
+  diagnostico?: { diagnosisId: string; peticion: PeticionDelDiagnostico } | null;
   /** El plan completo, tal cual a `guardarPlanDeTratamiento` (más la duración y las extracciones indicadas). */
   plan: Record<string, unknown>;
   extraccionesIndicadas: number[];
@@ -265,7 +275,9 @@ export interface DrawerNewCaseProps {
 const soloFecha = (iso: string | null | undefined): string => (iso ? iso.slice(0, 10) : "");
 
 export function DrawerNewCase(props: DrawerNewCaseProps) {
-  const cajonRef = useCajon<HTMLDivElement>(props.onClose);
+  // Cerrar (Escape, velo, X, Cancelar): con cambios sin guardar pregunta antes; `cerrar` se define más abajo.
+  const cerrarRef = useRef<() => void>(props.onClose);
+  const cajonRef = useCajon<HTMLDivElement>(() => cerrarRef.current());
   const vista = props.vista ?? null;
   const caso = vista?.caso ?? null;
   const editar = props.modo === "editar" && vista !== null && caso !== null;
@@ -334,7 +346,6 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   // Al EDITAR, el diagnóstico completo llega del servidor (el mismo lector que la ficha) y arma el formulario UNA vez.
   const { datos: dxDatos, error: dxErrorDeCarga } = useDiagnosticoCompleto(editarDx ? props.existingDiagnosisId : null);
   const [dxInicial, setDxInicial] = useState<string | null>(null);
-  const [guardandoDx, setGuardandoDx] = useState(false);
   useEffect(() => {
     if (!dxDatos || dxInicial !== null) return;
     const f = formularioDesdeDiagnostico(dxDatos.base, dxDatos.detalle);
@@ -562,16 +573,34 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     primerPago,
     conFactura: tieneFactura,
   };
-  const faltantesDx = faltantesDelDiagnostico({ necesitaDiagnostico: needsDiagnosis, enObservacion: inObservation, resumen: dx.clinicalSummary, proximaRevision: nextObservationDate });
+  const faltantesDx = faltantesDelDiagnostico({ necesitaDiagnostico: needsDiagnosis, enObservacion: inObservation, proximaRevision: nextObservationDate });
   const faltantesDelPlan = faltantesDelPlanCompleto(estadoDelPlan);
   const todosLosFaltantes = [...faltantesDelPlan.obligatorios, ...faltantesDelPlan.correcciones];
+  const dxTocado = editarDx && dxInicial !== null && JSON.stringify(dx) !== dxInicial;
+  // El plan «tocado»: lo que hay ahora frente a lo que había al terminar de cargar la ventana.
+  const firmaDelPlan = JSON.stringify([
+    planForm, tecnicaId, treatingDoctorId, retention, objectives, installedAt, iprRequired, duration, totalCost,
+    billingMode, guardianMode, responsibleGuardianId, newGuardianName, newGuardianPhone, newGuardianRelation,
+    enganche, numPagos, primerPago, precioColocacion, despues,
+  ]);
+  const [firmaBase, setFirmaBase] = useState<string | null>(null);
+  useEffect(() => {
+    if (!loadingOptions && firmaBase === null) setFirmaBase(firmaDelPlan);
+  }, [loadingOptions, firmaBase, firmaDelPlan]);
+  const planTocado = editarDx && firmaBase !== null && firmaDelPlan !== firmaBase;
+  const cambiosSinGuardar = editar && (dxTocado || planTocado);
+  cerrarRef.current = () => {
+    if (cambiosSinGuardar && !window.confirm("Hay cambios sin guardar. ¿Cerrar sin guardar?")) return;
+    props.onClose();
+  };
+
+  // Hasta que llegan las opciones no se sabe si quien abre puede cobrar: el botón espera.
+  const canSubmit = todosLosFaltantes.length === 0 && !loadingOptions;
   const fraseFaltantes = paso === "diagnostico" && editarDx
-    ? null
+    ? (planTocado && !canSubmit ? fraseDeLoQueFalta(faltantesDelPlan, "editar") : null)
     : paso === "diagnostico"
     ? (faltantesDx.length > 0 ? `${inObservation ? "Para guardarlo en observación" : "Para continuar"} falta: ${faltantesDx.join("; ")}.` : null)
     : fraseDeLoQueFalta(faltantesDelPlan, editar ? "editar" : "crear");
-  // Hasta que llegan las opciones no se sabe si quien abre puede cobrar: el botón espera.
-  const canSubmit = todosLosFaltantes.length === 0 && !loadingOptions;
   const seCreaLaFactura = hayQueCrearLaFactura(estadoDelPlan);
 
   const estadoPlan: EstadoDelPlan = { modo: billingMode, costoTotal: costo, precioColocacion, enganche, numPagos, primerPago };
@@ -652,39 +681,112 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     };
   };
 
-  const guardarDx = async () => {
+  // ── Editar: UN solo «Guardar» para los dos pasos ────────────────────────
+  // Lo cambiado en el diagnóstico y lo cambiado en el plan se guardan juntos, se llegue al botón desde el paso que
+  // sea: antes cada paso guardaba lo suyo y lo del otro se perdía en silencio. Se valida TODO antes de escribir
+  // nada y el diagnóstico y el plan completo se escriben en UNA transacción (`guardarDiagnosticoYPlan`).
+  /** El «Guardar plan» de siempre: lo entrega a `onEditar` con el costo, la técnica y el plan de pago. */
+  const enviarPlanEditado = async (peticionDx: PeticionDelDiagnostico | null): Promise<boolean | void> => {
+    if (!vista || !caso || !peticionDelPlan || peticionDelPlan.ok === false) return false;
+    const costoAGuardar = costoParaGuardar(totalCost);
+    const peticion = peticionDelPlan.peticion;
+    const planDePago = planDePagoAlAbrir({ ...estadoDelPlan, enObservacion: inObservation });
+    const eligida = tecnica;
+    const base = eligida?.base ?? caso.tecnica;
+    const etiqueta = eligida?.id === ID_TECNICA_ACTUAL ? caso.tecnicaNombrePropio : nombrePropioAGuardar(eligida);
+    const cambioTecnica = base !== caso.tecnica || (etiqueta ?? null) !== (caso.tecnicaNombrePropio ?? null);
+    const cambioCosto = Math.abs(costoAGuardar - (caso.factura?.total ?? caso.costoReferencia)) >= 0.005 && costoAGuardar > 0;
+    const responsableNuevo = guardianMode === "new";
+    const responsableId = guardianMode === "existing" ? responsibleGuardianId || null : null;
+    const columnasCambiaron =
+      objectives !== caso.objetivos ||
+      retention.trim() !== (caso.retencion ?? "").trim() ||
+      (treatingDoctorId || null) !== (caso.doctorId ?? null) ||
+      responsableNuevo ||
+      responsableId !== (caso.responsableId ?? null) ||
+      soloFecha(caso.colocadoEl) !== installedAt ||
+      iprRequired !== caso.iprRequerido;
+    return props.onEditar?.({
+      treatmentPlanId: vista.treatmentPlanId,
+      diagnostico: peticionDx && props.existingDiagnosisId ? { diagnosisId: props.existingDiagnosisId, peticion: peticionDx } : null,
+      columnasCambiaron,
+      tecnica: cambioTecnica ? { technique: base, techniqueLabel: etiqueta ?? null } : null,
+      columnas: {
+        treatmentObjectives: objectives,
+        retentionPlanText: retention.trim(),
+        treatingDoctorId: treatingDoctorId || null,
+        responsibleGuardianId: guardianMode === "existing" ? responsibleGuardianId || null : null,
+        newResponsibleGuardian:
+          guardianMode === "new"
+            ? { fullName: newGuardianName.trim(), phone: newGuardianPhone.trim(), parentesco: newGuardianRelation }
+            : null,
+        ...(soloFecha(caso.colocadoEl) !== installedAt ? { installedAt: installedAt ? new Date(installedAt).toISOString() : null } : {}),
+        iprRequired,
+      },
+      plan: peticion.plan,
+      extraccionesIndicadas: peticion.extraccionesIndicadas,
+      duracionMeses: peticion.duracionMeses ?? (duration || 18),
+      costo: { total: costoAGuardar, cambio: cambioCosto },
+      planDePago,
+    });
+  };
+
+  const guardarCambios = async () => {
     if (!props.existingDiagnosisId) return;
     setError(null);
     setSeccionDxConError(null);
-    const r = peticionDelDiagnostico(dx, "editar");
-    if (r.ok === false) {
-      setError(r.error);
-      setSeccionDxConError(r.seccion as SeccionDelPaso);
-      setSeccionDx(r.seccion as SeccionDelPaso);
-      return;
-    }
-    setGuardandoDx(true);
-    try {
-      const res = await updateDiagnosis({ diagnosisId: props.existingDiagnosisId, ...r.peticion });
-      if (isFailure(res)) {
-        setError(res.error);
+    const quierePlan = paso === "plan" || planTocado;
+    // 1) Validar todo antes de escribir nada, llevando al doctor al paso y la sección donde está el problema.
+    let peticionDx: PeticionDelDiagnostico | null = null;
+    if (dxTocado) {
+      const r = peticionDelDiagnostico(dx, "editar");
+      if (r.ok === false) {
+        setPaso("diagnostico");
+        setError(r.error);
+        setSeccionDxConError(r.seccion as SeccionDelPaso);
+        setSeccionDx(r.seccion as SeccionDelPaso);
         return;
       }
-      olvidarDiagnosticoCompleto(props.existingDiagnosisId);
-      toast.success("Diagnóstico guardado");
-      if (res.data.avisoDetalle) toast(res.data.avisoDetalle, { duration: 12000 });
+      peticionDx = r.peticion;
+    }
+    if (quierePlan && (!canSubmit || !peticionDelPlan || peticionDelPlan.ok === false)) {
+      setPaso("plan");
+      setError(fraseDeLoQueFalta(faltantesDelPlan, "editar") ?? "Revisa el plan de tratamiento: hay algo por corregir.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // 2) Con el plan de por medio: el diagnóstico y el plan completo van JUNTOS (en la misma transacción del
+      //    servidor); lo demás del plan (columnas, costo, plan de pago) lo sigue guardando quien recibe el envío,
+      //    que además cierra la ventana si todo sale bien.
+      if (quierePlan) {
+        await enviarPlanEditado(peticionDx);
+        return;
+      }
+      // 3) Solo el diagnóstico: es una sola acción, ya es atómica.
+      if (peticionDx) {
+        const res = await updateDiagnosis({ diagnosisId: props.existingDiagnosisId, ...peticionDx });
+        if (isFailure(res)) {
+          setPaso("diagnostico");
+          setError(res.error);
+          return;
+        }
+        olvidarDiagnosticoCompleto(props.existingDiagnosisId);
+        toast.success("Diagnóstico guardado");
+        if (res.data.avisoDetalle) toast(res.data.avisoDetalle, { duration: 12000 });
+      }
       router.refresh();
       props.onClose();
     } catch {
-      setError("No se pudo guardar el diagnóstico. Revisa tu conexión e inténtalo de nuevo.");
+      setError("No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.");
     } finally {
-      setGuardandoDx(false);
+      setSubmitting(false);
     }
   };
 
   const submit = async () => {
-    if (paso === "diagnostico" && editarDx) {
-      await guardarDx();
+    if (editarDx) {
+      await guardarCambios();
       return;
     }
     if (paso === "diagnostico") {
@@ -729,29 +831,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
             : null,
       };
       if (editar && vista && caso) {
-        const eligida = tecnica;
-        const base = eligida?.base ?? caso.tecnica;
-        const etiqueta = eligida?.id === ID_TECNICA_ACTUAL ? caso.tecnicaNombrePropio : nombrePropioAGuardar(eligida);
-        const cambioTecnica = base !== caso.tecnica || (etiqueta ?? null) !== (caso.tecnicaNombrePropio ?? null);
-        const cambioCosto = Math.abs(costoAGuardar - (caso.factura?.total ?? caso.costoReferencia)) >= 0.005 && costoAGuardar > 0;
-        const ok = await props.onEditar?.({
-          treatmentPlanId: vista.treatmentPlanId,
-          tecnica: cambioTecnica ? { technique: base, techniqueLabel: etiqueta ?? null } : null,
-          columnas: {
-            treatmentObjectives: objectives,
-            retentionPlanText: retention.trim(),
-            treatingDoctorId: treatingDoctorId || null,
-            ...responsable,
-            ...(soloFecha(caso.colocadoEl) !== installedAt ? { installedAt: installedAt ? new Date(installedAt).toISOString() : null } : {}),
-            iprRequired,
-          },
-          plan: peticion.plan,
-          extraccionesIndicadas: peticion.extraccionesIndicadas,
-          duracionMeses: peticion.duracionMeses ?? (duration || 18),
-          costo: { total: costoAGuardar, cambio: cambioCosto },
-          planDePago,
-        });
-        if (ok === false) return;
+        await enviarPlanEditado(null);
         return;
       }
       const dxListo = diagnosticoParaEnviar();
@@ -838,7 +918,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
   return (
     <>
-      <div className={orto.velo} onClick={props.onClose} aria-hidden />
+      <div className={orto.velo} onClick={() => cerrarRef.current()} aria-hidden />
       <div className={alta.marco}>
         <div
           ref={cajonRef}
@@ -884,7 +964,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 </p>
               )}
             </div>
-            <button type="button" onClick={props.onClose} aria-label="Cerrar" className={orto.botonIcono}>
+            <button type="button" onClick={() => cerrarRef.current()} aria-label="Cerrar" className={orto.botonIcono}>
               <X className="w-5 h-5" aria-hidden />
             </button>
           </header>
@@ -1465,7 +1545,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               </span>
             ) : paso === "diagnostico" ? (
               <span className={`${alta.pieNota} inline-flex items-center gap-1`}>
-                <ListChecks className="w-3 h-3 shrink-0" aria-hidden /> {inObservation ? "Queda dentro de la ficha del paciente" : "Sigue el plan de tratamiento: solo la técnica y el doctor son obligatorios."}
+                <ListChecks className="w-3 h-3 shrink-0" aria-hidden /> {editarDx ? "«Guardar cambios» guarda el diagnóstico y el plan a la vez." : inObservation ? "Queda dentro de la ficha del paciente" : "Sigue el plan de tratamiento: solo la técnica y el doctor son obligatorios."}
               </span>
             ) : (
               <span className={`${alta.pieNota} inline-flex items-center gap-1`}>
@@ -1473,7 +1553,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
               </span>
             )}
             <div className={alta.pieBotones}>
-              <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
+              <Btn variant="ghost" size="md" onClick={() => cerrarRef.current()}>Cancelar</Btn>
               {paso === "plan" && (needsDiagnosis || editarDx) ? (
                 <Btn variant="secondary" size="md" icon={<ArrowLeft className="w-3.5 h-3.5" aria-hidden />} onClick={() => setPaso("diagnostico")}>Atrás</Btn>
               ) : null}
@@ -1481,15 +1561,15 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                 variant="primary"
                 size="md"
                 onClick={submit}
-                disabled={paso === "diagnostico" ? faltantesDx.length > 0 || submitting || guardandoDx || (editarDx && dxInicial === null) : !canSubmit || submitting}
+                disabled={paso === "diagnostico" ? faltantesDx.length > 0 || submitting || (editarDx && dxInicial === null) : !canSubmit || submitting}
                 aria-describedby={fraseFaltantes ? idFaltantes : undefined}
                 icon={paso === "diagnostico" && !inObservation && !editarDx ? <ArrowRight className="w-3.5 h-3.5" aria-hidden /> : undefined}
               >
-                {submitting || guardandoDx
+                {submitting
                   ? "Guardando…"
                   : paso === "diagnostico"
-                    ? editarDx ? "Guardar diagnóstico" : inObservation ? "Guardar en observación" : "Siguiente: plan de tratamiento"
-                    : (props.etiquetas?.guardar ?? (editar ? "Guardar plan" : "Abrir caso"))}
+                    ? editarDx ? "Guardar cambios" : inObservation ? "Guardar en observación" : "Siguiente: plan de tratamiento"
+                    : (props.etiquetas?.guardar ?? (editarDx ? "Guardar cambios" : editar ? "Guardar plan" : "Abrir caso"))}
               </Btn>
             </div>
           </footer>

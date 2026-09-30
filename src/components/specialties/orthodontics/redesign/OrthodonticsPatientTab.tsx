@@ -63,6 +63,8 @@ import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { CasosMigrados } from "./CasosMigrados";
 import { DrawerNewCase, type DrawerEditarPlanSubmit, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { guardarPlanDeTratamiento } from "@/app/actions/orthodontics/guardarPlanDeTratamiento";
+import { guardarDiagnosticoYPlan } from "@/app/actions/orthodontics/guardarDiagnosticoYPlan";
+import { olvidarDiagnosticoCompleto } from "./diagnostico/useDiagnosticoCompleto";
 import { cambiarCostoDelCaso } from "@/app/actions/orthodontics/cobro/cambiarCostoDelCaso";
 import { crearPlanDelCaso } from "@/app/actions/orthodontics/cobro/crearPlanDelCaso";
 import { Btn } from "./atoms/Btn";
@@ -365,39 +367,58 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
         return false;
       }
     }
-    const cols = await updateTreatmentPlan({
-      treatmentPlanId: id,
-      treatmentObjectives: p.columnas.treatmentObjectives as never,
-      retentionPlanText: p.columnas.retentionPlanText,
-      treatingDoctorId: p.columnas.treatingDoctorId,
-      responsibleGuardianId: p.columnas.responsibleGuardianId,
-      newResponsibleGuardian: p.columnas.newResponsibleGuardian as never,
-      iprRequired: p.columnas.iprRequired,
-      ...(p.columnas.installedAt !== undefined ? { installedAt: p.columnas.installedAt } : {}),
-    });
-    if (isFailure(cols)) {
-      toast.error(cols.error);
-      return false;
-    }
-    if (!cols.data.altaCasoFieldsSaved && (p.columnas.treatingDoctorId || p.columnas.responsibleGuardianId || p.columnas.newResponsibleGuardian)) {
-      toast(t("patients.ortho.altaCasoSqlPending"));
-    }
-    // F «Cambio de doctor»: los controles YA agendados se quedaban con el doctor anterior. Se ofrece pasarlos.
-    if (cols.data.controlesConOtroDoctor > 0) {
-      const n = cols.data.controlesConOtroDoctor;
-      const pasar = window.confirm(
-        `${n === 1 ? "Hay 1 control futuro agendado" : `Hay ${n} controles futuros agendados`} con el doctor anterior. ¿Pasarlo${n === 1 ? "" : "s"} al doctor nuevo? Solo se pasan los que no chocan con su agenda.`,
-      );
-      if (pasar) {
-        const m = await moverControlesFuturosAlDoctor({ treatmentPlanId: id });
-        if (isFailure(m)) toast.error(m.error);
-        else toast.success(`${m.data.movidos} control${m.data.movidos === 1 ? "" : "es"} pasado${m.data.movidos === 1 ? "" : "s"} al doctor nuevo` + (m.data.conChoque > 0 ? `; ${m.data.conChoque} chocan con su agenda y se quedaron como estaban.` : "."));
+    // Sin cambios en estas columnas no se llama: cada llamada deja su propio movimiento «Actualizó el plan…».
+    if (p.columnasCambiaron) {
+      const cols = await updateTreatmentPlan({
+        treatmentPlanId: id,
+        treatmentObjectives: p.columnas.treatmentObjectives as never,
+        retentionPlanText: p.columnas.retentionPlanText,
+        treatingDoctorId: p.columnas.treatingDoctorId,
+        responsibleGuardianId: p.columnas.responsibleGuardianId,
+        newResponsibleGuardian: p.columnas.newResponsibleGuardian as never,
+        iprRequired: p.columnas.iprRequired,
+        ...(p.columnas.installedAt !== undefined ? { installedAt: p.columnas.installedAt } : {}),
+      });
+      if (isFailure(cols)) {
+        toast.error(cols.error);
+        return false;
+      }
+      if (!cols.data.altaCasoFieldsSaved && (p.columnas.treatingDoctorId || p.columnas.responsibleGuardianId || p.columnas.newResponsibleGuardian)) {
+        toast(t("patients.ortho.altaCasoSqlPending"));
+      }
+      // F «Cambio de doctor»: los controles YA agendados se quedaban con el doctor anterior. Se ofrece pasarlos.
+      if (cols.data.controlesConOtroDoctor > 0) {
+        const n = cols.data.controlesConOtroDoctor;
+        const pasar = window.confirm(
+          `${n === 1 ? "Hay 1 control futuro agendado" : `Hay ${n} controles futuros agendados`} con el doctor anterior. ¿Pasarlo${n === 1 ? "" : "s"} al doctor nuevo? Solo se pasan los que no chocan con su agenda.`,
+        );
+        if (pasar) {
+          const m = await moverControlesFuturosAlDoctor({ treatmentPlanId: id });
+          if (isFailure(m)) toast.error(m.error);
+          else toast.success(`${m.data.movidos} control${m.data.movidos === 1 ? "" : "es"} pasado${m.data.movidos === 1 ? "" : "s"} al doctor nuevo` + (m.data.conChoque > 0 ? `; ${m.data.conChoque} chocan con su agenda y se quedaron como estaban.` : "."));
+        }
       }
     }
-    const plan = await guardarPlanDeTratamiento({ treatmentPlanId: id, plan: p.plan, extraccionesIndicadas: p.extraccionesIndicadas, duracionMeses: p.duracionMeses });
-    if (isFailure(plan)) {
-      toast.error(plan.error);
-      return false;
+    const datosDelPlan = { treatmentPlanId: id, plan: p.plan, extraccionesIndicadas: p.extraccionesIndicadas, duracionMeses: p.duracionMeses };
+    if (p.diagnostico) {
+      // Diagnóstico y plan completo en UNA transacción: o se guardan los dos o ninguno.
+      const junto = await guardarDiagnosticoYPlan({ ...datosDelPlan, diagnosisId: p.diagnostico.diagnosisId, diagnostico: p.diagnostico.peticion });
+      if (isFailure(junto)) {
+        toast.error(junto.error);
+        return false;
+      }
+      olvidarDiagnosticoCompleto(p.diagnostico.diagnosisId);
+      if (junto.data.aviso) toast(junto.data.aviso, { duration: 12000 });
+      if (!junto.data.planGuardado) {
+        router.refresh();
+        return false;
+      }
+    } else {
+      const plan = await guardarPlanDeTratamiento(datosDelPlan);
+      if (isFailure(plan)) {
+        toast.error(plan.error);
+        return false;
+      }
     }
     let todoBien = true;
     if (p.costo.cambio) {

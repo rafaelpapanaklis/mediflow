@@ -215,12 +215,21 @@ export function SectionPlanDeTratamiento({ vista, onEditar }: SectionPlanDeTrata
                 <span />
                 <span className={c.tablaMiniCab}>Superior</span>
                 <span className={c.tablaMiniCab}>Inferior</span>
-                <span className={c.tablaMiniFila}>Tubos</span>
-                <Valor v={d.tubosSuperiores} />
-                <Valor v={d.tubosInferiores} />
-                <span className={c.tablaMiniFila}>Bandas</span>
-                <Valor v={d.bandasSuperiores} />
-                <Valor v={d.bandasInferiores} />
+                {/* Solo las filas que tienen algún dato: nada de «Bandas — —». */}
+                {d.tubosSuperiores || d.tubosInferiores ? (
+                  <>
+                    <span className={c.tablaMiniFila}>Tubos</span>
+                    <Valor v={d.tubosSuperiores} />
+                    <Valor v={d.tubosInferiores} />
+                  </>
+                ) : null}
+                {d.bandasSuperiores || d.bandasInferiores ? (
+                  <>
+                    <span className={c.tablaMiniFila}>Bandas</span>
+                    <Valor v={d.bandasSuperiores} />
+                    <Valor v={d.bandasInferiores} />
+                  </>
+                ) : null}
               </div>
             ) : null}
             {hayCementacion ? (
@@ -228,12 +237,20 @@ export function SectionPlanDeTratamiento({ vista, onEditar }: SectionPlanDeTrata
                 <span className={c.tablaMiniCab}>Cementación</span>
                 <span className={c.tablaMiniCab}>Anterior</span>
                 <span className={c.tablaMiniCab}>Posterior</span>
-                <span className={c.tablaMiniFila}>Superior</span>
-                <Valor v={d.cementacionSuperiorAnterior} />
-                <Valor v={d.cementacionSuperiorPosterior} />
-                <span className={c.tablaMiniFila}>Inferior</span>
-                <Valor v={d.cementacionInferiorAnterior} />
-                <Valor v={d.cementacionInferiorPosterior} />
+                {d.cementacionSuperiorAnterior || d.cementacionSuperiorPosterior ? (
+                  <>
+                    <span className={c.tablaMiniFila}>Superior</span>
+                    <Valor v={d.cementacionSuperiorAnterior} />
+                    <Valor v={d.cementacionSuperiorPosterior} />
+                  </>
+                ) : null}
+                {d.cementacionInferiorAnterior || d.cementacionInferiorPosterior ? (
+                  <>
+                    <span className={c.tablaMiniFila}>Inferior</span>
+                    <Valor v={d.cementacionInferiorAnterior} />
+                    <Valor v={d.cementacionInferiorPosterior} />
+                  </>
+                ) : null}
               </div>
             ) : null}
           </Grupo>
