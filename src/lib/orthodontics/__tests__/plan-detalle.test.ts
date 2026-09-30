@@ -258,8 +258,8 @@ test("microtornillos y miniplacas piden TADs", () => {
 test("lineasDelPlan: dice todo lo elegido y calla lo vacío", () => {
   const base = { estimatedDurationMonths: 18, anchorageType: "MODERATE", extractionsRequired: true, extractionsTeethFdi: [44, 14, 24, 34] };
   const vacias = lineasDelPlan(base, null);
-  assert.deepEqual(vacias.map((l) => l.clave), ["duracion", "anclaje", "extraccionesIndicadas"]);
-  assert.equal(vacias.find((l) => l.clave === "anclaje")!.valor, "Moderado", "sin por arcada, el general de siempre");
+  assert.deepEqual(vacias.map((l) => l.clave), ["duracion", "extraccionesIndicadas"], "el «Moderado» de arranque no es un dato");
+  assert.equal(lineasDelPlan({ ...base, anchorageType: "MAXIMUM" }, null).find((l) => l.clave === "anclaje")!.valor, "Máximo", "un general distinto del de arranque sí se eligió");
 
   const l = lineasDelPlan(
     base,
@@ -742,6 +742,8 @@ test("la prescripción y el cementado generales se derivan de tubos, bandas y ce
   assert.equal(prescripcionDerivada(completo({ bandasInferiores: "Damon" })).prescriptionSlot, "DAMON_Q2");
   assert.equal(prescripcionDerivada(completo({ tubosSuperiores: "Roth", bandasSuperiores: "MBT" })).prescriptionSlot, null, "sistemas mezclados: no se deduce");
   assert.equal(prescripcionDerivada(completo()).prescriptionSlot, null);
+  assert.equal(prescripcionDerivada(completo({ brackets: ["MBT"], tubosSuperiores: "Roth" })).prescriptionSlot, null, "brackets MBT con tubos Roth: dos prescripciones, ninguna se deduce");
+  assert.equal(prescripcionDerivada(completo({ brackets: ["Ovation Roth"], tubosSuperiores: "Roth" })).prescriptionSlot, "ROTH_022");
   assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Cementado indirecto" })).bondingType, "INDIRECTO");
   assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Directo", cementacionInferiorAnterior: "Directo" })).bondingType, "DIRECTO");
   assert.equal(prescripcionDerivada(completo({ cementacionSuperiorAnterior: "Directo", cementacionInferiorAnterior: "Indirecto" })).bondingType, null);
@@ -753,10 +755,9 @@ import { pasoQueFalta, piezasQueFaltan } from "../plan-detalle";
 
 const CASO_COMPLETO = {
   diagnosticoMigrado: false,
-  resumenClinico: "Clase II división 1 con apiñamiento moderado; se planea corrección con extracciones.",
+  sinCapturar: [] as string[],
   doctorId: "d1",
   detalle: completo({ controlesPrevistos: 18, anclajeSuperior: "MAXIMO" as const, brackets: ["MBT"] }),
-  retencion: "Retenedor fijo inferior y removible superior, uso nocturno por 2 años.",
   billingMode: "PRECIO_TOTAL" as const,
   tieneFactura: true,
 };
@@ -766,24 +767,52 @@ test("un caso completo no tiene nada que faltar; lo opcional vacío no cuenta", 
   assert.equal(pasoQueFalta([]), null);
 });
 
+test("lo opcional no cuenta: sin resumen clínico, anclaje, aparatología ni retención el caso NO está incompleto", () => {
+  const f = piezasQueFaltan({ ...CASO_COMPLETO, detalle: completo({ controlesPrevistos: 18 }) });
+  assert.deepEqual(f, []);
+});
+
 test("un caso migrado de Dentalink entra vacío: dice qué falta y a qué paso ir primero", () => {
   const f = piezasQueFaltan({
     diagnosticoMigrado: true,
-    resumenClinico: "Caso migrado de Dentalink…",
     doctorId: null,
     detalle: null,
-    retencion: "Plan de retención sin registrar (caso migrado de Dentalink): se define al llegar a la etapa de retención.",
     billingMode: "PRECIO_TOTAL",
     tieneFactura: false,
   });
-  assert.deepEqual(f.map((x) => x.clave), ["diagnostico-migrado", "doctor", "controles", "anclaje", "aparatologia", "retencion", "cobro"]);
+  assert.deepEqual(f.map((x) => x.clave), ["diagnostico-migrado", "doctor", "controles", "cobro"]);
   assert.equal(pasoQueFalta(f), "diagnostico");
   assert.equal(pasoQueFalta(f.filter((x) => x.paso === "plan")), "plan");
 });
 
-test("la falta se dice por pieza: resumen corto, sin doctor, «Pago por control» sin factura de colocación", () => {
-  const f = piezasQueFaltan({ ...CASO_COMPLETO, resumenClinico: "corto", doctorId: null, billingMode: "PAGO_POR_CONTROL", tieneFactura: false });
-  assert.deepEqual(f.map((x) => x.clave), ["resumen", "doctor", "cobro"]);
+test("la falta se dice por pieza: Angle y overjet/overbite sin capturar, sin doctor, «Pago por control» sin factura de colocación", () => {
+  const f = piezasQueFaltan({
+    ...CASO_COMPLETO,
+    sinCapturar: ["angleClassRight", "angleClassLeft", "overjetMm", "overbiteMm", "overbitePercentage"],
+    doctorId: null,
+    billingMode: "PAGO_POR_CONTROL",
+    tieneFactura: false,
+  });
+  assert.deepEqual(f.map((x) => x.clave), ["angle", "overjet-overbite", "doctor", "cobro"]);
   assert.equal(f.find((x) => x.clave === "cobro")!.texto, "factura de colocación");
   assert.equal(pasoQueFalta(f), "diagnostico");
+});
+
+// ─── Una fuente para la prescripción y lo de arranque que no es dato (ws1-t12, revisión final) ────
+
+import { anclajeGeneralComoDato, prescripcionDelPlan } from "../plan-detalle";
+
+test("la prescripción es la que dice el plan, tal cual: brackets MBT con tubos Roth se dicen los dos", () => {
+  assert.equal(prescripcionDelPlan(completo({ brackets: ["MBT"], tubosSuperiores: "Roth", tubosInferiores: "Roth" })), "Brackets MBT · Tubos Roth");
+  assert.equal(prescripcionDelPlan(completo({ brackets: ["MBT"], tubosSuperiores: "MBT", bandasSuperiores: "MBT" })), "Brackets MBT · Tubos y bandas MBT");
+  assert.equal(prescripcionDelPlan(completo({ tubosSuperiores: "Roth", bandasInferiores: "Damon" })), "Tubos Roth · Bandas Damon");
+  assert.equal(prescripcionDelPlan(completo({ alineadores: ["Invisalign lite single"] })), null, "los alineadores no llevan prescripción de brackets");
+  assert.equal(prescripcionDelPlan(completo()), null, "sin nada elegido no se inventa un calibre");
+});
+
+test("el anclaje general «Moderado» es el de arranque y no se dice como dato; los demás sí", () => {
+  assert.equal(anclajeGeneralComoDato("MODERATE"), null);
+  assert.equal(anclajeGeneralComoDato(null), null);
+  assert.equal(anclajeGeneralComoDato("MAXIMUM"), "Máximo");
+  assert.equal(anclajeGeneralComoDato("COMPOUND"), "Compuesto (ver por arcada)");
 });

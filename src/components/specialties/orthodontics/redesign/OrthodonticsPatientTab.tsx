@@ -286,8 +286,12 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
   // que nunca tuvo caso (`OrtodonciaSinCaso`).
   const crearCaso = async (payload: DrawerNewCaseSubmit): Promise<boolean> => {
     let diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
+    // Abrir el caso es UNA acción: con diagnóstico y plan juntos, las filas del diagnóstico quedan solo en la bitácora y
+    // Movimientos muestra una («Abrió el caso de ortodoncia: …», la escribe createTreatmentPlan).
+    const juntoConElPlan = Boolean(payload.diagnosis && payload.plan);
+    const pasoDelAlta = juntoConElPlan ? { parteDeUnaAccion: true } : {};
     if (payload.diagnosis) {
-      const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis });
+      const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis, ...pasoDelAlta });
       if (isFailure(res)) {
         toast.error(res.error);
         return false;
@@ -296,7 +300,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       // ws1-t8: el diagnóstico COMPLETO (facial, oclusal, funcional, cefalometría…) se guarda enseguida con el mismo
       // servidor que «Editar diagnóstico». Si no se pudo, el caso sigue: se dice y se completa desde el resumen.
       if (payload.diagnosis.detalle) {
-        const detalle = await updateDiagnosis({ diagnosisId, ...payload.diagnosis.detalle });
+        const detalle = await updateDiagnosis({ diagnosisId, ...payload.diagnosis.detalle, ...pasoDelAlta });
         if (isFailure(detalle)) {
           toast(`El diagnóstico se creó, pero el detalle no se guardó: ${detalle.error} Complétalo con «Editar diagnóstico».`, { duration: 12000 });
         } else if (detalle.data.avisoDetalle) {
@@ -319,6 +323,9 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
         diagnosisId,
         patientId: patient.id,
         ...payload.plan,
+        ...pasoDelAlta,
+        // A plazos, el resumen de toda la apertura lo escribe `crearPlanDelCaso` (la última llamada).
+        ...(payload.planDePago ? { sigueElPlanDePago: true } : {}),
       });
       if (isFailure(res)) {
         toast.error(res.error);
@@ -334,7 +341,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       // ws1-t10: el plan de pago se arma al abrir el caso. El caso YA está abierto: si la factura
       // no sale, se dice claro y Cobro sigue ofreciendo «Abrir plan de pago» para reintentar.
       if (payload.planDePago) {
-        const cobro = await crearPlanDelCaso({ treatmentPlanId: res.data.id, ...payload.planDePago });
+        const cobro = await crearPlanDelCaso({
+          treatmentPlanId: res.data.id,
+          ...payload.planDePago,
+          aperturaDelCaso: { diagnostico: juntoConElPlan, detalleDelPlan: Boolean(payload.plan.planDetalle) },
+        });
         if (isFailure(cobro)) {
           toast.error(`El caso se abrió, pero el plan de pago no se pudo crear: ${cobro.error} Reinténtalo en Cobro, con «Abrir plan de pago».`, { duration: 12000 });
         } else if (cobro.data.aviso) {
@@ -1177,6 +1188,9 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 orthoRedesignBundle?.historicalPhotoSets ?? [],
                 stage,
               );
+              // Una foto subida es UNA acción: el juego nuevo y la ligadura quedan solo en la bitácora; Movimientos
+              // muestra la fila de la subida (una-accion.ts).
+              let juegoNuevo = false;
               if (!setId) {
                 const created = await createPhotoSet({
                   treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
@@ -1184,12 +1198,14 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                   setType: stage,
                   capturedAt: new Date().toISOString(),
                   monthInTreatment: orthoRedesignVM.treatment.monthCurrent,
+                  parteDeUnaAccion: true,
                 });
                 if (isFailure(created)) {
                   toast.error(created.error);
                   return;
                 }
                 setId = (created.data as { id: string }).id;
+                juegoNuevo = true;
               }
 
               // 2. POST file + setId + view al endpoint que sube a Supabase
@@ -1198,6 +1214,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               fd.append("file", file);
               fd.append("setId", setId);
               fd.append("view", view ?? slotId);
+              if (juegoNuevo) fd.append("juegoNuevo", "1");
               const res = await fetch(
                 "/api/orthodontics/photos/upload",
                 { method: "POST", body: fd },
@@ -1212,8 +1229,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               // 3. Asocia el PatientFile a la columna del set (o, en
               //    sobremordida/resalte, a su fila de la tabla de extras).
               const attached: ActionResult<unknown> = view
-                ? await uploadPhotoToSet({ setId, fileId, view })
-                : await agregarFotoExtra({ setId, fileId, slot: slotId });
+                ? await uploadPhotoToSet({ setId, fileId, view, parteDeUnaAccion: true })
+                : await agregarFotoExtra({ setId, fileId, slot: slotId, parteDeUnaAccion: true });
               if (isFailure(attached)) {
                 toast.error(attached.error);
                 return;
@@ -1237,6 +1254,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             if (!orthoRedesignVM.treatment.treatmentPlanId) return t("patients.ortho.noPlan");
             try {
               let setId = elegirSetParaFoto(orthoRedesignBundle?.historicalPhotoSets ?? [], stage);
+              let juegoNuevo = false;
               if (!setId) {
                 const created = await createPhotoSet({
                   treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
@@ -1244,13 +1262,16 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                   setType: stage,
                   capturedAt: new Date().toISOString(),
                   monthInTreatment: orthoRedesignVM.treatment.monthCurrent,
+                  parteDeUnaAccion: true,
                 });
                 if (isFailure(created)) return created.error;
                 setId = (created.data as { id: string }).id;
+                juegoNuevo = true;
               }
+              // Aquí no hay subida: esta llamada es la fila de la acción, y dice si creó el juego.
               const attached: ActionResult<unknown> = view
-                ? await uploadPhotoToSet({ setId, fileId, view })
-                : await agregarFotoExtra({ setId, fileId, slot: slotId });
+                ? await uploadPhotoToSet({ setId, fileId, view, juegoNuevo })
+                : await agregarFotoExtra({ setId, fileId, slot: slotId, juegoNuevo });
               if (isFailure(attached)) return attached.error;
               toast.success(
                 t("patients.ortho.photoUploaded", { view: (view ?? slotId).replace(/_/g, " ").toLowerCase() }),

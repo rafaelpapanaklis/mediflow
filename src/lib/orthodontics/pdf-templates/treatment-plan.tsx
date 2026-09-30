@@ -14,6 +14,7 @@ import { PHASE_LABELS } from "../kanban-helpers";
 import { ACENTO_ORTO, GRIS_ORTO, MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
 import { dinero } from "../pdf/formato";
 import { CLASE_ANGLE } from "../expediente-ortodoncia";
+import { anclajeGeneralComoDato } from "../plan-detalle";
 
 const DOCUMENTO = "Plan de tratamiento";
 
@@ -32,13 +33,6 @@ const styles = StyleSheet.create({
   bullet: { marginLeft: 6, marginBottom: 3 },
   nota: { fontSize: 8.5, color: GRIS_ORTO, marginTop: 14, lineHeight: 1.4 },
 });
-
-const ANCLAJE: Record<string, string> = {
-  MAXIMUM: "máximo",
-  MODERATE: "moderado",
-  MINIMUM: "mínimo",
-  COMPOUND: "compuesto",
-};
 
 const OBJETIVOS: Record<string, string> = {
   AESTHETIC_ONLY: "estéticos",
@@ -74,7 +68,8 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
   // ws1-t10: en «Pago por control» es un estimado; el $1 provisional no se enseña como precio.
   const costo = descripcionDelCosto(data.plan.billingMode, data.plan.totalCostMxn);
   const lineas = data.planCompleto?.lineas ?? [];
-  const anclajePorArcada = lineas.find((l) => l.clave === "anclaje")?.valor ?? null;
+  // El anclaje general «Moderado» de arranque no es un dato (anclajeGeneralComoDato).
+  const anclajePorArcada = lineas.find((l) => l.clave === "anclaje")?.valor ?? anclajeGeneralComoDato(data.plan.anchorageType);
   const detalleDelPlan = lineas.filter((l) => !YA_EN_LA_CAJA.has(l.clave));
   return (
     <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
@@ -120,17 +115,20 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
           </>
         ) : null}
 
+        {/* Título y cuadro JUNTOS: el bloque «Tu plan de tratamiento» no se parte entre dos páginas (ws1-t12). */}
+        <View wrap={false}>
         <Text style={styles.h2}>Tu plan de tratamiento</Text>
         <View style={styles.box}>
           <Metrica etiqueta="Técnica" valor={techniqueLabel(data.plan.technique as never, data.plan.techniqueName)} />
           {data.plan.techniqueNotes ? <Metrica etiqueta="Detalle de técnica" valor={data.plan.techniqueNotes} /> : null}
           <Metrica etiqueta="Duración estimada" valor={`${data.plan.estimatedDurationMonths} meses`} />
           {/* ws1-t12: con el plan completo, el anclaje se dice por arcada («superior máximo · inferior medio»). */}
-          <Metrica etiqueta="Anclaje" valor={anclajePorArcada ?? etiqueta(ANCLAJE, data.plan.anchorageType)} />
+          {anclajePorArcada ? <Metrica etiqueta="Anclaje" valor={anclajePorArcada} /> : null}
           <Metrica etiqueta="Objetivos" valor={etiqueta(OBJETIVOS, data.plan.treatmentObjectives)} />
           {data.plan.extractionsRequired ? (
-            <Metrica etiqueta="Extracciones" valor={`FDI ${data.plan.extractionsTeethFdi.join(", ") || "—"}`} />
+            <Metrica etiqueta="Extracciones" valor={data.plan.extractionsTeethFdi.length > 0 ? `FDI ${data.plan.extractionsTeethFdi.join(", ")}` : "Indicadas, sin piezas anotadas"} />
           ) : null}
+        </View>
         </View>
 
         {/* ws1-t12: el resto del plan de tratamiento completo. Lo que ya sale arriba (duración, anclaje,
@@ -179,13 +177,19 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
           </>
         ) : null}
 
-        <Text style={styles.h2} minPresenceAhead={60}>Qué esperar mes a mes</Text>
-        <Text style={styles.bullet}>• Cita mensual de control (~30-45 min).</Text>
-        <Text style={styles.bullet}>• Higiene exhaustiva: cepillado 3 veces al día + hilo dental.</Text>
-        <Text style={styles.bullet}>• Si te ponen elásticos: úsalos al menos 22 horas al día.</Text>
-        <Text style={styles.bullet}>
-          • Avisa de inmediato si se rompe un bracket, sale un elástico, o tienes dolor anormal.
-        </Text>
+        {/* Con su aviso final en el mismo bloque: la última hoja nunca lleva solo «Este documento es informativo…». */}
+        <View wrap={false}>
+          <Text style={styles.h2}>Qué esperar mes a mes</Text>
+          <Text style={styles.bullet}>• Cita mensual de control (~30-45 min).</Text>
+          <Text style={styles.bullet}>• Higiene exhaustiva: cepillado 3 veces al día + hilo dental.</Text>
+          <Text style={styles.bullet}>• Si te ponen elásticos: úsalos al menos 22 horas al día.</Text>
+          <Text style={styles.bullet}>
+            • Avisa de inmediato si se rompe un bracket, sale un elástico, o tienes dolor anormal.
+          </Text>
+          <Text style={styles.nota}>
+            Este documento es informativo. El consentimiento firmado contiene los términos legales completos.
+          </Text>
+        </View>
 
         {/* ws1-t8: historial de reevaluaciones (las versiones anteriores se conservan completas en la ficha). */}
         {data.versiones && data.versiones.anteriores.length > 0 ? (
@@ -198,10 +202,6 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
             ))}
           </View>
         ) : null}
-
-        <Text style={styles.nota}>
-          Este documento es informativo. El consentimiento firmado contiene los términos legales completos.
-        </Text>
 
         <PieOrto datos={m} documento={DOCUMENTO} />
       </Page>

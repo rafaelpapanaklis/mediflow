@@ -172,10 +172,17 @@ test("segunda pasada (t9): «Cobrar extra» y la hoja avisan del procedimiento q
   assert.match(cobrar, /href="\/dashboard\/procedures"/);
   // Tubos/bandas/cementación y aparatología: solo filas con dato.
   const plan = sinComentarios(leer("components/specialties/orthodontics/redesign/sections/SectionPlanDeTratamiento.tsx"));
-  assert.match(plan, /\{d\.bandasSuperiores \|\| d\.bandasInferiores \? \(/);
-  assert.match(plan, /\{d\.cementacionInferiorAnterior \|\| d\.cementacionInferiorPosterior \? \(/);
+  // La tabla chica solo dibuja filas y columnas con dato; la celda vacía queda en blanco, no en «—».
+  assert.match(plan, /const conDato = filas\.filter\(\(f\) => idx\.some\(\(i\) => f\.valores\[i\]\)\)/);
+  assert.match(plan, /\{f\.valores\[i\] \?\? ""\}/);
+  assert.doesNotMatch(plan, /"—"/, "ningún «—» en el resumen del plan");
   const aparatologia = sinComentarios(leer("components/specialties/orthodontics/redesign/sections/SectionPlan.tsx"));
-  assert.match(aparatologia, /treatment\.appliance\.bonding \? <PrescriptionTile label="Cementado"/);
+  assert.match(aparatologia, /\{bonding \? <PrescriptionTile label="Cementado"/);
+  // Una sola fuente para la prescripción: la del plan, sin «Sin definir» ni el slot de la columna encima (ws1-t12).
+  assert.match(aparatologia, /\{slot \? <PrescriptionTile label=\{prescripcionDelPlan \? "Prescripción \(del plan\)"/);
+  const cliente = sinComentarios(leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx"));
+  assert.match(cliente, /<SectionHero\s+treatment=\{t\}\s+prescripcionDelPlan=\{prescripcionDelPlanVista\}/);
+  assert.match(cliente, /<SectionPlan\s+treatment=\{t\}\s+prescripcionDelPlan=\{prescripcionDelPlanVista\}/);
   assert.match(aparatologia, /treatment\.appliance\.notes \? <PrescriptionTile label="Notas"/);
   // Un «Guardar plan» que solo cambió el plan completo no llama a updateTreatmentPlan (dejaba su propio movimiento genérico).
   const tab = sinComentarios(leer("components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx"));

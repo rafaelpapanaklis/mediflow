@@ -4,13 +4,18 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createPhotoSetSchema } from "@/lib/validation/orthodontics";
+import { conMovimientosSoloDeBitacora, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
-export async function createPhotoSet(
-  input: unknown,
-): Promise<ActionResult<{ id: string }>> {
+export async function createPhotoSet(input: unknown): Promise<ActionResult<{ id: string }>> {
+  // Subir una foto crea el juego si hace falta y luego sube y liga la foto: es UNA acción del usuario. Si esta llamada es
+  // un paso de esa acción (`parteDeUnaAccion`), su fila queda solo en la bitácora y Movimientos muestra una.
+  return esPasoDeOtraAccion(input) ? conMovimientosSoloDeBitacora(() => crearJuegoDeFotos(input)) : crearJuegoDeFotos(input);
+}
+
+async function crearJuegoDeFotos(input: unknown): Promise<ActionResult<{ id: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;

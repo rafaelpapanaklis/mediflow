@@ -32,11 +32,41 @@ import type { PlanDePagoAlAbrir } from "@/lib/orthodontics/cobro/plan-al-abrir";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { auditarCobro, loadCasoParaCobro } from "./_ctx";
 import { abrirPlanDePago } from "./abrirPlanDePago";
+import { conUnSoloMovimiento } from "@/lib/movimientos-paciente/una-accion";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 
+type ResultadoDelPlanDePago = ActionResult<{ invoiceId: string; invoiceNumber: string | null; yaExistia: boolean; aviso?: string }>;
+
+/**
+ * `aperturaDelCaso`: esta llamada cierra la apertura de un caso a plazos (diagnóstico → plan → plan de pago). Las
+ * anteriores dejaron sus filas solo en la bitácora; aquí se escribe UNA en Movimientos, «Abrió el caso de ortodoncia:
+ * …», con todo el detalle. Solo banderas: las frases las pone el servidor. Sin ella, la llamada se comporta como siempre.
+ */
 export async function crearPlanDelCaso(args: {
   treatmentPlanId: string;
-} & PlanDePagoAlAbrir): Promise<ActionResult<{ invoiceId: string; invoiceNumber: string | null; yaExistia: boolean; aviso?: string }>> {
+  aperturaDelCaso?: { diagnostico?: boolean; detalleDelPlan?: boolean };
+} & PlanDePagoAlAbrir): Promise<ResultadoDelPlanDePago> {
+  const ap = args?.aperturaDelCaso;
+  if (!ap) return crearElPlanDePago(args, () => undefined);
+  let base: { clinicId: string; userId: string; patientId: string; entityType: string; entityId: string; action: string } | null = null;
+  return conUnSoloMovimiento(
+    {
+      titulo: "Abrió el caso de ortodoncia",
+      detallesExtra: [
+        ...(ap.diagnostico === true ? ["Registró el diagnóstico de ortodoncia"] : []),
+        "Creó el plan de tratamiento de ortodoncia",
+        ...(ap.detalleDelPlan === true ? ["Completó el plan de tratamiento de ortodoncia"] : []),
+      ],
+      filaBase: () => base,
+    },
+    () => crearElPlanDePago(args, (b) => { base = b; }),
+  );
+}
+
+async function crearElPlanDePago(
+  args: { treatmentPlanId: string } & PlanDePagoAlAbrir,
+  conCaso: (base: { clinicId: string; userId: string; patientId: string; entityType: string; entityId: string; action: string }) => void,
+): Promise<ResultadoDelPlanDePago> {
   const ctxResult = await getOrthoBillingActionContext("billing.create");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
@@ -47,6 +77,7 @@ export async function crearPlanDelCaso(args: {
   const casoResult = await loadCasoParaCobro({ ctx, treatmentPlanId: args.treatmentPlanId });
   if (isFailure(casoResult)) return casoResult;
   const caso = casoResult.data;
+  conCaso({ clinicId, userId: ctx.userId, patientId: caso.patientId, entityType: "orthodontic-plan", entityId: caso.id, action: "update" });
 
   const deps: DepsDelPlan = {
     facturaLigada: (invoiceId) =>

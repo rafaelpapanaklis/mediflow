@@ -61,7 +61,7 @@ import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
 import { DrawerEditDiagnosis } from "./drawers/DrawerEditDiagnosis";
 import { DrawerEditPrescription } from "./drawers/DrawerEditPrescription";
-import { progresoDeControles, type PlanDeTratamientoVista } from "@/lib/orthodontics/plan-detalle";
+import { prescripcionDelPlan, prescripcionDerivada, progresoDeControles, type PlanDeTratamientoVista } from "@/lib/orthodontics/plan-detalle";
 import { DrawerNewReferral } from "./drawers/DrawerNewReferral";
 import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
 import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
@@ -557,6 +557,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const controlesPrevistosDelCaso = props.planDeTratamiento?.detalle.controlesPrevistos ?? null;
 
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
+  // La prescripción sale del plan (una sola fuente): hero y «Aparatología y arcos» dicen lo mismo.
+  const prescripcionDelPlanVista = props.planDeTratamiento ? prescripcionDelPlan(props.planDeTratamiento.detalle) : null;
+  const cementadoDelPlanVista = props.planDeTratamiento ? prescripcionDerivada(props.planDeTratamiento.detalle).bondingType : null;
   // Fila 26 (ws1-t4 ronda 6): lo que no toca por fase va plegado.
   const plegadas = seccionesPlegadasPorFase({
     estado: tStatus,
@@ -601,6 +604,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         <div className={orto.columna}>
           <SectionHero
             treatment={t}
+            prescripcionDelPlan={prescripcionDelPlanVista}
             controles={
               props.planDeTratamiento?.detalle.controlesPrevistos
                 ? progresoDeControles(props.planDeTratamiento.controlesHechos, props.planDeTratamiento.detalle.controlesPrevistos)
@@ -679,6 +683,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
           <SectionPlan
             treatment={t}
+            prescripcionDelPlan={prescripcionDelPlanVista}
+            cementadoDelPlan={cementadoDelPlanVista}
             wireSequence={vm.wireSequence}
             iprPlan={derivePlanIprFromCards(vm)}
             tads={vm.tads}

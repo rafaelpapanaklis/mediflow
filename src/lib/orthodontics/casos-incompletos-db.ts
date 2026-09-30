@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { cargarModosDeCobro } from "./billing-mode-db";
 import { normalizarOrthoBillingMode } from "./billing-mode";
 import { cargarPlanesDetalle } from "./plan-detalle-db";
+import { cargarDiagnosticosDetalle } from "./diagnostico-detalle-db";
 import { pasoQueFalta, piezasQueFaltan, type PasoDelCaso, type PiezaFaltante } from "./plan-detalle";
 import { ACTIVE_PLAN_STATUSES } from "./specialty-kpis";
 
@@ -24,10 +25,10 @@ export interface CasoIncompleto {
 
 interface FilaDelCaso {
   id: string;
+  diagnosisId: string;
   treatingDoctorId?: string | null;
-  retentionPlanText: string | null;
   invoiceId?: string | null;
-  diagnosis: { etiologyNotes: string | null; clinicalSummary: string | null } | null;
+  diagnosis: { etiologyNotes: string | null } | null;
 }
 
 function esRelacionAusente(e: unknown): boolean {
@@ -51,8 +52,8 @@ export async function cargarCasosIncompletos(
   try {
     const seleccion = {
       id: true,
-      retentionPlanText: true,
-      diagnosis: { select: { etiologyNotes: true, clinicalSummary: true } },
+      diagnosisId: true,
+      diagnosis: { select: { etiologyNotes: true } },
     } as const;
     const donde = { clinicId, id: { in: ids }, deletedAt: null };
     let filas: FilaDelCaso[];
@@ -63,7 +64,11 @@ export async function cargarCasosIncompletos(
       // Sin las columnas de doctor / factura (SQL sin pegar): se dice lo demás.
       filas = await prisma.orthodonticTreatmentPlan.findMany({ where: donde, select: seleccion });
     }
-    const [detalles, modos] = await Promise.all([cargarPlanesDetalle(clinicId, ids), cargarModosDeCobro(clinicId, ids)]);
+    const [detalles, modos, diagnosticos] = await Promise.all([
+      cargarPlanesDetalle(clinicId, ids),
+      cargarModosDeCobro(clinicId, ids),
+      cargarDiagnosticosDetalle(clinicId, filas.map((f) => f.diagnosisId)),
+    ]);
     const porId = new Map(filas.map((f) => [f.id, f]));
     const salida: CasoIncompleto[] = [];
     for (const c of activos) {
@@ -71,10 +76,9 @@ export async function cargarCasosIncompletos(
       if (!f) continue;
       const faltan = piezasQueFaltan({
         diagnosticoMigrado: esDiagnosticoMigrado(f.diagnosis?.etiologyNotes),
-        resumenClinico: f.diagnosis?.clinicalSummary,
+        sinCapturar: diagnosticos.get(f.diagnosisId)?.sinCapturar ?? [],
         doctorId: f.treatingDoctorId,
         detalle: detalles.get(c.planId) ?? null,
-        retencion: f.retentionPlanText,
         billingMode: normalizarOrthoBillingMode(modos.get(c.planId)),
         tieneFactura: Boolean(f.invoiceId),
       });

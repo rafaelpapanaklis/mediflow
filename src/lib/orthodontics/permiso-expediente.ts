@@ -22,3 +22,6 @@ export function puedeVerExpediente(usuario: UsuarioConPermisos | null | undefine
     "medicalRecord.view",
   );
 }
+
+/** Lo que se le dice a quien pide un PDF del expediente sin la llave. */
+export const MENSAJE_SIN_PERMISO_DE_EXPEDIENTE = "No tienes permiso para ver el expediente de este paciente.";

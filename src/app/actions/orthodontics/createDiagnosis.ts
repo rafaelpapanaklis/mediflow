@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createDiagnosisSchema } from "@/lib/validation/orthodontics";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { validarArchivosInicialesDelDiagnostico, validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
+import { conMovimientosSoloDeBitacora, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
 import {
   auditOrtho,
   getOrthoActionContext,
@@ -14,7 +15,13 @@ import {
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
-export async function createDiagnosis(
+export async function createDiagnosis(input: unknown): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
+  // Abrir el caso reparte su trabajo en varias llamadas: si esta es un paso de esa acción (`parteDeUnaAccion`), su fila queda
+  // solo en la bitácora y el resumen «Abrió el caso…» lo escribe la llamada que crea el plan (una fila por acción).
+  return esPasoDeOtraAccion(input) ? conMovimientosSoloDeBitacora(() => crearDiagnostico(input)) : crearDiagnostico(input);
+}
+
+async function crearDiagnostico(
   input: unknown,
 ): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean }>> {
   const auth = await getOrthoActionContext();

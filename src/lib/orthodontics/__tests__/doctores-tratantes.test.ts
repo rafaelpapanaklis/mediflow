@@ -261,3 +261,40 @@ test("los primeros pasos ya no piden elegir doctor por defecto", () => {
   const p = codigo("src/lib/orthodontics/primeros-pasos.ts");
   assert.doesNotMatch(p, /doctor-tratante|doctorTratanteElegido/);
 });
+
+// ── ws1-t12 (revisión final, #1): lo que se ve seleccionado es lo que se guarda ─────────────────
+
+test("el dueño SIN acceso a Ortodoncia no sale en la lista ni se propone: no queda de tratante para luego bloquear «Agendar este control»", () => {
+  const opciones = opcionesDeDoctorTratante([
+    usuario({ id: "dueno", role: "SUPER_ADMIN", agendaActive: true, permissionsOverride: ["patients.view", "agenda.view"] }),
+    usuario({ id: "ana", firstName: "Ana", specialty: "Ortodoncia" }),
+  ]);
+  assert.deepEqual(opciones.map((o) => o.id), ["ana"]);
+  // Lo abre el dueño sin acceso: no se propone él; hay un solo ortodoncista con acceso: ese.
+  assert.deepEqual(propuestaDeDoctorParaElAlta({ quienAbreId: "dueno", opciones }), { id: "ana", motivo: "unico" });
+});
+
+test("si nadie tiene acceso a Ortodoncia, no se propone a nadie y el alta pide elegir (con aviso hacia Equipo)", () => {
+  const opciones = opcionesDeDoctorTratante([
+    usuario({ id: "dueno", role: "SUPER_ADMIN", permissionsOverride: ["patients.view"] }),
+    usuario({ id: "otro", permissionsOverride: ["agenda.view"] }),
+  ]);
+  assert.equal(opciones.length, 0);
+  assert.deepEqual(propuestaDeDoctorParaElAlta({ quienAbreId: "dueno", opciones }), { id: "", motivo: null });
+  assert.equal(motivoFaltaDoctor({ treatingDoctorId: "", columnaExiste: true }), MENSAJE_FALTA_DOCTOR);
+  for (const f of [
+    "src/components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx",
+    "src/components/specialties/orthodontics/plan/TreatmentPlanWizard.tsx",
+  ]) {
+    const c = codigo(f);
+    assert.match(c, /Ningún doctor de esta clínica tiene acceso a Ortodoncia/, f);
+    assert.match(c, /href="\/dashboard\/team"/, f);
+  }
+});
+
+test("un caso cuyo doctor perdió Ortodoncia se ve con lo que hay guardado, no como «— elige al doctor —»", () => {
+  assert.match(
+    codigo("src/components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"),
+    /Doctor actual del caso \(sin acceso a Ortodoncia\)/,
+  );
+});

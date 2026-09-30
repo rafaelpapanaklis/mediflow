@@ -65,8 +65,11 @@ export async function terminarPosposicion(args: {
   tipo: TipoPosponible;
 }): Promise<void> {
   if (!args.clinicId) throw new Error("clinicId requerido");
+  // «Ahora» de la base y «ahora» del servidor de la app pueden diferir unos segundos: con `now()` a secas, la fila
+  // seguía «pospuesta» para el servidor hasta que sus relojes se alcanzaban y la lista no se actualizaba al deshacer
+  // (ws1-t9 #10). Se vence en el pasado de AMBOS relojes.
   await prisma.$executeRaw`
     UPDATE "ortho_alert_snoozes"
-    SET "hasta" = now()
+    SET "hasta" = LEAST(now(), ${new Date()}::timestamptz) - interval '1 minute'
     WHERE "clinicId" = ${args.clinicId} AND "patientId" = ${args.patientId} AND "tipo" = ${args.tipo}`;
 }

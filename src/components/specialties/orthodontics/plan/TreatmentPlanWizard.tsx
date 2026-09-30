@@ -257,7 +257,13 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
           {treatingDoctorId !== "" && textoDeLaPropuesta(motivoPropuesta) ? (
             <div style={{ fontSize: 11, color: "var(--text-3)" }}>{textoDeLaPropuesta(motivoPropuesta)}</div>
           ) : null}
-          {sinDoctor ? <div style={{ fontSize: 11, color: "#F59E0B" }}>{MENSAJE_FALTA_DOCTOR}</div> : null}
+          {sinDoctor && doctors.length > 0 ? <div style={{ fontSize: 11, color: "#F59E0B" }}>{MENSAJE_FALTA_DOCTOR}</div> : null}
+          {sinDoctor && doctors.length === 0 ? (
+            <div style={{ fontSize: 11, color: "#F59E0B" }}>
+              Ningún doctor de esta clínica tiene acceso a Ortodoncia. Dale acceso en{" "}
+              <a href="/dashboard/team" style={{ textDecoration: "underline" }}>Equipo</a> y vuelve a abrir el caso.
+            </div>
+          ) : null}
           <p style={{ margin: 0, fontSize: 11, color: "var(--text-3)" }}>
             Tras guardar, se abrirá el modal del consentimiento de tratamiento (SPEC §10.4)
             para firma del paciente o tutor.

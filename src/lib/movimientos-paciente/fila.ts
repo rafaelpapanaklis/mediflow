@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { retenerSiHayAlcance } from "./una-accion";
 
 /**
  * Escritura de una fila de `audit_logs` que puede llevar `patientId`.
@@ -102,6 +103,8 @@ async function crearPorPrisma(fila: FilaBitacora): Promise<void> {
  * paciente) decide qué hacer; ninguno deja que la acción principal falle.
  */
 export async function insertarFilaBitacora(fila: FilaBitacora): Promise<void> {
+  // Dentro de `conUnSoloMovimiento` la fila se retiene: el alcance la escribe al terminar, junto con su resumen.
+  if (retenerSiHayAlcance(fila)) return;
   const db = prisma as unknown as { $executeRaw?: unknown };
   const puedeCrudo = typeof db.$executeRaw === "function";
   if (!fila.patientId || !puedeCrudo || columnaProbablementeAusente()) {

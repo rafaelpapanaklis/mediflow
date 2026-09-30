@@ -169,7 +169,7 @@ test("guardarDiagnosticoYPlan: valida los dos sin escribir, escribe en UNA trans
 
 test("al abrir el caso, el diagnóstico completo se guarda enseguida con el mismo servidor de «Editar diagnóstico»; si falla, el caso sigue abierto y se dice", () => {
   const crear = TAB.indexOf("await createDiagnosis(");
-  const detalle = TAB.indexOf("await updateDiagnosis({ diagnosisId, ...payload.diagnosis.detalle })");
+  const detalle = TAB.indexOf("await updateDiagnosis({ diagnosisId, ...payload.diagnosis.detalle, ...pasoDelAlta })");
   const plan = TAB.indexOf("await createTreatmentPlan(");
   assert.ok(crear > 0 && detalle > crear && plan > detalle, "diagnóstico → su detalle → plan");
   assert.match(TAB, /El diagnóstico se creó, pero el detalle no se guardó/);
@@ -179,7 +179,7 @@ test("al confirmar: primero se abre el caso y DESPUÉS se crea su factura; si fa
   const abrir = TAB.indexOf("await createTreatmentPlan(");
   const cobrar = TAB.indexOf("await crearPlanDelCaso(");
   assert.ok(abrir > 0 && cobrar > abrir, "la factura se crea con el id del caso recién abierto");
-  assert.match(TAB, /crearPlanDelCaso\(\{ treatmentPlanId: res\.data\.id, \.\.\.payload\.planDePago \}\)/);
+  assert.match(TAB, /crearPlanDelCaso\(\{\s*treatmentPlanId: res\.data\.id,\s*\.\.\.payload\.planDePago,\s*aperturaDelCaso:/);
   assert.match(TAB, /if \(payload\.planDePago\) \{/, "sin planDePago (después / sin permiso) no se llama");
   assert.match(TAB, /El caso se abrió, pero el plan de pago no se pudo crear: \$\{cobro\.error\} Reinténtalo en Cobro, con «Abrir plan de pago»\./);
   // Sigue existiendo el camino de «Abrir plan de pago» para quien lo dejó «después».
@@ -197,7 +197,7 @@ test("la acción: exige billing.create ANTES de tocar nada, saca la clínica de 
   assert.ok(a.indexOf('getOrthoBillingActionContext("billing.create")') < a.indexOf("prisma."), "el permiso va antes de cualquier consulta");
   assert.ok(a.indexOf('getOrthoBillingActionContext("billing.create")') < a.indexOf("crearPlanDelCasoCore("));
   assert.match(a, /const clinicId = ctx\.clinicId;\s*if \(!clinicId\) return fail/);
-  assert.match(a, /args: \{\s*treatmentPlanId: string;\s*\} & PlanDePagoAlAbrir/, "solo el id del caso y las condiciones: nada de clínica ni paciente");
+  assert.match(a, /args: \{\s*treatmentPlanId: string;\s*aperturaDelCaso\?: \{ diagnostico\?: boolean; detalleDelPlan\?: boolean \};\s*\} & PlanDePagoAlAbrir/, "solo el id del caso, dos banderas y las condiciones: nada de clínica ni paciente");
   assert.doesNotMatch(a, /args\.clinicId|args\.patientId/);
   // Toda consulta lleva la clínica de la sesión.
   assert.doesNotMatch(a, /clinicId: undefined/);

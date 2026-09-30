@@ -24,11 +24,29 @@ import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-
 import { existeColumnaDoctorTratante } from "@/lib/orthodontics/doctores-tratantes-db";
 import { motivoFaltaDoctor } from "@/lib/orthodontics/doctores-tratantes";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
+import { conMovimientosSoloDeBitacora, conUnSoloMovimiento, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
-export async function createTreatmentPlan(
-  input: unknown,
-): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoPlanDetalle?: string; avisoCosto?: string }>> {
+type ResultadoDelPlan = ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoPlanDetalle?: string; avisoCosto?: string }>;
+
+export async function createTreatmentPlan(input: unknown): Promise<ResultadoDelPlan> {
+  // Abrir el caso A PLAZOS sigue con `crearPlanDelCaso` (el plan de pago): el resumen de toda la apertura lo escribe esa
+  // última llamada (`aperturaDelCaso`), y estas filas quedan solo en la bitácora.
+  if (input && typeof input === "object" && (input as { sigueElPlanDePago?: unknown }).sigueElPlanDePago === true) {
+    return conMovimientosSoloDeBitacora(() => crearPlanDeTratamiento(input));
+  }
+  // Abrir el caso = UNA fila en Movimientos con todo el detalle: el diagnóstico (llamadas anteriores, marcadas
+  // `parteDeUnaAccion`), el plan y su detalle. Las filas sueltas quedan en la bitácora (una-accion.ts).
+  return conUnSoloMovimiento(
+    {
+      titulo: "Abrió el caso de ortodoncia",
+      detallesExtra: esPasoDeOtraAccion(input) ? ["Registró el diagnóstico de ortodoncia"] : [],
+    },
+    () => crearPlanDeTratamiento(input),
+  );
+}
+
+async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan> {
   // A11 (revisión cruzada): en la práctica crear un plan siempre trae campos
   // clínicos obligatorios (técnica, costo, anclaje…), así que este gate no
   // se relaja de verdad aquí — se usa el mismo helper que updateTreatmentPlan

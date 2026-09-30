@@ -634,11 +634,14 @@ export function tadsRequeridos(aditamentos: readonly string[], tadsRegistrados: 
  * «indirecta» / «directa» → el cementado. `null` = no se puede deducir: la columna no se toca. (0.022 es el
  * calibre más común; el doctor lo afina en la hoja de control.)
  */
-export function prescripcionDerivada(d: Pick<PlanDetalle, "tubosSuperiores" | "tubosInferiores" | "bandasSuperiores" | "bandasInferiores" | "cementacionSuperiorAnterior" | "cementacionSuperiorPosterior" | "cementacionInferiorAnterior" | "cementacionInferiorPosterior">): {
+export function prescripcionDerivada(d: Pick<PlanDetalle, "brackets" | "tubosSuperiores" | "tubosInferiores" | "bandasSuperiores" | "bandasInferiores" | "cementacionSuperiorAnterior" | "cementacionSuperiorPosterior" | "cementacionInferiorAnterior" | "cementacionInferiorPosterior">): {
   prescriptionSlot: "ROTH_022" | "MBT_022" | "DAMON_Q2" | null;
   bondingType: "DIRECTO" | "INDIRECTO" | null;
 } {
-  const marcas = [d.tubosSuperiores, d.tubosInferiores, d.bandasSuperiores, d.bandasInferiores].filter((x): x is string => Boolean(x)).map((x) => clave(x));
+  // Brackets, tubos y bandas cuentan igual: «Brackets MBT» con «Tubos Roth» son dos prescripciones, no una.
+  const marcas = [...d.brackets, d.tubosSuperiores, d.tubosInferiores, d.bandasSuperiores, d.bandasInferiores]
+    .filter((x): x is string => Boolean(x))
+    .map((x) => clave(x));
   const tiene = (re: RegExp) => marcas.some((m) => re.test(m));
   // Si mezclan sistemas distintos no hay una sola prescripción que decir.
   const roth = tiene(/\broth\b/);
@@ -654,6 +657,25 @@ export function prescripcionDerivada(d: Pick<PlanDetalle, "tubosSuperiores" | "t
   const directo = cem.some((m) => /\bdirect/.test(m));
   const bondingType = indirecto && !directo ? "INDIRECTO" : directo && !indirecto ? "DIRECTO" : null;
   return { prescriptionSlot, bondingType };
+}
+
+/**
+ * La prescripción del caso TAL COMO LA DICE EL PLAN (su única fuente): «Brackets MBT · Tubos y bandas Roth». No se
+ * deduce ni se inventa un calibre; si el plan no eligió brackets, tubos ni bandas, `null` (la tarjeta de
+ * aparatología no dice nada). Lo lee la tarjeta de «Aparatología y arcos» y el resumen de arriba.
+ */
+export function prescripcionDelPlan(d: Pick<PlanDetalle, "brackets" | "tubosSuperiores" | "tubosInferiores" | "bandasSuperiores" | "bandasInferiores">): string | null {
+  const unicos = (...v: Array<string | null>) => [...new Set(v.filter((x): x is string => Boolean(x)))];
+  const tubos = unicos(d.tubosSuperiores, d.tubosInferiores);
+  const bandas = unicos(d.bandasSuperiores, d.bandasInferiores);
+  const partes: string[] = [];
+  if (d.brackets.length > 0) partes.push(`Brackets ${lista(d.brackets)}`);
+  if (tubos.length > 0 && tubos.join("|") === bandas.join("|")) partes.push(`Tubos y bandas ${lista(tubos)}`);
+  else {
+    if (tubos.length > 0) partes.push(`Tubos ${lista(tubos)}`);
+    if (bandas.length > 0) partes.push(`Bandas ${lista(bandas)}`);
+  }
+  return partes.length > 0 ? partes.join(" · ") : null;
 }
 
 // ─── Anclaje general derivado ───────────────────────────────────────────
@@ -684,6 +706,16 @@ export const ETIQUETA_ANCLAJE_GENERAL: Record<string, string> = {
   MINIMUM: "Mínimo",
   COMPOUND: "Compuesto (ver por arcada)",
 };
+
+/**
+ * El anclaje general (`AnchorageType`) es NOT NULL y arranca en «Moderado» al abrir el caso, al migrar de Dentalink y
+ * cuando no se elige ninguno por arcada: «Moderado» solo, sin detalle por arcada, es el valor de relleno y NO se dice
+ * como dato. Cualquier otro (máximo, mínimo, compuesto) sí se eligió. `null` = sin capturar.
+ */
+export function anclajeGeneralComoDato(anchorageType: string | null | undefined): string | null {
+  if (!anchorageType || anchorageType === "MODERATE") return null;
+  return ETIQUETA_ANCLAJE_GENERAL[anchorageType] ?? null;
+}
 
 // ─── TADs ↔ aditamentos ─────────────────────────────────────────────────
 
@@ -753,8 +785,9 @@ export function lineasDelPlan(base: BaseDelPlan, detalle: PlanDetalle | null, ta
         .join(" · ")
         .replace(/^./, (c) => c.toUpperCase()),
     );
-  } else if (base.anchorageType && ETIQUETA_ANCLAJE_GENERAL[base.anchorageType]) {
-    poner("anclaje", "Anclaje", ETIQUETA_ANCLAJE_GENERAL[base.anchorageType]!.toLowerCase().replace(/^./, (c) => c.toUpperCase()));
+  } else {
+    const general = anclajeGeneralComoDato(base.anchorageType);
+    if (general) poner("anclaje", "Anclaje", general);
   }
 
   const adit = [...d.aditamentos];
@@ -816,36 +849,36 @@ export interface PiezaFaltante {
   texto: string;
 }
 
-/** El texto que dejan los casos migrados en el plan de retención: sigue faltando. */
-const RETENCION_DE_MIGRACION = /^plan de retenci[oó]n sin registrar/i;
-
 /**
  * Lo que falta de un caso para darlo por completo. Para ABRIR un caso solo se exigen técnica y doctor; lo demás
- * puede quedar a medias, y los casos migrados de Dentalink entran casi vacíos. Esto lo dice, por paso:
- *  · DIAGNÓSTICO — los valores neutros de migración, o un resumen clínico que no llega al mínimo.
- *  · PLAN — doctor, controles previstos, anclaje, aparatología, retención y cobro (plan de pago).
- * Lo vacío que NO se exige (aditamentos, extracciones, radiografías, interconsultas…) no cuenta: puede no aplicar.
+ * puede quedar a medias, y los casos migrados de Dentalink entran casi vacíos. «Incompleto» dice SOLO lo esencial
+ * (ws1-t12, revisión final: con todo lo demás, 21 de 25 casos salían y la alerta no servía):
+ *  · DIAGNÓSTICO — los valores neutros de migración, o la clase de Angle / el overjet y overbite sin capturar.
+ *  · PLAN — doctor tratante, controles previstos y cobro (plan de pago o factura de colocación). La técnica no
+ *    entra: siempre existe (sin ella no se abre el caso).
+ * NO cuentan: el resumen clínico (es opcional), el anclaje, la aparatología, la retención, los aditamentos, las
+ * extracciones, las radiografías ni las interconsultas: pueden no aplicar o llenarse más tarde.
  */
 export function piezasQueFaltan(c: {
   /** El diagnóstico lleva la marca de migración (valores neutros, no mediciones). */
   diagnosticoMigrado: boolean;
-  resumenClinico: string | null | undefined;
+  /** `sinCapturar` del detalle del diagnóstico: lo que se guardó como relleno y no es un dato real. */
+  sinCapturar?: readonly string[];
   doctorId: string | null | undefined;
   detalle: PlanDetalle | null | undefined;
-  retencion: string | null | undefined;
   billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL";
   tieneFactura: boolean;
 }): PiezaFaltante[] {
   const out: PiezaFaltante[] = [];
   const d = c.detalle ?? planDetalleVacio();
+  const sin = c.sinCapturar ?? [];
   if (c.diagnosticoMigrado) out.push({ paso: "diagnostico", clave: "diagnostico-migrado", texto: "diagnóstico (valores de migración)" });
-  else if ((c.resumenClinico ?? "").trim().length < 40) out.push({ paso: "diagnostico", clave: "resumen", texto: "resumen clínico del diagnóstico" });
+  else {
+    if (sin.includes("angleClassRight") || sin.includes("angleClassLeft")) out.push({ paso: "diagnostico", clave: "angle", texto: "clase de Angle" });
+    if (sin.includes("overjetMm") || sin.includes("overbiteMm")) out.push({ paso: "diagnostico", clave: "overjet-overbite", texto: "overjet y overbite" });
+  }
   if (!c.doctorId) out.push({ paso: "plan", clave: "doctor", texto: "doctor tratante" });
   if (!d.controlesPrevistos) out.push({ paso: "plan", clave: "controles", texto: "controles previstos" });
-  if (!d.anclajeSuperior && !d.anclajeInferior) out.push({ paso: "plan", clave: "anclaje", texto: "anclaje" });
-  if (d.brackets.length + d.alineadores.length + d.placas.length === 0) out.push({ paso: "plan", clave: "aparatologia", texto: "aparatología" });
-  const ret = (c.retencion ?? "").trim();
-  if (ret === "" || RETENCION_DE_MIGRACION.test(ret)) out.push({ paso: "plan", clave: "retencion", texto: "plan de retención" });
   if (!c.tieneFactura) out.push({ paso: "plan", clave: "cobro", texto: c.billingMode === "PAGO_POR_CONTROL" ? "factura de colocación" : "plan de pago" });
   return out;
 }

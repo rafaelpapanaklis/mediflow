@@ -435,6 +435,57 @@ describe("membrete común en los PDF de ortodoncia", () => {
     }
   });
 
+  it("plan de tratamiento: «Tu plan de tratamiento» no se parte y la última hoja nunca lleva solo el aviso (ws1-t12)", async () => {
+    // Se barre la cantidad de renglones del plan completo para que el bloque caiga en cada borde de hoja posible.
+    for (let n = 0; n <= 44; n += 2) {
+      const lineas = Array.from({ length: n }, (_, i) => ({ clave: `l${i}`, etiqueta: `Renglón ${i + 1}`, valor: `Valor del renglón ${i + 1}` }));
+      const { paginas } = await textoDelPdf(
+        <TreatmentPlanPdf
+          data={{
+            treatmentPlanId: "c1",
+            membrete: membrete(),
+            patient: { firstName: "Diego", lastName: "Hernández", dob: null },
+            clinic: { name: "Clínica Sonrisa Norte" },
+            doctor: { firstName: "Ana", lastName: "Ruiz", cedulaProfesional: "7654321" },
+            diagnosis: { angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_II_DIV_1", overbiteMm: "4", overjetMm: "7", clinicalSummary: "Clase II división 1." },
+            plan: {
+              technique: "METAL_BRACKETS", techniqueName: null, techniqueNotes: null, estimatedDurationMonths: 18,
+              totalCostMxn: "35000", anchorageType: "MODERATE", extractionsRequired: true, extractionsTeethFdi: [14, 24],
+              treatmentObjectives: "AESTHETIC_AND_FUNCTIONAL", retentionPlanText: "Retenedor fijo inferior y removible superior, uso nocturno por dos años.",
+            },
+            planCompleto: { lineas },
+            phases: [],
+            generatedAt: "2026-09-29T08:33:00.000Z",
+          }}
+        />,
+      );
+      // Los títulos van en mayúsculas en la hoja: se busca sin distinguirlas.
+      const enHoja = (e: string) => paginas.findIndex((p) => p.toLowerCase().includes(e.toLowerCase()));
+      assert.ok(enHoja("Tu plan de tratamiento") >= 0 && enHoja("Objetivos") >= 0, `${n} renglones: faltan el título o «Objetivos»`);
+      assert.equal(enHoja("Tu plan de tratamiento"), enHoja("Objetivos"), `${n} renglones: el bloque «Tu plan de tratamiento» se partió entre hojas`);
+      assert.equal(enHoja("Qué esperar mes a mes"), enHoja("Este documento es informativo"), `${n} renglones: el aviso final quedó solo`);
+      assert.ok(paginas.length === 1 || enHoja("Este documento es informativo") === paginas.length - 1, `${n} renglones: el aviso no está en la última hoja`);
+    }
+  });
+
+  it("plan de tratamiento: el anclaje «Moderado» de arranque no se dice como dato", async () => {
+    const base = {
+      treatmentPlanId: "c1",
+      membrete: membrete(),
+      patient: { firstName: "Diego", lastName: "Hernández", dob: null },
+      clinic: { name: "Clínica Sonrisa Norte" },
+      doctor: { firstName: "Ana", lastName: "Ruiz", cedulaProfesional: "7654321" },
+      diagnosis: { angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_II_DIV_1", overbiteMm: "4", overjetMm: "7", clinicalSummary: "x" },
+      phases: [],
+      generatedAt: "2026-09-29T08:33:00.000Z",
+    };
+    const plan = { technique: "METAL_BRACKETS", techniqueName: null, techniqueNotes: null, estimatedDurationMonths: 18, totalCostMxn: "35000", extractionsRequired: false, extractionsTeethFdi: [], treatmentObjectives: "AESTHETIC_AND_FUNCTIONAL", retentionPlanText: "r" };
+    const sin = await textoDelPdf(<TreatmentPlanPdf data={{ ...base, plan: { ...plan, anchorageType: "MODERATE" } }} />);
+    assert.ok(!sin.tiene("Anclaje"), "«Moderado» de arranque: no hay renglón de anclaje");
+    const con = await textoDelPdf(<TreatmentPlanPdf data={{ ...base, plan: { ...plan, anchorageType: "MAXIMUM" } }} />);
+    assert.ok(con.tiene("Anclaje") && con.tiene("Máximo"));
+  });
+
   it("carta de alta", async () => {
     const { todo, tiene } = await textoDelPdf(
       <DischargeLetterPdf

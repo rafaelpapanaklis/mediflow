@@ -263,7 +263,8 @@ export function SectionPhotos(props: SectionPhotosProps) {
         const res = await fetch("/api/orthodontics/photos/upload", { method: "POST", body: fd });
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json?.fileId) throw new Error(json?.error ?? "No se pudo subir la foto");
-        const r = await agregarFotoExtra({ setId, fileId: json.fileId, etiqueta: item.etiqueta });
+        // La subida ya dejó su fila en Movimientos; ligar la foto queda solo en la bitácora (una fila por foto).
+        const r = await agregarFotoExtra({ setId, fileId: json.fileId, etiqueta: item.etiqueta, parteDeUnaAccion: true });
         if (isFailure(r)) throw new Error(r.error);
       } catch (e) {
         fallidas.push(i);

@@ -19,6 +19,7 @@ import {
 } from "@/lib/uploads/validar-archivo";
 
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { conMovimientosSoloDeBitacora } from "@/lib/movimientos-paciente/una-accion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +89,9 @@ export async function POST(req: NextRequest) {
   const file = form.get("file");
   const setId = form.get("setId");
   const view = form.get("view");
+  // «Subir una foto» del navegador: crea el juego (si hace falta), sube y liga. Esta fila es la que se ve en
+  // Movimientos; las otras dos llamadas de la acción quedan solo en la bitácora. `juegoNuevo` lo dice en la frase.
+  const juegoNuevo = form.get("juegoNuevo") === "1";
   if (!(file instanceof Blob) || typeof setId !== "string" || typeof view !== "string") {
     return NextResponse.json(
       { error: "file + setId + view requeridos" },
@@ -240,7 +244,7 @@ export async function POST(req: NextRequest) {
     entityType: "patient-file",
     entityId: patientFile.id,
     action: "create",
-    texto: "Subió una foto de ortodoncia a un juego de fotos",
+    texto: juegoNuevo ? "Subió una foto de ortodoncia a un juego de fotos nuevo" : "Subió una foto de ortodoncia a un juego de fotos",
     req,
   });
 

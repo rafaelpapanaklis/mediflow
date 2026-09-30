@@ -146,6 +146,8 @@ function dondeCompleto(f: FiltroMovimientos, conColumna: boolean, ahora: Date): 
     Prisma.sql`a."clinicId" IN (${Prisma.join(f.clinicIds)})`,
     Prisma.sql`a."action" <> 'view'`,
     Prisma.sql`a."action" NOT LIKE '%.pdf'`,
+    // Las filas de una acción que se juntó en un resumen (una-accion.ts) quedan en la bitácora, no en la lista.
+    Prisma.sql`COALESCE(a."changes" -> '_mov' -> 'after' ->> 'soloBitacora', '') <> 'true'`,
     Prisma.sql`a."entityType" NOT IN (${Prisma.join(ENTIDADES_EXCLUIDAS.slice())})`,
     dondePertenece(f, conColumna, ahora),
   ];

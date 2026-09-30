@@ -11,11 +11,19 @@ import {
   movimientoDelGuardado,
   prepararGuardadoDelDiagnostico,
 } from "@/lib/orthodontics/diagnostico-guardar";
+import { conMovimientosSoloDeBitacora, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 export async function updateDiagnosis(
+  input: unknown,
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoDetalle: string | null }>> {
+  // Paso de «Abrir caso» (`parteDeUnaAccion`): su fila queda solo en la bitácora; el resumen lo escribe la que crea el plan.
+  return esPasoDeOtraAccion(input) ? conMovimientosSoloDeBitacora(() => actualizarDiagnostico(input)) : actualizarDiagnostico(input);
+}
+
+async function actualizarDiagnostico(
   input: unknown,
 ): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoDetalle: string | null }>> {
   const auth = await getOrthoActionContext();

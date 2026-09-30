@@ -21,6 +21,7 @@ import {
   prepararGuardadoDelDiagnostico,
   type ResultadoDelGuardado,
 } from "@/lib/orthodontics/diagnostico-guardar";
+import { conUnSoloMovimiento } from "@/lib/movimientos-paciente/una-accion";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -38,6 +39,11 @@ export interface ResultadoDelGuardadoUnico {
  * `diagnosisId` y `diagnostico` (lo que recibe `updateDiagnosis`, sin el id). Sin `diagnostico` solo se guarda el plan.
  */
 export async function guardarDiagnosticoYPlan(input: unknown): Promise<ActionResult<ResultadoDelGuardadoUnico>> {
+  // Un «Guardar cambios» = una fila en Movimientos con lo del diagnóstico y lo del plan (una-accion.ts).
+  return conUnSoloMovimiento({}, () => guardarJuntos(input));
+}
+
+async function guardarJuntos(input: unknown): Promise<ActionResult<ResultadoDelGuardadoUnico>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;

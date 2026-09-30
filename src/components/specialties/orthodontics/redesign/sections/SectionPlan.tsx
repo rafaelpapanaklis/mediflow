@@ -39,6 +39,10 @@ export interface SectionPlanProps {
   iprPlan: IPRPointDTO[];
   tads: TADDTO[];
   auxMechanics: AuxMechanicsDTO | null;
+  /** La prescripción tal como la dice el plan («Brackets MBT · Tubos Roth»): su única fuente. Con ella, la de la columna no se muestra. */
+  prescripcionDelPlan?: string | null;
+  /** El cementado que dice el plan (directo/indirecto, de su cementación); con plan, manda sobre el de la columna. */
+  cementadoDelPlan?: OrthoTreatmentDTO["appliance"]["bonding"];
   onEditPrescription?: () => void;
   onAddWireStep?: () => void;
   onAddTad?: () => void;
@@ -54,7 +58,7 @@ export function SectionPlan(props: SectionPlanProps) {
       title="Aparatología y arcos"
       eyebrow="Lo que lleva el paciente: aparatología, secuencia de arcos, IPR y mecánicas auxiliares"
     >
-      <PrescriptionBlock treatment={t} onEdit={props.onEditPrescription} />
+      <PrescriptionBlock treatment={t} prescripcionDelPlan={props.prescripcionDelPlan ?? null} cementadoDelPlan={props.cementadoDelPlan ?? null} onEdit={props.onEditPrescription} />
       <WireSequenceBlock
         sequence={props.wireSequence}
         onAdd={props.onAddWireStep}
@@ -72,17 +76,24 @@ export function SectionPlan(props: SectionPlanProps) {
 
 function PrescriptionBlock({
   treatment,
+  prescripcionDelPlan,
+  cementadoDelPlan,
   onEdit,
 }: {
   treatment: OrthoTreatmentDTO;
+  prescripcionDelPlan: string | null;
+  cementadoDelPlan: OrthoTreatmentDTO["appliance"]["bonding"];
   onEdit?: () => void;
 }) {
-  const slot = treatment.appliance.prescriptionSlot
-    ? APPLIANCE_SLOT_LABELS[treatment.appliance.prescriptionSlot]
-    : "Sin definir";
-  const bonding = treatment.appliance.bonding
-    ? BONDING_LABELS[treatment.appliance.bonding]
-    : "—";
+  // UNA fuente: si el plan dice la prescripción, esa; si no, la que se guardó a mano en el caso; si tampoco, nada.
+  const slot = prescripcionDelPlan
+    ? prescripcionDelPlan
+    : treatment.appliance.prescriptionSlot
+      ? APPLIANCE_SLOT_LABELS[treatment.appliance.prescriptionSlot]
+      : null;
+  // Igual que la prescripción: con plan, el cementado es el del plan; la columna solo vale para un caso sin plan completo.
+  const cementado = cementadoDelPlan ?? (prescripcionDelPlan ? null : treatment.appliance.bonding);
+  const bonding = cementado ? BONDING_LABELS[cementado] : null;
 
   return (
     <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
@@ -102,8 +113,11 @@ function PrescriptionBlock({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Solo lo que tiene dato: nada de «Cementado —» ni «Notas —». */}
         {treatment.appliance.type ? <PrescriptionTile label="Tipo" value={treatment.appliance.type} accent /> : null}
-        <PrescriptionTile label="Prescripción / slot" value={slot} mono />
-        {treatment.appliance.bonding ? <PrescriptionTile label="Cementado" value={bonding} /> : null}
+        {slot ? <PrescriptionTile label={prescripcionDelPlan ? "Prescripción (del plan)" : "Prescripción / slot"} value={slot} mono={!prescripcionDelPlan} /> : null}
+        {bonding ? <PrescriptionTile label="Cementado" value={bonding} /> : null}
+        {!treatment.appliance.type && !slot && !bonding && !treatment.appliance.notes ? (
+          <div className={`${orto.vacioLinea} col-span-full`}>Aún no hay aparatología definida. Se define en «Editar plan».</div>
+        ) : null}
         {treatment.appliance.notes ? <PrescriptionTile label="Notas" value={treatment.appliance.notes} subtle /> : null}
       </div>
     </div>

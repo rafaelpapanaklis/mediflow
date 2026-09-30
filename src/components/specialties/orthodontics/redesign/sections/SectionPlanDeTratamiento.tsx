@@ -14,7 +14,7 @@ import { Btn, Card } from "../atoms";
 import { ProgressBar } from "../atoms/ProgressBar";
 import {
   CAMPOS_DE_UNA_OPCION,
-  ETIQUETA_ANCLAJE_GENERAL,
+  anclajeGeneralComoDato,
   esAditamentoConTads,
   esPlanDetalleVacio,
   etiquetaDeAnclaje,
@@ -113,15 +113,16 @@ export function SectionPlanDeTratamiento({ vista, onEditar }: SectionPlanDeTrata
             ) : null}
           </Kpi>
 
-          <Kpi etiqueta="Anclaje" vacio={d.anclajeSuperior || d.anclajeInferior || vista.anchorageType ? null : "Sin definir"}>
+          <Kpi etiqueta="Anclaje" vacio={d.anclajeSuperior || d.anclajeInferior || anclajeGeneralComoDato(vista.anchorageType) ? null : "Sin capturar"}>
             {d.anclajeSuperior || d.anclajeInferior ? (
               <div className={c.kpiPildoras}>
-                <Pildora etiqueta="Sup." valor={d.anclajeSuperior ? etiquetaDeAnclaje(d.anclajeSuperior) : "—"} apagada={!d.anclajeSuperior} />
-                <Pildora etiqueta="Inf." valor={d.anclajeInferior ? etiquetaDeAnclaje(d.anclajeInferior) : "—"} apagada={!d.anclajeInferior} />
+                {/* Solo la arcada que se definió: nada de «Inf. —». */}
+                {d.anclajeSuperior ? <Pildora etiqueta="Sup." valor={etiquetaDeAnclaje(d.anclajeSuperior)} /> : null}
+                {d.anclajeInferior ? <Pildora etiqueta="Inf." valor={etiquetaDeAnclaje(d.anclajeInferior)} /> : null}
               </div>
-            ) : vista.anchorageType && ETIQUETA_ANCLAJE_GENERAL[vista.anchorageType] ? (
+            ) : anclajeGeneralComoDato(vista.anchorageType) ? (
               <div className={c.kpiPildoras}>
-                <Pildora etiqueta="General" valor={ETIQUETA_ANCLAJE_GENERAL[vista.anchorageType]!} />
+                <Pildora etiqueta="General" valor={anclajeGeneralComoDato(vista.anchorageType)!} />
                 <div className={c.kpiSub}>Aún sin el detalle por arcada.</div>
               </div>
             ) : null}
@@ -211,47 +212,31 @@ export function SectionPlanDeTratamiento({ vista, onEditar }: SectionPlanDeTrata
         {hayTubos ? (
           <Grupo titulo="Tubos, bandas y cementación" ancho>
             {hayTubosOBandas ? (
-              <div className={c.tablaMini} style={{ marginBottom: hayCementacion ? 12 : 0 }}>
-                <span />
-                <span className={c.tablaMiniCab}>Superior</span>
-                <span className={c.tablaMiniCab}>Inferior</span>
-                {/* Solo las filas que tienen algún dato: nada de «Bandas — —». */}
-                {d.tubosSuperiores || d.tubosInferiores ? (
-                  <>
-                    <span className={c.tablaMiniFila}>Tubos</span>
-                    <Valor v={d.tubosSuperiores} />
-                    <Valor v={d.tubosInferiores} />
-                  </>
-                ) : null}
-                {d.bandasSuperiores || d.bandasInferiores ? (
-                  <>
-                    <span className={c.tablaMiniFila}>Bandas</span>
-                    <Valor v={d.bandasSuperiores} />
-                    <Valor v={d.bandasInferiores} />
-                  </>
-                ) : null}
-              </div>
+              <TablaMini
+                columnas={[
+                  { titulo: "Superior", tiene: Boolean(d.tubosSuperiores || d.bandasSuperiores) },
+                  { titulo: "Inferior", tiene: Boolean(d.tubosInferiores || d.bandasInferiores) },
+                ]}
+                filas={[
+                  { titulo: "Tubos", valores: [d.tubosSuperiores, d.tubosInferiores] },
+                  { titulo: "Bandas", valores: [d.bandasSuperiores, d.bandasInferiores] },
+                ]}
+                cabeceraDeFilas=""
+                separado={hayCementacion}
+              />
             ) : null}
             {hayCementacion ? (
-              <div className={c.tablaMini}>
-                <span className={c.tablaMiniCab}>Cementación</span>
-                <span className={c.tablaMiniCab}>Anterior</span>
-                <span className={c.tablaMiniCab}>Posterior</span>
-                {d.cementacionSuperiorAnterior || d.cementacionSuperiorPosterior ? (
-                  <>
-                    <span className={c.tablaMiniFila}>Superior</span>
-                    <Valor v={d.cementacionSuperiorAnterior} />
-                    <Valor v={d.cementacionSuperiorPosterior} />
-                  </>
-                ) : null}
-                {d.cementacionInferiorAnterior || d.cementacionInferiorPosterior ? (
-                  <>
-                    <span className={c.tablaMiniFila}>Inferior</span>
-                    <Valor v={d.cementacionInferiorAnterior} />
-                    <Valor v={d.cementacionInferiorPosterior} />
-                  </>
-                ) : null}
-              </div>
+              <TablaMini
+                columnas={[
+                  { titulo: "Anterior", tiene: Boolean(d.cementacionSuperiorAnterior || d.cementacionInferiorAnterior) },
+                  { titulo: "Posterior", tiene: Boolean(d.cementacionSuperiorPosterior || d.cementacionInferiorPosterior) },
+                ]}
+                filas={[
+                  { titulo: "Superior", valores: [d.cementacionSuperiorAnterior, d.cementacionSuperiorPosterior] },
+                  { titulo: "Inferior", valores: [d.cementacionInferiorAnterior, d.cementacionInferiorPosterior] },
+                ]}
+                cabeceraDeFilas="Cementación"
+              />
             ) : null}
           </Grupo>
         ) : null}
@@ -315,7 +300,38 @@ function Pildora({ etiqueta, valor, apagada }: { etiqueta: string; valor: string
   );
 }
 
-function Valor({ v }: { v: string | null }) {
-  return <span className={v ? c.tablaMiniValor : c.tablaMiniVacio}>{v ?? "—"}</span>;
+/**
+ * Tabla chica de dos columnas (superior/inferior o anterior/posterior) que solo dibuja lo que tiene dato:
+ * la columna sin ningún valor y la fila sin ninguno no salen, y la celda vacía queda en blanco (nada de «—»).
+ */
+function TablaMini({
+  columnas,
+  filas,
+  cabeceraDeFilas,
+  separado,
+}: {
+  columnas: [{ titulo: string; tiene: boolean }, { titulo: string; tiene: boolean }];
+  filas: Array<{ titulo: string; valores: [string | null, string | null] }>;
+  cabeceraDeFilas: string;
+  separado?: boolean;
+}) {
+  const idx = [0, 1].filter((i) => columnas[i].tiene);
+  const conDato = filas.filter((f) => idx.some((i) => f.valores[i]));
+  if (idx.length === 0 || conDato.length === 0) return null;
+  return (
+    <div className={c.tablaMini} style={{ gridTemplateColumns: `auto repeat(${idx.length}, minmax(0, 1fr))`, marginBottom: separado ? 12 : 0 }}>
+      <span className={c.tablaMiniCab}>{cabeceraDeFilas}</span>
+      {idx.map((i) => (
+        <span key={columnas[i].titulo} className={c.tablaMiniCab}>{columnas[i].titulo}</span>
+      ))}
+      {conDato.map((f) => (
+        <span key={f.titulo} className="contents">
+          <span className={c.tablaMiniFila}>{f.titulo}</span>
+          {idx.map((i) => (
+            <span key={i} className={c.tablaMiniValor}>{f.valores[i] ?? ""}</span>
+          ))}
+        </span>
+      ))}
+    </div>
+  );
 }
-

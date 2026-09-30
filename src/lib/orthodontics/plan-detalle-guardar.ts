@@ -8,7 +8,6 @@ import {
   cambiosDelPlan,
   esFdiValido,
   ordenarFdi,
-  prescripcionDerivada,
   tadsRequeridos,
   textoDeMovimientoDelPlan,
   validarContraOpciones,
@@ -69,7 +68,7 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
     where: { id: treatmentPlanId, clinicId: ctx.clinicId, patientId, deletedAt: null },
     select: {
       estimatedDurationMonths: true, extractionsTeethFdi: true, extractionsRequired: true, tadsRequired: true, anchorageType: true,
-      technique: true, prescriptionSlot: true, bondingType: true,
+      technique: true,
     },
   });
   if (!antesCols) return { ok: false, error: "Plan no encontrado" };
@@ -125,10 +124,9 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
       const pideTads = tadsRequeridos(plan.aditamentos, tadsRegistrados);
       if (pideTads !== antesCols.tadsRequired) datos.tadsRequired = pideTads;
       if (anclajeNuevo && anclajeNuevo !== antesCols.anchorageType) datos.anchorageType = anclajeNuevo;
-      // La prescripción y el cementado generales salen de tubos, bandas y cementación (si se pueden deducir).
-      const pres = prescripcionDerivada(plan);
-      if (pres.prescriptionSlot && pres.prescriptionSlot !== antesCols.prescriptionSlot) datos.prescriptionSlot = pres.prescriptionSlot;
-      if (pres.bondingType && pres.bondingType !== antesCols.bondingType) datos.bondingType = pres.bondingType;
+      // La prescripción y el cementado YA NO se escriben en las columnas del caso: la fuente es el plan (brackets, tubos,
+      // bandas y cementación) y la tarjeta de «Aparatología y arcos» lo lee de ahí (`prescripcionDelPlan`). Antes se
+      // deducía un «Roth 0.022» de los tubos y se guardaba encima, sin avisar y aun cuando los brackets decían MBT.
       if (Object.keys(datos).length > 0) {
         await tx.orthodonticTreatmentPlan.updateMany({ where: { id: treatmentPlanId, clinicId: ctx.clinicId }, data: datos });
       }

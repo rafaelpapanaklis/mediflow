@@ -1215,6 +1215,10 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                           disabled={!columnsExist.treatingDoctorId}
                         >
                           <option value="">{columnsExist.treatingDoctorId ? "— elige al doctor —" : "— sin asignar —"}</option>
+                          {/* Un caso cuyo doctor ya perdió «Ortodoncia» en Equipo: se ve lo que hay guardado, no un «elige» que engaña. */}
+                          {treatingDoctorId && !loadingOptions && !doctors.some((d) => d.id === treatingDoctorId) ? (
+                            <option value={treatingDoctorId}>Doctor actual del caso (sin acceso a Ortodoncia)</option>
+                          ) : null}
                           {doctors.map((d) => (
                             <option key={d.id} value={d.id}>{d.fullName}</option>
                           ))}
@@ -1235,8 +1239,9 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     ) : null}
                     {!loadingOptions && columnsExist.treatingDoctorId && doctors.length === 0 ? (
                       <p className="text-[11px] text-[color:var(--pr-alerta)]">
-                        Nadie de esta clínica aparece como doctor. Revisa en Equipo que quien atiende tenga rol de
-                        doctor o esté en la Agenda.
+                        Ningún doctor de esta clínica tiene acceso a Ortodoncia, así que no hay a quién dejar como
+                        tratante. Dale acceso en{" "}
+                        <a href="/dashboard/team" className="underline">Equipo</a> y vuelve a abrir el caso.
                       </p>
                     ) : null}
                     {!columnsExist.treatingDoctorId ? (

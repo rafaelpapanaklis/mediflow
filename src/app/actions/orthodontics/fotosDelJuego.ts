@@ -25,6 +25,7 @@ import {
   limpiarEtiqueta,
   limpiarMotivo,
 } from "@/lib/orthodontics/fotos-del-juego";
+import { conMovimientosSoloDeBitacora, conUnSoloMovimiento, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -134,13 +135,28 @@ export async function quitarFotoDeVista(input: {
 }
 
 /** Registra una foto extra ya subida (POST /api/orthodontics/photos/upload con view=extra). */
-export async function agregarFotoExtra(input: {
+export async function agregarFotoExtra(input: EntradaDeFotoExtra): Promise<ActionResult<{ id: string }>> {
+  // Igual que uploadPhotoToSet: una fila por foto (ver una-accion.ts).
+  if (esPasoDeOtraAccion(input)) return conMovimientosSoloDeBitacora(() => guardarFotoExtra(input));
+  return conUnSoloMovimiento(
+    { titulo: "Subió una foto extra de ortodoncia", detallesExtra: input?.juegoNuevo === true ? ["Creó un juego de fotos de ortodoncia"] : [] },
+    () => guardarFotoExtra(input),
+  );
+}
+
+interface EntradaDeFotoExtra {
   setId: string;
   fileId: string;
   etiqueta?: string | null;
   /** «sobremordida» o «resalte»: la foto de esa vista (no una extra suelta). */
   slot?: string | null;
-}): Promise<ActionResult<{ id: string }>> {
+  /** Paso de una subida que ya dejó su propio movimiento: esta llamada queda solo en la bitácora. */
+  parteDeUnaAccion?: boolean;
+  /** Se ligó una foto que ya estaba y el juego se creó en esta acción: el movimiento lo dice. */
+  juegoNuevo?: boolean;
+}
+
+async function guardarFotoExtra(input: EntradaDeFotoExtra): Promise<ActionResult<{ id: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;

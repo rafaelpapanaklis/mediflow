@@ -6,6 +6,7 @@ import { exportTreatmentPlanPdf } from "@/app/actions/orthodontics/exportTreatme
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { TreatmentPlanPdf } from "@/lib/orthodontics/pdf-templates/treatment-plan";
 import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
+import { estadoDeFalloDelPdf, guardaDelPdfDelCaso } from "@/lib/orthodontics/pdf/guarda-del-caso";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,9 +16,12 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } },
 ) {
+  const sinPermiso = await guardaDelPdfDelCaso();
+  if (sinPermiso) return sinPermiso;
+
   const result = await exportTreatmentPlanPdf({ treatmentPlanId: params.id });
   if (isFailure(result)) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    return NextResponse.json({ ok: false, error: result.error }, { status: estadoDeFalloDelPdf(result.error) });
   }
 
   const buffer = await renderToBuffer(<TreatmentPlanPdf data={result.data} />);

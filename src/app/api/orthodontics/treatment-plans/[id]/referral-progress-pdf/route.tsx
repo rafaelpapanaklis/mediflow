@@ -7,6 +7,7 @@ import { exportReferralProgressLetterPdf } from "@/app/actions/orthodontics/expo
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { ReferralProgressLetterPdf } from "@/lib/orthodontics/pdf-templates/referral-progress-letter";
 import { nombreDeArchivoPdf } from "@/lib/orthodontics/pdf/nombre-de-archivo";
+import { estadoDeFalloDelPdf, guardaDelPdfDelCaso } from "@/lib/orthodontics/pdf/guarda-del-caso";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,9 @@ export async function GET(
   req: Request,
   { params }: { params: { id: string } },
 ) {
+  const sinPermiso = await guardaDelPdfDelCaso();
+  if (sinPermiso) return sinPermiso;
+
   const stage = new URL(req.url).searchParams.get("stage");
   const parsedStage = stage === "inicio" || stage === "termino" ? stage : null;
   if (!parsedStage) {
@@ -24,7 +28,7 @@ export async function GET(
 
   const result = await exportReferralProgressLetterPdf({ treatmentPlanId: params.id, stage: parsedStage });
   if (isFailure(result)) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    return NextResponse.json({ ok: false, error: result.error }, { status: estadoDeFalloDelPdf(result.error) });
   }
 
   const buffer = await renderToBuffer(<ReferralProgressLetterPdf data={result.data} />);

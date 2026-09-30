@@ -42,6 +42,8 @@ export interface SectionHeroProps {
   /** Ola 1 (ws1-t6) — A5/A6/A7/A11: doctor tratante, responsable del pago,
    *  fecha de colocación y estado del caso. */
   onOpenCaseSettings?: () => void;
+  /** La prescripción tal como la dice el plan: si existe, es la que se ve (una sola fuente). */
+  prescripcionDelPlan?: string | null;
   onStartControl?: () => void;
   onAdvancePhase?: () => void;
 }
@@ -58,11 +60,11 @@ export function SectionHero(props: SectionHeroProps) {
   // Primero qué lleva; debajo, la prescripción. Antes salía «Sin definir»
   // como dato principal aunque el tipo sí estuviera capturado.
   const applianceLabel = t.appliance.type ?? "Sin definir";
-  const applianceSub = t.appliance.prescriptionSlot
-    ? `Prescripción ${APPLIANCE_SLOT_LABELS[t.appliance.prescriptionSlot]}`
-    : t.appliance.type
-      ? "Prescripción sin definir"
-      : "—";
+  const applianceSub = props.prescripcionDelPlan
+    ? props.prescripcionDelPlan
+    : t.appliance.prescriptionSlot
+      ? `Prescripción ${APPLIANCE_SLOT_LABELS[t.appliance.prescriptionSlot]}`
+      : undefined;
   // Con los indicadores de verdad, `pct: null` es «sin datos». Sin ellos
   // (quien arma el objeto a mano), los dos números de siempre.
   const asistencia = t.attendance ? t.attendance.pct : t.attendancePct;

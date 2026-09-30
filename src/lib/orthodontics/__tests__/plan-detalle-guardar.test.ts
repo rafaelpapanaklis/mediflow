@@ -112,15 +112,16 @@ test("«Requiere TADs» se DERIVA de Aditamentos y de los TAD registrados (se en
   assert.equal(state.escrituras.find((e) => e.tabla === "plan"), undefined, "con TAD registrados sigue en «sí»: no hay nada que cambiar");
 });
 
-test("el anclaje general, la prescripción y las extracciones se derivan del plan", async () => {
+test("el anclaje general y las extracciones se derivan del plan; la prescripción y el cementado NO se escriben en el caso", async () => {
   reiniciar();
   await aplicarPlanDetalle(
     args(plan({ anclajeSuperior: "MAXIMO", anclajeInferior: "MEDIO", tubosSuperiores: "Roth", cementacionSuperiorAnterior: "Indirecto" }), { extraccionesIndicadas: [24, 14], duracionMeses: 20 }),
   );
   const d = state.escrituras.find((e) => e.tabla === "plan")!.datos;
   assert.equal(d.anchorageType, "COMPOUND", "distintos por arcada = «ver por arcada»");
-  assert.equal(d.prescriptionSlot, "ROTH_022");
-  assert.equal(d.bondingType, "INDIRECTO");
+  // La fuente de la prescripción es el plan mismo: nada se deduce ni se guarda encima en silencio (ws1-t12).
+  assert.equal("prescriptionSlot" in d, false);
+  assert.equal("bondingType" in d, false);
   assert.deepEqual(d.extractionsTeethFdi, [14, 24]);
   assert.equal(d.extractionsRequired, true);
   assert.equal(d.estimatedDurationMonths, 20);

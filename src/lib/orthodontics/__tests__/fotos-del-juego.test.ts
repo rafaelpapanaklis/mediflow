@@ -188,7 +188,8 @@ test("la lectura vuelve a poner la foto en su casilla y tolera que falte la colu
 test("la pestaña ya no rechaza sobremordida/resalte: sube y elige del expediente por la tabla de extras", () => {
   const tab = leer("src/components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx");
   assert.equal((tab.match(/const enExtras = esVistaEnExtras\(slotId\);/g) ?? []).length, 2, "subir y elegir existente");
-  assert.equal((tab.match(/agregarFotoExtra\(\{ setId, fileId, slot: slotId \}\)/g) ?? []).length, 2);
+  // Las dos ligan por agregarFotoExtra; ahora con las banderas de una-accion.ts (una fila por foto).
+  assert.equal((tab.match(/agregarFotoExtra\(\{ setId, fileId, slot: slotId, (parteDeUnaAccion: true|juegoNuevo) \}\)/g) ?? []).length, 2);
   assert.doesNotMatch(tab, /if \(!view\) \{/);
   const ui = leer("src/components/specialties/orthodontics/redesign/sections/SectionPhotos.tsx");
   assert.doesNotMatch(ui, /Aún no se guarda/);
