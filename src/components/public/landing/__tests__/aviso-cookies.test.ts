@@ -38,7 +38,7 @@ test("los dos pies públicos lo montan (y solo una vez cada uno)", () => {
 
 test("el aviso de privacidad: fecha real, ancla #cookies y frase de aceptación por uso en la sección 3", () => {
   const p = leer("src/app/privacidad/page.tsx");
-  assert.match(p, /const LAST_UPDATED = "27 de septiembre de 2026";/);
+  assert.match(p, /const LAST_UPDATED = "30 de septiembre de 2026";/);
   assert.doesNotMatch(p, /\[fecha de publicación\]/);
   assert.match(p, /<Section id="cookies" title="3\. Cookies">/);
   assert.match(p, /section id=\{id\}/);

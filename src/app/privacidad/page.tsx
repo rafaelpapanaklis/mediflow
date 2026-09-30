@@ -8,10 +8,11 @@ export const metadata: Metadata = {
 };
 
 // Fecha de publicación (texto aprobado por el abogado; se publica con la integración de la ola del 26-sep).
-const LAST_UPDATED = "27 de septiembre de 2026";
+const LAST_UPDATED = "30 de septiembre de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
 const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
+const SUPPORT_EMAIL = "contacto@dalecontrol.com";
 
 export default function PrivacidadPage() {
   return (
@@ -339,6 +340,11 @@ export default function PrivacidadPage() {
             descritos en la sección 3.
           </li>
           <li>
+            <b>Google LLC (Google Calendar)</b> — solo si la clínica conecta su cuenta de Google,
+            las citas de la clínica se escriben en un calendario de esa cuenta. Es una
+            integración opcional, con el alcance descrito en la sección 9.
+          </li>
+          <li>
             <b>Meta Platforms, Inc.</b> — medición de visitas al sitio público con el Píxel de
             Meta, con lo descrito en la sección 3.
           </li>
@@ -429,14 +435,154 @@ export default function PrivacidadPage() {
         </p>
       </Section>
 
-      <Section title="9. Cambios al aviso de privacidad">
+      <Section id="google-calendar" title="9. Datos de Google Calendar (integración opcional)">
+        <p>
+          DaleControl puede conectarse a Google Calendar <b>solo si un administrador de la
+          clínica lo decide</b> desde Configuración &rarr; Integraciones y autoriza el acceso
+          en la pantalla de consentimiento de Google. Sin esa conexión, DaleControl no accede
+          a ningún dato de Google Calendar. Esta sección explica qué datos de Google se
+          usan, para qué, cómo se protegen y cómo retirarlos.
+        </p>
+
+        <p><b>Permisos que solicitamos a Google.</b></p>
+        <ul>
+          <li>
+            <b>Calendar &mdash; <code>https://www.googleapis.com/auth/calendar.app.created</code></b>:
+            crear un calendario secundario para la clínica y ver, crear, cambiar y borrar
+            eventos <b>únicamente en ese calendario</b>, el que DaleControl crea. No podemos
+            leer ni modificar sus demás calendarios ni los eventos de su calendario personal.
+          </li>
+          <li>
+            <b>Identidad &mdash; <code>openid</code> y <code>email</code></b>: conocer el
+            correo de la cuenta de Google conectada, para mostrarle a la clínica qué cuenta
+            está conectada y no permitir que se conecte otra encima por error.
+          </li>
+        </ul>
+
+        <p><b>Qué datos escribimos en su Google Calendar.</b> Por cada cita de la clínica, en el
+          calendario de la clínica: el tipo de cita, el horario, el nombre del doctor, el
+          nombre y la dirección de la clínica y, en el título del evento, el nombre de pila
+          del paciente con la inicial de su apellido. Como invitados se agrega el correo del
+          doctor y, si la clínica mantiene activa la opción «Enviar invitación por correo al
+          paciente» (Configuración &rarr; Integraciones), el correo del paciente, a quien
+          Google le envía la invitación. <b>Las notas internas de la cita y los datos clínicos
+          (diagnósticos, antecedentes, tratamientos, estudios) nunca se envían a Google.</b>
+        </p>
+
+        <p><b>Qué datos leemos de Google.</b> El correo de la cuenta conectada y el
+          identificador del calendario de la clínica y de los eventos que DaleControl crea,
+          para mantenerlos al día (moverlos o cancelarlos cuando la cita cambia). No leemos
+          eventos creados por otras personas o aplicaciones, y lo que se edite o borre
+          directamente en Google Calendar no modifica la agenda de DaleControl.
+        </p>
+
+        <p><b>Para qué los usamos.</b> Exclusivamente para reflejar las citas de la clínica en
+          su Google Calendar y mantenerlas al día, y para mostrar en la pantalla de
+          Integraciones si la conexión está activa. No usamos los datos de Google para
+          publicidad ni para crear perfiles, no los vendemos, no los usamos para entrenar
+          modelos de inteligencia artificial y no los enviamos a los proveedores de IA
+          mencionados en la sección 5.
+        </p>
+
+        <p><b>Cómo los protegemos y con quién se comparten.</b> Las credenciales de acceso que
+          Google nos entrega (tokens) se guardan en la base de datos de DaleControl
+          (Supabase), se usan solo desde nuestros servidores y nunca se envían al navegador.
+          No compartimos datos de Google con terceros, salvo con los proveedores de
+          infraestructura de la sección 5 que los procesan por nuestra cuenta. Las personas de
+          DaleControl no leen datos de Google Calendar, salvo con su consentimiento, para
+          investigar un abuso o un problema de seguridad, o cuando la ley lo exija.
+        </p>
+
+        <p><b>Conservación y cómo retirarlos.</b></p>
+        <ul>
+          <li>
+            Conservamos los tokens solo mientras la integración esté conectada y hasta que se desconecte. Al pulsar
+            <b> Desconectar Google Calendar</b> en Configuración &rarr; Integraciones los
+            borramos y <b>revocamos el permiso ante Google</b>.
+          </li>
+          <li>
+            Los eventos que ya se crearon <b>se quedan</b> en su calendario de Google: puede
+            borrarlos desde Google Calendar (o el calendario completo de la clínica).
+          </li>
+          <li>
+            También puede retirar el acceso de DaleControl en cualquier momento desde{" "}
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
+              myaccount.google.com/permissions
+            </a>.
+          </li>
+          <li>
+            Para pedir que eliminemos cualquier dato relacionado con esta integración, escriba
+            a <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a> o a{" "}
+            <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+          </li>
+        </ul>
+
+        <p>
+          <b>Declaración de Uso Limitado.</b> El uso que DaleControl haga de la información
+          recibida de las API de Google, y su transferencia a cualquier otra aplicación,
+          cumplirá la{" "}
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">
+            Política de datos de usuario de los servicios de las API de Google
+          </a>
+          , incluidos los requisitos de Uso Limitado.
+        </p>
+
+        <div lang="en" style={{ borderTop: "1px solid var(--border-soft, #e2e8f0)", marginTop: 14, paddingTop: 14 }}>
+          <p><b>Google user data &mdash; summary in English.</b></p>
+          <p>
+            DaleControl connects to Google Calendar only when a clinic administrator chooses to
+            and grants access on Google&apos;s consent screen. We request the scope{" "}
+            <code>https://www.googleapis.com/auth/calendar.app.created</code> (to create a
+            secondary calendar for the clinic and to view, create, change and delete events
+            only on that calendar) plus <code>openid</code> and <code>email</code> (to show which
+            Google account is connected). We cannot read or modify the user&apos;s other calendars.
+          </p>
+          <p>
+            <b>Data we write:</b> for each clinic appointment, the appointment type, time,
+            doctor&apos;s name, clinic name and address, and the patient&apos;s first name with the
+            initial of the last name in the event title; the doctor&apos;s email (and the
+            patient&apos;s email if the clinic keeps the &quot;email an invitation to the patient&quot;
+            option on) as attendees. Internal appointment notes and clinical data are never sent
+            to Google. <b>Data we read:</b> the connected account&apos;s email and the identifiers of
+            the clinic calendar and of the events DaleControl created; we do not read events
+            created by others, and changes made in Google Calendar do not change DaleControl.
+          </p>
+          <p>
+            <b>Use:</b> only to mirror the clinic&apos;s appointments to its Google Calendar and keep
+            them up to date. We do not use Google user data for advertising, do not sell it, do
+            not use it to train AI or machine-learning models, and humans do not read it except
+            with the user&apos;s consent, for security or abuse investigations, or to comply with
+            law. Access tokens are stored in our database, used only server-side, and never sent
+            to the browser.
+          </p>
+          <p>
+            <b>Retention and revocation:</b> tokens are kept only while the integration is
+            connected and until it is disconnected. Clicking &quot;Disconnect Google Calendar&quot; in Settings &rarr; Integrations deletes them
+            and revokes the permission with Google; events already created stay in the user&apos;s
+            Google Calendar. Access can also be removed at{" "}
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>.
+            Deletion requests: <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a> or{" "}
+            <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+          </p>
+          <p>
+            <b>Limited Use disclosure.</b> DaleControl&apos;s use and transfer to any other app of
+            information received from Google APIs will adhere to the{" "}
+            <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">
+              Google API Services User Data Policy
+            </a>
+            , including the Limited Use requirements.
+          </p>
+        </div>
+      </Section>
+
+      <Section title="10. Cambios al aviso de privacidad">
         <p>
           Cualquier modificación al presente aviso se publicará en esta misma URL con la
           nueva fecha de actualización. Le recomendamos revisarlo periódicamente.
         </p>
       </Section>
 
-      <Section title="10. Contacto">
+      <Section title="11. Contacto">
         <p>
           Para cualquier duda relacionada con la protección de sus datos personales, contacte
           a: <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>.
