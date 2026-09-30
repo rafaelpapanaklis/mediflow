@@ -169,8 +169,9 @@ export async function exportTreatmentPlanPdf(
     clinic,
     doctor: doctor ?? { firstName: "", lastName: "", cedulaProfesional: null },
     diagnosis: {
-      angleClassRight: plan.diagnosis.angleClassRight,
-      angleClassLeft: plan.diagnosis.angleClassLeft,
+      // "" = sin capturar (relleno de la columna NOT NULL): el PDF no lo dice como Clase I.
+      angleClassRight: medidaSinCapturar(detalleDx, "angleClassRight", plan.diagnosis.etiologyNotes) ? "" : plan.diagnosis.angleClassRight,
+      angleClassLeft: medidaSinCapturar(detalleDx, "angleClassLeft", plan.diagnosis.etiologyNotes) ? "" : plan.diagnosis.angleClassLeft,
       overbiteMm: medidaSinCapturar(detalleDx, "overbiteMm", plan.diagnosis.etiologyNotes) ? null : plan.diagnosis.overbiteMm.toString(),
       overjetMm: medidaSinCapturar(detalleDx, "overjetMm", plan.diagnosis.etiologyNotes) ? null : plan.diagnosis.overjetMm.toString(),
       clinicalSummary: plan.diagnosis.clinicalSummary,

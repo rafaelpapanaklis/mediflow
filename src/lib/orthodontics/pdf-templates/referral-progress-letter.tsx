@@ -11,7 +11,7 @@ import { techniqueLabel } from "../consent-texts";
 import { MembreteOrto, PieOrto, estilosPaginaOrto } from "../pdf/membrete-orto";
 import { CLASE_ANGLE } from "../expediente-ortodoncia";
 
-const claseAngle = (v: string) => CLASE_ANGLE[v] ?? v.replaceAll("_", " ").toLowerCase();
+const claseAngle = (v: string) => (v ? (CLASE_ANGLE[v] ?? v.replaceAll("_", " ").toLowerCase()) : "sin capturar");
 
 const DOCUMENTO = "Carta de avance";
 

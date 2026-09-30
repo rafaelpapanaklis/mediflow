@@ -18,6 +18,7 @@ import { fmtDateShort } from "../atoms/format";
 import type { DiagnosisDTO } from "../types";
 import {
   FASE_DENTAL,
+  baseSinRelleno,
   indicadoresClave,
   seccionesDelDiagnostico,
   type DiagnosticoBase,
@@ -193,8 +194,10 @@ function ResumenDelDiagnostico({ d, onEdit, treatmentPlanId }: { d: DiagnosisDTO
     onEdit();
   };
   const resumen = (base.clinicalSummary ?? "").trim();
+  // La etapa de dentición de relleno (sin capturar) no se dice.
+  const fase = baseSinRelleno(base, detalle).dentalPhase;
   const meta = [
-    base.dentalPhase ? `Dentición ${(FASE_DENTAL[base.dentalPhase] ?? base.dentalPhase).toLowerCase()}` : null,
+    fase ? `Dentición ${(FASE_DENTAL[fase] ?? fase).toLowerCase()}` : null,
     datos ? `valorado el ${fmtDateShort(datos.diagnosticadoEl)}` : null,
   ].filter(Boolean);
 

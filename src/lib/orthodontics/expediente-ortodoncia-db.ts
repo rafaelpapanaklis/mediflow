@@ -3,6 +3,8 @@ import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
 import { cargarPlanesDetalle } from "./plan-detalle-db";
 import { cargarDiagnosticosDetalle, cargarDiagnosticosLegibles } from "./diagnostico-detalle-db";
 import { medidaSinCapturar } from "./diagnostico-detalle";
+import { listarVersionesDelCaso } from "./versiones-caso-db";
+import { lineaDeTiempo } from "./versiones-caso";
 import { armarCasoDeOrtodoncia, type ExpedienteOrtodoncia } from "./expediente-ortodoncia";
 
 /**
@@ -79,8 +81,29 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
     }
     // ws1-t8: el diagnóstico completo de cada caso, ya redactado (sin la columna nueva, lo de siempre).
     const diagnosticos = await cargarDiagnosticosLegibles(clinicId, planes.map((p) => p.diagnosisId));
-    // Las medidas guardadas como relleno («sin capturar») no se imprimen como un 0 real.
+    // Las medidas y el Angle guardados como relleno («sin capturar») no se imprimen como un dato real.
     const detallesDx = await cargarDiagnosticosDetalle(clinicId, planes.map((p) => p.diagnosisId));
+    // ws1-t8: las reevaluaciones de cada caso (versiones anteriores y sus motivos). Uno por uno: pocos casos por
+    // paciente y así no se satura el pooler. Sin la tabla (SQL sin pegar) o si falla, el caso sale sin historial.
+    const versiones = new Map<string, ExpedienteOrtodoncia["versiones"]>();
+    for (const p of planes) {
+      const cerradas = await listarVersionesDelCaso(clinicId, p.id).catch(() => null);
+      if (!cerradas || cerradas.length === 0) continue;
+      const inicio = p.diagnosis?.diagnosedAt ? p.diagnosis.diagnosedAt.toISOString() : cerradas[0]!.iniciadaEl;
+      const linea = lineaDeTiempo(cerradas, inicio);
+      const actual = linea[linea.length - 1]!;
+      const orden = [...cerradas].sort((a, b) => a.numero - b.numero);
+      versiones.set(p.id, {
+        actual: { etiqueta: actual.etiqueta, desde: actual.desde },
+        anteriores: linea.slice(0, -1).map((v, i) => ({
+          etiqueta: v.etiqueta,
+          desde: v.desde,
+          hasta: v.hasta ?? orden[i]!.cerradaEl,
+          motivo: orden[i]?.motivo ?? null,
+          cerradaPor: orden[i]?.cerradaPor ?? null,
+        })),
+      });
+    }
     return planes.map((p) => {
       const caso = armarCasoDeOrtodoncia(
         p,
@@ -93,7 +116,10 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
         ...caso,
         overbiteMm: medidaSinCapturar(dx, "overbiteMm", p.diagnosis?.etiologyNotes) ? null : caso.overbiteMm,
         overjetMm: medidaSinCapturar(dx, "overjetMm", p.diagnosis?.etiologyNotes) ? null : caso.overjetMm,
+        claseAngleDerecha: medidaSinCapturar(dx, "angleClassRight", p.diagnosis?.etiologyNotes) ? null : caso.claseAngleDerecha,
+        claseAngleIzquierda: medidaSinCapturar(dx, "angleClassLeft", p.diagnosis?.etiologyNotes) ? null : caso.claseAngleIzquierda,
         diagnosticoCompleto: (diagnosticos.get(p.diagnosisId) ?? []).filter((sec) => sec.clave !== "clasificacion"),
+        ...(versiones.has(p.id) ? { versiones: versiones.get(p.id) } : {}),
       };
     });
   } catch (e) {

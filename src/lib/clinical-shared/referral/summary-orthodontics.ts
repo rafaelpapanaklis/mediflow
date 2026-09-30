@@ -39,10 +39,10 @@ export async function buildOrthoSummary(args: {
   const lines: string[] = [];
 
   if (dx) {
-    const angleR = ANGLE_CLASS_LABELS[dx.angleClassRight] ?? dx.angleClassRight;
-    const angleL = ANGLE_CLASS_LABELS[dx.angleClassLeft] ?? dx.angleClassLeft;
-    // Las medidas que no se capturaron (un 0 de relleno) no se dicen como dato: «sin capturar».
+    // Las medidas que no se capturaron (un 0 de relleno) no se dicen como dato: «sin capturar». Tampoco el Angle de relleno.
     const detalle = await cargarDiagnosticoDetalle(args.clinicId, dx.id).catch(() => null);
+    const angleR = medidaSinCapturar(detalle, "angleClassRight", dx.etiologyNotes) ? "sin capturar" : (ANGLE_CLASS_LABELS[dx.angleClassRight] ?? dx.angleClassRight);
+    const angleL = medidaSinCapturar(detalle, "angleClassLeft", dx.etiologyNotes) ? "sin capturar" : (ANGLE_CLASS_LABELS[dx.angleClassLeft] ?? dx.angleClassLeft);
     const oj = medidaSinCapturar(detalle, "overjetMm", dx.etiologyNotes) ? "sin capturar" : `${dx.overjetMm.toString()} mm`;
     const ob = medidaSinCapturar(detalle, "overbiteMm", dx.etiologyNotes) ? "sin capturar" : `${dx.overbiteMm.toString()} mm`;
     lines.push(

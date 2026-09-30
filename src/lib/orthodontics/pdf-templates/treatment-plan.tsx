@@ -92,8 +92,8 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <Text style={styles.h2}>Tu diagnóstico</Text>
         <View style={styles.box} wrap={false}>
           <Text>
-            Clase de Angle derecha: {etiqueta(CLASE_ANGLE, data.diagnosis.angleClassRight)} · izquierda:{" "}
-            {etiqueta(CLASE_ANGLE, data.diagnosis.angleClassLeft)}.
+            Clase de Angle derecha: {data.diagnosis.angleClassRight ? etiqueta(CLASE_ANGLE, data.diagnosis.angleClassRight) : "sin capturar"} · izquierda:{" "}
+            {data.diagnosis.angleClassLeft ? etiqueta(CLASE_ANGLE, data.diagnosis.angleClassLeft) : "sin capturar"}.
           </Text>
           <Text>
             Overbite: {data.diagnosis.overbiteMm != null ? `${data.diagnosis.overbiteMm} mm` : "sin capturar"} · Overjet:{" "}

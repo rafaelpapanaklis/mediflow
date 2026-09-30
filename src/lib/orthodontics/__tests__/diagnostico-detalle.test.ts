@@ -280,15 +280,22 @@ test("sin capturar: al abrir, las medidas vacías se anotan y la base guarda un 
   const r = formularioAPeticion(f, "abrir");
   assert.equal(r.ok, true);
   const p = (r as { peticion: PeticionDelDiagnostico }).peticion;
-  assert.deepEqual(p.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  // ws1-t9 #5: también Angle, etapa y ATM (nadie los capturó): la base guarda Clase I / Permanente de relleno.
+  assert.deepEqual(p.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage", "angleClassRight", "angleClassLeft", "dentalPhase", "atm"]);
+  assert.equal(p.angleClassRight, "CLASS_I");
+  assert.equal(p.dentalPhase, "PERMANENT");
   // Con captura parcial, solo se anota lo que falta.
   f.overjetMm = "3";
   const parcial = (formularioAPeticion(f, "abrir") as { peticion: PeticionDelDiagnostico }).peticion;
-  assert.deepEqual(parcial.diagnosticoDetalle.sinCapturar, ["overbiteMm", "overbitePercentage"]);
+  assert.deepEqual(parcial.diagnosticoDetalle.sinCapturar, ["overbiteMm", "overbitePercentage", "angleClassRight", "angleClassLeft", "dentalPhase", "atm"]);
   assert.equal(parcial.overjetMm, 3);
   // Todo capturado: no hay nada que anotar.
   f.overbiteMm = "2";
   f.overbitePercentage = "20";
+  f.angleClassRight = "CLASS_II_DIV_1";
+  f.angleClassLeft = "CLASS_I";
+  f.dentalPhase = "MIXED_LATE";
+  f.atmRevisada = true;
   const completo = (formularioAPeticion(f, "abrir") as { peticion: PeticionDelDiagnostico }).peticion;
   assert.equal(completo.diagnosticoDetalle.sinCapturar, undefined);
 });
@@ -374,6 +381,69 @@ test("caso migrado de Dentalink: sus valores neutros (2 / 20 % / 2) no se dicen 
   // Al editarlo aparecen vacías y quedan anotadas; un diagnóstico normal con los mismos números sí los dice.
   const f = formularioDesdeDiagnostico({ ...base, initialCephFileId: null, initialScanFileId: null }, null);
   assert.equal(f.overjetMm, "");
-  assert.deepEqual((formularioAPeticion(f, "editar") as { peticion: PeticionDelDiagnostico }).peticion.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  assert.deepEqual((formularioAPeticion(f, "editar") as { peticion: PeticionDelDiagnostico }).peticion.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage", "angleClassRight", "angleClassLeft", "dentalPhase", "atm"]);
+  assert.equal(f.angleClassRight, "", "el Angle de migración (Clase I neutro) se edita vacío");
+  assert.equal(indicadoresClave(base, null).find((i) => i.clave === "angle")!.valor, "Sin capturar");
   assert.equal(indicadoresClave({ ...base, etiologyNotes: null }, null).find((i) => i.clave === "overjet")!.valor, "2 mm");
+});
+
+test("ws1-t9 #5: un caso abierto solo con técnica y doctor no dice Angle I, ATM sin dolor ni etapa: todo «sin capturar»", () => {
+  const f = formularioVacio();
+  assert.equal(f.angleClassRight, "");
+  assert.equal(f.dentalPhase, "");
+  assert.equal(f.atmRevisada, false);
+  // El contador solo cuenta lo capturado: antes «Clasificación 3/6» sin tocar nada.
+  const a = avanceDelPaso(f);
+  assert.equal(a.clasificacion.llenos, 0);
+  assert.equal(a.funcional.llenos, 0);
+  const p = (formularioAPeticion(f, "abrir") as { peticion: PeticionDelDiagnostico }).peticion;
+  // Lo que se guarda (relleno en las columnas + la anotación) se LEE como sin capturar en ficha, PDF y Sabina.
+  const base: DiagnosticoBase = {
+    ...BASE,
+    angleClassRight: p.angleClassRight,
+    angleClassLeft: p.angleClassLeft,
+    dentalPhase: p.dentalPhase,
+    tmjPainPresent: false,
+    tmjClickingPresent: false,
+    overbiteMm: 0,
+    overbitePercentage: 0,
+    overjetMm: 0,
+    habits: [],
+    clinicalSummary: null,
+  };
+  const det = normalizarDiagnosticoDetalle(p.diagnosticoDetalle);
+  const lineas = seccionesDelDiagnostico(base, det).flatMap((s) => s.lineas);
+  assert.ok(!lineas.some((l) => l.clave === "angle"), "sin renglón «Clase I bilateral»");
+  assert.ok(!lineas.some((l) => l.clave === "atm"), "sin «ATM: sin dolor ni chasquido»");
+  assert.ok(!lineas.some((l) => l.clave === "dentalPhase"), "sin etapa de relleno");
+  assert.ok(!seccionesDelDiagnostico(base, det).some((s) => s.clave === "clasificacion"), "clasificación vacía = no sale");
+  const angle = indicadoresClave(base, det).find((i) => i.clave === "angle")!;
+  assert.equal(angle.valor, "Sin capturar");
+  assert.equal(angle.estado, null);
+  assert.ok(faltaDelDiagnostico(base, det).includes("clase de Angle"));
+  // Al editarlo, aparecen vacíos; capturarlos quita la anotación.
+  const e = formularioDesdeDiagnostico({ ...base, initialCephFileId: null, initialScanFileId: null }, det);
+  assert.equal(e.angleClassLeft, "");
+  assert.equal(e.dentalPhase, "");
+  assert.equal(e.atmRevisada, false);
+  const capturado = { ...e, angleClassRight: "CLASS_I", angleClassLeft: "CLASS_I", dentalPhase: "PERMANENT", atmRevisada: true };
+  const p2 = (formularioAPeticion(capturado, "editar") as { peticion: PeticionDelDiagnostico }).peticion;
+  assert.deepEqual(p2.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  const det2 = normalizarDiagnosticoDetalle(p2.diagnosticoDetalle);
+  const l2 = seccionesDelDiagnostico({ ...base, dentalPhase: "PERMANENT" }, det2).flatMap((s) => s.lineas);
+  assert.equal(l2.find((l) => l.clave === "angle")!.valor, "Clase I bilateral");
+  assert.equal(l2.find((l) => l.clave === "atm")!.valor, "Sin dolor ni chasquido");
+  assert.equal(avanceDelPaso(capturado).clasificacion.llenos, 3);
+});
+
+test("ws1-t9 #5: ATM — encender dolor o chasquido la da por revisada; un lado de Angle solo dice el otro «sin capturar»", () => {
+  const f = { ...formularioVacio(), tmjPainPresent: true };
+  const p = (formularioAPeticion(f, "abrir") as { peticion: PeticionDelDiagnostico }).peticion;
+  assert.ok(!(p.diagnosticoDetalle.sinCapturar ?? []).includes("atm"));
+  const det = normalizarDiagnosticoDetalle({ sinCapturar: ["angleClassLeft"] });
+  const base = { ...BASE, angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_I" };
+  assert.equal(seccionesDelDiagnostico(base, det).flatMap((s) => s.lineas).find((l) => l.clave === "angle")!.valor, "der. Clase II div. 1 · izq. sin capturar");
+  // Un diagnóstico de siempre (sin anotación) se lee como antes.
+  assert.equal(seccionesDelDiagnostico(BASE, null).flatMap((s) => s.lineas).find((l) => l.clave === "atm")!.valor, "Sin dolor ni chasquido");
+  assert.equal(formularioDesdeDiagnostico({ ...BASE, initialCephFileId: null, initialScanFileId: null }, null).atmRevisada, true);
 });

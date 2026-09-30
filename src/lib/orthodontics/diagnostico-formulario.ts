@@ -7,7 +7,10 @@
 
 import {
   HABITOS_DEL_PASO,
+  DATOS_QUE_PUEDEN_FALTAR,
   MEDIDAS_QUE_PUEDEN_FALTAR,
+  RELLENO_ANGLE,
+  RELLENO_FASE_DENTAL,
   esDiagnosticoDeMigracion,
   SECCIONES_DEL_DETALLE,
   camposConDato,
@@ -56,6 +59,11 @@ export interface FormularioDelDiagnostico {
   habitsDescription: string;
   tmjPainPresent: boolean;
   tmjClickingPresent: boolean;
+  /**
+   * ¿Alguien revisó la ATM? Dolor y chasquido apagados solo dicen «sin dolor ni chasquido» si está en `true` (el
+   * doctor marcó «Sin dolor ni chasquido» o encendió uno de los dos). En `false` y sin nada, queda «sin capturar».
+   */
+  atmRevisada: boolean;
   tmjNotes: string;
   etiologySkeletal: boolean;
   etiologyDental: boolean;
@@ -75,16 +83,17 @@ export type DiagnosticoParaFormulario = DiagnosticoBase & {
 
 const txt = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n));
 
+/** Al abrir el caso nada viene «capturado»: Angle, etapa y ATM empiezan vacíos (antes Clase I / Permanente / sin dolor). */
 export function formularioVacio(): FormularioDelDiagnostico {
   return {
-    angleClassRight: "CLASS_I",
-    angleClassLeft: "CLASS_I",
+    angleClassRight: "",
+    angleClassLeft: "",
     overjetMm: "",
     overbiteMm: "",
     overbitePercentage: "",
     crowdingUpperMm: "",
     crowdingLowerMm: "",
-    dentalPhase: "PERMANENT",
+    dentalPhase: "",
     skeletalPattern: "",
     crossbiteDetails: "",
     openBiteDetails: "",
@@ -92,6 +101,7 @@ export function formularioVacio(): FormularioDelDiagnostico {
     habitsDescription: "",
     tmjPainPresent: false,
     tmjClickingPresent: false,
+    atmRevisada: false,
     tmjNotes: "",
     etiologySkeletal: false,
     etiologyDental: false,
@@ -108,7 +118,8 @@ export function formularioVacio(): FormularioDelDiagnostico {
 export function formularioDesdeDiagnostico(base: DiagnosticoParaFormulario, detalle: DiagnosticoDetalle | null): FormularioDelDiagnostico {
   const d = normalizarDiagnosticoDetalle(detalle ?? null);
   // Un diagnóstico migrado de Dentalink trae valores neutros: se editan como vacíos y quedan anotados «sin capturar».
-  if (esDiagnosticoDeMigracion(base.etiologyNotes)) d.sinCapturar = [...MEDIDAS_QUE_PUEDEN_FALTAR];
+  if (esDiagnosticoDeMigracion(base.etiologyNotes)) d.sinCapturar = [...DATOS_QUE_PUEDEN_FALTAR];
+  const falta = (k: (typeof DATOS_QUE_PUEDEN_FALTAR)[number]) => (d.sinCapturar ?? []).includes(k);
   if (!d.funcional.respiracion && base.habits.includes("MOUTH_BREATHING")) d.funcional.respiracion = "oral";
   // Sin líneas medias nuevas pero con la vieja «centrada» (0): se propone centrada en las dos.
   if (!d.oclusal.lineaMediaSuperior && !d.oclusal.lineaMediaInferior && base.midlineDeviationMm === 0) {
@@ -116,15 +127,15 @@ export function formularioDesdeDiagnostico(base: DiagnosticoParaFormulario, deta
     d.oclusal.lineaMediaInferior = "centrada";
   }
   return {
-    angleClassRight: base.angleClassRight,
-    angleClassLeft: base.angleClassLeft,
-    // Las medidas guardadas como relleno («sin capturar») se editan como VACÍAS, no como un 0 que parece real.
-    overjetMm: (d.sinCapturar ?? []).includes("overjetMm") ? "" : txt(base.overjetMm),
-    overbiteMm: (d.sinCapturar ?? []).includes("overbiteMm") ? "" : txt(base.overbiteMm),
-    overbitePercentage: (d.sinCapturar ?? []).includes("overbitePercentage") ? "" : base.overbitePercentage ? String(base.overbitePercentage) : "",
+    // Los datos guardados como relleno («sin capturar») se editan como VACÍOS, no como un valor que parece real.
+    angleClassRight: falta("angleClassRight") ? "" : base.angleClassRight,
+    angleClassLeft: falta("angleClassLeft") ? "" : base.angleClassLeft,
+    overjetMm: falta("overjetMm") ? "" : txt(base.overjetMm),
+    overbiteMm: falta("overbiteMm") ? "" : txt(base.overbiteMm),
+    overbitePercentage: falta("overbitePercentage") ? "" : base.overbitePercentage ? String(base.overbitePercentage) : "",
     crowdingUpperMm: base.crowdingUpperMm ? String(base.crowdingUpperMm) : "",
     crowdingLowerMm: base.crowdingLowerMm ? String(base.crowdingLowerMm) : "",
-    dentalPhase: base.dentalPhase ?? "PERMANENT",
+    dentalPhase: falta("dentalPhase") ? "" : (base.dentalPhase ?? ""),
     skeletalPattern: base.skeletalPattern ?? "",
     crossbiteDetails: base.crossbiteDetails ?? "",
     openBiteDetails: base.openBiteDetails ?? "",
@@ -132,6 +143,7 @@ export function formularioDesdeDiagnostico(base: DiagnosticoParaFormulario, deta
     habitsDescription: base.habitsDescription ?? "",
     tmjPainPresent: base.tmjPainPresent,
     tmjClickingPresent: base.tmjClickingPresent,
+    atmRevisada: base.tmjPainPresent || base.tmjClickingPresent || !falta("atm"),
     tmjNotes: base.tmjNotes ?? "",
     etiologySkeletal: base.etiologySkeletal,
     etiologyDental: base.etiologyDental,
@@ -216,10 +228,16 @@ export function formularioAPeticion(
   // Las medidas que quedan VACÍAS y son NOT NULL en la base se anotan como «sin capturar» (la columna guarda un 0
   // neutro y el resumen no lo dice como dato real). Al abrir el caso, todas las vacías; al editar, solo las que ya
   // estaban anotadas y siguen vacías (vaciar una medida real no la borra: la columna se queda como estaba).
-  const previas = f.detalle.sinCapturar ?? [];
-  const sinCapturar = MEDIDAS_QUE_PUEDEN_FALTAR.filter(
+  const previas: readonly string[] = f.detalle.sinCapturar ?? [];
+  const sinCapturar: Array<(typeof DATOS_QUE_PUEDEN_FALTAR)[number]> = MEDIDAS_QUE_PUEDEN_FALTAR.filter(
     (k) => f[k].trim() === "" && (modo === "abrir" || previas.includes(k)),
   );
+  // Angle, etapa y ATM: vacíos = sin capturar en los dos modos (la columna NOT NULL guarda un relleno que nadie lee
+  // como dato). Vaciarlos al editar es decir «no lo sé», no un valor.
+  if (!f.angleClassRight) sinCapturar.push("angleClassRight");
+  if (!f.angleClassLeft) sinCapturar.push("angleClassLeft");
+  if (!f.dentalPhase) sinCapturar.push("dentalPhase");
+  if (!f.atmRevisada && !f.tmjPainPresent && !f.tmjClickingPresent) sinCapturar.push("atm");
   const v = validarDiagnosticoDetalle({ ...f.detalle, sinCapturar: sinCapturar.length > 0 ? sinCapturar : undefined });
   if (v.ok === false) {
     const sec = ["facial", "oclusal", "dentoalveolar", "funcional", "cefalometria"].find((s) => v.error.startsWith(tituloCorto(s))) ?? "clasificacion";
@@ -231,8 +249,8 @@ export function formularioAPeticion(
   const t = (s: string) => s.trim() || null;
 
   const peticion: PeticionDelDiagnostico = {
-    angleClassRight: f.angleClassRight,
-    angleClassLeft: f.angleClassLeft,
+    angleClassRight: f.angleClassRight || RELLENO_ANGLE,
+    angleClassLeft: f.angleClassLeft || RELLENO_ANGLE,
     ...(n.overjetMm !== null && n.overjetMm !== undefined ? { overjetMm: n.overjetMm } : {}),
     ...(n.overbiteMm !== null && n.overbiteMm !== undefined ? { overbiteMm: n.overbiteMm } : {}),
     ...(n.overbitePercentage !== null && n.overbitePercentage !== undefined ? { overbitePercentage: n.overbitePercentage } : {}),
@@ -242,7 +260,7 @@ export function formularioAPeticion(
     ...mordidas,
     crossbiteDetails: t(f.crossbiteDetails),
     openBiteDetails: t(f.openBiteDetails),
-    dentalPhase: f.dentalPhase,
+    dentalPhase: f.dentalPhase || RELLENO_FASE_DENTAL,
     skeletalPattern: f.skeletalPattern || null,
     // La respiración bucal ya no es hábito: vive en «Tipo de respiración».
     habits: f.habits.filter((h) => h !== "MOUTH_BREATHING"),
@@ -296,7 +314,8 @@ export function avanceDelPaso(f: FormularioDelDiagnostico): Record<SeccionDelPas
   const hay = (t: string) => (t.trim() ? 1 : 0);
   const d = f.detalle;
   return {
-    clasificacion: { llenos: 2 + hay(f.overjetMm) + hay(f.overbiteMm) + hay(f.overbitePercentage) + (f.dentalPhase ? 1 : 0), total: 6 },
+    // Solo lo que alguien capturó: Angle y etapa vacíos (sin capturar) no cuentan.
+    clasificacion: { llenos: hay(f.angleClassRight) + hay(f.angleClassLeft) + hay(f.overjetMm) + hay(f.overbiteMm) + hay(f.overbitePercentage) + hay(f.dentalPhase), total: 6 },
     facial: { llenos: camposConDato(d, "facial"), total: totalDetalle("facial") },
     oclusal: { llenos: camposConDato(d, "oclusal"), total: totalDetalle("oclusal") },
     dentoalveolar: {
@@ -308,7 +327,7 @@ export function avanceDelPaso(f: FormularioDelDiagnostico): Record<SeccionDelPas
         camposConDato(d, "funcional") +
         (f.habits.length ? 1 : 0) +
         hay(f.habitsDescription) +
-        (f.tmjPainPresent || f.tmjClickingPresent ? 1 : 0) +
+        (f.atmRevisada || f.tmjPainPresent || f.tmjClickingPresent ? 1 : 0) +
         hay(f.tmjNotes),
       total: totalDetalle("funcional") + 4,
     },

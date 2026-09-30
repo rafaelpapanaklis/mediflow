@@ -450,12 +450,13 @@ function Clasificacion({ f, set }: { f: FormularioDelDiagnostico; set: Set }) {
     <>
       <section className={dx.dxGrupo}>
         <h5 className={dx.dxGrupoTitulo}>Clase de Angle (dental)</h5>
+        {/* Sin elegir = «sin capturar» (no se dice Clase I). Tocar la elegida la quita. */}
         <div className={dx.dxCampos}>
           <Campo etiqueta="Lado derecho" ancho>
-            <Opciones etiqueta="Angle derecha" opciones={ANGLE_OPCIONES.map((o) => ({ ...o, normal: o.valor === "CLASS_I" }))} valor={f.angleClassRight} obligatoria onCambio={(v) => set({ angleClassRight: v ?? "CLASS_I" })} />
+            <Opciones etiqueta="Angle derecha" opciones={ANGLE_OPCIONES.map((o) => ({ ...o, normal: o.valor === "CLASS_I" }))} valor={f.angleClassRight} onCambio={(v) => set({ angleClassRight: v ?? "" })} />
           </Campo>
           <Campo etiqueta="Lado izquierdo" ancho>
-            <Opciones etiqueta="Angle izquierda" opciones={ANGLE_OPCIONES.map((o) => ({ ...o, normal: o.valor === "CLASS_I" }))} valor={f.angleClassLeft} obligatoria onCambio={(v) => set({ angleClassLeft: v ?? "CLASS_I" })} />
+            <Opciones etiqueta="Angle izquierda" opciones={ANGLE_OPCIONES.map((o) => ({ ...o, normal: o.valor === "CLASS_I" }))} valor={f.angleClassLeft} onCambio={(v) => set({ angleClassLeft: v ?? "" })} />
           </Campo>
         </div>
       </section>
@@ -482,7 +483,7 @@ function Clasificacion({ f, set }: { f: FormularioDelDiagnostico; set: Set }) {
       <section className={dx.dxGrupo}>
         <h5 className={dx.dxGrupoTitulo}>Dentición</h5>
         <Campo etiqueta="Etapa de dentición" ancho>
-          <Opciones etiqueta="Etapa de dentición" opciones={FASE_OPCIONES} valor={f.dentalPhase} obligatoria onCambio={(v) => set({ dentalPhase: v ?? "PERMANENT" })} />
+          <Opciones etiqueta="Etapa de dentición" opciones={FASE_OPCIONES} valor={f.dentalPhase} onCambio={(v) => set({ dentalPhase: v ?? "" })} />
         </Campo>
       </section>
     </>
@@ -547,8 +548,15 @@ function Funcional({ f, set, setDetalle }: { f: FormularioDelDiagnostico; set: S
       <section className={dx.dxGrupo}>
         <h5 className={dx.dxGrupoTitulo}>ATM</h5>
         <div className={dx.dxInterruptores}>
-          <Interruptor on={f.tmjPainPresent} onCambio={(v) => set({ tmjPainPresent: v })}>Dolor</Interruptor>
-          <Interruptor on={f.tmjClickingPresent} onCambio={(v) => set({ tmjClickingPresent: v })}>Chasquido</Interruptor>
+          {/* Nada encendido = ATM sin capturar; «Sin dolor ni chasquido» es un hallazgo y se marca a propósito. */}
+          <Interruptor
+            on={f.atmRevisada && !f.tmjPainPresent && !f.tmjClickingPresent}
+            onCambio={(v) => set({ atmRevisada: v, tmjPainPresent: false, tmjClickingPresent: false })}
+          >
+            Sin dolor ni chasquido
+          </Interruptor>
+          <Interruptor on={f.tmjPainPresent} onCambio={(v) => set({ tmjPainPresent: v, atmRevisada: v || f.tmjClickingPresent })}>Dolor</Interruptor>
+          <Interruptor on={f.tmjClickingPresent} onCambio={(v) => set({ tmjClickingPresent: v, atmRevisada: v || f.tmjPainPresent })}>Chasquido</Interruptor>
         </div>
         <Campo etiqueta="Notas de ATM" ancho>
           <textarea className={`${orto.entrada} min-h-[60px]`} maxLength={500} value={f.tmjNotes} onChange={(e) => set({ tmjNotes: e.target.value })} />

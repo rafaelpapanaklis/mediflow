@@ -320,11 +320,23 @@ export type SeccionDx = Record<string, ValorDx>;
  * vez de «0 mm».
  */
 export const MEDIDAS_QUE_PUEDEN_FALTAR = ["overjetMm", "overbiteMm", "overbitePercentage"] as const;
-export type MedidaQuePuedeFaltar = (typeof MEDIDAS_QUE_PUEDEN_FALTAR)[number];
+/**
+ * Todo lo del diagnóstico que la base exige (NOT NULL / con default) y que puede quedar SIN CAPTURAR (ws1-t9 #5): las
+ * medidas, la clase de Angle de cada lado y la etapa de dentición (se guarda un relleno: Clase I / Permanente) y la
+ * ATM («atm»: dolor y chasquido en `false` no son «sin dolor ni chasquido» si nadie la revisó). Lo anotado aquí no
+ * se dice como dato en ningún lector ni cuenta en el avance.
+ */
+export const DATOS_QUE_PUEDEN_FALTAR = [...MEDIDAS_QUE_PUEDEN_FALTAR, "angleClassRight", "angleClassLeft", "dentalPhase", "atm"] as const;
+export type DatoQuePuedeFaltar = (typeof DATOS_QUE_PUEDEN_FALTAR)[number];
+/** @deprecated nombre viejo: ya no son solo medidas. */
+export type MedidaQuePuedeFaltar = DatoQuePuedeFaltar;
+/** Los rellenos que se guardan en las columnas NOT NULL cuando el dato queda sin capturar. */
+export const RELLENO_ANGLE = "CLASS_I";
+export const RELLENO_FASE_DENTAL = "PERMANENT";
 
 export type DiagnosticoDetalle = Record<SeccionDelDetalle, SeccionDx> & {
-  /** Medidas guardadas como relleno neutro (0): no son un dato real. Ausente o vacío = todas capturadas. */
-  sinCapturar?: MedidaQuePuedeFaltar[];
+  /** Datos guardados como relleno neutro: no son un dato real. Ausente o vacío = todos capturados. */
+  sinCapturar?: DatoQuePuedeFaltar[];
 };
 
 /**
@@ -336,17 +348,22 @@ export function esDiagnosticoDeMigracion(etiologyNotes: string | null | undefine
 }
 
 const medidasSinCapturar = (d: DiagnosticoDetalle | null | undefined, etiologyNotes?: string | null): readonly string[] =>
-  esDiagnosticoDeMigracion(etiologyNotes) ? MEDIDAS_QUE_PUEDEN_FALTAR : (d?.sinCapturar ?? []);
+  esDiagnosticoDeMigracion(etiologyNotes) ? DATOS_QUE_PUEDEN_FALTAR : (d?.sinCapturar ?? []);
 
 /**
- * ¿Esta medida está guardada como relleno («sin capturar») y no como un dato real? Para todo lector de las columnas.
+ * ¿Este dato está guardado como relleno («sin capturar») y no como un dato real? Para todo lector de las columnas.
  * Pasa `etiologyNotes` del diagnóstico para cubrir también los casos migrados de Dentalink.
  */
-export function medidaSinCapturar(detalle: DiagnosticoDetalle | null | undefined, medida: MedidaQuePuedeFaltar, etiologyNotes?: string | null): boolean {
+export function medidaSinCapturar(detalle: DiagnosticoDetalle | null | undefined, medida: DatoQuePuedeFaltar, etiologyNotes?: string | null): boolean {
   return medidasSinCapturar(detalle, etiologyNotes).includes(medida);
 }
+export const datoSinCapturar = medidaSinCapturar;
 
-/** La base como se DICE: las medidas de relleno (sin capturar) salen como «sin dato», no como un 0 real. */
+/**
+ * La base como se DICE: los rellenos (sin capturar) salen como «sin dato», no como un valor real: medidas en `null`,
+ * Angle en "" (el lado sin capturar), etapa en `null`. La ATM no tiene «vacío» en la base: se pregunta con
+ * `datoSinCapturar(…, "atm")`.
+ */
 export function baseSinRelleno(base: DiagnosticoBase, detalle: DiagnosticoDetalle | null | undefined): DiagnosticoBase {
   const faltan = medidasSinCapturar(detalle, base.etiologyNotes);
   if (faltan.length === 0) return base;
@@ -355,6 +372,9 @@ export function baseSinRelleno(base: DiagnosticoBase, detalle: DiagnosticoDetall
     ...(faltan.includes("overjetMm") ? { overjetMm: null } : {}),
     ...(faltan.includes("overbiteMm") ? { overbiteMm: null } : {}),
     ...(faltan.includes("overbitePercentage") ? { overbitePercentage: null } : {}),
+    ...(faltan.includes("angleClassRight") ? { angleClassRight: "" } : {}),
+    ...(faltan.includes("angleClassLeft") ? { angleClassLeft: "" } : {}),
+    ...(faltan.includes("dentalPhase") ? { dentalPhase: null } : {}),
   };
 }
 
@@ -414,7 +434,7 @@ export function normalizarDiagnosticoDetalle(raw: unknown): DiagnosticoDetalle {
     }
   }
   const faltan = Array.isArray(o.sinCapturar)
-    ? [...new Set(o.sinCapturar.filter((x): x is MedidaQuePuedeFaltar => (MEDIDAS_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x)))]
+    ? [...new Set(o.sinCapturar.filter((x): x is DatoQuePuedeFaltar => (DATOS_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x)))]
     : [];
   if (faltan.length > 0) salida.sinCapturar = faltan;
   return salida;
@@ -428,7 +448,7 @@ export function validarDiagnosticoDetalle(raw: unknown): ResultadoDx {
   if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "Diagnóstico: formato inválido." };
   const o = raw as Record<string, unknown>;
   if (o.sinCapturar !== undefined && o.sinCapturar !== null) {
-    if (!Array.isArray(o.sinCapturar) || o.sinCapturar.some((x) => !(MEDIDAS_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x))) {
+    if (!Array.isArray(o.sinCapturar) || o.sinCapturar.some((x) => !(DATOS_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x))) {
       return { ok: false, error: "Diagnóstico: medidas sin capturar no válidas." };
     }
   }
@@ -656,10 +676,14 @@ function lineasDelDetalle(seccion: SeccionDelDetalle, sec: SeccionDx): LineaDx[]
   return out;
 }
 
-/** El renglón de Angle: «Clase I bilateral» si coinciden, «der. Clase II div. 1 · izq. Clase I» si no. */
+/**
+ * El renglón de Angle: «Clase I bilateral» si coinciden, «der. Clase II div. 1 · izq. Clase I» si no. Un lado ""
+ * (sin capturar) se dice «sin capturar».
+ */
 export function textoDeAngle(der: string, izq: string): string {
-  const d = CLASE_ANGLE[der] ?? der;
-  const i = CLASE_ANGLE[izq] ?? izq;
+  const d = der ? (CLASE_ANGLE[der] ?? der) : "sin capturar";
+  const i = izq ? (CLASE_ANGLE[izq] ?? izq) : "sin capturar";
+  if (!der && !izq) return "Sin capturar";
   return der === izq ? `${d} bilateral` : `der. ${d} · izq. ${i}`;
 }
 
@@ -684,12 +708,15 @@ export function seccionesDelDiagnostico(baseCruda: DiagnosticoBase | null, detal
 
   if (base) {
     const cl: LineaDx[] = [];
-    cl.push({
-      clave: "angle",
-      etiqueta: "Clase de Angle (dental)",
-      valor: textoDeAngle(base.angleClassRight, base.angleClassLeft),
-      estado: base.angleClassRight === "CLASS_I" && base.angleClassLeft === "CLASS_I" ? "normal" : "alterado",
-    });
+    // Un lado sin capturar (relleno) no se dice; los dos sin capturar = no hay renglón de Angle.
+    if (base.angleClassRight || base.angleClassLeft) {
+      cl.push({
+        clave: "angle",
+        etiqueta: "Clase de Angle (dental)",
+        valor: textoDeAngle(base.angleClassRight, base.angleClassLeft),
+        estado: !base.angleClassRight || !base.angleClassLeft ? "neutro" : base.angleClassRight === "CLASS_I" && base.angleClassLeft === "CLASS_I" ? "normal" : "alterado",
+      });
+    }
     if (base.overjetMm !== null) {
       const c = categoriaOverjet(base.overjetMm);
       cl.push({ clave: "overjetMm", etiqueta: "Overjet", valor: `${fmtDx(base.overjetMm, "mm")}${c ? ` · ${etiquetaDeCategoria(c).toLowerCase()}` : ""}`, estado: estadoCat(c) });
@@ -700,7 +727,7 @@ export function seccionesDelDiagnostico(baseCruda: DiagnosticoBase | null, detal
       cl.push({ clave: "overbiteMm", etiqueta: "Overbite", valor: `${fmtDx(base.overbiteMm, "mm")}${pct}${c ? ` · ${etiquetaDeCategoria(c).toLowerCase()}` : ""}`, estado: estadoCat(c) });
     }
     if (base.dentalPhase) cl.push({ clave: "dentalPhase", etiqueta: "Etapa de dentición", valor: FASE_DENTAL[base.dentalPhase] ?? base.dentalPhase, estado: "neutro" });
-    out.push({ clave: "clasificacion", titulo: "Clasificación", lineas: cl });
+    if (cl.length) out.push({ clave: "clasificacion", titulo: "Clasificación", lineas: cl });
   }
 
   const facial = lineasDelDetalle("facial", d.facial);
@@ -744,7 +771,10 @@ export function seccionesDelDiagnostico(baseCruda: DiagnosticoBase | null, detal
     if (habitos.length) func.push({ clave: "habits", etiqueta: "Hábitos", valor: habitos.map((h) => HABITO[h] ?? h).join(", "), estado: "alterado" });
     if (base.habitsDescription) func.push({ clave: "habitsDescription", etiqueta: "Descripción de hábitos", valor: base.habitsDescription, estado: "neutro" });
     const atm = [base.tmjPainPresent ? "dolor" : null, base.tmjClickingPresent ? "chasquido" : null].filter(Boolean) as string[];
-    func.push({ clave: "atm", etiqueta: "ATM", valor: atm.length ? `Con ${atm.join(" y ")}` : "Sin dolor ni chasquido", estado: atm.length ? "alterado" : "normal" });
+    // Dolor y chasquido en `false` sin que nadie revisara la ATM no son «sin dolor ni chasquido».
+    if (atm.length || !medidaSinCapturar(detalle, "atm", base.etiologyNotes)) {
+      func.push({ clave: "atm", etiqueta: "ATM", valor: atm.length ? `Con ${atm.join(" y ")}` : "Sin dolor ni chasquido", estado: atm.length ? "alterado" : "normal" });
+    }
     if (base.tmjNotes) func.push({ clave: "tmjNotes", etiqueta: "Notas de ATM", valor: base.tmjNotes, estado: "neutro" });
   }
   if (func.length) out.push({ clave: "funcional", titulo: "Funcional, respiratorio y ATM", lineas: func });
@@ -811,16 +841,18 @@ export function indicadoresClave(baseCruda: DiagnosticoBase, detalle: Diagnostic
   }
 
   return [
-    {
-      clave: "angle",
-      etiqueta: "Angle",
-      valor:
-        base.angleClassRight === base.angleClassLeft
-          ? cortoAngle(base.angleClassRight)
-          : `${cortoAngle(base.angleClassRight)} / ${cortoAngle(base.angleClassLeft)}`,
-      detalle: base.angleClassRight === base.angleClassLeft ? "bilateral" : "der. / izq.",
-      estado: base.angleClassRight === "CLASS_I" && base.angleClassLeft === "CLASS_I" ? "normal" : "alterado",
-    },
+    !base.angleClassRight && !base.angleClassLeft
+      ? { clave: "angle", etiqueta: "Angle", valor: "Sin capturar", detalle: null, estado: null }
+      : {
+          clave: "angle",
+          etiqueta: "Angle",
+          valor:
+            base.angleClassRight === base.angleClassLeft
+              ? cortoAngle(base.angleClassRight)
+              : `${base.angleClassRight ? cortoAngle(base.angleClassRight) : "sin capturar"} / ${base.angleClassLeft ? cortoAngle(base.angleClassLeft) : "sin capturar"}`,
+          detalle: base.angleClassRight === base.angleClassLeft ? "bilateral" : "der. / izq.",
+          estado: !base.angleClassRight || !base.angleClassLeft ? null : base.angleClassRight === "CLASS_I" && base.angleClassLeft === "CLASS_I" ? "normal" : "alterado",
+        },
     {
       clave: "overjet",
       etiqueta: "Overjet",
@@ -957,7 +989,9 @@ export function faltaDelDiagnostico(base: DiagnosticoBase | null, detalle: Diagn
   if (camposConDato(d, "facial") === 0) falta.push("características faciales");
   if (!d.oclusal.lineaMediaSuperior && !d.oclusal.lineaMediaInferior && base.midlineDeviationMm === null) falta.push("líneas medias");
   if (!respiracionEfectiva(base, d)) falta.push("tipo de respiración");
-  if (medidasSinCapturar(detalle, base.etiologyNotes).length > 0) falta.push("overjet y overbite");
+  const sin = medidasSinCapturar(detalle, base.etiologyNotes);
+  if (sin.includes("angleClassRight") || sin.includes("angleClassLeft")) falta.push("clase de Angle");
+  if (MEDIDAS_QUE_PUEDEN_FALTAR.some((m) => sin.includes(m))) falta.push("overjet y overbite");
   if (!(base.clinicalSummary ?? "").trim()) falta.push("resumen diagnóstico");
   return falta;
 }

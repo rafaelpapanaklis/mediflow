@@ -8,6 +8,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { cargarDiagnosticoDetalle } from "@/lib/orthodontics/diagnostico-detalle-db";
+import { medidaSinCapturar } from "@/lib/orthodontics/diagnostico-detalle";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { z } from "zod";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -65,9 +67,11 @@ export async function exportReferralProgressLetterPdf(
         treatingDoctor: { select: { firstName: true, lastName: true, cedulaProfesional: true } },
         diagnosis: {
           select: {
+            id: true,
             angleClassRight: true,
             angleClassLeft: true,
             clinicalSummary: true,
+            etiologyNotes: true,
             diagnosedById: true,
             referredByDoctor: { select: { fullName: true, clinicName: true } },
           },
@@ -117,6 +121,7 @@ export async function exportReferralProgressLetterPdf(
     meta: { exportedAt: new Date().toISOString(), stage: parsed.data.stage },
   });
 
+  const detalleDx = await cargarDiagnosticoDetalle(ctx.clinicId, plan.diagnosis.id).catch(() => null);
   return ok({
     stage: parsed.data.stage,
     membrete,
@@ -125,8 +130,9 @@ export async function exportReferralProgressLetterPdf(
     treatingDoctor: plan.treatingDoctor,
     referredByDoctor: plan.diagnosis.referredByDoctor,
     diagnosis: {
-      angleClassRight: plan.diagnosis.angleClassRight,
-      angleClassLeft: plan.diagnosis.angleClassLeft,
+      // "" = sin capturar (relleno de la columna NOT NULL): la carta no lo dice como Clase I.
+      angleClassRight: medidaSinCapturar(detalleDx, "angleClassRight", plan.diagnosis.etiologyNotes) ? "" : plan.diagnosis.angleClassRight,
+      angleClassLeft: medidaSinCapturar(detalleDx, "angleClassLeft", plan.diagnosis.etiologyNotes) ? "" : plan.diagnosis.angleClassLeft,
       clinicalSummary: plan.diagnosis.clinicalSummary,
     },
     plan: {

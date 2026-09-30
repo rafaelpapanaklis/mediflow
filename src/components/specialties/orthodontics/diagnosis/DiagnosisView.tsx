@@ -16,6 +16,8 @@ export function DiagnosisView(props: {
   const detalle = datos?.detalle ?? null;
   const overbite = medidaSinCapturar(detalle, "overbiteMm", dx.etiologyNotes) ? "Sin capturar" : `${dx.overbiteMm} mm${medidaSinCapturar(detalle, "overbitePercentage", dx.etiologyNotes) ? "" : ` · ${dx.overbitePercentage}%`}`;
   const overjet = medidaSinCapturar(detalle, "overjetMm", dx.etiologyNotes) ? "Sin capturar" : `${dx.overjetMm} mm`;
+  // Angle, etapa y ATM de relleno (ws1-t9 #5) tampoco se dicen como dato.
+  const falta = (k: "angleClassRight" | "angleClassLeft" | "dentalPhase" | "atm") => medidaSinCapturar(detalle, k, dx.etiologyNotes);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -43,8 +45,8 @@ export function DiagnosisView(props: {
       </header>
 
       <Section title="Análisis Angle">
-        <Row label="Clase derecha" value={dx.angleClassRight} />
-        <Row label="Clase izquierda" value={dx.angleClassLeft} />
+        <Row label="Clase derecha" value={falta("angleClassRight") ? "Sin capturar" : dx.angleClassRight} />
+        <Row label="Clase izquierda" value={falta("angleClassLeft") ? "Sin capturar" : dx.angleClassLeft} />
         <Row label="Overbite" value={overbite} />
         <Row label="Overjet" value={overjet} />
         {dx.midlineDeviationMm != null ? (
@@ -81,7 +83,7 @@ export function DiagnosisView(props: {
       <Section title="Hábitos + ATM + fase dental">
         <Row
           label="Fase dental"
-          value={dx.dentalPhase.replace("_", " ").toLowerCase()}
+          value={falta("dentalPhase") ? "Sin capturar" : dx.dentalPhase.replace("_", " ").toLowerCase()}
         />
         <Row label="Hábitos" value={dx.habits.length > 0 ? dx.habits.join(", ") : "Sin reportar"} />
         {dx.habitsDescription ? <Row label="Descripción" value={dx.habitsDescription} /> : null}
@@ -93,7 +95,7 @@ export function DiagnosisView(props: {
               dx.tmjClickingPresent && "Chasquido",
             ]
               .filter(Boolean)
-              .join(", ") || "Sin hallazgos"
+              .join(", ") || (falta("atm") ? "Sin capturar" : "Sin hallazgos")
           }
         />
         {dx.tmjNotes ? <Row label="Notas ATM" value={dx.tmjNotes} /> : null}

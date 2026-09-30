@@ -1538,6 +1538,30 @@ function OrtodonciaBloque({ caso, tz }: { caso: ExpedienteOrtodoncia; tz: string
           </View>
         </>
       ) : null}
+      {/* ws1-t8: reevaluaciones — lo de arriba es la versión vigente; las anteriores se listan con su motivo. */}
+      {caso.versiones && caso.versiones.anteriores.length > 0 ? (
+        <>
+          <Text style={styles.subTitulo}>Reevaluaciones del diagnóstico y del plan</Text>
+          <Text style={styles.vacio}>
+            Diagnóstico y plan de arriba: {caso.versiones.actual.etiqueta}, vigente desde el {fecha(caso.versiones.actual.desde, tz)}. Las
+            versiones anteriores se conservan completas e inalteradas en la ficha de ortodoncia.
+          </Text>
+          <Tabla
+            columnas={[
+              { titulo: "Versión", ancho: "18%" },
+              { titulo: "Vigente", ancho: "26%" },
+              { titulo: "Cerrada por", ancho: "18%" },
+              { titulo: "Motivo de la reevaluación que la cerró", ancho: "38%" },
+            ]}
+            filas={caso.versiones.anteriores.map((v) => [
+              v.etiqueta,
+              `Del ${fecha(v.desde, tz)} al ${fecha(v.hasta, tz)}`,
+              noCapturado(v.cerradaPor),
+              v.motivo || NO_CAPTURADO,
+            ])}
+          />
+        </>
+      ) : null}
       <Text style={styles.subTitulo}>Hojas de control firmadas</Text>
       {caso.hojas.length === 0 ? (
         <Text style={styles.vacio}>Sin hojas de control firmadas.</Text>

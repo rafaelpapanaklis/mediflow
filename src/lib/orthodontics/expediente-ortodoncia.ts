@@ -48,6 +48,14 @@ export interface ExpedienteOrtodoncia {
    * redactado (`seccionesDelDiagnostico`), sin la clasificación que ya sale arriba. Vacío/ausente = lo de siempre.
    */
   diagnosticoCompleto?: SeccionLegible[];
+  /**
+   * ws1-t8 — REEVALUACIONES (como el PDF del plan): la versión vigente y las anteriores, con fechas (ISO), quién la
+   * cerró y el MOTIVO de la reevaluación que la cerró. Ausente o sin anteriores = el caso nunca se reevaluó.
+   */
+  versiones?: {
+    actual: { etiqueta: string; desde: string };
+    anteriores: Array<{ etiqueta: string; desde: string; hasta: string; motivo: string | null; cerradaPor: string | null }>;
+  };
   hojas: ExpedienteHojaControl[];
 }
 
