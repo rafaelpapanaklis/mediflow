@@ -110,9 +110,24 @@ interface Props {
   rediseno?: boolean;
   /** Métodos de pago que existen hoy (resuelto en el servidor): para el texto de «Activa tu plan» en Suscripción. */
   metodosPago?: MetodosDisponibles;
+  /** Google Calendar DE LA CLÍNICA (no del usuario que mira), resuelto en el servidor. */
+  gcalClinica?: GcalClinica;
 }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago }: Props) {
+/** Estado de la conexión de la clínica con Google Calendar (ver lib/google-calendar-estado). */
+interface GcalClinica {
+  estado: "conectado" | "caido" | "no_conectado";
+  email: string | null;
+  caidoDesde: string | null;
+  motivo: string | null;
+  invitarPaciente: boolean;
+  /** false = falta aplicar sql/ws1-t12-google-calendar-estado.sql: el ajuste de invitación no se puede guardar. */
+  tablaDisponible: boolean;
+}
+
+const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caidoDesde: null, motivo: null, invitarPaciente: true, tablaDisponible: false };
+
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, gcalClinica }: Props) {
   const t = useT();
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
   // «Ver configuración» concedido persona a persona desde Equipo → Permisos:
@@ -273,8 +288,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     }
   }
 
-  // Google Calendar status
-  const gcalConnected = !!user.googleCalendarEnabled;
+  // Google Calendar: el estado es el de LA CLÍNICA (lo que de verdad sincroniza),
+  // no el del usuario que mira: un doctor que «conectaba» veía «Conectado» sin
+  // que se sincronizara nada suyo, y un segundo admin veía «No conectado».
+  const [gcal, setGcal] = useState<GcalClinica>(gcalClinica ?? GCAL_SIN_DATOS);
+  const [gcalBusy, setGcalBusy] = useState<"" | "desconectar" | "invitar" | "sincronizar">("");
+  const gcalConnected = gcal.estado === "conectado";
+  const gcalCaido = gcal.estado === "caido";
+  const gcalFecha = gcal.caidoDesde
+    ? new Date(gcal.caidoDesde).toLocaleDateString(initClinic?.locale === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric" })
+    : "";
+  // Solo motivos conocidos (códigos del sync): nunca se pinta texto libre del servidor.
+  const gcalMotivoTexto = gcal.motivo && ["autorizacion", "permisos", "api_no_habilitada", "calendario"].includes(gcal.motivo)
+    ? t(`settings.client.gcalLostReason_${gcal.motivo}`)
+    : "";
 
   // Logo de la clínica (WS1-T6) — el MISMO Clinic.logoUrl que usa la mini-web
   // (/dashboard/landing). Se sube por /api/landing-upload (destino "logo") y
@@ -508,12 +535,71 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   }
 
   async function disconnectGcal() {
+    if (gcalBusy) return;
+    setGcalBusy("desconectar");
     try {
       const res = await fetch("/api/google", { method:"DELETE" });
       if (!res.ok) throw new Error();
-      toast.success(t("settings.client.gcalDisconnectedToast"));
+      const r = await res.json().catch(() => ({}));
+      // Los eventos que ya estaban en Google NO se borran: se dice siempre.
+      toast.success(
+        r?.permisoRevocado === false
+          ? t("settings.client.gcalDisconnectedNoRevokeToast")
+          : t("settings.client.gcalDisconnectedToast"),
+        { duration: 9000 },
+      );
+      setGcal((g) => ({ ...g, estado: "no_conectado", email: null, caidoDesde: null, motivo: null }));
       setUser((u: any) => ({ ...u, googleCalendarEnabled:false, googleCalendarEmail:null }));
     } catch { toast.error(t("settings.client.gcalDisconnectErrorToast")); }
+    finally { setGcalBusy(""); }
+  }
+
+  async function alternarInvitarPaciente(invitar: boolean) {
+    if (gcalBusy) return;
+    setGcalBusy("invitar");
+    try {
+      const res = await fetch("/api/google/ajustes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitarPaciente: invitar }),
+      });
+      if (!res.ok) {
+        const r = await res.json().catch(() => ({}));
+        throw new Error(res.status === 503 ? t("settings.client.gcalInviteUnavailable") : (r?.error || ""));
+      }
+      setGcal((g) => ({ ...g, invitarPaciente: invitar }));
+      toast.success(invitar ? t("settings.client.gcalInviteOnToast") : t("settings.client.gcalInviteOffToast"));
+    } catch (e: any) {
+      toast.error(e?.message || t("settings.client.gcalInviteErrorToast"));
+    } finally { setGcalBusy(""); }
+  }
+
+  async function sincronizarFuturasGcal() {
+    if (gcalBusy) return;
+    setGcalBusy("sincronizar");
+    try {
+      const res = await fetch("/api/google/sincronizar-futuras", { method: "POST" });
+      const r = await res.json().catch(() => ({}));
+      if (res.status === 501) { toast.error(t("settings.client.gcalSyncUnavailable")); return; }
+      if (!res.ok) throw new Error();
+      if (r?.motivo === "no_conectada" || r?.motivo === "conexion_caida") {
+        toast.error(t(r.motivo === "no_conectada" ? "settings.client.gcalSyncNotConnected" : "settings.client.gcalLostTitle"));
+        return;
+      }
+      if (Number(r?.restantes ?? 0) > 0) {
+        // Se agotó el tiempo de la petición: es idempotente, basta volver a pulsar.
+        toast(t("settings.client.gcalSyncPartial").replace("{creadas}", String(r?.creadas ?? 0)).replace("{restantes}", String(r.restantes)), { duration: 10000 });
+        return;
+      }
+      toast.success(
+        t("settings.client.gcalSyncDone")
+          .replace("{creadas}", String(r?.creadas ?? 0))
+          .replace("{omitidas}", String(r?.omitidas ?? 0))
+          .replace("{fallidas}", String(r?.fallidas ?? 0)),
+        { duration: 9000 },
+      );
+    } catch { toast.error(t("settings.client.gcalSyncError")); }
+    finally { setGcalBusy(""); }
   }
 
   const [team, setTeam] = useState<TeamMember[]>(initTeam);
@@ -1113,28 +1199,63 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   subtitulo={t("settings.client.gcalSubtitle")}
                   extra={gcalConnected
                     ? <Insignia tono="exito" punto>{t("settings.client.gcalConnectedBadge")}</Insignia>
-                    : <Insignia>{t("settings.client.gcalNotConnectedBadge")}</Insignia>}
+                    : gcalCaido
+                      ? <Insignia tono="peligro" punto>{t("settings.client.gcalLostBadge")}</Insignia>
+                      : <Insignia>{t("settings.client.gcalNotConnectedBadge")}</Insignia>}
                 >
-                  {gcalConnected ? (
+                  {gcalCaido && (
+                    <Aviso tono="peligro" icono={<CalendarCheck size={16} strokeWidth={1.75} aria-hidden />}>
+                      <strong>{t("settings.client.gcalLostTitle")}</strong>
+                      <div>{t("settings.client.gcalLostBody")}{gcalFecha ? ` ${t("settings.client.gcalLostSince").replace("{fecha}", gcalFecha)}` : ""}</div>
+                      {gcalMotivoTexto && <div>{gcalMotivoTexto}</div>}
+                    </Aviso>
+                  )}
+                  {gcalConnected && (
+                    <Aviso tono="exito" icono={<CalendarCheck size={16} strokeWidth={1.75} aria-hidden />}>
+                      <strong>{t("settings.client.gcalAccountConnected")}</strong>
+                      <div>{gcal.email}</div>
+                    </Aviso>
+                  )}
+                  {(gcalConnected || gcalCaido) && (
+                    <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalConnectedDesc")}</p>
+                  )}
+                  {gcal.estado === "no_conectado" && (
+                    <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{isAdminUser ? t("settings.client.gcalConnectDesc") : t("settings.client.gcalNotConnectedNonAdmin")}</p>
+                  )}
+                  {isAdminUser && gcalConnected && (
                     <>
-                      <Aviso tono="exito" icono={<CalendarCheck size={16} strokeWidth={1.75} aria-hidden />}>
-                        <strong>{t("settings.client.gcalAccountConnected")}</strong>
-                        <div>{user.googleCalendarEmail}</div>
-                      </Aviso>
-                      <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalConnectedDesc")}</p>
+                      <FilaInterruptor
+                        titulo={t("settings.client.gcalInviteTitle")}
+                        descripcion={gcal.tablaDisponible ? t("settings.client.gcalInviteDesc") : t("settings.client.gcalInviteDescNoTable")}
+                        activo={gcal.invitarPaciente}
+                        onCambiar={alternarInvitarPaciente}
+                        disabled={gcalBusy !== "" || !gcal.tablaDisponible}
+                      />
+                      <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalPrivacyNote")}</p>
+                    </>
+                  )}
+                  {isAdminUser ? (
+                    <>
                       <Acciones>
-                        <Boton variante="peligro" onClick={disconnectGcal}>{t("settings.client.gcalDisconnectBtn")}</Boton>
+                        {(gcalCaido || gcal.estado === "no_conectado") && (
+                          <EnlaceBoton href="/api/google">
+                            <span style={{ fontSize: 17, fontWeight: 700 }}>G</span> {gcalCaido ? t("settings.client.gcalReconnectBtn") : t("settings.client.gcalConnectBtn")}
+                          </EnlaceBoton>
+                        )}
+                        {gcalConnected && (
+                          <Boton onClick={sincronizarFuturasGcal} disabled={gcalBusy !== ""}>
+                            {gcalBusy === "sincronizar" ? t("settings.client.gcalSyncing") : t("settings.client.gcalSyncBtn")}
+                          </Boton>
+                        )}
+                        {(gcalConnected || gcalCaido) && (
+                          <Boton variante="peligro" onClick={disconnectGcal} disabled={gcalBusy !== ""}>{t("settings.client.gcalDisconnectBtn")}</Boton>
+                        )}
                       </Acciones>
+                      {gcalConnected && <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalSyncHelp")}</p>}
+                      {(gcalConnected || gcalCaido) && <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalDisconnectHelp")}</p>}
                     </>
                   ) : (
-                    <>
-                      <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalConnectDesc")}</p>
-                      <Acciones>
-                        <EnlaceBoton href="/api/google">
-                          <span style={{ fontSize: 17, fontWeight: 700 }}>G</span> {t("settings.client.gcalConnectBtn")}
-                        </EnlaceBoton>
-                      </Acciones>
-                    </>
+                    (gcalConnected || gcalCaido) && <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalNonAdminNote")}</p>
                   )}
                 </Seccion>
 
@@ -2008,32 +2129,74 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </div>
               {gcalConnected
                 ? <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full">{t("settings.client.gcalConnectedBadge")}</span>
-                : <span className="text-sm font-bold bg-muted text-muted-foreground px-3 py-1 rounded-full">{t("settings.client.gcalNotConnectedBadge")}</span>}
+                : gcalCaido
+                  ? <span className="text-sm font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 px-3 py-1 rounded-full">{t("settings.client.gcalLostBadge")}</span>
+                  : <span className="text-sm font-bold bg-muted text-muted-foreground px-3 py-1 rounded-full">{t("settings.client.gcalNotConnectedBadge")}</span>}
             </div>
 
-            {gcalConnected ? (
-              <div className="space-y-3">
+            <div className="space-y-3">
+              {gcalCaido && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/20 rounded-xl border border-rose-200 dark:border-rose-800">
+                  <div className="text-sm font-bold text-rose-700 dark:text-rose-300">{t("settings.client.gcalLostTitle")}</div>
+                  <div className="text-sm text-rose-600 dark:text-rose-400">{t("settings.client.gcalLostBody")}{gcalFecha ? ` ${t("settings.client.gcalLostSince").replace("{fecha}", gcalFecha)}` : ""}</div>
+                  {gcalMotivoTexto && <div className="text-sm text-rose-600 dark:text-rose-400">{gcalMotivoTexto}</div>}
+                </div>
+              )}
+              {gcalConnected && (
                 <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div>
                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{t("settings.client.gcalAccountConnected")}</div>
-                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
+                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{gcal.email}</div>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground">{t("settings.client.gcalConnectedDesc")}</p>
-                <Button variant="outline" onClick={disconnectGcal} className="border-rose-300 text-rose-700 hover:bg-rose-50">
-                  {t("settings.client.gcalDisconnectBtn")}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">{t("settings.client.gcalConnectDesc")}</p>
-                <a href="/api/google"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-card border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
-                  <span className="text-xl">G</span> {t("settings.client.gcalConnectBtn")}
-                </a>
-              </div>
-            )}
+              )}
+              {(gcalConnected || gcalCaido) && <p className="text-sm text-muted-foreground">{t("settings.client.gcalConnectedDesc")}</p>}
+              {gcal.estado === "no_conectado" && (
+                <p className="text-sm text-muted-foreground">{isAdminUser ? t("settings.client.gcalConnectDesc") : t("settings.client.gcalNotConnectedNonAdmin")}</p>
+              )}
+              {isAdminUser && gcalConnected && (
+                <>
+                  <label className="flex items-start gap-3 text-sm">
+                    <input type="checkbox" checked={gcal.invitarPaciente}
+                      disabled={gcalBusy !== "" || !gcal.tablaDisponible}
+                      onChange={e => alternarInvitarPaciente(e.target.checked)}
+                      className="mt-1 w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
+                    <span>
+                      <span className="font-semibold">{t("settings.client.gcalInviteTitle")}</span>
+                      <span className="block text-muted-foreground">{gcal.tablaDisponible ? t("settings.client.gcalInviteDesc") : t("settings.client.gcalInviteDescNoTable")}</span>
+                    </span>
+                  </label>
+                  <p className="text-sm text-muted-foreground">{t("settings.client.gcalPrivacyNote")}</p>
+                </>
+              )}
+              {isAdminUser ? (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {(gcalCaido || gcal.estado === "no_conectado") && (
+                      <a href="/api/google"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-card border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
+                        <span className="text-xl">G</span> {gcalCaido ? t("settings.client.gcalReconnectBtn") : t("settings.client.gcalConnectBtn")}
+                      </a>
+                    )}
+                    {gcalConnected && (
+                      <Button variant="outline" onClick={sincronizarFuturasGcal} disabled={gcalBusy !== ""}>
+                        {gcalBusy === "sincronizar" ? t("settings.client.gcalSyncing") : t("settings.client.gcalSyncBtn")}
+                      </Button>
+                    )}
+                    {(gcalConnected || gcalCaido) && (
+                      <Button variant="outline" onClick={disconnectGcal} disabled={gcalBusy !== ""} className="border-rose-300 text-rose-700 hover:bg-rose-50">
+                        {t("settings.client.gcalDisconnectBtn")}
+                      </Button>
+                    )}
+                  </div>
+                  {gcalConnected && <p className="text-sm text-muted-foreground">{t("settings.client.gcalSyncHelp")}</p>}
+                  {(gcalConnected || gcalCaido) && <p className="text-sm text-muted-foreground">{t("settings.client.gcalDisconnectHelp")}</p>}
+                </>
+              ) : (
+                (gcalConnected || gcalCaido) && <p className="text-sm text-muted-foreground">{t("settings.client.gcalNonAdminNote")}</p>
+              )}
+            </div>
           </div>
 
           {/* WhatsApp (admin only) */}

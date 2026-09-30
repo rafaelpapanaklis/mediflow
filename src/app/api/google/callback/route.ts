@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOAuthClient, verifyState, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
+import { limpiarGoogleCaido } from "@/lib/google-calendar-estado";
 import { createClient } from "@/lib/supabase/server";
 import { urlDeSaltoAlHostDeLaApp, type MotivoErrorGcal } from "@/lib/google-calendar-callback";
 
@@ -108,6 +109,8 @@ export async function GET(req: NextRequest) {
         `UPDATE clinics SET "googleCalendarToken"=$1,"googleRefreshToken"=$2,"googleCalendarEmail"=$3,"googleCalendarEnabled"=true,"googleClinicCalendarId"=$4,"updatedAt"=NOW() WHERE id=$5`,
         accessToken, refreshToken, email, clinicCalendarId, user.clinicId
       );
+      // Reconectó con permiso nuevo: ya no está «caída» (nunca lanza).
+      await limpiarGoogleCaido(user.clinicId);
     }
 
     return NextResponse.redirect(`${BASE}&gcal=success`);

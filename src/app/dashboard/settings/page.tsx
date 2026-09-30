@@ -10,6 +10,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { getServerT } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
+import { estadoConexionGoogle, leerAjustesGoogle } from "@/lib/google-calendar-estado";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { leerCuentaSpei } from "@/lib/billing/spei-directo";
 import { ivaParaCobro } from "@/lib/billing/iva-cobro";
@@ -63,6 +64,19 @@ export default async function SettingsPage({ searchParams }: Props) {
     leerCuentaSpei().catch(() => null),
     exencionIvaDeClinica(clinic ? (clinic as any) : null).catch(() => null),
   ]);
+  // Google Calendar DE LA CLÍNICA (no el del usuario que mira). Se resuelve aquí,
+  // con la fila completa, porque el refresh token ya no viaja al navegador;
+  // leerAjustesGoogle nunca lanza (sin la tabla nueva: invita al paciente, como siempre).
+  const ajustesGoogle = await leerAjustesGoogle(user.clinicId);
+  const gcalClinica = {
+    estado: estadoConexionGoogle(clinic as any, ajustesGoogle),
+    email: (clinic as any)?.googleCalendarEmail ?? null,
+    caidoDesde: ajustesGoogle.caidoDesde ? ajustesGoogle.caidoDesde.toISOString() : null,
+    motivo: ajustesGoogle.motivo,
+    invitarPaciente: ajustesGoogle.invitarPaciente,
+    tablaDisponible: ajustesGoogle.tablaDisponible,
+  };
+
   const metodosPago = { tarjetaOxxo: ivaParaCobro(process.env).ok || exencionIva !== null, spei: cuentaSpei !== null };
 
   return (
@@ -79,6 +93,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         puedeEditarClinica={puedeEditarClinica}
         rediseno={rediseno}
         metodosPago={metodosPago}
+        gcalClinica={gcalClinica}
       />
     </ErrorBoundary>
   );
