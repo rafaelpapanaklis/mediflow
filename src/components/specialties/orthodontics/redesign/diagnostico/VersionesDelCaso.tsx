@@ -28,14 +28,27 @@ export interface VersionesDelCasoProps {
 export function VersionesDelCaso(props: VersionesDelCasoProps) {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [historial, setHistorial] = useState(false);
+  const [abriendo, setAbriendo] = useState(false);
   const [nueva, setNueva] = useState(false);
 
-  const cargar = useCallback(() => {
-    leerVersionesDelCaso(props.treatmentPlanId)
-      .then((r) => setDatos(isFailure(r) ? null : r.data))
-      .catch(() => setDatos(null));
-  }, [props.treatmentPlanId]);
-  useEffect(() => cargar(), [cargar]);
+  const cargar = useCallback(
+    () =>
+      leerVersionesDelCaso(props.treatmentPlanId)
+        .then((r) => setDatos(isFailure(r) ? null : r.data))
+        .catch(() => setDatos(null)),
+    [props.treatmentPlanId],
+  );
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+  // La versión vigente es lo que HOY está en la ficha: el historial se vuelve a leer al abrirlo (lo cargado al
+  // montar la pestaña ya no sirve si después se editó el diagnóstico o el plan).
+  const abrirHistorial = async () => {
+    setAbriendo(true);
+    await cargar();
+    setAbriendo(false);
+    setHistorial(true);
+  };
 
   if (!datos || !datos.tabla || datos.linea.length === 0) return null;
   const actual = datos.linea[datos.linea.length - 1]!;
@@ -47,12 +60,16 @@ export function VersionesDelCaso(props: VersionesDelCasoProps) {
         <span className={dx.dxVersionActual}>
           <span className={dx.dxVersionPunto} aria-hidden />
           <strong>{actual.etiqueta}</strong>
-          <span className={orto.tonoApagado}>desde {fechaDma(actual.desde)}</span>
+          <span className={orto.tonoApagado}>vigente desde {fechaDma(actual.desde, datos.zona)}</span>
         </span>
         <span className={dx.dxVersionesAcciones}>
           {previas > 0 ? (
-            <button type="button" className={dx.dxCompletar} onClick={() => setHistorial(true)}>
-              <History size={13} strokeWidth={1.9} className="inline mr-1" aria-hidden />
+            <button type="button" className={dx.dxCompletar} onClick={abrirHistorial} disabled={abriendo}>
+              {abriendo ? (
+                <Loader2 size={13} strokeWidth={1.9} className="inline mr-1 animate-spin" aria-hidden />
+              ) : (
+                <History size={13} strokeWidth={1.9} className="inline mr-1" aria-hidden />
+              )}
               Historial ({previas} {previas === 1 ? "versión anterior" : "versiones anteriores"})
             </button>
           ) : null}
@@ -117,7 +134,7 @@ function Historial({ datos, onClose }: { datos: Datos; onClose: () => void }) {
                       >
                         <span className={dx.dxIndiceNombre}>
                           {p.etiqueta}
-                          <span className={dx.dxHitoFecha}>{fechaDma(p.desde)}{p.actual ? " · actual" : ""}</span>
+                          <span className={dx.dxHitoFecha}>{fechaDma(p.desde, datos.zona)}{p.actual ? " · vigente" : ""}</span>
                         </span>
                       </button>
                     </li>
@@ -128,13 +145,20 @@ function Historial({ datos, onClose }: { datos: Datos; onClose: () => void }) {
                 <header className={dx.dxContenidoCabeza}>
                   <h4 className={dx.dxContenidoTitulo}>{punto.etiqueta}</h4>
                   <p className={dx.dxContenidoSub}>
-                    {fechaDma(punto.desde)} → {punto.hasta ? fechaDma(punto.hasta) : "hoy"}
+                    {fechaDma(punto.desde, datos.zona)} → {punto.hasta ? fechaDma(punto.hasta, datos.zona) : "hoy"}
                     {v.cerradaPor ? ` · cerrada por ${v.cerradaPor}` : ""}
                     {punto.motivo ? ` · motivo: ${punto.motivo}` : ""}
                   </p>
                 </header>
 
-                {siguiente ? <QueCambio cambios={v.cambiosALaSiguiente} siguiente={siguiente.etiqueta} /> : null}
+                {punto.actual ? (
+                  <p className={dx.dxAvisoVigente}>
+                    Vigente: son los datos de hoy en la ficha y se siguen editando. Se congela al abrir la siguiente reevaluación.
+                  </p>
+                ) : null}
+                {siguiente ? (
+                  <QueCambio cambios={v.cambiosALaSiguiente} siguiente={siguiente.actual ? `${siguiente.etiqueta} (vigente, datos de hoy)` : siguiente.etiqueta} />
+                ) : null}
 
                 <div className={dx.dxTarjetas}>
                   {v.legible.diagnostico.map((s) => (

@@ -52,11 +52,27 @@ export function etiquetaDeVersion(numero: number): string {
   return numero === 0 ? "Inicial" : `Reevaluación ${numero}`;
 }
 
-export function fechaDma(iso: string | null | undefined): string {
+/**
+ * «dd/mm/aaaa» en la zona horaria de la CLÍNICA (no UTC: una reevaluación cerrada a las 6 p.m. de México no es
+ * del día siguiente). Un día suelto («2026-09-29») se respeta tal cual.
+ */
+export function fechaDma(iso: string | null | undefined, zona: string = ZONA_POR_DEFECTO): string {
   if (!iso) return "";
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+  const soloDia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (soloDia) return `${soloDia[3]}/${soloDia[2]}/${soloDia[1]}`;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  let partes: Intl.DateTimeFormatPart[];
+  try {
+    partes = new Intl.DateTimeFormat("es-MX", { timeZone: zona, day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(d);
+  } catch {
+    partes = new Intl.DateTimeFormat("es-MX", { timeZone: ZONA_POR_DEFECTO, day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(d);
+  }
+  const v = (t: string) => partes.find((x) => x.type === t)?.value ?? "";
+  return `${v("day")}/${v("month")}/${v("year")}`;
 }
+
+export const ZONA_POR_DEFECTO = "America/Mexico_City";
 
 /** La línea de tiempo completa: las cerradas en orden y la viva al final. `inicioDelCaso` = fecha del diagnóstico. */
 export function lineaDeTiempo(cerradas: ReadonlyArray<Pick<VersionCerrada, "numero" | "iniciadaEl" | "cerradaEl" | "motivo">>, inicioDelCaso: string): PuntoDeVersion[] {

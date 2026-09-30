@@ -117,7 +117,8 @@ export async function exportTreatmentPlanPdf(
   const [clinic, doctor, membrete] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
-      select: { name: true },
+      // ws1-t8: la zona, para fechar las reevaluaciones como en la ficha.
+      select: { name: true, timezone: true },
     }),
     prisma.user.findUnique({
       where: { id: doctorId },
@@ -186,24 +187,31 @@ export async function exportTreatmentPlanPdf(
     planCompleto,
     // ws1-t8: sin la columna del diagnóstico completo (SQL sin pegar), sale lo de siempre.
     diagnosticoCompleto: (await cargarDiagnosticosLegibles(ctx.clinicId, [plan.diagnosisId])).get(plan.diagnosisId) ?? [],
-    versiones: await versionesParaElPdf(ctx.clinicId, plan.id, plan.diagnosis.diagnosedAt),
+    versiones: await versionesParaElPdf(ctx.clinicId, plan.id, plan.diagnosis.diagnosedAt, clinic?.timezone),
     phases: plan.phases,
     generatedAt: new Date().toISOString(),
   });
 }
 
 /** ws1-t8 — la línea de tiempo de reevaluaciones para el PDF. Sin la tabla (SQL sin pegar), nada. */
-async function versionesParaElPdf(clinicId: string, planId: string, diagnosedAt: Date): Promise<TreatmentPlanPdfData["versiones"]> {
+async function versionesParaElPdf(
+  clinicId: string,
+  planId: string,
+  diagnosedAt: Date,
+  zona: string | null | undefined,
+): Promise<TreatmentPlanPdfData["versiones"]> {
+  // En la zona de la clínica: una reevaluación cerrada a las 6 p.m. de México no es «del día siguiente».
+  const dia = (iso: string | null) => fechaDma(iso, zona || undefined);
   const cerradas = await listarVersionesDelCaso(clinicId, planId).catch(() => null);
   if (!cerradas || cerradas.length === 0) return undefined;
   const linea = lineaDeTiempo(cerradas, diagnosedAt.toISOString());
   const actual = linea[linea.length - 1]!;
   return {
-    actual: { etiqueta: actual.etiqueta, desde: fechaDma(actual.desde) },
+    actual: { etiqueta: actual.etiqueta, desde: dia(actual.desde) },
     anteriores: linea.slice(0, -1).map((p, i) => ({
       etiqueta: p.etiqueta,
-      desde: fechaDma(p.desde),
-      hasta: fechaDma(p.hasta),
+      desde: dia(p.desde),
+      hasta: dia(p.hasta),
       motivo: cerradas[i]?.motivo ?? null,
     })),
   };

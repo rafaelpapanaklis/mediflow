@@ -20,6 +20,7 @@ import {
   queCambio,
   validarMotivo,
   versionLegible,
+  ZONA_POR_DEFECTO,
   type CambioEntreVersiones,
   type PuntoDeVersion,
   type VersionLegible,
@@ -30,8 +31,14 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 export interface VersionesDelCaso {
   /** false = falta pegar el SQL de reevaluaciones. */
   tabla: boolean;
+  /** Zona horaria de la clínica: las fechas se dicen en ella, no en UTC. */
+  zona: string;
   linea: PuntoDeVersion[];
-  /** Cada versión (cerradas y la actual, en el orden de `linea`) redactada, con quién la cerró y qué cambió en la siguiente. */
+  /**
+   * Cada versión (cerradas y la actual, en el orden de `linea`) redactada, con quién la cerró y qué cambió en la
+   * siguiente. La ACTUAL se lee de la ficha en el momento de pedirla (no es una foto): la anterior se compara
+   * contra lo que hoy hay guardado.
+   */
   versiones: Array<{
     numero: number;
     cerradaPor: string | null;
@@ -62,8 +69,12 @@ export async function leerVersionesDelCaso(treatmentPlanId: string): Promise<Act
 
   const caso = await casoVisible(treatmentPlanId, ctx);
   if (!caso) return fail("Caso no encontrado");
-  const cerradas = await listarVersionesDelCaso(ctx.clinicId, caso.id);
-  if (cerradas === null) return ok({ tabla: false, linea: [], versiones: [] });
+  const [cerradas, clinica] = await Promise.all([
+    listarVersionesDelCaso(ctx.clinicId, caso.id),
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }).catch(() => null),
+  ]);
+  const zona = clinica?.timezone || ZONA_POR_DEFECTO;
+  if (cerradas === null) return ok({ tabla: false, zona, linea: [], versiones: [] });
 
   // La versión viva: lo que hoy está en la ficha.
   const [detalle, planDetalle, tecnica] = await Promise.all([
@@ -84,6 +95,7 @@ export async function leerVersionesDelCaso(treatmentPlanId: string): Promise<Act
   const linea = lineaDeTiempo(cerradas, caso.diagnosis.diagnosedAt.toISOString());
   return ok({
     tabla: true,
+    zona,
     linea,
     versiones: linea.map((p, i) => ({
       numero: p.numero,

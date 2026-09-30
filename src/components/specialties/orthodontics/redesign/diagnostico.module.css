@@ -64,9 +64,13 @@
   overflow-wrap: anywhere;
 }
 
+/* Sin dato: una palabra discreta, no un «—» con peso de valor. */
 .dxIndicadorVacio {
-  color: var(--pr-texto-3);
+  margin-top: 8px;
+  font-size: 12.5px;
   font-weight: 500;
+  letter-spacing: 0;
+  color: var(--pr-texto-3);
 }
 
 .dxIndicadorDetalle {
@@ -739,6 +743,16 @@
   font-weight: 600;
   color: var(--pr-texto);
   overflow-wrap: anywhere;
+}
+
+.dxAvisoVigente {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--orto-violeta-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-activo-suave);
+  color: var(--pr-texto-2);
+  font-size: 12.5px;
 }
 
 .dxVentanaChica {

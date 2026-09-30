@@ -217,7 +217,11 @@ function ResumenDelDiagnostico({ d, onEdit, treatmentPlanId }: { d: DiagnosisDTO
                 />
               ) : null}
             </div>
-            <div className={`${dx.dxIndicadorValor} ${i.valor === "—" ? dx.dxIndicadorVacio : ""}`}>{i.valor}</div>
+            {i.valor === "—" ? (
+              <div className={dx.dxIndicadorVacio}>Sin capturar</div>
+            ) : (
+              <div className={dx.dxIndicadorValor}>{i.valor}</div>
+            )}
             {i.detalle ? <div className={dx.dxIndicadorDetalle}>{i.detalle}</div> : null}
           </div>
         ))}

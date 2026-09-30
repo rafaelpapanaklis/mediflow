@@ -65,9 +65,13 @@ test("la consulta corta sin clínica y filtra tutor por clínica (compartido ent
 });
 
 test("el doctor que refirió se valida al crear y al editar el diagnóstico", () => {
-  for (const f of ["createDiagnosis", "updateDiagnosis"]) {
-    const src = leer(`app/actions/orthodontics/${f}.ts`);
-    assert.match(src, /validarPersonasDelCaso\(\{[\s\S]*?clinicId: ctx\.clinicId,[\s\S]*?referredByDoctorId: parsed\.data\.referredByDoctorId/, f);
-    assert.match(src, /if \(personaAjena\) return fail\(personaAjena\);/, f);
-  }
+  const crear = leer("app/actions/orthodontics/createDiagnosis.ts");
+  assert.match(crear, /validarPersonasDelCaso\(\{[\s\S]*?clinicId: ctx\.clinicId,[\s\S]*?referredByDoctorId: parsed\.data\.referredByDoctorId/);
+  assert.match(crear, /if \(personaAjena\) return fail\(personaAjena\);/);
+  // ws1-t8: editar valida en `prepararGuardadoDelDiagnostico` (lo usan updateDiagnosis y el guardado de los dos
+  // pasos de la ventana del caso), ANTES de escribir nada.
+  assert.match(leer("app/actions/orthodontics/updateDiagnosis.ts"), /prepararGuardadoDelDiagnostico\(ctx, input\)/);
+  const guardar = leer("lib/orthodontics/diagnostico-guardar.ts");
+  assert.match(guardar, /validarPersonasDelCaso\(\{[\s\S]*?clinicId: ctx\.clinicId,[\s\S]*?referredByDoctorId: parsed\.data\.referredByDoctorId/);
+  assert.match(guardar, /if \(personaAjena\) return \{ ok: false, error: personaAjena \};/);
 });

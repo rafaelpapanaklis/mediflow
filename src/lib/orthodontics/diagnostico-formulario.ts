@@ -313,3 +313,24 @@ export function avanceDelPaso(f: FormularioDelDiagnostico): Record<SeccionDelPas
     resumen: { llenos: f.clinicalSummary.trim().length >= RESUMEN_MINIMO ? 1 : 0, total: 1 },
   };
 }
+
+// ─── Para la ventana del caso (ws1-t12): guardar los DOS pasos con un solo «Guardar» ──────────
+
+/** ¿El paso cambió respecto a como se abrió? (Para avisar o para saber si hay que guardar el diagnóstico.) */
+export function hayCambiosEnElDiagnostico(inicial: FormularioDelDiagnostico, actual: FormularioDelDiagnostico): boolean {
+  return JSON.stringify(inicial) !== JSON.stringify(actual);
+}
+
+/**
+ * La entrada lista para el servidor (`updateDiagnosis`, o `prepararGuardadoDelDiagnostico` dentro de la acción
+ * que guarda diagnóstico + plan juntos), o el error con la sección del paso a la que hay que llevar al doctor.
+ */
+export function entradaParaGuardar(
+  diagnosisId: string,
+  f: FormularioDelDiagnostico,
+  modo: "abrir" | "editar" = "editar",
+): { ok: true; entrada: { diagnosisId: string } & PeticionDelDiagnostico } | { ok: false; error: string; seccion: SeccionDelPaso } {
+  const r = formularioAPeticion(f, modo);
+  if (r.ok === false) return { ok: false, error: r.error, seccion: r.seccion as SeccionDelPaso };
+  return { ok: true, entrada: { diagnosisId, ...r.peticion } };
+}

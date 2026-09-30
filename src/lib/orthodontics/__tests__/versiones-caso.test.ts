@@ -18,15 +18,15 @@ test("línea de tiempo: inicial, reevaluaciones y la actual al final", () => {
   assert.deepEqual(sola.map((p) => [p.etiqueta, p.actual]), [["Inicial", true]]);
   const l = lineaDeTiempo(
     [
-      { numero: 1, iniciadaEl: "2026-06-01T00:00:00.000Z", cerradaEl: "2026-09-29T00:00:00.000Z", motivo: "Control radiográfico" },
-      { numero: 0, iniciadaEl: "2026-01-10T00:00:00.000Z", cerradaEl: "2026-06-01T00:00:00.000Z", motivo: "Cambio de anclaje" },
+      { numero: 1, iniciadaEl: "2026-06-01T16:00:00.000Z", cerradaEl: "2026-09-29T16:00:00.000Z", motivo: "Control radiográfico" },
+      { numero: 0, iniciadaEl: "2026-01-10T00:00:00.000Z", cerradaEl: "2026-06-01T16:00:00.000Z", motivo: "Cambio de anclaje" },
     ],
     "2026-01-10T00:00:00.000Z",
   );
   assert.deepEqual(l.map((p) => p.etiqueta), ["Inicial", "Reevaluación 1", "Reevaluación 2"]);
   assert.equal(l[0]!.motivo, null);
   assert.equal(l[1]!.motivo, "Cambio de anclaje", "la reevaluación 1 la abrió el motivo guardado en la versión 0");
-  assert.equal(l[2]!.desde, "2026-09-29T00:00:00.000Z");
+  assert.equal(l[2]!.desde, "2026-09-29T16:00:00.000Z");
   assert.equal(l[2]!.actual, true);
   assert.equal(fechaDma(l[1]!.desde), "01/06/2026");
   assert.equal(etiquetaDeVersion(0), "Inicial");
@@ -69,4 +69,13 @@ test("foto legible con la misma redacción que la ficha, y qué cambió", () => 
   const cl = queCambio(conLinea, detallada);
   assert.ok(!cl.some((x) => x.etiqueta === "Línea media" && x.despues === null));
   assert.ok(cl.some((x) => x.etiqueta === "Línea media inferior" && x.antes === null));
+});
+
+test("fechas en la zona de la clínica, no en UTC (6 p.m. de México del 29 no es el 30)", () => {
+  assert.equal(fechaDma("2026-09-30T00:17:00.000Z"), "29/09/2026");
+  assert.equal(fechaDma("2026-09-30T00:17:00.000Z", "America/Mexico_City"), "29/09/2026");
+  assert.equal(fechaDma("2026-09-30T00:17:00.000Z", "Europe/Madrid"), "30/09/2026");
+  assert.equal(fechaDma("2026-09-29"), "29/09/2026", "un día suelto no se corre");
+  assert.equal(fechaDma("2026-09-30T00:17:00.000Z", "Zona/Inventada"), "29/09/2026", "zona inválida → la de México");
+  assert.equal(fechaDma(null), "");
 });

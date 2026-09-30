@@ -21,7 +21,15 @@ import {
   validarDiagnosticoDetalle,
   type DiagnosticoBase,
 } from "../diagnostico-detalle";
-import { avanceDelPaso, formularioAPeticion, formularioDesdeDiagnostico, formularioVacio, type PeticionDelDiagnostico } from "../diagnostico-formulario";
+import {
+  avanceDelPaso,
+  entradaParaGuardar,
+  formularioAPeticion,
+  formularioDesdeDiagnostico,
+  formularioVacio,
+  hayCambiosEnElDiagnostico,
+  type PeticionDelDiagnostico,
+} from "../diagnostico-formulario";
 
 const BASE: DiagnosticoBase = {
   angleClassRight: "CLASS_I",
@@ -246,4 +254,21 @@ test("avance del paso y qué le falta al diagnóstico", () => {
   d.oclusal.lineaMediaSuperior = "centrada";
   d.funcional.respiracion = "nasal";
   assert.deepEqual(faltaDelDiagnostico(BASE, d), []);
+});
+
+test("para guardar los dos pasos juntos: hay cambios y entrada lista para el servidor", () => {
+  const inicial = formularioDesdeDiagnostico(BASE, null);
+  const f = structuredClone(inicial);
+  assert.equal(hayCambiosEnElDiagnostico(inicial, f), false);
+  f.overjetMm = "4";
+  assert.equal(hayCambiosEnElDiagnostico(inicial, f), true);
+  const e = entradaParaGuardar("dx1", f);
+  assert.equal(e.ok, true);
+  const entrada = (e as { entrada: { diagnosisId: string; overjetMm?: number } }).entrada;
+  assert.equal(entrada.diagnosisId, "dx1");
+  assert.equal(entrada.overjetMm, 4);
+  f.overjetMm = "xx";
+  const mal = entradaParaGuardar("dx1", f);
+  assert.equal(mal.ok, false);
+  assert.equal((mal as { seccion: string }).seccion, "clasificacion");
 });
