@@ -816,3 +816,87 @@ test("el anclaje general «Moderado» es el de arranque y no se dice como dato; 
   assert.equal(anclajeGeneralComoDato("MAXIMUM"), "Máximo");
   assert.equal(anclajeGeneralComoDato("COMPOUND"), "Compuesto (ver por arcada)");
 });
+
+// ─── Duración y objetivos «sin capturar»; anclaje general elegido a propósito (ws1-t12, cierre) ────
+
+import {
+  DURACION_NEUTRA_MESES,
+  OBJETIVOS_NEUTROS,
+  conDatoCapturado,
+  datoDelPlanSinCapturar,
+  tieneMarcasDelPlan,
+} from "../plan-detalle";
+
+test("la marca «sin capturar» del plan se lee, se valida y no cuenta como dato del plan", () => {
+  const p = normalizarPlanDetalle({ sinCapturar: ["duracion", "objetivos", "basura"], anclajeGeneralElegido: true });
+  assert.deepEqual(p.sinCapturar, ["duracion", "objetivos"]);
+  assert.equal(p.anclajeGeneralElegido, true);
+  assert.equal(esPlanDetalleVacio(p), true, "solo marcas = plan sin datos");
+  assert.equal(tieneMarcasDelPlan(p), true, "pero las marcas se guardan (no se vuelve NULL)");
+  assert.equal(tieneMarcasDelPlan(planDetalleVacio()), false);
+  assert.equal(esPlanDetalleVacio(completo({ controlesPrevistos: 12 })), false);
+  assert.equal(validarPlanDetalle({ sinCapturar: ["duracion"] }).ok, true);
+  assert.equal(validarPlanDetalle({ sinCapturar: ["otra-cosa"] }).ok, false);
+  assert.equal(validarPlanDetalle({ sinCapturar: "duracion" }).ok, false);
+  assert.equal("sinCapturar" in normalizarPlanDetalle({ sinCapturar: [] }), false);
+  assert.equal("sinCapturar" in planDetalleVacio(), false, "no es una clave del plan: no entra al diff ni a «vacío»");
+});
+
+test("conDatoCapturado quita solo la marca de ese dato", () => {
+  const p = completo({ sinCapturar: ["duracion", "objetivos"] });
+  assert.deepEqual(conDatoCapturado(p, "duracion").sinCapturar, ["objetivos"]);
+  assert.equal("sinCapturar" in conDatoCapturado(conDatoCapturado(p, "duracion"), "objetivos"), false);
+  assert.equal(conDatoCapturado(p, "objetivos").sinCapturar?.[0], "duracion");
+  assert.equal(datoDelPlanSinCapturar(p, "duracion"), true);
+  assert.equal(datoDelPlanSinCapturar(null, "duracion"), false);
+});
+
+test("una duración sin capturar no se dice como dato en el resumen; una capturada sí", () => {
+  const base = { estimatedDurationMonths: DURACION_NEUTRA_MESES, anchorageType: "MODERATE", extractionsRequired: false, extractionsTeethFdi: [] as number[] };
+  assert.equal(lineasDelPlan(base, completo({ sinCapturar: ["duracion"] })).some((l) => l.clave === "duracion"), false);
+  assert.equal(lineasDelPlan(base, completo()).find((l) => l.clave === "duracion")?.valor, "18 meses");
+});
+
+test("un anclaje «Moderado» ELEGIDO a propósito (asistente viejo) es un dato; el de arranque no", () => {
+  const base = { estimatedDurationMonths: 18, anchorageType: "MODERATE", extractionsRequired: false, extractionsTeethFdi: [] as number[] };
+  assert.equal(lineasDelPlan(base, completo({ anclajeGeneralElegido: true })).find((l) => l.clave === "anclaje")?.valor, "Moderado");
+  assert.equal(lineasDelPlan(base, completo()).some((l) => l.clave === "anclaje"), false);
+  assert.equal(anclajeGeneralComoDato("MODERATE", { anclajeGeneralElegido: true }), "Moderado");
+  assert.equal(anclajeGeneralComoDato("MODERATE", null), null);
+});
+
+test("«incompleto» pide la duración y los objetivos cuando quedaron sin capturar", () => {
+  const f = piezasQueFaltan({ ...CASO_COMPLETO, detalle: completo({ controlesPrevistos: 18, sinCapturar: ["duracion", "objetivos"] }) });
+  assert.deepEqual(f.map((x) => x.clave), ["duracion", "objetivos"]);
+  assert.deepEqual(f.map((x) => x.texto), ["tiempo de tratamiento", "objetivos del tratamiento"]);
+  assert.deepEqual(piezasQueFaltan({ ...CASO_COMPLETO, detalle: completo({ controlesPrevistos: 18 }) }), []);
+});
+
+test("el formulario del alta: duración vacía = sin capturar (valor neutro aparte), objetivos sin elegir = sin capturar", () => {
+  const vacio = formularioVacio(null);
+  assert.equal(vacio.duracion, "");
+  const r = formularioAPeticion(vacio, { conDuracion: true, permitirSinDuracion: true, objetivosSinCapturar: true });
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.equal(r.peticion.duracionMeses, undefined, "no se manda duración: el servidor no toca la columna");
+  assert.deepEqual(r.peticion.plan.sinCapturar, ["duracion", "objetivos"]);
+  // Con la duración escrita, esa marca no viaja.
+  const con = formularioAPeticion({ ...vacio, duracion: "24" }, { conDuracion: true, permitirSinDuracion: true, objetivosSinCapturar: false });
+  assert.ok(con.ok);
+  if (con.ok) {
+    assert.equal(con.peticion.duracionMeses, 24);
+    assert.equal("sinCapturar" in con.peticion.plan, false);
+  }
+});
+
+test("al editar, la duración solo puede quedar vacía si ya estaba sin capturar; el anclaje elegido se conserva", () => {
+  const sin = formularioAPeticion(formularioVacio(null), { conDuracion: true });
+  assert.equal(sin.ok, false);
+  const conservado = formularioAPeticion(formularioVacio(null), { conDuracion: true, permitirSinDuracion: true, anclajeGeneralElegido: true });
+  assert.ok(conservado.ok);
+  if (conservado.ok) assert.equal(conservado.peticion.plan.anclajeGeneralElegido, true);
+  const v = vista({ detalle: completo({ sinCapturar: ["duracion"] }), duracionMeses: 18 });
+  assert.equal(formularioDesdeLaVista(v).duracion, "", "el relleno no se presenta como dato en «Editar plan»");
+  assert.equal(formularioDesdeLaVista(vista({ duracionMeses: 24 })).duracion, "24");
+  assert.equal(OBJETIVOS_NEUTROS, "AESTHETIC_AND_FUNCTIONAL");
+});

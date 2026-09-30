@@ -4,6 +4,7 @@ import type { LectorRaw } from "./tecnicas-de-la-clinica-db";
 import {
   FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION,
   esPlanDetalleVacio,
+  tieneMarcasDelPlan,
   normalizarFrecuenciaDeControl,
   normalizarOpciones,
   normalizarPlanDetalle,
@@ -152,7 +153,7 @@ export async function actualizarPlanDetalle(
       const antes = normalizarPlanDetalle(filas[0]!.planDetalle);
       const despues = normalizarPlanDetalle(transformar(antes));
       // Un plan vacío se guarda como NULL de SQL (el caso «sin plan completo»), no como el JSON `null`.
-      const json = esPlanDetalleVacio(despues) ? null : JSON.stringify(despues);
+      const json = esPlanDetalleVacio(despues) && !tieneMarcasDelPlan(despues) ? null : JSON.stringify(despues);
       await tx.$executeRaw(Prisma.sql`
         UPDATE "orthodontic_treatment_plans"
            SET "planDetalle" = ${json}::jsonb, "updatedAt" = CURRENT_TIMESTAMP

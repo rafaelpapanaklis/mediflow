@@ -96,7 +96,8 @@ export function SectionHero(props: SectionHeroProps) {
       icon={<Activity size={15} strokeWidth={1.75} />}
       title={
         <>
-          Mes {t.monthCurrent} de {t.monthTotal}
+          {/* Sin duración capturada no hay «de N»: solo el mes en que va. */}
+          Mes {t.monthCurrent}{t.monthTotal > 0 ? ` de ${t.monthTotal}` : ""}
           {t.phase ? (
             <span className={orto.tonoApagado} style={{ fontWeight: 500 }}>
               {" "}
@@ -188,6 +189,8 @@ export function SectionHero(props: SectionHeroProps) {
           );
         })()}
 
+        {/* «Avance» y «Fin estimado» salen de la duración: sin duración capturada no se pintan (no hay 0 % que decir). */}
+        {t.monthTotal > 0 ? (
         <div className="mt-[18px]">
           <div className="flex items-baseline justify-between gap-3 mb-[7px]">
             <span className={orto.ceja}>Avance del tratamiento</span>
@@ -202,6 +205,7 @@ export function SectionHero(props: SectionHeroProps) {
             <span className="text-right">Fin estimado · {fmtDayLong(t.estimatedEndDate)}</span>
           </div>
         </div>
+        ) : null}
 
         {props.controles ? (
           <div className="mt-[16px]">

@@ -10,6 +10,8 @@ import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { cargarDiagnosticoDetalle } from "@/lib/orthodontics/diagnostico-detalle-db";
 import { medidaSinCapturar } from "@/lib/orthodontics/diagnostico-detalle";
+import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
+import { datoDelPlanSinCapturar } from "@/lib/orthodontics/plan-detalle";
 import { canViewPatient } from "@/lib/patient-visibility";
 import { z } from "zod";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
@@ -40,7 +42,8 @@ export interface ReferralProgressLetterPdfData {
     technique: string;
     /** ws1-t10: nombre propio de la técnica de la clínica. */
     techniqueName?: string | null;
-    estimatedDurationMonths: number;
+    /** null = la duración quedó «sin capturar» (relleno neutro): la carta no la dice. */
+    estimatedDurationMonths: number | null;
     installedAt: string | null;
     retentionPlanText: string;
     status: string;
@@ -122,6 +125,7 @@ export async function exportReferralProgressLetterPdf(
   });
 
   const detalleDx = await cargarDiagnosticoDetalle(ctx.clinicId, plan.diagnosis.id).catch(() => null);
+  const detallePlan = await cargarPlanDetalle(ctx.clinicId, plan.id).catch(() => null);
   return ok({
     stage: parsed.data.stage,
     membrete,
@@ -138,7 +142,7 @@ export async function exportReferralProgressLetterPdf(
     plan: {
       technique: plan.technique,
       techniqueName: await cargarNombreDeTecnica(ctx.clinicId, plan.id),
-      estimatedDurationMonths: plan.estimatedDurationMonths,
+      estimatedDurationMonths: datoDelPlanSinCapturar(detallePlan, "duracion") ? null : plan.estimatedDurationMonths,
       installedAt: plan.installedAt ? plan.installedAt.toISOString() : null,
       retentionPlanText: plan.retentionPlanText,
       status: plan.status,

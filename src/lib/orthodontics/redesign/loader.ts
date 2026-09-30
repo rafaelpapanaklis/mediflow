@@ -27,7 +27,7 @@ import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import { cargarNombreDeTecnica } from "../tecnicas-de-la-clinica-db";
 import { cargarPlanDetalle, columnaDePlanDetalleExiste } from "../plan-detalle-db";
-import { planDetalleVacio, reevaluacionesPendientes, type PlanDeTratamientoVista } from "../plan-detalle";
+import { datoDelPlanSinCapturar, planDetalleVacio, reevaluacionesPendientes, type PlanDeTratamientoVista } from "../plan-detalle";
 import { cargarModoDeCobro } from "../billing-mode-db";
 import { normalizarOrthoBillingMode } from "../billing-mode";
 import { nombreDeTecnica } from "../tecnicas-de-la-clinica";
@@ -498,6 +498,8 @@ export async function loadOrthoRedesignData(
     zona: indicadores.zona,
     nombreTecnica,
   });
+  // Una duración guardada como relleno («sin capturar») no es el total del tratamiento: «Mes 3 de 18» no se dice.
+  if (planDeTratamiento && datoDelPlanSinCapturar(planDeTratamiento.detalle, "duracion")) viewModel.treatment.monthTotal = 0;
 
   const bundle: OrthoRedesignBundle = {
     planDeTratamiento,

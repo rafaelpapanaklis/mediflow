@@ -70,6 +70,8 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
   const lineas = data.planCompleto?.lineas ?? [];
   // El anclaje general «Moderado» de arranque no es un dato (anclajeGeneralComoDato).
   const anclajePorArcada = lineas.find((l) => l.clave === "anclaje")?.valor ?? anclajeGeneralComoDato(data.plan.anchorageType);
+  // Duración y objetivos guardados como relleno neutro no se imprimen como dato.
+  const sinCapturar = data.planCompleto?.sinCapturar ?? [];
   const detalleDelPlan = lineas.filter((l) => !YA_EN_LA_CAJA.has(l.clave));
   return (
     <Document title={`${DOCUMENTO} · ${m.paciente.nombre}`} author={m.clinicName}>
@@ -121,10 +123,10 @@ export function TreatmentPlanPdf({ data }: { data: TreatmentPlanPdfData }) {
         <View style={styles.box}>
           <Metrica etiqueta="Técnica" valor={techniqueLabel(data.plan.technique as never, data.plan.techniqueName)} />
           {data.plan.techniqueNotes ? <Metrica etiqueta="Detalle de técnica" valor={data.plan.techniqueNotes} /> : null}
-          <Metrica etiqueta="Duración estimada" valor={`${data.plan.estimatedDurationMonths} meses`} />
+          {sinCapturar.includes("duracion") ? null : <Metrica etiqueta="Duración estimada" valor={`${data.plan.estimatedDurationMonths} meses`} />}
           {/* ws1-t12: con el plan completo, el anclaje se dice por arcada («superior máximo · inferior medio»). */}
           {anclajePorArcada ? <Metrica etiqueta="Anclaje" valor={anclajePorArcada} /> : null}
-          <Metrica etiqueta="Objetivos" valor={etiqueta(OBJETIVOS, data.plan.treatmentObjectives)} />
+          {sinCapturar.includes("objetivos") ? null : <Metrica etiqueta="Objetivos" valor={etiqueta(OBJETIVOS, data.plan.treatmentObjectives)} />}
           {data.plan.extractionsRequired ? (
             <Metrica etiqueta="Extracciones" valor={data.plan.extractionsTeethFdi.length > 0 ? `FDI ${data.plan.extractionsTeethFdi.join(", ")}` : "Indicadas, sin piezas anotadas"} />
           ) : null}

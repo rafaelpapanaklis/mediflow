@@ -135,6 +135,8 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
         patientGoals: patientGoals || null,
         retentionPlanText: retention,
         treatingDoctorId: treatingDoctorId || null,
+        // Este asistente PIDE el anclaje general: lo que se eligió aquí (Moderado incluido) es un dato, no el relleno de arranque.
+        planDetalle: { anclajeGeneralElegido: true },
       });
       if (isFailure(result)) {
         toast.error(result.error);

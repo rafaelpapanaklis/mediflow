@@ -71,10 +71,12 @@ export function ReferralProgressLetterPdf({ data }: { data: ReferralProgressLett
             <Text style={styles.metricValue}>{techniqueLabel(data.plan.technique as never, data.plan.techniqueName)}</Text>
           </View>
           {isInicio ? (
-            <View style={styles.metric}>
-              <Text style={styles.metricLabel}>Duración estimada:</Text>
-              <Text style={styles.metricValue}>{data.plan.estimatedDurationMonths} meses</Text>
-            </View>
+            data.plan.estimatedDurationMonths != null ? (
+              <View style={styles.metric}>
+                <Text style={styles.metricLabel}>Duración estimada:</Text>
+                <Text style={styles.metricValue}>{data.plan.estimatedDurationMonths} meses</Text>
+              </View>
+            ) : null
           ) : (
             <View style={styles.metric}>
               <Text style={styles.metricLabel}>Plan de retención:</Text>

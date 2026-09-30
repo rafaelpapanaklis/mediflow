@@ -78,9 +78,12 @@ import {
   anclajeGeneralDerivado,
   aparatologiaPermitida,
   controlesSugeridos,
+  datoDelPlanSinCapturar,
+  DURACION_NEUTRA_MESES,
   estimadoPorControles,
   FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION,
   FRECUENCIAS_DE_CONTROL,
+  OBJETIVOS_NEUTROS,
   planPideTads,
   sinAparatologiaIncompatible,
   textoDelEstimado,
@@ -130,6 +133,7 @@ const MODO_DE_COBRO_OPTIONS = (["PRECIO_TOTAL", "PAGO_POR_CONTROL"] as const).ma
 }));
 
 const OBJECTIVE_OPTIONS = [
+  { v: "", l: "Sin capturar" },
   { v: "AESTHETIC_ONLY", l: "Solo estético" },
   { v: "FUNCTIONAL_ONLY", l: "Solo funcional" },
   { v: "AESTHETIC_AND_FUNCTIONAL", l: "Estético y funcional" },
@@ -244,7 +248,8 @@ export interface DrawerEditarPlanSubmit {
   /** El plan completo, tal cual a `guardarPlanDeTratamiento` (más la duración y las extracciones indicadas). */
   plan: Record<string, unknown>;
   extraccionesIndicadas: number[];
-  duracionMeses: number;
+  /** Ausente = la duración quedó sin capturar. */
+  duracionMeses?: number;
   /** El costo escrito (0 = vacío) y si cambió respecto de lo guardado. */
   costo: { total: number; cambio: boolean };
   /** Solo si el caso aún no tiene factura y se quiere crear ahora. */
@@ -316,7 +321,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   /** ws1-t12: precio de «Control de ortodoncia» del catálogo, para estimar el total en «Pago por control». */
   const [precioControl, setPrecioControl] = useState<number | null>(null);
   const [enganche, setEnganche] = useState("");
-  const [numPagos, setNumPagos] = useState(() => String(pagosPropuestos(caso ? (vista?.duracionMeses ?? 18) : 18)));
+  const [numPagos, setNumPagos] = useState(() => String(pagosPropuestos(caso && !datoDelPlanSinCapturar(vista?.detalle, "duracion") ? (vista?.duracionMeses ?? DURACION_NEUTRA_MESES) : DURACION_NEUTRA_MESES)));
   /** Mientras nadie edite «Número de pagos», sigue a la duración estimada. */
   const [pagosTocados, setPagosTocados] = useState(false);
   const [primerPago, setPrimerPago] = useState(() => hoyISO());
@@ -365,10 +370,11 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     return opciones.map((o) => ({ id: o.id, nombre: o.nombre, base: o.base, precio: tecnicas.find((t) => t.id === o.id)?.precio ?? null, activa: true }));
   }, [editar, caso, tecnicas]);
   const tecnica = listaDeTecnicas.find((x) => x.id === tecnicaId) ?? (editar ? null : (listaDeTecnicas[0] ?? null));
-  const [planForm, setPlanForm] = useState<FormularioDelPlan>(() => (vista ? formularioDesdeLaVista(vista) : formularioVacio(18)));
+  const [planForm, setPlanForm] = useState<FormularioDelPlan>(() => (vista ? formularioDesdeLaVista(vista) : formularioVacio(null)));
   const duration = Number(planForm.duracion) || 0;
   useEffect(() => {
-    if (!pagosTocados) setNumPagos(String(pagosPropuestos(duration)));
+    // Sin duración capturada, los pagos se proponen con la neutra (solo es una propuesta editable).
+    if (!pagosTocados) setNumPagos(String(pagosPropuestos(duration || DURACION_NEUTRA_MESES)));
   }, [duration, pagosTocados]);
   const [installedAt, setInstalledAt] = useState(soloFecha(caso?.colocadoEl));
   // (c) Vacío a propósito: el precio lo escribe la clínica, no el código.
@@ -400,7 +406,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   // arranque si no se elige ningún anclaje por arcada (el modelo lo exige).
   const anchorage = caso ? (vista?.anchorageType ?? "MODERATE") : "MODERATE";
   const [iprRequired, setIprRequired] = useState(caso?.iprRequerido ?? false);
-  const [objectives, setObjectives] = useState(caso?.objetivos ?? "AESTHETIC_AND_FUNCTIONAL");
+  // Los objetivos sin elegir (alta, o un caso que los tiene «sin capturar») arrancan VACÍOS: «» = sin capturar.
+  const [objectives, setObjectives] = useState(caso && !datoDelPlanSinCapturar(vista?.detalle, "objetivos") ? caso.objetivos : "");
   const [retention, setRetention] = useState(caso?.retencion ?? "");
   const [opcionesPlan, setOpcionesPlan] = useState<OpcionesDelPlan | null>(null);
   const [frecuenciaControl, setFrecuenciaControl] = useState<number>(FRECUENCIA_DE_CONTROL_DIAS_POR_OMISION);
@@ -547,7 +554,15 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   };
 
   // ── Lo que falta, dicho para quien llena el formulario ───────────────
-  const peticionDelPlan = !inObservation ? formularioAPeticion(planForm) : null;
+  const peticionDelPlan = !inObservation
+    ? formularioAPeticion(planForm, {
+        conDuracion: true,
+        // El alta puede abrirse sin duración (queda «sin capturar»); al editar, solo si ya estaba así.
+        permitirSinDuracion: !editar || datoDelPlanSinCapturar(vista?.detalle, "duracion"),
+        objetivosSinCapturar: objectives === "",
+        anclajeGeneralElegido: vista?.detalle.anclajeGeneralElegido === true,
+      })
+    : null;
   const errorDelPlanCompleto = peticionDelPlan && peticionDelPlan.ok === false ? peticionDelPlan.error : null;
   const costo = leerCostoTotal(totalCost);
   const textosCosto = textosDelCosto(billingMode);
@@ -699,7 +714,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
     const responsableNuevo = guardianMode === "new";
     const responsableId = guardianMode === "existing" ? responsibleGuardianId || null : null;
     const columnasCambiaron =
-      objectives !== caso.objetivos ||
+      (objectives || OBJETIVOS_NEUTROS) !== caso.objetivos ||
       retention.trim() !== (caso.retencion ?? "").trim() ||
       (treatingDoctorId || null) !== (caso.doctorId ?? null) ||
       responsableNuevo ||
@@ -712,7 +727,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       columnasCambiaron,
       tecnica: cambioTecnica ? { technique: base, techniqueLabel: etiqueta ?? null } : null,
       columnas: {
-        treatmentObjectives: objectives,
+        treatmentObjectives: objectives || OBJETIVOS_NEUTROS,
         retentionPlanText: retention.trim(),
         treatingDoctorId: treatingDoctorId || null,
         responsibleGuardianId: guardianMode === "existing" ? responsibleGuardianId || null : null,
@@ -725,7 +740,8 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       },
       plan: peticion.plan,
       extraccionesIndicadas: peticion.extraccionesIndicadas,
-      duracionMeses: peticion.duracionMeses ?? (duration || 18),
+      // Sin duración capturada no se manda: el servidor no toca la columna y la marca «sin capturar» sigue.
+      duracionMeses: peticion.duracionMeses,
       costo: { total: costoAGuardar, cambio: cambioCosto },
       planDePago,
     });
@@ -846,7 +862,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       const plan: DrawerNewCasePlanPayload = {
         technique: tecnica?.base ?? "METAL_BRACKETS", // sin técnica el alta no se puede confirmar (faltantes)
         techniqueLabel: nombrePropioAGuardar(tecnica),
-        estimatedDurationMonths: peticion.duracionMeses ?? 18,
+        estimatedDurationMonths: peticion.duracionMeses ?? DURACION_NEUTRA_MESES,
         installedAt: installedAt ? new Date(installedAt).toISOString() : null,
         totalCostMxn: costoAGuardar,
         // Lo indicado en el plan manda sobre lo de siempre; el anclaje por arcada, sobre el general.
@@ -854,12 +870,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
         extractionsRequired: peticion.extraccionesIndicadas.length > 0,
         iprRequired,
         tadsRequired: planPideTads(planForm.aditamentos),
-        treatmentObjectives: objectives,
+        treatmentObjectives: objectives || OBJETIVOS_NEUTROS,
         retentionPlanText: retention.trim(),
         treatingDoctorId: treatingDoctorId || null,
         ...responsable,
         billingMode,
-        ...(formularioTocado(planForm) ? { planDetalle: peticion.plan } : {}),
+        // También viaja cuando solo lleva marcas («duración» / «objetivos» sin capturar): así se guardan como tales.
+        ...(formularioTocado(planForm) || "sinCapturar" in peticion.plan ? { planDetalle: peticion.plan } : {}),
         extractionsTeethFdi: peticion.extraccionesIndicadas,
       };
       await props.onConfirm({ diagnosis, plan, planDePago });
@@ -1495,7 +1512,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                                 </Field>
                                 <Field
                                   label="Número de pagos"
-                                  hint={pagosTocados ? undefined : `Propuesto: la duración estimada (${duration} meses).`}
+                                  hint={pagosTocados ? undefined : `Propuesto: la duración estimada (${duration || DURACION_NEUTRA_MESES} meses).`}
                                   htmlFor={idPagos}
                                 >
                                   <input

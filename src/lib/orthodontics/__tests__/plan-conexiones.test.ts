@@ -189,3 +189,24 @@ test("segunda pasada (t9): «Cobrar extra» y la hoja avisan del procedimiento q
   assert.match(tab, /if \(p\.columnasCambiaron\) \{\s*const cols = await updateTreatmentPlan\(/);
   assert.match(sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx")), /const columnasCambiaron =/);
 });
+
+test("(ws1-t12, cierre) duración y objetivos «sin capturar»: el alta arranca vacía, viaja la marca y todo lector la respeta", () => {
+  const drawer = sinComentarios(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"));
+  assert.match(drawer, /formularioVacio\(null\)/, "la duración del alta arranca vacía (no «18» ya escrito)");
+  assert.match(drawer, /useState\(caso && !datoDelPlanSinCapturar\(vista\?\.detalle, "objetivos"\) \? caso\.objetivos : ""\)/);
+  assert.match(drawer, /\{ v: "", l: "Sin capturar" \}/);
+  assert.match(drawer, /estimatedDurationMonths: peticion\.duracionMeses \?\? DURACION_NEUTRA_MESES/);
+  assert.match(drawer, /treatmentObjectives: objectives \|\| OBJETIVOS_NEUTROS/);
+  assert.match(drawer, /"sinCapturar" in peticion\.plan \? \{ planDetalle: peticion\.plan \}/);
+  assert.match(drawer, /duracionMeses: peticion\.duracionMeses,/, "al editar, sin duración capturada no se manda un 18");
+  // Un plan con solo marcas no se guarda como NULL.
+  assert.match(sinComentarios(leer("lib/orthodontics/plan-detalle-db.ts")), /esPlanDetalleVacio\(despues\) && !tieneMarcasDelPlan\(despues\)/);
+  // Lectores: ficha (KPI), hero, PDF del plan y carta de avance, alertas.
+  assert.match(sinComentarios(leer("components/specialties/orthodontics/redesign/sections/SectionPlanDeTratamiento.tsx")), /datoDelPlanSinCapturar\(d, "duracion"\) \? "Sin capturar"/);
+  assert.match(sinComentarios(leer("lib/orthodontics/redesign/loader.ts")), /datoDelPlanSinCapturar\(planDeTratamiento\.detalle, "duracion"\)\) viewModel\.treatment\.monthTotal = 0/);
+  assert.match(sinComentarios(leer("lib/orthodontics/pdf-templates/treatment-plan.tsx")), /sinCapturar\.includes\("objetivos"\) \? null/);
+  assert.match(sinComentarios(leer("app/actions/orthodontics/exportReferralProgressLetterPdf.ts")), /datoDelPlanSinCapturar\(detallePlan, "duracion"\) \? null/);
+  // El asistente viejo PIDE el anclaje general: lo elegido va marcado como dato.
+  assert.match(sinComentarios(leer("components/specialties/orthodontics/plan/TreatmentPlanWizard.tsx")), /planDetalle: \{ anclajeGeneralElegido: true \}/);
+});
+

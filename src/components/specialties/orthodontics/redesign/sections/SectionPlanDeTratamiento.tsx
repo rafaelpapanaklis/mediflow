@@ -15,6 +15,7 @@ import { ProgressBar } from "../atoms/ProgressBar";
 import {
   CAMPOS_DE_UNA_OPCION,
   anclajeGeneralComoDato,
+  datoDelPlanSinCapturar,
   esAditamentoConTads,
   esPlanDetalleVacio,
   etiquetaDeAnclaje,
@@ -91,8 +92,8 @@ export function SectionPlanDeTratamiento({ vista, onEditar }: SectionPlanDeTrata
 
         {/* ── Las cuatro cifras ─────────────────────────────────── */}
         <div className={c.kpis}>
-          <Kpi etiqueta="Duración" vacio={vista.duracionMeses ? null : "Sin definir"}>
-            {vista.duracionMeses ? (
+          <Kpi etiqueta="Duración" vacio={datoDelPlanSinCapturar(d, "duracion") ? "Sin capturar" : vista.duracionMeses ? null : "Sin definir"}>
+            {vista.duracionMeses && !datoDelPlanSinCapturar(d, "duracion") ? (
               <div className={c.kpiValor}>
                 {vista.duracionMeses} <small>{vista.duracionMeses === 1 ? "mes" : "meses"}</small>
               </div>
@@ -113,16 +114,16 @@ export function SectionPlanDeTratamiento({ vista, onEditar }: SectionPlanDeTrata
             ) : null}
           </Kpi>
 
-          <Kpi etiqueta="Anclaje" vacio={d.anclajeSuperior || d.anclajeInferior || anclajeGeneralComoDato(vista.anchorageType) ? null : "Sin capturar"}>
+          <Kpi etiqueta="Anclaje" vacio={d.anclajeSuperior || d.anclajeInferior || anclajeGeneralComoDato(vista.anchorageType, d) ? null : "Sin capturar"}>
             {d.anclajeSuperior || d.anclajeInferior ? (
               <div className={c.kpiPildoras}>
                 {/* Solo la arcada que se definió: nada de «Inf. —». */}
                 {d.anclajeSuperior ? <Pildora etiqueta="Sup." valor={etiquetaDeAnclaje(d.anclajeSuperior)} /> : null}
                 {d.anclajeInferior ? <Pildora etiqueta="Inf." valor={etiquetaDeAnclaje(d.anclajeInferior)} /> : null}
               </div>
-            ) : anclajeGeneralComoDato(vista.anchorageType) ? (
+            ) : anclajeGeneralComoDato(vista.anchorageType, d) ? (
               <div className={c.kpiPildoras}>
-                <Pildora etiqueta="General" valor={anclajeGeneralComoDato(vista.anchorageType)!} />
+                <Pildora etiqueta="General" valor={anclajeGeneralComoDato(vista.anchorageType, d)!} />
                 <div className={c.kpiSub}>Aún sin el detalle por arcada.</div>
               </div>
             ) : null}

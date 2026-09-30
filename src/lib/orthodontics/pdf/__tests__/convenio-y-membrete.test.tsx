@@ -486,6 +486,30 @@ describe("membrete común en los PDF de ortodoncia", () => {
     assert.ok(con.tiene("Anclaje") && con.tiene("Máximo"));
   });
 
+  it("plan de tratamiento: la duración y los objetivos «sin capturar» no se imprimen como dato (ws1-t12)", async () => {
+    const data = {
+      treatmentPlanId: "c1",
+      membrete: membrete(),
+      patient: { firstName: "Diego", lastName: "Hernández", dob: null },
+      clinic: { name: "Clínica Sonrisa Norte" },
+      doctor: { firstName: "Ana", lastName: "Ruiz", cedulaProfesional: "7654321" },
+      diagnosis: { angleClassRight: "CLASS_II_DIV_1", angleClassLeft: "CLASS_II_DIV_1", overbiteMm: "4", overjetMm: "7", clinicalSummary: "x" },
+      plan: {
+        technique: "METAL_BRACKETS", techniqueName: null, techniqueNotes: null, estimatedDurationMonths: 18,
+        totalCostMxn: "35000", anchorageType: "MODERATE", extractionsRequired: false, extractionsTeethFdi: [],
+        treatmentObjectives: "AESTHETIC_AND_FUNCTIONAL", retentionPlanText: "r",
+      },
+      phases: [],
+      generatedAt: "2026-09-29T08:33:00.000Z",
+    };
+    const con = await textoDelPdf(<TreatmentPlanPdf data={{ ...data, planCompleto: { lineas: [], sinCapturar: [] } }} />);
+    assert.ok(con.tiene("Duración estimada") && con.tiene("18 meses") && con.tiene("Objetivos"), "capturados: salen");
+    const sin = await textoDelPdf(<TreatmentPlanPdf data={{ ...data, planCompleto: { lineas: [], sinCapturar: ["duracion", "objetivos"] } }} />);
+    assert.ok(!sin.tiene("Duración estimada") && !sin.tiene("18 meses"), "sin duración capturada no sale «18 meses»");
+    assert.ok(!sin.tiene("Objetivos") && !sin.tiene("estéticos y funcionales"), "sin objetivos capturados no salen");
+    assert.ok(sin.tiene("Técnica"), "el resto del plan sigue");
+  });
+
   it("carta de alta", async () => {
     const { todo, tiene } = await textoDelPdf(
       <DischargeLetterPdf

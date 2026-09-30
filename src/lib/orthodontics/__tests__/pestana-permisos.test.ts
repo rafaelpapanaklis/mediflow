@@ -69,7 +69,7 @@ test("la ficha solo carga el caso en la vista clínica y pasa la cara administra
   const pagina = leer("src/app/dashboard/patients/[id]/page.tsx");
   assert.match(pagina, /hasPermission\(permsUser, "specialties\.orthodontics"\)/);
   assert.match(pagina, /verExpediente: hasPermission\(permsUser, "medicalRecord\.view"\)/);
-  assert.match(pagina, /if \(orthoVista === "clinica"\) \{\s*const redesign = await loadOrthoRedesignData\(/);
+  assert.match(pagina, /if \(orthoVista === "clinica"\) \{[\s\S]*?const redesign = await loadOrthoRedesignData\(/);
   assert.equal((pagina.match(/loadOrthoRedesignData\(/g) ?? []).length, 1, "un solo sitio carga lo clínico");
   assert.match(pagina, /orthoSoloAdministrativo=\{orthoSoloAdministrativo\}/);
 

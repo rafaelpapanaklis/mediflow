@@ -202,3 +202,20 @@ test("guardado único: si lo de `enLaTransaccion` falla, el error sube (la trans
   );
   assert.equal(state.movimientos.length, 0, "sin transacción confirmada no hay movimiento");
 });
+
+test("(ws1-t12) si esta llamada trae la duración, la marca «sin capturar» de la duración se cae; sin duración se conserva", async () => {
+  reiniciar();
+  await aplicarPlanDetalle(args(plan({ sinCapturar: ["duracion", "objetivos"] }), { duracionMeses: 24 }));
+  assert.deepEqual(state.guardado!.sinCapturar, ["objetivos"], "la duración ya se capturó; los objetivos no");
+  assert.equal(state.escrituras.find((e) => e.tabla === "plan")!.datos.estimatedDurationMonths, 24);
+  reiniciar();
+  await aplicarPlanDetalle(args(plan({ sinCapturar: ["duracion", "objetivos"] })));
+  assert.deepEqual(state.guardado!.sinCapturar, ["duracion", "objetivos"]);
+  assert.equal("estimatedDurationMonths" in (state.escrituras.find((e) => e.tabla === "plan")?.datos ?? {}), false, "sin duración no se toca la columna");
+});
+
+test("(ws1-t12) un plan con solo marcas se registra sin fila de movimientos (no hay dato clínico que decir)", async () => {
+  reiniciar();
+  await aplicarPlanDetalle(args(plan({ sinCapturar: ["duracion", "objetivos"] }), { creado: true }));
+  assert.equal(state.movimientos.length, 0);
+});

@@ -8,11 +8,13 @@ import {
   ALINEADORES_MAXIMOS,
   CONTROLES_MAXIMOS,
   PERIODICIDAD_MAXIMA_MESES,
+  datoDelPlanSinCapturar,
   fechaIsoValida,
   leerFdi,
   textoFdi,
   type AnclajeArcada,
   type CampoDeUnaOpcion,
+  type DatoDelPlanQuePuedeFaltar,
   type PlanDeTratamientoVista,
   type PlanDetalle,
   type TipoRadiografia,
@@ -75,7 +77,8 @@ export function formularioVacio(duracionMeses: number | null = null): Formulario
 /** El formulario de «Editar plan»: parte de lo que el caso ya tiene. */
 export function formularioDesdeLaVista(v: PlanDeTratamientoVista): FormularioDelPlan {
   const d = v.detalle;
-  const f = formularioVacio(v.duracionMeses);
+  // Una duración guardada como relleno («sin capturar») se ve VACÍA: el formulario no la presenta como dato.
+  const f = formularioVacio(datoDelPlanSinCapturar(d, "duracion") ? null : v.duracionMeses);
   return {
     ...f,
     controles: d.controlesPrevistos ? String(d.controlesPrevistos) : "",
@@ -122,13 +125,26 @@ export interface PeticionDelPlan {
   /** Va tal cual a `validarPlanDetalle`. */
   plan: Record<string, unknown>;
   extraccionesIndicadas: number[];
+  /** Ausente = la duración quedó sin capturar (el servidor no la toca y la marca queda en `plan.sinCapturar`). */
   duracionMeses?: number;
+}
+
+/** Cómo se lee el formulario: qué se exige y qué marcas del plan viajan de vuelta. */
+export interface OpcionesDelFormulario {
+  /** Pide la duración (3 a 60). Con `false` no se manda. */
+  conDuracion: boolean;
+  /** La duración vacía es válida y queda «sin capturar» (el alta; o un caso que ya la tenía sin capturar). */
+  permitirSinDuracion?: boolean;
+  /** Los objetivos del caso están sin elegir: quedan «sin capturar». */
+  objetivosSinCapturar?: boolean;
+  /** El anclaje general lo eligió quien abrió el caso a propósito (se conserva al editar). */
+  anclajeGeneralElegido?: boolean;
 }
 
 export type ResultadoDelFormulario = { ok: true; peticion: PeticionDelPlan } | { ok: false; error: string };
 
 /** Lo que se mandará al servidor, o lo primero que hay que corregir. */
-export function formularioAPeticion(f: FormularioDelPlan, opts: { conDuracion: boolean } = { conDuracion: true }): ResultadoDelFormulario {
+export function formularioAPeticion(f: FormularioDelPlan, opts: OpcionesDelFormulario = { conDuracion: true }): ResultadoDelFormulario {
   const controles = entero(f.controles, 1, CONTROLES_MAXIMOS, "Cantidad de controles");
   if (controles.ok === false) return controles;
   const alineadores = entero(f.alineadoresTotales, 1, ALINEADORES_MAXIMOS, "Alineadores totales");
@@ -136,12 +152,18 @@ export function formularioAPeticion(f: FormularioDelPlan, opts: { conDuracion: b
   const periodicidad = entero(f.periodicidad, 1, PERIODICIDAD_MAXIMA_MESES, "Periodicidad");
   if (periodicidad.ok === false) return periodicidad;
   let duracionMeses: number | undefined;
+  const sinCapturar: DatoDelPlanQuePuedeFaltar[] = [];
   if (opts.conDuracion) {
     const d = entero(f.duracion, 3, 60, "Tiempo de tratamiento");
     if (d.ok === false) return d;
-    if (d.valor === null) return { ok: false, error: "Tiempo de tratamiento: escribe los meses (de 3 a 60)." };
-    duracionMeses = d.valor;
+    if (d.valor === null) {
+      if (!opts.permitirSinDuracion) return { ok: false, error: "Tiempo de tratamiento: escribe los meses (de 3 a 60)." };
+      sinCapturar.push("duracion");
+    } else {
+      duracionMeses = d.valor;
+    }
   }
+  if (opts.objetivosSinCapturar) sinCapturar.push("objetivos");
   const indicadas = leerFdi(f.extraccionesIndicadas);
   if (indicadas.invalidos.length > 0) return { ok: false, error: `Extracciones indicadas: «${indicadas.invalidos.join("», «")}» no es una pieza FDI válida (por ejemplo 14, 24, 34, 44).` };
   const realizadas = leerFdi(f.extraccionesRealizadas);
@@ -162,6 +184,8 @@ export function formularioAPeticion(f: FormularioDelPlan, opts: { conDuracion: b
     alineadores: f.alineadores,
     placas: f.placas,
     interconsultas: f.interconsultas.trim() || null,
+    ...(sinCapturar.length > 0 ? { sinCapturar } : {}),
+    ...(opts.anclajeGeneralElegido ? { anclajeGeneralElegido: true } : {}),
   };
   for (const c of CAMPOS_DE_UNA_OPCION) plan[c.campo] = (f[c.campo as CampoDeUnaOpcion] as string).trim() || null;
   return { ok: true, peticion: { plan, extraccionesIndicadas: indicadas.validos, ...(duracionMeses !== undefined ? { duracionMeses } : {}) } };

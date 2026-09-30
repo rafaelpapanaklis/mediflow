@@ -82,7 +82,7 @@ test("el plan de pago se arma AQUÍ: enganche, número de pagos (propuesto = dur
   assert.match(CAJON, /label="Número de pagos"/);
   assert.match(CAJON, /label="Fecha del primer pago"/);
   assert.match(CAJON, /label="Costo total"/);
-  assert.match(CAJON, /pagosPropuestos\(duration\)/, "propuesto = duración estimada en meses");
+  assert.match(CAJON, /pagosPropuestos\(duration \|\| DURACION_NEUTRA_MESES\)/, "propuesto = duración estimada en meses (la neutra si aún no se captura)");
   assert.match(CAJON, /setPagosTocados\(true\)/, "editable: si lo tocan, deja de seguir a la duración");
   assert.match(CAJON, /const vistaPrevia = vistaPreviaDelPlan\(estadoPlan\);/);
   assert.match(CAJON, /<PlanVistaPrevia texto=\{vistaPrevia\} \/>/);

@@ -5,6 +5,7 @@ import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/regis
 import { actualizarPlanDetalle, cargarPlanDetalle, leerOpcionesDelPlan } from "./plan-detalle-db";
 import {
   anclajeGeneralDerivado,
+  conDatoCapturado,
   cambiosDelPlan,
   esFdiValido,
   ordenarFdi,
@@ -106,7 +107,11 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
     ctx.clinicId,
     treatmentPlanId,
     // Con seguimiento, el total vive allá: aquí no se duplica.
-    () => ({ ...plan, alineadoresTotales: aligner ? null : plan.alineadoresTotales }),
+    // Y si esta misma llamada trae la duración, ese dato acaba de capturarse: su marca «sin capturar» se cae.
+    () => {
+      const guardado = { ...plan, alineadoresTotales: aligner ? null : plan.alineadoresTotales };
+      return args.duracionMeses !== undefined ? conDatoCapturado(guardado, "duracion") : guardado;
+    },
     async (tx) => {
       if (aligner && plan.alineadoresTotales !== null && plan.alineadoresTotales !== aligner.totalTrays) {
         await tx.orthodonticAligner.updateMany({

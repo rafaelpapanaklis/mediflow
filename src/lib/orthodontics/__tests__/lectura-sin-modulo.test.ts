@@ -70,5 +70,5 @@ test("solo lectura: los botones que escriben se frenan y los de leer no", () => 
 
 test("la ficha monta la pestaña dentro del freno de solo lectura", () => {
   const src = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
-  assert.match(src, /<SoloLectura activo=\{orthoSoloLectura\}>\s*<OrthodonticsPatientTab/);
+  assert.match(src, /<SoloLectura activo=\{orthoSoloLectura\}>\s*(?:<SelectorDeCasos[^>]*\/>\s*)?<OrthodonticsPatientTab/);
 });

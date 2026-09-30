@@ -274,6 +274,18 @@ export function opcionesParaElegir(
 
 export const PLAN_DETALLE_VERSION = 1;
 
+/**
+ * Datos del plan que la base exige (duración NOT NULL con CHECK, objetivos NOT NULL) y que al abrir el caso pueden
+ * quedar SIN CAPTURAR: se guarda un valor neutro (18 meses / «estéticos y funcionales») y se ANOTA aquí que no es un
+ * dato real, igual que `sinCapturar` del diagnóstico. Ausente o vacío = capturados (los casos de antes de esta marca
+ * se leen como capturados: no se puede saber).
+ */
+export const DATOS_DEL_PLAN_QUE_PUEDEN_FALTAR = ["duracion", "objetivos"] as const;
+export type DatoDelPlanQuePuedeFaltar = (typeof DATOS_DEL_PLAN_QUE_PUEDEN_FALTAR)[number];
+/** Los valores neutros que se guardan en las columnas NOT NULL cuando el dato queda sin capturar. */
+export const DURACION_NEUTRA_MESES = 18;
+export const OBJETIVOS_NEUTROS = "AESTHETIC_AND_FUNCTIONAL";
+
 export interface PlanDetalle {
   v: number;
   /** Cantidad de controles previstos en todo el tratamiento. */
@@ -304,6 +316,13 @@ export interface PlanDetalle {
   cementacionInferiorAnterior: string | null;
   cementacionInferiorPosterior: string | null;
   interconsultas: string | null;
+  /** Datos guardados como relleno neutro: no son un dato real. Ausente = todos capturados. No cuenta como «dato del plan». */
+  sinCapturar?: DatoDelPlanQuePuedeFaltar[];
+  /**
+   * El anclaje GENERAL («Moderado» incluido) lo eligió quien abrió el caso a propósito (el asistente viejo, que lo pide).
+   * Sin esta marca, un «Moderado» sin detalle por arcada es el relleno de arranque y no se dice como dato.
+   */
+  anclajeGeneralElegido?: true;
 }
 
 export function planDetalleVacio(): PlanDetalle {
@@ -442,12 +461,44 @@ export function normalizarPlanDetalle(raw: unknown): PlanDetalle {
   plan.placas = textos(o.placas);
   for (const c of CAMPOS_DE_UNA_OPCION) plan[c.campo] = unTexto(o[c.campo]);
   plan.interconsultas = typeof o.interconsultas === "string" && o.interconsultas.trim() ? o.interconsultas.trim().slice(0, INTERCONSULTAS_MAXIMO) : null;
+  const faltan = Array.isArray(o.sinCapturar)
+    ? DATOS_DEL_PLAN_QUE_PUEDEN_FALTAR.filter((k) => (o.sinCapturar as unknown[]).includes(k))
+    : [];
+  if (faltan.length > 0) plan.sinCapturar = [...faltan];
+  if (o.anclajeGeneralElegido === true) plan.anclajeGeneralElegido = true;
   return plan;
+}
+
+/** ¿Este dato del plan está guardado como relleno («sin capturar») y no como un dato real? */
+export function datoDelPlanSinCapturar(detalle: Pick<PlanDetalle, "sinCapturar"> | null | undefined, dato: DatoDelPlanQuePuedeFaltar): boolean {
+  return Boolean(detalle?.sinCapturar?.includes(dato));
+}
+
+/** Las marcas no son datos del plan: un plan con solo marcas sigue «vacío». */
+function sinMarcas(p: PlanDetalle): PlanDetalle {
+  const { sinCapturar: _a, anclajeGeneralElegido: _b, ...resto } = p;
+  void _a;
+  void _b;
+  return resto as PlanDetalle;
+}
+
+/** ¿Lleva alguna marca («sin capturar», anclaje general elegido)? Un plan sin datos pero con marcas SÍ se guarda. */
+export function tieneMarcasDelPlan(p: PlanDetalle | null | undefined): boolean {
+  return Boolean(p && ((p.sinCapturar?.length ?? 0) > 0 || p.anclajeGeneralElegido));
+}
+
+/** El mismo plan sin la marca de un dato: ese dato acaba de capturarse. */
+export function conDatoCapturado(p: PlanDetalle, dato: DatoDelPlanQuePuedeFaltar): PlanDetalle {
+  if (!datoDelPlanSinCapturar(p, dato)) return p;
+  const resto = (p.sinCapturar ?? []).filter((k) => k !== dato);
+  const { sinCapturar: _s, ...sin } = p;
+  void _s;
+  return resto.length > 0 ? { ...sin, sinCapturar: resto } : (sin as PlanDetalle);
 }
 
 export function esPlanDetalleVacio(p: PlanDetalle | null | undefined): boolean {
   if (!p) return true;
-  return JSON.stringify({ ...p, v: 0 }) === JSON.stringify({ ...planDetalleVacio(), v: 0 });
+  return JSON.stringify({ ...sinMarcas(p), v: 0 }) === JSON.stringify({ ...planDetalleVacio(), v: 0 });
 }
 
 export type ResultadoDeValidar = { ok: true; plan: PlanDetalle } | { ok: false; error: string };
@@ -478,6 +529,14 @@ export function validarPlanDetalle(raw: unknown): ResultadoDeValidar {
   }
   if (!vacio(o.reevaluacion) && fechaIsoValida(o.reevaluacion) === null) {
     return { ok: false, error: "La fecha de reevaluación no es una fecha válida." };
+  }
+  if (o.sinCapturar !== undefined && o.sinCapturar !== null) {
+    if (!Array.isArray(o.sinCapturar) || o.sinCapturar.some((x) => !(DATOS_DEL_PLAN_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x))) {
+      return { ok: false, error: "Plan: datos sin capturar no válidos." };
+    }
+  }
+  if (o.anclajeGeneralElegido !== undefined && o.anclajeGeneralElegido !== null && o.anclajeGeneralElegido !== true && o.anclajeGeneralElegido !== false) {
+    return { ok: false, error: "Plan: anclaje general no válido." };
   }
   if (o.controlRadiografico !== undefined && o.controlRadiografico !== null) {
     if (!Array.isArray(o.controlRadiografico) || o.controlRadiografico.some((x) => typeof x !== "string" || !CLAVES_RADIOGRAFIA.has(x))) {
@@ -712,8 +771,12 @@ export const ETIQUETA_ANCLAJE_GENERAL: Record<string, string> = {
  * cuando no se elige ninguno por arcada: «Moderado» solo, sin detalle por arcada, es el valor de relleno y NO se dice
  * como dato. Cualquier otro (máximo, mínimo, compuesto) sí se eligió. `null` = sin capturar.
  */
-export function anclajeGeneralComoDato(anchorageType: string | null | undefined): string | null {
-  if (!anchorageType || anchorageType === "MODERATE") return null;
+export function anclajeGeneralComoDato(
+  anchorageType: string | null | undefined,
+  detalle?: Pick<PlanDetalle, "anclajeGeneralElegido"> | null,
+): string | null {
+  if (!anchorageType) return null;
+  if (anchorageType === "MODERATE" && !detalle?.anclajeGeneralElegido) return null;
   return ETIQUETA_ANCLAJE_GENERAL[anchorageType] ?? null;
 }
 
@@ -770,7 +833,7 @@ export function lineasDelPlan(base: BaseDelPlan, detalle: PlanDetalle | null, ta
     if (valor.trim()) out.push({ clave, etiqueta, valor });
   };
 
-  if (base.estimatedDurationMonths && base.estimatedDurationMonths > 0) {
+  if (base.estimatedDurationMonths && base.estimatedDurationMonths > 0 && !datoDelPlanSinCapturar(d, "duracion")) {
     poner("duracion", "Duración estimada", plural(base.estimatedDurationMonths, "mes", "meses"));
   }
   if (d.controlesPrevistos) poner("controles", "Controles previstos", String(d.controlesPrevistos));
@@ -786,7 +849,7 @@ export function lineasDelPlan(base: BaseDelPlan, detalle: PlanDetalle | null, ta
         .replace(/^./, (c) => c.toUpperCase()),
     );
   } else {
-    const general = anclajeGeneralComoDato(base.anchorageType);
+    const general = anclajeGeneralComoDato(base.anchorageType, d);
     if (general) poner("anclaje", "Anclaje", general);
   }
 
@@ -878,6 +941,8 @@ export function piezasQueFaltan(c: {
     if (sin.includes("overjetMm") || sin.includes("overbiteMm")) out.push({ paso: "diagnostico", clave: "overjet-overbite", texto: "overjet y overbite" });
   }
   if (!c.doctorId) out.push({ paso: "plan", clave: "doctor", texto: "doctor tratante" });
+  if (datoDelPlanSinCapturar(d, "duracion")) out.push({ paso: "plan", clave: "duracion", texto: "tiempo de tratamiento" });
+  if (datoDelPlanSinCapturar(d, "objetivos")) out.push({ paso: "plan", clave: "objetivos", texto: "objetivos del tratamiento" });
   if (!d.controlesPrevistos) out.push({ paso: "plan", clave: "controles", texto: "controles previstos" });
   if (!c.tieneFactura) out.push({ paso: "plan", clave: "cobro", texto: c.billingMode === "PAGO_POR_CONTROL" ? "factura de colocación" : "plan de pago" });
   return out;

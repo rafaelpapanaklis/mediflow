@@ -58,7 +58,7 @@ export type TreatmentPlanPdfData = {
    * realizadas, control radiográfico, aparatología, tubos, bandas, cementación, interconsultas), en renglones ya
    * redactados (`lineasDelPlan`: la misma redacción que la ficha). `null`/ausente = el caso no tiene plan completo.
    */
-  planCompleto?: { lineas: LineaDelPlan[] } | null;
+  planCompleto?: { lineas: LineaDelPlan[]; sinCapturar?: string[] } | null;
   /**
    * ws1-t8 — el DIAGNÓSTICO completo (facial, oclusal, dentoalveolar, funcional, cefalometría, etiología), ya
    * redactado con `seccionesDelDiagnostico` (la misma redacción que la ficha). Vacío/ausente = solo lo de arriba.
@@ -160,6 +160,8 @@ export async function exportTreatmentPlanPdf(
           detalle,
           tads,
         ),
+        // Duración / objetivos guardados como relleno neutro: el PDF no los imprime como dato.
+        sinCapturar: detalle.sinCapturar ?? [],
       }
     : null;
   return ok({

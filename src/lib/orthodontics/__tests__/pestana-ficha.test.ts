@@ -60,7 +60,7 @@ test("caso 1 — sin el módulo en la sede, la pestaña no aparece", () => {
   assert.match(ficha, /const showOrthodontics = hayDatosOrto \|\| orthoSoloAdministrativo;/);
   const pagina = leer("src/app/dashboard/patients/[id]/page.tsx");
   assert.match(pagina, /await hasActiveOrthodonticsModule\(user\.clinicId\)/);
-  assert.match(pagina, /if \(orthoVista === "clinica"\) \{\s*const redesign = await loadOrthoRedesignData\(/);
+  assert.match(pagina, /if \(orthoVista === "clinica"\) \{[\s\S]*?const redesign = await loadOrthoRedesignData\(/);
 });
 
 // ── Caso 2: tiene o tuvo caso ────────────────────────────────────────────
