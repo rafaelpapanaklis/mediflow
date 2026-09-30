@@ -96,6 +96,7 @@ export async function exportTreatmentPlanPdf(
           angleClassLeft: true,
           overbiteMm: true,
           overjetMm: true,
+          etiologyNotes: true,
           clinicalSummary: true,
           diagnosedById: true,
           diagnosedAt: true,
@@ -170,8 +171,8 @@ export async function exportTreatmentPlanPdf(
     diagnosis: {
       angleClassRight: plan.diagnosis.angleClassRight,
       angleClassLeft: plan.diagnosis.angleClassLeft,
-      overbiteMm: medidaSinCapturar(detalleDx, "overbiteMm") ? null : plan.diagnosis.overbiteMm.toString(),
-      overjetMm: medidaSinCapturar(detalleDx, "overjetMm") ? null : plan.diagnosis.overjetMm.toString(),
+      overbiteMm: medidaSinCapturar(detalleDx, "overbiteMm", plan.diagnosis.etiologyNotes) ? null : plan.diagnosis.overbiteMm.toString(),
+      overjetMm: medidaSinCapturar(detalleDx, "overjetMm", plan.diagnosis.etiologyNotes) ? null : plan.diagnosis.overjetMm.toString(),
       clinicalSummary: plan.diagnosis.clinicalSummary,
     },
     plan: {

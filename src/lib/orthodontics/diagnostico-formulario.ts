@@ -8,6 +8,7 @@
 import {
   HABITOS_DEL_PASO,
   MEDIDAS_QUE_PUEDEN_FALTAR,
+  esDiagnosticoDeMigracion,
   SECCIONES_DEL_DETALLE,
   camposConDato,
   diagnosticoDetalleVacio,
@@ -106,6 +107,8 @@ export function formularioVacio(): FormularioDelDiagnostico {
 /** El formulario desde un diagnóstico guardado. El hábito viejo «respiración bucal» pasa a «Tipo de respiración: oral». */
 export function formularioDesdeDiagnostico(base: DiagnosticoParaFormulario, detalle: DiagnosticoDetalle | null): FormularioDelDiagnostico {
   const d = normalizarDiagnosticoDetalle(detalle ?? null);
+  // Un diagnóstico migrado de Dentalink trae valores neutros: se editan como vacíos y quedan anotados «sin capturar».
+  if (esDiagnosticoDeMigracion(base.etiologyNotes)) d.sinCapturar = [...MEDIDAS_QUE_PUEDEN_FALTAR];
   if (!d.funcional.respiracion && base.habits.includes("MOUTH_BREATHING")) d.funcional.respiracion = "oral";
   // Sin líneas medias nuevas pero con la vieja «centrada» (0): se propone centrada en las dos.
   if (!d.oclusal.lineaMediaSuperior && !d.oclusal.lineaMediaInferior && base.midlineDeviationMm === 0) {

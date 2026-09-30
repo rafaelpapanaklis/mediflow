@@ -14,8 +14,8 @@ export function DiagnosisView(props: {
   // Las medidas guardadas como relleno («sin capturar») no se dicen como un 0 real.
   const { datos } = useDiagnosticoCompleto(dx.id);
   const detalle = datos?.detalle ?? null;
-  const overbite = medidaSinCapturar(detalle, "overbiteMm") ? "Sin capturar" : `${dx.overbiteMm} mm${medidaSinCapturar(detalle, "overbitePercentage") ? "" : ` · ${dx.overbitePercentage}%`}`;
-  const overjet = medidaSinCapturar(detalle, "overjetMm") ? "Sin capturar" : `${dx.overjetMm} mm`;
+  const overbite = medidaSinCapturar(detalle, "overbiteMm", dx.etiologyNotes) ? "Sin capturar" : `${dx.overbiteMm} mm${medidaSinCapturar(detalle, "overbitePercentage", dx.etiologyNotes) ? "" : ` · ${dx.overbitePercentage}%`}`;
+  const overjet = medidaSinCapturar(detalle, "overjetMm", dx.etiologyNotes) ? "Sin capturar" : `${dx.overjetMm} mm`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

@@ -39,6 +39,7 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
             overbiteMm: true,
             overjetMm: true,
             clinicalSummary: true,
+            etiologyNotes: true,
           },
         },
       },
@@ -90,8 +91,8 @@ export async function leerOrtodonciaDelExpediente(clinicId: string, patientId: s
       const dx = detallesDx.get(p.diagnosisId) ?? null;
       return {
         ...caso,
-        overbiteMm: medidaSinCapturar(dx, "overbiteMm") ? null : caso.overbiteMm,
-        overjetMm: medidaSinCapturar(dx, "overjetMm") ? null : caso.overjetMm,
+        overbiteMm: medidaSinCapturar(dx, "overbiteMm", p.diagnosis?.etiologyNotes) ? null : caso.overbiteMm,
+        overjetMm: medidaSinCapturar(dx, "overjetMm", p.diagnosis?.etiologyNotes) ? null : caso.overjetMm,
         diagnosticoCompleto: (diagnosticos.get(p.diagnosisId) ?? []).filter((sec) => sec.clave !== "clasificacion"),
       };
     });

@@ -327,16 +327,28 @@ export type DiagnosticoDetalle = Record<SeccionDelDetalle, SeccionDx> & {
   sinCapturar?: MedidaQuePuedeFaltar[];
 };
 
-const medidasSinCapturar = (d: DiagnosticoDetalle | null | undefined): readonly string[] => d?.sinCapturar ?? [];
+/**
+ * Un diagnóstico que entró por la MIGRACIÓN desde Dentalink (`etiologyNotes` lleva su marca): el importador no trae el
+ * examen y guarda valores neutros (2 / 20 % / 2) que NO son mediciones. Cuenta como «sin capturar».
+ */
+export function esDiagnosticoDeMigracion(etiologyNotes: string | null | undefined): boolean {
+  return /migrado de dentalink/i.test(etiologyNotes ?? "");
+}
 
-/** ¿Esta medida está guardada como relleno («sin capturar») y no como un dato real? Para todo lector de las columnas. */
-export function medidaSinCapturar(detalle: DiagnosticoDetalle | null | undefined, medida: MedidaQuePuedeFaltar): boolean {
-  return medidasSinCapturar(detalle).includes(medida);
+const medidasSinCapturar = (d: DiagnosticoDetalle | null | undefined, etiologyNotes?: string | null): readonly string[] =>
+  esDiagnosticoDeMigracion(etiologyNotes) ? MEDIDAS_QUE_PUEDEN_FALTAR : (d?.sinCapturar ?? []);
+
+/**
+ * ¿Esta medida está guardada como relleno («sin capturar») y no como un dato real? Para todo lector de las columnas.
+ * Pasa `etiologyNotes` del diagnóstico para cubrir también los casos migrados de Dentalink.
+ */
+export function medidaSinCapturar(detalle: DiagnosticoDetalle | null | undefined, medida: MedidaQuePuedeFaltar, etiologyNotes?: string | null): boolean {
+  return medidasSinCapturar(detalle, etiologyNotes).includes(medida);
 }
 
 /** La base como se DICE: las medidas de relleno (sin capturar) salen como «sin dato», no como un 0 real. */
 export function baseSinRelleno(base: DiagnosticoBase, detalle: DiagnosticoDetalle | null | undefined): DiagnosticoBase {
-  const faltan = medidasSinCapturar(detalle);
+  const faltan = medidasSinCapturar(detalle, base.etiologyNotes);
   if (faltan.length === 0) return base;
   return {
     ...base,
@@ -945,7 +957,7 @@ export function faltaDelDiagnostico(base: DiagnosticoBase | null, detalle: Diagn
   if (camposConDato(d, "facial") === 0) falta.push("características faciales");
   if (!d.oclusal.lineaMediaSuperior && !d.oclusal.lineaMediaInferior && base.midlineDeviationMm === null) falta.push("líneas medias");
   if (!respiracionEfectiva(base, d)) falta.push("tipo de respiración");
-  if (medidasSinCapturar(detalle).length > 0) falta.push("overjet y overbite");
+  if (medidasSinCapturar(detalle, base.etiologyNotes).length > 0) falta.push("overjet y overbite");
   if (!(base.clinicalSummary ?? "").trim()) falta.push("resumen diagnóstico");
   return falta;
 }

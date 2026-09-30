@@ -355,3 +355,25 @@ test("sin capturar: `medidaSinCapturar` lo dicen todos los lectores de las colum
   ]) assert.match(src(f), /medidaSinCapturar\(/, f);
   assert.match(src("lib/orthodontics/pdf-templates/treatment-plan.tsx"), /"sin capturar"/);
 });
+
+test("caso migrado de Dentalink: sus valores neutros (2 / 20 % / 2) no se dicen como mediciones", async () => {
+  const { esDiagnosticoDeMigracion, medidaSinCapturar } = await import("../diagnostico-detalle");
+  const MIGRADO = "Migrado de Dentalink — sin datos clínicos";
+  assert.equal(esDiagnosticoDeMigracion(MIGRADO), true);
+  assert.equal(esDiagnosticoDeMigracion("Bruxismo desde niño"), false);
+  assert.equal(esDiagnosticoDeMigracion(null), false);
+  const base = { ...BASE, overbiteMm: 2, overbitePercentage: 20, overjetMm: 2, etiologyNotes: MIGRADO };
+  const ind = indicadoresClave(base, null);
+  assert.equal(ind.find((i) => i.clave === "overjet")!.valor, "—");
+  assert.equal(ind.find((i) => i.clave === "overbite")!.valor, "—");
+  const lineas = seccionesDelDiagnostico(base, null).flatMap((s) => s.lineas.map((l) => l.clave));
+  assert.ok(!lineas.includes("overjetMm") && !lineas.includes("overbiteMm"));
+  assert.ok(faltaDelDiagnostico(base, null).includes("overjet y overbite"));
+  assert.equal(medidaSinCapturar(null, "overjetMm", MIGRADO), true);
+  assert.equal(medidaSinCapturar(null, "overjetMm", "Otra nota"), false);
+  // Al editarlo aparecen vacías y quedan anotadas; un diagnóstico normal con los mismos números sí los dice.
+  const f = formularioDesdeDiagnostico({ ...base, initialCephFileId: null, initialScanFileId: null }, null);
+  assert.equal(f.overjetMm, "");
+  assert.deepEqual((formularioAPeticion(f, "editar") as { peticion: PeticionDelDiagnostico }).peticion.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  assert.equal(indicadoresClave({ ...base, etiologyNotes: null }, null).find((i) => i.clave === "overjet")!.valor, "2 mm");
+});
