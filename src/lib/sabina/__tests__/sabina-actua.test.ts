@@ -62,6 +62,8 @@ const m = {
   escrituras: [] as Escritura[],
   bitacora: [] as any[],
   recordatorios: [] as string[],
+  /** Las veces que el handler pidió dejar a Google Calendar al día: "clínica/cita". */
+  google: [] as string[],
   visibilidad: [] as any[],
   sesion: null as any,
   guion: [] as any[],
@@ -88,6 +90,7 @@ beforeEach(() => {
   m.escrituras = [];
   m.bitacora = [];
   m.recordatorios = [];
+  m.google = [];
   m.visibilidad = [];
   m.sesion = sesionDe(U_RECEP, "RECEPTIONIST");
   m.guion = [];
@@ -308,9 +311,9 @@ before(async () => {
   });
   mock.module("@/lib/agenda/google-sync", {
     namedExports: {
-      syncCreateToGoogleCalendar: async () => undefined,
-      syncUpdateToGoogleCalendar: async () => undefined,
-      syncDeleteFromGoogleCalendar: async () => undefined,
+      sincronizarCitaEnSegundoPlano: async (clinicId: string, citaId: string) => {
+        m.google.push(`${clinicId}/${citaId}`);
+      },
     },
   });
   mock.module("@/lib/reminders/reschedule.server", {
@@ -648,9 +651,10 @@ test("cancelar: recepción lo hace por el DELETE real; un doctor ni siquiera rec
   const c = await confirmar(t.id);
   assert.equal(c.json.propuesta.estado, "hecha", JSON.stringify(c.json.propuesta.resultado));
   assert.match(c.json.propuesta.resultado.frase, /la cita quedó cancelada/);
-  // La cancelación, y el handler limpiando el id del evento de Google que borró.
-  assert.deepEqual(m.escrituras.map((e) => e.op), ["appointment.update", "appointment.update"]);
-  assert.deepEqual(m.escrituras[1].args.data, { googleCalendarEventId: null });
+  // Un solo UPDATE: la cancelación. Borrar el evento de Google y limpiar su id ya no lo hace
+  // el handler a mano: lo hace la sincronización, a la que el handler le pide dejar la cita al día.
+  assert.deepEqual(m.escrituras.map((e) => e.op), ["appointment.update"]);
+  assert.deepEqual(m.google, ["cl-agenda/a-juan-10"]);
   const cita = m.agenda.filas.appointments.find((a: any) => a.id === "a-juan-10");
   assert.equal(cita.status, "CANCELLED");
   assert.equal(cita.cancelReason, "El paciente avisó");

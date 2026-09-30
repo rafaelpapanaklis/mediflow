@@ -43,8 +43,7 @@ import {
   rescheduleRuleViolation,
 } from "@/lib/agenda/booking-rules";
 import {
-  syncUpdateToGoogleCalendar,
-  syncDeleteFromGoogleCalendar,
+  sincronizarCitaEnSegundoPlano,
 } from "@/lib/agenda/google-sync";
 import type {
   AppointmentConflictError,
@@ -443,30 +442,9 @@ export async function PATCH(
       },
     });
 
-    // Google Calendar sync (best-effort)
-    try {
-      const updatedFull = await prisma.appointment.findUnique({
-        where: { id: params.id },
-        select: {
-          id: true, type: true, startsAt: true, endsAt: true, notes: true,
-          googleCalendarEventId: true,
-          patient: { select: { firstName: true, lastName: true } },
-          doctor:  { select: { firstName: true, lastName: true } },
-        },
-      });
-      if (updatedFull?.googleCalendarEventId) {
-        await syncUpdateToGoogleCalendar(session.clinic.id, updatedFull.googleCalendarEventId, {
-          id: updatedFull.id, type: updatedFull.type,
-          startsAt: updatedFull.startsAt, endsAt: updatedFull.endsAt,
-          notes: updatedFull.notes,
-          patientName: `${updatedFull.patient.firstName} ${updatedFull.patient.lastName}`,
-          doctorName: `${updatedFull.doctor.firstName} ${updatedFull.doctor.lastName}`,
-          doctorEmail: null,
-        });
-      }
-    } catch (err) {
-      console.error("GCal update wrapper error:", err);
-    }
+    // Google Calendar: pone al día el evento (o lo crea si la cita no lo tenía).
+    // No lanza y no alarga la respuesta.
+    await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
 
     revalidateAfter("appointments");
     revalidatePatientProfile(updated.patientId);
@@ -540,7 +518,7 @@ export async function DELETE(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, patientId: true, doctorId: true, startsAt: true, googleCalendarEventId: true },
+    select: { id: true, status: true, patientId: true, doctorId: true, startsAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -625,19 +603,8 @@ export async function DELETE(
   // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
   await marcarPendienteSiHayDinero({ clinicId: session.clinic.id, appointmentId: params.id, userId: session.user.id, quien: session.user.displayName });
 
-  // Google Calendar sync — borrar el evento del calendario si existia
-  try {
-    if (existing.googleCalendarEventId) {
-      await syncDeleteFromGoogleCalendar(session.clinic.id, existing.googleCalendarEventId);
-      // Limpiar el id para no reintentar si vuelven a llamar DELETE
-      await prisma.appointment.update({
-        where: { id: params.id },
-        data: { googleCalendarEventId: null },
-      });
-    }
-  } catch (err) {
-    console.error("GCal delete wrapper error:", err);
-  }
+  // Google Calendar: la cita ya está cancelada, así que el evento se borra y su id se limpia.
+  await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
 
   // Aviso de cancelación: solo si la clínica lo encendió (nace apagado).
   // `notifyPatient: false` en el cuerpo lo calla para ESTA cancelación (lo usa

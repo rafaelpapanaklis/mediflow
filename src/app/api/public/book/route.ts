@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
-import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { isOverlapError } from "@/lib/agenda/api-helpers";
@@ -303,55 +303,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Google Calendar sync ─────────────────────────────────────────────────
-  try {
-    const clinicGcal = await prisma.clinic.findUnique({
-      where: { id: clinic.id },
-      select: {
-        name: true, address: true,
-        googleCalendarEnabled: true, googleCalendarToken: true,
-        googleRefreshToken: true, googleClinicCalendarId: true,
-      },
-    });
-
-    if (clinicGcal?.googleCalendarEnabled && clinicGcal.googleRefreshToken) {
-      let token = clinicGcal.googleCalendarToken;
-      if (!token) {
-        token = await refreshAccessToken(clinicGcal.googleRefreshToken);
-        if (token) await prisma.clinic.update({ where: { id: clinic.id }, data: { googleCalendarToken: token } });
-      }
-      if (token) {
-        // Auto-create clinic calendar if missing
-        let calendarId = clinicGcal.googleClinicCalendarId;
-        if (!calendarId) {
-          try {
-            calendarId = await getOrCreateClinicCalendar(token, clinicGcal.googleRefreshToken, clinicGcal.name);
-            if (calendarId) {
-              await prisma.clinic.update({ where: { id: clinic.id }, data: { googleClinicCalendarId: calendarId } });
-            }
-          } catch (err) {
-            console.error("Error creating clinic calendar on-the-fly:", err);
-          }
-        }
-
-        const gcalEventId = await createCalendarEvent(token, clinicGcal.googleRefreshToken, {
-          id: appt.id, type: type?.trim() || "Consulta general",
-          startsAt: appt.startsAt, endsAt: appt.endsAt, clinicTimezone: clinic.timezone,
-          patientName: `${firstName.trim()} ${lastName.trim()}`,
-          clinicName: clinicGcal.name, clinicAddress: clinicGcal.address,
-          notes: notes?.trim() || null,
-          doctorName: `${doctor.firstName} ${doctor.lastName}`,
-          doctorEmail: null, patientEmail: email?.trim() || null,
-          calendarId: calendarId ?? "primary",
-        });
-        if (gcalEventId) {
-          await prisma.appointment.update({ where: { id: appt.id }, data: { googleCalendarEventId: gcalEventId } });
-        }
-      }
-    }
-  } catch (e) {
-    console.error("Google Calendar sync failed:", e);
-  }
+  // ── Google Calendar ──────────────────────────────────────────────────────
+  // No lanza y no alarga la respuesta: la cita ya está guardada.
+  await sincronizarCitaEnSegundoPlano(clinic.id, appt.id);
 
   return NextResponse.json({
     success:       true,

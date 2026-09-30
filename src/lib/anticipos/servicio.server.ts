@@ -53,6 +53,12 @@ export interface DepsAnticipos {
   crearPreferencia: (token: string, opts: CreatePreferenceOptions) => Promise<CreatePreferenceResult>;
   crearCita: typeof createBotAppointment;
   avisar: (aviso: AvisoAnticipo) => Promise<void>;
+  /**
+   * Se llama con cada cita que el cron deja cancelada (apartado vencido): quita
+   * su evento de Google Calendar. Por defecto no hace nada, para que las pruebas
+   * con base falsa no toquen la real; el cron lo pasa de verdad.
+   */
+  alCancelarCita: (clinicId: string, appointmentId: string) => Promise<void>;
   ahora: () => Date;
   baseUrl: () => string | null;
 }
@@ -75,6 +81,7 @@ export const depsReales: DepsAnticipos = {
     const { avisarAlPaciente } = await import("./avisos.server");
     await avisarAlPaciente(aviso);
   },
+  alCancelarCita: async () => undefined,
   ahora: () => new Date(),
   baseUrl: urlBaseApp,
 };
@@ -762,6 +769,8 @@ export async function liberarAnticiposVencidos(over?: Partial<DepsAnticipos>): P
     // decir.
     if (cita?.status === "CANCELLED" && cita.cancelReason === MOTIVO_APARTADO_LIBERADO) {
       resumen.liberadas++;
+      // Google Calendar: la cita ya no existe, su evento tampoco. No debe romper la limpieza.
+      try { await d.alCancelarCita(dep.clinicId, dep.appointmentId); } catch { /* best-effort */ }
       // Y no si el MISMO paciente volvió a tomar ese hueco (se le venció y lo
       // pidió de nuevo): «se liberó tu horario» justo después de «confirmada»
       // solo confunde.

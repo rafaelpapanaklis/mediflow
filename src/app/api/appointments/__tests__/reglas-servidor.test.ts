@@ -188,11 +188,7 @@ const session = {
   namedExports: { revalidateAfter: () => undefined, revalidatePatientProfile: () => undefined },
 });
 (mock as any).module("@/lib/agenda/google-sync", {
-  namedExports: {
-    syncCreateToGoogleCalendar: async () => undefined,
-    syncUpdateToGoogleCalendar: async () => undefined,
-    syncDeleteFromGoogleCalendar: async () => undefined,
-  },
+  namedExports: { sincronizarCitaEnSegundoPlano: async () => undefined },
 });
 (mock as any).module("@/lib/reminders/reschedule.server", {
   namedExports: {

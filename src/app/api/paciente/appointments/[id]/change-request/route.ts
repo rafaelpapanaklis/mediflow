@@ -61,6 +61,7 @@ import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { fechaHoraParaTexto, textoCita } from "@/lib/movimientos-paciente/textos";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -363,6 +364,10 @@ export async function POST(
         : `${textoCita.cancelada(appt.startsAt, appt.clinic.timezone)} (a petición suya)`,
     req,
   });
+
+  // Google Calendar: la cita ya cambió (nueva hora, o cancelada): el evento se
+  // mueve o se borra. No lanza y no alarga la respuesta.
+  await sincronizarCitaEnSegundoPlano(appt.clinicId, appt.id);
 
   // Best-effort FUERA de la tx: nunca rompen la respuesta.
   // Los recordatorios ya se reprogramaron DENTRO de la transacción.

@@ -11,10 +11,7 @@ import {
   requireRole,
   isOverlapError,
 } from "@/lib/agenda/api-helpers";
-import {
-  syncUpdateToGoogleCalendar,
-  syncDeleteFromGoogleCalendar,
-} from "@/lib/agenda/google-sync";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { isSlotFree } from "@/lib/appointment-change/slots";
 import {
   applyReminderReschedule,
@@ -163,21 +160,9 @@ export async function POST(
       return NextResponse.json({ error: "internal_error" }, { status: 500 });
     }
 
-    // Google Calendar sync (best-effort) — espejo del DELETE /api/appointments/[id]
-    try {
-      if (appointment.googleCalendarEventId) {
-        await syncDeleteFromGoogleCalendar(
-          session.clinic.id,
-          appointment.googleCalendarEventId,
-        );
-        await prisma.appointment.update({
-          where: { id: appointment.id },
-          data: { googleCalendarEventId: null },
-        });
-      }
-    } catch (err) {
-      console.error("GCal delete wrapper error:", err);
-    }
+    // Google Calendar — espejo del DELETE /api/appointments/[id]: la cita quedó
+    // cancelada, el evento se borra. No lanza y no alarga la respuesta.
+    await sincronizarCitaEnSegundoPlano(session.clinic.id, appointment.id);
 
     await logMutation({
       req,
@@ -341,41 +326,9 @@ export async function POST(
   // Post-aprobación (fuera de tx, best-effort cada uno):
   // Los recordatorios YA se reprogramaron dentro de la transacción de arriba.
 
-  // Google Calendar sync (best-effort) — mismo helper que el PATCH
-  //    /api/appointments/[id].
-  try {
-    const updatedFull = await prisma.appointment.findUnique({
-      where: { id: appointment.id },
-      select: {
-        id: true,
-        type: true,
-        startsAt: true,
-        endsAt: true,
-        notes: true,
-        googleCalendarEventId: true,
-        patient: { select: { firstName: true, lastName: true } },
-        doctor: { select: { firstName: true, lastName: true } },
-      },
-    });
-    if (updatedFull?.googleCalendarEventId) {
-      await syncUpdateToGoogleCalendar(
-        session.clinic.id,
-        updatedFull.googleCalendarEventId,
-        {
-          id: updatedFull.id,
-          type: updatedFull.type,
-          startsAt: updatedFull.startsAt,
-          endsAt: updatedFull.endsAt,
-          notes: updatedFull.notes,
-          patientName: `${updatedFull.patient.firstName} ${updatedFull.patient.lastName}`,
-          doctorName: `${updatedFull.doctor.firstName} ${updatedFull.doctor.lastName}`,
-          doctorEmail: null,
-        },
-      );
-    }
-  } catch (err) {
-    console.error("GCal update wrapper error:", err);
-  }
+  // Google Calendar — mismo camino que el PATCH /api/appointments/[id]: pone al
+  // día el evento con la hora nueva. No lanza y no alarga la respuesta.
+  await sincronizarCitaEnSegundoPlano(session.clinic.id, appointment.id);
 
   // 3) Audit log.
   await logMutation({

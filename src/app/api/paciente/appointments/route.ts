@@ -22,11 +22,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
-import {
-  createCalendarEvent,
-  refreshAccessToken,
-  getOrCreateClinicCalendar,
-} from "@/lib/google-calendar";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import type {
   PacienteCambioPendiente,
   PacienteCita,
@@ -307,10 +303,6 @@ export async function POST(req: NextRequest) {
         waAccessToken: true,
         // Fuera de la ventana de 24 h el aviso solo sale por plantilla (M-09).
         waTemplates: true,
-        googleCalendarEnabled: true,
-        googleCalendarToken: true,
-        googleRefreshToken: true,
-        googleClinicCalendarId: true,
         schedules: {
           select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
         },
@@ -503,64 +495,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Google Calendar (mismo patrón que /api/public/book).
-    try {
-      if (clinic.googleCalendarEnabled && clinic.googleRefreshToken) {
-        let token = clinic.googleCalendarToken;
-        if (!token) {
-          token = await refreshAccessToken(clinic.googleRefreshToken);
-          if (token) {
-            await prisma.clinic.update({
-              where: { id: clinicId },
-              data: { googleCalendarToken: token },
-            });
-          }
-        }
-        if (token) {
-          let calendarId = clinic.googleClinicCalendarId;
-          if (!calendarId) {
-            try {
-              calendarId = await getOrCreateClinicCalendar(
-                token,
-                clinic.googleRefreshToken,
-                clinic.name
-              );
-              if (calendarId) {
-                await prisma.clinic.update({
-                  where: { id: clinicId },
-                  data: { googleClinicCalendarId: calendarId },
-                });
-              }
-            } catch (err) {
-              console.error("[paciente/appointments POST] create calendar failed:", err);
-            }
-          }
-          const gcalEventId = await createCalendarEvent(token, clinic.googleRefreshToken, {
-            id: appt.id,
-            type: cleanType,
-            startsAt: appt.startsAt,
-            endsAt: appt.endsAt,
-            clinicTimezone: timezone,
-            patientName,
-            clinicName: clinic.name,
-            clinicAddress: clinic.address,
-            notes: cleanNotes,
-            doctorName: `${doctor.firstName} ${doctor.lastName}`,
-            doctorEmail: null,
-            patientEmail: patient?.email ?? ctx.account.email ?? null,
-            calendarId: calendarId ?? "primary",
-          });
-          if (gcalEventId) {
-            await prisma.appointment.update({
-              where: { id: appt.id },
-              data: { googleCalendarEventId: gcalEventId },
-            });
-          }
-        }
-      }
-    } catch (e) {
-      console.error("[paciente/appointments POST] Google Calendar sync failed:", e);
-    }
+    // Google Calendar: no lanza y no alarga la respuesta (la cita ya está guardada).
+    await sincronizarCitaEnSegundoPlano(clinicId, appt.id);
 
     return NextResponse.json({
       ok: true,

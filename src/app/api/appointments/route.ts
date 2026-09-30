@@ -59,7 +59,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { avisarCitaPorWhatsApp, type AvisoCitaResultado } from "@/lib/whatsapp/avisos-cita";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
-import { syncCreateToGoogleCalendar } from "@/lib/agenda/google-sync";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import type {
   AgendaDayResponse,
   AppointmentConflictError,
@@ -517,30 +517,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Google Calendar sync (best-effort, no falla la creacion si Google falla)
-    try {
-      const fullAppt = await prisma.appointment.findUnique({
-        where: { id: created.id },
-        select: {
-          id: true, type: true, startsAt: true, endsAt: true, notes: true,
-          patient: { select: { firstName: true, lastName: true, email: true } },
-          doctor:  { select: { firstName: true, lastName: true, email: true } },
-        },
-      });
-      if (fullAppt) {
-        await syncCreateToGoogleCalendar(session.clinic.id, {
-          id: fullAppt.id, type: fullAppt.type,
-          startsAt: fullAppt.startsAt, endsAt: fullAppt.endsAt,
-          notes: fullAppt.notes,
-          patientName: `${fullAppt.patient.firstName} ${fullAppt.patient.lastName}`,
-          doctorName: `${fullAppt.doctor.firstName} ${fullAppt.doctor.lastName}`,
-          doctorEmail: fullAppt.doctor.email ?? null,
-          patientEmail: fullAppt.patient.email ?? null,
-        });
-      }
-    } catch (err) {
-      console.error("GCal sync wrapper error:", err);
-    }
+    // Google Calendar (no lanza y no alarga la respuesta: la cita ya está guardada).
+    await sincronizarCitaEnSegundoPlano(session.clinic.id, created.id);
 
     revalidateAfter("appointments");
     revalidatePatientProfile(created.patientId);

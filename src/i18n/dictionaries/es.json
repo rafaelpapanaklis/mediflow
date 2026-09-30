@@ -3936,6 +3936,8 @@
       "gcalError_otra_cuenta": "La conexión con Google se inició desde otro usuario de DaleControl. Vuelve a pulsar «Conectar Google Calendar» desde esta sesión.",
       "gcalError_token": "Google no aceptó la autorización (pudo caducar). Vuelve a intentarlo; si se repite, avísanos.",
       "gcalError_guardar": "Google autorizó, pero no pudimos guardar la conexión. Vuelve a intentarlo; si se repite, avísanos.",
+      "gcalError_cuenta_distinta": "Tu clínica ya está conectada con otra cuenta de Google. Para cambiar de cuenta, primero pulsa «Desconectar» y luego vuelve a conectar con la cuenta nueva (las citas ya creadas se quedan en el calendario de la cuenta anterior).",
+      "gcalError_calendario": "Conectamos tu cuenta, pero Google no nos dejó crear el calendario de la clínica (¿quitaste el permiso de Calendar al autorizar, o la API de Google Calendar está desactivada?). Mientras tanto las citas no se enviarán a Google. Vuelve a pulsar «Conectar Google Calendar» y acepta todos los permisos; si se repite, avísanos.",
       "clinicSavedToast": "Datos de la clínica actualizados",
       "saveErrorToast": "Error al guardar",
       "profileSavedToast": "Perfil actualizado",

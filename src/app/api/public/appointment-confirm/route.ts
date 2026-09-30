@@ -10,6 +10,7 @@ import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.serve
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +82,8 @@ export async function POST(req: NextRequest) {
         cancelReason: "Canceló desde el enlace de confirmación",
       },
     });
+    // Google Calendar: la cita quedó cancelada, el evento se borra. No lanza.
+    await sincronizarCitaEnSegundoPlano(appt.clinicId, appt.id);
     // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».
     await marcarPendienteSiHayDinero({ clinicId: appt.clinicId, appointmentId: appt.id, quien: "el paciente (enlace de confirmación)" });
     await registrarMovimientoExterno({

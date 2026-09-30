@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOAuthClient, verifyState, getOrCreateClinicCalendar } from "@/lib/google-calendar";
+import { getOAuthClient, verifyState, buscarOCrearCalendarioDeClinica, crearClienteCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 import { limpiarGoogleCaido } from "@/lib/google-calendar-estado";
 import { createClient } from "@/lib/supabase/server";
-import { urlDeSaltoAlHostDeLaApp, type MotivoErrorGcal } from "@/lib/google-calendar-callback";
+import { decidirConexionDeClinica, urlDeSaltoAlHostDeLaApp, type MotivoErrorGcal } from "@/lib/google-calendar-callback";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -67,6 +67,12 @@ export async function GET(req: NextRequest) {
     const accessToken  = tokens.access_token  ?? null;
     const refreshToken = tokens.refresh_token ?? null;
     if (!accessToken && !refreshToken) throw new Error("No tokens");
+    // Sin refresh token no hay conexión que valga: guardarla con NULL pisaría la buena.
+    // (Con access_type=offline + prompt=consent Google siempre lo manda.)
+    if (!refreshToken) {
+      console.error("Google OAuth: Google no devolvió refresh_token");
+      return fallo("token");
+    }
 
     let email: string | null = null;
     if (tokens.id_token) {
@@ -79,9 +85,22 @@ export async function GET(req: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where:  { id: userId },
-      select: { id: true, role: true, clinicId: true, clinic: { select: { name: true } } },
+      select: { id: true, role: true, clinicId: true, clinic: { select: { name: true, timezone: true, googleRefreshToken: true, googleCalendarEmail: true } } },
     });
     if (!user) throw new Error("User not found");
+
+    const esAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+    // Una clínica = una cuenta de Google. Otra cuenta encima pisaría los tokens y
+    // el calendario y dejaría los eventos ya creados fuera de alcance: primero se desconecta.
+    // Se decide ANTES de guardar nada (ni siquiera lo del usuario).
+    if (esAdmin && decidirConexionDeClinica({
+      clinicaYaConectada: !!user.clinic.googleRefreshToken,
+      correoDeLaClinica: user.clinic.googleCalendarEmail,
+      correoNuevo: email,
+    }) === "cuenta_distinta") {
+      console.error("Google OAuth: la clínica ya está conectada con otra cuenta de Google");
+      return fallo("cuenta_distinta");
+    }
 
     // Update user-level Google Calendar fields
     await prisma.$executeRawUnsafe(
@@ -90,19 +109,20 @@ export async function GET(req: NextRequest) {
     );
 
     // If admin/super_admin, also set clinic-level AND create the clinic calendar
-    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
-      // Create or find the clinic's dedicated Google Calendar
+    let sinCalendario = false;
+    if (esAdmin) {
+      // Create or find the clinic's dedicated Google Calendar (marcado con el id de ESTA clínica)
       let clinicCalendarId: string | null = null;
-      if (accessToken && refreshToken) {
-        try {
-          clinicCalendarId = await getOrCreateClinicCalendar(
-            accessToken,
-            refreshToken,
-            user.clinic.name
-          );
-        } catch (err) {
-          console.error("Error creating clinic calendar:", err);
-        }
+      try {
+        const cal = crearClienteCalendar({ accessToken, refreshToken });
+        clinicCalendarId = (await buscarOCrearCalendarioDeClinica(cal, {
+          clinicId: user.clinicId, clinicName: user.clinic.name, timezone: user.clinic.timezone,
+        })).id;
+      } catch (err: any) {
+        // La conexión se guarda igual (los tokens valen); el aviso dice que falta el calendario.
+        // La sincronización lo reintenta con cada cita y, si no hay forma, marca la conexión como caída.
+        console.error("Error creating clinic calendar:", err?.response?.data?.error?.message ?? err?.message);
+        sinCalendario = true;
       }
 
       await prisma.$executeRawUnsafe(
@@ -113,6 +133,7 @@ export async function GET(req: NextRequest) {
       await limpiarGoogleCaido(user.clinicId);
     }
 
+    if (sinCalendario) return fallo("calendario");
     return NextResponse.redirect(`${BASE}&gcal=success`);
   } catch (err: any) {
     console.error("Google OAuth callback error:", err?.message);

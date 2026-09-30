@@ -18,6 +18,7 @@ import { decisionEfectiva } from "@/lib/anticipos/cita-cancelada-core";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -152,6 +153,13 @@ export async function PATCH(
     }
     return row;
   });
+
+  // Google Calendar: cancelar o marcar no-asistió saca la cita del calendario
+  // (borra el evento y limpia su id) y reactivarla la vuelve a poner. Los demás
+  // cambios de estado no mueven nada allí. No lanza y no alarga la respuesta.
+  if (closesAppointment !== (existing.status === "CANCELLED" || existing.status === "NO_SHOW")) {
+    await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
+  }
 
   // ws1-t12 — cada cambio de estado de la cita (confirmó, llegó, canceló, no
   // asistió…) queda en los movimientos del paciente. Antes esta ruta no

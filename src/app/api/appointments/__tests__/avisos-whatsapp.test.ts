@@ -39,8 +39,11 @@ let envios: any[];
 /** Si no es null, el embudo lanza esto (envío bloqueado / Meta caído). */
 let falloDelEmbudo: Error | null;
 let apptStartsAt: Date;
+/** Las veces que la ruta pidió dejar a Google Calendar al día: [clinicId, appointmentId]. */
+let llamadasGoogle: [string, string][] = [];
 
 beforeEach(() => {
+  llamadasGoogle = [];
   existingRow = null;
   patientPhone = "+52 999 123 4567";
   envios = [];
@@ -185,9 +188,9 @@ const session = {
 });
 (mock as any).module("@/lib/agenda/google-sync", {
   namedExports: {
-    syncCreateToGoogleCalendar: async () => undefined,
-    syncUpdateToGoogleCalendar: async () => undefined,
-    syncDeleteFromGoogleCalendar: async () => undefined,
+    sincronizarCitaEnSegundoPlano: async (clinicId: string, appointmentId: string) => {
+      llamadasGoogle.push([clinicId, appointmentId]);
+    },
   },
 });
 (mock as any).module("@/lib/reminders/reschedule.server", {
@@ -489,4 +492,48 @@ test("el diálogo solo enseña «Enviar WhatsApp» si la clínica está conectad
   assert.match(dialogo, /boot\.waConnected && boot\.waConfirmOnCreate && \(/);
   assert.match(dialogo, /setNotifyPatient\(waConnected && waConfirmOnCreate\)/);
   assert.match(dialogo, /toastWhatsAppNotSent/, "si no salió, el diálogo tiene que decirlo");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GOOGLE CALENDAR (ws1-t2) — cada camino deja al evento igual que la cita
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("Google Calendar: agendar, mover y cancelar (DELETE) piden la sincronización de ESA cita de la clínica de la sesión", async () => {
+  const c = await post(futureBody());
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(llamadasGoogle.length, 1);
+  assert.equal(llamadasGoogle[0][0], "c1", "la clínica sale de la sesión");
+  assert.equal(llamadasGoogle[0][1], c.body.appointment.id);
+
+  llamadasGoogle = [];
+  citaExistente();
+  const m = await patch(moverUnaHora());
+  assert.equal(m.status, 200, JSON.stringify(m.body));
+  assert.deepEqual(llamadasGoogle, [["c1", "a1"]]);
+
+  llamadasGoogle = [];
+  citaExistente();
+  const d = await del();
+  assert.equal(d.status, 200, JSON.stringify(d.body));
+  assert.deepEqual(llamadasGoogle, [["c1", "a1"]]);
+});
+
+test("Google Calendar: cancelar o marcar no-asistió por PATCH /status (agenda nueva y ficha) también saca el evento — era el hueco", async () => {
+  citaExistente();
+  const a = await patchStatus({ status: "CANCELLED" });
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.deepEqual(llamadasGoogle, [["c1", "a1"]], "cancelar por /status no llamaba a Google");
+
+  llamadasGoogle = [];
+  existingRow = apptRow({ startsAt: atMinute(-2 * 60 * MIN), endsAt: atMinute(-90 * MIN), status: "CONFIRMED" });
+  const b = await patchStatus({ status: "NO_SHOW" });
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  assert.deepEqual(llamadasGoogle, [["c1", "a1"]]);
+});
+
+test("Google Calendar: los cambios de estado que no sacan la cita del calendario (confirmar, llegó…) no gastan llamadas", async () => {
+  citaExistente();
+  const r = await patchStatus({ status: "CONFIRMED" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(llamadasGoogle, []);
 });

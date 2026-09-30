@@ -144,7 +144,7 @@ const prismaStub: any = {
 (mock as any).module("@/lib/cache/revalidate", { namedExports: { revalidateAfter: () => undefined } });
 (mock as any).module("@/lib/patient-visibility", { namedExports: { assertPatientVisible: async () => null } });
 (mock as any).module("@/lib/agenda/google-sync", {
-  namedExports: { syncUpdateToGoogleCalendar: async () => undefined, syncDeleteFromGoogleCalendar: async () => undefined },
+  namedExports: { sincronizarCitaEnSegundoPlano: async () => undefined },
 });
 (mock as any).module("@/lib/reminders/reschedule.server", {
   namedExports: { applyReminderReschedule: async () => undefined, cancelPendingRemindersForAppointment: async () => undefined },

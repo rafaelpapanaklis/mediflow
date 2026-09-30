@@ -3936,6 +3936,8 @@
       "gcalError_otra_cuenta": "The Google connection was started from another DaleControl user. Click «Connect Google Calendar» again from this session.",
       "gcalError_token": "Google did not accept the authorization (it may have expired). Try again; if it repeats, let us know.",
       "gcalError_guardar": "Google authorized, but we could not save the connection. Try again; if it repeats, let us know.",
+      "gcalError_cuenta_distinta": "Your clinic is already connected to a different Google account. To switch accounts, press “Disconnect” first and then connect again with the new account (appointments already created stay in the previous account’s calendar).",
+      "gcalError_calendario": "We connected your account, but Google did not let us create the clinic calendar (did you untick the Calendar permission when authorizing, or is the Google Calendar API turned off?). Until then appointments will not be sent to Google. Press “Connect Google Calendar” again and accept all permissions; if it repeats, let us know.",
       "clinicSavedToast": "Clinic details updated",
       "saveErrorToast": "Error saving",
       "profileSavedToast": "Profile updated",

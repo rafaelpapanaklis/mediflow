@@ -8,6 +8,7 @@ import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/ho
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
 import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { HECHOS_DENTRO_DEL_CONTROL, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
 
 /**
@@ -382,6 +383,8 @@ export async function createBotAppointment(params: {
       },
       select: { id: true, deposits: { select: { id: true } } },
     });
+    // Google Calendar: la cita ya existe, su evento se crea. No lanza y no alarga la respuesta.
+    await sincronizarCitaEnSegundoPlano(clinicId, created.id);
     return {
       ok: true,
       appointmentId: created.id,
@@ -485,6 +488,8 @@ export async function rescheduleBotAppointment(params: {
       }
     });
 
+    // Google Calendar: el evento se mueve a la hora nueva. No lanza y no alarga la respuesta.
+    await sincronizarCitaEnSegundoPlano(clinicId, existing.id);
     return { ok: true, appointmentId: existing.id };
   } catch (err) {
     if (isOverlapError(err)) return { ok: false, error: "overlap" };

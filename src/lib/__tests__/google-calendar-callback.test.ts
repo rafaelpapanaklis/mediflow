@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  urlDeSaltoAlHostDeLaApp, claveAvisoErrorGcal, MOTIVOS_ERROR_GCAL, PARAM_SALTO,
+  urlDeSaltoAlHostDeLaApp, claveAvisoErrorGcal, decidirConexionDeClinica, MOTIVOS_ERROR_GCAL, PARAM_SALTO,
 } from "../google-calendar-callback";
 
 // La configuración que tienen hoy el .env del servidor y (según esa copia) Vercel.
@@ -97,4 +97,41 @@ test("el callback usa el salto y ya no manda gcal=error sin motivo", () => {
   assert.doesNotMatch(src, /gcal=error`\)/);
   // la fila de la sesión se busca por id del state + supabaseId (personas con varias clínicas)
   assert.match(src, /where: \{ id: userId, supabaseId: sessionUser\.id, isActive: true \}/);
+});
+
+// ── ws1-t2 (#11): una clínica, una cuenta de Google; calendario que no se pudo crear ─────────────
+
+test("clínica ya conectada con OTRA cuenta de Google: no se deja pisar (hay que desconectar primero)", () => {
+  assert.equal(decidirConexionDeClinica({ clinicaYaConectada: true, correoDeLaClinica: "a@x.mx", correoNuevo: "b@x.mx" }), "cuenta_distinta");
+});
+
+test("la MISMA cuenta puede reconectar (renovar permisos), sin importar mayúsculas ni espacios", () => {
+  assert.equal(decidirConexionDeClinica({ clinicaYaConectada: true, correoDeLaClinica: "Ana@X.mx ", correoNuevo: "ana@x.mx" }), "ok");
+});
+
+test("clínica sin conexión previa, o sin correo con qué comparar: se deja pasar", () => {
+  assert.equal(decidirConexionDeClinica({ clinicaYaConectada: false, correoDeLaClinica: "a@x.mx", correoNuevo: "b@x.mx" }), "ok");
+  assert.equal(decidirConexionDeClinica({ clinicaYaConectada: true, correoDeLaClinica: null, correoNuevo: "b@x.mx" }), "ok");
+  assert.equal(decidirConexionDeClinica({ clinicaYaConectada: true, correoDeLaClinica: "a@x.mx", correoNuevo: undefined }), "ok");
+});
+
+test("«cuenta_distinta» y «calendario» son motivos con aviso propio", () => {
+  assert.ok(MOTIVOS_ERROR_GCAL.includes("cuenta_distinta"));
+  assert.ok(MOTIVOS_ERROR_GCAL.includes("calendario"));
+  assert.equal(claveAvisoErrorGcal("cuenta_distinta"), "settings.client.gcalError_cuenta_distinta");
+  assert.equal(claveAvisoErrorGcal("calendario"), "settings.client.gcalError_calendario");
+});
+
+test("el callback decide la cuenta ANTES de guardar nada, exige refresh token y avisa si falta el calendario", () => {
+  const src = fs.readFileSync(path.resolve(__dirname, "../../app/api/google/callback/route.ts"), "utf8");
+  const iDecide = src.indexOf("decidirConexionDeClinica(");
+  const iPrimerUpdate = src.indexOf("UPDATE users SET");
+  assert.ok(iDecide > 0 && iPrimerUpdate > 0 && iDecide < iPrimerUpdate, "la decisión va antes de cualquier UPDATE");
+  assert.match(src, /fallo\("cuenta_distinta"\)/);
+  assert.match(src, /if \(!refreshToken\)/);
+  // el calendario se busca por el id de la clínica, ya no por nombre a secas
+  assert.match(src, /buscarOCrearCalendarioDeClinica\(cal, \{\s*clinicId: user\.clinicId/);
+  assert.match(src, /if \(sinCalendario\) return fallo\("calendario"\)/);
+  // la conexión se guarda igual aunque no haya calendario (los tokens valen)
+  assert.ok(src.indexOf("UPDATE clinics SET") < src.indexOf('fallo("calendario")'));
 });

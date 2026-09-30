@@ -12,6 +12,7 @@ import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidat
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import { avisarCitaPorWhatsApp } from "@/lib/whatsapp/avisos-cita";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
@@ -106,6 +107,14 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[batch-validate] failed", id, err);
       result.failed.push({ id, error: "update_failed" });
+    }
+  }
+
+  // Google Calendar: rechazar deja la cita CANCELLED, así que su evento se borra
+  // (de a 5, para no saturar el pool; no lanza). Confirmar no mueve nada allí.
+  if (body.action !== "confirm") {
+    for (let i = 0; i < procesadas.length; i += 5) {
+      await Promise.all(procesadas.slice(i, i + 5).map((id) => sincronizarCitaEnSegundoPlano(session.clinic.id, id, { esperarMs: 500 })));
     }
   }
 

@@ -12,6 +12,7 @@ import {
   ensureUserCanSeePatient,
 } from "@/lib/patient-visibility";
 import { logAudit, logMutation } from "@/lib/audit";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -454,6 +455,12 @@ async function cancelFutureAppointmentsForPatient(
       clinicId, userId: quien.userId, entityType: "invoice", entityId: m.invoiceId, action: "update",
       changes: { dineroCitaCancelada: { before: null, after: { decision: "pendiente", monto: m.monto, motivo: "paciente archivado" } } },
     });
+  }
+
+  // Google Calendar: esas citas ya están canceladas, sus eventos se borran (de a
+  // 5, para no saturar el pool). No lanza y no alarga la respuesta más de un instante.
+  for (let i = 0; i < ids.length; i += 5) {
+    await Promise.all(ids.slice(i, i + 5).map((id) => sincronizarCitaEnSegundoPlano(clinicId, id, { esperarMs: 500 })));
   }
 
   try {

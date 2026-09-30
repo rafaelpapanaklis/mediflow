@@ -27,6 +27,7 @@ import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -351,6 +352,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         req,
       });
     }
+
+    // Google Calendar: la cita ya existe, su evento se crea. No lanza y no alarga la respuesta.
+    await sincronizarCitaEnSegundoPlano(clinicId, creado.cita.id);
 
     revalidateAfter("appointments");
 

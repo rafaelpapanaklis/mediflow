@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { describirResumen, liberarAnticiposVencidos } from "@/lib/anticipos/servicio.server";
+import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const resumen = await liberarAnticiposVencidos();
+    const resumen = await liberarAnticiposVencidos({
+      // Cada cita que el cron cancela sale también de Google Calendar.
+      alCancelarCita: (clinicId, appointmentId) => sincronizarCitaEnSegundoPlano(clinicId, appointmentId),
+    });
     console.log(`[cron/anticipos] ${describirResumen(resumen)}`);
     return NextResponse.json({ ok: true, ...resumen });
   } catch (e) {
