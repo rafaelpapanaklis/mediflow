@@ -148,3 +148,25 @@ export function trackGa4Purchase(p: Ga4Purchase): boolean {
     return false;
   }
 }
+
+/**
+ * `select_promotion` de GA4 (recomendado): clic en un anuncio de DaleControl
+ * dentro de un artículo del blog. `promotion_id` es el sufijo del title del
+ * enlace (pro, basico, anual…). Va con `send_to` a GA4, así que NO genera
+ * conversión de Google Ads. Nunca lanza; sin gtag devuelve false.
+ */
+export function trackGa4SelectPromotion(promotionId: string): boolean {
+  const gtag = gtagDelNavegador();
+  if (!gtag) return false;
+  try {
+    gtag("event", "select_promotion", {
+      send_to: GA4_MEASUREMENT_ID,
+      promotion_id: promotionId,
+      promotion_name: `blog-anuncio-${promotionId}`,
+      creative_name: "blog-anuncio",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
