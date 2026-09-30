@@ -207,7 +207,7 @@ export function CamposDelPlan(props: CamposDelPlanProps) {
                 rows={2}
                 value={v.extraccionesRealizadas}
                 onChange={(e) => cambiar({ extraccionesRealizadas: e.target.value.slice(0, 200) })}
-                placeholder="—"
+                placeholder="14, 24" aria-label="Extracciones realizadas (piezas FDI, separadas por coma)"
                 aria-invalid={realizadas.invalidos.length > 0}
               />
             </Campo>
