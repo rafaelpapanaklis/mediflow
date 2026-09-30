@@ -7,11 +7,7 @@
 // Sin sql/ortodoncia-plan-de-tratamiento.sql pegado no escribe nada y lo dice.
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { canSeePatient } from "@/lib/patient-visibility";
-import { aplicarPlanDetalle } from "@/lib/orthodontics/plan-detalle-guardar";
-import { cargarPlanDetalle, leerOpcionesDelPlan } from "@/lib/orthodontics/plan-detalle-db";
-import { esFdiValido, validarContraOpciones, validarPlanDetalle } from "@/lib/orthodontics/plan-detalle";
+import { aplicarPlanDetalle, prepararGuardadoDelPlan } from "@/lib/orthodontics/plan-detalle-guardar";
 import { getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -21,48 +17,17 @@ export async function guardarPlanDeTratamiento(input: unknown): Promise<ActionRe
   const { ctx } = auth.data;
   if (!ctx.clinicId) return fail("No se pudo identificar tu clínica");
 
-  const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const treatmentPlanId = typeof o.treatmentPlanId === "string" ? o.treatmentPlanId : "";
-  if (!treatmentPlanId) return fail("Falta el caso");
-
-  const validado = validarPlanDetalle(o.plan);
-  if (validado.ok === false) return fail(validado.error);
-
-  let indicadas: number[] | undefined;
-  if (o.extraccionesIndicadas !== undefined && o.extraccionesIndicadas !== null) {
-    if (!Array.isArray(o.extraccionesIndicadas) || o.extraccionesIndicadas.some((x) => !esFdiValido(x))) {
-      return fail("Extracciones indicadas: usa piezas válidas en notación FDI (por ejemplo 14, 24).");
-    }
-    indicadas = o.extraccionesIndicadas as number[];
-  }
-  let duracionMeses: number | undefined;
-  if (o.duracionMeses !== undefined && o.duracionMeses !== null && o.duracionMeses !== "") {
-    const n = Number(o.duracionMeses);
-    if (!Number.isInteger(n) || n < 3 || n > 60) return fail("Tiempo de tratamiento: de 3 a 60 meses.");
-    duracionMeses = n;
-  }
-
-  // El caso es de ESTA clínica y el paciente lo puede ver quien pregunta (mismo criterio que Cobro).
-  const caso = await prisma.orthodonticTreatmentPlan.findFirst({
-    where: { id: treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
-    select: { id: true, patientId: true, patient: { select: { visibleUserIds: true } } },
-  });
-  if (!caso) return fail("Caso no encontrado");
-  if (!canSeePatient({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }, caso.patient?.visibleUserIds)) {
-    return fail("Caso no encontrado");
-  }
-
-  // Lo que se AGREGA tiene que seguir ofreciéndose; lo que el caso ya tenía se conserva.
-  const [anterior, opciones] = await Promise.all([cargarPlanDetalle(ctx.clinicId, caso.id), leerOpcionesDelPlan(ctx.clinicId)]);
-  const fuera = validarContraOpciones(validado.plan, anterior, opciones.opciones);
-  if (fuera) return fail(fuera);
+  // Valida TODO sin escribir: forma, rangos, FDI, caso de esta clínica, paciente visible y opciones ofrecidas.
+  const prep = await prepararGuardadoDelPlan(ctx, input);
+  if (prep.ok === false) return fail(prep.error);
+  const { caso, plan, extraccionesIndicadas, duracionMeses } = prep.preparado;
 
   const r = await aplicarPlanDetalle({
     ctx: { clinicId: ctx.clinicId, userId: ctx.userId },
     treatmentPlanId: caso.id,
     patientId: caso.patientId,
-    plan: validado.plan,
-    extraccionesIndicadas: indicadas,
+    plan,
+    extraccionesIndicadas,
     duracionMeses,
   });
   if (r.ok === false) return fail(r.error);

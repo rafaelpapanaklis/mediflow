@@ -19,7 +19,7 @@ import { canSeePatient } from "@/lib/patient-visibility";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
-import { extraccionesPendientes, ordenarConSugeridosPrimero, procedimientosSugeridos } from "@/lib/orthodontics/plan-detalle";
+import { extraccionesPendientes, ordenarConSugeridosPrimero, procedimientosQueFaltanEnElCatalogo, procedimientosSugeridos } from "@/lib/orthodontics/plan-detalle";
 import {
   buscarNotaDeHoja,
   cargarCatalogoElegible,
@@ -86,6 +86,8 @@ export async function cargarProcedimientosDeHoja(input: {
     hojaFirmada: boolean;
     /** ws1-t12: extracciones indicadas en el plan que aún no se marcan como realizadas. */
     extraccionesPendientes: number[];
+    /** ws1-t12: lo que el plan eligió y el catálogo no tiene (se avisa con enlace a Configuración → Procedimientos). */
+    procedimientosFaltantes: string[];
   }>
 > {
   const auth = await getOrthoActionContext({ write: false });
@@ -120,6 +122,7 @@ export async function cargarProcedimientosDeHoja(input: {
       ...(motivoPorId.has(c.id) ? { sugerido: true, motivo: motivoPorId.get(c.id) } : {}),
     })),
     extraccionesPendientes: extraccionesPendientes(indicadas?.extractionsTeethFdi ?? [], planDetalle?.extraccionesRealizadas ?? []),
+    procedimientosFaltantes: procedimientosQueFaltanEnElCatalogo(planDetalle, catalogo),
     lineas,
     puedeCobrar: hasPermission({ role: ctx.role as never, permissionsOverride: ctx.permissionsOverride }, "billing.charge"),
     hojaFirmada: Boolean(notaValida?.firmada),

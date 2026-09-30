@@ -1156,10 +1156,16 @@ export function textoDeReevaluacion(r: ReevaluacionPendiente): string {
 
 // ─── Procedimientos del catálogo que el plan propone ────────────────────
 
+/**
+ * Comparar textos: sin acentos ni mayúsculas y con guiones, barras y signos hechos espacio («Mini-implante (TAD)» →
+ * «mini implante tad»), para que el emparejamiento no dependa de cómo escribió el nombre cada clínica.
+ */
+const claveDeBusqueda = (t: string): string => clave(t).replace(/[^a-z0-9]+/g, " ").trim();
+
 /** Grupos de palabras clave: un aditamento/aparatología y un procedimiento del catálogo son «lo mismo» si comparten grupo. */
 const GRUPOS_DE_PROCEDIMIENTO: ReadonlyArray<readonly RegExp[]> = [
-  [/microtornill/, /mini ?implante/, /\btads?\b/],
-  [/miniplaca/],
+  [/micro ?tornill/, /mini ?tornill/, /micro ?implant/, /mini ?implant/, /\btads?\b/, /tornillos? de anclaje/, /anclaje esqueletico/],
+  [/mini ?placa/],
   [/\bizg\b/],
   [/bucal shelf/, /buccal shelf/],
   [/barra palatina/],
@@ -1196,12 +1202,12 @@ export function procedimientosSugeridos(
   const out: ProcedimientoSugerido[] = [];
   const vistos = new Set<string>();
   for (const item of elegidos) {
-    const k = clave(item);
+    const k = claveDeBusqueda(item);
     for (const grupo of GRUPOS_DE_PROCEDIMIENTO) {
       if (!grupo.some((re) => re.test(k))) continue;
       for (const proc of catalogo) {
         if (vistos.has(proc.id)) continue;
-        const kp = clave(proc.name);
+        const kp = claveDeBusqueda(proc.name);
         if (grupo.some((re) => re.test(kp))) {
           vistos.add(proc.id);
           out.push({ procedureId: proc.id, motivo: `Del plan: ${item}` });
@@ -1210,6 +1216,35 @@ export function procedimientosSugeridos(
     }
   }
   return out;
+}
+
+/**
+ * Lo que el plan eligió y es un procedimiento que se cobra (microtornillo, miniplaca, barra palatina…) pero el
+ * catálogo de la clínica NO tiene: sin él, «Cobrar extra» no tiene qué proponer. Se dice, para que lo agreguen en
+ * Configuración → Procedimientos. `catalogo` = TODOS los procedimientos activos (también los «incluidos en el
+ * tratamiento»: si el catálogo ya lo trae como incluido, no falta nada).
+ */
+export function procedimientosQueFaltanEnElCatalogo(
+  plan: Pick<PlanDetalle, "aditamentos" | "placas" | "alineadores"> | null,
+  catalogo: readonly ProcedimientoDelCatalogo[],
+): string[] {
+  if (!plan) return [];
+  const faltan: string[] = [];
+  const grupos = new Set<number>();
+  for (const item of [...plan.aditamentos, ...plan.placas]) {
+    const k = claveDeBusqueda(item);
+    const g = GRUPOS_DE_PROCEDIMIENTO.findIndex((grupo) => grupo.some((re) => re.test(k)));
+    if (g < 0 || grupos.has(g)) continue;
+    grupos.add(g);
+    const grupo = GRUPOS_DE_PROCEDIMIENTO[g]!;
+    if (!catalogo.some((proc) => grupo.some((re) => re.test(claveDeBusqueda(proc.name))))) faltan.push(item);
+  }
+  return faltan;
+}
+
+/** «Tu plan incluye Microtornillos: agrega su procedimiento en Configuración → Procedimientos para cobrarlo.» */
+export function avisoDeProcedimientoFaltante(item: string): string {
+  return `Tu plan incluye ${item}: agrega su procedimiento en Configuración → Procedimientos para cobrarlo.`;
 }
 
 /** Los sugeridos primero (en el orden del plan) y el resto como venía. */

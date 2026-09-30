@@ -40,7 +40,7 @@ import { loadCasoParaCobro } from "./_ctx";
 import { buscarPrecioControlOrto, elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
 import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
 import { cargarProgresoDeControles } from "@/lib/orthodontics/controles-hechos-db";
-import { aparatologiaElegida, estimadoPorControles, ordenarConSugeridosPrimero, procedimientosSugeridos, type EstimadoPorControles } from "@/lib/orthodontics/plan-detalle";
+import { aparatologiaElegida, estimadoPorControles, ordenarConSugeridosPrimero, procedimientosQueFaltanEnElCatalogo, procedimientosSugeridos, type EstimadoPorControles } from "@/lib/orthodontics/plan-detalle";
 import { limitarConcurrencia } from "@/lib/limitar-concurrencia";
 import { controlesPorCobrarDe, type ControlPorCobrar } from "@/lib/orthodontics/cobro/controles-por-cobrar";
 import { fail, isFailure, ok, type ActionResult } from "../result";
@@ -95,6 +95,8 @@ export interface PanelDeCobro {
   borradorInicial: BorradorDeFactura;
   /** H7: conceptos de ortodoncia que se cobran aparte (catálogo de la clínica), para «Cobrar extra». Los que el plan de tratamiento propone, primero. */
   catalogoDeExtras: ConceptoDeExtra[];
+  /** ws1-t12: lo que el plan eligió (microtornillos, miniplacas…) y el catálogo NO tiene: «Cobrar extra» lo dice y manda a Configuración → Procedimientos. */
+  procedimientosFaltantes: string[];
   /**
    * ws1-t12 — los controles que prevé el plan de tratamiento del caso y en cuál va. `null` = el plan no
    * dice cuántos controles prevé. `estimado` solo en «Pago por control» (controles previstos × precio del
@@ -233,6 +235,8 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     ...(motivoPorId.has(f.id) ? { sugerido: true, motivo: motivoPorId.get(f.id) } : {}),
   }));
 
+  const procedimientosFaltantes = procedimientosQueFaltanEnElCatalogo(planDetalle, filasCatalogo.filter((f) => f.isActive));
+
   // «Control X de N» y, en «Pago por control», el estimado. Solo se calcula si el plan dice cuántos controles prevé.
   const previstos = planDetalle?.controlesPrevistos ?? null;
   const zonaDelCaso = clinica?.timezone || "America/Mexico_City";
@@ -266,6 +270,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],
     borradorInicial: borradorInicialDelCaso({ ...caso, aparatologia }, billingMode === "PAGO_POR_CONTROL", precioColocacion),
     controlesDelPlan,
+    procedimientosFaltantes,
   };
 
   const zonaHoraria = clinica?.timezone || "America/Mexico_City";

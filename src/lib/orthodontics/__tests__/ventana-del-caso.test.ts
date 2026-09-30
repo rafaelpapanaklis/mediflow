@@ -71,9 +71,10 @@ test("planDePagoAlAbrir: null si no hay factura que crear; con costo, las condic
 });
 
 test("el diagnóstico pide su resumen; en observación, la fecha de revisión; con diagnóstico ya hecho, nada", () => {
-  assert.equal(faltantesDelDiagnostico({ necesitaDiagnostico: false, enObservacion: false, resumen: "", proximaRevision: "" }).length, 0);
-  assert.match(faltantesDelDiagnostico({ necesitaDiagnostico: true, enObservacion: false, resumen: "corto", proximaRevision: "" })[0]!, /5 de 40/);
-  assert.equal(faltantesDelDiagnostico({ necesitaDiagnostico: true, enObservacion: true, resumen: "x".repeat(40), proximaRevision: "" })[0], "la fecha de la próxima revisión");
+  assert.equal(faltantesDelDiagnostico({ necesitaDiagnostico: false, enObservacion: false, proximaRevision: "" }).length, 0);
+  // Decisión de Rafael: solo técnica y doctor son obligatorios; el resumen ni se pide ni tiene mínimo.
+  assert.deepEqual(faltantesDelDiagnostico({ necesitaDiagnostico: true, enObservacion: false, proximaRevision: "" }), []);
+  assert.equal(faltantesDelDiagnostico({ necesitaDiagnostico: true, enObservacion: true, proximaRevision: "" })[0], "la fecha de la próxima revisión");
 });
 
 test("la nota bajo el botón dice qué pasará con el cobro", () => {

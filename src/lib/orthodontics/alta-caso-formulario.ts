@@ -19,7 +19,6 @@
 
 import type { OrthoBillingMode } from "./billing-mode";
 
-export const MIN_RESUMEN = 40;
 export const MIN_RETENCION = 20;
 export const MIN_NOMBRE_TUTOR = 2;
 export const MIN_TELEFONO_TUTOR = 7;
@@ -171,10 +170,7 @@ export function faltantesDelAlta(e: EstadoAlta): string[] {
   const faltan: string[] = [];
 
   if (e.necesitaDiagnostico) {
-    const largo = e.resumen.trim().length;
-    if (largo < MIN_RESUMEN) {
-      faltan.push(`el resumen clínico (lleva ${largo} de ${MIN_RESUMEN} caracteres)`);
-    }
+    // El resumen clínico es opcional y sin mínimo (decisión de Rafael): solo técnica y doctor son obligatorios.
     if (e.enObservacion && e.proximaRevision === "") {
       faltan.push("la fecha de la próxima revisión");
     }

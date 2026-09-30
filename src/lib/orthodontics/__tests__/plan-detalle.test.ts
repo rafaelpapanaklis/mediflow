@@ -25,6 +25,8 @@ import {
   planDetalleVacio,
   planPideTads,
   procedimientosSugeridos,
+  procedimientosQueFaltanEnElCatalogo,
+  avisoDeProcedimientoFaltante,
   progresoDeControles,
   reevaluacionesPendientes,
   restaurarDeEjemplo,
@@ -499,6 +501,29 @@ test("los brackets no proponen nada, ni se propone lo que no está en el plan", 
   assert.deepEqual(procedimientosSugeridos(completo({ aditamentos: ["Topes"] }), CATALOGO), []);
   const m = procedimientosSugeridos(completo({ aditamentos: ["Miniplacas"] }), CATALOGO);
   assert.deepEqual(m.map((x) => x.procedureId), ["p7"], "miniplaca no arrastra a «placa de retención»");
+});
+
+test("el emparejamiento entiende sinónimos, guiones y mayúsculas del nombre que puso la clínica", () => {
+  const catalogo = [
+    { id: "a", name: "Mini-implante (TAD)" },
+    { id: "b", name: "MICRO TORNILLO de anclaje" },
+    { id: "c", name: "Minitornillo palatino" },
+  ];
+  const s = procedimientosSugeridos(completo({ aditamentos: ["Microtornillos"] }), catalogo);
+  assert.deepEqual(s.map((x) => x.procedureId), ["a", "b", "c"]);
+});
+
+test("lo que el plan eligió y el catálogo no tiene se DICE (con su aviso), y lo que sí tiene no se avisa", () => {
+  const sinMicro = CATALOGO.filter((c) => c.id !== "p1");
+  const faltan = procedimientosQueFaltanEnElCatalogo(completo({ aditamentos: ["Microtornillos", "Barra Palatina"] }), sinMicro);
+  assert.deepEqual(faltan, ["Microtornillos"]);
+  assert.equal(avisoDeProcedimientoFaltante("Microtornillos"), "Tu plan incluye Microtornillos: agrega su procedimiento en Configuración → Procedimientos para cobrarlo.");
+  assert.deepEqual(procedimientosQueFaltanEnElCatalogo(completo({ aditamentos: ["Microtornillos"] }), CATALOGO), []);
+  // Lo que no es un procedimiento que se cobre (brackets, un aditamento sin grupo) ni se avisa; sin plan tampoco.
+  assert.deepEqual(procedimientosQueFaltanEnElCatalogo(completo({ brackets: ["Damon"], aditamentos: ["Ancla QA"] }), []), []);
+  assert.deepEqual(procedimientosQueFaltanEnElCatalogo(null, []), []);
+  // Dos aditamentos del mismo grupo avisan una sola vez.
+  assert.deepEqual(procedimientosQueFaltanEnElCatalogo(completo({ aditamentos: ["Microtornillos", "Mini implantes"] }), []), ["Microtornillos"]);
 });
 
 test("ordenarConSugeridosPrimero deja los sugeridos arriba y el resto como estaba", () => {

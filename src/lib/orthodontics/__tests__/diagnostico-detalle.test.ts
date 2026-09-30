@@ -225,14 +225,14 @@ test("formulario: desde el diagnóstico y de vuelta, con los derivados", () => {
   assert.deepEqual(p.habits, ["BRUXISM"]);
 });
 
-test("formulario: errores llevan a su sección; al abrir el caso el resumen puede esperar", () => {
+test("formulario: errores llevan a su sección; el resumen es opcional y sin mínimo (solo técnica y doctor son obligatorios)", () => {
   const f = formularioVacio();
-  const editar = formularioAPeticion(f, "editar");
-  assert.equal(editar.ok, false);
-  assert.equal((editar as { seccion: string }).seccion, "resumen");
+  assert.equal(formularioAPeticion(f, "editar").ok, true);
   assert.equal(formularioAPeticion(f, "abrir").ok, true);
   f.clinicalSummary = "corto";
-  assert.equal((formularioAPeticion(f, "abrir") as { seccion: string }).seccion, "resumen");
+  const corto = formularioAPeticion(f, "abrir");
+  assert.equal(corto.ok, true);
+  assert.equal((corto as { peticion: PeticionDelDiagnostico }).peticion.clinicalSummary, "corto");
   f.clinicalSummary = "x".repeat(40);
   f.overjetMm = "abc";
   assert.equal((formularioAPeticion(f) as { seccion: string }).seccion, "clasificacion");
@@ -271,4 +271,68 @@ test("para guardar los dos pasos juntos: hay cambios y entrada lista para el ser
   const mal = entradaParaGuardar("dx1", f);
   assert.equal(mal.ok, false);
   assert.equal((mal as { seccion: string }).seccion, "clasificacion");
+});
+
+// ── ws1-t12 · abrir el caso con solo técnica y doctor: las medidas NOT NULL sin capturar ─────────────────────────
+
+test("sin capturar: al abrir, las medidas vacías se anotan y la base guarda un neutro DENTRO del CHECK de la base", () => {
+  const f = formularioVacio();
+  const r = formularioAPeticion(f, "abrir");
+  assert.equal(r.ok, true);
+  const p = (r as { peticion: PeticionDelDiagnostico }).peticion;
+  assert.deepEqual(p.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  // Con captura parcial, solo se anota lo que falta.
+  f.overjetMm = "3";
+  const parcial = (formularioAPeticion(f, "abrir") as { peticion: PeticionDelDiagnostico }).peticion;
+  assert.deepEqual(parcial.diagnosticoDetalle.sinCapturar, ["overbiteMm", "overbitePercentage"]);
+  assert.equal(parcial.overjetMm, 3);
+  // Todo capturado: no hay nada que anotar.
+  f.overbiteMm = "2";
+  f.overbitePercentage = "20";
+  const completo = (formularioAPeticion(f, "abrir") as { peticion: PeticionDelDiagnostico }).peticion;
+  assert.equal(completo.diagnosticoDetalle.sinCapturar, undefined);
+});
+
+test("sin capturar: el neutro que se guarda al crear cae en el CHECK orthodontic_diagnoses_overbite_chk", () => {
+  // -10 ≤ overbiteMm ≤ 15 · 0 ≤ overbitePercentage ≤ 100 · -5 ≤ overjetMm ≤ 20 (verificado en la base real).
+  const neutro = { overbiteMm: 0, overbitePercentage: 0, overjetMm: 0 };
+  assert.ok(neutro.overbiteMm >= -10 && neutro.overbiteMm <= 15);
+  assert.ok(neutro.overbitePercentage >= 0 && neutro.overbitePercentage <= 100);
+  assert.ok(neutro.overjetMm >= -5 && neutro.overjetMm <= 20);
+});
+
+test("sin capturar: el resumen dice «Sin capturar», no «0 mm»; los renglones legibles y los valores clave lo omiten", () => {
+  const base = { ...BASE, overbiteMm: 0, overbitePercentage: 0, overjetMm: 0 };
+  const det = normalizarDiagnosticoDetalle({ sinCapturar: ["overjetMm", "overbiteMm", "overbitePercentage"] });
+  assert.deepEqual(det.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  const ind = indicadoresClave(base, det);
+  assert.equal(ind.find((i) => i.clave === "overjet")!.valor, "—", "«—» es lo que la ficha pinta como «Sin capturar»");
+  assert.equal(ind.find((i) => i.clave === "overbite")!.valor, "—");
+  assert.equal(ind.find((i) => i.clave === "overjet")!.estado, null);
+  const lineas = seccionesDelDiagnostico(base, det).flatMap((s) => s.lineas.map((l) => l.clave));
+  assert.ok(!lineas.includes("overjetMm") && !lineas.includes("overbiteMm"));
+  // Sin la marca, el 0 se dice como dato (un overjet de 0 mm real existe).
+  assert.equal(indicadoresClave(base, null).find((i) => i.clave === "overjet")!.valor, "0 mm");
+});
+
+test("sin capturar: se guarda aunque sea lo único del detalle, la edición lo muestra vacío y capturarlo lo quita", () => {
+  assert.equal(esDiagnosticoDetalleVacio(normalizarDiagnosticoDetalle({ sinCapturar: ["overjetMm"] })), false);
+  assert.equal(validarDiagnosticoDetalle({ sinCapturar: ["overjetMm"] }).ok, true);
+  assert.equal(validarDiagnosticoDetalle({ sinCapturar: ["algoInventado"] }).ok, false);
+  const base = { ...BASE, overbiteMm: 0, overbitePercentage: 0, overjetMm: 0 };
+  const det = normalizarDiagnosticoDetalle({ sinCapturar: ["overjetMm", "overbiteMm", "overbitePercentage"] });
+  const f = formularioDesdeDiagnostico({ ...base, initialCephFileId: null, initialScanFileId: null }, det);
+  assert.equal(f.overjetMm, "", "no se edita un 0 que no era real");
+  assert.equal(f.overbiteMm, "");
+  // Al editar sin tocarlo, sigue anotado; al capturar un valor, se quita solo ese.
+  assert.deepEqual((formularioAPeticion(f, "editar") as { peticion: PeticionDelDiagnostico }).peticion.diagnosticoDetalle.sinCapturar, ["overjetMm", "overbiteMm", "overbitePercentage"]);
+  f.overjetMm = "4";
+  assert.deepEqual((formularioAPeticion(f, "editar") as { peticion: PeticionDelDiagnostico }).peticion.diagnosticoDetalle.sinCapturar, ["overbiteMm", "overbitePercentage"]);
+});
+
+test("sin capturar: el caso aparece entre los incompletos con «overjet y overbite»", () => {
+  const base = { ...BASE, overbiteMm: 0, overbitePercentage: 0, overjetMm: 0, clinicalSummary: "x".repeat(50) };
+  const det = normalizarDiagnosticoDetalle({ sinCapturar: ["overjetMm"], facial: { claseFacialSagital: "I" }, funcional: { respiracion: "nasal" } });
+  assert.ok(faltaDelDiagnostico(base, det).includes("overjet y overbite"));
+  assert.ok(!faltaDelDiagnostico(base, normalizarDiagnosticoDetalle({ facial: { claseFacialSagital: "I" } })).includes("overjet y overbite"));
 });

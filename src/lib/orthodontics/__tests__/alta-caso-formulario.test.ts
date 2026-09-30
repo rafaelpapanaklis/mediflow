@@ -15,7 +15,6 @@ import { join } from "node:path";
 import {
   MAX_COSTO_TOTAL,
   MIN_NOMBRE_TUTOR,
-  MIN_RESUMEN,
   MIN_RETENCION,
   MIN_TELEFONO_TUTOR,
   MAX_TELEFONO_TUTOR,
@@ -100,7 +99,8 @@ test("los mínimos son los del servidor (createTreatmentPlanSchema / createDiagn
   assert.match(esquema, /retentionPlanText: z\.string\(\)\.max\(2000\)\.default\(""\)/);
   assert.match(esquema, /totalCostMxn: z\.number\(\)\.positive\(\)\.max\(10_000_000\)/);
   assert.equal(MAX_COSTO_TOTAL, 10_000_000);
-  assert.equal(MIN_RESUMEN, 40);
+  // El resumen clínico ya no tiene mínimo: el esquema no lo exige.
+  assert.doesNotMatch(esquema, /El resumen clínico debe tener al menos 40/);
 });
 
 test("todo lo que falta, en el orden del formulario", () => {
@@ -117,7 +117,6 @@ test("todo lo que falta, en el orden del formulario", () => {
     tutorTelefono: "55",
   });
   assert.deepEqual(faltan, [
-    "el resumen clínico (lleva 5 de 40 caracteres)",
     "el costo del tratamiento",
     "el plan de retención (lleva 4 de 20 caracteres)",
     "el nombre del responsable del pago",
@@ -131,8 +130,9 @@ test("todo lo que falta, en el orden del formulario", () => {
   ]);
   assert.deepEqual(faltantesDelAlta({ ...COMPLETA, modoResponsable: "existing", tutorElegidoId: "g1" }), []);
 
-  // Con diagnóstico ya hecho, el resumen no se pide.
+  // El resumen no se pide nunca (con o sin diagnóstico previo).
   assert.deepEqual(faltantesDelAlta({ ...COMPLETA, necesitaDiagnostico: false, resumen: "" }), []);
+  assert.deepEqual(faltantesDelAlta({ ...COMPLETA, necesitaDiagnostico: true, resumen: "" }), []);
 });
 
 test("paciente en observación: sin plan, solo diagnóstico y próxima revisión", () => {

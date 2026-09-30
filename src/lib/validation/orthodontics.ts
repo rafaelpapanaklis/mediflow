@@ -112,10 +112,9 @@ export const createDiagnosisSchema = z.object({
   initialPhotoSetId: z.string().optional().nullable(),
   initialCephFileId: z.string().optional().nullable(),
   initialScanFileId: z.string().optional().nullable(),
-  clinicalSummary: z
-    .string()
-    .min(40, "El resumen clínico debe tener al menos 40 caracteres")
-    .max(5000),
+  // Decisión de Rafael: para abrir un caso solo son obligatorios la técnica y el doctor. El resumen es opcional y, si
+  // viene, sin mínimo (la columna es NOT NULL: vacío = ""; no hay CHECK de longitud en ningún SQL del repo).
+  clinicalSummary: z.string().max(5000).default(""),
   // Ola 1 (ws1-t6, sep-2026) — «Alta del caso»:
   //   A13 · quién refirió al paciente (directorio doctor_contacts).
   //   A12 · paciente en observación (valorado, sin plan todavía) + próxima

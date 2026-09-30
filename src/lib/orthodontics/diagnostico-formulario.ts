@@ -7,6 +7,7 @@
 
 import {
   HABITOS_DEL_PASO,
+  MEDIDAS_QUE_PUEDEN_FALTAR,
   SECCIONES_DEL_DETALLE,
   camposConDato,
   diagnosticoDetalleVacio,
@@ -114,9 +115,10 @@ export function formularioDesdeDiagnostico(base: DiagnosticoParaFormulario, deta
   return {
     angleClassRight: base.angleClassRight,
     angleClassLeft: base.angleClassLeft,
-    overjetMm: txt(base.overjetMm),
-    overbiteMm: txt(base.overbiteMm),
-    overbitePercentage: base.overbitePercentage ? String(base.overbitePercentage) : "",
+    // Las medidas guardadas como relleno («sin capturar») se editan como VACÍAS, no como un 0 que parece real.
+    overjetMm: (d.sinCapturar ?? []).includes("overjetMm") ? "" : txt(base.overjetMm),
+    overbiteMm: (d.sinCapturar ?? []).includes("overbiteMm") ? "" : txt(base.overbiteMm),
+    overbitePercentage: (d.sinCapturar ?? []).includes("overbitePercentage") ? "" : base.overbitePercentage ? String(base.overbitePercentage) : "",
     crowdingUpperMm: base.crowdingUpperMm ? String(base.crowdingUpperMm) : "",
     crowdingLowerMm: base.crowdingLowerMm ? String(base.crowdingLowerMm) : "",
     dentalPhase: base.dentalPhase ?? "PERMANENT",
@@ -178,8 +180,6 @@ export function leerNumero(t: string): number | null | "invalido" {
   return Number.isFinite(n) ? Math.round(n * 10) / 10 : "invalido";
 }
 
-export const RESUMEN_MINIMO = 40;
-
 /**
  * El formulario como petición, con los derivados. `modo: "abrir"` deja el resumen para después (al abrir el
  * caso solo son obligatorios técnica y doctor); `"editar"` lo pide porque la columna ya lo tiene.
@@ -207,15 +207,17 @@ export function formularioAPeticion(
     return { ok: false, error: "Overbite (%): un número entero.", seccion: "clasificacion" };
   }
   const resumen = f.clinicalSummary.trim();
-  if (resumen && resumen.length < RESUMEN_MINIMO) {
-    return { ok: false, error: `Resumen diagnóstico: al menos ${RESUMEN_MINIMO} caracteres (van ${resumen.length}).`, seccion: "resumen" };
-  }
-  if (!resumen && modo === "editar") {
-    return { ok: false, error: `Resumen diagnóstico: escríbelo (al menos ${RESUMEN_MINIMO} caracteres).`, seccion: "resumen" };
-  }
+  // El resumen es opcional (al abrir y al editar) y, si viene, no tiene mínimo: solo técnica y doctor son obligatorios.
   if (resumen.length > 5000) return { ok: false, error: "Resumen diagnóstico: máximo 5000 caracteres.", seccion: "resumen" };
 
-  const v = validarDiagnosticoDetalle(f.detalle);
+  // Las medidas que quedan VACÍAS y son NOT NULL en la base se anotan como «sin capturar» (la columna guarda un 0
+  // neutro y el resumen no lo dice como dato real). Al abrir el caso, todas las vacías; al editar, solo las que ya
+  // estaban anotadas y siguen vacías (vaciar una medida real no la borra: la columna se queda como estaba).
+  const previas = f.detalle.sinCapturar ?? [];
+  const sinCapturar = MEDIDAS_QUE_PUEDEN_FALTAR.filter(
+    (k) => f[k].trim() === "" && (modo === "abrir" || previas.includes(k)),
+  );
+  const v = validarDiagnosticoDetalle({ ...f.detalle, sinCapturar: sinCapturar.length > 0 ? sinCapturar : undefined });
   if (v.ok === false) {
     const sec = ["facial", "oclusal", "dentoalveolar", "funcional", "cefalometria"].find((s) => v.error.startsWith(tituloCorto(s))) ?? "clasificacion";
     return { ok: false, error: v.error, seccion: sec };
@@ -310,7 +312,7 @@ export function avanceDelPaso(f: FormularioDelDiagnostico): Record<SeccionDelPas
     cefalometria: { llenos: camposConDato(d, "cefalometria") + (f.skeletalPattern ? 1 : 0), total: totalDetalle("cefalometria") + 1 },
     etiologia: { llenos: (f.etiologySkeletal || f.etiologyDental || f.etiologyFunctional ? 1 : 0) + hay(f.etiologyNotes), total: 2 },
     registros: { llenos: (f.initialCephFileId ? 1 : 0) + (f.initialScanFileId ? 1 : 0), total: 2 },
-    resumen: { llenos: f.clinicalSummary.trim().length >= RESUMEN_MINIMO ? 1 : 0, total: 1 },
+    resumen: { llenos: f.clinicalSummary.trim().length > 0 ? 1 : 0, total: 1 },
   };
 }
 

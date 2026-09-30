@@ -183,3 +183,21 @@ test("extracciones desde la hoja: solo cuentan las que el plan tiene indicadas",
   assert.deepEqual(nada, { ok: true, marcadas: [] });
   assert.equal(state.guardado, null);
 });
+
+test("guardado único: lo que pide `enLaTransaccion` corre DENTRO de la transacción del plan, con el mismo `tx`", async () => {
+  reiniciar();
+  let recibido: unknown = null;
+  const r = await aplicarPlanDetalle(args(plan({ controlesPrevistos: 12 }), { enLaTransaccion: async (tx: unknown) => { recibido = tx; } }));
+  assert.equal(r.ok, true);
+  assert.ok(recibido && typeof recibido === "object", "recibió la transacción");
+  assert.ok("orthodonticTreatmentPlan" in (recibido as object), "es el mismo cliente transaccional que usa el plan");
+});
+
+test("guardado único: si lo de `enLaTransaccion` falla, el error sube (la transacción entera se deshace) y no se registra el movimiento", async () => {
+  reiniciar();
+  await assert.rejects(
+    aplicarPlanDetalle(args(plan({ controlesPrevistos: 12 }), { enLaTransaccion: async () => { throw new Error("falló el diagnóstico"); } })),
+    /falló el diagnóstico/,
+  );
+  assert.equal(state.movimientos.length, 0, "sin transacción confirmada no hay movimiento");
+});

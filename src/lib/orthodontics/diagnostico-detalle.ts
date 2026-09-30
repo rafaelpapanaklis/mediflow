@@ -314,7 +314,32 @@ export const SECCIONES_DEL_DETALLE: ReadonlyArray<{ clave: SeccionDelDetalle; ti
 
 export type ValorDx = string | number | string[] | null;
 export type SeccionDx = Record<string, ValorDx>;
-export type DiagnosticoDetalle = Record<SeccionDelDetalle, SeccionDx>;
+/**
+ * Las medidas de la clasificación que son NOT NULL en la base (con CHECK de rango): al abrir un caso sin capturarlas se
+ * guarda un valor neutro (0) y se ANOTA aquí que no son un dato real, para que el resumen las diga «sin capturar» en
+ * vez de «0 mm».
+ */
+export const MEDIDAS_QUE_PUEDEN_FALTAR = ["overjetMm", "overbiteMm", "overbitePercentage"] as const;
+export type MedidaQuePuedeFaltar = (typeof MEDIDAS_QUE_PUEDEN_FALTAR)[number];
+
+export type DiagnosticoDetalle = Record<SeccionDelDetalle, SeccionDx> & {
+  /** Medidas guardadas como relleno neutro (0): no son un dato real. Ausente o vacío = todas capturadas. */
+  sinCapturar?: MedidaQuePuedeFaltar[];
+};
+
+const medidasSinCapturar = (d: DiagnosticoDetalle | null | undefined): readonly string[] => d?.sinCapturar ?? [];
+
+/** La base como se DICE: las medidas de relleno (sin capturar) salen como «sin dato», no como un 0 real. */
+export function baseSinRelleno(base: DiagnosticoBase, detalle: DiagnosticoDetalle | null | undefined): DiagnosticoBase {
+  const faltan = medidasSinCapturar(detalle);
+  if (faltan.length === 0) return base;
+  return {
+    ...base,
+    ...(faltan.includes("overjetMm") ? { overjetMm: null } : {}),
+    ...(faltan.includes("overbiteMm") ? { overbiteMm: null } : {}),
+    ...(faltan.includes("overbitePercentage") ? { overbitePercentage: null } : {}),
+  };
+}
 
 export const DIAGNOSTICO_DETALLE_VERSION = 1;
 
@@ -334,6 +359,7 @@ function esVacio(v: ValorDx | undefined): boolean {
 
 export function esDiagnosticoDetalleVacio(d: DiagnosticoDetalle | null | undefined): boolean {
   if (!d) return true;
+  if (medidasSinCapturar(d).length > 0) return false; // el aviso de «sin capturar» también se guarda
   return SECCIONES_DEL_DETALLE.every((s) => s.campos.every((c) => esVacio(d[s.clave]?.[c.clave])));
 }
 
@@ -370,6 +396,10 @@ export function normalizarDiagnosticoDetalle(raw: unknown): DiagnosticoDetalle {
       }
     }
   }
+  const faltan = Array.isArray(o.sinCapturar)
+    ? [...new Set(o.sinCapturar.filter((x): x is MedidaQuePuedeFaltar => (MEDIDAS_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x)))]
+    : [];
+  if (faltan.length > 0) salida.sinCapturar = faltan;
   return salida;
 }
 
@@ -380,7 +410,13 @@ export function validarDiagnosticoDetalle(raw: unknown): ResultadoDx {
   if (raw === null || raw === undefined) return { ok: true, detalle: diagnosticoDetalleVacio() };
   if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "Diagnóstico: formato inválido." };
   const o = raw as Record<string, unknown>;
+  if (o.sinCapturar !== undefined && o.sinCapturar !== null) {
+    if (!Array.isArray(o.sinCapturar) || o.sinCapturar.some((x) => !(MEDIDAS_QUE_PUEDEN_FALTAR as readonly unknown[]).includes(x))) {
+      return { ok: false, error: "Diagnóstico: medidas sin capturar no válidas." };
+    }
+  }
   for (const k of Object.keys(o)) {
+    if (k === "sinCapturar") continue;
     if (!(SECCIONES_DEL_DETALLE_CLAVES as readonly string[]).includes(k)) return { ok: false, error: `Diagnóstico: sección desconocida «${k}».` };
   }
   for (const s of SECCIONES_DEL_DETALLE) {
@@ -623,8 +659,10 @@ export function respiracionEfectiva(base: DiagnosticoBase | null, d: Diagnostico
  * El diagnóstico COMPLETO en secciones legibles, para la ficha, el PDF del plan, el expediente PDF y Sabina.
  * Solo lo que tiene dato: una sección sin nada no sale.
  */
-export function seccionesDelDiagnostico(base: DiagnosticoBase | null, detalle: DiagnosticoDetalle | null): SeccionLegible[] {
+export function seccionesDelDiagnostico(baseCruda: DiagnosticoBase | null, detalle: DiagnosticoDetalle | null): SeccionLegible[] {
   const d = detalle ?? diagnosticoDetalleVacio();
+  // Las medidas de relleno («sin capturar») no salen como dato real.
+  const base = baseCruda ? baseSinRelleno(baseCruda, detalle) : null;
   const out: SeccionLegible[] = [];
 
   if (base) {
@@ -727,8 +765,9 @@ export interface IndicadorDx {
   estado: EstadoDx | null;
 }
 
-export function indicadoresClave(base: DiagnosticoBase, detalle: DiagnosticoDetalle | null): IndicadorDx[] {
+export function indicadoresClave(baseCruda: DiagnosticoBase, detalle: DiagnosticoDetalle | null): IndicadorDx[] {
   const d = detalle ?? diagnosticoDetalleVacio();
+  const base = baseSinRelleno(baseCruda, detalle);
   const cortoAngle = (k: string) => (CLASE_ANGLE[k] ?? k).replace("Clase ", "");
   const oj = categoriaOverjet(base.overjetMm);
   const ob = categoriaOverbite(base.overbiteMm);
@@ -901,6 +940,7 @@ export function faltaDelDiagnostico(base: DiagnosticoBase | null, detalle: Diagn
   if (camposConDato(d, "facial") === 0) falta.push("características faciales");
   if (!d.oclusal.lineaMediaSuperior && !d.oclusal.lineaMediaInferior && base.midlineDeviationMm === null) falta.push("líneas medias");
   if (!respiracionEfectiva(base, d)) falta.push("tipo de respiración");
-  if (!(base.clinicalSummary ?? "").trim() || (base.clinicalSummary ?? "").trim().length < 40) falta.push("resumen diagnóstico");
+  if (medidasSinCapturar(detalle).length > 0) falta.push("overjet y overbite");
+  if (!(base.clinicalSummary ?? "").trim()) falta.push("resumen diagnóstico");
   return falta;
 }

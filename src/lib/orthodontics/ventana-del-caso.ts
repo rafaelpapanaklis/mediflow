@@ -12,19 +12,17 @@ import { faltantesDelPlanDePago, planDePagoParaEnviar, type PlanDePagoAlAbrir } 
 
 export type PasoDeLaVentana = "diagnostico" | "plan";
 
-export const RESUMEN_MINIMO = 40;
-
-/** Lo que falta del PASO 1 (diagnóstico) para pasar al plan. Un paciente en observación solo pide la fecha de revisión. */
+/**
+ * Lo que falta del PASO 1 (diagnóstico) para pasar al plan. El diagnóstico entero es opcional (el resumen también, sin
+ * mínimo): solo un paciente en observación pide la fecha de revisión.
+ */
 export function faltantesDelDiagnostico(e: {
   necesitaDiagnostico: boolean;
   enObservacion: boolean;
-  resumen: string;
   proximaRevision: string;
 }): string[] {
   const faltan: string[] = [];
   if (!e.necesitaDiagnostico) return faltan;
-  const largo = e.resumen.trim().length;
-  if (largo < RESUMEN_MINIMO) faltan.push(`el resumen clínico (lleva ${largo} de ${RESUMEN_MINIMO} caracteres)`);
   if (e.enObservacion && e.proximaRevision === "") faltan.push("la fecha de la próxima revisión");
   return faltan;
 }

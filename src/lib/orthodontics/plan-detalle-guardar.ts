@@ -1,14 +1,19 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { canSeePatient } from "@/lib/patient-visibility";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
-import { actualizarPlanDetalle } from "./plan-detalle-db";
+import { actualizarPlanDetalle, cargarPlanDetalle, leerOpcionesDelPlan } from "./plan-detalle-db";
 import {
   anclajeGeneralDerivado,
   cambiosDelPlan,
+  esFdiValido,
   ordenarFdi,
   prescripcionDerivada,
   tadsRequeridos,
   textoDeMovimientoDelPlan,
+  validarContraOpciones,
   validarContraTecnica,
+  validarPlanDetalle,
   type CambiosDelPlan,
   type PlanDetalle,
 } from "./plan-detalle";
@@ -37,13 +42,18 @@ export interface AplicarPlanArgs {
   duracionMeses?: number;
   /** El plan se completa al abrir el caso (la frase de Movimientos cambia). */
   creado?: boolean;
+  /**
+   * Algo más que tiene que quedar o deshacerse JUNTO con el plan (p. ej. el diagnóstico, en el «Guardar» único de la
+   * ventana del caso): corre dentro de la misma transacción; si lanza, no se guarda nada.
+   */
+  enLaTransaccion?: (tx: Prisma.TransactionClient) => Promise<void>;
 }
 
 export type ResultadoDeAplicar =
   | { ok: true; cambios: CambiosDelPlan }
   | { ok: false; error: string };
 
-const MENSAJE_SIN_SQL = "Falta pegar sql/ortodoncia-plan-de-tratamiento.sql: el plan de tratamiento no se guardó.";
+export const MENSAJE_SIN_SQL = "Falta pegar sql/ortodoncia-plan-de-tratamiento.sql: el plan de tratamiento no se guardó.";
 
 function esRelacionAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -122,6 +132,7 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
       if (Object.keys(datos).length > 0) {
         await tx.orthodonticTreatmentPlan.updateMany({ where: { id: treatmentPlanId, clinicId: ctx.clinicId }, data: datos });
       }
+      if (args.enLaTransaccion) await args.enLaTransaccion(tx);
     },
   );
   if (r.ok === false) {
@@ -157,6 +168,70 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
     });
   }
   return { ok: true, cambios };
+}
+
+export interface PlanPreparado {
+  caso: { id: string; patientId: string; diagnosisId: string };
+  plan: PlanDetalle;
+  extraccionesIndicadas: number[] | undefined;
+  duracionMeses: number | undefined;
+}
+
+/**
+ * Valida TODO lo del «Editar plan» SIN escribir: la forma y los rangos del plan, las piezas FDI, la duración, que el
+ * caso sea de esta clínica y su paciente visible para quien guarda, y que lo que se AGREGA siga ofreciéndose (lo que
+ * el caso ya tenía se conserva). La usan `guardarPlanDeTratamiento` y el «Guardar» único de diagnóstico + plan.
+ */
+export async function prepararGuardadoDelPlan(
+  ctx: { clinicId: string; userId: string; role: string },
+  input: unknown,
+): Promise<{ ok: true; preparado: PlanPreparado } | { ok: false; error: string }> {
+  if (!ctx.clinicId) return { ok: false, error: "No se pudo identificar tu clínica" };
+  const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const treatmentPlanId = typeof o.treatmentPlanId === "string" ? o.treatmentPlanId : "";
+  if (!treatmentPlanId) return { ok: false, error: "Falta el caso" };
+
+  const validado = validarPlanDetalle(o.plan);
+  if (validado.ok === false) return { ok: false, error: validado.error };
+
+  let indicadas: number[] | undefined;
+  if (o.extraccionesIndicadas !== undefined && o.extraccionesIndicadas !== null) {
+    if (!Array.isArray(o.extraccionesIndicadas) || o.extraccionesIndicadas.some((x) => !esFdiValido(x))) {
+      return { ok: false, error: "Extracciones indicadas: usa piezas válidas en notación FDI (por ejemplo 14, 24)." };
+    }
+    indicadas = o.extraccionesIndicadas as number[];
+  }
+  let duracionMeses: number | undefined;
+  if (o.duracionMeses !== undefined && o.duracionMeses !== null && o.duracionMeses !== "") {
+    const n = Number(o.duracionMeses);
+    if (!Number.isInteger(n) || n < 3 || n > 60) return { ok: false, error: "Tiempo de tratamiento: de 3 a 60 meses." };
+    duracionMeses = n;
+  }
+
+  // El caso es de ESTA clínica y el paciente lo puede ver quien pregunta (mismo criterio que Cobro).
+  const caso = await prisma.orthodonticTreatmentPlan.findFirst({
+    where: { id: treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
+    select: { id: true, patientId: true, diagnosisId: true, patient: { select: { visibleUserIds: true } } },
+  });
+  if (!caso) return { ok: false, error: "Caso no encontrado" };
+  if (!canSeePatient({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }, caso.patient?.visibleUserIds)) {
+    return { ok: false, error: "Caso no encontrado" };
+  }
+
+  // Lo que se AGREGA tiene que seguir ofreciéndose; lo que el caso ya tenía se conserva.
+  const [anterior, opciones] = await Promise.all([cargarPlanDetalle(ctx.clinicId, caso.id), leerOpcionesDelPlan(ctx.clinicId)]);
+  const fuera = validarContraOpciones(validado.plan, anterior, opciones.opciones);
+  if (fuera) return { ok: false, error: fuera };
+
+  return {
+    ok: true,
+    preparado: {
+      caso: { id: caso.id, patientId: caso.patientId, diagnosisId: caso.diagnosisId },
+      plan: validado.plan,
+      extraccionesIndicadas: indicadas,
+      duracionMeses,
+    },
+  };
 }
 
 /**
