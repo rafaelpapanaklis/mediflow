@@ -6,7 +6,6 @@ import * as React from "react";
 // tsx compila el JSX con el runtime clásico (tsconfig: jsx preserve para Next):
 // React tiene que existir como global antes de cargar el componente.
 (globalThis as unknown as { React: typeof React }).React = React;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { BlogMarkdown, sufijoDeAnuncio } = require("../markdown") as typeof import("../markdown");
 
 const render = (md: string) => renderToStaticMarkup(<BlogMarkdown content={md} />);
