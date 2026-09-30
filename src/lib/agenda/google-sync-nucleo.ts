@@ -88,9 +88,11 @@ export interface Puertos {
   esErrorDeAutorizacion(err: unknown): boolean;
   marcarCaido(clinicId: string, motivo: string): Promise<void>;
   log?(...args: unknown[]): void;
+  /** El reloj (las pruebas lo fijan). */
+  ahora?(): Date;
 }
 
-export type MotivoOmitida = "no_conectada" | "conexion_caida" | "cita_no_existe" | "sin_calendario";
+export type MotivoOmitida = "no_conectada" | "conexion_caida" | "cita_no_existe" | "sin_calendario" | "cita_pasada";
 
 export type ResultadoSync =
   | { estado: "creado" | "actualizado" | "borrado" | "sin_cambios" }
@@ -235,6 +237,10 @@ export async function sincronizarCita(
       if ((await parcharEvento(cal, datos(cid, cita.googleEventId))) === "ok") return { estado: "actualizado" };
       // Google ya no tiene ese evento (o ese calendario): se vuelve a crear, con id determinista.
     }
+
+    // Una cita que ya terminó y nunca estuvo en Google no se sube: sería un evento en el pasado y,
+    // si hay invitados, un correo de invitación a una cita que ya pasó (p. ej. al editar una visita vieja).
+    if (cita.endsAt.getTime() < (p.ahora?.() ?? new Date()).getTime()) return { estado: "omitido", motivo: "cita_pasada" };
 
     const eventId = idEventoDeCita(clinicId, appointmentId);
     let cid = await asegurarCalendario();

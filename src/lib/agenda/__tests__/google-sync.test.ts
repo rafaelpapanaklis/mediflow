@@ -88,6 +88,7 @@ function mundo(opts: { clinicas?: ClinicaGoogle[]; citas?: (CitaParaGoogle & { c
       if (c) c.enabled = false; // como la de verdad: apaga el sync y conserva los tokens
     },
     log: () => undefined,
+    ahora: () => new Date("2026-10-01T00:00:00Z"),
     listarFuturasSinEvento: async (clinicId, _d, tope) =>
       [...citas.values()]
         .filter((c) => c.clinicId === clinicId && !["CANCELLED", "NO_SHOW"].includes(c.status) && !c.googleEventId)
@@ -545,4 +546,25 @@ test("otra instancia fijó su calendario primero: se usa el suyo y el que creamo
   assert.equal(r.estado, "creado");
   assert.deepEqual([...w.google.calendarios.keys()], ["ganador"], "el calendario propio sobrante se quitó");
   assert.equal(w.google.activos("ganador").length, 1);
+});
+
+// ── Citas que ya pasaron ─────────────────────────────────────────────────────
+
+test("una cita que ya terminó y nunca estuvo en Google NO se sube (ni invitación a algo pasado)", async () => {
+  const w = mundo({ citas: [conCita("vieja", { startsAt: new Date("2026-09-01T16:00:00Z"), endsAt: new Date("2026-09-01T16:30:00Z") })] });
+  const r = await sincronizarCita(w.puertos, C1, "vieja");
+  assert.deepEqual(r, { estado: "omitido", motivo: "cita_pasada" });
+  assert.equal(w.google.llamadas.length, 0, "ni siquiera se consulta a Google");
+  assert.equal(w.citas.get("vieja")!.googleEventId, null);
+});
+
+test("si esa cita pasada YA tenía su evento, editarla sí lo pone al día (y cancelarla lo borra)", async () => {
+  const w = mundo({ citas: [conCita("a1", { startsAt: new Date("2026-09-30T16:00:00Z"), endsAt: new Date("2026-09-30T16:30:00Z") })] });
+  // nació cuando aún era futura
+  w.puertos.ahora = () => new Date("2026-09-01T00:00:00Z");
+  await sincronizarCita(w.puertos, C1, "a1");
+  w.puertos.ahora = () => new Date("2026-10-01T00:00:00Z"); // ya pasó
+  assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "actualizado");
+  w.citas.get("a1")!.status = "CANCELLED";
+  assert.equal((await sincronizarCita(w.puertos, C1, "a1")).estado, "borrado");
 });
