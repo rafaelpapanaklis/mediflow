@@ -69,7 +69,7 @@ export async function cargarCobranzaDelCaso(
     invoiceId
       ? prisma.invoice.findFirst({
           where: { id: invoiceId, clinicId },
-          select: { status: true, total: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
+          select: { status: true, total: true, paid: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
         })
       : Promise.resolve(null),
     getPatientCreditBalance(clinicId, patientId),
@@ -94,6 +94,7 @@ export async function cargarCobranzaDelCaso(
           condiciones: condicionesResult.porFactura.get(invoiceId!) ?? null,
           totalFactura: facturaVigente.total,
           cobros: facturaVigente.payments,
+          pagado: facturaVigente.paid,
           invoiceId,
           vencimiento: vencimientoDeFacturaPrincipal(modo, facturaVigente.dueDate, facturaVigente.createdAt, args.zonaHoraria),
         }

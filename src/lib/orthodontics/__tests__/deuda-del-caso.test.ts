@@ -147,7 +147,7 @@ function caso(p: Partial<OrthoCaseSummary>): OrthoCaseSummary {
     patientName: "QaF1P Control Dos",
     treatingDoctorId: null,
     treatingDoctorName: null,
-    status: "ACTIVE",
+    status: "IN_PROGRESS",
     installedAt: null,
     estimatedDurationMonths: 24,
     droppedOutAt: null,
@@ -208,4 +208,97 @@ test("fallo 5: la marca interna no se ve y no se pierde al editar las notas", ()
   // Sin marca, se guarda lo que llega.
   assert.equal(notasParaGuardar("Nota vieja", "Nota nueva"), "Nota nueva");
   assert.equal(notasParaGuardar(null, null), null);
+});
+
+// ── Segunda pasada de ws1-t1, fallo A: lo pagado es `Invoice.paid` (lo mismo que Facturación) ──
+
+test("fallo A: colocación migrada de Dentalink ya pagada ($8,000 en `paid`, sin filas en payments) no se debe", () => {
+  // «QaF1 Ana Control Uno»: MF-1086 $8,000 PAID, controles MF-1087/1088 pagados.
+  const c = cobranzaDelCasoUnificada({
+    modo: "PAGO_POR_CONTROL",
+    facturaPrincipal: { condiciones: null, totalFactura: 8000, cobros: [], pagado: 8000, invoiceId: "mf-1086", vencimiento: "2026-06-01" },
+    cargosControl: [control({ invoiceId: "mf-1087", total: 500, pagado: 500, vencimiento: "2026-07-10" }), control({ invoiceId: "mf-1088", total: 500, pagado: 500, vencimiento: "2026-08-10" })],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(c!.saldoTotal, 0);
+  assert.equal(c!.vencidas.length, 0);
+  const d = deudaDelCaso(c, undefined);
+  assert.deepEqual([d.porCobrar, d.vencido, d.facturado, d.pagado], [0, 0, 9000, 9000]);
+  // Cobranza: «Saldado», no «Vencido $8,000».
+  assert.equal(filasDeCobranza([caso({ cobranza: c })], "2026-09-30")[0]!.situacion, "saldado");
+});
+
+test("fallo A: «Precio total» migrado sin plazos ($30,000 con $10,000 migrados) debe $20,000", () => {
+  // «QaF1 Beto Total Dos»: MF-1089.
+  const c = cobranzaDelCasoUnificada({
+    modo: "PRECIO_TOTAL",
+    facturaPrincipal: { condiciones: null, totalFactura: 30000, cobros: [], pagado: 10000, invoiceId: "mf-1089", vencimiento: null },
+    cargosControl: [],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(c!.saldoTotal, 20000);
+  assert.equal(deudaDelCaso(c, undefined).porCobrar, 20000);
+  assert.equal(deudaDelCaso(c, undefined).pagado, 10000);
+});
+
+test("fallo A: con plazos, lo migrado también cubre cuotas en cascada", () => {
+  const plazos: CondicionesPago = { ...condicionesPorDefecto(), modo: "plazos", numPagos: 3, primerPago: "2026-07-03" };
+  const c = cobranzaDelCasoUnificada({
+    modo: "PRECIO_TOTAL",
+    facturaPrincipal: { condiciones: plazos, totalFactura: 6000, cobros: [], pagado: 4000, invoiceId: "x" },
+    cargosControl: [],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(c!.pagadas.length, 2);
+  assert.equal(c!.saldoTotal, 2000);
+  assert.equal(c!.vencidas.length, 1, "la tercera (3-sep) ya venció");
+});
+
+test("fallo A: `paid` manda sobre las filas de payments; sin `paid`, se usan las filas (como antes)", () => {
+  // Cobro normal + migrado + anticipo aplicado: Facturación dice paid = $2,500 aunque solo haya una fila de $1,000.
+  const conPaid = cobranzaDelCasoUnificada({
+    modo: "PAGO_POR_CONTROL",
+    facturaPrincipal: { condiciones: null, totalFactura: 3000, cobros: [{ amount: 1000, method: "cash" }], pagado: 2500, vencimiento: "2026-09-01" },
+    cargosControl: [],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(conPaid!.saldoTotal, 500);
+  const sinPaid = cobranzaDelCasoUnificada({
+    modo: "PAGO_POR_CONTROL",
+    facturaPrincipal: { condiciones: null, totalFactura: 3000, cobros: [{ amount: 1000, method: "cash" }], vencimiento: "2026-09-01" },
+    cargosControl: [],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(sinPaid!.saldoTotal, 2000);
+});
+
+test("fallo A: Control Dos y Extras Tres siguen en $3,200 y $3,550 con `paid` real", () => {
+  const dos = cobranzaDelCasoUnificada({
+    modo: "PAGO_POR_CONTROL",
+    facturaPrincipal: { condiciones: null, totalFactura: 3000, cobros: [], pagado: 0, invoiceId: "mf-1080", vencimiento: "2026-09-29" },
+    cargosControl: [control({ pagado: 100 })],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(deudaDelCaso(dos, undefined).porCobrar, 3200);
+  const tres = cobranzaDelCasoUnificada({
+    modo: "PAGO_POR_CONTROL",
+    facturaPrincipal: { condiciones: null, totalFactura: 3000, cobros: [], pagado: 0, invoiceId: "mf-1082", vencimiento: "2026-09-29" },
+    cargosControl: [control({ invoiceId: "mf-1083", pagado: 0 })],
+    saldoAFavorPrevio: 0,
+    ahora: AHORA,
+    zonaHoraria: ZONA,
+  });
+  assert.equal(deudaDelCaso(tres, { monto: 250, cantidad: 1 }).porCobrar, 3550);
 });

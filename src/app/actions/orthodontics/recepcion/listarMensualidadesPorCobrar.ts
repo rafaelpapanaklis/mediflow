@@ -171,6 +171,7 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
             condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
             totalFactura: invoice.total,
             cobros: invoice.payments,
+            pagado: invoice.paid,
             invoiceId: plan.invoiceId,
             vencimiento: vencimientoDeFacturaPrincipal(modo, invoice.dueDate, invoice.createdAt, zonaHoraria),
           }

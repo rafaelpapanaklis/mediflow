@@ -154,6 +154,8 @@ interface InvoiceForCobranza {
   status?: string;
   dueDate?: Date | null;
   createdAt?: Date | null;
+  /** `Invoice.paid`: lo pagado, igual que Facturación (incluye lo migrado sin filas en `payments`). */
+  paid?: number;
   payments: Array<{ amount: unknown; method?: string | null; paidAt: Date }>;
 }
 
@@ -189,7 +191,7 @@ export async function loadOrthoCases(
       leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
       prisma.invoice.findMany({
         where: { id: { in: invoiceIds }, clinicId },
-        select: { id: true, total: true, status: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true, paidAt: true } } },
+        select: { id: true, total: true, paid: true, status: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true, paidAt: true } } },
       }),
     ]);
     condicionesPorFactura = condicionesResult.porFactura;
@@ -218,6 +220,7 @@ export async function loadOrthoCases(
             condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null,
             totalFactura: invoice.total,
             cobros: invoice.payments,
+            pagado: invoice.paid,
             invoiceId: invoice.id,
             vencimiento: vencimientoDeFacturaPrincipal(p.billingMode, invoice.dueDate ?? null, invoice.createdAt ?? null, zonaHoraria),
           }

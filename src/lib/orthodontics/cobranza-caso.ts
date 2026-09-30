@@ -234,6 +234,15 @@ export interface CobranzaUnificadaInput {
     vencimiento?: string | null;
     /** La factura misma, para que su cuota única sepa qué cobrar. */
     invoiceId?: string | null;
+    /**
+     * ws1-t4 (segunda pasada de ws1-t1, fallo A) — `Invoice.paid`: LO PAGADO de
+     * la factura, la misma cifra que Facturación (cobros normales, pagos
+     * migrados de Dentalink, anticipos aplicados, menos reembolsos). Si llega,
+     * es LA fuente de lo pagado; `cobros` solo se usa si falta. Un caso
+     * importado trae `paid` sin filas en `payments`: sin esto su colocación de
+     * $8,000 ya pagada salía «vencida $8,000».
+     */
+    pagado?: number | null;
   } | null;
   /** Solo aplica en PAGO_POR_CONTROL: los controles atendidos, cada uno con su factura. */
   cargosControl: CargoDeControl[];
@@ -309,12 +318,26 @@ export function agruparVencidasPorFactura(
  * de la colocación sin pagar. Ahora es UNA cuota con lo que falta de toda la
  * factura (sin cascada con los controles: es su propia factura).
  */
+/**
+ * Lo pagado de la factura principal, como una sola fila para la cascada
+ * (`estadoDelPlan` solo usa la suma): `Invoice.paid` si llega, si no las
+ * filas de `payments`. Una sola fuente para los dos caminos (con y sin plazos).
+ */
+export function cobrosDeLaPrincipal(
+  f: Pick<NonNullable<CobranzaUnificadaInput["facturaPrincipal"]>, "cobros" | "pagado">,
+): Array<{ amount: unknown; method?: string | null }> {
+  const pagado = Number(f.pagado);
+  if (f.pagado === null || f.pagado === undefined || !Number.isFinite(pagado)) return f.cobros;
+  return [{ amount: Math.max(0, pagado) }];
+}
+
 function cobranzaDeLaPrincipal(
-  f: NonNullable<CobranzaUnificadaInput["facturaPrincipal"]>,
+  fOriginal: NonNullable<CobranzaUnificadaInput["facturaPrincipal"]>,
   saldoAFavorPrevio: number,
   ahora: Date,
   zonaHoraria: string,
 ): CobranzaDelCaso {
+  const f = { ...fOriginal, cobros: cobrosDeLaPrincipal(fOriginal) };
   if (calendarioDeCuotas(f.condiciones, f.totalFactura).length > 0 || !(aCentavos(f.totalFactura) > 0)) {
     return cobranzaDelCaso({ ...f, saldoAFavorPrevio, ahora, zonaHoraria });
   }

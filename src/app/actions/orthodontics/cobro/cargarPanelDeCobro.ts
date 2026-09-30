@@ -305,6 +305,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
           condiciones,
           totalFactura: facturaVigente.total,
           cobros: facturaVigente.payments,
+          pagado: facturaVigente.paid,
           invoiceId: facturaVigente.id,
           vencimiento: vencimientoDeFacturaPrincipal(billingMode, facturaVigente.dueDate, facturaVigente.createdAt, zonaHoraria),
         }

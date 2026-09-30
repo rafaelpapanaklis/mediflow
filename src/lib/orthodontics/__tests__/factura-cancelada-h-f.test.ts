@@ -18,7 +18,7 @@ const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 test("cobranza-db.ts: una factura CANCELLED no cuenta como deuda del caso", () => {
   const src = leer("lib/orthodontics/cobranza-db.ts");
-  assert.match(src, /select: \{ status: true, total: true, (dueDate: true, createdAt: true, )?payments:/, "lee el status de la factura, no solo total/pagos");
+  assert.match(src, /select: \{ status: true, total: true, (paid: true, )?(dueDate: true, createdAt: true, )?payments:/, "lee el status de la factura, no solo total/pagos");
   assert.match(src, /const facturaVigente = invoice && invoice\.status !== "CANCELLED" \? invoice : null;/);
   assert.match(src, /facturaPrincipal: facturaVigente\s*\n\s*\? \{\s*condiciones: condicionesResult\.porFactura\.get\(invoiceId!\) \?\? null,\s*totalFactura: facturaVigente\.total,\s*cobros: facturaVigente\.payments,[\s\S]*?\}\s*\n\s*: null,/);
 });

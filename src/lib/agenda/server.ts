@@ -212,7 +212,7 @@ async function pacientesConMensualidadVencida(
       leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
       prisma.invoice.findMany({
         where: { id: { in: invoiceIds }, clinicId },
-        select: { id: true, total: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
+        select: { id: true, total: true, paid: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
       }),
       cargarCargosDeControlPorCasos(clinicId, casosPorControl),
     ]);
@@ -231,6 +231,7 @@ async function pacientesConMensualidadVencida(
               condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
               totalFactura: invoice.total,
               cobros: invoice.payments,
+              pagado: invoice.paid,
               invoiceId: plan.invoiceId,
               vencimiento: vencimientoDeFacturaPrincipal(modosPorCaso.get(plan.id) ?? null, invoice.dueDate, invoice.createdAt, zonaHoraria),
             }
