@@ -37,6 +37,7 @@ import type {
   SupportTicketSummary,
 } from "@/lib/support/types";
 import { TicketRediseno } from "@/components/dashboard/soporte-rediseno/ticket";
+import { cambioDelMensaje } from "@/lib/support/mensaje-edicion";
 
 // ── Presentación ─────────────────────────────────────────────────────────────
 
@@ -162,14 +163,21 @@ function MessageBubble({ msg }: { msg: SupportMessageDTO }) {
   const authorLabel = isClinic
     ? (msg.authorName || "Tú")
     : (msg.authorName || "Soporte DaleControl");
+  // Soporte puede corregir o retirar una respuesta ya enviada: nada se borra en
+  // silencio («(editado · fecha)» / «Respuesta retirada por soporte»).
+  const cambio = isClinic ? null : cambioDelMensaje(msg);
+  const retirada = cambio?.tipo === "retirada";
 
   return (
     <div className={`flex items-start gap-2 ${isClinic ? "justify-end" : "justify-start"}`}>
       {!isClinic && <AvatarNew name={authorLabel} size="sm" className="mt-1" />}
       <div
         className="max-w-[85%] sm:max-w-[65%] px-3.5 py-2.5"
+        data-mensaje-retirado={retirada ? "true" : undefined}
         style={
-          isClinic
+          retirada
+            ? { background: "transparent", border: "1px dashed var(--border-soft)", borderRadius: "var(--radius-lg)", borderBottomLeftRadius: "var(--radius-sm)" }
+            : isClinic
             ? { background: "var(--brand-soft)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: "var(--radius-lg)", borderBottomRightRadius: "var(--radius-sm)" }
             : { background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-lg)", borderBottomLeftRadius: "var(--radius-sm)" }
         }
@@ -181,22 +189,33 @@ function MessageBubble({ msg }: { msg: SupportMessageDTO }) {
           {authorLabel}
         </p>
         {/* Texto plano siempre — nunca HTML */}
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed" style={{ color: "var(--text-1)" }}>
-          {msg.body}
+        <p
+          className={`whitespace-pre-wrap break-words text-sm leading-relaxed${retirada ? " italic" : ""}`}
+          style={{ color: retirada ? "var(--text-3)" : "var(--text-1)" }}
+        >
+          {retirada ? cambio.texto : msg.body}
         </p>
-        {attachments.length > 0 && (
+        {!retirada && attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((att, i) => (
               <AttachmentItem key={`${att.path || att.name}-${i}`} att={att} />
             ))}
           </div>
         )}
-        {time && (
+        {(time || cambio) && (
           <p
             className={`mt-1 ${isClinic ? "text-right" : "text-left"}`}
             style={{ fontSize: 11, color: "var(--text-3)" }}
           >
             {time}
+            {cambio?.tipo === "editada" && (
+              <span className="italic" data-etiqueta-editado="true">
+                {time ? " · " : ""}(editado · {formatMsgTime(cambio.fecha)})
+              </span>
+            )}
+            {retirada && cambio && (
+              <span className="italic">{time ? " · " : ""}retirada el {formatMsgTime(cambio.fecha)}</span>
+            )}
           </p>
         )}
       </div>

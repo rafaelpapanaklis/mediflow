@@ -120,6 +120,10 @@ export interface SupportMessageDTO {
   attachments: SupportAttachment[];
   internalNote: boolean; // SIEMPRE false en respuestas para la clínica
   createdAt: string;
+  /** Soporte cambió el texto o agregó archivos después de enviarlo (fecha del último cambio). */
+  editedAt?: string | null;
+  /** Soporte retiró el mensaje: `body` ya es el aviso «Respuesta retirada por soporte» y no hay adjuntos. */
+  retractedAt?: string | null;
 }
 
 export interface SupportTicketDetailDTO {

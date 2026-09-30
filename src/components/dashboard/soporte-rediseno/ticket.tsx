@@ -29,6 +29,7 @@ import {
   SUPPORT_STATUS_LABELS_CLINIC,
 } from "@/lib/support/types";
 import type { SupportAttachment, SupportMessageDTO, SupportTicketSummary } from "@/lib/support/types";
+import { cambioDelMensaje } from "@/lib/support/mensaje-edicion";
 import { RaizSoporte } from "./raiz";
 import { Avatar, Boton, Estrellas, Etiqueta } from "./piezas";
 import { bytesHilo, fechaLarga, horaMensaje, TONO_ESTADO, TONO_PRIORIDAD } from "./formato";
@@ -115,20 +116,38 @@ function Mensaje({ msg }: { msg: SupportMessageDTO }) {
 
   const esClinica = msg.authorType === "clinic";
   const autor = esClinica ? (msg.authorName || "Tú") : (msg.authorName || "Soporte DaleControl");
+  // Soporte puede corregir o retirar una respuesta ya enviada: nada se borra en
+  // silencio, así que se ve «(editado · fecha)» o «Respuesta retirada por soporte».
+  const cambio = esClinica ? null : cambioDelMensaje(msg);
+  const retirada = cambio?.tipo === "retirada";
 
   return (
     <div className={`${s.mensaje} ${esClinica ? s.mensajeClinica : s.mensajeSoporte}`}>
       {!esClinica && <Avatar nombre={autor} />}
-      <div className={s.burbuja}>
+      <div className={`${s.burbuja} ${retirada ? s.burbujaRetirada : ""}`} data-mensaje-retirado={retirada ? "true" : undefined}>
         <p className={s.burbujaAutor}>{autor}</p>
         {/* Texto plano siempre — nunca HTML */}
-        <p className={s.burbujaTexto}>{msg.body}</p>
-        {adjuntos.length > 0 && (
+        <p className={retirada ? `${s.burbujaTexto} ${s.burbujaTextoRetirado}` : s.burbujaTexto}>
+          {retirada ? cambio.texto : msg.body}
+        </p>
+        {!retirada && adjuntos.length > 0 && (
           <div className={s.burbujaAdjuntos}>
             {adjuntos.map((att, i) => <Adjunto key={`${att.path || att.name}-${i}`} att={att} />)}
           </div>
         )}
-        {hora && <p className={s.burbujaHora}>{hora}</p>}
+        {(hora || cambio) && (
+          <p className={s.burbujaHora}>
+            {hora}
+            {cambio?.tipo === "editada" && (
+              <span className={s.burbujaEditado} data-etiqueta-editado="true">
+                {hora ? " · " : ""}(editado · {horaMensaje(cambio.fecha)})
+              </span>
+            )}
+            {retirada && cambio && (
+              <span className={s.burbujaEditado}>{hora ? " · " : ""}retirada el {horaMensaje(cambio.fecha)}</span>
+            )}
+          </p>
+        )}
       </div>
       {esClinica && <Avatar nombre={autor} clinica />}
     </div>

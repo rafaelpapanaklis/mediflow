@@ -39,8 +39,9 @@ export const LECTURA_LABEL: Record<EstadoLectura, string> = {
  * Frase completa: tooltip en la lista, texto visible en la ficha.
  *
  * Ojo con la redacción de "sin-leer": `clinicUnread` se levanta con la
- * respuesta (addSupportMessage) Y con el cambio de estado (changeTicketStatus,
- * que además le manda email a la clínica). Si la clínica lee la respuesta y
+ * respuesta (addSupportMessage), con una corrección/retiro de una respuesta
+ * pública (editSupportMessage / retractSupportMessage) Y con el cambio de
+ * estado (changeTicketStatus, que además le manda email a la clínica). Si la clínica lee la respuesta y
  * DESPUÉS soporte mueve el estado, vuelve a quedar en true. Por eso aquí se
  * habla de "nuestra última novedad" y no de "nuestra respuesta": lo segundo
  * sería mentira en ese caso. Distinguirlos pediría una fecha de lectura en la
@@ -48,6 +49,6 @@ export const LECTURA_LABEL: Record<EstadoLectura, string> = {
  */
 export const LECTURA_DETALLE: Record<EstadoLectura, string> = {
   "sin-respuesta": "Todavía no le hemos respondido: no hay nada que la clínica pueda leer.",
-  "sin-leer": "La clínica NO ha abierto el ticket desde nuestra última novedad (respuesta o cambio de estado).",
+  "sin-leer": "La clínica NO ha abierto el ticket desde nuestra última novedad (respuesta, corrección de una respuesta o cambio de estado).",
   leido: "La clínica abrió el ticket después de nuestra última novedad.",
 };

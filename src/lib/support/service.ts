@@ -21,6 +21,14 @@ import {
   notifySupportReply,
   notifyStatusChange,
 } from "./notifications";
+import { sanitizeSupportText } from "./texto";
+import {
+  estadosDeEdicion,
+  planearEdicion,
+  planearRetiro,
+  retractedText,
+  type EstadoEdicion,
+} from "./mensaje-edicion";
 import {
   SupportError,
   formatFolio,
@@ -52,16 +60,8 @@ export function supportAttachmentPrefix(clinicId: string): string {
 
 // ── Sanitización (texto plano, sin HTML crudo) ──────────────────────────────
 
-/** Texto plano: quita chars de control (excepto \n y \t), normaliza saltos. */
-export function sanitizeSupportText(input: unknown, maxLen: number): string {
-  const raw = typeof input === "string" ? input : "";
-  return raw
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .trim()
-    .slice(0, maxLen);
-}
+// sanitizeSupportText vive en ./texto (módulo puro); se reexporta por compatibilidad.
+export { sanitizeSupportText };
 
 function assertCategory(value: string): void {
   if (!(SUPPORT_CATEGORIES as readonly string[]).includes(value)) {
@@ -214,9 +214,66 @@ type MessageRow = {
   createdAt: Date;
 };
 
+/**
+ * ¿La tabla de revisiones (sql/soporte-mensajes-edicion.sql) aún no existe, o el
+ * cliente de Prisma que corre no la conoce? Mientras no exista, el hilo se lee y
+ * se escribe como siempre; solo editar/retirar avisa que falta aplicar el SQL.
+ */
+function revisionesNoDisponibles(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  if (e?.code === "P2021") return true; // la tabla no existe
+  const msg = String(e?.message ?? "");
+  return (
+    (/support_message_revisions/i.test(msg) && /does not exist|no existe/i.test(msg)) ||
+    // Un cliente de Prisma generado antes de este cambio (servidor de desarrollo sin reiniciar).
+    /supportMessageRevision/.test(msg) ||
+    /Unknown arg(ument)? `revisions`/.test(msg)
+  );
+}
+
+const AVISO_FALTA_SQL =
+  "Editar o retirar respuestas todavía no está disponible: falta aplicar sql/soporte-mensajes-edicion.sql en la base.";
+
+/**
+ * Qué mensajes del ticket soporte editó o retiró. Lectura del hilo (`estricto`
+ * false): si la tabla no está, se lee todo como «sin cambios» — nunca tumba el
+ * hilo. Escritura (`estricto` true): sin tabla no se cambia nada (no habría dónde
+ * guardar el original) y se responde 503 con el motivo.
+ */
+async function cargarEstadosDeEdicion(
+  ticketId: string,
+  estricto = false,
+): Promise<Map<string, EstadoEdicion>> {
+  try {
+    if (!prisma.supportMessageRevision) throw new Error("supportMessageRevision");
+    const filas = await prisma.supportMessageRevision.findMany({
+      where: { ticketId },
+      select: { messageId: true, kind: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+      take: 5000,
+    });
+    return estadosDeEdicion(filas);
+  } catch (err) {
+    if (revisionesNoDisponibles(err)) {
+      if (estricto) throw new SupportError(AVISO_FALTA_SQL, 503);
+      return new Map();
+    }
+    if (estricto) throw err;
+    console.error("[support] no se pudo leer el historial de ediciones:", err);
+    return new Map();
+  }
+}
+
 /** Convierte mensajes a DTO firmando TODOS los adjuntos en un solo batch. */
-async function toMessageDTOs(messages: MessageRow[]): Promise<SupportMessageDTO[]> {
-  const parsed = messages.map((m) => ({ m, atts: parseAttachments(m.attachments) }));
+async function toMessageDTOs(
+  messages: MessageRow[],
+  estados: Map<string, EstadoEdicion> = new Map(),
+): Promise<SupportMessageDTO[]> {
+  // Un mensaje retirado no muestra (ni firma) ningún archivo.
+  const parsed = messages.map((m) => ({
+    m,
+    atts: estados.get(m.id)?.retractedAt ? [] : parseAttachments(m.attachments),
+  }));
   const allPaths: string[] = [];
   parsed.forEach((p) => p.atts.forEach((a) => allPaths.push(a.path)));
 
@@ -226,16 +283,24 @@ async function toMessageDTOs(messages: MessageRow[]): Promise<SupportMessageDTO[
     urls = await signMaybeUrls(allPaths, ATTACHMENT_URL_TTL_SECONDS);
   }
   let cursor = 0;
-  return parsed.map(({ m, atts }) => ({
-    id: m.id,
-    ticketId: m.ticketId,
-    authorType: (m.authorType as SupportMessageDTO["authorType"]) ?? "system",
-    authorName: m.authorName,
-    body: m.body,
-    attachments: atts.map((a) => ({ ...a, signedUrl: urls[cursor++] || undefined })),
-    internalNote: m.internalNote,
-    createdAt: m.createdAt.toISOString(),
-  }));
+  return parsed.map(({ m, atts }) => {
+    const estado = estados.get(m.id);
+    const retirado = estado?.retractedAt != null;
+    return {
+      id: m.id,
+      ticketId: m.ticketId,
+      authorType: (m.authorType as SupportMessageDTO["authorType"]) ?? "system",
+      authorName: m.authorName,
+      // Retirado: en su lugar queda el aviso y ni un archivo (el original vive en
+      // support_message_revisions). Se fuerza aquí además de guardarlo así en la fila.
+      body: retirado ? retractedText(m.internalNote) : m.body,
+      attachments: atts.map((a) => ({ ...a, signedUrl: urls[cursor++] || undefined })),
+      internalNote: m.internalNote,
+      createdAt: m.createdAt.toISOString(),
+      editedAt: estado?.editedAt?.toISOString() ?? null,
+      retractedAt: estado?.retractedAt?.toISOString() ?? null,
+    };
+  });
 }
 
 function bodyPreview(body: string): string {
@@ -374,7 +439,8 @@ export async function getTicketForClinic(
     ticket.clinicUnread = false;
   }
 
-  const messages = await toMessageDTOs(ticket.messages as MessageRow[]);
+  const estados = await cargarEstadosDeEdicion(ticket.id);
+  const messages = await toMessageDTOs(ticket.messages as MessageRow[], estados);
   return { ticket: toSummary(ticket as TicketRow), messages };
 }
 
@@ -543,14 +609,15 @@ export async function getTicketForAdmin(ticketId: string): Promise<AdminTicketDe
   });
   if (!ticket) return null;
 
-  const [clinic, creatorEmail, messages] = await Promise.all([
+  const [clinic, creatorEmail, estados] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: ticket.clinicId },
       select: { name: true, email: true },
     }),
     getCreatorEmail(ticket.createdById),
-    toMessageDTOs(ticket.messages as MessageRow[]),
+    cargarEstadosDeEdicion(ticket.id),
   ]);
+  const messages = await toMessageDTOs(ticket.messages as MessageRow[], estados);
 
   return {
     ticket: {
@@ -651,6 +718,160 @@ export async function addSupportMessage(
 
   const [message] = await toMessageDTOs(updated.messages as MessageRow[]);
   return message;
+}
+
+// ── Editar / retirar / adjuntar a una respuesta ya enviada ──────────────────
+
+/** Quién hace el cambio (queda en el historial). Sale de la sesión admin, jamás del body. */
+export interface SupportMessageActor {
+  id?: string | null;
+  name?: string | null;
+}
+
+async function cargarMensajeDeSoporte(ticketId: string, messageId: string) {
+  const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+  if (!ticket) throw new SupportError("Ticket no encontrado", 404);
+  // El mensaje se busca DENTRO del ticket de la URL: no hay forma de tocar el de otro hilo.
+  const message = await prisma.supportMessage.findFirst({
+    where: { id: messageId, ticketId: ticket.id },
+  });
+  if (!message) throw new SupportError("Mensaje no encontrado", 404);
+  return { ticket, message };
+}
+
+/**
+ * Un solo write atómico (nested write, sin transacción interactiva): actualiza el
+ * mensaje Y guarda en support_message_revisions lo que decía antes. Si la tabla no
+ * existe, TODO falla y no cambia nada. Un cambio a una respuesta pública levanta
+ * `clinicUnread` (la clínica ve la novedad en su lista); NO manda email — el aviso
+ * ya salió con la respuesta y un correo por cada corrección sería ruido.
+ */
+async function escribirCambioDeMensaje(args: {
+  ticketId: string;
+  message: MessageRow;
+  kind: "edit" | "attach" | "retract";
+  body: string;
+  attachments: SupportAttachment[];
+  actor: SupportMessageActor;
+}): Promise<void> {
+  const { message } = args;
+  const previoAdjuntos = parseAttachments(message.attachments);
+  try {
+    await prisma.supportTicket.update({
+      where: { id: args.ticketId },
+      data: {
+        ...(message.internalNote ? {} : { clinicUnread: true }),
+        messages: {
+          update: {
+            where: { id: message.id },
+            data: {
+              body: args.body,
+              attachments: args.attachments as any,
+              revisions: {
+                create: {
+                  ticketId: args.ticketId,
+                  kind: args.kind,
+                  previousBody: message.body,
+                  previousAttachments: previoAdjuntos.length ? (previoAdjuntos as any) : undefined,
+                  editedById: args.actor.id ?? null,
+                  editedByName: sanitizeSupportText(args.actor.name ?? "", 120) || null,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  } catch (err) {
+    if (revisionesNoDisponibles(err)) throw new SupportError(AVISO_FALTA_SQL, 503);
+    throw err;
+  }
+}
+
+export interface EditSupportMessageInput {
+  /** Texto nuevo. Omitido = no tocar el texto (p. ej. solo se agregan archivos). */
+  body?: unknown;
+  /** Metadatos de POST /api/admin/support/tickets/[id]/attachments para AGREGAR a la respuesta. */
+  attachments?: unknown;
+}
+
+/**
+ * Soporte edita su respuesta (o le agrega archivos) DESPUÉS de enviarla. Deja
+ * «(editado)» con fecha y guarda lo anterior. No cambia el estado del ticket.
+ */
+export async function editSupportMessage(
+  ticketId: string,
+  messageId: string,
+  input: EditSupportMessageInput,
+  actor: SupportMessageActor,
+): Promise<SupportMessageDTO> {
+  const { ticket, message } = await cargarMensajeDeSoporte(ticketId, messageId);
+  const estados = await cargarEstadosDeEdicion(ticket.id, true);
+  // Mismo validador anti cross-tenant que al enviar; el clinicId sale del ticket.
+  const archivosNuevos = validateAttachmentsMeta(input.attachments, ticket.clinicId);
+  const plan = planearEdicion(
+    {
+      authorType: message.authorType,
+      internalNote: message.internalNote,
+      body: message.body,
+      attachments: parseAttachments(message.attachments),
+    },
+    estados.get(message.id),
+    { body: input.body, archivosNuevos },
+  );
+
+  await escribirCambioDeMensaje({
+    ticketId: ticket.id,
+    message: message as MessageRow,
+    kind: plan.kind,
+    body: plan.body,
+    attachments: plan.attachments,
+    actor,
+  });
+
+  const [dto] = await toMessageDTOs(
+    [{ ...(message as MessageRow), body: plan.body, attachments: plan.attachments }],
+    new Map([[message.id, { editedAt: new Date(), retractedAt: null }]]),
+  );
+  return dto;
+}
+
+/**
+ * Soporte retira su respuesta. NO se borra: en su lugar queda «Respuesta retirada
+ * por soporte» y el texto y los archivos originales se conservan en
+ * support_message_revisions para auditoría.
+ */
+export async function retractSupportMessage(
+  ticketId: string,
+  messageId: string,
+  actor: SupportMessageActor,
+): Promise<SupportMessageDTO> {
+  const { ticket, message } = await cargarMensajeDeSoporte(ticketId, messageId);
+  const estados = await cargarEstadosDeEdicion(ticket.id, true);
+  const plan = planearRetiro(
+    {
+      authorType: message.authorType,
+      internalNote: message.internalNote,
+      body: message.body,
+      attachments: parseAttachments(message.attachments),
+    },
+    estados.get(message.id),
+  );
+
+  await escribirCambioDeMensaje({
+    ticketId: ticket.id,
+    message: message as MessageRow,
+    kind: "retract",
+    body: plan.body,
+    attachments: plan.attachments,
+    actor,
+  });
+
+  const [dto] = await toMessageDTOs(
+    [{ ...(message as MessageRow), body: plan.body, attachments: [] }],
+    new Map([[message.id, { editedAt: null, retractedAt: new Date() }]]),
+  );
+  return dto;
 }
 
 /** Cambio de estado por soporte: mensaje system en el hilo + email a la clínica. */

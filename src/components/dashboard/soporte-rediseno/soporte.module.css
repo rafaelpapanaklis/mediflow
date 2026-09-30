@@ -832,6 +832,21 @@ select.campo {
   color: var(--m2-texto);
 }
 
+.mensajeSoporte .burbujaRetirada {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+}
+
+.burbujaTextoRetirado {
+  font-style: italic;
+  color: var(--m2-texto-3);
+}
+
+.burbujaEditado {
+  font-style: italic;
+}
+
 .burbujaHora {
   margin: 4px 0 0;
   font-size: 11px;

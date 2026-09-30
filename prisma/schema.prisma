@@ -8791,10 +8791,36 @@ model SupportMessage {
   internalNote Boolean  @default(false) // nota interna de soporte; la clínica NUNCA la ve
   createdAt    DateTime @default(now())
 
-  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticket    SupportTicket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  revisions SupportMessageRevision[] // solo relación de Prisma (sin columna): ver SupportMessageRevision
 
   @@index([ticketId, createdAt])
   @@map("support_messages")
+}
+
+/// Historial de cambios de soporte a un mensaje SUYO ya enviado (editar, adjuntar,
+/// retirar). Una fila por cambio, con lo que decía ANTES: es la auditoría — el aviso
+/// a la clínica ya salió con el texto original, así que nada se borra en silencio.
+/// Tabla nueva a propósito (sin tocar support_messages): si sql/soporte-mensajes-edicion.sql
+/// no se ha corrido, el hilo sigue funcionando y solo editar/retirar avisa que falta.
+/// La relación con SupportMessage es solo de Prisma (permite el nested write atómico
+/// editar-mensaje + guardar-lo-anterior); ninguna lectura de mensajes la incluye.
+model SupportMessageRevision {
+  id                  String   @id @default(cuid())
+  messageId           String
+  ticketId            String
+  kind                String // edit | attach | retract
+  previousBody        String
+  previousAttachments Json? // SupportAttachment[] que tenía antes del cambio
+  editedById          String? // AdminUser.id de quien lo hizo
+  editedByName        String?
+  createdAt           DateTime @default(now())
+
+  message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([messageId, createdAt])
+  @@map("support_message_revisions")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

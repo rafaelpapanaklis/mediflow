@@ -10,6 +10,9 @@
 // API: GET/PATCH /api/admin/support/tickets/[id]
 //      POST /api/admin/support/tickets/[id]/messages { body, internalNote?, attachments? }
 //      POST /api/admin/support/tickets/[id]/attachments (subir adjunto antes de enviar)
+//      PATCH / DELETE /api/admin/support/tickets/[id]/messages/[messageId]
+//        (editar, adjuntar a, o retirar una respuesta de soporte ya enviada:
+//        ver ./acciones-mensaje — nada se borra en silencio)
 // Contrato: src/lib/support/types.ts (AdminTicketDetailDTO).
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -37,6 +40,7 @@ import {
 } from "@/lib/support/types";
 import { estadoLectura, LECTURA_DETALLE } from "../lectura-clinica";
 import { EtiquetaLectura } from "../etiqueta-lectura";
+import { CuerpoDeRespuesta, textoEditado } from "./acciones-mensaje";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -203,10 +207,23 @@ function AttachmentList({ attachments }: { attachments?: SupportAttachment[] }) 
 
 // ── Mensaje del hilo ─────────────────────────────────────────────────────────
 
-function MessageItem({ message, clinicName }: { message: SupportMessageDTO; clinicName: string }) {
+function MessageItem({
+  message,
+  clinicName,
+  ticketId,
+  onCambio,
+}: {
+  message: SupportMessageDTO;
+  clinicName: string;
+  ticketId: string;
+  onCambio: () => Promise<void> | void;
+}) {
   const isInternal = message.internalNote === true;
   const isClinic = message.authorType === "clinic";
   const isSystem = message.authorType === "system";
+  const isSupport = message.authorType === "support";
+  const retirado = Boolean(message.retractedAt);
+  const etiquetaEditado = retirado ? null : textoEditado(message.editedAt, formatDate);
 
   // Mensajes system (cambios de estado, etc.): centrados, pequeños, itálica.
   if (isSystem && !isInternal) {
@@ -240,6 +257,8 @@ function MessageItem({ message, clinicName }: { message: SupportMessageDTO; clin
           background: "var(--warning-soft)",
           border: "1px solid var(--warning-border-strong, rgba(217,119,6,0.35))",
         }
+      : retirado
+        ? { alignSelf: "flex-end", background: "transparent", border: "1px dashed var(--border-soft)" }
       : isClinic
         ? { alignSelf: "flex-start", background: "var(--bg-elev)", border: "1px solid var(--border-soft)" }
         : { alignSelf: "flex-end", background: "var(--brand-softer)", border: "1px solid var(--brand-soft)" }),
@@ -270,22 +289,39 @@ function MessageItem({ message, clinicName }: { message: SupportMessageDTO; clin
           {message.authorName || (isClinic ? "Clínica" : "Soporte DaleControl")}
         </span>
         {isClinic && <span style={{ fontSize: 11, color: "var(--text-3)" }}>{clinicName}</span>}
+        {etiquetaEditado && (
+          <span
+            data-etiqueta-editado="true"
+            title="Soporte corrigió esta respuesta después de enviarla; el texto anterior se conserva"
+            style={{ fontSize: 10.5, fontStyle: "italic", color: "var(--text-3)" }}
+          >
+            ({etiquetaEditado})
+          </span>
+        )}
         <span style={{ fontSize: 10.5, color: "var(--text-3)", marginLeft: "auto" }}>
           {formatDate(message.createdAt)}
         </span>
       </div>
-      <div
-        style={{
-          fontSize: 13,
-          lineHeight: 1.55,
-          color: "var(--text-1)",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {message.body}
-      </div>
-      <AttachmentList attachments={message.attachments} />
+      {isSupport ? (
+        <CuerpoDeRespuesta ticketId={ticketId} message={message} formatearFecha={formatDate} onCambio={onCambio}>
+          <AttachmentList attachments={message.attachments} />
+        </CuerpoDeRespuesta>
+      ) : (
+        <>
+          <div
+            style={{
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: "var(--text-1)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {message.body}
+          </div>
+          <AttachmentList attachments={message.attachments} />
+        </>
+      )}
     </div>
   );
 }
@@ -640,7 +676,7 @@ export function AdminTicketClient({ ticketId }: { ticketId: string }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {messages.map((m) => (
-          <MessageItem key={m.id} message={m} clinicName={ticket.clinicName} />
+          <MessageItem key={m.id} message={m} clinicName={ticket.clinicName} ticketId={ticketId} onCambio={fetchTicket} />
         ))}
         {messages.length === 0 && (
           <div style={{ textAlign: "center", padding: 20, fontSize: 12.5, color: "var(--text-3)" }}>
