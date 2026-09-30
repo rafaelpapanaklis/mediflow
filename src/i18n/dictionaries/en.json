@@ -1145,7 +1145,10 @@
         "amountFormatDesc": "{count} rows have an amount like “{example}”. We don't guess: choose how to read it and the rows will be imported that way.",
         "amountFormatPick": "Choose how to read them…",
         "amountFormatNeeded": "Confirm how to read the amounts to continue",
-        "unverifiedReview": "The {name} profile has not been validated against a real export yet: check this preview carefully before importing."
+        "unverifiedReview": "The {name} profile has not been validated against a real export yet: check this preview carefully before importing.",
+        "showing": "Showing {shown} of {total} rows",
+        "showingNote": "Rows with errors and skipped rows come first; the rest is a sample. The counts above cover the whole file.",
+        "onlyErrors": "Errors only"
       },
       "sheet": {
         "title": "Which tab holds the {entity}?",
@@ -1197,6 +1200,12 @@
         "title": "Done! Your clinic is in DaleControl",
         "titleErrors": "Import finished with errors",
         "titleNothing": "Nothing was imported",
+        "titleNoNews": "There was nothing new to import",
+        "leadNoNews": "There was nothing new to import.",
+        "leadNoNewsRemembered": {
+          "one": "There was nothing new to import. {count} duplicate patient ID was remembered to link their appointments, balances and treatments.",
+          "other": "There was nothing new to import. {count} duplicate patient IDs were remembered to link their appointments, balances and treatments."
+        },
         "leadOk": "We imported your data successfully.",
         "leadPartial": {
           "one": "{created} records were imported. {count} record with an error wasn't imported: see below which one and why.",

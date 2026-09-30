@@ -579,7 +579,7 @@ test("perfil Dentalink: reconoce las columnas de la API/reportes, sigue marcado 
   const { listOrigins } = await import("../profiles");
   const dentalink = listOrigins().find((o) => o.id === "dentalink")!;
   assert.equal(dentalink.hasProfile, true);
-  assert.equal(dentalink.verified, false, "sin un export real delante no se puede afirmar que casa");
+  assert.equal(dentalink.verified, true, "probado con el export real de BEVADENT (30-sep-2026)");
 
   reiniciar();
   // Pacientes: «Id», «Nombre completo», «Rut», «Celular»…
@@ -822,10 +822,11 @@ test("N1: la vista previa de CITAS trae fecha y hora en la zona de la clínica, 
   assert.equal(ui.timezone, TZ);
   assert.deepEqual(
     ui.rows.map((r) => [r.name, r.when, r.doctor, r.duration]),
+    // Error primero, luego omitida y al final la válida (ws1-t6: lo que hay que revisar sale arriba).
     [
-      ["María Hernández", "15/01/2030 15:30", "Ana López", 45],
-      ["María Hernández", "15/01/2020 10:00", "Ana López", 30],
       ["Jorge López", "16/01/2030 09:00", "Inexistente", 30],
+      ["María Hernández", "15/01/2020 10:00", "Ana López", 30],
+      ["María Hernández", "15/01/2030 15:30", "Ana López", 45],
     ],
   );
 });
@@ -849,8 +850,9 @@ test("N2: las filas con error muestran el nombre y el teléfono que traía el ar
 test("N3: el paso 1 dice «sin validar» para los perfiles verified:false (los orígenes locales y los del backend)", async () => {
   const { ORIGINS } = await import("../../../components/import/import-client");
   const { listOrigins } = await import("../profiles");
-  for (const o of ORIGINS.filter((x) => x.hasProfile)) assert.equal(o.verified, false, o.id);
-  for (const o of listOrigins().filter((x) => x.hasProfile)) assert.equal(o.verified, false, o.id);
+  // Dentalink es el único validado con un export real; los demás siguen «sin validar».
+  for (const o of ORIGINS.filter((x) => x.hasProfile)) assert.equal(o.verified, o.id === "dentalink", o.id);
+  for (const o of listOrigins().filter((x) => x.hasProfile)) assert.equal(o.verified, o.id === "dentalink", o.id);
   assert.equal(ORIGINS.find((o) => !o.hasProfile)!.verified, undefined);
 });
 

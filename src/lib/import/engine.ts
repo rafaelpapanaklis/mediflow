@@ -683,7 +683,7 @@ export interface EntityHandler {
     clinicId: string,
     skipDuplicates: boolean,
     ctx: ImportContext,
-  ): Promise<{ created: number; skipped: number }>;
+  ): Promise<{ created: number; skipped: number; /** IDs de duplicados que se recordaron sin crear nada (pacientes). */ remembered?: number }>;
   /** Recorta `data` para la respuesta del dry-run (p. ej. el texto largo de una nota). */
   toPreview?(row: PreviewRow): PreviewRow;
   /** Catálogo de la clínica para elegir equivalente de los `unresolved`, por campo. */
@@ -726,6 +726,26 @@ function columnSamples(columns: string[], rows: Record<string, any>[]): Record<s
     }
   }
   return out;
+}
+
+/** Tope de filas que viajan en la vista previa. */
+export const MAX_FILAS_VISTA_PREVIA = 200;
+
+/**
+ * Las filas de la vista previa (tope MAX_FILAS_VISTA_PREVIA): primero las que hay que mirar —error y omitidas—,
+ * luego duplicados y al final las válidas; dentro de cada grupo, en el orden del archivo (solo cuando hay más filas que
+ * el tope; si caben todas van tal cual). Antes iban las primeras 200
+ * del archivo: un error en la fila 500 no se veía nunca.
+ */
+export function filasParaVistaPrevia(preview: PreviewRow[]): PreviewRow[] {
+  const prioridad = (s: PreviewRow["status"]) => (s === "error" ? 0 : s === "skipped" ? 1 : s === "duplicate" ? 2 : 3);
+  // Si caben todas, se mandan en el orden del archivo (la tabla del cliente las ordena por prioridad).
+  if (preview.length <= MAX_FILAS_VISTA_PREVIA) return preview;
+  return preview
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => prioridad(a.r.status) - prioridad(b.r.status) || a.i - b.i)
+    .slice(0, MAX_FILAS_VISTA_PREVIA)
+    .map((x) => x.r);
 }
 
 function tally(preview: PreviewRow[]) {
@@ -926,13 +946,13 @@ export async function runImport(
       columns,
       suggestedMapping: suggested,
       samples: columnSamples(columns, rawRows),
-      preview: preview.slice(0, 200).map((r) => conNombreDelArchivo(handler.toPreview ? handler.toPreview(r) : r, mappedPorFila.get(r.row))),
+      preview: filasParaVistaPrevia(preview).map((r) => conNombreDelArchivo(handler.toPreview ? handler.toPreview(r) : r, mappedPorFila.get(r.row))),
       ...(unresolved.length > 0 ? { unresolved } : {}),
       ...(options ? { options } : {}),
     };
   }
 
-  const { created, skipped } = await handler.commit(preview, opts.clinicId, opts.skipDuplicates, ctx);
+  const { created, skipped, remembered } = await handler.commit(preview, opts.clinicId, opts.skipDuplicates, ctx);
 
   await logAudit({
     clinicId: opts.clinicId,
@@ -979,6 +999,7 @@ export async function runImport(
     skipped,
     duplicates: counts.duplicados,
     ...(counts.omitidos > 0 ? { omitted: counts.omitidos } : {}),
+    ...(remembered ? { remembered } : {}),
     errors: filasConError.slice(0, MAX_FILAS_CON_ERROR_EN_RESPUESTA).map((r) => ({ row: r.row, errors: r.errors })),
     errorsTotal: filasConError.length,
   };

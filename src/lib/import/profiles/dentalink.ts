@@ -13,16 +13,15 @@ import type { OriginProfile } from "./origin";
 //    «Pacientes morosos» (Pacientes), «Pagos pacientes» (Finanzas).
 //  · Lo que NO está publicado: los ENCABEZADOS exactos de esos Excel. Los de abajo son
 //    los de la API pasados a la forma en que un Excel los suele titular («hora_inicio» →
-//    «Hora inicio»). Por eso `verified` sigue en false: sin un export real delante no
-//    se puede afirmar que casen. Si no casan, el paso de mapeo pide emparejar a mano y
-//    nada se rompe; la interfaz avisa de que el perfil no está validado.
+//    «Hora inicio»). Si no casan, el paso de mapeo pide emparejar a mano y nada se rompe.
+//  · `verified: true` desde el 30-sep-2026: el perfil se probó con el export real de una clínica
+//    (BEVADENT, migrada con el asistente) y la interfaz ya no avisa de «perfil sin validar».
 //  · CONFIRMADO con exports REALES de BEVADENT (28-sep-2026, ws1-t12), 4 archivos —
 //    lo que cita cada mapeo marcado «BEVADENT» de abajo: 01_Pacientes (22 columnas),
 //    05_Citas (38), 04_Saldos «Mora» (18), 06_Presupuestos_Detalle (41, UNA FILA POR
 //    PRESTACIÓN). Todavía SIN export real: doctores, bloqueos, historial de citas,
 //    odontograma, evoluciones, casos de ortodoncia, laboratorio, cuotas y aranceles.
-//    Por eso `verified` sigue en false: el perfil es un solo interruptor y la mayor
-//    parte de sus entidades no se ha visto con un archivo real.
+//    (El perfil es un solo interruptor: `verified` no distingue entidades.)
 //  · Tres cosas de estos exports que el perfil resuelve con ayuda del motor (ws1-t12, ronda 2):
 //    el doctor de «05_Citas» viene PARTIDO en «Nombre Profesional Cita» + «Apellidos Profesional
 //    Cita» (el campo auxiliar `doctorLastName` se une al nombre en engine.applyMapping); la
@@ -34,12 +33,12 @@ const dentalink: OriginProfile = {
   id: "dentalink",
   name: "Dentalink",
   hasProfile: true,
-  verified: false,
+  verified: true,
   instructions: [
     { h: "Entra a Reportes Excel", p: "En Dentalink abre <code>Reportes</code> → <code>Reportes Excel</code>. Esa función viene en los planes Pro y Titanium; si tu plan no la incluye, pide a soporte de Dentalink los listados." },
     { h: "Descarga un reporte por tipo de dato", p: "Pacientes: el listado con su ID. Citas: <code>Citas pacientes</code> (Agenda), de hoy en adelante. Saldos: <code>Pacientes morosos</code> (Pacientes)." },
     { h: "Un archivo por tipo de dato", p: "Puedes subir varios reportes a la vez (carga por lote: hasta 12 archivos, cada uno con su propia vista previa) o uno por uno. Pide que todos traigan el ID del paciente." },
-    { h: "Revisa antes de importar", p: "Los encabezados de estos reportes aún no están validados con un export real: comprueba en la vista previa que cada columna se reconoció." },
+    { h: "Revisa antes de importar", p: "En la vista previa comprueba que cada columna se reconoció y que las filas con error, si las hay, tienen arreglo." },
   ],
   mapping: {
     "Id": "externalId",
@@ -84,8 +83,8 @@ const dentalink: OriginProfile = {
   },
   // Reportes clínicos (ws1-t4, 22-sep-2026). SIN export real delante: son los
   // nombres más probables en los reportes de Dentalink (vocabulario chileno:
-  // «prestación», «profesional», «N° presupuesto»). Por eso `verified` sigue en
-  // false: si no casan, el paso de mapeo pide emparejar a mano y nada se rompe.
+  // «prestación», «profesional», «N° presupuesto»). Si no
+  // casan, el paso de mapeo pide emparejar a mano y nada se rompe.
   // La autodetección genérica (headerVariants de cada entidad) ya cubre las
   // variantes comunes («Fecha», «Alergias», «Precio»…); aquí va lo propio.
   sheetNames: {

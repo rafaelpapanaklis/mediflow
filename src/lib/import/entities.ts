@@ -834,8 +834,8 @@ export const patientsHandler: EntityHandler = {
   async commit(rows, clinicId, skipDuplicates, ctx) {
     // El ID de Dentalink de un duplicado omitido (la misma persona que un paciente que se queda) también se recuerda,
     // aunque no se cree nada: reimportar el archivo de pacientes ya importado los registra sin duplicar a nadie.
-    const recordarDuplicados = async () => {
-      if (!ctx.originId) return;
+    const recordarDuplicados = async (): Promise<number> => {
+      if (!ctx.originId) return 0;
       const pares: Array<{ externalId: string; localId: string }> = [];
       for (const r of rows) {
         const dup = r.data.duplicadoDe as { id?: string; fila?: PreviewRow; por?: string[] } | undefined;
@@ -843,15 +843,17 @@ export const patientsHandler: EntityHandler = {
         const local = dup.id ?? (dup.fila && dup.fila.status !== "error" ? (dup.fila.data.newId as string | undefined) : undefined);
         if (local) pares.push({ externalId: r.data.externalId as string, localId: local });
       }
-      if (pares.length === 0) return;
+      if (pares.length === 0) return 0;
       const vivos = await idsCreados("patient", clinicId, Array.from(new Set(pares.map((p) => p.localId))));
       const buenos = pares.filter((p) => vivos.has(p.localId));
       if (buenos.length > 0 && !(await guardarExternos(clinicId, ctx.originId, "patient", buenos))) {
         console.warn("[import/patients] import_external_ids no existe: no se guardaron los ID de los duplicados");
+        return 0;
       }
+      return buenos.length;
     };
     const toInsert = pickInsertable(rows, skipDuplicates);
-    if (toInsert.length === 0) { await recordarDuplicados(); return { created: 0, skipped: 0 }; }
+    if (toInsert.length === 0) { const remembered = await recordarDuplicados(); return { created: 0, skipped: 0, ...(remembered > 0 ? { remembered } : {}) }; }
 
     // Tope de pacientes del plan. El createMany de abajo lo saltaba por
     // completo: un Básico (500) podía subir un Excel de 5 000 y quedarse con
@@ -955,9 +957,9 @@ export const patientsHandler: EntityHandler = {
         console.warn("[import/patients] no se pudo guardar el apoderado de los menores:", e);
       }
     }
-    await recordarDuplicados();
+    const remembered = await recordarDuplicados();
     const erroredNow = toInsert.filter((r) => r.status === "error").length;
-    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow) };
+    return { created, skipped: Math.max(0, toInsert.length - created - erroredNow), ...(remembered > 0 ? { remembered } : {}) };
   },
 };
 

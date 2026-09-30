@@ -4,6 +4,7 @@
 // de error en hover/foco + switch "Omitir duplicados". En presupuestos, además,
 // los procedimientos que no casaron con el tarifario: cada uno entra «solo con
 // su importe» salvo que aquí se elija su equivalente.
+import { useState } from "react";
 import { Check, AlertCircle, Copy, Link2, ShieldAlert, Calculator } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { CLINICAL_ENTITIES, VALUE_UNLINKED, type Entity, type PreviewResult, type PreviewRow, type ValueOption } from "./import-client";
@@ -171,6 +172,9 @@ function AmountFormat({ t, info }: { t: TFunction; info: AmountFormatProps }) {
 export function StepReview({ t, entity, unverifiedName, amountFormat, preview, skipDup, onToggleSkip, decisions, onDecide }: Props) {
   const { stats, rows } = preview;
   const withBalance = WITH_BALANCE.has(entity);
+  const [soloErrores, setSoloErrores] = useState(false);
+  const visibles = soloErrores ? rows.filter((r) => r.status === "error") : rows;
+  const total = preview.totalRows;
   // Las CITAS se revisan por lo que importa de una cita: cuándo (en la zona de la clínica), con quién y cuánto dura.
   const citas = entity === "appointments";
   return (
@@ -245,6 +249,30 @@ export function StepReview({ t, entity, unverifiedName, amountFormat, preview, s
         <span className="imp-hint">{t("shell.importClinic.step6.hoverHint")}</span>
       </div>
 
+      <div className="imp-review-toolbar" style={{ marginTop: 10 }}>
+        <span className="imp-hint" role="status" data-testid="imp-shown">
+          {t("shell.importClinic.step6.showing", { shown: visibles.length.toLocaleString(), total: (soloErrores ? stats.errors : Math.max(total, rows.length)).toLocaleString() })}
+        </span>
+        {stats.errors > 0 && (
+          <>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={soloErrores}
+              className={`switch${soloErrores ? " switch--on" : ""}`}
+              onClick={() => setSoloErrores((v) => !v)}
+              aria-label={t("shell.importClinic.step6.onlyErrors")}
+            >
+              <span className="switch__thumb" />
+            </button>
+            <span className="imp-switch-lbl">{t("shell.importClinic.step6.onlyErrors")}</span>
+          </>
+        )}
+      </div>
+      {rows.length < total && !soloErrores && (
+        <p className="imp-hint" style={{ margin: "6px 0 0" }}>{t("shell.importClinic.step6.showingNote")}</p>
+      )}
+
       {amountFormat && <AmountFormat t={t} info={amountFormat} />}
       <Unresolved t={t} preview={preview} decisions={decisions} onDecide={onDecide} />
 
@@ -271,7 +299,7 @@ export function StepReview({ t, entity, unverifiedName, amountFormat, preview, s
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {visibles.map((r) => (
                 <tr key={r.row} className={r.status === "error" ? "imp-row-err" : r.status === "duplicate" || r.status === "skipped" ? "imp-row-dup" : ""}>
                   <td className="mono">{r.row}</td>
                   <td>{r.name}</td>

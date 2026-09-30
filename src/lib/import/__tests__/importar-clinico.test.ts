@@ -435,9 +435,9 @@ test("perfil de Dentalink: reconoce columnas que la autodetección genérica no,
   // Un origen inventado no rompe nada: es "sin perfil".
   const raro = await correr("clinicalNotes", archivo("dentalink-evoluciones.csv"), { dryRun: true, origin: "../../etc" });
   assert.equal(raro.mappingError, "Falta la columna con el texto de la nota");
-  // Sigue sin estar verificado: nadie lo ha probado con un export real.
+  // Verificado desde el 30-sep-2026: se probó con el export real de BEVADENT.
   const { getOriginProfile } = await import("../profiles");
-  assert.equal(getOriginProfile("dentalink")!.verified, false);
+  assert.equal(getOriginProfile("dentalink")!.verified, true);
 });
 
 test("plantilla: trae una pestaña por entidad y cada importador lee la suya y reconoce sus encabezados", async () => {

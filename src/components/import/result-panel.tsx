@@ -37,11 +37,13 @@ interface Props {
 }
 
 export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownloadReport }: Props) {
-  const { created, errors, summary, omitted = 0, errorRows = [] } = result;
+  const { created, errors, summary, omitted = 0, remembered = 0, errorRows = [] } = result;
   // Con errores el título y la frase no pueden decir «correctamente»: si NADA entró, se dice; si entró una parte, también.
   const nada = errors > 0 && created === 0;
   const parcial = errors > 0 && created > 0;
-  const titulo = nada ? "titleNothing" : parcial ? "titleErrors" : "title";
+  // Nada creado y sin errores: no es «tu clínica está lista», es que no había nada nuevo (a lo sumo se recordaron IDs).
+  const sinNovedad = errors === 0 && created === 0;
+  const titulo = nada ? "titleNothing" : parcial ? "titleErrors" : sinNovedad ? "titleNoNews" : "title";
   return (
     <div className="imp-result">
       <div className="imp-seal" aria-hidden>{nada ? <AlertCircle size={38} /> : <Check size={38} />}</div>
@@ -51,7 +53,11 @@ export function ResultPanel({ t, result, onGoPatients, onImportAnother, onDownlo
           ? t("shell.importClinic.result.leadNothing", { count: errors })
           : parcial
             ? t("shell.importClinic.result.leadPartial", { count: errors, created })
-            : t("shell.importClinic.result.leadOk")}
+            : sinNovedad
+              ? remembered > 0
+                ? t("shell.importClinic.result.leadNoNewsRemembered", { count: remembered })
+                : t("shell.importClinic.result.leadNoNews")
+              : t("shell.importClinic.result.leadOk")}
       </p>
 
       <div className="imp-summary-row">

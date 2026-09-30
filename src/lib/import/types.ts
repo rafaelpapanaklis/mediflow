@@ -207,6 +207,8 @@ export interface CommitResult {
   duplicates: number;
   /** Filas dejadas fuera a propósito, ver RowStatus "skipped". Ausente = 0. */
   omitted?: number;
+  /** IDs de pacientes duplicados que se recordaron sin crear nada (reimportar pacientes para enlazar sus ID). */
+  remembered?: number;
   /** Las filas con error (con su motivo), hasta `MAX_FILAS_CON_ERROR_EN_RESPUESTA`. */
   errors: { row: number; errors: string[] }[];
   /** Cuántas filas fallaron en total (`errors` se recorta): el resumen final y el reporte lo dicen. */

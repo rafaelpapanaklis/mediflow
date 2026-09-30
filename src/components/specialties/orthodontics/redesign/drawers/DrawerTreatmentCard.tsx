@@ -43,7 +43,7 @@ import {
 import { useCajon } from "../atoms/useCajon";
 import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
 import { aplicarPlantillaAlControl } from "@/lib/orthodontics/consulta-ortodoncia";
-import { mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { avisoSinArcosPlanificados, mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import { claveDeFase } from "@/lib/orthodontics/fase-de-hoja";
 import { plantillaAplicaALaTecnica } from "@/lib/orthodontics/plantillas-por-tecnica";
@@ -519,6 +519,11 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     {props.treatmentPlanId ? <option value="__otro__">Otro arco…</option> : null}
                   </select>
                 )}
+                {!isReadOnly && avisoSinArcosPlanificados(todosLosArcos.length, Boolean(props.treatmentPlanId)) ? (
+                  <p className={`${orto.bloqueNota} mt-[6px]`} data-sin-arcos>
+                    {avisoSinArcosPlanificados(todosLosArcos.length, Boolean(props.treatmentPlanId))}
+                  </p>
+                ) : null}
                 {otroArco && props.treatmentPlanId ? (
                   <OtroArcoForm
                     treatmentPlanId={props.treatmentPlanId}

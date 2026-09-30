@@ -386,7 +386,7 @@ const ENDPOINTS: Record<Entity, string> = {
 
 const PREVIEW_TIMEOUT_MS = 60_000;
 const ORIGINS_TIMEOUT_MS = 15_000;
-const MAX_PREVIEW_ROWS = 100; // muestra para la tabla del paso 6 (backend ya capa a 200)
+const MAX_PREVIEW_ROWS = 100; // filas que dibuja la tabla del paso 6 (el backend manda hasta 200, errores primero)
 
 // ---------------------------------------------------------------------------
 // Helpers de formato (Spanish-friendly).
@@ -709,6 +709,18 @@ export class RealImportClient implements ImportClient {
 // ---------------------------------------------------------------------------
 
 /**
+ * Las filas que dibuja la tabla del paso «Revisar»: TODAS las de error y omitidas (nunca se esconden, aunque pasen de
+ * MAX_PREVIEW_ROWS), luego duplicadas y luego válidas hasta completar MAX_PREVIEW_ROWS. Se ordenan en ese orden y,
+ * dentro de cada grupo, por el orden del archivo.
+ */
+export function filasAMostrar<T extends { status: string }>(preview: T[]): T[] {
+  const prioridad = (s: string) => (s === "error" ? 0 : s === "skipped" ? 1 : s === "duplicate" ? 2 : 3);
+  const ordenadas = preview.map((r, i) => ({ r, i })).sort((a, b) => prioridad(a.r.status) - prioridad(b.r.status) || a.i - b.i);
+  const aRevisar = ordenadas.filter((x) => prioridad(x.r.status) <= 1).length;
+  return ordenadas.slice(0, Math.max(MAX_PREVIEW_ROWS, aRevisar)).map((x) => x.r);
+}
+
+/**
  * PreviewResult del backend → del wizard.
  * - columns: cada header del archivo + su sugerencia (campo canónico) + una muestra.
  *   La muestra sale de `samples` (primer valor crudo de CADA columna, también de
@@ -734,7 +746,7 @@ export function adaptPreview(entity: Entity, b: BackendPreviewResult): PreviewRe
 
   // Un tratamiento (folio) con varios renglones dice su «abonado» en el primero, no en cada uno.
   const abonadoYaDicho = new Set<string>();
-  const rows: PreviewRow[] = b.preview.slice(0, MAX_PREVIEW_ROWS).map((r) => {
+  const rows: PreviewRow[] = filasAMostrar(b.preview).map((r) => {
     const data = r.data ?? {};
     let sinAbonado = false;
     if (entity === "treatmentPlans" && typeof data.groupKey === "string" && typeof data.abonado === "number") {
@@ -793,6 +805,7 @@ function adaptCommit(entity: Entity, b: BackendCommitResult, fileName?: string):
     errors: typeof b.errorsTotal === "number" ? b.errorsTotal : filas.length,
     duplicates: b.duplicates,
     ...(b.omitted ? { omitted: b.omitted } : {}),
+    ...(b.remembered ? { remembered: b.remembered } : {}),
     summary,
     // Qué falló y por qué, por archivo y por fila: el resumen final lo enseña y «Descargar reporte» lo baja como CSV.
     errorRows: filas.map((f) => ({ entity, fileName: fileName ?? "", row: f.row, errors: f.errors })),

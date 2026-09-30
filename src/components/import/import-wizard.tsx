@@ -501,6 +501,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
         agg.created += r.created;
         agg.errors += r.errors;
         agg.duplicates += r.duplicates;
+        if (r.remembered) agg.remembered = (agg.remembered ?? 0) + r.remembered;
         if (r.errorReportUrl) agg.errorReportUrl = r.errorReportUrl;
         if (r.errorRows?.length) agg.errorRows!.push(...r.errorRows);
         agg.summary[ent] = r.created;

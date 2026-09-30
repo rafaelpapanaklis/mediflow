@@ -90,3 +90,13 @@ export function proximaFechaDeControl(args: { desde: string | null; semanas: num
   }
   return d.toISOString();
 }
+
+/**
+ * Ayuda bajo el desplegable «Arco nuevo» cuando el caso no tiene ningún arco planificado (sin ella el desplegable solo
+ * ofrece «Sin cambio» y no explica por qué). Con plan, «Otro arco…» permite sumar uno desde la misma hoja.
+ */
+export function avisoSinArcosPlanificados(cantidadDeArcos: number, conPlan: boolean): string | null {
+  if (cantidadDeArcos > 0) return null;
+  const base = "Aún no hay arcos planificados: cárgalos en Aparatología y arcos → Secuencia de arcos → Agregar arco.";
+  return conPlan ? `${base} O usa «Otro arco…» aquí para sumar el de hoy.` : base;
+}

@@ -1145,7 +1145,10 @@
         "amountFormatDesc": "{count} filas traen un monto como «{example}». No lo adivinamos: elige cómo leerlo y las filas se importarán con ese criterio.",
         "amountFormatPick": "Elige cómo leerlos…",
         "amountFormatNeeded": "Confirma cómo leer los montos para continuar",
-        "unverifiedReview": "El perfil de {name} aún no está validado con un export real: revisa bien esta vista previa antes de importar."
+        "unverifiedReview": "El perfil de {name} aún no está validado con un export real: revisa bien esta vista previa antes de importar.",
+        "showing": "Mostrando {shown} de {total} filas",
+        "showingNote": "Las filas con error y las omitidas salen primero; el resto es una muestra. Los conteos de arriba son de todo el archivo.",
+        "onlyErrors": "Solo errores"
       },
       "sheet": {
         "title": "¿Qué pestaña es de {entity}?",
@@ -1197,6 +1200,12 @@
         "title": "¡Listo! Tu clínica está en DaleControl",
         "titleErrors": "Importación terminada con errores",
         "titleNothing": "No se importó nada",
+        "titleNoNews": "No había nada nuevo que importar",
+        "leadNoNews": "No había nada nuevo que importar.",
+        "leadNoNewsRemembered": {
+          "one": "No había nada nuevo que importar. Se recordó {count} ID de paciente duplicado para enlazar sus citas, saldos y tratamientos.",
+          "other": "No había nada nuevo que importar. Se recordaron {count} ID de pacientes duplicados para enlazar sus citas, saldos y tratamientos."
+        },
         "leadOk": "Importamos tus datos correctamente.",
         "leadPartial": {
           "one": "Se importaron {created} registros. {count} registro con error no se importó: abajo dice cuál y por qué.",

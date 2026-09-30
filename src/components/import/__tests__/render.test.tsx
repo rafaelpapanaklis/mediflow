@@ -27,10 +27,12 @@ for (const [lang, dic] of [["es", es], ["en", en]] as const) {
   const t = mk(dic) as any;
 
   test(`${lang}: paso 1 — los perfiles sin validar dicen «sin validar», no «listo»`, () => {
-    const html = renderToStaticMarkup(<StepOrigin t={t} origins={ORIGINS} selected={null} onSelect={() => {}} onAssisted={() => {}} />);
+    // Dentalink ya se probó con un export real (sí dice «listo»); el resto no.
+    const sinDentalink = ORIGINS.filter((o) => o.id !== "dentalink");
+    const html = renderToStaticMarkup(<StepOrigin t={t} origins={sinDentalink} selected={null} onSelect={() => {}} onAssisted={() => {}} />);
     assert.ok(!html.includes("«shell."), "clave sin traducir");
-    assert.equal((html.match(/imp-src-card__meta/g) ?? []).length, ORIGINS.length);
-    assert.ok(!/Perfil listo|Profile ready/.test(html), "ninguna tarjeta dice «listo»: ninguno está validado");
+    assert.equal((html.match(/imp-src-card__meta/g) ?? []).length, sinDentalink.length);
+    assert.ok(!/Perfil listo|Profile ready/.test(html), "ninguna otra tarjeta dice «listo»: no están validadas");
     assert.ok(/Perfil sin validar|Unvalidated profile/.test(html));
     assert.ok(/Mapeo manual|Manual mapping/i.test(html), "Mi Excel / Otro siguen en manual");
     // Y si un perfil SÍ estuviera validado, sí diría «listo».

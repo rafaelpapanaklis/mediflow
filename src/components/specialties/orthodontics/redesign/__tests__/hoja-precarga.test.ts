@@ -168,3 +168,13 @@ function initialStateFixture() {
     indications: null,
   };
 }
+
+describe("ayuda sin arcos planificados (ws1-t6)", () => {
+  it("sin arcos explica dónde cargarlos; con arcos no dice nada", async () => {
+    const { avisoSinArcosPlanificados } = await import("../../../../../lib/orthodontics/hoja-de-control-reglas");
+    assert.match(avisoSinArcosPlanificados(0, false)!, /Aparatología y arcos → Secuencia de arcos → Agregar arco/);
+    assert.ok(!/Otro arco/.test(avisoSinArcosPlanificados(0, false)!));
+    assert.match(avisoSinArcosPlanificados(0, true)!, /Otro arco…/);
+    assert.equal(avisoSinArcosPlanificados(2, true), null);
+  });
+});

@@ -130,6 +130,8 @@ export interface CommitResult {
   duplicates: number;
   /** Filas dejadas fuera a propósito (citas pasadas, ya importadas). */
   omitted?: number;
+  /** IDs de pacientes duplicados recordados sin crear nada. */
+  remembered?: number;
   /** Resumen para las "pills" de la pantalla de resultado: creados por entidad importada. */
   summary: Partial<Record<Entity, number>>;
   /** Qué falló y por qué, por archivo y por fila: alimenta el resumen final y el reporte descargable (CSV). */
@@ -176,7 +178,7 @@ export interface ImportClient {
 // Catálogo de orígenes (paso 1). Los 9 con perfil + Excel/Otro manuales.
 // ---------------------------------------------------------------------------
 export const ORIGINS: Origin[] = [
-  { id: "dentalink", name: "Dentalink", color: "#0ea5e9", hasProfile: true, verified: false },
+  { id: "dentalink", name: "Dentalink", color: "#0ea5e9", hasProfile: true, verified: true },
   { id: "medilink", name: "Medilink", color: "#14b8a6", hasProfile: true, verified: false },
   { id: "identalsoft", name: "iDentalSoft", color: "#f97316", hasProfile: true, verified: false },
   { id: "opendental", name: "Open Dental", color: "#16a34a", hasProfile: true, verified: false },
