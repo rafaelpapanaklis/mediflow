@@ -68,6 +68,8 @@ export interface VentanaCitaProps {
   /** Etiqueta unificada del estado, la misma que pinta la tabla. */
   estado: (status: string) => { texto: string; tono: string };
   onClose: () => void;
+  /** El servidor confirmó un cambio de estado (cambiar o eliminar): el padre lo pinta ya, sin esperar al refresh. */
+  onEstadoCambiado?: (citaId: string, status: string) => void;
 }
 
 export function VentanaCita({
@@ -78,6 +80,7 @@ export function VentanaCita({
   userRole,
   estado,
   onClose,
+  onEstadoCambiado,
 }: VentanaCitaProps) {
   const router = useRouter();
   const confirmarConMotivo = useConfirmWithReason();
@@ -154,6 +157,7 @@ export function VentanaCita({
     try {
       await patchAppointmentStatus(cita.id, destino);
       toast.success(`Estado: ${estado(destino).texto}`);
+      onEstadoCambiado?.(cita.id, destino);
       // Empezar la consulta lleva a la ficha con la consulta en curso, igual
       // que desde la agenda.
       if (destino === "IN_PROGRESS") {
@@ -216,6 +220,7 @@ export function VentanaCita({
       const cuerpo = await res.json().catch(() => ({}));
       if (!res.ok) throw { status: res.status, ...cuerpo };
       toast.success("Cita eliminada de la agenda.");
+      onEstadoCambiado?.(cita.id, "CANCELLED");
       onClose();
       router.refresh();
     } catch (err) {

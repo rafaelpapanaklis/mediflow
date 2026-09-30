@@ -99,6 +99,12 @@ import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 import { resumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
+import {
+  aplicarCorrecciones,
+  purgarCorrecciones,
+  registrarCorreccion,
+  type CorreccionesDeEstado,
+} from "@/lib/patients/correcciones-estado-cita";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
@@ -444,7 +450,7 @@ interface Props {
 }
 
 export function PatientDetailClient({
-  patient, records: initialRecords, appointments, invoices: initialInvoices,
+  patient, records: initialRecords, appointments: citasDelServidor, invoices: initialInvoices,
   doctors, currentUser, specialty, clinicCategory, treatments, portalUrl, clinicTaxMode,
   portalAccountStatus = "none",
   pediatricsData,
@@ -495,6 +501,26 @@ export function PatientDetailClient({
   const { open: openNewAppointment } = useNewAppointmentDialog();
   // La cita abierta en «Editar cita» desde la pestaña Citas (solo rediseño).
   const [citaAbiertaId, setCitaAbiertaId] = useState<string | null>(null);
+  // Citas: lo que el servidor ya confirmó (cancelar, cambiar de estado) se pinta
+  // AL MOMENTO encima de las filas del servidor; `router.refresh()` re-arma la
+  // ficha entera y tarda segundos. Todo lo que se deriva de `appointments`
+  // (etiqueta de la fila, botón «Cancelar», contadores, próxima cita, consulta
+  // activa) lee la lista ya corregida. Ver lib/patients/correcciones-estado-cita.
+  const [correccionesCita, setCorreccionesCita] = useState<CorreccionesDeEstado>({});
+  const appointments = useMemo(
+    () => aplicarCorrecciones(citasDelServidor, correccionesCita),
+    [citasDelServidor, correccionesCita],
+  );
+  // Cuando el servidor ya trae el estado nuevo (o cambió otra vez), la corrección sobra.
+  useEffect(() => {
+    setCorreccionesCita((prev) => purgarCorrecciones(citasDelServidor, prev));
+  }, [citasDelServidor]);
+  const marcarEstadoDeCita = useCallback(
+    (id: string, estado: string) => {
+      setCorreccionesCita((prev) => registrarCorreccion(citasDelServidor, prev, id, estado));
+    },
+    [citasDelServidor],
+  );
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -741,6 +767,8 @@ export function PatientDetailClient({
         throw new Error(data.error ?? t("patients.cancelAppt.failed"));
       }
       toast.success(t("patients.cancelAppt.success"));
+      // La fila (y todo lo que cuenta citas) cambia ya; el refresh trae el resto.
+      marcarEstadoDeCita(appt.id, "CANCELLED");
       router.refresh();
     } catch (err: any) {
       toast.error(err.message ?? t("patients.cancelAppt.error"));
@@ -2774,6 +2802,7 @@ export function PatientDetailClient({
                 return { texto: t(full.labelKey), tono: full.tono };
               }}
               onClose={() => setCitaAbiertaId(null)}
+              onEstadoCambiado={marcarEstadoDeCita}
             />
           )}
 
