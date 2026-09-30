@@ -22,7 +22,9 @@ const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 test("recuadro de ortodoncia (ficha y panel de la cita): ResumenCobranza pasa montoSugerido", () => {
   const src = leer("components/specialties/orthodontics/cobranza/ResumenCobranza.tsx");
-  assert.match(src, /const montoSugerido = panel\.cobranza\.vencidas\.reduce\(\(acc, q\) => acc \+ q\.falta, 0\) \|\| cuota\?\.falta \|\| 0;/);
+  // ws1-t4 (revisión final): la MISMA regla que la Sección F y la cabecera (`montoDelCobroPrincipal`:
+  // lo vencido, si no la cuota de hoy; en «Pago por control», el control que se debe).
+  assert.match(src, /const cobro = cobroPrincipalDelCaso\(panel\);\s*const montoSugerido = cobro\?\.montoSugerido \?\? 0;/);
   // ws1-t4: ya no la ventana suelta, la completa — con el MISMO monto.
   assert.match(src, /<CobrarEnFactura[\s\S]*?montoSugerido=\{montoSugerido\}/);
 });

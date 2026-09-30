@@ -24,6 +24,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import type { CargoDeControl } from "./cobranza-caso";
+import { normalizarOrthoBillingMode } from "./billing-mode";
 
 let columna: { existe: boolean; at: number } | null = null;
 const TTL_MS = 60_000;
@@ -97,6 +98,25 @@ export function vencimientoDeCargoDeControl(
   zonaClinica?: string | null,
 ): string {
   return dueDate ? aFechaISO(dueDate) : diaEnZonaDeClinica(createdAt, zonaClinica);
+}
+
+/**
+ * ws1-t4 (revisión final, fallo 1) — cuándo vence la factura PRINCIPAL del caso
+ * cuando no es a plazos (sin plazos no hay calendario que lo diga). La
+ * colocación de «Pago por control» vence como un control: su `dueDate` o el día
+ * en que se creó. El pago único de «Precio total» solo si tiene `dueDate`: sin
+ * ella se debe, pero no se anuncia «vencido» (un caso importado sin fecha no
+ * amanece con meses de atraso). Con plazos, esta fecha no se usa.
+ */
+export function vencimientoDeFacturaPrincipal(
+  modo: string | null | undefined,
+  dueDate: Date | null,
+  createdAt: Date | null,
+  zonaClinica?: string | null,
+): string | null {
+  if (dueDate) return aFechaISO(dueDate);
+  if (!createdAt || normalizarOrthoBillingMode(modo) !== "PAGO_POR_CONTROL") return null;
+  return diaEnZonaDeClinica(createdAt, zonaClinica);
 }
 
 /**

@@ -21,6 +21,7 @@ import {
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { CANTIDAD_MAXIMA } from "@/lib/orthodontics/procedimientos-de-visita";
 import { avisoDeProcedimientoFaltante } from "@/lib/orthodontics/plan-detalle";
+import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
 import { Btn } from "../atoms/Btn";
 import { Pill } from "../atoms/Pill";
 import orto from "../orto.module.css";
@@ -60,6 +61,10 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
   const [cargado, setCargado] = useState(false);
   const [error, setError] = useState(false);
   const [cobrando, setCobrando] = useState<string | null>(null);
+  // ws1-t4 (revisión final, fallo 3): «Cobrar» abre la ventana completa de cobro de
+  // la factura del procedimiento (como los demás «Cobrar»). `cobrando` sigue puesto
+  // hasta que la ventana ya se ve: «Creando la factura…» y luego «Abriendo el cobro…».
+  const [ventana, setVentana] = useState<{ invoiceId: string; total: number; rediseno: boolean; clinicTaxMode: string | null } | null>(null);
   const { treatmentPlanId, cardId, soloLectura, seleccion, onSeleccion, recarga, extracciones = [], onExtracciones } = props;
 
   const cargar = useCallback(async () => {
@@ -97,14 +102,36 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
       const r = await cobrarProcedimientoDeHoja({ cardId, procedureId: l.procedureId });
       if (isFailure(r)) {
         toast.error(r.error);
+        setCobrando(null);
         return;
       }
-      toast.success(r.data.yaExistia ? `«${l.name}» ya tenía su factura (${r.data.invoiceNumber ?? "sin folio"}).` : `Factura ${r.data.invoiceNumber ?? ""} creada para «${l.name}».`);
-      await cargar();
-    } finally {
+      if (!r.data.yaExistia) toast.success(`Factura ${r.data.invoiceNumber ?? ""} creada para «${l.name}».`);
+      // La línea ya queda «facturada» aunque se cierre la ventana sin cobrar.
+      void cargar();
+      setVentana({ invoiceId: r.data.invoiceId, total: r.data.total, rediseno: r.data.rediseno, clinicTaxMode: r.data.clinicTaxMode });
+    } catch {
+      toast.error("No se pudo cobrar el procedimiento. Inténtalo de nuevo.");
       setCobrando(null);
     }
   }
+
+  const textoDeCobro = (procedureId: string, normal: string) =>
+    cobrando === procedureId ? (ventana ? "Abriendo el cobro…" : "Creando la factura…") : normal;
+
+  const ventanaDeCobro = ventana ? (
+    <CobrarEnFactura
+      invoiceId={ventana.invoiceId}
+      montoSugerido={ventana.total > 0 ? ventana.total : undefined}
+      rediseno={ventana.rediseno}
+      clinicTaxMode={ventana.clinicTaxMode}
+      onLista={() => setCobrando(null)}
+      onClose={() => {
+        setVentana(null);
+        setCobrando(null);
+      }}
+      onRefrescar={() => void cargar()}
+    />
+  ) : null;
 
   const titulo = (
     <div className={orto.bloqueCabeza}>
@@ -168,9 +195,10 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
                           size="sm"
                           icon={<Banknote size={14} strokeWidth={1.75} aria-hidden />}
                           disabled={cobrando !== null}
+                          aria-busy={cobrando === l.procedureId || undefined}
                           onClick={() => void cobrar(l)}
                         >
-                          {cobrando === l.procedureId ? "Cobrando…" : "Cobrar"}
+                          {textoDeCobro(l.procedureId, "Cobrar")}
                         </Btn>
                       ) : (
                         <span className="text-[12px] opacity-70">Recepción lo cobra desde Cobranza</span>
@@ -178,8 +206,14 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
                     </>
                   )}
                   {l.estado === "facturado" && l.factura?.cancelada && puedeCobrar ? (
-                    <Btn variant="secondary" size="sm" disabled={cobrando !== null} onClick={() => void cobrar(l)}>
-                      Cobrar de nuevo
+                    <Btn variant="secondary" size="sm" disabled={cobrando !== null} aria-busy={cobrando === l.procedureId || undefined} onClick={() => void cobrar(l)}>
+                      {textoDeCobro(l.procedureId, "Cobrar de nuevo")}
+                    </Btn>
+                  ) : null}
+                  {/* Facturada y sin pagar: «Cobrar» abre la ventana de esa MISMA factura (no crea otra). */}
+                  {l.estado === "facturado" && l.factura && !l.factura.pagada && !l.factura.cancelada && puedeCobrar ? (
+                    <Btn variant="secondary" size="sm" disabled={cobrando !== null} aria-busy={cobrando === l.procedureId || undefined} onClick={() => void cobrar(l)}>
+                      {textoDeCobro(l.procedureId, "Cobrar")}
                     </Btn>
                   ) : null}
                 </span>
@@ -187,6 +221,7 @@ export function ProcedimientosDeVisita(props: ProcedimientosDeVisitaProps) {
             ))}
           </div>
         )}
+        {ventanaDeCobro}
       </section>
     );
   }

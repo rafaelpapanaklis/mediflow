@@ -365,8 +365,9 @@ export function VistaCobranza({
                       <td role="cell" className={s.num} data-etiqueta="Por cobrar">
                         {f.situacion === "sin-plan" ? (
                           <>
-                            <span className={`${s.importe} ${s.importeApagado}`}>—</span>
-                            {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>+ {fmtMoney(f.extrasPendientes ?? 0)} en extras</div> : null}
+                            {/* Por cobrar = lo que debe el caso (deudaDelCaso): aquí, solo extras. */}
+                            <span className={`${s.importe} ${f.porCobrar > 0 ? "" : s.importeApagado}`}>{f.porCobrar > 0 ? fmtMoney(f.porCobrar) : "—"}</span>
+                            {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>en extras</div> : null}
                           </>
                         ) : (
                           <>
@@ -375,7 +376,7 @@ export function VistaCobranza({
                               {f.cuotasPagadas} de {f.cuotasTotales} pago{f.cuotasTotales === 1 ? "" : "s"} cubierto
                               {f.cuotasTotales === 1 ? "" : "s"}
                             </div>
-                            {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>+ {fmtMoney(f.extrasPendientes ?? 0)} en extras</div> : null}
+                            {(f.extrasPendientes ?? 0) > 0 ? <div className={s.detalle}>incluye {fmtMoney(f.extrasPendientes ?? 0)} en extras</div> : null}
                           </>
                         )}
                       </td>

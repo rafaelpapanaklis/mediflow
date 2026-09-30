@@ -63,6 +63,7 @@ import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { pagadoEsSoloAnticipo } from "@/lib/patient-credit-core";
+import { notasVisibles } from "@/lib/invoices/marcas-internas";
 
 const METHOD_LABEL_KEYS: Record<string, string> = {
   cash: "clinical.invoiceDetail.methodCash", debit: "clinical.invoiceDetail.methodDebit", credit: "clinical.invoiceDetail.methodCredit",
@@ -912,10 +913,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   </span>
                 </div>
               )}
-              {isCancelled && invoice.notes && (
+              {isCancelled && notasVisibles(invoice.notes) && (
                 <div className={cx("pt-2 border-t border-border mt-2", c.resumenNotas)}>
                   <span className={cx("text-muted-foreground text-[10px] uppercase tracking-wide", c.seccionTitulo)}>{t("common.notes")}</span>
-                  <p className={cx("text-[11px] mt-1 whitespace-pre-line", c.notasTexto)}>{invoice.notes}</p>
+                  <p className={cx("text-[11px] mt-1 whitespace-pre-line", c.notasTexto)}>{notasVisibles(invoice.notes)}</p>
                 </div>
               )}
               {/* H15 (opción A, ws1-t4): la cita se canceló con dinero pagado. */}

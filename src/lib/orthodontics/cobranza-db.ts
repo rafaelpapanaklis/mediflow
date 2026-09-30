@@ -16,7 +16,7 @@ import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { cobranzaDelCasoUnificada, type CobranzaDelCaso } from "./cobranza-caso";
 import { normalizarOrthoBillingMode } from "./billing-mode";
 import { cargarModoDeCobro } from "./billing-mode-db";
-import { cargarCargosDeControlDelCaso } from "./cobranza-controles-db";
+import { cargarCargosDeControlDelCaso, vencimientoDeFacturaPrincipal } from "./cobranza-controles-db";
 
 /** Códigos Prisma de "tabla/columna inexistente" — igual que patient-credit.ts. */
 function esRelacionAusente(e: unknown): boolean {
@@ -69,7 +69,7 @@ export async function cargarCobranzaDelCaso(
     invoiceId
       ? prisma.invoice.findFirst({
           where: { id: invoiceId, clinicId },
-          select: { status: true, total: true, payments: { select: { amount: true, method: true } } },
+          select: { status: true, total: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
         })
       : Promise.resolve(null),
     getPatientCreditBalance(clinicId, patientId),
@@ -90,7 +90,13 @@ export async function cargarCobranzaDelCaso(
   return cobranzaDelCasoUnificada({
     modo,
     facturaPrincipal: facturaVigente
-      ? { condiciones: condicionesResult.porFactura.get(invoiceId!) ?? null, totalFactura: facturaVigente.total, cobros: facturaVigente.payments }
+      ? {
+          condiciones: condicionesResult.porFactura.get(invoiceId!) ?? null,
+          totalFactura: facturaVigente.total,
+          cobros: facturaVigente.payments,
+          invoiceId,
+          vencimiento: vencimientoDeFacturaPrincipal(modo, facturaVigente.dueDate, facturaVigente.createdAt, args.zonaHoraria),
+        }
       : null,
     cargosControl,
     saldoAFavorPrevio,

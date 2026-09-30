@@ -14,13 +14,13 @@ import { prisma } from "@/lib/prisma";
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { loadOrthoCases } from "./tablero-data";
+import { deudaDelCaso } from "./cobranza-caso";
 import { cargarNombresDeTecnica } from "./tecnicas-de-la-clinica-db";
 import { existeColumnaDeFacturasDelCaso } from "./cobro/extras-db";
 import { leerHistorialDeCasos } from "./eliminar-caso-db";
 import {
   controlesPorPaciente,
   filaDeCaso,
-  saldoDeFactura,
   type FilaDeCaso,
   type LoClinicoDelCaso,
 } from "./pacientes-modulo";
@@ -103,9 +103,15 @@ export async function cargarFilasDeCasos(
         return null;
       })
     : null;
-  const saldoDe = (planId: string): number | null => {
-    const factura = invoicesById.get(invoiceIdByPlanId.get(planId) ?? "");
-    return factura && factura.status !== "CANCELLED" ? saldoDeFactura(factura.total, factura.payments) : null;
+  // ws1-t4 (revisión final, fallo 1): el saldo de la fila es LO QUE DEBE EL CASO
+  // (`deudaDelCaso`: plan o colocación + controles + extras), el mismo número de
+  // Cobranza y de la ficha — antes solo la factura principal. Sin factura
+  // principal y sin nada que deber, «sin plan» (null) como antes.
+  const saldoDe = (c: (typeof cases)[number]): number | null => {
+    const factura = invoicesById.get(invoiceIdByPlanId.get(c.planId) ?? "");
+    const vigente = factura && factura.status !== "CANCELLED";
+    const deuda = deudaDelCaso(c.cobranza, c.extrasPendientes).porCobrar;
+    return vigente || deuda > 0 ? deuda : null;
   };
 
   const clinico = new Map<string, LoClinicoDelCaso>(
@@ -120,7 +126,7 @@ export async function cargarFilasDeCasos(
   return cases
     .map((c) =>
       filaDeCaso(c, clinico.get(c.planId), controles.get(c.patientId), ahora, {
-        saldoMxn: saldoDe(c.planId),
+        saldoMxn: saldoDe(c),
         historial: historiales?.get(c.planId),
       }),
     )

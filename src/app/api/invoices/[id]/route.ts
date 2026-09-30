@@ -18,6 +18,7 @@ import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { decidirEdicion, motivoParaNoEditar } from "@/lib/invoices/editar-factura-core";
+import { notasParaGuardar } from "@/lib/invoices/marcas-internas";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -241,7 +242,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const updateData: any = {};
-  if (body.notes !== undefined) updateData.notes = body.notes;
+  // ws1-t4 (fallo 5): la marca interna de ortodoncia (`[control-hoja:…]`) no se
+  // enseña en «Editar»; al guardar lo editado se le vuelve a poner delante, o la
+  // factura dejaría de contar como el control de su hoja (y se podría duplicar).
+  if (body.notes !== undefined) updateData.notes = notasParaGuardar(invoice.notes, body.notes);
   if (body.items) {
     // Sin esta validación, un body.items no-arreglo se guardaría tal cual en el
     // JSON (sumInvoiceItems devuelve 0 para no-arreglos) dejando la factura con

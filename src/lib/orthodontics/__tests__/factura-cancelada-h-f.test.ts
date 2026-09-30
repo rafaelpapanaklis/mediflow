@@ -18,21 +18,23 @@ const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 test("cobranza-db.ts: una factura CANCELLED no cuenta como deuda del caso", () => {
   const src = leer("lib/orthodontics/cobranza-db.ts");
-  assert.match(src, /select: \{ status: true, total: true, payments:/, "lee el status de la factura, no solo total/pagos");
+  assert.match(src, /select: \{ status: true, total: true, (dueDate: true, createdAt: true, )?payments:/, "lee el status de la factura, no solo total/pagos");
   assert.match(src, /const facturaVigente = invoice && invoice\.status !== "CANCELLED" \? invoice : null;/);
-  assert.match(src, /facturaPrincipal: facturaVigente\s*\n\s*\? \{ condiciones: condicionesResult\.porFactura\.get\(invoiceId!\) \?\? null, totalFactura: facturaVigente\.total, cobros: facturaVigente\.payments \}\s*\n\s*: null,/);
+  assert.match(src, /facturaPrincipal: facturaVigente\s*\n\s*\? \{\s*condiciones: condicionesResult\.porFactura\.get\(invoiceId!\) \?\? null,\s*totalFactura: facturaVigente\.total,\s*cobros: facturaVigente\.payments,[\s\S]*?\}\s*\n\s*: null,/);
 });
 
 test("cargarPanelDeCobro.ts: el panel de cobro tampoco cuenta una factura CANCELLED como deuda", () => {
   const src = leer("app/actions/orthodontics/cobro/cargarPanelDeCobro.ts");
   assert.match(src, /const facturaVigente = invoice && invoice\.status !== "CANCELLED" \? invoice : null;/);
-  assert.match(src, /facturaPrincipal: facturaVigente \? \{ condiciones, totalFactura: facturaVigente\.total, cobros: facturaVigente\.payments \} : null,/);
+  assert.match(src, /facturaPrincipal: facturaVigente\s*\? \{\s*condiciones,\s*totalFactura: facturaVigente\.total,\s*cobros: facturaVigente\.payments,[\s\S]*?\}\s*: null,/);
 });
 
 test("ResumenCobranza.tsx: el botón «Cobrar» no se ofrece sobre una factura cancelada", () => {
   const src = leer("components/specialties/orthodontics/cobranza/ResumenCobranza.tsx");
-  // ws1-t4: y además solo con permiso de cobro.
-  assert.match(src, /\{panel\.puedeCobrar && panel\.invoice\.balance > 0 && panel\.invoice\.status !== "CANCELLED" \? \(/);
+  // ws1-t4: y además solo con permiso de cobro. Revisión final: la factura sale de
+  // `cobroPrincipalDelCaso` y nunca es la principal si está cancelada.
+  assert.match(src, /panel\.invoice\?\.status === "CANCELLED"/);
+  assert.match(src, /\{panel\.puedeCobrar && puedeOfrecerCobro \? \(/);
 });
 
 test("abrirPlanDePago.ts: una factura cancelada NO bloquea abrir el plan de verdad", () => {

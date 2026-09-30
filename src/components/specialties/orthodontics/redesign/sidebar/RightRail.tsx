@@ -52,8 +52,12 @@ const ICONO = { size: 15, strokeWidth: 1.75 } as const;
 
 export function RightRail(props: RightRailProps) {
   const { panel } = props;
-  const invoice = panel && panel !== "cargando" && panel !== "error" ? panel.invoice : null;
-  const remaining = invoice ? Math.max(0, invoice.balance) : 0;
+  const listo = panel && panel !== "cargando" && panel !== "error" ? panel : null;
+  const invoice = listo?.invoice ?? null;
+  // ws1-t4 (revisión final, fallo 1): lo que debe EL CASO (deudaDelCaso), la
+  // misma cifra de la Sección F, la cabecera, Cobranza y Casos.
+  const deuda = listo?.deuda ?? null;
+  const remaining = deuda?.porCobrar ?? 0;
   return (
     <aside className={orto.riel}>
       <NextAppointmentCard
@@ -73,8 +77,9 @@ export function RightRail(props: RightRailProps) {
             <div className={orto.vacioLinea}>Este caso todavía no tiene un plan de pago.</div>
           ) : (
             <>
-              <KV k="Total del tratamiento" v={fmtMoney(invoice.total)} />
-              <KV k="Pagado" v={fmtMoney(invoice.paid)} vClass={orto.tonoExito} />
+              <KV k={listo?.billingMode === "PAGO_POR_CONTROL" ? "Colocación y controles" : "Total del tratamiento"} v={fmtMoney(deuda?.facturado ?? 0)} />
+              <KV k="Pagado" v={fmtMoney(deuda?.pagado ?? 0)} vClass={orto.tonoExito} />
+              {deuda && deuda.extras > 0 ? <KV k="Extras sin pagar" v={fmtMoney(deuda.extras)} /> : null}
               <KV
                 k="Saldo"
                 v={fmtMoney(remaining)}
@@ -82,8 +87,8 @@ export function RightRail(props: RightRailProps) {
                 vClass={remaining > 0 ? orto.tonoPeligro : orto.tonoExito}
               />
               <ProgressBar
-                value={invoice.paid}
-                max={invoice.total}
+                value={deuda?.pagado ?? 0}
+                max={deuda?.facturado ?? 0}
                 color="emerald"
                 className="mt-3"
                 ariaLabel="Avance de pagos"

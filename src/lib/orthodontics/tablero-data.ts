@@ -37,7 +37,7 @@ import { cambiosDeEstadoDeBitacora, diasEnPausa } from "./dias-en-pausa";
 import { cobranzaDelCasoUnificada } from "./cobranza-caso";
 import { normalizarOrthoBillingMode } from "./billing-mode";
 import { cargarModosDeCobro } from "./billing-mode-db";
-import { cargarCargosDeControlPorCasos } from "./cobranza-controles-db";
+import { cargarCargosDeControlPorCasos, vencimientoDeFacturaPrincipal } from "./cobranza-controles-db";
 import { extrasPendientesPorCasos } from "./cobro/extras-db";
 import {
   computeActiveCasesCount,
@@ -152,6 +152,8 @@ interface InvoiceForCobranza {
   id: string;
   total: number;
   status?: string;
+  dueDate?: Date | null;
+  createdAt?: Date | null;
   payments: Array<{ amount: unknown; method?: string | null; paidAt: Date }>;
 }
 
@@ -187,7 +189,7 @@ export async function loadOrthoCases(
       leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
       prisma.invoice.findMany({
         where: { id: { in: invoiceIds }, clinicId },
-        select: { id: true, total: true, status: true, payments: { select: { amount: true, method: true, paidAt: true } } },
+        select: { id: true, total: true, status: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true, paidAt: true } } },
       }),
     ]);
     condicionesPorFactura = condicionesResult.porFactura;
@@ -211,7 +213,15 @@ export async function loadOrthoCases(
     // vencido lo que ya se canceló para reabrir el plan.
     const cobranza = cobranzaDelCasoUnificada({
       modo: p.billingMode,
-      facturaPrincipal: invoice != null && invoice.status !== "CANCELLED" ? { condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null, totalFactura: invoice.total, cobros: invoice.payments } : null,
+      facturaPrincipal: invoice != null && invoice.status !== "CANCELLED"
+        ? {
+            condiciones: condicionesPorFactura.get(p.invoiceId!) ?? null,
+            totalFactura: invoice.total,
+            cobros: invoice.payments,
+            invoiceId: invoice.id,
+            vencimiento: vencimientoDeFacturaPrincipal(p.billingMode, invoice.dueDate ?? null, invoice.createdAt ?? null, zonaHoraria),
+          }
+        : null,
       cargosControl: cargosControlPorPlan.get(p.id) ?? [],
       saldoAFavorPrevio: 0,
       ahora,

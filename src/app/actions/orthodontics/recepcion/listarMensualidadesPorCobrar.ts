@@ -26,7 +26,7 @@ import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { cobranzaDelCasoUnificada, agruparVencidasPorFactura } from "@/lib/orthodontics/cobranza-caso";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { cargarModosDeCobro } from "@/lib/orthodontics/billing-mode-db";
-import { cargarCargosDeControlPorCasos } from "@/lib/orthodontics/cobranza-controles-db";
+import { cargarCargosDeControlPorCasos, vencimientoDeFacturaPrincipal } from "@/lib/orthodontics/cobranza-controles-db";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { ok, isFailure, type ActionResult } from "../result";
@@ -127,6 +127,8 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
         paid: true,
         balance: true,
         status: true,
+        dueDate: true,
+        createdAt: true,
         payments: { select: { amount: true, method: true } },
       },
     }),
@@ -165,7 +167,13 @@ export async function listarMensualidadesPorCobrar(): Promise<ActionResult<Mensu
     const resumen = cobranzaDelCasoUnificada({
       modo,
       facturaPrincipal: invoice != null && plan.invoiceId
-        ? { condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null, totalFactura: invoice.total, cobros: invoice.payments }
+        ? {
+            condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
+            totalFactura: invoice.total,
+            cobros: invoice.payments,
+            invoiceId: plan.invoiceId,
+            vencimiento: vencimientoDeFacturaPrincipal(modo, invoice.dueDate, invoice.createdAt, zonaHoraria),
+          }
         : null,
       cargosControl: cargosControlPorCaso.get(plan.id) ?? [],
       saldoAFavorPrevio: 0,

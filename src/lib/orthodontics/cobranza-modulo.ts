@@ -16,6 +16,7 @@
 
 import type { OrthoTreatmentStatus } from "@prisma/client";
 import { ACTIVE_PLAN_STATUSES, type OrthoCaseSummary } from "./specialty-kpis";
+import { deudaDelCaso } from "./cobranza-caso";
 
 /** Una mensualidad «por vencer» es la que vence de hoy a siete días: la misma ventana que la lista de Caja. */
 export const HORIZONTE_POR_VENCER_DIAS = 7;
@@ -54,7 +55,11 @@ export interface FilaCobranza {
   proximoImporte: number | null;
   /** Días de calendario de hoy a esa fecha (0 = vence hoy). */
   diasParaLaProxima: number | null;
-  /** Todo lo que falta por cobrar del tratamiento (vencido + por vencer), en pesos. */
+  /**
+   * Todo lo que debe el caso, en pesos: plan (vencido + por vencer) o colocación,
+   * controles y extras — `deudaDelCaso`, el mismo número de la ficha y de Casos
+   * (ws1-t4, revisión final, fallo 1). Los extras van además aparte en `extrasPendientes`.
+   */
   porCobrar: number;
   cuotasPagadas: number;
   cuotasTotales: number;
@@ -68,7 +73,7 @@ export interface FilaCobranza {
 export interface ResumenDeCobranza {
   vencido: { casos: number; cuotas: number; importe: number };
   porVencer: { casos: number; importe: number };
-  /** Todo lo que falta por cobrar de todos los casos, en pesos. */
+  /** Todo lo que falta por cobrar de todos los casos (extras incluidos), en pesos. */
   porCobrar: number;
   alCorriente: number;
   sinPlan: number;
@@ -113,7 +118,8 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
 
   for (const c of cases) {
     const casoActivo = ACTIVE_PLAN_STATUSES.includes(c.status);
-    const extrasPendientes = c.extrasPendientes?.monto ?? 0;
+    const deuda = deudaDelCaso(c.cobranza, c.extrasPendientes);
+    const extrasPendientes = deuda.extras;
     const base = {
       extrasPendientes,
       extrasCantidad: c.extrasPendientes?.cantidad ?? 0,
@@ -140,7 +146,7 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
         proximaFecha: null,
         proximoImporte: null,
         diasParaLaProxima: null,
-        porCobrar: 0,
+        porCobrar: deuda.porCobrar,
         cuotasPagadas: 0,
         cuotasTotales: 0,
       });
@@ -157,7 +163,7 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
       null,
     );
     const porCobrarC = aCentavos(cob.saldoTotal);
-    if (!casoActivo && porCobrarC <= 0 && extrasPendientes <= 0) continue;
+    if (!casoActivo && aCentavos(deuda.porCobrar) <= 0) continue;
 
     const diasParaLaProxima = proxima?.vencimiento ? diasEntre(hoy, proxima.vencimiento) : null;
     let situacion: SituacionCobranza;
@@ -176,7 +182,7 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
       proximaFecha: proxima?.vencimiento ?? null,
       proximoImporte: proxima ? proxima.falta : null,
       diasParaLaProxima,
-      porCobrar: aPesos(porCobrarC),
+      porCobrar: deuda.porCobrar,
       cuotasPagadas: cob.pagadas.length,
       cuotasTotales,
     });

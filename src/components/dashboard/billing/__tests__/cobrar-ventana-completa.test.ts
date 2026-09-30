@@ -175,7 +175,8 @@ test("agenda (vieja y nueva): «Cobrar» abre la completa con el pago abierto", 
 });
 
 test("sin permiso de cobro (billing.charge) los botones de cobro de ortodoncia no salen", () => {
-  assert.match(leer("src/components/specialties/orthodontics/cobranza/ResumenCobranza.tsx"), /\{panel\.puedeCobrar && panel\.invoice\.balance > 0/);
+  // ws1-t4 (revisión final, fallo 1): la factura y el monto salen de `cobroPrincipalDelCaso`, como en la Sección F.
+  assert.match(leer("src/components/specialties/orthodontics/cobranza/ResumenCobranza.tsx"), /\{panel\.puedeCobrar && puedeOfrecerCobro \? \(/);
   const f = leer("src/components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
   assert.equal((f.match(/\{panel\.puedeCobrar \? \(/g) ?? []).length, 2, "«Cobrar» y «Cobrar» del control");
   assert.match(leer("src/components/specialties/orthodontics/cobranza/ListaMensualidades.tsx"), /\{puedeCobrar && \(\s*<ButtonNew/);

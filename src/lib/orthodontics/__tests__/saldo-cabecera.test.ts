@@ -18,6 +18,7 @@ test("la cabecera solo pinta rojo con lo vencido y el cliente lo saca de las cuo
   const h = leer("components/specialties/orthodontics/redesign/PatientHeaderG16.tsx");
   assert.match(h, /tone=\{props\.outstandingAmount != null && \(props\.overdueAmount \?\? 0\) > 0 \? "rose" : "emerald"\}/);
   const c = leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
-  assert.match(c, /panelDeCobro\.cobranza\.vencidas\.reduce/);
+  // ws1-t4 (revisión final, fallo 1): lo vencido de `deudaDelCaso` (sale de las mismas cuotas vencidas).
+  assert.match(c, /panelDeCobro\.deuda\.vencido/);
   assert.match(c, /overdueAmount=\{overdueAmountReal\}/);
 });

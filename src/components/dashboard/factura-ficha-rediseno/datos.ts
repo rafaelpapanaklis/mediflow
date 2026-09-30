@@ -7,6 +7,7 @@
 
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { fraseCondiciones } from "@/lib/invoices/correo-factura";
+import { notasVisibles } from "@/lib/invoices/marcas-internas";
 
 /** La factura tal como llega a las listas (Caja y expediente). Todo lo que no es
  *  folio/estado/importes es opcional: cada lista trae un recorte distinto. */
@@ -114,7 +115,8 @@ export function borradorDesdeFactura(inv: FacturaDeFicha, condiciones?: Condicio
   return {
     items,
     descuento: Math.max(0, n(inv.discount)),
-    notes: inv.notes ?? "",
+    // ws1-t4 (fallo 5): la copia NO hereda la marca interna de ortodoncia: contaría como el control de otra hoja.
+    notes: notasVisibles(inv.notes),
     doctorId: inv.doctorId ?? "",
     taxRate: inv.taxRate === undefined || inv.taxRate === null ? null : n(inv.taxRate),
     taxIncluded: typeof inv.taxIncluded === "boolean" ? inv.taxIncluded : null,

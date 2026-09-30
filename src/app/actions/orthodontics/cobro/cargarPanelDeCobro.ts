@@ -18,10 +18,10 @@
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth/permissions";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
-import { cobranzaDelCasoUnificada, type CobranzaDelCaso } from "@/lib/orthodontics/cobranza-caso";
+import { cobranzaDelCasoUnificada, deudaDelCaso, type CobranzaDelCaso, type DeudaDelCaso } from "@/lib/orthodontics/cobranza-caso";
 import { normalizarOrthoBillingMode, ORTHO_BILLING_MODE_LABELS, type OrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
-import { cargarCargosDeControlDelCaso } from "@/lib/orthodontics/cobranza-controles-db";
+import { cargarCargosDeControlDelCaso, vencimientoDeFacturaPrincipal } from "@/lib/orthodontics/cobranza-controles-db";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { leerConfigDeCobro, type ConfigDeCobro } from "@/lib/orthodontics/cobro/config-db";
@@ -34,7 +34,7 @@ import { calcularRecargo, diasEntre } from "@/lib/orthodontics/cobro/reglas";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { ESTADOS_LIGABLES, conceptoDeFactura, facturaSinLigarReciente } from "@/lib/orthodontics/cobro/facturas-ligables";
-import { idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
+import { extrasPendientesPorCasos, idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
 import { buscarPrecioControlOrto, elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
@@ -67,6 +67,12 @@ export interface PanelDeCobro {
   /** Las condiciones crudas de la factura (para F7, precargar el editor de plan). */
   condiciones: CondicionesPago | null;
   cobranza: CobranzaDelCaso | null;
+  /**
+   * ws1-t4 (revisión final, fallo 1) — LO QUE DEBE EL CASO, con la misma
+   * función (`deudaDelCaso`) que Cobranza, Casos y la cabecera: plan o
+   * colocación + controles + extras sin pagar.
+   */
+  deuda: DeudaDelCaso;
   /** Ola 2 (ws1-t1) — modo CON EL QUE NACIÓ este caso (no el default actual de la clínica). */
   billingMode: OrthoBillingMode;
   billingModeLabel: string;
@@ -185,6 +191,8 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   const pPlanDetalle = pedir(() => cargarPlanDetalle(ctx.clinicId, treatmentPlanId).catch(() => null));
   const pExtras = pedir(() => listarExtrasDelCaso(treatmentPlanId, ctx.clinicId));
   const pPromesas = pedir(() => listarPromesasDelCaso(treatmentPlanId, ctx.clinicId));
+  // Lo que se debe en extras, con la MISMA consulta que Cobranza y Casos (tablero-data.ts).
+  const pExtrasPendientes = pedir(() => extrasPendientesPorCasos(ctx.clinicId, [treatmentPlanId]));
 
   const casoResult = await pCaso;
   if (isFailure(casoResult)) return casoResult;
@@ -195,7 +203,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     ? pedir(() =>
         prisma.invoice.findFirst({
           where: { id: caso.invoiceId!, clinicId: ctx.clinicId },
-          select: { id: true, invoiceNumber: true, total: true, paid: true, balance: true, status: true, payments: { select: { amount: true, method: true } } },
+          select: { id: true, invoiceNumber: true, total: true, paid: true, balance: true, status: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
         }),
       )
     : null;
@@ -278,10 +286,11 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   const invoice = pInvoice ? await pInvoice : null;
   if (caso.invoiceId && !invoice) return fail("La factura del tratamiento ya no existe");
 
-  const [condicionesResult, saldoAFavorPrevio, cargosControl] = await Promise.all([
+  const [condicionesResult, saldoAFavorPrevio, cargosControl, extrasPendientes] = await Promise.all([
     pCondiciones ?? Promise.resolve({ porFactura: new Map<string, CondicionesPago>() }),
     pSaldoAFavor,
     pCargosControl,
+    pExtrasPendientes,
   ]);
 
   const condiciones = invoice ? condicionesResult.porFactura.get(invoice.id) ?? null : null;
@@ -291,7 +300,15 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   const facturaVigente = invoice && invoice.status !== "CANCELLED" ? invoice : null;
   const cobranza = cobranzaDelCasoUnificada({
     modo: billingMode,
-    facturaPrincipal: facturaVigente ? { condiciones, totalFactura: facturaVigente.total, cobros: facturaVigente.payments } : null,
+    facturaPrincipal: facturaVigente
+      ? {
+          condiciones,
+          totalFactura: facturaVigente.total,
+          cobros: facturaVigente.payments,
+          invoiceId: facturaVigente.id,
+          vencimiento: vencimientoDeFacturaPrincipal(billingMode, facturaVigente.dueDate, facturaVigente.createdAt, zonaHoraria),
+        }
+      : null,
     cargosControl,
     saldoAFavorPrevio,
     ahora: new Date(),
@@ -321,6 +338,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     invoice: invoice ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, paid: invoice.paid, balance: invoice.balance, status: invoice.status } : null,
     condiciones,
     cobranza,
+    deuda: deudaDelCaso(cobranza, extrasPendientes.get(treatmentPlanId)),
     recargoSugerido,
     facturaSinLigar,
   });

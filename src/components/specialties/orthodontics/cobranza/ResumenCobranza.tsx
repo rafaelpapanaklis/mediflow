@@ -20,6 +20,8 @@ import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontic
 import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
 import { fmtDay } from "../redesign/atoms/format";
 import { resumenDeVencidas, tituloDeVencido } from "@/lib/orthodontics/cobro/linea-de-vencido";
+import { cobroPrincipalDelCaso } from "@/lib/orthodontics/cobro/cobro-principal";
+import { esPlanAPlazos } from "@/lib/invoices/plan-de-pagos";
 import orto from "../redesign/orto.module.css";
 
 export interface ResumenCobranzaProps {
@@ -57,8 +59,12 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
   }, [compartido, props.treatmentPlanId]);
 
   if (panel === "cargando" || panel === "error") return null;
-  if (!panel.invoiceId || !panel.cobranza || !panel.invoice) return null;
+  if (!panel.cobranza || (!panel.invoice && panel.deuda.porCobrar <= 0)) return null;
 
+  // ws1-t4 (revisión final, fallo 11): «mensualidad» solo si la factura del caso
+  // es a plazos. La colocación de «Pago por control» y el pago único de «Precio
+  // total» no tienen mensualidades: no se habla de ellas.
+  const aPlazos = esPlanAPlazos(panel.condiciones);
   const cuota = panel.cobranza.cuotaDeHoy;
   // H8: con cuotas vencidas, el título y el botón hablan de LO MISMO (la suma).
   const vencidas = resumenDeVencidas(panel.cobranza.vencidas);
@@ -67,7 +73,12 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
   // el campo nacía en el saldo COMPLETO del tratamiento aunque el aviso de
   // arriba dijera "Próxima mensualidad $1,000". Mismo cálculo que ya usa
   // SectionFinance (`panel.cobranza.vencidas` primero, si no `cuotaDeHoy`).
-  const montoSugerido = panel.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) || cuota?.falta || 0;
+  // ws1-t4: la MISMA factura y el MISMO monto que «Cobrar» de la Sección F y de la cabecera.
+  // (En «Pago por control» con un control que se debe, ese control; si no, lo vencido o la cuota de hoy.)
+  const cobro = cobroPrincipalDelCaso(panel);
+  const montoSugerido = cobro?.montoSugerido ?? 0;
+  // Nunca sobre una factura cancelada (ws1-t10 H·F); y solo si el plan o los controles deben algo.
+  const puedeOfrecerCobro = Boolean(cobro) && panel.deuda.delPlan > 0 && !(cobro!.invoiceId === panel.invoice?.id && panel.invoice?.status === "CANCELLED");
 
   return (
     <div
@@ -82,10 +93,14 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
         <div className="min-w-0">
           <div className={`text-[13px] font-semibold ${vencida ? orto.tonoPeligro : orto.tonoTexto}`}>
             {vencidas.cuantas > 0
-              ? tituloDeVencido(vencidas, (n) => fmt.format(n))
+              ? aPlazos
+                ? tituloDeVencido(vencidas, (n) => fmt.format(n))
+                : `Vencido: ${fmt.format(vencidas.total)}`
               : cuota
-                ? `Próxima mensualidad: ${fmt.format(cuota.falta)}`
-                : "Sin mensualidades pendientes"}
+                ? `${aPlazos ? "Próxima mensualidad" : "Por cobrar"}: ${fmt.format(cuota.falta)}`
+                : aPlazos
+                  ? "Sin mensualidades pendientes"
+                  : "Nada pendiente del tratamiento"}
           </div>
           <div className="text-xs text-[color:var(--pr-texto-3)]">
             {vencidas.cuantas > 0 && vencidas.masAntigua
@@ -93,7 +108,9 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
               : cuota?.vencimiento
                 ? `${vencida ? "Venció" : "Vence"} el ${fmtDay(cuota.vencimiento)} · `
                 : ""}
-            Saldo total {fmt.format(panel.invoice.balance)}
+            {/* Lo que debe el caso: la misma cifra de Cobranza, Casos y la cabecera (deudaDelCaso). */}
+            Saldo total {fmt.format(panel.deuda.porCobrar)}
+            {panel.deuda.extras > 0 ? ` (incluye ${fmt.format(panel.deuda.extras)} en extras)` : ""}
             {panel.cobranza.saldoAFavor > 0 ? (
               <span className={orto.tonoExito}> · saldo a favor {fmt.format(panel.cobranza.saldoAFavor)}</span>
             ) : null}
@@ -101,7 +118,7 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
         </div>
       </div>
       {/* ws1-t4: sin permiso de cobro (billing.charge) no se ofrece «Cobrar». */}
-      {panel.puedeCobrar && panel.invoice.balance > 0 && panel.invoice.status !== "CANCELLED" ? (
+      {panel.puedeCobrar && puedeOfrecerCobro ? (
         <button
           type="button"
           onClick={() => setCobrando(true)}
@@ -110,9 +127,9 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
           <Banknote size={14} strokeWidth={1.75} aria-hidden /> Cobrar
         </button>
       ) : null}
-      {cobrando ? (
+      {cobrando && cobro ? (
         <CobrarEnFactura
-          invoiceId={panel.invoice.id}
+          invoiceId={cobro.invoiceId}
           patientName={props.patientName}
           montoSugerido={montoSugerido}
           rediseno={panel.redisenoFacturas}

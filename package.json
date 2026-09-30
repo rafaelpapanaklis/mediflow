@@ -387,6 +387,7 @@
     "//test:ia-interruptor": "ws1-t1: las cinco rutas que llamaban a Claude sin rastro (weekly-insights, ai-insight, no-shows, clinic-layout, homeopatía) dejan su AiUsageEvent con billedCents 0 sin cambiar quién paga, y registrar nunca tumba la respuesta. Con la función apagada en Saldo de IA no sale ni un fetch (13 funciones; el cron lo lee por clínica a mitad de corrida). Todo encendido de fábrica y si no se puede leer, encendido.",
     "test:ia-interruptor": "tsx --test src/lib/ai-billing/__tests__/fugas-e-interruptor.test.ts",
     "test:orto-cobranza-caso": "tsx --test src/lib/orthodontics/__tests__/cobranza-caso.test.ts",
+    "test:orto-deuda-del-caso": "tsx --test src/lib/orthodontics/__tests__/deuda-del-caso.test.ts",
     "test:orto-helpers": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/__tests__/_helpers.test.ts",
     "test:orto-cobro-reglas": "tsx --test src/lib/orthodontics/__tests__/cobro-reglas.test.ts",
     "test:orto-tablero-alertas": "tsx --test src/lib/orthodontics/__tests__/tablero-alertas.test.ts",

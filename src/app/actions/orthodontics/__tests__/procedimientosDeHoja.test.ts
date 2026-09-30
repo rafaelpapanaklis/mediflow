@@ -95,6 +95,8 @@ mock.module("@/lib/orthodontics/procedimientos-de-hoja-db", {
   },
 });
 mock.module("next/cache", { namedExports: { revalidatePath: () => {} } });
+// ws1-t4 (fallo 3): el cobro devuelve lo que necesita la ventana completa de cobro.
+mock.module("@/lib/menu-dos-niveles/interruptor", { namedExports: { menuDosNivelesEncendido: async () => true } });
 
 const lineas = () => (nota.specialtyData.procedimientos as { procedureId: string; invoiceId?: string | null }[]);
 
@@ -109,6 +111,12 @@ test("con permiso de cobro se crea la factura del extra con la cantidad y el pre
   assert.ok((facturas[0].notes ?? "").startsWith("[extra-hoja:card-1:pc]"));
   assert.equal(lineas().find((l) => l.procedureId === "pc")?.invoiceId, "inv-1");
   assert.equal(nota.specialtyData.hayPorCobrar, false, "ya no queda nada por cobrar");
+  // ws1-t4 (fallo 3): con esto quien llama abre la ventana completa de cobro de ESA factura.
+  if (r.ok) {
+    assert.equal(r.data.invoiceId, "inv-1");
+    assert.equal(r.data.rediseno, true);
+    assert.equal(typeof r.data.total, "number");
+  }
 });
 
 test("NO duplica: el segundo cobro de la misma línea devuelve la misma factura", async () => {

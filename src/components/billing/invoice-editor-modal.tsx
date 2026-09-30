@@ -35,6 +35,7 @@ import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-red
 // ws1-t4: «Editar» de una factura existente (borrador sin pagos) abre este editor.
 import { conceptosParaEditar, cuerpoDeEdicion } from "./editar-factura";
 import { avisoDePlan, CODIGO_PLAN_SE_RECALCULA } from "@/lib/invoices/editar-factura-core";
+import { notasVisibles } from "@/lib/invoices/marcas-internas";
 
 /**
  * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
@@ -209,7 +210,8 @@ function InvoiceEditorBody({
   const descuentoInicial = editar ? Math.max(0, Number(editar.discount ?? 0) || 0) : (inicial?.descuento ?? 0);
   const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">(descuentoInicial > 0 ? "amount" : "none");
   const [discountValue, setDiscountValue] = useState<number>(descuentoInicial);
-  const [notes, setNotes] = useState(editar ? (editar.notes ?? "") : (inicial?.notes ?? ""));
+  // ws1-t4 (fallo 5): sin la marca interna de ortodoncia (`[control-hoja:…]`); el servidor la conserva al guardar.
+  const [notes, setNotes] = useState(editar ? notasVisibles(editar.notes) : (inicial?.notes ?? ""));
   // Editar con pagos (ws1-t4): lo ya pagado (saldo a favor incluido) es el piso
   // del total, y el plan a plazos —si lo hay— se recalcula con el total nuevo.
   const pagadoEdicion = editar ? Math.max(0, Number(editar.paid ?? 0) || 0) : 0;

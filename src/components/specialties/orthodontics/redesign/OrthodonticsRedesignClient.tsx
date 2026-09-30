@@ -475,15 +475,18 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
   // Saldo real: null mientras carga o si el caso no tiene factura todavía
   // — nunca el precio de referencia disfrazado de "pendiente" (§5).
+  // ws1-t4 (revisión final, fallo 1): es LO QUE DEBE EL CASO (`panel.deuda`, la
+  // misma función que Cobranza y Casos: plan o colocación + controles + extras),
+  // no solo el saldo de la factura principal.
   const outstandingAmountReal =
-    panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" && panelDeCobro.invoice
-      ? Math.max(0, panelDeCobro.invoice.balance)
+    panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" && (panelDeCobro.invoice || panelDeCobro.deuda.porCobrar > 0)
+      ? panelDeCobro.deuda.porCobrar
       : null;
 
   // #73: lo VENCIDO de ese saldo (el rojo de la cabecera depende de esto, no del saldo total).
   const overdueAmountReal =
     panelDeCobro && panelDeCobro !== "cargando" && panelDeCobro !== "error" && panelDeCobro.cobranza
-      ? Math.round(panelDeCobro.cobranza.vencidas.reduce((acc, q) => acc + q.falta, 0) * 100) / 100
+      ? panelDeCobro.deuda.vencido
       : null;
 
   // ws1-t4 (revisión panel.108, fallo 3): «Cobrar» de la cabecera abría solo la

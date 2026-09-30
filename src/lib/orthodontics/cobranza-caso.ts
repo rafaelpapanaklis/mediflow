@@ -224,6 +224,16 @@ export interface CobranzaUnificadaInput {
     condiciones: CondicionesPago | null;
     totalFactura: number;
     cobros: Array<{ amount: unknown; method?: string | null }>;
+    /**
+     * ws1-t4 (revisión final, fallo 1) — solo cuenta cuando la factura NO es a
+     * plazos (colocación de «Pago por control», pago único de «Precio total»):
+     * esa factura es UNA cuota que vence ese día ("YYYY-MM-DD",
+     * `vencimientoDeCargoDeControl`). Sin fecha, la cuota se debe pero nunca
+     * sale «vencida».
+     */
+    vencimiento?: string | null;
+    /** La factura misma, para que su cuota única sepa qué cobrar. */
+    invoiceId?: string | null;
   } | null;
   /** Solo aplica en PAGO_POR_CONTROL: los controles atendidos, cada uno con su factura. */
   cargosControl: CargoDeControl[];
@@ -291,21 +301,61 @@ export function agruparVencidasPorFactura(
   return grupos;
 }
 
+/**
+ * La factura principal del caso (plan a plazos, pago único o colocación).
+ * ws1-t4 (revisión final, fallo 1): una factura SIN plazos (la colocación de
+ * «Pago por control», el pago único de «Precio total») no tiene calendario, y
+ * `cobranzaDelCaso` la daba por saldada ($0): Cobranza no enseñaba los $3,000
+ * de la colocación sin pagar. Ahora es UNA cuota con lo que falta de toda la
+ * factura (sin cascada con los controles: es su propia factura).
+ */
+function cobranzaDeLaPrincipal(
+  f: NonNullable<CobranzaUnificadaInput["facturaPrincipal"]>,
+  saldoAFavorPrevio: number,
+  ahora: Date,
+  zonaHoraria: string,
+): CobranzaDelCaso {
+  if (calendarioDeCuotas(f.condiciones, f.totalFactura).length > 0 || !(aCentavos(f.totalFactura) > 0)) {
+    return cobranzaDelCaso({ ...f, saldoAFavorPrevio, ahora, zonaHoraria });
+  }
+  const hoy = hoyEnZona(ahora, zonaHoraria);
+  const importeC = aCentavos(f.totalFactura);
+  const pagadoC = pagosDesdeFilas(f.cobros).reduce((s, p) => s + aCentavos(p.importe), 0);
+  const abonadoC = Math.min(importeC, Math.max(0, pagadoC));
+  const faltaC = importeC - abonadoC;
+  const vencimiento = f.vencimiento ?? null;
+  const estado: EstadoCuota = faltaC === 0 ? "pagada" : vencimiento && vencimiento < hoy ? "vencida" : "porVencer";
+  const cuota: CuotaConEstado = {
+    numero: 0,
+    esEnganche: false,
+    importe: aPesos(importeC),
+    vencimiento,
+    ...(f.invoiceId ? { invoiceId: f.invoiceId } : {}),
+    abonado: aPesos(abonadoC),
+    falta: aPesos(faltaC),
+    estado,
+  };
+  return {
+    cuotaDeHoy: estado === "pagada" ? null : cuota,
+    pagadas: estado === "pagada" ? [cuota] : [],
+    vencidas: estado === "vencida" ? [cuota] : [],
+    proximas: estado === "porVencer" ? [cuota] : [],
+    saldoTotal: aPesos(faltaC),
+    saldoAFavor: aPesos(aCentavos(saldoAFavorPrevio) + Math.max(0, pagadoC - importeC)),
+    proximoVencimiento: estado === "porVencer" ? vencimiento : null,
+  };
+}
+
 export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): CobranzaDelCaso | null {
   const modo = normalizarOrthoBillingMode(input.modo);
 
   if (modo === "PRECIO_TOTAL") {
     if (!input.facturaPrincipal) return null;
-    return cobranzaDelCaso({
-      ...input.facturaPrincipal,
-      saldoAFavorPrevio: input.saldoAFavorPrevio,
-      ahora: input.ahora,
-      zonaHoraria: input.zonaHoraria,
-    });
+    return cobranzaDeLaPrincipal(input.facturaPrincipal, input.saldoAFavorPrevio, input.ahora, input.zonaHoraria);
   }
 
   const colocacion = input.facturaPrincipal
-    ? cobranzaDelCaso({ ...input.facturaPrincipal, saldoAFavorPrevio: 0, ahora: input.ahora, zonaHoraria: input.zonaHoraria })
+    ? cobranzaDeLaPrincipal(input.facturaPrincipal, 0, input.ahora, input.zonaHoraria)
     : null;
   const controles = input.cargosControl.length > 0 ? cobranzaPorControles(input.cargosControl, input.ahora, input.zonaHoraria) : null;
   const combinado = combinarCobranzas(colocacion, controles);
@@ -314,4 +364,45 @@ export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): Cobranz
     return input.saldoAFavorPrevio > 0 ? { ...cuotaVacia(), saldoAFavor: input.saldoAFavorPrevio } : null;
   }
   return { ...combinado, saldoAFavor: aPesos(aCentavos(combinado.saldoAFavor) + aCentavos(input.saldoAFavorPrevio)) };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE DEBE EL CASO (ws1-t4, revisión final, fallo 1) — UN solo número para
+// Cobranza, la ficha (Cobro y cabecera «Saldo de ortodoncia»), Casos y la
+// cuenta del paciente: plan a plazos / pago único / colocación + controles
+// facturados sin pagar + extras sin pagar. Antes cada pantalla sumaba otra
+// cosa (Cobranza $200, Cobro $3,000, Facturación $3,200 para el mismo caso).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface DeudaDelCaso {
+  /** Todo lo que falta por cobrar del caso, en pesos. */
+  porCobrar: number;
+  /** De eso, lo del plan (mensualidades, pago único o colocación) y los controles. */
+  delPlan: number;
+  /** De eso, los extras (reposiciones, microimplantes…) sin pagar. */
+  extras: number;
+  extrasCantidad: number;
+  /** Lo vencido del plan y los controles (los extras no tienen fecha). */
+  vencido: number;
+  /** Lo facturado del plan y los controles, y lo abonado a eso (sin excedentes). */
+  facturado: number;
+  pagado: number;
+}
+
+export function deudaDelCaso(
+  cobranza: CobranzaDelCaso | null,
+  extras: { monto: number; cantidad: number } | null | undefined,
+): DeudaDelCaso {
+  const cuotas = cobranza ? [...cobranza.pagadas, ...cobranza.vencidas, ...cobranza.proximas] : [];
+  const delPlanC = cobranza ? aCentavos(cobranza.saldoTotal) : 0;
+  const extrasC = Math.max(0, aCentavos(extras?.monto ?? 0));
+  return {
+    porCobrar: aPesos(delPlanC + extrasC),
+    delPlan: aPesos(delPlanC),
+    extras: aPesos(extrasC),
+    extrasCantidad: extrasC > 0 ? extras?.cantidad ?? 0 : 0,
+    vencido: aPesos((cobranza?.vencidas ?? []).reduce((s, q) => s + aCentavos(q.falta), 0)),
+    facturado: aPesos(cuotas.reduce((s, q) => s + aCentavos(q.importe), 0)),
+    pagado: aPesos(cuotas.reduce((s, q) => s + aCentavos(q.abonado), 0)),
+  };
 }

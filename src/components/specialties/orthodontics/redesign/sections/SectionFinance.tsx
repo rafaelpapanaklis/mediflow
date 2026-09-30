@@ -44,7 +44,7 @@ import { resolverPromesaDePago } from "@/app/actions/orthodontics/cobro/resolver
 import { abrirPlanDePago } from "@/app/actions/orthodontics/cobro/abrirPlanDePago";
 import { comprobarPlanDePagoLibre } from "@/app/actions/orthodontics/cobro/comprobarPlanDePagoLibre";
 import { isFailure } from "@/app/actions/orthodontics/result";
-import type { CuotaConEstado } from "@/lib/invoices/plan-de-pagos";
+import { esPlanAPlazos, type CuotaConEstado } from "@/lib/invoices/plan-de-pagos";
 import { cobroPrincipalDelCaso, montoDelCobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
 import { progresoDeControles, textoControlQueSigue, textoControlesHechos, textoDelEstimado } from "@/lib/orthodontics/plan-detalle";
 import orto from "../orto.module.css";
@@ -164,6 +164,11 @@ export function SectionFinance(props: SectionFinanceProps) {
   const cobroPrincipal = cobroPrincipalDelCaso(panel);
   const idFacturaACobrar: string | null = cobroPrincipal?.invoiceId ?? null;
   const controlACobrar = drawer?.kind === "cobrar-control" ? controlesPorCobrar.find((c) => c.invoiceId === drawer.invoiceId) ?? null : null;
+  // ws1-t4 (revisión final, fallo 11): calendario y CFDI «de cada mensualidad»
+  // solo si la factura del caso es a plazos. La colocación de «Pago por control»
+  // y el pago único de «Precio total» no tienen mensualidades.
+  const aPlazos = esPlanAPlazos(panel.condiciones);
+  const deuda = panel.deuda;
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
 
   // ronda 3 (ws1-t2, H6): lo que se sugiere cobrar con «Cobrar» — TODO lo
@@ -215,7 +220,7 @@ export function SectionFinance(props: SectionFinanceProps) {
         }
       >
         <div style={{ padding: "0 18px" }}>
-          <ExtrasPorCobrar treatmentPlanId={props.treatmentPlanId} />
+          <ExtrasPorCobrar treatmentPlanId={props.treatmentPlanId} onCambio={recargar} />
         </div>
         {panel.controlesDelPlan ? (
           <div style={{ padding: "0 18px" }}>
@@ -280,23 +285,29 @@ export function SectionFinance(props: SectionFinanceProps) {
           <>
             <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
               <div className={orto.rejilla3} style={{ gap: "12px 18px" }}>
+                {/* ws1-t4 (revisión final, fallo 1): lo que debe EL CASO (deudaDelCaso,
+                    la misma cifra de Cobranza, Casos y la cabecera): en «Pago por control»,
+                    colocación + controles; los extras sin pagar, sumados y dichos aparte. */}
                 <div className={orto.dato}>
-                  <div className={orto.datoEtiqueta}>Total del tratamiento</div>
-                  <div className={`${orto.datoValor} ${orto.datoValorGrande}`}>{fmtMoney(panel.invoice!.total)}</div>
+                  <div className={orto.datoEtiqueta}>{esPorControl ? "Colocación y controles" : "Total del tratamiento"}</div>
+                  <div className={`${orto.datoValor} ${orto.datoValorGrande}`}>{fmtMoney(deuda.facturado)}</div>
                 </div>
                 <div className={orto.dato}>
                   <div className={orto.datoEtiqueta}>Pagado</div>
-                  <div className={`${orto.datoValor} ${orto.datoValorGrande} ${orto.tonoExito}`}>{fmtMoney(panel.invoice!.paid)}</div>
+                  <div className={`${orto.datoValor} ${orto.datoValorGrande} ${orto.tonoExito}`}>{fmtMoney(deuda.pagado)}</div>
                 </div>
                 <div className={orto.dato}>
                   <div className={orto.datoEtiqueta}>Por cobrar</div>
-                  <div className={`${orto.datoValor} ${orto.datoValorGrande} ${(panel.cobranza?.vencidas.length ?? 0) > 0 ? orto.tonoPeligro : ""}`}>{fmtMoney(panel.invoice!.balance)}</div>
+                  <div className={`${orto.datoValor} ${orto.datoValorGrande} ${deuda.vencido > 0 ? orto.tonoPeligro : ""}`}>{fmtMoney(deuda.porCobrar)}</div>
+                  {deuda.extras > 0 ? (
+                    <div className={orto.datoSub}>Incluye {fmtMoney(deuda.extras)} en extras</div>
+                  ) : null}
                   {panel.cobranza?.saldoAFavor ? (
                     <div className={`${orto.datoSub} ${orto.tonoExito}`}>Saldo a favor: {fmtMoney(panel.cobranza.saldoAFavor)}</div>
                   ) : null}
                 </div>
               </div>
-              <ProgressBar value={panel.invoice!.paid} max={panel.invoice!.total} color="emerald" className="mt-[12px]" ariaLabel="Avance de pagos" />
+              <ProgressBar value={deuda.pagado} max={deuda.facturado} color="emerald" className="mt-[12px]" ariaLabel="Avance de pagos" />
             </div>
 
             {panel.cobranza ? (
@@ -355,7 +366,7 @@ export function SectionFinance(props: SectionFinanceProps) {
               </div>
             ) : null}
 
-            {panel.cobranza ? (
+            {panel.cobranza && aPlazos ? (
               <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <h4 className={orto.bloqueTitulo}>Calendario de mensualidades</h4>
@@ -365,13 +376,14 @@ export function SectionFinance(props: SectionFinanceProps) {
                     <Pill color="slate" size="xs">Por vencer</Pill>
                   </div>
                 </div>
-                {calendarioCompleto(panel.cobranza).length === 0 ? (
-                  <p className={orto.vacioLinea}>Pago único, sin calendario de mensualidades.</p>
+                {calendarioCompleto(panel.cobranza).filter((q) => !q.invoiceId).length === 0 ? (
+                  <p className={orto.vacioLinea}>Sin calendario de mensualidades.</p>
                 ) : (
                   // Las casillas se acomodan solas al ancho: con ocho columnas fijas,
                   // en el teléfono el importe no cabía en la suya.
                   <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
-                    {calendarioCompleto(panel.cobranza).map((q) => (
+                    {/* Solo las cuotas de la factura a plazos: los controles (con su propia factura) van en «Controles por cobrar». */}
+                    {calendarioCompleto(panel.cobranza).filter((q) => !q.invoiceId).map((q) => (
                       <div key={`${q.esEnganche ? "e" : "p"}-${q.numero}`} className={`${orto.caja} text-center ${ESTILO_CUOTA[q.estado]}`} style={{ padding: "8px 6px" }}>
                         <div className="text-[11px] font-semibold opacity-80">{q.esEnganche ? "Enganche" : `Mes ${q.numero}`}</div>
                         <div className="text-[13px] tabular-nums font-bold mt-[1px] whitespace-nowrap">{fmtMoney(q.importe)}</div>
@@ -442,6 +454,7 @@ export function SectionFinance(props: SectionFinanceProps) {
 
             {bloqueControlesPorCobrar}
 
+            {aPlazos ? (
             <div className={`${orto.tarjetaPie} text-[11.5px] text-[color:var(--pr-texto-3)]`}>
               {/* ws1-t1 (sep-2026): decisión de Rafael — cada pago se factura
                   como su propio CFDI PUE (igual que la suscripción del plan),
@@ -453,6 +466,7 @@ export function SectionFinance(props: SectionFinanceProps) {
               Facturación o en la ficha del paciente y usa «Facturar este pago» junto al pago que
               quieras timbrar. El cobro automático con tarjeta todavía no está disponible aquí.
             </div>
+            ) : null}
           </>
         )}
       </Card>

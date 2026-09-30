@@ -7,6 +7,9 @@
 //    «Cobrar extra», ligada al caso) de UNA línea con costo aparte de una hoja YA
 //    FIRMADA. No duplica: por la línea, por la marca de la factura y por un candado
 //    de fila sobre la nota. Exige permiso de cobro; sin él, la línea sigue «por cobrar».
+//    ws1-t4 (revisión final, fallo 3): devuelve además lo que necesita la ventana
+//    completa de cobro de esa factura, que quien llama abre enseguida (como los
+//    demás «Cobrar»); antes solo creaba la factura y no pasaba nada más.
 //  · listarExtrasPorCobrar: lo que quedó pendiente (ficha y Cobranza).
 //
 // ES DINERO: precio y nombre salen de lo GUARDADO en la hoja al firmar (que salió
@@ -14,6 +17,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { hasPermission } from "@/lib/auth/permissions";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
@@ -132,7 +136,15 @@ export async function cargarProcedimientosDeHoja(input: {
 export async function cobrarProcedimientoDeHoja(input: {
   cardId: string;
   procedureId: string;
-}): Promise<ActionResult<{ invoiceId: string; invoiceNumber: string | null; yaExistia: boolean }>> {
+}): Promise<ActionResult<{
+  invoiceId: string;
+  invoiceNumber: string | null;
+  yaExistia: boolean;
+  /** Para abrir la ventana completa de cobro (`CobrarEnFactura`) sin otra ida al servidor. */
+  total: number;
+  rediseno: boolean;
+  clinicTaxMode: string | null;
+}>> {
   const ctxResult = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(ctxResult)) return ctxResult;
   const { ctx } = ctxResult.data;
@@ -218,20 +230,47 @@ export async function cobrarProcedimientoDeHoja(input: {
 
     if ("error" in resultado) return fail(resultado.error);
 
-    await auditarCobro({
-      ctx,
-      action: "cobrar-procedimiento-de-hoja",
-      entityId: card.treatmentPlanId,
-      patientId: card.patientId,
-      meta: { cardId: card.id, procedureId: input.procedureId, invoiceId: resultado.invoiceId, yaExistia: resultado.yaExistia },
-    });
-    revalidatePath(`/dashboard/patients/${card.patientId}`);
+    const [, ventana] = await Promise.all([
+      auditarCobro({
+        ctx,
+        action: "cobrar-procedimiento-de-hoja",
+        entityId: card.treatmentPlanId,
+        patientId: card.patientId,
+        meta: { cardId: card.id, procedureId: input.procedureId, invoiceId: resultado.invoiceId, yaExistia: resultado.yaExistia },
+      }),
+      datosDeLaVentanaDeCobro(ctx.clinicId, resultado.invoiceId),
+    ]);
+    // ws1-t4 (fallo 3): ya NO se revalida la ficha del paciente. Desde una acción,
+    // `revalidatePath` de la página en la que se está vuelve a pintar esa página
+    // entera DENTRO de la respuesta (la ficha tarda 10–25 s), y el botón se quedaba
+    // «Cobrando…» todo ese rato. La hoja y la lista se recargan solas; Cobranza
+    // (lo único que pinta el servidor) sí se revalida.
     revalidatePath("/dashboard/orthodontics/cobranza");
-    return ok(resultado);
+    return ok({ ...resultado, ...ventana });
   } catch (e) {
     console.error("[ortho] cobrarProcedimientoDeHoja:", e);
     return fail("No se pudo cobrar el procedimiento. Inténtalo de nuevo.");
   }
+}
+
+/** El interruptor del diseño de facturas, el régimen de la clínica y el total de la factura. Nunca lanza. */
+async function datosDeLaVentanaDeCobro(
+  clinicId: string,
+  invoiceId: string,
+): Promise<{ total: number; rediseno: boolean; clinicTaxMode: string | null }> {
+  const seguro = async <T,>(f: () => Promise<T>, porDefecto: T): Promise<T> => {
+    try {
+      return await f();
+    } catch {
+      return porDefecto;
+    }
+  };
+  const [rediseno, clinica, factura] = await Promise.all([
+    seguro(() => menuDosNivelesEncendido(clinicId), false),
+    seguro(() => prisma.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } }), null),
+    seguro(() => prisma.invoice.findFirst({ where: { id: invoiceId, clinicId }, select: { balance: true } }), null),
+  ]);
+  return { total: Math.max(0, Number(factura?.balance) || 0), rediseno: Boolean(rediseno), clinicTaxMode: clinica?.cfdiTaxMode ?? null };
 }
 
 export interface ExtraPorCobrar {

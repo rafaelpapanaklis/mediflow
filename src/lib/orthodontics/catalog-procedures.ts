@@ -172,6 +172,33 @@ export function _olvidarColumnaOrthoIncluido(): void {
   columna = null;
 }
 
+/**
+ * ws1-t4 (revisión final, fallo 2) — cómo se cobra de VERDAD un procedimiento
+ * de ortodoncia. PURO. El catálogo sembrado antes de que existiera la columna
+ * (o cuando marcarla falló) quedó con `orthoIncludedInTreatment` en NULL y el
+ * cobro escrito solo en la descripción («Con costo aparte.»): en la clínica de
+ * prueba, «Microimplante (TAD) $2,500», «Reposición de bracket» y otros ocho no
+ * salían en «Cobrar extra» ni en la hoja. Si la columna ya dice algo, manda
+ * ella. Si no: lo que la precarga sugerida dice para ese nombre y, si no es de
+ * la precarga, lo que dice su descripción. El control y lo que ya se hace
+ * dentro del control («Cambio de arco»…) siguen sin cobro propio (NULL).
+ */
+export function cobroDelProcedimiento(p: {
+  name: string;
+  description?: string | null;
+  orthoIncludedInTreatment: boolean | null | undefined;
+}): boolean | null {
+  if (typeof p.orthoIncludedInTreatment === "boolean") return p.orthoIncludedInTreatment;
+  const nombre = p.name.trim();
+  if (nombre === TIPO_CITA_CONTROL_ORTO || HECHOS_DENTRO_DEL_CONTROL.includes(nombre)) return null;
+  const semilla = DEFAULT_ORTHO_PROCEDURES.find((x) => x.name === nombre);
+  if (semilla) return semilla.orthoIncludedInTreatment;
+  const d = (p.description ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  if (/\bcon costo aparte\b/.test(d)) return false;
+  if (/^\s*incluido en el tratamiento\b/.test(d)) return true;
+  return null;
+}
+
 export interface OrthoProcedureRow {
   id: string;
   name: string;
@@ -190,21 +217,26 @@ export interface OrthoProcedureRow {
  */
 export async function listarProcedimientosDeOrtodoncia(clinicId: string): Promise<OrthoProcedureRow[]> {
   if (!clinicId) return [];
-  let base: { id: string; name: string; basePrice: number; isActive: boolean }[];
+  let conDescripcion: { id: string; name: string; basePrice: number; isActive: boolean; description: string | null }[];
   try {
-    base = await prisma.procedureCatalog.findMany({
+    conDescripcion = await prisma.procedureCatalog.findMany({
       where: { clinicId, category: ORTHO_CATALOG_CATEGORY },
-      select: { id: true, name: true, basePrice: true, isActive: true },
+      select: { id: true, name: true, basePrice: true, isActive: true, description: true },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
     });
   } catch (e) {
     if (esRelacionAusente(e)) return [];
     throw e;
   }
-  if (base.length === 0) return [];
+  if (conDescripcion.length === 0) return [];
+  const descripcionDe = new Map(conDescripcion.map((p) => [p.id, p.description]));
+  const base = conDescripcion.map(({ description: _d, ...p }) => p);
+  // ws1-t4 (fallo 2): sin valor en la columna, el cobro sale de la precarga o de la descripción.
+  const resolver = (p: (typeof base)[number], flag: boolean | null) =>
+    ({ ...p, orthoIncludedInTreatment: cobroDelProcedimiento({ name: p.name, description: descripcionDe.get(p.id), orthoIncludedInTreatment: flag }) });
 
   if (!(await columnaOrthoIncluidoExiste())) {
-    return base.map((p) => ({ ...p, orthoIncludedInTreatment: null }));
+    return base.map((p) => resolver(p, null));
   }
   try {
     const flags = await prisma.$queryRaw<{ id: string; orthoIncludedInTreatment: boolean | null }[]>`
@@ -212,10 +244,10 @@ export async function listarProcedimientosDeOrtodoncia(clinicId: string): Promis
         FROM "procedure_catalog"
        WHERE "clinicId" = ${clinicId} AND "category" = ${ORTHO_CATALOG_CATEGORY}`;
     const flagById = new Map(flags.map((f) => [f.id, f.orthoIncludedInTreatment]));
-    return base.map((p) => ({ ...p, orthoIncludedInTreatment: flagById.get(p.id) ?? null }));
+    return base.map((p) => resolver(p, flagById.get(p.id) ?? null));
   } catch (e) {
     console.warn("[ortodoncia:catalogo] no se pudo leer incluido/con costo:", e);
-    return base.map((p) => ({ ...p, orthoIncludedInTreatment: null }));
+    return base.map((p) => resolver(p, null));
   }
 }
 

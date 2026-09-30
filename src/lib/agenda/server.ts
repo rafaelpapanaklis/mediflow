@@ -5,7 +5,7 @@ import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { cobranzaDelCasoUnificada } from "@/lib/orthodontics/cobranza-caso";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { cargarModosDeCobro } from "@/lib/orthodontics/billing-mode-db";
-import { cargarCargosDeControlPorCasos } from "@/lib/orthodontics/cobranza-controles-db";
+import { cargarCargosDeControlPorCasos, vencimientoDeFacturaPrincipal } from "@/lib/orthodontics/cobranza-controles-db";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import type { Prisma, ClinicCategory } from "@prisma/client";
 import type {
@@ -212,7 +212,7 @@ async function pacientesConMensualidadVencida(
       leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds }),
       prisma.invoice.findMany({
         where: { id: { in: invoiceIds }, clinicId },
-        select: { id: true, total: true, payments: { select: { amount: true, method: true } } },
+        select: { id: true, total: true, dueDate: true, createdAt: true, payments: { select: { amount: true, method: true } } },
       }),
       cargarCargosDeControlPorCasos(clinicId, casosPorControl),
     ]);
@@ -227,7 +227,13 @@ async function pacientesConMensualidadVencida(
       const resumen = cobranzaDelCasoUnificada({
         modo: modosPorCaso.get(plan.id) ?? null,
         facturaPrincipal: invoice != null && plan.invoiceId
-          ? { condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null, totalFactura: invoice.total, cobros: invoice.payments }
+          ? {
+              condiciones: condicionesResult.porFactura.get(plan.invoiceId) ?? null,
+              totalFactura: invoice.total,
+              cobros: invoice.payments,
+              invoiceId: plan.invoiceId,
+              vencimiento: vencimientoDeFacturaPrincipal(modosPorCaso.get(plan.id) ?? null, invoice.dueDate, invoice.createdAt, zonaHoraria),
+            }
           : null,
         cargosControl: cargosPorCaso.get(plan.id) ?? [],
         saldoAFavorPrevio: 0,
