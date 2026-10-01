@@ -1,29 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  persistentRateLimit,
-  failbanGuard,
-  recordAuthFailure,
-  recordAuthSuccess,
-} from "@/lib/failban";
+import { persistentRateLimit, failbanGuard } from "@/lib/failban";
 
 export const dynamic = "force-dynamic";
 
-const SCOPE = "clinic-login";
+const SCOPE = "clinic-login"; // = SCOPE_LOGIN_CLINICA de @/lib/auth/login-servidor
 
 /**
- * Guard server-side para el login de clínica.
+ * Consulta de bloqueo del login de clínica (solo `check`).
  *
- * El login de clínica es Supabase CLIENT-SIDE (signInWithPassword en el
- * navegador), así que NO hay un seam de servidor ANTES de validar credenciales.
- * Este endpoint es ese seam, llamado por el formulario:
- *   - phase "check"   → ANTES de signInWithPassword. 429 si IP/cuenta bloqueada.
- *   - phase "fail"    → tras un signInWithPassword fallido. Cuenta el fallo.
- *   - phase "success" → tras login OK. Resetea contadores (IP + cuenta).
- *
- * Es best-effort: el formulario hace FAIL-OPEN si este endpoint falla o no
- * responde 429 (nunca rompe un login legítimo). La protección dura vive aquí en
- * el servidor; un atacante podría saltarse el "check" del cliente, pero el
- * conteo de fallos sigue siendo server-side. Endurecer con captcha = otra ola.
+ * Auditoría 30-sep (M4): el login ya es del servidor (POST /api/auth/login),
+ * que cuenta él mismo los fallos y solo él limpia el bloqueo tras un acierto
+ * real. Aquí se aceptaban `fail` y `success` SIN sesión: cinco `fail` con el
+ * correo del dueño lo dejaban fuera 30 min y un `success` borraba el bloqueo
+ * de cualquier cuenta. Esas dos fases ya no hacen nada (410): ni con sesión,
+ * porque nadie legítimo las necesita. `check` sigue para quien lo llame
+ * (responde 429 si la IP o la cuenta están bloqueadas, sin decir si existe).
  */
 export async function POST(req: NextRequest) {
   // Anti-flood del endpoint (anti-spam del contador). Intencionalmente más alto
@@ -42,14 +33,9 @@ export async function POST(req: NextRequest) {
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const target = { scope: SCOPE, account: email || null };
 
-  if (phase === "fail") {
-    await recordAuthFailure(req, target);
-    return NextResponse.json({ ok: true });
-  }
-
-  if (phase === "success") {
-    await recordAuthSuccess(req, target);
-    return NextResponse.json({ ok: true });
+  if (phase === "fail" || phase === "success") {
+    // M4: retiradas. No cuentan ni limpian nada (ver arriba).
+    return NextResponse.json({ error: "Fase retirada: el login se hace en /api/auth/login" }, { status: 410 });
   }
 
   // phase "check" (por defecto): 429 con Retry-After si está bloqueado.

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { createClient } from "@/lib/supabase/client";
 import { Logo } from "../../landing/primitives/logo";
 import { SecureBadge } from "../../landing/primitives/secure-badge";
 import { SocialButtons, GOOGLE_OAUTH_ENABLED } from "../social-buttons";
@@ -30,46 +29,31 @@ export function LoginForm() {
     setError(null);
     setLoading(true);
     try {
-      const supabase = createClient();
-      // Cerrar sesión previa para evitar contaminación cross-account.
-      try { await supabase.auth.signOut(); } catch { /* ignore */ }
-
-      // Fail-ban: lockout por IP/cuenta tras varios intentos fallidos. Best-
-      // effort y FAIL-OPEN: solo bloquea ante un 429 explícito; cualquier otro
-      // resultado (o error de red) deja pasar para no romper logins legítimos.
+      // M4 (auditoría 30-sep): la contraseña la comprueba el SERVIDOR, que lleva
+      // el bloqueo persistente por IP y por cuenta y escribe las cookies de
+      // sesión en su respuesta. El navegador ya no habla con Supabase aquí.
+      let res: Response;
       try {
-        const guard = await fetch("/api/auth/login-attempt", {
+        res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "check", email }),
+          body: JSON.stringify({ email, password }),
         });
-        if (guard.status === 429) {
-          setError("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
-          setLoading(false);
-          return;
-        }
-      } catch { /* fail-open */ }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-      if (authError) {
-        // Cuenta el fallo (fire-and-forget; no bloquea la UI).
-        void fetch("/api/auth/login-attempt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "fail", email }),
-        }).catch(() => {});
-        // Si el login FALLA no hay animación: error en el form, como siempre.
-        setError("Email o contraseña incorrectos.");
+      } catch {
+        setError("No pudimos conectar. Revisa tu internet e inténtalo de nuevo.");
         setLoading(false);
         return;
       }
-
-      // Éxito → resetea contadores de fallo (fire-and-forget).
-      void fetch("/api/auth/login-attempt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phase: "success", email }),
-      }).catch(() => {});
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(
+          res.status === 429
+            ? "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
+            : data?.error ?? "Correo o contraseña incorrectos.",
+        );
+        setLoading(false);
+        return;
+      }
 
       // Sembrar/limpiar cookie activeClinicId para el nuevo supabaseId.
       try { await fetch("/api/auth/post-login", { method: "POST" }); } catch { /* ignore */ }
