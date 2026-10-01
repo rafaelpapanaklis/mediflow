@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import sharp from "sharp";
 import JSZip from "jszip";
 import {
@@ -320,7 +321,7 @@ test("el rechazo concuerda en género: «no una radiografía…» y «no un docu
 });
 
 test("FOTO_CLINICA rechaza un JPG truncado (cabecera válida, cuerpo cortado) con motivo claro", async () => {
-  const entero = await sharp({ create: { width: 400, height: 400, channels: 3, noise: { type: "gaussian", mean: 128, sigma: 60 } } }).jpeg().toBuffer();
+  const entero = await sharp(randomBytes(400 * 400 * 3), { raw: { width: 400, height: 400, channels: 3 } }).jpeg().toBuffer();
   const truncado = entero.subarray(0, Math.floor(entero.length / 3));
   const r = await validarArchivo({ bytes: truncado, nombreOriginal: "foto.jpg", perfil: PERFILES.FOTO_CLINICA });
   assert.equal(r.ok, false);
