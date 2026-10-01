@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     dataIdQuery: url.searchParams.get("data.id"),
     idsDelBody: [data?.id as string | number | undefined, (body as { id?: string | number }).id],
   });
-  if (!firma.ok) {
+  if ("motivo" in firma) {
     if (firma.motivo === "sin_secreto") {
       console.error("MercadoPago webhook: MERCADOPAGO_WEBHOOK_SECRET no está configurado; notificación rechazada (503)");
       return NextResponse.json({ error: "webhook not configured" }, { status: 503 });
