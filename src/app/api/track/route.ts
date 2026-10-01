@@ -10,6 +10,7 @@ import { resolveGeo } from "@/lib/analytics/geo";
 import { parseUserAgent } from "@/lib/analytics/ua";
 import { classifyReferrer } from "@/lib/analytics/referrer";
 import { resolveIdentity } from "@/lib/analytics/identity";
+import { suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 import { surfaceFromPath, isTrackingIgnored, MAX_BATCH } from "@/lib/analytics/constants";
 
 export const runtime = "nodejs";
@@ -93,6 +94,9 @@ export async function POST(req: NextRequest) {
   return NO_CONTENT();
 }
 
+/** ¿Esta petición viene de una sesión de «Ver como clínica»? */
+const esSuplantacion = async () => (await suplantacionDeEstaPeticion()) !== null;
+
 async function ingest(req: NextRequest, p: Payload): Promise<void> {
   // Los "ping" (heartbeat) sólo refrescan lastSeenAt: no se persisten como evento.
   const persistable = p.events.filter((e) => e.type !== "ping");
@@ -100,6 +104,10 @@ async function ingest(req: NextRequest, p: Payload): Promise<void> {
   const firstPath = pvEvents.length ? pvEvents[0].path : p.events[0].path;
   const surface = surfaceFromPath(firstPath);
   if (surface === "admin") return; // no se rastrea el panel del owner
+  // «Ver como clínica» (M5, añadido de Rafael 1-oct): el admin de plataforma
+  // navegando como el dueño NO es actividad de la clínica — ni sesión, ni
+  // «último acceso», ni eventos, ni «en vivo», ni salud/uso en /admin.
+  if (await esSuplantacion()) return;
 
   const now = new Date();
   const ua = parseUserAgent(req.headers.get("user-agent"));
