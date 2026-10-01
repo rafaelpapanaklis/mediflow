@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit } from "@/lib/failban";
+import {
+  elegirDestinoWhatsApp, nombreParaPlantilla, TOPE_CITAS_WEB_PENDIENTES,
+} from "@/lib/public-book/destino-whatsapp";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { isOverlapError } from "@/lib/agenda/api-helpers";
 import { getPatientPortalContext } from "@/lib/patient-portal/guard";
@@ -17,7 +20,10 @@ import { textoCita } from "@/lib/movimientos-paciente/textos";
 
 export async function POST(req: NextRequest) {
   try {
-  const rl = rateLimit(req, 10); // 10 requests per minute per IP
+  // M9 (auditoría 30-sep-2026): límite PERSISTENTE (Upstash, compartido entre
+  // instancias; en memoria solo si no hay Redis). El de antes era un Map por
+  // instancia serverless: cada instancia nueva lo reiniciaba.
+  const rl = await persistentRateLimit(req, { limit: 10, windowSec: 60, scope: "public-book:ip" });
   if (rl) return rl;
 
   const body = await req.json();
@@ -55,6 +61,13 @@ export async function POST(req: NextRequest) {
       { status: 401 }
     );
   }
+
+  // M9: tope por CUENTA (quien reserva ya tiene sesión de paciente). Una cuenta
+  // verificada no puede llenar la agenda de una clínica en bucle.
+  const rlCuenta = await persistentRateLimit(req, {
+    id: ctx.account.id, limit: 6, windowSec: 3600, scope: "public-book:cuenta",
+  });
+  if (rlCuenta) return rlCuenta;
 
   // ── Find clinic ────────────────────────────────────────────────────────────
   const clinic = await prisma.clinic.findUnique({
@@ -130,6 +143,24 @@ export async function POST(req: NextRequest) {
     // cabecera antes que con uno inventado.
     primaryDoctorId: anyDoctor ? null : doctorId,
   });
+
+  // M9: tope de citas web pendientes por paciente y clínica. El límite por hora
+  // frena la ráfaga; este frena a quien reparte las reservas a lo largo del día.
+  const pendientesWeb = await prisma.appointment.count({
+    where: {
+      clinicId: clinic.id,
+      patientId: resolved.patientId,
+      source: "WEBSITE",
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      startsAt: { gte: new Date() },
+    },
+  });
+  if (pendientesWeb >= TOPE_CITAS_WEB_PENDIENTES) {
+    return NextResponse.json(
+      { error: "Ya tienes varias citas pendientes con esta clínica. Cancela o espera a que se atiendan para reservar otra." },
+      { status: 429 },
+    );
+  }
 
   // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
   const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
@@ -265,7 +296,31 @@ export async function POST(req: NextRequest) {
   });
 
   // ── Send WhatsApp confirmation ─────────────────────────────────────────────
+  // M9: el destino NUNCA es el teléfono que se escribió en el formulario. Es el
+  // del expediente (paciente ya registrado) o el de la cuenta, y cada teléfono
+  // tiene su propio tope diario: ni con una cuenta propia se le puede escribir
+  // en bucle a un número ajeno desde el WhatsApp de la clínica.
+  let destinoWhatsApp: string | null = null;
   if (clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken) {
+    const expediente = resolved.created
+      ? null
+      : await prisma.patient.findFirst({
+          where: { id: resolved.patientId, clinicId: clinic.id },
+          select: { phone: true },
+        });
+    destinoWhatsApp = elegirDestinoWhatsApp({
+      pacienteYaRegistrado: !resolved.created,
+      telefonoDelExpediente: expediente?.phone,
+      telefonoDeLaCuenta: ctx.account.phone,
+    });
+    if (destinoWhatsApp) {
+      const topeTelefono = await persistentRateLimit(req, {
+        id: destinoWhatsApp, limit: 3, windowSec: 86400, scope: "public-book:wa-telefono",
+      });
+      if (topeTelefono) destinoWhatsApp = null;
+    }
+  }
+  if (destinoWhatsApp && clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken) {
     try {
       const dateFormatted = apptDate.toLocaleDateString("es-MX", {
         weekday:"long", day:"numeric", month:"long", year:"numeric",
@@ -283,14 +338,14 @@ export async function POST(req: NextRequest) {
 
       await sendWhatsAppLogged({
         clinic,
-        to: cleanPhone,
+        to: destinoWhatsApp,
         body: msg,
         kind: "booking",
         // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor —
         // el orden de WA_TEMPLATE_SPECS. Meta sustituye por posición, no por
         // nombre.
         templateParams: [
-          firstName.trim(),
+          nombreParaPlantilla(firstName),
           clinic.name,
           dateFormatted,
           startTime,
