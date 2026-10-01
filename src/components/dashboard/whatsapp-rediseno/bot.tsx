@@ -5,6 +5,7 @@ import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } 
 import type { BotConfigDTO, BotFaqDTO } from "@/lib/whatsapp/bot/types";
 import type { EditableConfig, ScheduleState } from "@/app/dashboard/whatsapp/bot/bot-client";
 import { PERSONA_TEMPLATES } from "@/app/dashboard/whatsapp/bot/persona-templates";
+import { avisoDeTamanoDePersona } from "@/lib/whatsapp/bot/ai-prompt";
 import { RaizWhatsApp } from "./raiz";
 import { Boton, BotonEnlace, Cabecera, Campo, Cargando, Etiqueta, FilaInterruptor, Interruptor, Nota, Tarjeta } from "./piezas";
 import s from "./whatsapp-rediseno.module.css";
@@ -164,6 +165,23 @@ export function BotRediseno({ vm }: { vm: BotVM }) {
                     value={form.persona}
                     onChange={(e) => setForm((f) => ({ ...f, persona: e.target.value }))}
                   />
+                  {/* El mismo contador y los mismos avisos que la vista de
+                      siempre (avisoDeTamanoDePersona, PERSONA_MAX_CARACTERES de
+                      ws1-t5): la API rechaza guardar una persona nueva o
+                      editada más larga, y aquí se ve antes de tocar Guardar. */}
+                  {(() => {
+                    const t = avisoDeTamanoDePersona(form.persona, config.persona);
+                    const tono = t.nivel === "tope" ? s.contadorTope : t.nivel === "aviso" ? s.contadorAviso : "";
+                    return (
+                      <p
+                        className={[s.contadorPersona, tono].filter(Boolean).join(" ")}
+                        role={t.nivel === "tope" ? "alert" : undefined}
+                      >
+                        <span className={s.contadorCifra}>{t.contador}</span>
+                        {t.aviso ? <span> · {t.aviso}</span> : null}
+                      </p>
+                    );
+                  })()}
                 </Campo>
 
                 <Campo etiqueta="Saludo">

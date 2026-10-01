@@ -173,6 +173,7 @@
     "test:bot-aprende": "tsx --test src/lib/whatsapp/bot/aprende/__tests__/aprende-puro.test.ts src/lib/whatsapp/bot/aprende/__tests__/aprende-servicio.test.ts",
     "test:wa-bot-fecha": "tsx --test src/lib/whatsapp/bot/__tests__/fecha-y-agenda.test.ts src/lib/whatsapp/bot/__tests__/motor-ia-agenda.test.ts",
     "test:wa-bot-ia": "tsx --test src/lib/whatsapp/bot/__tests__/handoff.test.ts src/lib/whatsapp/bot/__tests__/ia-modelo-y-cobro.test.ts src/lib/whatsapp/bot/__tests__/motor-ia-agenda.test.ts",
+    "test:wa-bot-persona": "tsx --test src/lib/whatsapp/bot/__tests__/persona-tamano-vistas.test.ts",
     "test:wa-agenda-auditoria": "tsx --test src/lib/whatsapp/bot/__tests__/agenda-auditoria.test.ts src/lib/agenda/__tests__/bot-booking-sillones.test.ts",
     "test:wa-send-mode": "tsx --test src/lib/whatsapp/__tests__/send-mode.test.ts",
     "test:wa-sin-plantilla": "tsx --test src/lib/whatsapp/__tests__/sin-plantilla.test.ts",

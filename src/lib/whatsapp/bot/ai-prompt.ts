@@ -58,6 +58,44 @@ export function errorDeTamanoDePersona(nueva: string | null | undefined, actual:
   );
 }
 
+/**
+ * El contador de la persona en la configuración del bot: cuántos caracteres,
+ * de qué tono y qué decir. Lo pintan las DOS vistas (la de siempre,
+ * `bot-client.tsx`, y la del rediseño, `whatsapp-rediseno/bot.tsx`) para que
+ * el texto y los umbrales no se separen. Hasta PERSONA_AVISO_CARACTERES no se
+ * dice nada; de ahí al tope, un aviso; por encima del tope la API no deja
+ * GUARDAR una persona nueva o editada (una ya guardada más larga sigue
+ * funcionando). Nunca se recorta.
+ */
+export function avisoDeTamanoDePersona(
+  persona: string,
+  guardada: string | null | undefined,
+): { largo: number; nivel: "normal" | "aviso" | "tope"; contador: string; aviso: string | null } {
+  const largo = persona.trim().length;
+  const editada = persona.trim() !== (guardada ?? "").trim();
+  const n = (x: number) => x.toLocaleString("es-MX");
+  const contador = `${n(largo)} / ${n(PERSONA_MAX_CARACTERES)} caracteres`;
+  if (largo > PERSONA_MAX_CARACTERES) {
+    return {
+      largo,
+      nivel: "tope",
+      contador,
+      aviso: editada
+        ? "Pasa del máximo: no se puede guardar así. Recórtalas: deja el tono y las reglas de atención, y pasa precios, horarios y datos a Preguntas frecuentes."
+        : `Pasa del máximo. El bot las sigue usando tal cual, pero las sigue mejor si son cortas; para editarlas tendrás que dejarlas en ${n(PERSONA_MAX_CARACTERES)} o menos.`,
+    };
+  }
+  if (largo > PERSONA_AVISO_CARACTERES) {
+    return {
+      largo,
+      nivel: "aviso",
+      contador,
+      aviso: `Son muchas instrucciones: el bot las sigue mejor si son cortas (menos de ${n(PERSONA_AVISO_CARACTERES)}). Deja aquí el tono y las reglas, y pon precios, horarios y datos en Preguntas frecuentes. No hace falta explicarle la agenda ni la fecha: el sistema ya se las da.`,
+    };
+  }
+  return { largo, nivel: "normal", contador, aviso: null };
+}
+
 /** Qué hacer con el texto que devolvió el modelo. */
 export type ClaseRespuesta = { tipo: "handoff" } | { tipo: "agenda" } | { tipo: "texto"; texto: string };
 

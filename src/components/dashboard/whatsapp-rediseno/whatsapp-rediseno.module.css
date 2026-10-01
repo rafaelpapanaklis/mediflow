@@ -521,6 +521,29 @@
   color: var(--m2-texto-3);
 }
 
+/* Contador de la persona del bot (PERSONA_MAX_CARACTERES, ws1-t5). Normal en gris;
+   pasado el aviso, en alerta; pasado el tope, en peligro. */
+.contadorPersona {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.contadorCifra {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.contadorAviso {
+  color: var(--warning-strong, #a85a05);
+}
+
+.contadorTope {
+  color: var(--danger-strong, #991b1b);
+}
+
 .casilla {
   flex-shrink: 0;
   width: 16px;
