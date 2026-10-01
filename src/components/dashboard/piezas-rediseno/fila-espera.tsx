@@ -50,6 +50,9 @@ export interface FilaEsperaProps {
   handleAction: (id: string, action: string) => Promise<void>;
   statusLabel: (status: string) => string;
   pintarEspera: (since: string) => ReactNode;
+  /** agenda.create / agenda.edit (la API los exige igual; aquí solo se esconde). */
+  puedeAgregar?: boolean;
+  puedeEditar?: boolean;
 }
 
 function horaLlegada(iso: string) {
@@ -65,6 +68,8 @@ export function FilaEspera({
   handleAction,
   statusLabel,
   pintarEspera,
+  puedeAgregar = true,
+  puedeEditar = true,
 }: FilaEsperaProps) {
   const t = useT();
   const nombreRef = useRef<HTMLInputElement>(null);
@@ -82,14 +87,16 @@ export function FilaEspera({
         titulo={t("pages.walkIn.title")}
         subtitulo={t("pages.walkIn.waitingCount", { count: activeQueue.length })}
         acciones={
-          <Boton variante="principal" icono={<UserPlus size={16} strokeWidth={2} />} onClick={() => nombreRef.current?.focus()}>
-            {t("pages.walkIn.addPatient")}
-          </Boton>
+          puedeAgregar ? (
+            <Boton variante="principal" icono={<UserPlus size={16} strokeWidth={2} />} onClick={() => nombreRef.current?.focus()}>
+              {t("pages.walkIn.addPatient")}
+            </Boton>
+          ) : undefined
         }
       />
 
       <div className={s.apilado}>
-        <Tarjeta icono={<UserPlus size={15} strokeWidth={1.75} />} titulo={t("pages.walkIn.addToQueue")}>
+        {puedeAgregar && <Tarjeta icono={<UserPlus size={15} strokeWidth={1.75} />} titulo={t("pages.walkIn.addToQueue")}>
           <div className={s.campoFila}>
             <Campo etiqueta={t("pages.walkIn.patientNameLabel")} htmlFor="wi-nombre">
               <input
@@ -118,7 +125,7 @@ export function FilaEspera({
               {t("common.add")}
             </Boton>
           </div>
-        </Tarjeta>
+        </Tarjeta>}
 
         {activeQueue.length > 0 ? (
           <div className={s.lista}>
@@ -142,7 +149,7 @@ export function FilaEspera({
                     <span className={s.espera}>{pintarEspera(item.joinedAt)}</span>
                   </div>
                 </div>
-                <div className={s.filaAcciones}>
+                {puedeEditar && <div className={s.filaAcciones}>
                   {item.status === "WAITING" && (
                     <Boton peq onClick={() => handleAction(item.id, "assign")}>
                       {t("pages.walkIn.assign")}
@@ -163,7 +170,7 @@ export function FilaEspera({
                       {t("common.cancel")}
                     </Boton>
                   )}
-                </div>
+                </div>}
               </div>
             ))}
           </div>

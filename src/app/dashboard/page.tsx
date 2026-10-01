@@ -1,5 +1,6 @@
 // src/app/dashboard/page.tsx
 import { getCurrentUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
 import {
   fetchReceptionistData,
   fetchDoctorData,
@@ -52,6 +53,11 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
   const homeClinic = { name: clinic.name, timezone: clinic.timezone };
 
   const role = user.role;
+  // walk-in: la API /api/walk-in exige agenda.create para agregar a la fila.
+  const puedeAgregarEspera = hasPermission(
+    { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+    "agenda.create",
+  );
   const period: AdminPeriod = isValidPeriod(searchParams?.period)
     ? (searchParams!.period as AdminPeriod)
     : "month";
@@ -70,13 +76,13 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     if (rediseno) {
       return (
         <RaizHoy>
-          <HoyRecepcion key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
+          <HoyRecepcion key={clinic.id} user={homeUser} clinic={homeClinic} data={data} puedeAgregarEspera={puedeAgregarEspera} />
         </RaizHoy>
       );
     }
     return (
       <HomeShell>
-        <HomeReceptionist key={clinic.id} user={homeUser} clinic={homeClinic} data={data} />
+        <HomeReceptionist key={clinic.id} user={homeUser} clinic={homeClinic} data={data} puedeAgregarEspera={puedeAgregarEspera} />
       </HomeShell>
     );
   }

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "agenda.edit");
+  if (denied) return denied;
 
   const entry = await prisma.walkInQueue.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
@@ -28,6 +31,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "agenda.edit");
+  if (denied) return denied;
 
   const entry = await prisma.walkInQueue.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

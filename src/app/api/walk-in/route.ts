@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "agenda.view");
+  if (denied) return denied;
 
   // Today start (midnight)
   const todayStart = new Date();
@@ -26,6 +29,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "agenda.create");
+  if (denied) return denied;
 
   const body = await req.json();
   const { patientName, service, patientId } = body;

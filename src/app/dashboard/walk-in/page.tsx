@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { WalkInClient } from "./walk-in-client";
@@ -10,6 +12,12 @@ export const metadata: Metadata = { title: "Fila de Espera — DaleControl" };
 
 export default async function WalkInPage() {
   const user = await getCurrentUser();
+  // Mismo permiso que la API (/api/walk-in): ver la fila = ver la agenda;
+  // agregar = crear citas; avanzar/cancelar turnos = editar citas.
+  requirePermissionOrRedirect(user, "agenda.view");
+  const quien = { role: user.role, permissionsOverride: user.permissionsOverride ?? [] };
+  const puedeAgregar = hasPermission(quien, "agenda.create");
+  const puedeEditar = hasPermission(quien, "agenda.edit");
   const clinicId = user.clinicId;
 
   const today = new Date();
@@ -33,5 +41,6 @@ export default async function WalkInPage() {
     menuDosNivelesEncendido(clinicId),
   ]);
 
-  return <WalkInClient key={clinicId} initialQueue={queue as any} rediseno={rediseno} />;
+  return <WalkInClient key={clinicId} initialQueue={queue as any} rediseno={rediseno}
+    puedeAgregar={puedeAgregar} puedeEditar={puedeEditar} />;
 }

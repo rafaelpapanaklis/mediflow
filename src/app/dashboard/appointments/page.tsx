@@ -1,7 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth/permissions";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { decidirAgendaVieja, destinoAgendaVieja } from "@/lib/agenda/ruta-agenda-vieja";
 import { prisma } from "@/lib/prisma";
 import { canSeePatient, patientVisibilityAnd } from "@/lib/patient-visibility";
 import { AppointmentsClient } from "./appointments-client";
@@ -12,9 +17,24 @@ import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 
 export const metadata: Metadata = { title: "Agenda — DaleControl" };
 
-export default async function AppointmentsPage() {
-  const { t } = await getServerT();
+export default async function AppointmentsPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const user = await getCurrentUser();
+  // Esta pantalla es la agenda ANTERIOR al rediseño. Con el diseño nuevo
+  // encendido (el MISMO interruptor de la agenda nueva) la dirección manda a
+  // /dashboard/agenda antes de leer una sola cita; apagado, sigue siendo la
+  // agenda de la clínica, pero ya no se abre sin agenda.view.
+  const rediseno = await menuDosNivelesEncendido(user.clinicId);
+  const decision = decidirAgendaVieja(
+    rediseno,
+    hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "agenda.view"),
+  );
+  if (decision === "agenda-nueva") redirect(destinoAgendaVieja(searchParams));
+  requirePermissionOrRedirect(user, "agenda.view");
+  const { t } = await getServerT();
   const tz = user.clinic.timezone;
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
 

@@ -24,14 +24,16 @@ export function WaitlistCard({ items, onAdd }: Props) {
           : t("home.waitlist.subtitle", { count: items.length })
       }
       action={
-        <ButtonNew
-          size="sm"
-          variant="secondary"
-          icon={<Plus size={14} strokeWidth={1.75} />}
-          onClick={onAdd}
-        >
-          {t("common.add")}
-        </ButtonNew>
+        onAdd ? (
+          <ButtonNew
+            size="sm"
+            variant="secondary"
+            icon={<Plus size={14} strokeWidth={1.75} />}
+            onClick={onAdd}
+          >
+            {t("common.add")}
+          </ButtonNew>
+        ) : undefined
       }
       noPad
     >

@@ -24,9 +24,11 @@ interface Props {
   user: { displayName: string };
   clinic: { name: string; timezone?: string | null };
   data: HomeReceptionistData;
+  /** agenda.create: sin él no se ofrece «Agregar a espera» (la API lo exige igual). */
+  puedeAgregarEspera?: boolean;
 }
 
-export function HomeReceptionist({ user, clinic, data }: Props) {
+export function HomeReceptionist({ user, clinic, data, puedeAgregarEspera = true }: Props) {
   const t = useT();
   const router = useRouter();
   const waiting = data.checkedInPatients.length;
@@ -215,7 +217,7 @@ export function HomeReceptionist({ user, clinic, data }: Props) {
         // La página real es /dashboard/walk-in (con guion). Sin él, los dos
         // botones de la tarjeta —"Agregar" y el CTA del estado vacío— caían en
         // un 404 desde el inicio de recepción, todos los días.
-        onAdd={() => router.push("/dashboard/walk-in?waitlist=1")}
+        onAdd={puedeAgregarEspera ? () => router.push("/dashboard/walk-in?waitlist=1") : undefined}
       />
 
       <HomeShortcutBar />

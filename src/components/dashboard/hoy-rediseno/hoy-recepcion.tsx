@@ -32,9 +32,11 @@ interface Props {
   user: { displayName: string };
   clinic: { name: string; timezone?: string | null };
   data: HomeReceptionistData;
+  /** agenda.create: sin él no se ofrece «Agregar a espera» (la API lo exige igual). */
+  puedeAgregarEspera?: boolean;
 }
 
-export function HoyRecepcion({ user, clinic, data }: Props) {
+export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: Props) {
   const t = useT();
   const router = useRouter();
   const enSala = data.checkedInPatients.length;
@@ -154,10 +156,12 @@ export function HoyRecepcion({ user, clinic, data }: Props) {
             : t("home.waitlist.subtitle", { count: data.waitlist.length })
         }
         accion={
-          <button type="button" className={`${s.boton} ${s.botonPeq}`} onClick={agregarAEspera}>
-            <Plus size={14} strokeWidth={1.75} aria-hidden />
-            {t("common.add")}
-          </button>
+          puedeAgregarEspera ? (
+            <button type="button" className={`${s.boton} ${s.botonPeq}`} onClick={agregarAEspera}>
+              <Plus size={14} strokeWidth={1.75} aria-hidden />
+              {t("common.add")}
+            </button>
+          ) : undefined
         }
         lista
       >
@@ -167,14 +171,16 @@ export function HoyRecepcion({ user, clinic, data }: Props) {
             titulo={t("clinical.emptyStates.waitlistTitle")}
             pista={t("clinical.emptyStates.waitlistDesc")}
             acciones={
-              <button
-                type="button"
-                className={`${s.boton} ${s.botonPeq} ${s.botonPrincipal}`}
-                onClick={agregarAEspera}
-              >
-                <Plus size={14} strokeWidth={1.75} aria-hidden />
-                {t("clinical.emptyStates.waitlistAddCta")}
-              </button>
+              puedeAgregarEspera ? (
+                <button
+                  type="button"
+                  className={`${s.boton} ${s.botonPeq} ${s.botonPrincipal}`}
+                  onClick={agregarAEspera}
+                >
+                  <Plus size={14} strokeWidth={1.75} aria-hidden />
+                  {t("clinical.emptyStates.waitlistAddCta")}
+                </button>
+              ) : undefined
             }
           />
         ) : (

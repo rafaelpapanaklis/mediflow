@@ -54,12 +54,15 @@ function ElapsedTimer({ since }: { since: string }) {
   return <span className="text-xs font-medium">{elapsed}</span>;
 }
 
-export function WalkInClient({ initialQueue, rediseno = false }: {
+export function WalkInClient({ initialQueue, rediseno = false, puedeAgregar = true, puedeEditar = true }: {
   initialQueue: QueueItem[];
   /** Interruptor `menu-dos-niveles` de la clínica (lo resuelve page.tsx):
    *  encendido pinta la fila vestida con el lenguaje del menú nuevo;
    *  apagado, todo lo de abajo, tal cual. La lógica es la misma en los dos. */
   rediseno?: boolean;
+  /** agenda.create / agenda.edit: la API los exige igual; aquí solo se esconde el botón. */
+  puedeAgregar?: boolean;
+  puedeEditar?: boolean;
 }) {
   const t = useT();
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
@@ -152,6 +155,8 @@ export function WalkInClient({ initialQueue, rediseno = false }: {
         handleAction={handleAction}
         statusLabel={statusLabel}
         pintarEspera={(since) => <ElapsedTimer since={since} />}
+        puedeAgregar={puedeAgregar}
+        puedeEditar={puedeEditar}
       />
     );
   }
@@ -163,9 +168,11 @@ export function WalkInClient({ initialQueue, rediseno = false }: {
           <h1 className="text-2xl font-extrabold">{t("pages.walkIn.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("pages.walkIn.waitingCount", { count: activeQueue.length })}</p>
         </div>
-        <Button onClick={() => setShowAdd(true)}>
-          <UserPlus className="w-5 h-5 mr-2" /> {t("pages.walkIn.addPatient")}
-        </Button>
+        {puedeAgregar && (
+          <Button onClick={() => setShowAdd(true)}>
+            <UserPlus className="w-5 h-5 mr-2" /> {t("pages.walkIn.addPatient")}
+          </Button>
+        )}
       </div>
 
       {/* Active queue */}
@@ -192,7 +199,7 @@ export function WalkInClient({ initialQueue, rediseno = false }: {
                 <ElapsedTimer since={item.joinedAt} />
               </div>
             </div>
-            <div className="flex gap-2">
+            {puedeEditar && <div className="flex gap-2">
               {item.status === "WAITING" && (
                 <Button size="sm" variant="outline" onClick={() => handleAction(item.id, "assign")}>{t("pages.walkIn.assign")}</Button>
               )}
@@ -205,7 +212,7 @@ export function WalkInClient({ initialQueue, rediseno = false }: {
               {item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
                 <Button size="sm" variant="outline" className="text-rose-500 border-rose-300 hover:bg-rose-50" onClick={() => handleAction(item.id, "cancel")}>{t("common.cancel")}</Button>
               )}
-            </div>
+            </div>}
           </div>
         ))}
         {activeQueue.length === 0 && (
@@ -237,7 +244,7 @@ export function WalkInClient({ initialQueue, rediseno = false }: {
       )}
 
       {/* Add Modal */}
-      {showAdd && (
+      {showAdd && puedeAgregar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">

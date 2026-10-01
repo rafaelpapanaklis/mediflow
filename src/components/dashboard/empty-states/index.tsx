@@ -166,7 +166,7 @@ export function EmptyWaitlist({ size, className, onAdd }: EmptyWaitlistProps) {
       icon={Clock} tone="neutral"
       title={t("clinical.emptyStates.waitlistTitle")}
       description={t("clinical.emptyStates.waitlistDesc")}
-      primaryCta={{ label: t("clinical.emptyStates.waitlistAddCta"), icon: Plus, onClick: onAdd }}
+      primaryCta={onAdd ? { label: t("clinical.emptyStates.waitlistAddCta"), icon: Plus, onClick: onAdd } : undefined}
       size={size} className={className}
     />
   );
