@@ -4,6 +4,7 @@ import "server-only";
  * Wrapper Whisper para transcripción audio → texto. Usado por:
  * - Voice input del AI assistant.
  * - Audio-to-SOAP en /clinical (graba consulta → transcribe → IA arma SOAP).
+ * - Notas de voz que el paciente manda al bot de WhatsApp (bot/nota-de-voz.ts).
  *
  * Stub: si no hay OPENAI_API_KEY devuelve { text: "", mock: true }.
  * Producción: usa la API de OpenAI Whisper (audio/transcriptions).
@@ -18,6 +19,8 @@ export interface TranscribeInput {
   language?: string;
   /** Hint de vocabulario/contexto (mejora términos técnicos y puntuación). */
   prompt?: string;
+  /** Corta la llamada (p. ej. un timeout del webhook); se devuelve como `error`. */
+  signal?: AbortSignal;
 }
 
 export interface TranscribeResult {
@@ -49,6 +52,7 @@ export async function transcribeAudio(input: TranscribeInput): Promise<Transcrib
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
       body: form,
+      signal: input.signal,
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");

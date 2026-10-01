@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
+import { entenderNotaDeVoz } from "@/lib/whatsapp/bot/nota-de-voz";
 import { actionablePatientIds, asksToConfirmOrCancel, resolveReminderReply } from "@/lib/whatsapp/reminder-pick";
 import { esRespuestaDeEncuesta } from "@/lib/whatsapp/reminder-reply";
 import { detectaIntencionDeAgenda } from "@/lib/whatsapp/bot/booking-parse";
@@ -38,6 +39,11 @@ import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { anotarRespuestaARecordatorio } from "@/lib/whatsapp/bot/movimientos-bot";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
+
+// ws1-t5 — una nota de voz suma al turno la descarga de Meta (≤15 s) y la
+// transcripción (≤25 s), además de Claude (≤12 s): el tope por defecto de la
+// función se queda corto y Meta reintentaría un webhook cortado a la mitad.
+export const maxDuration = 60;
 
 // Tope diario de respuestas del bot por clínica (proxy de gasto: cada
 // respuesta OUT del bot ≈ 1 llamada a Claude + 1 envío de WhatsApp).
@@ -272,14 +278,15 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   const from    = msg.from;                       // teléfono del paciente (formato internacional)
   // Texto original (Inbox + bot). Las respuestas por BOTÓN cuentan como texto:
   // un "CONFIRMAR" pulsado —y no escrito— sigue confirmando la cita.
-  const rawText = String(
+  // `let`: una nota de voz transcrita (ws1-t5) entra después como texto.
+  let rawText = String(
     msg.text?.body ??
     msg.interactive?.button_reply?.title ??
     msg.interactive?.list_reply?.title ??
     msg.button?.text ??
     "",
   ).trim();
-  const text    = rawText.toLowerCase();          // para detectar confirmar/cancelar
+  let text    = rawText.toLowerCase();          // para detectar confirmar/cancelar
 
   if (!from) return;
 
@@ -428,7 +435,42 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // eso este return va ANTES del bloque de recordatorios y ANTES de runBotTurn.
   // El hilo ya quedó sin leer (markUnread arriba), que es lo que lo pone en
   // "Necesitan atención ahora".
-  if (incoming) {
+  // ── ws1-t5: nota de voz → texto ──
+  // Si el bot está trabajando y la clínica tiene cupo de IA, el audio se
+  // transcribe (el mismo transcriptor y la misma tarifa que el dictado) y
+  // sigue como si el paciente lo hubiera escrito: recordatorio, bot… La bandeja
+  // ya dice «🎤 Nota de voz: …» y conserva el audio. Si no se pudo escuchar, se
+  // le pide que lo escriba. Si no toca transcribir (bot apagado o en pausa, sin
+  // cupo…), todo sigue como antes, abajo. Reglas: lib/whatsapp/bot/nota-de-voz-core.ts.
+  let transcrita = false;
+  if (incoming && msg.type === "audio") {
+    let voz: Awaited<ReturnType<typeof entenderNotaDeVoz>> | null = null;
+    try {
+      voz = await entenderNotaDeVoz({
+        clinicId: clinic.id,
+        threadId: thread.id,
+        inMsgId: inMsg.id,
+        from,
+        audio: msg.audio,
+        botActive: thread.botActive,
+        accessToken: clinic.waAccessToken,
+      });
+    } catch (err) {
+      // No debería lanzar nunca; si lo hace, el audio queda como antes.
+      console.error("[whatsapp/webhook] nota de voz no procesada:", err);
+    }
+    if (voz?.accion === "avisar") {
+      await enviarYRegistrar({ clinic, threadId: thread.id, to: from, body: voz.mensaje, origen: "bot" });
+      return;
+    }
+    if (voz?.accion === "texto") {
+      rawText = voz.texto;
+      text = rawText.toLowerCase();
+      transcrita = true;
+    }
+  }
+
+  if (incoming && !transcrita) {
     // Si el bot sigue activo nadie más va a contestar de inmediato: se le
     // dice a la paciente que su archivo llegó (máximo uno por hora por hilo;
     // el dedupe lo hace sendOnceToThread). Sin esto manda su radiografía y

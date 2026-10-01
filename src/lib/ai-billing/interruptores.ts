@@ -82,8 +82,8 @@ export const FUNCIONES_IA = [
     id: "dictation",
     nombre: "Dictado por voz",
     gasta: "cupo",
-    queHace: "Convierte en texto lo que dictas en la consulta.",
-    siLaApagas: "Las notas se escriben a mano.",
+    queHace: "Convierte en texto lo que dictas en la consulta y las notas de voz que los pacientes le mandan al bot de WhatsApp.",
+    siLaApagas: "Las notas se escriben a mano y el bot deja las notas de voz para que las escuche tu equipo.",
   },
   {
     id: "consult_assist",

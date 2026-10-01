@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { transcribeAudio } from "@/lib/integrations/whisper";
+import { tokensDeAudio } from "@/lib/integrations/whisper-tarifa";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 
@@ -15,26 +16,8 @@ const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 /** Tope por grabación en el cliente (dictation-mic.tsx). Solo para acotar el cobro. */
 const MAX_SECONDS = 60;
 
-/**
- * TARIFA DEL DICTADO EN TOKENS DEL MONEDERO DE IA.
- *
- * Whisper cobra por MINUTO de audio ($0.006 USD/min en whisper-1), no por
- * tokens de Claude. Para que el dictado entre en el MISMO contador que el resto
- * de la IA (Clinic.aiTokensUsed / aiTokensLimit) se convierte usando el precio
- * de referencia que ya vive en el repo para tokens de entrada:
- * `inputUsdPerMtok = 3` USD por millón (src/lib/ai-billing/pricing.ts).
- *
- *   0.006 USD/min ÷ (3 USD / 1 000 000 tok) = 2 000 tokens por minuto de audio
- *
- * ⇒ ~33 tokens por segundo. Una grabación completa (60 s, el máximo del
- * producto) cuesta 2 000 tokens, así que un plan Profesional (200 mil/mes) da
- * para ~100 minutos de dictado. El plan Básico tiene 0 tokens ⇒ queda
- * bloqueado, coherente con el "Sin IA" de su tarifa.
- *
- * Si cambia el precio de Whisper o el de referencia, se ajusta AQUÍ y el número
- * sigue siendo explicable con la división de arriba.
- */
-const AUDIO_TOKENS_PER_MINUTE = 2000;
+// Tarifa (2 000 tokens del cupo por minuto de audio): la misma para el dictado
+// y para las notas de voz del bot de WhatsApp, explicada en whisper-tarifa.ts.
 
 /** Bitrate nominal con el que graba el cliente: 64 kbps = 8 KB/s. */
 const AUDIO_BYTES_PER_SECOND = 8 * 1024;
@@ -143,7 +126,7 @@ export async function POST(req: NextRequest) {
   // de Whisper ya salieron arriba y no generan costo. FAIL-OPEN igual que el
   // check: si el incremento falla, se responde el texto y se loguea.
   const seconds = billableSeconds(result.duration, audio.size);
-  const tokens = Math.max(1, Math.round((seconds * AUDIO_TOKENS_PER_MINUTE) / 60));
+  const tokens = tokensDeAudio(seconds);
   try {
     await addAiTokens(ctx.clinicId, tokens, "dictation", ctx.userId);
   } catch (e) {
