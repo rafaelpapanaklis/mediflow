@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock } from "lucide-react";
+import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } from "lucide-react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -479,6 +479,9 @@ export function BotClient({
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <Link href="/dashboard/whatsapp/bot/saldo" className="btn-new btn-new--secondary">
             <Wallet size={15} /> Saldo de IA
+          </Link>
+          <Link href="/dashboard/whatsapp/bot/aprende" className="btn-new btn-new--secondary">
+            <GraduationCap size={15} /> Aprende de tu equipo
           </Link>
           <BadgeNew tone={form.enabled ? "success" : "neutral"} dot>
             {form.enabled ? "Activado" : "Desactivado"}

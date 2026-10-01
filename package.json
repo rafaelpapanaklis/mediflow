@@ -157,6 +157,7 @@
     "test:cobranza-aviso": "tsx --test --experimental-test-module-mocks src/lib/whatsapp/cobranza/__tests__/aviso-mensualidad.test.ts",
     "test:ws1-t8-orto-conexiones": "tsx --test src/lib/orthodontics/__tests__/aviso-proximo-control.test.ts src/lib/orthodontics/__tests__/doctor-tratante-cita.test.ts src/lib/orthodontics/__tests__/controles-modulo.test.ts src/lib/whatsapp/bot/__tests__/booking.test.ts",
     "test:bot-saldo": "tsx --test src/lib/whatsapp/bot/__tests__/saldo.test.ts",
+    "test:bot-aprende": "tsx --test src/lib/whatsapp/bot/aprende/__tests__/aprende-puro.test.ts src/lib/whatsapp/bot/aprende/__tests__/aprende-servicio.test.ts",
     "test:wa-bot-fecha": "tsx --test src/lib/whatsapp/bot/__tests__/fecha-y-agenda.test.ts src/lib/whatsapp/bot/__tests__/motor-ia-agenda.test.ts",
     "test:wa-bot-ia": "tsx --test src/lib/whatsapp/bot/__tests__/handoff.test.ts src/lib/whatsapp/bot/__tests__/ia-modelo-y-cobro.test.ts src/lib/whatsapp/bot/__tests__/motor-ia-agenda.test.ts",
     "test:wa-agenda-auditoria": "tsx --test src/lib/whatsapp/bot/__tests__/agenda-auditoria.test.ts src/lib/agenda/__tests__/bot-booking-sillones.test.ts",

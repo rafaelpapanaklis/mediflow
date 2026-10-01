@@ -1,0 +1,259 @@
+/* ═══════════════════════════════════════════════════════════════════
+   «Aprende de tu equipo» (ws1-t11): sugerencias, reporte de lo que el
+   bot no supo, 👍/👎 y ejemplos de tono.
+
+   Sin colores propios: lee los `--m2-*` que monta la raíz del rediseño
+   de WhatsApp. `ValorarRespuesta` también puede vivir en el Inbox, que
+   no monta esos tokens: por eso cada `var()` lleva el token general de
+   globals.css como respaldo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.grupo + .grupo {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--m2-borde, var(--border));
+}
+
+.grupoCabeza {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.grupoTitulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto, var(--text-1));
+}
+
+.conteo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--m2-contador-fondo, var(--bg-hover));
+  color: var(--m2-contador-texto, var(--text-2));
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--m2-borde, var(--border));
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover, var(--bg-hover));
+}
+
+.itemFila {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.itemTextos {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.rotulo {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3, var(--text-3));
+}
+
+.pregunta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--m2-texto, var(--text-1));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.respuesta {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-2, var(--text-2));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cuando {
+  font-size: 11px;
+  color: var(--m2-texto-3, var(--text-3));
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger-strong, var(--danger));
+}
+
+.aviso {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--m2-texto-2, var(--text-2));
+}
+
+.pie {
+  margin: 12px 0 0;
+}
+
+.contador {
+  font-size: 11px;
+  color: var(--m2-texto-3, var(--text-3));
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 👍 / 👎 ─────────────────────────────────────────────────────── */
+
+.valorar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pulgares {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pulgar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--m2-tarjeta-borde, var(--border));
+  border-radius: 8px;
+  background: var(--m2-tarjeta, var(--bg-elev));
+  color: var(--m2-texto-3, var(--text-3));
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .pulgar:hover:not(:disabled) {
+    border-color: var(--m2-texto-3, var(--text-3));
+    color: var(--m2-texto, var(--text-1));
+  }
+}
+
+.pulgar:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco, 0 0 0 3px var(--brand-soft));
+}
+
+.pulgar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pulgarTexto {
+  width: auto;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pulgarBien {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success-strong);
+}
+
+.pulgarMal {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger-strong);
+}
+
+.correccion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.correccionAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.area {
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 10px;
+  border: 1px solid var(--m2-tarjeta-borde, var(--border)) !important;
+  border-radius: 10px;
+  background: var(--m2-tarjeta, var(--bg-elev)) !important;
+  color: var(--m2-texto, var(--text-1)) !important;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.area:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco, 0 0 0 3px var(--brand-soft));
+}
+
+.rotulo .cuando {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* Angosto: el texto arriba y las acciones debajo (por contenedor dentro del
+   panel; por pantalla, si el componente vive fuera de la raíz, p. ej. Inbox). */
+@container whatsapp (max-width: 640px) {
+  .itemFila {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .itemFila {
+    flex-direction: column;
+  }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock } from "lucide-react";
+import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } from "lucide-react";
 import type { BotConfigDTO, BotFaqDTO } from "@/lib/whatsapp/bot/types";
 import type { EditableConfig, ScheduleState } from "@/app/dashboard/whatsapp/bot/bot-client";
 import { PERSONA_TEMPLATES } from "@/app/dashboard/whatsapp/bot/persona-templates";
@@ -82,6 +82,9 @@ export function BotRediseno({ vm }: { vm: BotVM }) {
           <>
             <BotonEnlace href="/dashboard/whatsapp/bot/saldo" icono={<Wallet size={15} />}>
               Saldo de IA
+            </BotonEnlace>
+            <BotonEnlace href="/dashboard/whatsapp/bot/aprende" icono={<GraduationCap size={15} />}>
+              Aprende de tu equipo
             </BotonEnlace>
             <Etiqueta tono={form.enabled ? "success" : "neutral"} punto>
               {form.enabled ? "Activado" : "Desactivado"}

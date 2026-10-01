@@ -3945,6 +3945,74 @@ model WhatsAppBotFaq {
   @@map("whatsapp_bot_faqs")
 }
 
+// ── El bot aprende de cada clínica, SUPERVISADO (ws1-t11) ────────────────────
+// sql/ws1-t11-bot-aprende.sql. Sin relaciones de Prisma a propósito: las FK
+// viven en el SQL y así no se toca ningún modelo existente. Textos ya
+// anonimizados (src/lib/whatsapp/bot/aprende/anonimizar.ts). Mientras el SQL no
+// esté pegado, src/lib/whatsapp/bot/aprende/servicio.ts oculta la función.
+
+/// «¿Quieres que el bot conteste esto así?». Aprobar crea una WhatsAppBotFaq.
+model WhatsAppBotSugerencia {
+  id            String    @id @default(cuid())
+  clinicId      String
+  /// equipo | correccion
+  origen        String
+  /// pendiente | aprobada | descartada | no_apto
+  estado        String    @default("pendiente")
+  /// clinico | personal | corta | larga
+  motivoNoApto  String?
+  pregunta      String?   @db.Text
+  respuesta     String?   @db.Text
+  tema          String?
+  threadId      String?
+  /// Mensaje del Inbox que la originó: idempotencia del escaneo.
+  fuenteId      String
+  faqId         String?
+  decididoPorId String?
+  decididoAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([clinicId, fuenteId])
+  @@index([clinicId, estado, createdAt(sort: Desc)])
+  @@map("whatsapp_bot_sugerencias")
+}
+
+/// 👍 / 👎 de la clínica sobre una respuesta del bot.
+model WhatsAppBotValoracion {
+  id         String   @id @default(cuid())
+  clinicId   String
+  messageId  String
+  threadId   String
+  /// bien | mal
+  valor      String
+  correccion String?  @db.Text
+  pregunta   String?  @db.Text
+  usuarioId  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([clinicId, messageId])
+  @@index([clinicId, createdAt(sort: Desc)])
+  @@map("whatsapp_bot_valoraciones")
+}
+
+/// Respuesta del equipo marcada «así hablamos» (máx. 8 activas).
+model WhatsAppBotEjemploTono {
+  id          String   @id @default(cuid())
+  clinicId    String
+  texto       String   @db.Text
+  fuenteId    String
+  activo      Boolean  @default(true)
+  creadoPorId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([clinicId, fuenteId])
+  @@index([clinicId, activo])
+  @@map("whatsapp_bot_ejemplos_tono")
+}
+
 enum ReminderStatus {
   PENDING
   DONE

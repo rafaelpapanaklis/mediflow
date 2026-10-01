@@ -53,6 +53,8 @@ import { useT } from "@/i18n/i18n-provider";
 import { avisarCambioArmazon } from "@/lib/armazon/refrescar";
 import type { TFunction } from "@/i18n/t";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
+import { esRespuestaDelBot } from "@/lib/whatsapp/bot/aprende/detectar";
+import { ValorarRespuesta } from "@/components/dashboard/bot-aprende/valorar-respuesta";
 import type { WaDeliveryStatus } from "@/lib/whatsapp/delivery-status";
 import { describeReminderFailure } from "@/lib/whatsapp/reminder-error";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
@@ -81,6 +83,8 @@ interface Viewer {
   clinicName: string;
   /** "inbox.send". Sin él no se responde ni se inicia una conversación. */
   canSend?: boolean;
+  /** ws1-t11: "whatsapp.send" — 👍/👎 sobre las respuestas del bot. */
+  canTeachBot?: boolean;
 }
 
 interface Thread {
@@ -2526,6 +2530,11 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
                                 {describeDelivery(m, t)}
                               </span>
                             )}
+                            {/* ws1-t11: la clínica califica al bot (👎 = «así debió ser»). */}
+                            {viewer.canTeachBot && activeThread.channel === "WHATSAPP" &&
+                              esRespuestaDelBot({ direction: m.direction, isInternal: m.isInternal, sentById: m.sentBy?.id ?? null, externalId: m.externalId }) && (
+                                <ValorarRespuesta messageId={m.id} puedeEditar />
+                              )}
                           </div>
                         );
                       })}

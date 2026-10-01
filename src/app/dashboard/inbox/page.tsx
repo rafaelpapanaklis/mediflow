@@ -34,6 +34,12 @@ export default async function InboxPage() {
           { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
           "inbox.send",
         ),
+        // ws1-t11: 👍/👎 sobre las respuestas del bot. Mismo permiso que
+        // editar sus respuestas frecuentes; la API lo revalida.
+        canTeachBot: hasPermission(
+          { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+          "whatsapp.send",
+        ),
       }}
     />
   );
