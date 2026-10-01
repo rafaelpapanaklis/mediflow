@@ -72,6 +72,9 @@ interface ChangeRequestBody {
   reason?: string;
 }
 
+// Sentinel: otra petición ya cambió esta cita (M11, ws1-t10).
+const CITA_YA_CAMBIADA = "CITA_YA_CAMBIADA";
+
 /** UNIQUE parcial en SQL (un solo PENDING por appointmentId): P2002 o 23505. */
 function isUniquePendingViolation(err: unknown): boolean {
   const e = err as { code?: string; meta?: { code?: string }; message?: string } | null;
@@ -289,8 +292,11 @@ export async function POST(
         });
         if (conflict) throw new Error("SLOT_TAKEN");
 
-        await tx.appointment.update({
-          where: { id: appt.id },
+        // M11 (ws1-t10): la cita se RECLAMA con la hora y el estado que se
+        // leyeron. Dos peticiones a la vez (doble toque, dos pestañas) ya no
+        // se aprueban las dos: la segunda ve `count === 0` y no avisa.
+        const reclamo = await tx.appointment.updateMany({
+          where: { id: appt.id, clinicId: appt.clinicId, startsAt: appt.startsAt, status: appt.status },
           data: {
             startsAt: proposedStartsAt!,
             endsAt: proposedEndsAt!,
@@ -298,6 +304,7 @@ export async function POST(
             confirmedAt: null,
           },
         });
+        if (reclamo.count !== 1) throw new Error(CITA_YA_CAMBIADA);
 
         // M-22, dentro de la MISMA tx: se cancelan los avisos que llevan la
         // hora vieja y se encolan los de la nueva.
@@ -307,14 +314,15 @@ export async function POST(
           newStartsAt: proposedStartsAt!,
         });
       } else {
-        await tx.appointment.update({
-          where: { id: appt.id },
+        const reclamo = await tx.appointment.updateMany({
+          where: { id: appt.id, clinicId: appt.clinicId, startsAt: appt.startsAt, status: appt.status },
           data: {
             status: "CANCELLED",
             cancelledAt: now,
             cancelReason: reason || "Cancelada por el paciente desde el portal",
           },
         });
+        if (reclamo.count !== 1) throw new Error(CITA_YA_CAMBIADA);
         await cancelPendingRemindersForAppointment(tx, {
           appointmentId: appt.id,
           clinicId: appt.clinicId,
@@ -343,6 +351,10 @@ export async function POST(
   } catch (err) {
     if (err instanceof Error && err.message === "SLOT_TAKEN") {
       return NextResponse.json({ error: "slot_taken" }, { status: 409 });
+    }
+    if (err instanceof Error && err.message === CITA_YA_CAMBIADA) {
+      // 422 como el chequeo de estado de arriba: la pantalla ya lo sabe pintar.
+      return NextResponse.json({ error: "not_changeable" }, { status: 422 });
     }
     if (isUniquePendingViolation(err)) {
       return NextResponse.json({ error: "pending_exists" }, { status: 409 });

@@ -48,10 +48,18 @@ export async function POST(req: NextRequest) {
   if (body.appointmentIds.length > 50) {
     return NextResponse.json({ error: "too_many_ids" }, { status: 400 });
   }
+  // M11 (ws1-t10): un id repetido en el lote se procesaba —y avisaba al
+  // paciente— una vez por cada repetición.
+  const appointmentIds = Array.from(
+    new Set(body.appointmentIds.filter((id): id is string => typeof id === "string" && id !== "")),
+  );
+  if (appointmentIds.length === 0) {
+    return NextResponse.json({ error: "missing_ids" }, { status: 400 });
+  }
 
   const candidates = await prisma.appointment.findMany({
     where: {
-      id: { in: body.appointmentIds },
+      id: { in: appointmentIds },
       clinicId: session.clinic.id,
       requiresValidation: true,
       status: "SCHEDULED",
@@ -66,26 +74,33 @@ export async function POST(req: NextRequest) {
   };
 
   const procesadas: string[] = [];
-  for (const id of body.appointmentIds) {
+  for (const id of appointmentIds) {
     if (!validIds.has(id)) {
       result.failed.push({ id, error: "not_found_or_not_pending" });
       continue;
     }
     try {
+      // M11 (ws1-t10): el cambio de estado RECLAMA la fila con el estado que
+      // se esperaba (pendiente de validar). Solo quien lo cambia (count === 1)
+      // cuenta como procesada y, por tanto, avisa al paciente: un doble clic o
+      // dos recepcionistas a la vez ya no mandan dos WhatsApp.
+      const reclamada = { id, clinicId: session.clinic.id, requiresValidation: true, status: "SCHEDULED" as const };
+      let reclamo = false;
       if (body.action === "confirm") {
-        await prisma.appointment.update({
-          where: { id },
+        const r = await prisma.appointment.updateMany({
+          where: reclamada,
           data: {
             status: "CONFIRMED",
             requiresValidation: false,
           },
         });
+        reclamo = r.count === 1;
       } else {
         // Rechazar deja la cita CANCELLED: sus recordatorios pendientes se
         // cancelan con ella, en la misma transacción.
-        await prisma.$transaction(async (tx) => {
-          await tx.appointment.update({
-            where: { id },
+        reclamo = await prisma.$transaction(async (tx) => {
+          const r = await tx.appointment.updateMany({
+            where: reclamada,
             data: {
               status: "CANCELLED",
               requiresValidation: false,
@@ -95,12 +110,18 @@ export async function POST(req: NextRequest) {
               cancelledAt: new Date(),
             },
           });
+          if (r.count !== 1) return false;
           await cancelPendingRemindersForAppointment(tx, {
             appointmentId: id,
             clinicId: session.clinic.id,
             reason: "Cancelado: la cita se rechazó en la validación",
           });
+          return true;
         });
+      }
+      if (!reclamo) {
+        result.failed.push({ id, error: "not_found_or_not_pending" });
+        continue;
       }
       result.processed += 1;
       procesadas.push(id);

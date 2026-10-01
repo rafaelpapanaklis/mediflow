@@ -39,10 +39,13 @@ let envios: any[];
 /** Si no es null, el embudo lanza esto (envío bloqueado / Meta caído). */
 let falloDelEmbudo: Error | null;
 let apptStartsAt: Date;
+/** Lo último que `updateMany` escribió sobre la cita (M11, ws1-t10). */
+let ultimoReclamo: any = null;
 /** Las veces que la ruta pidió dejar a Google Calendar al día: [clinicId, appointmentId]. */
 let llamadasGoogle: [string, string][] = [];
 
 beforeEach(() => {
+  ultimoReclamo = null;
   llamadasGoogle = [];
   existingRow = null;
   patientPhone = "+52 999 123 4567";
@@ -110,6 +113,17 @@ const prismaStub: any = {
   $transaction: async (fn: any) =>
     fn({
       appointment: {
+        // M11 (ws1-t10): cancelar / cambiar de estado RECLAMA la cita con
+        // updateMany condicionado al estado; el doble siempre lo concede.
+        updateMany: async ({ data }: any) => {
+          ultimoReclamo = data;
+          return { count: 1 };
+        },
+        findFirst: async () =>
+          apptRow({
+            ...existingRow,
+            ...(ultimoReclamo?.status ? { status: ultimoReclamo.status } : {}),
+          }),
         create: async ({ data }: any) => {
           apptStartsAt = data.startsAt;
           return apptRow({ ...data, id: "nueva" });

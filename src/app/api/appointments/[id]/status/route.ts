@@ -132,15 +132,23 @@ export async function PATCH(
       : {};
 
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.appointment.update({
-      where: { id: params.id },
+    // M11 (ws1-t10): el cambio de estado reclama la cita con el estado que se
+    // leyó arriba. Con dos peticiones a la vez (doble clic en «Cancelar») solo
+    // una ve `count === 1`; la otra sale con 409 sin avisar al paciente otra vez.
+    const reclamo = await tx.appointment.updateMany({
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
       data: {
         status: body.status,
         ...sideEffects,
         ...cancelFields,
       },
+    });
+    if (reclamo.count !== 1) return null;
+    const row = await tx.appointment.findFirst({
+      where: { id: params.id, clinicId: session.clinic.id },
       include: APPT_INCLUDE,
     });
+    if (!row) return null;
     if (closesAppointment) {
       await cancelPendingRemindersForAppointment(tx, {
         appointmentId: params.id,
@@ -153,6 +161,12 @@ export async function PATCH(
     }
     return row;
   });
+  if (!updated) {
+    return NextResponse.json(
+      { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
+      { status: 409 },
+    );
+  }
 
   // Google Calendar: cancelar o marcar no-asistió saca la cita del calendario
   // (borra el evento y limpia su id) y reactivarla la vuelve a poner. Los demás

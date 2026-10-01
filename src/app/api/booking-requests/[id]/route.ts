@@ -57,6 +57,16 @@ function partirNombre(completo: string): { firstName: string; lastName: string }
   return { firstName: t.slice(0, -2).join(" "), lastName: t.slice(-2).join(" ") };
 }
 
+const YA_RESUELTA = "SOLICITUD_YA_RESUELTA";
+
+/** Otra petición resolvió la solicitud entre la lectura y la escritura. */
+function respuestaYaResuelta() {
+  return NextResponse.json(
+    { error: "Esta solicitud ya fue resuelta por otra persona", code: "ALREADY_RESOLVED" },
+    { status: 409 },
+  );
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
@@ -99,10 +109,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ? body.reason.trim().slice(0, 500)
       : null;
 
-    await prisma.bookingRequest.update({
-      where: { id: solicitud.id },
+    // M11 (ws1-t10): se reclama con el estado esperado; si otra petición ya la
+    // resolvió (aceptó o rechazó), esta no pisa su resultado.
+    const reclamada = await prisma.bookingRequest.updateMany({
+      where: { id: solicitud.id, clinicId, status: "PENDIENTE" },
       data: { status: "RECHAZADA", rejectedReason: motivo },
     });
+    if (reclamada.count !== 1) return respuestaYaResuelta();
 
     return NextResponse.json({ ok: true, status: "RECHAZADA" });
   }
@@ -239,6 +252,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // El retry envuelve al $transaction (no al revés): una tx abortada por
     // P2002 ya no admite queries, así que cada intento abre transacción nueva.
     const creado = await withPatientNumberRetry(() => prisma.$transaction(async (tx) => {
+      // M11 (ws1-t10): LO PRIMERO es reclamar la solicitud (PENDIENTE →
+      // ACEPTADA). Con dos «Aceptar» a la vez, el segundo espera el candado de
+      // la fila, ve que ya no está pendiente y aborta antes de crear una
+      // segunda cita (y quizá un segundo expediente). Si el hueco resulta
+      // ocupado, el throw de abajo deshace también este reclamo.
+      const reclamo = await tx.bookingRequest.updateMany({
+        where: { id: solicitud!.id, clinicId, status: "PENDIENTE" },
+        data: { status: "ACEPTADA" },
+      });
+      if (reclamo.count !== 1) throw new Error(YA_RESUELTA);
+
       const ocupados = await tx.appointment.findMany({
         where: {
           clinicId,
@@ -309,7 +333,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       await tx.bookingRequest.update({
         where: { id: solicitud!.id },
         data: {
-          status: "ACEPTADA",
           createdPatientId: paciente.id,
           createdAppointmentId: cita.id,
           doctorId: doctor.id,
@@ -372,6 +395,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch (err: any) {
     // El hueco se lo ganaron mientras la solicitud esperaba. No es un error
     // del sistema: se responde con los horarios que SÍ quedan libres ese día.
+    if (err?.message === YA_RESUELTA) return respuestaYaResuelta();
     if (err?.message === "SLOT_TAKEN" || isOverlapError(err)) {
       // WS1-T2 · horario — las alternativas también se recortan al horario de
       // cada doctor. `freeSlotsForDay` (src/lib/booking-requests/server.ts,

@@ -99,6 +99,11 @@ const prismaStub: any = {
       crActualizadas.push(args);
       return args;
     },
+    // M11 (ws1-t10): la solicitud se reclama con updateMany condicionado.
+    updateMany: async (args: any) => {
+      crActualizadas.push(args);
+      return { count: 1 };
+    },
   },
   bookingRequest: {
     findFirst: async ({ where }: any) =>
@@ -117,11 +122,14 @@ const prismaStub: any = {
             notes: null,
           }
         : null,
+    // M11 (ws1-t10): aceptar/rechazar reclama la solicitud con updateMany.
+    updateMany: async () => ({ count: 1 }),
   },
   patient: { findMany: async () => [] },
   doctorSchedule: { findMany: async () => [] },
   $transaction: async (fn: any) =>
     fn({
+      bookingRequest: { updateMany: async () => ({ count: 1 }) },
       appointment: {
         findMany: async ({ where }: any) => {
           candidatosEnTx = where.doctorId.in;

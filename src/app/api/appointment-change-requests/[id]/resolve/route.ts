@@ -36,6 +36,38 @@ export const dynamic = "force-dynamic";
 const SLOT_TAKEN_NOTE = "El horario propuesto ya no está disponible";
 // Sentinel para abortar el $transaction cuando el re-check detecta overlap.
 const SLOT_TAKEN_IN_TX = "appointment_change_slot_taken_in_tx";
+// Sentinel: otra petición ya resolvió esta solicitud (M11, ws1-t10).
+const YA_RESUELTA = "appointment_change_ya_resuelta";
+
+/**
+ * M11 (ws1-t10): RECLAMAR la solicitud antes de mover nada o avisar. El
+ * `updateMany` condiciona al estado pendiente: con dos peticiones a la vez
+ * (doble clic, dos recepcionistas) solo una ve `count === 1`; la otra recibe
+ * 409 y no manda su aviso. Antes la lectura de `status` y la escritura iban
+ * separadas y las dos pasaban.
+ */
+async function reclamarSolicitud(
+  db: Pick<typeof prisma, "appointmentChangeRequest">,
+  args: {
+    id: string;
+    clinicId: string;
+    status: "APPROVED" | "REJECTED";
+    resolvedById: string;
+    resolvedAt: Date;
+    resolutionNote?: string | null;
+  },
+): Promise<boolean> {
+  const r = await db.appointmentChangeRequest.updateMany({
+    where: { id: args.id, clinicId: args.clinicId, status: "PENDING" },
+    data: {
+      status: args.status,
+      resolvedById: args.resolvedById,
+      resolvedAt: args.resolvedAt,
+      ...(args.resolutionNote !== undefined ? { resolutionNote: args.resolutionNote } : {}),
+    },
+  });
+  return r.count === 1;
+}
 
 async function notifyBestEffort(changeRequestId: string) {
   try {
@@ -111,15 +143,17 @@ export async function POST(
   // ── REJECT ──────────────────────────────────────────────────────
   if (action === "REJECT") {
     try {
-      await prisma.appointmentChangeRequest.update({
-        where: { id: cr.id },
-        data: {
-          status: "REJECTED",
-          resolvedById: session.user.id,
-          resolvedAt: now,
-          resolutionNote: note || null,
-        },
+      const reclamada = await reclamarSolicitud(prisma, {
+        id: cr.id,
+        clinicId: session.clinic.id,
+        status: "REJECTED",
+        resolvedById: session.user.id,
+        resolvedAt: now,
+        resolutionNote: note || null,
       });
+      if (!reclamada) {
+        return NextResponse.json({ error: "not_pending" }, { status: 409 });
+      }
     } catch (err) {
       console.error("[resolve CR] REJECT error", err);
       return NextResponse.json({ error: "internal_error" }, { status: 500 });
@@ -132,20 +166,22 @@ export async function POST(
   if (cr.type === "CANCEL") {
     try {
       await prisma.$transaction(async (tx) => {
+        // Lo PRIMERO: reclamar la solicitud. Si otra petición ya la resolvió,
+        // se aborta antes de tocar la cita.
+        const reclamada = await reclamarSolicitud(tx, {
+          id: cr.id,
+          clinicId: session.clinic.id,
+          status: "APPROVED",
+          resolvedById: session.user.id,
+          resolvedAt: now,
+        });
+        if (!reclamada) throw new Error(YA_RESUELTA);
         await tx.appointment.update({
           where: { id: appointment.id },
           data: {
             status: "CANCELLED",
             cancelledAt: now,
             cancelReason: cr.reason || "Cancelada a petición del paciente",
-          },
-        });
-        await tx.appointmentChangeRequest.update({
-          where: { id: cr.id },
-          data: {
-            status: "APPROVED",
-            resolvedById: session.user.id,
-            resolvedAt: now,
           },
         });
         // La cita se cancela: sus recordatorios pendientes también.
@@ -156,6 +192,9 @@ export async function POST(
         });
       });
     } catch (err) {
+      if (err instanceof Error && err.message === YA_RESUELTA) {
+        return NextResponse.json({ error: "not_pending" }, { status: 409 });
+      }
       console.error("[resolve CR] APPROVE CANCEL error", err);
       return NextResponse.json({ error: "internal_error" }, { status: 500 });
     }
@@ -201,15 +240,18 @@ export async function POST(
 
   const autoRejectSlotTaken = async () => {
     try {
-      await prisma.appointmentChangeRequest.update({
-        where: { id: cr.id },
-        data: {
-          status: "REJECTED",
-          resolvedById: session.user.id,
-          resolvedAt: new Date(),
-          resolutionNote: SLOT_TAKEN_NOTE,
-        },
+      const reclamada = await reclamarSolicitud(prisma, {
+        id: cr.id,
+        clinicId: session.clinic.id,
+        status: "REJECTED",
+        resolvedById: session.user.id,
+        resolvedAt: new Date(),
+        resolutionNote: SLOT_TAKEN_NOTE,
       });
+      // Otra petición la resolvió primero: ella avisa, esta no.
+      if (!reclamada) {
+        return NextResponse.json({ error: "not_pending" }, { status: 409 });
+      }
     } catch (err) {
       console.error("[resolve CR] auto-reject error", err);
     }
@@ -258,6 +300,18 @@ export async function POST(
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Primero reclamar la solicitud (M11): si el hueco resulta ocupado, el
+      // throw de abajo deshace también este reclamo y el auto-rechazo la
+      // reclama de nuevo; si otra petición ya la resolvió, no se mueve nada.
+      const reclamada = await reclamarSolicitud(tx, {
+        id: cr.id,
+        clinicId: session.clinic.id,
+        status: "APPROVED",
+        resolvedById: session.user.id,
+        resolvedAt: now,
+      });
+      if (!reclamada) throw new Error(YA_RESUELTA);
+
       // Re-check de overlap DENTRO de la transacción (mismo where que el
       // PATCH /api/appointments/[id]) para cerrar la ventana de carrera.
       const conflict = await tx.appointment.findFirst({
@@ -293,15 +347,6 @@ export async function POST(
         },
       });
 
-      await tx.appointmentChangeRequest.update({
-        where: { id: cr.id },
-        data: {
-          status: "APPROVED",
-          resolvedById: session.user.id,
-          resolvedAt: now,
-        },
-      });
-
       // M-22: dentro de la MISMA tx que mueve la cita. Antes se borraban fuera,
       // best-effort: si eso fallaba, la cita quedaba movida y el recordatorio
       // viejo salía igual con la hora anterior.
@@ -312,6 +357,9 @@ export async function POST(
       });
     });
   } catch (err) {
+    if (err instanceof Error && err.message === YA_RESUELTA) {
+      return NextResponse.json({ error: "not_pending" }, { status: 409 });
+    }
     // Chocó dentro de la tx (re-check o constraint EXCLUDE) → auto-rechazo.
     if (
       (err instanceof Error && err.message === SLOT_TAKEN_IN_TX) ||

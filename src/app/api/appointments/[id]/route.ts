@@ -578,16 +578,32 @@ export async function DELETE(
   // transacción. El worker ya se negaba a enviarlos (re-check al salir), pero la
   // fila seguía en "En cola" en el panel hasta que le tocaba turno: un
   // recordatorio pendiente de una cita que ya no existe.
-  await prisma.$transaction(async (tx) => {
-    await tx.appointment.update({
-      where: { id: params.id },
+  // M11 (ws1-t10): se reclama la cita con el estado leído arriba. Con dos
+  // cancelaciones a la vez solo una ve `count === 1`; la otra es idempotente
+  // (ok sin avisar de nuevo al paciente ni repetir bitácora ni dinero).
+  const cancelada = await prisma.$transaction(async (tx) => {
+    const reclamo = await tx.appointment.updateMany({
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
       data: { status: "CANCELLED", cancelledAt: now, cancelReason },
     });
+    if (reclamo.count !== 1) return false;
     await cancelPendingRemindersForAppointment(tx, {
       appointmentId: params.id,
       clinicId: session.clinic.id,
     });
+    return true;
   });
+  if (!cancelada) {
+    const actual = await prisma.appointment.findFirst({
+      where: { id: params.id, clinicId: session.clinic.id },
+      select: { status: true },
+    });
+    if (actual?.status === "CANCELLED") return NextResponse.json({ ok: true });
+    return NextResponse.json(
+      { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
+      { status: 409 },
+    );
+  }
 
   await logMutation({
     req,
