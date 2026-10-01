@@ -35,7 +35,8 @@ export function generateStaticParams() {
   return BLOG_CATEGORIES.map((c) => ({ cat: c.slug }));
 }
 export const dynamicParams = false;
-export const revalidate = 3600;
+// Cinco minutos como mucho si se pierde una invalidación de revalidateBlog().
+export const revalidate = 300;
 
 export function generateMetadata({ params }: Props): Metadata {
   const cat = getBlogCategory(params.cat);

@@ -63,6 +63,10 @@ export const prisma =
   (globalForPrisma.prisma as PrismaClient | undefined) ??
   (createPrismaClient() as unknown as PrismaClient);
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+// UN cliente por proceso, también en producción (ws1-t12, incidente del
+// 1-oct-2026, pooler lleno). El build de Next mete este archivo en varios
+// módulos distintos (medido: 3 ids de webpack — páginas, server actions y el
+// sitemap), y cada copia que se evaluaba sin el global creaba OTRO cliente
+// con su propio pool de `connection_limit` conexiones en la misma función.
+// Antes solo se guardaba fuera de producción (para el recargado de next dev).
+globalForPrisma.prisma = prisma;

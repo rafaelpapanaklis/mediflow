@@ -35,14 +35,13 @@ export const metadata: Metadata = buildMetadata({
 // ─────────────────────────────────────────────────────────────────────────────
 // /blog — índice paginado (12 por página), sólo artículos publicados.
 //
-// Caching: el enfoque de /descubre es `export const revalidate` + revalidatePath
-// al mutar. Aquí `revalidate` sólo cubre el data cache: leer `searchParams`
-// (?page=) hace que Next 14 renderice esta ruta bajo demanda. Es barato — dos
-// queries sobre el índice (status, publishedAt DESC) — y quien SÍ queda cacheada
-// como ISR de verdad es la ficha del artículo, que es la que recibe el tráfico
-// orgánico. Las mutaciones del admin y el cron llaman revalidateBlog().
+// Caching: leer `searchParams` (?page=) hace que Next 14 renderice esta ruta
+// bajo demanda, pero sus dos lecturas (lista y conteo por categoría) van por
+// la caché de datos de @/lib/blog/queries: el render no abre conexiones a la
+// base mientras el dato siga vigente (ws1-t12). La ficha del artículo sí queda
+// como ISR completa. Las mutaciones del admin y el cron llaman revalidateBlog().
 // ─────────────────────────────────────────────────────────────────────────────
-export const revalidate = 3600;
+export const revalidate = 300;
 
 interface Props {
   searchParams?: { page?: string };

@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { authDebug } from "@/lib/auth/debug-log";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { readActiveClinicCookie, logClinicFallback, resembrarActiveClinicCookie } from "@/lib/active-clinic";
 import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { redirect } from "next/navigation";
@@ -107,13 +107,16 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     if (!finalUser || !finalUser.isActive) return null;
 
     if (!dbUser) {
+      // Cookie inservible: se reescribe con la elegida (ws1-t12), así la
+      // próxima petición ya no cae aquí. Ver resembrarActiveClinicCookie.
+      const resembrada = resembrarActiveClinicCookie(finalUser.clinicId);
       if (activeClinicId) {
         authDebug("warn", "[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
           reason: "supabaseId no es activo en clinicId solicitada",
           requested: activeClinicId,
           picked: finalUser.clinicId,
         }));
-        logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
+        logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId, resembrada });
       } else {
         authDebug("warn", "[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
           reason: "cookie ausente o HMAC inválido",

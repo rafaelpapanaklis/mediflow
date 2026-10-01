@@ -16,6 +16,7 @@ import toast from "react-hot-toast";
 import type { Role } from "@prisma/client";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { usePrecargaAlPasar } from "@/hooks/use-precarga-al-pasar";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useT } from "@/i18n/i18n-provider";
@@ -112,6 +113,8 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
 
   const router = useRouter();
+  // Sin precarga masiva al abrir el panel: solo al detenerse encima (ws1-t12).
+  const precargaAlPasar = usePrecargaAlPasar();
   // En la ficha de un paciente el menú se recoge solo (ws1-t4); fuera manda la preferencia.
   const [encogido, setEncogido] = useEncogidoEnFicha(useEncogido(), pathname);
   const esMovil = useMedia("(max-width: 1023.98px)");
@@ -358,6 +361,8 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
         <Link
           key={item.id}
           href={item.href}
+          prefetch={false}
+          {...precargaAlPasar(item.href)}
           aria-current={activo ? "page" : undefined}
           aria-label={`${texto}. ${aviso}`}
           data-candado="true"
@@ -377,6 +382,8 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
       <Link
         key={item.id}
         href={item.href}
+        prefetch={false}
+        {...precargaAlPasar(item.href)}
         aria-current={activo ? "page" : undefined}
         // Recogido, el enlace se queda solo con su ícono (decorativo): el
         // nombre va aquí. Desplegado lo da el propio texto.
@@ -806,7 +813,7 @@ function TarjetaUsuario({
                   {t("menuDosNiveles.miPerfil")}
                 </a>
               ) : (
-                <Link href="/dashboard/settings?tab=perfil">
+                <Link href="/dashboard/settings?tab=perfil" prefetch={false}>
                   <Icono nombre="person" />
                   {t("menuDosNiveles.miPerfil")}
                 </Link>

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { usePrecargaAlPasar } from "@/hooks/use-precarga-al-pasar";
 import type { Role } from "@prisma/client";
 import { hasPermission } from "@/lib/auth/permissions";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -131,6 +132,8 @@ function useBooleanLocalStorage(key: string, defaultValue: boolean): [boolean, (
 export function Sidebar(props: SidebarProps) {
   const t = useT();
   const pathname = usePathname();
+  // Sin precarga masiva al abrir el panel: solo al detenerse encima (ws1-t12).
+  const precargaAlPasar = usePrecargaAlPasar();
   const counts = useSidebarCounts();
   const activeConsult = useActiveConsult().consult;
 
@@ -356,6 +359,8 @@ export function Sidebar(props: SidebarProps) {
         <Link
           key={item.id}
           href={item.href}
+          prefetch={false}
+          {...precargaAlPasar(item.href)}
           aria-current={active ? "page" : undefined}
           // Módulo sin contratar (ws1-t3): mismo enlace, con candado; el href
           // ya es el de la página de contratar.

@@ -493,6 +493,14 @@ export function start(): void {
   } catch {
     return;
   }
+  // Navegador conducido por automatización (Playwright, Puppeteer, Selenium):
+  // un robot que ejecuta JS con user-agent de persona. No manda nada, así que
+  // /api/track ni se entera (ws1-t12, incidente del 1-oct-2026).
+  try {
+    if (navigator.webdriver) return;
+  } catch {
+    /* sin navigator: sigue */
+  }
   started = true;
   markActivity(); // abrir la página cuenta como interacción
   vid = ensureVisitor();

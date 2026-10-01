@@ -91,6 +91,7 @@
     "test:login-servidor": "tsx --test --experimental-test-module-mocks src/lib/auth/__tests__/login-servidor.test.ts",
     "test:suplantacion": "tsx --test --experimental-test-module-mocks src/lib/admin/__tests__/suplantacion.test.ts",
     "test:suplantacion-sin-actividad": "tsx --test --experimental-test-module-mocks src/app/api/track/__tests__/suplantacion-sin-actividad.test.ts",
+    "test:conexiones-base": "tsx --test --experimental-test-module-mocks src/lib/blog/__tests__/cache-blog.test.ts src/lib/__tests__/prisma-url.test.ts src/lib/__tests__/prisma-un-cliente-por-proceso.test.ts src/lib/__tests__/active-clinic-resembrar.test.ts src/app/api/track/__tests__/base-en-apuros.test.ts src/components/dashboard/menu-dos-niveles/__tests__/sin-precarga-masiva.test.ts",
     "test:equipo-revision-final": "tsx --test src/lib/team/__tests__/equipo-revision-final.test.ts",
     "test:team-sin-cuenta": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cambio-correo-sin-cuenta.test.ts",
     "test:team-cupo": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cupo-usuarios.test.ts",

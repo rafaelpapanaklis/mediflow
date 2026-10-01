@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
+import { readActiveClinicCookie, logClinicFallback, resembrarActiveClinicCookie } from "@/lib/active-clinic";
 import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
 import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
@@ -233,13 +233,18 @@ const resolverUsuarioActual = cache(async () => {
     redirect("/onboarding");
   }
 
+  // La cookie no sirve (ausente, firma rota o de una clínica donde esta
+  // persona no está activa): se reescribe con la elegida para que la próxima
+  // petición ya no caiga aquí (ws1-t12; solo prende en route handlers y
+  // server actions, ver resembrarActiveClinicCookie).
+  const resembrada = resembrarActiveClinicCookie(user.clinicId);
   if (activeClinicId) {
     authDebug("warn", "[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
       reason: "supabaseId no es activo en clinicId solicitada",
       requested: activeClinicId,
       picked: user.clinicId,
     }));
-    logClinicFallback({ supabaseId: supabaseUser.id, requestedClinicId: activeClinicId, actualClinicId: user.clinicId });
+    logClinicFallback({ supabaseId: supabaseUser.id, requestedClinicId: activeClinicId, actualClinicId: user.clinicId, resembrada });
   } else {
     authDebug("warn", "[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
       reason: "cookie ausente o HMAC inválido",

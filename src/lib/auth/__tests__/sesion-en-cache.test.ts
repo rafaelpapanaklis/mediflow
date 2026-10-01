@@ -107,7 +107,7 @@ mock.module("@/lib/supabase/server", {
   namedExports: { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: sesion } } }) } }) },
 });
 mock.module("@/lib/active-clinic", {
-  namedExports: { readActiveClinicCookie: () => cookieClinica, logClinicFallback: () => {} },
+  namedExports: { readActiveClinicCookie: () => cookieClinica, logClinicFallback: () => {}, resembrarActiveClinicCookie: () => false },
 });
 // Lo que el middleware re-escribe en toda ruta /api.
 mock.module("next/headers", {

@@ -2,6 +2,17 @@
 // (no empieza por /admin|/dashboard|/proveedores) → sin refresh de Supabase.
 // CSRF ligero propio (Origin same-origin) + cap de tamaño + drop de bots.
 // SIEMPRE responde 204: jamás debe romper la navegación.
+//
+// Con la base en apuros, la analítica es lo primero que se suelta (ws1-t12,
+// incidente del 1-oct-2026, pooler lleno):
+//   · un robot conocido (por user-agent) sale ANTES de leer el cuerpo: no
+//     toca la base, ni Supabase, ni nada;
+//   · si la base falla por conexión (pooler lleno, sin conexión libre, caída),
+//     esta instancia deja de intentarlo un minuto (@/lib/analytics/pausa-por-fallo):
+//     nada de reintentos que sumen conexiones al problema;
+//   · la respuesta no espera más de ESPERA_MAXIMA_MS a la base; lo que quede
+//     pendiente termina (o falla) por su cuenta. prismaAdmin va con una sola
+//     conexión y pool_timeout de 5 s (@/lib/prisma-admin).
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -12,6 +23,7 @@ import { classifyReferrer } from "@/lib/analytics/referrer";
 import { resolveIdentity } from "@/lib/analytics/identity";
 import { suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 import { surfaceFromPath, isTrackingIgnored, MAX_BATCH } from "@/lib/analytics/constants";
+import { analiticaEnPausa, pausarSiFalloDeConexion, PAUSA_TRAS_FALLO_MS } from "@/lib/analytics/pausa-por-fallo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +70,15 @@ type Payload = z.infer<typeof PayloadSchema>;
 
 const NO_CONTENT = () => new NextResponse(null, { status: 204 });
 
+/** Lo más que la respuesta espera a la base. */
+const ESPERA_MAXIMA_MS = 2_000;
+
 export async function POST(req: NextRequest) {
+  // Robots conocidos fuera, antes de leer nada (el detector es el único del repo).
+  if (parseUserAgent(req.headers.get("user-agent")).device === "bot") return NO_CONTENT();
+  // Base en apuros hace poco: ni se intenta.
+  if (analiticaEnPausa()) return NO_CONTENT();
+
   // CSRF ligero: sólo aceptar POST del mismo origen (el tracker siempre es same-origin).
   // Si Origin está ausente (algunos POST same-origin lo omiten) se permite; si está
   // presente y no coincide con el host, se descarta (forced-post cross-site).
@@ -86,11 +106,16 @@ export async function POST(req: NextRequest) {
   payload = { ...payload, events: payload.events.filter((e) => !isTrackingIgnored(e.path)) };
   if (payload.events.length === 0) return NO_CONTENT();
 
-  try {
-    await ingest(req, payload);
-  } catch (e) {
+  const trabajo = ingest(req, payload).catch((e) => {
+    if (pausarSiFalloDeConexion(e)) {
+      console.error("[track] la base no da conexión; analítica en pausa", Math.round(PAUSA_TRAS_FALLO_MS / 1000), "s:", e instanceof Error ? e.message : e);
+      return;
+    }
     console.error("[track] ingest failed:", e);
-  }
+  });
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([trabajo, new Promise<void>((listo) => { reloj = setTimeout(listo, ESPERA_MAXIMA_MS); })]);
+  clearTimeout(reloj);
   return NO_CONTENT();
 }
 
@@ -110,8 +135,8 @@ async function ingest(req: NextRequest, p: Payload): Promise<void> {
   if (await esSuplantacion()) return;
 
   const now = new Date();
+  // Los bots ya salieron en POST, antes de leer el cuerpo.
   const ua = parseUserAgent(req.headers.get("user-agent"));
-  if (ua.device === "bot") return; // no rastrear bots que ejecutan JS (Lighthouse, headless, scrapers)
   const selfHost = req.headers.get("host");
   const ref = classifyReferrer({
     referrer: p.referrer,

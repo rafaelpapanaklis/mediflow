@@ -208,7 +208,7 @@ mock.module("@/lib/supabase/server", {
   },
 });
 mock.module("@/lib/active-clinic", {
-  namedExports: { readActiveClinicCookie: () => null, logClinicFallback: () => {} },
+  namedExports: { readActiveClinicCookie: () => null, logClinicFallback: () => {}, resembrarActiveClinicCookie: () => false },
 });
 mock.module("@/lib/plan-status", {
   namedExports: { isPlanExpired: () => false, isApiPathBlockedForExpiredPlan: () => false },

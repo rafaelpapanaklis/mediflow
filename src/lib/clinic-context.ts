@@ -12,7 +12,17 @@ export interface ClinicContext {
   role?: string;
 }
 
-export const clinicContextStorage = new AsyncLocalStorage<ClinicContext>();
+// En globalThis: el build mete este archivo en varios módulos (páginas, server
+// actions…) y el cliente de Prisma es UNO por proceso (@/lib/prisma, ws1-t12);
+// con un AsyncLocalStorage por copia, el cliente no vería el contexto que
+// fija otra copia.
+const globalParaContexto = globalThis as unknown as {
+  clinicContextStorage: AsyncLocalStorage<ClinicContext> | undefined;
+};
+
+export const clinicContextStorage =
+  globalParaContexto.clinicContextStorage ?? new AsyncLocalStorage<ClinicContext>();
+globalParaContexto.clinicContextStorage = clinicContextStorage;
 
 /**
  * Obtiene el contexto actual. Retorna undefined si no hay contexto.

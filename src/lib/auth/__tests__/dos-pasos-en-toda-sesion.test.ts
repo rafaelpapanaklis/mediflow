@@ -80,7 +80,7 @@ mock.module("@/lib/supabase/server", {
   namedExports: { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: SB } } }) } }) },
 });
 mock.module("@/lib/active-clinic", {
-  namedExports: { readActiveClinicCookie: () => null, logClinicFallback: () => {} },
+  namedExports: { readActiveClinicCookie: () => null, logClinicFallback: () => {}, resembrarActiveClinicCookie: () => false },
 });
 mock.module("next/headers", {
   namedExports: {

@@ -1,4 +1,12 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+
+/**
+ * Etiqueta de TODAS las lecturas públicas del blog en la caché de datos
+ * (src/lib/blog/queries.ts). Invalidarla refresca también cada página que las
+ * usó: /blog, cada artículo, las categorías, el RSS, el sitemap y los
+ * relacionados de /casos-de-uso.
+ */
+export const BLOG_CACHE_TAG = "blog-publico";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Invalidación de las superficies públicas del blog.
@@ -18,6 +26,14 @@ export function revalidateBlog(opts?: {
   slugs?: (string | null | undefined)[];
   categories?: (string | null | undefined)[];
 }): void {
+  // Primero la caché de datos: es la que de verdad evita ir a la base, y la
+  // que alcanza también a los artículos cuyo slug no viene en `opts`.
+  try {
+    revalidateTag(BLOG_CACHE_TAG);
+  } catch (e) {
+    console.warn("[blog/revalidate] no se pudo invalidar la caché del blog:", e);
+  }
+
   const seen: Record<string, true> = {};
   const paths: string[] = BLOG_STATIC_PATHS.slice();
 

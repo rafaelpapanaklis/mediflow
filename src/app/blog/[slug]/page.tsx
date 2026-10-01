@@ -23,15 +23,27 @@ interface Props {
 // /blog/[slug] — la ficha del artículo, la superficie que recibe el tráfico
 // orgánico.
 //
-// Sin generateStaticParams a propósito: exigiría BD en build time y el build de
-// Vercel corre sin garantía de DATABASE_URL. Con `revalidate` la página se
-// genera bajo demanda la primera vez y queda cacheada como ISR; publicar o
-// editar la invalida al instante vía revalidateBlog().
+// generateStaticParams devuelve [] A PROPÓSITO (ws1-t12, incidente del
+// 1-oct-2026): sin esa función Next 14 marca la ruta como dinámica y renderiza
+// —con su consulta a la base— en CADA visita, aunque haya `revalidate`; el
+// build de producción no la tenía en prerender-manifest y un robot recorriendo
+// artículos abría una conexión por petición. Con la lista vacía no se toca la
+// base en el build (que corre sin garantía de DATABASE_URL) y cada artículo se
+// genera la primera vez que alguien lo pide y queda guardado como ISR. Además
+// los datos van por la caché de @/lib/blog/queries, así que regenerar tampoco
+// consulta la base si el dato sigue vigente.
+//
+// Publicar o editar invalida al instante vía revalidateBlog() (ruta y etiqueta
+// de la caché); `revalidate` es la red de seguridad: cinco minutos como mucho.
 //
 // SOLO `status = 'published'`: un borrador o un programado devuelven 404 real,
 // no una página vacía (getPublishedPostBySlug filtra en el where).
 // ─────────────────────────────────────────────────────────────────────────────
-export const revalidate = 3600;
+export const revalidate = 300;
+
+export function generateStaticParams(): Props["params"][] {
+  return [];
+}
 
 /** URL de la OG dinámica (/og/blog?title=…) para este artículo. */
 function ogUrlFor(title: string): string {

@@ -58,6 +58,8 @@ let cookie2fa = false;
 // Con qué (persona, clínica) se comprobó la cookie df_2fa: tiene que ser la sede ELEGIDA.
 let pruebas2fa: Array<[string, string]> = [];
 const consultas: Array<{ op: string; where: any; orderBy?: any }> = [];
+// ws1-t12: con qué clínica se reescribió la cookie de clínica activa.
+const resembradas: string[] = [];
 
 beforeEach(() => {
   filas = [];
@@ -66,6 +68,7 @@ beforeEach(() => {
   cookie2fa = false;
   pruebas2fa = [];
   consultas.length = 0;
+  resembradas.length = 0;
 });
 
 /** Prisma falso: evalúa el where como Prisma (supabaseId, isActive, clinicId, totpEnabled). */
@@ -96,7 +99,11 @@ mock.module("@/lib/supabase/server", {
   namedExports: { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: SB } } }) } }) },
 });
 mock.module("@/lib/active-clinic", {
-  namedExports: { readActiveClinicCookie: () => cookieClinica, logClinicFallback: () => {} },
+  namedExports: {
+    readActiveClinicCookie: () => cookieClinica,
+    logClinicFallback: () => {},
+    resembrarActiveClinicCookie: (clinicId: string) => { resembradas.push(clinicId); return true; },
+  },
 });
 mock.module("next/headers", {
   namedExports: { headers: () => ({ get: (k: string) => (k === "x-pathname" ? rutaActual : null) }) },
@@ -239,4 +246,42 @@ test("getCurrentUser · sin ninguna fila de clínica: sigue la cadena de siempre
   (prismaFalso as any).realtyUser = { findFirst: async () => null };
   filas = [];
   await assert.rejects(() => getCurrentUser(), (e: unknown) => e instanceof Redireccion && e.destino === "/onboarding");
+});
+
+// ═══════════════════ ws1-t12 · la cookie desfasada se corrige sola ═══════════════════
+// En producción casi cada petición dejaba «[auth] activeClinicId fallback
+// triggered»: la cookie apuntaba a una clínica donde la persona no está y nadie
+// la reescribía hasta el siguiente login. Ahora se reescribe con la elegida.
+
+test("ws1-t12 · cookie AJENA: getAuthContext la reescribe con la sede elegida, sin otra consulta", async () => {
+  filas = [fila("u_a", "cli_a", "2025-01-01")];
+  cookieClinica = "cli_ajena";
+  const ctx = await getAuthContext();
+  assert.equal(ctx?.clinicId, "cli_a");
+  assert.deepEqual(resembradas, ["cli_a"]);
+  soloUnaConsulta();
+});
+
+test("ws1-t12 · cookie AJENA: getCurrentUser la reescribe con la sede elegida, sin otra consulta", async () => {
+  filas = [fila("u_b", "cli_b", "2026-01-01"), fila("u_a", "cli_a", "2025-01-01")];
+  cookieClinica = "cli_ajena";
+  const u = await getCurrentUser();
+  assert.equal(u.clinicId, "cli_a");
+  assert.deepEqual(resembradas, ["cli_a"]);
+  soloUnaConsulta();
+});
+
+test("ws1-t12 · sin cookie también se siembra (la de la primera sede)", async () => {
+  filas = [fila("u_a", "cli_a", "2025-01-01")];
+  await getAuthContext();
+  await getCurrentUser();
+  assert.deepEqual(resembradas, ["cli_a", "cli_a"]);
+});
+
+test("ws1-t12 · cookie de una sede propia: NO se toca (cambiar de sucursal sigue mandando)", async () => {
+  filas = [fila("u_a", "cli_a", "2025-01-01"), fila("u_b", "cli_b", "2026-01-01")];
+  cookieClinica = "cli_b";
+  await getAuthContext();
+  await getCurrentUser();
+  assert.deepEqual(resembradas, []);
 });
