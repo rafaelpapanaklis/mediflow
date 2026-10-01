@@ -132,7 +132,7 @@ describe("flujo normal: un recordatorio de cita futura", () => {
   });
 
   it('"cancelar" cancela esa cita', () => {
-    for (const text of ["cancelar", "cancela mi cita", "no puedo ir", "no"]) {
+    for (const text of ["cancelar", "cancela mi cita"]) {
       const { reminder, action } = resolveReminderReply(soloRecordatorio, text);
       assert.equal(reminder?.id, "a", `texto: "${text}"`);
       assert.equal(action, "cancel", `texto: "${text}"`);
@@ -236,9 +236,15 @@ describe("lo último que recibió el paciente SÍ pedía confirmar/cancelar", ()
     assert.equal(reminder?.id, "y-24h");
   });
 
-  it('"2" y "no puedo ir" también', () => {
-    for (const text of ["2", "no puedo ir", "no"]) {
-      assert.equal(resolveReminderReply(serie, text).action, "cancel", `texto: "${text}"`);
+  it('"2" también', () => {
+    assert.equal(resolveReminderReply(serie, "2").action, "cancel");
+  });
+
+  it('ws1-t3 #1: "no puedo ir" y "no" ya NO cancelan: se pide escribir CANCELAR', () => {
+    for (const text of ["no puedo ir", "no"]) {
+      const { reminder, action } = resolveReminderReply(serie, text);
+      assert.equal(action, "ask_cancel", `texto: "${text}"`);
+      assert.equal(reminder?.id, "y-24h", `texto: "${text}"`);
     }
   });
 
@@ -413,27 +419,34 @@ describe("erratas del paciente: los casos exactos del reporte", () => {
     }
   });
 
-  it('"CANCELAR", "2" y "mejor no" cancelan', () => {
-    for (const raw of ["CANCELAR", "2", "mejor no", "Cancelar por favor"]) {
+  it('"CANCELAR", "2" y "Cancelar por favor" cancelan', () => {
+    for (const raw of ["CANCELAR", "2", "Cancelar por favor"]) {
       assert.equal(decide(raw).action, "cancel", `texto: "${raw}"`);
     }
   });
 
-  it('"no puedo confirmar" NO confirma — cancelar se evalúa primero', () => {
+  it('ws1-t3 #1: "mejor no" ya no cancela de golpe: se pregunta', () => {
+    assert.equal(decide("mejor no").action, "ask_cancel");
+  });
+
+  it('"no puedo confirmar" NO confirma — la negativa se evalúa primero', () => {
     // La tolerancia a erratas NO puede invertir este orden: la frase lleva
-    // "confirmar" dentro y aun así es una negativa.
+    // "confirmar" dentro y aun así es una negativa. Desde ws1-t3 #1 tampoco
+    // cancela a ciegas: se le pide escribir CANCELAR.
     const { action } = decide("no puedo confirmar");
     assert.notEqual(action, "confirm");
-    assert.equal(action, "cancel");
+    assert.equal(action, "ask_cancel");
   });
 
   it("un texto de verdad ajeno sigue sin mover la cita", () => {
     for (const raw of [
-      "hola buenas", "gracias doctora", "quiero una cita", "cuánto cuesta la limpieza",
+      "hola buenas", "gracias doctora", "quiero una cita",
       "confío en usted", "ahí estaré",
     ]) {
       assert.equal(decide(raw).action, "none", `texto: "${raw}"`);
     }
+    // ws1-t3 #15: una pregunta tampoco la mueve; ahora se marca para el bot.
+    assert.equal(decide("cuánto cuesta la limpieza").action, "question");
   });
 
   it("la tolerancia NO se extiende a cancelar (cancelar de más no se deshace)", () => {

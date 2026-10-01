@@ -213,6 +213,28 @@ export async function persistentRateLimit(
   return allowed ? null : tooMany(windowSec);
 }
 
+/**
+ * La misma ventana deslizante de `persistentRateLimit`, pero por CLAVE y sin
+ * request HTTP: para límites que no dependen de quién llama al endpoint sino
+ * de a quién se atiende (el bot de WhatsApp limita por remitente y por clínica,
+ * y quien llama es siempre Meta). true = pasa. Upstash si está configurado
+ * (global entre instancias); si no, o ante error de Redis, memoria.
+ */
+export async function persistentRateLimitKey(key: string, limit: number, windowSec = 60): Promise<boolean> {
+  sweep();
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const res = await getLimiter(redis, limit, windowSec).limit(key);
+      return res.success;
+    } catch (err) {
+      warnRuntime(err);
+      // fall-through a memoria
+    }
+  }
+  return rateLimitKey(`fb:rl:${key}`, limit, windowSec * 1000);
+}
+
 // ─────────────────────────── Lock de trabajo caro ──────────────────────────
 /**
  * Candado de exclusión mutua para trabajos CAROS e idempotentes (generar el

@@ -41,7 +41,7 @@ export async function findPatientByWhatsAppPhone(
 export async function findPatientsByWhatsAppPhone(
   clinicId: string,
   phone: string,
-): Promise<Array<{ id: string; phone: string | null }>> {
+): Promise<Array<{ id: string; phone: string | null; firstName: string | null }>> {
   const last10 = normalizeLast10(phone);
   if (last10.length !== 10) return [];
 
@@ -66,8 +66,9 @@ export async function findPatientsByWhatsAppPhone(
   // esa columna, así que la expresión solo se evalúa sobre los pacientes de la
   // clínica, no sobre la tabla entera.
   try {
-    return await prisma.$queryRaw<Array<{ id: string; phone: string | null }>>`
-      SELECT "id", "phone"
+    // `firstName` (ws1-t3/#17): el bot saluda al paciente por su nombre.
+    return await prisma.$queryRaw<Array<{ id: string; phone: string | null; firstName: string | null }>>`
+      SELECT "id", "phone", "firstName"
         FROM "patients"
        WHERE "clinicId" = ${clinicId}
          AND "phone" IS NOT NULL
@@ -81,7 +82,7 @@ export async function findPatientsByWhatsAppPhone(
     console.error("[whatsapp/inbox-log] el emparejamiento normalizado falló, uso el contains:", err);
     const candidates = await prisma.patient.findMany({
       where: { clinicId, phone: { contains: last10 } },
-      select: { id: true, phone: true },
+      select: { id: true, phone: true, firstName: true },
       take: 25,
     });
     return candidates.filter((p) => normalizeLast10(p.phone ?? "") === last10);

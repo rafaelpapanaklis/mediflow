@@ -132,10 +132,13 @@ describe("classifyReminderReply", () => {
     assert.equal(classifyReminderReply("claro"), "confirm");
   });
 
-  it("cancela con 2 y con palabras negativas/cancelar", () => {
+  it("cancela con 2 y con cancelar", () => {
     assert.equal(classifyReminderReply("2"), "cancel");
-    assert.equal(classifyReminderReply("no"), "cancel");
     assert.equal(classifyReminderReply("cancelar"), "cancel");
+  });
+
+  it("ws1-t3 #1: un «no» suelto ya no cancela en el acto, se pide escribir CANCELAR", () => {
+    assert.equal(classifyReminderReply("no"), "ask_cancel");
   });
 
   it("en frases ambiguas, CANCELAR gana sobre confirmar", () => {

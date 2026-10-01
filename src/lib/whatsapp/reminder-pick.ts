@@ -10,7 +10,7 @@
 // Vive aparte del route para poder testearlo sin BD ni Meta, igual que
 // `classifyReminderReply`.
 
-import { classifyReminderReply, type ReminderReply } from "./reminder-reply";
+import { classifyReminderReply, esRespuestaCorta, type ReminderReply } from "./reminder-reply";
 import {
   WA_REMINDER_CONFIRMABLE_TYPES,
   WA_REMINDER_REPLYABLE_APPT_STATUSES,
@@ -149,11 +149,24 @@ export function resolveReminderReply<T extends PickableReminder>(
   if (!actionable || !latest) return { reminder: latest, action: "none", unclear: false };
 
   const action = classifyReminderReply(text);
-  if (action === "none") {
-    return { reminder: latest, action: "none", unclear: asksToConfirmOrCancel(latest) };
+  if (action === "confirm") return { reminder: actionable, action, unclear: false };
+  if (action === "cancel" || action === "ask_cancel") {
+    // Tocar la cita (o preguntar por cancelarla) solo si lo último que recibió
+    // le pedía confirmar/cancelar: un «no» a una encuesta no es sobre la cita.
+    if (latest !== actionable && !asksToConfirmOrCancel(latest)) {
+      return { reminder: latest, action: "none", unclear: false };
+    }
+    return { reminder: actionable, action, unclear: false };
   }
-  if (action === "cancel" && latest !== actionable && !asksToConfirmOrCancel(latest)) {
-    return { reminder: latest, action: "none", unclear: false };
-  }
-  return { reminder: actionable, action, unclear: false };
+  // Moverla: es sobre la cita viva aunque encima haya una encuesta.
+  if (action === "reschedule") return { reminder: actionable, action, unclear: false };
+  // Pregunta (#15): al bot, nunca «no te entendí».
+  if (action === "question") return { reminder: latest, action, unclear: false };
+  // ws1-t3 #15 — solo se pide aclarar un texto CORTO («canselar», «confirmrr»);
+  // uno largo es otra conversación y pasa al bot.
+  return {
+    reminder: latest,
+    action: "none",
+    unclear: asksToConfirmOrCancel(latest) && esRespuestaCorta(text),
+  };
 }

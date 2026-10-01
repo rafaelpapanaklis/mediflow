@@ -61,6 +61,23 @@ export function buildSystemExternalId(kind: WhatsAppSendKind, wamid?: string | n
   return `${SYSTEM_EXTERNAL_ID_PREFIX}${kind}:${suffix}`;
 }
 
+/**
+ * ws1-t3 (auditoría del bot, #7) — prefijo de las RESPUESTAS DEL BOT. Antes se
+ * guardaban con externalId null: el wamid se perdía y los estados de Meta
+ * (entregado / leído / falló) nunca llegaban a ellas. `sys:bot:<wamid>`:
+ *  · NO es un WhatsAppSendKind (no tiene plantilla ni etiqueta propia; el
+ *    Inbox las sigue pintando con la etiqueta genérica, como antes);
+ *  · empieza por `sys:`, así que nadie la confunde con una persona del equipo
+ *    (bot/handoff.ts) ni con un eco del celular;
+ *  · SÍ cuenta para el tope diario del bot (webhook: `BOT_REPLY_EXTERNAL_ID_PREFIX`).
+ */
+export const BOT_REPLY_EXTERNAL_ID_PREFIX = `${SYSTEM_EXTERNAL_ID_PREFIX}bot:`;
+
+export function buildBotReplyExternalId(wamid?: string | null): string {
+  const suffix = wamid && wamid.length > 0 ? wamid : randomSuffix();
+  return `${BOT_REPLY_EXTERNAL_ID_PREFIX}${suffix}`;
+}
+
 /** Devuelve el `kind` de un envío automático, o null si el mensaje no lo es. */
 export function parseSystemKind(externalId: string | null | undefined): WhatsAppSendKind | null {
   if (!externalId || !externalId.startsWith(SYSTEM_EXTERNAL_ID_PREFIX)) return null;
