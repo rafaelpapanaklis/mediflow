@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getCurrentUser, getUserClinics } from "@/lib/auth";
+import { getCurrentUserSinDosPasos, getUserClinics } from "@/lib/auth";
 import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { MenuDosNivelesServidor } from "@/components/dashboard/menu-dos-niveles/menu-servidor";
@@ -39,12 +39,13 @@ import { I18nProvider } from "@/i18n/i18n-provider";
 import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
 import { localeFromClinic } from "@/i18n/server";
-import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
-import { twoFactorPageGateDecision } from "@/lib/auth/two-factor-gate";
+import { avisoDosPasosPospuesto } from "@/lib/auth/two-factor-cookie";
+import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import {
   TWO_FA_ROUTE_PREFIX,
   TWO_FA_CHALLENGE_PATH,
   TWO_FA_SETUP_PATH,
+  TWO_FA_AVISO_PATH,
 } from "@/lib/auth/two-factor-constants";
 import { MUST_CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
 import { isPlanExpired, isAllowedWhileSuspended, isInTrial as inTrialNow } from "@/lib/plan-status";
@@ -52,7 +53,12 @@ import { getBranchQuota } from "@/lib/branches";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
+  // SIN el gate de 2FA a propósito (ws1-t8): este layout envuelve también las
+  // pantallas /dashboard/2fa*, que tienen que pintarse con el 2FA pendiente, y
+  // decide él mismo, abajo, con la ruta en la mano. Las páginas que cuelgan de
+  // aquí usan getCurrentUser/getAuthContext, que cortan siempre, así que la
+  // navegación suave (que no re-ejecuta este layout) tampoco se lo salta.
+  const user = await getCurrentUserSinDosPasos();
   const clinic = user.clinic;
   const pathname = headers().get("x-pathname") ?? "";
 
@@ -78,17 +84,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // La regla en sí vive en twoFactorPageGateDecision (pura, con tests) y la
   // comparte /teleconsulta/[id], la única página con sesión de equipo que vive
   // fuera de este layout.
+  //
+  // ws1-t8 · M2: la decisión es la de decidirDosPasos (la misma de
+  // getAuthContext/getCurrentUser) e incluye a los DUEÑOS: con la gracia
+  // vencida van al enrolamiento; durante la gracia, al aviso que se puede
+  // posponer («Recordármelo después» lo calla 24 h en este navegador).
   const isTwoFaRoute = pathname.startsWith(TWO_FA_ROUTE_PREFIX);
   if (!isTwoFaRoute) {
-    const decision = twoFactorPageGateDecision({
-      totpEnabled: (user as { totpEnabled?: boolean }).totpEnabled,
-      require2fa: (clinic as { require2fa?: boolean }).require2fa,
-      hasValidCookie: hasValidTwoFactorCookie(user.supabaseId, user.clinicId),
-    });
+    const { decision } = decidirDosPasos(user);
     if (decision === "challenge") {
       redirect(`${TWO_FA_CHALLENGE_PATH}?next=${encodeURIComponent(pathname || "/dashboard")}`);
     }
     if (decision === "setup") redirect(TWO_FA_SETUP_PATH);
+    if (decision === "aviso" && !avisoDosPasosPospuesto()) {
+      redirect(`${TWO_FA_AVISO_PATH}?next=${encodeURIComponent(pathname || "/dashboard")}`);
+    }
   }
   // Layout mínimo: sin sidebar/topbar ni providers de dashboard; dentro de
   // I18nProvider para que el reto/enrolamiento tengan useT. Lo comparten el

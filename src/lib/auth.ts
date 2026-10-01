@@ -6,9 +6,13 @@ import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
-import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
-import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
-import { TWO_FA_CHALLENGE_PATH } from "@/lib/auth/two-factor-constants";
+import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
+import { bloqueaDosPasos } from "@/lib/auth/two-factor-gate";
+import {
+  TWO_FA_CHALLENGE_PATH,
+  TWO_FA_SETUP_PATH,
+  TWO_FA_ROUTE_PREFIX,
+} from "@/lib/auth/two-factor-constants";
 
 // getSession/getCurrentUser/getUserClinics van memoizadas por request con
 // React cache(): layout, page y route handlers invocados in-process dentro
@@ -59,6 +63,42 @@ function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?:
   return filasDeLaPersona.some((f) => !!f.totpEnabled) ? { ...u, totpEnabled: true } : u;
 }
 
+// Gate de 2FA de getCurrentUser — el SEGUNDO camino además de getAuthContext,
+// y no es un camino menor: por aquí entran el layout y las páginas de
+// /dashboard, las ~30 rutas de agenda, citas, lista de espera y
+// /api/dashboard/home (vía loadClinicSession) y las server actions que lo usan.
+//
+// ws1-t8 · M1: antes solo cortaba en /api (por el x-pathname); en páginas y
+// server actions no hacía nada y confiaba en el layout, que no se re-ejecuta en
+// la navegación suave ni corre en una server action. Ahora corta SIEMPRE que la
+// decisión bloquee. getCurrentUser no puede devolver null (redirige por
+// contrato), así que se corta con redirect al reto o al enrolamiento: el
+// handler, la action o la página no llegan a correr, que es lo que importa.
+//
+// La única salida es getCurrentUserSinDosPasos, que usan el layout (decide él,
+// con la ruta) y las pantallas del propio flujo del 2FA.
+function enforceTwoFactorGate(user: {
+  supabaseId: string;
+  clinicId: string;
+  role?: string | null;
+  totpEnabled?: boolean | null;
+  clinic?: { require2fa?: boolean | null } | null;
+}): void {
+  const { decision } = decidirDosPasos(user);
+  if (!bloqueaDosPasos(decision)) return;
+  if (decision === "setup") redirect(TWO_FA_SETUP_PATH);
+  const pathname = (() => {
+    try { return headers().get("x-pathname"); } catch { return null; }
+  })();
+  // `next` solo para volver a una pantalla del panel tras el reto (el reto ya
+  // filtra lo que no empiece por /dashboard); en /api no hay a dónde volver.
+  const volver =
+    pathname && pathname.startsWith("/dashboard") && !pathname.startsWith(TWO_FA_ROUTE_PREFIX)
+      ? `?next=${encodeURIComponent(pathname)}`
+      : "";
+  redirect(`${TWO_FA_CHALLENGE_PATH}${volver}`);
+}
+
 // Gate de plan vencido para los route handlers que autentican vía
 // getCurrentUser (segundo camino además de getAuthContext). Si el plan venció
 // y la request va a una ruta /api NO exenta (allowlist de pago/auth), cortamos
@@ -66,34 +106,6 @@ function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?:
 // pero el redirect impide que el handler corra y el dato salga. Sólo dispara
 // en /api: las páginas server (pathname /dashboard/*) las cubre el layout, y
 // para callers sin x-pathname es no-op. Mismo criterio que getAuthContext.
-// Gate de 2FA para los route handlers que autentican vía getCurrentUser — el
-// SEGUNDO camino además de getAuthContext, y no es un camino menor: por aquí
-// entran las ~30 rutas de agenda, citas, lista de espera y /api/dashboard/home,
-// todas a través de loadClinicSession() (@/lib/agenda/api-helpers).
-//
-// getCurrentUser no puede devolver null (redirige por contrato), así que se corta
-// con redirect al reto — exactamente lo que ya hace enforceApiPlanGate con
-// /dashboard/suspended. El handler no llega a correr, que es lo único que
-// importa: el dato no sale.
-//
-// Sólo dispara en /api. Para páginas server (pathname /dashboard/*) es no-op: ahí
-// el gate autoritativo es el layout, que ya distingue reto de enrolamiento.
-// Criterio y allowlist compartidos con getAuthContext en @/lib/auth/two-factor-gate.
-function enforceApiTwoFactorGate(user: {
-  supabaseId: string;
-  clinicId: string;
-  totpEnabled?: boolean | null;
-  clinic?: { require2fa?: boolean | null } | null;
-}): void {
-  if (!needsTwoFactor({ totpEnabled: user.totpEnabled, require2fa: user.clinic?.require2fa })) return;
-  const pathname = (() => {
-    try { return headers().get("x-pathname"); } catch { return null; }
-  })();
-  if (!isApiPathBlockedForMissingTwoFactor(pathname)) return;
-  if (hasValidTwoFactorCookie(user.supabaseId, user.clinicId)) return;
-  redirect(TWO_FA_CHALLENGE_PATH);
-}
-
 function enforceApiPlanGate(clinic: unknown): void {
   if (!isPlanExpired(clinic as { trialEndsAt?: Date | string | null; subscriptionStatus?: string | null } | null)) return;
   const pathname = (() => {
@@ -102,7 +114,32 @@ function enforceApiPlanGate(clinic: unknown): void {
   if (isApiPathBlockedForExpiredPlan(pathname)) redirect("/dashboard/suspended");
 }
 
+/**
+ * getCurrentUser con TODOS sus gates: 2FA (siempre) y plan vencido (en /api).
+ * Es la que usa todo el mundo.
+ */
 export const getCurrentUser = cache(async () => {
+  const user = await resolverUsuarioActual();
+  // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
+  enforceTwoFactorGate(user);
+  enforceApiPlanGate(user.clinic);
+  return user;
+});
+
+/**
+ * ⚠ SIN el gate de 2FA. Solo para quien tiene que funcionar con el segundo
+ * factor pendiente y decide por su cuenta: el layout de /dashboard (que sabe en
+ * qué ruta está y manda al reto, al enrolamiento o al aviso) y las pantallas
+ * /dashboard/2fa*. La lista de quién la usa la fija
+ * src/lib/auth/__tests__/dos-pasos-en-toda-sesion.test.ts: añadir un caller
+ * nuevo obliga a ir allí a justificarlo.
+ */
+export const getCurrentUserSinDosPasos = cache(async () => resolverUsuarioActual());
+
+// La resolución de la persona y su clínica activa, sin gates. Cacheada por
+// petición: getCurrentUser y getCurrentUserSinDosPasos en el mismo render
+// comparten UNA lectura.
+const resolverUsuarioActual = cache(async () => {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
 
@@ -118,11 +155,7 @@ export const getCurrentUser = cache(async () => {
   if (activeClinicId) {
     const user = deLaCookie;
     if (user) {
-      // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
-      const conDosFactores = conDosFactoresDeLaPersona(user, candidates);
-      enforceApiTwoFactorGate(conDosFactores);
-      enforceApiPlanGate(conDosFactores.clinic);
-      return normalizeUser(conDosFactores);
+      return normalizeUser(conDosFactoresDeLaPersona(user, candidates));
     }
   }
 
@@ -209,14 +242,10 @@ export const getCurrentUser = cache(async () => {
     }));
   }
 
-  // Mismo par de gates que en la rama de la cookie de clínica activa, y en el
-  // mismo orden. Este es el camino de fallback (primer User por createdAt asc):
-  // si se le olvida el gate a UNA de las dos ramas, el agujero sigue abierto por
-  // ahí para cualquier sesión sin cookie de clínica válida.
-  const conDosFactores = conDosFactoresDeLaPersona(user, candidates);
-  enforceApiTwoFactorGate(conDosFactores);
-  enforceApiPlanGate(conDosFactores.clinic);
-  return normalizeUser(conDosFactores);
+  // Camino de fallback (primer User por createdAt asc). Los gates ya no viven
+  // en cada rama sino en getCurrentUser, sobre lo que devuelva cualquiera de
+  // las dos: no hay rama que se los pueda olvidar.
+  return normalizeUser(conDosFactoresDeLaPersona(user, candidates));
 });
 
 export const getUserClinics = cache(async () => {

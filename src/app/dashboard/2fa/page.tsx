@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
+import { getCurrentUserSinDosPasos } from "@/lib/auth";
+import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { TwoFactorChallenge } from "@/components/dashboard/security/two-factor-challenge";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
@@ -11,20 +11,16 @@ export const dynamic = "force-dynamic";
 // del gate y lo renderiza con layout mínimo (sin sidebar/topbar). Aquí solo
 // enrutamos los casos borde; el reto en sí lo maneja el componente cliente.
 export default async function TwoFactorChallengePage() {
-  const user = await getCurrentUser();
-  const clinic = user.clinic as { require2fa?: boolean };
+  // Sin el gate de 2FA: esta pantalla ES el reto (ws1-t8, ver
+  // getCurrentUserSinDosPasos). La decisión es la misma del gate.
+  const user = await getCurrentUserSinDosPasos();
+  const { decision } = decidirDosPasos(user);
 
-  // Sin 2FA activo: o la clínica lo exige (→ enrolamiento) o no hay nada que
-  // retar (→ panel).
-  if (!(user as { totpEnabled?: boolean }).totpEnabled) {
-    if (clinic?.require2fa) redirect("/dashboard/2fa/setup");
-    redirect("/dashboard");
-  }
-
-  // Ya superado en esta ventana → al panel (evita pedir el código de nuevo).
-  if (hasValidTwoFactorCookie(user.supabaseId, user.clinicId)) {
-    redirect("/dashboard");
-  }
+  // Sin 2FA activo: o hay que enrolarse (clínica que lo exige, o dueño con la
+  // gracia vencida) o no hay nada que retar (→ panel). Ya superado en esta
+  // ventana, o «Ver como clínica» → al panel (evita pedir el código de nuevo).
+  if (decision === "setup") redirect("/dashboard/2fa/setup");
+  if (decision !== "challenge") redirect("/dashboard");
 
   // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
   // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`). Esta ruta

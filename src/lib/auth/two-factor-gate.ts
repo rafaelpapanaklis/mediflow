@@ -30,6 +30,13 @@
 // que ya existe para /dashboard: fast-path barato en el middleware, gate
 // autoritativo con BD detrás.
 //
+// ── ws1-t8 · M1: YA NO SOLO /api ──────────────────────────────────────
+// Lo de arriba describe EQ-01, que cerró /api. Las server actions (POST a
+// /dashboard/...) y las páginas seguían abiertas porque el gate se decidía por
+// el x-pathname. Desde ws1-t8 getAuthContext y getCurrentUser cortan SIEMPRE
+// que la decisión (decisionDosPasos, abajo) bloquee, sin mirar la ruta; la
+// allowlist de abajo queda solo para el fast-path del middleware.
+//
 // ── QUÉ QUEDA FUERA, Y POR QUÉ NO HACE FALTA UNA LISTA LARGA ──────────
 // El gate solo puede afectar a una ruta si esa ruta llama a getAuthContext() o
 // getCurrentUser(). Se revisaron las 509 rutas bajo src/app/api: 225 los llaman.
@@ -122,11 +129,14 @@ export function isTwoFactorGateAllowlistedPath(pathname: string): boolean {
 }
 
 /**
- * True si el pathname es una ruta /api NO exenta y por tanto debe exigir 2FA.
- * Sólo aplica a /api: para páginas server (pathname /dashboard/*) o para callers
- * sin x-pathname devuelve false — esas navegaciones ya las corta el layout de
- * /dashboard. Mismo criterio, línea por línea, que
- * isApiPathBlockedForExpiredPlan.
+ * True si el pathname es una ruta /api NO exenta del FAST-PATH del middleware.
+ *
+ * ⚠ ws1-t8 · M1: el gate AUTORITATIVO ya no usa esto. Antes getAuthContext y
+ * getCurrentUser solo exigían el 2FA cuando esta función decía que sí, y para
+ * una server action (POST a /dashboard/...) o una página decía que no: ese era
+ * el hueco. Ahora el gate corta en toda sesión (ver two-factor-decision) y las
+ * salidas del propio flujo van por código. Esto queda como descripción del
+ * corte barato del middleware, que sí se limita a /api.
  */
 export function isApiPathBlockedForMissingTwoFactor(
   pathname: string | null | undefined,
@@ -183,8 +193,156 @@ export function twoFactorPageGateDecision(input: {
   totpEnabled?: boolean | null;
   require2fa?: boolean | null;
   hasValidCookie: boolean;
+  /** ws1-t8 · M2: estado del dueño frente a la obligación. Sin él, "no-aplica". */
+  dueno?: EstadoDuenoDosPasos;
+  /** ws1-t8: «Ver como clínica» desde /admin (cookie df_2fa_admin válida). */
+  verComoAdmin?: boolean;
 }): TwoFactorPageGateDecision {
+  const d = decisionDosPasos(input);
+  return d === "aviso" ? null : d;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ws1-t8 · M2 — 2FA OBLIGATORIO PARA LOS DUEÑOS (rol SUPER_ADMIN de clínica)
+// ══════════════════════════════════════════════════════════════════════
+//
+// El 30-sep-2026 ninguno de los 61 usuarios de clínica tenía 2FA. Exigirlo de
+// golpe dejaría a los dueños fuera de su panel el día del despliegue, así que
+// va en dos tiempos, contados desde una FECHA DE INICIO que se pone por env
+// (DOS_PASOS_DUENOS_DESDE, la del despliegue):
+//
+//   • GRACIA (por defecto 7 días): al entrar, el dueño sin 2FA ve «Activa la
+//     verificación en dos pasos» y puede posponerlo. No bloquea nada.
+//   • VENCIDA: el dueño sin 2FA NO entra al panel ni a la API hasta
+//     configurarlo — pero la pantalla de configuración y sus /api/auth/2fa/*
+//     siguen abiertas, así que nunca es un callejón sin salida.
+//
+// Sin la env (o con una fecha ilegible) la obligación está APAGADA: nadie
+// queda fuera por un despliegue a medias. Los demás roles siguen como hoy
+// (opcional, salvo que la clínica active require2fa).
+
+export const DIAS_GRACIA_DUENOS_POR_DEFECTO = 7;
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+export interface PoliticaDosPasosDuenos {
+  /** Instante (ms) en que empieza la gracia; null = obligación apagada. */
+  inicioMs: number | null;
+  diasGracia: number;
+}
+
+/**
+ * Lee la política del entorno. Acepta `AAAA-MM-DD` (medianoche en Ciudad de
+ * México, UTC-6 sin horario de verano desde 2022) o un ISO completo.
+ * Edge-safe: solo strings.
+ */
+export function leerPoliticaDosPasosDuenos(
+  env: Record<string, string | undefined> = process.env,
+): PoliticaDosPasosDuenos {
+  const diasRaw = Number(env.DOS_PASOS_DUENOS_GRACIA_DIAS);
+  const diasGracia =
+    Number.isFinite(diasRaw) && diasRaw >= 0 && diasRaw <= 365
+      ? Math.floor(diasRaw)
+      : DIAS_GRACIA_DUENOS_POR_DEFECTO;
+  const desde = (env.DOS_PASOS_DUENOS_DESDE ?? "").trim();
+  if (!desde) return { inicioMs: null, diasGracia };
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(desde) ? `${desde}T00:00:00-06:00` : desde;
+  const ms = Date.parse(iso);
+  return { inicioMs: Number.isFinite(ms) ? ms : null, diasGracia };
+}
+
+export type EstadoDuenoDosPasos =
+  | { estado: "no-aplica" }
+  | { estado: "gracia"; venceMs: number; diasRestantes: number }
+  | { estado: "vencida"; venceMs: number };
+
+/** Simulación de la obligación en un navegador, SOLO fuera de producción. */
+export type SimulacionDosPasosDuenos = "gracia" | "vencida" | null;
+
+/**
+ * ¿En qué punto está ESTE usuario frente a la obligación de los dueños?
+ *
+ * Solo aplica al rol SUPER_ADMIN de la clínica activa y solo mientras no tenga
+ * el segundo factor (a nivel persona: quien lo tiene ya cumple).
+ *
+ * La simulación —una cookie que solo se lee fuera de producción, ver
+ * two-factor-cookie— trata ESTA sesión como la de un dueño sin 2FA en gracia o
+ * con la gracia vencida, sea cual sea su rol: así se prueba en dev.108 con un
+ * usuario de la clínica de prueba, sin tocar la env, ni roles, ni datos de
+ * nadie. Solo puede ENDURECER, nunca aflojar; la regla del rol la fijan los
+ * tests.
+ */
+export function estadoDuenoDosPasos(input: {
+  role?: string | null;
+  totpEnabled?: boolean | null;
+  politica: PoliticaDosPasosDuenos;
+  ahoraMs: number;
+  simulacion?: SimulacionDosPasosDuenos;
+}): EstadoDuenoDosPasos {
+  if (input.totpEnabled) return { estado: "no-aplica" };
+  const real = estadoRealDueno(input.role, input.politica, input.ahoraMs);
+  if (input.simulacion === "vencida") return { estado: "vencida", venceMs: input.ahoraMs };
+  if (input.simulacion === "gracia" && real.estado !== "vencida") {
+    const venceMs = input.ahoraMs + input.politica.diasGracia * DIA_MS;
+    return { estado: "gracia", venceMs, diasRestantes: Math.max(1, input.politica.diasGracia) };
+  }
+  return real;
+}
+
+function estadoRealDueno(
+  role: string | null | undefined,
+  politica: PoliticaDosPasosDuenos,
+  ahoraMs: number,
+): EstadoDuenoDosPasos {
+  if (role !== "SUPER_ADMIN") return { estado: "no-aplica" };
+  const { inicioMs, diasGracia } = politica;
+  if (inicioMs === null) return { estado: "no-aplica" };
+  const venceMs = inicioMs + diasGracia * DIA_MS;
+  if (ahoraMs >= venceMs) return { estado: "vencida", venceMs };
+  // Antes del inicio también es gracia: el aviso sale desde el despliegue.
+  const diasRestantes = Math.max(1, Math.ceil((venceMs - ahoraMs) / DIA_MS));
+  return { estado: "gracia", venceMs, diasRestantes };
+}
+
+/**
+ * LA decisión del 2FA para una sesión de clínica. Una sola regla para el
+ * layout, las páginas sueltas (teleconsulta), getAuthContext y getCurrentUser:
+ *
+ *   • «Ver como clínica» desde /admin                       → null (pasa)
+ *   • enroló 2FA y trae la prueba (df_2fa) de esta sede     → null
+ *   • enroló 2FA y no la trae                               → "challenge"
+ *   • la clínica exige 2FA (require2fa) y no enroló         → "setup"
+ *   • es dueño, no enroló y la gracia venció                → "setup"
+ *   • es dueño, no enroló y sigue en gracia                 → "aviso" (no bloquea)
+ *   • nada de lo anterior                                   → null
+ *
+ * "challenge" y "setup" BLOQUEAN (ver bloqueaDosPasos); "aviso" solo lo pinta
+ * el layout como pantalla que se puede posponer.
+ */
+export type DecisionDosPasos = "challenge" | "setup" | "aviso" | null;
+
+export function decisionDosPasos(input: {
+  totpEnabled?: boolean | null;
+  require2fa?: boolean | null;
+  hasValidCookie: boolean;
+  dueno?: EstadoDuenoDosPasos;
+  verComoAdmin?: boolean;
+}): DecisionDosPasos {
+  // El admin de plataforma ya pasó SU propio TOTP para abrir /admin, y desde
+  // ahí «Ver como clínica» entra con un enlace mágico del dueño. Pedirle el
+  // código del celular del dueño (o mandarlo a enrolarse por él) lo dejaría
+  // fuera; la cookie que lo prueba solo la emite /api/admin/impersonate.
+  if (input.verComoAdmin) return null;
   if (input.totpEnabled) return input.hasValidCookie ? null : "challenge";
+  // Una cookie df_2fa no puede existir sin enrolar; si apareciera, tampoco
+  // sustituye al enrolamiento que se exige.
   if (input.require2fa) return "setup";
+  const dueno = input.dueno?.estado ?? "no-aplica";
+  if (dueno === "vencida") return "setup";
+  if (dueno === "gracia") return "aviso";
   return null;
+}
+
+/** ¿La decisión impide usar el panel y la API? */
+export function bloqueaDosPasos(d: DecisionDosPasos): d is "challenge" | "setup" {
+  return d === "challenge" || d === "setup";
 }

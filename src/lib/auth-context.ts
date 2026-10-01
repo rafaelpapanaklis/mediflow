@@ -4,8 +4,10 @@ import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
-import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
-import { isApiPathBlockedForMissingTwoFactor, needsTwoFactor } from "@/lib/auth/two-factor-gate";
+import { redirect } from "next/navigation";
+import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
+import { bloqueaDosPasos } from "@/lib/auth/two-factor-gate";
+import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-constants";
 
 export interface AuthContext {
   userId:       string;
@@ -37,6 +39,31 @@ export interface AuthContext {
  * The clinicId is ALWAYS taken from the session, never from the request body.
  */
 export async function getAuthContext(): Promise<AuthContext | null> {
+  const r = await resolverAuthContext();
+  if (r && esBloqueo(r)) {
+    // ws1-t8 · M1: en una SERVER ACTION (cabecera next-action) el null se
+    // traduciría en un «No autorizado» genérico; mandar al reto es lo que el
+    // usuario necesita. La cabecera la puede poner cualquiera, pero solo elige
+    // CÓMO se corta, nunca SI se corta. Fuera del try: redirect lanza.
+    if (esServerAction()) {
+      redirect(r.bloqueoDosPasos === "challenge" ? TWO_FA_CHALLENGE_PATH : TWO_FA_SETUP_PATH);
+    }
+    return null;
+  }
+  return r as AuthContext | null;
+}
+
+type BloqueoDosPasos = { bloqueoDosPasos: "challenge" | "setup" };
+
+function esBloqueo(r: AuthContext | BloqueoDosPasos): r is BloqueoDosPasos {
+  return "bloqueoDosPasos" in r;
+}
+
+function esServerAction(): boolean {
+  try { return !!headers().get("next-action"); } catch { return false; }
+}
+
+async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | null> {
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -97,6 +124,38 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const permissionsOverride: string[] =
       ((finalUser as any).permissionsOverride as string[] | null | undefined) ?? [];
 
+    // Gate central de 2FA (EQ-01 → ws1-t8 · M1). El segundo factor protegía las
+    // PANTALLAS y no los datos; EQ-01 lo extendió a /api, pero solo ahí: se
+    // decidía por el x-pathname, que para una SERVER ACTION (POST a
+    // /dashboard/...) o una página no es /api, así que las ~176 actions de
+    // src/app/actions y las páginas que leen datos con esta función pasaban
+    // con solo la contraseña (borrando la cookie df_2fa_pending, que es del
+    // cliente). Ahora se aplica SIEMPRE que haya sesión de clínica, sin mirar
+    // la ruta: las únicas salidas son las del propio flujo del 2FA, y van por
+    // código (getTwoFactorActor, getCurrentUserSinDosPasos), no por una lista
+    // de rutas que una cabecera pueda imitar.
+    //
+    // Va ANTES del gate de plan, igual que en el layout de /dashboard: el 2FA es
+    // AUTENTICACIÓN y el plan es una cuestión comercial posterior. Fail-closed:
+    // las rutas que hacen `if (!ctx) return 401` quedan cerradas sin tocarlas.
+    // El 403 con código que el panel sabe leer lo emite el fast-path del
+    // middleware; ver @/lib/auth/two-factor-gate.
+    //
+    // EQ-02: `totpEnabled` es una columna de la FILA, y una persona tiene una
+    // fila por clínica: se pregunta a todas las suyas (ya leídas en `filas`).
+    const enrolado =
+      !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled ||
+      filas.some((f) => !!(f as { totpEnabled?: boolean | null }).totpEnabled);
+
+    const { decision } = decidirDosPasos({
+      supabaseId: finalUser.supabaseId,
+      clinicId:   finalUser.clinicId,
+      role:       finalUser.role,
+      totpEnabled: enrolado,
+      clinic:     finalUser.clinic as { require2fa?: boolean | null } | null,
+    });
+    if (bloqueaDosPasos(decision)) return { bloqueoDosPasos: decision };
+
     // Gate central de plan vencido a nivel API. Si la clínica está vencida
     // (trial expirado + suscripción no activa) y la request va a una ruta
     // /api NO exenta (allowlist de pago/auth en @/lib/plan-status), cortamos
@@ -106,45 +165,6 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     // /dashboard ya redirige esas navegaciones a /dashboard/suspended. El
     // gate aplica a TODOS los roles (un SUPER_ADMIN destraba desde /admin,
     // ruta con su propia auth, no cubierta por este check).
-    // Gate central de 2FA a nivel API (EQ-01). El segundo factor protegía las
-    // PANTALLAS y no los datos: el middleware devuelve next() para todo /api
-    // antes de llegar a su rama de 2FA, y ni esta función ni getCurrentUser
-    // leían df_2fa. Con la contraseña robada, el reto de pantalla se saltaba
-    // haciendo fetch('/api/patients') desde la consola.
-    //
-    // Va ANTES del gate de plan, igual que en el layout de /dashboard: el 2FA es
-    // AUTENTICACIÓN (decide si quien tiene la sesión es esa persona) y el plan es
-    // una cuestión comercial posterior. Se corta devolviendo null, así que las
-    // 225 rutas que ya hacen `if (!ctx) return 401` quedan cerradas sin tocarlas
-    // una por una — fail-closed. El 403 con código, que es lo que el panel usa
-    // para mandar al reto en vez de al login, lo emite el fast-path del
-    // middleware; ver @/lib/auth/two-factor-gate.
-    // EQ-02: `totpEnabled` es una columna de la FILA, y una persona tiene una
-    // fila por clínica. Preguntarle solo a la fila activa era el agujero: quien
-    // enroló el 2FA en su sede principal entraba a la segunda —por el switcher
-    // o con un login nuevo— y el panel no le pedía nada, porque esa otra fila
-    // tiene totpEnabled=false. El `||` corta antes: si la fila activa ya lo
-    // tiene puesto, no se pregunta por las hermanas.
-    // (La pregunta por las hermanas ya no es otra consulta: sale de `filas`.)
-    const enrolado =
-      !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled ||
-      filas.some((f) => !!(f as { totpEnabled?: boolean | null }).totpEnabled);
-
-    if (needsTwoFactor({
-      totpEnabled: enrolado,
-      require2fa:  (finalUser.clinic as { require2fa?: boolean | null } | null)?.require2fa,
-    })) {
-      const pathname = (() => {
-        try { return headers().get("x-pathname"); } catch { return null; }
-      })();
-      if (
-        isApiPathBlockedForMissingTwoFactor(pathname) &&
-        !hasValidTwoFactorCookie(finalUser.supabaseId, finalUser.clinicId)
-      ) {
-        return null;
-      }
-    }
-
     const planExpired = isPlanExpired(finalUser.clinic);
     if (planExpired) {
       const pathname = (() => {

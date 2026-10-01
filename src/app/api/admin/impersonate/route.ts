@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
 import { getAdminSession } from "@/lib/admin-auth";
+import { setVerComoCookie } from "@/lib/auth/two-factor-cookie";
 
 export async function GET(req: NextRequest) {
   // 1. Verify admin is authenticated (sesión real en BD)
@@ -110,5 +111,12 @@ export async function GET(req: NextRequest) {
   // Sin esto, getAuthContext cae al fallback (primer User por createdAt asc)
   // cuando el super-admin pertenece a múltiples clínicas.
   writeActiveClinicCookie(response, clinicId);
+  // ws1-t8: «Ver como clínica» no puede quedar atrapado en el 2FA del dueño
+  // (ni en su reto, que pediría el celular del dueño, ni en el enrolamiento
+  // obligatorio de los dueños). Quien llega aquí ya pasó la sesión de admin de
+  // plataforma —con su propio TOTP—, así que se le da la prueba firmada
+  // df_2fa_admin para ESTA persona y ESTA clínica (12 h). Un login normal la
+  // borra (applyTwoFactorLoginCookies) y cerrar sesión también.
+  setVerComoCookie(response, user.supabaseId, clinicId);
   return response;
 }

@@ -80,11 +80,21 @@ export function isTwoFactorTokenValidFor(
   clinicId: string,
   nowMs: number = Date.now(),
   maxAgeSeconds: number = TWO_FA_OK_MAX_AGE_SECONDS,
+  secret: string = activeClinicSecret(),
 ): boolean {
-  const data = unpackTwoFactorToken(raw);
+  const data = unpackTwoFactorToken(raw, secret);
   if (!data) return false;
   if (data.supabaseId !== supabaseId || data.clinicId !== clinicId) return false;
   const ageMs = nowMs - data.iatMs;
   if (ageMs < 0 || ageMs > maxAgeSeconds * 1000) return false;
   return true;
+}
+
+/**
+ * ws1-t8 · Secreto de la cookie df_2fa_admin («Ver como clínica»). Derivado y
+ * DISTINTO del de df_2fa: una prueba de impersonación no puede pasar por un
+ * 2FA superado ni al revés, aunque compartan formato.
+ */
+export function verComoSecret(base: string = activeClinicSecret()): string {
+  return `${base}:ver-como-admin`;
 }

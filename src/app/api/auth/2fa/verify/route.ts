@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rateLimit } from "@/lib/rate-limit";
-import { getTwoFactorActor, verifyTotp, consumeRecoveryCode } from "@/lib/auth/two-factor";
+import {
+  limitar2faPorIp,
+  limitar2faPorCuenta,
+  consumirTotp,
+  MENSAJE_TOTP_REUSADO,
+} from "@/lib/auth/two-factor-intentos";
+import { getTwoFactorActor, consumeRecoveryCode } from "@/lib/auth/two-factor";
 import { setTwoFactorOkCookie } from "@/lib/auth/two-factor-cookie";
 import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 
@@ -10,11 +15,17 @@ import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 // (anti fuerza bruta). El gate del layout depende de la cookie df_2fa, no de
 // este endpoint, así que no se puede "saltar" sin pasar por aquí.
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 6, 15 * 60 * 1000);
-  if (rl) return rl;
+  // ws1-t8 · M3: límite PERSISTENTE (no en memoria por IP e instancia):
+  // anti-ráfaga por IP antes de la sesión y presupuesto por CUENTA después,
+  // compartido con las demás rutas que validan códigos.
+  const rlIp = await limitar2faPorIp(req);
+  if (rlIp) return rlIp;
 
   const actor = await getTwoFactorActor();
   if (!actor) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const rlCuenta = await limitar2faPorCuenta(req, actor.supabaseId);
+  if (rlCuenta) return rlCuenta;
 
   const secret = actor.user.totpSecret as string | null;
   // Sin 2FA activo no hay nada que verificar — respuesta genérica.
@@ -25,7 +36,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const code = String(body?.code ?? "");
 
-  let ok = verifyTotp(code, secret);
+  // ws1-t8 · M3: el TOTP es de UN SOLO USO por persona.
+  const totp = await consumirTotp(actor.supabaseId, code, secret);
+  if (totp === "reusado") return NextResponse.json({ error: MENSAJE_TOTP_REUSADO }, { status: 400 });
+  let ok = totp === "ok";
   if (!ok) {
     const r = await consumeRecoveryCode(code, actor.user.recoveryCodes ?? []);
     if (r.ok) {

@@ -1,7 +1,7 @@
 import { urlPublicaDe } from "@/lib/url-publica";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { TWO_FA_COOKIE, TWO_FA_PENDING_COOKIE } from "@/lib/auth/two-factor-constants";
+import { TWO_FA_COOKIE, TWO_FA_PENDING_COOKIE, TWO_FA_ADMIN_COOKIE } from "@/lib/auth/two-factor-constants";
 
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -14,5 +14,7 @@ export async function POST(request: Request) {
   // 2FA: la prueba y el flag pendiente no deben sobrevivir al cierre de sesión.
   res.cookies.set(TWO_FA_COOKIE, "", { path: "/", maxAge: 0 });
   res.cookies.set(TWO_FA_PENDING_COOKIE, "", { path: "/", maxAge: 0 });
+  // ws1-t8: ni la prueba de «Ver como clínica».
+  res.cookies.set(TWO_FA_ADMIN_COOKIE, "", { path: "/", maxAge: 0 });
   return res;
 }

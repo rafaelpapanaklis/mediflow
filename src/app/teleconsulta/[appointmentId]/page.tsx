@@ -2,8 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
-import { hasValidTwoFactorCookie } from "@/lib/auth/two-factor-cookie";
-import { twoFactorPageGateDecision } from "@/lib/auth/two-factor-gate";
+import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-constants";
 import { TeleconsultaClient } from "./teleconsulta-client";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
@@ -69,10 +68,15 @@ export default async function TeleconsultaPage({ params, searchParams }: { param
     // `totpEnabled` ya resuelto a nivel PERSONA por getAuthContext (EQ-02).
     // El reto devuelve a la lista de teleconsultas del panel —su `next` solo
     // acepta rutas de /dashboard—, donde el botón "Unirse" vuelve a traer aquí.
-    const decision = twoFactorPageGateDecision({
+    // ws1-t8: getAuthContext ya corta siempre (devuelve null y se cae en
+    // <EntraPorElPanel/>); esto queda para mandar al reto o al enrolamiento en
+    // vez de a «entra por el panel». Misma decisión que el gate.
+    const { decision } = decidirDosPasos({
+      supabaseId: ctx.user.supabaseId,
+      clinicId: ctx.clinicId,
+      role: ctx.role,
       totpEnabled: (ctx.user as { totpEnabled?: boolean | null }).totpEnabled,
-      require2fa: (ctx.clinic as { require2fa?: boolean | null } | null)?.require2fa,
-      hasValidCookie: hasValidTwoFactorCookie(ctx.user.supabaseId, ctx.clinicId),
+      clinic: ctx.clinic as { require2fa?: boolean | null } | null,
     });
     if (decision === "challenge") {
       redirect(`${TWO_FA_CHALLENGE_PATH}?next=${encodeURIComponent("/dashboard/teleconsulta")}`);

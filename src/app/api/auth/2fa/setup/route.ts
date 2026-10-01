@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rateLimit } from "@/lib/rate-limit";
+import { limitar2faPorIp, limitar2faSetup } from "@/lib/auth/two-factor-intentos";
 import {
   getTwoFactorActor,
   generateTotpSecret,
@@ -13,11 +13,15 @@ import { propagarDosFactores } from "@/lib/auth/two-factor-identity";
 // activa todavía). Devuelve QR + secret para registrar en la app. Activar
 // requiere /enable con un código válido.
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 8, 15 * 60 * 1000);
-  if (rl) return rl;
+  // ws1-t8 · M3: límite persistente por IP y por persona (no en memoria).
+  const rlIp = await limitar2faPorIp(req);
+  if (rlIp) return rlIp;
 
   const actor = await getTwoFactorActor();
   if (!actor) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const rlSetup = await limitar2faSetup(req, actor.supabaseId);
+  if (rlSetup) return rlSetup;
 
   if (actor.user.totpEnabled) {
     return NextResponse.json(

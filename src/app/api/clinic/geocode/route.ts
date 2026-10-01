@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { isValidLatLng } from "@/lib/directory/distance";
 
@@ -22,24 +20,11 @@ const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 // Nominatim exige identificar la app vía User-Agent (su política de uso).
 const USER_AGENT = "DaleControl-Directory/1.0 (+https://dalecontrol.com; geocoding de clínicas)";
 
+// ws1-t8 · M1: delega en getAuthContext (antes resolvía la sesión por su
+// cuenta y se saltaba el gate de 2FA). Misma clínica elegida que el resto.
 async function getAdminClinicUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  let dbUser = null;
-  if (activeClinicId) {
-    dbUser = await prisma.user.findFirst({
-      where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-    });
-  }
-  if (!dbUser) {
-    dbUser = await prisma.user.findFirst({
-      where: { supabaseId: user.id, isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
-  }
-  return dbUser;
+  const ctx = await getAuthContext();
+  return ctx?.user ?? null;
 }
 
 export async function POST(req: NextRequest) {
