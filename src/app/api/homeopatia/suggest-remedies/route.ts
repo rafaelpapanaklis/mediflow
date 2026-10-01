@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { addAiTokens, aiTokenLimitError } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
@@ -24,6 +25,9 @@ Formato de salida:
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // M6: es apoyo a la decisión clínica de la consulta — mismo permiso que escribirla.
+  const sinPermiso = denyIfNotClinical(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   // Interruptor de la clínica (Saldo de IA): ANTES de gastar, en el servidor.
   const apagada = await cortarSiIaApagada(ctx.clinicId, "homeopathy");

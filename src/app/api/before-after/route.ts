@@ -9,6 +9,10 @@ import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/regis
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // M6/B7: las fotos de antes/después son de la familia de radiografías y
+  // archivos del paciente (su POST pide xrays.upload); leerlas no pedía nada.
+  const sinVer = denyIfMissingPermission(ctx, "xrays.view");
+  if (sinVer) return sinVer;
 
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");

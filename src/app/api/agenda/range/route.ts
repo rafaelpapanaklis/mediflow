@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   fetchActiveDoctors,
   fetchAppointmentsForRange,
@@ -39,6 +40,10 @@ function parseList(raw: string | null): string[] {
 export async function GET(req: Request) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
+  // B7 (auditoría 30-sep): la agenda entera se leía aunque el dueño le hubiera
+  // quitado «Ver agenda» a esta persona.
+  const sinPermiso = denyIfMissingPermission(session.user, "agenda.view");
+  if (sinPermiso) return sinPermiso;
 
   const url = new URL(req.url);
   const fromISO = url.searchParams.get("from");

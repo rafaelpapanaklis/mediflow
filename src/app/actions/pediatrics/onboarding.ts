@@ -1,6 +1,7 @@
 "use server";
 // Pediatrics — server action para alta unificada (paciente + tutor + record). Spec: §7 (sprint 2)
 
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -84,6 +85,10 @@ export async function createPediatricPatient(
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: alta desde el módulo = paciente nuevo + expediente pediátrico.
+  if (!puedeClinico(ctx, "editar", ["patients.create"])) {
+    return fail("No tienes permiso para dar de alta pacientes en Pediatría. Pídeselo al administrador.");
+  }
 
   if (ctx.clinicCategory !== "DENTAL" && ctx.clinicCategory !== "MEDICINE") {
     return fail("La clínica no soporta el módulo de Pediatría");

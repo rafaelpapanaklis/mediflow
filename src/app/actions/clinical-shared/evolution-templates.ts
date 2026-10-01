@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { ClinicalModule } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { auditClinicalShared } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import {
   isSoapTemplateBody,
   type EvolutionTemplateDTO,
@@ -40,6 +40,9 @@ export async function createEvolutionTemplate(
   if (!parsed.success) return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   try {
     const created = await prisma.clinicalEvolutionTemplate.create({
@@ -85,6 +88,9 @@ export async function listEvolutionTemplates(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   if (parsed.data.ensureDefaults) {
     if (parsed.data.module === "pediatrics") {
@@ -130,6 +136,9 @@ export async function deleteEvolutionTemplate(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const tpl = await prisma.clinicalEvolutionTemplate.findUnique({
     where: { id: parsed.data.id },
@@ -162,6 +171,9 @@ export async function seedEvolutionTemplateDefaults(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
   if (!ctx.isAdmin && !ctx.isSuperAdmin) return fail("Solo administradores");
 
   if (parsed.data.module === "pediatrics") {

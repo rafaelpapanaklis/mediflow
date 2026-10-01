@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -12,6 +13,9 @@ const VALID_STATUSES = new Set(["SENT", "ACCEPTED", "REJECTED", "RESPONDED", "CA
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
+  // M6: leer una referencia no pedía ningún permiso.
+  const sinPermiso = denyIfNotClinical(user, "ver");
+  if (sinPermiso) return sinPermiso;
   const ref = await prisma.referral.findFirst({
     where: { id: params.id, clinicId: user.clinicId },
     include: {
@@ -37,9 +41,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!["DOCTOR", "ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const sinPermiso = denyIfNotClinical(user, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const existing = await prisma.referral.findFirst({
     where: { id: params.id, clinicId: user.clinicId },

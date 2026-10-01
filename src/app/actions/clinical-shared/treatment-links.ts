@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { ClinicalModule } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { auditClinicalShared } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { linkSessionToPlan, findLinksFor } from "@/lib/clinical-shared/treatment-link/link";
 import { fail, ok, type ActionResult } from "@/lib/clinical-shared/result";
 
@@ -27,6 +27,9 @@ export async function linkSessionToTreatmentPlan(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   try {
     const result = await linkSessionToPlan({
@@ -78,6 +81,9 @@ export async function findTreatmentLinksFor(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const links = await findLinksFor({
     clinicId: ctx.clinicId,
@@ -107,6 +113,9 @@ export async function listOpenTreatmentSessions(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const sessions = await prisma.treatmentSession.findMany({
     where: {

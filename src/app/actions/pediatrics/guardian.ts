@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
 
 const PARENTESCO = [
   "madre", "padre", "tutor_legal", "abuelo", "abuela",
@@ -100,6 +100,9 @@ export async function updateGuardian(
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const guardian = await prisma.guardian.findUnique({
     where: { id: parsed.data.id },
@@ -149,6 +152,9 @@ export async function updateGuardian(
 export async function setPrimaryGuardian(args: { guardianId: string }): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const guardian = await prisma.guardian.findUnique({
     where: { id: args.guardianId },
@@ -187,6 +193,9 @@ export async function setPrimaryGuardian(args: { guardianId: string }): Promise<
 export async function deleteGuardian(args: { guardianId: string }): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const guardian = await prisma.guardian.findUnique({
     where: { id: args.guardianId },

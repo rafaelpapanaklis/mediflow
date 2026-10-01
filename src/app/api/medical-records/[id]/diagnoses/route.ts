@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,9 @@ interface Params { params: { id: string } }
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN", "DOCTOR"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // M6: antes era una lista de roles fija, que no veía el permiso quitado a mano.
+  const sinPermiso = denyIfNotClinical(user, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const record = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: user.clinicId },
@@ -85,6 +86,9 @@ export async function POST(req: NextRequest, { params }: Params) {
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
+  // M6: leer los diagnósticos no pedía ningún permiso (recepción, solo lectura).
+  const sinPermiso = denyIfNotClinical(user, "ver");
+  if (sinPermiso) return sinPermiso;
   const record = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: user.clinicId },
     select: { id: true, patientId: true },

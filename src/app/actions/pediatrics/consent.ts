@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
 
 const PROCEDURE_TYPES = [
   "anestesia_local", "sedacion_consciente", "oxido_nitroso",
@@ -92,6 +92,9 @@ export async function signConsentByGuardian(input: z.infer<typeof signGuardianSc
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const consent = await prisma.pediatricConsent.findUnique({
     where: { id: parsed.data.consentId },
@@ -125,6 +128,9 @@ export async function signConsentByMinor(input: z.infer<typeof signMinorSchema>)
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const consent = await prisma.pediatricConsent.findUnique({
     where: { id: parsed.data.consentId },
@@ -159,6 +165,9 @@ export async function voidConsent(input: z.infer<typeof voidSchema>): Promise<Ac
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const consent = await prisma.pediatricConsent.findUnique({
     where: { id: parsed.data.consentId },

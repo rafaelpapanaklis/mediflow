@@ -7,7 +7,7 @@ import { canSeePatient } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { isPediatric } from "@/lib/pediatrics/age";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
-import { hasPermission } from "@/lib/auth/permissions";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 
 export { ok, fail, isFailure, type ActionResult, type Success, type Failure } from "./result";
 import { ok, fail, type ActionResult } from "./result";
@@ -31,7 +31,8 @@ export function requirePediatricsPermission(
   opts?: { write?: boolean },
 ): ActionResult<undefined> {
   const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
-  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+  // M6: la decisión es del guardia clínico compartido (@/lib/auth/guardia-clinica).
+  if (!puedeClinico(ctx, requiredKey === "medicalRecord.view" ? "ver" : "editar")) {
     return fail(`Sin permisos: ${requiredKey}`);
   }
   return ok(undefined);
@@ -52,7 +53,8 @@ export async function loadPatientForPediatrics(args: {
   write?: boolean;
 }): Promise<ActionResult<LoadedPatient>> {
   const requiredKey = args.write === false ? "medicalRecord.view" : "medicalRecord.edit";
-  if (!hasPermission({ role: args.ctx.role as any, permissionsOverride: args.ctx.permissionsOverride }, requiredKey)) {
+  // M6: la decisión es del guardia clínico compartido (@/lib/auth/guardia-clinica).
+  if (!puedeClinico(args.ctx, requiredKey === "medicalRecord.view" ? "ver" : "editar")) {
     return fail(`Sin permisos: ${requiredKey}`);
   }
 

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 import { patientVisibilityFilter, type VisibilityViewer } from "@/lib/patient-visibility";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 
 /**
  * QUIÉN PUEDE ESCRIBIR EL ODONTOGRAMA. Recepción y solo-lectura NO.
@@ -21,9 +22,24 @@ import { patientVisibilityFilter, type VisibilityViewer } from "@/lib/patient-vi
  */
 export const ROLES_QUE_ESCRIBEN_ODONTOGRAMA = new Set<string>(["SUPER_ADMIN", "ADMIN", "DOCTOR"]);
 
-/** ¿Este rol puede tocar el odontograma de un paciente? */
-export function puedeEscribirOdontograma(role: string): boolean {
-  return ROLES_QUE_ESCRIBEN_ODONTOGRAMA.has(role);
+type QuienPide = { role: string; permissionsOverride?: string[] | null };
+
+/**
+ * ¿Puede esta persona escribir el odontograma? (auditoría 30-sep, M6)
+ *
+ * Antes miraba solo el ROL (la lista de arriba), así que a un doctor al que el
+ * dueño le quitó «Editar notas SOAP» se le seguía dejando pintar hallazgos. Ahora
+ * decide el guardia clínico compartido con `medicalRecord.edit` y el override por
+ * persona. Con los permisos por default de cada rol el resultado es el mismo que
+ * la lista de roles (SUPER_ADMIN, ADMIN y DOCTOR sí; recepción y solo lectura no).
+ */
+export function puedeEscribirOdontograma(user: QuienPide): boolean {
+  return puedeClinico(user, "editar");
+}
+
+/** ¿Puede LEERLO? `medicalRecord.view` — antes el GET no pedía ningún permiso. */
+export function puedeLeerOdontograma(user: QuienPide): boolean {
+  return puedeClinico(user, "ver");
 }
 
 /**

@@ -3,10 +3,14 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // M6: el periodontograma es expediente — antes bastaba con ser de la clínica.
+  const sinPermiso = denyIfNotClinical(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
   const patientId = new URL(req.url).searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
   // Visibilidad por paciente: sin este gate se leía el periodontograma de un
@@ -28,6 +32,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const sinPermiso = denyIfNotClinical(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
   const { patientId, measurements, notes, bleedingIndex, plaquIndex } = await req.json();
   if (!patientId || !measurements) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 

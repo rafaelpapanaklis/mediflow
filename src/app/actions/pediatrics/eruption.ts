@@ -8,7 +8,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { calculateAge } from "@/lib/pediatrics/age";
 import { evaluateDeviation, getRangeForFdi } from "@/lib/pediatrics/eruption-data";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
 
 const eruptionSchema = z.object({
   patientId: z.string().min(1),
@@ -85,6 +85,9 @@ export async function recordEruption(input: RecordEruptionInput): Promise<Action
 export async function deleteEruption(args: { id: string }): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const row = await prisma.eruptionRecord.findUnique({
     where: { id: args.id },

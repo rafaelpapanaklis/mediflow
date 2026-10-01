@@ -5,6 +5,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { calculateAge, isPediatric } from "@/lib/pediatrics/age";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
@@ -45,13 +46,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ pediatric: false });
   }
 
+  // M6: la escala de Frankl es expediente. Recepción agenda niños todos los
+  // días y sigue recibiendo edad, tutor y duración sugerida; la conducta (y el
+  // bloque largo que se deduce de ella) solo con `medicalRecord.view`.
+  const veClinico = puedeClinico(ctx, "ver");
   const [recentFrankl, guardian] = await Promise.all([
-    prisma.behaviorAssessment.findMany({
-      where: { patientId, clinicId: ctx.clinicId, scale: "frankl", deletedAt: null },
-      orderBy: { recordedAt: "desc" },
-      take: 2,
-      select: { value: true },
-    }),
+    veClinico
+      ? prisma.behaviorAssessment.findMany({
+          where: { patientId, clinicId: ctx.clinicId, scale: "frankl", deletedAt: null },
+          orderBy: { recordedAt: "desc" },
+          take: 2,
+          select: { value: true },
+        })
+      : Promise.resolve([] as { value: number }[]),
     prisma.guardian.findFirst({
       where: { patientId, clinicId: ctx.clinicId, deletedAt: null, principal: true },
       select: { fullName: true },

@@ -9,7 +9,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { signMaybeUrls } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
 import { validateMagicNumber } from "@/lib/validate-upload";
-import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import {
   ALLOWED_PHOTO_MIME,
   MAX_PHOTO_BYTES,
@@ -99,6 +99,9 @@ export async function uploadClinicalPhotoAction(
 
     const ctx = await getAuthContext();
     if (!ctx) return fail("No autenticado");
+    // M6: permiso de rol de lo clínico (guardia compartido).
+    const sinPermiso = sinPermisoClinico(ctx, "editar");
+    if (sinPermiso) return sinPermiso;
 
     const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
     if (isFailure(guard)) return fail(guard.error);
@@ -240,6 +243,9 @@ export async function deleteClinicalPhotoAction(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
   // El rol de solo lectura puede ver la galería pero no destruir evidencia
   // clínica (el soft-delete además borra el binario del bucket).
   if (ctx.role === "READONLY") {
@@ -290,6 +296,9 @@ export async function listClinicalPhotosAction(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -346,6 +355,9 @@ export async function updatePhotoAnnotationsAction(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const photo = await prisma.clinicalPhoto.findUnique({
     where: { id: parsed.data.id },

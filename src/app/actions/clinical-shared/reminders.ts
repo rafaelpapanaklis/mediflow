@@ -10,7 +10,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
 import { nextBirthday } from "@/lib/clinical-shared/reminders/birthday";
 
@@ -34,6 +34,9 @@ export async function createClinicalReminder(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -72,6 +75,9 @@ export async function cancelClinicalReminder(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const r = await prisma.clinicalReminder.findUnique({
     where: { id: parsed.data.id },
@@ -117,6 +123,9 @@ export async function listClinicalReminders(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   // Visibilidad por paciente: no listar recordatorios de un paciente restringido.
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
@@ -162,6 +171,9 @@ export async function autoSeedPediatricReminders(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -236,6 +248,9 @@ export async function autoSeedOrthoReminders(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);

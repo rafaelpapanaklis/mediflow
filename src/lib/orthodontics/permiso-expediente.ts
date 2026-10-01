@@ -8,7 +8,7 @@
 // Respeta los permisos personalizados de Equipo → Permisos: si la clínica le
 // quitó el expediente a un doctor, aquí sale `false` aunque su rol lo traiga.
 
-import { hasPermission } from "@/lib/auth/permissions";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 
 export interface UsuarioConPermisos {
   role: string;
@@ -16,11 +16,8 @@ export interface UsuarioConPermisos {
 }
 
 export function puedeVerExpediente(usuario: UsuarioConPermisos | null | undefined): boolean {
-  if (!usuario) return false;
-  return hasPermission(
-    { role: usuario.role, permissionsOverride: usuario.permissionsOverride ?? null },
-    "medicalRecord.view",
-  );
+  // M6: delega en el guardia clínico compartido (una sola regla para todo lo clínico).
+  return puedeClinico(usuario, "ver");
 }
 
 /** Lo que se le dice a quien pide un PDF del expediente sin la llave. */

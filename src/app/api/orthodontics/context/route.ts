@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { differenceInMonths } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { suggestOrthoAppointmentDuration } from "@/lib/orthodontics/appointment-durations";
@@ -92,15 +93,19 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  // M6: lo que sirve para AGENDAR (hay caso activo, doctor tratante, duración)
+  // lo recibe quien tiene la llave de Ortodoncia, recepción incluida; técnica,
+  // fase y mes de tratamiento son expediente y piden `medicalRecord.view`.
+  const veClinico = puedeClinico(ctx, "ver");
   return NextResponse.json({
     orthodontics: true,
     moduleActive: true,
     hasActivePlan: Boolean(plan),
     // ws1-t8: «Nueva cita» propone al doctor tratante del caso para el control de ortodoncia.
     treatingDoctorId: plan?.treatingDoctorId ?? null,
-    technique: plan?.technique ?? null,
-    currentPhase: plan?.phases[0]?.phaseKey ?? null,
-    monthInTreatment: plan?.installedAt
+    technique: veClinico ? plan?.technique ?? null : null,
+    currentPhase: veClinico ? plan?.phases[0]?.phaseKey ?? null : null,
+    monthInTreatment: veClinico && plan?.installedAt
       ? Math.max(0, differenceInMonths(new Date(), plan.installedAt))
       : null,
     paymentStatus: plan?.paymentPlan?.status ?? null,

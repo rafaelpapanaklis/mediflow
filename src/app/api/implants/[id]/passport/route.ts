@@ -7,6 +7,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import QRCode from "qrcode";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
@@ -25,6 +26,9 @@ interface Params {
 export async function GET(_req: NextRequest, ctx: Params) {
   const { id } = await ctx.params;
   const user = await getCurrentUser();
+  // M6: el pasaporte lleva cirugía, prótesis y lote del implante — expediente.
+  const sinPermiso = denyIfNotClinical(user, "ver");
+  if (sinPermiso) return sinPermiso;
   if (user.clinic.category !== "DENTAL") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

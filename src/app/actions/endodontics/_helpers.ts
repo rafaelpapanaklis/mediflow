@@ -6,7 +6,7 @@ import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
-import { hasPermission } from "@/lib/auth/permissions";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 
 export { ok, fail, isFailure, type ActionResult, type Success, type Failure } from "./result";
 import { fail, type ActionResult } from "./result";
@@ -42,7 +42,8 @@ export async function getEndoActionContext(
   }
 
   const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
-  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+  // M6: la decisión es del guardia clínico compartido (@/lib/auth/guardia-clinica).
+  if (!puedeClinico(ctx, requiredKey === "medicalRecord.view" ? "ver" : "editar")) {
     return fail(`Sin permisos: ${requiredKey}`);
   }
 

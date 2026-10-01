@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 
@@ -47,6 +48,9 @@ export async function searchPatientsForSpecialty(
   input: SearchPatientsInput,
 ): Promise<SearchPatientsOutput> {
   const user = await getCurrentUser();
+  // M6: este buscador abre los módulos de especialidad (expediente) — quien no
+  // puede ver lo clínico recibe la lista vacía, igual que sin coincidencias.
+  if (!puedeClinico(user, "ver")) return { ok: false, results: [] };
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   const q = (input.q ?? "").trim();
 

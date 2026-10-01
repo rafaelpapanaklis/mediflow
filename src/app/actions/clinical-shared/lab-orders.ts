@@ -11,7 +11,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
 import { LabOrderDocument } from "@/lib/pdf/lab-order-document";
 import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
@@ -44,6 +44,9 @@ export async function createLabPartner(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const created = await prisma.labPartner.create({
     data: {
@@ -71,6 +74,9 @@ export async function createLabPartner(
 export async function listLabPartners(): Promise<ActionResult<LabPartnerDTO[]>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
   const rows = await prisma.labPartner.findMany({
     where: { clinicId: ctx.clinicId, deletedAt: null },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -98,6 +104,9 @@ export async function setLabPartnerActive(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const p = await prisma.labPartner.findUnique({
     where: { id: parsed.data.id },
@@ -134,6 +143,9 @@ export async function createLabOrder(
   if (!parsed.success) return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -191,6 +203,9 @@ export async function listLabOrders(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   // Visibilidad por paciente: el pdfUrl de cada orden embebe nombre+dob del paciente.
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
@@ -238,6 +253,9 @@ export async function setLabOrderStatus(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const o = await prisma.labOrder.findUnique({
     where: { id: parsed.data.id },

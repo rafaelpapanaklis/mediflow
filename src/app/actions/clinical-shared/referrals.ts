@@ -7,7 +7,7 @@ import { renderToStream } from "@react-pdf/renderer";
 import { ClinicalModule, ReferralLetterChannel } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
 import { buildPediatricSummary } from "@/lib/clinical-shared/referral/summary";
 import { buildOrthoSummary } from "@/lib/clinical-shared/referral/summary-orthodontics";
@@ -37,7 +37,8 @@ export async function createDoctorContact(
   if (!parsed.success) return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
-
+  const veto = sinPermisoClinico(ctx, "editar"); // M6
+  if (veto) return veto;
   const created = await prisma.doctorContact.create({
     data: {
       clinicId: ctx.clinicId,
@@ -72,6 +73,9 @@ export async function updateDoctorContact(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const existing = await prisma.doctorContact.findUnique({
     where: { id: parsed.data.id },
@@ -110,6 +114,9 @@ export async function listDoctorContacts(): Promise<
 > {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
   const rows = await prisma.doctorContact.findMany({
     where: { clinicId: ctx.clinicId, deletedAt: null },
     orderBy: { fullName: "asc" },
@@ -135,6 +142,9 @@ export async function deleteDoctorContact(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const c = await prisma.doctorContact.findUnique({
     where: { id: parsed.data.id },
@@ -168,6 +178,9 @@ export async function buildReferralSummary(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -203,6 +216,9 @@ export async function createReferralLetter(
   if (!parsed.success) return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -266,6 +282,9 @@ export async function markReferralSent(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const r = await prisma.referralLetter.findUnique({
     where: { id: parsed.data.id },

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
@@ -14,9 +15,9 @@ const VALID_TYPES = new Set(["OUTGOING", "INCOMING"]);
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!["DOCTOR", "ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // M6: antes era una lista de roles fija, que no veía el permiso quitado a mano.
+  const sinPermiso = denyIfNotClinical(user, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const patientId = req.nextUrl.searchParams.get("patientId");
   const where: Record<string, unknown> = { clinicId: user.clinicId };
@@ -55,9 +56,8 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!["DOCTOR", "ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const sinPermiso = denyIfNotClinical(user, "editar");
+  if (sinPermiso) return sinPermiso;
 
   let body: {
     patientId?: string;

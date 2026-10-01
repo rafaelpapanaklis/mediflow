@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { denyIfMissingAnyPermission } from "@/lib/auth/require-permission";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { patientSearchTokens } from "@/lib/patients/patient-search-core";
 import { findPatientIdsBySearch } from "@/lib/patients/patient-search";
@@ -8,6 +9,11 @@ import { findPatientIdsBySearch } from "@/lib/patients/patient-search";
 export async function GET(req: NextRequest) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
+  // B7: es el buscador de «Nueva cita». Pide ver pacientes o poder agendar
+  // (quien agenda tiene que encontrar al paciente); sin ninguna de las dos —el
+  // permiso quitado a mano— ya no devuelve nombres ni teléfonos.
+  const sinPermiso = denyIfMissingAnyPermission(session.user, ["patients.view", "agenda.create"]);
+  if (sinPermiso) return sinPermiso;
 
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < 2) {

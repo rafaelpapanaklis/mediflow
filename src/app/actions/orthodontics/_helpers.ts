@@ -9,6 +9,7 @@ import { canSeePatient } from "@/lib/patient-visibility";
 import { getAuthContext } from "@/lib/auth-context";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { fail, type ActionResult } from "./result";
 
@@ -40,7 +41,8 @@ export async function getOrthoActionContext(
   }
 
   const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
-  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+  // M6: la decisión es del guardia clínico compartido (@/lib/auth/guardia-clinica).
+  if (!puedeClinico(ctx, requiredKey === "medicalRecord.view" ? "ver" : "editar")) {
     return fail(`Sin permisos: ${requiredKey}`);
   }
 
@@ -177,7 +179,7 @@ export async function getOrthoPlanActionContext(
 
   const perm = { role: ctx.role as any, permissionsOverride: ctx.permissionsOverride };
   const clinicalKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
-  if (hasPermission(perm, clinicalKey)) return { ok: true, data: { ctx } };
+  if (puedeClinico(perm, clinicalKey === "medicalRecord.view" ? "ver" : "editar")) return { ok: true, data: { ctx } };
 
   const billingKey = opts?.write === false ? "billing.view" : "billing.charge";
   if (onlyResponsibleGuardian && hasPermission(perm, billingKey)) {

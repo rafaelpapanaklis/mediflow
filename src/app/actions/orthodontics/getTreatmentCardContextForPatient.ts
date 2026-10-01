@@ -25,7 +25,7 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
-import { buildTreatmentCardContext, type TreatmentCardAgendaContext } from "./getTreatmentCardContextForAppointment";
+import { buildTreatmentCardContext, type TreatmentCardAgendaContext } from "@/lib/orthodontics/treatment-card-context";
 
 export async function getTreatmentCardContextForPatient(
   treatmentPlanId: string,

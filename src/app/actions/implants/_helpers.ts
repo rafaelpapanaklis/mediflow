@@ -17,7 +17,7 @@ import type { AuthContext } from "@/lib/auth-context";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
-import { hasPermission } from "@/lib/auth/permissions";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { canSeePatient } from "@/lib/patient-visibility";
 import type { ImplantStatus } from "@prisma/client";
 import { ok, fail, type ActionResult } from "./result";
@@ -46,7 +46,8 @@ export async function getImplantActionContext(
   }
 
   const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
-  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+  // M6: la decisión es del guardia clínico compartido (@/lib/auth/guardia-clinica).
+  if (!puedeClinico(ctx, requiredKey === "medicalRecord.view" ? "ver" : "editar")) {
     return fail(`Sin permisos: ${requiredKey}`);
   }
 

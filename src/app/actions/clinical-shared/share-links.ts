@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { ClinicalModule } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
+import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
 import {
   buildShortOrthoSummary,
@@ -33,6 +33,9 @@ export async function createPatientShareLink(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
@@ -81,6 +84,9 @@ export async function revokePatientShareLink(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const link = await prisma.patientShareLink.findUnique({
     where: { token: parsed.data.token },
@@ -127,6 +133,9 @@ export async function listPatientShareLinks(
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: permiso de rol de lo clínico (guardia compartido).
+  const sinPermiso = sinPermisoClinico(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   // Visibilidad por paciente: no listar los share-links de un paciente restringido.
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });

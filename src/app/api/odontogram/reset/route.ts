@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta } from "@/lib/audit";
-import { getDbUser, isMissingTableError, ROLES_QUE_ESCRIBEN_ODONTOGRAMA } from "@/lib/odontogram/api-auth";
+import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
+import { getDbUser, isMissingTableError, puedeEscribirOdontograma } from "@/lib/odontogram/api-auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
-/** Roles que pueden borrar el odontograma vivo. Recepción/readonly NO.
- *  La lista se movió a @/lib/odontogram/api-auth: estaba aquí y en /sync, y
- *  faltaba en las cuatro rutas que sí dejaban escribir (PAC-05). */
-const DESTRUCTIVE_ROLES = ROLES_QUE_ESCRIBEN_ODONTOGRAMA;
+/** Quién puede borrar el odontograma vivo: lo decide puedeEscribirOdontograma
+ *  (@/lib/odontogram/api-auth → guardia clínica, `medicalRecord.edit` con el
+ *  override por persona). Recepción/readonly NO. */
 
 /** POST /api/odontogram/reset?patientId=ID — borra todas las entries del paciente. */
 export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (!DESTRUCTIVE_ROLES.has(dbUser.role)) {
+    if (!puedeEscribirOdontograma(dbUser)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     const patientId = req.nextUrl.searchParams.get("patientId");
@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
     // borradas quedan serializadas en audit_logs.changes (Json) si y solo si
     // el borrado se aplicó — restaurables a mano ante un reset accidental.
     // (No hay tabla de versiones y el schema no se toca: audit es el lugar.)
+    // «Ver como clínica» (decisión A): la foto de antes va a la bitácora de admin, no a la de la clínica.
+    const suplantacion = await suplantacionDeEstaPeticion();
+    let cambiosParaAdmin: unknown = null;
     const deleted = await prisma.$transaction(async (tx) => {
       const prevRows = await tx.odontogramEntry.findMany({
         where: { patientId },
@@ -45,22 +48,34 @@ export async function POST(req: NextRequest) {
         orderBy: { toothNumber: "asc" },
       });
       const del = await tx.odontogramEntry.deleteMany({ where: { patientId } });
-      await tx.auditLog.create({
-        data: {
-          clinicId: dbUser.clinicId,
-          userId: dbUser.id,
-          entityType: "patient",
-          entityId: patientId,
-          action: "odontogram_reset",
-          changes: {
-            _odontogram: { before: { count: del.count, rows: prevRows }, after: { count: 0 } },
+      if (suplantacion) {
+        cambiosParaAdmin = {
+          _odontogram: { before: { count: del.count, rows: prevRows }, after: { count: 0 } },
+        };
+      } else {
+        await tx.auditLog.create({
+          data: {
+            clinicId: dbUser.clinicId,
+            userId: dbUser.id,
+            entityType: "patient",
+            entityId: patientId,
+            action: "odontogram_reset",
+            changes: {
+              _odontogram: { before: { count: del.count, rows: prevRows }, after: { count: 0 } },
+            },
+            ipAddress: ipAddress ?? null,
+            userAgent: userAgent ?? null,
           },
-          ipAddress: ipAddress ?? null,
-          userAgent: userAgent ?? null,
-        },
-      });
+        });
+      }
       return del.count;
     });
+    if (suplantacion) {
+      await anotarAccionDeSuplantacion(suplantacion, {
+        clinicId: dbUser.clinicId, entityType: "patient", entityId: patientId, action: "odontogram_reset",
+        changes: cambiosParaAdmin, patientId, ipAddress, userAgent,
+      });
+    }
 
     return NextResponse.json({ ok: true, deleted });
   } catch (err) {

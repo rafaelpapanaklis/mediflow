@@ -83,6 +83,9 @@ const APPT_INCLUDE = {
 export async function GET(req: NextRequest) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
+  // B7: listar citas exige «Ver agenda» (respeta el permiso quitado a mano).
+  const sinPermiso = denyIfMissingPermission(session.user, "agenda.view");
+  if (sinPermiso) return sinPermiso;
 
   const sp = req.nextUrl.searchParams;
   const dateParam = sp.get("date");

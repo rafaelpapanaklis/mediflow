@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
 import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const HABIT_TYPE = [
@@ -80,6 +80,9 @@ export async function updateHabit(
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const habit = await prisma.oralHabit.findUnique({
     where: { id: parsed.data.id },
@@ -119,6 +122,9 @@ export async function resolveHabit(args: {
 }): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const habit = await prisma.oralHabit.findUnique({
     where: { id: args.id },
@@ -162,6 +168,9 @@ export async function resolveHabit(args: {
 export async function deleteHabit(args: { id: string }): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const habit = await prisma.oralHabit.findUnique({
     where: { id: args.id },

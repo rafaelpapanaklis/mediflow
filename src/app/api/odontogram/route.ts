@@ -6,9 +6,11 @@ import {
   getDbUser,
   isMissingTableError,
   puedeEscribirOdontograma,
+  puedeLeerOdontograma,
 } from "@/lib/odontogram/api-auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { extractAuditMeta } from "@/lib/audit";
+import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +81,8 @@ export async function GET(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // M6: leer el odontograma es leer expediente (antes bastaba la sesión).
+    if (!puedeLeerOdontograma(dbUser)) return jsonError("forbidden", 403);
     const patientId = req.nextUrl.searchParams.get("patientId");
     if (!patientId) return jsonError("missing_patientId", 400);
     // FASE 2 — sharedRead: el odontograma es contenido clínico, así que se LEE
@@ -119,7 +123,7 @@ export async function PUT(req: NextRequest) {
     if (!dbUser) return jsonError("unauthorized", 401);
     // PAC-05: el mismo rol que exigen /reset y /sync. Escribir un hallazgo en
     // el odontograma es escribir expediente clínico.
-    if (!puedeEscribirOdontograma(dbUser.role)) return jsonError("forbidden", 403);
+    if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
 
     const body = await req.json().catch(() => null);
     const parsed = PutSchema.safeParse(body);
@@ -197,7 +201,7 @@ export async function DELETE(req: NextRequest) {
     if (!dbUser) return jsonError("unauthorized", 401);
     // PAC-05: igual que el PUT. Quitar hallazgos de una cara, uno a uno, es el
     // mismo borrado que /reset hace de golpe.
-    if (!puedeEscribirOdontograma(dbUser.role)) return jsonError("forbidden", 403);
+    if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
 
     const body = await req.json().catch(() => null);
     const parsed = DeleteSchema.safeParse(body);
@@ -257,6 +261,15 @@ async function anotarEnBitacora(
 ): Promise<void> {
   try {
     const { ipAddress, userAgent } = extractAuditMeta(req);
+    // «Ver como clínica» (decisión A): a la bitácora de admin, no a la de la clínica.
+    const suplantacion = await suplantacionDeEstaPeticion();
+    if (suplantacion) {
+      await anotarAccionDeSuplantacion(suplantacion, {
+        clinicId: dbUser.clinicId, entityType: "patient", entityId: patientId, action,
+        changes: { _odontogram: { after: detalle } }, patientId, ipAddress, userAgent,
+      });
+      return;
+    }
     await prisma.auditLog.create({
       data: {
         clinicId: dbUser.clinicId,

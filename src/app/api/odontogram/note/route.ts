@@ -78,7 +78,7 @@ export async function PUT(req: NextRequest) {
     if (!dbUser) return jsonError("unauthorized", 401);
     // PAC-05: la nota por diente es texto clínico. Mismo rol que el resto del
     // odontograma; recepción y solo-lectura no la escriben.
-    if (!puedeEscribirOdontograma(dbUser.role)) return jsonError("forbidden", 403);
+    if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
 
     const body = await req.json().catch(() => null);
     const parsed = NoteSchema.safeParse(body);
@@ -134,7 +134,7 @@ export async function DELETE(req: NextRequest) {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
     // PAC-05: borrar la nota clínica de un diente, igual que escribirla.
-    if (!puedeEscribirOdontograma(dbUser.role)) return jsonError("forbidden", 403);
+    if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
 
     const body = await req.json().catch(() => null);
     const parsed = DeleteSchema.safeParse(body);

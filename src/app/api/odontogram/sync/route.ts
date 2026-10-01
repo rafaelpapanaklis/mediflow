@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta } from "@/lib/audit";
+import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 import {
   ensurePatientInClinic,
   getDbUser,
   isMissingTableError,
-  ROLES_QUE_ESCRIBEN_ODONTOGRAMA,
+  puedeEscribirOdontograma,
 } from "@/lib/odontogram/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +15,8 @@ export const dynamic = "force-dynamic";
 /** conditionId reservado para la nota por diente. */
 const NOTE_CONDITION = "__note__";
 
-/** Roles que pueden REEMPLAZAR el odontograma vivo. Recepción/readonly NO.
- *  La lista se movió a @/lib/odontogram/api-auth: estaba aquí y en /reset, y
- *  faltaba en las cuatro rutas que sí dejaban escribir (PAC-05). */
-const DESTRUCTIVE_ROLES = ROLES_QUE_ESCRIBEN_ODONTOGRAMA;
+/** Quién puede REEMPLAZAR el odontograma vivo: puedeEscribirOdontograma
+ *  (@/lib/odontogram/api-auth → guardia clínica). Recepción/readonly NO. */
 
 /** Tope de filas aplanadas (anti payload-bomba: este endpoint reemplaza TODO
  *  el odontograma). Un odontograma real queda muy por debajo (~900 máx). */
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (!DESTRUCTIVE_ROLES.has(dbUser.role)) {
+    if (!puedeEscribirOdontograma(dbUser)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
@@ -143,6 +142,9 @@ export async function POST(req: NextRequest) {
     // falla no hay ni borrado ni snapshot; si commitea, el estado anterior es
     // restaurable a mano. (Sin tabla de versiones en el schema, audit es el
     // lugar natural.)
+    // «Ver como clínica» (decisión A): la foto de antes va a la bitácora de admin, no a la de la clínica.
+    const suplantacion = await suplantacionDeEstaPeticion();
+    let cambiosParaAdmin: unknown = null;
     await prisma.$transaction(async (tx) => {
       const prevRows = await tx.odontogramEntry.findMany({
         where: { patientId },
@@ -153,24 +155,39 @@ export async function POST(req: NextRequest) {
       const created = rows.length
         ? await tx.odontogramEntry.createMany({ data: rows, skipDuplicates: true })
         : { count: 0 };
-      await tx.auditLog.create({
-        data: {
-          clinicId: dbUser.clinicId,
-          userId: dbUser.id,
-          entityType: "patient",
-          entityId: patientId,
-          action: "odontogram_sync",
-          changes: {
-            _odontogram: {
-              before: { count: del.count, rows: prevRows },
-              after: { count: created.count },
-            },
+      if (suplantacion) {
+        cambiosParaAdmin = {
+          _odontogram: {
+            before: { count: del.count, rows: prevRows },
+            after: { count: created.count },
           },
-          ipAddress: ipAddress ?? null,
-          userAgent: userAgent ?? null,
-        },
-      });
+        };
+      } else {
+        await tx.auditLog.create({
+          data: {
+            clinicId: dbUser.clinicId,
+            userId: dbUser.id,
+            entityType: "patient",
+            entityId: patientId,
+            action: "odontogram_sync",
+            changes: {
+              _odontogram: {
+                before: { count: del.count, rows: prevRows },
+                after: { count: created.count },
+              },
+            },
+            ipAddress: ipAddress ?? null,
+            userAgent: userAgent ?? null,
+          },
+        });
+      }
     });
+    if (suplantacion) {
+      await anotarAccionDeSuplantacion(suplantacion, {
+        clinicId: dbUser.clinicId, entityType: "patient", entityId: patientId, action: "odontogram_sync",
+        changes: cambiosParaAdmin, patientId, ipAddress, userAgent,
+      });
+    }
 
     return NextResponse.json({ ok: true, count: rows.length });
   } catch (err) {

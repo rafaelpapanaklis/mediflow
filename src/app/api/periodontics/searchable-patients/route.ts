@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { differenceInYears } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
@@ -24,6 +25,9 @@ export type SearchablePatient = {
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // M6: módulo de periodoncia = expediente (antes bastaba con tener el módulo).
+  const sinPermiso = denyIfNotClinical(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
   if (ctx.clinicCategory !== "DENTAL") {
     return NextResponse.json({ error: "Categoría no válida" }, { status: 403 });
   }

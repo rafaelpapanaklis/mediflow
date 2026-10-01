@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
@@ -75,6 +76,10 @@ export async function POST(req: NextRequest) {
   if (!tieneAccesoOrtodoncia({ role: ctx.role, permissionsOverride: ctx.permissionsOverride })) {
     return NextResponse.json({ error: MENSAJE_SIN_ACCESO_ORTODONCIA }, { status: 403 });
   }
+  // M6: subir imagen clínica del caso es escribir expediente — el mismo
+  // permiso que createPhotoSet (getOrthoActionContext) ya pedía.
+  const sinPermiso = denyIfNotClinical(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

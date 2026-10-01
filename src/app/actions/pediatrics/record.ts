@@ -81,6 +81,9 @@ export async function updatePediatricRecord(
 
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const record = await prisma.pediatricRecord.findUnique({
     where: { id: parsed.data.id },

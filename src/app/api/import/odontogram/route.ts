@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireRole } from "@/lib/auth-context";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseImportForm, runImport, importErrorResponse } from "@/lib/import/engine";
 import { odontogramHandler } from "@/lib/import/entities";
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const roleGate = requireRole(ctx, "ADMIN", "DOCTOR");
   if (roleGate) return roleGate;
+  // M6: además del rol, el permiso clínico (un doctor sin «Editar notas SOAP»
+  // tampoco escribe el odontograma en bloque).
+  const sinPermiso = denyIfNotClinical(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   try {
     const form = await parseImportForm(req);

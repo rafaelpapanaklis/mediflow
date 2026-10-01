@@ -4,6 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { suggestEndoAppointmentDuration } from "@/lib/helpers/endoAppointmentDurations";
@@ -22,6 +23,11 @@ export async function GET(req: NextRequest) {
   }
 
   if (ctx.clinicCategory !== "DENTAL") {
+    return NextResponse.json({ endo: false });
+  }
+  // M6: el contexto clínico del módulo solo para quien puede ver expediente;
+  // para los demás es como si el módulo no aplicara (misma forma de respuesta).
+  if (!puedeClinico(ctx, "ver")) {
     return NextResponse.json({ endo: false });
   }
   const access = await canAccessModule(ctx.clinicId, ENDODONTICS_MODULE_KEY);

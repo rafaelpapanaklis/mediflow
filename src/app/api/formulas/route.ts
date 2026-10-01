@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -10,6 +11,9 @@ export async function GET(req: NextRequest) {
   // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
   const fuera = negarApiPorCategoria("/dashboard/formulas", ctx.clinicCategory);
   if (fuera) return fuera;
+  // M6: las fórmulas aplicadas a un paciente son expediente.
+  const sinPermiso = denyIfNotClinical(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
@@ -47,6 +51,8 @@ export async function POST(req: NextRequest) {
   // Guardia de categoría (sesión): 403 si el giro de la clínica no tiene esta función.
   const fuera = negarApiPorCategoria("/dashboard/formulas", ctx.clinicCategory);
   if (fuera) return fuera;
+  const sinPermiso = denyIfNotClinical(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const body = await req.json();
   const { patientId, type, formula, notes, appliedBy } = body;

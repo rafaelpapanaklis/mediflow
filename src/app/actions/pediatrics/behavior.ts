@@ -100,6 +100,9 @@ export async function getBehaviorHistory(patientId: string): Promise<ActionResul
 export async function deleteBehavior(args: { id: string }): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  // M6: antes estas acciones por id no pedían permiso de rol (solo clínica).
+  const sinPermiso = requirePediatricsPermission(ctx);
+  if (!sinPermiso.ok) return sinPermiso;
 
   const row = await prisma.behaviorAssessment.findUnique({
     where: { id: args.id },

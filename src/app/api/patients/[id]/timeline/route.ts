@@ -47,9 +47,8 @@ const ALL_TYPES: TimelineEventType[] = [
  */
 export async function GET(req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // M6/B7: la lista de roles fija que había aquí se quitó — decide el permiso
+  // de abajo, que sí ve el expediente concedido o quitado a mano.
 
   // PERMISOS-CONSISTENCIA — este timeline ES el expediente: entrega la primera
   // línea del `subjective` de cada nota y los CIE-10 con código, descripción y

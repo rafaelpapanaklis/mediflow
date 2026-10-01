@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -7,6 +8,9 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // M6: el mapa corporal es expediente — antes bastaba con ser de la clínica.
+  const sinPermiso = denyIfNotClinical(ctx, "ver");
+  if (sinPermiso) return sinPermiso;
 
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
@@ -35,6 +39,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const sinPermiso = denyIfNotClinical(ctx, "editar");
+  if (sinPermiso) return sinPermiso;
 
   const body = await req.json();
   const { patientId, mapType, annotations, recordId } = body;

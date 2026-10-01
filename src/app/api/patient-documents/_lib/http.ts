@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, type AuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import type { PermissionKey } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { rateLimit } from "@/lib/rate-limit";
@@ -23,7 +24,11 @@ export async function entrar(
   if (limited) return { res: limited };
   const ctx = await getAuthContext();
   if (!ctx) return { res: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const denied = denyIfMissingPermission(ctx, permiso);
+  // M6: lo clínico lo decide el guardia compartido (@/lib/auth/guardia-clinica).
+  const denied =
+    permiso === VER ? denyIfNotClinical(ctx, "ver")
+    : permiso === ESCRIBIR ? denyIfNotClinical(ctx, "editar")
+    : denyIfMissingPermission(ctx, permiso);
   if (denied) return { res: denied };
   return { ctx };
 }

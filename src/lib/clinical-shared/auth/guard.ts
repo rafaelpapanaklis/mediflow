@@ -6,8 +6,13 @@
 import { prisma } from "@/lib/prisma";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 import type { AuthContext } from "@/lib/auth-context";
-import { fail, ok, type ActionResult } from "@/lib/clinical-shared/result";
+import { fail, ok, type ActionResult, type Failure } from "@/lib/clinical-shared/result";
 import { canSeePatient } from "@/lib/patient-visibility";
+import {
+  mensajeSinPermisoClinico,
+  permisosClinicosFaltantes,
+  type ModoClinico,
+} from "@/lib/auth/guardia-clinica";
 
 export type ClinicalShareModule =
   | "pediatrics"
@@ -19,14 +24,34 @@ export type ClinicalShareModule =
 const ELIGIBLE_CLINIC_CATEGORIES = new Set(["DENTAL", "MEDICINE"]);
 
 /**
+ * M6 (auditoría 30-sep): permiso de rol de lo clínico para las acciones de
+ * clinical-shared. Antes solo se comprobaba clínica y visibilidad del paciente,
+ * y recepción o solo lectura exportaban el PDF del módulo, subían o borraban
+ * fotos clínicas y creaban enlaces públicos del expediente. Decide el guardia
+ * compartido (@/lib/auth/guardia-clinica), con el override por persona.
+ * `null` = puede; si no, el Failure listo para devolver.
+ */
+export function sinPermisoClinico(ctx: AuthContext, modo: ModoClinico): Failure | null {
+  const faltan = permisosClinicosFaltantes(ctx, modo);
+  return faltan.length === 0 ? null : fail(mensajeSinPermisoClinico(faltan));
+}
+
+/**
  * Verifica que el paciente exista, no esté soft-deleted y pertenezca al
  * clinicId de la sesión. No valida el módulo (cross-cutting): cualquier
  * paciente del clinicId puede tener fotos/órdenes/referencias.
+ *
+ * M6: además pide el permiso clínico. `modo` por omisión es "ver" (lo mínimo
+ * para tocar a un paciente desde aquí); las acciones que escriben piden
+ * "editar" explícitamente antes de llegar (sinPermisoClinico).
  */
 export async function guardPatient(args: {
   ctx: AuthContext;
   patientId: string;
+  modo?: ModoClinico;
 }): Promise<ActionResult<{ id: string; clinicId: string }>> {
+  const sinPermiso = sinPermisoClinico(args.ctx, args.modo ?? "ver");
+  if (sinPermiso) return sinPermiso;
   if (!ELIGIBLE_CLINIC_CATEGORIES.has(args.ctx.clinicCategory)) {
     return fail("Categoría de clínica no soportada");
   }
