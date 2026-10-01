@@ -14,7 +14,9 @@ export const dynamic = "force-dynamic";
 // de cita por WhatsApp + links de pago de facturas. MercadoPago llama el
 // notification_url con `?ref=lab:<orderId>` / `?ref=sup:<orderId>` /
 // `?ref=aitopup:<topupId>` / `?ref=anticipo:<depositId>` /
-// `?ref=factura:<linkId>` + el id del pago en el body `data.id` (o `id`).
+// `?ref=factura:<linkId>`; MP añade `&data.id=<id del pago>&type=payment` y manda
+// el mismo `data.id` en el body. El `id` de la RAÍZ del body es el de la
+// NOTIFICACIÓN, no el del pago: no se usa para nada.
 // Cada vendedor cobra a su propia cuenta, así que el token con el que
 // consultamos el pago sale de la orden (lab/supplier) o de la clínica
 // (anticipo, factura), nunca del body.
@@ -23,8 +25,9 @@ export const dynamic = "force-dynamic";
 //  · 200 — procesado O descartado por causa DETERMINISTA (ref/payload inválido,
 //    pago inexistente o 4xx, no aprobado, ref que no coincide, monto
 //    insuficiente): reintentar la misma notificación no cambiaría nada.
-//  · 401 — x-signature inválida, ausente, sin data.id en la query o con un id
-//    en el body distinto al firmado: MP reintenta y el fallo queda visible en su
+//  · 401 — x-signature inválida o ausente, sin `data.id` (ni en la query ni en
+//    el body) o con un `data.id` del body distinto al de la query: MP reintenta
+//    y el fallo queda visible en su
 //    dashboard (un 200 silencioso perdería pagos reales si el secret quedó mal
 //    configurado).
 //  · 503 — falta MERCADOPAGO_WEBHOOK_SECRET (B8, auditoría 30-sep-2026): falla
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
   // y el pago que se procesa tiene que ser ESE (B8, auditoría 30-sep-2026).
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   const data = (body as { data?: { id?: unknown } }).data;
+  const requestId = req.headers.get("x-request-id");
 
   // ── 0. Firma HMAC. Sin MERCADOPAGO_WEBHOOK_SECRET el webhook RECHAZA (falla
   // cerrado): 503 y no 401 porque es una mala configuración nuestra, no una
@@ -45,17 +49,34 @@ export async function POST(req: NextRequest) {
   const firma = verificarFirmaMp({
     secret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
     signature: req.headers.get("x-signature"),
-    requestId: req.headers.get("x-request-id"),
+    requestId,
     dataIdQuery: url.searchParams.get("data.id"),
-    idsDelBody: [data?.id as string | number | undefined, (body as { id?: string | number }).id],
+    // Solo `data.id`: el `id` de la raíz es el de la notificación (ws1-t12).
+    dataIdBody: data?.id,
   });
   if ("motivo" in firma) {
     if (firma.motivo === "sin_secreto") {
       console.error("MercadoPago webhook: MERCADOPAGO_WEBHOOK_SECRET no está configurado; notificación rechazada (503)");
       return NextResponse.json({ error: "webhook not configured" }, { status: 503 });
     }
-    console.error(`MercadoPago webhook: x-signature inválida (${firma.motivo}); notificación rechazada`);
+    console.error(
+      `MercadoPago webhook: x-signature inválida (${firma.motivo}); notificación rechazada (401)` +
+        ` · x-request-id=${requestId ?? "-"}`,
+    );
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
+
+  // Solo los pagos mueven algo aquí. Una notificación firmada de otro tipo
+  // (merchant_order / topic_merchant_order_wh, contracargos…) trae en `data.id`
+  // el id de ESE recurso, no de un pago: 200 sin procesar, para que MP no la
+  // reintente. Sin tipo declarado se trata como pago (el formato viejo).
+  const tipo =
+    url.searchParams.get("type") ??
+    url.searchParams.get("topic") ??
+    texto((body as { type?: unknown }).type) ??
+    texto((body as { topic?: unknown }).topic);
+  if (tipo && tipo !== "payment") {
+    return NextResponse.json({ received: true });
   }
 
   // ── 1. ref de la query → kind + orderId
@@ -67,7 +88,7 @@ export async function POST(req: NextRequest) {
   const kind = ref.slice(0, idx);
   const orderId = ref.slice(idx + 1);
 
-  // id del pago: el FIRMADO (data.id de la query); el body solo se contrastó arriba.
+  // id del pago: el FIRMADO (data.id de la query, o el del body si la query no lo trae).
   const paymentId = firma.paymentId;
 
   try {
@@ -189,6 +210,10 @@ export async function POST(req: NextRequest) {
 
   // ── 4. 200 (procesado o descartado de forma determinista; idempotente)
   return NextResponse.json({ received: true });
+}
+
+function texto(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
 // La verificación de x-signature vive en src/lib/mercadopago-firma.ts (verificarFirmaMp).
