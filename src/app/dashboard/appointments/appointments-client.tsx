@@ -1289,7 +1289,18 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 px-3 py-1.5 rounded-full w-fit">
                           <Clock className="w-4 h-4" strokeWidth={1.75} aria-hidden />{t("appointments.teleconsult.paymentPending")}
                         </div>
-                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/pago/${appt.id}`); toast.success(t("appointments.teleconsult.paymentLinkCopied")); }}
+                        <button onClick={async () => {
+                            // M7: la liga lleva un token que solo el servidor puede calcular.
+                            try {
+                              const r = await fetch(`/api/teleconsulta/pago-link?appointmentId=${encodeURIComponent(appt.id)}`, { cache: "no-store" });
+                              const d = await r.json();
+                              if (!r.ok || !d.path) throw new Error(d.error ?? "error");
+                              await navigator.clipboard.writeText(`${window.location.origin}${d.path}`);
+                              toast.success(t("appointments.teleconsult.paymentLinkCopied"));
+                            } catch (e: any) {
+                              toast.error(e?.message ?? "No se pudo generar la liga de pago");
+                            }
+                          }}
                           className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-border hover:bg-muted text-sm font-bold transition-colors">
                           <ClipboardList className="w-4 h-4" strokeWidth={1.75} aria-hidden />{t("appointments.teleconsult.copyPaymentLink")}
                         </button>

@@ -15,8 +15,15 @@ export default async function PatientPortalPage({ params }: Props) {
   // el portal renderiza. Sin spreads del modelo completo — eso filtraba al
   // HTML público notes internas, SOAP completo (aun con isPrivate), CURP/RFC,
   // portalToken y tokens de telemedicina.
+  //
+  // M8 (auditoría 30-sep-2026): el portal se rige por lo que la clínica YA
+  // borró. `deletedAt` del paciente (baja ARCO / archivado) → 404, igual que su
+  // API gemela `/api/portal/[token]`; y los archivos y consentimientos
+  // borrados por la clínica (soft-delete) no se listan ni se firman: una
+  // radiografía subida al paciente equivocado y borrada seguía visible, con URL
+  // firmada, para el titular de la liga.
   const patient = await prisma.patient.findFirst({
-    where: { portalToken: params.token },
+    where: { portalToken: params.token, deletedAt: null },
     select: {
       id: true,
       firstName: true,
@@ -60,6 +67,7 @@ export default async function PatientPortalPage({ params }: Props) {
         },
       },
       files: {
+        where: { deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
@@ -68,6 +76,7 @@ export default async function PatientPortalPage({ params }: Props) {
         },
       },
       consentForms: {
+        where: { deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: {
           id: true, procedure: true, signedAt: true,

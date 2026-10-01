@@ -12,8 +12,8 @@ interface PagoClientProps {
   time: string;
   amount: number;
   paymentStatus: string;
-  teleRoomUrl: string | null;
-  telePatientToken: string | null;
+  /** Token de la liga de pago; se manda de vuelta al crear el checkout. */
+  payToken: string;
 }
 
 export function PagoClient({
@@ -26,8 +26,7 @@ export function PagoClient({
   time,
   amount,
   paymentStatus,
-  teleRoomUrl,
-  telePatientToken,
+  payToken,
 }: PagoClientProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -50,7 +49,7 @@ export function PagoClient({
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointmentId }),
+        body: JSON.stringify({ appointmentId, t: payToken }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al procesar pago");
@@ -67,10 +66,6 @@ export function PagoClient({
 
   // Already paid
   if (paymentStatus === "paid") {
-    const teleconsultaUrl = teleRoomUrl
-      ? `/teleconsulta/${appointmentId}?token=${telePatientToken}`
-      : null;
-
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">
         <div className="w-full max-w-md text-center">
@@ -79,16 +74,9 @@ export function PagoClient({
           </div>
           <h1 className="text-2xl font-extrabold mb-2">Tu consulta ya está pagada</h1>
           <p className="text-muted-foreground mb-6">
-            No necesitas hacer nada más. Recibirás un recordatorio antes de tu cita.
+            No necesitas hacer nada más. Revisa tu WhatsApp: ahí te enviamos la liga de la videollamada y
+            recibirás un recordatorio antes de tu cita.
           </p>
-          {teleconsultaUrl && (
-            <a
-              href={teleconsultaUrl}
-              className="inline-block bg-blue-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
-            >
-              Ir a la videollamada
-            </a>
-          )}
         </div>
       </div>
     );

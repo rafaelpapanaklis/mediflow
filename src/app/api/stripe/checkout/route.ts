@@ -3,13 +3,21 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createCheckoutSession } from "@/lib/stripe-connect";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { esTokenDePagoValido } from "@/lib/teleconsulta/pago-token";
 
 export async function POST(req: NextRequest) {
   try {
-    const { appointmentId } = await req.json();
+    const { appointmentId, t } = await req.json();
 
-    // Public endpoint — auth is optional
+    // Endpoint público: lo abre el paciente desde su liga de pago (lleva el
+    // token `t`, M7 de la auditoría 30-sep-2026) o alguien de la clínica con
+    // sesión. Sin ninguna de las dos cosas, 404 (no se confirma que la cita
+    // existe).
     const ctx = await getAuthContext();
+    const conToken = esTokenDePagoValido(String(appointmentId ?? ""), typeof t === "string" ? t : null);
+    if (!conToken && !ctx) {
+      return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+    }
 
     const appointment = await prisma.appointment.findUnique({
       where: { id: appointmentId },
@@ -20,7 +28,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (!appointment) {
+    if (!appointment || (!conToken && appointment.clinic.id !== ctx?.clinicId)) {
       return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
     }
 
