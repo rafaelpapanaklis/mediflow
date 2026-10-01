@@ -21,6 +21,7 @@
  * Ni un cobro real: Stripe y Mercado Pago son dobles; la firma de Stripe se
  * salta con `constructEvent = JSON.parse`.
  */
+import { createHmac } from "node:crypto";
 import { before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { crearMonederoDoble, instalarDobles } from "./_monedero-doble";
@@ -99,11 +100,10 @@ before(async () => {
   ({ POST: mpPOST } = await import("@/app/api/webhooks/mercadopago/route"));
   wallet = await import("../wallet");
   // Cargar @prisma/client (algún import de las rutas lo hace) lee el `.env` de
-  // la carpeta y trae el MERCADOPAGO_WEBHOOK_SECRET real: con él el webhook
-  // exige firma y responde 401. Estas pruebas mandan avisos sin firmar a
-  // propósito; el secreto se quita DESPUÉS de los imports (la ruta lo lee en
-  // cada petición).
-  delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
+  // la carpeta y trae el MERCADOPAGO_WEBHOOK_SECRET real. Estas pruebas firman
+  // con un secreto PROPIO (B8: sin secreto el webhook rechaza), puesto DESPUÉS
+  // de los imports (la ruta lo lee en cada petición).
+  process.env.MERCADOPAGO_WEBHOOK_SECRET = SECRETO_MP;
 });
 
 beforeEach(() => {
@@ -342,10 +342,17 @@ test("el clinicId sale de nuestra recarga, nunca del evento", async () => {
 
 /* ── Mercado Pago, con el webhook entero ────────────────────────────────── */
 
+const SECRETO_MP = "secreto-mp-de-reembolsos";
+
 async function mp(topupId: string, paymentId: string) {
+  // x-signature como la manda MP: el manifest lleva el data.id de la QUERY.
+  const ts = "1758643200";
+  const manifiesto = `id:${paymentId.toLowerCase()};request-id:req-1;ts:${ts};`;
+  const v1 = createHmac("sha256", SECRETO_MP).update(manifiesto).digest("hex");
   const res = await mpPOST(
-    new NextRequestCtor(`http://localhost/api/webhooks/mercadopago?ref=aitopup:${topupId}`, {
+    new NextRequestCtor(`http://localhost/api/webhooks/mercadopago?ref=aitopup:${topupId}&data.id=${paymentId}`, {
       method: "POST",
+      headers: { "x-request-id": "req-1", "x-signature": `ts=${ts},v1=${v1}` },
       body: JSON.stringify({ data: { id: paymentId } }),
     }),
   );

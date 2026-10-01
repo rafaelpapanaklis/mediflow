@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPayment } from "@/lib/mercadopago";
@@ -6,6 +5,7 @@ import { verifyAndCreditMpTopup } from "@/lib/ai-wallet/mercadopago";
 import { aplicarPagoDeAnticipo } from "@/lib/anticipos/servicio.server";
 import { aplicarPagoDeFactura } from "@/lib/factura-mp/servicio.server";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { verificarFirmaMp } from "@/lib/mercadopago-firma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,17 +23,38 @@ export const dynamic = "force-dynamic";
 //  · 200 — procesado O descartado por causa DETERMINISTA (ref/payload inválido,
 //    pago inexistente o 4xx, no aprobado, ref que no coincide, monto
 //    insuficiente): reintentar la misma notificación no cambiaría nada.
-//  · 401 — x-signature inválida TENIENDO secret configurado: MP reintenta y el
-//    fallo queda visible en su dashboard (un 200 silencioso perdería pagos
-//    reales si el secret quedó mal configurado).
+//  · 401 — x-signature inválida, ausente, sin data.id en la query o con un id
+//    en el body distinto al firmado: MP reintenta y el fallo queda visible en su
+//    dashboard (un 200 silencioso perdería pagos reales si el secret quedó mal
+//    configurado).
+//  · 503 — falta MERCADOPAGO_WEBHOOK_SECRET (B8, auditoría 30-sep-2026): falla
+//    cerrado. Es configuración nuestra: MP reintenta y nada se pierde al ponerlo.
 //  · 500 — fallo TRANSITORIO (red hacia MP, 5xx/429 de MP, lectura/escritura a
 //    DB): MP reintenta y el flip idempotente PENDING→PAID evita doble crédito.
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
 
-  // ── 0. Firma HMAC (solo si MERCADOPAGO_WEBHOOK_SECRET está en el env)
-  if (!verifyMpSignature(req, url)) {
-    console.error("MercadoPago webhook: x-signature inválida; notificación rechazada");
+  // El cuerpo se lee ANTES de verificar: la firma cubre el `data.id` de la query
+  // y el pago que se procesa tiene que ser ESE (B8, auditoría 30-sep-2026).
+  const body = await req.json().catch(() => ({}) as Record<string, unknown>);
+  const data = (body as { data?: { id?: unknown } }).data;
+
+  // ── 0. Firma HMAC. Sin MERCADOPAGO_WEBHOOK_SECRET el webhook RECHAZA (falla
+  // cerrado): 503 y no 401 porque es una mala configuración nuestra, no una
+  // firma falsa; MP reintenta y no se pierde ningún pago al configurarla.
+  const firma = verificarFirmaMp({
+    secret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
+    signature: req.headers.get("x-signature"),
+    requestId: req.headers.get("x-request-id"),
+    dataIdQuery: url.searchParams.get("data.id"),
+    idsDelBody: [data?.id as string | number | undefined, (body as { id?: string | number }).id],
+  });
+  if (!firma.ok) {
+    if (firma.motivo === "sin_secreto") {
+      console.error("MercadoPago webhook: MERCADOPAGO_WEBHOOK_SECRET no está configurado; notificación rechazada (503)");
+      return NextResponse.json({ error: "webhook not configured" }, { status: 503 });
+    }
+    console.error(`MercadoPago webhook: x-signature inválida (${firma.motivo}); notificación rechazada`);
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
@@ -46,15 +67,8 @@ export async function POST(req: NextRequest) {
   const kind = ref.slice(0, idx);
   const orderId = ref.slice(idx + 1);
 
-  // id del pago: body data.id / id, con fallback a query
-  const body = await req.json().catch(() => ({}) as Record<string, unknown>);
-  const data = (body as { data?: { id?: unknown } }).data;
-  const rawPaymentId =
-    data?.id ??
-    (body as { id?: unknown }).id ??
-    url.searchParams.get("data.id") ??
-    url.searchParams.get("id");
-  const paymentId = rawPaymentId == null ? "" : String(rawPaymentId);
+  // id del pago: el FIRMADO (data.id de la query); el body solo se contrastó arriba.
+  const paymentId = firma.paymentId;
 
   try {
     // ── Recarga del monedero de IA (T4) ──────────────────────────────────────
@@ -177,40 +191,4 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ received: true });
 }
 
-// ── Firma x-signature de MercadoPago (HMAC-SHA256) ──────────────────────────
-// Manifest oficial de MP: "id:<data.id>;request-id:<x-request-id>;ts:<ts>;"
-// donde cada parte PRESENTE termina en ";", el data.id firmado es el de la
-// QUERY STRING (no el del body) y si es alfanumérico va en minúsculas. El
-// header x-signature trae "ts=<unix>,v1=<hmac-hex>".
-//
-// Comportamiento: si MERCADOPAGO_WEBHOOK_SECRET NO está en el env, NO se
-// valida nada (no rompemos prod; la re-consulta del pago a la API de MP sigue
-// siendo la capa de verdad). Con el secret configurado, firma ausente o
-// inválida → 401: MP reintenta y el fallo es visible en su dashboard, en vez
-// de descartar pagos reales en silencio con un 200.
-function verifyMpSignature(req: NextRequest, url: URL): boolean {
-  const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-  if (!secret) return true;
-
-  const header = req.headers.get("x-signature") ?? "";
-  const parts: Record<string, string> = {};
-  for (const piece of header.split(",")) {
-    const eq = piece.indexOf("=");
-    if (eq > 0) parts[piece.slice(0, eq).trim()] = piece.slice(eq + 1).trim();
-  }
-  const ts = parts.ts;
-  const v1 = parts.v1;
-  if (!ts || !v1) return false;
-
-  const dataId = url.searchParams.get("data.id");
-  const requestId = req.headers.get("x-request-id");
-  let manifest = "";
-  if (dataId) manifest += `id:${dataId.toLowerCase()};`;
-  if (requestId) manifest += `request-id:${requestId};`;
-  manifest += `ts:${ts};`;
-
-  const expected = createHmac("sha256", secret).update(manifest).digest("hex");
-  const got = Buffer.from(v1, "hex");
-  const want = Buffer.from(expected, "hex");
-  return got.length === want.length && timingSafeEqual(got, want);
-}
+// La verificación de x-signature vive en src/lib/mercadopago-firma.ts (verificarFirmaMp).
