@@ -9,6 +9,7 @@ import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
 import { ClinicStripeTab } from "@/components/admin/clinic-stripe-tab";
 import { ClinicModulesTab, type ModuleCatalogRow, type ClinicModuleRow } from "@/components/admin/clinic-modules-tab";
 import { SendMessageModal } from "@/components/admin/send-message-modal";
+import { BotonVerComoClinica } from "@/components/admin/boton-ver-como-clinica";
 import { DeleteClinicModal } from "@/components/admin/delete-clinic-modal";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -467,11 +468,8 @@ export function AdminClinicDetailClient({
               Exportar
             </ButtonNew>
           </a>
-          <a href={`/api/admin/impersonate?clinicId=${clinic.id}`} target="_blank">
-            <ButtonNew variant="primary" icon={<Eye size={14} />}>
-              Impersonar
-            </ButtonNew>
-          </a>
+          {/* M5: POST con motivo obligatorio (antes un enlace GET). */}
+          <BotonVerComoClinica clinicId={clinic.id} etiqueta="Impersonar" />
         </div>
       </div>
 

@@ -14,6 +14,7 @@
  * mismo texto y el mismo endpoint.
  */
 
+import { BotonVerComoClinica } from "@/components/admin/boton-ver-como-clinica";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Mail, MessageCircle, Eye, Archive } from "lucide-react";
@@ -438,9 +439,8 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
         <Link href={`/admin/clinics/${clinica.id}`}>
           <ButtonNew size="sm" variant="secondary" icon={<Eye size={13} />}>Ver detalle</ButtonNew>
         </Link>
-        <a href={`/api/admin/impersonate?clinicId=${clinica.id}`} target="_blank" rel="noreferrer">
-          <ButtonNew size="sm" variant="primary" icon={<Eye size={13} />}>Impersonar</ButtonNew>
-        </a>
+        {/* M5: POST con motivo obligatorio (antes un enlace GET). */}
+        <BotonVerComoClinica clinicId={clinica.id} etiqueta="Impersonar" size="sm" />
       </div>
     </div>
   );

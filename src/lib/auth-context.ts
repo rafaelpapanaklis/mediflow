@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { bloqueaDosPasos } from "@/lib/auth/two-factor-gate";
 import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-constants";
+import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
 
 export interface AuthContext {
   userId:       string;
@@ -32,6 +33,10 @@ export interface AuthContext {
   isReceptionist: boolean; // Receptionist — limited access
   canManageTeam: boolean;  // Can create/edit/delete doctors
   canViewAllData: boolean; // Can see all clinic data (not just own)
+  // M5 (auditoría 30-sep): presente solo si esta sesión es «Ver como clínica»
+  // de un admin de plataforma (admin_impersonation_sessions). El resto del
+  // contexto es el del dueño, como siempre.
+  suplantacion?: { adminUserId: string; adminEmail: string; expiresAt: Date } | null;
 }
 
 /**
@@ -69,6 +74,10 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
+
+    // M5: «Ver como clínica» vencida (2 h) o cerrada = sin sesión.
+    const suplantacion = await estadoSuplantacionDe(supabase);
+    if (suplantacion.tipo === "terminada") return null;
 
     const activeClinicId = readActiveClinicCookie();
 
@@ -193,6 +202,13 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
       isReceptionist,
       canManageTeam:   isAdmin,
       canViewAllData:  isAdmin,
+      suplantacion: suplantacion.tipo === "activa"
+        ? {
+            adminUserId: suplantacion.fila.adminUserId,
+            adminEmail: suplantacion.fila.adminEmail,
+            expiresAt: new Date(suplantacion.fila.expiresAt),
+          }
+        : null,
     };
   } catch {
     return null;

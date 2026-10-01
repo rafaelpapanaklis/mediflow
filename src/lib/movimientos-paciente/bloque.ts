@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 import type { CategoriaMovimiento } from "./catalogo";
 import { armarCambiosDelMovimiento } from "./registrar";
 import {
@@ -35,6 +36,19 @@ export async function registrarMovimientosEnBloque(args: {
 }): Promise<number> {
   const { clinicId, userId } = args;
   if (!clinicId || !userId) return 0;
+  // «Ver como clínica» (decisión A): una importación hecha por el admin no deja
+  // movimientos en la clínica; se anota una sola acción en la bitácora de admin.
+  const suplantacion = await suplantacionDeEstaPeticion();
+  if (suplantacion) {
+    await anotarAccionDeSuplantacion(suplantacion, {
+      clinicId,
+      entityType: "movimientos-en-bloque",
+      entityId: args.movimientos[0]?.entityId ?? "n/a",
+      action: "create",
+      changes: { filas: args.movimientos.length, muestra: args.movimientos.slice(0, 20) },
+    });
+    return 0;
+  }
   const filas = args.movimientos
     .filter((m) => m.patientId && m.entityId && m.texto)
     .map((m) => ({

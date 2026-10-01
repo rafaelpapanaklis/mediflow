@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { desviarSiSuplantacion } from "@/lib/admin/suplantacion";
 import { prisma } from "@/lib/prisma";
 import { retenerSiHayAlcance } from "./una-accion";
 
@@ -103,6 +104,11 @@ async function crearPorPrisma(fila: FilaBitacora): Promise<void> {
  * paciente) decide qué hacer; ninguno deja que la acción principal falle.
  */
 export async function insertarFilaBitacora(fila: FilaBitacora): Promise<void> {
+  // «Ver como clínica» (decisión A de Rafael, 1-oct): lo que hace el admin de
+  // plataforma va SOLO a su bitácora, nunca a la de la clínica ni a nombre de
+  // nadie de la clínica. Va antes del alcance: una acción suplantada no deja
+  // ni filas sueltas ni resumen en Movimientos.
+  if (await desviarSiSuplantacion(fila)) return;
   // Dentro de `conUnSoloMovimiento` la fila se retiene: el alcance la escribe al terminar, junto con su resumen.
   if (retenerSiHayAlcance(fila)) return;
   const db = prisma as unknown as { $executeRaw?: unknown };

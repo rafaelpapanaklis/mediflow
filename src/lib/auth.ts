@@ -2,6 +2,7 @@ import { cache } from "react";
 import { authDebug } from "@/lib/auth/debug-log";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
@@ -22,6 +23,9 @@ import {
 export const getSession = cache(async () => {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  // M5 (auditoría 30-sep): una sesión de «Ver como clínica» vencida (2 h) o
+  // cerrada vale como SIN sesión, aunque el navegador conserve las cookies.
+  if (user && (await estadoSuplantacionDe(supabase)).tipo === "terminada") return null;
   return user;
 });
 

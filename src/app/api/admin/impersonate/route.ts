@@ -1,25 +1,92 @@
 import { origenPublicoDe } from "@/lib/url-publica";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { clienteAdminSupabase } from "@/lib/admin/supabase-admin";
 import { prisma } from "@/lib/prisma";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
 import { getAdminSession } from "@/lib/admin-auth";
 import { setVerComoCookie } from "@/lib/auth/two-factor-cookie";
+import { createClient as crearClienteDeSesion } from "@/lib/supabase/server";
+import {
+  DURACION_SUPLANTACION_MS,
+  NOTA_MIN,
+  SQL_SUPLANTACION,
+  limpiarNota,
+  sessionIdDelToken,
+} from "@/lib/admin/suplantacion-core";
+import { registrarSuplantacion, tablaDeSuplantacionLista } from "@/lib/admin/suplantacion";
 
+/**
+ * «Ver como clínica» (auditoría 30-sep-2026, M5).
+ *
+ * Antes: un GET que generaba un magic link del dueño y abría una sesión normal
+ * de Supabase (30 días renovables), con la nota de auditoría «si se puede».
+ * Ahora:
+ *   · solo POST (el middleware exige Origin de esta web en /api/admin);
+ *   · la NOTA del admin es obligatoria y se guarda ANTES de abrir nada — si no
+ *     se pudo escribir, no se entra;
+ *   · la sesión de Supabase se crea aquí, en el servidor, y se registra por su
+ *     session_id en admin_impersonation_sessions con vencimiento de 2 h
+ *     (@/lib/admin/suplantacion): al vencer, el panel la trata como sin sesión;
+ *   · sin la tabla (SQL sin pegar) contesta 503 y no abre sesión.
+ * La bitácora de la clínica (audit_logs / Movimientos) queda como estaba:
+ * pausa de Rafael del 1-oct, pendiente de que decida cómo se muestra.
+ */
+
+function pagina(titulo: string, texto: string, clinicId: string | null, status: number): NextResponse {
+  const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+  const volver = clinicId ? `<a href="/admin/clinics/${encodeURIComponent(clinicId)}" style="color:#3b82f6;text-decoration:none">← Volver al perfil de la clínica</a>` : "";
+  return new NextResponse(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title>
+<style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}</style></head>
+<body><div style="text-align:center;max-width:480px;padding:24px"><h2 style="color:#f59e0b">${esc(titulo)}</h2><p style="color:#94a3b8">${esc(texto)}</p>${volver}</div></body></html>`,
+    { status, headers: { "Content-Type": "text/html; charset=utf-8" } },
+  );
+}
+
+/** GET ya no abre sesión (era un GET con efectos, fuera del chequeo de Origin). */
 export async function GET(req: NextRequest) {
-  // 1. Verify admin is authenticated (sesión real en BD)
+  return pagina(
+    "Usa el botón «Ver como clínica»",
+    "Entrar como una clínica ahora se hace desde su ficha en /admin, escribiendo el motivo.",
+    req.nextUrl.searchParams.get("clinicId"),
+    405,
+  );
+}
+
+async function leerCampos(req: NextRequest): Promise<{ clinicId: string | null; nota: unknown }> {
+  const tipo = req.headers.get("content-type") ?? "";
+  try {
+    if (tipo.includes("application/json")) {
+      const b = (await req.json()) as { clinicId?: unknown; nota?: unknown };
+      return { clinicId: typeof b.clinicId === "string" ? b.clinicId : null, nota: b.nota };
+    }
+    const f = await req.formData();
+    const c = f.get("clinicId");
+    return { clinicId: typeof c === "string" ? c : null, nota: f.get("nota") };
+  } catch {
+    return { clinicId: null, nota: null };
+  }
+}
+
+export async function POST(req: NextRequest) {
+  // 1. Admin de plataforma con sesión real en BD.
   const admin = await getAdminSession();
   if (!admin) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // 2. Get clinicId from query
-  const clinicId = req.nextUrl.searchParams.get("clinicId");
+  // 2. Clínica y nota (obligatoria).
+  const campos = await leerCampos(req);
+  const clinicId = campos.clinicId?.trim() || null;
   if (!clinicId) {
-    return NextResponse.json({ error: "clinicId requerido" }, { status: 400 });
+    return pagina("Falta la clínica", "No llegó el id de la clínica.", null, 400);
+  }
+  const nota = limpiarNota(campos.nota);
+  if (!nota) {
+    return pagina("Escribe el motivo", `Para entrar como la clínica hay que escribir el motivo (mínimo ${NOTA_MIN} caracteres).`, clinicId, 400);
   }
 
-  // 3. Check Service Role Key is configured
+  // 3. Service Role Key configurada
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
     return new NextResponse(`
@@ -50,63 +117,93 @@ export async function GET(req: NextRequest) {
     `, { headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 
-  // 4. Get clinic owner email
+  // 4. Sin registro no se entra: la tabla tiene que existir ANTES de abrir nada.
+  if (!(await tablaDeSuplantacionLista())) {
+    return pagina(
+      "Falta un paso en la base",
+      `«Ver como clínica» necesita la tabla de suplantaciones. Pega ${SQL_SUPLANTACION} en Supabase y vuelve a intentarlo.`,
+      clinicId,
+      503,
+    );
+  }
+
+  // 5. Dueño de la clínica
   const user = await prisma.user.findFirst({
     where: { clinicId, role: "SUPER_ADMIN" },
-    select: { supabaseId: true, email: true, firstName: true, lastName: true },
+    select: { id: true, supabaseId: true, email: true, firstName: true, lastName: true },
   });
 
   if (!user) {
     return NextResponse.json({ error: "No se encontró el dueño de la clínica" }, { status: 404 });
   }
 
-  // 5. Create admin Supabase client with service role
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const ua = req.headers.get("user-agent")?.slice(0, 200) ?? null;
 
-  // 6. Generate magic link for the user
+  // 6. La nota del admin, ANTES de abrir la sesión. Mismo registro de siempre
+  // (AdminClinicNote, que se ve en /admin), ahora con el motivo; si no se pudo
+  // escribir, no se entra.
+  try {
+    await prisma.adminClinicNote.create({
+      data: {
+        clinicId,
+        authorId: null,
+        content: `[IMPERSONATION] admin ${admin.user.email} accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip ?? "unknown"} · UA ${ua ?? "unknown"} · ${new Date().toISOString()} · motivo: ${nota}`,
+      },
+    });
+  } catch (logErr) {
+    console.error("[impersonate] audit log failed:", logErr);
+    return pagina("No se pudo registrar la entrada", "La nota de auditoría no se guardó, así que no se abre la sesión. Inténtalo de nuevo.", clinicId, 503);
+  }
+
+  // 7. Enlace de un solo uso del dueño, canjeado AQUÍ (no en el navegador del admin):
+  // la sesión nace en el servidor y conocemos su session_id para registrarla.
+  const supabaseAdmin = clienteAdminSupabase(serviceRoleKey);
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: "magiclink",
     email: user.email,
     options: { redirectTo: `${origenPublicoDe(req, req.url)}/dashboard` },
   });
-
   if (error || !data?.properties?.hashed_token) {
     console.error("Error generating magic link:", error);
     return NextResponse.json({ error: "Error al generar acceso temporal" }, { status: 500 });
   }
 
-  // Audit trail: AdminClinicNote sirve como bitácora de impersonación (authorId=null
-  // porque el AdminUser de plataforma no es una fila User; el admin queda en el
-  // content vía su email). La TTL del magic link la hereda de Supabase.
-  try {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-    const ua = req.headers.get("user-agent")?.slice(0, 200) ?? "unknown";
-    await prisma.adminClinicNote.create({
-      data: {
-        clinicId,
-        authorId: null,
-        content: `[IMPERSONATION] admin ${admin.user.email} accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip} · UA ${ua} · ${new Date().toISOString()}`,
-      },
-    });
-    console.warn("[impersonate]", JSON.stringify({ clinicId, admin: admin.user.email, targetUser: user.email, ip, at: new Date().toISOString() }));
-  } catch (logErr) {
-    console.error("[impersonate] audit log failed:", logErr);
+  const supabase = crearClienteDeSesion();
+  try { await supabase.auth.signOut(); } catch { /* sin sesión previa en este navegador */ }
+  const canje = await supabase.auth.verifyOtp({ type: "email", token_hash: data.properties.hashed_token });
+  const sessionId = sessionIdDelToken(canje.data?.session?.access_token);
+  if (canje.error || !sessionId) {
+    console.error("[impersonate] verifyOtp falló:", canje.error?.message);
+    try { await supabase.auth.signOut(); } catch { /* nada que cerrar */ }
+    return NextResponse.json({ error: "Error al abrir la sesión temporal" }, { status: 500 });
   }
 
-  // 7. Build the magic link URL and redirect
-  const magicLinkUrl = new URL(`${origenPublicoDe(req, req.url)}/api/auth/callback`);
-  magicLinkUrl.searchParams.set("token_hash", data.properties.hashed_token);
-  magicLinkUrl.searchParams.set("type", "email");
-  magicLinkUrl.searchParams.set("next", "/dashboard");
+  // 8. Registro de la sesión. Si no queda escrito, se cierra lo abierto y no se entra.
+  const expiresAt = new Date(Date.now() + DURACION_SUPLANTACION_MS);
+  try {
+    await registrarSuplantacion({
+      adminUserId: admin.user.id,
+      adminEmail: admin.user.email,
+      clinicId,
+      targetUserId: user.id,
+      targetSupabaseId: user.supabaseId,
+      supabaseSessionId: sessionId,
+      nota,
+      ip,
+      userAgent: ua,
+      expiresAt,
+    });
+  } catch (e) {
+    console.error("[impersonate] registro de la sesión falló:", e);
+    try { await supabase.auth.signOut(); } catch { /* best effort */ }
+    return pagina("No se pudo registrar la sesión", "No se abre la sesión sin su registro. Inténtalo de nuevo.", clinicId, 503);
+  }
+  console.warn("[impersonate]", JSON.stringify({ clinicId, admin: admin.user.email, targetUser: user.email, ip, expiresAt: expiresAt.toISOString() }));
 
-  // Add a banner param so the dashboard knows we're in admin mode
-  const finalUrl = `${origenPublicoDe(req, req.url)}/auth/confirm?token_hash=${data.properties.hashed_token}&type=email&next=/dashboard`;
-
-  const response = NextResponse.redirect(finalUrl);
+  // 303: el navegador sigue con GET a /dashboard. Las cookies de Supabase las
+  // escribió el cliente SSR de arriba en esta misma respuesta.
+  const response = NextResponse.redirect(`${origenPublicoDe(req, req.url)}/dashboard`, 303);
   // Setear la cookie activeClinicId firmada para la clínica impersonada.
   // Sin esto, getAuthContext cae al fallback (primer User por createdAt asc)
   // cuando el super-admin pertenece a múltiples clínicas.
