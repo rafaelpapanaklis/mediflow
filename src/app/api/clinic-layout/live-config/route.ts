@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import {
   hashLivePassword,
   isValidSlug,
+  contrasenaLiveEsAntigua,
+  problemaDeContrasenaLive,
+  LIVE_PASSWORD_MIN,
 } from "@/lib/floor-plan/live-config";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +37,37 @@ function isMissingTable(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as { code?: string };
   return e.code === "P2021" || e.code === "P2022" || e.code === "42P01" || e.code === "42703";
+}
+
+/**
+ * GET /api/clinic-layout/live-config — estado de la contraseña del Modo En Vivo
+ * para el panel de compartir: si hay, y si es de ANTES de la regla de 8
+ * caracteres (M12, auditoría 30-sep-2026) para pedir que la actualicen. Nunca
+ * devuelve el hash.
+ */
+export async function GET() {
+  try {
+    const dbUser = await getDbUser();
+    if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const denied = denyIfMissingPermission(dbUser, "clinicLayout.edit");
+    if (denied) return denied;
+    if (!dbUser.clinicId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+    const c = await prisma.clinic.findUnique({
+      where: { id: dbUser.clinicId },
+      select: { liveModeEnabled: true, liveModeSlug: true, liveModePassword: true },
+    });
+    return NextResponse.json({
+      liveModeEnabled: Boolean(c?.liveModeEnabled),
+      liveModeSlug: c?.liveModeSlug ?? null,
+      hasPassword: Boolean(c?.liveModePassword),
+      passwordLegacy: contrasenaLiveEsAntigua(c?.liveModePassword),
+    });
+  } catch (err) {
+    if (isMissingTable(err)) return NextResponse.json({ error: "schema_not_migrated" }, { status: 503 });
+    console.error("[GET /api/clinic-layout/live-config]", err);
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
+  }
 }
 
 /**
@@ -92,18 +126,35 @@ export async function PATCH(req: NextRequest) {
         data.liveModeSlug = s;
       }
     }
+    // M12 (auditoría 30-sep-2026): con el Modo En Vivo encendido la contraseña es
+    // OBLIGATORIA y las nuevas son de mínimo 8 caracteres. Las que ya existen
+    // (de 4+) siguen funcionando; el GET avisa que conviene actualizarlas.
+    const actual = await prisma.clinic.findUnique({
+      where: { id: dbUser.clinicId },
+      select: { liveModeEnabled: true, liveModePassword: true },
+    });
+    const problema = problemaDeContrasenaLive({
+      enabledFinal: parsed.data.liveModeEnabled ?? Boolean(actual?.liveModeEnabled),
+      hayContrasenaGuardada: Boolean(actual?.liveModePassword),
+      nueva: parsed.data.liveModePassword,
+    });
+    if (problema === "password_too_short") {
+      return NextResponse.json(
+        { error: "password_too_short", hint: `Mínimo ${LIVE_PASSWORD_MIN} caracteres.` },
+        { status: 400 },
+      );
+    }
+    if (problema === "password_required") {
+      return NextResponse.json(
+        { error: "password_required", hint: "Para compartir En Vivo hace falta una contraseña." },
+        { status: 400 },
+      );
+    }
     if (parsed.data.liveModePassword !== undefined) {
-      if (parsed.data.liveModePassword === null || parsed.data.liveModePassword === "") {
-        data.liveModePassword = null;
-      } else {
-        if (parsed.data.liveModePassword.length < 4) {
-          return NextResponse.json(
-            { error: "password_too_short", hint: "Mínimo 4 caracteres." },
-            { status: 400 },
-          );
-        }
-        data.liveModePassword = await hashLivePassword(parsed.data.liveModePassword);
-      }
+      data.liveModePassword =
+        parsed.data.liveModePassword === null || parsed.data.liveModePassword === ""
+          ? null
+          : await hashLivePassword(parsed.data.liveModePassword);
     }
 
     const updated = await prisma.clinic.update({
@@ -126,6 +177,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({
       ...updated,
       hasPassword: Boolean(clinic?.liveModePassword),
+      passwordLegacy: contrasenaLiveEsAntigua(clinic?.liveModePassword),
     });
   } catch (err) {
     if (isMissingTable(err)) {

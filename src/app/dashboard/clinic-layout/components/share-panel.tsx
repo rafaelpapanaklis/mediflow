@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Copy,
@@ -40,11 +40,28 @@ export function SharePanel({
   const [enabled, setEnabled] = useState(initial.enabled);
   const [slug, setSlug] = useState(initial.slug ?? slugify(clinicName));
   const [hasPassword, setHasPassword] = useState(initial.hasPassword);
+  // M12: contraseña anterior a la regla de 8 caracteres → se pide actualizarla.
+  const [passwordLegacy, setPasswordLegacy] = useState(false);
   const [password, setPassword] = useState("");
   const [showPasswordRaw, setShowPasswordRaw] = useState(false);
   const [showPatientNames, setShowPatientNames] = useState(initial.showPatientNames);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
+
+  // El panel abre sin saber si ya hay contraseña (antes solo lo averiguaba al
+  // guardar): se lee del servidor, que además dice si es una de las antiguas.
+  useEffect(() => {
+    let cancelado = false;
+    fetch("/api/clinic-layout/live-config", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelado || !d) return;
+        setHasPassword(Boolean(d.hasPassword));
+        setPasswordLegacy(Boolean(d.passwordLegacy));
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, []);
 
   const publicUrl =
     typeof window !== "undefined" && slug ? `${window.location.origin}/live/${slug}` : "";
@@ -79,6 +96,8 @@ export function SharePanel({
           toast.error(t("pages.clinicLayout.shareInvalidSlug"));
         } else if (err.error === "password_too_short") {
           toast.error(t("pages.clinicLayout.sharePasswordTooShort"));
+        } else if (err.error === "password_required") {
+          toast.error(t("pages.clinicLayout.sharePasswordRequired"));
         } else {
           toast.error(t("pages.clinicLayout.shareSaveFailed"));
         }
@@ -86,6 +105,7 @@ export function SharePanel({
       }
       const data = await res.json();
       setHasPassword(Boolean(data.hasPassword));
+      setPasswordLegacy(Boolean(data.passwordLegacy));
       setPassword("");
       setSavedOk(true);
       toast.success(t("pages.clinicLayout.shareConfigSaved"));
@@ -111,12 +131,21 @@ export function SharePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ liveModePassword: null }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        // Con En Vivo encendido la contraseña es obligatoria: no se puede quitar.
+        throw new Error(err?.error === "password_required" ? "password_required" : "x");
+      }
       setHasPassword(false);
+      setPasswordLegacy(false);
       setPassword("");
       toast.success(t("pages.clinicLayout.sharePasswordRemoved"));
-    } catch {
-      toast.error(t("pages.clinicLayout.sharePasswordRemoveFailed"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error && e.message === "password_required"
+          ? t("pages.clinicLayout.sharePasswordRequired")
+          : t("pages.clinicLayout.sharePasswordRemoveFailed"),
+      );
     } finally {
       setSaving(false);
     }
@@ -249,6 +278,11 @@ export function SharePanel({
               >
                 {t("pages.clinicLayout.shareRemovePasswordLink")}
               </button>
+            )}
+            {hasPassword && passwordLegacy && (
+              <span className={shareStyles.fieldHint} role="status">
+                {t("pages.clinicLayout.sharePasswordLegacy")}
+              </span>
             )}
             <span className={shareStyles.fieldHint}>
               {t("pages.clinicLayout.sharePasswordHint")}

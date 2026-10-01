@@ -3,7 +3,12 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { liveCookieName, verifyLivePassword, packLiveUnlockCookie, LIVE_UNLOCK_TTL_HOURS } from "@/lib/floor-plan/live-config";
-import { rateLimit } from "@/lib/rate-limit";
+import { persistentRateLimit, failbanGuard, recordAuthFailure, recordAuthSuccess } from "@/lib/failban";
+
+// M12: bloqueo PERSISTENTE por IP y por clínica (slug) tras 6 fallos en 15 min,
+// con espera creciente (1 → 30 min). Antes era un Map en memoria de 10 intentos
+// por IP cada 5 minutos: cada instancia serverless lo reiniciaba.
+const UNLOCK_POLICY = { threshold: 6, windowSec: 15 * 60, baseLockSec: 60, maxLockSec: 30 * 60 };
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +34,15 @@ export async function POST(req: NextRequest, { params }: Params) {
   const slug = (params.slug ?? "").toLowerCase();
   try {
     // Endpoint publico (sin auth) que verifica password contra bcrypt hash —
-    // vulnerable a brute force. Limita a 10 intentos por IP cada 5 minutos.
-    // Es generoso para typos legitimos pero detiene ataques automatizados.
-    const rl = rateLimit(req, 10, 5 * 60 * 1000);
+    // vulnerable a brute force. Anti-flood persistente + lockout persistente
+    // por fallos (IP y slug), antes de tocar la base.
+    const rl = await persistentRateLimit(req, { limit: 20, windowSec: 300, scope: "live-unlock" });
     if (rl) return rl;
 
     if (!slug) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+    const bloqueado = await failbanGuard(req, { scope: "live-unlock", account: slug, policy: UNLOCK_POLICY });
+    if (bloqueado) return bloqueado;
 
     const body = await req.json().catch(() => null);
     const parsed = BodySchema.safeParse(body);
@@ -56,9 +64,11 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const ok = await verifyLivePassword(parsed.data.password, clinic.liveModePassword);
     if (!ok) {
+      await recordAuthFailure(req, { scope: "live-unlock", account: slug, policy: UNLOCK_POLICY });
       // Constant-time-ish: bcrypt.compare ya usa timing-safe.
       return NextResponse.json({ error: "invalid_password" }, { status: 401 });
     }
+    await recordAuthSuccess(req, { scope: "live-unlock", account: slug });
 
     const res = NextResponse.json({ ok: true });
 

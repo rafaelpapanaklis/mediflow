@@ -81,8 +81,68 @@ export function verifyLiveUnlockCookie(
   return exp > now;
 }
 
+/** Mínimo de la contraseña del Modo En Vivo para las NUEVAS y los cambios (M12). */
+export const LIVE_PASSWORD_MIN = 8;
+export const LIVE_PASSWORD_MAX = 200;
+/**
+ * Costo bcrypt de las contraseñas nuevas. Las de antes se hashearon con 10 y
+ * podían ser de 4 caracteres: el costo del hash en la base es la marca (sin
+ * columna nueva) que dice «esta contraseña es anterior a la regla de 8».
+ */
+export const LIVE_PASSWORD_ROUNDS = 12;
+
 export async function hashLivePassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, 10);
+  return bcrypt.hash(plain, LIVE_PASSWORD_ROUNDS);
+}
+
+/** Texto de la contraseña nueva válido: 8–200 caracteres. */
+export function esContrasenaLiveValida(plain: unknown): plain is string {
+  return typeof plain === "string" && plain.length >= LIVE_PASSWORD_MIN && plain.length <= LIVE_PASSWORD_MAX;
+}
+
+/**
+ * true si el hash guardado es de ANTES de la regla de 8 caracteres (costo bcrypt
+ * menor al actual): sigue funcionando, pero hay que pedirle a la clínica que la
+ * actualice. Sin hash (sin contraseña) no aplica.
+ */
+export function contrasenaLiveEsAntigua(hash: string | null | undefined): boolean {
+  if (!hash) return false;
+  const m = /^\$2[abxy]\$(\d{2})\$/.exec(hash);
+  if (!m) return true; // formato desconocido: mejor pedir que la cambien
+  return Number(m[1]) < LIVE_PASSWORD_ROUNDS;
+}
+
+/**
+ * ¿Puede quedar así la clínica? Con el Modo En Vivo ENCENDIDO tiene que haber
+ * contraseña (la nueva, o la que ya había y no se está quitando). Apagado, no
+ * hace falta. Devuelve el código de error o null.
+ */
+export function problemaDeContrasenaLive(o: {
+  enabledFinal: boolean;
+  hayContrasenaGuardada: boolean;
+  nueva: string | null | undefined; // undefined = no se toca; null/"" = quitar
+}): "password_required" | "password_too_short" | null {
+  const quitando = o.nueva === null || o.nueva === "";
+  if (typeof o.nueva === "string" && o.nueva !== "" && !esContrasenaLiveValida(o.nueva)) {
+    return "password_too_short";
+  }
+  const quedara = quitando ? false : (typeof o.nueva === "string" ? true : o.hayContrasenaGuardada);
+  if (o.enabledFinal && !quedara) return "password_required";
+  return null;
+}
+
+/**
+ * La fecha que pide `?date=` a la vista pública: solo hoy, ayer o mañana EN LA
+ * ZONA DE LA CLÍNICA (lo que un tablero necesita al cruzar la medianoche). Más
+ * allá, nadie recorre la agenda histórica ni la futura de una clínica por URL.
+ */
+export function fechaLiveEnRango(dateISO: string, hoyISO: string): boolean {
+  const aMs = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const dias = Math.abs(aMs(dateISO) - aMs(hoyISO)) / 86_400_000;
+  return Number.isFinite(dias) && dias <= 1;
 }
 
 export async function verifyLivePassword(plain: string, hash: string): Promise<boolean> {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { liveCookieName, verifyLiveUnlockCookie } from "@/lib/floor-plan/live-config";
+import { liveCookieName, verifyLiveUnlockCookie, fechaLiveEnRango } from "@/lib/floor-plan/live-config";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import {
@@ -88,10 +88,14 @@ export async function GET(req: NextRequest, { params }: Params) {
      * esta clínica es el servidor, mirando su zona.
      */
     const dateParam = req.nextUrl.searchParams.get("date");
-    const dayISO =
-      dateParam && isValidDateISO(dateParam)
-        ? dateParam
-        : todayInTz(clinic.timezone);
+    const hoyISO = todayInTz(clinic.timezone);
+    // M12 (auditoría 30-sep-2026): `?date=` solo vale para hoy, ayer o mañana en
+    // la zona de la clínica. Sin esto, cualquiera con el slug (que sale del
+    // nombre de la clínica) recorría su agenda histórica y futura día por día.
+    if (dateParam && (!isValidDateISO(dateParam) || !fechaLiveEnRango(dateParam, hoyISO))) {
+      return NextResponse.json({ error: "date_out_of_range" }, { status: 400 });
+    }
+    const dayISO = dateParam ?? hoyISO;
     const { startUtc: dayStart, endUtc: dayEnd } = calendarDayRangeUtc(
       dayISO,
       clinic.timezone,
