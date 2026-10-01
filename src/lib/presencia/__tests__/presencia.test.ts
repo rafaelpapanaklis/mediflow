@@ -32,9 +32,11 @@ import {
   contarConEspera,
   leerClinicasEnLinea,
   procesarLatido,
+  _fijarRedisParaPruebas,
+  _luaEnPausa,
   type IdentidadLatido,
 } from "../presencia-store";
-import { RedisFalso } from "./redis-falso";
+import { RedisConEvalRoto, RedisFalso } from "./redis-falso";
 
 const MIN = 60_000;
 
@@ -103,8 +105,7 @@ test("la duración se escribe legible", () => {
 function fabrica(redis: RedisFalso | null) {
   let resoluciones = 0;
   const identidades: Record<string, IdentidadLatido | null> = {};
-  const entrada = (o: { supabaseId?: string; sesion?: string; ruta?: unknown } = {}) => ({
-    supabaseId: o.supabaseId ?? "sb-ana",
+  const entrada = (o: { sesion?: string; ruta?: unknown } = {}) => ({
     sesion: o.sesion ?? "ses-1",
     clinicaCookie: "clin-A" as string | null,
     ruta: o.ruta ?? "/dashboard/agenda",
@@ -141,10 +142,10 @@ test("una señal pone a la clínica en línea y a los 5 min sin señal deja de e
 test("dos usuarios de la misma clínica son UNA clínica en línea con dos usuarios; otra clínica suma", async () => {
   const r = new RedisFalso();
   const a = fabrica(r), b = fabrica(r), c = fabrica(r);
-  await a.latir(ANA, { supabaseId: "sb-ana", sesion: "s-ana", ruta: "/dashboard/agenda" });
-  await b.latir(LUIS, { supabaseId: "sb-luis", sesion: "s-luis", ruta: "/dashboard/caja" });
+  await a.latir(ANA, { sesion: "s-ana", ruta: "/dashboard/agenda" });
+  await b.latir(LUIS, { sesion: "s-luis", ruta: "/dashboard/caja" });
   assert.equal(await contarClinicasEnLinea(r, r.reloj), 1);
-  await c.latir(BETO, { supabaseId: "sb-beto", sesion: "s-beto", ruta: "/dashboard/billing" });
+  await c.latir(BETO, { sesion: "s-beto", ruta: "/dashboard/billing" });
   assert.equal(await contarClinicasEnLinea(r, r.reloj), 2);
 
   const filas = (await leerClinicasEnLinea(r, r.reloj))!;
@@ -163,7 +164,7 @@ test("«en línea desde» es la primera señal de la sesión continua y sobreviv
   for (let i = 0; i < 4; i++) { r.avanzar(LATIDO_MS); await latir(ANA); }
   const [f] = (await leerClinicasEnLinea(r, r.reloj))!;
   assert.equal(f.usuarios[0].desde, inicio);
-  assert.equal(f.desde, inicio);
+  assert.equal(armarClinicasEnLinea([f], new Map(), r.reloj)[0].desde, inicio, "la clínica: la primera señal de sus usuarios en línea");
   assert.equal(f.usuarios[0].ultimaSenal, r.reloj);
 });
 
@@ -177,7 +178,6 @@ test("si la sesión se corta más de 5 min, la siguiente señal empieza una sesi
   await latir(ANA);
   const [f] = (await leerClinicasEnLinea(r, r.reloj))!;
   assert.equal(f.usuarios[0].desde, vuelta, "desde se reinicia: ya no es la sesión de hace 6 min");
-  assert.equal(f.desde, vuelta);
 });
 
 test("la pantalla de cada usuario se actualiza con su última señal", async () => {
@@ -209,19 +209,20 @@ test("«Ver como clínica» (cuenta:false) no suma ni escribe nada de presencia"
   assert.deepEqual(res, { estado: 200, guardado: false, motivo: "no-cuenta" });
   assert.equal(await contarClinicasEnLinea(r, r.reloj), 0);
   assert.deepEqual((await leerClinicasEnLinea(r, r.reloj))!, []);
-  assert.ok(!r.llaves().some((k) => k.startsWith("pres:u:") || k.startsWith("pres:c:") || k === "pres:clinicas"));
+  assert.ok(!r.llaves().includes("pres:z"), "no entra al índice de quién está en línea");
+  assert.ok(r.llaves().some((k) => k.startsWith("pres:s:")), "solo se recuerda la decisión, para no volver a preguntar a la base");
 });
 
 test("la sesión real del dueño y la de «Ver como clínica» (mismo usuario) no se mezclan", async () => {
   const r = new RedisFalso();
   const real = fabrica(r), suplantada = fabrica(r);
   // Mismo supabaseId; solo cambia el session_id de Supabase.
-  await suplantada.latir({ ...ANA, cuenta: false }, { supabaseId: "sb-dueño", sesion: "ses-admin-viendo" });
+  await suplantada.latir({ ...ANA, cuenta: false }, { sesion: "ses-admin-viendo" });
   assert.equal(await contarClinicasEnLinea(r, r.reloj), 0);
-  await real.latir(ANA, { supabaseId: "sb-dueño", sesion: "ses-real" });
+  await real.latir(ANA, { sesion: "ses-real" });
   assert.equal(await contarClinicasEnLinea(r, r.reloj), 1, "la sesión real sí cuenta");
   // Y la suplantada, otra vez, sigue sin contar: su identidad en caché es la suya.
-  const otra = await suplantada.latir({ ...ANA, cuenta: true }, { supabaseId: "sb-dueño", sesion: "ses-admin-viendo" });
+  const otra = await suplantada.latir({ ...ANA, cuenta: true }, { sesion: "ses-admin-viendo" });
   assert.deepEqual(otra, { estado: 200, guardado: false, motivo: "no-cuenta" });
   assert.equal(suplantada.resoluciones(), 1, "no se vuelve a resolver: la decisión quedó en caché");
 });
@@ -231,7 +232,7 @@ test("sin sesión con acceso (2FA pendiente, plan vencido…) contesta 401 y no 
   const { latir } = fabrica(r);
   assert.deepEqual(await latir(null), { estado: 401 });
   assert.equal(await contarClinicasEnLinea(r, r.reloj), 0);
-  assert.ok(!r.llaves().some((k) => k.startsWith("pres:id:")), "tampoco se cachea el «no»");
+  assert.ok(!r.llaves().some((k) => k.startsWith("pres:s:")), "tampoco se cachea el «no»");
 });
 
 // ── Sin base de datos en cada señal ──
@@ -244,14 +245,25 @@ test("la identidad se resuelve con la base UNA vez: las 25 señales siguientes (
   assert.equal(resoluciones(), 1, "26 señales, 1 resolución (la de la primera)");
 });
 
-test("en una hora de uso a una señal por minuto la base se consulta 6 veces, no 60", async () => {
+test("en una hora de uso a una señal por minuto la base se consulta 1 vez, no 60 (la identidad vive mientras la sesión da señales)", async () => {
   const r = new RedisFalso();
   const { latir, resoluciones } = fabrica(r);
   for (let i = 0; i < 60; i++) { await latir(ANA); r.avanzar(LATIDO_MS); }
-  assert.equal(resoluciones(), 6, "una cada 10 min, que es lo que dura la identidad en Redis");
+  assert.equal(resoluciones(), 1);
 });
 
-test("la identidad en caché caduca (10 min): ahí sí se vuelve a preguntar, una vez", async () => {
+test("en régimen normal una señal es UN viaje a Redis (dos la primera de la sesión: descubrir que falta la identidad y guardarla)", async () => {
+  const r = new RedisFalso();
+  const { latir } = fabrica(r);
+  await latir(ANA);
+  assert.equal(r.viajes, 3, "primera señal en el camino de reserva: GET, GET + SET/ZADD con la identidad");
+  const antes = r.viajes;
+  r.avanzar(LATIDO_MS);
+  await latir(ANA);
+  assert.equal(r.viajes - antes, 2, "camino de reserva: GET y luego SET+ZADD (con Lua sería 1 solo)");
+});
+
+test("la identidad en caché caduca a los 10 min SIN señales: ahí sí se vuelve a preguntar, una vez", async () => {
   const r = new RedisFalso();
   const { latir, resoluciones } = fabrica(r);
   await latir(ANA);
@@ -278,7 +290,7 @@ test("el servidor de la señal no importa Prisma (ni el almacén ni la ruta salv
 
 // ── Límite ──
 
-test(`un usuario no pasa de ${MAX_LATIDOS_POR_MINUTO} señales por minuto: la siguiente es 429`, async () => {
+test(`una sesión no pasa de ${MAX_LATIDOS_POR_MINUTO} señales por minuto: la siguiente es 429`, async () => {
   const r = new RedisFalso();
   const { latir } = fabrica(r);
   // Arranca en el segundo 0 de un minuto: así las 11 caen en el mismo minuto.
@@ -292,18 +304,18 @@ test(`un usuario no pasa de ${MAX_LATIDOS_POR_MINUTO} señales por minuto: la si
   // Cien intentos más: todos rechazados, y no escriben nada nuevo.
   const antes = r.volcado();
   for (let i = 0; i < 100; i++) assert.equal((await latir(ANA)).estado, 429);
-  assert.equal(r.volcado().replace(/pres:rl:[^"]+",\d+/g, ""), antes.replace(/pres:rl:[^"]+",\d+/g, ""));
+  assert.equal(r.volcado(), antes, "las rechazadas no escriben nada");
   // Al minuto siguiente vuelve a pasar.
   r.avanzar(MIN);
   assert.equal((await latir(ANA)).estado, 200);
 });
 
-test("el límite es por usuario: otro usuario no se queda sin señal porque Ana se pasó", async () => {
+test("el límite es por sesión: otro usuario no se queda sin señal porque Ana se pasó", async () => {
   const r = new RedisFalso();
   r.reloj = Math.floor(r.reloj / MIN) * MIN;
   const a = fabrica(r), b = fabrica(r);
-  for (let i = 0; i < MAX_LATIDOS_POR_MINUTO + 3; i++) await a.latir(ANA, { supabaseId: "sb-ana", sesion: "s-ana" });
-  assert.equal((await b.latir(LUIS, { supabaseId: "sb-luis", sesion: "s-luis" })).estado, 200);
+  for (let i = 0; i < MAX_LATIDOS_POR_MINUTO + 3; i++) await a.latir(ANA, { sesion: "s-ana" });
+  assert.equal((await b.latir(LUIS, { sesion: "s-luis" })).estado, 200);
 });
 
 // ── Sin Redis / Redis caído ──
@@ -370,9 +382,45 @@ test("una clínica sin nombre en la base se enseña igual, no desaparece", () =>
 test("cada clínica solo ve sus propios usuarios (nada se mezcla entre clínicas)", async () => {
   const r = new RedisFalso();
   const a = fabrica(r), b = fabrica(r);
-  await a.latir(ANA, { supabaseId: "sb-ana", sesion: "s-ana" });
-  await b.latir(BETO, { supabaseId: "sb-beto", sesion: "s-beto" });
+  await a.latir(ANA, { sesion: "s-ana" });
+  await b.latir(BETO, { sesion: "s-beto" });
   const filas = (await leerClinicasEnLinea(r, r.reloj))!;
   const porId = Object.fromEntries(filas.map((f) => [f.clinicId, f.usuarios.map((u) => u.nombre)]));
   assert.deepEqual(porId, { "clin-A": ["Ana Pérez"], "clin-B": ["Beto Ruiz"] });
+});
+
+// ── EVAL que falla: se cae al camino de varios comandos y no se rompe nada ──
+
+test("si EVAL falla en ejecución, la señal sigue funcionando por el camino de varios comandos", async () => {
+  _fijarRedisParaPruebas(undefined);
+  const r = new RedisConEvalRoto(new Error("ERR unknown command 'evalsha'"));
+  const { latir } = fabrica(r);
+  assert.deepEqual(await latir(ANA), { estado: 200, guardado: true });
+  assert.equal(await contarClinicasEnLinea(r, r.reloj), 1);
+  assert.equal(r.intentosEval, 1);
+  assert.ok(_luaEnPausa(r.reloj), "Lua queda en pausa");
+});
+
+test("con Lua en pausa no se vuelve a intentar durante 5 min (cada intento fallido costaría de más) y luego sí", async () => {
+  _fijarRedisParaPruebas(undefined);
+  const r = new RedisConEvalRoto(new Error("script falló"));
+  const { latir } = fabrica(r);
+  await latir(ANA);
+  for (let i = 0; i < 4; i++) { r.avanzar(LATIDO_MS); await latir(ANA); }
+  assert.equal(r.intentosEval, 1, "4 señales más en 4 min: ni un intento de EVAL");
+  r.avanzar(2 * MIN);
+  await latir(ANA);
+  assert.equal(r.intentosEval, 2, "pasados los 5 min se vuelve a probar");
+  _fijarRedisParaPruebas(undefined);
+});
+
+test("el camino de reserva aplica la misma regla: límite, «no cuenta» y desde", async () => {
+  _fijarRedisParaPruebas(undefined);
+  const r = new RedisConEvalRoto(new Error("x"));
+  r.reloj = Math.floor(r.reloj / MIN) * MIN;
+  const { latir } = fabrica(r);
+  for (let i = 0; i < MAX_LATIDOS_POR_MINUTO; i++) assert.equal((await latir(ANA)).estado, 200);
+  assert.equal((await latir(ANA)).estado, 429);
+  assert.deepEqual(await fabrica(r).latir({ ...LUIS, cuenta: false }, { sesion: "otra" }), { estado: 200, guardado: false, motivo: "no-cuenta" });
+  _fijarRedisParaPruebas(undefined);
 });

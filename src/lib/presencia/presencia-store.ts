@@ -5,64 +5,70 @@
  * conexiones (pooler lleno); esto manda una señal por minuto y por pestaña, así
  * que NO abre ni una conexión de Prisma por señal:
  *   · quién es el usuario (clínica, id, nombre, si cuenta) se resuelve UNA vez
- *     y queda en Redis 10 min con la llave sesión + clínica de la cookie;
- *   · las señales siguientes solo hablan con Redis (2 viajes: leer identidad +
- *     límite, y escribir).
+ *     y queda en el registro de su sesión en Redis 10 min;
+ *   · las señales siguientes solo hablan con Redis.
  *
  * Sin Redis (UPSTASH_REDIS_REST_URL/TOKEN sin poner: panel.108, dev.108) nada
  * falla: la señal contesta «no se guarda» sin tocar nada, y la tarjeta dice
  * «sin dato». Un error de Redis en runtime hace lo mismo (fail-open, un warn).
  *
- * ── Qué hay en Redis (todo con caducidad) ────────────────────────────────
- *   pres:u:<clínica>:<usuario>   hash  desde · ts · ruta · nombre      TTL 5 min
- *        `desde` solo lo pone HSETNX: mientras haya señales cada <5 min el hash
- *        no caduca y `desde` se conserva = «en línea desde» de la sesión continua.
- *   pres:c:<clínica>             zset  usuario → última señal           TTL 10 min
- *   pres:cs:<clínica>            hash  desde (sesión continua de la clínica) TTL 5 min
- *   pres:clinicas                zset  clínica → última señal de cualquiera
- *        Índice global: «cuántas clínicas en línea» es UN ZCOUNT. No lleva TTL
- *        propio (un miembro por clínica, acotado); la ventana lo ignora y el
- *        detalle lo poda.
- *   pres:id:<sesión>:<clínica>   JSON  identidad resuelta                TTL 10 min
- *   pres:rl:<usuario>:<minuto>   int   límite por usuario                TTL 2 min
+ * ── Costo: UNA llamada por señal ─────────────────────────────────────────
+ * Un script de Lua (presencia-lua.ts, EVALSHA) lee el registro de la sesión,
+ * aplica el límite por minuto, actualiza «desde»/última señal/pantalla y anota
+ * la sesión en el índice. En régimen normal es 1 comando por señal (y 2 en la
+ * primera de cada sesión y cada 10 min: una para descubrir que falta la
+ * identidad y otra con la identidad ya resuelta). Si EVAL falla en ejecución,
+ * se cae al camino de varios comandos (GET → decide en JS → SET + ZADD), con la
+ * misma regla (`aplicarLatido`), y no se vuelve a intentar Lua en 5 min.
  *
- * Una nota de coste: cada señal son ~11 comandos de Upstash (3 + 8). Con un
- * EVAL de Lua serían 2, pero no hay un Redis local con el que probar el script
- * antes de ponerlo en producción; es una mejora fácil si el coste importa.
+ * ── Qué hay en Redis (todo con caducidad salvo el índice) ────────────────
+ *   pres:s:<sesión>:<clínica de la cookie>   texto  registro de la sesión   TTL 10 min
+ *        clínica|usuario|cuenta|desde|ts|minuto|n|pantalla|nombre
+ *        `desde` se conserva mientras entre señales pasen ≤ 5 min.
+ *   pres:z   zset  «clínica|usuario|<sesión>:<cookie>» → última señal
+ *        Es el índice: «quién está en línea» = ZRANGEBYSCORE de la ventana de
+ *        5 min. Sin TTL propio; se poda (> 24 h) en cada lectura de /admin.
  */
 import { Redis } from "@upstash/redis";
 import {
+  LATIDO,
   MAX_CLINICAS_EN_LISTA,
   MAX_LATIDOS_POR_MINUTO,
   VENTANA_EN_LINEA_MS,
+  aplicarLatido,
   etiquetaDePantalla,
+  leerRegistro,
+  limpiarTexto,
   type FilaEnLinea,
+  type ParamsLatido,
   type UsuarioEnLinea,
 } from "./presencia-core";
+import { SCRIPT_LATIDO, SHA_SCRIPT_LATIDO } from "./presencia-lua";
 
 // ─────────────────────────── Cliente (mínimo, inyectable) ───────────────────
 
-/** Lo que se usa de un pipeline de Upstash. Lo cumple `redis.pipeline()` y el falso de las pruebas. */
+/** Lo que se usa de un pipeline de Upstash. Lo cumple `redis.pipeline()` y los dobles de las pruebas. */
 export interface PipelineMini {
   get(k: string): PipelineMini;
   set(k: string, v: unknown, opts?: { ex?: number }): PipelineMini;
-  incr(k: string): PipelineMini;
-  expire(k: string, segundos: number): PipelineMini;
-  hset(k: string, kv: Record<string, unknown>): PipelineMini;
-  hsetnx(k: string, campo: string, v: unknown): PipelineMini;
-  hgetall(k: string): PipelineMini;
+  mget(...ks: string[]): PipelineMini;
   zadd(k: string, sm: { score: number; member: string }): PipelineMini;
-  zcount(k: string, min: number, max: number | "+inf"): PipelineMini;
   zrange(k: string, min: number, max: number | "+inf", opts: { byScore: true }): PipelineMini;
   zremrangebyscore(k: string, min: number | "-inf", max: number): PipelineMini;
   exec(): Promise<unknown[]>;
 }
 export interface RedisMini {
   pipeline(): PipelineMini;
+  /** EVALSHA / EVAL: sin ellos (o si fallan) se usa el camino de varios comandos. */
+  evalsha?(sha1: string, keys: string[], args: unknown[]): Promise<unknown>;
+  eval?(script: string, keys: string[], args: unknown[]): Promise<unknown>;
 }
 
 let cliente: RedisMini | null | undefined;
 let avisoRuntime = false;
+/** Hasta cuándo no se intenta Lua (EVAL falló en ejecución). */
+let luaRotoHasta = 0;
+const PAUSA_LUA_MS = 5 * 60_000;
 
 /** Cliente de Upstash, o null si faltan las variables (decisión tomada una vez). */
 export function obtenerRedis(): RedisMini | null {
@@ -82,10 +88,16 @@ export function obtenerRedis(): RedisMini | null {
   return cliente;
 }
 
-/** Solo para pruebas: fija (o limpia con undefined) el cliente. */
+/** Solo para pruebas: fija (o limpia con undefined) el cliente y el estado de Lua. */
 export function _fijarRedisParaPruebas(r: RedisMini | null | undefined): void {
   cliente = r;
   avisoRuntime = false;
+  luaRotoHasta = 0;
+}
+
+/** Solo para pruebas: ¿Lua está en pausa por un fallo? */
+export function _luaEnPausa(ahora: number): boolean {
+  return ahora < luaRotoHasta;
 }
 
 function avisarUnaVez(e: unknown): void {
@@ -96,17 +108,13 @@ function avisarUnaVez(e: unknown): void {
 
 // ─────────────────────────── Llaves ─────────────────────────────────────────
 
-const K = {
-  usuario: (clinicId: string, userId: string) => `pres:u:${clinicId}:${userId}`,
-  clinica: (clinicId: string) => `pres:c:${clinicId}`,
-  clinicaSesion: (clinicId: string) => `pres:cs:${clinicId}`,
-  global: "pres:clinicas",
-  identidad: (sesion: string, clinicaCookie: string | null) => `pres:id:${sesion}:${clinicaCookie ?? "-"}`,
-  limite: (userId: string, minuto: number) => `pres:rl:${userId}:${minuto}`,
-};
+const INDICE = "pres:z";
+const llaveRegistro = (sufijo: string) => `pres:s:${sufijo}`;
+/** Lo que identifica a la sesión: la de Supabase + la clínica de la cookie (cambiar de sede es otra). */
+const sufijoDeSesion = (sesion: string, clinicaCookie: string | null) => `${sesion}:${clinicaCookie ?? "-"}`;
 
-const TTL_VENTANA_S = Math.round(VENTANA_EN_LINEA_MS / 1000);
-const TTL_IDENTIDAD_S = 10 * 60;
+/** Vida del registro = vida de la identidad en caché. */
+const TTL_REGISTRO_S = 10 * 60;
 
 // ─────────────────────────── La señal ───────────────────────────────────────
 
@@ -126,8 +134,6 @@ export type ResultadoLatido =
   | { estado: 429; reintentarEnS: number };
 
 export interface EntradaLatido {
-  /** Id de usuario de Supabase, ya validado con getUser(). */
-  supabaseId: string;
   /** Id de la sesión de Supabase (claim session_id); distingue «Ver como clínica» de la sesión real. */
   sesion: string;
   /** Clínica activa de la cookie firmada, o null. */
@@ -146,73 +152,100 @@ export interface DepsLatido {
   resolverIdentidad: () => Promise<IdentidadLatido | null>;
 }
 
-function leerIdentidad(v: unknown): IdentidadLatido | null {
-  let o: unknown = v;
-  if (typeof v === "string") {
-    try { o = JSON.parse(v); } catch { return null; }
+interface SalidaLatido {
+  codigo: number;
+  segundos: number;
+}
+
+function esNoscript(e: unknown): boolean {
+  return /NOSCRIPT/i.test(e instanceof Error ? e.message : String(e));
+}
+
+function leerSalida(v: unknown): SalidaLatido {
+  if (Array.isArray(v) && v.length >= 2 && Number.isFinite(Number(v[0]))) return { codigo: Number(v[0]), segundos: Number(v[1]) || 0 };
+  throw new Error("respuesta inesperada del script de presencia: " + JSON.stringify(v));
+}
+
+/** UNA llamada: EVALSHA (y EVAL completo solo si Redis no tiene el script cargado). */
+async function porLua(redis: RedisMini, llave: string, args: unknown[]): Promise<SalidaLatido> {
+  if (!redis.evalsha) throw new Error("el cliente no tiene evalsha");
+  try {
+    return leerSalida(await redis.evalsha(SHA_SCRIPT_LATIDO, [llave, INDICE], args));
+  } catch (e) {
+    if (!esNoscript(e) || !redis.eval) throw e;
+    return leerSalida(await redis.eval(SCRIPT_LATIDO, [llave, INDICE], args));
   }
-  if (!o || typeof o !== "object") return null;
-  const r = o as Record<string, unknown>;
-  if (typeof r.clinicId !== "string" || typeof r.userId !== "string") return null;
-  return {
-    clinicId: r.clinicId,
-    userId: r.userId,
-    nombre: typeof r.nombre === "string" ? r.nombre : "",
-    cuenta: r.cuenta === true,
-  };
+}
+
+/** Varios comandos: GET → regla en JS → SET + ZADD. Lo mismo que el script, sin atomicidad. */
+async function porComandos(redis: RedisMini, llave: string, sufijo: string, p: ParamsLatido): Promise<SalidaLatido> {
+  const [crudo] = (await redis.pipeline().get(llave).exec()) as [unknown];
+  const d = aplicarLatido(typeof crudo === "string" ? crudo : null, p);
+  if (d.codigo === 1) return { codigo: 1, segundos: 0 };
+  if (d.codigo === 3) return { codigo: 3, segundos: d.reintentarEnS };
+  if (d.codigo === 2) {
+    if (d.escribir) await redis.pipeline().set(llave, d.escribir, { ex: p.ttlS }).exec();
+    return { codigo: 2, segundos: 0 };
+  }
+  await redis
+    .pipeline()
+    .set(llave, d.escribir, { ex: p.ttlS })
+    .zadd(INDICE, { score: p.ahora, member: `${d.indexar.clinicId}|${d.indexar.userId}|${sufijo}` })
+    .exec();
+  return { codigo: 0, segundos: 0 };
+}
+
+async function ejecutarLatido(
+  redis: RedisMini,
+  sufijo: string,
+  p: ParamsLatido,
+): Promise<SalidaLatido> {
+  const llave = llaveRegistro(sufijo);
+  if (redis.evalsha && p.ahora >= luaRotoHasta) {
+    const args: unknown[] = [p.ahora, p.ttlS, p.limitePorMinuto, limpiarTexto(p.pantalla, 60), p.ventanaMs, sufijo];
+    if (p.identidad) args.push(p.identidad.clinicId, p.identidad.userId, p.identidad.cuenta ? "1" : "0", limpiarTexto(p.identidad.nombre));
+    try {
+      return await porLua(redis, llave, args);
+    } catch (e) {
+      // EVAL no sirvió (no soportado, error del script, red): se sigue con el camino de
+      // varios comandos y no se insiste con Lua durante 5 min (cada intento fallido costaría de más).
+      luaRotoHasta = p.ahora + PAUSA_LUA_MS;
+      console.warn("[presencia] EVAL falló; se usa el camino de varios comandos 5 min:", e instanceof Error ? e.message : e);
+    }
+  }
+  return porComandos(redis, llave, sufijo, p);
 }
 
 /**
- * Procesa UNA señal. Orden pensado para gastar lo menos posible:
+ * Procesa UNA señal.
  *   1. sin Redis → nada (ni siquiera se pregunta quién es);
- *   2. un viaje: identidad en caché + contador de límite del usuario;
- *   3. límite superado → 429, sin tocar nada más;
- *   4. identidad desconocida → UNA resolución con la base y se guarda 10 min;
- *   5. si no cuenta → fuera; si cuenta → un viaje que escribe todo.
+ *   2. una llamada: el script decide todo (límite, desde, índice);
+ *   3. si falta la identidad (primera señal de la sesión, o pasaron 10 min):
+ *      UNA resolución con la base y una segunda llamada que ya la lleva;
+ *   4. límite superado → 429; no cuenta → fuera.
  */
 export async function procesarLatido(deps: DepsLatido, e: EntradaLatido): Promise<ResultadoLatido> {
   const redis = deps.redis;
   if (!redis) return { estado: 200, guardado: false, motivo: "sin-redis" };
 
   try {
-    const minuto = Math.floor(e.ahora / 60_000);
-    const llaveId = K.identidad(e.sesion, e.clinicaCookie);
-    const llaveRl = K.limite(e.supabaseId, minuto);
-
-    const [crudaId, usados] = (await redis
-      .pipeline()
-      .get(llaveId)
-      .incr(llaveRl)
-      .expire(llaveRl, 120)
-      .exec()) as [unknown, number, unknown];
-
-    if (typeof usados === "number" && usados > MAX_LATIDOS_POR_MINUTO) {
-      return { estado: 429, reintentarEnS: Math.max(1, 60 - Math.floor((e.ahora % 60_000) / 1000)) };
-    }
-
-    let identidad = leerIdentidad(crudaId);
-    if (!identidad) {
-      identidad = await deps.resolverIdentidad();
+    const sufijo = sufijoDeSesion(e.sesion, e.clinicaCookie);
+    const base: ParamsLatido = {
+      ahora: e.ahora,
+      ttlS: TTL_REGISTRO_S,
+      limitePorMinuto: MAX_LATIDOS_POR_MINUTO,
+      pantalla: etiquetaDePantalla(e.ruta),
+      ventanaMs: VENTANA_EN_LINEA_MS,
+    };
+    let r = await ejecutarLatido(redis, sufijo, base);
+    if (r.codigo === LATIDO.FALTA_IDENTIDAD) {
+      const identidad = await deps.resolverIdentidad();
       if (!identidad) return { estado: 401 };
-      await redis.pipeline().set(llaveId, JSON.stringify(identidad), { ex: TTL_IDENTIDAD_S }).exec();
+      r = await ejecutarLatido(redis, sufijo, { ...base, identidad });
+      if (r.codigo === LATIDO.FALTA_IDENTIDAD) throw new Error("Redis no guardó la identidad");
     }
-    if (!identidad.cuenta) return { estado: 200, guardado: false, motivo: "no-cuenta" };
-
-    const { clinicId, userId } = identidad;
-    const u = K.usuario(clinicId, userId);
-    const cs = K.clinicaSesion(clinicId);
-    const c = K.clinica(clinicId);
-    await redis
-      .pipeline()
-      .hsetnx(u, "desde", e.ahora)
-      .hset(u, { ts: e.ahora, ruta: etiquetaDePantalla(e.ruta), nombre: identidad.nombre })
-      .expire(u, TTL_VENTANA_S)
-      .zadd(c, { score: e.ahora, member: userId })
-      .expire(c, 2 * TTL_VENTANA_S)
-      .zadd(K.global, { score: e.ahora, member: clinicId })
-      .hsetnx(cs, "desde", e.ahora)
-      .expire(cs, TTL_VENTANA_S)
-      .exec();
+    if (r.codigo === LATIDO.LIMITE) return { estado: 429, reintentarEnS: Math.max(1, r.segundos) };
+    if (r.codigo === LATIDO.NO_CUENTA) return { estado: 200, guardado: false, motivo: "no-cuenta" };
     return { estado: 200, guardado: true };
   } catch (err) {
     avisarUnaVez(err);
@@ -222,87 +255,79 @@ export async function procesarLatido(deps: DepsLatido, e: EntradaLatido): Promis
 
 // ─────────────────────────── Lo que lee /admin ──────────────────────────────
 
+function aTexto(v: unknown): string {
+  return typeof v === "string" ? v : v === null || v === undefined ? "" : String(v);
+}
+
+interface Miembro {
+  clinicId: string;
+  userId: string;
+  sufijo: string;
+}
+
+/** Los miembros del índice con señal en la ventana (poda de paso lo de > 24 h). 2 comandos. */
+async function miembrosEnVentana(redis: RedisMini, ahora: number): Promise<Miembro[]> {
+  const corte = ahora - VENTANA_EN_LINEA_MS;
+  const r = (await redis
+    .pipeline()
+    .zremrangebyscore(INDICE, "-inf", ahora - 24 * 60 * 60_000)
+    .zrange(INDICE, corte, "+inf", { byScore: true })
+    .exec()) as [unknown, unknown];
+  const lista = Array.isArray(r[1]) ? r[1].map(aTexto) : [];
+  const salida: Miembro[] = [];
+  for (const m of lista) {
+    const a = m.indexOf("|");
+    const b = a < 0 ? -1 : m.indexOf("|", a + 1);
+    if (a <= 0 || b < 0) continue;
+    salida.push({ clinicId: m.slice(0, a), userId: m.slice(a + 1, b), sufijo: m.slice(b + 1) });
+  }
+  return salida;
+}
+
 /** null = sin dato (sin Redis o Redis falló): la tarjeta dice «sin dato», no «0». */
 export async function contarClinicasEnLinea(redis: RedisMini | null, ahora: number): Promise<number | null> {
   if (!redis) return null;
   try {
-    const [n] = (await redis.pipeline().zcount(K.global, ahora - VENTANA_EN_LINEA_MS, "+inf").exec()) as [number];
-    return typeof n === "number" && Number.isFinite(n) ? n : null;
+    return new Set((await miembrosEnVentana(redis, ahora)).map((m) => m.clinicId)).size;
   } catch (e) {
     avisarUnaVez(e);
     return null;
   }
 }
 
-function aTexto(v: unknown): string {
-  return typeof v === "string" ? v : v === null || v === undefined ? "" : String(v);
-}
-function aNumero(v: unknown): number | null {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-function lista(v: unknown): string[] {
-  return Array.isArray(v) ? v.map(aTexto).filter(Boolean) : [];
-}
-
 /**
  * Clínicas con señal en la ventana, con sus usuarios. null = sin dato.
- * Tres viajes en total, sin importar cuántas clínicas haya: el índice global,
- * los usuarios de todas, y el detalle de todos.
+ * Tres comandos en total, sin importar cuántas clínicas haya: la poda, el
+ * índice y un MGET con los registros de todas las sesiones.
  */
 export async function leerClinicasEnLinea(redis: RedisMini | null, ahora: number): Promise<FilaEnLinea[] | null> {
   if (!redis) return null;
   const corte = ahora - VENTANA_EN_LINEA_MS;
   try {
-    // 1) El índice (y de paso se poda lo que lleva más de un día sin señal).
-    const r1 = (await redis
-      .pipeline()
-      .zremrangebyscore(K.global, "-inf", ahora - 24 * 60 * 60_000)
-      .zrange(K.global, corte, "+inf", { byScore: true })
-      .exec()) as [unknown, unknown];
-    const clinicas = lista(r1[1]).slice(0, MAX_CLINICAS_EN_LISTA);
-    if (clinicas.length === 0) return [];
+    const miembros = await miembrosEnVentana(redis, ahora);
+    if (miembros.length === 0) return [];
+    const [crudos] = (await redis.pipeline().mget(...miembros.map((m) => llaveRegistro(m.sufijo))).exec()) as [unknown];
+    const registros = Array.isArray(crudos) ? crudos : [];
 
-    // 2) Los usuarios con señal en la ventana y el «desde» de cada clínica.
-    const p2 = redis.pipeline();
-    for (const id of clinicas) p2.zrange(K.clinica(id), corte, "+inf", { byScore: true }).hgetall(K.clinicaSesion(id));
-    const r2 = (await p2.exec()) as unknown[];
-
-    const pares: Array<{ clinicId: string; userId: string }> = [];
-    const desdeClinica = new Map<string, number | null>();
-    clinicas.forEach((id, i) => {
-      for (const userId of lista(r2[i * 2])) pares.push({ clinicId: id, userId });
-      const h = r2[i * 2 + 1] as Record<string, unknown> | null;
-      desdeClinica.set(id, h ? aNumero(h.desde) : null);
+    // Una persona con dos sesiones (dos navegadores) es UN usuario: la primera «desde», la última señal y su pantalla.
+    const porClinica = new Map<string, Map<string, UsuarioEnLinea>>();
+    miembros.forEach((m, i) => {
+      const r = leerRegistro(registros[i]);
+      if (!r || !r.cuenta || r.ts < corte || r.clinicId !== m.clinicId) return;
+      const usuarios = porClinica.get(m.clinicId) ?? new Map<string, UsuarioEnLinea>();
+      const previo = usuarios.get(r.userId);
+      if (!previo) {
+        usuarios.set(r.userId, { nombre: r.nombre || "Usuario", pantalla: r.pantalla || "Otra pantalla", desde: r.desde, ultimaSenal: r.ts });
+      } else {
+        previo.desde = Math.min(previo.desde, r.desde);
+        if (r.ts > previo.ultimaSenal) { previo.ultimaSenal = r.ts; previo.pantalla = r.pantalla || previo.pantalla; }
+      }
+      porClinica.set(m.clinicId, usuarios);
     });
 
-    // 3) El detalle de cada usuario.
-    const p3 = redis.pipeline();
-    for (const p of pares) p3.hgetall(K.usuario(p.clinicId, p.userId));
-    const r3 = pares.length ? ((await p3.exec()) as unknown[]) : [];
-
-    const porClinica = new Map<string, UsuarioEnLinea[]>();
-    pares.forEach((p, i) => {
-      const h = r3[i] as Record<string, unknown> | null;
-      if (!h) return; // su hash ya caducó: no está en línea
-      const ts = aNumero(h.ts);
-      if (ts === null) return;
-      const desde = aNumero(h.desde) ?? ts;
-      const u: UsuarioEnLinea = {
-        nombre: aTexto(h.nombre) || "Usuario",
-        pantalla: aTexto(h.ruta) || "Otra pantalla",
-        desde,
-        ultimaSenal: ts,
-      };
-      const lst = porClinica.get(p.clinicId);
-      if (lst) lst.push(u); else porClinica.set(p.clinicId, [u]);
-    });
-
-    return clinicas.map((id) => ({
-      clinicId: id,
-      desde: desdeClinica.get(id) ?? null,
-      usuarios: porClinica.get(id) ?? [],
-    }));
+    return Array.from(porClinica.entries())
+      .slice(0, MAX_CLINICAS_EN_LISTA)
+      .map(([clinicId, usuarios]) => ({ clinicId, desde: null, usuarios: Array.from(usuarios.values()) }));
   } catch (e) {
     avisarUnaVez(e);
     return null;

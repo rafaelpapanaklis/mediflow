@@ -137,6 +137,117 @@ export function etiquetaDePantalla(ruta: unknown): string {
   return PANTALLAS[seccion];
 }
 
+// ─────────────────────────── El registro de una sesión ──────────────────────
+//
+// Una sesión (login de un navegador) = UN registro en Redis, con su identidad,
+// su «desde», su última señal, su pantalla y el contador del límite por minuto.
+// Se guarda como texto delimitado con «|» (sin cjson: un script de Lua que no
+// depende de librerías) y se cambia con UNA llamada: el script de presencia-lua.ts
+// o, si EVAL no sirve, `aplicarLatido` de abajo, que hace lo MISMO en JS.
+// Las pruebas contra un Redis real comparan las dos.
+//
+//   clínica|usuario|cuenta|desde|ts|minuto|n|pantalla|nombre
+//
+// El nombre va al final (el único campo libre) y se limpia de «|» y controles.
+
+export interface RegistroSesion {
+  clinicId: string;
+  userId: string;
+  /** false = «Ver como clínica» o usuario de plataforma: no cuenta, solo se recuerda para no volver a preguntar. */
+  cuenta: boolean;
+  /** Primera señal de la sesión continua. */
+  desde: number;
+  /** Última señal. */
+  ts: number;
+  /** Minuto (ms/60000) del contador del límite. */
+  minuto: number;
+  /** Señales aceptadas en ese minuto. */
+  n: number;
+  pantalla: string;
+  nombre: string;
+}
+
+/** Quita lo que rompería el formato (|, saltos de línea, controles). */
+export function limpiarTexto(t: string, max = 80): string {
+  // eslint-disable-next-line no-control-regex
+  return t.replace(/[|\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+export function codificarRegistro(r: RegistroSesion): string {
+  return [r.clinicId, r.userId, r.cuenta ? "1" : "0", r.desde, r.ts, r.minuto, r.n, limpiarTexto(r.pantalla, 60), limpiarTexto(r.nombre)].join("|");
+}
+
+/** null si no es un registro válido (ausente o dañado: se trata como ausente). */
+export function leerRegistro(crudo: unknown): RegistroSesion | null {
+  if (typeof crudo !== "string") return null;
+  const f = crudo.split("|");
+  if (f.length < 9) return null;
+  const [clinicId, userId, cuenta, desde, ts, minuto, n, pantalla] = f;
+  const nombre = f.slice(8).join("|");
+  const num = (x: string) => (x !== "" && Number.isFinite(Number(x)) ? Number(x) : NaN);
+  const r = { desde: num(desde), ts: num(ts), minuto: num(minuto), n: num(n) };
+  if (!clinicId || !userId || [r.desde, r.ts, r.minuto, r.n].some(Number.isNaN)) return null;
+  return { clinicId, userId, cuenta: cuenta === "1", ...r, pantalla, nombre };
+}
+
+/** Códigos que devuelve la señal (el script de Lua devuelve los mismos). */
+export const LATIDO = { GUARDADO: 0, FALTA_IDENTIDAD: 1, NO_CUENTA: 2, LIMITE: 3 } as const;
+
+export interface ParamsLatido {
+  ahora: number;
+  /** TTL del registro en segundos (= la vida de la identidad en caché). */
+  ttlS: number;
+  limitePorMinuto: number;
+  pantalla: string;
+  ventanaMs: number;
+  /** Solo cuando el servidor ya resolvió la identidad con la base. */
+  identidad?: { clinicId: string; userId: string; cuenta: boolean; nombre: string };
+}
+
+export type DecisionLatido =
+  | { codigo: 1 }
+  | { codigo: 2; escribir: string | null }
+  | { codigo: 3; reintentarEnS: number }
+  | { codigo: 0; escribir: string; indexar: { clinicId: string; userId: string } };
+
+/**
+ * La regla de una señal, pura. Es la MISMA que ejecuta el script de Lua en
+ * Redis; esta versión existe para el camino de reserva (EVAL no disponible) y
+ * para las pruebas de las dos contra un Redis real.
+ *
+ *  · sin registro y sin identidad → pide la identidad (código 1);
+ *  · registro de quien no cuenta → 2, sin escribir nada;
+ *  · límite por minuto y por sesión → código 3 con los segundos que faltan;
+ *  · `desde` se conserva mientras entre señal y señal no pasen más de `ventanaMs`.
+ */
+export function aplicarLatido(crudo: string | null, p: ParamsLatido): DecisionLatido {
+  const previo = leerRegistro(crudo);
+  if (previo && !previo.cuenta) return { codigo: 2, escribir: null };
+  let r: RegistroSesion;
+  if (previo) {
+    r = { ...previo };
+  } else {
+    if (!p.identidad) return { codigo: 1 };
+    r = {
+      clinicId: p.identidad.clinicId, userId: p.identidad.userId, cuenta: p.identidad.cuenta,
+      desde: p.ahora, ts: 0, minuto: -1, n: 0, pantalla: "", nombre: limpiarTexto(p.identidad.nombre),
+    };
+    if (!r.cuenta) return { codigo: 2, escribir: codificarRegistro({ ...r, ts: p.ahora, minuto: Math.floor(p.ahora / 60_000), n: 1, pantalla: limpiarTexto(p.pantalla, 60) }) };
+  }
+  const minuto = Math.floor(p.ahora / 60_000);
+  if (r.minuto === minuto) {
+    if (r.n >= p.limitePorMinuto) return { codigo: 3, reintentarEnS: 60 - Math.floor((p.ahora % 60_000) / 1000) };
+    r.n += 1;
+  } else {
+    r.minuto = minuto;
+    r.n = 1;
+  }
+  if (r.ts === 0 || p.ahora - r.ts > p.ventanaMs) r.desde = p.ahora;
+  r.ts = p.ahora;
+  r.pantalla = p.pantalla;
+  return { codigo: 0, escribir: codificarRegistro(r), indexar: { clinicId: r.clinicId, userId: r.userId } };
+}
+
 // ─────────────────────────── Lo que se enseña ───────────────────────────────
 
 export interface UsuarioEnLinea {

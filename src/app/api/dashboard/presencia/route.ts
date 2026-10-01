@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         };
       },
     },
-    { supabaseId: user.id, sesion, clinicaCookie: readActiveClinicCookie(), ruta, ahora: Date.now() },
+    { sesion, clinicaCookie: readActiveClinicCookie(), ruta, ahora: Date.now() },
   );
 
   if (resultado.estado === 401) return NextResponse.json({ error: "No autorizado" }, { status: 401, headers: SIN_CACHE });
