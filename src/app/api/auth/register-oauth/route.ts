@@ -8,6 +8,7 @@ import { SITE_URL } from "@/lib/seo";
 import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
+import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
 
 /**
  * Completar registro para usuarios que entraron via OAuth (Google/Microsoft).
@@ -170,6 +171,15 @@ export async function POST(req: NextRequest) {
     // nunca lanza y tolera que la tabla aún no exista.
     await guardarClickAdsDeLaAlta(clinic.id, (n) => req.cookies.get(n)?.value);
 
+    // CompleteRegistration de Meta (WS1-T4): igual que /api/auth/register.
+    const metaEventId = enviarRegistroMetaEnSegundoPlano({
+      clinicId: clinic.id,
+      email,
+      phone: data.phone,
+      req,
+      leerCookie: (n) => req.cookies.get(n)?.value,
+    });
+
     sendWelcomeEmail({
       email,
       firstName,
@@ -178,7 +188,7 @@ export async function POST(req: NextRequest) {
       dashboardUrl: `${SITE_URL}/dashboard`,
     }).catch(err => console.error("[register-oauth] welcome email failed:", err));
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, metaEventId });
   } catch (err: any) {
     // Campo inválido (p. ej. el WhatsApp) → 400 legible, no el volcado de issues.
     if (err instanceof z.ZodError) {

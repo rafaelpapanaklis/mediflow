@@ -16,6 +16,7 @@ import { isPlanId } from "@/lib/billing/plans";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
+import { trackMetaCompleteRegistration } from "@/lib/analytics/meta-pixel-eventos";
 import { guardarEleccionAlta } from "@/lib/billing/eleccion-alta";
 import { MENSAJE_CONTRASENA_FILTRADA } from "@/lib/auth/errores-contrasena";
 
@@ -210,6 +211,7 @@ export function SignupForm() {
         error?: string;
         code?: string; // "weak_password" cuando Supabase rechaza la contraseña
         coupon?: string | null; // "applied" | "invalid" | null
+        metaEventId?: string; // eventID del CompleteRegistration de Meta (WS1-T4)
       };
       if (res.status === 409) {
         toast.error(data.error ?? "Ya existe una cuenta con este correo");
@@ -262,6 +264,10 @@ export function SignupForm() {
       // volver a preguntarlo. Caduca a los 7 días y se borra al iniciar el pago.
       guardarEleccionAlta({ plan: form.plan, billing: form.billing });
       toast.success("¡Cuenta creada! Elige cómo pagar para activar tu plan.");
+      // Píxel de Meta (WS1-T4): CompleteRegistration con el eventID que devolvió
+      // el alta; el servidor manda el mismo por la API de Conversiones y Meta
+      // los junta. Sin callback: la redirección no espera nada nuevo.
+      trackMetaCompleteRegistration(data.metaEventId);
       // GA4 `sign_up` (WS1-T6): mismo momento, ANTES de la conversión de Ads y sin
       // callback propio → la redirección espera lo mismo que antes. Evento aparte.
       trackGa4SignUp(isOAuthFlow ? "google" : "email");

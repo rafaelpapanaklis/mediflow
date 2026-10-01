@@ -14,6 +14,7 @@ import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
 import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
+import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
 import { leerErrorContrasena, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -277,6 +278,17 @@ export async function POST(req: NextRequest) {
     // tolera que sql/ws1-t6-ads-clics.sql aún no esté aplicado y no bloquea el alta.
     await guardarClickAdsDeLaAlta(clinic.id, (n) => req.cookies.get(n)?.value);
 
+    // CompleteRegistration de Meta por la API de Conversiones (WS1-T4), en segundo
+    // plano: no alarga el alta y nunca lanza. El eventId vuelve al navegador para
+    // que el píxel mande el mismo y Meta los deduplique.
+    const metaEventId = enviarRegistroMetaEnSegundoPlano({
+      clinicId: clinic.id,
+      email: data.email,
+      phone: data.phone,
+      req,
+      leerCookie: (n) => req.cookies.get(n)?.value,
+    });
+
     // Conversión de afiliado (best-effort): registra la atribución con su
     // campaña y origen. Si la tabla nueva no existe aún, silencio total.
     if (referringAffiliate) {
@@ -347,6 +359,7 @@ export async function POST(req: NextRequest) {
       success: true,
       // "applied" | "invalid" | null — informativo para el form (no bloquea)
       coupon: data.coupon ? (couponValid ? "applied" : "invalid") : null,
+      metaEventId,
     });
   } catch (err: any) {
     // Campo inválido (p. ej. el WhatsApp) → 400 con el mensaje del campo. Antes

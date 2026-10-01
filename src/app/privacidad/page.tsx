@@ -198,17 +198,31 @@ export default function PrivacidadPage() {
             público para medir cuántas personas llegan desde nuestros anuncios de Meta. Al
             cargarse, Meta guarda en su navegador cookies propias (por ejemplo
             &laquo;_fbp&raquo;, y &laquo;_fbc&raquo; cuando usted llega desde un anuncio de
-            Meta) que, según Meta, duran hasta 90 días. El único evento que DaleControl envía
-            a Meta es{" "}
+            Meta) que, según Meta, duran hasta 90 días. DaleControl envía a Meta solo tres
+            eventos:{" "}
             <b>&laquo;PageView&raquo;: que se visitó una página pública</b>, en cada página
-            que usted abre. Junto con ese evento, su navegador entrega a Meta la dirección de esa
-            página, su dirección IP y datos del navegador. Nosotros no le enviamos su nombre,
-            su correo ni ningún dato de una cuenta.{" "}
+            que usted abre;{" "}
+            <b>&laquo;CompleteRegistration&raquo;: que se creó una cuenta</b>, al terminar el
+            registro; y{" "}
+            <b>&laquo;Purchase&raquo;: el primer pago de la suscripción</b>, con su importe sin
+            IVA y la moneda. Junto con cada evento, su navegador entrega a Meta la dirección de
+            esa página, su dirección IP y datos del navegador. Los eventos de cuenta creada y
+            primer pago también los envía nuestro servidor a Meta (API de Conversiones), para
+            que cuenten aunque el navegador bloquee el Píxel y para medir los pagos por
+            transferencia, que no pasan por ninguna página; con ellos van el correo y el
+            teléfono de la cuenta{" "}
+            <b>cifrados con un hash (SHA-256), nunca en claro</b>, la dirección IP y el
+            navegador de quien se registró o pagó, y los valores de las cookies
+            &laquo;_fbp&raquo; y &laquo;_fbc&raquo; (o del clic guardado en &laquo;dc_meta&raquo;),
+            solo para que Meta pueda reconocer que vienen de una persona que vio un anuncio.
+            No le enviamos su nombre ni otros datos de la cuenta.{" "}
             <b>
               Nunca enviamos datos de salud, de pacientes ni de expedientes, ni datos de
               tarjeta,
             </b>{" "}
-            y el Píxel <b>no se carga dentro del panel de la clínica ni en el portal del paciente</b>.
+            y el Píxel <b>no se carga dentro del panel de la clínica ni en el portal del paciente</b>,
+            salvo en la pantalla que confirma el primer pago, donde solo envía el evento de
+            pago (sin rastrear clics ni el contenido de la página).
           </li>
           <li>
             <b>Chat de soporte (Tawk.to).</b> En la página principal del sitio público (no
@@ -340,7 +354,10 @@ export default function PrivacidadPage() {
           <li>
             Conocer cómo se usa el sitio y el sistema (páginas visitadas, clics, tiempo y
             origen de las visitas) con nuestra analítica propia y con el Píxel de Meta,
-            para mejorar el servicio y medir nuestra publicidad.
+            para mejorar el servicio y medir nuestra publicidad, y compartir con Meta, en
+            forma de eventos de &laquo;cuenta creada&raquo; y &laquo;primer pago&raquo;, el
+            resultado de esa medición para evaluar y mejorar nuestras campañas en Facebook e
+            Instagram.
           </li>
         </ul>
       </Section>
@@ -369,8 +386,9 @@ export default function PrivacidadPage() {
             integración opcional, con el alcance descrito en la sección 9.
           </li>
           <li>
-            <b>Meta Platforms, Inc.</b> — medición de visitas al sitio público con el Píxel de
-            Meta, con lo descrito en la sección 3.
+            <b>Meta Platforms, Inc.</b> — medición de visitas al sitio público, de cuentas
+            creadas y del primer pago con el Píxel de Meta y la API de Conversiones, con lo
+            descrito en la sección 3.
           </li>
           <li>
             <b>Tawk.to</b> — chat de soporte de la página principal del sitio público, con lo
@@ -388,8 +406,9 @@ export default function PrivacidadPage() {
           expreso. La única información que compartimos con Google para medir nuestra
           publicidad es la descrita en la sección 3 (visitas al sitio público, cuenta creada y
           primer pago, y el identificador del clic del anuncio), sin datos de salud ni de
-          pacientes. Con Meta compartimos únicamente la visita a las páginas públicas que
-          describe la sección 3, sin datos de salud ni de pacientes.
+          pacientes. Con Meta compartimos únicamente lo que describe la sección 3 (visitas a
+          las páginas públicas, cuenta creada y primer pago, con el correo y el teléfono
+          cifrados con un hash), sin datos de salud ni de pacientes.
         </p>
       </Section>
 

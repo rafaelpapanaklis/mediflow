@@ -55,6 +55,7 @@ import {
 } from "@/lib/marketplace/module-purchase-core";
 import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { notifyModuleActivated } from "@/lib/marketplace/module-activated-email";
+import { enviarCompraMetaDeSesion } from "@/lib/analytics/meta-capi.server";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -199,6 +200,10 @@ export async function POST(req: NextRequest) {
           sessionId: session.id,
           plan: session.metadata?.plan ?? null,
         }, session.metadata?.billing === "annual" ? "annual" : "monthly");
+        // Purchase de Meta por la API de Conversiones (WS1-T4): solo la PRIMERA
+        // contratación pagada, event_id = session.id (el mismo del píxel en la
+        // página de éxito). Nunca lanza ni cambia la respuesta del webhook.
+        await enviarCompraMetaDeSesion(session);
         break;
       }
 
@@ -245,6 +250,9 @@ export async function POST(req: NextRequest) {
           sessionId: session.id,
           plan: session.metadata?.plan ?? null,
         }, session.metadata?.billing === "annual" ? "annual" : "monthly");
+        // SPEI/OXXO de Stripe nunca pasan por la página de éxito: este Purchase
+        // del servidor es el único que los cuenta en Meta (WS1-T4).
+        await enviarCompraMetaDeSesion(session);
         break;
       }
 

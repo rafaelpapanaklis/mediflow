@@ -213,6 +213,7 @@
     "test:conversion-pago": "tsx --test src/app/dashboard/suspended/success/__tests__/conversion-pago.test.ts",
     "test:medicion-pago": "tsx --test src/app/dashboard/suspended/success/__tests__/medicion-pago.test.ts",
     "test:click-ids": "tsx --test src/lib/ads/__tests__/click-ids.test.ts",
+    "test:meta-capi": "tsx --test src/lib/analytics/__tests__/meta-capi.test.ts",
     "//test:meta-origen": "ws1-t10: clic de Meta (fbclid → cookie dc_meta, fbc/fbp), UTM del primer y del último toque, guardado en el alta con tolerancia a columnas/tabla sin crear, origen de la clínica en /admin y el SQL ws1-t10-meta-origen.sql. Sin Meta ni base reales.",
     "test:meta-origen": "tsx --test src/lib/ads/__tests__/meta-origen.test.ts",
     "test:analitica-sin-portal": "tsx --test src/lib/analytics/sin-portal.test.ts",

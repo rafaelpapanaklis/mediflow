@@ -5,6 +5,7 @@ import { isPlanExpired } from "@/lib/plan-status";
 import { ConfirmingPoll } from "./confirming-poll";
 import { conversionPagoConfirmada } from "./conversion-pago.server";
 import { ConversionPagoCompletadoGads } from "./conversion-pago-cliente";
+import { ConversionPagoCompletadoMeta } from "./conversion-pago-meta";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import {
@@ -54,7 +55,14 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
     sessionId,
     activada: isActivated,
   });
-  const conversionGads = conversion ? <ConversionPagoCompletadoGads {...conversion} /> : null;
+  // Purchase del píxel de Meta (WS1-T4): la MISMA conversión confirmada, con
+  // eventID = session_id para deduplicar contra la API de Conversiones del webhook.
+  const conversionGads = conversion ? (
+    <>
+      <ConversionPagoCompletadoGads {...conversion} />
+      <ConversionPagoCompletadoMeta {...conversion} />
+    </>
+  ) : null;
 
   // REDISEÑO — mismo interruptor por clínica que el menú de dos niveles (ver
   // ../page.tsx): el layout completo ya lo pidió en este request, esto comparte
