@@ -40,8 +40,12 @@ export async function resolveLabChatCaller(): Promise<LabChatCaller | null> {
  * el caller responde 404 sin revelar la existencia de hilos ajenos.
  */
 export async function loadOwnedThread(threadId: string, caller: LabChatCaller) {
-  const thread = await prisma.dentalLabChatThread.findUnique({
-    where: { id: threadId },
+  // El filtro del dueño va EN la consulta (regla (c)): un hilo ajeno no se lee.
+  // Las dos comprobaciones de abajo quedan como segundo cerrojo.
+  const thread = await prisma.dentalLabChatThread.findFirst({
+    where: caller.side === "CLINIC"
+      ? { id: threadId, clinicId: caller.clinicId }
+      : { id: threadId, labId: caller.labId },
     select: { id: true, clinicId: true, labId: true },
   });
   if (!thread) return null;

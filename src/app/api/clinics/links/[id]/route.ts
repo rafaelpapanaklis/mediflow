@@ -35,8 +35,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 
   try {
-    const link = await prisma.clinicPatientLink.findUnique({
-      where: { id: params.id },
+    // Las sedes del dueño salen de la SESIÓN, y el vínculo se busca YA acotado a
+    // ellas (regla (c)): un vínculo de otro dueño ni siquiera se lee.
+    const owned = await getOwnedClinicIds(ctx.user.supabaseId);
+    if (owned.length === 0) return NextResponse.json({ error: "Vínculo no encontrado" }, { status: 404 });
+    const link = await prisma.clinicPatientLink.findFirst({
+      where: { id: params.id, OR: [{ clinicAId: { in: owned } }, { clinicBId: { in: owned } }] },
       select: { id: true, clinicAId: true, clinicBId: true },
     });
     // 404 genérico también cuando existe pero no es suyo: no confirmamos la
@@ -50,7 +54,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     // desactivado—, nadie puede volver a cerrarlo y la sede ajena sigue
     // leyendo pacientes indefinidamente. Revocar el acceso A TUS PROPIOS datos
     // tiene que ser siempre unilateral; vincular sí exige las dos (ver POST).
-    const owned = await getOwnedClinicIds(ctx.user.supabaseId);
     if (owned.indexOf(link.clinicAId) === -1 && owned.indexOf(link.clinicBId) === -1) {
       return NextResponse.json({ error: "Vínculo no encontrado" }, { status: 404 });
     }

@@ -31,7 +31,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const denied = denyIfMissingPermission(user, "arco.manage");
   if (denied) return denied;
 
-  const arco = await prisma.arcoRequest.findUnique({ where: { id: params.id } });
+  // La consulta ya lleva el filtro de clínica de la sesión (regla (c)): una
+  // solicitud ajena —o anónima— ni siquiera se lee. `arcoEsDeMiClinica` queda
+  // como segundo cerrojo.
+  const arco = await prisma.arcoRequest.findFirst({ where: { id: params.id, clinicId: user.clinicId } });
   if (!arco) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   if (!arcoEsDeMiClinica(arco.clinicId, user.clinicId)) {
@@ -50,7 +53,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const denied = denyIfMissingPermission(user, "arco.manage");
   if (denied) return denied;
 
-  const arco = await prisma.arcoRequest.findUnique({ where: { id: params.id } });
+  // La consulta ya lleva el filtro de clínica de la sesión (regla (c)): una
+  // solicitud ajena —o anónima— ni siquiera se lee. `arcoEsDeMiClinica` queda
+  // como segundo cerrojo.
+  const arco = await prisma.arcoRequest.findFirst({ where: { id: params.id, clinicId: user.clinicId } });
   if (!arco) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   // Multi-tenant scope: solo las de MI clínica (las anónimas son de /admin).
