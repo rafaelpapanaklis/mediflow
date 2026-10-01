@@ -483,7 +483,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "archiver": "^7.0.1",
-    "axios": "^1.17.0",
+    "axios": "^1.20.0",
     "bcryptjs": "^3.0.3",
     "card-validator": "^10.0.4",
     "class-variance-authority": "^0.7.0",
