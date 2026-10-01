@@ -3,7 +3,8 @@
 // · rateLimit(req, 5) (mismo helper de src/lib/rate-limit.ts).
 // · email → trim().toLowerCase(). Validar shape a mano (typeof) como los
 //   registros de laboratorios/proveedores.
-// · Si existe cuenta con emailVerified=true → 409 { error }.
+// · Si existe cuenta con emailVerified=true → MISMA respuesta 200 que un alta nueva
+//   (B3: sin 409) + aviso «ya tienes una cuenta» al buzón de la cuenta.
 // · Si existe SIN verificar → actualizar name/phone/passwordHash + código nuevo.
 // · Si no existe → crear PatientAccount (emailVerified false).
 // · Generar código 6 dígitos (crypto.ts), guardar sha256 + expiry 15 min +
@@ -14,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendEmail } from "@/lib/email";
 import { hashPassword, generateVerifyCode, sha256 } from "@/lib/patient-portal/crypto";
-import { buildVerifyCodeEmail } from "@/lib/patient-portal/emails";
+import { buildVerifyCodeEmail, buildAccountExistsEmail } from "@/lib/patient-portal/emails";
 import { VERIFY_CODE_TTL_MIN } from "@/lib/patient-portal/types";
 
 export const dynamic = "force-dynamic";
@@ -59,10 +60,23 @@ export async function POST(req: NextRequest) {
 
     const existing = await prisma.patientAccount.findUnique({ where: { email } });
     if (existing && existing.emailVerified) {
-      return NextResponse.json(
-        { error: "Este correo ya tiene una cuenta. Inicia sesión." },
-        { status: 409 },
-      );
+      // B3 (auditoría 30-sep-2026): SIN 409. Responder distinto a un correo que
+      // ya tiene cuenta le confirmaba a cualquiera que existe. Se responde lo
+      // mismo que en un alta nueva (y con el mismo costo de bcrypt) y es el
+      // dueño del buzón quien recibe el aviso «ya tienes una cuenta».
+      await hashPassword(password);
+      const origin = (process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin).replace(/\/+$/, "");
+      try {
+        const mail = buildAccountExistsEmail({
+          name: existing.name,
+          loginUrl: `${origin}/paciente/login`,
+          resetUrl: `${origin}/paciente/recuperar`,
+        });
+        await sendEmail({ to: existing.email, subject: mail.subject, html: mail.html, text: mail.text });
+      } catch (err) {
+        console.error("[paciente/register] sendEmail (cuenta existente) failed:", err);
+      }
+      return NextResponse.json({ ok: true, email });
     }
     // Cuenta INVITADA por la clínica (emailVerified=false, passwordHash=null) o
     // un registro previo sin verificar: NO se responde 409 — cae al update de
@@ -93,10 +107,8 @@ export async function POST(req: NextRequest) {
           // Carrera: otra petición creó la cuenta entre el check y el create.
           const raced = await prisma.patientAccount.findUnique({ where: { email } });
           if (!raced || raced.emailVerified) {
-            return NextResponse.json(
-              { error: "Este correo ya tiene una cuenta. Inicia sesión." },
-              { status: 409 },
-            );
+            // Carrera con otra alta que ya verificó: misma respuesta uniforme (sin 409).
+            return NextResponse.json({ ok: true, email });
           }
           await prisma.patientAccount.update({ where: { id: raced.id }, data: accountData });
         } else {

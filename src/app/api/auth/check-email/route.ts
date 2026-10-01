@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getAuthContext } from "@/lib/auth-context";
 import { persistentRateLimit, failbanGuard, recordAuthFailure, AUTH_FLOOD_RATE_LIMIT } from "@/lib/failban";
 
 const schema = z.object({ email: z.string().email() });
@@ -14,6 +15,18 @@ const CHECK_EMAIL_POLICY = {
   baseLockSec: 30,
   maxLockSec: 10 * 60,
 };
+
+/**
+ * B3 (auditoría 30-sep-2026): sin sesión NO se revela si un correo tiene
+ * cuenta. La respuesta es la misma para existente e inexistente (`exists:
+ * false`); el alta sigue su camino y es el registro, al final, el que avisa.
+ * Con sesión iniciada (alguien que ya es del sistema) se responde de verdad.
+ */
+async function respuestaDeExistencia(raw: string): Promise<{ exists: boolean }> {
+  const ctx = await getAuthContext().catch(() => null);
+  if (!ctx) return { exists: false };
+  return { exists: await emailExists(raw) };
+}
 
 async function emailExists(raw: string) {
   const email = raw.trim().toLowerCase();
@@ -34,7 +47,7 @@ export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get("email");
   if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
   await recordAuthFailure(req, { scope: "check-email", policy: CHECK_EMAIL_POLICY });
-  return NextResponse.json({ exists: await emailExists(email) });
+  return NextResponse.json(await respuestaDeExistencia(email));
 }
 
 export async function POST(req: NextRequest) {
@@ -59,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   await recordAuthFailure(req, { scope: "check-email", policy: CHECK_EMAIL_POLICY });
   try {
-    return NextResponse.json({ exists: await emailExists(parsed.data.email) });
+    return NextResponse.json(await respuestaDeExistencia(parsed.data.email));
   } catch {
     return NextResponse.json({ exists: false });
   }

@@ -18,6 +18,18 @@ import { PATIENT_SESSION_COOKIE } from "@/lib/patient-portal/types";
 
 export const dynamic = "force-dynamic";
 
+// B3 (auditoría 30-sep-2026): una cuenta inexistente, una invitada sin contraseña
+// y una contraseña mala responden IGUAL (mismo código, mismo texto, mismo costo
+// de bcrypt y mismo conteo de fallos): ni el mensaje ni el tiempo dicen si el
+// correo tiene cuenta. El texto incluye la salida para quien fue invitado por su
+// clínica y aún no activa (usar «Olvidé mi contraseña»), sin confirmar que lo sea.
+const CREDENCIALES_MALAS =
+  "Correo o contraseña incorrectos. Si tu clínica te invitó y aún no activas tu cuenta, usa «Olvidé mi contraseña».";
+
+// Hash bcrypt (costo 10) de un valor al azar: se compara contra él cuando no hay
+// hash real, para que el login de un correo inexistente cueste lo mismo.
+const HASH_DE_RELLENO = "$2b$10$N7h0KQjkJEnolSrcY7b52eIaO0rHo4xIzE9Ef8YrNU.Zg0OcBa5ti";
+
 export async function POST(req: NextRequest) {
   try {
     // Anti-flood GENEROSO: el lockout (5.º fallo + backoff) corta antes que esto.
@@ -41,34 +53,22 @@ export async function POST(req: NextRequest) {
     // Mensaje genérico idéntico (sin enumeración) para cualquier credencial mala.
     if (!email || !password) {
       await recordAuthFailure(req, { scope: "paciente-login", account: email });
-      return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
+      return NextResponse.json({ error: CREDENCIALES_MALAS }, { status: 401 });
     }
 
     const account = await prisma.patientAccount.findUnique({ where: { email } });
-    if (!account) {
+    if (!account || account.passwordHash === null) {
+      // Inexistente, o invitada por la clínica que aún no fija contraseña: misma
+      // respuesta que una contraseña mala, con el mismo costo de bcrypt.
+      await verifyPassword(password, HASH_DE_RELLENO).catch(() => false);
       await recordAuthFailure(req, { scope: "paciente-login", account: email });
-      return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
-    }
-
-    // Cuenta INVITADA por la clínica que aún no fija su contraseña (passwordHash
-    // null). NO es una credencial inválida: damos un mensaje claro para que
-    // active desde el correo de invitación. No cuenta como fallo (no bump) —
-    // evita que se pueda lockear una cuenta que ni siquiera tiene contraseña.
-    if (account.passwordHash === null) {
-      return NextResponse.json(
-        {
-          error:
-            "Aún no activas tu cuenta. Revisa el correo de invitación de tu clínica o pide que te reenvíen el acceso.",
-          needsActivation: true,
-        },
-        { status: 403 },
-      );
+      return NextResponse.json({ error: CREDENCIALES_MALAS }, { status: 401 });
     }
 
     const passwordOk = await verifyPassword(password, account.passwordHash);
     if (!passwordOk) {
       await recordAuthFailure(req, { scope: "paciente-login", account: email });
-      return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
+      return NextResponse.json({ error: CREDENCIALES_MALAS }, { status: 401 });
     }
 
     if (!account.emailVerified) {

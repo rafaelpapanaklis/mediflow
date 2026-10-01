@@ -169,3 +169,43 @@ export function buildInviteEmail(args: {
 
   return { subject, html, text };
 }
+
+/**
+ * Aviso a una cuenta YA verificada cuando alguien intenta registrarla otra vez
+ * (B3, auditoría 30-sep-2026): el registro responde igual exista o no la cuenta
+ * —sin 409— y es este correo, que solo ve el dueño del buzón, el que le dice que
+ * ya tiene cuenta y le ofrece entrar o recuperar su contraseña.
+ */
+export function buildAccountExistsEmail(args: { name: string; loginUrl: string; resetUrl: string }): EmailContent {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const safeName = name ? escapeHtml(name) : "";
+  const login = escapeHtml(args.loginUrl);
+  const reset = escapeHtml(args.resetUrl);
+
+  const subject = "Ya tienes una cuenta en DaleControl";
+
+  const html = darkShell(`
+    <h1 style="font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px 0; color: #f5f5f7;">
+      Ya tienes una cuenta${safeName ? `, ${safeName}` : ""}
+    </h1>
+    <p style="font-size: 15px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
+      Alguien intentó crear una cuenta del portal de pacientes con este correo, pero ya existe una.
+      Puedes entrar con tu contraseña o, si no la recuerdas, crear una nueva.
+    </p>
+    <p style="margin: 0 0 12px 0;">
+      <a href="${login}" style="display: inline-block; padding: 12px 22px; border-radius: 10px; background: linear-gradient(135deg,#8b5cf6,#7c3aed); color: #fff; text-decoration: none; font-weight: 600;">Iniciar sesión</a>
+    </p>
+    <p style="font-size: 13px; color: rgba(245,245,247,0.6); line-height: 1.6; margin: 0;">
+      <a href="${reset}" style="color: #a78bfa;">Olvidé mi contraseña</a>. Si no fuiste tú, ignora este correo: tu cuenta no cambió.
+    </p>`);
+
+  const text =
+    `Ya tienes una cuenta${name ? `, ${name}` : ""}\n\n` +
+    `Alguien intentó crear una cuenta del portal de pacientes con este correo, pero ya existe una.\n` +
+    `Iniciar sesión: ${args.loginUrl}\n` +
+    `Olvidé mi contraseña: ${args.resetUrl}\n\n` +
+    `Si no fuiste tú, ignora este correo: tu cuenta no cambió.\n\n` +
+    `DaleControl — Portal del paciente MX`;
+
+  return { subject, html, text };
+}

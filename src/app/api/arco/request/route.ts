@@ -57,24 +57,31 @@ export async function POST(req: NextRequest) {
 
   // Si llega patientId, validamos pertenencia y heredamos clinicId.
   // NUNCA confiamos en clinicId del request body.
+  //
+  // B3 (auditoría 30-sep-2026): sin oráculo. Antes un patientId inexistente daba
+  // 404 y uno con otro correo 403: se podía comprobar si un paciente existe en
+  // alguna clínica y cuál es (o no es) su correo. Ahora los tres casos —paciente
+  // y correo coinciden, paciente que no existe, correo que no coincide— reciben
+  // el MISMO 201. Solo el primero queda asignado a la clínica; los otros dos
+  // caen como anónimos (los atiende el equipo de privacidad de la plataforma,
+  // que verifica la identidad) y el patientId declarado viaja solo en el aviso
+  // interno.
   let clinicId: string | null = null;
   let patientId: string | null = null;
-  if (body.patientId) {
+  const patientIdDeclarado: string | null =
+    typeof body.patientId === "string" && body.patientId.trim() ? body.patientId.trim().slice(0, 64) : null;
+  if (patientIdDeclarado) {
     const patient = await prisma.patient.findUnique({
-      where: { id: body.patientId },
+      where: { id: patientIdDeclarado },
       select: { id: true, clinicId: true, email: true },
     });
-    if (!patient) {
-      return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+    // Si el paciente tiene correo registrado, el del request tiene que ser ese
+    // (evita pedir ARCO de otro conociendo solo el id).
+    const coincide = patient && (!patient.email || patient.email.toLowerCase() === email);
+    if (patient && coincide) {
+      clinicId = patient.clinicId;
+      patientId = patient.id;
     }
-    // Defensa: si el email del request no coincide con el del paciente
-    // y el paciente tiene email registrado, rechazamos para evitar que
-    // alguien solicite ARCO de otro paciente conociendo solo el id.
-    if (patient.email && patient.email.toLowerCase() !== email) {
-      return NextResponse.json({ error: "email_mismatch" }, { status: 403 });
-    }
-    clinicId = patient.clinicId;
-    patientId = patient.id;
   }
 
   const request = await prisma.arcoRequest.create({
@@ -101,6 +108,9 @@ export async function POST(req: NextRequest) {
         <li><b>Email solicitante:</b> ${email}</li>
         <li><b>Clínica:</b> ${clinicId ?? "anónima (sin patientId)"}</li>
         <li><b>PatientId:</b> ${patientId ?? "—"}</li>
+        ${!patientId && patientIdDeclarado
+          ? `<li><b>PatientId declarado (NO verificado — no existe o el correo no coincide):</b> ${patientIdDeclarado.replace(/[^A-Za-z0-9_-]/g, "")}</li>`
+          : ""}
       </ul>
       <p><b>Razón:</b></p>
       <p style="white-space:pre-wrap;">${reason.replace(/[<>]/g, "")}</p>
