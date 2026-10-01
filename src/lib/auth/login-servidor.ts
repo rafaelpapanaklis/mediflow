@@ -8,8 +8,9 @@
  * `success` sin sesión borraba el bloqueo de cualquier cuenta.
  *
  * Ahora la contraseña la comprueba POST /api/auth/login: mira el bloqueo
- * persistente (failban, Upstash) por IP y por cuenta ANTES de llamar a
- * Supabase, cuenta el fallo él mismo y solo él lo limpia tras un acierto real.
+ * persistente (failban, Upstash) ANTES de llamar a Supabase, cuenta el fallo él
+ * mismo y solo él lo limpia tras un acierto real. Fuerte por cuenta y solo un
+ * tope alto por IP (ver @/lib/auth/login-bloqueo).
  *
  * Mensajes: el mismo texto para «no existe», «contraseña mala», «correo sin
  * confirmar» o cualquier otro error de Supabase, y el bloqueo aplica igual a un
@@ -20,6 +21,21 @@ export const SCOPE_LOGIN_CLINICA = "clinic-login";
 
 export const MENSAJE_CREDENCIALES = "Correo o contraseña incorrectos.";
 export const MENSAJE_BLOQUEO = "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.";
+
+function minutos(retrySec: number): string {
+  const m = Math.max(1, Math.ceil(retrySec / 60));
+  return m === 1 ? "1 minuto" : `${m} minutos`;
+}
+
+/** Bloqueo de UNA cuenta (correo). Mismo texto exista o no: no revela nada. */
+export function mensajeBloqueoCuenta(retrySec: number): string {
+  return `Demasiados intentos fallidos con este correo. Espera ${minutos(retrySec)} e inténtalo de nuevo, o usa «¿Olvidaste tu contraseña?». Las demás cuentas pueden seguir entrando.`;
+}
+
+/** Tope por IP: muchas cuentas distintas fallidas desde esta red. */
+export function mensajeBloqueoRed(retrySec: number): string {
+  return `Desde esta red se intentó entrar con demasiadas cuentas distintas. Espera ${minutos(retrySec)} e inténtalo de nuevo. Si ya habías entrado antes desde aquí, tu cuenta puede seguir entrando.`;
+}
 export const MENSAJE_INVALIDO = "Escribe tu correo y tu contraseña.";
 
 /** Tope de largo: un payload enorme no llega a Supabase (ni al hash). */

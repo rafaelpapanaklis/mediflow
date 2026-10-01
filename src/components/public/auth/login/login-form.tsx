@@ -30,7 +30,7 @@ export function LoginForm() {
     setLoading(true);
     try {
       // M4 (auditoría 30-sep): la contraseña la comprueba el SERVIDOR, que lleva
-      // el bloqueo persistente por IP y por cuenta y escribe las cookies de
+      // el bloqueo persistente (por cuenta, y un tope alto por IP) y escribe las cookies de
       // sesión en su respuesta. El navegador ya no habla con Supabase aquí.
       let res: Response;
       try {
@@ -46,10 +46,12 @@ export function LoginForm() {
       }
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        // El 429 trae su propio texto (bloqueo de ESTE correo o tope de la red).
         setError(
-          res.status === 429
-            ? "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
-            : data?.error ?? "Correo o contraseña incorrectos.",
+          data?.error ??
+            (res.status === 429
+              ? "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
+              : "Correo o contraseña incorrectos."),
         );
         setLoading(false);
         return;

@@ -45,6 +45,12 @@ export interface LockoutTarget {
   account?: string | null;
   /** Sobrescribe la política por defecto (parcial). */
   policy?: Partial<LockoutPolicy>;
+  /**
+   * false = solo cuenta (sin subject de IP). Para logins donde muchas personas
+   * comparten IP (una clínica entera detrás del mismo router): el freno por IP
+   * lo pone el llamador con `recordDistinctFailure`. Por defecto true.
+   */
+  porIp?: boolean;
 }
 
 function resolvePolicy(p?: Partial<LockoutPolicy>): LockoutPolicy {
@@ -100,6 +106,7 @@ interface Counter {
 }
 const memCounters = new Map<string, Counter>();
 const memLocks = new Map<string, number>(); // key → lockedUntil (epoch ms)
+const memSets = new Map<string, { members: Set<string>; resetAt: number }>();
 
 let lastSweep = Date.now();
 function sweep(): void {
@@ -111,6 +118,9 @@ function sweep(): void {
   });
   memLocks.forEach((until, k) => {
     if (until < now) memLocks.delete(k);
+  });
+  memSets.forEach((c, k) => {
+    if (c.resetAt < now) memSets.delete(k);
   });
 }
 
@@ -288,8 +298,8 @@ export async function releaseLock(key: string): Promise<void> {
 
 // ─────────────────────────── Lockout (punto 3) ─────────────────────────────
 function subjectsFor(req: NextRequest, target: LockoutTarget): string[] {
-  const ip = getClientIp(req);
-  const subjects = [`${target.scope}:ip:${ip}`];
+  const subjects: string[] = [];
+  if (target.porIp !== false) subjects.push(`${target.scope}:ip:${getClientIp(req)}`);
   const acct = target.account?.trim().toLowerCase();
   if (acct) subjects.push(`${target.scope}:acct:${acct}`);
   return subjects;
@@ -400,4 +410,88 @@ export async function recordAuthSuccess(
 ): Promise<void> {
   const subjects = subjectsFor(req, target); // máx 2 → Promise.all seguro (<7)
   await Promise.all(subjects.map((s) => clearSubject(s)));
+}
+
+// ─────────────────────── Piezas sueltas (login de clínica) ─────────────────
+/** Segundos restantes de bloqueo de un subject arbitrario (0 = libre). */
+export async function lockRemainingSec(subject: string): Promise<number> {
+  sweep();
+  return getLockRetry(subject);
+}
+
+export interface DistinctPolicy {
+  /** Miembros DISTINTOS dentro de la ventana que disparan el bloqueo. */
+  threshold: number;
+  windowSec: number;
+  lockSec: number;
+}
+
+/**
+ * Anota `member` (p. ej. un correo) en el conjunto de fallos de `subject`
+ * (p. ej. una IP) y bloquea el subject cuando junta `threshold` miembros
+ * distintos dentro de la ventana. Repetir el mismo miembro no suma: así una
+ * persona que se equivoca diez veces con SU correo no frena a la IP (eso ya
+ * lo frena el bloqueo de su cuenta), pero probar muchas cuentas sí.
+ * Devuelve cuántos miembros distintos lleva.
+ */
+export async function recordDistinctFailure(
+  subject: string,
+  member: string,
+  p: DistinctPolicy,
+): Promise<number> {
+  const setKey = `fb:set:${subject}`;
+  const lockKey = `fb:lock:${subject}`;
+  const redis = getRedis();
+  if (redis) {
+    try {
+      await redis.sadd(setKey, member);
+      // Ventana fija desde el primer fallo (como bumpFailure): NX no la alarga.
+      await redis.expire(setKey, p.windowSec, "NX");
+      const n = await redis.scard(setKey);
+      if (n >= p.threshold) await redis.set(lockKey, n, { ex: p.lockSec });
+      return n;
+    } catch (err) {
+      warnRuntime(err);
+    }
+  }
+  const now = Date.now();
+  let cur = memSets.get(setKey);
+  if (!cur || cur.resetAt < now) {
+    cur = { members: new Set(), resetAt: now + p.windowSec * 1000 };
+    memSets.set(setKey, cur);
+  }
+  cur.members.add(member);
+  const n = cur.members.size;
+  if (n >= p.threshold) memLocks.set(lockKey, now + p.lockSec * 1000);
+  return n;
+}
+
+/** Marca con caducidad (p. ej. «esta cuenta ya entró bien desde esta IP»). */
+export async function rememberKey(key: string, ttlSec: number): Promise<void> {
+  const k = `fb:mark:${key}`;
+  const redis = getRedis();
+  if (redis) {
+    try {
+      await redis.set(k, "1", { ex: ttlSec });
+      return;
+    } catch (err) {
+      warnRuntime(err);
+    }
+  }
+  memLocks.set(k, Date.now() + ttlSec * 1000);
+}
+
+/** ¿Existe la marca de `rememberKey` y no ha caducado? */
+export async function isRemembered(key: string): Promise<boolean> {
+  const k = `fb:mark:${key}`;
+  const redis = getRedis();
+  if (redis) {
+    try {
+      return (await redis.exists(k)) > 0;
+    } catch (err) {
+      warnRuntime(err);
+    }
+  }
+  const until = memLocks.get(k);
+  return !!until && until > Date.now();
 }

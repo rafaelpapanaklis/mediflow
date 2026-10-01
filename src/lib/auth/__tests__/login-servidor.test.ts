@@ -9,7 +9,10 @@
  *
  * Y fija el login nuevo (POST /api/auth/login, Supabase simulado):
  *   · mismo mensaje para cuenta inexistente, contraseña mala y correo sin confirmar;
- *   · bloqueo por CUENTA al 5.º fallo aunque cambie la IP, y por IP aunque cambie la cuenta;
+ *   · bloqueo por CUENTA al 5.º fallo aunque cambie la IP;
+ *   · F3 (revisión en panel.108, 1-oct): 5 fallos de A NO bloquean a B desde la misma IP
+ *     (una clínica sale por una sola IP); muchas cuentas distintas fallidas desde una IP
+ *     sí frenan esa IP, salvo a quien ya entró bien desde ahí; el bloqueo de A expira;
  *   · el acierto limpia el contador; no se llama a Supabase si está bloqueado;
  *   · otro origen (CSRF de login) no entra.
  *
@@ -86,13 +89,93 @@ test("login: bloquea la CUENTA al 5.º fallo aunque cada intento venga de otra I
   assert.equal(llamadasSupabase, antes, "bloqueado no debe ni preguntar a Supabase");
 });
 
-test("login: bloquea la IP aunque cambie el correo (y el bloqueo no distingue cuentas inexistentes)", async () => {
-  respuestaSupabase = { data: { session: null }, error: { message: "Invalid login credentials" } };
+const MALA = { data: { session: null }, error: { message: "Invalid login credentials" } };
+const BUENA = { data: { session: { access_token: "t" } }, error: null };
+
+test("F3: 5 fallos de A no bloquean a B desde la misma IP (la recepcionista no deja fuera al doctor)", async () => {
+  const ip = "198.18.0.7";
+  respuestaSupabase = MALA;
   for (let i = 0; i < 5; i++) {
-    await login(pedir("/api/auth/login", { email: `nadie${i}@example.com`, password: "x" }, "172.16.0.5"));
+    const r = await login(pedir("/api/auth/login", { email: "inventado@example.com", password: `mala${i}` }, ip));
+    assert.equal(r.status, 401);
   }
-  const r = await login(pedir("/api/auth/login", { email: "otra@example.com", password: "x" }, "172.16.0.5"));
+  // A sí queda bloqueada, con un mensaje que dice que es ESTE correo.
+  const a = await login(pedir("/api/auth/login", { email: "inventado@example.com", password: "otra" }, ip));
+  assert.equal(a.status, 429);
+  assert.match((await a.json()).error, /con este correo/);
+
+  // B, desde la misma IP: su login correcto pasa…
+  respuestaSupabase = BUENA;
+  const b = await login(pedir("/api/auth/login", { email: "doctor@example.com", password: "buena" }, ip));
+  assert.equal(b.status, 200);
+  // …y si se equivoca recibe el 401 normal, no un 429.
+  respuestaSupabase = MALA;
+  const b2 = await login(pedir("/api/auth/login", { email: "doctor@example.com", password: "mala" }, ip));
+  assert.equal(b2.status, 401);
+});
+
+test("F3: muchas cuentas distintas fallidas desde una IP frenan esa IP (y solo esa)", async () => {
+  const ip = "198.18.0.8";
+  const { POLITICA_IP } = await import("../login-bloqueo");
+  // Antes del ataque, el doctor entra bien desde esta IP: queda «conocido» aquí.
+  respuestaSupabase = BUENA;
+  assert.equal((await login(pedir("/api/auth/login", { email: "dr-conocido@example.com", password: "buena" }, ip))).status, 200);
+
+  respuestaSupabase = MALA;
+  for (let i = 0; i < POLITICA_IP.threshold; i++) {
+    const r = await login(pedir("/api/auth/login", { email: `victima${i}@example.com`, password: "x" }, ip));
+    assert.equal(r.status, 401, `el fallo ${i + 1} todavía responde 401`);
+  }
+  // Una cuenta nueva desde esa IP: 429 con el mensaje de la red, sin preguntar a Supabase.
+  respuestaSupabase = BUENA;
+  const antes = llamadasSupabase;
+  const r = await login(pedir("/api/auth/login", { email: "nueva@example.com", password: "buena" }, ip));
   assert.equal(r.status, 429);
+  assert.ok(Number(r.headers.get("Retry-After")) > 0);
+  assert.match((await r.json()).error, /desde esta red/i);
+  assert.equal(llamadasSupabase, antes);
+
+  // Quien ya había entrado bien desde esa IP sigue entrando.
+  assert.equal((await login(pedir("/api/auth/login", { email: "dr-conocido@example.com", password: "buena" }, ip))).status, 200);
+  // Y la misma cuenta nueva desde otra IP entra sin problema.
+  assert.equal((await login(pedir("/api/auth/login", { email: "nueva@example.com", password: "buena" }, "198.18.0.9"))).status, 200);
+});
+
+test("F3: equivocarse muchas veces con el MISMO correo no frena la IP", async () => {
+  const ip = "198.18.0.10";
+  respuestaSupabase = MALA;
+  // Tres personas se equivocan cada una hasta quedar bloqueadas (y siguen insistiendo).
+  for (const quien of ["recep1@example.com", "recep2@example.com", "recep3@example.com"]) {
+    for (let i = 0; i < 8; i++) await login(pedir("/api/auth/login", { email: quien, password: "mala" }, ip));
+  }
+  respuestaSupabase = BUENA;
+  assert.equal((await login(pedir("/api/auth/login", { email: "doctora@example.com", password: "buena" }, ip))).status, 200);
+});
+
+test("F3: el bloqueo de A expira (y el de la IP también)", async () => {
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  try {
+    const ip = "198.18.0.11";
+    respuestaSupabase = MALA;
+    for (let i = 0; i < 5; i++) await login(pedir("/api/auth/login", { email: "a-expira@example.com", password: "mala" }, ip));
+    respuestaSupabase = BUENA;
+    const bloqueada = await login(pedir("/api/auth/login", { email: "a-expira@example.com", password: "buena" }, ip));
+    assert.equal(bloqueada.status, 429);
+    assert.match((await bloqueada.json()).error, /Espera 1 minuto/);
+    mock.timers.tick(61_000);
+    assert.equal((await login(pedir("/api/auth/login", { email: "a-expira@example.com", password: "buena" }, ip))).status, 200);
+
+    const { POLITICA_IP } = await import("../login-bloqueo");
+    const ip2 = "198.18.0.12";
+    respuestaSupabase = MALA;
+    for (let i = 0; i < POLITICA_IP.threshold; i++) await login(pedir("/api/auth/login", { email: `exp${i}@example.com`, password: "x" }, ip2));
+    respuestaSupabase = BUENA;
+    assert.equal((await login(pedir("/api/auth/login", { email: "luego@example.com", password: "buena" }, ip2))).status, 429);
+    mock.timers.tick(POLITICA_IP.lockSec * 1000 + 1000);
+    assert.equal((await login(pedir("/api/auth/login", { email: "luego@example.com", password: "buena" }, ip2))).status, 200);
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 test("login: el acierto limpia el contador de esa cuenta", async () => {
