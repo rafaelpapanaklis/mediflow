@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAffiliateContext } from "@/lib/affiliate-auth";
 import { roundMxn } from "@/lib/affiliates/stats";
 import { commissionKindLabel, isNetworkBonusKind } from "@/lib/affiliates/payout-core";
-import * as XLSX from "xlsx";
+import { libroXlsx } from "@/lib/excel/libro-xlsx";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ function referralStatus(subscriptionStatus: string | null, trialEndsAt: Date | n
 
 /**
  * GET /api/afiliados/reportes/export?type=referidos|comisiones&from=YYYY-MM-DD&to=YYYY-MM-DD
- * Devuelve un .xlsx (librería `xlsx`, SOLO export — convención G8).
+ * Devuelve un .xlsx (exceljs vía `libroXlsx`, SOLO export — convención G8).
  * Rango default: últimos 30 días; `to` es inclusivo (createdAt < to + 1 día).
  * Datos SIEMPRE where affiliateId del ctx — nunca del request.
  */
@@ -93,14 +93,14 @@ export async function GET(req: NextRequest) {
   const createdAt = { gte: from, lt: toExclusive };
 
   let header: string[];
-  let cols: { wch: number }[];
+  let cols: number[];
   let rows: Record<string, string | number>[];
   let sheetName: "Referidos" | "Comisiones";
 
   if (type === "referidos") {
     sheetName = "Referidos";
     header = ["Clínica", "Fecha de registro", "Estado"];
-    cols = [{ wch: 34 }, { wch: 18 }, { wch: 16 }];
+    cols = [34, 18, 16];
     const clinics = await prisma.clinic.findMany({
       where: { affiliateId, createdAt },
       select: { name: true, createdAt: true, subscriptionStatus: true, trialEndsAt: true },
@@ -124,16 +124,7 @@ export async function GET(req: NextRequest) {
       "Estado",
       "Fecha de pago",
     ];
-    cols = [
-      { wch: 12 },
-      { wch: 34 },
-      { wch: 17 },
-      { wch: 16 },
-      { wch: 18 },
-      { wch: 16 },
-      { wch: 12 },
-      { wch: 14 },
-    ];
+    cols = [12, 34, 17, 16, 18, 16, 12, 14];
     const commissions = await prisma.affiliateCommission.findMany({
       where: { affiliateId, createdAt },
       orderBy: { createdAt: "desc" },
@@ -163,16 +154,12 @@ export async function GET(req: NextRequest) {
     }));
   }
 
-  // Con `header` explícito el sheet conserva los encabezados aunque no haya filas.
-  const ws = XLSX.utils.json_to_sheet(rows, { header });
-  ws["!cols"] = cols;
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  // Con `encabezados` explícitos la hoja conserva los títulos aunque no haya filas.
+  const buffer = await libroXlsx([{ nombre: sheetName, encabezados: header, filas: rows, anchos: cols }]);
 
   const fname = `dalecontrol-afiliado-${type}-${from.toISOString().slice(0, 10)}-${to.toISOString().slice(0, 10)}.xlsx`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

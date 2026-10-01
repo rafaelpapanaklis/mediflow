@@ -69,6 +69,10 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "30mb",
     },
+    // src/instrumentation.ts: al arrancar, apaga los cargadores HEIF y .vips
+    // de sharp (avisos de libheif/libvips sin parche en 0.34). En Next 14 el
+    // archivo no se ejecuta sin esta bandera.
+    instrumentationHook: true,
   },
   // Los codecs DICOM comprimidos (@cornerstonejs/dicom-codec -> glue Emscripten de
   // OpenJPEG/CharLS/libjpeg-turbo, que descomprime JPEG2000/JPEG-LS/HTJ2K/RLE en el

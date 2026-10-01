@@ -427,6 +427,17 @@ export async function validarArchivo(args: ValidarArchivoArgs): Promise<Resultad
     };
   }
 
+  // AVIF: sharp ya no lo abre (src/lib/uploads/sharp-bloqueos.ts apaga el
+  // cargador HEIF de libvips por los avisos de libheif). Sin este corte, el
+  // perfil que lo admite (fotos de ortodoncia) diría «corrupta».
+  if (detectado.mime === "image/avif") {
+    return {
+      ok: false,
+      motivo: "Las imágenes AVIF no se aceptan. Guárdala como JPG, PNG o WebP y vuelve a subirla.",
+      codigo: "tipo_no_permitido",
+    };
+  }
+
   // HEIC/HEIF (fotos de iPhone) y BMP quedan FUERA de la decodificación
   // forzada: el libheif que trae sharp empaquetado decodifica AVIF (AV1)
   // pero NO HEIC real (HEVC/x265, con licencia aparte), y sharp/libvips de

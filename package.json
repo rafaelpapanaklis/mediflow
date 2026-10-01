@@ -17,6 +17,8 @@
     "test:clinic-logo": "tsx --test src/lib/__tests__/clinic-logo.test.ts",
     "test:format-date": "tsx --test src/lib/__tests__/format-date.test.ts",
     "test:uploads-validar": "tsx --test src/lib/uploads/__tests__/validar-archivo.test.ts",
+    "test:sharp-bloqueos": "tsx --test src/lib/uploads/__tests__/sharp-bloqueos.test.ts",
+    "test:exportes-xlsx": "tsx --test --experimental-test-module-mocks src/lib/excel/__tests__/exportes-xlsx.test.ts",
     "test:route-cache": "tsx --test src/lib/__tests__/route-cache.test.ts",
     "test:marketplace": "tsx --test src/lib/marketplace/access-control.test.ts",
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
@@ -544,7 +546,6 @@
     "three": "^0.184.0",
     "three-mesh-bvh": "^0.9.10",
     "twilio": "^6.0.0",
-    "xlsx": "^0.18.5",
     "xmlbuilder2": "^4.0.3",
     "zod": "^3.23.8"
   },

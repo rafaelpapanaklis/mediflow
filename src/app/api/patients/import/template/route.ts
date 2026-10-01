@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import { libroXlsx } from "@/lib/excel/libro-xlsx";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GET /api/patients/import/template  (WS2-T2; ampliada en ws1-t4)
@@ -12,8 +12,8 @@ import * as XLSX from "xlsx";
 // para todo. Los encabezados son variantes que la autodetección de cada
 // entidad reconoce (`headerVariants`): cambiarlos aquí obliga a mirarlos allí.
 //
-// `xlsx` (SheetJS) se usa SOLO para GENERAR (output de confianza); el PARSEO de
-// archivos subidos va por exceljs (ver src/lib/import/engine.ts).
+// Se genera con exceljs (src/lib/excel/libro-xlsx.ts), igual que el PARSEO de
+// archivos subidos (src/lib/import/engine.ts). SheetJS ya no es dependencia.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const runtime = "nodejs";
@@ -143,15 +143,9 @@ const TEMPLATE_SHEETS: SheetDef[] = [
 ];
 
 export async function GET() {
-  const wb = XLSX.utils.book_new();
-
-  for (const def of TEMPLATE_SHEETS) {
-    const ws = XLSX.utils.json_to_sheet(def.rows, { header: def.headers });
-    ws["!cols"] = def.widths.map((wch) => ({ wch }));
-    XLSX.utils.book_append_sheet(wb, ws, def.name);
-  }
-
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  const buf = await libroXlsx(
+    TEMPLATE_SHEETS.map((def) => ({ nombre: def.name, encabezados: def.headers, filas: def.rows, anchos: def.widths })),
+  );
   const body = new Uint8Array(buf);
 
   return new NextResponse(body, {

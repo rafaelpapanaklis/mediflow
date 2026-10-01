@@ -163,8 +163,10 @@ export async function POST(req: NextRequest) {
       codigo: validado.codigo,
       nombreOriginal,
     });
+    // El motivo va en `error`: es lo que pintan PhotoSetWizard y SectionPhotos
+    // (p. ej. «Las imágenes AVIF no se aceptan…» desde el bloqueo de sharp).
     return NextResponse.json(
-      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: validado.motivo },
+      { error: `Archivo no válido: ${validado.motivo}`, detalle: validado.motivo },
       { status: 400 },
     );
   }

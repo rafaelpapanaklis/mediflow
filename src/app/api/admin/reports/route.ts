@@ -2,7 +2,7 @@ import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isInTrial } from "@/lib/plan-status";
-import * as XLSX from "xlsx";
+import { libroXlsx } from "@/lib/excel/libro-xlsx";
 import { diaAdmin } from "@/lib/admin/zona-horaria";
 import { diaDePeriodo } from "@/lib/admin/dia-de-periodo";
 import { getAdminMrr } from "@/lib/admin/mrr";
@@ -195,9 +195,7 @@ export async function GET(req: NextRequest) {
   if (format !== "xlsx") return NextResponse.json(data);
 
   // Export XLSX
-  const wb = XLSX.utils.book_new();
-
-  const summarySheet = XLSX.utils.json_to_sheet([
+  const resumen = [
     { Métrica: "Periodo",           Valor: `${desde} → ${hasta}` },
     { Métrica: "MRR (activo)",      Valor: data.summary.mrr },
     { Métrica: "ARR",               Valor: data.summary.arr },
@@ -212,43 +210,40 @@ export async function GET(req: NextRequest) {
     { Métrica: "Churn (periodo)",   Valor: data.summary.churnedPeriod },
     { Métrica: "Ingresos periodo",  Valor: data.summary.periodRevenue },
     { Métrica: "Pagos periodo",     Valor: data.summary.periodPayments },
+  ];
+
+  const mensual = data.monthlySeries.map(m => ({
+    Mes:            m.month,
+    "Ingresos":     m.paid,
+    "# Pagos":      m.payments,
+    "Nuevas":       m.newClinics,
+    "Churn":        m.churned,
+  }));
+
+  const pagos = data.periodInvoices.map(inv => ({
+    // `createdAt` SÍ es un instante: se fecha en la zona del panel.
+    Fecha:          diaAdmin(inv.createdAt),
+    Clínica:        inv.clinic?.name ?? "",
+    Plan:           inv.clinic?.plan ?? "",
+    Monto:          inv.amount,
+    Moneda:         inv.currency,
+    Método:         inv.method ?? "",
+    Estado:         inv.status,
+    Referencia:     inv.reference ?? "",
+    // Columna MIXTA (manual = fecha de calendario, Stripe = instante):
+    // ver `diaDePeriodo`. No se puede fechar todo igual.
+    PeriodoInicio:  diaDePeriodo(inv.periodStart),
+    PeriodoFin:     diaDePeriodo(inv.periodEnd),
+  }));
+
+  const buffer = await libroXlsx([
+    { nombre: "Resumen", filas: resumen },
+    { nombre: "Mensual", filas: mensual },
+    { nombre: "Pagos",   filas: pagos },
   ]);
-  XLSX.utils.book_append_sheet(wb, summarySheet, "Resumen");
-
-  const monthlySheet = XLSX.utils.json_to_sheet(
-    data.monthlySeries.map(m => ({
-      Mes:            m.month,
-      "Ingresos":     m.paid,
-      "# Pagos":      m.payments,
-      "Nuevas":       m.newClinics,
-      "Churn":        m.churned,
-    })),
-  );
-  XLSX.utils.book_append_sheet(wb, monthlySheet, "Mensual");
-
-  const paymentsSheet = XLSX.utils.json_to_sheet(
-    data.periodInvoices.map(inv => ({
-      // `createdAt` SÍ es un instante: se fecha en la zona del panel.
-      Fecha:          diaAdmin(inv.createdAt),
-      Clínica:        inv.clinic?.name ?? "",
-      Plan:           inv.clinic?.plan ?? "",
-      Monto:          inv.amount,
-      Moneda:         inv.currency,
-      Método:         inv.method ?? "",
-      Estado:         inv.status,
-      Referencia:     inv.reference ?? "",
-      // Columna MIXTA (manual = fecha de calendario, Stripe = instante):
-      // ver `diaDePeriodo`. No se puede fechar todo igual.
-      PeriodoInicio:  diaDePeriodo(inv.periodStart),
-      PeriodoFin:     diaDePeriodo(inv.periodEnd),
-    })),
-  );
-  XLSX.utils.book_append_sheet(wb, paymentsSheet, "Pagos");
-
-  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
   const fname = `dalecontrol-reporte-${desde}_${hasta}.xlsx`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
