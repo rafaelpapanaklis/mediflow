@@ -17,6 +17,7 @@
     "test:clinic-logo": "tsx --test src/lib/__tests__/clinic-logo.test.ts",
     "test:format-date": "tsx --test src/lib/__tests__/format-date.test.ts",
     "test:uploads-validar": "tsx --test src/lib/uploads/__tests__/validar-archivo.test.ts",
+    "test:csv-excel": "tsx --test src/lib/__tests__/csv-excel.test.ts",
     "test:sharp-bloqueos": "tsx --test src/lib/uploads/__tests__/sharp-bloqueos.test.ts",
     "test:exportes-xlsx": "tsx --test --experimental-test-module-mocks src/lib/excel/__tests__/exportes-xlsx.test.ts",
     "test:route-cache": "tsx --test src/lib/__tests__/route-cache.test.ts",

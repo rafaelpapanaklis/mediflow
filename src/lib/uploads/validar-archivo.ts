@@ -38,6 +38,13 @@ export interface PerfilSubida {
   pdfProfundo?: boolean;
   /** Descripción humana, para mensajes de error. */
   descripcion: string;
+  /** Género de `descripcion` para el artículo del mensaje («una radiografía»). Por omisión masculino. */
+  genero?: "f";
+}
+
+/** «un documento» / «una radiografía»: el artículo concuerda con la descripción del perfil. */
+export function conArticulo(perfil: Pick<PerfilSubida, "descripcion" | "genero">): string {
+  return `${perfil.genero === "f" ? "una" : "un"} ${perfil.descripcion}`;
 }
 
 const MB = 1024 * 1024;
@@ -65,6 +72,7 @@ export const PERFILES = {
     maxBytes: 25 * MB,
     imagen: true,
     descripcion: "foto clínica",
+    genero: "f",
   },
   DOCUMENTO_PACIENTE: {
     id: "DOCUMENTO_PACIENTE",
@@ -89,6 +97,7 @@ export const PERFILES = {
     imagen: true,
     pdfProfundo: true,
     descripcion: "radiografía o archivo clínico",
+    genero: "f",
   },
   COMPROBANTE: {
     id: "COMPROBANTE",
@@ -134,6 +143,7 @@ export const PERFILES = {
     ],
     maxBytes: 30 * MB,
     descripcion: "nota de voz",
+    genero: "f",
   },
 } as const satisfies Record<string, PerfilSubida>;
 
@@ -394,7 +404,7 @@ export async function validarArchivo(args: ValidarArchivoArgs): Promise<Resultad
     buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
   );
   if (ejecutable) {
-    return { ok: false, motivo: `El contenido es un ${ejecutable}, no un ${args.perfil.descripcion}`, codigo: "ejecutable" };
+    return { ok: false, motivo: `El contenido es un ${ejecutable}, no ${conArticulo(args.perfil)}`, codigo: "ejecutable" };
   }
 
   // Nombre declarado: extensión peligrosa en cualquier segmento (aunque el
@@ -409,7 +419,7 @@ export async function validarArchivo(args: ValidarArchivoArgs): Promise<Resultad
   if (marcador) {
     return {
       ok: false,
-      motivo: `El contenido parece un script o marcado (${marcador.trim()}), no un ${args.perfil.descripcion}`,
+      motivo: `El contenido parece un script o marcado (${marcador.trim()}), no ${conArticulo(args.perfil)}`,
       codigo: "script_o_marcado",
     };
   }

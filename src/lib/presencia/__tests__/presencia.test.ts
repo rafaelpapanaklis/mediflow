@@ -25,6 +25,7 @@ import {
   debeLatir,
   etiquetaDePantalla,
   formatoDuracion,
+  pausaPorErrores,
   puedeLatirYa,
 } from "../presencia-core";
 import {
@@ -66,6 +67,26 @@ test("15 min sin mouse/teclado/toque: deja de mandar aunque la pestaña siga vis
 test("las señales que no son del reloj respetan los 15 s mínimos", () => {
   assert.equal(puedeLatirYa(100_000 + LATIDO_MINIMO_MS - 1, 100_000), false);
   assert.equal(puedeLatirYa(100_000 + LATIDO_MINIMO_MS, 100_000), true);
+});
+
+test("«error» seguido: 1 y 2 no cambian el ritmo; desde la 3.ª se espacia hasta 10 min", () => {
+  assert.equal(pausaPorErrores(0), 0);
+  assert.equal(pausaPorErrores(1), 0);
+  assert.equal(pausaPorErrores(2), 0);
+  assert.equal(pausaPorErrores(3), 2 * MIN);
+  assert.equal(pausaPorErrores(4), 4 * MIN);
+  assert.equal(pausaPorErrores(5), 8 * MIN);
+  assert.equal(pausaPorErrores(6), 10 * MIN, "tope");
+  assert.equal(pausaPorErrores(500), 10 * MIN, "no se desborda");
+  assert.equal(pausaPorErrores(Number.NaN), 0);
+});
+
+test("el latido lleva el espaciado por «error» y vuelve al ritmo normal con una respuesta buena", () => {
+  const src = readFileSync(join(process.cwd(), "src/components/dashboard/presencia-latido.tsx"), "utf8");
+  assert.match(src, /j\.motivo === "error"/, "cuenta los «error» del servidor");
+  assert.match(src, /pausaPorErrores\(erroresSeguidos\)/);
+  assert.match(src, /erroresSeguidos = 0;\s*\n\s*noAntesDe = 0;/, "una respuesta buena lo reinicia");
+  assert.match(src, /if \(Date\.now\(\) < noAntesDe\) return;/);
 });
 
 // ─────────────────────────── Pantalla legible ───────────────────────────────

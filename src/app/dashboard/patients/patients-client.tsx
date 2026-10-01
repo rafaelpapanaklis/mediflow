@@ -49,6 +49,7 @@ import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { DateField } from "@/components/ui/date-field";
 import { patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
+import { armarCsvExcel } from "@/lib/csv-excel";
 import styles from "./patients.module.css";
 // REDISEÑO DE PACIENTES (WS1-T4) — la raíz que trae Instrument Sans y los
 // tokens `--pr-*`. Solo se monta con el interruptor `menu-dos-niveles`
@@ -666,12 +667,10 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       t("patients.export.colStatus"),
       t("patients.export.colBalance"),
     ];
-    const csv = [
-      headers.join(","),
-      ...rows.map((p) =>
-        [p.patientNumber, `"${p.fullName}"`, p.phone ?? "", p.email ?? "", p.age ?? "", p.status, p.balance].join(","),
-      ),
-    ].join("\n");
+    const csv = armarCsvExcel([
+      headers,
+      ...rows.map((p) => [p.patientNumber, p.fullName, p.phone, p.email, p.age, p.status, p.balance]),
+    ]);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

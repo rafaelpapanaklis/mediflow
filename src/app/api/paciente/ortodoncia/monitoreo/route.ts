@@ -39,6 +39,7 @@ const PERFIL: PerfilSubida = {
   maxBytes: 20 * 1024 * 1024,
   imagen: true,
   descripcion: "foto de monitoreo de ortodoncia",
+  genero: "f",
 };
 const ANGLES = ["FRONTAL", "LATERAL", "SMILE", "INTRAORAL", "OTHER"];
 

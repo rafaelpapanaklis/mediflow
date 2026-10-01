@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { signMaybeUrls } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
-import { validateMagicNumber } from "@/lib/validate-upload";
+import { PERFILES, registrarSubidaRechazada, validarArchivo } from "@/lib/uploads/validar-archivo";
 import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import {
   ALLOWED_PHOTO_MIME,
@@ -106,13 +106,27 @@ export async function uploadClinicalPhotoAction(
     const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
     if (isFailure(guard)) return fail(guard.error);
 
-    // Blindaje: firma real del contenido (no la extensión/MIME declarado),
-    // mismo patrón que /api/orthodontics/photos/upload.
+    // Blindaje: el mismo validarArchivo de las demás subidas (/api/xrays,
+    // /api/orthodontics/*): firma real del contenido, ejecutables/scripts y
+    // decodificación real con sharp — una foto truncada o corrupta ya no entra
+    // al expediente. El motivo llega tal cual a la pantalla.
     const rawBytes = new Uint8Array(await file.arrayBuffer());
-    // Array.from (no spread): el tsconfig no baja iteradores de Set (target).
-    const magicErr = await validateMagicNumber(rawBytes, Array.from(ALLOWED_PHOTO_MIME));
-    if (magicErr) {
-      return fail(`Archivo no válido: ${magicErr}`);
+    const validado = await validarArchivo({
+      bytes: rawBytes,
+      nombreOriginal: fileName,
+      perfil: PERFILES.FOTO_CLINICA,
+    });
+    if (validado.ok === false) {
+      await registrarSubidaRechazada({
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        patientId: parsed.data.patientId,
+        ruta: "uploadClinicalPhotoAction",
+        motivo: validado.motivo,
+        codigo: validado.codigo,
+        nombreOriginal: fileName,
+      });
+      return fail(`Archivo no válido: ${validado.motivo}`);
     }
 
     // Cuota de almacenamiento del plan — ANTES de subir bytes. storageQuotaError

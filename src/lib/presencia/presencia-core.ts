@@ -46,6 +46,23 @@ export function puedeLatirYa(ahora: number, ultimoLatido: number): boolean {
   return ahora - ultimoLatido >= LATIDO_MINIMO_MS;
 }
 
+/** Tope del espaciado cuando el servidor responde «error» una y otra vez. */
+export const PAUSA_MAXIMA_POR_ERRORES_MS = 10 * 60_000;
+/** Cuántos «error» seguidos se toleran antes de espaciar (uno suelto es un parpadeo). */
+export const ERRORES_SEGUIDOS_TOLERADOS = 2;
+
+/**
+ * Cuánto esperar antes de la siguiente señal tras `seguidos` respuestas
+ * `motivo:"error"` consecutivas (p. ej. Redis inalcanzable). Hasta 2 seguidas
+ * nada cambia; desde la 3.ª: 2, 4, 8 min… con tope de 10. Con una respuesta
+ * buena el contador vuelve a cero y el ritmo normal (60 s) también.
+ */
+export function pausaPorErrores(seguidos: number): number {
+  if (!Number.isFinite(seguidos) || seguidos <= ERRORES_SEGUIDOS_TOLERADOS) return 0;
+  const potencia = Math.min(seguidos - ERRORES_SEGUIDOS_TOLERADOS, 10);
+  return Math.min(PAUSA_MAXIMA_POR_ERRORES_MS, LATIDO_MS * 2 ** potencia);
+}
+
 // ─────────────────────────── Pantalla legible ───────────────────────────────
 
 /** Primer segmento de /dashboard/<x> → nombre en el menú. */

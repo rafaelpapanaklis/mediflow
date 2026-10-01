@@ -38,6 +38,7 @@ const PERFIL_IMAGEN: PerfilSubida = {
   maxBytes: MAX_SIZE,
   imagen: true,
   descripcion: "radiografía o foto de análisis facial",
+  genero: "f",
 };
 const PERFIL_PDF: PerfilSubida = {
   id: "ORTHO_TRAZADO_PDF",
@@ -125,8 +126,10 @@ export async function POST(req: NextRequest) {
       codigo: validado.codigo,
       nombreOriginal,
     });
+    // El motivo va en `error`: es lo que pinta la pantalla (AVIF, GIF, corrupta…),
+    // igual que /api/orthodontics/photos/upload.
     return NextResponse.json(
-      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: validado.motivo },
+      { error: `Archivo no válido: ${validado.motivo}`, detalle: validado.motivo },
       { status: 400 },
     );
   }

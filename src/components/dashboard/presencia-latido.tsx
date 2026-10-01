@@ -7,6 +7,7 @@ import {
   LATIDO_MS,
   RUTA_LATIDO,
   debeLatir,
+  pausaPorErrores,
   puedeLatirYa,
 } from "@/lib/presencia/presencia-core";
 
@@ -24,6 +25,9 @@ import {
  *
  * Si el servidor dice que no hay dónde guardarla (sin Redis), que no cuenta esta
  * sesión, o que no hay sesión (401/403), se deja de intentar hasta recargar.
+ * Si responde «error» (Redis caído) varias veces seguidas, las señales se
+ * espacian (2, 4, 8 min… hasta 10) en vez de martillar cada 60 s; con una
+ * respuesta buena vuelve el ritmo normal.
  */
 export function PresenciaLatido() {
   const pathname = usePathname();
@@ -34,9 +38,12 @@ export function PresenciaLatido() {
     let enCurso = false;
     let ultimaActividad = Date.now();
     let ultimoLatido = 0;
+    let erroresSeguidos = 0;
+    let noAntesDe = 0;
 
     const mandar = async () => {
       if (parado || enCurso) return;
+      if (Date.now() < noAntesDe) return; // espaciado tras varios «error» seguidos
       enCurso = true;
       ultimoLatido = Date.now();
       // Una petición colgada (red que se cae a medias) no debe dejar a la pestaña
@@ -57,6 +64,13 @@ export function PresenciaLatido() {
         } else if (r.ok) {
           const j = (await r.json().catch(() => null)) as { guardado?: boolean; motivo?: string } | null;
           if (j && j.guardado === false && (j.motivo === "sin-redis" || j.motivo === "no-cuenta")) parado = true;
+          if (j && j.guardado === false && j.motivo === "error") {
+            erroresSeguidos += 1;
+            noAntesDe = Date.now() + pausaPorErrores(erroresSeguidos);
+          } else {
+            erroresSeguidos = 0;
+            noAntesDe = 0;
+          }
         }
       } catch {
         // sin red o servidor caído: la siguiente señal lo vuelve a intentar

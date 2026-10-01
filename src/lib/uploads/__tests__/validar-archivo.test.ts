@@ -303,3 +303,29 @@ test("cabecerasDescargaSegura fuerza attachment para lo que no es imagen/pdf y s
   const forzado = cabecerasDescargaSegura({ mimeReal: "application/pdf", nombreSaneado: "x.pdf", forzarDescarga: true });
   assert.ok(forzado["Content-Disposition"].startsWith("attachment"));
 });
+
+// ─────────── Artículo del mensaje (ws1-t9): «una radiografía», no «un radiografía» ───────────
+
+test("el rechazo concuerda en género: «no una radiografía…» y «no un documento…»", async () => {
+  const exe = await validarArchivo({ bytes: ejecutableWindows(), nombreOriginal: "rx.png", perfil: PERFILES.RADIOGRAFIA });
+  assert.equal(exe.ok, false);
+  if (exe.ok === false) {
+    assert.match(exe.motivo, /, no una radiografía o archivo clínico$/);
+    assert.doesNotMatch(exe.motivo, /no un radiograf/);
+  }
+  const svg = await validarArchivo({ bytes: Buffer.from(`<svg><script>1</script></svg>`), nombreOriginal: "f.png", perfil: PERFILES.FOTO_CLINICA });
+  if (svg.ok === false) assert.match(svg.motivo, /, no una foto clínica$/);
+  const doc = await validarArchivo({ bytes: ejecutableWindows(), nombreOriginal: "d.png", perfil: PERFILES.DOCUMENTO_PACIENTE });
+  if (doc.ok === false) assert.match(doc.motivo, /, no un documento del paciente$/);
+});
+
+test("FOTO_CLINICA rechaza un JPG truncado (cabecera válida, cuerpo cortado) con motivo claro", async () => {
+  const entero = await sharp({ create: { width: 400, height: 400, channels: 3, noise: { type: "gaussian", mean: 128, sigma: 60 } } }).jpeg().toBuffer();
+  const truncado = entero.subarray(0, Math.floor(entero.length / 3));
+  const r = await validarArchivo({ bytes: truncado, nombreOriginal: "foto.jpg", perfil: PERFILES.FOTO_CLINICA });
+  assert.equal(r.ok, false);
+  if (r.ok === false) {
+    assert.equal(r.codigo, "imagen_corrupta");
+    assert.match(r.motivo, /corrupta/);
+  }
+});

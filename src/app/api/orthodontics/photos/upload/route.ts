@@ -45,6 +45,7 @@ const PERFIL_FOTO_SET: import("@/lib/uploads/validar-archivo").PerfilSubida = {
   maxBytes: 25 * 1024 * 1024,
   imagen: true,
   descripcion: "foto del set fotográfico de ortodoncia",
+  genero: "f",
 };
 
 function fileCategoryFromSetType(setType: OrthoPhotoSetType) {
