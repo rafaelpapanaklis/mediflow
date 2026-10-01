@@ -13,6 +13,7 @@
  */
 import { ALL_PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
 import { DEFAULT_TZ } from "@/lib/agenda/date-ranges";
+import { bloqueFechasRelativas } from "./fechas-relativas";
 import { FRASE_SABINA_APAGADA, type CausaSinPermiso } from "./permisos-sabina";
 import type {
   SabinaDificultad,
@@ -689,6 +690,21 @@ export function hoyParaPrompt(instante: Date, timezone: string): string {
 }
 
 /**
+ * El bloque de fechas relativas para el prompt, sobre el MISMO «hoy» de la
+ * clínica que `hoyParaPrompt` (misma zona, mismo respaldo si es ilegible).
+ */
+export function fechasParaPrompt(instante: Date, timezone: string): string {
+  const iso = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone }).format(instante);
+  let hoyISO: string;
+  try {
+    hoyISO = iso(timezone || DEFAULT_TZ);
+  } catch {
+    hoyISO = iso(DEFAULT_TZ);
+  }
+  return bloqueFechasRelativas(hoyISO);
+}
+
+/**
  * El prompt del sistema. Es donde viven las reglas 3, 5 y 6 del contrato.
  *
  * «CÓMO ESCRIBES» decía «dos o tres líneas» y «nada de tablas» sin más, y con eso
@@ -705,6 +721,12 @@ export function hoyParaPrompt(instante: Date, timezone: string): string {
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
   hoy: string;
+  /**
+   * Las fechas relativas ya resueltas (`fechasParaPrompt`): «mañana», «el
+   * próximo lunes», «el 15». Sin ellas el modelo las contaba de cabeza y se
+   * iba un día (ws1-t5: jueves 1-oct, «el próximo lunes» → martes 6).
+   */
+  fechas?: string | null;
   /**
    * Lo que el catálogo le deja PROPONER («agendar citas»). Vacío o ausente: Sabina
    * solo lee, y el prompt lo dice así.
@@ -781,6 +803,7 @@ Se llama «${nombreClinica}»${lugarClinica ? ` y está en «${lugarClinica}»` 
 `
     : "";
   const contexto = typeof opciones.contexto === "string" ? opciones.contexto.trim() : "";
+  const fechas = typeof opciones.fechas === "string" ? opciones.fechas.trim() : "";
   const pendiente = typeof opciones.tarjetaPendiente === "string" ? opciones.tarjetaPendiente.trim() : "";
   // 🔴 Esta línea era incondicional: «si te escriben "sí", diles que usen el botón
   // de la tarjeta». Agendar casi siempre pasa por una pregunta («¿te la agendo?»),
@@ -790,7 +813,7 @@ Se llama «${nombreClinica}»${lugarClinica ? ` y está en «${lugarClinica}»` 
     ? `- Ahora mismo el usuario tiene en pantalla UNA propuesta sin confirmar: «${pendiente}». Si te escriben "sí" o "confírmalo" sobre ESA propuesta, diles que usen el botón de su tarjeta.`
     : `- Ahora mismo NO hay ninguna tarjeta en pantalla. Solo hay tarjeta cuando en ESTE turno una herramienta de acción te devuelve "propuesta_sin_confirmar". Si el usuario contesta "sí" a algo que tú le preguntaste («¿te la agendo?», «¿es este paciente?»), eso es su respuesta: llama a la herramienta de acción con los datos de la conversación para preparar la propuesta. NUNCA le pidas que confirme en una tarjeta que no preparaste.`;
   return `Eres Sabina, la asistente de una clínica dental en México. Contestas al doctor y a su equipo sobre SU clínica, en español neutro y de tú. Hoy es ${opciones.hoy}.
-${contexto ? `\n${contexto}\n` : ""}
+${fechas ? `\n${fechas}\n` : ""}${contexto ? `\n${contexto}\n` : ""}
 CÓMO CONSIGUES LOS DATOS
 Los números salen SIEMPRE de tus herramientas. No tienes ningún dato de la clínica en la cabeza.
 - Las fechas que les pases van en formato AAAA-MM-DD.

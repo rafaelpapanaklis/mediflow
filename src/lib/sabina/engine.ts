@@ -15,6 +15,7 @@ import {
   garantizarAvisoSinPermiso,
   garantizarAvisoSinPermisoAccion,
   garantizarSinTarjetaFantasma,
+  fechasParaPrompt,
   hoyParaPrompt,
   mandaAConfirmarTarjeta,
   modeloPara,
@@ -274,6 +275,9 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   // México el servidor ya va en el día siguiente, y el modelo pediría las citas
   // de mañana.
   const hoy = hoyParaPrompt(new Date(arranque), input.ctx.timezone);
+  // «Mañana», «el próximo lunes», «el 15» ya resueltos sobre ese mismo hoy:
+  // el modelo los lee en vez de contarlos (ws1-t5).
+  const fechas = fechasParaPrompt(new Date(arranque), input.ctx.timezone);
 
   // Cómo se llama la clínica y dónde está, para el prompt (ws1-t5). Sale del ctx
   // —o sea de la sesión—, se arma una vez por turno y no cuesta una consulta:
@@ -354,6 +358,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         system: construirSystemPrompt({
           dificultad,
           hoy,
+          fechas,
           acciones: queHacen,
           tarjetaPendiente,
           clinica: identidadClinica,
