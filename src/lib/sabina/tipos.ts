@@ -135,6 +135,35 @@ export interface SabinaDb {
   };
   payment: {
     findMany(args: any): Promise<any[]>;
+    /** Efectivo recibido de `calcularResumenFinanzas` (la misma función que /api/finanzas). */
+    aggregate(args: any): Promise<any>;
+  };
+  /**
+   * Inventario, gastos y rentabilidad (ws1-t6) — SOLO LECTURA. Las leen las
+   * mismas funciones que las pantallas (`listarInventario`, `getExpiryAlerts`,
+   * `listarCompras`, `listarGastosDelPeriodo`, `costoDeRecetaPorProcedimiento`),
+   * con este cliente. `InventoryLot`, `InventoryPurchase` y `Expense` NO
+   * llevan relación a Clinic: el tenant sale SIEMPRE del `where` con el
+   * `clinicId` de la sesión.
+   */
+  inventoryItem: {
+    findMany(args: any): Promise<any[]>;
+    findFirst(args: any): Promise<any | null>;
+  };
+  inventoryLot: {
+    findMany(args: any): Promise<any[]>;
+  };
+  inventoryAlertSettings: {
+    findUnique(args: any): Promise<any | null>;
+  };
+  inventoryPurchase: {
+    findMany(args: any): Promise<any[]>;
+  };
+  expense: {
+    findMany(args: any): Promise<any[]>;
+  };
+  procedureMaterialRecipe: {
+    findMany(args: any): Promise<any[]>;
   };
   clinic: {
     findFirst(args: any): Promise<any>;

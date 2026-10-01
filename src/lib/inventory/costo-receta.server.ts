@@ -21,9 +21,13 @@ export function sumarCostoDeReceta(
   return out;
 }
 
-export async function costoDeRecetaPorProcedimiento(clinicId: string): Promise<Record<string, number>> {
+/**
+ * `cliente` es opcional y solo lo pasa Sabina (su `ctx.db`, de solo lectura) para
+ * leer el costo con ESTA misma función; sin él, el `prisma` del repo, como siempre.
+ */
+export async function costoDeRecetaPorProcedimiento(clinicId: string, cliente?: unknown): Promise<Record<string, number>> {
   if (!clinicId) return {}; // jamás una consulta sin tenant
-  const db = prisma as PrismaClient;
+  const db = (cliente ?? prisma) as PrismaClient;
   const leer = (conCosto: boolean) =>
     db.procedureMaterialRecipe.findMany({
       where: { clinicId },

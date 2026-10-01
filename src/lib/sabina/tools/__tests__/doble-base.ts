@@ -95,6 +95,20 @@ export interface Datos {
   patientCredits?: Fila[];
   /** La fila de Configuración → Ortodoncia de cada sede: catálogo de tipos de cita. */
   orthodonticsClinicSettings?: Fila[];
+  /**
+   * ws1-t6 («inventario, gastos y reportes»): inventario con lotes, compras con
+   * sus líneas y proveedor, gastos, y la receta de materiales de cada
+   * procedimiento. Ninguna de estas tablas lleva relación a Clinic: el tenant es
+   * SOLO el `clinicId` del `where`, y por eso la prueba de fuga vale.
+   */
+  inventoryItems?: Fila[];
+  inventoryLots?: Fila[];
+  inventoryAlertSettings?: Fila[];
+  inventoryPurchases?: Fila[];
+  inventoryPurchaseLines?: Fila[];
+  inventoryProviders?: Fila[];
+  expenses?: Fila[];
+  procedureMaterialRecipes?: Fila[];
 }
 
 /** Los modelos de ortodoncia (ws1-t11): entidad de Prisma → tabla del doble. */
@@ -175,6 +189,24 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
     patient: { modelo: "patients", via: (r, p) => r.patientId === p.id, lista: false },
     appointment: { modelo: "appointments", via: (r, a) => r.appointmentId === a.id, lista: false },
   },
+  // ws1-t6 — inventario, compras, gastos y recetas.
+  inventoryLot: {
+    item: { modelo: "inventoryItems", via: (l, i) => l.itemId === i.id, lista: false },
+  },
+  inventoryPurchase: {
+    provider: { modelo: "inventoryProviders", via: (c, p) => c.providerId === p.id, lista: false },
+    lines: { modelo: "inventoryPurchaseLines", via: (c, l) => l.purchaseId === c.id, lista: true },
+    expense: { modelo: "expenses", via: (c, e) => e.purchaseId === c.id, lista: false },
+  },
+  inventoryPurchaseLine: {
+    item: { modelo: "inventoryItems", via: (l, i) => l.itemId === i.id, lista: false },
+  },
+  expense: {
+    purchase: { modelo: "inventoryPurchases", via: (e, c) => e.purchaseId === c.id, lista: false },
+  },
+  procedureMaterialRecipe: {
+    item: { modelo: "inventoryItems", via: (r, i) => r.itemId === i.id, lista: false },
+  },
   // ws1-t11 — ortodoncia.
   clinicModule: {
     module: { modelo: "modules", via: (c, m) => c.moduleId === m.id, lista: false },
@@ -226,6 +258,14 @@ const MODELO_DE: Record<string, string> = {
   clinicBankAccount: "clinicBankAccounts",
   appointmentDeposit: "appointmentDeposits",
   appointmentDepositPayment: "appointmentDepositPayments",
+  inventoryItem: "inventoryItems",
+  inventoryLot: "inventoryLots",
+  inventoryAlertSettings: "inventoryAlertSettings",
+  inventoryPurchase: "inventoryPurchases",
+  inventoryPurchaseLine: "inventoryPurchaseLines",
+  inventoryProvider: "inventoryProviders",
+  expense: "expenses",
+  procedureMaterialRecipe: "procedureMaterialRecipes",
   ...MODELOS_ORTO,
 };
 
@@ -270,6 +310,14 @@ export function crearBase(datos: Datos): BaseDoble {
     clinicBankAccounts: datos.clinicBankAccounts ?? [],
     appointmentDeposits: datos.appointmentDeposits ?? [],
     appointmentDepositPayments: datos.appointmentDepositPayments ?? [],
+    inventoryItems: datos.inventoryItems ?? [],
+    inventoryLots: datos.inventoryLots ?? [],
+    inventoryAlertSettings: datos.inventoryAlertSettings ?? [],
+    inventoryPurchases: datos.inventoryPurchases ?? [],
+    inventoryPurchaseLines: datos.inventoryPurchaseLines ?? [],
+    inventoryProviders: datos.inventoryProviders ?? [],
+    expenses: datos.expenses ?? [],
+    procedureMaterialRecipes: datos.procedureMaterialRecipes ?? [],
   };
   for (const tabla of Object.values(MODELOS_ORTO)) tablas[tabla] = datos[tabla] ?? [];
   const contador: Contador = { llamadas: [] };
@@ -381,6 +429,13 @@ export function crearBase(datos: Datos): BaseDoble {
     clinicMercadoPago: delegado("clinicMercadoPago") as any,
     clinicBankAccount: delegado("clinicBankAccount") as any,
     appointmentDeposit: delegado("appointmentDeposit") as any,
+    // ws1-t6 — inventario, compras, gastos y recetas (solo lectura, como SabinaDb).
+    inventoryItem: delegado("inventoryItem") as any,
+    inventoryLot: delegado("inventoryLot") as any,
+    inventoryAlertSettings: delegado("inventoryAlertSettings") as any,
+    inventoryPurchase: delegado("inventoryPurchase") as any,
+    expense: delegado("expense") as any,
+    procedureMaterialRecipe: delegado("procedureMaterialRecipe") as any,
     // ws1-t11 — ortodoncia: los modelos que leen los cargadores del módulo.
     ...Object.fromEntries(Object.keys(MODELOS_ORTO).map((entidad) => [entidad, delegado(entidad)])),
     // Las tres que `SabinaDb` declara (las lee `orto_caso` por `ctx.db`), con su nombre.

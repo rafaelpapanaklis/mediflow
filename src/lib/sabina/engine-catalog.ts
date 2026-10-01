@@ -29,6 +29,9 @@ import { ortoControles } from "./tools/orto-controles";
 import { ortoCobranza } from "./tools/orto-cobranza";
 import { ortoResumen } from "./tools/orto-resumen";
 import { presupuestos } from "./tools/presupuestos";
+import { inventario } from "./tools/inventario";
+import { gastos } from "./tools/gastos";
+import { reportes } from "./tools/reportes";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -107,6 +110,14 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   // ws1-t9 (1-oct-2026): el histórico de ortodoncia y los presupuestos. Solo leen. Pruebas en tools/__tests__/orto-resumen.test.ts y consultas-t9-dinero.test.ts.
   ortoResumen,
   presupuestos,
+  // ws1-t6 (1-oct-2026): inventario, gastos y reportes. Solo leen, con las MISMAS
+  // funciones que sus pantallas (listarInventario, getExpiryAlerts, listarCompras,
+  // calcularResumenFinanzas, listarGastosDelPeriodo, gastoDe/margenDe), cada parte
+  // con la llave de su pantalla y lo que falta dicho en `omitidas`. Pruebas en
+  // tools/__tests__/negocio.test.ts.
+  inventario,
+  gastos,
+  reportes,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────

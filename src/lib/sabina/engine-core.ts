@@ -296,6 +296,9 @@ const AREA_POR_PREFIJO: Record<string, string> = {
   prescription: "las recetas",
   reports: "los reportes",
   inventory: "el inventario",
+  // analytics.view es la llave de Finanzas (utilidad, gastos, producción por doctor).
+  analytics: "finanzas",
+  procedures: "los procedimientos",
   team: "el equipo",
 };
 

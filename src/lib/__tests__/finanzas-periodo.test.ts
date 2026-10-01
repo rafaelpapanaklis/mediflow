@@ -83,15 +83,20 @@ const raiz = path.resolve(__dirname, "../../..");
 const leer = (rel: string) => fs.readFileSync(path.join(raiz, rel), "utf8");
 
 test("las dos rutas usan la MISMA ventana de gastos (lista = tarjeta = utilidad)", () => {
-  for (const rel of ["src/app/api/finanzas/route.ts", "src/app/api/gastos/route.ts"]) {
-    const src = leer(rel);
-    assert.match(src, /expenseWindowEnd\(/, rel);
-    assert.match(src, /date:\s*\{\s*gte:\s*(win\.)?from,\s*lte:\s*expenseTo\s*\}/, rel);
-  }
+  // /api/finanzas delega el cálculo en @/lib/finanzas-resumen.server (lo lee
+  // también Sabina): la ruta calcula `expenseTo` y la función lo aplica.
+  const finanzas = leer("src/app/api/finanzas/route.ts");
+  assert.match(finanzas, /expenseWindowEnd\(/, "finanzas/route.ts");
+  assert.match(finanzas, /calcularResumenFinanzas\(/, "finanzas/route.ts");
+  assert.match(leer("src/lib/finanzas-resumen.server.ts"), /date:\s*\{\s*gte:\s*from,\s*lte:\s*expenseTo\s*\}/);
+  const gastos = leer("src/app/api/gastos/route.ts");
+  assert.match(gastos, /expenseWindowEnd\(/, "gastos/route.ts");
+  assert.match(gastos, /listarGastosDelPeriodo\(/, "gastos/route.ts");
+  assert.match(leer("src/lib/gastos-periodo.server.ts"), /date:\s*\{\s*gte:\s*from,\s*lte:\s*expenseTo\s*\}/);
 });
 
 test("/api/finanzas: ventas y porDoctor excluyen DRAFT; nada filtra ya solo CANCELLED", () => {
-  const src = leer("src/app/api/finanzas/route.ts");
+  const src = leer("src/lib/finanzas-resumen.server.ts"); // el cálculo vive aquí; la ruta lo llama
   assert.equal((src.match(/notIn:\s*\[\.\.\.NOT_A_SALE_STATUSES\]/g) ?? []).length, 2);
   // El único `not: "CANCELLED"` que queda es el de las citas, que no se tocó.
   assert.equal((src.match(/not:\s*"CANCELLED"/g) ?? []).length, 1);
