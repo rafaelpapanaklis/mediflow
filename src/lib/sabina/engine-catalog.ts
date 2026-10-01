@@ -27,6 +27,8 @@ import { ortoCaso } from "./tools/orto-caso";
 import { ortoDiagnostico } from "./tools/orto-diagnostico";
 import { ortoControles } from "./tools/orto-controles";
 import { ortoCobranza } from "./tools/orto-cobranza";
+import { ortoResumen } from "./tools/orto-resumen";
+import { presupuestos } from "./tools/presupuestos";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -102,6 +104,9 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ortoDiagnostico,
   ortoControles,
   ortoCobranza,
+  // ws1-t9 (1-oct-2026): el histórico de ortodoncia y los presupuestos. Solo leen. Pruebas en tools/__tests__/orto-resumen.test.ts y consultas-t9-dinero.test.ts.
+  ortoResumen,
+  presupuestos,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
