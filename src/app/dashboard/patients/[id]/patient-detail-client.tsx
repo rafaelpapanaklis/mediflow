@@ -13,7 +13,7 @@ import { DeletePatientModal } from "@/components/dashboard/patient-detail/delete
 import { ExpedientePdfDialog } from "@/components/dashboard/patient-detail/expediente-pdf-dialog";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { PatientNavBar } from "@/components/dashboard/patient-detail/patient-nav-bar";
-import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
+import { buildPatientNavItems, PESTANAS_DEL_EXPEDIENTE, TAB_SIN_PERMISO_CLINICO } from "@/components/dashboard/patient-detail/patient-nav-items";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import type { ReminderOutcome } from "@/lib/reminders/promise";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
@@ -408,6 +408,14 @@ interface Props {
   canEditRecords?: boolean;
   /** "prescription.view" (ISO-03) — la pestaña Recetas existe. */
   canViewPrescriptions?: boolean;
+  /**
+   * "medicalRecord.view" — el mismo permiso que exige el servidor para el
+   * odontograma, la historia, las notas y las consultas. Sin él esas pestañas
+   * ni salen del menú y, si se llega a una por enlace o por un botón, la
+   * pantalla dice que falta el permiso en vez de pintar una vista vacía y con
+   * herramientas activas contra un 403.
+   */
+  canViewRecords?: boolean;
   /** "treatments.edit" (EQ-07) — crear, editar y borrar planes de tratamiento. */
   canEditTreatments?: boolean;
   /**
@@ -489,6 +497,7 @@ export function PatientDetailClient({
   canAnalyzeXrays = false,
   canEditRecords = false,
   canViewPrescriptions = false,
+  canViewRecords = false,
   canEditTreatments = false,
   facturApiEnabled = false,
   reminderOutcome = null,
@@ -555,9 +564,10 @@ export function PatientDetailClient({
       showConsents: canViewConsents,
       showXrays: canViewXrays,
       showPrescriptions: canViewPrescriptions,
+      showClinical: canViewRecords,
     });
     return [...items.filter((i) => !i.disabled), ...items.filter((i) => i.disabled)];
-  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling, canViewConsents, canViewXrays, canViewPrescriptions]);
+  }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling, canViewConsents, canViewXrays, canViewPrescriptions, canViewRecords]);
   const tabFromUrl = searchParams.get("tab");
   // Especialidades OCULTAS del menú (HIDDEN_SPECIALTY_IDS) pero alcanzables
   // por enlace profundo desde /dashboard/specialties/*: no están en `tabs`,
@@ -586,11 +596,19 @@ export function PatientDetailClient({
   // abre la pantalla con la que la clínica ATIENDE — "Nueva consulta" donde
   // hay formulario clínico, el editor SOAP de siempre donde no lo hay.
   // El porqué (y por qué era SOAP hasta ahora) está en consult-landing.ts.
+  const consultLandingPermitido = (id: string | null) =>
+    id !== null && (canViewRecords || !PESTANAS_DEL_EXPEDIENTE.includes(id)) ? id : null;
   const consultTab = searchParams.get("appointment")
-    ? consultLandingTab(clinicCategory)
+    ? consultLandingPermitido(consultLandingTab(clinicCategory))
     : null;
   const initialTab = deepLinkTab ?? menuTab ?? consultTab ?? "resumen";
-  const [tab, setTab]         = useState(initialTab);
+  const [tabPedida, setTab] = useState(initialTab);
+  // Sin "medicalRecord.view" una pestaña clínica NO se monta aunque se llegue a
+  // ella (botón interno, `?tab=`): la pestaña efectiva pasa a ser el aviso, y
+  // ningún `tab === "odontograma"` & co. se cumple. El servidor ya la niega con
+  // 403; esto evita pintar la vista vacía, con «forbidden» y herramientas vivas.
+  const sinPermisoClinico = !canViewRecords && PESTANAS_DEL_EXPEDIENTE.includes(tabPedida);
+  const tab = sinPermisoClinico ? TAB_SIN_PERMISO_CLINICO : tabPedida;
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
@@ -1205,7 +1223,7 @@ export function PatientDetailClient({
   // `?appointment=` sin remontar el componente, así que el estado inicial de
   // `tab` ya pasó. Con `?tab=` explícito en la URL manda la URL.
   const activeApptId = activeAppointment?.id ?? null;
-  const consultLanding = consultLandingTab(clinicCategory);
+  const consultLanding = consultLandingPermitido(consultLandingTab(clinicCategory));
   const landedForApptRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeApptId) {
@@ -1620,6 +1638,7 @@ export function PatientDetailClient({
           showConsents={canViewConsents}
           showXrays={canViewXrays}
           showPrescriptions={canViewPrescriptions}
+          showClinical={canViewRecords}
         />
       ) : (
       <PatientNavBar
@@ -1650,6 +1669,7 @@ export function PatientDetailClient({
         showConsents={canViewConsents}
         showXrays={canViewXrays}
         showPrescriptions={canViewPrescriptions}
+        showClinical={canViewRecords}
         activityCounts={activityCounts}
       />
       )}
@@ -1955,6 +1975,20 @@ export function PatientDetailClient({
               El mismo contenido: la línea de tiempo entera y la bitácora de
               accesos que exige la NOM-024. La bitácora pasa a estar PLEGADA:
               es un requisito legal, no lectura diaria. */}
+          {/* Sin "medicalRecord.view": el menú ya no ofrece estas pestañas, pero se
+              puede llegar con un botón interno o por enlace. Aquí va solo el
+              aviso, sin herramientas (ver `sinPermisoClinico`). */}
+          {tab === TAB_SIN_PERMISO_CLINICO && (
+            <div
+              role="alert"
+              data-testid="sin-permiso-clinico"
+              className="bg-card border border-border rounded-xl px-5 py-10 text-center"
+            >
+              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.tabs.sinPermisoClinico")}</h2>
+              <p className="mt-2 text-[13px] text-muted-foreground max-w-[460px] mx-auto">{t("patients.tabs.sinPermisoClinicoDetalle")}</p>
+            </div>
+          )}
+
           {tab === "historia" && rediseno && (
             <HistoriaRediseno
               timeline={

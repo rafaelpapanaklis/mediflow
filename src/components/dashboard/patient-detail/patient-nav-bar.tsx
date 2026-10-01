@@ -76,6 +76,8 @@ export interface PatientNavBarProps {
   showXrays?: boolean;
   /** Recetas — "prescription.view" (ISO-03). */
   showPrescriptions?: boolean;
+  /** Expediente clínico — "medicalRecord.view". `false` esconde Historia, Nueva consulta, Odontograma, etc. */
+  showClinical?: boolean;
   activityCounts?: PatientActivityCounts;
 }
 
@@ -115,6 +117,7 @@ export function PatientNavBar({
   showConsents,
   showXrays,
   showPrescriptions,
+  showClinical,
   activityCounts,
 }: PatientNavBarProps) {
   const t = useT();
@@ -131,8 +134,9 @@ export function PatientNavBar({
         showConsents,
         showXrays,
         showPrescriptions,
+        showClinical,
       }),
-    [pediatrics, showPeriodontics, showEndodontics, showImplants, showOrthodontics, showBilling, showConsents, showXrays, showPrescriptions],
+    [pediatrics, showPeriodontics, showEndodontics, showImplants, showOrthodontics, showBilling, showConsents, showXrays, showPrescriptions, showClinical],
   );
 
   const countFor: Record<string, number | undefined> = {

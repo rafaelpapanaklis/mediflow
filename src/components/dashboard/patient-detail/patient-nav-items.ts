@@ -96,7 +96,32 @@ export interface BuildPatientNavOpts {
    * para todos y recepción/solo-lectura la abrían para recibir un 403.
    */
   showPrescriptions?: boolean;
+  /**
+   * Expediente clínico — requiere "medicalRecord.view" (el mismo permiso que
+   * exige el servidor en /api/odontogram, /api/records, la línea de tiempo y
+   * las notas de evolución). `false` saca del menú las pestañas de
+   * `PESTANAS_DEL_EXPEDIENTE`; `undefined` las deja visibles. Antes recepción
+   * las veía, las abría y recibía un 403 pintado como pantalla vacía.
+   */
+  showClinical?: boolean;
 }
+
+/**
+ * Pestañas cuya lectura pide "medicalRecord.view" en el servidor. Solo las que
+ * el servidor NIEGA de verdad a quien no lo tiene: el cuestionario de salud, los
+ * archivos, las fotos y la agenda no están aquí porque recepción sí los usa.
+ * La pantalla (patient-detail-client) usa esta misma lista para no pintar el
+ * contenido de una de ellas cuando se llega por enlace o por un botón interno.
+ */
+export const TAB_SIN_PERMISO_CLINICO = "sin-permiso-clinico";
+
+export const PESTANAS_DEL_EXPEDIENTE: readonly string[] = [
+  "historia",
+  "expediente",
+  "historial-consultas",
+  "nota-evolucion",
+  "odontograma",
+];
 
 /**
  * Especialidades OCULTAS del menú de la ficha. Rafael las quiere fuera por
@@ -199,12 +224,14 @@ export function buildPatientNavItems(opts: BuildPatientNavOpts): PatientNavItem[
   const hideConsents = opts.showConsents === false;
   const hideXrays = opts.showXrays === false;
   const hidePrescriptions = opts.showPrescriptions === false;
+  const hideClinical = opts.showClinical === false;
   return items.filter(
     (i) =>
       !HIDDEN_SPECIALTY_IDS.has(i.id) &&
       !(hideBilling && i.id === "facturacion") &&
       !(hideConsents && i.id === "consentimientos") &&
       !(hideXrays && i.id === "radiografias") &&
-      !(hidePrescriptions && i.id === "recetas"),
+      !(hidePrescriptions && i.id === "recetas") &&
+      !(hideClinical && PESTANAS_DEL_EXPEDIENTE.includes(i.id)),
   );
 }

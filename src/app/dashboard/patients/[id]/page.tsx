@@ -651,6 +651,7 @@ export default async function PatientDetailPage({
           canAnalyzeXrays={canAnalyzeXrays}
           canEditRecords={canEditRecords}
           canViewPrescriptions={canViewPrescriptions}
+          canViewRecords={canViewRecords}
           canEditTreatments={canEditTreatments}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace

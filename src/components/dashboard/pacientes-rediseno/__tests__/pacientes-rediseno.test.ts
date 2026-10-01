@@ -98,7 +98,9 @@ test("ningún apartado se pierde ni se repite, para ningún juego de permisos", 
     { ...TODO, showImplants: false },
     { ...TODO, showBilling: false, showConsents: false },
     { ...TODO, showXrays: false, showPrescriptions: false },
+    { ...TODO, showClinical: false },
     { ...TODO, showBilling: false, showConsents: false, showXrays: false, showPrescriptions: false, showImplants: false },
+    { ...TODO, showBilling: false, showConsents: false, showXrays: false, showPrescriptions: false, showImplants: false, showClinical: false },
   ];
   combinaciones.forEach((opts) => {
     const items = buildPatientNavItems(opts);
@@ -368,4 +370,73 @@ test("el rediseño se enciende con el MISMO interruptor del menú, no con otro",
     assert.match(src, /menuDosNivelesEncendido\(/, "la pantalla no consulta el interruptor");
     assert.match(src, /rediseno=\{rediseno\}/, "la pantalla no baja la bandera al cliente");
   });
+});
+
+// ═══ Lo clínico sin «medicalRecord.view» (revisión en panel.108, F1) ═════════
+//
+// Recepción veía Odontograma, Historia, Nueva consulta, Nota de evolución e
+// Historial de consultas aunque el servidor se los niega (403): al abrir el
+// odontograma salía vacío, con la palabra cruda «forbidden» y «Limpiar todo»
+// activo. Ahora el menú no las ofrece y, si se llega por enlace o botón, la
+// pantalla dice que falta el permiso en lugar de montar la vista clínica.
+
+import { PESTANAS_DEL_EXPEDIENTE } from "@/components/dashboard/patient-detail/patient-nav-items";
+
+const RECEPCION = {
+  ...TODO,
+  showClinical: false,
+  showPrescriptions: false,
+  showImplants: false,
+};
+
+test("sin el permiso del expediente el menú no ofrece ninguna pestaña clínica", () => {
+  const ids = buildPatientNavItems(RECEPCION).map((i) => i.id);
+  for (const id of PESTANAS_DEL_EXPEDIENTE) assert.ok(!ids.includes(id), `«${id}» no debería salir`);
+  const menu = construirMenuFicha(buildPatientNavItems(RECEPCION));
+  const pintados = menu.fijos.map((i) => i.id).concat(...menu.grupos.map((g) => g.items.map((i) => i.id)));
+  for (const id of PESTANAS_DEL_EXPEDIENTE) assert.ok(!pintados.includes(id), `«${id}» no debería pintarse`);
+});
+
+test("con el permiso (doctor, dueño) el menú trae exactamente las mismas pestañas de siempre", () => {
+  const conPermiso = buildPatientNavItems({ ...TODO, showClinical: true }).map((i) => i.id);
+  const sinOpcion = buildPatientNavItems(TODO).map((i) => i.id);
+  assert.deepEqual(conPermiso, sinOpcion);
+  for (const id of PESTANAS_DEL_EXPEDIENTE) assert.ok(conPermiso.includes(id), `«${id}» sale con el permiso`);
+});
+
+test("lo que recepción SÍ usa sigue en el menú: resumen, cuestionario, consentimientos, radiografías, tratamiento, agenda y facturación", () => {
+  const ids = buildPatientNavItems(RECEPCION).map((i) => i.id);
+  for (const id of ["resumen", "cuestionario", "consentimientos", "radiografias", "tratamiento", "agenda", "facturacion"]) {
+    assert.ok(ids.includes(id), `«${id}» tiene que seguir`);
+  }
+});
+
+test("la ficha manda el permiso a los tres menús y no monta la pantalla clínica sin él", () => {
+  const cliente = readFileSync(join(RAIZ, "src/app/dashboard/patients/[id]/patient-detail-client.tsx"), "utf8");
+  const pagina = readFileSync(join(RAIZ, "src/app/dashboard/patients/[id]/page.tsx"), "utf8");
+  assert.match(pagina, /canViewRecords=\{canViewRecords\}/, "page.tsx pasa el permiso resuelto en el servidor");
+  assert.match(cliente, /canViewRecords = false/, "falla cerrado: sin la prop no se ve lo clínico");
+  assert.match(cliente, /showClinical: canViewRecords/, "tab bar móvil");
+  assert.equal((cliente.match(/showClinical=\{canViewRecords\}/g) ?? []).length, 2, "FichaMenu y PatientNavBar");
+  // La pestaña EFECTIVA es el aviso: ninguna `tab === "<clínica>"` se cumple sin el permiso,
+  // así que ninguna pantalla clínica se monta (y todas siguen escritas como siempre).
+  assert.match(cliente, /const \[tabPedida, setTab\] = useState\(initialTab\)/);
+  assert.match(cliente, /const sinPermisoClinico = !canViewRecords && PESTANAS_DEL_EXPEDIENTE\.includes\(tabPedida\)/);
+  assert.match(cliente, /const tab = sinPermisoClinico \? TAB_SIN_PERMISO_CLINICO : tabPedida/);
+  assert.doesNotMatch(cliente, /const \[tab, setTab\]/, "nadie lee la pestaña pedida sin pasar por la guarda");
+  for (const id of PESTANAS_DEL_EXPEDIENTE) {
+    assert.match(cliente, new RegExp(`\\{tab === "${id}"`), `hay montaje de «${id}»`);
+  }
+  assert.match(cliente, /\{tab === TAB_SIN_PERMISO_CLINICO && \(/, "el aviso se pinta");
+  // «Nueva consulta» desde la agenda no manda a quien no ve lo clínico a una pestaña que no abre.
+  assert.match(cliente, /consultLandingPermitido\(consultLandingTab\(clinicCategory\)\)/);
+});
+
+test("el aviso existe en español e inglés y no es la palabra cruda «forbidden»", () => {
+  const es = JSON.parse(readFileSync(join(RAIZ, "src/i18n/dictionaries/es.json"), "utf8"));
+  const en = JSON.parse(readFileSync(join(RAIZ, "src/i18n/dictionaries/en.json"), "utf8"));
+  assert.equal(es.patients.tabs.sinPermisoClinico, "No tienes permiso para ver lo clínico");
+  assert.ok(en.patients.tabs.sinPermisoClinico.length > 10);
+  assert.ok(es.patients.tabs.sinPermisoClinicoDetalle.length > 20);
+  assert.ok(en.patients.tabs.sinPermisoClinicoDetalle.length > 20);
 });

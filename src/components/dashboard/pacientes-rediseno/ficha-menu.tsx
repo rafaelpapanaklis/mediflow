@@ -62,6 +62,7 @@ export interface FichaMenuProps {
   showConsents?: boolean;
   showXrays?: boolean;
   showPrescriptions?: boolean;
+  showClinical?: boolean;
 }
 
 const ICONO_GRUPO: Record<IdGrupo, typeof Stethoscope> = {
@@ -84,6 +85,7 @@ export function FichaMenu({
   showConsents,
   showXrays,
   showPrescriptions,
+  showClinical,
 }: FichaMenuProps) {
   const t = useT();
 
@@ -100,6 +102,7 @@ export function FichaMenu({
           showConsents,
           showXrays,
           showPrescriptions,
+          showClinical,
         }),
       ),
     [
@@ -112,6 +115,7 @@ export function FichaMenu({
       showConsents,
       showXrays,
       showPrescriptions,
+      showClinical,
     ],
   );
 

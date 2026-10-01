@@ -2023,7 +2023,9 @@
       "recetas": "Recetas",
       "consentimientos": "Consentimiento informado",
       "sectionsAria": "Secciones del paciente",
-      "notaEvolucion": "Nota de evolución"
+      "notaEvolucion": "Nota de evolución",
+      "sinPermisoClinico": "No tienes permiso para ver lo clínico",
+      "sinPermisoClinicoDetalle": "Esta sección es parte del expediente clínico y tu usuario no tiene el permiso «Ver expediente clínico». Pídele a la persona administradora de la clínica que te lo active si lo necesitas."
     },
     "tabsShort": {
       "cuestionario": "Cuestionario",

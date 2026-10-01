@@ -2023,7 +2023,9 @@
       "recetas": "Prescriptions",
       "consentimientos": "Informed consent",
       "sectionsAria": "Patient sections",
-      "notaEvolucion": "Progress note"
+      "notaEvolucion": "Progress note",
+      "sinPermisoClinico": "You don't have permission to view clinical records",
+      "sinPermisoClinicoDetalle": "This section is part of the clinical record and your user doesn't have the «View clinical record» permission. Ask the clinic administrator to enable it if you need it."
     },
     "tabsShort": {
       "cuestionario": "Questionnaire",
