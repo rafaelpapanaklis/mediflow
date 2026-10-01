@@ -6,6 +6,7 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { isValidLatLng } from "@/lib/directory/distance";
 import { categoriaAlGuardar } from "@/lib/clinic/categoria-fija";
 import { esNombreDeClinicaValido, MENSAJE_NOMBRE_INVALIDO } from "@/lib/clinic-fields";
+import { normalizarUrlWeb } from "@/lib/url-interna";
 
 // Contexto vía el helper CENTRAL (getAuthContext): misma resolución
 // cookie→clínica que la copia local que había aquí, pero pasando por los
@@ -52,12 +53,26 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: MENSAJE_NOMBRE_INVALIDO }, { status: 400 });
   }
 
+  // B10 (auditoría 30-sep-2026): `mapsUrl` acababa en un `href` público; un
+  // `javascript:` ahí era XSS. Solo http/https (sin esquema se le pone https://).
+  let mapsUrl: string | null | undefined;
+  if (body.mapsUrl !== undefined) {
+    if (body.mapsUrl === null || (typeof body.mapsUrl === "string" && body.mapsUrl.trim() === "")) {
+      mapsUrl = null;
+    } else {
+      mapsUrl = normalizarUrlWeb(body.mapsUrl);
+      if (!mapsUrl) {
+        return NextResponse.json({ error: "El enlace de Google Maps debe ser una URL http o https." }, { status: 400 });
+      }
+    }
+  }
+
   // Build update object — only update fields that were sent
   const data: Record<string, any> = {};
   if (body.name        !== undefined) data.name        = body.name.trim();
   if (body.city        !== undefined) data.city        = body.city        || null;
   if (body.address     !== undefined) data.address     = body.address     || null;
-  if (body.mapsUrl     !== undefined) data.mapsUrl     = body.mapsUrl     || null;
+  if (mapsUrl          !== undefined) data.mapsUrl     = mapsUrl;
   if (body.phone       !== undefined) data.phone       = body.phone       || null;
   if (body.email       !== undefined) data.email       = body.email       || null;
   if (body.description !== undefined) data.description = body.description || null;

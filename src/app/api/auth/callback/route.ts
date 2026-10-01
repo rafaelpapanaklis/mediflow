@@ -2,6 +2,7 @@ import { origenPublicoDe } from "@/lib/url-publica";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { rutaInternaSegura } from "@/lib/url-interna";
 
 /**
  * OAuth callback from Supabase (Google, Microsoft/Azure, etc.)
@@ -17,7 +18,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const origin = origenPublicoDe(request, request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  // B10 (auditoría 30-sep-2026): `next` solo puede ser una ruta interna. Se arma
+  // `${origin}${next}`, así que un `next=@evil.com` saltaba a otro sitio.
+  const next = rutaInternaSegura(searchParams.get("next"), "/dashboard");
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);

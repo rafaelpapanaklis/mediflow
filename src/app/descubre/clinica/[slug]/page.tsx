@@ -16,6 +16,7 @@ import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import "@/components/public/landing/sales/sales.css";
 import { serializeJsonLd } from "@/lib/json-ld";
+import { normalizarUrlWeb } from "@/lib/url-interna";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /descubre/clinica/[slug] — perfil público de una clínica (estilo Doctoralia).
@@ -346,7 +347,7 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
                 <div className="rounded-2xl border bg-white p-5" style={{ borderColor: "var(--line, #e9e7f3)" }}>
                   <h3 className="mb-3 text-sm font-bold" style={{ color: "var(--ink, #0f172a)" }}>Contacto</h3>
                   {clinic.address && (
-                    <a href={clinic.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clinic.address)}`} target="_blank" rel="noreferrer" className="flex items-start gap-2 text-[13px] hover:underline" style={{ color: "var(--body, #475569)" }}>
+                    <a href={normalizarUrlWeb(clinic.mapsUrl) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clinic.address)}`} target="_blank" rel="noreferrer" className="flex items-start gap-2 text-[13px] hover:underline" style={{ color: "var(--body, #475569)" }}>
                       <MapPin size={15} className="mt-0.5 shrink-0" style={{ color: theme }} aria-hidden="true" /> {clinic.address}
                     </a>
                   )}

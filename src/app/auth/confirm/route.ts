@@ -1,6 +1,7 @@
 import { origenPublicoDe } from "@/lib/url-publica";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rutaInternaSegura } from "@/lib/url-interna";
 
 /**
  * Aterrizaje de enlaces de Supabase Auth. Dos consumidores hoy:
@@ -21,9 +22,8 @@ export async function GET(request: NextRequest) {
   const token_hash = searchParams.get("token_hash");
   const type       = searchParams.get("type") as any;
   const code       = searchParams.get("code");
-  const rawNext    = searchParams.get("next") ?? "/dashboard";
-  // Solo paths internos: un next absoluto o "//host" sería open redirect.
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
+  // Solo paths internos: un next absoluto, "//host" o "/\\host" sería open redirect.
+  const next = rutaInternaSegura(searchParams.get("next"), "/dashboard");
 
   const isRecovery = type === "recovery" || next === "/reset-password";
   const fail = NextResponse.redirect(
