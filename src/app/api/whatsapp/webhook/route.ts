@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createHmac, timingSafeEqual } from "crypto";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppInteractive, sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
 import { entenderNotaDeVoz } from "@/lib/whatsapp/bot/nota-de-voz";
-import { actionablePatientIds, asksToConfirmOrCancel, resolveReminderReply } from "@/lib/whatsapp/reminder-pick";
+import {
+  actionablePatientIds,
+  asksToConfirmOrCancel,
+  isActionableReminder,
+  resolveReminderReply,
+} from "@/lib/whatsapp/reminder-pick";
+import {
+  accionDeBotonRecordatorio,
+  botonesRecordatorio,
+  construirInteractivo,
+  leerEleccion,
+  lineaDeOpciones,
+  textoBandejaDeEleccion,
+  type EleccionEntrante,
+  type MensajeInteractivo,
+} from "@/lib/whatsapp/interactivo";
+import { isBookingInProgress } from "@/lib/whatsapp/bot/booking-core";
 import { esRespuestaDeEncuesta } from "@/lib/whatsapp/reminder-reply";
 import { detectaIntencionDeAgenda } from "@/lib/whatsapp/bot/booking-parse";
 import { extraerEventosDelWebhook, phoneNumberIdDe } from "@/lib/whatsapp/webhook-eventos";
@@ -29,7 +45,13 @@ import {
   metaTimestampToDate,
   parseDeliveryStatus,
 } from "@/lib/whatsapp/delivery-status";
-import { WA_ERROR_CODE, formatWaErrorMessage, isTokenRevoked, waErrorCode } from "@/lib/whatsapp/errors";
+import {
+  WA_ERROR_CODE,
+  WhatsAppApiError,
+  formatWaErrorMessage,
+  isTokenRevoked,
+  waErrorCode,
+} from "@/lib/whatsapp/errors";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { ingestTemplateStatusUpdate } from "@/lib/whatsapp/provision-templates";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
@@ -88,6 +110,20 @@ const REMINDER_AMBIGUOUS_MSG =
 // lo va a contestar (no sabe qué hay dentro) y el staff puede tardar: se le
 // confirma que llegó, para que no se quede mirando una sola palomita.
 const MEDIA_RECEIVED_MSG = "Recibí tu archivo, en un momento te atiende una persona.";
+
+// ws1-t3 (botones) — tocó Confirmar/Cancelar en un recordatorio que ya no está
+// pendiente (ya contestado, o la cita cambió). No se actúa sobre OTRA cita.
+const REMINDER_BUTTON_STALE_MSG =
+  "Ese recordatorio ya no está pendiente. Si necesitas cambiar o cancelar tu cita, escríbenos por aquí. 🙏";
+
+// ws1-t3 (botones) — tocó una opción de una lista o de unos botones que ya no
+// son los últimos que le mandó el bot (o el agendado ya venció).
+const BOT_BUTTON_STALE_MSG = "Esa opción es de un mensaje anterior. Elige en el último mensaje que te mandé. 🙂";
+const BOT_BUTTON_EXPIRED_MSG =
+  "Esas opciones ya vencieron. Escribe *agendar* (o *reagendar*) y te muestro los horarios de nuevo. 🙂";
+
+/** Palabra que el clasificador de recordatorios entiende para cada botón. */
+const PALABRA_DE_BOTON = { confirm: "confirmar", cancel: "cancelar", reschedule: "reagendar" } as const;
 
 /** Adjunto entrante tal y como se guarda en `InboxMessage.attachments` (Json). */
 type IncomingAttachment = {
@@ -276,16 +312,14 @@ export async function POST(req: NextRequest) {
 /** Un mensaje entrante del paciente: Inbox, recordatorios y bot. */
 async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   const from    = msg.from;                       // teléfono del paciente (formato internacional)
-  // Texto original (Inbox + bot). Las respuestas por BOTÓN cuentan como texto:
-  // un "CONFIRMAR" pulsado —y no escrito— sigue confirmando la cita.
-  // `let`: una nota de voz transcrita (ws1-t5) entra después como texto.
-  let rawText = String(
-    msg.text?.body ??
-    msg.interactive?.button_reply?.title ??
-    msg.interactive?.list_reply?.title ??
-    msg.button?.text ??
-    "",
-  ).trim();
+  // ws1-t3 — el paciente TOCÓ un botón o una fila (interactive button_reply /
+  // list_reply, o el botón de una plantilla). Su id es la intención exacta
+  // (para el recordatorio y para el motor); su título hace de texto para todo
+  // lo que lee texto, como antes.
+  const eleccion: EleccionEntrante | null = leerEleccion(msg);
+  // Texto original (Inbox + bot). `let`: una nota de voz transcrita (ws1-t5)
+  // entra después como texto.
+  let rawText = String(msg.text?.body ?? eleccion?.titulo ?? "").trim();
   let text    = rawText.toLowerCase();          // para detectar confirmar/cancelar
 
   if (!from) return;
@@ -412,7 +446,9 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
         direction: "IN",
         // Texto del paciente o, si no mandó texto, la frase que describe lo
         // que mandó (el guard de arriba garantiza que hay una de las dos).
-        body: rawText || incoming!.body,
+        // ws1-t3: un toque se guarda diciendo QUÉ tocó («🔘 Tocó el botón
+        // «✅ Confirmar»»), para que el equipo lo distinga de algo escrito.
+        body: eleccion ? textoBandejaDeEleccion(eleccion) : rawText || incoming!.body,
         attachments: incoming?.attachments ?? undefined,
         externalId: msg.id,
         sentAt: now,
@@ -527,7 +563,33 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // - `question` (#15) = pregunta normal → al bot, nunca «no te entendí».
   // - `unclear` = el mensaje le pedía confirmar/cancelar y contestó algo CORTO
   //   que no se entiende («Confirmarr» ya confirma; «canselar» no).
-  const { reminder, action: reply, unclear } = resolveReminderReply(pendingReminders, text);
+  // ws1-t3 — un botón del recordatorio es la acción EXACTA, sin clasificar
+  // texto. Si el botón dice de qué recordatorio es (lo normal), se actúa sobre
+  // ESE y nada más; si ya no está pendiente, se avisa y no se toca ninguna
+  // otra cita. Un botón sin id (plantilla con payloads ajenos) se trata como la
+  // palabra escrita.
+  const boton = accionDeBotonRecordatorio(eleccion);
+  let { reminder, action: reply, unclear } = resolveReminderReply(
+    pendingReminders,
+    boton ? PALABRA_DE_BOTON[boton.accion] : text,
+  );
+  let botonExacto = false;
+  if (boton?.reminderId) {
+    const tocado = pendingReminders.find((r) => r.id === boton.reminderId) ?? null;
+    if (tocado && isActionableReminder(tocado)) {
+      reminder = tocado;
+      reply = boton.accion;
+      unclear = false;
+      botonExacto = true;
+    } else if (boton.accion === "reschedule") {
+      // Mover la cita no depende del recordatorio: lo atiende la agenda del bot.
+      await turnoDelBot({ clinic, thread, inMsg, now, from, rawText, patient, eleccion });
+      return;
+    } else {
+      await enviarYRegistrar({ clinic, threadId: thread.id, to: from, body: REMINDER_BUTTON_STALE_MSG, origen: "reminder" });
+      return;
+    }
+  }
 
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -536,7 +598,8 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // equipo lo va a resolver y el mensaje se queda en el Inbox (ya está ahí,
   // y el hilo quedó UNREAD). NINGÚN recordatorio se toca: el que de verdad
   // corresponda lo cierra el staff a mano desde la agenda.
-  if (actionablePatientIds(pendingReminders).length > 1) {
+  // Con un botón que nombra el recordatorio no hay nada que adivinar.
+  if (!botonExacto && actionablePatientIds(pendingReminders).length > 1) {
     const notified = await sendOnceToThread({
       clinic,
       threadId: thread.id,
@@ -613,6 +676,8 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
           timeHHMMInTz(appt.startsAt, clinic.timezone),
         ),
         since: reminder.sentAt ?? dayAgo,
+        // ws1-t3 — que lo toque en vez de escribirlo.
+        interactivo: { tipo: "botones", botones: botonesRecordatorio(reminder.id) },
       });
       if (asked) return;
       // Ya se le preguntó y sigue sin decir CANCELAR: no se insiste con la
@@ -650,6 +715,7 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
         body: REMINDER_UNCLEAR_MSG,
         // Una sola aclaración por recordatorio, no por mensaje.
         since: reminder.sentAt ?? dayAgo,
+        interactivo: { tipo: "botones", botones: botonesRecordatorio(reminder.id) },
       });
       if (asked) return;
       // Ya se le pidió aclarar y sigue sin decir confirmar ni cancelar: no es
@@ -671,7 +737,7 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
     // no se registra como respuesta y pasa al bot, que la contesta.
   }
 
-  await turnoDelBot({ clinic, thread, inMsg, now, from, rawText, patient });
+  await turnoDelBot({ clinic, thread, inMsg, now, from, rawText, patient, eleccion });
 }
 
 /** El turno del bot para un mensaje que nadie más atendió. */
@@ -683,8 +749,11 @@ async function turnoDelBot(args: {
   from: string;
   rawText: string;
   patient: { id: string; firstName: string | null } | null;
+  /** ws1-t3 — lo que tocó el paciente, si tocó un botón o una fila. */
+  eleccion?: EleccionEntrante | null;
 }): Promise<void> {
   const { clinic, thread, inMsg, now, from, rawText, patient } = args;
+  const eleccion = args.eleccion ?? null;
 
   // Atajo: hilo en pausa SIN marca de handoff (la pausó una persona o un eco
   // del celular) → el bot calla, sin gastar candado ni rate-limit. La pausa de
@@ -746,6 +815,18 @@ async function turnoDelBot(args: {
       botState = null;
     }
 
+    // ── ws1-t3: un toque sobre opciones del agendado que ya no valen ──
+    // Solo cuentan las del ÚLTIMO mensaje del bot y con el agendado vivo: un
+    // «10:30» tocado en la lista de otro día, o un «Sí» de una confirmación
+    // anterior, no puede agendar nada.
+    if (eleccion?.id.startsWith("bk.")) {
+      const aviso = await avisoDeOpcionVieja(thread.id, eleccion, botState);
+      if (aviso) {
+        await enviarYRegistrar({ clinic, threadId: thread.id, to: from, body: aviso, origen: "reminder" });
+        return;
+      }
+    }
+
     // ── Tope diario de gasto del bot por clínica ──
     // Cuenta las respuestas OUT del bot de las últimas 24h. Al excederlo no se
     // llama a Claude: se avisa máximo una vez por hilo al día que atiende un
@@ -803,13 +884,21 @@ async function turnoDelBot(args: {
       incomingText: rawText,
       history,
       botState,
+      ...(eleccion ? { eleccion: { id: eleccion.id, titulo: eleccion.titulo } } : {}),
     });
 
     // ws1-t3 #7: con su wamid (estados de Meta en el Inbox) y sin lanzar; si
     // Meta lo rechaza, el OUT queda FAILED con el código y se sigue guardando
     // el estado del bot.
     if (result.reply) {
-      await enviarYRegistrar({ clinic, threadId: thread.id, to: from, body: result.reply, origen: "bot" });
+      await enviarYRegistrar({
+        clinic,
+        threadId: thread.id,
+        to: from,
+        body: result.reply,
+        origen: "bot",
+        interactivo: result.interactivo ?? null,
+      });
     }
 
     // Persiste el estado multi-turno del bot y, si el bot deriva a humano
@@ -839,6 +928,30 @@ function fechaLargaDeCita(startsAt: Date, timezone: string): string {
   return new Intl.DateTimeFormat("es-MX", {
     timeZone: timezone, weekday: "long", day: "numeric", month: "long",
   }).format(startsAt);
+}
+
+/**
+ * ws1-t3 — ¿el toque sobre una opción del agendado (`bk.…`) ya no vale? Devuelve
+ * el aviso para el paciente, o null si es una opción vigente.
+ *
+ * - El agendado ya no está en curso (venció a los 30 min o terminó).
+ * - Meta dice a qué mensaje responde (`context.id`) y no es la ÚLTIMA respuesta
+ *   del bot en el hilo. Sin `context.id` (clientes viejos) se deja pasar: el
+ *   motor solo acepta ids del paso actual.
+ */
+async function avisoDeOpcionVieja(
+  threadId: string,
+  eleccion: EleccionEntrante,
+  botState: Prisma.JsonValue | null,
+): Promise<string | null> {
+  if (!isBookingInProgress(botState)) return BOT_BUTTON_EXPIRED_MSG;
+  if (!eleccion.contextoId) return null;
+  const ultimo = await prisma.inboxMessage.findFirst({
+    where: { threadId, direction: "OUT", externalId: { startsWith: BOT_REPLY_EXTERNAL_ID_PREFIX } },
+    orderBy: { sentAt: "desc" },
+    select: { externalId: true },
+  });
+  return ultimo?.externalId === buildBotReplyExternalId(eleccion.contextoId) ? null : BOT_BUTTON_STALE_MSG;
 }
 
 /**
@@ -900,6 +1013,8 @@ async function sendOnceToThread(args: {
   to: string;
   body: string;
   since: Date;
+  /** ws1-t3 — botones que acompañan al aviso (dentro de la ventana). */
+  interactivo?: MensajeInteractivo | null;
 }): Promise<boolean> {
   const { waAccessToken, waPhoneNumberId } = args.clinic;
   if (!waAccessToken || !waPhoneNumberId) return false;
@@ -908,7 +1023,8 @@ async function sendOnceToThread(args: {
       where: {
         threadId:  args.threadId,
         direction: "OUT",
-        body:      args.body,
+        // ws1-t3: con botones, la bandeja guarda el aviso + «🔘 Opciones: …».
+        OR:        [{ body: args.body }, { body: { startsWith: `${args.body}\n\n🔘 ` } }],
         sentAt:    { gte: args.since },
       },
       select: { id: true },
@@ -948,18 +1064,45 @@ async function enviarYRegistrar(args: {
   to: string;
   body: string;
   origen: "bot" | "reminder";
+  /**
+   * ws1-t3 — botones o lista. Este camino siempre contesta a un mensaje que
+   * acaba de llegar (ventana de 24 h abierta). Si no cabe en los límites de
+   * Meta o Meta lo rechaza, sale `body` como texto, igual que antes.
+   */
+  interactivo?: MensajeInteractivo | null;
 }): Promise<boolean> {
   const { waAccessToken, waPhoneNumberId } = args.clinic;
   if (!waAccessToken || !waPhoneNumberId) return false;
 
   let wamid: string | null = null;
   let fallo: unknown = null;
-  try {
-    const meta = await sendWhatsAppMessage(waPhoneNumberId, waAccessToken, args.to, args.body);
-    const id = meta?.messages?.[0]?.id;
-    wamid = typeof id === "string" && id.length > 0 ? id : null;
-  } catch (e) {
-    fallo = e;
+  // Lo que se le ofreció de verdad, para la bandeja (null = salió como texto).
+  let opciones: string | null = null;
+  const interactive = args.interactivo ? construirInteractivo(args.body, args.interactivo) : null;
+  if (interactive) {
+    try {
+      const meta = await sendWhatsAppInteractive(waPhoneNumberId, waAccessToken, args.to, interactive);
+      const id = meta?.messages?.[0]?.id;
+      wamid = typeof id === "string" && id.length > 0 ? id : null;
+      opciones = lineaDeOpciones(args.interactivo!);
+    } catch (e) {
+      // Un rechazo explícito de Meta (no el token: fallaría igual) → texto.
+      // Un timeout o error de red NO se reintenta: pudo haber salido.
+      if (e instanceof WhatsAppApiError && !isTokenRevoked(e)) {
+        console.warn(`[whatsapp/webhook] Meta rechazó el interactivo (${args.origen}); sale como texto: ${e.message}`);
+      } else {
+        fallo = e;
+      }
+    }
+  }
+  if (!opciones && !fallo) {
+    try {
+      const meta = await sendWhatsAppMessage(waPhoneNumberId, waAccessToken, args.to, args.body);
+      const id = meta?.messages?.[0]?.id;
+      wamid = typeof id === "string" && id.length > 0 ? id : null;
+    } catch (e) {
+      fallo = e;
+    }
   }
 
   const codigo = fallo ? waErrorCode(fallo) : null;
@@ -971,7 +1114,8 @@ async function enviarYRegistrar(args: {
       data: {
         threadId: args.threadId,
         direction: "OUT",
-        body: args.body,
+        // La bandeja enseña también los botones que se le ofrecieron.
+        body: opciones ? `${args.body}\n\n${opciones}` : args.body,
         sentAt: new Date(),
         externalId: args.origen === "bot" ? buildBotReplyExternalId(wamid) : buildSystemExternalId("reminder", wamid),
         ...(fallo ? { deliveryStatus: "FAILED", errorCode: codigo, errorTitle: motivo } : {}),

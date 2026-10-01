@@ -165,6 +165,8 @@
     "test:wa-webhook-entrada": "tsx --test src/lib/whatsapp/__tests__/webhook-entrada.test.ts",
     "//test:wa-webhook-bot": "ws1-t3: el POST del webhook de verdad con Prisma/Meta/motor falsos — #1, #5, #7, #10, #11, #15, #19. WEBHOOK_RUTA=<copia vieja> reproduce los fallos.",
     "test:wa-webhook-bot": "tsx --test --experimental-test-module-mocks src/app/api/whatsapp/webhook/__tests__/webhook-bot.test.ts",
+    "//test:wa-botones": "ws1-t3: botones y listas de WhatsApp — armado dentro de los límites de Meta, el agendado del bot tocando (id exacto, toque de otro paso no elige nada), el recordatorio con botones (ventana: interactivo con respaldo de texto; fuera: plantilla actual intacta, propuesta con payloads) y el webhook (botón = acción exacta sobre ESE recordatorio, opciones viejas o vencidas no agendan, la bandeja dice qué tocó).",
+    "test:wa-botones": "tsx --test --experimental-test-module-mocks src/lib/whatsapp/__tests__/interactivo.test.ts src/lib/whatsapp/bot/__tests__/booking-botones.test.ts src/lib/whatsapp/__tests__/send-and-log-botones.test.ts src/app/api/whatsapp/webhook/__tests__/webhook-bot.test.ts",
     "test:wa-permissions": "tsx --test src/lib/auth/__tests__/whatsapp-write-permission.test.ts",
     "test:billing-deposit-register": "tsx --test src/lib/auth/__tests__/billing-deposit-register.test.ts",
     "test:wa-delivery": "tsx --test src/lib/whatsapp/__tests__/delivery-status.test.ts",

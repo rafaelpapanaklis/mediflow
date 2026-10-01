@@ -59,10 +59,11 @@ const e = {
   recordatorios: [] as any[],
   citasActualizadas: [] as any[],
   sqlCrudo: [] as string[],
-  enviados: [] as Array<{ to: string; body: string }>,
+  enviados: [] as Array<{ to: string; body: string; interactive?: any }>,
+  interactivoFalla: null as Error | null,
   envioFalla: null as Error | null,
-  turnos: [] as Array<{ incomingText: string; botState: unknown; firstName?: string | null }>,
-  turnoRespuesta: { reply: "respuesta del bot", intent: "SMALLTALK", newBotState: undefined as unknown },
+  turnos: [] as Array<{ incomingText: string; botState: unknown; firstName?: string | null; eleccion?: any }>,
+  turnoRespuesta: { reply: "respuesta del bot", intent: "SMALLTALK", newBotState: undefined as unknown } as any,
   turnoDemoraMs: 0,
   enCurso: 0,
   maxEnCurso: 0,
@@ -75,6 +76,9 @@ let seq = 0;
 
 function coincide(m: Msg, w: any): boolean {
   if (!w) return true;
+  if (Array.isArray(w.OR) && !w.OR.some((o: any) => coincide(m, o))) return false;
+  if (typeof w.body?.startsWith === "string" && !m.body.startsWith(w.body.startsWith)) return false;
+  if (typeof w.externalId?.startsWith === "string" && !(m.externalId ?? "").startsWith(w.externalId.startsWith)) return false;
   if (typeof w.threadId === "string" && m.threadId !== w.threadId) return false;
   if (w.direction && m.direction !== w.direction) return false;
   if (typeof w.body === "string" && m.body !== w.body) return false;
@@ -104,7 +108,10 @@ const prismaFalso = {
     },
   },
   inboxMessage: {
-    findFirst: async ({ where }: any) => e.mensajes.find((m) => coincide(m, where)) ?? null,
+    findFirst: async ({ where, orderBy }: any) => {
+      const lista = e.mensajes.filter((m) => coincide(m, where));
+      return (orderBy?.sentAt === "desc" ? lista.at(-1) : lista[0]) ?? null;
+    },
     findMany: async ({ where }: any) => e.mensajes.filter((m) => coincide(m, where)).slice(-10).reverse(),
     count: async () => 0,
     create: async ({ data }: any) => {
@@ -166,6 +173,12 @@ mock.module("@/lib/whatsapp", {
       e.enviados.push({ to, body });
       return { messages: [{ id: `wamid.${e.enviados.length}` }] };
     },
+    sendWhatsAppInteractive: async (_p: string, _t: string, to: string, interactive: any) => {
+      if (e.envioFalla) throw e.envioFalla;
+      if (e.interactivoFalla) throw e.interactivoFalla;
+      e.enviados.push({ to, body: interactive.body.text, interactive });
+      return { messages: [{ id: `wamid.${e.enviados.length}` }] };
+    },
   },
 });
 mock.module("@/lib/whatsapp/bot/engine", {
@@ -173,7 +186,7 @@ mock.module("@/lib/whatsapp/bot/engine", {
     runBotTurn: async (input: any) => {
       e.enCurso++;
       e.maxEnCurso = Math.max(e.maxEnCurso, e.enCurso);
-      e.turnos.push({ incomingText: input.incomingText, botState: input.botState, firstName: input.patient?.firstName });
+      e.turnos.push({ incomingText: input.incomingText, botState: input.botState, firstName: input.patient?.firstName, eleccion: input.eleccion });
       if (e.turnoDemoraMs) await new Promise((r) => setTimeout(r, e.turnoDemoraMs));
       e.enCurso--;
       return { ...e.turnoRespuesta, newBotState: e.turnoRespuesta.newBotState ?? { paso: e.turnos.length } };
@@ -198,6 +211,15 @@ mock.module("@/lib/reminders/reschedule.server", { namedExports: { cancelPending
 mock.module("@/lib/anticipos/cita-cancelada.server", { namedExports: { marcarPendienteSiHayDinero: async () => {} } });
 mock.module("@/lib/whatsapp/bot/movimientos-bot", { namedExports: { anotarRespuestaARecordatorio: async () => {} } });
 mock.module("@/lib/agenda/google-sync", { namedExports: { sincronizarCitaEnSegundoPlano: async () => {} } });
+// ws1-t5 (notas de voz): su módulo carga whisper.ts (server-only). Aquí no
+// llegan audios: se queda «como antes».
+mock.module("@/lib/whatsapp/bot/nota-de-voz", {
+  namedExports: {
+    entenderNotaDeVoz: async () => ({ accion: "como_antes" }),
+    MSG_NO_PUDE: "No pude escuchar tu audio",
+    MSG_DEMASIADO_LARGO: "Tu audio es muy largo",
+  },
+});
 mock.module("@/lib/whatsapp/bot/handoff", {
   namedExports: {
     reactivarBotSiVencioHandoff: async () => false,
@@ -221,6 +243,7 @@ beforeEach(() => {
   e.sqlCrudo = [];
   e.enviados = [];
   e.envioFalla = null;
+  e.interactivoFalla = null;
   e.turnos = [];
   e.turnoRespuesta = { reply: "respuesta del bot", intent: "SMALLTALK", newBotState: undefined };
   e.turnoDemoraMs = 0;
@@ -428,5 +451,133 @@ describe("el bot recibe el nombre del paciente", () => {
   it("firstName viaja a runBotTurn", async () => {
     await enviar("hola");
     assert.equal(e.turnos[0].firstName, "Ana");
+  });
+});
+
+// ── ws1-t3: botones interactivos ────────────────────────────────────────────
+function toque(id: string, titulo: string, contextoId?: string, tipo: "boton" | "lista" | "plantilla" = "boton") {
+  const base: any = { from: TEL, id: `wamid.IN.${++wamidSeq}`, ...(contextoId ? { context: { from: "negocio", id: contextoId } } : {}) };
+  if (tipo === "plantilla") return { ...base, type: "button", button: { payload: id, text: titulo } };
+  return tipo === "lista"
+    ? { ...base, type: "interactive", interactive: { type: "list_reply", list_reply: { id, title: titulo } } }
+    : { ...base, type: "interactive", interactive: { type: "button_reply", button_reply: { id, title: titulo } } };
+}
+const tocar = (msg: any) => POST(peticion({ entry: [{ id: "waba", changes: [cambio([msg])] }] }));
+const agendadoEnCurso = () => ({ flow: "booking", mode: "create", step: "slot", updatedAt: Date.now() });
+
+describe("ws1-t3 — botones del recordatorio: la acción exacta, sin leer texto", () => {
+  it("«❌ Cancelar» con el id del recordatorio cancela ESA cita y la bandeja dice qué tocó", async () => {
+    e.recordatorios = [recordatorio()];
+    await tocar(toque("rec.cancelar:rec1", "❌ Cancelar"));
+    assert.equal(cancelo(), true);
+    assert.equal(e.turnos.length, 0);
+    const entrada = e.mensajes.find((m) => m.direction === "IN");
+    assert.equal(entrada?.body, "🔘 Tocó el botón «❌ Cancelar»");
+  });
+
+  it("teléfono compartido con dos citas por confirmar: el botón dice cuál y no se pregunta", async () => {
+    e.recordatorios = [
+      recordatorio({ id: "recA", appointmentId: "citaA", appointment: { id: "citaA", status: "SCHEDULED", patientId: "pac1", startsAt: new Date("2026-10-08T16:00:00Z") } }),
+      recordatorio({ id: "recB", appointmentId: "citaB", appointment: { id: "citaB", status: "SCHEDULED", patientId: "pac2", startsAt: new Date("2026-10-09T16:00:00Z") } }),
+    ];
+    await tocar(toque("rec.confirmar:recB", "✅ Confirmar"));
+    const confirmadas = e.citasActualizadas.filter((a) => a.data?.status === "CONFIRMED").map((a) => a.where.id);
+    assert.deepEqual(confirmadas, ["citaB"]);
+    assert.ok(!e.enviados.some((m) => m.body.includes("más de una cita")), "no hay aviso de ambigüedad");
+  });
+
+  it("botón de un recordatorio que YA no está pendiente: no toca la OTRA cita pendiente", async () => {
+    e.recordatorios = [recordatorio({ id: "recNuevo" })];
+    await tocar(toque("rec.cancelar:recViejo", "❌ Cancelar"));
+    assert.equal(cancelo(), false);
+    assert.ok(e.enviados.at(-1)?.body.includes("ya no está pendiente"));
+  });
+
+  it("botón de PLANTILLA (type «button» con payload) confirma igual", async () => {
+    e.recordatorios = [recordatorio()];
+    await tocar(toque("rec.confirmar:rec1", "✅ Confirmar", "wamid.plantilla", "plantilla"));
+    assert.ok(e.citasActualizadas.some((a) => a.data?.status === "CONFIRMED"));
+  });
+
+  it("«🔁 Reagendar» va al bot con la elección (aunque el recordatorio ya no esté pendiente)", async () => {
+    await tocar(toque("rec.reagendar:recViejo", "🔁 Reagendar"));
+    assert.equal(e.turnos.length, 1);
+    assert.equal(e.turnos[0].eleccion?.id, "rec.reagendar:recViejo");
+    assert.equal(cancelo(), false);
+  });
+
+  it("un «no» escrito pide CANCELAR CON botones, y la bandeja guarda las opciones; no se repite", async () => {
+    e.recordatorios = [recordatorio()];
+    await enviar("no");
+    const ultimo = e.enviados.at(-1)!;
+    assert.ok(ultimo.interactive, "salió como interactivo");
+    assert.deepEqual(
+      ultimo.interactive.action.buttons.map((b: any) => b.reply.id),
+      ["rec.confirmar:rec1", "rec.reagendar:rec1", "rec.cancelar:rec1"],
+    );
+    const out = e.mensajes.filter((m) => m.direction === "OUT").at(-1)!;
+    assert.match(out.body, /responde \*CANCELAR\*[\s\S]*\n\n🔘 Opciones: ✅ Confirmar · 🔁 Reagendar · ❌ Cancelar$/);
+    // Segundo «no»: el aviso ya salió (con su línea de opciones en la bandeja)
+    // y no se repite; como antes, el mensaje pasa al bot.
+    await enviar("no");
+    assert.equal(e.enviados.filter((m) => m.body.includes("responde *CANCELAR*")).length, 1, "el aviso con botones sale una sola vez");
+  });
+});
+
+describe("ws1-t3 — respuestas del bot con botones", () => {
+  it("el motor pide botones → sale interactivo, con su wamid y las opciones en la bandeja", async () => {
+    e.turnoRespuesta = {
+      reply: "¿Confirmas?",
+      intent: "BOOK_APPOINTMENT",
+      newBotState: agendadoEnCurso(),
+      interactivo: { tipo: "botones", botones: [{ id: "bk.confirm.si", titulo: "✅ Sí" }, { id: "bk.confirm.no", titulo: "❌ No" }] },
+    };
+    await enviar("hola");
+    assert.equal(e.enviados.at(-1)?.interactive?.type, "button");
+    const out = e.mensajes.find((m) => m.direction === "OUT")!;
+    assert.equal(out.externalId, "sys:bot:wamid.1");
+    assert.equal(out.body, "¿Confirmas?\n\n🔘 Opciones: ✅ Sí · ❌ No");
+  });
+
+  it("si Meta rechaza el interactivo (131009), sale el MISMO texto como texto normal", async () => {
+    e.interactivoFalla = new WhatsAppApiError({ message: "(#131009) Parameter value is not valid", code: 131009, httpStatus: 400 });
+    e.turnoRespuesta = {
+      reply: "¿Confirmas?",
+      intent: "BOOK_APPOINTMENT",
+      interactivo: { tipo: "botones", botones: [{ id: "bk.confirm.si", titulo: "✅ Sí" }] },
+    };
+    await enviar("hola");
+    assert.deepEqual(e.enviados.map((m) => m.body), ["¿Confirmas?"]);
+    assert.equal(e.enviados[0].interactive, undefined);
+    const out = e.mensajes.find((m) => m.direction === "OUT")!;
+    assert.equal(out.body, "¿Confirmas?", "la bandeja no dice que hubo botones");
+    assert.equal(out.deliveryStatus, null);
+  });
+
+  it("tocar una opción del ÚLTIMO mensaje del bot pasa al motor con el id exacto", async () => {
+    e.hilo.botState = agendadoEnCurso();
+    e.turnoRespuesta = { reply: "Lista", intent: "BOOK_APPOINTMENT", newBotState: agendadoEnCurso() };
+    await enviar("quiero agendar"); // el bot contesta → wamid.1
+    await tocar(toque("bk.slot.10:30", "10:30", "wamid.1", "lista"));
+    assert.equal(e.turnos.length, 2);
+    assert.deepEqual(e.turnos[1].eleccion, { id: "bk.slot.10:30", titulo: "10:30" });
+    assert.equal(e.turnos[1].incomingText, "10:30");
+  });
+
+  it("tocar una opción de un mensaje ANTERIOR no llega al motor: se avisa", async () => {
+    e.hilo.botState = agendadoEnCurso();
+    e.turnoRespuesta = { reply: "Lista", intent: "BOOK_APPOINTMENT", newBotState: agendadoEnCurso() };
+    await enviar("quiero agendar"); // wamid.1
+    await enviar("mañana"); // wamid.2
+    await tocar(toque("bk.slot.10:30", "10:30", "wamid.1", "lista"));
+    assert.equal(e.turnos.length, 2, "el toque viejo no corre turno");
+    assert.ok(e.enviados.at(-1)?.body.includes("mensaje anterior"));
+  });
+
+  it("tocar una opción con el agendado ya vencido: se avisa, sin turno", async () => {
+    e.hilo.botState = null;
+    await tocar(toque("bk.confirm.si", "✅ Sí", "wamid.x"));
+    assert.equal(e.turnos.length, 0);
+    assert.ok(e.enviados.at(-1)?.body.includes("ya vencieron"));
   });
 });

@@ -23,9 +23,12 @@ import { buildAppointmentReminderEmail } from "@/lib/reminders/email";
 import {
   WA_REMINDER_STATUS,
   WA_REMINDER_PENDING_STATUSES,
+  WA_REMINDER_REPLYABLE_APPT_STATUSES,
 } from "@/lib/whatsapp/reminder-status";
+import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 import { isTokenRevoked, WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { motivoDeBloqueo } from "@/lib/whatsapp/sin-plantilla";
+import { botonesRecordatorio } from "@/lib/whatsapp/interactivo";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
 import { ORTHO_WHATSAPP_TEMPLATES } from "@/lib/orthodontics/whatsapp-templates";
@@ -363,6 +366,16 @@ export async function processWhatsAppQueue(opts?: {
         body,
         kind: "reminder",
         templateParams,
+        // ws1-t3 — el recordatorio de una cita viva sale con botones
+        // (Confirmar / Reagendar / Cancelar) dentro de la ventana de 24 h; el
+        // webhook los convierte en la acción exacta. Solo el automático: uno
+        // manual lo redacta el equipo y puede no tratar de confirmar nada.
+        interactivo:
+          r.type === APPT_AUTO_TYPE &&
+          r.appointment &&
+          WA_REMINDER_REPLYABLE_APPT_STATUSES.includes(r.appointment.status)
+            ? { tipo: "botones", botones: botonesRecordatorio(r.id) }
+            : null,
       });
       // El row ya quedó SENT por el claim; no hay update post-send.
       //

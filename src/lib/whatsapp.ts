@@ -1,6 +1,7 @@
 import { decryptField } from "@/lib/crypto/envelope";
 import { parseWaError } from "@/lib/whatsapp/errors";
 import type { WaTemplateConfig } from "@/lib/whatsapp/template-config";
+import { componentesDeRespuestaRapida, payloadsDeBotonesDePlantilla } from "@/lib/whatsapp/interactivo";
 
 /**
  * Normaliza a 52 + 10 dígitos (México). Exportada para poder probarla y para
@@ -98,7 +99,17 @@ export async function sendWhatsAppTemplate(
   to: string,
   template: WaTemplateConfig,
   params: string[],
+  /** ws1-t3 — payloads de los botones de respuesta rápida, si el caller los fija. */
+  quickReplyPayloads?: string[],
 ) {
+  // ws1-t3 — solo la plantilla de recordatorio CON botones lleva payloads de
+  // respuesta rápida (lib/whatsapp/interactivo.ts); las demás, como siempre.
+  const botones = componentesDeRespuestaRapida(quickReplyPayloads ?? payloadsDeBotonesDePlantilla(template.name));
+  const components = [
+    // Sin variables no se manda el body: Meta rechaza un body vacío.
+    ...(params.length > 0 ? [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] : []),
+    ...botones,
+  ];
   return postToGraph(phoneNumberId, accessToken, {
     messaging_product: "whatsapp",
     to: normalizeMxWhatsAppPhone(to),
@@ -106,18 +117,28 @@ export async function sendWhatsAppTemplate(
     template: {
       name: template.name,
       language: { code: template.lang },
-      // Sin variables no se manda `components`: Meta rechaza un body vacío.
-      ...(params.length > 0
-        ? {
-            components: [
-              {
-                type: "body",
-                parameters: params.map((text) => ({ type: "text", text })),
-              },
-            ],
-          }
-        : {}),
+      ...(components.length > 0 ? { components } : {}),
     },
+  });
+}
+
+/**
+ * ws1-t3 — mensaje interactivo (botones de respuesta o lista), con el cuerpo
+ * `interactive` ya armado y validado por `construirInteractivo`. Como el texto
+ * libre, SOLO llega dentro de la ventana de 24 h.
+ */
+export async function sendWhatsAppInteractive(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  interactive: Record<string, unknown>,
+) {
+  return postToGraph(phoneNumberId, accessToken, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizeMxWhatsAppPhone(to),
+    type: "interactive",
+    interactive,
   });
 }
 

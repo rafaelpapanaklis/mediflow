@@ -15,6 +15,7 @@ import {
 } from "./booking-parse";
 import { BotIntent } from "./types";
 import { textoAvisoAnticipo, textoLinkDePago } from "@/lib/anticipos/core";
+import { interactivoParaOpciones, REC_BOTON, type MensajeInteractivo } from "../interactivo";
 import type { BotConfigDTO, BotJson, BotTurnInput, BotTurnResult } from "./types";
 import type {
   CreateErrorCode,
@@ -212,7 +213,10 @@ export interface BookingDeps {
   }>;
 }
 
-const MAX_SLOTS_SHOWN = 12;
+// ws1-t3 — 10 y no 12: es el tope de filas de una lista de WhatsApp. Así la
+// lista y el texto numerado enseñan lo mismo (escribir otra hora libre sigue
+// valiendo: `state.slots` guarda hasta 40).
+const MAX_SLOTS_SHOWN = 10;
 const MAX_MISSES = 2;
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min de inactividad
 
@@ -238,20 +242,26 @@ export async function runBookingTurn(
 ): Promise<BotTurnResult | null> {
   const text = input.incomingText.trim();
   const state = readState(input.botState);
+  // ws1-t3 — un toque sobre las opciones de ESTE paso no es una orden escrita:
+  // su título («Otra persona», un servicio…) no pasa por los comandos globales.
+  const tocoEstePaso = !!state && esEleccionDelPaso(input, state.step);
 
   // Comandos globales (solo con un flujo activo). ws1-t1 (#16): cancelar exige
   // que el mensaje ENTERO sea la orden; «ya no me duele, ¿qué día puedo ir?»
   // sigue el agendado en vez de tirarlo.
-  if (state && esCancelacionClara(text)) {
+  if (state && !tocoEstePaso && esCancelacionClara(text)) {
     return done("Listo, cancelé la solicitud. Si necesitas algo más, aquí estoy. 🙂", state.mode);
   }
-  if (state && isMenuWord(text)) {
+  if (state && !tocoEstePaso && isMenuWord(text)) {
     // "menu"/"reiniciar": empieza de nuevo conservando el tipo de flujo.
     return iniciarFlujo(input, config, deps, state.mode);
   }
 
   if (!state) {
-    return iniciarFlujo(input, config, deps, detectMode(text));
+    // ws1-t3 — el botón «🔁 Reagendar» del recordatorio es reagendar, diga lo
+    // que diga su título.
+    const mode = input.eleccion?.id === REC_BOTON.REAGENDAR ? "reschedule" : detectMode(text);
+    return iniciarFlujo(input, config, deps, mode);
   }
 
   switch (state.step) {
@@ -286,7 +296,61 @@ function intentFor(mode: FlowMode): BotIntent {
 
 function step(reply: string, mode: FlowMode, state: BookingState): BotTurnResult {
   state.updatedAt = Date.now(); // marca actividad para la expiración por inactividad
-  return { reply, intent: intentFor(mode), newBotState: state as unknown as BotJson };
+  const interactivo = interactivoDelPaso(state);
+  return {
+    reply,
+    intent: intentFor(mode),
+    newBotState: state as unknown as BotJson,
+    ...(interactivo ? { interactivo } : {}),
+  };
+}
+
+// ── ws1-t3: botones y listas ────────────────────────────────────────────────
+// Cada pregunta con opciones sale además como botones (≤3) o lista (≤10). El
+// texto numerado se queda: es el respaldo y el paciente puede seguir
+// escribiendo el número o la hora. El id de cada opción es
+// `bk.<paso>.<id de la opción>`, así un toque se resuelve por id EXACTO, sin
+// analizar texto, y un toque de un paso anterior no se confunde con este.
+
+const PASOS_CON_OPCIONES: readonly BookingStep[] = ["who", "service_kind", "service", "doctor", "slot", "select_appt"];
+const SI_NO = { si: "si", no: "no" } as const;
+
+function idDeOpcion(paso: BookingStep, opcionId: string): string {
+  return `bk.${paso}.${opcionId}`;
+}
+
+function interactivoDelPaso(state: BookingState): MensajeInteractivo | null {
+  if (state.step === "confirm") {
+    return {
+      tipo: "botones",
+      botones: [
+        { id: idDeOpcion("confirm", SI_NO.si), titulo: "✅ Sí, confirmo" },
+        { id: idDeOpcion("confirm", SI_NO.no), titulo: "❌ No, otro horario" },
+      ],
+    };
+  }
+  if (!PASOS_CON_OPCIONES.includes(state.step) || !state.options?.length) return null;
+  const boton = state.step === "slot" ? "Ver horarios" : "Ver opciones";
+  return interactivoParaOpciones(
+    state.options.map((o) => ({ id: idDeOpcion(state.step, o.id), titulo: o.label })),
+    boton,
+  );
+}
+
+/** ¿El paciente tocó una opción ofrecida en el paso `paso`? */
+function esEleccionDelPaso(input: BotTurnInput, paso: BookingStep): boolean {
+  return !!input.eleccion?.id.startsWith(`bk.${paso}.`);
+}
+
+/**
+ * Índice de la opción tocada en este paso, o null si no tocó ninguna de estas
+ * (escribió, o tocó algo de otro mensaje): entonces se lee el texto como
+ * siempre.
+ */
+function indiceTocado(input: BotTurnInput, state: BookingState, options: BookingOption[]): number | null {
+  if (!esEleccionDelPaso(input, state.step)) return null;
+  const idx = options.findIndex((o) => idDeOpcion(state.step, o.id) === input.eleccion!.id);
+  return idx >= 0 ? idx : null;
 }
 
 function done(reply: string, mode: FlowMode): BotTurnResult {
@@ -417,8 +481,8 @@ async function stepWho(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  let idx = parseChoiceIndex(input.incomingText, options.length);
-  if (idx === null) {
+  let idx = indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
+  if (idx === null && !esEleccionDelPaso(input, state.step)) {
     // También vale el nombre: «para Luis».
     const t = foldAccents(input.incomingText);
     const porNombre = options.findIndex(
@@ -666,7 +730,7 @@ async function stepServiceKind(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  const idx = parseChoiceIndex(input.incomingText, options.length);
+  const idx = indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
   if (idx === null) {
     return miss(state, `No te entendí. Responde con el número:\n${numberedList(options)}`);
   }
@@ -683,7 +747,7 @@ async function stepService(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  const idx = parseChoiceIndex(input.incomingText, options.length);
+  const idx = indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
   if (idx === null) {
     return miss(state, `No te entendí. Responde con el número del servicio:\n${numberedList(options)}`);
   }
@@ -703,7 +767,7 @@ async function stepDoctor(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  const idx = parseChoiceIndex(input.incomingText, options.length);
+  const idx = indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
   if (idx === null) {
     return miss(state, `Responde con el número del profesional:\n${numberedList(options)}`);
   }
@@ -816,13 +880,14 @@ async function stepSlot(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
+  // ws1-t3 — tocó una fila de la lista: esa hora, sin interpretar el título.
+  const tocado = indiceTocado(input, state, options);
   // ws1-t1 (#2) — una hora escrita como hora («a las 10», «10 am», «10:30», o
   // «10» si ese hueco existe) es esa hora, no la opción número 10.
-  const eleccion = interpretarEleccionDeHorario(
-    input.incomingText,
-    options.map((o) => o.id),
-    state.slots ?? [],
-  );
+  const eleccion =
+    tocado !== null
+      ? ({ tipo: "indice", indice: tocado } as const)
+      : interpretarEleccionDeHorario(input.incomingText, options.map((o) => o.id), state.slots ?? []);
   if (eleccion?.tipo === "hora_no_disponible") {
     return miss(state, `Esa hora no está disponible. Elige una de la lista por su número:\n${numberedList(options)}`);
   }
@@ -921,7 +986,13 @@ async function stepConfirm(
 
   // ws1-t1 (#3) — la negación gana: «no me va», «no sé, ok» u «ok no» NO crean
   // la cita (antes `isAffirmative` iba primero y casaba con el «va»/«ok»).
-  const respuesta = respuestaSiNo(t);
+  // ws1-t3 — con los botones «Sí»/«No» la respuesta es el id, no el texto.
+  const respuesta =
+    input.eleccion?.id === idDeOpcion("confirm", SI_NO.si)
+      ? "si"
+      : input.eleccion?.id === idDeOpcion("confirm", SI_NO.no)
+        ? "no"
+        : respuestaSiNo(t);
   if (respuesta === "no") {
     state.misses = 0;
     state.step = "slot";
@@ -997,7 +1068,7 @@ async function stepSelectAppt(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  const idx = parseChoiceIndex(input.incomingText, options.length);
+  const idx = indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
   if (idx === null) {
     return miss(state, `Responde con el número de la cita:\n${numberedList(options)}`);
   }

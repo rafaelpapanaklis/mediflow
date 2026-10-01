@@ -14,10 +14,19 @@
 import { prisma } from "@/lib/prisma";
 import {
   sendWhatsAppDocument,
+  sendWhatsAppInteractive,
   sendWhatsAppMessage,
   sendWhatsAppTemplate,
   uploadWhatsAppMedia,
 } from "@/lib/whatsapp";
+import {
+  PLANTILLA_RECORDATORIO_CON_BOTONES,
+  construirInteractivo,
+  lineaDeOpciones,
+  payloadsDeBotonesDePlantilla,
+  plantillaTieneBotones,
+  type MensajeInteractivo,
+} from "@/lib/whatsapp/interactivo";
 import {
   findPatientByWhatsAppPhone,
   lastInboundAtForPhone,
@@ -31,7 +40,7 @@ import {
   renderTemplateBody,
   specForKind,
 } from "@/lib/whatsapp/template-config";
-import { WhatsAppBlockedError, isBillingError } from "@/lib/whatsapp/errors";
+import { WhatsAppApiError, WhatsAppBlockedError, isBillingError, isTokenRevoked } from "@/lib/whatsapp/errors";
 
 export type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
@@ -99,6 +108,13 @@ export interface SendWhatsAppLoggedArgs {
    */
   templateParams?: string[] | null;
   /**
+   * ws1-t3 — botones o lista que acompañan a `body` DENTRO de la ventana de
+   * 24 h (fuera de ella sale la plantilla, que lleva los suyos si los tiene).
+   * Si Meta rechaza el interactivo (o no cabe en sus límites), sale `body` como
+   * texto libre: el paciente siempre puede contestar escribiendo.
+   */
+  interactivo?: MensajeInteractivo | null;
+  /**
    * Adjunto que se manda DESPUÉS del texto, como segundo mensaje del hilo.
    * Solo aplica con la ventana de 24 h abierta (modo texto): las plantillas de
    * DaleControl son de solo texto y Meta no permite colgarles un documento, así
@@ -147,22 +163,54 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
   //    waConnected aquí: los callers ya lo hacen y añadir el gate cambiaría su
   //    comportamiento de error.
   let meta: any;
+  // ws1-t3 — lo que de verdad llevó el mensaje de botones (null = sin botones).
+  let opcionesEnviadas: string | null = null;
   try {
-    meta =
-      decision.mode === "template"
-        ? await sendWhatsAppTemplate(
+    if (decision.mode === "template") {
+      meta = await sendWhatsAppTemplate(
+        clinic?.waPhoneNumberId ?? "",
+        clinic?.waAccessToken ?? "",
+        args.to,
+        decision.template,
+        decision.params,
+        payloadsDeBotonesDePlantilla(decision.template.name, args.interactivo),
+      );
+      // La plantilla con botones (la propuesta para recordatorios) los lleva
+      // fijos; la bandeja los enseña igual que los de un interactivo.
+      if (plantillaTieneBotones(decision.template.name)) {
+        opcionesEnviadas = lineaDeOpciones({
+          tipo: "botones",
+          botones: PLANTILLA_RECORDATORIO_CON_BOTONES.botones.map((b) => ({ id: b.payload, titulo: b.texto })),
+        });
+      }
+    } else {
+      const interactive = args.interactivo ? construirInteractivo(args.body, args.interactivo) : null;
+      if (interactive) {
+        try {
+          meta = await sendWhatsAppInteractive(
             clinic?.waPhoneNumberId ?? "",
             clinic?.waAccessToken ?? "",
             args.to,
-            decision.template,
-            decision.params,
-          )
-        : await sendWhatsAppMessage(
-            clinic?.waPhoneNumberId ?? "",
-            clinic?.waAccessToken ?? "",
-            args.to,
-            args.body,
+            interactive,
           );
+          opcionesEnviadas = lineaDeOpciones(args.interactivo!);
+        } catch (e) {
+          // Solo un rechazo EXPLÍCITO de Meta (no un timeout: pudo haber
+          // salido) y no por el token: ese fallaría igual en texto.
+          if (!(e instanceof WhatsAppApiError) || isTokenRevoked(e)) throw e;
+          console.warn(`[whatsapp/send-and-log] Meta rechazó el interactivo (${args.kind}); sale como texto:`, e.message);
+          meta = null;
+        }
+      }
+      if (!meta) {
+        meta = await sendWhatsAppMessage(
+          clinic?.waPhoneNumberId ?? "",
+          clinic?.waAccessToken ?? "",
+          args.to,
+          args.body,
+        );
+      }
+    }
   } catch (e) {
     // 131042: la WABA de la clínica se quedó sin método de pago. Se anota para
     // que la pantalla de Plantillas lo diga en vez de repetir el mismo fallo.
@@ -209,9 +257,9 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
         // que se habría mandado dentro de ventana: son distintos y el equipo
         // necesita ver la conversación de verdad.
         body:
-          decision.mode === "template"
+          (decision.mode === "template"
             ? renderTemplateBody(specForKind(args.kind), decision.params, args.body)
-            : args.body,
+            : args.body) + (opcionesEnviadas ? `\n\n${opcionesEnviadas}` : ""),
         kind: args.kind,
         linkPatient: args.linkPatient ?? args.kind !== "system",
         patientId: args.patientId ?? null,

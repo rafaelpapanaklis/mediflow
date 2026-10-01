@@ -261,17 +261,19 @@ describe("#16 — «ya no» dentro de una frase no cancela el agendado", () => {
 });
 
 describe("#18 — la hora de ejemplo es un hueco real que no se mostró", () => {
-  it("clínica que cierra a las 16:00: el ejemplo es 15:00, no un «16:30» que no existe", async () => {
-    const { deps } = makeDeps({}, huecos("09:00", "16:00")); // 14 huecos, se muestran 12
+  // ws1-t3 (botones): se muestran 10 (el tope de filas de una lista de
+  // WhatsApp), no 12; el primer hueco que no cupo es 14:00.
+  it("clínica que cierra a las 16:00: el ejemplo es 14:00, no un «16:30» que no existe", async () => {
+    const { deps } = makeDeps({}, huecos("09:00", "16:00")); // 14 huecos, se muestran 10
     const c = makeConvo(deps, { id: "patP", phone: "5215512345678" });
     await c.say("quiero una cita");
     await c.say("1");
     const r = await c.say("mañana");
     assert.doesNotMatch(r.reply ?? "", /16:30/);
-    assert.match(r.reply ?? "", /por ejemplo 15:00/);
+    assert.match(r.reply ?? "", /por ejemplo 14:00/);
     // Y escribir el ejemplo funciona.
-    const r2 = await c.say("15:00");
-    assert.match(r2.reply ?? "", /a las 15:00/);
+    const r2 = await c.say("14:00");
+    assert.match(r2.reply ?? "", /a las 14:00/);
   });
 
   it("si todos los huecos caben en la lista, no hay ejemplo", async () => {

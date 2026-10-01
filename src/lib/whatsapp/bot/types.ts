@@ -2,6 +2,7 @@
 // el wire del webhook y las terminales T2 (UI), T3 (Claude) y T4 (agenda).
 // Multi-tenant: todo se resuelve por clinicId. Solo tipos — no toca Prisma en runtime.
 import type { Prisma } from "@prisma/client";
+import type { MensajeInteractivo } from "../interactivo";
 
 /** Valor JSON serializable (alias de Prisma) para botState / businessHours. */
 export type BotJson = Prisma.JsonValue;
@@ -105,6 +106,13 @@ export interface BotTurnInput {
   incomingText: string;
   history: BotHistoryItem[];
   botState?: BotJson | null;
+  /**
+   * ws1-t3 — el paciente TOCÓ un botón o una fila de lista (no escribió). `id`
+   * es el que puso el motor al ofrecer las opciones (`bk.<paso>.<opción>`);
+   * `incomingText` trae el título, para todo lo que lee texto. Ausente = texto
+   * escrito (o nota de voz transcrita, ws1-t5).
+   */
+  eleccion?: { id: string; titulo: string };
 }
 
 /** Resultado de un turno del bot. */
@@ -119,6 +127,12 @@ export interface BotTurnResult {
    * undefined ⇒ no cambiar; null ⇒ limpiar.
    */
   newBotState?: BotJson | null;
+  /**
+   * ws1-t3 — botones o lista para acompañar a `reply` (que sigue siendo el
+   * texto completo: cuerpo del mensaje, bandeja y respaldo). El webhook decide
+   * si se puede mandar interactivo; si no, sale `reply` como texto.
+   */
+  interactivo?: MensajeInteractivo;
 }
 
 // ── Firmas de los stubs que rellenan T3 y T4 ───────────────────────────────
