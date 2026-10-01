@@ -8,6 +8,7 @@ import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/li
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import { loadModulosContratados, computeMrrModulos, modulosDeClinica, type FilaModulo } from "@/lib/admin/modulos";
+import { cargarOrigenes } from "@/lib/admin/origen-clinica";
 import { AdminClinicsClient, type FilaClinica } from "./clinics-client";
 
 export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
@@ -161,6 +162,10 @@ export default async function AdminClinicsPage() {
     else modulosPorClinica.set(m.clinicId, [m]);
   }
 
+  // Quinta consulta (en fila): de dónde llegó cada clínica (clinic_ads_clicks, SQL
+  // crudo que tolera tabla/columnas sin crear: ver @/lib/admin/origen-clinica).
+  const origenes = await cargarOrigenes(clinics.map((c) => c.id));
+
   const porClinica = <T extends { clinicId: string | null }>(filas: T[]) =>
     new Map(filas.filter((f) => f.clinicId !== null).map((f) => [f.clinicId as string, f]));
 
@@ -198,6 +203,7 @@ export default async function AdminClinicsPage() {
     totalPagado:     mPagos.get(c.id)?._sum.amount ?? 0,
     sedeIncluida:    sedesIncluidas.has(c.id),
     uso:             uso.porClinica.get(c.id),
+    origen:          origenes.get(c.id),
     modulos:         modulos.medido ? modulosDeClinica(modulosPorClinica.get(c.id) ?? [], ahora) : undefined,
   }));
 

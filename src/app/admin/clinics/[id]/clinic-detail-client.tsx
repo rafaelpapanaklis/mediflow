@@ -34,6 +34,8 @@ import { PlanOverridesCard, type PlanOverridesDTO } from "./plan-overrides-card"
 import type { UsoClinica } from "@/lib/admin/uso-core";
 import { Chip } from "@/components/admin/rediseno/piezas";
 import { ResumenClinica } from "./resumen-clinica";
+import { OrigenClinica } from "./origen-clinica";
+import type { OrigenClinicaDTO } from "@/lib/ads/origen";
 
 /** Lo que ESTA clínica nos ha pagado por su suscripción (subscription_invoices). */
 export interface PlatformPayments {
@@ -120,6 +122,8 @@ interface Props {
   planOverrides:        PlanOverridesDTO;
   /** "Ahora" del servidor: SSR e hidratación cuentan los mismos días. */
   ahoraISO:             string;
+  /** De dónde llegó la clínica (ws1-t10). Ausente = no se pudo leer. */
+  origen?:              OrigenClinicaDTO;
   /** Agregados de citas de ESTA clínica (3 consultas, ninguna por fila). */
   actividad: {
     citasPasadas:  number;
@@ -164,6 +168,7 @@ export function AdminClinicDetailClient({
   planPrices,
   planOverrides,
   ahoraISO,
+  origen,
   actividad,
 }: Props) {
   const askConfirm = useConfirm();
@@ -483,6 +488,8 @@ export function AdminClinicDetailClient({
         ultimoPagoAt={platformPayments.lastPaidAt}
         ultimoPagoMonto={platformPayments.lastAmount}
       />
+
+      {origen && <OrigenClinica origen={origen} />}
 
       {/* KPIs de volumen (los de siempre, sin el de pacientes, que ya está en el resumen) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>

@@ -135,6 +135,30 @@ export default function PrivacidadPage() {
             analítica propia, el identificador del clic puede quedar en el registro de esa
             visita, ver más abajo «Analítica propia de DaleControl»).
           </li>
+          <li>
+            <b>Cookies del clic de un anuncio de Meta y de los UTM de la dirección
+            (&quot;dc_meta&quot;, &quot;dc_utm1&quot; y &quot;dc_utm2&quot;).</b> Se guardan
+            únicamente cuando usted llega al sitio desde un anuncio de Meta (la dirección trae
+            un identificador de clic, &laquo;fbclid&raquo;) o desde un enlace con etiquetas de
+            campaña (&laquo;utm_source&raquo;, &laquo;utm_medium&raquo;, &laquo;utm_campaign&raquo;
+            y &laquo;utm_content&raquo;). Tienen una sola finalidad: saber qué anuncio o
+            campaña trajo a la persona que después crea una cuenta, para medir qué anuncios
+            funcionan.
+            <br />
+            <b>Qué guardan:</b> el identificador del clic de Meta y la fecha en que se hizo
+            (&laquo;dc_meta&raquo;), y las etiquetas de campaña del primer enlace con el que
+            llegó (&laquo;dc_utm1&raquo;) y del más reciente (&laquo;dc_utm2&raquo;), con su fecha.
+            No guardan su nombre, su correo ni su dirección IP.
+            <br />
+            <b>Cuánto duran:</b> hasta <b>90 días</b>. Las escribe nuestro servidor, no pueden
+            leerse desde el código que corre en su navegador (httpOnly), viajan solo por
+            conexión segura (Secure) y no se envían a otros sitios (SameSite=Lax).
+            <br />
+            <b>Cómo se usan:</b> si usted crea una cuenta, estos datos se guardan junto a ella,
+            junto con el valor de la cookie &laquo;_fbp&raquo; de Meta de su navegador, y se
+            conservan según la sección 8. Si no la crea, no los asociamos a ninguna cuenta: solo
+            quedan las cookies hasta que caduquen o usted las borre.
+          </li>
           {/* Texto C. Google Signals en GA4 está DESACTIVADA (comprobado por Rafael,
               26-sep-2026): no se menciona publicidad personalizada. Ajuste 1 (ws7):
               lo que pasa dentro del panel se dice como es. Hechos en #424: gtag.js y
@@ -424,6 +448,15 @@ export default function PrivacidadPage() {
           conserva asociado a ella durante <b>12 meses contados desde que se registra la
           cuenta</b> y después se elimina automáticamente; si la cuenta se elimina antes, o
           usted lo solicita antes, se elimina en ese momento.
+        </p>
+        <p>
+          <b>Clic de un anuncio de Meta y UTM.</b> Las cookies &laquo;dc_meta&raquo;,
+          &laquo;dc_utm1&raquo; y &laquo;dc_utm2&raquo; duran hasta 90 días. Si usted crea una
+          cuenta, el identificador del clic de Meta, las etiquetas de campaña y el valor de
+          &laquo;_fbp&raquo; se conservan asociados a ella durante <b>12 meses contados desde
+          que se registra la cuenta</b> y después se eliminan automáticamente, igual que el
+          clic de Google; si la cuenta se elimina antes, o usted lo solicita antes, se
+          eliminan en ese momento.
         </p>
         <p>
           <b>Analítica propia.</b> Los registros de cada clic y de cada página visitada se

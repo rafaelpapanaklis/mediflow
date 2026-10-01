@@ -49,6 +49,7 @@ import {
   type MrrModulos,
 } from "@/lib/admin/modulos-core";
 import { BarraUso, Chip, Vacio, type TonoChip } from "@/components/admin/rediseno/piezas";
+import type { OrigenClinicaDTO } from "@/lib/ads/origen";
 import css from "./clinics.module.css";
 
 /** Una fila del roster: la clínica más sus agregados de actividad, pago y consumo. */
@@ -103,7 +104,13 @@ export interface FilaClinica {
    * cuánto. Ausente = no se pudo leer (no es «no tiene ninguno»).
    */
   modulos?: ModuloDeClinica[];
+  /** De dónde llegó (@/lib/admin/origen-clinica): «Meta · campaña · anuncio», «Google Ads», «Orgánico». */
+  origen?: OrigenClinicaDTO;
 }
+
+const TONO_ORIGEN: Record<OrigenClinicaDTO["canal"], TonoChip> = {
+  meta: "info", google: "brand", otro: "neutral", organico: "neutral",
+};
 
 interface Props {
   clinics: FilaClinica[];
@@ -568,6 +575,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                 <th>Estado</th>
                 <th>Plan</th>
                 <th>Módulos</th>
+                <th>Origen</th>
                 <th>Última compra</th>
                 <th>Renueva</th>
                 <th>Uso</th>
@@ -681,6 +689,16 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                       </div>
                     </td>
 
+                    <td data-col="Origen">
+                      {clinic.origen ? (
+                        <Chip tono={TONO_ORIGEN[clinic.origen.canal]} sm title={clinic.origen.etiqueta}>
+                          {clinic.origen.etiqueta}
+                        </Chip>
+                      ) : (
+                        <span className={css.sinDato}>sin medir</span>
+                      )}
+                    </td>
+
                     <td data-col="Última compra">
                       <div className={css.celda}>
                         <span className={`dcp-fuerte ${css.num}`}>
@@ -749,7 +767,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
               })}
               {filtradas.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="dcp-tabla__vacio">
+                  <td colSpan={10} className="dcp-tabla__vacio">
                     {search || filtro !== "todas" ? "Ninguna clínica cumple ese filtro." : "No hay clínicas registradas."}
                   </td>
                 </tr>

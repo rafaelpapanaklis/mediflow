@@ -16,6 +16,7 @@ import { leerSaldoIaClinica, type SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import type { UsoClinica } from "@/lib/admin/uso-core";
 import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-method-card";
+import { cargarOrigen } from "@/lib/admin/origen-clinica";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 import type { PlanOverridesDTO } from "./plan-overrides-card";
 
@@ -127,6 +128,9 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
   } catch (e) {
     console.warn("[admin/clinics/:id] manager de cuenta no disponible:", e);
   }
+
+  // De dónde llegó (clinic_ads_clicks; tolera tabla/columnas sin crear, nunca lanza).
+  const origen = await cargarOrigen(params.id);
 
   // Para la modal de eliminar — total de clínicas para decidir si está permitido.
   const totalClinics = await prisma.clinic.count();
@@ -319,6 +323,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       planPrices={planPrices}
       planOverrides={planOverrides}
       ahoraISO={ahora.toISOString()}
+      origen={origen}
       actividad={{
         citasPasadas:  citasPasadas._count._all,
         ultimaCitaAt:  citasPasadas._max.startsAt ? citasPasadas._max.startsAt.toISOString() : null,
