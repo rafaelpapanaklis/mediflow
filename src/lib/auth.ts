@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { authDebug } from "@/lib/auth/debug-log";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
@@ -229,14 +230,14 @@ const resolverUsuarioActual = cache(async () => {
   }
 
   if (activeClinicId) {
-    console.warn("[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
+    authDebug("warn", "[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
       reason: "supabaseId no es activo en clinicId solicitada",
       requested: activeClinicId,
       picked: user.clinicId,
     }));
     logClinicFallback({ supabaseId: supabaseUser.id, requestedClinicId: activeClinicId, actualClinicId: user.clinicId });
   } else {
-    console.warn("[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
+    authDebug("warn", "[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
       reason: "cookie ausente o HMAC inválido",
       picked: user.clinicId,
     }));

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { authDebug } from "@/lib/auth/debug-log";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
@@ -89,7 +90,7 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     const { filas, deLaCookie: dbUser, elegida } = await resolverSesion(user.id, activeClinicId);
 
     if (dbUser) {
-      console.log("[AUTH-DEBUG getAuthContext] cookie OK", JSON.stringify({ picked: dbUser.clinicId }));
+      authDebug("log", "[AUTH-DEBUG getAuthContext] cookie OK", JSON.stringify({ picked: dbUser.clinicId }));
     }
 
     const finalUser = elegida;
@@ -98,14 +99,14 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
 
     if (!dbUser) {
       if (activeClinicId) {
-        console.warn("[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
+        authDebug("warn", "[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
           reason: "supabaseId no es activo en clinicId solicitada",
           requested: activeClinicId,
           picked: finalUser.clinicId,
         }));
         logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
       } else {
-        console.warn("[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
+        authDebug("warn", "[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
           reason: "cookie ausente o HMAC inválido",
           picked: finalUser.clinicId,
         }));
