@@ -33,11 +33,22 @@ const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
 
 /* ─── 1. El gasto no sale de cara al paciente ──────────────────────────── */
 
-/** Los únicos sitios que pueden leer la fila entera: el panel de Procedimientos. */
+/**
+ * Los únicos sitios que pueden leer la fila entera: el panel de Procedimientos.
+ *
+ * Y una excepción con nombre: `reportes` de Sabina (ws1-t6, «rentabilidad por
+ * procedimiento»), que lee `cost` para el margen que ya enseña esa pantalla. NO
+ * es un camino de cara al paciente: es la asistente del equipo, y lee el gasto
+ * solo después de comprobar `procedures.view` —la llave de la propia pantalla—
+ * y dentro de la sesión de la clínica; sin ella ni siquiera consulta el catálogo
+ * (lo prueban tools/__tests__/negocio.test.ts). Si otra herramienta de Sabina
+ * necesita el gasto, que se sume aquí A PROPÓSITO, con su razón.
+ */
 const PANEL = new Set([
   "src/app/api/procedures/route.ts",
   "src/app/api/procedures/[id]/route.ts",
   "src/app/dashboard/procedures/page.tsx",
+  "src/lib/sabina/tools/reportes.ts",
 ]);
 
 const CARA_AL_PACIENTE = [
