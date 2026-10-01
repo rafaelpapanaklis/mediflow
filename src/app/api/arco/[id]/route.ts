@@ -3,12 +3,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
+import { arcoEsDeMiClinica, armarCambioArco } from "@/lib/arco/alcance";
 
 export const dynamic = "force-dynamic";
 
 interface Params { params: { id: string } }
-
-const VALID_STATUSES = new Set(["PENDING", "IN_PROGRESS", "RESOLVED", "REJECTED"]);
 
 /**
  * GET /api/arco/[id] — quien atiende ARCO en la clínica ve el detalle de una
@@ -21,8 +20,11 @@ const VALID_STATUSES = new Set(["PENDING", "IN_PROGRESS", "RESOLVED", "REJECTED"
  * pasaban antes.
  *
  * Multi-tenant:
- *  - Si la solicitud tiene clinicId, debe coincidir con ctx.clinicId.
- *  - Si la solicitud tiene clinicId NULL (anónima), solo SUPER_ADMIN.
+ *  - La solicitud debe tener clinicId y coincidir con el de la sesión.
+ *  - Las anónimas (clinicId NULL) NO son de ninguna clínica: las atiende el
+ *    admin de plataforma en /api/admin/arco. SUPER_ADMIN no las abre — ese rol
+ *    lo recibe todo dueño de clínica (A3, auditoría 30-sep-2026). Se responde
+ *    404 y no 403 para no confirmar que el id existe.
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
@@ -32,10 +34,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const arco = await prisma.arcoRequest.findUnique({ where: { id: params.id } });
   if (!arco) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  if (arco.clinicId === null) {
-    if (user.role !== "SUPER_ADMIN") return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  } else if (arco.clinicId !== user.clinicId) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!arcoEsDeMiClinica(arco.clinicId, user.clinicId)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
   return NextResponse.json(arco);
@@ -53,11 +53,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const arco = await prisma.arcoRequest.findUnique({ where: { id: params.id } });
   if (!arco) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Multi-tenant scope
-  if (arco.clinicId === null) {
-    if (user.role !== "SUPER_ADMIN") return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  } else if (arco.clinicId !== user.clinicId) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Multi-tenant scope: solo las de MI clínica (las anónimas son de /admin).
+  if (!arcoEsDeMiClinica(arco.clinicId, user.clinicId)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
   let body: { status?: string; resolvedNotes?: string };
@@ -65,19 +63,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const data: { status?: "PENDING" | "IN_PROGRESS" | "RESOLVED" | "REJECTED"; resolvedAt?: Date | null; resolvedNotes?: string | null } = {};
-  if (body.status !== undefined) {
-    const status = String(body.status).toUpperCase();
-    if (!VALID_STATUSES.has(status)) {
-      return NextResponse.json({ error: "invalid_status" }, { status: 400 });
-    }
-    data.status = status as "PENDING" | "IN_PROGRESS" | "RESOLVED" | "REJECTED";
-    if (status === "RESOLVED" || status === "REJECTED") data.resolvedAt = new Date();
-    if (status === "PENDING" || status === "IN_PROGRESS") data.resolvedAt = null;
-  }
-  if (body.resolvedNotes !== undefined) {
-    data.resolvedNotes = body.resolvedNotes?.slice(0, 4000) ?? null;
-  }
+  const cambio = armarCambioArco(body);
+  if ("error" in cambio) return NextResponse.json({ error: cambio.error }, { status: 400 });
+  const data = cambio.data;
 
   const updated = await prisma.arcoRequest.update({
     where: { id: params.id },

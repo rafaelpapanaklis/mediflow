@@ -11,6 +11,7 @@ import {
   Landmark,
   GraduationCap,
   Target,
+  ShieldCheck,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -66,6 +67,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/resenas",      label: "Reseñas",      icon: Star,            section: "growth" },
   { href: "/admin/auditoria",    label: "Auditoría",         icon: ScrollText, section: "system" },
   { href: "/admin/bug-audit",    label: "Auditoría de bugs", icon: Bug,        section: "system" },
+  // ARCO anónimas (sin clínica): las atiende la plataforma, no ninguna clínica.
+  { href: "/admin/arco",         label: "Solicitudes ARCO", icon: ShieldCheck, section: "system" },
   { href: "/admin/sesiones",     label: "Sesiones",     icon: KeyRound,        section: "system" },
   { href: "/admin/settings",     label: "Configuración",icon: Settings,        section: "system" },
 ];

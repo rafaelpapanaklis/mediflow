@@ -25,8 +25,6 @@ interface ArcoRow {
 
 interface Props {
   clinicRequests: ArcoRow[];
-  anonymousRequests: ArcoRow[];
-  isSuperAdmin: boolean;
   /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
    *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
   rediseno?: boolean;
@@ -63,7 +61,7 @@ const STATUS_TONO_REDISENO: Record<ArcoRow["status"], Tono> = {
   REJECTED:    "peligro",
 };
 
-export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperAdmin, rediseno = false }: Props) {
+export function ArcoRequestsClient({ clinicRequests, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [editing, setEditing] = useState<ArcoRow | null>(null);
@@ -77,11 +75,6 @@ export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperA
           <Seccion titulo={t("settings.arco.sectionClinic", { count: clinicRequests.length })} sinRelleno={clinicRequests.length > 0}>
             <TablaRediseno rows={clinicRequests} onEdit={setEditing} />
           </Seccion>
-          {isSuperAdmin && (
-            <Seccion titulo={t("settings.arco.sectionAnonymous", { count: anonymousRequests.length })} sinRelleno={anonymousRequests.length > 0}>
-              <TablaRediseno rows={anonymousRequests} onEdit={setEditing} />
-            </Seccion>
-          )}
         </Columna>
         {editing && (
           <EditModal
@@ -104,12 +97,6 @@ export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperA
       <Section title={t("settings.arco.sectionClinic", { count: clinicRequests.length })}>
         <Table rows={clinicRequests} onEdit={setEditing} />
       </Section>
-
-      {isSuperAdmin && (
-        <Section title={t("settings.arco.sectionAnonymous", { count: anonymousRequests.length })}>
-          <Table rows={anonymousRequests} onEdit={setEditing} />
-        </Section>
-      )}
 
       {editing && (
         <EditModal

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
@@ -15,33 +16,29 @@ export default async function ArcoRequestsPage() {
   // no solo el botón de guardar.
   requirePermissionOrRedirect(user, "arco.manage");
 
-  // Las dos listas y el interruptor del rediseño (ws1-t2: el MISMO
-  // `menu-dos-niveles` de la clínica) en UN Promise.all: antes iban en
-  // cascada, y el interruptor no añade viaje (falla cerrado → false = la
-  // pantalla de siempre).
-  const [clinicRequests, anonymousRequests, rediseno] = await Promise.all([
-    // Solicitudes scoped a la clínica
+  // Solo las solicitudes de ESTA clínica. Las anónimas (clinicId NULL) las
+  // atiende el admin de plataforma en /admin/arco: aquí NO se consultan, ni
+  // siquiera para SUPER_ADMIN (rol de todo dueño de clínica; A3, auditoría
+  // 30-sep-2026). Sin clínica resuelta no se consulta nada: `clinicId:
+  // undefined` haría que Prisma descartara el filtro y devolviera TODAS.
+  const clinicId = user.clinicId;
+  if (!clinicId) redirect("/dashboard");
+
+  // La lista y el interruptor del rediseño (ws1-t2: el MISMO `menu-dos-niveles`
+  // de la clínica) en UN Promise.all: el interruptor falla cerrado → false = la
+  // pantalla de siempre.
+  const [clinicRequests, rediseno] = await Promise.all([
     prisma.arcoRequest.findMany({
-      where: { clinicId: user.clinicId },
+      where: { clinicId },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    // Solicitudes anónimas (clinicId NULL) — solo SUPER_ADMIN.
-    user.role === "SUPER_ADMIN"
-      ? prisma.arcoRequest.findMany({
-          where: { clinicId: null },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-        })
-      : Promise.resolve([]),
     menuDosNivelesEncendido(user.clinicId),
   ]);
 
   return (
     <ArcoRequestsClient
       clinicRequests={clinicRequests.map(serialize)}
-      anonymousRequests={anonymousRequests.map(serialize)}
-      isSuperAdmin={user.role === "SUPER_ADMIN"}
       rediseno={rediseno}
     />
   );
