@@ -118,8 +118,7 @@ test("2FA y contraseña montan los MISMOS componentes de seguridad, encendido o 
   const setup = leer("app/dashboard/2fa/setup/page.tsx");
   const pwd = leer("app/dashboard/cambiar-contrasena/page.tsx");
   assert.equal((reto.match(/<TwoFactorChallenge \/>/g) ?? []).length, 2, "el reto: uno vestido y uno de siempre");
-  // ws1-t8: `motivo` solo elige el encabezado del modo forzado (clínica o dueño).
-  assert.equal((setup.match(/<TwoFactorSetup forced=\{forced\} motivo=\{motivo\} \/>/g) ?? []).length, 2, "el enrolamiento: uno vestido y uno de siempre");
+  assert.equal((setup.match(/<TwoFactorSetup forced=\{forced\} \/>/g) ?? []).length, 2, "el enrolamiento: uno vestido y uno de siempre");
   assert.equal((pwd.match(/<ChangePasswordClient \/>/g) ?? []).length, 2, "la contraseña: uno vestido y uno de siempre");
   // El camino viejo del enrolamiento conserva su envoltorio de siempre.
   assert.ok(setup.includes('<div className="w-full max-w-md">'), "el enrolamiento de siempre conserva su max-w-md");

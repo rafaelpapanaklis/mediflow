@@ -111,9 +111,8 @@ mock.module("@/lib/auth/two-factor-cookie", {
       return cookie2fa;
     },
     // ws1-t8: la decisión común (two-factor-decision) lee también la prueba de
-    // «Ver como clínica» y la simulación de la obligación de los dueños.
+    // «Ver como clínica».
     hasValidVerComoCookie: () => false,
-    leerSimulacionDosPasos: () => null,
   },
 });
 // Si alguien vuelve a preguntar por las hermanas con otra consulta, que se note.

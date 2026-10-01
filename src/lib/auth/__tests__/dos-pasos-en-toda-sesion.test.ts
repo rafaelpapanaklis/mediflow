@@ -13,8 +13,9 @@
  * Dos mitades:
  *   1. Con getAuthContext / getCurrentUser REALES (Prisma, Supabase, cookies y
  *      cabeceras de mentira): bloquean en server action, en página y sin
- *      ruta; la única salida es getCurrentUserSinDosPasos; el dueño con la
- *      gracia vencida queda bloqueado y en gracia no; «Ver como clínica» pasa.
+ *      ruta; la única salida es getCurrentUserSinDosPasos; nadie queda
+ *      obligado por su ROL (el 2FA es opcional, decisión de Rafael del
+ *      1-oct-2026); «Ver como clínica» pasa.
  *   2. Un ESCANEO del código que falla si alguien vuelve a resolver la sesión
  *      de clínica por su cuenta (supabase.auth.getUser fuera de la lista
  *      justificada) o usa las salidas sin gate fuera de donde toca.
@@ -65,8 +66,6 @@ beforeEach(() => {
   accion = null;
   cookie2fa = false;
   cookieVerComo = false;
-  delete process.env.DOS_PASOS_DUENOS_DESDE;
-  delete process.env.DOS_PASOS_DUENOS_GRACIA_DIAS;
 });
 
 const prismaFalso = {
@@ -97,7 +96,6 @@ mock.module("@/lib/auth/two-factor-cookie", {
   namedExports: {
     hasValidTwoFactorCookie: () => cookie2fa,
     hasValidVerComoCookie: () => cookieVerComo,
-    leerSimulacionDosPasos: () => null,
   },
 });
 mock.module("@/lib/auth/two-factor-identity", {
@@ -175,42 +173,53 @@ test("quien no tiene 2FA en una clínica que no lo exige no se entera del gate",
   assert.equal((await getCurrentUser()).clinicId, "cli_a");
 });
 
-// ══════════════════ M2 · dueños ══════════════════
+// ══════════════════ 2FA opcional: ningún rol obligado ══════════════════
 
-test("DUEÑO con la gracia vencida y sin 2FA: ni API ni server actions; la página lo manda a configurarlo", async () => {
-  process.env.DOS_PASOS_DUENOS_DESDE = "2026-01-01";
-  filas = [fila({ role: "SUPER_ADMIN" })];
-  ruta = "/api/patients";
-  assert.equal(await getAuthContext(), null);
-  ruta = "/dashboard";
-  await assert.rejects(() => getCurrentUser(), redirigeA("/dashboard/2fa/setup"));
-  // Y la pantalla de configuración SÍ puede resolverlo: no es un callejón.
-  assert.equal((await getCurrentUserSinDosPasos()).role, "SUPER_ADMIN");
-});
-
-test("DUEÑO en gracia: trabaja normal (el aviso es solo del layout y se pospone)", async () => {
-  process.env.DOS_PASOS_DUENOS_DESDE = new Date().toISOString();
+test("el DUEÑO sin 2FA entra igual que todos: el 2FA es opcional, no hay obligación por rol", async () => {
   filas = [fila({ role: "SUPER_ADMIN" })];
   ruta = "/dashboard/patients";
+  accion = "abc";
   assert.equal((await getAuthContext())?.clinicId, "cli_a");
   assert.equal((await getCurrentUser()).clinicId, "cli_a");
 });
 
-test("la doctora de la misma clínica con la gracia vencida: opcional, como hoy", async () => {
-  process.env.DOS_PASOS_DUENOS_DESDE = "2026-01-01";
-  filas = [fila({ role: "DOCTOR" })];
-  ruta = "/dashboard/patients";
-  assert.equal((await getAuthContext())?.clinicId, "cli_a");
+test("el dueño que SÍ activó su 2FA tiene el reto como cualquiera", async () => {
+  filas = [fila({ role: "SUPER_ADMIN", totpEnabled: true })];
+  ruta = "/dashboard";
+  await assert.rejects(() => getCurrentUser(), redirigeA("/dashboard/2fa?next=%2Fdashboard"));
 });
 
-test("«Ver como clínica» desde /admin: entra aunque el dueño tenga 2FA o la gracia vencida", async () => {
-  process.env.DOS_PASOS_DUENOS_DESDE = "2026-01-01";
-  filas = [fila({ role: "SUPER_ADMIN" })];
+test("«Ver como clínica» desde /admin: entra aunque el dueño tenga su 2FA activado o la clínica lo exija", async () => {
+  filas = [fila({ role: "SUPER_ADMIN", totpEnabled: true })];
   cookieVerComo = true;
   ruta = "/dashboard";
   assert.equal((await getAuthContext())?.clinicId, "cli_a");
-  filas = [fila({ role: "SUPER_ADMIN", totpEnabled: true })];
   assert.equal((await getCurrentUser()).clinicId, "cli_a");
+  filas = [fila({ role: "SUPER_ADMIN", clinic: { id: "cli_a", category: "DENTAL", require2fa: true } })];
+  assert.equal((await getAuthContext())?.clinicId, "cli_a");
+});
+
+test("la regla: verComo pasa siempre; enrolado sin prueba → reto; require2fa → enrolar; nada más", async () => {
+  const { decisionDosPasos } = await import("../two-factor-gate");
+  assert.equal(decisionDosPasos({ totpEnabled: true, hasValidCookie: false, verComoAdmin: true }), null);
+  assert.equal(decisionDosPasos({ require2fa: true, hasValidCookie: false, verComoAdmin: true }), null);
+  assert.equal(decisionDosPasos({ totpEnabled: true, hasValidCookie: false }), "challenge");
+  assert.equal(decisionDosPasos({ totpEnabled: true, hasValidCookie: true }), null);
+  assert.equal(decisionDosPasos({ require2fa: true, hasValidCookie: false }), "setup");
+  assert.equal(decisionDosPasos({ hasValidCookie: false }), null);
+});
+
+test("la prueba de «Ver como clínica» y la de 2FA superado no se sustituyen entre sí", async () => {
+  const { packTwoFactorToken, isTwoFactorTokenValidFor, verComoSecret } = await import("../two-factor-core");
+  const sb = "11111111-2222-3333-4444-555555555555";
+  const cli = "clinica_qa_prueba";
+  const now = Date.now();
+  const verComo = packTwoFactorToken(sb, cli, now, verComoSecret());
+  const dosPasos = packTwoFactorToken(sb, cli, now);
+  assert.equal(isTwoFactorTokenValidFor(verComo, sb, cli, now, 3600, verComoSecret()), true);
+  assert.equal(isTwoFactorTokenValidFor(verComo, sb, cli, now), false, "la de admin no vale como 2FA superado");
+  assert.equal(isTwoFactorTokenValidFor(dosPasos, sb, cli, now, 3600, verComoSecret()), false, "un 2FA superado no vale como admin");
+  assert.equal(isTwoFactorTokenValidFor(verComo, sb, "otra_clinica", now, 3600, verComoSecret()), false, "atada a la clínica");
 });
 
 // ══════════════════ 2 · escaneo: nadie se salta el gate ══════════════════
@@ -283,7 +292,6 @@ test("el odontograma y geocode ya no son excepción: delegan en getAuthContext",
 test("getCurrentUserSinDosPasos solo lo usan el layout y las pantallas del propio 2FA", () => {
   const usan = TODOS.filter((f) => /getCurrentUserSinDosPasos\s*\(/.test(f.src)).map((f) => f.rel).sort();
   assert.deepEqual(usan, [
-    "src/app/dashboard/2fa/activar/page.tsx",
     "src/app/dashboard/2fa/page.tsx",
     "src/app/dashboard/2fa/setup/page.tsx",
     "src/app/dashboard/layout.tsx",
@@ -302,4 +310,11 @@ test("el gate autoritativo ya no decide por la ruta (x-pathname) si exigir el 2F
     assert.doesNotMatch(f.src, /isApiPathBlockedForMissingTwoFactor/, `${r} vuelve a limitar el 2FA a /api`);
     assert.match(f.src, /decidirDosPasos\(/, `${r} no usa la decisión común`);
   }
+});
+
+test("no queda rastro del 2FA obligatorio para dueños (retirado el 1-oct-2026)", () => {
+  const rastro = TODOS.filter((f) =>
+    /DOS_PASOS_DUENOS|estadoDuenoDosPasos|df_2fa_simular|df_2fa_luego|2fa\/activar|2fa\/posponer/.test(f.src),
+  ).map((f) => f.rel);
+  assert.deepEqual(rastro, []);
 });

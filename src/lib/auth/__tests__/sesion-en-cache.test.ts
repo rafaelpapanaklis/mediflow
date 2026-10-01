@@ -121,12 +121,11 @@ mock.module("@/lib/plan-status", {
   namedExports: { isPlanExpired: () => false, isApiPathBlockedForExpiredPlan: () => false },
 });
 // ws1-t8: la decisión común (two-factor-decision) lee también la prueba de
-// «Ver como clínica» y la simulación de la obligación de los dueños.
+// «Ver como clínica».
 mock.module("@/lib/auth/two-factor-cookie", {
   namedExports: {
     hasValidTwoFactorCookie: () => cookie2fa,
     hasValidVerComoCookie: () => false,
-    leerSimulacionDosPasos: () => null,
   },
 });
 class Redireccion extends Error { constructor(public destino: string) { super(`NEXT_REDIRECT ${destino}`); } }

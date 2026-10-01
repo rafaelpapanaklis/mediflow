@@ -16,8 +16,8 @@ export default async function TwoFactorChallengePage() {
   const user = await getCurrentUserSinDosPasos();
   const { decision } = decidirDosPasos(user);
 
-  // Sin 2FA activo: o hay que enrolarse (clínica que lo exige, o dueño con la
-  // gracia vencida) o no hay nada que retar (→ panel). Ya superado en esta
+  // Sin 2FA activo: o hay que enrolarse (la clínica lo exige) o no hay nada
+  // que retar (→ panel). Ya superado en esta
   // ventana, o «Ver como clínica» → al panel (evita pedir el código de nuevo).
   if (decision === "setup") redirect("/dashboard/2fa/setup");
   if (decision !== "challenge") redirect("/dashboard");

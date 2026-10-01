@@ -9,9 +9,10 @@
 -- videollamada…) ANTES de correrlo: quien tenga la contraseña robada también
 -- puede escribir a soporte.
 --
--- Qué pasa después: la persona entra solo con su contraseña. Si es DUEÑO
--- (SUPER_ADMIN) y la gracia ya venció, el panel la manda directo a configurar
--- el 2FA con el celular nuevo (no queda bloqueada: puede hacerlo ahí mismo).
+-- Qué pasa después: la persona entra solo con su contraseña y, si quiere,
+-- vuelve a activar el 2FA con el celular nuevo en Configuración → Seguridad. Si
+-- su clínica tiene «Exigir 2FA a todo el equipo», el panel la manda a
+-- configurarlo al entrar (puede hacerlo ahí mismo).
 --
 -- El 2FA es de la PERSONA (EQ-02): se quita en todas sus filas de users, por
 -- supabaseId, no solo en una clínica.

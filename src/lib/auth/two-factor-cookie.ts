@@ -6,12 +6,8 @@ import {
   TWO_FA_OK_MAX_AGE_SECONDS,
   TWO_FA_PENDING_MAX_AGE_SECONDS,
   TWO_FA_ADMIN_COOKIE,
-  TWO_FA_POSPUESTO_COOKIE,
-  TWO_FA_POSPUESTO_MAX_AGE_SECONDS,
-  TWO_FA_SIMULACION_COOKIE,
 } from "./two-factor-constants";
 import { packTwoFactorToken, isTwoFactorTokenValidFor, verComoSecret } from "./two-factor-core";
-import type { SimulacionDosPasosDuenos } from "./two-factor-gate";
 
 // Helpers de cookies del 2FA, lado servidor (Node):
 //  - lectura para el LAYOUT / páginas del reto (hasValidTwoFactorCookie)
@@ -52,29 +48,6 @@ export function hasValidVerComoCookie(supabaseId: string, clinicId: string): boo
     return false;
   }
   return isTwoFactorTokenValidFor(raw, supabaseId, clinicId, Date.now(), TWO_FA_OK_MAX_AGE_SECONDS, verComoSecret());
-}
-
-// ws1-t8 · M2: simulación de la obligación de los dueños en ESTE navegador.
-// En producción NO se lee nunca (devuelve null aunque la cookie exista), y la
-// regla solo la usa para endurecer (ver estadoDuenoDosPasos).
-export function leerSimulacionDosPasos(nodeEnv: string | undefined = process.env.NODE_ENV): SimulacionDosPasosDuenos {
-  if (nodeEnv === "production") return null;
-  let raw: string | undefined;
-  try {
-    raw = cookies().get(TWO_FA_SIMULACION_COOKIE)?.value;
-  } catch {
-    return null;
-  }
-  return raw === "gracia" || raw === "vencida" ? raw : null;
-}
-
-// ws1-t8 · M2: el dueño pulsó «Recordármelo después» en las últimas 24 h.
-export function avisoDosPasosPospuesto(): boolean {
-  try {
-    return cookies().get(TWO_FA_POSPUESTO_COOKIE)?.value === "1";
-  } catch {
-    return false;
-  }
 }
 
 // ── Escritura sobre la respuesta (route handlers) ─────────────────
@@ -126,18 +99,6 @@ export function clearVerComoCookie(res: ResLike): void {
   res.cookies.set({ name: TWO_FA_ADMIN_COOKIE, value: "", path: "/", maxAge: 0 });
 }
 
-export function setAvisoPospuestoCookie(res: ResLike): void {
-  res.cookies.set({
-    name: TWO_FA_POSPUESTO_COOKIE,
-    value: "1",
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    path: "/",
-    maxAge: TWO_FA_POSPUESTO_MAX_AGE_SECONDS,
-  });
-}
-
 export function clearTwoFactorPending(res: ResLike): void {
   res.cookies.set({ name: TWO_FA_PENDING_COOKIE, value: "", path: "/", maxAge: 0 });
 }
@@ -167,7 +128,7 @@ export async function applyTwoFactorLoginCookies(
     const { prisma } = await import("@/lib/prisma");
     const u = await prisma.user.findFirst({
       where: { supabaseId, clinicId, isActive: true },
-      select: { role: true, totpEnabled: true, clinic: { select: { require2fa: true } } },
+      select: { totpEnabled: true, clinic: { select: { require2fa: true } } },
     });
     // EQ-02: el 2FA es de la persona, no de esta fila. Si enroló en OTRA de sus
     // sedes, aquí también hay que sembrar el pendiente: sin esto, aterrizar en
@@ -177,22 +138,7 @@ export async function applyTwoFactorLoginCookies(
     const enrolado = !!u?.totpEnabled || (!!u && await personaTieneDosFactores(supabaseId));
     // Un login de verdad nunca es «Ver como clínica»: esa prueba no sobrevive.
     clearVerComoCookie(res);
-    // ws1-t8 · M2: el dueño con la gracia vencida también lleva el pendiente
-    // (fast-path del middleware); en gracia, no: ahí no se bloquea nada.
-    const { decisionDosPasos, estadoDuenoDosPasos, leerPoliticaDosPasosDuenos, bloqueaDosPasos } =
-      await import("./two-factor-gate");
-    const needs2fa = !!u && bloqueaDosPasos(decisionDosPasos({
-      totpEnabled: enrolado,
-      require2fa: u.clinic?.require2fa,
-      hasValidCookie: false,
-      dueno: estadoDuenoDosPasos({
-        role: u.role,
-        totpEnabled: enrolado,
-        politica: leerPoliticaDosPasosDuenos(),
-        ahoraMs: Date.now(),
-        simulacion: leerSimulacionDosPasos(),
-      }),
-    }));
+    const needs2fa = !!u && (enrolado || !!u.clinic?.require2fa);
     if (needs2fa) {
       setTwoFactorPendingCookie(res);
       clearTwoFactorOk(res);

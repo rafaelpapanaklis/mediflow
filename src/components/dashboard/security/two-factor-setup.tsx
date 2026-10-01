@@ -11,13 +11,9 @@ interface Props {
   forced?: boolean;
   // Ajustes: refrescar el estado de la card al activar.
   onEnabled?: () => void;
-  // ws1-t8 · Por qué se pide (solo cambia el encabezado del modo forzado):
-  // "clinica" = require2fa; "dueno" = obligación de los dueños (gracia o
-  // vencida). Sin él, el encabezado de siempre.
-  motivo?: "clinica" | "dueno";
 }
 
-export function TwoFactorSetup({ forced = false, onEnabled, motivo }: Props) {
+export function TwoFactorSetup({ forced = false, onEnabled }: Props) {
   const t = useT();
   const [step, setStep] = useState<"start" | "scan" | "codes">(forced ? "scan" : "start");
   const [qr, setQr] = useState<string | null>(null);
@@ -186,14 +182,10 @@ export function TwoFactorSetup({ forced = false, onEnabled, motivo }: Props) {
             style={{ borderBottom: "1px solid var(--border-soft)", paddingBottom: 12 }}
           >
             <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
-              {motivo === "dueno"
-                ? t("settings.client.tfa.ownerForcedTitle")
-                : t("settings.client.tfa.forcedTitle")}
+              {t("settings.client.tfa.forcedTitle")}
             </h2>
             <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: 0 }}>
-              {motivo === "dueno"
-                ? t("settings.client.tfa.ownerForcedSubtitle")
-                : t("settings.client.tfa.forcedSubtitle")}
+              {t("settings.client.tfa.forcedSubtitle")}
             </p>
           </div>
         )}
