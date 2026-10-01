@@ -13,6 +13,10 @@ import {
   sanitizeCobranzaSettings,
 } from "@/lib/reminders/config";
 import { esUrlDeLogoValida } from "@/lib/clinic-logo";
+import {
+  esNombreDeClinicaValido, MENSAJE_NOMBRE_INVALIDO,
+  esRfcValido, normalizarRfc, MENSAJE_RFC_INVALIDO,
+} from "@/lib/clinic-fields";
 
 /**
  * ISO-01 — esta ruta reescribe la IDENTIDAD de la clínica.
@@ -60,6 +64,27 @@ export async function PATCH(req: NextRequest) {
   const data: Record<string, any> = {};
   for (const key of allowed) {
     if (key in body) data[key] = body[key];
+  }
+
+  // A1/A2 (auditoría 30-sep-2026): el nombre llega al directorio público y a
+  // los recibos sin etiquetas; el RFC (taxId / rfcEmisor) tiene formato fijo.
+  // Vacío o null limpia el RFC; el nombre nunca puede quedar vacío.
+  if ("name" in data) {
+    if (!esNombreDeClinicaValido(data.name)) {
+      return NextResponse.json({ error: MENSAJE_NOMBRE_INVALIDO }, { status: 400 });
+    }
+    data.name = data.name.trim();
+  }
+  for (const campo of ["taxId", "rfcEmisor"] as const) {
+    if (!(campo in data)) continue;
+    const v = data[campo];
+    if (v === null || v === "") {
+      data[campo] = null;
+    } else if (esRfcValido(v)) {
+      data[campo] = normalizarRfc(v);
+    } else {
+      return NextResponse.json({ error: MENSAJE_RFC_INVALIDO, campo }, { status: 400 });
+    }
   }
 
   // WS1-T6 — logoUrl entraba tal cual, sin mirar ni la URL. Esta columna

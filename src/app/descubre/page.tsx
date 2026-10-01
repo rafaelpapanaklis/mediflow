@@ -11,6 +11,7 @@ import { TopCombosFooter } from "@/components/directory/CityLinks";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import "@/components/public/landing/sales/sales.css";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 export const metadata: Metadata = buildMetadata({
   title: "Encuentra tu clínica y reserva en línea | DaleControl",
@@ -136,7 +137,7 @@ export default function DescubrePage() {
       <SalesFooter />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(JSON_LD) }}
       />
     </div>
   );

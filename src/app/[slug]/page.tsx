@@ -23,6 +23,7 @@ import {
   medicalBusinessLd,
   SITE_URL,
 } from "@/lib/seo";
+import { serializeJsonLd } from "@/lib/json-ld";
 // Las 4 landings PÚBLICAS de especialidad (PUBLIC_SPECIALTY_SLUGS) se
 // pre-renderizan en build (generateStaticParams) y revalidan cada 5 min (ISR).
 // Las otras 13 siguen en SPECIALTIES como tipo de clínica del registro, pero
@@ -110,7 +111,7 @@ export default async function ClinicLandingPage({ params }: Props) {
           <script
             key={i}
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+            dangerouslySetInnerHTML={{ __html: serializeJsonLd(ld) }}
           />
         ))}
         <div className="landing-theme" data-mode="dark" style={{ minHeight: "100vh" }}>

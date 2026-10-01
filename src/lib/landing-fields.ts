@@ -23,6 +23,7 @@
    agrega en los DOS lados: allá para que se VEA mientras se escribe,
    aquí para que se GUARDE.
    ============================================================ */
+import { esNombreDeClinicaValido } from "@/lib/clinic-fields";
 import {
   TEMPLATE_MANIFESTS, allPhotoSlotIds, allCopyKeys, esClaveDeCopia, topeDeCopia,
 } from "@/app/[slug]/_shared/template-manifest";
@@ -37,10 +38,6 @@ const esNulo = (v: unknown) => v === null || v === undefined;
 /** Texto acotado, o null. La cadena vacía cuenta como texto (borra el campo). */
 const texto = (max: number) => (v: unknown) =>
   esNulo(v) || (typeof v === "string" && v.length <= max);
-
-/** Texto obligatorio: ni null ni vacío (el nombre de la clínica, p. ej.). */
-const textoObligatorio = (min: number, max: number) => (v: unknown) =>
-  typeof v === "string" && v.trim().length >= min && v.length <= max;
 
 /**
  * URL http(s) y nada más.
@@ -154,7 +151,7 @@ export const CAMPOS_EDITABLES = {
 
   /* Identidad y contacto — lo que pintan las ocho plantillas en el
      encabezado y en el bloque de contacto. */
-  name:    textoObligatorio(2, 120),
+  name:    esNombreDeClinicaValido, // 2–120, sin «<» ni «>» (A1, 30-sep-2026)
   phone:   texto(40),
   email:   (v: unknown) =>
     esNulo(v) || (typeof v === "string" && (v === "" || (v.length <= 160 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))),

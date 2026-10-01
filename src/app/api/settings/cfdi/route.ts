@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
+import { esRfcValido, MENSAJE_RFC_INVALIDO } from "@/lib/clinic-fields";
 import { createOrganization, updateOrgLegal, getOrganizationStatus } from "@/lib/facturapi";
 
 // POST /api/settings/cfdi — configure clinic's RFC for invoicing
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
   const { rfcEmisor, regimenFiscal, cpEmisor, razonSocial, cfdiTaxMode } = await req.json();
 
   if (!rfcEmisor?.trim()) return NextResponse.json({ error:"RFC es requerido" }, { status:400 });
+  if (!esRfcValido(rfcEmisor)) return NextResponse.json({ error: MENSAJE_RFC_INVALIDO }, { status:400 });
   if (!cpEmisor?.trim() || cpEmisor.length !== 5) return NextResponse.json({ error:"Código postal debe tener 5 dígitos" }, { status:400 });
   if (!razonSocial?.trim()) return NextResponse.json({ error:"Razón social es requerida" }, { status:400 });
 

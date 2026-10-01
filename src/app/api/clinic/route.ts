@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { isValidLatLng } from "@/lib/directory/distance";
 import { categoriaAlGuardar } from "@/lib/clinic/categoria-fija";
+import { esNombreDeClinicaValido, MENSAJE_NOMBRE_INVALIDO } from "@/lib/clinic-fields";
 
 // Contexto vía el helper CENTRAL (getAuthContext): misma resolución
 // cookie→clínica que la copia local que había aquí, pero pasando por los
@@ -44,9 +45,16 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // El nombre llega al directorio público, al JSON-LD y a los recibos: texto
+  // de 2–120 caracteres sin «<» ni «>» (A1, auditoría 30-sep-2026). Antes
+  // entraba tal cual, incluso un objeto o una cadena vacía.
+  if (body.name !== undefined && !esNombreDeClinicaValido(body.name)) {
+    return NextResponse.json({ error: MENSAJE_NOMBRE_INVALIDO }, { status: 400 });
+  }
+
   // Build update object — only update fields that were sent
   const data: Record<string, any> = {};
-  if (body.name        !== undefined) data.name        = body.name;
+  if (body.name        !== undefined) data.name        = body.name.trim();
   if (body.city        !== undefined) data.city        = body.city        || null;
   if (body.address     !== undefined) data.address     = body.address     || null;
   if (body.mapsUrl     !== undefined) data.mapsUrl     = body.mapsUrl     || null;

@@ -10,6 +10,7 @@ import { CategoryCityLinks } from "@/components/directory/CityLinks";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { DIRECTORY_CATEGORIES, getCategoryBySlug } from "@/lib/directory/types";
 import "@/components/public/landing/sales/sales.css";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 interface Props {
   params: { categoria: string };
@@ -132,7 +133,7 @@ export default function CategoriaPage({ params }: Props) {
       <SalesFooter />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
     </div>
   );

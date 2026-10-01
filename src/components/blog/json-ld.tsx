@@ -14,8 +14,10 @@
 // de cierre de script y parta el bloque en dos.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { serializeJsonLd } from "@/lib/json-ld";
+
 export function JsonLd({ data }: { data: unknown }) {
-  const json = JSON.stringify(data).replace(/</g, "\\u003c");
+  const json = serializeJsonLd(data);
   return (
     <script
       type="application/ld+json"

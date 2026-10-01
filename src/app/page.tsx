@@ -12,6 +12,7 @@ import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { getResolvedPlans } from "@/lib/plans";
 import { TodoElPanel } from "@/components/public/landing/sales/v2/todo-el-panel";
 import "@/components/public/landing/sales/v2/landing-v2.css";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
@@ -163,7 +164,7 @@ export default async function HomePage() {
       <TawkChat />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
     </div>
   );

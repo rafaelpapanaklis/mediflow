@@ -13,6 +13,7 @@ import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { getCategoryBySlug } from "@/lib/directory/types";
 import { getCityPageData, getCategoryCityCombos } from "@/lib/directory/query";
 import "@/components/public/landing/sales/sales.css";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 // SEO programático: páginas estáticas por combinación real (categoría × ciudad)
 // con ISR diario. Las combinaciones SIN clínicas hacen notFound() (404) — cero
@@ -232,11 +233,11 @@ export default async function CiudadPage({ params }: Props) {
       <BookingPopupController />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(itemListLd) }}
       />
     </div>
   );

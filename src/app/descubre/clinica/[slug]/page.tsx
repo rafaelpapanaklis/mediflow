@@ -15,6 +15,7 @@ import { ProfileReviews } from "@/components/reviews/ProfileReviews";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import "@/components/public/landing/sales/sales.css";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /descubre/clinica/[slug] — perfil público de una clínica (estilo Doctoralia).
@@ -390,8 +391,8 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
       {/* Popup de reserva (montado una sola vez) + restauración ?reservar= */}
       <BookingPopupController />
 
-      {/* JSON-LD: < escapado para evitar breakout de </script> con datos de la clínica. */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+      {/* JSON-LD: serializeJsonLd escapa < > & para que un nombre de clínica no cierre el <script>. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }} />
     </div>
   );
 }
