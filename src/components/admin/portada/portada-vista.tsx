@@ -19,6 +19,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { PlanStatusBadge, type PlanClinicLike } from "@/components/admin/plan-status-badge";
 import { Chip, Cifra, Sparkline, Tarjeta, Tile, Vacio } from "@/components/admin/rediseno/piezas";
 import { GraficaNegocio } from "./grafica-negocio";
+import { TileEnLinea, type EnLineaInicial } from "./tile-en-linea";
 import { TONO_MOTIVO, type ConteosTiles, type Pendiente } from "./pendientes";
 import type { FilaActividad } from "./atencion-core";
 
@@ -81,6 +82,11 @@ export interface DatosPortada {
   ultimosPagos: PagoReciente[];
   trabajando: FilaActividad[];
   enLinea: number;
+  /**
+   * «Clínicas en línea» de la tarjeta azul: señal de vida del panel (Redis), no la
+   * actividad de arriba. `clinicas: null` = sin dato. Ausente = sin dato.
+   */
+  enLineaAhora?: EnLineaInicial;
   /** Lo que no se pudo medir. */
   avisos: string[];
 }
@@ -167,9 +173,8 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
         <Tile href="/admin/clinics" tono={d.tiles.renovaciones > 0 ? "brand" : "quieto"} icono={CalendarClock}
           n={d.tiles.renovaciones} label="Renovaciones manuales en 7 días"
           title="Clínicas que pagan a mano (transferencia, SPEI, OXXO, depósito) y renuevan en los próximos 7 días. Las de tarjeta en Stripe se cobran solas; si fallan, salen en «Cobros fallidos»." />
-        <Tile href="/admin/clinics" tono={d.tiles.cercaDelTope > 0 ? "info" : "quieto"} icono={Gauge}
-          n={d.tiles.cercaDelTope} label="Clínicas cerca de un tope"
-          title="Almacenamiento o tokens IA al 80 % o más, usuarios al tope, CFDI por encima del cupo, saldo IA bajo o en negativo" />
+        {/* Antes aquí iba «Clínicas cerca de un tope»: ahora vive en «Este mes» (más abajo). */}
+        <TileEnLinea inicial={d.enLineaAhora ?? { disponible: false, clinicas: null, ahora: now.getTime() }} />
       </div>
 
       {/* ── 2 + 3. Gráfica y sparklines ── */}
@@ -237,6 +242,18 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
               <div className="dcp-cifra__pie">
                 archivadas este mes
                 {d.negocio.cancelacionesPedidas > 0 && ` · ${d.negocio.cancelacionesPedidas} cancelación${d.negocio.cancelacionesPedidas === 1 ? "" : "es"} pedida${d.negocio.cancelacionesPedidas === 1 ? "" : "s"}`}
+              </div>
+            </div>
+            <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--m2-tarjeta-borde)", paddingTop: 12 }}
+              title="Almacenamiento o tokens IA al 80 % o más, usuarios al tope, CFDI por encima del cupo, saldo IA bajo o en negativo">
+              <div className="dcp-cifra__label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Gauge size={13} aria-hidden /> Clínicas cerca de un tope
+              </div>
+              <div className={`dcp-cifra__n dcp-num${d.tiles.cercaDelTope > 0 ? " dcp-cifra__n--warning" : ""}`} data-cerca-del-tope>
+                {d.tiles.cercaDelTope}
+              </div>
+              <div className="dcp-cifra__pie">
+                cupos al 80 % o más o saldo IA bajo · <Link href="/admin/clinics" className="dcp-enlace">Ver clínicas <ArrowUpRight size={13} /></Link>
               </div>
             </div>
           </div>

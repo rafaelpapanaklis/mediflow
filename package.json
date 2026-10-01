@@ -140,6 +140,7 @@
     "test:portada-vs-clinicas": "tsx --test src/components/admin/portada/__tests__/portada-vs-clinicas.test.ts",
     "test:ventana-en-vivo": "tsx --test src/app/admin/analytics/__tests__/ventana-en-vivo.test.ts",
     "test:tablas-movil": "tsx --test src/app/admin/clinics/__tests__/tablas-movil.test.ts",
+    "test:presencia": "tsx --test src/lib/presencia/__tests__/presencia.test.ts src/components/admin/portada/__tests__/tarjeta-en-linea.test.ts",
     "test:admin-uso": "tsx --test src/lib/admin/__tests__/uso-core.test.ts src/components/admin/portada/__tests__/pendientes.test.ts",
     "test:storage-usage": "tsx --test src/lib/__tests__/storage-usage.test.ts",
     "test:mrr-universo": "tsx --test src/app/admin/clientes/__tests__/mrr-universo.test.ts",

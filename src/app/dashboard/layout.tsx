@@ -23,6 +23,7 @@ import { VestirAvisos } from "@/components/dashboard/layout-rediseno/avisos";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
+import { PresenciaLatido } from "@/components/dashboard/presencia-latido";
 import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
 import { SabinaLanzador } from "@/components/dashboard/sabina/lanzador";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
@@ -374,6 +375,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         de a un toast rojo genérico o a un rebote al login. Va aquí y no en el
         minimalShell: sobre la propia pantalla del reto no tiene nada que hacer. */}
     <TwoFactorFetchGuard />
+    {/* Señal de vida para «Clínicas en línea» de /admin: cada 60 s con la pestaña
+        visible y actividad en los últimos 15 min. No pinta nada; sin Redis no hace nada. */}
+    <PresenciaLatido />
     {/* Volver a Hoy o a Analítica, instantáneo pasados los 30 s de Next. No
         pinta nada, NO toca el plazo de la Agenda ni de Caja (la lista de rutas
         es cerrada: cache-navegacion/politica.ts) y solo existe con el

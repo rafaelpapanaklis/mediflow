@@ -88,6 +88,35 @@
 .dcp-tile__n { display: block; font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .dcp-tile__label { margin-top: 5px; font-size: 12.5px; font-weight: 500; opacity: 0.92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* La tarjeta que abre una lista (botón) se ve igual que las de enlace. */
+.dcp-tile--boton { border: 0; font: inherit; text-align: left; width: 100%; cursor: pointer; }
+
+/* ── Lista de «Clínicas en línea» (ventana encima del Dashboard) ───── */
+.dcp-modal {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px;
+  background: rgba(15, 12, 30, 0.45);
+}
+.dcp-modal__caja {
+  width: min(560px, 100%); max-height: min(80vh, 640px); display: flex; flex-direction: column;
+  background: var(--m2-tarjeta); border: 1px solid var(--m2-tarjeta-borde); border-radius: 14px; box-shadow: var(--m2-sombra);
+}
+.dcp-modal__cabeza { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--m2-tarjeta-borde); }
+.dcp-modal__cuerpo { overflow-y: auto; min-height: 0; }
+.dcp-modal__cerrar {
+  width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px;
+  border: 1px solid var(--m2-borde); background: transparent; color: var(--text-2); cursor: pointer;
+}
+.dcp-modal__cerrar:hover { background: var(--m2-tarjeta-hover); }
+.dcp-modal__cerrar:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.dcp-enlinea__clinica { padding: 12px 18px; border-bottom: 1px solid var(--m2-tarjeta-borde); display: flex; flex-direction: column; gap: 3px; }
+.dcp-enlinea__clinica:last-child { border-bottom: none; }
+.dcp-enlinea__fila { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.dcp-enlinea__fila a { text-decoration: none; }
+.dcp-enlinea__fila a:hover { color: var(--brand); }
+.dcp-enlinea__usuarios { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dcp-enlinea__usuarios li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.dcp-enlinea__nombre { color: var(--text-1); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── Rejillas ──────────────────────────────────────────────────────── */
 .dcp-grid-2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 .dcp-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

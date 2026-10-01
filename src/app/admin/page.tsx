@@ -14,6 +14,7 @@ import {
 } from "@/components/admin/portada/atencion-core";
 import { contarTiles, unirPendientes } from "@/components/admin/portada/pendientes";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
+import { contarConEspera, obtenerRedis } from "@/lib/presencia/presencia-store";
 import { metodoDePago, senalesDeCupo, USO_VACIO, type SenalCupo } from "@/lib/admin/uso-core";
 import { conteoMensual, serieNegocio, sumaPorPeriodo, ultimosMesesAdmin, type CobroCrudo } from "@/lib/admin/serie-negocio";
 import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
@@ -107,6 +108,10 @@ function acumula(
  */
 async function renderAdminDashboard() {
   const now = new Date();
+
+  // «Clínicas en línea»: UNA lectura a Redis (sin base), con tope de espera. Arranca
+  // ya y se espera al final, para no sumarle tiempo a las consultas de abajo.
+  const enLineaP = contarConEspera(obtenerRedis(), now.getTime());
 
   // ── Los CORTES, en la zona de Mérida (ver @/lib/admin/zona-horaria) ──────
   const hoy0   = inicioDelDia(now);
@@ -407,6 +412,7 @@ async function renderAdminDashboard() {
     ultimosPagos,
     trabajando,
     enLinea: portada.totales.enLinea,
+    enLineaAhora: await enLineaP.then((n) => ({ disponible: n !== null, clinicas: n, ahora: now.getTime() })),
     avisos,
   };
 
