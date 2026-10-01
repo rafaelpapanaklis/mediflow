@@ -4,6 +4,7 @@ import { funcionIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { BotIntent } from "./types";
 import type { GenerateAiReply } from "./types";
 import { buildMessages, buildSystemBlocks, clasificarRespuesta } from "./ai-prompt";
+import { bloqueDeTonoDeLaClinica } from "./aprende/tono-prompt";
 
 /**
  * T3 — Respuesta libre del bot de WhatsApp con Claude (Anthropic).
@@ -53,11 +54,6 @@ export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
     const incoming = input.incomingText?.trim();
     if (!incoming) return null; // nada que responder
 
-    // La fecha se calcula aquí, en cada turno: nunca un texto fijo. En dos
-    // bloques: lo fijo de la clínica con caché, la fecha al final sin caché.
-    const system = buildSystemBlocks(input, config, faqs, new Date());
-    const messages = buildMessages(input.history, incoming);
-
     // La clínica apagó la respuesta libre en Saldo de IA (ws1-t1): no llamamos
     // a Claude. Igual que sin saldo: el motor deriva a una persona y la FAQ por
     // reglas y la agenda siguen, que no gastan IA.
@@ -66,6 +62,15 @@ export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
     // Cobro de IA: si la clínica no tiene saldo (ni auto-recarga con tarjeta), no
     // llamamos a Claude — el motor cae a handoff y la FAQ por reglas sigue gratis.
     if (!(await canSpend(input.clinicId))) return null;
+
+    // Ejemplos de tono de la clínica («Así hablamos», ws1-t11). Nunca lanza:
+    // "" si no hay, si su SQL no está pegado o si algo falla.
+    const ejemplosTono = await bloqueDeTonoDeLaClinica(input.clinicId);
+
+    // La fecha se calcula aquí, en cada turno: nunca un texto fijo. En dos
+    // bloques: lo fijo de la clínica con caché, la fecha al final sin caché.
+    const system = buildSystemBlocks(input, config, faqs, new Date(), ejemplosTono);
+    const messages = buildMessages(input.history, incoming);
 
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);

@@ -15,7 +15,9 @@
  *  - otros usos de chat() (texto plano, sin thinking) salen igual que antes.
  * Y en el cobro:
  *  - #8: si Claude no contesta en 12 s la petición se ABORTA y no se cobra;
- *  - los tokens de caché se cobran separados (lectura y escritura).
+ *  - los tokens de caché se cobran separados (lectura y escritura);
+ *  - ws1-t11: «Así hablamos» entra en la parte fija, entre persona y FAQs, y
+ *    sin ejemplos (o sin su SQL) no deja rastro.
  */
 import Module from "node:module";
 import path from "node:path";
@@ -34,6 +36,9 @@ const estado = {
   uso: { input_tokens: 300, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } as Fila,
   cobros: [] as Fila[],
   reservasLiberadas: 0,
+  /** Lo que devuelve «Así hablamos» (ws1-t11); "" = sin ejemplos o sin SQL. */
+  tono: "",
+  tonoPedidoPara: [] as string[],
 };
 
 globalThis.fetch = (async (url: unknown, init?: { body?: string; signal?: AbortSignal }) => {
@@ -60,6 +65,12 @@ const dobles = new Map<string, unknown>([
     chargeUsage: async (args: Fila) => { estado.cobros.push(args); return null; },
   }],
   [path.join(RAIZ, "src/lib/ai-billing/interruptores.server.ts"), { funcionIaApagada: async () => false }],
+  [path.join(RAIZ, "src/lib/whatsapp/bot/aprende/tono-prompt.ts"), {
+    bloqueDeTonoDeLaClinica: async (clinicId: string) => {
+      estado.tonoPedidoPara.push(clinicId);
+      return estado.tono;
+    },
+  }],
 ]);
 const M = Module as unknown as {
   _load: (req: string, parent: unknown, isMain: boolean) => unknown;
@@ -91,6 +102,8 @@ beforeEach(() => {
   estado.cobros.length = 0;
   estado.reservasLiberadas = 0;
   estado.modo = "ok";
+  estado.tono = "";
+  estado.tonoPedidoPara.length = 0;
   estado.texto = "Claro, abrimos a las 9.";
   estado.uso = { input_tokens: 300, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
 });
@@ -188,4 +201,37 @@ test("si el modelo pide una persona, se distingue de un fallo", async () => {
   estado.texto = "__HANDOFF__";
   const r = await ai.generateAiReply(INPUT, CONFIG, FAQS);
   assert.deepEqual(r, { intent: "HANDOFF", handoff: true });
+});
+
+/* ── «Así hablamos» (ws1-t11) ───────────────────────────────────────── */
+
+test("los ejemplos de tono van en la parte cacheada, después de la persona y antes de las FAQs", async () => {
+  const { bloqueEjemplosDeTono } = await import("../aprende/tono");
+  estado.tono = bloqueEjemplosDeTono(["¡Hola, [nombre]! Con gusto te ayudamos 😊", "Claro que sí, te esperamos."]);
+  await ai.generateAiReply(INPUT, CONFIG, FAQS);
+  assert.deepEqual(estado.tonoPedidoPara, ["clinica_prueba"], "se piden los de la clínica del turno");
+  const [fijo, variable] = estado.cuerpos[0].system;
+  const iPersona = fijo.text.indexOf("PERSONA-DE-LA-CLINICA");
+  const iTono = fijo.text.indexOf("EJEMPLOS DE TONO DE LA CLÍNICA");
+  const iFaqs = fijo.text.indexOf("De 9 a 18");
+  assert.ok(iPersona >= 0 && iTono > iPersona && iFaqs > iTono, `orden persona(${iPersona}) < tono(${iTono}) < FAQs(${iFaqs})`);
+  assert.match(fijo.text, /Con gusto te ayudamos/);
+  assert.deepEqual(fijo.cache_control, { type: "ephemeral" });
+  assert.ok(!variable.text.includes("EJEMPLOS DE TONO"));
+});
+
+test("sin ejemplos (o sin el SQL de t11) el prompt queda igual que antes", async () => {
+  estado.tono = "";
+  await ai.generateAiReply(INPUT, CONFIG, FAQS);
+  const conVacio = estado.cuerpos[0].system[0].text;
+  assert.ok(!conVacio.includes("EJEMPLOS DE TONO"));
+  const { buildSystemBlocks } = await import("../ai-prompt");
+  const sinParametro = buildSystemBlocks(INPUT, CONFIG, FAQS, new Date())[0].text;
+  assert.equal(conVacio, sinParametro, "mismo bloque fijo byte a byte: no rompe la caché existente");
+});
+
+test("si no se va a llamar a la IA (mensaje vacío), no se consultan los ejemplos de tono", async () => {
+  // La consulta va después de los cortes (vacío, IA apagada, sin saldo).
+  await ai.generateAiReply({ ...INPUT, incomingText: "   " }, CONFIG, FAQS);
+  assert.equal(estado.tonoPedidoPara.length, 0);
 });

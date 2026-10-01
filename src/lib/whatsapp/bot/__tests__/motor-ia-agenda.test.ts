@@ -72,6 +72,7 @@ const dobles = new Map<string, unknown>([
       return estado.respuestaAgenda ? { ...estado.respuestaAgenda } : null;
     },
   }],
+  [path.join(RAIZ, "src/lib/whatsapp/bot/aprende/tono-prompt.ts"), { bloqueDeTonoDeLaClinica: async () => "" }],
   [path.join(RAIZ, "src/lib/whatsapp/bot/saldo.ts"), {
     isSaldoInProgress: () => false,
     handleSaldoTurn: async () => null,

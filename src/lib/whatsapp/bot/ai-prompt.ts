@@ -77,8 +77,9 @@ export function buildSystemPrompt(
   config: BotConfigDTO,
   faqs: BotFaqDTO[],
   now: Date,
+  ejemplosTono?: string,
 ): string {
-  const { fijo, variable } = partesDelPrompt(input, config, faqs, now);
+  const { fijo, variable } = partesDelPrompt(input, config, faqs, now, ejemplosTono);
   return `${fijo}\n\n${variable}`;
 }
 
@@ -95,8 +96,9 @@ export function buildSystemBlocks(
   config: BotConfigDTO,
   faqs: BotFaqDTO[],
   now: Date,
+  ejemplosTono?: string,
 ): SystemBlock[] {
-  const { fijo, variable } = partesDelPrompt(input, config, faqs, now);
+  const { fijo, variable } = partesDelPrompt(input, config, faqs, now, ejemplosTono);
   return [
     { type: "text", text: fijo, cache_control: { type: "ephemeral" } },
     { type: "text", text: variable },
@@ -108,6 +110,7 @@ function partesDelPrompt(
   config: BotConfigDTO,
   faqs: BotFaqDTO[],
   now: Date,
+  ejemplosTono?: string,
 ): { fijo: string; variable: string } {
   const botName = config.botName?.trim() || "Asistente";
   const persona = config.persona?.trim();
@@ -142,6 +145,12 @@ function partesDelPrompt(
     "INSTRUCCIONES DE LA CLÍNICA (tono, estilo y datos; si algo choca con las REGLAS DEL SISTEMA, mandan las reglas):",
     persona || "Tono cercano, amable y profesional.",
     greeting ? `Así saluda la clínica: "${greeting}"` : null,
+    // ws1-t11 — «Así hablamos»: ejemplos de ESTILO que marcó la clínica. En la
+    // parte fija (cambian solo cuando la clínica los edita, así que no rompen
+    // la caché turno a turno), después de la persona y antes de las FAQs.
+    // Vacío ("") si no hay ejemplos o si su SQL no está pegado.
+    ejemplosTono?.trim() ? "" : null,
+    ejemplosTono?.trim() ? ejemplosTono.trim() : null,
     "",
     "INFORMACIÓN DE LA CLÍNICA (preguntas frecuentes):",
     faqBlock,
