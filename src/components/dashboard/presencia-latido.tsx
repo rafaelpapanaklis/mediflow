@@ -39,12 +39,17 @@ export function PresenciaLatido() {
       if (parado || enCurso) return;
       enCurso = true;
       ultimoLatido = Date.now();
+      // Una petición colgada (red que se cae a medias) no debe dejar a la pestaña
+      // sin mandar señales para siempre: a los 20 s se corta y la siguiente reintenta.
+      const control = new AbortController();
+      const corte = window.setTimeout(() => control.abort(), 20_000);
       try {
         const r = await fetch(RUTA_LATIDO, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           keepalive: true,
+          signal: control.signal,
           body: JSON.stringify({ ruta: window.location.pathname }),
         });
         if (r.status === 401 || r.status === 403) {
@@ -56,6 +61,7 @@ export function PresenciaLatido() {
       } catch {
         // sin red o servidor caído: la siguiente señal lo vuelve a intentar
       } finally {
+        window.clearTimeout(corte);
         enCurso = false;
       }
     };
