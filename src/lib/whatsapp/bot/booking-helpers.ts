@@ -19,9 +19,12 @@ export async function findOrCreateWhatsAppPatient(
   clinicId: string,
   phoneRaw: string,
   fullName: string,
+  opciones?: { crearNuevo?: boolean },
 ): Promise<{ id: string } | null> {
   const last10 = normalizeLast10(phoneRaw);
-  if (last10.length >= 10) {
+  // ws1-t1 (#12) — «otra persona» en un número compartido: buscar por el número
+  // devolvería a quien ya lo tiene (la mamá) y la cita del hijo quedaría a su nombre.
+  if (last10.length >= 10 && !opciones?.crearNuevo) {
     const existing = await prisma.patient.findFirst({
       where: { clinicId, phone: { contains: last10 } },
       select: { id: true },

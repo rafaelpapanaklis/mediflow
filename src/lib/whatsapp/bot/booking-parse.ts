@@ -214,6 +214,142 @@ export function parseTimeInput(text: string): string | null {
   return null;
 }
 
+/** Lo que el paciente quiso decir en el paso de elegir horario. */
+export type EleccionDeHorario =
+  | { tipo: "hora"; hora: string }
+  | { tipo: "indice"; indice: number }
+  /** Escribió una hora (o un número que solo puede ser hora) que no está libre. */
+  | { tipo: "hora_no_disponible" };
+
+/**
+ * ws1-t1 (#2) — interpreta la respuesta al «Horarios disponibles… responde con
+ * el número». Antes «a las 10» se leía como la OPCIÓN 10 (otra hora). Ahora:
+ *   1. Una hora escrita como hora («10:30», «10 am», «4 pm», «a las 10», «las
+ *      4», «10 hrs», «10 y media») es una hora: se busca en `slots` (todos los
+ *      libres, no solo los mostrados). Sin am/pm, «a las 4» prueba 04:00 y
+ *      luego 16:00; «de la tarde/noche» fuerza la tarde.
+ *   2. Un número suelto («10») es la hora 10:00 si ese hueco existe; si no,
+ *      la opción N de la lista si es un índice válido. «Opción 10», «la 3» o
+ *      «#3» son siempre índice.
+ *   3. Si no, el primer número del texto como índice («la 2 porfa»).
+ * `opciones` son las horas mostradas (en orden); `slots`, todas las libres.
+ */
+export function interpretarEleccionDeHorario(
+  text: string,
+  opciones: string[],
+  slots: string[],
+): EleccionDeHorario | null {
+  const t = foldAccents(text).replace(/\s+/g, " ");
+  const libres = new Set([...slots, ...opciones]);
+
+  const tarde = /\b(pm|p\s?m|de la tarde|en la tarde|por la tarde|de la noche|en la noche|por la noche)\b/.test(t);
+  const manana = /\b(am|a\s?m|de la manana|en la manana|por la manana)\b/.test(t);
+
+  let h: number | null = null;
+  let mn = 0;
+  const hm = t.match(/\b(\d{1,2})\s*[:.h]\s*(\d{2})\b/);
+  const ap = t.match(/\b(\d{1,2})\s*(?:a\.?\s?m\.?|p\.?\s?m\.?)(?![a-z])/);
+  const alas = t.match(/\b(?:a\s+)?las?\s+(\d{1,2})\b/);
+  const hrs = t.match(/\b(\d{1,2})\s*(?:hrs?|horas?)\b/);
+  if (hm) {
+    h = parseInt(hm[1], 10);
+    mn = parseInt(hm[2], 10);
+  } else if (ap) {
+    h = parseInt(ap[1], 10);
+  } else if (hrs) {
+    h = parseInt(hrs[1], 10);
+  } else if (alas && /\ba\s+las?\b|\blas\b/.test(t)) {
+    // «la 3» a secas es «la opción 3»; «a la 1», «a las 3» y «las 3» son horas.
+    h = parseInt(alas[1], 10);
+  }
+
+  if (h !== null) {
+    if (!hm) {
+      if (/\by media\b/.test(t)) mn = 30;
+      else if (/\by cuarto\b/.test(t)) mn = 15;
+    }
+    if (h > 23 || mn > 59) return { tipo: "hora_no_disponible" };
+    const candidatas: number[] = [];
+    if (tarde && h < 12) candidatas.push(h + 12);
+    else if (manana && h === 12) candidatas.push(0);
+    else if (manana || h === 0 || h >= 12) candidatas.push(h);
+    else candidatas.push(h, h + 12);
+    for (const c of candidatas) {
+      const hora = `${pad2(c)}:${pad2(mn)}`;
+      if (libres.has(hora)) return { tipo: "hora", hora };
+    }
+    return { tipo: "hora_no_disponible" };
+  }
+
+  const prefijoIndice = t.match(/^(?:la\s+)?(?:opcion|numero|num|no\.?|#)\s*(\d{1,2})\b|^la\s+(\d{1,2})\b/);
+  if (prefijoIndice) {
+    const n = parseInt(prefijoIndice[1] ?? prefijoIndice[2], 10);
+    return n >= 1 && n <= opciones.length ? { tipo: "indice", indice: n - 1 } : null;
+  }
+
+  const suelto = t.match(/^(\d{1,2})\s*[.)!]?$/);
+  if (suelto) {
+    const n = parseInt(suelto[1], 10);
+    const hora = `${pad2(n)}:00`;
+    if (n <= 23 && libres.has(hora)) return { tipo: "hora", hora };
+    if (n >= 1 && n <= opciones.length) return { tipo: "indice", indice: n - 1 };
+    // Un «15» que no es opción de la lista solo puede ser una hora, y no está libre.
+    if (n <= 23) return { tipo: "hora_no_disponible" };
+    return null;
+  }
+
+  const idx = parseChoiceIndex(t, opciones.length);
+  return idx === null ? null : { tipo: "indice", indice: idx };
+}
+
+/**
+ * ws1-t1 (#3) — el «¿Confirmas?» de la cita. La NEGACIÓN GANA: antes
+ * `isAffirmative` iba primero y casaba con «va», «ok» o «sale» sueltos, así que
+ * «no me va» o «no sé, ok» CREABAN la cita. Ahora cualquier negación («no»,
+ * «nel», «mejor no», «otro horario»…) es un no, aunque traiga un «ok». Solo se
+ * respetan los giros que, llevando «no», dicen que sí («no hay problema»,
+ * «cómo no», «¿por qué no?»). Sin negación ni afirmación → null (re-preguntar).
+ *
+ * No sustituye a isAffirmative/isNegative: esos los sigue usando
+ * reminder-reply.ts tal cual.
+ */
+export function respuestaSiNo(text: string): "si" | "no" | null {
+  let t = foldAccents(text).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  t = t.replace(
+    /\b(no hay (problema|bronca|inconveniente|lio)|sin problema|como no|por que no|no se diga mas)\b/g,
+    " si ",
+  );
+  if (/\b(no|nel|nop|nope|negativo|tampoco|nunca|para nada|otro|otra|otros|otras)\b/.test(t)) return "no";
+  return isAffirmative(t) ? "si" : null;
+}
+
+/**
+ * ws1-t1 (#16) — ¿el mensaje es, ENTERO, una orden de abandonar el agendado?
+ * `isCancelWord` buscaba la palabra en cualquier parte, así que «ya no me
+ * duele, ¿qué día puedo ir?» cancelaba la solicitud. Aquí el mensaje tiene que
+ * ser solo eso: «cancelar», «ya no», «olvídalo», «mejor ya no, gracias»,
+ * «cancela la cita por favor», «ya no quiero la cita», «salir».
+ */
+export function esCancelacionClara(text: string): boolean {
+  const t = foldAccents(text).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  return /^(?:(?:mejor|bueno|ok|oye|no|ya|quiero|quisiera|puedes|podrias|por favor|porfa)\s+)*(?:cancelar|cancela|cancelo|cancelalo|cancelala|cancelemos|olvidalo|olvidala|dejalo|dejala|salir|detente|alto|stop|ya no|ya no quiero|no quiero)(?:\s+(?:la|mi|el|esta|esa)?\s*(?:cita|solicitud|agendado|reserva|tramite|nada))?(?:\s+(?:por favor|porfa|gracias|muchas gracias))*$/.test(
+    t,
+  );
+}
+
+/**
+ * ws1-t1 — el turno que pidió el paciente junto con el día («el lunes en la
+ * tarde»). «Mañana» como día no cuenta: solo «por/en/de la mañana».
+ */
+export function turnoPedido(text: string): "manana" | "tarde" | null {
+  const t = foldAccents(text ?? "");
+  if (/\b(?:por|en|de|a) la (?:tarde|noche)\b|\bpor las tardes\b/.test(t)) return "tarde";
+  if (/\b(?:por|en|de) la manana\b|\bpor las mananas\b|\btemprano\b/.test(t)) return "manana";
+  return null;
+}
+
 /** Primer entero del texto como índice 0-based dentro de [1, max]; si no, null. */
 export function parseChoiceIndex(text: string, max: number): number | null {
   const m = text.match(/\d+/);

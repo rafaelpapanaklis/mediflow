@@ -10,6 +10,14 @@ import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
 import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { HECHOS_DENTRO_DEL_CONTROL, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
+import {
+  KINDS_AGENDABLES_POR_BOT,
+  recursoLibre,
+  type CitaEnRecurso,
+  type RecursoAgendable,
+} from "@/lib/agenda/bot-recurso-libre";
+import type { WeekScheduleDTO } from "@/lib/agenda/types";
+import type { ResourceKind } from "@prisma/client";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -79,6 +87,52 @@ async function hasConflict(
   return conflict !== null;
 }
 
+/**
+ * ws1-t1 (#13) — los sillones/consultorios ACTIVOS de la clínica en los que el
+ * bot puede sentar una cita, en el orden de la agenda, con su horario. Lista
+ * vacía = la clínica no usa sillones y todo sigue como antes (resourceId null).
+ */
+async function leerRecursosAgendables(clinicId: string): Promise<RecursoAgendable[]> {
+  const rows = await prisma.resource.findMany({
+    where: { clinicId, isActive: true, kind: { in: [...KINDS_AGENDABLES_POR_BOT] as ResourceKind[] } },
+    orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+    select: { id: true, schedules: { select: { dayOfWeek: true, startTime: true, endTime: true } } },
+  });
+  return rows.map((r) => {
+    if (r.schedules.length === 0) return { id: r.id, schedule: null };
+    const days: WeekScheduleDTO["days"] = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+    for (const s of r.schedules) {
+      if (s.dayOfWeek < 0 || s.dayOfWeek > 6) continue;
+      days[s.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6].push({ startTime: s.startTime, endTime: s.endTime });
+    }
+    return { id: r.id, schedule: { days } };
+  });
+}
+
+/** Las citas que ocupan esos sillones en el rango (mismo criterio que appt_resource_no_overlap). */
+async function citasEnRecursos(
+  clinicId: string,
+  resourceIds: string[],
+  desde: Date,
+  hasta: Date,
+  excludeId?: string,
+): Promise<CitaEnRecurso[]> {
+  if (resourceIds.length === 0) return [];
+  return prisma.appointment.findMany({
+    where: {
+      clinicId,
+      resourceId: { in: resourceIds },
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      overrideReason: null,
+      startsAt: { lt: hasta },
+      endsAt: { gt: desde },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      AND: [sinApartadoVencido()],
+    },
+    select: { resourceId: true, startsAt: true, endsAt: true },
+  });
+}
+
 export interface SlotResult {
   closed: boolean;
   reason?: string;
@@ -112,7 +166,7 @@ export async function getAvailableSlots(params: {
   durationMin: number;
 }): Promise<SlotResult> {
   const { clinicId, doctorId, dateISO } = params;
-  const [clinic, horarios] = await Promise.all([
+  const [clinic, horarios, recursos] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: clinicId },
       select: {
@@ -128,6 +182,8 @@ export async function getAvailableSlots(params: {
     // WS1-T2 · horario — el horario PROPIO del doctor, si lo tiene. Sin filas
     // el mapa sale vacío y todo lo de abajo se calcula exactamente como antes.
     leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId] }),
+    // ws1-t1 (#13) — sillones. Vacío = la clínica no los usa: nada cambia.
+    leerRecursosAgendables(clinicId),
   ]);
   if (!clinic) return { closed: true, reason: "clinic_not_found", slots: [] };
 
@@ -167,7 +223,7 @@ export async function getAvailableSlots(params: {
 
   const dayStartUtc = tzLocalToUtc(dateISO, 0, 0, tz);
   const dayEndUtc = new Date(dayStartUtc.getTime() + DAY_MS);
-  const [existing, bloqueos] = await Promise.all([
+  const [existing, bloqueos, citasRecursos] = await Promise.all([
     prisma.appointment.findMany({
       where: {
         clinicId,
@@ -183,6 +239,7 @@ export async function getAvailableSlots(params: {
     // WS1-T2 — los bloqueos que tapan el día. Se piden los de ESTE doctor y
     // los de toda la clínica; el `bloqueaEsteSlot` de abajo aplica el alcance.
     leerBloqueosDelRango(clinicId, dayStartUtc, dayEndUtc, { doctorIds: [doctorId] }),
+    citasEnRecursos(clinicId, recursos.map((r) => r.id), dayStartUtc, dayEndUtc),
   ]);
 
   const nowMs = Date.now();
@@ -206,6 +263,9 @@ export async function getAvailableSlots(params: {
     // Con la ventana ya recortada no debería saltar nunca; está para que la
     // oferta y el alta digan SIEMPRE lo mismo aunque alguien toque el bucle.
     if (doctorNoAtiendeSlot(horarios, inicio, duration, doctorId, tz)) continue;
+    // ws1-t1 (#13) — el doctor está libre, pero ¿queda un sillón? Si la clínica
+    // usa sillones y todos están ocupados (o cerrados) a esa hora, no se ofrece.
+    if (recursos.length > 0 && !recursoLibre(recursos, citasRecursos, inicio, new Date(endMs), tz)) continue;
     slots.push(`${pad(h)}:${pad(mn)}`);
   }
 
@@ -346,13 +406,25 @@ export async function createBotAppointment(params: {
     return { ok: false, error: "doctor_off" };
   }
 
+  // ws1-t1 (#13) — si la clínica usa sillones, la cita se sienta en uno libre.
+  // Si entre la oferta y el «sí» se ocuparon todos, es un solape más: el bot
+  // vuelve a la lista del día (que ya sale sin esa hora). La constraint
+  // appt_resource_no_overlap queda de respaldo ante la carrera.
+  let resourceId: string | null = null;
+  const recursos = await leerRecursosAgendables(clinicId);
+  if (recursos.length > 0) {
+    const citas = await citasEnRecursos(clinicId, recursos.map((r) => r.id), startsAt, endsAt);
+    resourceId = recursoLibre(recursos, citas, startsAt, endsAt, clinic.timezone);
+    if (!resourceId) return { ok: false, error: "overlap" };
+  }
+
   try {
     const created = await prisma.appointment.create({
       data: {
         clinicId,
         patientId,
         doctorId,
-        resourceId: null,
+        resourceId,
         startsAt,
         endsAt,
         status: "SCHEDULED",
@@ -427,7 +499,15 @@ export async function rescheduleBotAppointment(params: {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: appointmentId, clinicId },
-    select: { id: true, doctorId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },
+    select: {
+      id: true,
+      doctorId: true,
+      resourceId: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+      holdExpiresAt: true,
+    },
   });
   if (!existing) return { ok: false, error: "not_found" };
   // WS1-T5 — una cita apartada cuyo anticipo venció ya no es de nadie: moverla
@@ -469,6 +549,17 @@ export async function rescheduleBotAppointment(params: {
     return { ok: false, error: "doctor_off" };
   }
 
+  // ws1-t1 (#13) — a la hora nueva, ¿sigue libre su sillón? Si sí, se queda en
+  // él; si no, pasa a otro libre; si no queda ninguno, es un solape.
+  let cambioDeSillon: { resourceId: string } | null = null;
+  const recursos = await leerRecursosAgendables(clinicId);
+  if (recursos.length > 0) {
+    const citas = await citasEnRecursos(clinicId, recursos.map((r) => r.id), startsAt, endsAt, existing.id);
+    const sillon = recursoLibre(recursos, citas, startsAt, endsAt, clinic.timezone, existing.resourceId);
+    if (!sillon) return { ok: false, error: "overlap" };
+    if (sillon !== existing.resourceId) cambioDeSillon = { resourceId: sillon };
+  }
+
   try {
     // M-22: mover la cita y reprogramar sus recordatorios es UNA operación. El
     // mensaje se rendea al ENCOLAR, con la fecha y la hora congeladas dentro
@@ -477,7 +568,7 @@ export async function rescheduleBotAppointment(params: {
     await prisma.$transaction(async (tx) => {
       await tx.appointment.update({
         where: { id: existing.id },
-        data: { startsAt, endsAt, status: "SCHEDULED", requiresValidation: true },
+        data: { startsAt, endsAt, status: "SCHEDULED", requiresValidation: true, ...(cambioDeSillon ?? {}) },
       });
       if (existing.startsAt.getTime() !== startsAt.getTime()) {
         await applyReminderReschedule(tx, {
@@ -534,7 +625,10 @@ export async function listBookableServices(clinicId: string) {
 
 export async function listBookableDoctors(clinicId: string) {
   return prisma.user.findMany({
-    where: { clinicId, role: "DOCTOR", isActive: true },
+    // ws1-t1 (#6) — los mismos roles que acepta el alta (createBotAppointment):
+    // en un consultorio cuyo único dentista es el dueño, el bot decía «no hay
+    // profesionales disponibles».
+    where: { clinicId, role: { in: [...ROLES_QUE_ATIENDEN] }, isActive: true },
     orderBy: { firstName: "asc" },
     select: { id: true, firstName: true, lastName: true },
   });

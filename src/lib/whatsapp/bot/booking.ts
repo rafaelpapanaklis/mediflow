@@ -9,6 +9,7 @@ import {
   rescheduleBotAppointment,
 } from "@/lib/agenda/bot-booking-service";
 import { findOrCreateWhatsAppPatient } from "./booking-helpers";
+import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { anticipoParaAnunciar, crearCitaDesdeBot } from "@/lib/anticipos/servicio.server";
 import { getOrthoBookingContext } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { anotarCitaCreadaPorBot, anotarCitaMovidaPorBot, citaAntesDeMover } from "./movimientos-bot";
@@ -49,6 +50,18 @@ const realDeps: BookingDeps = {
   },
   getUpcomingAppointmentsForPatient,
   findOrCreateWhatsAppPatient,
+  // ws1-t1 (#12) — la misma búsqueda normalizada que el webhook y el saldo; solo
+  // cuentan los pacientes activos y no borrados (a un dado de baja no se le agenda).
+  listPhoneOwners: async (clinicId, phone) => {
+    if (!clinicId || !phone) return [];
+    const encontrados = await findPatientsByWhatsAppPhone(clinicId, phone);
+    if (encontrados.length < 2) return [];
+    return prisma.patient.findMany({
+      where: { clinicId, id: { in: encontrados.map((p) => p.id) }, deletedAt: null, status: "ACTIVE" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, firstName: true, lastName: true },
+    });
+  },
   findServiceById: (clinicId, id) =>
     prisma.procedureCatalog.findFirst({
       where: { id, clinicId, isActive: true },

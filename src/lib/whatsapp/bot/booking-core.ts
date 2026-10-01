@@ -1,16 +1,17 @@
 import { todayInTz } from "@/lib/agenda/time-utils";
 import {
   detectaInteresOrtodoncia,
+  esCancelacionClara,
+  foldAccents,
   formatDateHuman,
   formatTimeHuman,
-  isAffirmative,
-  isCancelWord,
+  interpretarEleccionDeHorario,
   isMenuWord,
-  isNegative,
   parseChoiceIndex,
   parseDateInput,
-  parseTimeInput,
+  respuestaSiNo,
   toISODate,
+  turnoPedido,
 } from "./booking-parse";
 import { BotIntent } from "./types";
 import { textoAvisoAnticipo, textoLinkDePago } from "@/lib/anticipos/core";
@@ -49,7 +50,9 @@ export type BookingStep =
   | "slot"
   | "name"
   | "confirm"
-  | "select_appt";
+  | "select_appt"
+  /** ws1-t1 (#12) — número compartido: ¿para quién es la cita? */
+  | "who";
 
 export interface BookingOption {
   id: string;
@@ -88,11 +91,25 @@ export interface BookingState {
    * elige entre ese control y otro servicio (paso `service_kind`).
    */
   ortoCaso?: { label: string; durationMin: number; treatingDoctorId: string | null } | null;
+  /**
+   * ws1-t1 — la fecha que el paciente ya dijo al pedir la cita («quiero cita
+   * el lunes en la tarde»). Se usa en vez de preguntarla y se consume una vez.
+   */
+  fechaPedida?: string;
+  /** ws1-t1 — «en la tarde» / «en la mañana»: se enseñan primero esos huecos. */
+  turno?: "manana" | "tarde";
+  /**
+   * ws1-t1 (#12) — en un número compartido eligió «otra persona»: al pedir su
+   * nombre se crea un paciente NUEVO en vez de reutilizar al primero del número.
+   */
+  pacienteNuevo?: boolean;
 }
 
 /** Ids de las dos opciones del paso `service_kind`. */
 export const OPCION_CONTROL_ORTO = "orto_control";
 export const OPCION_OTRO_SERVICIO = "otro_servicio";
+/** ws1-t1 (#12) — opción «otra persona» del paso `who`. */
+export const OPCION_OTRA_PERSONA = "otra_persona";
 
 interface UpcomingAppt {
   id: string;
@@ -154,7 +171,18 @@ export interface BookingDeps {
     clinicId: string,
     phoneRaw: string,
     fullName: string,
+    /** ws1-t1 (#12) — «otra persona» en un número compartido: crear aunque el número ya exista. */
+    opciones?: { crearNuevo?: boolean },
   ): Promise<{ id: string } | null>;
+  /**
+   * ws1-t1 (#12) — los pacientes ACTIVOS de esta clínica que tienen este
+   * número. Con más de uno, el bot pregunta para quién es la cita antes de
+   * agendar o reagendar. Opcional: sin él, el flujo es el de siempre.
+   */
+  listPhoneOwners?(
+    clinicId: string,
+    phone: string,
+  ): Promise<Array<{ id: string; firstName: string; lastName: string }>>;
   findServiceById(
     clinicId: string,
     id: string,
@@ -211,24 +239,24 @@ export async function runBookingTurn(
   const text = input.incomingText.trim();
   const state = readState(input.botState);
 
-  // Comandos globales (solo con un flujo activo).
-  if (state && isCancelWord(text)) {
+  // Comandos globales (solo con un flujo activo). ws1-t1 (#16): cancelar exige
+  // que el mensaje ENTERO sea la orden; «ya no me duele, ¿qué día puedo ir?»
+  // sigue el agendado en vez de tirarlo.
+  if (state && esCancelacionClara(text)) {
     return done("Listo, cancelé la solicitud. Si necesitas algo más, aquí estoy. 🙂", state.mode);
   }
   if (state && isMenuWord(text)) {
     // "menu"/"reiniciar": empieza de nuevo conservando el tipo de flujo.
-    return state.mode === "reschedule"
-      ? startReschedule(input, config, deps)
-      : startCreate(input, config, deps);
+    return iniciarFlujo(input, config, deps, state.mode);
   }
 
   if (!state) {
-    return detectMode(text) === "reschedule"
-      ? startReschedule(input, config, deps)
-      : startCreate(input, config, deps);
+    return iniciarFlujo(input, config, deps, detectMode(text));
   }
 
   switch (state.step) {
+    case "who":
+      return stepWho(input, config, state, deps);
     case "service_kind":
       return stepServiceKind(input, state, deps);
     case "service":
@@ -315,12 +343,116 @@ async function resolvePhone(input: BotTurnInput, deps: BookingDeps): Promise<str
   return deps.findThreadExternalId(input.threadId, input.clinicId);
 }
 
+/** Lo que se arrastra desde el mensaje que abrió el flujo (fecha y turno pedidos). */
+type Precarga = Pick<BookingState, "fechaPedida" | "turno">;
+
+/**
+ * ws1-t1 — «quiero cita el lunes en la tarde»: la fecha (si es de hoy en
+ * adelante, en la zona de la clínica) y el turno se guardan para no volver a
+ * preguntarlos. Lo que no se entienda se pregunta como siempre.
+ */
+function precargaDelMensaje(text: string, tz: string): Precarga {
+  const out: Precarga = {};
+  const fecha = parseDateInput(text, tz);
+  if (fecha && fecha >= todayInTz(tz)) out.fechaPedida = fecha;
+  const turno = turnoPedido(text);
+  if (turno) out.turno = turno;
+  return out;
+}
+
+/** «Ana G.», para que dos hermanos del mismo número se distingan sin dar el apellido entero. */
+function etiquetaPaciente(p: { firstName: string; lastName: string }): string {
+  const inicial = p.lastName.trim().charAt(0);
+  return `${p.firstName.trim()}${inicial ? ` ${inicial.toUpperCase()}.` : ""}`.trim() || "Paciente";
+}
+
 // ── Arranque de flujos ──────────────────────────────────────────────────────
+
+/**
+ * Arranca agendar o reagendar. ws1-t1 (#12): si el número es de VARIOS
+ * pacientes, primero pregunta para quién es (antes se agendaba a nombre del
+ * primero que devolvía la base, sin preguntar). Con uno o ninguno, igual que
+ * siempre.
+ */
+async function iniciarFlujo(
+  input: BotTurnInput,
+  config: BotConfigDTO,
+  deps: BookingDeps,
+  mode: FlowMode,
+): Promise<BotTurnResult> {
+  const tz = await deps.getClinicTimezone(input.clinicId);
+  const precarga = precargaDelMensaje(input.incomingText, tz);
+
+  if (input.patient && deps.listPhoneOwners) {
+    const phone = await resolvePhone(input, deps);
+    const duenos = phone ? await deps.listPhoneOwners(input.clinicId, phone) : [];
+    if (duenos.length > 1) {
+      const options: BookingOption[] = duenos.map((d) => ({ id: d.id, label: etiquetaPaciente(d) }));
+      if (mode === "create") options.push({ id: OPCION_OTRA_PERSONA, label: "Otra persona" });
+      const state: BookingState = {
+        flow: "booking",
+        mode,
+        step: "who",
+        options,
+        fallbackToHuman: config.fallbackToHuman,
+        ...precarga,
+      };
+      const pregunta =
+        mode === "create"
+          ? "Este número está registrado para varias personas. ¿Para quién es la cita?"
+          : "Este número está registrado para varias personas. ¿De quién es la cita que quieres cambiar?";
+      return step(`${pregunta} Responde con el número:\n${numberedList(options)}`, mode, state);
+    }
+  }
+
+  return mode === "reschedule"
+    ? startReschedule(input, config, deps, precarga)
+    : startCreate(input, config, deps, precarga);
+}
+
+async function stepWho(
+  input: BotTurnInput,
+  config: BotConfigDTO,
+  state: BookingState,
+  deps: BookingDeps,
+): Promise<BotTurnResult> {
+  const options = state.options ?? [];
+  let idx = parseChoiceIndex(input.incomingText, options.length);
+  if (idx === null) {
+    // También vale el nombre: «para Luis».
+    const t = foldAccents(input.incomingText);
+    const porNombre = options.findIndex(
+      (o) =>
+        o.id !== OPCION_OTRA_PERSONA &&
+        new RegExp(`\\b${foldAccents(o.label.split(" ")[0]).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(t),
+    );
+    if (porNombre >= 0) idx = porNombre;
+    else if (/\b(otra persona|otro|otra|nuev[oa]|alguien mas)\b/.test(t)) {
+      const otra = options.findIndex((o) => o.id === OPCION_OTRA_PERSONA);
+      if (otra >= 0) idx = otra;
+    }
+  }
+  if (idx === null) {
+    return miss(state, `¿Para quién es? Responde con el número:\n${numberedList(options)}`);
+  }
+  const elegido = options[idx];
+  const precarga: Precarga = { fechaPedida: state.fechaPedida, turno: state.turno };
+  const phone = input.patient?.phone ?? null;
+  if (elegido.id === OPCION_OTRA_PERSONA) {
+    // Sin paciente: el flujo pedirá su nombre y lo dará de alta aparte.
+    return startCreate({ ...input, patient: undefined }, config, deps, { ...precarga, pacienteNuevo: true });
+  }
+  const conPaciente: BotTurnInput = { ...input, patient: { id: elegido.id, phone } };
+  return state.mode === "reschedule"
+    ? startReschedule(conPaciente, config, deps, precarga)
+    : startCreate(conPaciente, config, deps, precarga);
+}
 
 async function startCreate(
   input: BotTurnInput,
   config: BotConfigDTO,
   deps: BookingDeps,
+  precarga: Precarga & { pacienteNuevo?: boolean } = {},
 ): Promise<BotTurnResult> {
   const base: BookingState = {
     flow: "booking",
@@ -328,6 +460,7 @@ async function startCreate(
     step: "service",
     patientId: input.patient?.id ?? undefined,
     fallbackToHuman: config.fallbackToHuman,
+    ...precarga,
   };
 
   // ws1-t1 (Ortodoncia conectada al bot) — antes del catálogo normal: ¿este
@@ -403,6 +536,7 @@ async function startReschedule(
   input: BotTurnInput,
   config: BotConfigDTO,
   deps: BookingDeps,
+  precarga: Precarga = {},
 ): Promise<BotTurnResult> {
   const patientId = input.patient?.id;
   if (!patientId) {
@@ -431,9 +565,10 @@ async function startReschedule(
       durationMin: Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000),
       serviceName: a.type,
       fallbackToHuman: config.fallbackToHuman,
+      ...precarga,
     };
     const actual = `${formatDateHuman(toISODate(a.startsAt, tz), tz)} a las ${formatTimeHuman(a.startsAt, tz)}`;
-    return step(`Tu cita actual es el ${actual}.\n${askDateText(state)}`, "reschedule", state);
+    return pedirFecha(input, state, deps, `Tu cita actual es el ${actual}.`);
   }
 
   const options: BookingOption[] = appts.map((a) => ({
@@ -447,6 +582,7 @@ async function startReschedule(
     patientId,
     options,
     fallbackToHuman: config.fallbackToHuman,
+    ...precarga,
   };
   return step(`¿Cuál cita deseas reagendar? Responde con el número:\n${numberedList(options)}`, "reschedule", state);
 }
@@ -463,8 +599,7 @@ async function advanceToDoctorOrDate(
   if (doctors.length === 1) {
     state.doctorId = doctors[0].id;
     state.doctorName = `${doctors[0].firstName} ${doctors[0].lastName}`.trim();
-    state.step = "date";
-    return step(askDateText(state), state.mode, state);
+    return pedirFecha(input, state, deps);
   }
   const options: BookingOption[] = doctors.map((d) => ({
     id: d.id,
@@ -473,6 +608,27 @@ async function advanceToDoctorOrDate(
   state.step = "doctor";
   state.options = options;
   return step(`¿Con qué profesional te gustaría? Responde con el número:\n${numberedList(options)}`, state.mode, state);
+}
+
+/**
+ * Pide la fecha… salvo que el paciente ya la haya dicho al pedir la cita
+ * (ws1-t1): entonces va directo a los horarios de ese día. La fecha pedida se
+ * usa UNA vez; si ese día no hay lugar, `presentSlots` pide otra como siempre.
+ */
+async function pedirFecha(
+  input: BotTurnInput,
+  state: BookingState,
+  deps: BookingDeps,
+  prefijo?: string,
+): Promise<BotTurnResult> {
+  state.step = "date";
+  if (state.fechaPedida) {
+    const tz = await deps.getClinicTimezone(input.clinicId);
+    state.dateISO = state.fechaPedida;
+    state.fechaPedida = undefined;
+    if (state.dateISO >= todayInTz(tz)) return presentSlots(input, state, tz, deps, prefijo);
+  }
+  return step(prefijo ? `${prefijo}\n${askDateText(state)}` : askDateText(state), state.mode, state);
 }
 
 // ── Pasos ───────────────────────────────────────────────────────────────────
@@ -496,12 +652,7 @@ async function elegirControlOrto(
     if (tratante) {
       state.doctorId = tratante.id;
       state.doctorName = `${tratante.firstName} ${tratante.lastName}`.trim();
-      state.step = "date";
-      return step(
-        `Te agendo tu *${caso.label}* con ${state.doctorName}. 🦷\n${askDateText(state)}`,
-        "create",
-        state,
-      );
+      return pedirFecha(input, state, deps, `Te agendo tu *${caso.label}* con ${state.doctorName}. 🦷`);
     }
     // El doctor tratante ya no está disponible (baja, cambio de rol): sigue
     // el flujo normal de elegir doctor, sin perder el servicio ya resuelto.
@@ -560,8 +711,7 @@ async function stepDoctor(
   state.doctorId = options[idx].id;
   state.doctorName = options[idx].label;
   state.options = undefined;
-  state.step = "date";
-  return step(askDateText(state), state.mode, state);
+  return pedirFecha(input, state, deps);
 }
 
 async function stepDate(
@@ -632,15 +782,29 @@ async function presentSlots(
     return step(`${prefix}No quedan horarios disponibles el ${human}. ¿Quieres probar otra fecha?`, state.mode, state);
   }
 
-  const shown = res.slots.slice(0, MAX_SLOTS_SHOWN);
+  // ws1-t1 — «en la tarde»: primero los huecos de ese turno. Si ese turno no
+  // tiene ninguno, se dice y se enseñan los que hay. Escribir otra hora libre
+  // (de cualquier turno) sigue valiendo: `state.slots` guarda todas.
+  let lista = res.slots;
+  let notaTurno = "";
+  if (state.turno) {
+    const delTurno = res.slots.filter((s) => (state.turno === "tarde" ? s >= "12:00" : s < "12:00"));
+    if (delTurno.length > 0) lista = delTurno;
+    else notaTurno = `Ese día no quedan horarios ${state.turno === "tarde" ? "por la tarde" : "por la mañana"}. `;
+  }
+
+  const shown = lista.slice(0, MAX_SLOTS_SHOWN);
   const options: BookingOption[] = shown.map((s) => ({ id: s, label: s }));
   state.options = options;
   state.slots = res.slots.slice(0, 40);
   state.step = "slot";
-  const extra =
-    res.slots.length > shown.length ? "\n(También puedes escribir otra hora disponible, por ejemplo 16:30.)" : "";
+  // ws1-t1 (#18) — el ejemplo es un hueco REAL que no cupo en la lista, no un
+  // «16:30» fijo que podía no existir (y al escribirlo: «no está disponible»).
+  const noMostradas = res.slots.filter((s) => !shown.includes(s));
+  const ejemplo = noMostradas.find((s) => (state.slots ?? []).includes(s));
+  const extra = ejemplo ? `\n(También puedes escribir otra hora disponible, por ejemplo ${ejemplo}.)` : "";
   return step(
-    `${prefix}Horarios disponibles el ${human} con ${state.doctorName ?? "el profesional"}:\n${numberedList(options)}${extra}\nResponde con el número.`,
+    `${prefix}${notaTurno}Horarios disponibles el ${human} con ${state.doctorName ?? "el profesional"}:\n${numberedList(options)}${extra}\nResponde con el número.`,
     state.mode,
     state,
   );
@@ -652,22 +816,23 @@ async function stepSlot(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  let time: string | null = null;
-  // Si el texto parece una hora, parséala primero (evita que "9:30" se tome
-  // como la opción #9). Si no, trátalo como número de la lista.
-  if (/\d\s*:\s*\d|\b\d{1,2}\s*(am|pm)\b/i.test(input.incomingText)) {
-    const typed = parseTimeInput(input.incomingText);
-    if (typed && (state.slots ?? []).includes(typed)) {
-      time = typed;
-    } else {
-      return miss(state, `Esa hora no está disponible. Elige una de la lista por su número:\n${numberedList(options)}`);
-    }
-  } else {
-    const idx = parseChoiceIndex(input.incomingText, options.length);
-    if (idx !== null) time = options[idx].id;
+  // ws1-t1 (#2) — una hora escrita como hora («a las 10», «10 am», «10:30», o
+  // «10» si ese hueco existe) es esa hora, no la opción número 10.
+  const eleccion = interpretarEleccionDeHorario(
+    input.incomingText,
+    options.map((o) => o.id),
+    state.slots ?? [],
+  );
+  if (eleccion?.tipo === "hora_no_disponible") {
+    return miss(state, `Esa hora no está disponible. Elige una de la lista por su número:\n${numberedList(options)}`);
   }
+  const time = eleccion?.tipo === "hora" ? eleccion.hora : eleccion?.tipo === "indice" ? options[eleccion.indice]?.id : null;
   if (!time) {
-    return miss(state, `Elige un horario por su número (o escribe una hora disponible, ej. 16:30):\n${numberedList(options)}`);
+    const ejemplo = options[0]?.id;
+    return miss(
+      state,
+      `Elige un horario por su número${ejemplo ? ` (o escribe una hora disponible, ej. ${ejemplo})` : ""}:\n${numberedList(options)}`,
+    );
   }
 
   state.misses = 0;
@@ -716,7 +881,12 @@ async function stepName(
   if (!phone) {
     return done("No pude identificar tu número para crear el registro. Te comunico con el consultorio.", state.mode);
   }
-  const patient = await deps.findOrCreateWhatsAppPatient(input.clinicId, phone, name);
+  const patient = await deps.findOrCreateWhatsAppPatient(
+    input.clinicId,
+    phone,
+    name,
+    state.pacienteNuevo ? { crearNuevo: true } : undefined,
+  );
   if (!patient) {
     return done("Tuve un problema al crear tu registro. Intenta más tarde o llama al consultorio.", state.mode);
   }
@@ -749,12 +919,15 @@ async function stepConfirm(
   const t = input.incomingText.trim();
   const tz = await deps.getClinicTimezone(input.clinicId);
 
-  if (!isAffirmative(t)) {
-    if (isNegative(t)) {
-      state.misses = 0;
-      state.step = "slot";
-      return presentSlots(input, state, tz, deps, "De acuerdo, elijamos otro horario.");
-    }
+  // ws1-t1 (#3) — la negación gana: «no me va», «no sé, ok» u «ok no» NO crean
+  // la cita (antes `isAffirmative` iba primero y casaba con el «va»/«ok»).
+  const respuesta = respuestaSiNo(t);
+  if (respuesta === "no") {
+    state.misses = 0;
+    state.step = "slot";
+    return presentSlots(input, state, tz, deps, "De acuerdo, elijamos otro horario.");
+  }
+  if (respuesta !== "si") {
     return miss(state, "¿Confirmas la cita? Responde *sí* para agendar o *no* para elegir otro horario.");
   }
   state.misses = 0;
@@ -838,8 +1011,7 @@ async function stepSelectAppt(
   state.durationMin = Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000);
   state.serviceName = a.type;
   state.options = undefined;
-  state.step = "date";
-  return step(askDateText(state), state.mode, state);
+  return pedirFecha(input, state, deps);
 }
 
 // ── Manejo de errores del servicio ──────────────────────────────────────────
