@@ -235,6 +235,7 @@ const MODELO_DE: Record<string, string> = {
   clinicSchedule: "clinicSchedules",
   user: "users",
   record: "records",
+  medicalRecord: "records",
   quote: "quotes",
   quoteItem: "quoteItems",
   inboxThread: "inboxThreads",
@@ -436,6 +437,7 @@ export function crearBase(datos: Datos): BaseDoble {
     inventoryPurchase: delegado("inventoryPurchase") as any,
     expense: delegado("expense") as any,
     procedureMaterialRecipe: delegado("procedureMaterialRecipe") as any,
+    medicalRecord: delegado("medicalRecord") as any,
     // ws1-t11 — ortodoncia: los modelos que leen los cargadores del módulo.
     ...Object.fromEntries(Object.keys(MODELOS_ORTO).map((entidad) => [entidad, delegado(entidad)])),
     // Las tres que `SabinaDb` declara (las lee `orto_caso` por `ctx.db`), con su nombre.

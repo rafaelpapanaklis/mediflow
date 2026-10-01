@@ -39,6 +39,7 @@ import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import r from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
 import s from "./presupuesto.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /* ── Estado de una línea en el editor ─────────────────────────────────── */
 
@@ -539,7 +540,10 @@ export function PresupuestoEditor({
             </p>
           </div>
           <div className={r.campo} style={{ gridColumn: "span 2" }}>
-            <span className={r.campoEtiqueta}>{t("presupuestoNuevo.campoNotas")}</span>
+            <span className={r.campoEtiqueta} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              {t("presupuestoNuevo.campoNotas")}
+              <DictationMic onText={(txt) => setNotas((p) => appendDictado(p, txt))} />
+            </span>
             <textarea
               className={`${r.campoEntrada} ${r.campoArea}`}
               rows={2}

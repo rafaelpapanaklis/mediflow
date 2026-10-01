@@ -17,6 +17,7 @@ import styles from "./patient-detail.module.css";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useT } from "@/i18n/i18n-provider";
 import { DentalRecordDetail } from "@/components/clinical/records-list";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 interface Cie10Code {
   code: string;
@@ -482,7 +483,10 @@ function SoapField({
   const term = label.split(" — ")[1]?.toLowerCase();
   return (
     <label className={styles.noteSoapFieldWrap}>
-      <span className={styles.noteSoapFieldLabel}>{label}</span>
+      <span className={styles.noteSoapFieldLabel} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        {label}
+        <DictationMic onText={(txt) => onChange(appendDictado(value, txt))} />
+      </span>
       <textarea
         className={styles.noteSoapFieldInput}
         value={value}

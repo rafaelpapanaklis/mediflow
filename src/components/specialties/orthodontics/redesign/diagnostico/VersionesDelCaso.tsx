@@ -17,6 +17,7 @@ import { MOTIVO_MINIMO, fechaDma } from "@/lib/orthodontics/versiones-caso";
 import orto from "../orto.module.css";
 import alta from "../alta-caso.module.css";
 import dx from "../diagnostico.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 export interface VersionesDelCasoProps {
   treatmentPlanId: string;
@@ -314,7 +315,10 @@ function NuevaReevaluacion({
               podrá cambiar. Después editas la {siguiente.toLowerCase()} con los datos actuales como punto de partida.
             </p>
             <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-[color:var(--pr-texto-2)]">Motivo de la reevaluación</span>
+              <span className="flex items-center justify-between gap-2 text-xs font-semibold text-[color:var(--pr-texto-2)]">
+                Motivo de la reevaluación
+                <DictationMic onText={(t) => setMotivo((p) => appendDictado(p, t, " ", 500))} />
+              </span>
               <textarea
                 className={`${orto.entrada} min-h-[90px]`}
                 maxLength={500}

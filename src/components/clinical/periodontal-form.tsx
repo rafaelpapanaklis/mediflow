@@ -5,6 +5,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { useT } from "@/i18n/i18n-provider";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 // FDI notation - 6 measurement points per tooth (buccal: distobuccal, buccal, mesiobuccal; lingual: distolingual, lingual, mesiolingual)
 const UPPER_TEETH = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
@@ -390,7 +391,10 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
       {/* Notas + historial */}
       <CardNew title={t("clinical.periodontal.notesTitle")}>
         <div className="field-new">
-          <label className="field-new__label">{t("clinical.periodontal.notesLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label className="field-new__label">{t("clinical.periodontal.notesLabel")}</label>
+            <DictationMic onText={(txt) => setNotes((p) => appendDictado(p, txt))} />
+          </div>
           <textarea
             className="input-new"
             style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}

@@ -294,6 +294,8 @@ export interface SabinaDb {
   clinicModule?: { findFirst(args: any): Promise<any | null> };
   orthodonticsClinicSettings?: { findUnique(args: any): Promise<any | null> };
   orthodonticTreatmentPlan?: { findFirst(args: any): Promise<any | null> };
+  /** Notas de consulta (ws1-t9), solo para `notas_de_consulta`. Opcional: los dobles anteriores no lo declaran. */
+  medicalRecord?: { findMany(args: any): Promise<any[]> };
   $queryRaw(query: any): Promise<any[]>;
 }
 

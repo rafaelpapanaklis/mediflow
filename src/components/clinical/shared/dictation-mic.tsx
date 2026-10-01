@@ -85,8 +85,23 @@ const btnStyle: CSSProperties = {
   color: "var(--text-2)",
 };
 
+/**
+ * Agrega lo dictado AL FINAL de lo escrito (nunca reemplaza). `max` recorta al
+ * tope del campo: un textarea con maxLength no recorta lo que se asigna por código.
+ */
+export function appendDictado(prev: string | null | undefined, text: string, sep = "\n", max?: number): string {
+  const base = String(prev ?? "");
+  const joined = base.trim() ? base.replace(/\s+$/, "") + sep + text : text;
+  return max && joined.length > max ? joined.slice(0, max) : joined;
+}
+
 export function DictationMic({ onText, disabled }: Props) {
   const t = useT();
+  // El texto llega minutos después de armar el handler (hasta 60 s de grabación
+  // + transcripción): se llama SIEMPRE al handler del último render, no al del
+  // momento de pulsar, para no pisar lo que se tecleó entretanto.
+  const onTextRef = useRef(onText);
+  onTextRef.current = onText;
   const [phase, setPhase] = useState<Phase>("idle");
   const [seconds, setSeconds] = useState(0);
   // Aviso efímero del costo del último dictado ("" = oculto).
@@ -320,7 +335,7 @@ export function DictationMic({ onText, disabled }: Props) {
       setPhase("idle");
       if (!text) { toast(t("clinical.dictation.noSpeech")); return; }
       if (used !== null && left !== null) showCost(used, left);
-      onText(text);
+      onTextRef.current(text);
     } catch {
       if (!mountedRef.current) return;
       retryBlobRef.current = { blob, filename };

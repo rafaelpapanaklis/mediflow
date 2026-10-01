@@ -47,6 +47,7 @@ import {
   type FormularioDelDiagnostico,
   type SeccionDelPaso,
 } from "@/lib/orthodontics/diagnostico-formulario";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 import { Btn } from "../atoms/Btn";
 import orto from "../orto.module.css";
 import dx from "../diagnostico.module.css";
@@ -188,12 +189,13 @@ type Set = (p: Partial<FormularioDelDiagnostico>) => void;
 /** `ademas`: otros campos de la MISMA sección que cambian en el mismo gesto (una sola actualización). */
 type SetDetalle = (sec: SeccionDelDetalle, clave: string, v: ValorDx, ademas?: Record<string, ValorDx>) => void;
 
-function Campo({ etiqueta, pista, ancho, children }: { etiqueta: string; pista?: ReactNode; ancho?: boolean; children: ReactNode }) {
+function Campo({ etiqueta, pista, ancho, dictado, children }: { etiqueta: string; pista?: ReactNode; ancho?: boolean; dictado?: (texto: string) => void; children: ReactNode }) {
   return (
     <div className={`${dx.dxCampo} ${ancho ? dx.dxCampoAncho : ""}`} role="group" aria-label={etiqueta}>
       <div className={dx.dxCampoEtiqueta}>
         <span>{etiqueta}</span>
         {pista ? <span className={dx.dxCampoPista}>{pista}</span> : null}
+        {dictado ? <DictationMic onText={dictado} /> : null}
       </div>
       {children}
     </div>
@@ -365,7 +367,12 @@ function CampoDelDetalle({ seccion, c, d, setDetalle }: { seccion: SeccionDelDet
     );
   }
   return (
-    <Campo etiqueta={c.etiqueta} pista={c.pista} ancho={c.largo}>
+    <Campo
+      etiqueta={c.etiqueta}
+      pista={c.pista}
+      ancho={c.largo}
+      dictado={c.largo ? (t) => setDetalle(seccion, c.clave, appendDictado(v as string | null, t, " ", c.max) || null) : undefined}
+    >
       {c.largo ? (
         <textarea
           className={`${orto.entrada} min-h-[72px]`}
@@ -541,7 +548,7 @@ function Funcional({ f, set, setDetalle }: { f: FormularioDelDiagnostico; set: S
         <Campo etiqueta="Hábitos parafuncionales" pista="la respiración oral va arriba" ancho>
           <Varias etiqueta="Hábitos" opciones={HABITOS_DEL_PASO.map((h) => ({ valor: h, etiqueta: HABITO[h]! }))} valor={f.habits} onCambio={(v) => set({ habits: v })} />
         </Campo>
-        <Campo etiqueta="Descripción de hábitos" ancho>
+        <Campo etiqueta="Descripción de hábitos" ancho dictado={(t) => set({ habitsDescription: appendDictado(f.habitsDescription, t, " ", 1000) })}>
           <textarea className={`${orto.entrada} min-h-[60px]`} maxLength={1000} value={f.habitsDescription} onChange={(e) => set({ habitsDescription: e.target.value })} />
         </Campo>
       </section>
@@ -558,7 +565,7 @@ function Funcional({ f, set, setDetalle }: { f: FormularioDelDiagnostico; set: S
           <Interruptor on={f.tmjPainPresent} onCambio={(v) => set({ tmjPainPresent: v, atmRevisada: v || f.tmjClickingPresent })}>Dolor</Interruptor>
           <Interruptor on={f.tmjClickingPresent} onCambio={(v) => set({ tmjClickingPresent: v, atmRevisada: v || f.tmjPainPresent })}>Chasquido</Interruptor>
         </div>
-        <Campo etiqueta="Notas de ATM" ancho>
+        <Campo etiqueta="Notas de ATM" ancho dictado={(t) => set({ tmjNotes: appendDictado(f.tmjNotes, t, " ", 500) })}>
           <textarea className={`${orto.entrada} min-h-[60px]`} maxLength={500} value={f.tmjNotes} onChange={(e) => set({ tmjNotes: e.target.value })} />
         </Campo>
       </section>
@@ -637,7 +644,7 @@ function Etiologia({ f, set }: { f: FormularioDelDiagnostico; set: Set }) {
           <Interruptor on={f.etiologyFunctional} onCambio={(v) => set({ etiologyFunctional: v })}>Funcional</Interruptor>
         </div>
       </Campo>
-      <Campo etiqueta="Notas de etiología" ancho>
+      <Campo etiqueta="Notas de etiología" ancho dictado={(t) => set({ etiologyNotes: appendDictado(f.etiologyNotes, t, " ", 1000) })}>
         <textarea className={`${orto.entrada} min-h-[72px]`} maxLength={1000} value={f.etiologyNotes} onChange={(e) => set({ etiologyNotes: e.target.value })} />
       </Campo>
     </section>
@@ -697,6 +704,7 @@ function Resumen({ f, set, modo }: { f: FormularioDelDiagnostico; set: Set; modo
         etiqueta="Resumen diagnóstico"
         pista={<span className={dx.dxContador}>{n === 1 ? "1 carácter" : `${n} caracteres`}</span>}
         ancho
+        dictado={(t) => set({ clinicalSummary: appendDictado(f.clinicalSummary, t, "\n", 5000) })}
       >
         <textarea
           className={`${orto.entrada} min-h-[180px]`}

@@ -12,6 +12,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PresupuestoEditor } from "@/components/dashboard/presupuesto-nuevo/editor";
 import { PresupuestoLista } from "@/components/dashboard/presupuesto-nuevo/lista";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -757,7 +758,10 @@ function QuoteEditor({
             className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("quotes.editor.notes")}</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t("quotes.editor.notes")}</label>
+            <DictationMic onText={(txt) => setNotes((p) => appendDictado(p, txt))} />
+          </div>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             placeholder={t("quotes.editor.notesPlaceholder")}
             className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-y" />

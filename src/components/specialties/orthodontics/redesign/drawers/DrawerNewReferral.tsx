@@ -8,6 +8,7 @@ import { Send, Shield, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 const SPECIALTIES = [
   "Periodoncia",
@@ -88,10 +89,10 @@ export function DrawerNewReferral(props: DrawerNewReferralProps) {
           <Field label="Doctor (opcional)">
             <input type="text" value={doctor} onChange={(e) => setDoctor(e.target.value)} className={inputCls} placeholder="Dr/a. Apellido Apellido" />
           </Field>
-          <Field label="Motivo de referencia">
+          <Field label="Motivo de referencia" dictado={(t) => setReason((p) => appendDictado(p, t))}>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} className={`${inputCls} min-h-[60px]`} placeholder="Re-tratamiento endodóntico de #46..." required />
           </Field>
-          <Field label="Resumen clínico">
+          <Field label="Resumen clínico" dictado={(t) => setSummary((p) => appendDictado(p, t))}>
             <textarea value={summary} onChange={(e) => setSummary(e.target.value)} className={`${inputCls} min-h-[100px]`} placeholder="Paciente fem. 14 años · maloclusión clase II div 1 · molestia post-bracket #46 con sospecha pulpitis irreversible..." required />
           </Field>
           {error ? <div className="bg-[color:var(--pr-peligro-suave)] border border-[color:var(--orto-peligro-borde)] text-[color:var(--pr-peligro)] text-xs rounded-[8px] p-2">{error}</div> : null}
@@ -110,10 +111,13 @@ export function DrawerNewReferral(props: DrawerNewReferralProps) {
 
 const inputCls = orto.entrada;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, dictado, children }: { label: string; dictado?: (texto: string) => void; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)] mb-1">{label}</label>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)]">{label}</label>
+        {dictado ? <DictationMic onText={dictado} /> : null}
+      </div>
       {children}
     </div>
   );

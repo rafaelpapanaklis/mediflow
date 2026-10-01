@@ -13,6 +13,7 @@ import {
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import s from "./plan.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /**
  * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
@@ -238,7 +239,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
             <h4 className={s.seccionTitulo}>{t("planTratamiento.nuevo.diagnostico")}</h4>
             <div className={s.dosColumnasAncha}>
               <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-diagnostico">{t("planTratamiento.nuevo.diagnosticoRotulo")}</label>
+                <div className={s.rotuloFila}>
+                  <label className={s.rotulo} htmlFor="plan-diagnostico">{t("planTratamiento.nuevo.diagnosticoRotulo")}</label>
+                  <DictationMic onText={(txt) => setPlan((p) => ({ ...p, diagnostico: appendDictado(p.diagnostico, txt) }))} />
+                </div>
                 <textarea
                   id="plan-diagnostico"
                   className={s.area}
@@ -530,7 +534,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
           <section className={s.seccion}>
             <div className={s.dosColumnas}>
               <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-alternativa">{t("planTratamiento.nuevo.alternativa")}</label>
+                <div className={s.rotuloFila}>
+                  <label className={s.rotulo} htmlFor="plan-alternativa">{t("planTratamiento.nuevo.alternativa")}</label>
+                  <DictationMic onText={(txt) => setPlan((p) => ({ ...p, alternativa: appendDictado(p.alternativa, txt) }))} />
+                </div>
                 <textarea
                   id="plan-alternativa"
                   className={s.area}
@@ -541,7 +548,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                 />
               </div>
               <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-notas">{t("patients.treatment.descLabel")}</label>
+                <div className={s.rotuloFila}>
+                  <label className={s.rotulo} htmlFor="plan-notas">{t("patients.treatment.descLabel")}</label>
+                  <DictationMic onText={(txt) => setPlan((p) => ({ ...p, notas: appendDictado(p.notas, txt) }))} />
+                </div>
                 <textarea
                   id="plan-notas"
                   className={s.area}

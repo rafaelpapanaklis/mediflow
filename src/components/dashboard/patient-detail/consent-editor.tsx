@@ -40,6 +40,7 @@ import { parseConsentText } from "@/lib/consent/render";
 import type { ConsentMissingItem } from "@/lib/consent/document-data";
 import { ConsentMissingNotice } from "./consent-missing-notice";
 import s from "./consent-documento.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /** Lo que devuelve GET /api/consent/preview. */
 export interface PreviewCarta {
@@ -428,6 +429,15 @@ export function ConsentEditor({
               {viendo ? t("patients.consents.editor.write") : t("patients.consents.editor.preview")}
             </button>
             {trayendo ? <Loader2 size={15} className="animate-spin" aria-hidden style={{ alignSelf: "center" }} /> : null}
+            {!viendo && !quieto ? (
+              <DictationMic
+                onText={(txt) => {
+                  setTexto((p) => appendDictado(p, txt));
+                  tocado.current = true;
+                  textoDePlantilla.current = false;
+                }}
+              />
+            ) : null}
             <MenuPlantillas
               plantillas={plantillas ?? []}
               ocupado={quieto}

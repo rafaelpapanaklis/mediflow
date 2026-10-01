@@ -7,6 +7,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
 import s from "./plan.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /**
  * «Plan de tratamiento» (ver) y «Editar plan», con la ropa del menú nuevo.
@@ -172,7 +173,10 @@ export function VentanaEditarPlan({ form, setForm, guardando, onCerrar, onGuarda
             />
           </div>
           <div className={s.campo}>
-            <label className={s.rotulo} htmlFor="plan-editar-descripcion">{t("patients.treatment.descLabel")}</label>
+            <div className={s.rotuloFila}>
+              <label className={s.rotulo} htmlFor="plan-editar-descripcion">{t("patients.treatment.descLabel")}</label>
+              <DictationMic onText={(txt) => setForm((f) => ({ ...f, description: appendDictado(f.description, txt) }))} />
+            </div>
             <textarea
               id="plan-editar-descripcion"
               className={s.area}

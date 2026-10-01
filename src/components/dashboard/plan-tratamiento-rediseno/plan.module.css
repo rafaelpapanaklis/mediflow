@@ -711,3 +711,11 @@
   .dosColumnasAncha,
   .tresColumnas { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Rótulo + micrófono de dictado en la misma línea. */
+.rotuloFila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}

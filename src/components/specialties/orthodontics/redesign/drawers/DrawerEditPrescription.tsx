@@ -11,6 +11,7 @@ import orto from "../orto.module.css";
 import { listarTecnicasActivasDeLaClinica } from "@/app/actions/orthodontics/listarTecnicasDeLaClinica";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { ID_TECNICA_ACTUAL, nombrePropioAGuardar, opcionesDeEdicion, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 const SLOTS = [
   { v: "MBT_018", l: "MBT 0.018" },
@@ -128,7 +129,7 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
               {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </Field>
-          <Field label="Notas (opcional)">
+          <Field label="Notas (opcional)" dictado={(t) => setNotes((p) => appendDictado(p, t))}>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className={`${inputCls} min-h-[80px]`} placeholder="Premolares cerámicos, molares con tubos..." />
           </Field>
           {error ? <div className="bg-[color:var(--pr-peligro-suave)] border border-[color:var(--orto-peligro-borde)] text-[color:var(--pr-peligro)] text-xs rounded-[8px] p-2">{error}</div> : null}
@@ -147,10 +148,13 @@ export function DrawerEditPrescription(props: DrawerEditPrescriptionProps) {
 
 const inputCls = orto.entrada;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, dictado, children }: { label: string; dictado?: (texto: string) => void; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)] mb-1">{label}</label>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)]">{label}</label>
+        {dictado ? <DictationMic onText={dictado} /> : null}
+      </div>
       {children}
     </div>
   );

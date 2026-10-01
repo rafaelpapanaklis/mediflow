@@ -17,6 +17,7 @@ import orto from "../orto.module.css";
 // El catálogo vive en `wire-options.ts` (se importa también desde las pruebas,
 // sin el componente). Se reexporta para quien ya lo tomaba de aquí.
 import { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS } from "./wire-options";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 export { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS };
 
 const AUXILIARIES = [
@@ -259,7 +260,7 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
             />
           </Field>
 
-          <Field label="Notas">
+          <Field label="Notas" dictado={(t) => setNotes((p) => appendDictado(p, t))}>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -287,11 +288,12 @@ export function DrawerWireStep(props: DrawerWireStepProps) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, dictado, children }: { label: string; dictado?: (texto: string) => void; children: React.ReactNode }) {
   return (
     <div>
-      <div className={`${orto.ceja} mb-1.5`}>
-        {label}
+      <div className={`${orto.ceja} mb-1.5 flex items-center justify-between gap-2`}>
+        <span>{label}</span>
+        {dictado ? <DictationMic onText={dictado} /> : null}
       </div>
       {children}
     </div>

@@ -14,6 +14,7 @@ import { getCaseIntakeOptions, buscarTutoresDeLaClinica, type TutorDeLaClinica }
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 const STATUS_OPTIONS = [
   { v: "PLANNED", l: "Planeado (sin colocar)" },
@@ -304,12 +305,12 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
               {STATUS_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
             {status === "ON_HOLD" ? (
-              <Field label="Motivo de la pausa">
+              <Field label="Motivo de la pausa" dictado={(t) => setOnHoldReason((p) => appendDictado(p, t))}>
                 <textarea value={onHoldReason} onChange={(e) => setOnHoldReason(e.target.value)} className={`${inputCls} min-h-[60px]`} />
               </Field>
             ) : null}
             {status === "DROPPED_OUT" ? (
-              <Field label="Motivo del abandono (mín. 20 caracteres)">
+              <Field label="Motivo del abandono (mín. 20 caracteres)" dictado={(t) => setDroppedOutReason((p) => appendDictado(p, t))}>
                 <textarea value={droppedOutReason} onChange={(e) => setDroppedOutReason(e.target.value)} className={`${inputCls} min-h-[60px]`} />
                 <div className={`text-[11px] mt-1 ${dropValid ? "text-[color:var(--pr-exito)]" : "text-[color:var(--pr-alerta)]"}`}>
                   {droppedOutReason.trim().length} / 20 mínimo
@@ -380,10 +381,13 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, dictado, children }: { label: string; dictado?: (texto: string) => void; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)] mb-1">{label}</label>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)]">{label}</label>
+        {dictado ? <DictationMic onText={dictado} /> : null}
+      </div>
       {children}
     </div>
   );

@@ -23,6 +23,7 @@ import {
   clases as s,
   type Tono,
 } from "./piezas";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /**
  * Tratamientos, vestido con el lenguaje del menú de dos niveles: la misma
@@ -298,7 +299,7 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
               {addingSession === selected.id ? (
                 <div className={s.campos}>
                   <SeccionTitulo>{t("pages.treatments.recordSession")}</SeccionTitulo>
-                  <Campo etiqueta={t("pages.treatments.sessionNotesLabel")} htmlFor="tr-nota">
+                  <Campo etiqueta={t("pages.treatments.sessionNotesLabel")} htmlFor="tr-nota" dictado={(txt) => setSessionNote(appendDictado(sessionNote, txt))}>
                     <textarea
                       id="tr-nota"
                       className={`${s.campoEntrada} ${s.campoArea}`}

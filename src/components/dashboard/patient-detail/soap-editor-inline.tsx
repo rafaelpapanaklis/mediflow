@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 export interface SoapDraft {
   id?: string;
@@ -161,6 +162,9 @@ export function SoapEditorInline({
                   <span className={styles.soapLetter}>{letter}</span>
                   <span>{t(meta.labelKey)}</span>
                   <span className={styles.soapHint}>{t(meta.hintKey)}</span>
+                  <span style={{ marginLeft: "auto" }}>
+                    <DictationMic onText={(txt) => setDraft((d) => ({ ...d, [field]: appendDictado(d[field], txt) }))} />
+                  </span>
                 </div>
                 <textarea
                   className={styles.soapInput}

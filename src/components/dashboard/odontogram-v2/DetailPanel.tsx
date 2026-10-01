@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   classify, numberLabel, GROUP_COLOR, COND_BY_ID, I18N,
   SURFACES, SURFACE_NAMES, GROUPS, CONDITIONS,
@@ -10,6 +10,7 @@ import { Surface2D } from "./Surface2D";
 import { Tooth3D } from "./Tooth3D";
 import { PalmerLabel } from "./Odontogram";
 import { ConditionSwatch } from "./Palette";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 const TYPE_NAMES: Record<string, Record<"es" | "en", string>> = {
   central: { es: "Incisivo central", en: "Central incisor" },
@@ -41,6 +42,8 @@ export function DetailPanel({
   });
   const [resetKey, setResetKey] = useState(0);
   const [note, setNoteLocal] = useState(record.note || "");
+  const noteRef = useRef(note);
+  noteRef.current = note;
 
   // Re-sync the textarea when the tooth changes or the note is updated/cleared
   // externally (e.g. "clear tooth"). Local edits survive surface/finding edits.
@@ -173,7 +176,10 @@ export function DetailPanel({
           </div>
 
           {/* notes */}
-          <div className="odo-section-t">{t.notes}</div>
+          <div className="odo-section-t" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            {t.notes}
+            <DictationMic onText={(txt) => { const next = appendDictado(noteRef.current, txt); setNoteLocal(next); if (next !== (record.note || "")) onNote(next); }} />
+          </div>
           <textarea
             className="odo-note"
             placeholder={t.notesPh}

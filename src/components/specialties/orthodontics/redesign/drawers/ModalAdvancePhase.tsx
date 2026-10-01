@@ -22,6 +22,7 @@ import orto from "../orto.module.css";
 // El checklist vive en `phase-criteria.ts` (se importa también desde las
 // pruebas, sin el componente). Se reexporta para quien ya lo tomaba de aquí.
 import { PHASE_CRITERIA, type PhaseCriterion } from "./phase-criteria";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 export { PHASE_CRITERIA, type PhaseCriterion };
 
 export interface ModalAdvancePhaseProps {
@@ -156,8 +157,9 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
       </div>
 
       <div className="px-5 py-4 border-b border-[color:var(--pr-borde-suave)]">
-        <div className={`${orto.ceja} mb-1`}>
-          Notas clínicas (opcional)
+        <div className={`${orto.ceja} mb-1 flex items-center justify-between gap-2`}>
+          <span>Notas clínicas (opcional)</span>
+          <DictationMic onText={(t) => setDoctorNotes((p) => appendDictado(p, t))} />
         </div>
         <textarea
           value={doctorNotes}
@@ -194,8 +196,9 @@ export function ModalAdvancePhase(props: ModalAdvancePhaseProps) {
               {overrideMode ? (
                 <div className="mt-2 space-y-2">
                   <div>
-                    <div className={`${orto.ceja} mb-0.5`}>
-                      Razón clínica (mín. 10 caracteres)
+                    <div className={`${orto.ceja} mb-0.5 flex items-center justify-between gap-2`}>
+                      <span>Razón clínica (mín. 10 caracteres)</span>
+                      <DictationMic onText={(t) => setOverrideReason((p) => appendDictado(p, t))} />
                     </div>
                     <textarea
                       value={overrideReason}

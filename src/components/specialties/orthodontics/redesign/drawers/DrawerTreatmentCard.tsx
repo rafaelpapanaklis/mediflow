@@ -62,6 +62,7 @@ import {
 } from "./treatment-card-state";
 import { ProcedimientosDeVisita, type SeleccionDeProcedimiento } from "./ProcedimientosDeVisita";
 import orto from "../orto.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 export type DrawerCardSubmit = {
   cardId: string | null;
@@ -590,6 +591,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           <section className={orto.bloque}>
             <div className={orto.bloqueCabeza}>
               <h4 className={orto.bloqueTitulo}>Activaciones de este control</h4>
+              {!isReadOnly ? (
+                <DictationMic onText={(t) => dispatch({ kind: "set-activations-note", value: appendDictado(state.activationsNote, t) })} />
+              ) : null}
             </div>
             {isReadOnly ? (
               <Lectura vacio="Sin activaciones anotadas.">{state.activationsNote}</Lectura>
@@ -650,11 +654,16 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 ] as const
               ).map(([key, label, pista]) => (
                 <div key={key} className={orto.campo}>
-                  <div className={orto.campoEtiqueta}>
-                    <span className={`${orto.tonoVioleta} font-bold mr-[5px]`}>
-                      {key.toUpperCase()}
+                  <div className={`${orto.campoEtiqueta} flex items-center justify-between gap-2`}>
+                    <span>
+                      <span className={`${orto.tonoVioleta} font-bold mr-[5px]`}>
+                        {key.toUpperCase()}
+                      </span>
+                      {label}
                     </span>
-                    {label}
+                    {!isReadOnly ? (
+                      <DictationMic onText={(t) => dispatch({ kind: "set-soap", field: key, value: appendDictado(state.soap[key], t) })} />
+                    ) : null}
                   </div>
                   {isReadOnly ? (
                     <Lectura vacio="Sin anotar.">{state.soap[key]}</Lectura>
@@ -679,7 +688,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           <section className={orto.bloque}>
             <div className={orto.bloqueCabeza}>
               <h4 className={orto.bloqueTitulo}>Indicaciones para el paciente</h4>
-              {!isReadOnly && state.delAnterior.indicaciones ? <DelAnterior /> : null}
+              <span className="inline-flex items-center gap-2">
+                {!isReadOnly && state.delAnterior.indicaciones ? <DelAnterior /> : null}
+                {!isReadOnly ? (
+                  <DictationMic onText={(t) => dispatch({ kind: "set-indications", value: appendDictado(state.indications, t) })} />
+                ) : null}
+              </span>
             </div>
             {isReadOnly ? (
               <Lectura vacio="Sin indicaciones para este control.">{state.indications}</Lectura>

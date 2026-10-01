@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { ClinicalModule } from "@prisma/client";
 import { EvolutionTemplatePicker, applyTemplateToSoap } from "./EvolutionTemplatePicker";
 import type { SoapTemplateBody } from "@/lib/clinical-shared/evolution-templates/types";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 export interface SoapNoteProps {
   module: ClinicalModule;
@@ -60,7 +61,10 @@ export function SoapNote(props: SoapNoteProps) {
 
       {FIELDS.map((f) => (
         <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 12, color: "var(--text-2)" }}>{f.label}</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label style={{ fontSize: 12, color: "var(--text-2)" }}>{f.label}</label>
+            {props.disabled ? null : <DictationMic onText={(txt) => set(f.key, appendDictado(props.value[f.key], txt))} />}
+          </div>
           <textarea
             value={props.value[f.key]}
             onChange={(e) => set(f.key, e.target.value)}

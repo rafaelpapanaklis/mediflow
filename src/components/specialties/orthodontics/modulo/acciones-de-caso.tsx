@@ -28,6 +28,7 @@ import { eliminarCaso } from "@/app/actions/orthodontics/modulo/eliminarCaso";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { MAX_LETRAS_MOTIVO, MIN_LETRAS_MOTIVO, motivoValido } from "@/lib/orthodontics/eliminar-caso";
 import s from "./modulo.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /** Monta `hijos` en el `<body>` (solo en el navegador, ya con la página pintada). */
 function EnElBody({ clases, hijos }: { clases: string; hijos: React.ReactNode }) {
@@ -192,9 +193,12 @@ export function EliminarCasoDialogo({
                 </p>
               )}
               <div className={s.campo}>
-                <label htmlFor={idMotivo} className={s.campoEtiqueta}>
-                  Motivo
-                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor={idMotivo} className={s.campoEtiqueta}>
+                    Motivo
+                  </label>
+                  <DictationMic disabled={enviando} onText={(t) => setMotivo((p) => appendDictado(p, t, " ", MAX_LETRAS_MOTIVO))} />
+                </div>
                 <textarea
                   id={idMotivo}
                   className={s.campoEntrada}

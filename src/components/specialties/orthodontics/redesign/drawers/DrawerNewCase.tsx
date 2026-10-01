@@ -126,6 +126,7 @@ import orto from "../orto.module.css";
 import alta from "../alta-caso.module.css";
 import planCss from "../plan-tratamiento.module.css";
 import dxCss from "../diagnostico.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 const MODO_DE_COBRO_OPTIONS = (["PRECIO_TOTAL", "PAGO_POR_CONTROL"] as const).map((v) => ({
   v,
@@ -1294,7 +1295,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                     titulo="Plan de retención"
                     sub="Opcional: puedes definirlo al llegar a la etapa de retención."
                   >
-                    <Field label="Plan de retención">
+                    <Field label="Plan de retención" dictado={(t) => setRetention((p) => appendDictado(p, t, "\n", 2000))}>
                       <textarea value={retention} onChange={(e) => setRetention(e.target.value)} placeholder={`Ejemplo: ${EJEMPLO_DE_RETENCION}`} className={`${inputCls} min-h-[70px]`} maxLength={2000} />
                     </Field>
                   </Seccion>
@@ -1646,17 +1647,27 @@ function Field({
   label,
   hint,
   htmlFor,
+  dictado,
   children,
 }: {
   label: string;
   hint?: string;
+  /** Con él, el rótulo lleva el micrófono de dictado y lo dictado se agrega al final. */
+  dictado?: (texto: string) => void;
   /** El `id` del campo, para que pulsar el rótulo lo enfoque y el lector de pantalla los una. */
   htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={orto.campo}>
-      <label htmlFor={htmlFor} className={orto.campoEtiqueta}>{label}</label>
+      {dictado ? (
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor={htmlFor} className={orto.campoEtiqueta}>{label}</label>
+          <DictationMic onText={dictado} />
+        </div>
+      ) : (
+        <label htmlFor={htmlFor} className={orto.campoEtiqueta}>{label}</label>
+      )}
       {children}
       {hint ? <p className={orto.campoPista}>{hint}</p> : null}
     </div>

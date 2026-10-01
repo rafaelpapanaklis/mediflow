@@ -25,6 +25,8 @@ import { estadoMercadoPago } from "./tools/estado-mercado-pago";
 import { ayudaDelPanel } from "./tools/ayuda-del-panel";
 import { ortoCaso } from "./tools/orto-caso";
 import { ortoDiagnostico } from "./tools/orto-diagnostico";
+import { ortoNotas } from "./tools/orto-notas";
+import { notasDeConsulta } from "./tools/notas-de-consulta";
 import { ortoControles } from "./tools/orto-controles";
 import { ortoCobranza } from "./tools/orto-cobranza";
 import { ortoResumen } from "./tools/orto-resumen";
@@ -105,6 +107,9 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ayudaDelPanel,
   ortoCaso,
   ortoDiagnostico,
+  // ws1-t9 (1-oct-2026): el texto libre que el doctor teclea o dicta (notas del plan, hojas de control, reevaluaciones, consultas). Solo leen, con medicalRecord.view. Pruebas en tools/__tests__/notas-dictadas.test.ts.
+  ortoNotas,
+  notasDeConsulta,
   ortoControles,
   ortoCobranza,
   // ws1-t9 (1-oct-2026): el histórico de ortodoncia y los presupuestos. Solo leen. Pruebas en tools/__tests__/orto-resumen.test.ts y consultas-t9-dinero.test.ts.

@@ -4,6 +4,7 @@ import { useEffect, type ReactNode, type MouseEvent } from "react";
 import { X } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import s from "./piezas.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /**
  * Piezas comunes de las tres pantallas (Reserva de recursos, Fila de
@@ -266,17 +267,23 @@ export function Dialogo({
 export function Campo({
   etiqueta,
   htmlFor,
+  dictado,
   children,
 }: {
   etiqueta: ReactNode;
   htmlFor?: string;
+  /** Con él, el rótulo lleva el micrófono de dictado y lo dictado se agrega al final. */
+  dictado?: (texto: string) => void;
   children: ReactNode;
 }) {
   return (
     <div className={s.campo}>
-      <label className={s.campoEtiqueta} htmlFor={htmlFor}>
-        {etiqueta}
-      </label>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: dictado ? "space-between" : undefined, gap: 8 }}>
+        <label className={s.campoEtiqueta} htmlFor={htmlFor}>
+          {etiqueta}
+        </label>
+        {dictado ? <DictationMic onText={dictado} /> : null}
+      </div>
       {children}
     </div>
   );

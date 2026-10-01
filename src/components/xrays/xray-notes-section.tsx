@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 const NOTES_MAX = 5000;
 const AUTO_SAVE_DELAY_MS = 3000;
@@ -123,6 +124,7 @@ export function XrayNotesSection({
           <FileEdit className="h-3 w-3" />
           Mis notas
         </h4>
+        <DictationMic onText={(txt) => setDraft((p) => appendDictado(p, txt))} />
         {relativeTime && (
           <span className="text-[11px] text-muted-foreground">
             Última edición: {relativeTime}

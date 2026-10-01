@@ -31,6 +31,7 @@ import { PERIODICIDADES_COMUNES, alternar, type ClaveDeLaVentana, type Formulari
 import orto from "../orto.module.css";
 import alta from "../alta-caso.module.css";
 import c from "../plan-tratamiento.module.css";
+import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /** El id del ancla de una sección: la navegación del popup salta a él. */
 export const idDeSeccion = (prefijo: string, clave: ClaveDeLaVentana): string => `${prefijo}-sec-${clave}`;
@@ -345,7 +346,7 @@ export function CamposDelPlan(props: CamposDelPlanProps) {
       </Bloque>
 
       <Bloque id={sec("interconsultas")} anidado={props.anidado} icono={<MessageSquareText size={16} strokeWidth={1.75} />} titulo="Interconsultas">
-        <Campo etiqueta="Interconsultas" htmlFor={`${pre}-interconsultas`} pista="Con quién se interconsulta y para qué. Por ejemplo: con odontología general para exodoncia de premolares.">
+        <Campo etiqueta="Interconsultas" htmlFor={`${pre}-interconsultas`} dictado={(t) => cambiar({ interconsultas: appendDictado(v.interconsultas, t, "\n", 1000) })} pista="Con quién se interconsulta y para qué. Por ejemplo: con odontología general para exodoncia de premolares.">
           <textarea
             id={`${pre}-interconsultas`}
             className={orto.entrada}
@@ -386,10 +387,17 @@ function Bloque({ id, anidado, icono, titulo, sub, children }: { id: string; ani
   );
 }
 
-function Campo({ etiqueta, htmlFor, pista, error, children }: { etiqueta: string; htmlFor?: string; pista?: string; error?: string; children: ReactNode }) {
+function Campo({ etiqueta, htmlFor, pista, error, dictado, children }: { etiqueta: string; htmlFor?: string; pista?: string; error?: string; dictado?: (texto: string) => void; children: ReactNode }) {
   return (
     <div className={orto.campo}>
-      <label htmlFor={htmlFor} className={orto.campoEtiqueta}>{etiqueta}</label>
+      {dictado ? (
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor={htmlFor} className={orto.campoEtiqueta}>{etiqueta}</label>
+          <DictationMic onText={dictado} />
+        </div>
+      ) : (
+        <label htmlFor={htmlFor} className={orto.campoEtiqueta}>{etiqueta}</label>
+      )}
       {children}
       {error ? (
         <p className={orto.campoPista} style={{ color: "var(--pr-peligro)" }} role="alert">{error}</p>
