@@ -192,7 +192,8 @@ export const resumenClinica = definirHerramienta<ParamsResumen, DatosResumen>({
     const deSabina = d.omitidas.filter((o) => o.causa);
     const avisos: string[] = [];
     if (delUsuario.length > 0) {
-      const falta = delUsuario.map((o) => `${o.seccion} (falta ${o.permiso})`).join(", ");
+      // Sin la key: el modelo la repetía tal cual al usuario («falta medicalRecord.view»).
+      const falta = delUsuario.map((o) => o.seccion).join(", ");
       avisos.push(`NO tienes acceso a: ${falta} — dilo, no lo presentes como que no hay datos.`);
     }
     if (deSabina.length > 0) {

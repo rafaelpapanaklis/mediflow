@@ -312,7 +312,25 @@ export function areaDePermiso(permiso: string): string {
   if (Object.prototype.hasOwnProperty.call(ALL_PERMISSIONS, permiso)) {
     return `«${ALL_PERMISSIONS[permiso as PermissionKey]}»`;
   }
-  return `«${permiso}»`;
+  // Una key que no está ni en el mapa ni en el catálogo NUNCA se le enseña al
+  // usuario («medicalRecord.view» no dice nada en un mostrador).
+  return "esa sección";
+}
+
+/**
+ * «a» + el área, contrayendo «a el» → «al»: «a facturación», «a los pacientes»,
+ * pero «al expediente clínico» (no «a el expediente clínico»).
+ */
+export function conA(area: string): string {
+  return /^el\s/i.test(area) ? `al ${area.slice(3)}` : `a ${area}`;
+}
+
+/**
+ * ¿El texto (ya normalizado) nombra el área del permiso? Sin el artículo «el»:
+ * «al expediente clínico» es la misma mención que «el expediente clínico».
+ */
+function nombraElArea(texto: string, permiso: string): boolean {
+  return texto.includes(normalizar(areaDePermiso(permiso).replace(/^el\s/i, "")));
 }
 
 /**
@@ -325,9 +343,9 @@ export function fraseSinPermiso(permiso: string, causa: CausaSinPermiso = "usuar
   // permiso, «no tienes acceso» es falso y lo manda a pedir algo que ya tiene.
   if (causa === "apagada") return FRASE_SABINA_APAGADA;
   if (causa === "sabina") {
-    return `Tú sí tienes acceso a ${areaDePermiso(permiso)}, pero el Super Admin de la clínica no me deja consultarlo en tu nombre, así que eso no te lo puedo contestar.`;
+    return `Tú sí tienes acceso ${conA(areaDePermiso(permiso))}, pero el Super Admin de la clínica no me deja consultarlo en tu nombre, así que eso no te lo puedo contestar.`;
   }
-  return `No tienes acceso a ${areaDePermiso(permiso)}, eso no te lo puedo contestar.`;
+  return `No tienes acceso ${conA(areaDePermiso(permiso))}, eso no te lo puedo contestar.`;
 }
 
 /**
@@ -364,9 +382,9 @@ export function garantizarAvisoSinPermiso(
   const faltantes = Array.from(new Set(permisos)).filter((p) => {
     const causa = causaDe(p);
     if (texto.includes(normalizar(fraseSinPermiso(p, causa)))) return false;
-    if (causa !== "usuario") return !(habla_del_super_admin && (causa === "apagada" || texto.includes(normalizar(areaDePermiso(p)))));
+    if (causa !== "usuario") return !(habla_del_super_admin && (causa === "apagada" || nombraElArea(texto, p)));
     if (!habla_de_acceso) return true;
-    return !texto.includes(normalizar(areaDePermiso(p)));
+    return !nombraElArea(texto, p);
   });
   if (faltantes.length === 0) return respuesta;
 
@@ -641,7 +659,7 @@ export function resultadoParaModelo(
       motivo: "sin_permiso",
       permiso: mal.permiso,
       instruccion:
-        `EL USUARIO NO TIENE ACCESO A ${areaDePermiso(mal.permiso).toUpperCase()}. ` +
+        `EL USUARIO NO TIENE ACCESO ${conA(areaDePermiso(mal.permiso)).toUpperCase()}. ` +
         `NO omitas este dato en silencio ni lo sustituyas por otro: DI textualmente ` +
         `"${fraseSinPermiso(mal.permiso)}" y sigue con lo que sí puedas contestar. ` +
         `Si la pregunta dependía de esto, dilo antes de cualquier conclusión.`,
@@ -829,6 +847,7 @@ Si una herramienta vuelve con "sin_permiso", NO puedes omitir esa parte en silen
 - BIEN: "No tienes acceso a facturación, eso no te lo puedo contestar."
 Dilo con esas palabras, ANTES de cualquier conclusión, y sigue contestando lo que sí puedas. Si te faltó una pieza, avisa de que tu respuesta va sobre medio cuadro: un consejo sobre datos incompletos, dicho con seguridad, es peor que no contestar.
 Hay dos razones distintas y NO son intercambiables: que el usuario no tenga el permiso, o que el usuario sí lo tenga y el Super Admin no te deje usarlo en su nombre. Usa SIEMPRE la frase exacta que te da la herramienta; nunca le digas "no tienes acceso" a quien sí lo tiene.
+Nunca escribas al usuario una clave técnica de permiso (algo como «medicalRecord.view» o «billing.view», con punto): nombra el área en lenguaje de mostrador, «el expediente clínico», «facturación».
 
 PRIMERO EL HECHO, DESPUÉS LA OPINIÓN
 Separa siempre las dos cosas, y en este orden:

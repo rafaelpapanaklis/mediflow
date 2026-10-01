@@ -67,7 +67,7 @@ test("🔴 resumen_clinica: sin facturación, esa parte se OMITE Y SE DICE", asy
   // …y lo que falta se DICE, con la key, una sola vez (ingresos y deuda comparten permiso).
   assert.deepEqual(r.datos.omitidas, [{ seccion: "ingresos y deuda", permiso: "billing.view" }]);
   // Y el resumen lo lleva escrito, para el caso en que el motor sólo lea eso.
-  assert.match(r.resumen, /NO tienes acceso a: ingresos y deuda \(falta billing\.view\)/);
+  assert.match(r.resumen, /NO tienes acceso a: ingresos y deuda — dilo/);
   assert.match(r.resumen, /no lo presentes como que no hay datos/);
 
   // Lo que sí tiene, lo trae.

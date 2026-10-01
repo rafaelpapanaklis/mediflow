@@ -6,6 +6,8 @@ import { transcribeAudio } from "@/lib/integrations/whisper";
 import { tokensDeAudio } from "@/lib/integrations/whisper-tarifa";
 import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
+import { denyIfMissingAnyPermission } from "@/lib/auth/require-permission";
+import { PERMISOS_DE_DICTADO } from "@/lib/integrations/dictado-permisos";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -65,6 +67,16 @@ export async function POST(req: NextRequest) {
   // se asocia a datos del paciente: entra, se transcribe y se descarta.
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Solo quien ve el micrófono en la interfaz (escribe en el expediente, el
+  // consentimiento, la placa, el plan o Ortodoncia). Un rol de solo lectura que
+  // llame a la API directo no gasta el cupo de IA de la clínica. ANTES del
+  // interruptor y del cupo: no se lee nada de la clínica para quien no puede.
+  const sinPermiso = denyIfMissingAnyPermission(
+    { role: ctx.role, permissionsOverride: ctx.permissionsOverride },
+    [...PERMISOS_DE_DICTADO],
+  );
+  if (sinPermiso) return sinPermiso;
 
   // Interruptor de la clínica (Saldo de IA → Funciones de IA): ANTES de gastar.
   const apagada = await cortarSiIaApagada(ctx.clinicId, "dictation");

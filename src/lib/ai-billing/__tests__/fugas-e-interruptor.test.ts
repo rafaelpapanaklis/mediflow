@@ -186,7 +186,7 @@ const dobles = new Map<string, unknown>([
   [path.join(RAIZ, "src/lib/auth.ts"), { getCurrentUser: async () => sesion.user }],
   [path.join(RAIZ, "src/lib/failban.ts"), { persistentRateLimit: async () => null }],
   [path.join(RAIZ, "src/lib/rate-limit.ts"), { rateLimit: () => null }],
-  [path.join(RAIZ, "src/lib/auth/require-permission.ts"), { denyIfMissingPermission: () => null }],
+  [path.join(RAIZ, "src/lib/auth/require-permission.ts"), { denyIfMissingPermission: () => null, denyIfMissingAnyPermission: () => null }],
   [path.join(RAIZ, "src/lib/patient-visibility.ts"), { assertPatientVisible: async () => null }],
   [path.join(RAIZ, "src/lib/menu-dos-niveles/interruptor.ts"), { menuDosNivelesEncendido: async () => true }],
   [path.join(RAIZ, "src/lib/audit.ts"), { logAudit: async () => {}, extractAuditMeta: () => ({}) }],

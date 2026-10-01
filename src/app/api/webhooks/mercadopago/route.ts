@@ -70,9 +70,11 @@ export async function POST(req: NextRequest) {
   // (merchant_order / topic_merchant_order_wh, contracargos…) trae en `data.id`
   // el id de ESE recurso, no de un pago: 200 sin procesar, para que MP no la
   // reintente. Sin tipo declarado se trata como pago (el formato viejo).
+  // Las cuatro fuentes pasan por `texto()`: una query vacía (`type=`) es "" y el
+  // `??` no la salta, con lo que el tipo del cuerpo no llegaba a leerse nunca.
   const tipo =
-    url.searchParams.get("type") ??
-    url.searchParams.get("topic") ??
+    texto(url.searchParams.get("type")) ??
+    texto(url.searchParams.get("topic")) ??
     texto((body as { type?: unknown }).type) ??
     texto((body as { topic?: unknown }).topic);
   if (tipo && tipo !== "payment") {

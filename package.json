@@ -81,6 +81,8 @@
     "test:spei-directo": "tsx --test src/lib/billing/spei-directo.test.ts src/lib/billing/spei-directo-servidor.test.ts",
     "test:cuenta-rediseno": "tsx --test src/components/dashboard/cuenta-rediseno/__tests__/cuenta-rediseno.test.ts",
     "test:layout-rediseno": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/layout-rediseno/__tests__/layout-rediseno.test.tsx",
+    "test:dictado-permiso": "tsx --test --experimental-test-module-mocks src/app/api/ai/transcribe/__tests__/permiso.test.ts",
+    "test:nota-evolucion-dictado": "tsx --test src/components/dashboard/nota-evolucion/__tests__/dictado.test.ts",
     "test:sabina-core": "tsx --test src/lib/sabina/engine-core.test.ts",
     "test:sabina-motor": "tsx --test src/lib/sabina/engine.test.ts",
     "test:sabina-fechas": "tsx --test src/lib/sabina/__tests__/fechas-relativas.test.ts",

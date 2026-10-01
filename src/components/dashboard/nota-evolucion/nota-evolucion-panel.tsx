@@ -27,6 +27,8 @@ import { MenuPlantillas } from "@/components/dashboard/documentos-paciente/menu-
 import {
   DocumentoHoja, DocumentoMesa, DocumentoRaiz, clasesDocumento,
 } from "@/components/dashboard/documentos-paciente/documento-hoja";
+import { DictationMic } from "@/components/clinical/shared/dictation-mic";
+import { textoParaInsertar } from "./dictado";
 import { combinarConPlantilla } from "@/lib/patient-documents/combinar-plantilla";
 import { NotaVisor } from "./nota-documento";
 import estilos from "./editor.module.css";
@@ -269,6 +271,21 @@ function Editor({
   const [vacio, setVacio] = useState(!hoja.body);
   const medirVacio = () => setVacio(!(caja.current?.textContent ?? "").trim());
 
+  // Dónde estaba el cursor DENTRO de la hoja la última vez: pulsar el micrófono
+  // (y los 60 s de grabación) lo sacan de ahí, y el dictado debe caer donde se
+  // estaba escribiendo, no al principio ni en otra parte de la pantalla.
+  const rangoGuardado = useRef<Range | null>(null);
+  useEffect(() => {
+    const guardar = () => {
+      const sel = window.getSelection();
+      const el = caja.current;
+      if (!sel || sel.rangeCount === 0 || !el) return;
+      if (el.contains(sel.anchorNode) && el.contains(sel.focusNode)) rangoGuardado.current = sel.getRangeAt(0).cloneRange();
+    };
+    document.addEventListener("selectionchange", guardar);
+    return () => document.removeEventListener("selectionchange", guardar);
+  }, []);
+
   useEffect(() => {
     let vivo = true;
     pedir<PlantillaNota[]>("/api/patient-documents/templates")
@@ -351,6 +368,46 @@ function Editor({
     }
   };
   const quieto = ocupado || trayendo;
+
+  // Lo dictado entra en el cursor (o al final) con `insertText`: respeta el
+  // formato de alrededor (negritas, listas, títulos) y deja la hoja como la
+  // saneará el servidor al firmar. Nunca reescribe lo que ya está escrito.
+  const dictar = (dictado: string) => {
+    const el = caja.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel) return;
+    const guardado = rangoGuardado.current;
+    if (guardado && el.contains(guardado.startContainer) && el.contains(guardado.endContainer)) {
+      // Con algo seleccionado, el dictado va DESPUÉS de la selección: nunca la pisa.
+      const donde = guardado.cloneRange();
+      donde.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(donde);
+    } else {
+      sel.selectAllChildren(el);
+      sel.collapseToEnd();
+    }
+    const antes = document.createRange();
+    antes.selectNodeContents(el);
+    antes.setEnd(sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
+    const texto = textoParaInsertar(antes.toString(), dictado);
+    if (!texto) return;
+    if (!document.execCommand("insertText", false, texto)) {
+      // Respaldo (navegadores sin insertText): un nodo de texto en el cursor.
+      const r = sel.getRangeAt(0);
+      r.deleteContents();
+      const nodo = document.createTextNode(texto);
+      r.insertNode(nodo);
+      r.setStartAfter(nodo);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    tocado.current = true;
+    medirVacio();
+  };
 
   // Formato con los comandos del navegador: producen justo las etiquetas de la
   // lista blanca del saneado (b, i, u, listas, h2). Lo que no lo sea se cae allí.
@@ -435,6 +492,7 @@ function Editor({
               titulo={t("notaEvolucionDoc.pick.title")}
               onUsar={(p) => void usarPlantilla(p)}
             />
+            <DictationMic onText={dictar} disabled={quieto} />
           </div>
           <div
             ref={caja}

@@ -398,7 +398,7 @@ export function desenlaceDeEndpoint(r: RespuestaEndpoint, verbo: string): Sabina
       ok: false,
       tipo: "sin_permiso",
       frase: clave
-        ? `No tienes el permiso para ${verbo} (${clave}). Lo da el administrador en Equipo.`
+        ? `No tienes el permiso para ${verbo}. Lo da el administrador en Equipo.`
         : `Tu rol no permite ${verbo}.`,
     };
   }

@@ -460,3 +460,41 @@ test("la sección «CÓMO ESCRIBES» no engorda: se paga en cada llamada al mode
     assert.ok(seccion.length <= tope, `${dificultad}: ${seccion.length} caracteres`);
   }
 });
+
+/* ── ws1-t5: frases de permiso en lenguaje humano ───────────────────── */
+
+test("«a» + «el» se contrae: «al expediente clínico», nunca «a el expediente clínico»", () => {
+  assert.equal(fraseSinPermiso("medicalRecord.view"), "No tienes acceso al expediente clínico, eso no te lo puedo contestar.");
+  assert.match(fraseSinPermiso("medicalRecord.view", "sabina"), /Tú sí tienes acceso al expediente clínico, pero/);
+  // Las que no llevan «el» no cambian.
+  assert.equal(fraseSinPermiso("billing.view"), "No tienes acceso a facturación, eso no te lo puedo contestar.");
+  assert.match(fraseSinPermiso("patients.view"), /acceso a los pacientes,/);
+  assert.match(fraseSinPermiso("inventory.view"), /acceso al inventario,/);
+  assert.match(fraseSinPermiso("team.view"), /acceso al equipo,/);
+});
+
+test("ninguna frase de permiso muestra una clave técnica, ni siquiera una desconocida", () => {
+  const claves = ["medicalRecord.view", "billing.view", "inventario.raro", "patients.create"];
+  for (const k of claves) {
+    for (const causa of ["usuario", "sabina"] as const) {
+      const f = fraseSinPermiso(k, causa);
+      assert.ok(!f.includes(k), `${causa}: «${f}» enseña ${k}`);
+      assert.ok(!/\ba el\b/i.test(f), `${causa}: «${f}» dice «a el»`);
+    }
+    const instruccion = JSON.parse(resultadoParaModelo({ ok: false, motivo: "sin_permiso", permiso: k })).instruccion as string;
+    assert.ok(!instruccion.includes(k), `la orden al modelo enseña ${k}`);
+    assert.ok(!/\ba el\b/i.test(instruccion), instruccion);
+  }
+});
+
+test("la red de seguridad da por avisado «al expediente clínico» y no repite el aviso", () => {
+  const dicha = "No tienes acceso al expediente clínico, eso no te lo puedo contestar. Hoy tienes 8 citas.";
+  assert.equal(garantizarAvisoSinPermiso(dicha, ["medicalRecord.view"]), dicha);
+  // Y si no lo dijo, lo añade con la contracción bien hecha.
+  assert.match(garantizarAvisoSinPermiso("Hoy tienes 8 citas.", ["medicalRecord.view"]), /acceso al expediente clínico/);
+});
+
+test("el prompt le prohíbe al modelo escribir claves técnicas de permiso", () => {
+  const prompt = construirSystemPrompt({ dificultad: "abierta", hoy: "10 de septiembre de 2026" });
+  assert.match(prompt, /Nunca escribas al usuario una clave técnica de permiso/);
+});

@@ -282,3 +282,35 @@ test("ruta: sin firma, con firma de otro secreto o de otro pago es 401 con el mo
   assert.match(errores[0], /firma_ausente/);
   assert.match(errores[1], /firma_invalida/);
 });
+
+// ws1-t5 (1-oct-2026): el tipo de la notificación también puede venir SOLO en el
+// cuerpo (`type` o `topic`), o con la query vacía (`type=`). Una orden de
+// comercio firmada no es un pago: 200 sin llamar a getPayment con el id de otra cosa.
+test("ruta: el tipo (type/topic) leído del cuerpo o con la query vacía descarta lo que no es pago", async () => {
+  const REF = "ref=lab:lab1";
+  const casos: Array<[string, string, Record<string, unknown>]> = [
+    ["topic en el cuerpo, query sin tipo", `${REF}&data.id=${PAGO}`, { topic: "merchant_order", data: { id: PAGO } }],
+    ["type en el cuerpo, query sin tipo", `${REF}&data.id=${PAGO}`, { type: "merchant_order", data: { id: PAGO } }],
+    ["type vacío en la query, topic en el cuerpo", `${REF}&data.id=${PAGO}&type=`, { topic: "merchant_order", data: { id: PAGO } }],
+    ["type vacío y topic vacío en la query, type en el cuerpo", `${REF}&data.id=${PAGO}&type=&topic=`, { type: "chargebacks", data: { id: PAGO } }],
+  ];
+  for (const [nombre, query, body] of casos) {
+    procesados.length = 0;
+    const res = await POSTEAR(notificacion({ query, headers: FIRMADO, body }));
+    assert.equal(res.status, 200, nombre);
+    assert.deepEqual(procesados, [], `${nombre}: no debía procesar nada`);
+  }
+});
+
+test("ruta: sin tipo en ningún lado (formato viejo) o con type=payment en el cuerpo sigue procesando el pago", async () => {
+  for (const [query, body] of [
+    [`ref=lab:lab1&data.id=${PAGO}`, { data: { id: PAGO } }],
+    [`ref=lab:lab1&data.id=${PAGO}&type=`, { type: "payment", data: { id: PAGO } }],
+    [`ref=lab:lab1&data.id=${PAGO}`, { topic: "payment", data: { id: PAGO } }],
+  ] as Array<[string, Record<string, unknown>]>) {
+    procesados.length = 0;
+    const res = await POSTEAR(notificacion({ query, headers: FIRMADO, body }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(procesados[0], ["getPayment", "tok-lab", PAGO], query);
+  }
+});
