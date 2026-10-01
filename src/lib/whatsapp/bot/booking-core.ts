@@ -305,7 +305,9 @@ function numberedList(options: BookingOption[]): string {
 
 function askDateText(state: BookingState): string {
   const svc = state.serviceName ? ` para *${state.serviceName}*` : "";
-  return `¿Para qué fecha te gustaría la cita${svc}? Puedes escribir "mañana" o una fecha como 2026-06-12.`;
+  // ws1-t5 — sin fecha fija de ejemplo: «2026-06-12» ya estaba en el pasado y
+  // era justo lo que el paciente veía al elegir día.
+  return `¿Para qué fecha te gustaría la cita${svc}? Puedes escribir "mañana", un día como "el jueves" o el día y el mes ("el 15", "15/10").`;
 }
 
 async function resolvePhone(input: BotTurnInput, deps: BookingDeps): Promise<string | null> {
@@ -570,7 +572,7 @@ async function stepDate(
   const tz = await deps.getClinicTimezone(input.clinicId);
   const dateISO = parseDateInput(input.incomingText, tz);
   if (!dateISO) {
-    return miss(state, 'No reconocí la fecha. Escribe algo como "mañana" o "2026-06-12".');
+    return miss(state, 'No reconocí la fecha. Escribe algo como "mañana", "el jueves" o "15/10".');
   }
   if (dateISO < todayInTz(tz)) {
     return miss(state, 'Esa fecha ya pasó. Indícame una fecha futura (por ejemplo "mañana").');

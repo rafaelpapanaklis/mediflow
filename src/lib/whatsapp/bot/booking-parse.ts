@@ -14,11 +14,20 @@ const MONTHS: Record<string, number> = {
   noviembre: 11, diciembre: 12,
 };
 
-// 0=Domingo … 6=Sábado (igual que Date.getUTCDay). Con y sin acento.
+// 0=Domingo … 6=Sábado (igual que Date.getUTCDay). Sin acentos: el texto se
+// compara ya pasado por foldAccents.
 const WEEKDAYS: Record<string, number> = {
-  domingo: 0, lunes: 1, martes: 2, miércoles: 3, miercoles: 3,
-  jueves: 4, viernes: 5, sábado: 6, sabado: 6,
+  domingo: 0, lunes: 1, martes: 2, miercoles: 3,
+  jueves: 4, viernes: 5, sabado: 6,
 };
+
+/**
+ * Una fecha sin año que quedó MÁS de esto en el pasado se lee como del año
+ * que viene («10 de enero» dicho en diciembre). Con menos, se deja tal cual y
+ * el flujo contesta «esa fecha ya pasó»: «el 30 de septiembre» dicho el 1 de
+ * octubre es un error del paciente, no una cita para dentro de un año.
+ */
+const DIAS_PARA_PASAR_AL_ANO_SIGUIENTE = 60;
 
 export function normalizeLast10(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
@@ -30,53 +39,158 @@ export function addDaysISO(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** ¿Existe ese día en el calendario? (31/02 no). */
+function esFechaReal(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
+function diasEntre(desdeISO: string, hastaISO: string): number {
+  return Math.round(
+    (new Date(`${hastaISO}T12:00:00Z`).getTime() - new Date(`${desdeISO}T12:00:00Z`).getTime()) / 86_400_000,
+  );
+}
+
+/** Día y mes sin año → este año, o el que viene si ya quedó muy atrás. */
+function conAnoImplicito(today: string, month: number, day: number): string | null {
+  const year = parseInt(today.slice(0, 4), 10);
+  if (!esFechaReal(year, month, day)) {
+    // 29/02 en año no bisiesto: puede existir el año que viene.
+    return esFechaReal(year + 1, month, day) ? `${year + 1}-${pad2(month)}-${pad2(day)}` : null;
+  }
+  const iso = `${year}-${pad2(month)}-${pad2(day)}`;
+  if (diasEntre(iso, today) > DIAS_PARA_PASAR_AL_ANO_SIGUIENTE && esFechaReal(year + 1, month, day)) {
+    return `${year + 1}-${pad2(month)}-${pad2(day)}`;
+  }
+  return iso;
+}
+
 /**
- * Parsea "hoy"/"mañana"/"pasado mañana", día de la semana ("lunes" → el próximo
- * lunes), ISO, DD/MM[/YYYY] y "10 de junio". Tolerante; null si no reconoce.
+ * «El 15» a secas → el próximo día 15: este mes si no ha pasado; si ya pasó o
+ * el mes no lo tiene («el 31» en septiembre), el primer mes siguiente que sí.
  */
-export function parseDateInput(text: string, timezone: string): string | null {
-  const t = text.trim().toLowerCase();
-  const today = todayInTz(timezone);
-
-  if (/pasado\s+ma(n|ñ)ana/.test(t)) return addDaysISO(today, 2);
-  if (/\bhoy\b/.test(t)) return today;
-  if (/ma(n|ñ)ana/.test(t)) return addDaysISO(today, 1);
-
-  // Día de la semana → próxima ocurrencia (1..7 días adelante; el mismo día
-  // de hoy se interpreta como la semana que viene para evitar ambigüedad).
-  const dayNames = Object.keys(WEEKDAYS);
-  for (let i = 0; i < dayNames.length; i++) {
-    const name = dayNames[i];
-    if (new RegExp(`\\b${name}\\b`).test(t)) {
-      const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay();
-      let delta = (WEEKDAYS[name] - todayDow + 7) % 7;
-      if (delta === 0) delta = 7;
-      return addDaysISO(today, delta);
+function proximoDiaDelMes(today: string, day: number): string | null {
+  if (day < 1 || day > 31) return null;
+  let year = parseInt(today.slice(0, 4), 10);
+  let month = parseInt(today.slice(5, 7), 10);
+  const hoyDia = parseInt(today.slice(8, 10), 10);
+  for (let i = 0; i < 3; i++) {
+    if ((i > 0 || day >= hoyDia) && esFechaReal(year, month, day)) {
+      return `${year}-${pad2(month)}-${pad2(day)}`;
+    }
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
     }
   }
+  return null;
+}
 
-  const iso = t.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+/**
+ * Parsea la fecha que escribe el paciente, SIEMPRE contra el «hoy» de la
+ * clínica (`timezone`), no el del servidor. Entiende, en este orden:
+ *   1. ISO (2026-10-15) y DD/MM[/AAAA].
+ *   2. "15 de octubre [de 2026]", "15 octubre", "1ro de octubre".
+ *   3. Día de la semana: "el martes" → el próximo martes (hoy no cuenta: el
+ *      mismo día se lee como la semana que viene, salvo "hoy jueves");
+ *      "el jueves de la próxima/siguiente semana" → el jueves de la semana
+ *      calendario siguiente (lunes a domingo). Si trae número ("martes 13"),
+ *      manda el número.
+ *   4. "pasado mañana", "hoy", "mañana" — pero "por/en/de la mañana" es un
+ *      turno, no el día de mañana ("el martes por la mañana" es el martes).
+ *   5. "el 15" / "día 15" → el próximo día 15.
+ * Sin año, una fecha muy pasada se pasa al año siguiente (ver
+ * DIAS_PARA_PASAR_AL_ANO_SIGUIENTE). `now` es inyectable para las pruebas.
+ * Devuelve "YYYY-MM-DD" o null si no reconoce nada.
+ */
+export function parseDateInput(text: string, timezone: string, now: Date = new Date()): string | null {
+  const t = foldAccents(text);
+  const p = getTzParts(now, timezone);
+  const today = `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
+
+  const iso = t.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) {
+    const [y, m, d] = [parseInt(iso[1], 10), parseInt(iso[2], 10), parseInt(iso[3], 10)];
+    return esFechaReal(y, m, d) ? `${y}-${pad2(m)}-${pad2(d)}` : null;
+  }
 
   const dm = t.match(/\b(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?\b/);
   if (dm) {
     const day = parseInt(dm[1], 10);
     const month = parseInt(dm[2], 10);
-    let year = dm[3] ? parseInt(dm[3], 10) : parseInt(today.slice(0, 4), 10);
-    if (year < 100) year += 2000;
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return `${year}-${pad2(month)}-${pad2(day)}`;
+    if (dm[3]) {
+      let year = parseInt(dm[3], 10);
+      if (year < 100) year += 2000;
+      return esFechaReal(year, month, day) ? `${year}-${pad2(month)}-${pad2(day)}` : null;
     }
+    return conAnoImplicito(today, month, day);
   }
 
-  const named = t.match(/\b(\d{1,2})\s+de\s+([a-záéíóúñ]+)(?:\s+de\s+(\d{4}))?/);
-  if (named) {
+  const named = t.match(/\b(\d{1,2})\s*(?:ro|ero|o|°|º)?\s+(?:de\s+)?([a-z]+)(?:\s+(?:de|del)\s+(\d{4}))?/);
+  if (named && MONTHS[named[2]]) {
     const day = parseInt(named[1], 10);
     const month = MONTHS[named[2]];
-    const year = named[3] ? parseInt(named[3], 10) : parseInt(today.slice(0, 4), 10);
-    if (month && day >= 1 && day <= 31) {
-      return `${year}-${pad2(month)}-${pad2(day)}`;
+    if (named[3]) {
+      const year = parseInt(named[3], 10);
+      return esFechaReal(year, month, day) ? `${year}-${pad2(month)}-${pad2(day)}` : null;
     }
+    return conAnoImplicito(today, month, day);
+  }
+
+  const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay();
+  // "mañana" como día (no como turno: "la mañana", "las mañanas").
+  const dijoManana = /(?<!\blas?\s)\bmanana\b/.test(t) && !/pasado\s+manana/.test(t);
+  const dijoHoy = /\bhoy\b/.test(t);
+
+  for (const name of Object.keys(WEEKDAYS)) {
+    if (!new RegExp(`\\b${name}\\b`).test(t)) continue;
+    const target = WEEKDAYS[name];
+    // "martes 13": el número manda (y el paciente ve el día real al confirmar).
+    const numero = t.match(new RegExp(`\\b${name}\\s+(\\d{1,2})\\b`));
+    if (numero) return proximoDiaDelMes(today, parseInt(numero[1], 10));
+    if (/\b(proxima|siguiente|otra)\s+semana\b|\bsemana\s+que\s+viene\b/.test(t)) {
+      // Semanas de lunes a domingo, como en el calendario de México.
+      const lunesQueViene = 7 - ((todayDow + 6) % 7);
+      return addDaysISO(today, lunesQueViene + ((target + 6) % 7));
+    }
+    if (target === todayDow && dijoHoy) return today;
+    let delta = (target - todayDow + 7) % 7;
+    if (delta === 0) delta = 7;
+    return addDaysISO(today, delta);
+  }
+
+  if (/pasado\s+manana/.test(t)) return addDaysISO(today, 2);
+  if (dijoHoy) return today;
+  if (dijoManana) return addDaysISO(today, 1);
+
+  const soloDia = t.match(/\b(?:el|dia)\s+(\d{1,2})\b(?!\s*(?::|am\b|pm\b|hrs?\b|horas?\b))/);
+  if (soloDia) return proximoDiaDelMes(today, parseInt(soloDia[1], 10));
+
+  return null;
+}
+
+/**
+ * ¿El mensaje pide una cita (o moverla)? Lo usa el motor antes de la IA
+ * libre. Deliberadamente sin «horario» suelto: «¿qué horario tienen?» es la
+ * FAQ del horario de atención, no una reserva. Lo que se escape aquí lo
+ * recoge la IA libre con su centinela de agenda (ai-prompt.ts).
+ */
+export function detectaIntencionDeAgenda(text: string): "book" | "reschedule" | null {
+  const n = foldAccents(text ?? "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (/(reagendar|reprogramar|cambiar (de|la|mi) cita|mover (la|mi) cita)/.test(n)) return "reschedule";
+  if (/(agendar|reservar|sacar (una )?cita|quiero (una )?cita|nueva cita|hacer (una )?cita|pedir (una )?cita)/.test(n)) {
+    return "book";
+  }
+  if (/\b(agendame|agendarme|agendo|agende|apartar (una )?cita)\b/.test(n)) return "book";
+  if (
+    /\b(quiero|quisiera|me gustaria|necesito|ocupo|puedo|podria|se puede|busco)( sacar| hacer| pedir| tener| agendar)?( una| un)? (cita|consulta|valoracion|revision)\b/.test(n)
+  ) {
+    return "book";
+  }
+  if (/\b(hay|tienen|tendran|habra|tiene) (espacio|lugar|disponibilidad|citas?)\b|\bdisponibilidad\b/.test(n)) {
+    return "book";
   }
   return null;
 }
@@ -208,13 +322,21 @@ export function isMenuWord(text: string): boolean {
   return /\b(men[uú]|reiniciar|reinicia|empezar de nuevo|volver a empezar)\b/i.test(text.trim());
 }
 
-export function formatDateHuman(dateISO: string, timezone: string): string {
+/**
+ * "jueves, 15 de octubre". Lleva el año solo si NO es el año en curso de la
+ * clínica (ws1-t5): una cita del año que viene no debe parecer de este.
+ * `dateISO` ya es la fecha civil: se formatea en UTC a mediodía para que
+ * ninguna zona la corra de día.
+ */
+export function formatDateHuman(dateISO: string, timezone: string, now: Date = new Date()): string {
   const d = new Date(`${dateISO}T12:00:00Z`);
+  const otroAno = dateISO.slice(0, 4) !== String(getTzParts(now, timezone).year);
   return new Intl.DateTimeFormat("es-MX", {
-    timeZone: timezone,
+    timeZone: "UTC",
     weekday: "long",
     day: "numeric",
     month: "long",
+    ...(otroAno ? { year: "numeric" as const } : {}),
   }).format(d);
 }
 

@@ -10,6 +10,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { BotConfigDTO, BotFaqDTO, BotBusinessHours } from "@/lib/whatsapp/bot/types";
 import { PERSONA_TEMPLATES } from "./persona-templates";
+import { PERSONA_AVISO_CARACTERES } from "@/lib/whatsapp/bot/ai-prompt";
 import { BotRediseno } from "@/components/dashboard/whatsapp-rediseno/bot";
 
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
@@ -584,6 +585,21 @@ export function BotClient({
                 value={form.persona}
                 onChange={(e) => setForm((f) => ({ ...f, persona: e.target.value }))}
               />
+              {/* ws1-t5 — tamaño de la persona. No se recorta; se avisa: unas
+                  instrucciones muy largas diluyen las reglas del sistema y el
+                  bot responde peor (ticket BEVADENT, ~16,500 caracteres). */}
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 4,
+                  color: form.persona.length > PERSONA_AVISO_CARACTERES ? "var(--warning, #b45309)" : "var(--text-3)",
+                }}
+              >
+                {form.persona.length.toLocaleString("es-MX")} caracteres
+                {form.persona.length > PERSONA_AVISO_CARACTERES
+                  ? ` · Son muchas instrucciones: el bot las sigue mejor si son cortas (menos de ${PERSONA_AVISO_CARACTERES.toLocaleString("es-MX")}). Deja aquí el tono y las reglas, y pon precios, horarios y datos en Preguntas frecuentes. No hace falta explicarle la agenda ni la fecha: el sistema ya se las da.`
+                  : null}
+              </div>
             </div>
 
             <div className="field-new">

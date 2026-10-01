@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { generateAiReply } from "./ai";
 import { handleBookingTurn, isBookingInProgress } from "./booking";
+import { detectaIntencionDeAgenda } from "./booking-parse";
 import { handleSaldoTurn, isSaldoInProgress } from "./saldo";
 import { getCobranzaSettings } from "@/lib/reminders/config";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
@@ -138,15 +139,11 @@ function isWithinBusinessHours(
   return cur >= hhmmToMinutes(slot.open) && cur < hhmmToMinutes(slot.close);
 }
 
-/** Heurística ligera de intención de agenda (T4 la refina). */
+/** Heurística de intención de agenda (pura, en booking-parse: tiene pruebas). */
 function detectBookingIntent(text: string): BotIntent | null {
-  const n = normalize(text);
-  if (/(reagendar|reprogramar|cambiar (de|la|mi) cita|mover (la|mi) cita)/.test(n)) {
-    return BotIntent.RESCHEDULE;
-  }
-  if (/(agendar|reservar|sacar (una )?cita|quiero (una )?cita|nueva cita|hacer (una )?cita|pedir (una )?cita)/.test(n)) {
-    return BotIntent.BOOK_APPOINTMENT;
-  }
+  const modo = detectaIntencionDeAgenda(text);
+  if (modo === "reschedule") return BotIntent.RESCHEDULE;
+  if (modo === "book") return BotIntent.BOOK_APPOINTMENT;
   return null;
 }
 
@@ -155,7 +152,8 @@ function detectBookingIntent(text: string): BotIntent | null {
  *   1) Saldo (ws1-t3) si preguntan por dinero y canAnswerBalance.
  *   2) FAQ por reglas (rápido y barato).
  *   3) Agenda (T4) si hay intención de cita y canBookAppointments.
- *   4) IA libre con Claude (T3) como respuesta general.
+ *   4) IA libre con Claude (T3) como respuesta general; si detecta que el
+ *      paciente quiere cita, pasa a (3) en vez de contestar (ws1-t5).
  *   5) Handoff a humano si nada respondió y fallbackToHuman.
  *
  * Booking va ANTES que la IA libre para que una petición de cita use el flujo
@@ -223,7 +221,18 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
 
   // 4) IA libre (T3).
   const ai = await generateAiReply(input, config, faqs);
-  if (ai) return ai;
+  // ws1-t5 — la IA libre no ve la agenda. Si entendió que el paciente quiere
+  // cita (aunque lo dijera con palabras que la heurística de (3) no caza),
+  // devuelve BOOK_APPOINTMENT sin texto y aquí pasa al flujo de agenda real.
+  // Nunca se manda un horario inventado por el modelo.
+  if (ai && ai.intent === BotIntent.BOOK_APPOINTMENT && !ai.reply) {
+    if (config.canBookAppointments) {
+      const booking = await handleBookingTurn(input, config);
+      if (booking) return booking;
+    }
+  } else if (ai) {
+    return ai;
+  }
 
   // 5) Nada respondió → derivar a humano.
   if (config.fallbackToHuman) return { intent: BotIntent.HANDOFF, handoff: true };
