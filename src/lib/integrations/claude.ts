@@ -18,11 +18,41 @@ export interface ChatMessage {
   content: string;
 }
 
+/**
+ * Bloque de system con caché opcional. La API cachea el prefijo hasta el
+ * último bloque marcado: lo fijo va primero con `cache_control` y lo que cambia
+ * en cada llamada (fecha, hora) después, sin marca.
+ */
+export interface SystemBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface ChatInput {
   messages: ChatMessage[];
-  system?: string;
+  /** Texto plano o bloques (para prompt caching). */
+  system?: string | SystemBlock[];
   maxTokens?: number;
   model?: string;
+  /**
+   * Razonamiento. Claude Sonnet 5 corre con razonamiento ADAPTATIVO si no se
+   * manda nada (Sonnet 4.6 no); para respuestas cortas de chat se apaga con
+   * `{ type: "disabled" }`. Sin el campo, el cuerpo sale igual que siempre.
+   */
+  thinking?: { type: "disabled" } | { type: "adaptive" };
+  /** Corta la petición HTTP de verdad (no solo deja de esperarla). */
+  signal?: AbortSignal;
+}
+
+/** Texto total del system, sea string o bloques (para estimar tamaño). */
+export function systemText(system: ChatInput["system"]): string {
+  if (!system) return "";
+  return typeof system === "string" ? system : system.map((b) => b.text).join("\n");
+}
+
+function hasSystem(system: ChatInput["system"]): boolean {
+  return typeof system === "string" ? system.length > 0 : Array.isArray(system) && system.length > 0;
 }
 
 export interface ChatResult {
@@ -55,9 +85,11 @@ export async function chat(input: ChatInput): Promise<ChatResult> {
       body: JSON.stringify({
         model: input.model ?? DEFAULT_MODEL,
         max_tokens: input.maxTokens ?? 1024,
-        ...(input.system ? { system: input.system } : {}),
+        ...(hasSystem(input.system) ? { system: input.system } : {}),
+        ...(input.thinking ? { thinking: input.thinking } : {}),
         messages: input.messages,
       }),
+      ...(input.signal ? { signal: input.signal } : {}),
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
@@ -73,6 +105,8 @@ export async function chat(input: ChatInput): Promise<ChatResult> {
       cacheRead: data.usage?.cache_read_input_tokens,
     };
   } catch (err) {
+    // Abortada (timeout del llamador): error explícito para que nadie la cobre.
+    if (input.signal?.aborted) return { text: "", error: "claude_aborted" };
     return { text: "", error: err instanceof Error ? err.message : "chat_failed" };
   }
 }
@@ -109,7 +143,7 @@ export async function chatStream(input: ChatInput): Promise<ReadableStream<Uint8
       model: input.model ?? DEFAULT_MODEL,
       max_tokens: input.maxTokens ?? 1024,
       stream: true,
-      ...(input.system ? { system: input.system } : {}),
+      ...(hasSystem(input.system) ? { system: input.system } : {}),
       messages: input.messages,
     }),
   });

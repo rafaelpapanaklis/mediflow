@@ -14,7 +14,10 @@
  *    la zona de la clínica;
  *  - si el modelo pide agenda, el paciente NO recibe texto del modelo: pasa
  *    al flujo de agenda real; sin agendado encendido, se deriva a una persona;
- *  - «quisiera una cita» entra a la agenda sin pasar por la IA.
+ *  - «quisiera una cita» entra a la agenda sin pasar por la IA;
+ *  - #4: al derivar, el paciente recibe un aviso y queda la marca de handoff;
+ *  - #9: fuera de horario se contesta FAQ y agenda, y el aviso sale 1 vez al día;
+ *  - #14: «a», «de», «ta» no casan con ninguna FAQ.
  */
 import Module from "node:module";
 import path from "node:path";
@@ -26,9 +29,13 @@ type Fila = Record<string, any>;
 
 const estado = {
   config: null as Fila | null,
-  textoModelo: "",
+  textoModelo: "" as string | null,
   prompts: [] as string[],
   agenda: [] as string[],
+  /** Respuesta que da la agenda falsa (null = no aplica). */
+  respuestaAgenda: { reply: "AGENDA-REAL: ¿qué servicio?", intent: "BOOK_APPOINTMENT", newBotState: { step: "service" } } as Fila | null,
+  /** OUT ya enviados en el hilo (para el aviso de fuera de horario). */
+  outs: [] as Fila[],
 };
 
 const prismaDoble = {
@@ -38,13 +45,21 @@ const prismaDoble = {
   inboxThread: {
     findUnique: async () => ({ botActive: true }),
   },
+  inboxMessage: {
+    findFirst: async ({ where }: { where: Fila }) =>
+      estado.outs.find(
+        (m) => m.threadId === where.threadId && m.body === where.body && (!where.sentAt?.gte || m.sentAt >= where.sentAt.gte),
+      ) ?? null,
+  },
 };
 
 const dobles = new Map<string, unknown>([
   [path.join(RAIZ, "src/lib/prisma.ts"), { prisma: prismaDoble }],
   [path.join(RAIZ, "src/lib/ai-billing/meter.ts"), {
-    chatMetered: async (_clinicId: string, _funcion: string, req: { system: string }) => {
-      estado.prompts.push(req.system);
+    chatMetered: async (_clinicId: string, _funcion: string, req: { system: string | Array<{ text: string }> }) => {
+      estado.prompts.push(typeof req.system === "string" ? req.system : req.system.map((b) => b.text).join("\n"));
+      // null = la IA falla (timeout, sin saldo…)
+      if (estado.textoModelo === null) return { text: "", error: "claude_aborted", mock: false };
       return { text: estado.textoModelo, error: null, mock: false };
     },
   }],
@@ -54,7 +69,7 @@ const dobles = new Map<string, unknown>([
     isBookingInProgress: () => false,
     handleBookingTurn: async (input: { incomingText: string }) => {
       estado.agenda.push(input.incomingText);
-      return { reply: "AGENDA-REAL: ¿qué servicio?", intent: "BOOK_APPOINTMENT", newBotState: { step: "service" } };
+      return estado.respuestaAgenda ? { ...estado.respuestaAgenda } : null;
     },
   }],
   [path.join(RAIZ, "src/lib/whatsapp/bot/saldo.ts"), {
@@ -114,6 +129,8 @@ beforeEach(() => {
   estado.textoModelo = "";
   estado.prompts.length = 0;
   estado.agenda.length = 0;
+  estado.outs.length = 0;
+  estado.respuestaAgenda = { reply: "AGENDA-REAL: ¿qué servicio?", intent: "BOOK_APPOINTMENT", newBotState: { step: "service" } };
 });
 
 const turno = (incomingText: string) =>
@@ -161,7 +178,8 @@ test("aunque el modelo diga agenda con el agendado apagado, nunca se agenda ni s
   estado.textoModelo = "__AGENDA__";
   const r = await turno("una cita porfa");
   assert.equal(estado.agenda.length, 0);
-  assert.equal(r.reply, undefined);
+  // #4: ya no es mudo — sale el aviso de handoff, nunca el centinela.
+  assert.equal(r.reply, "Te comunico con el equipo de la clínica, en breve te responden. 🙋");
   assert.equal(r.handoff, true);
 });
 
@@ -170,4 +188,92 @@ test("«quisiera una cita» entra a la agenda sin gastar IA", async () => {
   assert.equal(estado.prompts.length, 0);
   assert.equal(estado.agenda.length, 1);
   assert.equal(r.reply, "AGENDA-REAL: ¿qué servicio?");
+});
+
+/* ── #4 handoff con aviso ───────────────────────────────────────────── */
+
+test("#4: si la IA falla, el paciente recibe el aviso y el hilo queda marcado", async () => {
+  estado.textoModelo = null;
+  const r = await turno("¿atienden niños de 3 años?");
+  assert.equal(r.handoff, true);
+  assert.equal(r.reply, "Te comunico con el equipo de la clínica, en breve te responden. 🙋");
+  assert.match(JSON.stringify(r.newBotState), /"handoff":\{"at":"[^"]+","motivo":"sin_respuesta"\}/);
+});
+
+test("#4: si el modelo pide una persona, también hay aviso y marca", async () => {
+  estado.textoModelo = "__HANDOFF__";
+  const r = await turno("quiero hablar con el doctor");
+  assert.equal(r.handoff, true);
+  assert.equal(r.reply, "Te comunico con el equipo de la clínica, en breve te responden. 🙋");
+  assert.match(JSON.stringify(r.newBotState), /"motivo":"modelo"/);
+});
+
+test("#4: el handoff de la agenda conserva su texto y suma la marca", async () => {
+  estado.respuestaAgenda = { reply: "Creo que será más fácil si te ayuda una persona.", intent: "BOOK_APPOINTMENT", handoff: true, newBotState: null };
+  const r = await turno("quiero agendar");
+  assert.equal(r.reply, "Creo que será más fácil si te ayuda una persona.");
+  assert.equal(r.handoff, true);
+  assert.match(JSON.stringify(r.newBotState), /"motivo":"agenda"/);
+});
+
+test("#4: sin derivación a humano configurada, no hay aviso ni pausa", async () => {
+  estado.config = configBase({ fallbackToHuman: false });
+  estado.textoModelo = null;
+  const r = await turno("¿atienden niños?");
+  assert.equal(r.reply, undefined);
+  assert.equal(r.handoff, undefined);
+});
+
+/* ── #14 matchFaq con textos cortos ─────────────────────────────────── */
+
+const FAQS = [
+  { id: "f1", question: "¿Aceptan tarjeta de crédito?", answer: "Sí, todas las tarjetas.", enabled: true, order: 0 },
+  { id: "f2", question: "¿Dónde están ubicados?", answer: "En Av. Siempre Viva 123.", enabled: true, order: 1 },
+];
+
+for (const corto of ["a", "de", "ta", "ok", "si"]) {
+  test(`#14: «${corto}» no dispara ninguna FAQ`, async () => {
+    estado.config = configBase({ faqs: FAQS });
+    estado.textoModelo = "Hola, ¿en qué te ayudo?";
+    const r = await turno(corto);
+    assert.notEqual(r.intent, "FAQ");
+    assert.equal(r.reply, "Hola, ¿en qué te ayudo?");
+  });
+}
+
+test("#14: una pregunta real sí casa con su FAQ", async () => {
+  estado.config = configBase({ faqs: FAQS });
+  assert.equal((await turno("aceptan tarjeta?")).reply, "Sí, todas las tarjetas.");
+  assert.equal((await turno("¿dónde están ubicados?")).reply, "En Av. Siempre Viva 123.");
+});
+
+/* ── #9 fuera de horario ────────────────────────────────────────────── */
+
+const CERRADO = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [String(d), { enabled: false, open: "09:00", close: "18:00" }]));
+const AVISO_NOCHE = "Estamos cerrados; te respondemos mañana a partir de las 9.";
+
+test("#9: fuera de horario la FAQ se contesta (antes salía el aviso)", async () => {
+  estado.config = configBase({ faqs: FAQS, businessHours: CERRADO, afterHoursMsg: AVISO_NOCHE });
+  assert.equal((await turno("¿dónde están ubicados?")).reply, "En Av. Siempre Viva 123.");
+});
+
+test("#9: fuera de horario se agenda con la agenda real", async () => {
+  estado.config = configBase({ businessHours: CERRADO, afterHoursMsg: AVISO_NOCHE });
+  const r = await turno("quiero una cita");
+  assert.equal(r.reply, "AGENDA-REAL: ¿qué servicio?");
+});
+
+test("#9: el aviso de fuera de horario sale una vez al día; después sigue la IA", async () => {
+  estado.config = configBase({ businessHours: CERRADO, afterHoursMsg: AVISO_NOCHE });
+  estado.textoModelo = "Respuesta de la IA";
+  assert.equal((await turno("hola")).reply, AVISO_NOCHE);
+  assert.equal(estado.prompts.length, 0, "el aviso no gasta IA");
+  estado.outs.push({ threadId: "t1", body: AVISO_NOCHE, sentAt: new Date() });
+  assert.equal((await turno("¿y los domingos?")).reply, "Respuesta de la IA");
+});
+
+test("#9: el aviso de ayer no cuenta para hoy", async () => {
+  estado.config = configBase({ businessHours: CERRADO, afterHoursMsg: AVISO_NOCHE });
+  estado.outs.push({ threadId: "t1", body: AVISO_NOCHE, sentAt: new Date(Date.now() - 30 * 60 * 60 * 1000) });
+  assert.equal((await turno("hola")).reply, AVISO_NOCHE);
 });

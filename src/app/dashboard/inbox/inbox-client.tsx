@@ -106,6 +106,8 @@ interface Thread {
     isInternal: boolean;
   } | null;
   lastInboundAt?: string | null;
+  /** ws1-t5 (#4): el bot derivó y nadie del equipo ha contestado todavía. */
+  esperaPersona?: boolean;
 }
 
 interface Counts {
@@ -665,7 +667,12 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
           for (const th of incoming) {
             const old = byId[th.id];
             byId[th.id] = old
-              ? { ...th, lastMessage: th.lastMessage ?? old.lastMessage, lastInboundAt: th.lastInboundAt ?? old.lastInboundAt }
+              ? {
+                  ...th,
+                  lastMessage: th.lastMessage ?? old.lastMessage,
+                  lastInboundAt: th.lastInboundAt ?? old.lastInboundAt,
+                  esperaPersona: th.esperaPersona ?? old.esperaPersona,
+                }
               : th;
           }
           return Object.keys(byId)
@@ -1976,7 +1983,9 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
                 : th.subject;
               const showHumanChip = th.assignedTo !== null;
               const showBotChip = !showHumanChip && th.channel === "WHATSAPP" && th.botActive;
-              const showUnattended = !showHumanChip && !showBotChip && isUnread;
+              // El bot pasó el hilo a una persona y nadie contestó (#4).
+              const showEsperaPersona = !showHumanChip && !th.botActive && th.esperaPersona === true;
+              const showUnattended = !showHumanChip && !showBotChip && !showEsperaPersona && isUnread;
               return (
                 // div[role=button] y NO <button>: la X de archivar vive DENTRO de la
                 // fila y un <button> anidado es HTML inválido (React revienta en la
@@ -2041,6 +2050,12 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
                         <span className={`${styles.stateChip} ${styles.stateChipAmber}`}>
                           <Pause size={10} strokeWidth={2.4} aria-hidden />
                           {t("inbox.client.chipUnattended")}
+                        </span>
+                      )}
+                      {showEsperaPersona && (
+                        <span className={`${styles.stateChip} ${styles.stateChipAmber}`} title={t("inbox.client.chipWaitsHumanTitle")}>
+                          <User size={10} strokeWidth={2.4} aria-hidden />
+                          {t("inbox.client.chipWaitsHuman")}
                         </span>
                       )}
                       {showBotChip && (

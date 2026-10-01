@@ -5,6 +5,8 @@ import { detectaIntencionDeAgenda } from "./booking-parse";
 import { handleSaldoTurn, isSaldoInProgress } from "./saldo";
 import { getCobranzaSettings } from "@/lib/reminders/config";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
+import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
+import { HANDOFF_AVISO, marcaDeHandoff, type MotivoHandoff } from "./handoff";
 import { BotIntent } from "./types";
 import type {
   BotBusinessHours,
@@ -77,8 +79,17 @@ function normalize(s: string): string {
     .trim();
 }
 
+/**
+ * Un texto así de corto NO puede «estar contenido» en una pregunta: «a», «de»
+ * o «ta» caben dentro de casi cualquier FAQ («¿Aceptan **ta**rjeta…?») y el
+ * paciente recibía una respuesta sin relación (#14 de la auditoría).
+ */
+function esConsultaSuficiente(n: string): boolean {
+  return n.split(" ").length >= 2 || n.length >= 6;
+}
+
 /** Match de FAQ por contención o solapamiento de palabras clave (≥ 60%). */
-function matchFaq(text: string, faqs: BotFaqDTO[]): BotFaqDTO | null {
+export function matchFaq(text: string, faqs: BotFaqDTO[]): BotFaqDTO | null {
   const n = normalize(text);
   if (!n) return null;
   let best: BotFaqDTO | null = null;
@@ -86,7 +97,7 @@ function matchFaq(text: string, faqs: BotFaqDTO[]): BotFaqDTO | null {
   for (const faq of faqs) {
     const q = normalize(faq.question);
     if (!q) continue;
-    if (n.includes(q) || q.includes(n)) return faq;
+    if (n.includes(q) || (esConsultaSuficiente(n) && q.includes(n))) return faq;
     const words = q.split(" ").filter((w) => w.length >= 4);
     if (words.length === 0) continue;
     const hits = words.filter((w) => n.includes(w)).length;
@@ -152,6 +163,7 @@ function detectBookingIntent(text: string): BotIntent | null {
  *   1) Saldo (ws1-t3) si preguntan por dinero y canAnswerBalance.
  *   2) FAQ por reglas (rápido y barato).
  *   3) Agenda (T4) si hay intención de cita y canBookAppointments.
+ *   3b) Fuera de horario: el aviso de la clínica, una vez por hilo y día (#9).
  *   4) IA libre con Claude (T3) como respuesta general; si detecta que el
  *      paciente quiere cita, pasa a (3) en vez de contestar (ws1-t5).
  *   5) Handoff a humano si nada respondió y fallbackToHuman.
@@ -177,7 +189,7 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
   //    agendado a medias debe poder terminarse aunque el cliente escriba tarde.
   if (config.canBookAppointments && isBookingInProgress(input.botState)) {
     const booking = await handleBookingTurn(input, config);
-    if (booking) return booking;
+    if (booking) return conMarcaDeHandoff(booking, "agenda");
   }
 
   // 0b) Saldo a medias en un número compartido: igual que el agendado, se
@@ -186,13 +198,12 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
   //     respuesta a ESO; si cayera en FAQ o en la IA, se quedaría sin respuesta.
   if ((config.canAnswerBalance || config.canAnswerOrthoControl) && isSaldoInProgress(input.botState)) {
     const saldo = await handleSaldoTurn(input, config);
-    if (saldo) return saldo;
+    if (saldo) return conMarcaDeHandoff(saldo, "sin_respuesta");
   }
 
-  // Fuera de horario → mensaje de after-hours (si está configurado).
-  if (config.afterHoursMsg && !isWithinBusinessHours(config.businessHours, timezone, new Date())) {
-    return { reply: config.afterHoursMsg, intent: BotIntent.SMALLTALK };
-  }
+  // ws1-t5 (#9) — Fuera de horario YA NO corta aquí: saldo, FAQ y agenda
+  // funcionan igual que de día (la agenda real solo ofrece huecos reales). El
+  // aviso de horario sustituye a la IA libre, una vez por hilo y día (abajo).
 
   // 1) ¿Preguntan por dinero? Va ANTES que la FAQ a propósito: una FAQ de
   //    precios («¿cuánto cuesta una limpieza?») puede solapar con «¿cuánto
@@ -201,7 +212,7 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
   //    null y el motor sigue exactamente como hoy.
   {
     const saldo = await handleSaldoTurn(input, config);
-    if (saldo) return saldo;
+    if (saldo) return conMarcaDeHandoff(saldo, "sin_respuesta");
   }
 
   // 2) FAQ por reglas.
@@ -215,7 +226,16 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
     const intent = detectBookingIntent(input.incomingText);
     if (intent) {
       const booking = await handleBookingTurn(input, config);
-      if (booking) return booking;
+      if (booking) return conMarcaDeHandoff(booking, "agenda");
+    }
+  }
+
+  // 3b) Fuera de horario (#9): el aviso de la clínica, UNA vez por hilo y por
+  //     día de la clínica. Va en lugar de la IA libre (no gasta IA). Si ya
+  //     salió hoy, se sigue como de día: la IA contesta o se deriva.
+  if (config.afterHoursMsg && !isWithinBusinessHours(config.businessHours, timezone, new Date())) {
+    if (!(await avisoDeHorarioYaSalioHoy(input.threadId, config.afterHoursMsg, timezone))) {
+      return { reply: config.afterHoursMsg, intent: BotIntent.SMALLTALK };
     }
   }
 
@@ -228,13 +248,62 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
   if (ai && ai.intent === BotIntent.BOOK_APPOINTMENT && !ai.reply) {
     if (config.canBookAppointments) {
       const booking = await handleBookingTurn(input, config);
-      if (booking) return booking;
+      if (booking) return conMarcaDeHandoff(booking, "agenda");
     }
+  } else if (ai && ai.handoff) {
+    // El modelo pidió una persona (tema médico, dato que no tiene, «quiero
+    // hablar con alguien»).
+    if (config.fallbackToHuman) return derivar("modelo");
+    return { intent: BotIntent.UNKNOWN };
   } else if (ai) {
     return ai;
   }
 
-  // 5) Nada respondió → derivar a humano.
-  if (config.fallbackToHuman) return { intent: BotIntent.HANDOFF, handoff: true };
+  // 5) Nada respondió (IA apagada, sin saldo, timeout, error) → derivar a una
+  //    persona CON aviso al paciente (#4). La pausa no es para siempre: el
+  //    webhook reactiva el bot si nadie del equipo contesta en 12 h (handoff.ts).
+  if (config.fallbackToHuman) return derivar("sin_respuesta");
   return { intent: BotIntent.UNKNOWN };
+}
+
+/**
+ * #4 — handoff con aviso: el paciente sabe que lo atiende una persona y el
+ * hilo queda con la marca que permite reactivarlo a las 12 h.
+ */
+function derivar(motivo: MotivoHandoff): BotTurnResult {
+  return {
+    reply: HANDOFF_AVISO,
+    intent: BotIntent.HANDOFF,
+    handoff: true,
+    newBotState: marcaDeHandoff(new Date(), motivo),
+  };
+}
+
+/**
+ * Un handoff que viene de la agenda o del saldo conserva SU texto (ya le dice
+ * al paciente que lo atiende una persona) y suma la marca. Si no trae texto,
+ * se usa el aviso estándar: nunca más un handoff mudo.
+ */
+function conMarcaDeHandoff(r: BotTurnResult, motivo: MotivoHandoff): BotTurnResult {
+  if (!r.handoff) return r;
+  return {
+    ...r,
+    reply: r.reply?.trim() ? r.reply : HANDOFF_AVISO,
+    newBotState: marcaDeHandoff(new Date(), motivo),
+  };
+}
+
+/** ¿El aviso de fuera de horario ya salió hoy (día de la clínica) en este hilo? */
+async function avisoDeHorarioYaSalioHoy(threadId: string, body: string, timezone: string): Promise<boolean> {
+  try {
+    const { startUtc } = calendarDayRangeUtc(todayInTz(timezone), timezone);
+    const ya = await prisma.inboxMessage.findFirst({
+      where: { threadId, direction: "OUT", body, sentAt: { gte: startUtc } },
+      select: { id: true },
+    });
+    return !!ya;
+  } catch {
+    // Sin poder comprobarlo, mejor no repetirlo en cada mensaje.
+    return true;
+  }
 }

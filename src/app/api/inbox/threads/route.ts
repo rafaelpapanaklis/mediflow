@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { esperaPersona } from "@/lib/whatsapp/bot/handoff";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -170,6 +171,9 @@ export async function GET(req: NextRequest) {
         tags: true,
         externalId: true,
         botActive: true,
+        // ws1-t5 (#4): la marca de handoff vive en botState; no se expone,
+        // solo se usa para `esperaPersona`.
+        botState: true,
         patient: { select: { id: true, firstName: true, lastName: true } },
         assignedTo: { select: { id: true, firstName: true, lastName: true } },
         _count: { select: { messages: true } },
@@ -179,7 +183,7 @@ export async function GET(req: NextRequest) {
           where: { isInternal: false },
           orderBy: { sentAt: "desc" },
           take: 1,
-          select: { direction: true, sentAt: true, body: true },
+          select: { direction: true, sentAt: true, body: true, sentById: true, externalId: true },
         },
       },
     });
@@ -199,10 +203,12 @@ export async function GET(req: NextRequest) {
 
     // Shape retrocompatible: los campos de siempre + lastMessage/lastInboundAt.
     // El array crudo `messages` (take:1) no se expone al cliente.
-    const threadsPayload = threads.map(({ messages, ...t }) => {
+    const threadsPayload = threads.map(({ messages, botState, ...t }) => {
       const last = messages[0];
       return {
         ...t,
+        // El bot derivó y nadie del equipo ha contestado todavía (#4).
+        esperaPersona: esperaPersona({ botActive: t.botActive, botState, lastMessage: last ?? null }),
         lastMessage: last
           ? {
               direction: last.direction,

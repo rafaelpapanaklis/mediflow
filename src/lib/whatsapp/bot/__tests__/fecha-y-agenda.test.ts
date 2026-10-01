@@ -17,6 +17,7 @@ import {
   HANDOFF_SENTINEL,
   buildSystemPrompt,
   clasificarRespuesta,
+  errorDeTamanoDePersona,
 } from "../ai-prompt";
 import { detectaIntencionDeAgenda, formatDateHuman, parseDateInput } from "../booking-parse";
 import type { BotConfigDTO, BotTurnInput } from "../types";
@@ -224,4 +225,22 @@ describe("detectaIntencionDeAgenda", () => {
   for (const [texto, esperado] of casos) {
     it(`«${texto}» → ${esperado}`, () => assert.equal(detectaIntencionDeAgenda(texto), esperado));
   }
+});
+
+describe("tope de tamaño de la persona (ws1-t5)", () => {
+  it("hasta 12,000 caracteres se guarda", () => {
+    assert.equal(errorDeTamanoDePersona("x".repeat(12_000), null), null);
+  });
+  it("una persona nueva más larga se rechaza con un mensaje claro (no se recorta)", () => {
+    const e = errorDeTamanoDePersona("x".repeat(16_540), "corta");
+    assert.match(e ?? "", /hasta 12,000 caracteres y estas tienen 16,540/);
+    assert.match(e ?? "", /Preguntas frecuentes/);
+  });
+  it("la persona larga YA guardada sigue pasando si no se edita (se guarda otro campo)", () => {
+    const larga = "y".repeat(16_540);
+    assert.equal(errorDeTamanoDePersona(`${larga}  `, larga), null);
+  });
+  it("sin persona en el cuerpo no hay nada que validar", () => {
+    assert.equal(errorDeTamanoDePersona(undefined, "z".repeat(20_000)), null);
+  });
 });

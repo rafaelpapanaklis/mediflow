@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateBotConfig, toConfigDTO, toFaqDTO, buildConfigUpdate } from "./service";
+import { errorDeTamanoDePersona, PERSONA_MAX_CARACTERES } from "@/lib/whatsapp/bot/ai-prompt";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,21 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Garantiza que exista la fila antes del update (idempotente).
-  await getOrCreateBotConfig(ctx.clinicId);
+  const actual = await getOrCreateBotConfig(ctx.clinicId);
+
+  // Tope de tamaño de la persona (ws1-t5): no se recorta en silencio, se
+  // rechaza con un mensaje que la pantalla muestra tal cual. Si la persona no
+  // cambió (se guarda otro campo), pasa aunque sea larga.
+  const errorPersona = errorDeTamanoDePersona(
+    typeof body.persona === "string" ? body.persona : undefined,
+    actual.persona,
+  );
+  if (errorPersona) {
+    return NextResponse.json(
+      { error: errorPersona, code: "persona_demasiado_larga", max: PERSONA_MAX_CARACTERES },
+      { status: 400 },
+    );
+  }
 
   const data = buildConfigUpdate(body);
   const updated = await prisma.whatsAppBotConfig.update({

@@ -10,7 +10,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { BotConfigDTO, BotFaqDTO, BotBusinessHours } from "@/lib/whatsapp/bot/types";
 import { PERSONA_TEMPLATES } from "./persona-templates";
-import { PERSONA_AVISO_CARACTERES } from "@/lib/whatsapp/bot/ai-prompt";
+import { PERSONA_AVISO_CARACTERES, PERSONA_MAX_CARACTERES } from "@/lib/whatsapp/bot/ai-prompt";
 import { BotRediseno } from "@/components/dashboard/whatsapp-rediseno/bot";
 
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
@@ -247,7 +247,9 @@ export function BotClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Error");
+      // El servidor manda un texto legible (p. ej. el tope de la persona): se
+      // muestra ese, no el JSON crudo.
+      if (!res.ok) throw new Error((res.status === 403 ? SIN_PERMISO : await textoDeError(res)) || "Error");
       const data: { config: BotConfigDTO } = await res.json();
       setConfig(data.config);
       setForm(editableFromConfig(data.config));
@@ -585,21 +587,30 @@ export function BotClient({
                 value={form.persona}
                 onChange={(e) => setForm((f) => ({ ...f, persona: e.target.value }))}
               />
-              {/* ws1-t5 — tamaño de la persona. No se recorta; se avisa: unas
-                  instrucciones muy largas diluyen las reglas del sistema y el
-                  bot responde peor (ticket BEVADENT, ~16,500 caracteres). */}
-              <div
-                style={{
-                  fontSize: 11,
-                  marginTop: 4,
-                  color: form.persona.length > PERSONA_AVISO_CARACTERES ? "var(--warning, #b45309)" : "var(--text-3)",
-                }}
-              >
-                {form.persona.length.toLocaleString("es-MX")} caracteres
-                {form.persona.length > PERSONA_AVISO_CARACTERES
-                  ? ` · Son muchas instrucciones: el bot las sigue mejor si son cortas (menos de ${PERSONA_AVISO_CARACTERES.toLocaleString("es-MX")}). Deja aquí el tono y las reglas, y pon precios, horarios y datos en Preguntas frecuentes. No hace falta explicarle la agenda ni la fecha: el sistema ya se las da.`
-                  : null}
-              </div>
+              {/* ws1-t5 — tamaño de la persona. Hasta PERSONA_AVISO_CARACTERES no
+                  se dice nada; de ahí al tope, un aviso; por encima del tope la
+                  API no deja GUARDAR una persona nueva o editada (una ya
+                  guardada más larga sigue funcionando). Nunca se recorta. */}
+              {(() => {
+                const largo = form.persona.trim().length;
+                const guardada = (config?.persona ?? "").trim();
+                const pasaTope = largo > PERSONA_MAX_CARACTERES;
+                const editada = form.persona.trim() !== guardada;
+                const color = pasaTope ? "var(--danger, #dc2626)" : largo > PERSONA_AVISO_CARACTERES ? "var(--warning, #d97706)" : "var(--text-3)";
+                const n = (x: number) => x.toLocaleString("es-MX");
+                return (
+                  <div style={{ fontSize: 11, marginTop: 4, color }} role={pasaTope ? "alert" : undefined}>
+                    {n(largo)} / {n(PERSONA_MAX_CARACTERES)} caracteres
+                    {pasaTope && editada
+                      ? ` · Pasa del máximo: no se puede guardar así. Recórtalas: deja el tono y las reglas de atención, y pasa precios, horarios y datos a Preguntas frecuentes.`
+                      : pasaTope
+                        ? ` · Pasa del máximo. El bot las sigue usando tal cual, pero las sigue mejor si son cortas; para editarlas tendrás que dejarlas en ${n(PERSONA_MAX_CARACTERES)} o menos.`
+                        : largo > PERSONA_AVISO_CARACTERES
+                          ? ` · Son muchas instrucciones: el bot las sigue mejor si son cortas (menos de ${n(PERSONA_AVISO_CARACTERES)}). Deja aquí el tono y las reglas, y pon precios, horarios y datos en Preguntas frecuentes. No hace falta explicarle la agenda ni la fecha: el sistema ya se las da.`
+                          : null}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="field-new">

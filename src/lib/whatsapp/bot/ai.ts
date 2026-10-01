@@ -3,7 +3,7 @@ import { canSpend } from "@/lib/ai-billing/wallet";
 import { funcionIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { BotIntent } from "./types";
 import type { GenerateAiReply } from "./types";
-import { buildMessages, buildSystemPrompt, clasificarRespuesta } from "./ai-prompt";
+import { buildMessages, buildSystemBlocks, clasificarRespuesta } from "./ai-prompt";
 
 /**
  * T3 — Respuesta libre del bot de WhatsApp con Claude (Anthropic).
@@ -31,22 +31,31 @@ import { buildMessages, buildSystemPrompt, clasificarRespuesta } from "./ai-prom
  * SIN reply: el motor lo toma como «pasa al flujo de agenda real».
  */
 
-// Modelo barato y rápido para chat (es además el default de chat(); lo fijamos
-// explícito por claridad).
-const CHAT_MODEL = "claude-sonnet-4-6";
-// Salida modesta: las respuestas de WhatsApp son de 1-3 frases.
-const MAX_TOKENS = 300;
-// Red de seguridad ante cuelgues de red: si Claude no responde a tiempo,
-// devolvemos null y el motor hace handoff en lugar de trabar el webhook.
-const AI_TIMEOUT_MS = 12_000;
+// ws1-t5 — Claude Sonnet 5 (aprobado por Rafael el 1-oct-2026): $2/$10 por
+// MTok contra $3/$15 de Sonnet 4.6, y sigue mejor las instrucciones. Su
+// tokenizador cuenta ~30% más tokens por el mismo texto, así que el ahorro
+// real ronda el 13%, no el 33%. Precio en ai-billing/pricing-core.ts.
+export const CHAT_MODEL = "claude-sonnet-5";
+// Sin razonamiento: en Sonnet 5, si no se manda `thinking`, corre ADAPTATIVO
+// (Sonnet 4.6 no), lo que suma latencia y tokens a una respuesta de 1-3 frases.
+export const CHAT_THINKING = { type: "disabled" } as const;
+// Salida modesta: 1-3 frases. 400 y no 300: el tokenizador de Sonnet 5 cuenta
+// más tokens por la misma frase.
+const MAX_TOKENS = 400;
+// Red de seguridad ante cuelgues de red: si Claude no responde a tiempo, la
+// petición se ABORTA de verdad (#8): no se cobra una respuesta que no se manda.
+export const AI_TIMEOUT_MS = 12_000;
+// Respaldo por si el fetch ignorara el abort: medio segundo después.
+const AI_TIMEOUT_RESPALDO_MS = AI_TIMEOUT_MS + 500;
 
 export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
   try {
     const incoming = input.incomingText?.trim();
     if (!incoming) return null; // nada que responder
 
-    // La fecha se calcula aquí, en cada turno: nunca un texto fijo.
-    const system = buildSystemPrompt(input, config, faqs, new Date());
+    // La fecha se calcula aquí, en cada turno: nunca un texto fijo. En dos
+    // bloques: lo fijo de la clínica con caché, la fecha al final sin caché.
+    const system = buildSystemBlocks(input, config, faqs, new Date());
     const messages = buildMessages(input.history, incoming);
 
     // La clínica apagó la respuesta libre en Saldo de IA (ws1-t1): no llamamos
@@ -58,22 +67,30 @@ export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
     // llamamos a Claude — el motor cae a handoff y la FAQ por reglas sigue gratis.
     if (!(await canSpend(input.clinicId))) return null;
 
-    const result = await withTimeout(
-      chatMetered(
-        input.clinicId,
-        "whatsapp_bot",
-        { system, messages, model: CHAT_MODEL, maxTokens: MAX_TOKENS },
-        input.threadId,
-      ),
-      AI_TIMEOUT_MS,
-    );
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+    let result;
+    try {
+      result = await withTimeout(
+        chatMetered(
+          input.clinicId,
+          "whatsapp_bot",
+          { system, messages, model: CHAT_MODEL, maxTokens: MAX_TOKENS, thinking: CHAT_THINKING, signal: abort.signal },
+          input.threadId,
+        ),
+        AI_TIMEOUT_RESPALDO_MS,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
 
     // Timeout, error de red/API, o stub sin ANTHROPIC_API_KEY ⇒ derivar a humano.
     if (!result || result.error || result.mock) return null;
 
     const clase = clasificarRespuesta(result.text ?? "");
-    // El modelo pidió derivar (tema delicado / fuera de su alcance) o no dijo nada.
-    if (clase.tipo === "handoff") return null;
+    // El modelo pidió una persona (tema delicado / fuera de su alcance): se
+    // distingue de un fallo para que el motor lo anote como tal.
+    if (clase.tipo === "handoff") return { intent: BotIntent.HANDOFF, handoff: true };
     // Quiere cita: sin reply, el motor lo pasa a la agenda real (engine.ts).
     if (clase.tipo === "agenda") return { intent: BotIntent.BOOK_APPOINTMENT };
 

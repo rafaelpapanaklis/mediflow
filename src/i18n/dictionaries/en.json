@@ -5423,6 +5423,8 @@
       "emptyThreadsIn": "No conversations in {folder}.",
       "previewBotPrefix": "Bot:",
       "chipUnattended": "Unattended",
+      "chipWaitsHuman": "Waiting for a person",
+      "chipWaitsHumanTitle": "The bot handed this conversation to the team. If nobody replies within 12 h, the bot takes over again.",
       "chipBotActive": "Bot active",
       "unreadAria": "Unread",
       "yesterday": "yesterday",

@@ -1,5 +1,5 @@
 import "server-only";
-import { chat, type ChatInput, type ChatResult } from "@/lib/integrations/claude";
+import { chat, systemText, type ChatInput, type ChatResult } from "@/lib/integrations/claude";
 import { chargeUsage, estimarCostoCents, liberarReserva, reservarSaldo, type ReservaSaldo } from "./wallet";
 import { tokensPorTexto } from "./reserva-core";
 import { AI_FEATURE_WHATSAPP_BOT } from "./types";
@@ -36,7 +36,7 @@ export async function chatMetered(
   const model = input.model ?? MODELO_POR_DEFECTO;
   let reserva: ReservaSaldo | null;
   try {
-    const caracteres = (input.system ?? "").length + JSON.stringify(input.messages ?? []).length;
+    const caracteres = systemText(input.system).length + JSON.stringify(input.messages ?? []).length;
     const estimado = await estimarCostoCents([
       { model, entrada: tokensPorTexto(caracteres), salida: input.maxTokens ?? MAX_TOKENS_POR_DEFECTO },
     ]);
@@ -50,7 +50,9 @@ export async function chatMetered(
   try {
     const result = await chat(input);
 
-    // ¿Llamada facturable? No mock, sin error y con tokens reales.
+    // ¿Llamada facturable? No mock, sin error y con tokens reales. Una llamada
+    // ABORTADA por timeout (#8) vuelve con error: no se cobra, porque la
+    // respuesta nunca llega al paciente.
     const billable = !result.mock && !result.error && result.inputTokens != null;
     if (billable) {
       try {
@@ -60,7 +62,11 @@ export async function chatMetered(
           model,
           inputTokens: result.inputTokens ?? 0,
           outputTokens: result.outputTokens ?? 0,
-          cacheTokens: (result.cacheCreation ?? 0) + (result.cacheRead ?? 0),
+          // Con prompt caching (bot de WhatsApp) las dos cosas cuestan distinto:
+          // leer = 0.1× la entrada, escribir = 1.25×. Antes se sumaban y se
+          // cobraba todo como lectura.
+          cacheTokens: result.cacheRead ?? 0,
+          cacheWriteTokens: result.cacheCreation ?? 0,
           threadId,
         });
       } catch {

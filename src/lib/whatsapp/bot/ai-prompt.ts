@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/integrations/claude";
+import type { ChatMessage, SystemBlock } from "@/lib/integrations/claude";
 import { bloqueFechaActual } from "./fecha-contexto";
 import type { BotConfigDTO, BotFaqDTO, BotHistoryItem, BotTurnInput } from "./types";
 
@@ -36,6 +36,28 @@ const MAX_HISTORY = 10;
  */
 export const PERSONA_AVISO_CARACTERES = 6000;
 
+/**
+ * Tope DURO al guardar (ws1-t5, aprobado por Rafael). La API rechaza una
+ * persona NUEVA o EDITADA más larga, con un mensaje claro; nunca la recorta
+ * en silencio. Una persona ya guardada más larga sigue funcionando tal cual
+ * (el bot la usa entera) y la configuración muestra el aviso.
+ */
+export const PERSONA_MAX_CARACTERES = 12000;
+
+/** Mensaje para la clínica cuando se pasa del tope (null si está bien). */
+export function errorDeTamanoDePersona(nueva: string | null | undefined, actual: string | null | undefined): string | null {
+  if (typeof nueva !== "string") return null;
+  const t = nueva.trim();
+  if (t.length <= PERSONA_MAX_CARACTERES) return null;
+  // La misma persona que ya estaba guardada (se guarda otro campo del form): pasa.
+  if (t === (actual ?? "").trim()) return null;
+  const n = (x: number) => x.toLocaleString("es-MX");
+  return (
+    `Las instrucciones del bot pueden tener hasta ${n(PERSONA_MAX_CARACTERES)} caracteres y estas tienen ${n(t.length)}. ` +
+    "Recórtalas para guardar: deja el tono y las reglas de atención, y pasa precios, horarios y datos de la clínica a Preguntas frecuentes."
+  );
+}
+
 /** Qué hacer con el texto que devolvió el modelo. */
 export type ClaseRespuesta = { tipo: "handoff" } | { tipo: "agenda" } | { tipo: "texto"; texto: string };
 
@@ -56,6 +78,37 @@ export function buildSystemPrompt(
   faqs: BotFaqDTO[],
   now: Date,
 ): string {
+  const { fijo, variable } = partesDelPrompt(input, config, faqs, now);
+  return `${fijo}\n\n${variable}`;
+}
+
+/**
+ * El mismo prompt en dos bloques para el prompt caching (ws1-t5): lo FIJO
+ * de la clínica (reglas + persona + FAQs) con `cache_control`, y lo que
+ * cambia en cada turno (fecha, hora, recordatorio) DESPUÉS y sin marca. La
+ * caché es por prefijo: si la fecha fuera arriba, ningún turno la reusaría.
+ * Debajo del mínimo cacheable del modelo (1,024 tokens en Sonnet 5) la API
+ * simplemente no cachea; no falla.
+ */
+export function buildSystemBlocks(
+  input: BotTurnInput,
+  config: BotConfigDTO,
+  faqs: BotFaqDTO[],
+  now: Date,
+): SystemBlock[] {
+  const { fijo, variable } = partesDelPrompt(input, config, faqs, now);
+  return [
+    { type: "text", text: fijo, cache_control: { type: "ephemeral" } },
+    { type: "text", text: variable },
+  ];
+}
+
+function partesDelPrompt(
+  input: BotTurnInput,
+  config: BotConfigDTO,
+  faqs: BotFaqDTO[],
+  now: Date,
+): { fijo: string; variable: string } {
   const botName = config.botName?.trim() || "Asistente";
   const persona = config.persona?.trim();
   const greeting = config.greeting?.trim();
@@ -84,9 +137,6 @@ export function buildSystemPrompt(
       : `- Si el paciente quiere agendar, reagendar o cambiar una cita, o pregunta qué días u horarios hay disponibles: responde EXACTAMENTE ${HANDOFF_SENTINEL} (solo eso). Una persona del equipo lo atiende.`,
     "- Tienes la fecha y la hora reales al final de este mensaje. Úsalas: si preguntan qué día, mes, año u hora es, contesta con ese dato. Nunca digas que no tienes acceso a la fecha.",
     "- No menciones fechas pasadas ni de otro mes o año salvo que el paciente las pida.",
-    patientFirst
-      ? `- El paciente se llama ${patientFirst}; salúdalo por su nombre con naturalidad cuando encaje.`
-      : null,
     `- Si te preguntan un dato de la clínica que NO está abajo, o algo médico, o piden hablar con una persona/humano: NO improvises y responde EXACTAMENTE ${HANDOFF_SENTINEL} (solo eso, sin más texto).`,
     "",
     "INSTRUCCIONES DE LA CLÍNICA (tono, estilo y datos; si algo choca con las REGLAS DEL SISTEMA, mandan las reglas):",
@@ -95,13 +145,21 @@ export function buildSystemPrompt(
     "",
     "INFORMACIÓN DE LA CLÍNICA (preguntas frecuentes):",
     faqBlock,
-    "",
+  ];
+
+  // Lo que cambia en cada turno va aparte y al final (fuera de la caché).
+  // El nombre del paciente también: es por conversación, no por clínica.
+  const variable = [
     bloqueFechaActual(now, config.timezone),
     "",
+    patientFirst ? `El paciente se llama ${patientFirst}; salúdalo por su nombre con naturalidad cuando encaje.` : null,
     `RECUERDA: 1 a 3 frases; nada inventado; nunca ofrezcas horarios ni digas que revisas la agenda (para citas responde solo ${centinelaCita}); si no lo sabes, ${HANDOFF_SENTINEL}.`,
   ];
 
-  return lines.filter((l): l is string => l !== null).join("\n");
+  return {
+    fijo: lines.filter((l): l is string => l !== null).join("\n"),
+    variable: variable.filter((l): l is string => l !== null).join("\n"),
+  };
 }
 
 /**

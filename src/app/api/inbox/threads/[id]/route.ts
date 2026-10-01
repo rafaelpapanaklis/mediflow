@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -155,7 +156,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     if (parsed.data.subject !== undefined) data.subject = parsed.data.subject;
     if (parsed.data.tags !== undefined) data.tags = parsed.data.tags;
-    if (parsed.data.botActive !== undefined) data.botActive = parsed.data.botActive;
+    if (parsed.data.botActive !== undefined) {
+      data.botActive = parsed.data.botActive;
+      // ws1-t5 (#4): una persona movió el interruptor → la pausa (o la
+      // reactivación) es suya. Se borra la marca de handoff para que el bot no
+      // se reactive solo a las 12 h encima de esa decisión.
+      data.botState = Prisma.DbNull;
+    }
 
     const updated = await prisma.inboxThread.update({
       where: { id: params.id },
