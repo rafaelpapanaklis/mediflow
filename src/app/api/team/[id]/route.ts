@@ -1,9 +1,8 @@
+import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimitsForClinic } from "@/lib/plans";
-import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -129,16 +128,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // — un error del gate no puede impedirle a un admin reactivar a su equipo.
   if (body.isActive === true && member.isActive === false) {
     try {
-      const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: CLINIC_OVERRIDE_SELECT });
-      const { maxUsers } = await getPlanLimitsForClinic(clinicPlan);
-      if (maxUsers != null) {
-        const activeUsers = await prisma.user.count({ where: { clinicId: ctx!.clinicId, isActive: true } });
-        if (activeUsers >= maxUsers) {
-          return NextResponse.json(
-            { error: `Tu plan incluye ${maxUsers} usuario(s) activo(s). Desactiva a alguien más o sube de plan para reactivar a este miembro.`, code: "PLAN_LIMIT_USERS", limit: maxUsers },
-            { status: 402 },
-          );
-        }
+      const cupo = await getCupoUsuarios(ctx!.clinicId);
+      if (cupo.lleno) {
+        return NextResponse.json(
+          { error: `Tu plan incluye ${cupo.max} usuario(s) activo(s). Desactiva a alguien más o sube de plan para reactivar a este miembro.`, code: "PLAN_LIMIT_USERS", limit: cupo.max },
+          { status: 402 },
+        );
       }
     } catch (e) {
       console.error("[api/team/[id] PATCH] no se pudo validar el tope de usuarios, se deja pasar:", e);

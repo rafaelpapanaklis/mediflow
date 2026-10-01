@@ -13,6 +13,7 @@ import { useLocale } from "@/i18n/i18n-provider";
 const es = {
   // Alta
   agregarMiembro: "Agregar miembro",
+  cupoDeUsuarios: (usados: number, max: number) => `${usados} de ${max} usuarios de tu plan`,
   altaIntro: "Se crea su cuenta al instante y verás una contraseña temporal para entregársela. No se envía ninguna invitación por correo.",
   emailHintAlta: "Es el correo con el que inicia sesión. La contraseña temporal aparece al crear la cuenta.",
   crearCuenta: "Crear cuenta",
@@ -65,6 +66,7 @@ const es = {
 
 const en: typeof es = {
   agregarMiembro: "Add member",
+  cupoDeUsuarios: (usados, max) => `${usados} of ${max} users in your plan`,
   altaIntro: "Their account is created instantly and you'll get a temporary password to hand over. No invitation email is sent.",
   emailHintAlta: "This is the email they sign in with. The temporary password appears when the account is created.",
   crearCuenta: "Create account",

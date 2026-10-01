@@ -1,9 +1,8 @@
+import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { getPlanLimitsForClinic } from "@/lib/plans";
-import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -98,16 +97,12 @@ export async function POST(req: NextRequest) {
   // Tope de usuarios por plan (enforcement). maxUsers null = ilimitado.
   // Con las condiciones conservadas de la clínica (una Básica de antes sigue
   // con 2 usuarios aunque el plan nuevo diga 3): getPlanLimitsForClinic.
-  const clinicPlan = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: CLINIC_OVERRIDE_SELECT });
-  const { maxUsers } = await getPlanLimitsForClinic(clinicPlan);
-  if (maxUsers != null) {
-    const activeUsers = await prisma.user.count({ where: { clinicId: ctx!.clinicId, isActive: true } });
-    if (activeUsers >= maxUsers) {
-      return NextResponse.json(
-        { error: `Tu plan incluye ${maxUsers} usuario(s). Sube de plan para agregar más miembros.`, code: "PLAN_LIMIT_USERS", limit: maxUsers },
-        { status: 402 },
-      );
-    }
+  const cupo = await getCupoUsuarios(ctx!.clinicId);
+  if (cupo.lleno) {
+    return NextResponse.json(
+      { error: `Tu plan incluye ${cupo.max} usuario(s). Sube de plan para agregar más miembros.`, code: "PLAN_LIMIT_USERS", limit: cupo.max },
+      { status: 402 },
+    );
   }
 
   // ws1-t3 — «¿solo dental o también ortodoncista?». Solo cuenta para un DOCTOR

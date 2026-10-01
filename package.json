@@ -92,6 +92,7 @@
     "test:suplantacion": "tsx --test --experimental-test-module-mocks src/lib/admin/__tests__/suplantacion.test.ts",
     "test:equipo-revision-final": "tsx --test src/lib/team/__tests__/equipo-revision-final.test.ts",
     "test:team-sin-cuenta": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cambio-correo-sin-cuenta.test.ts",
+    "test:team-cupo": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cupo-usuarios.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
     "test:permissions-modal-titulo": "tsx --test src/components/dashboard/team/__tests__/permissions-modal-titulo.test.ts",
     "test:vendor-fields": "tsx --test src/lib/b2b/__tests__/vendor-fields.test.ts",

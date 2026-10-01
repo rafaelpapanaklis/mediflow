@@ -8,6 +8,9 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { horarioClinica } from "@/components/dashboard/horario-doctor/tipos";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
+import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
+import { getOpcionesSubida } from "@/lib/team/opciones-subida";
+import { isClinicBillingAdmin } from "@/lib/billing/authz";
 
 export const metadata: Metadata = { title: "Equipo — DaleControl" };
 
@@ -32,7 +35,7 @@ export default async function TeamPage() {
   // del mismo Promise.all, con el clinicId de la sesión.
   // ws1-t3: la pregunta «¿solo dental o también ortodoncista?» solo se hace si la
   // sede es dental y tiene el módulo contratado de verdad (sin el atajo de trial).
-  const [team, rediseno, horarios, ortoModulo] = await Promise.all([
+  const [team, rediseno, horarios, ortoModulo, cupo, subida] = await Promise.all([
     prisma.user.findMany({
       where: { clinicId: user.clinicId },
       select: {
@@ -62,6 +65,10 @@ export default async function TeamPage() {
       orderBy: { dayOfWeek: "asc" },
     }),
     user.clinic.category === "DENTAL" ? hasActiveOrthodonticsModule(user.clinicId).catch(() => false) : Promise.resolve(false),
+    // El MISMO conteo que usa el servidor al crear/reactivar (getCupoUsuarios): la
+    // pantalla avisa antes de llenar el formulario, no al guardar.
+    getCupoUsuarios(user.clinicId),
+    getOpcionesSubida(user.clinicId),
   ]);
 
   return (
@@ -75,6 +82,8 @@ export default async function TeamPage() {
       horarioClinica={horarioClinica(horarios)}
       sedeDental={user.clinic.category === "DENTAL"}
       ortoModulo={ortoModulo}
+      cupo={cupo}
+      subida={{ ...subida, puedeSubir: isClinicBillingAdmin(user.role) }}
     />
   );
 }

@@ -23,6 +23,8 @@ import { tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { accesoParaAlta, accesoQueViaja, seccionModulosVisible, type RespuestaModulo } from "@/lib/team/modulos-especialidades";
 import { prepararImagen } from "@/lib/image-client";
 import { useTextosEquipo } from "./textos-equipo";
+import { UpgradeUsuariosDialog } from "@/components/dashboard/team/upgrade-usuarios-dialog";
+import { cupoDeUsuarios, type CupoUsuarios, type PlanSubida } from "@/lib/team/cupo-usuarios-shared";
 import { validarContrasenaNueva, MAXIMO_CONTRASENA } from "@/lib/team/contrasena-nueva";
 import {
   formDeMiembro, parcheDeCambios, rolLlevaDatosClinicos,
@@ -714,15 +716,20 @@ interface Props {
   sedeDental?: boolean;
   /** ws1-t3: la sede es dental y tiene el módulo de Ortodoncia contratado de verdad. */
   ortoModulo?: boolean;
+  /** ws1-t8: tope de usuarios del plan (misma cuenta que el servidor). */
+  cupo?: CupoUsuarios;
+  /** ws1-t8: datos del aviso de tope — plan actual, planes a los que subir y si esta persona puede pagar. */
+  subida?: { planNombre: string; opciones: PlanSubida[]; puedeSubir: boolean };
 }
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false, cupo, subida }: Props) {
   const t = useT();
   const x = useTextosEquipo();
   const router = useRouter();
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
   const [showNew,    setShowNew]    = useState(false);
+  const [topeAbierto, setTopeAbierto] = useState<null | "alta" | "reactivar">(null);
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
   // Member cuyo modal de permisos está abierto. Solo SUPER_ADMIN puede abrirlo.
   const [permsMember, setPermsMember] = useState<TeamMember | null>(null);
@@ -769,8 +776,16 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   );
 
   const active  = team.filter(m => m.isActive).length;
+  // Misma regla que el servidor (cupoDeUsuarios): con el tope alcanzado ni se abre el formulario.
+  const cupoVivo = cupoDeUsuarios(active, cupo?.max);
   const doctors = team.filter(m => m.role === "DOCTOR" && m.isActive).length;
   const admins  = team.filter(m => (m.role === "ADMIN" || m.role === "SUPER_ADMIN") && m.isActive).length;
+
+  function abrirAlta() {
+    if (cupoVivo.lleno) { setTopeAbierto("alta"); return; }
+    setForm(emptyForm());
+    setShowNew(true);
+  }
 
   async function createDoctor() {
     // Read current form state directly — no stale closure issue
@@ -796,6 +811,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify(cuerpo),
       });
+      if (res.status === 402) { setShowNew(false); setTopeAbierto("alta"); return; }
       const data = await leerRespuestaEquipo(res);
       if (!res.ok) throw new Error(data.error);
       setTeam(prev => [...prev, { ...data, _count:{ appointments:0, records:0 } } as TeamMember]);
@@ -872,6 +888,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
   async function toggleActive(m: TeamMember) {
     if (m.id === currentUserId) { toast.error(t("settings.team.cannotDeactivateSelf")); return; }
+    // Reactivar suma un usuario activo: con el tope alcanzado se avisa ANTES de llamar.
+    if (!m.isActive && cupoVivo.lleno) { setTopeAbierto("reactivar"); return; }
     // Desactivar corta el acceso al instante: se pregunta. Reactivar no hace daño.
     if (m.isActive && !(await askConfirm({
       title: x.desactivarConfirmTitulo(`${m.firstName} ${m.lastName}`),
@@ -884,7 +902,11 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         method:"PATCH", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ isActive: !m.isActive }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const cuerpo = await res.json().catch(() => ({}));
+        if (cuerpo?.code === "PLAN_LIMIT_USERS") { setTopeAbierto("reactivar"); return; }
+        throw new Error();
+      }
       setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, isActive: !m.isActive } : mem));
       toast.success(m.isActive ? x.miembroDesactivado : x.miembroReactivado);
       router.refresh();
@@ -999,9 +1021,14 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
           </h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
             {clinicName} · {t("settings.team.activeMembersCount", { count: active })}
+            {cupoVivo.max != null && (
+              <span data-cupo-usuarios style={{ marginLeft: 8, fontWeight: 600, color: cupoVivo.lleno ? "var(--danger, #dc2626)" : "var(--text-2)" }}>
+                · {x.cupoDeUsuarios(active, cupoVivo.max)}
+              </span>
+            )}
           </p>
         </div>
-        <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={() => { setForm(emptyForm()); setShowNew(true); }}>
+        <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} />} onClick={abrirAlta}>
           {x.agregarMiembro}
         </ButtonNew>
       </div>
@@ -1120,7 +1147,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                 variant="primary"
                 size="sm"
                 icon={<Plus size={16} strokeWidth={1.75} />}
-                onClick={() => { setForm(emptyForm()); setShowNew(true); }}
+                onClick={abrirAlta}
               >
                 {x.agregarMiembro}
               </ButtonNew>
@@ -1266,6 +1293,17 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             );
           })}
         </div>
+      )}
+
+      {topeAbierto && subida && (
+        <UpgradeUsuariosDialog
+          planNombre={subida.planNombre}
+          max={cupoVivo.max}
+          opciones={subida.opciones}
+          puedeSubir={subida.puedeSubir}
+          reactivando={topeAbierto === "reactivar"}
+          onClose={() => setTopeAbierto(null)}
+        />
       )}
 
       {/* New modal */}
