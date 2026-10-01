@@ -4191,7 +4191,19 @@
         "policyOffToast": "2FA is no longer required for the team",
         "policyBlockedDisable": "Your clinic requires 2FA; ask an admin to turn off the policy first.",
         "genericError": "Incorrect code",
-        "errorGeneric": "Couldn't complete. Please try again."
+        "errorGeneric": "Couldn't complete. Please try again.",
+        "ownerForcedTitle": "Two-factor authentication is required for owners",
+        "ownerForcedSubtitle": "To enter the dashboard, set it up now with the authenticator app on your phone. It takes a minute.",
+        "avisoTitle": "Turn on two-factor authentication",
+        "avisoBody": "As the owner of {clinica}, starting {fecha} you will need a code from your phone, in addition to your password, to enter the dashboard.",
+        "avisoPorQue": "That way, even if someone gets your password, they can't open your patients' records without your phone.",
+        "avisoDias": {
+          "one": "You have 1 day left to turn it on.",
+          "other": "You have {count} days left to turn it on."
+        },
+        "avisoActivar": "Turn it on now",
+        "avisoLuego": "Remind me later",
+        "avisoRecuperacion": "When you turn it on we'll give you 10 recovery codes in case you lose your phone."
       }
     },
     "reminders": {

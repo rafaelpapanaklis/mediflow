@@ -4191,7 +4191,19 @@
         "policyOffToast": "Ya no se exige 2FA al equipo",
         "policyBlockedDisable": "Tu clínica exige 2FA; pide a un administrador que desactive la política primero.",
         "genericError": "Código incorrecto",
-        "errorGeneric": "No se pudo completar. Inténtalo de nuevo."
+        "errorGeneric": "No se pudo completar. Inténtalo de nuevo.",
+        "ownerForcedTitle": "La verificación en dos pasos es obligatoria para los dueños",
+        "ownerForcedSubtitle": "Para entrar al panel, configúrala ahora con la app de autenticación de tu celular. Toma un minuto.",
+        "avisoTitle": "Activa la verificación en dos pasos",
+        "avisoBody": "Como dueño de {clinica}, desde el {fecha} necesitarás un código de tu celular, además de tu contraseña, para entrar al panel.",
+        "avisoPorQue": "Así, aunque alguien consiga tu contraseña, no podrá abrir el expediente de tus pacientes sin tu celular.",
+        "avisoDias": {
+          "one": "Te queda 1 día para activarla.",
+          "other": "Te quedan {count} días para activarla."
+        },
+        "avisoActivar": "Activarla ahora",
+        "avisoLuego": "Recordármelo después",
+        "avisoRecuperacion": "Al activarla te daremos 10 códigos de recuperación por si pierdes el celular."
       }
     },
     "reminders": {
