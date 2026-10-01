@@ -123,6 +123,13 @@ function escribir(modelo: string, op: string, args: any): any {
     Object.assign(fila, args.data);
     return conInclude(fila);
   }
+  if (modelo === "appointment" && op === "updateMany") {
+    // El DELETE reclama la fila (M11): where con id + clinicId + status leído; count 1 si sigue igual.
+    const w = args.where ?? {};
+    const filas = m.agenda.filas.appointments.filter((a: any) => a.id === w.id && (w.clinicId === undefined || a.clinicId === w.clinicId) && (w.status === undefined || a.status === w.status));
+    for (const f of filas) Object.assign(f, args.data);
+    return { count: filas.length };
+  }
   if (modelo === "patient" && op === "create") {
     const fila = { id: `p-nuevo-${m.escrituras.length}`, createdAt: new Date(), deletedAt: null, status: "ACTIVE", ...args.data };
     m.agenda.filas.patients.push(fila);
@@ -651,9 +658,9 @@ test("cancelar: recepción lo hace por el DELETE real; un doctor ni siquiera rec
   const c = await confirmar(t.id);
   assert.equal(c.json.propuesta.estado, "hecha", JSON.stringify(c.json.propuesta.resultado));
   assert.match(c.json.propuesta.resultado.frase, /la cita quedó cancelada/);
-  // Un solo UPDATE: la cancelación. Borrar el evento de Google y limpiar su id ya no lo hace
+  // Una sola escritura: la cancelación (el DELETE reclama la fila con updateMany, M11). Borrar el evento de Google y limpiar su id ya no lo hace
   // el handler a mano: lo hace la sincronización, a la que el handler le pide dejar la cita al día.
-  assert.deepEqual(m.escrituras.map((e) => e.op), ["appointment.update"]);
+  assert.deepEqual(m.escrituras.map((e) => e.op), ["appointment.updateMany"]);
   assert.deepEqual(m.google, ["cl-agenda/a-juan-10"]);
   const cita = m.agenda.filas.appointments.find((a: any) => a.id === "a-juan-10");
   assert.equal(cita.status, "CANCELLED");
