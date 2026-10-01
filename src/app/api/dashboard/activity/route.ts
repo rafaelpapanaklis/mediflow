@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
-import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { filtrosDeActividad } from "@/lib/dashboard/actividad-filtros";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { dateISOInTz } from "@/lib/agenda/legacy-helpers";
 import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
@@ -48,11 +48,12 @@ export async function GET(req: NextRequest) {
 
   // Visibilidad por paciente: el feed de actividad NO tiene gate de rol (lo ven
   // doctores y recepción) y expone nombres de pacientes en pagos, altas y citas
-  // completadas. Filtramos por relación con patientNullable (las filas sin
-  // paciente no están restringidas). Va en AND; vacío/null para admins = sin filtro.
+  // completadas. Filtramos por la relación con el paciente; va en AND; vacío
+  // para admins = sin filtro. NO se usa `patientNullable`: facturas, citas y
+  // casos de ortodoncia tienen `patientId` OBLIGATORIO y Prisma rechaza el
+  // `{ patientId: null }` con un 500 (ver actividad-filtros.ts).
   const viewer = { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
-  const patientVis = patientVisibilityAnd(viewer);
-  const relatedVis = relatedPatientVisibilityAnd(viewer, { patientNullable: true });
+  const vis = filtrosDeActividad(viewer);
 
   // Solicitudes de cita SIN cuenta: nadie tiene expediente todavía, así que
   // no hay visibilidad por paciente que aplicar — pero sí hay una persona
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
   // La respuesta del interruptor vive 60 s en memoria por clínica: no es una
   // consulta más por cada sondeo de la campana.
   //
-  // 🔴 patientVis/relatedVis dependen de ctx.userId (visibilidad por
+  // 🔴 `vis` (filtrosDeActividad) depende de ctx.userId (visibilidad por
   // paciente: un doctor sin acceso a un paciente no debe ver su pago/alta/cita
   // aquí). Por eso esta clave lleva clinicId, userId Y rol — cachear solo por
   // clínica haría que un doctor viera lo que ve otro doctor de la misma
@@ -123,20 +124,20 @@ export async function GET(req: NextRequest) {
       async () => {
         const [facturas, pacientes, citas, casosNuevos] = await Promise.all([
           prisma.invoice.findMany({
-            where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(relatedVis.length ? { AND: relatedVis } : {}) },
+            where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(vis.facturas.length ? { AND: vis.facturas } : {}) },
             select: { id: true, paid: true, paymentMethod: true, paidAt: true, updatedAt: true,
               patient: { select: { firstName: true, lastName: true } } },
             orderBy: { paidAt: "desc" },
             take: 10,
           }),
           prisma.patient.findMany({
-            where: { clinicId: ctx.clinicId, ...(patientVis.length ? { AND: patientVis } : {}) },
+            where: { clinicId: ctx.clinicId, ...(vis.pacientes.length ? { AND: vis.pacientes } : {}) },
             select: { id: true, firstName: true, lastName: true, createdAt: true },
             orderBy: { createdAt: "desc" },
             take: 10,
           }),
           prisma.appointment.findMany({
-            where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(relatedVis.length ? { AND: relatedVis } : {}) },
+            where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(vis.citas.length ? { AND: vis.citas } : {}) },
             select: { id: true, updatedAt: true, startsAt: true, type: true, patientId: true,
               patient: { select: { firstName: true, lastName: true } } },
             orderBy: { updatedAt: "desc" },
@@ -150,7 +151,7 @@ export async function GET(req: NextRequest) {
                         where: {
                           clinicId: ctx.clinicId,
                           deletedAt: null,
-                          ...(relatedVis.length ? { AND: relatedVis } : {}),
+                          ...(vis.casosOrtodoncia.length ? { AND: vis.casosOrtodoncia } : {}),
                         },
                         select: {
                           id: true, patientId: true, createdAt: true,

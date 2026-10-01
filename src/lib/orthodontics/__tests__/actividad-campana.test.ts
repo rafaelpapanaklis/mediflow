@@ -87,7 +87,7 @@ test("cableado: la campana lee ortodoncia solo con módulo y permiso, en la clí
     assert.match(c, /deletedAt: null/);
   }
   // Los casos nuevos respetan la visibilidad por paciente, como el resto del feed.
-  assert.match(consultas[0], /relatedVis/);
+  assert.match(consultas[0], /vis\.casosOrtodoncia/);
   // La caché sigue siendo por clínica + persona + rol.
   assert.match(ruta, /claveDeClinica\("activity-recent", ctx\.clinicId, ctx\.userId, ctx\.role\)/);
   // La campana pinta el tipo nuevo.
