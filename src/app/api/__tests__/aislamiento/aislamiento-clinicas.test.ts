@@ -10,6 +10,12 @@
  * memoria del esquema real (ver base-falsa.ts): si un handler LEE o ESCRIBE una
  * fila de B o de C —o la devuelve en la respuesta—, la prueba falla.
  *
+ * Cada ruta se ataca dos veces: con los ids de B en TODAS partes, y —si tiene
+ * id en la URL— en modo MIXTO (id de la URL propio, ids del cuerpo y de la
+ * consulta de B), que es como se ata una fila propia a una ajena. Las rutas del
+ * núcleo (facturas, citas, recetas, pacientes…) llevan un cuerpo de negocio a
+ * mano en `cuerpos.ts` para que lleguen hasta sus consultas.
+ *
  * ── SEDES ───────────────────────────────────────────────────────────────
  * Una sede es su PROPIA fila de `Clinic`; lo que une dos sedes es una PERSONA:
  * el mismo `supabaseId` con una fila `User` activa en cada una (ver
@@ -205,6 +211,7 @@ const rutas = inventarioDeRutas().filter((r) => !filtro || r.archivo.includes(fi
 const fuentes = new Map(rutas.map((r) => [r.archivo, readFileSync(join(RAIZ_API, r.archivo), "utf8")]));
 const resultados: Resultado[] = [];
 const controles: Resultado[] = [];
+const mixtas: Resultado[] = [];
 
 async function sinRuido<T>(f: () => Promise<T>): Promise<T> {
   const previo = { log: console.log, warn: console.warn, error: console.error, info: console.info };
@@ -296,6 +303,22 @@ test("sesión: la cookie de clínica activa no deja entrar a una clínica ajena;
   contexto.cookies = {};
 });
 
+// ── Regresión puntual: el hallazgo que el barrido encontró en POST /api/patients ─
+test("regresión: crear un paciente con doctor de cabecera de OTRA clínica se rechaza; con uno propio, se guarda", async () => {
+  const ruta = rutas.find((r) => r.archivo === "patients/route.ts") ?? inventarioDeRutas().find((r) => r.archivo === "patients/route.ts")!;
+  const fuente = readFileSync(join(RAIZ_API, "patients/route.ts"), "utf8");
+  await sinRuido(async () => {
+    const ajeno = await ejecutarRuta(ruta, "POST", fuente, cargar, { cuerpo: { firstName: "Ana", lastName: "Prueba", primaryDoctorId: `${ID.B}d` } });
+    assert.equal(ajeno.estado, 400, `esperaba 400 y salió ${ajeno.estado}: ${ajeno.respuesta}`);
+    assert.match(ajeno.respuesta ?? "", /INVALID_PRIMARY_DOCTOR/);
+    assert.equal(ajeno.fugas.length, 0, `ató un paciente a un doctor de otra clínica: ${JSON.stringify(ajeno.fugas)}`);
+    const propio = await ejecutarRuta(ruta, "POST", fuente, cargar, { cuerpo: { firstName: "Ana", lastName: "Prueba", primaryDoctorId: `${ID.A}d` } });
+    assert.equal(propio.estado, 201, `con un doctor de la propia clínica debe crear: ${propio.estado} ${propio.respuesta}`);
+    assert.match(propio.respuesta ?? "", new RegExp(`"primaryDoctorId":"${ID.A}d"`));
+    assert.equal(propio.fugas.length, 0);
+  });
+});
+
 // ── El barrido ──────────────────────────────────────────────────────────────
 test("aislamiento: ninguna ruta toca ni devuelve datos de otra clínica", { timeout: 3_600_000 }, async () => {
   await sinRuido(async () => {
@@ -305,6 +328,8 @@ test("aislamiento: ninguna ruta toca ni devuelve datos de otra clínica", { time
         const k = clave(metodo, ruta.patron);
         if (SEDES_DEL_MISMO_DUENO[k]) continue; // se prueban abajo, con sus dos variantes
         resultados.push(await ejecutarRuta(ruta, metodo, fuente, cargar));
+        // Ataque MIXTO: el id de la URL es propio y los ids del cuerpo/consulta son de B.
+        if (Object.keys(ruta.params).length > 0) mixtas.push(await ejecutarRuta(ruta, metodo, fuente, cargar, { mixta: true }));
         // Control positivo POR RUTA: la misma petición con ids de A. Sin él un
         // «404» no dice si la ruta bloqueó a B o simplemente no se deja conducir.
         if (puertaDe(fuente) === "sesion-clinica" && !OTRAS_RAICES.includes(raizDe(ruta.patron))) {
@@ -313,19 +338,20 @@ test("aislamiento: ninguna ruta toca ni devuelve datos de otra clínica", { time
       }
     }
   });
-  if (process.env.AISLAMIENTO_SALIDA) writeFileSync(process.env.AISLAMIENTO_SALIDA, JSON.stringify({ resultados, controles }, null, 1));
+  if (process.env.AISLAMIENTO_SALIDA) writeFileSync(process.env.AISLAMIENTO_SALIDA, JSON.stringify({ resultados, controles, mixtas }, null, 1));
 
   const fallos: string[] = [];
   const usadas = { publicas: new Set<string>(), lectura: new Set<string>() };
-  for (const r of resultados) {
+  for (const r of [...resultados, ...mixtas]) {
     const k = clave(r.metodo, r.ruta);
+    const via = r.mixta ? " [id de la URL propio, ids del cuerpo ajenos]" : "";
     if (r.veredicto === "fuga") {
       if (PUBLICAS_POR_DISENO[k]) { usadas.publicas.add(k); continue; }
       if (LECTURA_Y_COMPROBACION[k]) {
         // Tolerada SOLO si no devolvió nada: ni marcas en la respuesta ni escrituras.
         if (r.marcasEnRespuesta.length === 0 && r.fugas.every((f) => f.tipo === "lectura")) { usadas.lectura.add(k); continue; }
       }
-      fallos.push(`${k} → ${r.estado}: ${r.fugas.slice(0, 3).map((f) => `${f.tipo} ${f.modelo}.${f.operacion} de ${f.dueno}`).join("; ")}${r.marcasEnRespuesta.length ? ` · la respuesta trae datos de ${r.marcasEnRespuesta}` : ""}`);
+      fallos.push(`${k}${via} → ${r.estado}: ${r.fugas.slice(0, 3).map((f) => `${f.tipo} ${f.modelo}.${f.operacion} de ${f.dueno}`).join("; ")}${r.marcasEnRespuesta.length ? ` · la respuesta trae datos de ${r.marcasEnRespuesta}` : ""}`);
     }
     if (r.veredicto === "sin-sesion" && !SIN_SESION_CONOCIDAS.has(k)) {
       fallos.push(`${k} → 401 con sesión válida de A: el arnés no pudo entrar (¿se rompió el doble de la sesión?)`);
@@ -348,9 +374,11 @@ test("cobertura: el control con ids de A conduce a las rutas canario y a la mayo
   }
   const ejercidas = controles.filter((c) => c.estado !== null && c.estado >= 200 && c.estado < 400).length;
   const conBase = controles.filter((c) => c.consultas > 0).length;
-  // Suelo medido el 1-oct-2026 (ver REPORTE-ws1-t10): si baja, se rompió algo del arnés.
-  assert.ok(ejercidas >= 120, `solo ${ejercidas} rutas de sesión se dejan conducir con ids de A (suelo 120)`);
-  assert.ok(conBase >= 400, `solo ${conBase} rutas de sesión llegaron a la base con ids de A (suelo 400)`);
+  // Suelos medidos el 1-oct-2026 (266 y 490; ver REPORTE-ws1-t10): si bajan, se rompió algo del arnés.
+  assert.ok(ejercidas >= 220, `solo ${ejercidas} rutas de sesión se dejan conducir con ids de A (suelo 220)`);
+  assert.ok(conBase >= 430, `solo ${conBase} rutas de sesión llegaron a la base con ids de A (suelo 430)`);
+  const mixtasOk = mixtas.filter((c) => c.estado !== null && c.estado >= 200 && c.estado < 400).length;
+  assert.ok(mixtasOk >= 80, `solo ${mixtasOk} ataques mixtos pasaron del chequeo de su propio id (suelo 80)`);
 });
 
 // ── La excepción: sedes del mismo dueño, y SOLO ellas ───────────────────────

@@ -748,6 +748,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message ?? "visibleUserIds inválido" }, { status: 400 });
   }
 
+  // Doctor de cabecera: si el cuerpo trae uno, tiene que ser un usuario ACTIVO de
+  // ESTA clínica. Sin esto un `primaryDoctorId` de otra clínica se guardaba tal
+  // cual (llave foránea cruzada): el paciente nacía apuntando a un usuario ajeno
+  // y cada lectura con `primaryDoctor` devolvía su nombre. Mismo criterio que el
+  // PATCH de la ficha (id + clinicId de la sesión + isActive).
+  let primaryDoctorId: string | null = ctx.isDoctor ? ctx.userId : null;
+  if (body.primaryDoctorId !== undefined && body.primaryDoctorId !== null && body.primaryDoctorId !== "") {
+    const doctor = typeof body.primaryDoctorId === "string"
+      ? await prisma.user.findFirst({
+          where: { id: body.primaryDoctorId, clinicId: ctx.clinicId, isActive: true },
+          select: { id: true },
+        })
+      : null;
+    if (!doctor) {
+      return NextResponse.json(
+        { error: "El doctor elegido no pertenece a esta clínica.", code: "INVALID_PRIMARY_DOCTOR" },
+        { status: 400 },
+      );
+    }
+    primaryDoctorId = doctor.id;
+  }
+
   // El folio sale del MÁXIMO emitido, no de un COUNT: con huecos por bajas
   // definitivas el count+1 apuntaba a un número ya usado → P2002 → 500 mudo.
   // El retry cubre además dos altas simultáneas de la misma clínica.
@@ -772,7 +794,7 @@ export async function POST(req: NextRequest) {
           chronicConditions: body.chronicConditions ?? [],
           tags: body.tags ?? [],
           isChild: body.isChild ?? false,
-          primaryDoctorId: body.primaryDoctorId ?? (ctx.isDoctor ? ctx.userId : null),
+          primaryDoctorId,
           curp:        body.curp ? String(body.curp).toUpperCase().trim() : null,
           curpStatus,
           passportNo:  body.passportNo ? String(body.passportNo).trim() : null,

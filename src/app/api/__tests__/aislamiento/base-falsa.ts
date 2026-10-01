@@ -40,6 +40,8 @@ interface Campo {
   isRequired: boolean;
   isId: boolean;
   hasDefaultValue: boolean;
+  /** Valor por defecto del esquema: un literal, o `{ name: "now" | "cuid" | … }` para los generados. */
+  default?: unknown;
   relationName?: string;
   relationFromFields?: readonly string[];
   relationToFields?: readonly string[];
@@ -89,7 +91,18 @@ type Fila = Record<string, any>;
 const FECHA = new Date("2026-06-15T12:00:00.000Z");
 
 /** Valores que NO conviene dejar al azar del primer valor del enum. */
+/** Un día laborable a unos días de hoy, 11:00 hora de México (17:00 UTC): una cita FUTURA y dentro de horario. */
+export function proximaCita(): Date {
+  const d = new Date(Date.now() + 10 * 864e5);
+  d.setUTCHours(17, 0, 0, 0);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setTime(d.getTime() + 864e5);
+  return d;
+}
+
 const FIJOS: Record<string, any> = {
+  "Appointment.startsAt": proximaCita(),
+  "Appointment.endsAt": new Date(proximaCita().getTime() + 30 * 60_000),
+  "User.cedulaProfesional": "12345678",
   "User.role": "SUPER_ADMIN",
   "User.isActive": true,
   "User.permissionsOverride": [],
@@ -106,12 +119,29 @@ const FIJOS: Record<string, any> = {
   "Patient.deletedAt": null,
   "Patient.status": "ACTIVE",
   "Appointment.status": "SCHEDULED",
+  "Invoice.status": "PENDING",
+  "Invoice.total": 100,
+  "Invoice.balance": 100,
+  "Invoice.paid": 0,
+  "Quote.status": "DRAFT",
+  "ResourceSchedule.dayOfWeek": 0,
+  "ResourceSchedule.startTime": "00:00",
+  "ResourceSchedule.endTime": "23:59",
+  "ClinicSchedule.dayOfWeek": 0,
+  "ClinicSchedule.enabled": true,
+  "ClinicSchedule.openTime": "00:00",
+  "ClinicSchedule.closeTime": "23:59",
 };
 
 function valorEscalar(m: Modelo, f: Campo, d: Dueno): any {
   const clave = `${m.name}.${f.name}`;
   if (clave in FIJOS) return FIJOS[clave];
   if (f.isList) return [];
+  // El valor por defecto del ESQUEMA (isActive true, status "PENDING"…) hace las
+  // filas realistas: sin él, muchas rutas rechazan a la propia clínica de la sesión.
+  if (f.hasDefaultValue && f.default !== undefined && f.default !== null && typeof f.default !== "object") {
+    return f.type === "Decimal" ? new Prisma.Decimal(f.default as any) : f.default;
+  }
   if (!f.isRequired) return null;
   if (f.kind === "enum") return ENUMS.get(f.type)?.[0] ?? null;
   switch (f.type) {
@@ -172,10 +202,26 @@ export class BaseFalsa {
     for (const m of MODELOS) {
       if (MODELOS_DE_CLINICA.has(m.name)) for (const d of duenos) this.insertar(m, d);
       else this.insertar(m, "G");
+      if (m.name === "User") for (const d of duenos) this.insertarDoctor(m, d);
+      // Horarios: una fila por día, abierto todo el día (con una sola fila el
+      // resto de la semana queda «cerrado» y las citas de prueba se rechazan).
+      if (m.name === "ResourceSchedule" || m.name === "ClinicSchedule") {
+        for (const d of duenos) for (let dia = 1; dia < 7; dia++) {
+          this.insertar(m, d, { dayOfWeek: dia, ...(m.name === "ResourceSchedule" ? { startTime: "00:00", endTime: "23:59" } : { enabled: true, openTime: "00:00", closeTime: "23:59" }) });
+        }
+      }
     }
   }
 
-  private insertar(m: Modelo, d: Dueno) {
+  /**
+   * Cada clínica tiene además UN DOCTOR (`idAd`, `idBd`, `idCd`): muchas rutas
+   * buscan al doctor por rol y el usuario de la sesión es SUPER_ADMIN.
+   */
+  private insertarDoctor(m: Modelo, d: Dueno) {
+    this.insertar(m, d, { id: `${ID[d]}d`, role: "DOCTOR", supabaseId: `sup-doc-${d}`, email: `doc-${d.toLowerCase()}@prueba.test`, firstName: `${MARCA[d]}Doctor`, lastName: `${MARCA[d]}Doctor` });
+  }
+
+  private insertar(m: Modelo, d: Dueno, pisar: Fila = {}) {
     const fila: Fila = {};
     for (const f of m.fields) {
       if (f.kind === "object") continue;
@@ -203,6 +249,7 @@ export class BaseFalsa {
       fila.createdAt = new Date(FECHA.getTime() + (d === "A" ? 0 : d === "C" ? 1000 : 2000));
       fila.email = `${d.toLowerCase()}@prueba.test`;
     }
+    Object.assign(fila, pisar);
     this.tablas.get(m.name)!.push({ fila, dueno: d });
   }
 
@@ -409,7 +456,7 @@ export class BaseFalsa {
 
   private revisarId(m: Modelo, id: string, operacion: string) {
     for (const d of ["A", "B", "C"] as Dueno[]) {
-      if (id === ID[d] && !this.permitidosEscritura.has(d)) this.fugas.push({ tipo: "alta", modelo: m.name, operacion: `${operacion} (apunta a ${ID[d]})`, dueno: d });
+      if ((id === ID[d] || id === `${ID[d]}d`) && !this.permitidosEscritura.has(d)) this.fugas.push({ tipo: "alta", modelo: m.name, operacion: `${operacion} (apunta a ${ID[d]})`, dueno: d });
     }
   }
 

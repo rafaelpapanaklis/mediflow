@@ -8,7 +8,8 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { BaseFalsa, CAMPOS_ID, ID, MARCA, type Dueno, type Fuga } from "./base-falsa";
+import { BaseFalsa, CAMPOS_ID, ID, MARCA, proximaCita, type Dueno, type Fuga } from "./base-falsa";
+import { AJUSTES, aplicarAjuste } from "./cuerpos";
 
 export const RAIZ_API = join(process.cwd(), "src", "app", "api");
 export const METODOS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
@@ -81,18 +82,23 @@ export function puertaDe(fuente: string): Puerta {
 /** Cuerpo universal: cada campo `…Id` del esquema apunta a una fila de B. */
 export function cuerpoDeAtaque(objetivo: Dueno = "B"): Record<string, unknown> {
   const x = ID[objetivo];
-  const c: Record<string, unknown> = Object.fromEntries(CAMPOS_ID.map((k) => [k, x]));
+  const c: Record<string, unknown> = Object.fromEntries(CAMPOS_ID.map((k) => [k, valorDeId(k, objetivo)]));
   Object.assign(c, {
     ids: [x], patientIds: [x], appointmentIds: [x], invoiceIds: [x],
     items: [{ id: x }], action: "confirm", status: "ACTIVE", date: "2026-06-15", from: "2026-06-01", to: "2026-06-30",
-    startsAt: "2026-06-15T15:00:00.000Z", endsAt: "2026-06-15T15:30:00.000Z",
+    startsAt: proximaCita().toISOString(), endsAt: new Date(proximaCita().getTime() + 30 * 60_000).toISOString(),
   });
   return c;
 }
 
+/** El valor de un campo `…Id`: los de doctor apuntan al DOCTOR de esa clínica (`idBd`), el resto a la fila `idB`. */
+export function valorDeId(campo: string, objetivo: Dueno): string {
+  return /doctor|dentist|provider|professional/i.test(campo) ? `${ID[objetivo]}d` : ID[objetivo];
+}
+
 export function consultaDeAtaque(objetivo: Dueno = "B"): string {
   const q = new URLSearchParams();
-  for (const k of CAMPOS_ID) q.set(k, ID[objetivo]);
+  for (const k of CAMPOS_ID) q.set(k, valorDeId(k, objetivo));
   q.set("date", "2026-06-15"); q.set("from", "2026-06-01"); q.set("to", "2026-06-30"); q.set("q", "a"); q.set("search", "a");
   return q.toString();
 }
@@ -118,9 +124,13 @@ export interface Resultado {
   crudo: number;
   noSoportado: string[];
   error?: string;
+  /** Primeros caracteres de la respuesta: para entender por qué una ruta no se dejó conducir. */
+  respuesta?: string;
   ms: number;
   /** Con qué dueño se pidieron los ids (B = ataque, A = control positivo). */
   objetivo: Dueno;
+  /** Ataque mixto: id de la URL propio, ids del cuerpo ajenos. */
+  mixta?: boolean;
 }
 
 export interface OpcionesEjecucion {
@@ -129,8 +139,17 @@ export interface OpcionesEjecucion {
   duenoDeC?: "mismo" | "otro";
   /** A quién pertenecen los ids de la petición: B (ataque, por defecto) o A (control). */
   objetivo?: Dueno;
+  /**
+   * Ataque MIXTO: el id de la URL es de A (la ruta lo encuentra y sigue) pero los
+   * ids del cuerpo y de la consulta son de B. Prueba lo que el ataque simple no
+   * alcanza: atar una fila PROPIA a una ajena (una factura mía al paciente de
+   * otra clínica) cuando la ruta ya pasó el chequeo de su propio id.
+   */
+  mixta?: boolean;
   /** Cookies de la petición (p. ej. la de «clínica activa»). */
   cookies?: Record<string, string>;
+  /** Cuerpo exacto de la petición (sustituye al universal): para las pruebas de regresión puntuales. */
+  cuerpo?: Record<string, unknown>;
   /** Tiempo máximo por llamada. */
   limiteMs?: number;
 }
@@ -158,22 +177,30 @@ export async function ejecutarRuta(
   });
   contexto.base = base;
   contexto.cookies = opciones.cookies ?? {};
-  const rutaUrl = ruta.url.split(ID.B).join(ID[objetivo]);
+  const deLaUrl = opciones.mixta ? "A" : objetivo;
+  const rutaUrl = ruta.url.split(ID.B).join(ID[deLaUrl]);
   const params = Object.fromEntries(
-    Object.entries(ruta.params).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => x.split(ID.B).join(ID[objetivo])) : v.split(ID.B).join(ID[objetivo])]),
+    Object.entries(ruta.params).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => x.split(ID.B).join(ID[deLaUrl])) : v.split(ID.B).join(ID[deLaUrl])]),
   );
-  const url = `http://localhost${rutaUrl}?${consultaDeAtaque(objetivo)}`;
+  const ajuste = AJUSTES[`${metodo} ${ruta.patron}`]?.({ id: ID[objetivo], doc: `${ID[objetivo]}d` });
+  const consulta = new URLSearchParams(consultaDeAtaque(objetivo));
+  if (ajuste) {
+    const q = aplicarAjuste(Object.fromEntries(consulta), ajuste, "query");
+    for (const k of [...consulta.keys()]) if (!(k in q)) consulta.delete(k);
+    for (const [k, v] of Object.entries(q)) consulta.set(k, String(v));
+  }
+  const url = `http://localhost${rutaUrl}?${consulta.toString()}`;
   contexto.cabeceras = new Headers({ "x-pathname": rutaUrl, "x-method": metodo });
   const { NextRequest } = await import("next/server");
   const init: any = {
     method: metodo,
     headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9", "x-pathname": rutaUrl, "x-method": metodo },
   };
-  if (metodo !== "GET") init.body = JSON.stringify(cuerpoDeAtaque(objetivo));
+  if (metodo !== "GET") init.body = JSON.stringify(opciones.cuerpo ?? aplicarAjuste(cuerpoDeAtaque(objetivo), ajuste, "body"));
   const peticion = new NextRequest(url, init);
 
   const base_res: Omit<Resultado, "estado" | "veredicto" | "fugas" | "marcasEnRespuesta" | "consultas" | "crudo" | "noSoportado" | "ms"> = {
-    ruta: ruta.patron, archivo: ruta.archivo, metodo, puerta: puertaDe(fuente), objetivo,
+    ruta: ruta.patron, archivo: ruta.archivo, metodo, puerta: puertaDe(fuente), objetivo, ...(opciones.mixta ? { mixta: true } : {}),
   };
   let estado: number | null = null;
   let texto = "";
@@ -207,6 +234,6 @@ export async function ejecutarRuta(
   else veredicto = "sin-base";
   return {
     ...base_res, estado, veredicto, fugas, marcasEnRespuesta: marcas, consultas: base.consultas,
-    crudo: base.crudo, noSoportado: [...new Set(base.noSoportado)], error, ms: Date.now() - t0,
+    crudo: base.crudo, noSoportado: [...new Set(base.noSoportado)], error, respuesta: texto.slice(0, 420), ms: Date.now() - t0,
   };
 }
