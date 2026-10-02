@@ -34,6 +34,9 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import { findingRegions, type AiFinding } from "./finding-regions";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { CLAVE_ETIQUETA_CATEGORIA, SIN_FILTRO, filtrarArchivosPorGrupo, puedeCambiarTipo, type FiltroArchivos } from "@/lib/uploads/categorias-archivo";
+import { ChipsFiltroArchivos } from "@/components/xrays/chips-filtro-archivos";
+import { CambiarTipoDialog, type ArchivoCambiable } from "@/components/xrays/cambiar-tipo-dialog";
 
 interface Patient {
   id: string;
@@ -95,15 +98,6 @@ interface Props {
   /** Interruptor `menu-dos-niveles` de la clínica: viste el visor con el rediseño. */
   rediseno?: boolean;
 }
-
-const CATEGORIES = [
-  { id: "XRAY_PERIAPICAL",   labelKey: "pages.xrays.catPeriapical" },
-  { id: "XRAY_PANORAMIC",    labelKey: "pages.xrays.catPanoramic" },
-  { id: "XRAY_CEPHALOMETRIC", labelKey: "pages.xrays.catCephalometric" },
-  { id: "XRAY_BITEWING",     labelKey: "pages.xrays.catBitewing" },
-  { id: "PHOTO_INTRAORAL",   labelKey: "pages.xrays.catIntraoralPhoto" },
-  { id: "OTHER",             labelKey: "pages.xrays.catOther" },
-];
 
 const SEV_COLOR: Record<AiFinding["severity"], string> = {
   alta: "#ef4444",
@@ -314,6 +308,11 @@ export function XraysClient({
   const tk = (viejo: string, nuevo: string) => (rediseno ? nuevo : viejo);
   const askConfirm = useConfirm();
   const [files, setFiles] = useState<PatientFile[]>(initialFiles);
+  // ws1-t9 (5b/5g): filtro por grupo y «Cambiar tipo».
+  const [filtroGrupo, setFiltroGrupo] = useState<FiltroArchivos>(SIN_FILTRO);
+  const [archivoACambiar, setArchivoACambiar] = useState<ArchivoCambiable | null>(null);
+  const etiquetaDeTipo = (categoria: string) =>
+    CLAVE_ETIQUETA_CATEGORIA[categoria] ? t(CLAVE_ETIQUETA_CATEGORIA[categoria]) : t("pages.xrays.catOther");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     initialPatientId ?? initialFiles[0]?.patient.id ?? null,
   );
@@ -386,8 +385,14 @@ export function XraysClient({
           `${f.patient.firstName} ${f.patient.lastName}`.toLowerCase().includes(q),
       );
     }
-    return list;
-  }, [files, selectedPatientId, search]);
+    return filtrarArchivosPorGrupo(list, filtroGrupo);
+  }, [files, selectedPatientId, search, filtroGrupo]);
+
+  // Los chips cuentan lo del paciente elegido (o todo), sin buscar ni filtrar.
+  const archivosParaChips = useMemo(
+    () => (selectedPatientId ? files.filter((f) => f.patient.id === selectedPatientId) : files),
+    [files, selectedPatientId],
+  );
 
   const activeFile = useMemo(
     () => files.find((f) => f.id === activeFileId) ?? null,
@@ -927,6 +932,17 @@ export function XraysClient({
         >
           <FileDown size={13} aria-hidden /> {t("common.export")}
         </button>
+        {canUpload && activeFile && puedeCambiarTipo(activeFile.category, activeFile.mimeType) && (
+          <button
+            type="button"
+            className={c.topbarBtn}
+            onClick={() =>
+              setArchivoACambiar({ id: activeFile.id, name: activeFile.name, category: activeFile.category, mimeType: activeFile.mimeType })
+            }
+          >
+            {t("patients.xrays.cambiarTipo.boton")}
+          </button>
+        )}
         {canUpload && (
           <button
             type="button"
@@ -966,6 +982,7 @@ export function XraysClient({
               style={{ paddingLeft: 26 }}
             />
           </div>
+          <ChipsFiltroArchivos archivos={archivosParaChips} filtro={filtroGrupo} onChange={setFiltroGrupo} />
         </div>
         {canUpload && (
           <button
@@ -1019,10 +1036,7 @@ export function XraysClient({
                   </div>
                   <div className={c.xrayCardInfo}>
                     <span className={c.xrayCardType}>
-                      {(() => {
-                        const cat = CATEGORIES.find((c) => c.id === f.category);
-                        return cat ? t(cat.labelKey) : t("pages.xrays.catOther");
-                      })()}
+                      {etiquetaDeTipo(f.category)}
                     </span>
                     <span className={c.xrayCardDate}>{formatDate(f.takenAt ?? f.createdAt)}</span>
                     {findingsCount > 0 && (
@@ -1299,10 +1313,7 @@ export function XraysClient({
 
               <div className={c.viewerInfoCard}>
                 <span className={c.viewerInfoCardTitle}>
-                  {(() => {
-                    const cat = CATEGORIES.find((c) => c.id === activeFile.category);
-                    return cat ? t(cat.labelKey) : t("pages.xrays.title");
-                  })()}
+                  {etiquetaDeTipo(activeFile.category)}
                 </span>
                 <span className={c.viewerInfoCardMeta}>
                   {formatDate(activeFile.takenAt ?? activeFile.createdAt)}
@@ -1641,6 +1652,12 @@ export function XraysClient({
           )}
         </div>
       </aside>
+
+      <CambiarTipoDialog
+        archivo={archivoACambiar}
+        onClose={() => setArchivoACambiar(null)}
+        onCambiado={(id, categoria) => setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, category: categoria } : f)))}
+      />
     </div>
   );
 }

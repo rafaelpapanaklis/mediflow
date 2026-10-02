@@ -57,7 +57,7 @@ export default async function XraysPage() {
       SELECT "patientId", "createdAt"
       FROM patient_files
       WHERE "clinicId" = ${clinicId}
-        AND category::text IN ('XRAY_PERIAPICAL', 'XRAY_PANORAMIC', 'XRAY_BITEWING', 'XRAY_OCCLUSAL')
+        AND category::text IN ('XRAY_PERIAPICAL', 'XRAY_PANORAMIC', 'XRAY_CEPHALOMETRIC', 'XRAY_BITEWING', 'XRAY_OCCLUSAL')
     `,
     menuDosNivelesEncendido(clinicId),
   ]);

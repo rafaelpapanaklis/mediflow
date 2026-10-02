@@ -70,7 +70,7 @@ export function categoriaSugeridaParaSubida(nombre: string): CategoriaSubidaFich
   return null;
 }
 
-/** Nombre en español (para el servidor: PDF, línea de tiempo). */
+/** Nombre en español (para el servidor: PDF, línea de tiempo, Movimientos). */
 export const NOMBRE_CATEGORIA_ES: Record<string, string> = {
   XRAY_PERIAPICAL: "Periapical",
   XRAY_PANORAMIC: "Panorámica",
@@ -78,4 +78,120 @@ export const NOMBRE_CATEGORIA_ES: Record<string, string> = {
   XRAY_OCCLUSAL: "Oclusal",
   XRAY_CBCT: "Tomografía (CBCT)",
   XRAY_CEPHALOMETRIC: "Lateral de cráneo (cefalométrica)",
+  PHOTO_INTRAORAL: "Foto intraoral",
+  PHOTO_EXTRAORAL: "Foto extraoral",
+  PHOTO_FRONTAL: "Foto frontal",
+  PHOTO_LATERAL: "Foto lateral",
+  PHOTO_OCCLUSAL_UPPER: "Foto oclusal superior",
+  PHOTO_OCCLUSAL_LOWER: "Foto oclusal inferior",
+  PHOTO_PROGRESS: "Progreso",
+  PHOTO_PATIENT: "Foto del paciente",
+  CEPH_ANALYSIS_PDF: "Análisis cefalométrico (PDF)",
+  CONSENT_FORM: "Consentimiento",
+  OTHER: "Otro",
 };
+
+// ─── Filtrar por grupo (ficha y visor) ───────────────────────────────────
+
+export const GRUPOS_ARCHIVO = ["radiografias", "fotos", "documentos", "ortodoncia"] as const;
+export type GrupoArchivo = (typeof GRUPOS_ARCHIVO)[number];
+
+/** Clave i18n de cada chip de grupo. */
+export const CLAVE_GRUPO: Record<GrupoArchivo, string> = {
+  radiografias: "patients.xrays.filtro.radiografias",
+  fotos: "patients.xrays.filtro.fotos",
+  documentos: "patients.xrays.filtro.documentos",
+  ortodoncia: "patients.xrays.filtro.ortodoncia",
+};
+
+/** Etapas del chip «Ortodoncia»: la categoría que las guarda y su etiqueta. */
+export const ETAPAS_ORTODONCIA = ["ORTHO_PHOTO_T0", "ORTHO_PHOTO_T1", "ORTHO_PHOTO_T2", "ORTHO_PHOTO_CONTROL"] as const;
+export type EtapaOrtodoncia = (typeof ETAPAS_ORTODONCIA)[number];
+export const CLAVE_ETAPA: Record<EtapaOrtodoncia, string> = {
+  ORTHO_PHOTO_T0: "patients.xrays.filtro.etapaT0",
+  ORTHO_PHOTO_T1: "patients.xrays.filtro.etapaT1",
+  ORTHO_PHOTO_T2: "patients.xrays.filtro.etapaT2",
+  ORTHO_PHOTO_CONTROL: "patients.xrays.filtro.etapaControl",
+};
+
+/**
+ * A qué chip pertenece una categoría. Todo lo que no es radiografía ni foto ni
+ * ortodoncia por etapa (PDF de trazado, consentimiento, modelo 3D, «Otro» y lo
+ * que no conozcamos) cae en documentos: así ningún archivo desaparece de la
+ * lista al filtrar.
+ */
+export function grupoDeCategoria(categoria: string | null | undefined): GrupoArchivo {
+  const c = categoria ?? "";
+  if (c.indexOf("XRAY_") === 0) return "radiografias";
+  if (c.indexOf("ORTHO_PHOTO_") === 0) return "ortodoncia";
+  if (c.indexOf("PHOTO_") === 0) return "fotos";
+  return "documentos";
+}
+
+export interface FiltroArchivos {
+  grupo: GrupoArchivo | null;
+  etapa: EtapaOrtodoncia | null;
+}
+export const SIN_FILTRO: FiltroArchivos = { grupo: null, etapa: null };
+
+export function filtrarArchivosPorGrupo<T extends { category: string }>(archivos: T[], filtro: FiltroArchivos): T[] {
+  if (!filtro.grupo) return archivos;
+  return archivos.filter((f) => {
+    if (grupoDeCategoria(f.category) !== filtro.grupo) return false;
+    return filtro.grupo === "ortodoncia" && filtro.etapa ? f.category === filtro.etapa : true;
+  });
+}
+
+export function contarPorGrupo<T extends { category: string }>(archivos: T[]): Record<GrupoArchivo, number> {
+  const n: Record<GrupoArchivo, number> = { radiografias: 0, fotos: 0, documentos: 0, ortodoncia: 0 };
+  for (const f of archivos) n[grupoDeCategoria(f.category)] += 1;
+  return n;
+}
+
+export function contarPorEtapa<T extends { category: string }>(archivos: T[]): Record<EtapaOrtodoncia, number> {
+  const n: Record<EtapaOrtodoncia, number> = { ORTHO_PHOTO_T0: 0, ORTHO_PHOTO_T1: 0, ORTHO_PHOTO_T2: 0, ORTHO_PHOTO_CONTROL: 0 };
+  for (const f of archivos) if ((ETAPAS_ORTODONCIA as readonly string[]).includes(f.category)) n[f.category as EtapaOrtodoncia] += 1;
+  return n;
+}
+
+// ─── Cambiar el tipo de un archivo ya subido ─────────────────────────────
+
+const DOCUMENTOS_PERMITIDOS: readonly string[] = ["CEPH_ANALYSIS_PDF", "CONSENT_FORM", "OTHER"];
+
+/**
+ * A qué tipos se puede cambiar un archivo ya subido. Solo cambia la etiqueta: el
+ * archivo no se toca, así que no se ofrece lo que contradice su formato (un PDF
+ * no es una periapical; una imagen no es un «PDF de trazado»). Los sets de fotos
+ * de ortodoncia (T0/T1/T2/control) y los modelos 3D los amarra su propio módulo
+ * por id: ni salen de su tipo ni se llega a ellos desde aquí.
+ */
+export function opcionesDeCambioDeTipo(actual: string, mimeType: string | null | undefined): CategoriaSubidaFicha[] {
+  if (actual.indexOf("ORTHO_PHOTO_") === 0 || actual === "SCAN_STL") return [];
+  const mime = (mimeType ?? "").toLowerCase();
+  return CATEGORIAS_SUBIDA_FICHA.filter((c) => {
+    if (c === actual) return false;
+    if (mime === "application/pdf") return DOCUMENTOS_PERMITIDOS.includes(c);
+    if (mime.indexOf("image/") === 0 || mime === "") return c !== "CEPH_ANALYSIS_PDF";
+    // DICOM u otro formato clínico: solo radiografías u «Otro».
+    return c.indexOf("XRAY_") === 0 || c === "OTHER";
+  });
+}
+
+export function puedeCambiarTipo(actual: string, mimeType: string | null | undefined): boolean {
+  return opcionesDeCambioDeTipo(actual, mimeType).length > 0;
+}
+
+// Forma plana a propósito: con `strict: false` TypeScript no estrecha por `ok`.
+export interface ResultadoCambioDeTipo {
+  ok: boolean;
+  motivo?: "mismo_tipo" | "tipo_no_permitido" | "tipo_bloqueado";
+}
+
+export function validarCambioDeTipo(args: { actual: string; nuevo: string; mimeType: string | null | undefined }): ResultadoCambioDeTipo {
+  if (args.actual === args.nuevo) return { ok: false, motivo: "mismo_tipo" };
+  if (args.actual.indexOf("ORTHO_PHOTO_") === 0 || args.actual === "SCAN_STL") return { ok: false, motivo: "tipo_bloqueado" };
+  if (!(opcionesDeCambioDeTipo(args.actual, args.mimeType) as string[]).includes(args.nuevo)) {
+    return { ok: false, motivo: "tipo_no_permitido" };
+  }
+  return { ok: true };
+}

@@ -78,7 +78,9 @@ import { PatientPhotosTab, RecentPhotosStrip } from "@/components/dashboard/pati
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import toast from "react-hot-toast";
-import { CLAVE_ETIQUETA_CATEGORIA, CATEGORIAS_SUBIDA_FICHA, categoriaSugeridaParaSubida } from "@/lib/uploads/categorias-archivo";
+import { CLAVE_ETIQUETA_CATEGORIA, CATEGORIAS_SUBIDA_FICHA, categoriaSugeridaParaSubida, filtrarArchivosPorGrupo, puedeCambiarTipo, SIN_FILTRO, type FiltroArchivos } from "@/lib/uploads/categorias-archivo";
+import { ChipsFiltroArchivos } from "@/components/xrays/chips-filtro-archivos";
+import { CambiarTipoDialog, type ArchivoCambiable } from "@/components/xrays/cambiar-tipo-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1002,6 +1004,9 @@ export function PatientDetailClient({
   // Archivo elegido que espera su tipo: se sube hasta que quien lo sube lo confirma.
   const [archivoPorTipificar, setArchivoPorTipificar] = useState<File | null>(null);
   const [tipoArchivo, setTipoArchivo] = useState<string>("");
+  // ws1-t9 (5b/5g): filtro por grupo y «Cambiar tipo» de lo ya subido.
+  const [filtroArchivos, setFiltroArchivos] = useState<FiltroArchivos>(SIN_FILTRO);
+  const [archivoACambiar, setArchivoACambiar] = useState<ArchivoCambiable | null>(null);
   const [analyzing, setAnalyzing]     = useState<string | null>(null); // fileId being analyzed
   const [analyses, setAnalyses]       = useState<Record<string, any>>({}); // fileId -> analysis result
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
@@ -3055,6 +3060,8 @@ export function PatientDetailClient({
                   )}
                 </div>
 
+                <ChipsFiltroArchivos archivos={files} filtro={filtroArchivos} onChange={setFiltroArchivos} />
+
                 {files.length === 0 && filesLoaded && (
                   <div className="bg-card border border-border rounded-xl p-10 text-center">
                     <div className="mb-2 flex justify-center">
@@ -3067,8 +3074,12 @@ export function PatientDetailClient({
                   </div>
                 )}
 
+                {files.length > 0 && filtrarArchivosPorGrupo(files, filtroArchivos).length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-6">{t("patients.xrays.filtro.vacio")}</p>
+                )}
+
                 {/* File cards */}
-                {files.map((f: any) => {
+                {filtrarArchivosPorGrupo(files, filtroArchivos).map((f: any) => {
                   const isImage = f.mimeType?.startsWith("image/");
                   const result  = analyses[f.id];
                   const isExp   = expandedFile === f.id;
@@ -3153,6 +3164,15 @@ export function PatientDetailClient({
                                 className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
                               >
                                 {isExp ? t("patients.xrays.hideResults") : t("patients.xrays.showResults")}
+                              </button>
+                            )}
+                            {canUploadXrays && puedeCambiarTipo(f.category, f.mimeType) && (
+                              <button
+                                type="button"
+                                onClick={() => setArchivoACambiar({ id: f.id, name: f.name, category: f.category, mimeType: f.mimeType })}
+                                className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                              >
+                                {t("patients.xrays.cambiarTipo.boton")}
                               </button>
                             )}
                             {canEditRecords && (
@@ -3436,6 +3456,12 @@ export function PatientDetailClient({
           }}
         />
       )}
+
+      <CambiarTipoDialog
+        archivo={archivoACambiar}
+        onClose={() => setArchivoACambiar(null)}
+        onCambiado={(id, categoria) => setFiles((prev: any[]) => prev.map((x) => (x.id === id ? { ...x, category: categoria } : x)))}
+      />
 
       {/* Edit patient modal */}
       <Dialog open={!!archivoPorTipificar} onOpenChange={(o) => { if (!o && !uploadingFile) setArchivoPorTipificar(null); }}>

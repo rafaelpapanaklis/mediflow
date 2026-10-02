@@ -5,6 +5,7 @@
  * contenía (una nota, un diagnóstico, el nombre de un archivo con el nombre de
  * una enfermedad… no entran aquí).
  */
+import { NOMBRE_CATEGORIA_ES } from "@/lib/uploads/categorias-archivo";
 
 const ZONA_POR_DEFECTO = "America/Mexico_City";
 
@@ -98,7 +99,14 @@ export const textoArchivo = {
   subido: (category: string | null | undefined) => `Subió ${sustantivoDeArchivo(category)}`,
   quitado: (category: string | null | undefined) => `Quitó ${sustantivoDeArchivo(category)}`,
   anotado: (category: string | null | undefined) => `Actualizó las notas de ${sustantivoDeArchivo(category)}`,
+  // Nunca el nombre del archivo: el tipo basta para saber qué se corrigió.
+  tipoCambiado: (de: string | null | undefined, a: string | null | undefined) =>
+    `Cambió el tipo de un estudio: de «${nombreDeTipo(de)}» a «${nombreDeTipo(a)}»`,
 };
+
+function nombreDeTipo(category: string | null | undefined): string {
+  return (category && NOMBRE_CATEGORIA_ES[category]) || "Otro";
+}
 
 export const ESTADO_PRESUPUESTO: Record<string, string> = {
   DRAFT: "Borrador",

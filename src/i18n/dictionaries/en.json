@@ -2665,6 +2665,30 @@
         "sugerido": "Suggested from the file name; change it if it is wrong.",
         "sinPista": "The file name doesn't say what it is: choose the type so it counts where it should.",
         "subir": "Upload"
+      },
+      "filtro": {
+        "aria": "Filter by file type",
+        "todos": "All",
+        "radiografias": "X-rays",
+        "fotos": "Photos",
+        "documentos": "PDFs and documents",
+        "ortodoncia": "Orthodontics by stage",
+        "todasEtapas": "All stages",
+        "etapaT0": "Initial (T0)",
+        "etapaT1": "T1",
+        "etapaT2": "Final (T2)",
+        "etapaControl": "Control",
+        "vacio": "No files of this type."
+      },
+      "cambiarTipo": {
+        "boton": "Change type",
+        "titulo": "Change the file type",
+        "actual": "Current type",
+        "nuevo": "New type",
+        "aviso": "Only the label changes: the file itself is untouched. Movements records who changed it.",
+        "guardar": "Change type",
+        "hecho": "Type changed to “{tipo}”",
+        "error": "Could not change the type"
       }
     },
     "billing": {

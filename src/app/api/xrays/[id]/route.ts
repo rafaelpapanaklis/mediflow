@@ -6,25 +6,27 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { textoArchivo } from "@/lib/movimientos-paciente/textos";
+import { validarCambioDeTipo } from "@/lib/uploads/categorias-archivo";
 
 /* ═══════════════════════════════════════════════════════════════════ */
-/*  PATCH — actualiza las notas clínicas del doctor sobre el archivo   */
+/*  PATCH — notas clínicas del doctor O tipo del archivo (uno por vez)  */
 /* ═══════════════════════════════════════════════════════════════════ */
 
 const UpdateNotesSchema = z.object({
   doctorNotes: z.string().max(5000, "Las notas no pueden exceder 5000 caracteres"),
 });
+const UpdateCategorySchema = z.object({
+  category: z.string().min(1).max(40),
+});
+
+const MOTIVO_TIPO: Record<string, string> = {
+  tipo_no_permitido: "Ese tipo no corresponde al formato del archivo",
+  tipo_bloqueado: "Este archivo pertenece a un set de ortodoncia o a un modelo 3D: su tipo no se cambia aquí",
+};
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // EQ-07: las notas del doctor sobre la placa son interpretación clínica, no
-  // "subir un archivo": mismo interruptor que las notas SOAP y que el DELETE
-  // de abajo (SA/ADMIN/DOCTOR). Antes cualquier sesión de la clínica escribía
-  // aquí, recepción y solo-lectura incluidas.
-  const denied = denyIfMissingPermission(ctx, "medicalRecord.edit");
-  if (denied) return denied;
 
   let body: unknown;
   try {
@@ -32,6 +34,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
+
+  const cambiaTipo = !!body && typeof body === "object" && "category" in (body as object);
+  if (cambiaTipo && "doctorNotes" in (body as object)) {
+    return NextResponse.json({ error: "Cambia el tipo o las notas, no ambos a la vez" }, { status: 400 });
+  }
+
+  // EQ-07: las notas del doctor sobre la placa son interpretación clínica, no
+  // "subir un archivo": mismo interruptor que las notas SOAP y que el DELETE
+  // de abajo (SA/ADMIN/DOCTOR). Antes cualquier sesión de la clínica escribía
+  // aquí, recepción y solo-lectura incluidas.
+  // Corregir el TIPO (ws1-t9) es la etiqueta de lo que se subió, no su lectura
+  // clínica: lo mismo que subirlo (`xrays.upload`), así recepción corrige lo que
+  // ella misma subió mal.
+  const denied = denyIfMissingPermission(ctx, cambiaTipo ? "xrays.upload" : "medicalRecord.edit");
+  if (denied) return denied;
+
+  if (cambiaTipo) return cambiarTipo(ctx, params.id, body);
+
   const parsed = UpdateNotesSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.errors[0]?.message ?? "Body inválido" }, { status: 400 });
@@ -89,6 +109,59 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     doctorNotes:          updated.doctorNotes ?? "",
     doctorNotesUpdatedAt: updated.doctorNotesUpdatedAt?.toISOString() ?? null,
   });
+}
+
+/**
+ * Cambia SOLO la etiqueta `category` (el archivo en Storage no se toca). Deja en
+ * Movimientos quién lo cambió y de qué a qué. Como la reevaluación radiográfica
+ * del plan de ortodoncia lee `category` en cada consulta, una panorámica corregida
+ * cuenta sin más pasos.
+ */
+async function cambiarTipo(ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>, id: string, body: unknown) {
+  const parsed = UpdateCategorySchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
+  const nuevo = parsed.data.category;
+
+  const existing = await prisma.patientFile.findFirst({
+    where:  { id, clinicId: ctx.clinicId, deletedAt: null },
+    select: { id: true, category: true, mimeType: true, patientId: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
+
+  if (existing.patientId) {
+    const visDenied = await assertPatientVisible(existing.patientId, {
+      userId: ctx.userId,
+      role: ctx.role,
+      clinicId: ctx.clinicId,
+    });
+    if (visDenied) return visDenied;
+  }
+
+  const actual = String(existing.category);
+  const veredicto = validarCambioDeTipo({ actual, nuevo, mimeType: existing.mimeType });
+  if (!veredicto.ok) {
+    // Mismo tipo: nada que hacer ni que registrar (idempotente).
+    if (veredicto.motivo === "mismo_tipo") return NextResponse.json({ category: actual, unchanged: true });
+    return NextResponse.json({ error: MOTIVO_TIPO[veredicto.motivo] }, { status: 400 });
+  }
+
+  await prisma.patientFile.updateMany({
+    where: { id: existing.id, clinicId: ctx.clinicId },
+    data:  { category: nuevo as any },
+  });
+
+  await logAudit({
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "patient-file",
+    entityId:   existing.id,
+    action:     "update",
+    patientId:  existing.patientId,
+    texto:      textoArchivo.tipoCambiado(actual, nuevo),
+    changes:    { category: { before: actual, after: nuevo } },
+  });
+
+  return NextResponse.json({ category: nuevo });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {

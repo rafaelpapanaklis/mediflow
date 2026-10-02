@@ -2665,6 +2665,30 @@
         "sugerido": "Lo sugerimos por el nombre del archivo; cámbialo si no es correcto.",
         "sinPista": "El nombre del archivo no dice qué es: elige el tipo para que cuente donde corresponde.",
         "subir": "Subir"
+      },
+      "filtro": {
+        "aria": "Filtrar por tipo de archivo",
+        "todos": "Todos",
+        "radiografias": "Radiografías",
+        "fotos": "Fotos",
+        "documentos": "PDF y documentos",
+        "ortodoncia": "Ortodoncia por etapa",
+        "todasEtapas": "Todas las etapas",
+        "etapaT0": "Inicial (T0)",
+        "etapaT1": "T1",
+        "etapaT2": "Final (T2)",
+        "etapaControl": "Control",
+        "vacio": "Ningún archivo de este tipo."
+      },
+      "cambiarTipo": {
+        "boton": "Cambiar tipo",
+        "titulo": "Cambiar el tipo del archivo",
+        "actual": "Tipo actual",
+        "nuevo": "Nuevo tipo",
+        "aviso": "Solo cambia la etiqueta: el archivo no se toca. Queda en Movimientos quién lo cambió.",
+        "guardar": "Cambiar tipo",
+        "hecho": "Tipo cambiado a «{tipo}»",
+        "error": "No se pudo cambiar el tipo"
       }
     },
     "billing": {
