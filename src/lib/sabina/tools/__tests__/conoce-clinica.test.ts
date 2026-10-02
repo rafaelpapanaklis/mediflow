@@ -209,11 +209,14 @@ test("con team.view (ADMIN): el equipo entero activo, y cuántos pueden llevar c
   if (!r.ok) return;
   assert.equal(r.datos.alcance, "equipo");
   assert.equal(r.datos.enElAlcance, 4); // 5 del norte − Omar, de baja
-  assert.equal(r.datos.doctores, 2);
-  assert.match(r.resumen, /rol de Doctor/);
+  // Regla única de la Agenda (2-oct-2026): solo Hugo aparece en ella (Nadia y Rita tienen la casilla apagada).
+  assert.equal(r.datos.doctores, 1);
+  assert.match(r.resumen, /aparece en la agenda y puede llevar citas/);
+  assert.match(r.resumen, /Nadia Rojas — Doctor · Endodoncia \(fuera de la agenda: no recibe citas\)/);
+  assert.match(r.resumen, /Rita Admin — Administrador \(fuera de la agenda: no recibe citas\)/);
 });
 
-test("🔴 SIN team.view el alcance se recorta a los doctores, y se DICE", async () => {
+test("🔴 SIN team.view el alcance se recorta a quienes reciben citas, y se DICE", async () => {
   // Lupe, recepción con los permisos por default: en el panel recibe un 403 de
   // GET /api/team y el selector de «Nueva cita» solo le enseña doctores. El
   // organigrama —quién es el Dueño, quién Recepción— no es suyo.
@@ -221,14 +224,15 @@ test("🔴 SIN team.view el alcance se recorta a los doctores, y se DICE", async
   assert.equal(r.ok, true);
   if (!r.ok) return;
   assert.equal(r.datos.alcance, "doctores");
-  assert.equal(r.datos.enElAlcance, 2);
+  // Como el selector de «Nueva cita»: la regla única de la Agenda (Nadia tiene la casilla apagada).
+  assert.equal(r.datos.enElAlcance, 1);
   const nombres = r.datos.equipo.filas.map((f) => f.nombre);
-  assert.deepEqual(nombres.sort(), ["Hugo Salas", "Nadia Rojas"]);
-  for (const fuera of ["Rita Admin", "Lupe Mesa"]) {
+  assert.deepEqual(nombres.sort(), ["Hugo Salas"]);
+  for (const fuera of ["Rita Admin", "Lupe Mesa", "Nadia Rojas"]) {
     assert.ok(!JSON.stringify(r.datos).includes(fuera), `se coló ${fuera}`);
   }
   // Regla 3: el recorte no se omite en silencio.
-  assert.match(r.resumen, /solo a los doctores/i);
+  assert.match(r.resumen, /solo a quienes reciben citas/i);
   assert.match(r.resumen, /no tienes permiso/i);
 });
 
@@ -236,9 +240,9 @@ test("soloDoctores recorta también para quien sí tiene team.view", async () =>
   const r = await correrEquipo(adminNorte(base()), { soloDoctores: true });
   assert.equal(r.ok, true);
   if (!r.ok) return;
-  assert.equal(r.datos.equipo.total, 2);
+  assert.equal(r.datos.equipo.total, 1);
   assert.ok(r.datos.equipo.filas.every((f) => f.esDoctor));
-  assert.doesNotMatch(r.resumen, /solo a los doctores/i); // lo pidió él, no es un recorte
+  assert.doesNotMatch(r.resumen, /solo a quienes reciben citas/i); // lo pidió él, no es un recorte
 });
 
 test("una clínica de UN doctor no se queda sin nombre en el resumen", async () => {
@@ -259,7 +263,8 @@ test("🔴 sin ningún usuario con rol Doctor NO es «sin datos»: se dice por q
   assert.equal(r.ok, true, "«no hay doctores» es una respuesta, no un hueco");
   if (!r.ok) return;
   assert.equal(r.datos.enElAlcance, 0);
-  assert.match(r.resumen, /solo agenda citas con doctores/);
+  assert.match(r.resumen, /nadie recibe citas/);
+  assert.match(r.resumen, /Aparece en la agenda/);
 });
 
 test("🔴 no salen correo, teléfono, cédula ni permisos: solo lo que contesta la pregunta", async () => {

@@ -430,6 +430,9 @@ export interface OpcionesDeAgenda {
  */
 export function baseOrtoConAgenda(op: OpcionesDeAgenda = {}): { db: BaseDoble; sql: SqlCrudo; datos: Datos } {
   const s = datosOrto();
+  // Nadia es aquí el SEGUNDO doctor de la agenda: tiene que aparecer en ella. Con la regla única
+  // (`puedeRecibirCitas`) un doctor con la casilla apagada no recibe citas, ni de Sabina ni del POST.
+  s.datos.users = (s.datos.users ?? []).map((u) => (u.id === U_DOC2_N ? { ...u, agendaActive: true } : u));
   s.datos.clinics = (s.datos.clinics ?? []).map((c) => ({ defaultSlotMinutes: 30, googleCalendarEnabled: false, ...c }));
   s.datos.appointments = [...(s.datos.appointments ?? []), ...(op.citas ?? [])];
   // Esta clínica no trabaja con sillones: si los tuviera, `agendar_cita`

@@ -47,6 +47,7 @@ import {
   U_DOC1,
   U_DOC_B,
   admin,
+  U_DUENO,
   baseAgenda,
   conKeys,
   drSalas,
@@ -272,10 +273,36 @@ test("doctor: pregunta si hay varios, se elige a sí mismo si es doctor, y nunca
   assert.equal(deFuera.estado, "no_se_puede");
   assert.equal(deFuera.causa, "doctor_no_disponible");
 
-  // El dueño (SUPER_ADMIN) no es doctor para el POST: se dice por qué (N12).
+  // El dueño con «Aparece en la agenda» APAGADA no recibe citas: se dice por qué (N12), con la casilla.
   const dueno = await datos("agendar_cita", recepcion(db), agendarJuan({ doctor: "Rafael" }));
   assert.equal(dueno.estado, "no_se_puede");
-  assert.match(dueno.frase, /rol de doctor/i);
+  assert.match(dueno.frase, /Aparece en la agenda/);
+});
+
+test("regla única de la Agenda (2-oct-2026): el dueño MARCADO es doctor para Sabina, y sale entre las opciones", async () => {
+  const db = baseAgenda();
+  const fila = db.filas.users.find((u: any) => u.id === U_DUENO)!;
+  fila.agendaActive = true;
+
+  const conDueno = await datos("agendar_cita", recepcion(db), agendarJuan({ doctor: "Rafael" }));
+  assert.equal(conDueno.estado, "propuesta", JSON.stringify(conDueno));
+  assert.equal(conDueno.propuesta.peticion.cuerpo.doctorId, U_DUENO);
+
+  const sinNombre = await datos("agendar_cita", recepcion(db), agendarJuan({ doctor: undefined }));
+  const q = sinNombre.preguntas.find((p: any) => p.falta === "doctor");
+  assert.deepEqual(q.opciones.map((o: any) => o.id).sort(), [U_DOC1, U_DUENO, "u-doc-nadia"].sort());
+});
+
+test("regla única de la Agenda: un DOCTOR con la casilla apagada no se propone ni se acepta por id", async () => {
+  const db = baseAgenda();
+  db.filas.users.find((u: any) => u.id === "u-doc-nadia")!.agendaActive = false;
+  const sinNombre = await datos("agendar_cita", recepcion(db), agendarJuan({ doctor: undefined }));
+  // Queda uno solo que recibe citas (Hugo): se usa sin preguntar.
+  assert.equal(sinNombre.estado, "propuesta", JSON.stringify(sinNombre));
+  assert.equal(sinNombre.propuesta.peticion.cuerpo.doctorId, U_DOC1);
+  const porId = await datos("agendar_cita", recepcion(db), agendarJuan({ doctor: undefined, doctorId: "u-doc-nadia" }));
+  assert.equal(porId.estado, "no_se_puede");
+  assert.equal(porId.causa, "doctor_no_disponible");
 });
 
 test("motivo: el servidor lo exige, así que falta = pregunta (y va junto con las demás)", async () => {

@@ -5,8 +5,10 @@
  * aquí?» no tenía respuesta aunque el dato estuviera en la base.
  *
  * ── DE DÓNDE SALE, Y QUÉ NO SALE ───────────────────────────────────────
- * De `User`, con el MISMO filtro que `resolverDoctor` usa para agendar y que
- * `fetchActiveDoctors` usa en la pantalla: la clínica de la sesión e `isActive`.
+ * De `User`: la clínica de la sesión e `isActive`. Quién «puede llevar citas»
+ * (`esDoctor`) es la regla única de la Agenda que usan `resolverDoctor`, «Nueva
+ * cita» y el POST (`puedeRecibirCitas`: doctor, administrador o dueño con
+ * «Aparece en la agenda» marcada; decisión de Rafael, 2-oct-2026).
  * De cada persona viajan cinco cosas y ni una más: nombre, rol, especialidad,
  * servicios y si está en la agenda.
  *
@@ -25,14 +27,14 @@
  * DOCTOR ni RECEPTIONIST. Pero el CUADRO DE DOCTORES es otra cosa: ya está a la
  * vista de cualquiera con agenda —el selector de doctor de «Nueva cita»,
  * `fetchActiveDoctors`—, `resolverDoctor` se lo enumera al modelo cuando se va a
- * agendar («Los doctores activos son: …»), y nombre, especialidad y servicios de
+ * agendar («Quienes sí reciben citas son: …»), y nombre, especialidad y servicios de
  * cada profesional son PÚBLICOS en la web de la clínica (`/descubre/clinica/[slug]`
  * y `/reservar/[slug]`), sin sesión ninguna.
  *
  * Así que la key es `agenda.view` y el ALCANCE se recorta al de la pantalla que
  * tiene delante quien pregunta:
  *   · con `team.view`  → el equipo entero, como en /dashboard/team;
- *   · sin `team.view`  → SOLO los doctores, como en el selector de «Nueva cita».
+ *   · sin `team.view`  → SOLO quien recibe citas, como en el selector de «Nueva cita».
  *
  * La primera versión devolvía la plantilla completa —con quién es el «Dueño» y
  * quién «Recepción»— a cualquiera con agenda: eso es el organigrama, y en el
@@ -62,12 +64,13 @@ import {
   type Lista,
 } from "./base";
 import { nombreDe, normal } from "./agenda-comun";
+import { RECIBE_CITAS_WHERE, ROLES_QUE_ATIENDEN, puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
 import type { SabinaCtx } from "../tipos";
 
 const parametros = z.object({
   /** Nombre, especialidad o servicio: «ortodoncia», «Salas». Sin él, el equipo entero. */
   busqueda: z.string().min(2).max(60).optional(),
-  /** `true` = solo los que pueden llevar citas (rol Doctor). */
+  /** `true` = solo los que pueden llevar citas (los que aparecen en la agenda). */
   soloDoctores: z.boolean().optional(),
 });
 
@@ -83,7 +86,7 @@ const TOPE_LECTURA = 200;
 /**
  * El rol como lo llama el panel, no como lo llama Prisma. Es solo la etiqueta
  * que se enseña: lo que decide («¿puede llevar citas?») nunca se compara contra
- * este diccionario, sino contra el enum, en `esDoctor`.
+ * este diccionario, sino con `puedeRecibirCitas`, en `esDoctor`.
  */
 const ROL: Record<string, string> = {
   SUPER_ADMIN: "Dueño",
@@ -93,11 +96,21 @@ const ROL: Record<string, string> = {
   READONLY: "Solo lectura",
 };
 
+/**
+ * Las etiquetas de los roles que atienden. Solo para el TEXTO del resumen
+ * («fuera de la agenda» frente a «ese rol no lleva citas»); quién puede llevar
+ * una cita lo decide `esDoctor`.
+ */
+const ROLES_QUE_LLEVAN_CITAS = new Set<string>(ROLES_QUE_ATIENDEN.map((r) => ROL[r]));
+
 export interface MiembroFila {
   nombre: string;
   /** Etiqueta legible del rol. */
   rol: string;
-  /** El enum, no la etiqueta: solo el rol DOCTOR puede llevar una cita. */
+  /**
+   * ¿Puede llevar una cita? La regla única de la Agenda (`puedeRecibirCitas`):
+   * doctor, administrador o dueño activo con «Aparece en la agenda» marcada.
+   */
   esDoctor: boolean;
   /**
    * `User.specialty` (el campo que usan la agenda y la web pública) y, si está
@@ -118,7 +131,7 @@ export interface DatosEquipo {
    * las filas daría un total falso presentado como total.
    */
   enElAlcance: number;
-  /** De ésas, cuántas tienen rol Doctor: las únicas que pueden llevar una cita. */
+  /** De ésas, cuántas aparecen en la agenda: las únicas que pueden llevar una cita. */
   doctores: number;
   /** `"equipo"` = todo el personal (con `team.view`); `"doctores"` = solo quien lleva citas. */
   alcance: "equipo" | "doctores";
@@ -133,7 +146,8 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
   descripcion:
     "Quién trabaja en ESTA clínica: nombre, rol y en qué es cada quién (especialidad y servicios). " +
     "Úsala para «¿quién hace ortodoncia aquí?», «¿qué doctores tengo?» o para saber a quién proponer " +
-    "en una cita. Solo el rol Doctor puede llevar citas.",
+    "en una cita. Solo puede llevar citas quien aparece en la agenda: un doctor, un administrador o el dueño " +
+    "con «Aparece en la agenda» marcada en Equipo (esDoctor = true).",
   parametros,
   permiso: "agenda.view",
 
@@ -142,13 +156,12 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
     // El alcance es el de la pantalla que tiene delante quien pregunta (ver el
     // encabezado): sin `team.view`, solo los doctores.
     const verTodos = tienePermiso(ctx, "team.view");
-    // 🔴 clinicId de la SESIÓN, e `isActive`: el mismo filtro de `resolverDoctor`
-    // y de `fetchActiveDoctors`. Una persona dada de baja no está en el equipo.
-    const where: Record<string, any> = {
-      clinicId: ctx.clinicId,
-      isActive: true,
-      ...(verTodos ? {} : { role: "DOCTOR" }),
-    };
+    // 🔴 clinicId de la SESIÓN, e `isActive`. Una persona dada de baja no está en
+    // el equipo. Sin `team.view`, solo quien recibe citas (la regla de `resolverDoctor`
+    // y de «Nueva cita»).
+    const where: Record<string, any> = verTodos
+      ? { clinicId: ctx.clinicId, isActive: true }
+      : { clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE };
 
     const [personas, enElAlcance, doctores] = await Promise.all([
       db.user.findMany({
@@ -161,18 +174,19 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
           especialidad: true,
           services: true,
           agendaActive: true,
+          isActive: true,
         },
         orderBy: [{ role: "asc" }, { firstName: "asc" }],
         take: TOPE_LECTURA,
       }),
       db.user.count({ where }),
-      verTodos ? db.user.count({ where: { ...where, role: "DOCTOR" } }) : Promise.resolve(-1),
+      verTodos ? db.user.count({ where: { clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE } }) : Promise.resolve(-1),
     ]);
 
     const todos: MiembroFila[] = personas.map((u: any) => ({
       nombre: nombreDe(u),
       rol: ROL[String(u.role)] ?? String(u.role ?? ""),
-      esDoctor: String(u.role) === "DOCTOR",
+      esDoctor: puedeRecibirCitas(u),
       // `specialty` manda: es el que pintan la agenda y la web pública. El de
       // NOM-024 (`especialidad`) solo entra cuando el otro está vacío.
       especialidad: textoODefecto(u.specialty) ?? textoODefecto(u.especialidad),
@@ -205,7 +219,7 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
   /**
    * «No hay datos» solo cuando hay a quién mirar y el filtro no encontró a
    * nadie. Con el alcance VACÍO la respuesta tiene contenido —«esta clínica no
-   * tiene ningún usuario con rol de Doctor»—, que además es la razón exacta por
+   * tiene a nadie que reciba citas»—, que además es la razón exacta por
    * la que va a fallar el siguiente intento de agendar (`resolverDoctor`).
    */
   vacio: (d) => d.enElAlcance > 0 && d.equipo.total === 0,
@@ -213,8 +227,8 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
   resumir(d) {
     if (d.enElAlcance === 0) {
       return (
-        "Esta clínica no tiene ningún usuario activo con rol de Doctor, y el sistema solo agenda citas " +
-        "con doctores. Se dan de alta desde Equipo, en el panel."
+        "En esta clínica nadie recibe citas: solo se agenda con un doctor, administrador o dueño activo " +
+        "que tenga marcada «Aparece en la agenda». Se marca (o se da de alta a un doctor) en Equipo, en el panel."
       );
     }
 
@@ -223,7 +237,7 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
       return (
         `${m.nombre} — ${m.rol}` +
         (que ? ` · ${que}` : "") +
-        (m.esDoctor && !m.enAgenda ? " (fuera de la agenda)" : "")
+        (!m.esDoctor && !m.enAgenda && ROLES_QUE_LLEVAN_CITAS.has(m.rol) ? " (fuera de la agenda: no recibe citas)" : "")
       );
     };
     const filas = d.equipo.filas;
@@ -236,14 +250,18 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
     // en su propia línea: pegado al último renglón parece parte de esa persona.
     const avisoAlcance =
       d.alcance === "doctores" && !d.soloDoctores
-        ? "Te doy solo a los doctores: el equipo completo (recepción, administración) se ve en Equipo, y para eso no tienes permiso."
+        ? "Te doy solo a quienes reciben citas: el equipo completo (recepción, administración) se ve en Equipo, y para eso no tienes permiso."
         : "";
     const traLista = (lista: string) => (avisoAlcance ? `${lista ? "\n" : " "}${avisoAlcance}` : "");
 
     if (d.busqueda) {
       if (filas.length === 1) {
         const m = filas[0];
-        const ojo = m.esDoctor ? "" : ` Ojo: su rol es ${m.rol}, y el sistema solo agenda citas con doctores.`;
+        const ojo = m.esDoctor
+          ? ""
+          : ROLES_QUE_LLEVAN_CITAS.has(m.rol)
+            ? " Ojo: tiene apagada «Aparece en la agenda» en Equipo, así que no se le pueden agendar citas."
+            : ` Ojo: su rol es ${m.rol}, y ese rol no lleva citas.`;
         return `${linea(m)}.${ojo}${recorte}${traLista("")}`;
       }
       const lista = lineasDeLista(filas, linea);
@@ -255,9 +273,9 @@ export const equipoClinica = definirHerramienta<ParamsEquipo, DatosEquipo>({
 
     const cab =
       d.soloDoctores || d.alcance === "doctores"
-        ? `${plural(d.equipo.total, "doctor activo", "doctores activos")}`
+        ? `${plural(d.equipo.total, "profesional en la agenda", "profesionales en la agenda")}`
         : `${plural(d.equipo.total, "persona activa", "personas activas")} en la clínica, de las que ` +
-          `${plural(d.doctores, "tiene rol de Doctor y puede llevar citas", "tienen rol de Doctor y pueden llevar citas")}`;
+          `${plural(d.doctores, "aparece en la agenda y puede llevar citas", "aparecen en la agenda y pueden llevar citas")}`;
     // Con una sola fila `lineasDeLista` devuelve "" (una lista de uno es ruido),
     // así que el nombre va en la frase o se perdería — el caso de la clínica de
     // un solo doctor, que es de las más comunes.

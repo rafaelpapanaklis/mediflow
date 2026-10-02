@@ -109,12 +109,14 @@ export function datosAgenda(op: OpcionesSiembra = {}) {
   // `agendaActive: true` = el valor de fábrica de la base. El alta de citas filtra por él (RECIBE_CITAS_WHERE,
   // ws1-t10) y sin la clave el doble no encontraba a ningún doctor.
   const users: Fila[] = [
-    { id: U_ADMIN, clinicId: CL_A, role: "ADMIN", firstName: "Rita", lastName: "Admin", isActive: true, agendaActive: true },
+    // Rita y el dueño, DESMARCADOS: un ADMIN nace así y el dueño de una clínica ya creada queda así (decisiones
+    // de Rafael, 2-oct-2026). Con la regla única no reciben citas; `agenda-acciones.test.ts` prueba al dueño marcado.
+    { id: U_ADMIN, clinicId: CL_A, role: "ADMIN", firstName: "Rita", lastName: "Admin", isActive: true, agendaActive: false },
     { id: U_DOC1, clinicId: CL_A, role: "DOCTOR", firstName: "Hugo", lastName: "Salas", isActive: true, agendaActive: true },
     { id: U_DOC2, clinicId: CL_A, role: "DOCTOR", firstName: "Nadia", lastName: "Rojas", isActive: true, agendaActive: true },
     { id: "u-doc-baja", clinicId: CL_A, role: "DOCTOR", firstName: "Pablo", lastName: "Viejo", isActive: false, agendaActive: true },
     { id: U_RECEP, clinicId: CL_A, role: "RECEPTIONIST", firstName: "Lupe", lastName: "Mesa", isActive: true, agendaActive: true },
-    { id: U_DUENO, clinicId: CL_A, role: "SUPER_ADMIN", firstName: "Rafael", lastName: "Dueño", isActive: true, agendaActive: true },
+    { id: U_DUENO, clinicId: CL_A, role: "SUPER_ADMIN", firstName: "Rafael", lastName: "Dueño", isActive: true, agendaActive: false },
     { id: U_READONLY, clinicId: CL_A, role: "READONLY", firstName: "Leo", lastName: "Lector", isActive: true, agendaActive: true },
     { id: U_DOC_B, clinicId: CL_B, role: "DOCTOR", firstName: "Hugo", lastName: "Vecino", isActive: true, agendaActive: true },
   ];

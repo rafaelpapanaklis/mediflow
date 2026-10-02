@@ -18,6 +18,7 @@
  */
 
 import { buildAppointmentWhere } from "@/lib/auth-context";
+import { ROLES_QUE_ATIENDEN, puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
 import { canSeePatient, patientVisibilityAnd } from "@/lib/patient-visibility";
 import { patientSearchTokens } from "@/lib/patients/patient-search-core";
 import { buildPatientSearchSql } from "@/lib/patients/patient-search";
@@ -231,7 +232,9 @@ function aPaciente(p: any): PacienteResuelto {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DOCTOR — lo único que acepta el POST: rol DOCTOR, activo, de la clínica
+   DOCTOR — lo que acepta el POST: la regla única de la Agenda
+   (`puedeRecibirCitas`: DOCTOR, ADMIN o SUPER_ADMIN activo con «Aparece en la
+   agenda» marcada), de la clínica de la sesión
    ═══════════════════════════════════════════════════════════════════════ */
 
 export interface DoctorResuelto {
@@ -243,12 +246,14 @@ export interface DoctorResuelto {
 const TITULOS = new Set(["dr", "dra", "doctor", "doctora", "el", "la", "con"]);
 
 /**
- * El doctor de la cita. Mismo filtro que `fetchActiveDoctors` y que la
- * validación del POST (`role: "DOCTOR", isActive: true`).
+ * El doctor de la cita. La MISMA regla que la Agenda, «Nueva cita» y la
+ * validación del POST (`roles-que-atienden.ts`, decisión de Rafael del
+ * 2-oct-2026): el dueño o el administrador que aparecen en la agenda SÍ son
+ * doctor; el que tiene la casilla apagada, no (tampoco un DOCTOR apagado).
  *
- * Sin nombre: si quien pregunta es DOCTOR, él; si la clínica tiene uno solo,
- * ése; si no, se pregunta. Un ADMIN/SUPER_ADMIN no es doctor para el POST (N12):
- * si lo nombran, se dice por qué no, en vez de un «no lo encuentro» a secas.
+ * Sin nombre: si quien pregunta es DOCTOR y recibe citas, él; si en la clínica
+ * recibe citas uno solo, ése; si no, se pregunta. Si nombran a alguien que no
+ * recibe citas, se dice por qué (N12), en vez de un «no lo encuentro» a secas.
  */
 export async function resolverDoctor(
   ctx: SabinaCtx,
@@ -256,11 +261,11 @@ export async function resolverDoctor(
   args: { doctorId?: string | null; doctor?: string | null },
 ): Promise<Resuelto<DoctorResuelto>> {
   const usuarios = await db.user.findMany({
-    where: { clinicId: ctx.clinicId, isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
-    select: { id: true, firstName: true, lastName: true, role: true },
+    where: { clinicId: ctx.clinicId, isActive: true, role: { in: [...ROLES_QUE_ATIENDEN] } },
+    select: { id: true, firstName: true, lastName: true, role: true, isActive: true, agendaActive: true },
     orderBy: { firstName: "asc" },
   });
-  const doctores = usuarios.filter((u: any) => u.role === "DOCTOR");
+  const doctores = usuarios.filter((u: any) => puedeRecibirCitas(u));
   const aDoctor = (u: any): DoctorResuelto => ({ id: u.id, nombre: nombreDe(u) });
   const opciones = (lista: any[]): OpcionAgenda[] => lista.slice(0, TOPE_OPCIONES).map((u) => ({ id: u.id, etiqueta: nombreDe(u), detalle: null }));
 
@@ -268,14 +273,20 @@ export async function resolverDoctor(
     return {
       tipo: "no",
       causa: "sin_doctores",
-      frase: "La clínica no tiene ningún usuario activo con rol de Doctor, y el sistema solo agenda citas con doctores.",
+      frase:
+        "En la clínica nadie recibe citas: se agenda con un doctor, administrador o dueño activo que tenga marcada " +
+        "«Aparece en la agenda» en Equipo, y hoy no hay ninguno.",
     };
   }
 
   if (args.doctorId) {
     const d = doctores.find((u: any) => u.id === args.doctorId);
     if (d) return { tipo: "ok", valor: aDoctor(d) };
-    return { tipo: "no", causa: "doctor_no_disponible", frase: "Ese doctor no está disponible para agendar (no está activo o no es de esta clínica)." };
+    return {
+      tipo: "no",
+      causa: "doctor_no_disponible",
+      frase: "Ese doctor no está disponible para agendar (no está activo, tiene apagada «Aparece en la agenda» o no es de esta clínica).",
+    };
   }
 
   const buscado = normal(args.doctor)
@@ -299,21 +310,23 @@ export async function resolverDoctor(
     return { tipo: "pregunta", pregunta: { falta: "doctor", texto: `Hay ${hallados.length} doctores que coinciden. ¿Cuál?`, opciones: opciones(hallados) } };
   }
 
-  const noDoctor = usuarios.filter((u: any) => u.role !== "DOCTOR" && coincide(u));
+  // Lo nombran, tiene un rol que atiende y está activo (es lo que se leyó), pero no recibe citas: solo puede
+  // ser la casilla apagada.
+  const noDoctor = usuarios.filter((u: any) => !puedeRecibirCitas(u) && coincide(u));
   if (noDoctor.length === 1) {
     return {
       tipo: "no",
       causa: "no_es_doctor",
       frase:
-        `${nombreDe(noDoctor[0])} no tiene rol de Doctor en Equipo, y el sistema solo agenda citas con doctores. ` +
-        `Los doctores activos son: ${doctores.map((u: any) => nombreDe(u)).join(", ")}.`,
+        `${nombreDe(noDoctor[0])} tiene apagada «Aparece en la agenda» en Equipo, así que no recibe citas. ` +
+        `Quienes sí reciben citas son: ${doctores.map((u: any) => nombreDe(u)).join(", ")}.`,
     };
   }
   return {
     tipo: "pregunta",
     pregunta: {
       falta: "doctor",
-      texto: `No encuentro a un doctor activo que se llame «${args.doctor}». ¿Con cuál de estos?`,
+      texto: `No encuentro a nadie en la agenda que se llame «${args.doctor}». ¿Con cuál de estos?`,
       opciones: opciones(doctores),
     },
   };
