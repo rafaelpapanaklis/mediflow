@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
-import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "./convertir-en-presupuesto";
+import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "../plan-a-presupuesto/convertir-en-presupuesto";
 import s from "./plan.module.css";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";

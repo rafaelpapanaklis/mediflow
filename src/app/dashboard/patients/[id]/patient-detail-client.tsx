@@ -59,7 +59,7 @@ import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashb
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
 import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
-import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-tratamiento-rediseno/convertir-en-presupuesto";
+import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-a-presupuesto/convertir-en-presupuesto";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";

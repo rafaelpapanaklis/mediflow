@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { useTextosConvertirPresupuesto } from "./textos-convertir-presupuesto";
-import s from "./plan.module.css";
+import s from "../plan-tratamiento-rediseno/plan.module.css";
 import c from "./convertir.module.css";
 
 /**
