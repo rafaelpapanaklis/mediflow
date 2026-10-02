@@ -273,6 +273,11 @@ export interface OrthodonticsRedesignClientProps {
   /** Se llegó desde «Nueva consulta» con el tipo «Ortodoncia»: abrir la hoja de control al entrar. */
   abrirControlAlEntrar?: boolean;
   onControlAbierto?: () => void;
+  /**
+   * ws1-t8 (ticket BEVADENT, punto 3): la cita de la consulta en curso en la ficha («Pasar a consulta»). La hoja
+   * que se abre se liga a ella y, al firmarla, adopta su nota y cierra la consulta: una sola nota por visita.
+   */
+  citaEnCursoId?: string | null;
   /** A9 · enlaza a las radiografías/escaneos que ya existen en el
    *  expediente, en vez de mandar al asistente de diagnóstico (bug heredado
    *  de reusar `onStartDiagnosisWizard` para "subir registro"). */
@@ -427,14 +432,15 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     // — degradación, no bloqueo: el control se sigue pudiendo registrar.
     // Si la consulta se cae (red, servidor reiniciando) tampoco se queda sin
     // abrir: mismo degradado que un fallo devuelto por la action.
-    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId).catch(() => null);
+    // ws1-t8 (punto 3): dentro de una consulta en curso, la hoja se liga a ESA cita (no a «la de control de hoy»).
+    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null).catch(() => null);
     setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
     setDrawer({ kind: "tcard-new" });
     } finally {
       abriendoControlRef.current = false;
       setAbriendoControl(false);
     }
-  }, [t.treatmentPlanId, hojaDeHoyFirmada]);
+  }, [t.treatmentPlanId, hojaDeHoyFirmada, props.citaEnCursoId]);
 
   // H17 (QA ws1-t9, ws1-t3): quien llega desde «Abrir caso» del módulo
   // (Pacientes en tratamiento → elegir paciente) trae `?abrirCaso=1`: el
@@ -936,6 +942,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           key={nuevoControlCtx.existingCard.id}
           card={nuevoControlCtx.existingCard}
           appointmentId={nuevoControlCtx.appointmentId}
+          cita={{ estado: nuevoControlCtx.appointmentStatus ?? null, inicio: nuevoControlCtx.appointmentStartsAt ?? null }}
           availableWires={nuevoControlCtx.availableWires}
           treatmentPlanId={t.treatmentPlanId || undefined}
           controlesPrevistos={controlesPrevistosDelCaso ?? nuevoControlCtx.controlesPrevistos}
@@ -951,6 +958,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           key="new-card-con-cita"
           card={null}
           appointmentId={nuevoControlCtx.appointmentId}
+          cita={{ estado: nuevoControlCtx.appointmentStatus ?? null, inicio: nuevoControlCtx.appointmentStartsAt ?? null }}
           controlesPrevistos={controlesPrevistosDelCaso ?? nuevoControlCtx.controlesPrevistos}
           tecnica={t.appliance.technique ?? nuevoControlCtx.technique}
           defaultsForNew={{

@@ -43,3 +43,35 @@ export function datosDeCierreDeCita(plan: PlanDeCierre, ahora: Date) {
     ...sideEffectsOf("COMPLETED", ahora),
   };
 }
+
+// ── ws1-t8 (ticket BEVADENT, punto 12): firmar HOY la hoja de una cita de OTRO día ─────────
+//
+// Antes, firmar la hoja ligada a una cita futura la pasaba a «Atendida» antes de que ocurriera y la
+// visita quedaba con la fecha futura («último control» en el futuro, paciente «sin próximo control»).
+// La regla, igual para todos los roles clínicos:
+//   · Cita de hoy o de un día pasado: como siempre (se liga, la visita lleva su fecha y se cierra).
+//   · Cita de un día FUTURO con el paciente ya presente (llegó, en sillón, en consulta): se atendió
+//     hoy, adelantada. Se liga y se cierra, pero la visita lleva la fecha de HOY.
+//   · Cita de un día FUTURO sin el paciente presente (agendada, confirmada…): NO se toca. La hoja se
+//     firma como visita de hoy, sin cita, y se avisa para que recepción decida qué hacer con esa cita.
+
+/** Estados en los que el paciente ya está en la clínica para ESA cita. */
+const PACIENTE_PRESENTE = new Set(["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"]);
+
+/** «2026-10-06», el día de calendario de `d` en la zona de la clínica. */
+export function diaEnZona(d: Date, zona: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+export type CitaAlFirmar =
+  /** La hoja se liga a la cita y se intenta cerrar; `visitaHoy` = la visita lleva la fecha de hoy, no la de la cita. */
+  | { ligar: true; visitaHoy: boolean }
+  /** Cita de un día futuro sin el paciente presente: no se liga ni se toca; la visita es de hoy. */
+  | { ligar: false; visitaHoy: true; diaDeLaCita: string };
+
+export function citaAlFirmar(cita: { status: string; startsAt: Date }, ahora: Date, zona: string): CitaAlFirmar {
+  const diaCita = diaEnZona(cita.startsAt, zona);
+  if (diaCita <= diaEnZona(ahora, zona)) return { ligar: true, visitaHoy: false };
+  if (PACIENTE_PRESENTE.has(cita.status)) return { ligar: true, visitaHoy: true };
+  return { ligar: false, visitaHoy: true, diaDeLaCita: diaCita };
+}

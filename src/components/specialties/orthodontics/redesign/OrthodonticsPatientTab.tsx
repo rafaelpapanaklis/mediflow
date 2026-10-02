@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { useTextosFirmaControl } from "./textos-firma-control";
 import { getInitials } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
@@ -197,6 +198,13 @@ export interface OrthodonticsPatientTabProps {
   abrirControlAlEntrar?: boolean;
   /** La pestaña ya atendió el aviso: que la ficha lo apague. */
   onControlAbierto?: () => void;
+  /**
+   * ws1-t8 (ticket BEVADENT, punto 3): la cita de la consulta en curso. La hoja se liga a ella y, al firmarla, la
+   * consulta queda cerrada con la nota de la hoja (una sola nota por visita).
+   */
+  citaEnCursoId?: string | null;
+  /** La firma de la hoja cerró la cita de la consulta en curso: que la ficha cierre la consulta sin pedir otra nota. */
+  onConsultaCerradaPorLaHoja?: (appointmentId: string) => void;
 }
 
 /** La pestaña «Ortodoncia» completa: banda de rediseño + ficha nueva o legacy. */
@@ -216,7 +224,10 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     onCollect,
     abrirControlAlEntrar,
     onControlAbierto,
+    citaEnCursoId,
+    onConsultaCerradaPorLaHoja,
   } = props;
+  const textosFirma = useTextosFirmaControl();
   const router = useRouter();
   const t = useT();
 
@@ -683,6 +694,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           onCreateCase={crearCaso}
           abrirControlAlEntrar={abrirControlAlEntrar}
           onControlAbierto={onControlAbierto}
+          citaEnCursoId={citaEnCursoId ?? null}
           onOpenImagingRecords={() => {
             // A9 · enlaza a lo que ya existe en el expediente (radiografías,
             // panorámica, lateral de cráneo, modelos 3D) en vez de mandar al
@@ -938,8 +950,17 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
             if (res.data.avisoReposiciones) toast(res.data.avisoReposiciones, { duration: 9000 });
             if (res.data.avisoProcedimientos) toast.error(res.data.avisoProcedimientos, { duration: 9000 });
             if (res.data.avisoExtracciones) toast.error(res.data.avisoExtracciones, { duration: 9000 });
-            // ws1-t9 #11: se firma un CONTROL (una hoja), no una cita.
-            toast.success("Control firmado");
+            // ws1-t8 (punto 12): la cita era de otro día y el paciente no había llegado — no se tocó.
+            if (res.data.citaDeOtroDiaSinTocar) toast(textosFirma.firmadaSinTocarCita(res.data.citaDeOtroDiaSinTocar), { duration: 10000 });
+            // ws1-t8 (punto 3): la firma cerró la cita de la consulta en curso con la nota de la hoja — la ficha
+            // cierra la consulta sin pedir otra nota.
+            if (res.data.citaCerrada && res.data.citaCerrada === citaEnCursoId) {
+              toast.success(textosFirma.consultaTerminada);
+              onConsultaCerradaPorLaHoja?.(res.data.citaCerrada);
+            } else {
+              // ws1-t9 #11: se firma un CONTROL (una hoja), no una cita.
+              toast.success("Control firmado");
+            }
             router.refresh();
             // §1 completo (ws1-t8): el cajón recuerda este id — así, si ya
             // se había guardado un borrador antes en la MISMA sesión y

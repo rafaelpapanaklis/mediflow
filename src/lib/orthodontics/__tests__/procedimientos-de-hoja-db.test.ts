@@ -21,6 +21,7 @@ mock.module("@/lib/prisma", {
         create: async ({ data }: { data: { plan: string; subjective: string; specialtyData: Record<string, unknown> } }) => {
           creaciones++;
           notas.push({ id: `n${creaciones}`, plan: data.plan, subjective: data.subjective, specialtyData: data.specialtyData });
+          return { id: `n${creaciones}` };
         },
         update: async ({ data }: { data: { plan: string; subjective: string; specialtyData: Record<string, unknown> } }) => {
           notas[0] = { ...notas[0], plan: data.plan, subjective: data.subjective, specialtyData: data.specialtyData };

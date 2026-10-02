@@ -78,7 +78,8 @@ test("la hoja que se abre es la de «Registrar control», y el aviso se apaga", 
   // la cita de control de HOY (mismo cargador que la Agenda) antes de abrir.
   assert.match(ficha, /if \(casoActivo\) void abrirRegistrarControl\(\);\s*onControlAbierto\?\.\(\);/);
   assert.match(ficha, /const abrirRegistrarControl = useCallback\(async \(\) => \{/);
-  assert.match(ficha, /getTreatmentCardContextForPatient\(t\.treatmentPlanId\)/);
+  // ws1-t8 (BEVADENT punto 3): dentro de una consulta en curso, con la cita de esa consulta.
+  assert.match(ficha, /getTreatmentCardContextForPatient\(t\.treatmentPlanId, props\.citaEnCursoId \?\? null\)/);
   // El mismo cajón que abre el botón «Registrar control» de la cabecera —
   // UNA sola función, no un setDrawer directo repetido por cada botón.
   assert.match(ficha, /onStartControl=\{\s*t\.status !== "no-iniciado" \? abrirRegistrarControl : undefined/);

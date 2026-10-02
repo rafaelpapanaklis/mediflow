@@ -23,6 +23,7 @@ import {
   notaPrecargada,
   type BracketPendiente,
 } from "@/lib/orthodontics/precarga-hoja-control";
+import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
 import type { OrthoPaymentStatus, OrthoTechnique } from "@prisma/client";
 import type {
   OrthoElasticClass,
@@ -63,6 +64,10 @@ export interface TreatmentCardAgendaContext {
    * FINGIR que está ligado a una).
    */
   appointmentId: string | null;
+  /** ws1-t8: estado de esa cita (para avisar en el cajón si es de otro día y el paciente no está). */
+  appointmentStatus: string | null;
+  /** ws1-t8: cuándo es esa cita (ISO). La fecha de la visita puede ser hoy aunque la cita sea de otro día. */
+  appointmentStartsAt: string | null;
   /** Ya hay una hoja ligada a ESTA cita, o una hoja de HOY del mismo caso
    * (se reabre/continúa, no se crea otra — hallazgo 7). */
   existingCard: TreatmentCardDTO | null;
@@ -172,7 +177,10 @@ export async function buildTreatmentCardContext(
   // nueva seguía diciendo la anterior.
   const phase: OrthoPhaseKey =
     phaseInProgress?.phaseKey ?? lastSignedCard?.phaseKey ?? "ALIGNMENT";
-  const visitDate = appt ? appt.startsAt.toISOString() : new Date().toISOString();
+  // ws1-t8 (punto 12): una cita de un día futuro que ya se está atendiendo (paciente presente) es una visita de
+  // HOY, adelantada: la hoja nace con la fecha de hoy, la misma que pondrá la firma (cerrar-cita-al-firmar.ts).
+  const visitaHoy = appt?.status ? citaAlFirmar({ status: appt.status, startsAt: appt.startsAt }, new Date(), clinicTimezone).visitaHoy : false;
+  const visitDate = appt && !visitaHoy ? appt.startsAt.toISOString() : new Date().toISOString();
   // ws1-t10: meses reales desde la colocación al día de la visita (antes, meses de calendario contra «hoy»).
   const monthAt = mesDeTratamiento(plan.installedAt ?? plan.startDate, new Date(visitDate));
   // Fila 12: el arco actual es el que puso el último control o, si ese
@@ -222,6 +230,8 @@ export async function buildTreatmentCardContext(
     treatmentPlanId: plan.id,
     patientId: plan.patientId,
     appointmentId: appt?.id ?? null,
+    appointmentStatus: appt?.status ?? null,
+    appointmentStartsAt: appt ? appt.startsAt.toISOString() : null,
     existingCard,
     availableWires: wireDTOs,
     controlesPrevistos: progreso?.previstos ?? null,

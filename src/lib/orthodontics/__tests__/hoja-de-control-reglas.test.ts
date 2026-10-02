@@ -10,20 +10,15 @@ test("huecos: cuántos y dónde", () => {
     total: 3,
     porCampo: [{ campo: "s", etiqueta: "Subjetivo", huecos: 2 }, { campo: "p", etiqueta: "Plan", huecos: 1 }],
   });
-  assert.equal(mensajeDeHuecos(nota), "Quedan 3 huecos (____): 2 en Subjetivo y 1 en Plan. Llénalos para poder firmar.");
+  // ws1-t8 (BEVADENT punto 10): el mensaje que BLOQUEA solo habla del Plan, lo obligatorio.
+  assert.equal(mensajeDeHuecos(nota), "Queda 1 hueco (____) en el Plan, que es obligatorio. Llénalo para poder firmar.");
 });
 
-test("huecos: uno solo, y ninguno", () => {
-  assert.equal(mensajeDeHuecos({ s: "", o: "", a: "", p: "Arco ____" }), "Queda 1 hueco (____): 1 en Plan. Llénalos para poder firmar.");
+test("huecos en el Plan: uno, varios y ninguno", () => {
+  assert.equal(mensajeDeHuecos({ s: "", o: "", a: "", p: "Arco ____" }), "Queda 1 hueco (____) en el Plan, que es obligatorio. Llénalo para poder firmar.");
+  assert.equal(mensajeDeHuecos({ s: "", o: "", a: "", p: "____ y ____" }), "Quedan 2 huecos (____) en el Plan, que es obligatorio. Llénalos para poder firmar.");
   assert.equal(mensajeDeHuecos({ s: "a", o: "b", a: "c", p: "d" }), null);
   assert.equal(mensajeDeHuecos({ s: "", o: "", a: "", p: "" }), null);
-});
-
-test("huecos en tres partes: «x en A, y en B y z en C»", () => {
-  assert.equal(
-    mensajeDeHuecos({ s: "____", o: "____", a: "", p: "____ ____" }),
-    "Quedan 4 huecos (____): 1 en Subjetivo, 1 en Objetivo y 2 en Plan. Llénalos para poder firmar.",
-  );
 });
 
 test("hojaFirmadaDeHoy: solo una FIRMADA y de hoy", () => {
@@ -68,12 +63,12 @@ import { join } from "node:path";
 const SRC = join(__dirname, "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
-test("#2: el cajón bloquea «Firmar control» con huecos y el servidor lo vuelve a exigir", () => {
+test("#2: el cajón bloquea «Firmar control» con huecos en el Plan y el servidor lo vuelve a exigir", () => {
   const d = leer("components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx");
   assert.match(d, /const canSign = puedeFirmarNota\(state\.soap, state\.notaPrecargada\) && !avisoDeHuecos;/);
   assert.match(d, /\{avisoDeHuecos\}/);
   const s = leer("app/actions/orthodontics/signTreatmentCard.ts");
-  assert.match(s, /const avisoDeHuecos = mensajeDeHuecos\(soap\);\s*if \(avisoDeHuecos\) return fail\(avisoDeHuecos\);/);
+  assert.match(s, /const avisoDeHuecos = mensajeDeHuecos\(soapTecleado\);\s*if \(avisoDeHuecos\) return fail\(avisoDeHuecos\);/);
 });
 
 test("#11: tras firmar sin fecha se ofrece agendar; la fecha usa la hora de la cita o del horario; el aviso dice «Control firmado»", () => {

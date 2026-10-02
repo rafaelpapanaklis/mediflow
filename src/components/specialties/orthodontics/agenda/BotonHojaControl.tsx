@@ -32,6 +32,7 @@ import { getTreatmentCardContextForAppointment } from "@/app/actions/orthodontic
 import { saveTreatmentCardDraft } from "@/app/actions/orthodontics/saveTreatmentCardDraft";
 import { signTreatmentCard } from "@/app/actions/orthodontics/signTreatmentCard";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { useTextosFirmaControl } from "../redesign/textos-firma-control";
 import orto from "../redesign/orto.module.css";
 import modulo from "../modulo/modulo.module.css";
 import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
@@ -53,6 +54,8 @@ export interface BotonHojaControlProps {
 
 interface LoadedContext {
   card: TreatmentCardDTO | null;
+  /** ws1-t8: estado y fecha de la cita, para el aviso de «cita de otro día» del cajón. */
+  cita: { estado: string | null; inicio: string | null };
   controlesPrevistos: number | null;
   tecnica: string | null;
   availableWires: WireStepDTO[];
@@ -80,6 +83,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
   const [ctx, setCtx] = useState<LoadedContext | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const textosFirma = useTextosFirmaControl();
 
   const abrir = async () => {
     setError(null);
@@ -92,6 +96,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
       }
       setCtx({
         card: res.data.existingCard,
+        cita: { estado: res.data.appointmentStatus, inicio: res.data.appointmentStartsAt },
         controlesPrevistos: res.data.controlesPrevistos,
         tecnica: res.data.technique,
         availableWires: res.data.availableWires,
@@ -160,6 +165,9 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
     if (avisoProcedimientos) toast.error(avisoProcedimientos, { duration: 9000 });
     const avisoReposiciones = firmar ? (res.data as { avisoReposiciones?: string }).avisoReposiciones : undefined;
     if (avisoReposiciones) toast(avisoReposiciones, { duration: 9000 });
+    // ws1-t8 (punto 12): la cita era de otro día y el paciente no había llegado — no se tocó.
+    const citaDeOtroDiaSinTocar = firmar ? (res.data as { citaDeOtroDiaSinTocar?: string }).citaDeOtroDiaSinTocar : undefined;
+    if (citaDeOtroDiaSinTocar) toast(textosFirma.firmadaSinTocarCita(citaDeOtroDiaSinTocar), { duration: 10000 });
     // M11 (Ronda 6): al FIRMAR, el cajón se queda abierto — es él quien
     // ahora ofrece Agendar/Avisar el próximo control con el cardId que
     // devuelve la firma (ver DrawerTreatmentCard.tsx, `justSigned`). Antes
@@ -198,6 +206,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
           treatmentPlanId={treatmentPlanId}
           availablePhotoSets={ctx.availablePhotoSets}
           appointmentId={appointmentId}
+          cita={ctx.cita}
           controlesPrevistos={ctx.controlesPrevistos}
           tecnica={ctx.tecnica}
           defaultsForNew={

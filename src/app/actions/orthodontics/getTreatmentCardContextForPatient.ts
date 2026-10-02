@@ -15,6 +15,12 @@
 //      (visita espontánea, caso real de clínica chica), pero ya no FINGE una
 //      cita que no existe.
 //
+// ws1-t8 (ticket BEVADENT, punto 3): si la hoja se abre DENTRO de una consulta en curso («Nueva
+// consulta» → tipo Ortodoncia), esa consulta ya sabe qué cita se está atendiendo: llega como
+// `citaEnCursoId` y manda sobre la búsqueda de la cita de hoy (la de P0294 era del día siguiente y
+// la hoja salía sin cita, con una segunda nota). Solo vale si la cita es de este paciente y el
+// paciente está presente (llegó, en sillón o en consulta); si no, se sigue la regla de siempre.
+//
 // En los dos casos, `buildTreatmentCardContext` aplica la misma regla de
 // "hoja de hoy" (hallazgo 7): si el plan YA tiene una hoja de hoy —ligada a
 // otra cita, o sin cita— se continúa esa en vez de crear una segunda.
@@ -29,6 +35,7 @@ import { buildTreatmentCardContext, type TreatmentCardAgendaContext } from "@/li
 
 export async function getTreatmentCardContextForPatient(
   treatmentPlanId: string,
+  citaEnCursoId?: string | null,
 ): Promise<ActionResult<TreatmentCardAgendaContext>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
@@ -56,6 +63,19 @@ export async function getTreatmentCardContextForPatient(
 
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
   const timezone = clinic?.timezone ?? "America/Mexico_City";
+
+  if (citaEnCursoId) {
+    const enCurso = await prisma.appointment.findFirst({
+      where: {
+        id: citaEnCursoId,
+        clinicId: ctx.clinicId,
+        patientId: plan.patientId,
+        status: { in: ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"] },
+      },
+      select: { id: true, startsAt: true, endsAt: true, status: true },
+    });
+    if (enCurso) return ok(await buildTreatmentCardContext(plan, enCurso, timezone));
+  }
 
   const { startUtc, endUtc } = calendarDayRangeUtc(hoyEnZona(new Date(), timezone), timezone);
   const citaDeHoy = await prisma.appointment.findFirst({

@@ -1453,6 +1453,22 @@ export function PatientDetailClient({
     router.refresh();
   }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router]);
 
+  // ws1-t8 (ticket BEVADENT, punto 3): firmar la hoja de control de la cita en curso YA cerró la cita y su nota
+  // (la hoja adoptó el borrador de esta consulta). La consulta se cierra aquí sin volver a pedir nota.
+  const cerrarConsultaPorLaHoja = useCallback(
+    (appointmentId: string) => {
+      if (!activeAppointment || activeAppointment.id !== appointmentId) return;
+      setConsultClosed(true);
+      setClinicalNoteId(null);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("appointment");
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : window.location.pathname);
+      router.refresh();
+    },
+    [activeAppointment, searchParams, router],
+  );
+
   const consultDoctorName =
     activeAppointment?.doctor?.firstName
       ? `${t("patients.doctorPrefix")} ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
@@ -2118,6 +2134,8 @@ export function PatientDetailClient({
               onCollect={openBillingTab}
               abrirControlAlEntrar={abrirControlOrto}
               onControlAbierto={() => setAbrirControlOrto(false)}
+              citaEnCursoId={activeAppointment?.id ?? null}
+              onConsultaCerradaPorLaHoja={cerrarConsultaPorLaHoja}
             />
             </SoloLectura>
           )}

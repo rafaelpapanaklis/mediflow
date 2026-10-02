@@ -21,8 +21,8 @@ import { marcarExtraccionesDesdeLaHoja } from "@/lib/orthodontics/plan-detalle-g
 import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
-import { datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/orthodontics/cerrar-cita-al-firmar";
-import { esCitaControlOrto, TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
+import { citaAlFirmar, datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/orthodontics/cerrar-cita-al-firmar";
+import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
@@ -30,7 +30,7 @@ import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
 import { notaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita";
-import { mensajeDeHuecos } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { mensajeDeHuecos, rellenarHuecosOpcionales } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cambiosAlFirmarConArco } from "@/lib/orthodontics/secuencia-de-arcos";
 import { existeFacturaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita-db";
 import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
@@ -138,7 +138,7 @@ export type SignTreatmentCardInput = z.input<typeof inputSchema>;
 
 export async function signTreatmentCard(
   input: unknown,
-): Promise<ActionResult<{ cardId: string; avisoControlSinFacturar?: string; avisoReposiciones?: string; avisoProcedimientos?: string; avisoExtracciones?: string }>> {
+): Promise<ActionResult<{ cardId: string; citaCerrada?: string; citaDeOtroDiaSinTocar?: string; avisoControlSinFacturar?: string; avisoReposiciones?: string; avisoProcedimientos?: string; avisoExtracciones?: string }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -151,20 +151,22 @@ export async function signTreatmentCard(
   // Regla SPEC: para firmar todos los SOAP deben tener contenido tras trim.
   // (zod normaliza optionals a string vacío gracias a default(""), pero el
   // tipo `z.input` los marca opcionales — copiamos al shape estricto.)
-  const soap = {
+  const soapTecleado = {
     s: data.soap.s ?? "",
     o: data.soap.o ?? "",
     a: data.soap.a ?? "",
     p: data.soap.p ?? "",
   };
-  if (!canSignSoap(soap)) {
+  if (!canSignSoap(soapTecleado)) {
     return fail("Falta el Plan (P): es lo único obligatorio para firmar el control");
   }
   // NOM-004 (ws1-t9 #2): una nota firmada es inalterable y no puede llevar los huecos «____» de
-  // la plantilla. El cajón ya lo bloquea; el servidor lo vuelve a exigir (una petición hecha a
-  // mano no se lo salta).
-  const avisoDeHuecos = mensajeDeHuecos(soap);
+  // la plantilla. ws1-t8 (ticket BEVADENT, punto 10): solo lo OBLIGATORIO bloquea — un hueco en el
+  // Plan impide firmar; uno en S/O/A (opcionales) se firma escrito «[sin dato]». El cajón dice lo
+  // mismo antes de firmar; el servidor lo vuelve a aplicar (una petición hecha a mano no se lo salta).
+  const avisoDeHuecos = mensajeDeHuecos(soapTecleado);
   if (avisoDeHuecos) return fail(avisoDeHuecos);
+  const soap = rellenarHuecosOpcionales(soapTecleado);
 
   const plan = await prisma.orthodonticTreatmentPlan.findFirst({
     where: { id: data.treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
@@ -188,6 +190,19 @@ export async function signTreatmentCard(
     citaDeControl = appt;
   }
 
+  // ws1-t8 (ticket BEVADENT, punto 12): firmar HOY la hoja de una cita de OTRO día. Una cita futura con el
+  // paciente presente se atendió hoy, adelantada (se liga y se cierra, la visita es de hoy); sin el paciente
+  // presente NO se toca: la hoja se firma como visita de hoy, sin cita, y se avisa. Regla en cerrar-cita-al-firmar.ts.
+  const clinicaZona = citaDeControl
+    ? ((await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }))?.timezone ?? "America/Mexico_City")
+    : null;
+  const decisionCita = citaDeControl && clinicaZona ? citaAlFirmar(citaDeControl, new Date(), clinicaZona) : null;
+  const citaDeOtroDiaSinTocar = decisionCita && "diaDeLaCita" in decisionCita ? decisionCita.diaDeLaCita : undefined;
+  if (citaDeOtroDiaSinTocar) citaDeControl = null;
+  // La cita a la que queda ligada la hoja: `undefined` = no se toca la columna; `null` = se desliga (una hoja
+  // guardada antes como borrador ligada a esa cita futura deja de estarlo).
+  const appointmentIdDeLaHoja: string | null | undefined = citaDeOtroDiaSinTocar ? null : data.appointmentId;
+
   // Los procedimientos de la visita se validan ANTES de firmar: una hoja no puede quedar
   // firmada con un procedimiento que el catálogo ya no ofrece (la firma es inalterable).
   if (data.procedimientos !== undefined) {
@@ -195,7 +210,7 @@ export async function signTreatmentCard(
     if (errorProcedimientos) return fail(errorProcedimientos);
   }
 
-  const visitDate = new Date(data.visitDate);
+  const visitDate = decisionCita?.visitaHoy ? new Date() : new Date(data.visitDate);
   const nextDate = data.nextDate ? new Date(data.nextDate) : null;
   const now = new Date();
 
@@ -235,10 +250,10 @@ export async function signTreatmentCard(
             monthAt: data.monthAt,
             wireFromId: data.wireFromId ?? null,
             wireToId: data.wireToId ?? null,
-            soapS: data.soap.s,
-            soapO: data.soap.o,
-            soapA: data.soap.a,
-            soapP: data.soap.p,
+            soapS: soap.s,
+            soapO: soap.o,
+            soapA: soap.a,
+            soapP: soap.p,
             hygienePlaquePct: data.hygiene.plaquePct,
             hygieneGingivitis: data.hygiene.gingivitis,
             hygieneWhiteSpots: data.hygiene.whiteSpots,
@@ -270,10 +285,10 @@ export async function signTreatmentCard(
             monthAt: data.monthAt,
             wireFromId: data.wireFromId ?? null,
             wireToId: data.wireToId ?? null,
-            soapS: data.soap.s,
-            soapO: data.soap.o,
-            soapA: data.soap.a,
-            soapP: data.soap.p,
+            soapS: soap.s,
+            soapO: soap.o,
+            soapA: soap.a,
+            soapP: soap.p,
             hygienePlaquePct: data.hygiene.plaquePct,
             hygieneGingivitis: data.hygiene.gingivitis,
             hygieneWhiteSpots: data.hygiene.whiteSpots,
@@ -368,7 +383,7 @@ export async function signTreatmentCard(
     // propósito de la de arriba, igual que saveTreatmentCardDraft.ts: un
     // P2021/P2022 aquí nunca debe poder revertir una firma ya hecha.
     if (
-      data.appointmentId !== undefined ||
+      appointmentIdDeLaHoja !== undefined ||
       data.activationsNote !== undefined ||
       data.indications !== undefined
     ) {
@@ -376,8 +391,8 @@ export async function signTreatmentCard(
         await prisma.orthoTreatmentCard.update({
           where: { id: cardId },
           data: {
-            ...(data.appointmentId !== undefined
-              ? { appointmentId: data.appointmentId }
+            ...(appointmentIdDeLaHoja !== undefined
+              ? { appointmentId: appointmentIdDeLaHoja }
               : {}),
             ...(data.activationsNote !== undefined
               ? { activationsNote: data.activationsNote }
@@ -416,7 +431,11 @@ export async function signTreatmentCard(
     // de la hoja en sus notas (`control-sin-cita.ts`) y ligada al caso — y no se duplica si
     // ya existe la de esa hoja ni cuando la hoja ya estaba firmada.
     let avisoControlSinFacturar: string | undefined;
-    const esControlConCita = !!citaDeControl && esCitaControlOrto(citaDeControl.type);
+    // ws1-t8 (punto 3): la hoja ahora se liga también a la cita de la consulta en curso aunque su tipo no sea
+    // «Control de ortodoncia» (se abrió como «Dental general» y el doctor cambió a Ortodoncia). Una hoja firmada
+    // ES un control: con cita ligada se factura con esa cita (sin cita se perdería el cobro en silencio, porque el
+    // camino «sin cita» no aplica). `crearFacturaDesdeCita` no duplica si la cita ya tiene factura.
+    const esControlConCita = !!citaDeControl;
     const esControlSinCita = !citaDeControl && !yaEstabaFirmada;
     if (esControlConCita || esControlSinCita) {
       try {
@@ -485,6 +504,7 @@ export async function signTreatmentCard(
     // venido el mismo día que vino. No bloqueante: se salta en silencio si
     // la transición no es válida desde el estado actual (p. ej. la cita ya
     // se canceló, o ya estaba completada) — nunca revierte la firma clínica.
+    let citaCerrada: string | undefined;
     if (citaDeControl && citaDeControl.status !== "COMPLETED") {
       try {
         const plan = planDeCierreDeCita(
@@ -499,6 +519,7 @@ export async function signTreatmentCard(
           // Cerrar la cita al firmar pide la reseña igual que «Terminar consulta»
           // (ws1-t4, 11.2). Idempotente y nunca lanza.
           await sendReviewInvitation(citaDeControl.id);
+          citaCerrada = citaDeControl.id;
         } else {
           console.warn(`[ortho] signTreatmentCard: cita ${citaDeControl.id} (${citaDeControl.status}) no se puede pasar a COMPLETED — se firmó igual`);
         }
@@ -529,7 +550,7 @@ export async function signTreatmentCard(
         cardId,
         cardNumber: data.cardNumber,
         visitDate,
-        appointmentId: data.appointmentId ?? null,
+        appointmentId: citaDeControl ? citaDeControl.id : null,
         soap,
         pedidos: data.procedimientos as Pedido[] | undefined,
         firmar: true,
@@ -577,7 +598,7 @@ export async function signTreatmentCard(
 
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     revalidatePath(`/dashboard/patients/${plan.patientId}`);
-    return ok({ cardId, ...(avisoExtracciones ? { avisoExtracciones } : {}), ...(avisoProcedimientos ? { avisoProcedimientos } : {}), ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
+    return ok({ cardId, ...(citaCerrada ? { citaCerrada } : {}), ...(citaDeOtroDiaSinTocar ? { citaDeOtroDiaSinTocar } : {}), ...(avisoExtracciones ? { avisoExtracciones } : {}), ...(avisoProcedimientos ? { avisoProcedimientos } : {}), ...(avisoReposiciones ? { avisoReposiciones } : {}), ...(avisoControlSinFacturar ? { avisoControlSinFacturar } : {}) });
   } catch (e) {
     console.error("[ortho] signTreatmentCard failed:", e);
     return fail("No se pudo firmar la cita");

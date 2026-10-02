@@ -35,15 +35,40 @@ export function huecosDeLaNota(nota: NotaConHuecos): ReporteDeHuecos {
 }
 
 /**
- * «Quedan 3 huecos (____): 1 en Subjetivo y 2 en Plan. Llénalos para poder firmar.»
- * `null` si no queda ninguno.
+ * ws1-t8 (ticket BEVADENT, punto 10): solo lo OBLIGATORIO bloquea la firma. El Plan (P) es lo único
+ * obligatorio (`canSignSoap`); un hueco en S, O o A ya no impide firmar: se firma como «sin dato»
+ * (ver `rellenarHuecosOpcionales`). Este mensaje solo habla de los huecos del Plan.
+ * «Quedan 2 huecos (____) en el Plan, que es obligatorio. Llénalos para poder firmar.» `null` si no hay.
  */
 export function mensajeDeHuecos(nota: NotaConHuecos): string | null {
-  const { total, porCampo } = huecosDeLaNota(nota);
-  if (total === 0) return null;
-  const dondes = porCampo.map((c) => `${c.huecos} en ${c.etiqueta}`);
+  const enPlan = huecosDeLaNota(nota).porCampo.find((c) => c.campo === "p")?.huecos ?? 0;
+  if (enPlan === 0) return null;
+  return enPlan === 1
+    ? `Queda 1 hueco (${HUECO}) en el Plan, que es obligatorio. Llénalo para poder firmar.`
+    : `Quedan ${enPlan} huecos (${HUECO}) en el Plan, que es obligatorio. Llénalos para poder firmar.`;
+}
+
+/**
+ * Lo que se escribe en la nota firmada en lugar de un hueco «____» de una parte OPCIONAL (S/O/A). Una nota
+ * firmada no lleva huecos de plantilla (NOM-004): se dice explícitamente que ese dato no se registró. No se
+ * borra la frase: puede llevar algo que el doctor sí escribió («Refiere ____ y molestia en el 24»).
+ */
+export const SIN_DATO = "[sin dato]";
+
+/** «3 datos opcionales sin llenar (____) en Subjetivo y Objetivo: puedes firmar así…». `null` si no hay. */
+export function avisoDeHuecosOpcionales(nota: NotaConHuecos): string | null {
+  const opcionales = huecosDeLaNota(nota).porCampo.filter((c) => c.campo !== "p");
+  if (opcionales.length === 0) return null;
+  const total = opcionales.reduce((n, c) => n + c.huecos, 0);
+  const dondes = opcionales.map((c) => c.etiqueta);
   const donde = dondes.length > 1 ? `${dondes.slice(0, -1).join(", ")} y ${dondes[dondes.length - 1]}` : dondes[0];
-  return `${total === 1 ? "Queda 1 hueco" : `Quedan ${total} huecos`} (${HUECO}): ${donde}. Llénalos para poder firmar.`;
+  return `${total === 1 ? "1 dato opcional sin llenar" : `${total} datos opcionales sin llenar`} (${HUECO}) en ${donde}: puedes firmar así y quedará escrito «${SIN_DATO}».`;
+}
+
+/** La nota tal como se firma: los huecos de S/O/A pasan a «[sin dato]»; el Plan no se toca (con hueco no se firma). */
+export function rellenarHuecosOpcionales<T extends NotaConHuecos>(nota: T): T {
+  const cambiar = (t: string) => (t ?? "").split(HUECO).join(SIN_DATO);
+  return { ...nota, s: cambiar(nota.s), o: cambiar(nota.o), a: cambiar(nota.a) };
 }
 
 // ── #17: ¿ya hay una hoja FIRMADA de hoy? ───────────────────────────────────────────────
@@ -99,4 +124,31 @@ export function avisoSinArcosPlanificados(cantidadDeArcos: number, conPlan: bool
   if (cantidadDeArcos > 0) return null;
   const base = "Aún no hay arcos planificados: cárgalos en Aparatología y arcos → Secuencia de arcos → Agregar arco.";
   return conPlan ? `${base} O usa «Otro arco…» aquí para sumar el de hoy.` : base;
+}
+
+// ── ws1-t8 (ticket BEVADENT, punto 3): UNA nota por visita ──────────────────────────────
+//
+// «Pasar a consulta» crea el borrador de la nota de esa cita; si el doctor atiende el control con la hoja
+// de ortodoncia, la hoja ADOPTA ese borrador al firmar (no crea una segunda nota). Lo que el doctor ya
+// hubiera escrito en el borrador no se pierde: va delante de lo de la hoja.
+
+/** El texto de una parte de la nota adoptada: lo del borrador de la consulta + lo de la hoja, sin repetir. */
+export function fusionarTexto(borrador: string | null | undefined, hoja: string): string {
+  const b = (borrador ?? "").trim();
+  if (!b) return hoja;
+  if (!hoja.trim()) return b;
+  if (hoja.includes(b)) return hoja;
+  return `${b}\n\n${hoja}`;
+}
+
+export function fusionarNotaDeConsulta(
+  borrador: { subjective: string | null; objective: string | null; assessment: string | null; plan: string | null },
+  hoja: NotaConHuecos,
+): NotaConHuecos {
+  return {
+    s: fusionarTexto(borrador.subjective, hoja.s),
+    o: fusionarTexto(borrador.objective, hoja.o),
+    a: fusionarTexto(borrador.assessment, hoja.a),
+    p: fusionarTexto(borrador.plan, hoja.p),
+  };
 }

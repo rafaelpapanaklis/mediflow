@@ -43,7 +43,10 @@ import {
 import { useCajon } from "../atoms/useCajon";
 import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionTemplatePicker";
 import { aplicarPlantillaAlControl } from "@/lib/orthodontics/consulta-ortodoncia";
-import { avisoSinArcosPlanificados, mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { avisoSinArcosPlanificados, huecosDeLaNota, mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
+import { zonaFijada } from "../atoms/format";
+import { useTextosFirmaControl } from "../textos-firma-control";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import { claveDeFase } from "@/lib/orthodontics/fase-de-hoja";
 import { plantillaAplicaALaTecnica } from "@/lib/orthodontics/plantillas-por-tecnica";
@@ -173,6 +176,11 @@ export interface DrawerTreatmentCardProps {
    * no tengan que llevar su propia copia. `null` = control sin cita ligada.
    */
   appointmentId?: string | null;
+  /**
+   * ws1-t8 (ticket BEVADENT, punto 12): estado y fecha de esa cita. Si es de un día futuro y el paciente no ha
+   * llegado, el cajón avisa antes de firmar que la hoja queda como visita de hoy y la cita no se toca.
+   */
+  cita?: { estado: string | null; inicio: string | null } | null;
   /**
    * El paciente de la hoja, para ofrecer «Agendar el próximo control» tras firmar cuando no se
    * capturó fecha (ws1-t9 #11). Sin él (la Agenda no lo pasa) ese botón no se ofrece.
@@ -309,7 +317,27 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     });
   };
   // NOM-004 (ws1-t9 #2): una nota con huecos «____» de la plantilla no se firma; el mensaje dice cuántos y dónde.
+  // ws1-t8 (ticket BEVADENT, punto 10): solo bloquea un hueco en el Plan (lo obligatorio). Los de S/O/A se avisan
+  // y se firman escritos «[sin dato]» (signTreatmentCard → rellenarHuecosOpcionales).
   const avisoDeHuecos = mensajeDeHuecos(state.soap);
+  const textosFirma = useTextosFirmaControl();
+  const huecosOpcionales = huecosDeLaNota(state.soap).porCampo.filter((c) => c.campo !== "p");
+  const avisoHuecosOpcionales = huecosOpcionales.length
+    ? textosFirma.huecosOpcionales(
+        huecosOpcionales.reduce((n, c) => n + c.huecos, 0),
+        huecosOpcionales.map((c) => c.campo as "s" | "o" | "a"),
+      )
+    : null;
+  // ws1-t8 (punto 12): cita de un día futuro sin el paciente presente → la firma no la toca.
+  const decisionCita =
+    props.appointmentId && props.cita?.estado && props.cita.inicio
+      ? citaAlFirmar(
+          { status: props.cita.estado, startsAt: new Date(props.cita.inicio) },
+          new Date(),
+          zonaFijada() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+        )
+      : null;
+  const avisoCitaDeOtroDia = decisionCita && "diaDeLaCita" in decisionCita ? textosFirma.citaDeOtroDia(decisionCita.diaDeLaCita) : null;
 
   const buildSubmit = (): DrawerCardSubmit => ({
     cardId: state.learnedCardId,
@@ -644,6 +672,11 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 {avisoDeHuecos}
               </p>
             ) : null}
+            {!isReadOnly && avisoHuecosOpcionales ? (
+              <p className={`${orto.bloqueNota} mb-[10px]`} data-huecos-opcionales>
+                {avisoHuecosOpcionales}
+              </p>
+            ) : null}
             <div className="flex flex-col gap-[10px]">
               {(
                 [
@@ -860,6 +893,11 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                 </div>
               ) : null}
             </section>
+          ) : null}
+          {!isReadOnly && avisoCitaDeOtroDia ? (
+            <div className={`${orto.aviso} ${orto.avisoAlerta}`} role="status" data-cita-de-otro-dia>
+              {avisoCitaDeOtroDia}
+            </div>
           ) : null}
         </div>
 

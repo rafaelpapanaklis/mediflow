@@ -128,3 +128,8 @@ export function clinicalSeverityColor(pct: number): "emerald" | "amber" | "rose"
   if (pct < 30) return "amber";
   return "rose";
 }
+
+/** La zona de la clínica fijada para esta pestaña (o `undefined`: la del navegador). */
+export function zonaFijada(): string | undefined {
+  return zonaDeLaClinica;
+}
