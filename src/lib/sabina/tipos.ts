@@ -99,6 +99,14 @@ export interface SabinaCtx {
    */
   idioma?: "es" | "en";
   /**
+   * «Ver como clínica» (ws1-t11, decisión de Rafael del 2-oct): Sabina funciona
+   * igual y todo queda a nombre de la cuenta de la sesión (el dueño), pero las
+   * filas que guarda no llevan la IP ni el navegador de quien está dentro: la
+   * pantalla Auditoría de la clínica los muestra y delatarían al admin de
+   * plataforma. Es solo para el rastro; NUNCA viaja al prompt.
+   */
+  rastroSinRed?: boolean;
+  /**
    * Cliente de base. Se omite en producción (se usa el `prisma` del repo); las
    * pruebas inyectan aquí un doble con dos clínicas sembradas para demostrar
    * que ninguna herramienta cruza el tenant. Ver `dbDe` en ./tools/base.
@@ -392,6 +400,8 @@ export async function crearSabinaCtx(
         userId?: string | null;
         role?: string | null;
         permissionsOverride?: string[] | null;
+        /** Presente solo en una sesión de «Ver como clínica» (ver `rastroSinRed`). */
+        suplantacion?: unknown;
         clinic?: {
           timezone?: string | null;
           category?: string | null;
@@ -431,6 +441,7 @@ export async function crearSabinaCtx(
       .filter(Boolean)
       .join(", ") || undefined,
     idioma: auth?.clinic?.locale === "en" ? "en" : "es",
+    ...(auth?.suplantacion ? { rastroSinRed: true } : {}),
   };
 }
 

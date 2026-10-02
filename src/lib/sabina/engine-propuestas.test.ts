@@ -361,3 +361,46 @@ test("la confirmación solo se acepta desde la misma página (Origin o Referer d
   assert.equal(origenValido(h({ host: "app.dalecontrol.mx", origin: "https://evil.example" })), false);
   assert.equal(origenValido(h({ host: "app.dalecontrol.mx" })), false);
 });
+
+/* ── «Ver como clínica» (ws1-t11, decisión de Rafael del 2-oct) ─────────── */
+
+test("«Ver como clínica»: Sabina funciona, todo queda a nombre del dueño y sin IP ni navegador del admin", async () => {
+  const { crearSabinaCtx } = await import("./tipos");
+  const c = await crearSabinaCtx(
+    {
+      clinicId: "cl_mia", userId: "us_dueno", role: "SUPER_ADMIN", permissionsOverride: [],
+      suplantacion: { adminUserId: "adm_1", adminEmail: "soporte@dalecontrol.com", expiresAt: new Date() },
+      clinic: { timezone: "America/Mexico_City", name: "Clínica Mía" },
+    },
+    { leerAjustes: async () => null },
+  );
+  assert.ok(c);
+  assert.equal(c.rastroSinRed, true);
+  assert.doesNotMatch(JSON.stringify(c), /dalecontrol|adm_1/, "el ctx de Sabina no sabe nada del admin");
+
+  const v = await proponer(c);
+  const d = await confirmar(v.id, c);
+  assert.equal(d.vista?.estado, "hecha", "Sabina sigue funcionando dentro");
+  const filas = base.filas.filter((f) => f.entityId === v.id);
+  assert.deepEqual(acciones(v.id), [EVENTO.proponer, EVENTO.confirmar, EVENTO.resultado]);
+  for (const f of filas) {
+    assert.equal(f.userId, "us_dueno");
+    assert.equal(f.ipAddress, null);
+    assert.equal(f.userAgent, null);
+  }
+  assert.doesNotMatch(JSON.stringify(filas), /dalecontrol\.com|adm_1|10\.0\.0\.7|"prueba"/);
+});
+
+test("fuera de «Ver como clínica» el rastro de Sabina conserva IP y navegador, como siempre", async () => {
+  const { crearSabinaCtx } = await import("./tipos");
+  const c = await crearSabinaCtx(
+    { clinicId: "cl_mia", userId: "us_dueno", role: "SUPER_ADMIN", permissionsOverride: [], suplantacion: null, clinic: {} },
+    { leerAjustes: async () => null },
+  );
+  assert.ok(c);
+  assert.equal(c.rastroSinRed, undefined);
+  const v = await proponer(c);
+  const f = base.filas.find((x) => x.entityId === v.id)!;
+  assert.equal(f.ipAddress, "10.0.0.7");
+  assert.equal(f.userAgent, "prueba");
+});

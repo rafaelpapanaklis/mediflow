@@ -91,7 +91,8 @@ function fila(ctx: SabinaCtx, id: string, action: string, changes: Record<string
       entityId: id,
       action,
       changes: { v: 1, ...changes },
-      ...meta(req),
+      // «Ver como clínica»: a nombre del dueño y sin la IP/navegador del admin.
+      ...(ctx.rastroSinRed ? { ipAddress: null, userAgent: null } : meta(req)),
       actorType: "staff",
     },
   };
