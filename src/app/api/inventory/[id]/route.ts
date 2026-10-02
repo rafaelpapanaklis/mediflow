@@ -41,6 +41,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         itemId: params.id, clinicId: ctx.clinicId, userId: ctx.userId,
         change, reason: "Ajuste directo", type: "adjust",
       });
+    } else if (newQty === 0) {
+      // 12f: «cuento y hay cero» NO cambia la cantidad, pero sí es un conteo:
+      // sin esta línea el artículo seguiría «Sin contar» para siempre.
+      await registrarHistorialInventario({
+        itemId: params.id, clinicId: ctx.clinicId, userId: ctx.userId,
+        change: 0, reason: "Conteo: sin existencias", type: "adjust",
+      });
     }
     return NextResponse.json(updated);
   }

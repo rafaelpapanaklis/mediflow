@@ -234,6 +234,12 @@ button.caducidadLinea:focus-visible {
   color: var(--warning-strong, var(--warning));
 }
 
+/* «Sin contar» (12f): ni bien ni mal, falta capturar — gris, nunca rojo. */
+.cuentaNeutra {
+  background: var(--iv-tarjeta-2);
+  color: var(--iv-texto-2);
+}
+
 /* Sobre el segmento activo (fondo de acento) la cuenta va en el color del
    propio texto: un ámbar sobre violeta no se lee. */
 :global(.segment-new__btn--active) .cuenta {
@@ -379,6 +385,7 @@ button.caducidadLinea:focus-visible {
 .tonoExito { color: var(--success-strong, var(--success)); }
 .tonoAlerta { color: var(--warning-strong, var(--warning)); }
 .tonoPeligro { color: var(--danger-strong, var(--danger)); }
+.tonoNeutro { color: var(--iv-texto-3); }
 
 .edicion {
   display: inline-flex;
@@ -479,6 +486,19 @@ button.caducidadLinea:focus-visible {
 .pildoraExito { background: var(--success-soft); color: var(--success-strong, var(--success)); }
 .pildoraAlerta { background: var(--warning-soft); color: var(--warning-strong, var(--warning)); }
 .pildoraPeligro { background: var(--danger-soft); color: var(--danger-strong, var(--danger)); }
+.pildoraNeutra { background: var(--iv-tarjeta-2); color: var(--iv-texto-2); box-shadow: inset 0 0 0 1px var(--iv-borde-suave); }
+
+/* Guía bajo los filtros cuando se ven los «Sin contar»: qué hacer, no solo qué pasa. */
+.guiaConteo {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--iv-tarjeta-2);
+  box-shadow: inset 0 0 0 1px var(--iv-borde-suave);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--iv-texto-2);
+}
 
 /* Acciones: pegadas al borde derecho, siempre a la vista aunque la tabla
    no quepa entera. El fondo es opaco para tapar lo que pasa por debajo. */

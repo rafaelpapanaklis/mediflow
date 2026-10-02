@@ -8,6 +8,7 @@ import {
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import { avisosDeExistencias, contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
+import { idsSinContar } from "@/lib/inventory/sin-contar.server";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import {
   periodRangeUtc,
@@ -316,7 +317,9 @@ async function buildAlerts(
       where: { clinicId },
       select: { id: true, quantity: true, minQuantity: true },
     });
-    alerts.push(...avisosDeExistencias(contarExistenciasVigentes(items, caducado)));
+    // 12f: lo que nunca se contó no es «agotado» — aviso aparte.
+    const sinContar = await idsSinContar(clinicId, items);
+    alerts.push(...avisosDeExistencias(contarExistenciasVigentes(items, caducado, sinContar)));
   } catch (err) {
     console.error("[admin alerts] lowStock query failed:", err);
     /* skip — la alerta se omite, no rompemos el endpoint */

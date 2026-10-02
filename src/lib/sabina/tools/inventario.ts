@@ -36,6 +36,7 @@ import { getExpiryAlerts, getAlertDaysAhead, type AvisoLote } from "@/lib/invent
 import { listarInventario, type ItemConCosto } from "@/lib/inventory/costo.server";
 import { listarCompras } from "@/lib/inventory/compras.server";
 import { contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
+import { idsSinContar } from "@/lib/inventory/sin-contar.server";
 import { sumarValorInventario } from "@/lib/inventory/costo-core";
 import { diasParaCaducar, estadoDeCaducidad } from "@/lib/inventory/lots-core";
 import { diaDeCompra, fechaCalendarioDe, hoyEnZona } from "@/lib/inventory/fecha-calendario";
@@ -67,7 +68,8 @@ const parametros = z.object({
 
 export type ParamsInventario = z.infer<typeof parametros>;
 
-export type EstadoExistencias = "agotado" | "bajo" | "disponible";
+/** `sin_contar` (12f): en cero y NUNCA contado — no es «agotado», no se sabe cuánto hay. */
+export type EstadoExistencias = "agotado" | "bajo" | "disponible" | "sin_contar";
 
 export interface ArticuloFila {
   nombre: string;
@@ -115,6 +117,8 @@ export interface DatosInventario {
     unidades: number;
     agotados: number;
     bajos: number;
+    /** Artículos en cero que nunca se contaron (no entran en `agotados`). */
+    sinContar: number;
     lotesPorCaducar: number;
     lotesCaducados: number;
     valorTotal: number;
@@ -222,6 +226,8 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
     ]);
 
     const cad = caducadoPorArticulo(avisos.caducado);
+    // 12f: la misma regla que la pantalla — en cero y sin historia no es «agotado».
+    const sinContarIds = await idsSinContar(ctx.clinicId, items, db);
     const vigente = (i: ItemConCosto) => Math.max(0, i.quantity - Math.round(cad.get(i.id) ?? 0));
     const fila = (i: ItemConCosto): ArticuloFila => {
       const q = vigente(i);
@@ -231,7 +237,7 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
         existencias: q,
         minimo: i.minQuantity,
         unidad: i.unit,
-        estado: estadoDe(q, i.minQuantity),
+        estado: q <= 0 && sinContarIds.has(i.id) ? "sin_contar" : estadoDe(q, i.minQuantity),
         caducadas: Math.round(cad.get(i.id) ?? 0),
         costoUnitario: i.unitCost ?? 0,
       };
@@ -241,6 +247,7 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
     const conteo = contarExistenciasVigentes(
       items.map((i) => ({ id: i.id, quantity: i.quantity, minQuantity: i.minQuantity })),
       avisos.caducado.map((a) => ({ itemId: a.itemId, remaining: a.remaining })),
+      sinContarIds,
     );
     const valorTotal = money(sumarValorInventario(items.map((i) => ({ unitCost: i.unitCost ?? 0, quantity: vigente(i) }))));
     const unidades = items.reduce((s, i) => s + vigente(i), 0);
@@ -253,6 +260,7 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
         unidades,
         agotados: conteo.agotados,
         bajos: conteo.bajos,
+        sinContar: conteo.sinContar ?? 0,
         lotesPorCaducar: avisos.porCaducar.length,
         lotesCaducados: avisos.caducado.length,
         valorTotal,
@@ -373,13 +381,17 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
     if (d.vista === "stock_bajo") {
       const ag = d.agotados!;
       const ba = d.bajos!;
-      if (ag.total === 0 && ba.total === 0) return `No hay artículos agotados ni con stock bajo. ${ver}`;
+      // 12f: lo que nunca se contó no se da por agotado, pero se dice que falta contarlo.
+      const sc = r!.sinContar;
+      const nota = sc > 0 ? ` Ojo: ${plural(sc, "artículo está sin contar", "artículos están sin contar")} (nadie ha capturado cuánto hay), así que no se pueden dar por agotados.` : "";
+      if (ag.total === 0 && ba.total === 0) return `No hay artículos agotados ni con stock bajo.${nota} ${ver}`;
       const fmt = (f: ArticuloFila) => `${f.nombre}: ${f.existencias} ${f.unidad} (mínimo ${f.minimo})`;
       const partes = [
         `${plural(ag.total, "artículo agotado", "artículos agotados")} y ${plural(ba.total, "con stock bajo", "con stock bajo")}.`,
       ];
       if (ba.total > 0) partes.push(`Con stock bajo${fraseRecorte(ba, "artículos")}:${lineasDeLista(ba.filas, fmt) || ` ${ba.filas.map(fmt).join("; ")}.`}`);
       if (ag.total > 0) partes.push(`Agotados${fraseRecorte(ag, "artículos")}:${lineasDeLista(ag.filas, (f) => f.nombre) || ` ${ag.filas.map((f) => f.nombre).join("; ")}.`}`);
+      if (nota) partes.push(nota.trim());
       return `${partes.join("\n")}\n${ver}`;
     }
 
@@ -415,7 +427,7 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
       const c = d.coincidencias!;
       if (c.total === 0) return `No encontré ningún artículo que se llame o contenga «${d.buscado}» en el inventario. ${ver}`;
       const fmt = (f: ArticuloFila) =>
-        `${f.nombre}: ${f.existencias} ${f.unidad}${f.estado === "agotado" ? " (agotado)" : f.estado === "bajo" ? ` (stock bajo; mínimo ${f.minimo})` : ""}` +
+        `${f.nombre}: ${f.existencias} ${f.unidad}${f.estado === "agotado" ? " (agotado)" : f.estado === "sin_contar" ? " (sin contar: nadie ha capturado cuánto hay)" : f.estado === "bajo" ? ` (stock bajo; mínimo ${f.minimo})` : ""}` +
         `${f.caducadas > 0 ? `, más ${f.caducadas} caducadas que no cuentan` : ""}`;
       if (c.filas.length === 1) {
         const lotes = d.lotesDelArticulo ?? [];
@@ -434,7 +446,8 @@ export const inventario = definirHerramienta<ParamsInventario, DatosInventario>(
       : "";
     return (
       `Inventario: ${plural(r!.articulos, "artículo", "artículos")}, ${r!.unidades} unidades en existencia, valor ${pesos(r!.valorTotal)}. ` +
-      `${plural(r!.agotados, "agotado", "agotados")} y ${plural(r!.bajos, "con stock bajo", "con stock bajo")}; ` +
+      `${plural(r!.agotados, "agotado", "agotados")} y ${plural(r!.bajos, "con stock bajo", "con stock bajo")}` +
+      `${r!.sinContar > 0 ? ` (y ${plural(r!.sinContar, "artículo sin contar", "artículos sin contar")}: en cero porque nadie ha capturado cuánto hay, no porque se hayan acabado)` : ""}; ` +
       `${plural(r!.lotesPorCaducar, "lote por caducar", "lotes por caducar")} (próximos ${d.diasAviso ?? 30} días) y ` +
       `${plural(r!.lotesCaducados, "lote caducado", "lotes caducados")}.${ult}\n${ver}`
     );

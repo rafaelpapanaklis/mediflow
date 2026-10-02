@@ -68,17 +68,17 @@ describe("H17: «Stock bajo» y «Agotado» de Hoy cuentan solo lo vigente", () 
     { id: "c", quantity: 0, minQuantity: 5 },
   ];
   it("sin caducados es el conteo de siempre", () => {
-    assert.deepEqual(contarExistenciasVigentes(items, []), { agotados: 1, bajos: 1 });
+    assert.deepEqual(contarExistenciasVigentes(items, []), { agotados: 1, bajos: 1, sinContar: 0 });
   });
   it("lo caducado se resta: 10 con 7 caducados queda bajo; 3 con 3 caducados queda agotado", () => {
     const r = contarExistenciasVigentes(items, [
       { itemId: "a", remaining: 7 },
       { itemId: "b", remaining: 3 },
     ]);
-    assert.deepEqual(r, { agotados: 2, bajos: 1 });
+    assert.deepEqual(r, { agotados: 2, bajos: 1, sinContar: 0 });
   });
   it("varios lotes caducados del mismo artículo se suman y nunca dejan negativo", () => {
     const r = contarExistenciasVigentes(items, [{ itemId: "b", remaining: 2 }, { itemId: "b", remaining: 9 }]);
-    assert.deepEqual(r, { agotados: 2, bajos: 0 });
+    assert.deepEqual(r, { agotados: 2, bajos: 0, sinContar: 0 });
   });
 });

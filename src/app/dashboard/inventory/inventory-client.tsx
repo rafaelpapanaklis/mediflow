@@ -6,7 +6,7 @@ import {
   Plus, Search, Package, X, Trash2, Minus, Check,
   AlertTriangle, PackageX, PackageOpen, SearchX, Banknote,
   Wrench, Cog, FlaskConical, Ruler, Microscope, Syringe,
-  CalendarClock,
+  CalendarClock, ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -89,6 +89,8 @@ interface Item {
   caducados?: number;
   /** H17: solo en la vista — el total guardado (vigente + caducado), para la edición directa. */
   quantityTotal?: number;
+  /** 12f: en cero y NUNCA contado (la página lo siembra así). No es «agotado». Lo manda el servidor. */
+  sinContar?: boolean;
 }
 
 /** ws1-t4 — proveedor propio de la clínica (no el Supplier del marketplace). */
@@ -101,7 +103,7 @@ interface Proveedor {
 
 // WS1-T5 (ajuste 3) — "por_caducar"/"caducado" son tabs de LOTE, no de
 // existencias: no los calcula getStatus(item), vienen de /api/inventory/alerts.
-type StatusTab = "todos" | "disponible" | "poco" | "sin" | "por_caducar" | "caducado";
+type StatusTab = "todos" | "disponible" | "poco" | "sin" | "sin_contar" | "por_caducar" | "caducado";
 
 const STATUS_FILTERS: { id: StatusTab; labelKey?: string; label?: string }[] = [
   { id: "todos",      labelKey: "common.all" },
@@ -122,12 +124,21 @@ interface AvisoLote {
 }
 
 function getStatus(item: Item): StatusTab {
-  if (item.quantity === 0) return "sin";
+  // 12f: en cero y nunca contado ≠ agotado (nadie sabe aún cuánto hay).
+  if (item.quantity === 0) return item.sinContar ? "sin_contar" : "sin";
   if (item.quantity <= item.minQuantity) return "poco";
   return "disponible";
 }
 
 function statusBadge(s: StatusTab, t: TFunction) {
+  if (s === "sin_contar") {
+    return (
+      <span className={`${inv.pildora} ${inv.pildoraNeutra}`}>
+        <ClipboardList size={13} strokeWidth={1.75} aria-hidden />
+        {t("procurement.inventoryClient.badgeUncounted")}
+      </span>
+    );
+  }
   if (s === "sin") {
     return (
       <span className={`${inv.pildora} ${inv.pildoraPeligro}`}>
@@ -156,6 +167,7 @@ const TONO_CANTIDAD: Record<string, string> = {
   sin: inv.tonoPeligro,
   poco: inv.tonoAlerta,
   disponible: inv.tonoExito,
+  sin_contar: inv.tonoNeutro,
 };
 
 /**
@@ -400,13 +412,21 @@ export function InventoryClient({
   const kpis = useMemo(() => {
     const totalQty    = itemsVista.reduce((s, i) => s + i.quantity, 0);
     const lowCount    = itemsVista.filter(i => i.quantity > 0 && i.quantity <= i.minQuantity).length;
-    const outCount    = itemsVista.filter(i => i.quantity === 0).length;
+    // 12f: «Agotados» solo cuenta lo que de verdad se acabó; lo que nunca se contó va aparte.
+    const outCount    = itemsVista.filter(i => getStatus(i) === "sin").length;
+    const sinContarCount = itemsVista.filter(i => getStatus(i) === "sin_contar").length;
     // ws1-t4: antes era Σ (price ?? 0) × quantity — price nunca se capturaba
     // y el total siempre daba $0. unitCost sí se captura (alta, edición, y
     // la compra lo actualiza al último costo).
     const totalValue  = itemsVista.reduce((s, i) => s + i.unitCost * i.quantity, 0);
-    return { total: items.length, totalQty, lowCount, outCount, totalValue };
+    return { total: items.length, totalQty, lowCount, outCount, sinContarCount, totalValue };
   }, [items, itemsVista]);
+
+  // 12f — al contar el último artículo, el filtro «Sin contar» desaparece:
+  // se vuelve a la lista completa en vez de dejar una vista vacía sin botón.
+  useEffect(() => {
+    if (tab === "sin_contar" && kpis.sinContarCount === 0) setTab("todos");
+  }, [tab, kpis.sinContarCount]);
 
   // WS1-T5 (ajuste 3) — de qué artículos hablan los avisos de caducidad,
   // para los tabs "Por caducar"/"Caducado" (no son estado de existencias).
@@ -426,7 +446,7 @@ export function InventoryClient({
         || i.category.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => {
         if (tab === "todos") {
-          const order: Record<string, number> = { disponible: 0, poco: 1, sin: 2 };
+          const order: Record<string, number> = { disponible: 0, poco: 1, sin: 2, sin_contar: 3 };
           const sa = order[getStatus(a)] ?? 9;
           const sb = order[getStatus(b)] ?? 9;
           if (sa !== sb) return sa - sb;
@@ -456,7 +476,8 @@ export function InventoryClient({
         toast.error(r.error ?? t("common.genericError"));
         return;
       }
-      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad } : i));
+      // 12f: guardar una cantidad (aun 0) es contar: deja de ser «Sin contar».
+      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad, sinContar: false } : i));
       setEditQty(prev => { const n = { ...prev }; delete n[id]; return n; });
       toast.success(`${item.name}: ${cantidad} ${item.unit}`);
     } catch { toast.error(t("common.genericError")); } finally {
@@ -479,7 +500,7 @@ export function InventoryClient({
         toast.error(r.error ?? t("common.genericError"));
         return;
       }
-      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad } : i));
+      setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad, sinContar: false } : i));
     } catch { toast.error(t("common.genericError")); } finally {
       setLoadingIds(s => { const n = new Set(s); n.delete(id); return n; });
     }
@@ -586,7 +607,7 @@ export function InventoryClient({
       // cantidad acumulada hasta esa línea) — find() se quedaba con la
       // primera (a medio aplicar). Se toma la ÚLTIMA: ya vio todas las líneas.
       const actualizado = r.items.filter(u => u.itemId === i.id).at(-1);
-      return actualizado ? { ...i, quantity: actualizado.quantity, unitCost: actualizado.unitCost } : i;
+      return actualizado ? { ...i, quantity: actualizado.quantity, unitCost: actualizado.unitCost, sinContar: false } : i;
     }));
     cargarAvisos();
   }
@@ -712,6 +733,18 @@ export function InventoryClient({
           ))}
           {/* WS1-T5 (ajuste 3) — solo aparecen si hay algo que filtrar: no
               dejan un filtro muerto en clínicas sin lotes por caducar. */}
+          {/* 12f — solo aparece si hay artículos que nunca se contaron. */}
+          {kpis.sinContarCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab("sin_contar")}
+              aria-pressed={tab === "sin_contar"}
+              className={`segment-new__btn ${tab === "sin_contar" ? "segment-new__btn--active" : ""}`}
+            >
+              {t("procurement.inventoryClient.filterUncounted")}
+              <span className={`${inv.cuenta} ${inv.cuentaNeutra}`}>{kpis.sinContarCount}</span>
+            </button>
+          )}
           {avisos.porCaducar.length > 0 && (
             <button
               type="button"
@@ -736,6 +769,10 @@ export function InventoryClient({
           )}
         </div>
       </div>
+
+      {tab === "sin_contar" && kpis.sinContarCount > 0 && (
+        <p className={inv.guiaConteo}>{t("procurement.inventoryClient.uncountedHint")}</p>
+      )}
 
       {/* Lista */}
       <CardNew noPad>

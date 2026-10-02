@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { listarInventario, crearInventoryItem } from "@/lib/inventory/costo.server";
+import { crearInventoryItem } from "@/lib/inventory/costo.server";
+import { listarInventarioConConteo } from "@/lib/inventory/sin-contar.server";
+import { registrarHistorialInventario } from "@/lib/inventory/historial.server";
 import { providerPerteneceAClinica } from "@/lib/inventory/proveedores.server";
 
 // EQ-07 — ws1-t4: la página y este GET no tenían NINGUNA puerta (cualquier
@@ -19,7 +21,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
 
-  const items = await listarInventario({ clinicId: ctx.clinicId, category: category ?? undefined });
+  // `sinContar`: en cero y nunca contado (12f) — la pantalla lo pinta distinto de «Agotado».
+  const items = await listarInventarioConConteo({ clinicId: ctx.clinicId, category: category ?? undefined });
   return NextResponse.json(items);
 }
 
@@ -59,6 +62,13 @@ export async function POST(req: NextRequest) {
     price:       body.price !== undefined && body.price !== null && body.price !== "" ? Number(body.price) : null,
     unitCost:    body.unitCost !== undefined && body.unitCost !== null && body.unitCost !== "" ? Number(body.unitCost) : 0,
     providerId,
+  });
+  // 12f: quien da de alta un artículo y escribe su cantidad (aunque sea 0)
+  // está diciendo cuánto hay: queda asentado, y por eso un alta en cero NO
+  // sale «Sin contar» (solo los sembrados por la página y nunca tocados).
+  await registrarHistorialInventario({
+    itemId: item.id, clinicId: ctx.clinicId, userId: ctx.userId,
+    change: item.quantity, reason: "Alta del artículo", type: "adjust",
   });
   return NextResponse.json(item, { status: 201 });
 }

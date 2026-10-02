@@ -39,6 +39,21 @@ export async function registrarHistorialInventario(datos: DatosHistorialInventar
       },
     });
   } catch (e) {
+    // 12f: «Sin contar» se deduce de que el artículo no tenga NINGUNA fila aquí.
+    // Sin el SQL de ws1-t4 (columnas clinicId/userId/type) el create de arriba
+    // falla y, tragado, dejaba al artículo «sin contar» para siempre aunque lo
+    // hubieran ajustado. Se reintenta con las columnas de siempre.
+    if ((e as { code?: string })?.code === "P2022") {
+      try {
+        await (db as PrismaClient).inventoryHistory.create({
+          data: { itemId: datos.itemId, change: datos.change, reason: datos.reason ?? null },
+        });
+        return;
+      } catch (e2) {
+        console.error("[inventory-history] no se pudo escribir la bitácora:", (e2 as Error)?.message ?? e2);
+        return;
+      }
+    }
     console.error("[inventory-history] no se pudo escribir la bitácora:", (e as Error)?.message ?? e);
   }
 }

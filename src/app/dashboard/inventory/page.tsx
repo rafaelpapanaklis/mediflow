@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
-import { listarInventario } from "@/lib/inventory/costo.server";
+import { listarInventarioConConteo } from "@/lib/inventory/sin-contar.server";
 import { InventoryClient } from "./inventory-client";
 
 export const metadata: Metadata = { title: "Inventario — DaleControl" };
@@ -142,7 +142,7 @@ export default async function InventoryPage() {
   // viaje a la base; falla cerrado (sin tabla, sin fila o con error → false =
   // la pantalla de hoy, tal cual).
   const [items0, rediseno] = await Promise.all([
-    listarInventario({ clinicId }),
+    listarInventarioConConteo({ clinicId }),
     menuDosNivelesEncendido(clinicId),
   ]);
   let items = items0;
@@ -164,7 +164,7 @@ export default async function InventoryPage() {
         })),
         skipDuplicates: true,
       });
-      items = await listarInventario({ clinicId });
+      items = await listarInventarioConConteo({ clinicId });
     }
   }
 
