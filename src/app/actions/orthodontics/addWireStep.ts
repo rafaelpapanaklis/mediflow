@@ -65,7 +65,7 @@ export interface PasoDeArcoCreado {
 
 export async function addWireStep(
   input: unknown,
-): Promise<ActionResult<{ wireStepId: string; paso: PasoDeArcoCreado }>> {
+): Promise<ActionResult<{ wireStepId: string; paso: PasoDeArcoCreado; aviso: string | null }>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -91,6 +91,8 @@ export async function addWireStep(
   );
   if (!elegido.ok) return fail(elegido.error);
   const material = elegido.material;
+  // Revisión en panel.108 (fallo 5): sin el SQL un NiTi superelástico/termoactivado se guarda «NiTi» y la pantalla lo dice.
+  const aviso = elegido.aviso ?? null;
 
   try {
     const last = await prisma.orthoWireStep.findFirst({
@@ -155,6 +157,7 @@ export async function addWireStep(
     revalidatePath(`/dashboard/specialties/orthodontics/${plan.patientId}`);
     return ok({
       wireStepId: created.id,
+      aviso,
       paso: {
         ...created,
         plannedDate: created.plannedDate?.toISOString() ?? null,

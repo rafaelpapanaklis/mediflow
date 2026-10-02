@@ -31,6 +31,7 @@ import {
   type TADDTO,
   type WireStepDTO,
 } from "../types";
+import { arcadaDeArco } from "@/lib/orthodontics/material-de-arco";
 import orto from "../orto.module.css";
 
 export interface SectionPlanProps {
@@ -177,12 +178,13 @@ function WireSequenceBlock({
         </div>
       ) : (
         <div className={`${orto.tablaCaja} border border-[color:var(--pr-borde-suave)] rounded-[10px]`}>
-          <table className={`${orto.tabla} ${orto.tablaDensa}`} style={{ minWidth: 560 }}>
+          <table className={`${orto.tabla} ${orto.tablaDensa}`} style={{ minWidth: 640 }}>
             <thead>
               <tr>
                 <th>#</th>
                 <th>Fase</th>
                 <th>Arco</th>
+                <th>Arcada</th>
                 <th>Duración</th>
                 <th>Inicio</th>
                 <th>Fin</th>
@@ -204,6 +206,8 @@ function WireSequenceBlock({
                   <td className="font-semibold whitespace-nowrap">
                     {WIRE_MATERIAL_LABELS[w.material]} {w.gauge}
                   </td>
+                  {/* ws1-t12 (revisión en panel.108, fallo 4): con dos «actual» se ve cuál va arriba y cuál abajo. */}
+                  <td className="whitespace-nowrap">{arcadaDeArco(w)}</td>
                   <td className="whitespace-nowrap">{w.durationWeeks} sem</td>
                   <td className="whitespace-nowrap">
                     {fmtDateShort(w.appliedDate ?? w.plannedDate)}

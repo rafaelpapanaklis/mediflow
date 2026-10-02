@@ -586,6 +586,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           controlNumero: props.planDeTratamiento ? props.planDeTratamiento.controlesHechos + 1 : null,
           monthAt: t.monthCurrent,
           wireFrom: t.wireCurrent,
+          // ws1-t12 (revisión en panel.108, fallo 4): «Actual» con el arco de cada arcada, como la cabecera.
+          arcosActuales: t.wiresCurrent ?? null,
           // H22 (QA ws1-t9): con la instantánea del instante en que se abre
           // el cajón, "Próximo control en N semanas" heredaba esa hora
           // (03:24, lo que fuera la hora del servidor) en vez de una hora de
@@ -967,6 +969,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             phase: nuevoControlCtx.defaultsForNew.phase,
             monthAt: nuevoControlCtx.defaultsForNew.monthAt,
             wireFrom: nuevoControlCtx.defaultsForNew.wireFrom,
+            arcosActuales: nuevoControlCtx.defaultsForNew.arcosActuales ?? t.wiresCurrent ?? null,
             visitDate: nuevoControlCtx.defaultsForNew.visitDate,
             monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
             lastElastics: nuevoControlCtx.defaultsForNew.lastElastics,
@@ -997,6 +1000,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             phase: newCardDefaults.phase,
             monthAt: newCardDefaults.monthAt,
             wireFrom: newCardDefaults.wireFrom,
+            arcosActuales: newCardDefaults.arcosActuales,
             visitDate: newCardDefaults.visitDate,
             monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
           }}

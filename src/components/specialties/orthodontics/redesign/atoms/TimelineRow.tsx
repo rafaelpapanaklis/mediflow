@@ -10,7 +10,7 @@ import { fmtDate, clinicalSeverityColor } from "./format";
 import { Pill } from "./Pill";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import { textoDelMes } from "@/lib/orthodontics/mes-de-tratamiento";
-import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
+import { textoDeArcoConArcada } from "@/lib/orthodontics/material-de-arco";
 import orto from "../orto.module.css";
 
 export interface TimelineRowProps {
@@ -139,6 +139,7 @@ function Dato({ rotulo, children }: { rotulo: string; children: React.ReactNode 
   );
 }
 
-function wireLabel(wire: { gauge: string; material: string }): string {
-  return textoDeArco(wire);
+/** ws1-t12 (revisión en panel.108, fallo 4): con su arcada, «NiTi 014 · Ambas → NiTi 016 · Superior». */
+function wireLabel(wire: { gauge: string; material: string; archUpper?: boolean; archLower?: boolean }): string {
+  return textoDeArcoConArcada(wire);
 }

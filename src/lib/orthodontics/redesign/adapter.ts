@@ -37,6 +37,7 @@ import type {
 } from "@/components/specialties/orthodontics/redesign/types";
 import { PHASE_LABELS } from "@/components/specialties/orthodontics/redesign/types";
 import { resolveCurrentWire } from "./current-wire";
+import { arcosActuales } from "@/lib/orthodontics/arcos-actuales";
 import { nombreDeTecnica } from "../tecnicas-de-la-clinica";
 
 // Tipos auxiliares para include shapes que load-data devolverá.
@@ -176,10 +177,13 @@ export function adaptToOrthoRedesignViewModel(
   // Ola 1 (ws1-t4, Control y agenda) — C1: "arco actual" = el último anotado en un control
   // firmado, no el status ACTIVE de la secuencia planeada. Ver current-wire.ts.
   const wireCurrent = resolveCurrentWire(wireSteps, treatmentCards);
+  // ws1-t12 (revisión en panel.108, fallo 4): y el de cada arcada, que tras cambiar solo uno son dos.
+  const wiresCurrent = arcosActuales(wireSteps, treatmentCards);
 
   const treatment = adaptTreatment({
     legacy: l,
     wireCurrent,
+    wiresCurrent,
     attendancePct: input.attendancePct,
     elasticsCompliancePct: input.elasticsCompliancePct,
     attendance: input.attendance,
@@ -230,6 +234,7 @@ const ETIQUETA_DEL_ESTADO: Record<string, string> = {
 function adaptTreatment(args: {
   legacy: OrthoTabData;
   wireCurrent: WireStepDTO | null;
+  wiresCurrent: { superior: WireStepDTO | null; inferior: WireStepDTO | null };
   attendancePct: number;
   elasticsCompliancePct: number;
   attendance?: OrthoTreatmentDTO["attendance"];
@@ -275,6 +280,7 @@ function adaptTreatment(args: {
       notes: plan?.prescriptionNotes ?? plan?.techniqueNotes ?? null,
     },
     wireCurrent: args.wireCurrent,
+    wiresCurrent: args.wiresCurrent,
     startDate: plan?.installedAt
       ? plan.installedAt.toISOString()
       : plan?.startDate

@@ -28,7 +28,7 @@ import {
 } from "../types";
 import { bracketsDelCaso, cooperacionDelPaciente, type ControlParaResumen } from "@/lib/orthodontics/resumen-del-caso";
 import { textoControlQueSigue, textoControlesHechos, type ProgresoDeControles } from "@/lib/orthodontics/plan-detalle";
-import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
+import { lineasDeArcosActuales, textoDeArcoConArcada } from "@/lib/orthodontics/material-de-arco";
 import orto from "../orto.module.css";
 
 export interface SectionHeroProps {
@@ -84,9 +84,25 @@ export function SectionHero(props: SectionHeroProps) {
     : t.elastics.pct === null
       ? "sin registros del paciente"
       : `${t.elastics.diasRegistrados} de ${t.elastics.ventanaDias} días registrados`;
-  const wireLabel = t.wireCurrent
-    ? `${formatWireLabel(t.wireCurrent)}`
-    : "Sin arco activo";
+  // ws1-t12 (revisión en panel.108, fallo 4): el arco dice su arcada, y si arriba y abajo llevan arcos distintos se ven
+  // los dos (antes solo el último anotado, sin decir de qué arcada era).
+  const lineasDeArco = t.wiresCurrent ? lineasDeArcosActuales(t.wiresCurrent) : [];
+  const wireLabel =
+    lineasDeArco.length > 1 ? (
+      <>
+        {lineasDeArco.map((l) => (
+          <span key={l} className="block">
+            {l}
+          </span>
+        ))}
+      </>
+    ) : lineasDeArco.length === 1 ? (
+      lineasDeArco[0]
+    ) : t.wireCurrent ? (
+      formatWireLabel(t.wireCurrent)
+    ) : (
+      "Sin arco activo"
+    );
   const elasticTone =
     (elasticos ?? 0) >= 85 ? "emerald" : (elasticos ?? 0) >= 70 ? "amber" : "rose";
   const phaseIndex = t.phase ? PHASE_ORDER.indexOf(t.phase) : -1;
@@ -151,7 +167,7 @@ export function SectionHero(props: SectionHeroProps) {
             sub={applianceSub}
           />
           <StatChip
-            label="Arco actual"
+            label={lineasDeArco.length > 1 ? "Arcos actuales" : "Arco actual"}
             value={wireLabel}
             sub={t.wireCurrent?.purpose ?? "—"}
           />
@@ -275,6 +291,6 @@ function HeroEmptyState({ onStart }: { onStart?: () => void }) {
   );
 }
 
-function formatWireLabel(wire: { gauge: string; material: string }): string {
-  return textoDeArco(wire);
+function formatWireLabel(wire: { gauge: string; material: string; archUpper?: boolean; archLower?: boolean }): string {
+  return textoDeArcoConArcada(wire);
 }

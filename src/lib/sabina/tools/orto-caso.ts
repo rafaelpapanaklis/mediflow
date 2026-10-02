@@ -159,6 +159,28 @@ function arcoLegible(arco: { material: string; gauge: string; archUpper: boolean
   return `${textoDeArco(arco)}${donde ? ` (${donde})` : ""}`;
 }
 
+/**
+ * ws1-t12 (revisión en panel.108, fallo 4): con arcos distintos arriba y abajo, los dos: «NiTi 016 (superior) y NiTi 014
+ * (inferior)». Con el mismo, como `arcoLegible`. `null` = no hay dato por arcada (se usa `arcoLegible`).
+ */
+export function arcosLegibles(
+  arcos:
+    | {
+        superior: { id: string; material: string; gauge: string; archUpper: boolean; archLower: boolean } | null;
+        inferior: { id: string; material: string; gauge: string; archUpper: boolean; archLower: boolean } | null;
+      }
+    | null
+    | undefined,
+): string | null {
+  if (!arcos || (!arcos.superior && !arcos.inferior)) return null;
+  const { superior, inferior } = arcos;
+  if (superior && inferior && superior.id !== inferior.id) {
+    return `${textoDeArco(superior)} (superior) y ${textoDeArco(inferior)} (inferior)`;
+  }
+  if (superior && inferior) return arcoLegible(superior);
+  return superior ? `${textoDeArco(superior)} (superior)` : `${textoDeArco(inferior!)} (inferior)`;
+}
+
 const SITUACION: Record<string, string> = {
   vencido: "con pagos vencidos",
   "por-vencer": "al corriente, con un pago por vencer",
@@ -254,7 +276,7 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
       clinico: leido.clinico
         ? {
             fase: leido.clinico.fase ? FASE[leido.clinico.fase] ?? leido.clinico.fase : null,
-            arco: arcoLegible(leido.clinico.arco),
+            arco: arcosLegibles(leido.clinico.arcos) ?? arcoLegible(leido.clinico.arco),
             higiene: leido.clinico.higiene,
             higieneEmpeora: leido.clinico.higieneEmpeora,
             plan: leido.clinico.plan.map((l) => ({ etiqueta: l.etiqueta, valor: l.valor })),

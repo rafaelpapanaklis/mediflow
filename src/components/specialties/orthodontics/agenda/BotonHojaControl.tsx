@@ -66,6 +66,7 @@ interface LoadedContext {
     phase: OrthoPhaseKey;
     monthAt: number;
     wireFrom: WireStepDTO | null;
+    arcosActuales?: { superior: WireStepDTO | null; inferior: WireStepDTO | null };
     visitDate: string;
     durationMin: number;
     lastElastics: Array<{ elasticClass: OrthoElasticClass; config: string; zone: OrthoElasticZone }>;
@@ -218,6 +219,7 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
                   phase: ctx.defaultsForNew.phase,
                   monthAt: ctx.defaultsForNew.monthAt,
                   wireFrom: ctx.defaultsForNew.wireFrom,
+                  arcosActuales: ctx.defaultsForNew.arcosActuales ?? null,
                   visitDate: ctx.defaultsForNew.visitDate,
                   lastElastics: ctx.defaultsForNew.lastElastics,
                   lastIndications: ctx.defaultsForNew.lastIndications,

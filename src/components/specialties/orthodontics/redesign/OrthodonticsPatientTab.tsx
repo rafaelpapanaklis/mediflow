@@ -864,7 +864,10 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               toast.error(res.error);
               return;
             }
-            toast.success(t("patients.ortho.wireStepAdded"));
+            // Revisión en panel.108 (fallo 5): sin el SQL de materiales un NiTi superelástico/termoactivado se guarda
+            // «NiTi»; se dice en vez de dar un «agregado» a secas.
+            if (res.data.aviso) toast(res.data.aviso, { icon: "⚠️", duration: 8000 });
+            else toast.success(t("patients.ortho.wireStepAdded"));
             router.refresh();
             // La fila creada, para que la «Secuencia de arcos» la pinte ya (mismo
             // dato que `adaptWireStep` arma al leer el caso).

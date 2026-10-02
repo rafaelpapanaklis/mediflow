@@ -169,6 +169,11 @@ export interface OrthoTreatmentDTO {
     notes: string | null;
   };
   wireCurrent: WireStepDTO | null;
+  /**
+   * ws1-t12 (revisión en panel.108, fallo 4): el arco de CADA arcada (`arcosActuales`). Tras cambiar solo el superior
+   * son dos distintos; `wireCurrent` sigue siendo uno (el último anotado). Opcional para quien arma este objeto a mano.
+   */
+  wiresCurrent?: { superior: WireStepDTO | null; inferior: WireStepDTO | null };
   startDate: string | null;
   estimatedEndDate: string | null;
   attendancePct: number;

@@ -119,6 +119,7 @@ test("Multi-stranded y los NiTi con su variante, con la base al día", async () 
     const r = await addWireStep(arco(clave));
     assert.equal(r.ok, true, clave);
     assert.equal(state.creadas[0]!.material, guardado, clave);
+    assert.equal(r.ok ? r.data.aviso : "falló", null, `${clave}: con la base al día no hay nada que avisar`);
   }
 });
 
@@ -135,8 +136,11 @@ test("sin el SQL: Cr-Co no se escribe (ni como acero) y se dice por qué", async
 test("sin el SQL: un NiTi termoactivado se guarda como NiTi; acero no pregunta a la base", async () => {
   const { addWireStep } = await import("../addWireStep");
   reset(false);
-  assert.equal((await addWireStep(arco("NITI_THERMO"))).ok, true);
+  const termo = await addWireStep(arco("NITI_THERMO"));
+  assert.equal(termo.ok, true);
   assert.equal(state.creadas[0]!.material, "NITI");
+  // Revisión en panel.108 (fallo 5): antes se perdía la variante sin decir nada.
+  assert.match(termo.ok ? (termo.data.aviso ?? "") : "", /«NiTi termoactivado» aún no está disponible: se guardó como «NiTi»/);
   reset(false);
   assert.equal((await addWireStep(arco("SS"))).ok, true);
   assert.equal(state.creadas[0]!.material, "SS");

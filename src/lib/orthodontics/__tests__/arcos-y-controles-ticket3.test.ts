@@ -104,7 +104,7 @@ test("4c: «Otro arco…» manda la arcada elegida y pinta la fila tal como se g
   assert.doesNotMatch(form, /archLower: true/);
   assert.match(form, /Superior/);
   assert.match(form, /Inferior/);
-  assert.match(form, /props\.onCreated\(res\.data\.paso\)/, "el material y la arcada salen de lo guardado");
+  assert.match(form, /props\.onCreated\(res\.data\.paso,/, "el material y la arcada salen de lo guardado");
   assert.doesNotMatch(form, /dbMaterial/, "nada de adivinar el material en la pantalla");
 });
 
@@ -136,7 +136,8 @@ test("4d: sin el SQL, Cr-Co y Multi-stranded NO se guardan como acero; los NiTi 
     assert.equal(r.ok, false, clave);
     if (!r.ok) assert.match(r.error, /aún no está disponible/);
   }
-  assert.deepEqual(materialParaGuardar("NITI_THERMO", null), { ok: true, material: "NITI" });
+  const termo = materialParaGuardar("NITI_THERMO", null);
+  assert.equal(termo.ok && termo.material, "NITI");
   assert.deepEqual(materialParaGuardar("SS", false), { ok: true, material: "SS" });
   assert.deepEqual(materialParaGuardar("BETA_TITANIUM", false), { ok: true, material: "BETA_TITANIUM" });
   assert.equal(materialParaGuardar("ORO", true).ok, false);
@@ -233,4 +234,113 @@ test("12c: la tarjeta dice «N controles agendados · M ya atendidos» con la mi
   assert.match(fuente, /controlPendiente\(c\.status\)/, "el número de cada día usa la regla de pendientes");
   assert.doesNotMatch(fuente, /d\.citas\.filter\(\(c\) => c\.status !== "CANCELLED"\)\.length/);
   assert.match(fuente, /semana\.atendidosProximos/);
+});
+
+// ── Revisión en panel.108 (fallo 4): todo arco dice su arcada y la cabecera dice los dos actuales ─────────────────────
+
+import { arcadaDeArco, lineasDeArcosActuales, textoDeArcoConArcada } from "../material-de-arco";
+import { arcosActuales } from "../arcos-actuales";
+import { arcosLegibles } from "@/lib/sabina/tools/orto-caso";
+
+const arcoDePrueba = (id: string, gauge: string, sup: boolean, inf: boolean, status: string, orderIndex: number) => ({
+  id,
+  material: "NITI",
+  gauge,
+  archUpper: sup,
+  archLower: inf,
+  status,
+  orderIndex,
+});
+// Dario Prueba Cuatro (P0165): «NiTi 014» de las dos arcadas; en el control se cambió SOLO el superior a «NiTi 016».
+const n014 = arcoDePrueba("w14", "014", true, true, "ACTIVE", 1);
+const n016sup = arcoDePrueba("w16", "016", true, false, "ACTIVE", 2);
+
+test("fallo 4: tras cambiar solo el superior, cada arcada tiene su arco (la cabecera ya no dice uno solo)", () => {
+  const firmada = { status: "SIGNED", visitDate: "2026-10-02T16:00:00Z", wireFrom: n014, wireTo: n016sup };
+  const arcos = arcosActuales([n014, n016sup], [firmada]);
+  assert.equal(arcos.superior?.id, "w16");
+  assert.equal(arcos.inferior?.id, "w14");
+  assert.deepEqual(lineasDeArcosActuales(arcos), ["NiTi 016 · Superior", "NiTi 014 · Inferior"]);
+  // Sin hojas firmadas: los dos pasos «actual» de la secuencia, cada uno en su arcada.
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014, n016sup], [])), ["NiTi 016 · Superior", "NiTi 014 · Inferior"]);
+  // Un borrador no cuenta.
+  const borrador = { ...firmada, status: "DRAFT" };
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([{ ...n014 }], [borrador])), ["NiTi 014 · Ambas"]);
+});
+
+test("fallo 4: el mismo arco arriba y abajo es una sola línea «· Ambas»; después cambiar el inferior lo separa", () => {
+  const h1 = { status: "SIGNED", visitDate: "2026-09-01T16:00:00Z", wireFrom: null, wireTo: n014 };
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014], [h1])), ["NiTi 014 · Ambas"]);
+  const n018inf = arcoDePrueba("w18", "018", false, true, "ACTIVE", 3);
+  const h2 = { status: "SIGNED", visitDate: "2026-09-20T16:00:00Z", wireFrom: n014, wireTo: n016sup };
+  // h3 llegó con el «Actual» que precarga la hoja (uno solo: el 016 superior) y cambió el inferior.
+  const h3 = { status: "SIGNED", visitDate: "2026-10-02T16:00:00Z", wireFrom: n016sup, wireTo: n018inf };
+  const arcos = arcosActuales([n014, n016sup, n018inf], [h1, h2, h3]);
+  assert.deepEqual(lineasDeArcosActuales(arcos), ["NiTi 016 · Superior", "NiTi 018 · Inferior"]);
+  // El orden de llegada de las hojas no importa: manda la fecha de la visita.
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014, n016sup, n018inf], [h3, h1, h2])), lineasDeArcosActuales(arcos));
+  assert.deepEqual(lineasDeArcosActuales({ superior: null, inferior: null }), []);
+});
+
+test("fallo 4: cada arco se rotula Superior / Inferior / Ambas (sin dato = Ambas, como al firmar)", () => {
+  assert.equal(arcadaDeArco({ archUpper: true, archLower: false }), "Superior");
+  assert.equal(arcadaDeArco({ archUpper: false, archLower: true }), "Inferior");
+  assert.equal(arcadaDeArco({ archUpper: true, archLower: true }), "Ambas");
+  assert.equal(arcadaDeArco({}), "Ambas");
+  assert.equal(textoDeArcoConArcada({ material: "CR_CO", gauge: "016", archUpper: true, archLower: false }), "Cr-Co 016 · Superior");
+});
+
+test("fallo 4: Sabina (orto_caso) también dice los dos arcos con su arcada", () => {
+  assert.equal(
+    arcosLegibles({ superior: n016sup, inferior: n014 }),
+    "NiTi 016 (superior) y NiTi 014 (inferior)",
+  );
+  assert.equal(arcosLegibles({ superior: n014, inferior: n014 }), "NiTi 014 (superior e inferior)");
+  assert.equal(arcosLegibles({ superior: n016sup, inferior: null }), "NiTi 016 (superior)");
+  assert.equal(arcosLegibles({ superior: null, inferior: null }), null);
+});
+
+test("fallo 4: la cabecera, la Secuencia de arcos, el historial y la hoja pintan la arcada", () => {
+  const leerFuente = (rel: string) => readFileSync(path.join(process.cwd(), rel), "utf8");
+  const R = "src/components/specialties/orthodontics/redesign";
+  const hero = leerFuente(`${R}/sections/SectionHero.tsx`);
+  assert.match(hero, /lineasDeArcosActuales\(t\.wiresCurrent\)/, "la cabecera usa los arcos de cada arcada");
+  assert.match(hero, /textoDeArcoConArcada\(wire\)/);
+  const plan = leerFuente(`${R}/sections/SectionPlan.tsx`);
+  assert.match(plan, /<th>Arcada<\/th>/);
+  assert.match(plan, /arcadaDeArco\(w\)/);
+  assert.match(leerFuente(`${R}/atoms/TimelineRow.tsx`), /textoDeArcoConArcada\(wire\)/);
+  const hoja = leerFuente(`${R}/drawers/DrawerTreatmentCard.tsx`);
+  assert.match(hoja, /lineasDeArcosActuales\(props\.defaultsForNew\.arcosActuales\)/, "«Actual» de la hoja nueva dice los dos");
+  assert.match(hoja, /\{textoDeArcoConArcada\(w\)\}/, "la lista de «Arco nuevo» rotula también «Ambas»");
+  assert.doesNotMatch(hoja, /return textoDeArco\(wire\)/);
+  assert.match(leerFuente("src/lib/orthodontics/redesign/adapter.ts"), /wiresCurrent = arcosActuales\(wireSteps, treatmentCards\)/);
+  assert.match(leerFuente("src/lib/orthodontics/treatment-card-context.ts"), /arcosActuales: arcosDeLlegada/);
+  assert.match(leerFuente("src/components/specialties/orthodontics/agenda/BotonHojaControl.tsx"), /arcosActuales: ctx\.defaultsForNew\.arcosActuales/);
+});
+
+// ── Revisión en panel.108 (fallo 5): sin el SQL, NiTi superelástico/termoactivado ya no se pierden sin avisar ─────────
+
+test("fallo 5: sin el SQL un NiTi con variante se guarda «NiTi» y lo dice; con la base al día, sin aviso", () => {
+  for (const [clave, nombre] of [
+    ["NITI_SUPER", "NiTi superelástico"],
+    ["NITI_THERMO", "NiTi termoactivado"],
+  ] as const) {
+    for (const enLaBase of [false, null]) {
+      const r = materialParaGuardar(clave, enLaBase);
+      assert.equal(r.ok && r.material, "NITI", clave);
+      assert.equal(r.aviso, `«${nombre}» aún no está disponible: se guardó como «NiTi». Pide a soporte que lo active.`);
+    }
+    assert.equal(materialParaGuardar(clave, true).aviso, undefined);
+  }
+  for (const clave of ["NITI_CONV", "SS", "TMA"]) assert.equal(materialParaGuardar(clave, false).aviso, undefined, clave);
+});
+
+test("fallo 5: las dos pantallas que agregan un arco enseñan el aviso", () => {
+  const leerFuente = (rel: string) => readFileSync(path.join(process.cwd(), rel), "utf8");
+  const R = "src/components/specialties/orthodontics/redesign";
+  const hoja = leerFuente(`${R}/drawers/DrawerTreatmentCard.tsx`);
+  assert.match(hoja, /props\.onCreated\(res\.data\.paso, res\.data\.aviso \?\? null\)/);
+  assert.match(hoja, /data-aviso-material/);
+  assert.match(leerFuente(`${R}/OrthodonticsPatientTab.tsx`), /if \(res\.data\.aviso\) toast\(res\.data\.aviso/);
 });

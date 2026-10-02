@@ -56,7 +56,7 @@ import { AvisarProximoControlButton } from "@/components/specialties/orthodontic
 import { addWireStep } from "@/app/actions/orthodontics/addWireStep";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS } from "./wire-options";
-import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
+import { lineasDeArcosActuales, textoDeArcoConArcada } from "@/lib/orthodontics/material-de-arco";
 import {
   initialState,
   notaBaseParaPlantilla,
@@ -140,6 +140,11 @@ export interface DrawerTreatmentCardProps {
     phase: string;
     monthAt: number;
     wireFrom: WireStepDTO | null;
+    /**
+     * ws1-t12 (revisión en panel.108, fallo 4): el arco que lleva puesto en CADA arcada (`arcosActuales`). Tras cambiar
+     * solo el superior son dos: «Actual» los dice los dos. Sin él se pinta `wireFrom` con su arcada.
+     */
+    arcosActuales?: { superior: WireStepDTO | null; inferior: WireStepDTO | null } | null;
     visitDate: string;
     /** Duración estimada del caso, en meses. La usan las plantillas de nota («Mes 4 de 18»). */
     monthTotal?: number | null;
@@ -286,7 +291,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       : "Hoja de control nueva"
     : `Hoja del ${(textoDelControl ?? `control ${props.card!.cardNumber}`).toLowerCase()}`;
 
-  const wireFromLabel = wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null);
+  // ws1-t12 (revisión en panel.108, fallo 4): todo arco dice su arcada, y en una hoja nueva «Actual» dice los dos
+  // arcos si arriba y abajo son distintos (antes solo uno, sin decir de cuál).
+  const arcosDeLlegada = isNew && props.defaultsForNew?.arcosActuales ? lineasDeArcosActuales(props.defaultsForNew.arcosActuales) : [];
+  const wireFromLineas =
+    arcosDeLlegada.length > 0 ? arcosDeLlegada : [wireText(props.card?.wireFrom ?? props.defaultsForNew?.wireFrom ?? null)];
+  const [avisoArco, setAvisoArco] = useState<string | null>(null);
   // H48: arcos escritos en esta hoja (ya guardados en la secuencia del caso).
   const [otroArco, setOtroArco] = useState(false);
   const [arcosNuevos, setArcosNuevos] = useState<WireStepDTO[]>([]);
@@ -310,7 +320,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       mes: props.card?.monthAt ?? props.defaultsForNew?.monthAt ?? null,
       duracionMeses: props.defaultsForNew?.monthTotal ?? null,
       fase: clave ? ((PHASE_LABELS as Record<string, string>)[clave] ?? clave) : null,
-      arcoActual: arcoDe ? wireText(arcoDe) : null,
+      arcoActual: arcoDe || arcosDeLlegada.length > 0 ? wireFromLineas.join(" / ") : null,
       arcoNuevo: wireToCurrent ? wireText(wireToCurrent) : null,
     });
     (["s", "o", "a", "p"] as const).forEach((campo) => {
@@ -506,7 +516,11 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               <div className="flex-1 min-w-0">
                 <div className={orto.campoEtiqueta}>Actual</div>
                 <div className="flex items-center h-[38px] text-[13.5px] font-semibold">
-                  {wireFromLabel}
+                  <span className="flex flex-col">
+                    {wireFromLineas.map((l) => (
+                      <span key={l}>{l}</span>
+                    ))}
+                  </span>
                 </div>
               </div>
               <ChevronRight
@@ -535,6 +549,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                         return;
                       }
                       setOtroArco(false);
+                      setAvisoArco(null);
                       dispatch({ kind: "set-wire-to", value: e.target.value || null });
                     }}
                     className={orto.entrada}
@@ -543,7 +558,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     <option value="">Sin cambio</option>
                     {todosLosArcos.map((w) => (
                       <option key={w.id} value={w.id}>
-                        {`${wireText(w)}${arcadaDelArco(w)}`}
+                        {textoDeArcoConArcada(w)}
                       </option>
                     ))}
                     {props.treatmentPlanId ? <option value="__otro__">Otro arco…</option> : null}
@@ -559,13 +574,19 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     treatmentPlanId={props.treatmentPlanId}
                     phaseKey={todosLosArcos[todosLosArcos.length - 1]?.phaseKey ?? "ALIGNMENT"}
                     nextOrder={todosLosArcos.length + 1}
-                    onCreated={(w) => {
+                    onCreated={(w, aviso) => {
+                      setAvisoArco(aviso);
                       setArcosNuevos((prev) => [...prev, w]);
                       dispatch({ kind: "set-wire-to", value: w.id });
                       setOtroArco(false);
                     }}
                     onCancel={() => setOtroArco(false)}
                   />
+                ) : null}
+                {!isReadOnly && avisoArco ? (
+                  <p className={`${orto.bloqueNota} mt-[6px]`} role="status" data-aviso-material>
+                    {avisoArco}
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -1421,7 +1442,7 @@ function OtroArcoForm(props: {
   treatmentPlanId: string;
   phaseKey: WireStepDTO["phaseKey"];
   nextOrder: number;
-  onCreated: (w: WireStepDTO) => void;
+  onCreated: (w: WireStepDTO, aviso: string | null) => void;
   onCancel: () => void;
 }) {
   const [material, setMaterial] = useState("NITI_SUPER");
@@ -1456,7 +1477,8 @@ function OtroArcoForm(props: {
         return;
       }
       // ws1-t12 (punto 4d): la fila tal como quedó guardada (material y arcada), no una adivinanza de la pantalla.
-      props.onCreated(res.data.paso);
+      // Revisión en panel.108 (fallo 5): sin el SQL de materiales un NiTi superelástico/termoactivado queda «NiTi» y se dice.
+      props.onCreated(res.data.paso, res.data.aviso ?? null);
     } finally {
       setGuardando(false);
     }
@@ -1500,16 +1522,10 @@ function OtroArcoForm(props: {
   );
 }
 
-function wireText(wire: { gauge: string; material: string } | null): string {
+/** «NiTi 014 · Ambas»: con su arcada (ws1-t12, revisión en panel.108, fallo 4). */
+function wireText(wire: { gauge: string; material: string; archUpper?: boolean; archLower?: boolean } | null): string {
   if (!wire) return "—";
-  return textoDeArco(wire);
-}
-
-/** ws1-t12: en la lista de «Arco nuevo», de qué arcada es cada arco (dos «NiTi 014» se veían iguales). */
-function arcadaDelArco(w: { archUpper: boolean; archLower: boolean }): string {
-  if (w.archUpper && !w.archLower) return " · superior";
-  if (w.archLower && !w.archUpper) return " · inferior";
-  return "";
+  return textoDeArcoConArcada(wire);
 }
 
 /** C5: "próximo control en N semanas" — parte de la fecha de ESTA visita, no de hoy. */

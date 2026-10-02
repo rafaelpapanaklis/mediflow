@@ -184,6 +184,8 @@ export interface CasoLeido {
   clinico: {
     fase: OrthoRedesignViewModel["treatment"]["phase"];
     arco: OrthoRedesignViewModel["treatment"]["wireCurrent"];
+    /** ws1-t12 (revisión en panel.108, fallo 4): el arco de cada arcada; tras cambiar solo uno son dos. */
+    arcos?: OrthoRedesignViewModel["treatment"]["wiresCurrent"];
     /** El último control FIRMADO con higiene registrada. */
     higiene: { fecha: string; placaPct: number | null; gingivitis: string | null; manchasBlancas: boolean } | null;
     higieneEmpeora: string[];
@@ -340,6 +342,7 @@ export async function leerCaso(
       plan: planCompleto,
       fase: vm.treatment.phase,
       arco: vm.treatment.wireCurrent,
+      arcos: vm.treatment.wiresCurrent,
       higiene: ultima
         ? {
             // El día de la visita en la zona de la CLÍNICA: un control de las

@@ -24,6 +24,7 @@ import {
   type BracketPendiente,
 } from "@/lib/orthodontics/precarga-hoja-control";
 import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
+import { arcosActuales } from "@/lib/orthodontics/arcos-actuales";
 import type { OrthoPaymentStatus, OrthoTechnique } from "@prisma/client";
 import type {
   OrthoElasticClass,
@@ -89,6 +90,8 @@ export interface TreatmentCardAgendaContext {
     phase: OrthoPhaseKey;
     monthAt: number;
     wireFrom: WireStepDTO | null;
+    /** ws1-t12 (revisión en panel.108, fallo 4): el arco de cada arcada; tras cambiar solo uno son dos. */
+    arcosActuales: { superior: WireStepDTO | null; inferior: WireStepDTO | null };
     visitDate: string;
     durationMin: number;
     /** M12: elásticos vigentes según la última hoja FIRMADA. */
@@ -188,6 +191,16 @@ export async function buildTreatmentCardContext(
   // de arco en el último control, la hoja nueva decía «—»).
   const arcoActualId = arcoActualDelControl(lastSignedCard);
   const wireFrom = arcoActualId ? (wireById.get(arcoActualId) ?? null) : null;
+  // ws1-t12 (revisión en panel.108, fallo 4): «Actual» dice el arco de cada arcada, con la regla de la cabecera.
+  const arcosDeLlegada = arcosActuales(
+    wireDTOs,
+    cards.map((c) => ({
+      status: c.status,
+      visitDate: c.visitDate,
+      wireFrom: c.wireFromId ? (wireById.get(c.wireFromId) ?? null) : null,
+      wireTo: c.wireToId ? (wireById.get(c.wireToId) ?? null) : null,
+    })),
+  );
   const durationMin = appt
     ? Math.max(15, Math.round((appt.endsAt.getTime() - appt.startsAt.getTime()) / 60000))
     : 30;
@@ -242,6 +255,7 @@ export async function buildTreatmentCardContext(
       phase,
       monthAt,
       wireFrom,
+      arcosActuales: arcosDeLlegada,
       visitDate,
       durationMin,
       lastElastics,
