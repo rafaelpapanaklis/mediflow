@@ -62,6 +62,12 @@ const es = {
   desactivadoConRegistros: "Desactivado en lugar de eliminado: tiene citas o registros",
   // Edición
   sinCambios: "No hay cambios que guardar",
+  // Rol fijo (el dueño y uno mismo) y «Atiende pacientes»
+  rolDuenoDesc: "Dueño de la cuenta",
+  rolDuenoAyuda: "El rol del dueño no se cambia. Todos los demás datos sí puedes editarlos aquí: nombre, teléfono, cédulas, especialidad, color y si atiendes pacientes.",
+  rolPropioAyuda: "No puedes cambiar tu propio rol. Los demás datos sí.",
+  atiendeTitulo: "Atiende pacientes",
+  atiendeDesc: "Aparece en la agenda y se le pueden asignar casos. Apágalo si solo administra.",
 };
 
 const en: typeof es = {
@@ -111,6 +117,11 @@ const en: typeof es = {
   miembroEliminado: "Member deleted",
   desactivadoConRegistros: "Deactivated instead of deleted: they have appointments or records",
   sinCambios: "There are no changes to save",
+  rolDuenoDesc: "Account owner",
+  rolDuenoAyuda: "The owner's role cannot be changed. You can edit everything else here: name, phone, license numbers, specialty, color and whether you see patients.",
+  rolPropioAyuda: "You cannot change your own role. Everything else you can.",
+  atiendeTitulo: "Sees patients",
+  atiendeDesc: "Shows up in the agenda and can be assigned cases. Turn it off if they only administer.",
 };
 
 export const TEXTOS_EQUIPO = { es, en } as const;

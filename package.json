@@ -102,6 +102,7 @@
     "test:team-sin-cuenta": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cambio-correo-sin-cuenta.test.ts",
     "test:team-cupo": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cupo-usuarios.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
+    "test:team-dueno-edita": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/team/__tests__/dueno-edita-su-ficha.test.ts src/components/dashboard/team/__tests__/selector-de-rol.test.tsx",
     "test:permissions-modal-titulo": "tsx --test src/components/dashboard/team/__tests__/permissions-modal-titulo.test.ts",
     "test:vendor-fields": "tsx --test src/lib/b2b/__tests__/vendor-fields.test.ts",
     "test:2fa-gate": "tsx --test src/lib/auth/__tests__/two-factor-gate.test.ts",

@@ -27,9 +27,10 @@ import { UpgradeUsuariosDialog } from "@/components/dashboard/team/upgrade-usuar
 import { cupoDeUsuarios, type CupoUsuarios, type PlanSubida } from "@/lib/team/cupo-usuarios-shared";
 import { validarContrasenaNueva, MAXIMO_CONTRASENA } from "@/lib/team/contrasena-nueva";
 import {
-  formDeMiembro, parcheDeCambios, rolLlevaDatosClinicos,
+  formDeMiembro, motivoRolFijo, ofreceHorario, parcheDeCambios, puedeMarcarAtiende, rolLlevaDatosClinicos,
   type DatosEditablesDeMiembro,
 } from "@/lib/team/parche-miembro";
+import { SelectorDeRol } from "./selector-de-rol";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 // labelKey -> resolved via t() at render time (never call t() at module scope).
@@ -80,6 +81,8 @@ interface FormState {
   cedulaProfesional: string;
   especialidad: string;
   cedulaEspecialidad: string;
+  // «Atiende pacientes» (solo se edita, no en el alta).
+  agendaActive: boolean;
   // ws1-t3: «¿solo dental o también ortodoncista?». "" = no aplica / sin contestar.
   accesoOrtodoncia: RespuestaModulo;
 }
@@ -91,6 +94,7 @@ interface TeamMember {
   cedulaProfesional?: string | null;
   especialidad?: string | null;
   cedulaEspecialidad?: string | null;
+  agendaActive?: boolean | null;
   permissionsOverride?: string[];
   _count: { appointments: number; records: number };
 }
@@ -207,7 +211,7 @@ function EstablecerContrasena({
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, onSetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, onSetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso, esYo,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -233,6 +237,8 @@ function MemberForm({
   ortoModulo: boolean;
   // Alta: quien da de alta. Edición: solo el dueño (los permisos son suyos).
   puedeCambiarAcceso: boolean;
+  // Edición: el miembro que se edita es quien tiene la sesión. Su rol no se toca.
+  esYo: boolean;
 }) {
   const t = useT();
   const x = useTextosEquipo();
@@ -240,6 +246,7 @@ function MemberForm({
   // NOM-024, color de agenda). El ADMIN y el dueño sí: firman recetas con su cédula.
   const clinico = rolLlevaDatosClinicos(form.role);
   const verModulos = seccionModulosVisible({ role: form.role, sedeDental });
+  const rolFijo = motivoRolFijo({ esEdicion: isEdit, rol: form.role, esYo });
   const [svcInput, setSvcInput] = useState("");
   // Con el rediseño, el acento y los bordes se leen del menú de dos niveles
   // (los `--m2-*` que monta la raíz); apagado, los tokens de siempre.
@@ -301,26 +308,17 @@ function MemberForm({
         </p>
       </div>
 
-      {/* Role */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-semibold">{t("settings.team.roleLabel")}</Label>
-        <div className="grid grid-cols-3 gap-2">
-          {ROLES.map(r => (
-            <button key={r.value} type="button" onClick={() => set("role", r.value)}
-              className="flex flex-col items-center p-3 text-center"
-              style={{
-                borderRadius: "var(--radius)",
-                border: `2px solid ${form.role === r.value ? acento : bordeSuave}`,
-                background: form.role === r.value ? acentoSuave : "transparent",
-                transition: "border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease)",
-              }}>
-              <r.icon size={18} strokeWidth={1.75} aria-hidden style={{ color: form.role === r.value ? acento : "var(--text-3)", marginBottom: 6 }} />
-              <span className="text-sm font-bold">{t(r.labelKey)}</span>
-              <span className="text-xs text-muted-foreground mt-0.5 leading-tight">{t(r.descKey)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Role — fijo para el dueño y para uno mismo (ver SelectorDeRol). */}
+      <SelectorDeRol
+        etiqueta={t("settings.team.roleLabel")}
+        opciones={ROLES.map(r => ({ value: r.value, label: t(r.labelKey), desc: t(r.descKey), icon: r.icon }))}
+        valor={form.role}
+        onCambiar={rol => set("role", rol)}
+        bloqueo={rolFijo}
+        ayuda={rolFijo === "dueno" ? x.rolDuenoAyuda : x.rolPropioAyuda}
+        acento={acento} acentoSuave={acentoSuave} bordeSuave={bordeSuave}
+        tarjetaDueno={{ value: "SUPER_ADMIN", label: t("settings.team.roleSuperAdmin"), desc: x.rolDuenoDesc, icon: ShieldCheck }}
+      />
 
       {/* Specialty + Phone — la especialidad no aplica a recepción. */}
       <div className={clinico ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}>
@@ -358,6 +356,24 @@ function MemberForm({
           // La especialidad no se toca: es independiente del módulo.
           onChange={(_modulo, respuesta) => set("accesoOrtodoncia", respuesta)}
         />
+      )}
+
+      {/* «Atiende pacientes»: solo al editar, y solo a quien tiene agenda propia. */}
+      {isEdit && puedeMarcarAtiende(form.role) && (
+        <label className="flex items-start gap-3 cursor-pointer" data-atiende-pacientes
+          style={{ padding: "10px 12px", borderRadius: "var(--radius)", border: `1px solid ${bordeSuave}` }}>
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.agendaActive}
+            onChange={e => set("agendaActive", e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: acento }}
+          />
+          <span className="flex flex-col">
+            <span className="text-sm font-semibold">{x.atiendeTitulo}</span>
+            <span className="text-xs text-muted-foreground leading-tight">{x.atiendeDesc}</span>
+          </span>
+        </label>
       )}
 
       {/* Services */}
@@ -762,6 +778,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     firstName:"", lastName:"", email:"", role:"DOCTOR",
     specialty:"", color: nextColor, phone:"", services:[],
     cedulaProfesional: "", especialidad: "", cedulaEspecialidad: "",
+    agendaActive: true,
     accesoOrtodoncia: "",
   });
 
@@ -835,7 +852,11 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     // Solo lo que la persona cambió. Antes viajaba el formulario ENTERO: un campo
     // que llegara vacío al modal (la cédula, que la página no traía) se guardaba
     // como vacío y BORRABA el dato del médico (ws1-t5, T1).
-    const parche = formInicial ? parcheDeCambios(formInicial, datosActuales) : (datosActuales as Partial<DatosEditablesDeMiembro>);
+    // El rol del dueño y el propio no viajan NUNCA, aunque el formulario los trajera distintos:
+    // el servidor rechaza el guardado entero si llegan (BEVADENT, oct-2026: el dueño no podía
+    // guardar su cédula). Lo demás se guarda con normalidad.
+    const rolFijo = motivoRolFijo({ esEdicion: true, rol: editMember.role, esYo: editMember.id === currentUserId }) !== null;
+    const parche = formInicial ? parcheDeCambios(formInicial, datosActuales, { rolFijo }) : (datosActuales as Partial<DatosEditablesDeMiembro>);
     const acceso = accesoQueViaja({ inicial: accesoInicial(editMember, ortoModulo), actual: form.accesoOrtodoncia });
     if (Object.keys(parche).length === 0 && !acceso) {
       setEditMember(null);
@@ -1250,9 +1271,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                         {t("settings.sabinaPermissions.button")}
                       </ButtonNew>
                     )}
-                    {/* Horario: solo sobre DOCTOR, que son los que tiene la
-                     *  agenda. Sin horario propio, sigue el de la clínica. */}
-                    {puedeHorario && m.role === "DOCTOR" && (
+                    {/* Horario: el doctor y quien administra pero atiende (el
+                     *  dueño con su propia consulta). Sin horario propio, sigue
+                     *  el de la clínica. */}
+                    {puedeHorario && ofreceHorario(m) && (
                       <ButtonNew
                         variant="secondary"
                         icon={<Clock size={16} strokeWidth={1.75} />}
@@ -1325,6 +1347,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               onSubmit={createDoctor} onCancel={() => setShowNew(false)}
               loading={loading} isEdit={false} rediseno={rediseno}
               sedeDental={sedeDental} ortoModulo={ortoModulo} puedeCambiarAcceso
+              esYo={false}
             />
           </div>
         </div>
@@ -1346,6 +1369,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
               loading={loading} isEdit={true} rediseno={rediseno}
               sedeDental={sedeDental} ortoModulo={ortoModulo} puedeCambiarAcceso={isSuperAdmin}
+              esYo={editMember.id === currentUserId}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={

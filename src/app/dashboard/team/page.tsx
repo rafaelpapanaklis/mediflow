@@ -46,6 +46,8 @@ export default async function TeamPage() {
         // especialidad oficial vacías y el PATCH las guardaba como null: guardar
         // cualquier otro dato (el teléfono) BORRABA la cédula del médico.
         cedulaProfesional: true, especialidad: true, cedulaEspecialidad: true,
+        // «Atiende pacientes» (la casilla del modal y el botón «Horario» del dueño).
+        agendaActive: true,
         // Override granular del set default del role — visible solo en el
         // modal de Permisos del SUPER_ADMIN.
         permissionsOverride: true,
