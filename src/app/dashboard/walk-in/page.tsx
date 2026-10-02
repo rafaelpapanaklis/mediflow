@@ -6,6 +6,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { WalkInClient } from "./walk-in-client";
 
 export const metadata: Metadata = { title: "Fila de Espera — DaleControl" };
@@ -30,7 +31,7 @@ export default async function WalkInPage() {
   // propio. Falla cerrado (→ false = la pantalla de hoy, tal cual). Va en el
   // mismo Promise.all que la fila para no añadir un viaje a la base; la
   // respuesta además vive 60 s en memoria por clínica.
-  const [queue, rediseno] = await Promise.all([
+  const [queue, rediseno, profesionalesDb] = await Promise.all([
     prisma.walkInQueue.findMany({
       where: {
         clinicId,
@@ -39,8 +40,17 @@ export default async function WalkInPage() {
       orderBy: [{ priority: "desc" }, { joinedAt: "asc" }],
     }),
     menuDosNivelesEncendido(clinicId),
+    // «Asignar»: la misma regla única de quién puede recibir citas que usa la Agenda (ws1-t10).
+    puedeEditar
+      ? prisma.user.findMany({
+          where: { clinicId, ...RECIBE_CITAS_WHERE },
+          select: { id: true, firstName: true, lastName: true },
+          orderBy: { firstName: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
+  const profesionales = profesionalesDb.map((u) => ({ id: u.id, name: `${u.firstName} ${u.lastName}`.trim() }));
 
-  return <WalkInClient key={clinicId} initialQueue={queue as any} rediseno={rediseno}
+  return <WalkInClient key={clinicId} initialQueue={queue as any} profesionales={profesionales} rediseno={rediseno}
     puedeAgregar={puedeAgregar} puedeEditar={puedeEditar} />;
 }

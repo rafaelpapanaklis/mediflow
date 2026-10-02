@@ -54,8 +54,10 @@ function ElapsedTimer({ since }: { since: string }) {
   return <span className="text-xs font-medium">{elapsed}</span>;
 }
 
-export function WalkInClient({ initialQueue, rediseno = false, puedeAgregar = true, puedeEditar = true }: {
+export function WalkInClient({ initialQueue, profesionales = [], rediseno = false, puedeAgregar = true, puedeEditar = true }: {
   initialQueue: QueueItem[];
+  /** Quién puede recibir citas (regla única de la Agenda): la lista de «Asignar». La resuelve page.tsx. */
+  profesionales?: { id: string; name: string }[];
   /** Interruptor `menu-dos-niveles` de la clínica (lo resuelve page.tsx):
    *  encendido pinta la fila vestida con el lenguaje del menú nuevo;
    *  apagado, todo lo de abajo, tal cual. La lógica es la misma en los dos. */
@@ -68,6 +70,9 @@ export function WalkInClient({ initialQueue, rediseno = false, puedeAgregar = tr
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ patientName: "", service: "" });
+  // Fila a la que se le está eligiendo profesional (el «Asignar» abre el selector en esa fila).
+  const [asignandoId, setAsignandoId] = useState<string | null>(null);
+  const nombreDe = (id: string | null) => (id ? profesionales.find(p => p.id === id)?.name ?? null : null);
 
   const statusLabel = (status: string) =>
     STATUS_LABEL_KEYS[status] ? t(STATUS_LABEL_KEYS[status]) : status;
@@ -122,16 +127,32 @@ export function WalkInClient({ initialQueue, rediseno = false, puedeAgregar = tr
     }
   }
 
-  async function handleAction(id: string, action: string) {
+  async function handleAction(id: string, action: string, assignedTo?: string) {
+    // «Asignar» sin profesional todavía: abre el selector de la fila; la petición sale al elegir.
+    if (action === "assign" && !assignedTo) {
+      if (profesionales.length === 0) { toast.error(t("pages.walkIn.noProfessionals")); return; }
+      setAsignandoId(id);
+      return;
+    }
     try {
       const res = await fetch(`/api/walk-in/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...(assignedTo ? { assignedTo } : {}) }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        toast.error(typeof err?.reason === "string" ? err.reason : t("pages.walkIn.updateError"));
+        if (res.status === 409) {
+          // Otra pantalla ya movió el turno: se trae la fila al día en vez de dejarla con el estado viejo.
+          const r = await fetch("/api/walk-in");
+          if (r.ok) { const data = await r.json(); if (Array.isArray(data)) setQueue(data); }
+        }
+        return;
+      }
       const updated = await res.json();
       setQueue(prev => prev.map(q => q.id === id ? updated : q));
+      setAsignandoId(null);
       toast.success(t("pages.walkIn.statusUpdatedToast", { status: statusLabel(updated.status) }));
     } catch {
       toast.error(t("pages.walkIn.updateError"));
@@ -153,6 +174,10 @@ export function WalkInClient({ initialQueue, rediseno = false, puedeAgregar = tr
         setForm={setForm}
         handleAdd={handleAdd}
         handleAction={handleAction}
+        profesionales={profesionales}
+        asignandoId={asignandoId}
+        cancelarAsignar={() => setAsignandoId(null)}
+        nombreDe={nombreDe}
         statusLabel={statusLabel}
         pintarEspera={(since) => <ElapsedTimer since={since} />}
         puedeAgregar={puedeAgregar}
@@ -199,8 +224,26 @@ export function WalkInClient({ initialQueue, rediseno = false, puedeAgregar = tr
                 <ElapsedTimer since={item.joinedAt} />
               </div>
             </div>
+            {nombreDe(item.assignedTo) && (
+              <p className="text-xs text-muted-foreground mb-3">{t("pages.walkIn.assignedTo", { name: nombreDe(item.assignedTo) ?? "" })}</p>
+            )}
+            {puedeEditar && asignandoId === item.id && (
+              <div className="flex gap-2 mb-3">
+                <select
+                  autoFocus
+                  aria-label={t("pages.walkIn.chooseProfessional")}
+                  className="h-9 flex-1 rounded-lg border border-border bg-card px-3 text-sm"
+                  defaultValue=""
+                  onChange={e => { if (e.target.value) void handleAction(item.id, "assign", e.target.value); }}
+                >
+                  <option value="" disabled>{t("pages.walkIn.chooseProfessional")}</option>
+                  {profesionales.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <Button size="sm" variant="outline" onClick={() => setAsignandoId(null)}>{t("common.cancel")}</Button>
+              </div>
+            )}
             {puedeEditar && <div className="flex gap-2">
-              {item.status === "WAITING" && (
+              {(item.status === "WAITING" || item.status === "ASSIGNED") && (
                 <Button size="sm" variant="outline" onClick={() => handleAction(item.id, "assign")}>{t("pages.walkIn.assign")}</Button>
               )}
               {(item.status === "WAITING" || item.status === "ASSIGNED") && (

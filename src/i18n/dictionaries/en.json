@@ -9595,6 +9595,9 @@
       "showWaitTimesCheckbox": "Yes, calculate wait time per checked-in patient"
     },
     "walkIn": {
+      "chooseProfessional": "Choose a professional",
+      "assignedTo": "Assigned to {name}",
+      "noProfessionals": "No professionals can receive appointments. Turn on “Appears in the agenda” in Team.",
       "statusWaiting": "Waiting",
       "statusAssigned": "Assigned",
       "statusInProgress": "In progress",

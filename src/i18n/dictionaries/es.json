@@ -9595,6 +9595,9 @@
       "showWaitTimesCheckbox": "Sí, calcula tiempo de espera por paciente check-in"
     },
     "walkIn": {
+      "chooseProfessional": "Elige un profesional",
+      "assignedTo": "Asignado a {name}",
+      "noProfessionals": "No hay profesionales que reciban citas. Enciende «Aparece en la agenda» en Equipo.",
       "statusWaiting": "Esperando",
       "statusAssigned": "Asignado",
       "statusInProgress": "En atención",

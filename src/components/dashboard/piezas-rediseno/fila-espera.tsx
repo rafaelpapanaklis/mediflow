@@ -47,7 +47,13 @@ export interface FilaEsperaProps {
   form: { patientName: string; service: string };
   setForm: Dispatch<SetStateAction<{ patientName: string; service: string }>>;
   handleAdd: () => Promise<void>;
-  handleAction: (id: string, action: string) => Promise<void>;
+  handleAction: (id: string, action: string, assignedTo?: string) => Promise<void>;
+  /** Quién puede recibir citas: la lista del selector de «Asignar». */
+  profesionales?: { id: string; name: string }[];
+  /** Fila a la que se le está eligiendo profesional. */
+  asignandoId?: string | null;
+  cancelarAsignar?: () => void;
+  nombreDe?: (id: string | null) => string | null;
   statusLabel: (status: string) => string;
   pintarEspera: (since: string) => ReactNode;
   /** agenda.create / agenda.edit (la API los exige igual; aquí solo se esconde). */
@@ -66,6 +72,10 @@ export function FilaEspera({
   setForm,
   handleAdd,
   handleAction,
+  profesionales = [],
+  asignandoId = null,
+  cancelarAsignar,
+  nombreDe,
   statusLabel,
   pintarEspera,
   puedeAgregar = true,
@@ -147,10 +157,31 @@ export function FilaEspera({
                     <span aria-hidden>·</span>
                     <span>{t("pages.walkIn.waitingLabel")}</span>
                     <span className={s.espera}>{pintarEspera(item.joinedAt)}</span>
+                    {nombreDe?.(item.assignedTo) && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{t("pages.walkIn.assignedTo", { name: nombreDe(item.assignedTo) ?? "" })}</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 {puedeEditar && <div className={s.filaAcciones}>
-                  {item.status === "WAITING" && (
+                  {asignandoId === item.id && (
+                    <>
+                      <select
+                        autoFocus
+                        aria-label={t("pages.walkIn.chooseProfessional")}
+                        className={s.campoEntrada}
+                        defaultValue=""
+                        onChange={(e) => { if (e.target.value) void handleAction(item.id, "assign", e.target.value); }}
+                      >
+                        <option value="" disabled>{t("pages.walkIn.chooseProfessional")}</option>
+                        {profesionales.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <Boton peq onClick={() => cancelarAsignar?.()}>{t("common.cancel")}</Boton>
+                    </>
+                  )}
+                  {asignandoId !== item.id && (item.status === "WAITING" || item.status === "ASSIGNED") && (
                     <Boton peq onClick={() => handleAction(item.id, "assign")}>
                       {t("pages.walkIn.assign")}
                     </Boton>

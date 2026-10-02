@@ -38,7 +38,7 @@ beforeEach(() => {
         findMany: async (a: any) => { tocadas.push("findMany"); assert.equal(a.where.clinicId, "c1"); return []; },
         findFirst: async () => ({ id: "w1", clinicId: "c1" }),
         create: async (a: any) => { creadas.push(a.data); return { id: "w1", ...a.data }; },
-        update: async () => ({ id: "w1" }),
+        updateMany: async () => ({ count: 1 }),
         deleteMany: async () => { tocadas.push("deleteMany"); return { count: 1 }; },
       },
     },
@@ -56,7 +56,7 @@ test("dueño, recepción y doctor: ven, agregan, avanzan y cancelan", async () =
     ctx.role = role;
     assert.equal((await GET(req())).status, 200, `${role} GET`);
     assert.equal((await POST(req({ patientName: "Ana", service: "Limpieza" }))).status, 201, `${role} POST`);
-    assert.equal((await PATCH(req({ status: "ASSIGNED" }), idp)).status, 200, `${role} PATCH`);
+    assert.equal((await PATCH(req({ action: "start" }), idp)).status, 200, `${role} PATCH`);
     assert.equal((await DELETE(req(), idp)).status, 200, `${role} DELETE`);
   }
 });
@@ -69,7 +69,7 @@ test("solo lectura: ve la fila pero no agrega ni toca turnos (403, sin escribir)
   const r = await POST(req({ patientName: "Ana", service: "Limpieza" }));
   assert.equal(r.status, 403);
   assert.equal((await r.json()).permiso, "agenda.create");
-  assert.equal((await PATCH(req({ status: "ASSIGNED" }), idp)).status, 403);
+  assert.equal((await PATCH(req({ action: "start" }), idp)).status, 403);
   assert.equal((await DELETE(req(), idp)).status, 403);
   assert.deepEqual(creadas, []);
   assert.ok(!tocadas.includes("deleteMany"));

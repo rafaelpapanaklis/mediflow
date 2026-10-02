@@ -18,7 +18,6 @@ export async function GET(req: NextRequest) {
     where: {
       clinicId: ctx.clinicId,
       joinedAt: { gte: todayStart },
-      status: { not: "COMPLETED" },
     },
     orderBy: [{ priority: "desc" }, { joinedAt: "asc" }],
   });
