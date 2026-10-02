@@ -366,6 +366,7 @@
     "test:pdf-cabecera": "tsx --test src/lib/pdf/__tests__/clinic-letterhead.test.ts",
     "test:pdf-documentos": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/documentos-cabecera.test.tsx",
     "test:agenda-doctor-de-la-cita": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/agenda/__tests__/doctor-de-la-cita.test.ts",
+    "test:aparece-en-agenda": "tsx --test src/lib/agenda/__tests__/aparece-en-agenda-alta-y-tratante.test.ts",
     "test:agenda-quien-recibe-citas": "tsx --tsconfig tsconfig.test.json --test src/lib/agenda/__tests__/quien-recibe-citas.test.ts",
     "test:agenda-revision-profesionales": "tsx --tsconfig tsconfig.test.json --test src/lib/agenda/__tests__/revision-profesionales.test.ts",
     "test:agenda-menores-revision-final": "tsx --tsconfig tsconfig.test.json --test src/lib/agenda/__tests__/menores-revision-final.test.ts",

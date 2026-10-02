@@ -9,6 +9,7 @@ import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
+import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
 /**
  * Completar registro para usuarios que entraron via OAuth (Google/Microsoft).
@@ -152,6 +153,8 @@ export async function POST(req: NextRequest) {
             lastName,
             role: "SUPER_ADMIN",
             specialty: specialtyLabel,
+            // Clínica NUEVA: el dueño nace en la Agenda (decisión de Rafael, 2-oct-2026); se desmarca en Equipo.
+            agendaActive: agendaActiveAlCrear("SUPER_ADMIN"),
           },
         },
         schedules: {

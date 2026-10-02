@@ -16,6 +16,7 @@ import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
 import { leerErrorContrasena, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
+import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -267,7 +268,9 @@ export async function POST(req: NextRequest) {
         paymentMethodCollected,
         paymentMethodType,
         paymentMethodLast4: paymentMethodType === "card" ? data.paymentMethodLast4 : undefined,
-        users: { create: { supabaseId: authData.user.id, email: data.email, firstName: data.firstName, lastName: data.lastName, role: "SUPER_ADMIN", specialty: specialtyLabel } },
+        users: { create: { supabaseId: authData.user.id, email: data.email, firstName: data.firstName, lastName: data.lastName, role: "SUPER_ADMIN", specialty: specialtyLabel,
+          // Clínica NUEVA: el dueño nace en la Agenda (decisión de Rafael, 2-oct-2026); se desmarca en Equipo.
+          agendaActive: agendaActiveAlCrear("SUPER_ADMIN") } },
         schedules: { createMany: { data: [0,1,2,3,4].map(day => ({ dayOfWeek: day, enabled: true, openTime: "09:00", closeTime: "18:00" })) } },
       },
     });

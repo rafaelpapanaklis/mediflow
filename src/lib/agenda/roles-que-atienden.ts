@@ -41,6 +41,17 @@ export function puedeRecibirCitas(u: {
 }
 
 /**
+ * Con qué «Aparece en la agenda» NACE una cuenta (decisiones de Rafael, 2-oct-2026). El dueño que registra una
+ * clínica nueva y el doctor que se da de alta en Equipo, marcados; un administrador nuevo, desmarcado (lleva la
+ * clínica, no necesariamente atiende: si atiende, se marca en Equipo → Editar). Recepción y solo lectura quedan
+ * con el default de la base: la casilla no les da nada mientras su rol no atienda. Lo de las clínicas YA creadas
+ * no se decide aquí: es `sql/ws1-t10-dueno-fuera-de-agenda.sql`.
+ */
+export function agendaActiveAlCrear(role: string): boolean {
+  return role !== "ADMIN";
+}
+
+/**
  * La frase GENÉRICA del `doctor_not_found` de la Agenda: la usa la pantalla solo si el servidor no mandó
  * `reason` (el servidor manda la del motivo concreto, `fraseNoRecibeCitas`).
  */

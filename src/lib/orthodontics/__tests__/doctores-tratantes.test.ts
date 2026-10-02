@@ -37,11 +37,11 @@ test("recepción y solo lectura nunca salen, aunque marquen especialidad", () =>
   assert.equal(opciones.length, 0);
 });
 
-test("la administradora fuera de la agenda no sale; si es ortodoncista, sí", () => {
+test("la administradora fuera de la agenda no sale, aunque sea ortodoncista (misma regla que la Agenda, 2-oct-2026)", () => {
   assert.equal(atiendePacientes(usuario({ id: "a", role: "ADMIN", agendaActive: false })), false);
   assert.equal(
     atiendePacientes(usuario({ id: "b", role: "ADMIN", agendaActive: false, specialty: "Ortodoncia" })),
-    true,
+    false,
   );
 });
 
@@ -49,8 +49,9 @@ test("un usuario dado de baja no sale", () => {
   assert.equal(atiendePacientes(usuario({ id: "x", isActive: false })), false);
 });
 
-test("un doctor sale aunque esté fuera de la agenda", () => {
-  assert.equal(atiendePacientes(usuario({ id: "d", role: "DOCTOR", agendaActive: false })), true);
+test("un doctor fuera de la agenda no sale: no se le podrían agendar los controles", () => {
+  assert.equal(atiendePacientes(usuario({ id: "d", role: "DOCTOR", agendaActive: false })), false);
+  assert.equal(atiendePacientes(usuario({ id: "e", role: "DOCTOR" })), true, "sin el dato = marcado (default de la base)");
 });
 
 test("reconoce la especialidad con o sin acentos y en la de la cédula", () => {
@@ -295,6 +296,6 @@ test("si nadie tiene acceso a Ortodoncia, no se propone a nadie y el alta pide e
 test("un caso cuyo doctor perdió Ortodoncia se ve con lo que hay guardado, no como «— elige al doctor —»", () => {
   assert.match(
     codigo("src/components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"),
-    /Doctor actual del caso \(sin acceso a Ortodoncia\)/,
+    /Doctor actual del caso \(sin acceso a Ortodoncia o fuera de la agenda\)/,
   );
 });

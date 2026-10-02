@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { hasPermission } from "@/lib/auth/permissions";
+import { puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
 
 /** Los mismos roles que la Agenda y la reserva aceptan como «quien atiende». */
 export { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
@@ -52,12 +53,6 @@ export function esOrtodoncista(u: Pick<UsuarioCandidato, "specialty" | "especial
 }
 
 /**
- * ¿Esta persona atiende pacientes? Un usuario con rol Doctor, siempre. Un
- * administrador (o el dueño), si está en la Agenda o si marcó Ortodoncia como
- * su especialidad: así no se cuela la administradora que solo lleva la caja y
- * a la que ya se sacó del calendario.
- */
-/**
  * ¿Puede abrir el módulo de Ortodoncia? Un doctor tratante que no entra al
  * módulo no puede abrir sus propios casos (la URL lo manda a Inicio): no se
  * ofrece. Es el permiso `specialties.orthodontics`, con el override de Equipo.
@@ -66,12 +61,17 @@ export function tieneAccesoAOrtodoncia(u: Pick<UsuarioCandidato, "role" | "permi
   return hasPermission({ role: u.role, permissionsOverride: u.permissionsOverride ?? [] }, "specialties.orthodontics");
 }
 
+/**
+ * ¿Puede ser doctor tratante? La MISMA regla de la Agenda (`puedeRecibirCitas`:
+ * rol que atiende, cuenta activa y «Aparece en la agenda» marcada) más el
+ * acceso al módulo. Decisión de Rafael (2-oct-2026): un dueño o administrador
+ * desmarcado NO es doctor, aunque marque Ortodoncia como especialidad, y un
+ * doctor desmarcado tampoco — el tratante es a quien se le agendan los
+ * controles, y fuera de la agenda no se le pueden agendar.
+ */
 export function atiendePacientes(u: UsuarioCandidato): boolean {
-  if (u.isActive === false) return false;
-  if (!tieneAccesoAOrtodoncia(u)) return false;
-  if (u.role === "DOCTOR") return true;
-  if (u.role !== "ADMIN" && u.role !== "SUPER_ADMIN") return false;
-  return u.agendaActive !== false || esOrtodoncista(u);
+  if (!puedeRecibirCitas(u)) return false;
+  return tieneAccesoAOrtodoncia(u);
 }
 
 /** Lista para los selectores: ortodoncistas primero y, dentro, por nombre. */

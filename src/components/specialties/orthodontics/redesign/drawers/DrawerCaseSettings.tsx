@@ -203,7 +203,7 @@ export function DrawerCaseSettings(props: DrawerCaseSettingsProps) {
                   ofrecerse en casos nuevos, pero los casos que ya lleva lo
                   conservan: se muestra tal cual y se guarda sin cambios. */}
               {treatingDoctorId && !loading && !doctors.some((d) => d.id === treatingDoctorId) ? (
-                <option value={treatingDoctorId}>Doctor actual del caso (sin acceso a Ortodoncia)</option>
+                <option value={treatingDoctorId}>Doctor actual del caso (sin acceso a Ortodoncia o fuera de la agenda)</option>
               ) : null}
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.fullName}</option>

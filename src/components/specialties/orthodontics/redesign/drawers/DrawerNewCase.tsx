@@ -1268,7 +1268,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                           <option value="">{columnsExist.treatingDoctorId ? "— elige al doctor —" : "— sin asignar —"}</option>
                           {/* Un caso cuyo doctor ya perdió «Ortodoncia» en Equipo: se ve lo que hay guardado, no un «elige» que engaña. */}
                           {treatingDoctorId && !loadingOptions && !doctors.some((d) => d.id === treatingDoctorId) ? (
-                            <option value={treatingDoctorId}>Doctor actual del caso (sin acceso a Ortodoncia)</option>
+                            <option value={treatingDoctorId}>Doctor actual del caso (sin acceso a Ortodoncia o fuera de la agenda)</option>
                           ) : null}
                           {doctors.map((d) => (
                             <option key={d.id} value={d.id}>{d.fullName}</option>

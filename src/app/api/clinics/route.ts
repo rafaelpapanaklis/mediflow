@@ -18,6 +18,7 @@ import { logMutation } from "@/lib/audit";
 import { logError } from "@/lib/safe-log";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { categoriaDeSucursal } from "@/lib/clinic/categoria-fija";
+import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -183,6 +184,8 @@ export async function POST(req: NextRequest) {
             lastName: ctx.user.lastName,
             role: "SUPER_ADMIN",
             specialty: category.toLowerCase(),
+            // La sede es una clínica NUEVA: el dueño nace en su Agenda, como en el registro (2-oct-2026).
+            agendaActive: agendaActiveAlCrear("SUPER_ADMIN"),
             // La sede nueva HEREDA la exigencia de cambiar contraseña. La marca
             // es por fila pero la contraseña es una sola (Supabase Auth, global
             // por supabaseId): una fila nueva en false sería una sede donde la

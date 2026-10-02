@@ -1,4 +1,5 @@
 import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
+import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -163,6 +164,8 @@ export async function POST(req: NextRequest) {
       // default del rol SIN la llave, explícito.
       ...(permissionsOverrideNuevo && permissionsOverrideNuevo.length > 0 && { permissionsOverride: permissionsOverrideNuevo }),
       color:      assignedColor,
+      // «Aparece en la agenda»: un ADMIN nuevo nace DESMARCADO (decisión de Rafael, 2-oct-2026); el doctor, marcado.
+      agendaActive: agendaActiveAlCrear(rolNuevo),
       phone:      phone || null,
       services:   services ?? [],
       isActive:   true,
