@@ -48,6 +48,7 @@ import {
 } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useAyudaDelPaso } from "@/lib/agenda/ayuda-de-pasos";
 
 interface ActionDef {
   status: AppointmentStatus;
@@ -126,6 +127,8 @@ interface AgendaDetailPanelProps {
 
 export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   const t = useT();
+  // ws1-t2 (9a): línea de ayuda bajo «Check-in», «Pasar a sillón» e «Iniciar consulta».
+  const ayudaDelPaso = useAyudaDelPaso();
   const { state, permissions, selectAppointment, dispatch, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -551,18 +554,30 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
               router.push(`/dashboard/patients/${appt.patient.id}?appointment=${appt.id}`);
             }
           };
-          return (
+          const ayuda = ayudaDelPaso(target);
+          const boton = (
             <button
               key={target}
               type="button"
               className={`${styles.detailAction} ${isPrimary ? styles.primary : ""}`}
               onClick={onClickAction}
               disabled={pendingStatus !== null}
-              title={label}
+              title={ayuda ? `${label}: ${ayuda}` : label}
+              aria-describedby={ayuda ? `ayuda-paso-${target}` : undefined}
             >
               <Icon size={12} aria-hidden />
               {pendingStatus === target ? "…" : label}
             </button>
+          );
+          return ayuda ? (
+            <div key={target} className={styles.detailActionConAyuda}>
+              {boton}
+              <span id={`ayuda-paso-${target}`} className={styles.detailActionAyuda}>
+                {ayuda}
+              </span>
+            </div>
+          ) : (
+            boton
           );
         })}
         {/* Acciones permanentes (no dependen del status). */}

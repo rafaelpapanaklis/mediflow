@@ -10,6 +10,7 @@ import type { AppointmentDTO, AppointmentStatus } from "@/lib/home/types";
 import { formatShortTime } from "@/lib/home/greet";
 import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
 import { useT } from "@/i18n/i18n-provider";
+import { useAyudaDelPaso } from "@/lib/agenda/ayuda-de-pasos";
 
 // Pills de estado del sistema (prototipo variante-a: fondo *-soft + dot 6px
 // currentColor + tinta *-strong 11/600). Texto sobre --brand-soft usa
@@ -61,6 +62,7 @@ export function TodayAppointmentRow({
 }: Props) {
   const router = useRouter();
   const t = useT();
+  const ayudaDelPaso = useAyudaDelPaso();
   const canCheckIn = appt.status === "SCHEDULED" || appt.status === "CONFIRMED";
   const statusLabel = t(STATUS_LABEL_KEY[appt.status]);
 
@@ -187,6 +189,7 @@ export function TodayAppointmentRow({
             <IconButton
               icon={CheckCircle2}
               label="Check-in"
+              help={ayudaDelPaso("CHECKED_IN")}
               onClick={() => onCheckIn?.(appt.id)}
               tone="success"
             />
@@ -290,11 +293,14 @@ function statusPillStyle(status: AppointmentStatus): React.CSSProperties {
 function IconButton({
   icon: Icon,
   label,
+  help,
   onClick,
   tone,
 }: {
   icon: LucideIcon;
   label: string;
+  /** 9a (ws1-t2): qué hace el paso; el botón es solo icono, así que va en el tooltip y en el nombre accesible. */
+  help?: string | null;
   onClick?: () => void;
   tone?: "success";
 }) {
@@ -302,8 +308,8 @@ function IconButton({
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
-      title={label}
+      aria-label={help ? `${label}: ${help}` : label}
+      title={help ? `${label}: ${help}` : label}
       style={{
         ...iconBtnStyle,
         color: tone === "success" ? "var(--success)" : "var(--text-2)",

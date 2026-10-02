@@ -331,6 +331,9 @@
   background: var(--success-soft); color: var(--success);
   border-color: color-mix(in srgb, var(--success) 30%, transparent);
 }
+/* El chip de «Salud sin capturar» es un botón cuando la sesión puede abrir el cuestionario. */
+.alertChipBoton { font-family: inherit; cursor: pointer; }
+.alertChipBoton:focus-visible { outline: none; box-shadow: var(--ring); }
 
 /* ─── Responsive del hero — @container, NO @media ───────────────────────
  *

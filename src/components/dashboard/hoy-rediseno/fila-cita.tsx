@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { useT } from "@/i18n/i18n-provider";
+import { useAyudaDelPaso } from "@/lib/agenda/ayuda-de-pasos";
 import { formatShortTime } from "@/lib/home/greet";
 import type { AppointmentDTO } from "@/lib/home/types";
 import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
@@ -37,6 +38,7 @@ interface Props {
 export function FilaCita({ appt, compacta, timeZone, onCheckIn, onCall, onWhatsApp }: Props) {
   const router = useRouter();
   const t = useT();
+  const ayudaDelPaso = useAyudaDelPaso();
   const puedeCheckIn = appt.status === "SCHEDULED" || appt.status === "CONFIRMED";
   // P1-15: /dashboard/appointments/[id] no existe. La cita se abre en la agenda
   // del día resaltada con ?highlight=, igual que la home de siempre.
@@ -93,6 +95,7 @@ export function FilaCita({ appt, compacta, timeZone, onCheckIn, onCall, onWhatsA
             <BotonIcono
               icono={CheckCircle2}
               etiqueta="Check-in"
+              ayuda={ayudaDelPaso("CHECKED_IN")}
               onClick={() => onCheckIn?.(appt.id)}
               exito
             />
@@ -141,11 +144,14 @@ export function FilaCita({ appt, compacta, timeZone, onCheckIn, onCall, onWhatsA
 function BotonIcono({
   icono: Icono,
   etiqueta,
+  ayuda,
   onClick,
   exito,
 }: {
   icono: LucideIcon;
   etiqueta: string;
+  /** 9a (ws1-t2): qué hace el paso; el botón es solo icono, así que va en el tooltip y en el nombre accesible. */
+  ayuda?: string | null;
   onClick?: () => void;
   exito?: boolean;
 }) {
@@ -153,8 +159,8 @@ function BotonIcono({
     <button
       type="button"
       onClick={onClick}
-      aria-label={etiqueta}
-      title={etiqueta}
+      aria-label={ayuda ? `${etiqueta}: ${ayuda}` : etiqueta}
+      title={ayuda ? `${etiqueta}: ${ayuda}` : etiqueta}
       className={`${s.botonIcono} ${exito ? s.botonIconoExito : ""}`}
     >
       <Icono size={16} strokeWidth={1.75} />

@@ -33,6 +33,8 @@ import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
 import { edadLegible } from "@/lib/pediatrics/age";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
+import { estadoSalud, puedePintarSinAlergias, saludPendiente, type EstadoCuestionario } from "@/lib/patients/salud-capturada";
+import { useTextosSaludCapturada } from "@/lib/patients/textos-salud-capturada";
 import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
 import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
 import { ROPA_MENU_FICHA } from "@/components/dashboard/portales-rediseno/ropa";
@@ -108,6 +110,16 @@ export interface HeroCardProps {
   /** Abre el diálogo del expediente. Solo se llama si `canExportRecord`. */
   onExportRecord?: () => void;
   riskFlags?: string[];
+  /**
+   * ws1-t2 (ticket BEVADENT 3, 12h): frescura del cuestionario de salud. Con ella la cabecera deja de pintar
+   * «✓ Sin alergias registradas» en verde para un paciente al que nunca se le capturó la salud: sin
+   * cuestionario sale el chip ámbar «Salud sin capturar» (o «Cuestionario de salud vencido»), y el verde solo
+   * con cuestionario vigente. Ausente = se desconoce y la cabecera se pinta como siempre.
+   */
+  questionnaireStatus?: EstadoCuestionario | null;
+  /** Lleva a la pestaña del cuestionario. Solo se pasa si la sesión puede ver el expediente clínico; sin él el
+   *  chip ámbar se pinta igual, pero no es un botón. */
+  onAbrirCuestionario?: () => void;
   emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
   /** Sede de origen cuando el paciente viene prestado de otra sucursal (Fase 2). null = paciente propio. */
   originClinicName?: string | null;
@@ -183,12 +195,16 @@ export function HeroCard({
   canExportRecord = false,
   onExportRecord,
   riskFlags = [],
+  questionnaireStatus = null,
+  onAbrirCuestionario,
   emergencyContact,
   originClinicName = null,
   rediseno = false,
   pediatria = null,
 }: HeroCardProps) {
   const t = useT();
+  const textosSalud = useTextosSaludCapturada();
+  const salud = estadoSalud(questionnaireStatus);
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const age = ageFromDob(patient.dob);
@@ -615,7 +631,28 @@ export function HeroCard({
             un paciente asmático sin ninguna alergia tiene que seguir viendo
             este chip. El chip existe justo para distinguir «se le preguntó y
             no tiene» de «no lo sabemos». */}
-        {rediseno && !hayRiesgo(alertas) && (
+        {saludPendiente(salud) && (
+          onAbrirCuestionario ? (
+            <button
+              type="button"
+              className={`${styles.alertChip} ${styles.warning} ${styles.alertChipBoton}`}
+              onClick={onAbrirCuestionario}
+              title={textosSalud.abrirCuestionario}
+            >
+              <HeartPulse size={11} strokeWidth={1.75} aria-hidden />{" "}
+              {salud === "vencida" ? textosSalud.vencida : textosSalud.sinCapturar}
+            </button>
+          ) : (
+            <span
+              className={`${styles.alertChip} ${styles.warning}`}
+              title={textosSalud.sinPermiso}
+            >
+              <HeartPulse size={11} strokeWidth={1.75} aria-hidden />{" "}
+              {salud === "vencida" ? textosSalud.vencida : textosSalud.sinCapturar}
+            </span>
+          )
+        )}
+        {rediseno && !hayRiesgo(alertas) && puedePintarSinAlergias(salud) && (
           <span className={`${styles.alertChip} ${styles.success}`}>
             <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
           </span>
@@ -632,7 +669,7 @@ export function HeroCard({
             <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
           </span>
         ))}
-        {!rediseno && riskFlags.length === 0 && alergias.length === 0 && (
+        {!rediseno && riskFlags.length === 0 && alergias.length === 0 && puedePintarSinAlergias(salud) && (
           <span className={`${styles.alertChip} ${styles.success}`}>
             <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
           </span>

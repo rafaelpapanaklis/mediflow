@@ -1086,6 +1086,14 @@
   font-family: inherit;
 }
 .detailAction:hover { background: var(--bg-elev-2); }
+/* 9a (ws1-t2): el botón de un paso del recorrido y, justo debajo, qué hace. */
+.detailActionConAyuda { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.detailActionConAyuda .detailAction { width: 100%; }
+.detailActionAyuda {
+  font-size: 10px; line-height: 1.3;
+  text-align: center;
+  color: var(--text-3);
+}
 .detailAction.danger {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);

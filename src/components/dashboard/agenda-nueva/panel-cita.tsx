@@ -18,7 +18,7 @@
  * booleanos de `permissions` solo esconden lo que la API va a rechazar.
  */
 
-import { startTransition, useCallback, useMemo, useState } from "react";
+import { Fragment, startTransition, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -53,6 +53,7 @@ import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
+import { useAyudaDelPaso } from "@/lib/agenda/ayuda-de-pasos";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import type { Role } from "@prisma/client";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
@@ -177,6 +178,8 @@ export interface PanelCitaProps {
 
 export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   const t = useT();
+  // ws1-t2 (9a): la línea de ayuda bajo «Marcar llegada», «Pasar al sillón» y «Pasar a consulta».
+  const ayudaDelPaso = useAyudaDelPaso();
   const { state, dispatch, permissions, invalidateRangeCache } = useAgenda();
   // El MISMO reloj por minuto que la cuadrícula: sin él, los minutos de espera
   // se congelaban al abrir el panel y «No asistió» no aparecía al cumplirse la
@@ -623,15 +626,23 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                   : "Cobrar"}
             </button>
           ) : principal ? (
-            <button
-              type="button"
-              className={s.accionPrincipal}
-              onClick={() => cambiarEstado(principal.destino)}
-              disabled={enVuelo !== null}
-            >
-              <principal.icono size={20} strokeWidth={2} />
-              {enVuelo === principal.destino ? "Guardando…" : principal.etiqueta}
-            </button>
+            <>
+              <button
+                type="button"
+                className={s.accionPrincipal}
+                onClick={() => cambiarEstado(principal.destino)}
+                disabled={enVuelo !== null}
+                aria-describedby={ayudaDelPaso(principal.destino) ? "ayuda-paso-principal" : undefined}
+              >
+                <principal.icono size={20} strokeWidth={2} />
+                {enVuelo === principal.destino ? "Guardando…" : principal.etiqueta}
+              </button>
+              {ayudaDelPaso(principal.destino) && (
+                <p id="ayuda-paso-principal" className={s.ayudaPaso}>
+                  {ayudaDelPaso(principal.destino)}
+                </p>
+              )}
+            </>
           ) : null}
 
           <div className={s.accionesSecundarias}>
@@ -683,18 +694,32 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 un paciente en sala, tiene «Pasar al sillón» de principal y
                 nada más; un doctor tiene «Pasar a consulta» y, además,
                 «Pasar al sillón» aquí. Nadie se queda sin camino. */}
-            {otrosPasos.map((a) => (
-              <button
-                key={a.destino}
-                type="button"
-                className={s.accionSecundaria}
-                onClick={() => cambiarEstado(a.destino)}
-                disabled={enVuelo !== null || !permissions.canEdit}
-              >
-                <a.icono size={18} strokeWidth={2} />
-                {a.etiqueta}
-              </button>
-            ))}
+            {otrosPasos.map((a) => {
+              const ayuda = ayudaDelPaso(a.destino);
+              const boton = (
+                <button
+                  type="button"
+                  className={s.accionSecundaria}
+                  onClick={() => cambiarEstado(a.destino)}
+                  disabled={enVuelo !== null || !permissions.canEdit}
+                  aria-describedby={ayuda ? `ayuda-paso-${a.destino}` : undefined}
+                >
+                  <a.icono size={18} strokeWidth={2} />
+                  {a.etiqueta}
+                </button>
+              );
+              // Sin ayuda (p. ej. «Marcar salida») el botón queda tal cual estaba.
+              return ayuda ? (
+                <div key={a.destino} className={s.pasoConAyuda}>
+                  {boton}
+                  <p id={`ayuda-paso-${a.destino}`} className={s.ayudaPaso}>
+                    {ayuda}
+                  </p>
+                </div>
+              ) : (
+                <Fragment key={a.destino}>{boton}</Fragment>
+              );
+            })}
 
             {/* Contextual: no asistió (antes de empezar) o marcar salida
                 (después de terminar). El diseño solo tiene dos botones aquí,

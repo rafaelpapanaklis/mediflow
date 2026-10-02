@@ -1636,6 +1636,9 @@ export function PatientDetailClient({
             currentMedications: patient.currentMedications ?? [],
           }}
           riskFlags={questionnaireRiskFlags}
+          // ws1-t2 (12h): sin cuestionario la cabecera dice «Salud sin capturar»; con permiso del expediente es un botón.
+          questionnaireStatus={questionnaireStatus}
+          onAbrirCuestionario={canViewRecords ? () => setTab("cuestionario") : undefined}
           originClinicName={originClinicName}
           emergencyContact={{
             name: patient.emergencyContactName ?? null,
@@ -2196,6 +2199,7 @@ export function PatientDetailClient({
               rediseno={rediseno}
               orthoData={orthoData}
               soloLectura={orthoSoloLectura}
+              questionnaireStatus={questionnaireStatus}
               orthoRedesignVM={orthoRedesignVM}
               orthoRedesignBundle={orthoRedesignBundle}
               // H12: «Agendar próxima» abre directamente el alta de cita, con el

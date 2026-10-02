@@ -13,6 +13,8 @@ import { Btn } from "./atoms/Btn";
 import { Pill } from "./atoms/Pill";
 import { fmtDate, fmtDateShort, fmtMoney, fmtTime } from "./atoms/format";
 import { subDelSaldo } from "@/lib/orthodontics/saldo-cabecera";
+import { saludPendiente, type EstadoSalud } from "@/lib/patients/salud-capturada";
+import { useTextosSaludCapturada } from "@/lib/patients/textos-salud-capturada";
 import { FLOW_STATUS_LABELS, type NextAppointmentDTO, type PatientFlowDTO } from "./types";
 import orto from "./orto.module.css";
 
@@ -31,6 +33,8 @@ export interface PatientHeaderProps {
     guardianLabel: string | null;
     /** Alergias críticas (texto corto, ej. "Penicilina"). */
     criticalAllergies: string | null;
+    /** ws1-t2 (12h): salud del paciente; «sin_capturar» y «vencida» pintan el aviso ámbar. Ausente = no se avisa. */
+    estadoSalud?: EstadoSalud;
   };
   /** PatientFlow G16 — null si no está en clínica. */
   patientFlow: PatientFlowDTO | null;
@@ -81,6 +85,13 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
   const p = props.patient;
   const flow = props.patientFlow;
   const next = props.nextAppointment;
+  const textosSalud = useTextosSaludCapturada();
+  const avisoSalud =
+    p.estadoSalud && saludPendiente(p.estadoSalud)
+      ? p.estadoSalud === "vencida"
+        ? textosSalud.vencida
+        : textosSalud.sinCapturar
+      : null;
 
   const sexLabel = p.sex === "F" ? "F" : p.sex === "M" ? "M" : p.sex === "X" ? "—" : null;
   const ageLabel = p.age != null ? `${p.age} años` : "edad —";
@@ -118,11 +129,12 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
               </span>
             ))}
           </div>
-          {p.criticalAllergies || flow ? (
+          {p.criticalAllergies || flow || avisoSalud ? (
             <div className={orto.cabeceraAvisos}>
               {p.criticalAllergies ? (
                 <Pill color="rose">Alergia: {p.criticalAllergies}</Pill>
               ) : null}
+              {avisoSalud ? <Pill color="amber">{avisoSalud}</Pill> : null}
               {flow ? (
                 <Pill color="amber">
                   <span className={`${orto.punto} ${orto.puntoVivo}`} aria-hidden />

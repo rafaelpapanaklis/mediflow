@@ -56,6 +56,7 @@ import { isFailure, type ActionResult } from "@/app/actions/orthodontics/result"
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
 import { alergiasReales } from "@/lib/alergias-reales";
+import { estadoSalud, saludPendiente, type EstadoCuestionario } from "@/lib/patients/salud-capturada";
 import { textoAsentimientoMenor } from "@/lib/orthodontics/asentimiento-menor";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
 import { agregarFotoExtra } from "@/app/actions/orthodontics/fotosDelJuego";
@@ -183,6 +184,8 @@ export interface OrthodonticsPatientTabProps {
    * abrir otro caso. Crear y cobrar los rechaza además el servidor.
    */
   soloLectura?: boolean;
+  /** ws1-t2 (12h): frescura del cuestionario de salud; sin él (o vencido) la cabecera avisa «Salud sin capturar». */
+  questionnaireStatus?: EstadoCuestionario | null;
   orthoRedesignVM: OrthoRedesignViewModel | null | undefined;
   orthoRedesignBundle: OrthoRedesignBundle | null | undefined;
   /** Antes `() => setTab("agenda")` en patient-detail-client.tsx. */
@@ -225,6 +228,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     pediatricsModuleActive,
     orthoData,
     soloLectura = false,
+    questionnaireStatus = null,
     orthoRedesignVM,
     orthoRedesignBundle,
     onScheduleNext,
@@ -646,6 +650,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 : null,
               criticalAllergies:
                 alergiasReales(patient.allergies).join(", ") || null,
+              estadoSalud: estadoSalud(questionnaireStatus),
             },
             // outstandingAmount ya no se calcula aquí (hallazgo ws1-t4 §5):
             // OrthodonticsRedesignClient lee la factura real del caso vía
