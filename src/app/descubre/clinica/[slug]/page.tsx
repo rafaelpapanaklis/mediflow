@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { inter } from "@/fonts/inter-400-700";
 import { MapPin, Phone, Clock, Stethoscope, BadgeCheck, Instagram, Facebook } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { buildMetadata, SITE_URL, localBusinessLd } from "@/lib/seo";
 import { categoryLabel, type DirectoryClinic, type ClinicCategoryValue } from "@/lib/directory/types";
@@ -93,7 +94,7 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
       landingInstagram: true, landingFacebook: true,
       schedules: { select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true } },
       users: {
-        where: { isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
+        where: { ...RECIBE_CITAS_WHERE },
         select: { id: true, firstName: true, lastName: true, specialty: true, color: true, avatarUrl: true, services: true },
         orderBy: { firstName: "asc" },
       },

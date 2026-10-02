@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { rateLimit } from "@/lib/rate-limit";
 import { buildDaySlots } from "@/lib/appointment-change/slots";
@@ -63,13 +64,12 @@ export async function GET(req: NextRequest) {
   });
   if (!clinic) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // El doctor debe pertenecer a ESA clínica y estar activo.
+  // El doctor debe pertenecer a ESA clínica y recibir citas (la regla única de la Agenda).
   const doctor = await prisma.user.findFirst({
     where: {
       id: doctorId,
       clinicId,
-      isActive: true,
-      role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] },
+      ...RECIBE_CITAS_WHERE,
     },
     select: { id: true },
   });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { persistentRateLimit } from "@/lib/failban";
 import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { partitionSlotsByOverlap, slotOverlapsBusy } from "@/lib/public-booking/slots";
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       },
       users: {
-        where:  { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+        where:  { ...RECIBE_CITAS_WHERE },
         select: { id: true, firstName: true, lastName: true, specialty: true, color: true },
         orderBy: { firstName: "asc" },
       },

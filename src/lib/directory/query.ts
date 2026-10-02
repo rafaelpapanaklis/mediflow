@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import {
   DIRECTORY_PAGE_SIZE,
   getCategoryByEnum,
@@ -65,7 +66,7 @@ export function queryDirectoryClinics(where: any, skip: number, take: number) {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       },
       users: {
-        where: { isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
+        where: { ...RECIBE_CITAS_WHERE },
         select: {
           id: true,
           firstName: true,

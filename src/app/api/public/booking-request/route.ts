@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { persistentRateLimit } from "@/lib/failban";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
     let doctorPedido: { id: string; firstName: string; lastName: string } | null = null;
     if (typeof doctorId === "string" && doctorId && doctorId !== "any") {
       doctorPedido = await prisma.user.findFirst({
-        where: { id: doctorId, clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+        where: { id: doctorId, clinicId: clinic.id, ...RECIBE_CITAS_WHERE },
         select: { id: true, firstName: true, lastName: true },
       });
     }
@@ -205,7 +206,7 @@ export async function POST(req: NextRequest) {
     const candidatosHorario = doctorPedido
       ? [doctorPedido.id]
       : (await prisma.user.findMany({
-          where: { clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+          where: { clinicId: clinic.id, ...RECIBE_CITAS_WHERE },
           select: { id: true },
         })).map(u => u.id);
     if (candidatosHorario.length > 0) {

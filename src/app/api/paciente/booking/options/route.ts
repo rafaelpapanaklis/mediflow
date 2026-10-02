@@ -18,6 +18,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import type {
   PacienteBookingClinica,
@@ -45,7 +46,7 @@ export async function GET() {
         name: true,
         timezone: true,
         users: {
-          where: { isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
+          where: { ...RECIBE_CITAS_WHERE },
           select: { id: true, firstName: true, lastName: true, specialty: true },
           orderBy: { firstName: "asc" },
         },

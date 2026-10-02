@@ -14,6 +14,7 @@
 //   clínica de los links: minHours + autoApprove). En `past` siempre null.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
@@ -312,13 +313,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
     }
 
-    // El doctor debe pertenecer a ESA clínica y estar activo.
+    // El doctor debe pertenecer a ESA clínica y recibir citas (la regla única de la Agenda).
     const doctor = await prisma.user.findFirst({
       where: {
         id: doctorId,
         clinicId,
-        isActive: true,
-        role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] },
+        ...RECIBE_CITAS_WHERE,
       },
       select: { id: true, firstName: true, lastName: true },
     });

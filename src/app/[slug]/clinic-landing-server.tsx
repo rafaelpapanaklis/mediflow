@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { orthoValoracionParaLanding } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { LivePreviewBridge } from "./_shared/live-preview";
 import { ClinicLandingClient } from "./landing-client";
@@ -98,7 +99,7 @@ export async function ClinicLandingServer({
       // Si falta aqui, la clinica lo edita, se guarda, y la pagina publica
       // sigue pintando el literal de siempre: se pierde en silencio.
       landingCopy: true,
-      users:     { where: { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+      users:     { where: { ...RECIBE_CITAS_WHERE },
                    select: { id:true, firstName:true, lastName:true, specialty:true, color:true, avatarUrl:true, services:true } },
       schedules: { orderBy: { dayOfWeek: "asc" },
                    select: { dayOfWeek:true, enabled:true, openTime:true, closeTime:true } },

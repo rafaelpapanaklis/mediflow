@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { persistentRateLimit } from "@/lib/failban";
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
   const anyDoctor = doctorId === "any";
   const candidates = await prisma.user.findMany({
     where: {
-      clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] },
+      clinicId: clinic.id, ...RECIBE_CITAS_WHERE,
       ...(anyDoctor ? {} : { id: doctorId }),
     },
     select: { id: true, firstName: true, lastName: true },
