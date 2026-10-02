@@ -216,12 +216,17 @@ export function formatReviewDate(iso: string): string {
   }
 }
 
-/** «2 de octubre de 2026»: la lista de «Invitaciones enviadas» (últimos 30 días) necesita el día. */
-export function formatInvitationDate(iso: string): string {
+/**
+ * «2 de octubre de 2026» (o «October 2, 2026»): la lista de «Invitaciones enviadas» (últimos 30
+ * días) necesita el día. `idioma` es el de la interfaz (`useLocale()`: «es», «en», «es-MX»…);
+ * sin él, español de México como siempre.
+ */
+export function formatInvitationDate(iso: string, idioma?: string): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+    const intl = idioma?.toLowerCase().startsWith("en") ? "en-US" : "es-MX";
+    return d.toLocaleDateString(intl, { day: "numeric", month: "long", year: "numeric" });
   } catch {
     return "";
   }

@@ -79,7 +79,8 @@ const CLASICA: Record<"info" | "ambar" | "neutra" | "violeta", string> = {
 // `rediseno` elige el vestido: las piezas del menú de dos niveles (variables
 // --pr-*, que solo existen dentro de RaizPequenas) o las clases de siempre.
 export function Invitaciones({ items, rediseno = false }: { items: InvitacionResenaDTO[] | undefined; rediseno?: boolean }) {
-  const t = useLocale().startsWith("en") ? en : es;
+  const locale = useLocale();
+  const t = locale.startsWith("en") ? en : es;
   if (!items || items.length === 0) return null;
 
   const Chip = ({ tono, children }: { tono: keyof typeof CLASICA; children: React.ReactNode }) =>
@@ -119,7 +120,7 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
               <div className={s.tarjetaCabeza}>
                 <div className={s.tarjetaTextos}>
                   <h3 className={s.tarjetaTitulo}>{i.authorName}</h3>
-                  <p className={s.tarjetaSub}>{formatInvitationDate(i.createdAt)}</p>
+                  <p className={s.tarjetaSub}>{formatInvitationDate(i.createdAt, locale)}</p>
                 </div>
                 <div className={s.tarjetaAcciones}>{chips}</div>
               </div>
@@ -132,7 +133,7 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <div>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{i.authorName}</h3>
-                  <p style={{ fontSize: 12, color: "var(--text-3)" }}>{formatInvitationDate(i.createdAt)}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-3)" }}>{formatInvitationDate(i.createdAt, locale)}</p>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chips}</div>
               </div>

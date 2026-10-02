@@ -148,13 +148,30 @@ const PALABRAS_EN = new Set(
     "required found denied access expired bad too many with from for and this that").split(" "),
 );
 
+/**
+ * Sustantivos de la clínica sin tilde ni ñ («Paciente archivado», «Cita duplicada»): ninguno es
+ * inglés ni sale en un mensaje técnico, así que uno solo basta para saber que la frase es de aquí.
+ */
+const SUSTANTIVOS_ES = new Set(
+  ("paciente pacientes cita citas factura facturas pago pagos cobro cobros receta recetas tratamiento tratamientos " +
+    "archivo archivos usuario usuarios cuenta cuentas correo horario solicitud mensaje nota notas permiso inventario " +
+    "lote lotes producto productos firma consulta consultas turno presupuesto presupuestos expediente clinica clinicas " +
+    "folio telefono monto saldo anticipo anticipos materiales material cuota cuotas sucursal profesional")
+    .split(" "),
+);
+
+/** Participio español de cinco letras o más («archivado», «duplicada», «cancelados», «vencida»): no hay inglés técnico así. */
+const PARTICIPIO_ES = /^[a-z]{2,}(ad|id)[oa]s?$/;
+
 /** Marcas que delatan un mensaje de máquina por sí solas. */
 const MARCA_TECNICA = /`|\bprisma\b|\binvocation\b|\bundefined\b|\bhttp \d{3}\b|\bstatus code\b|\bat .+:\d+/i;
 
 /**
  * ¿Es una frase en español hecha para una persona? Sin marca técnica y sin dos o
  * más palabras de inglés técnico, y con tilde, ñ o signo de apertura (seguro) o,
- * si no, alguna palabra de relleno del español. «Paciente no encontrado» pasa;
+ * si no, alguna palabra de relleno del español, un sustantivo de la clínica o un
+ * participio en -ado/-ida. «Paciente no encontrado», «Paciente archivado» y
+ * «Cita duplicada» pasan;
  * «The operation was aborted.», «Request failed with status code 500» y «No
  * connection to server» no.
  */
@@ -164,7 +181,7 @@ export function esFraseEnEspanol(texto: string): boolean {
   const palabras = t.toLowerCase().split(/[^a-záéíóúüñ]+/).filter(Boolean);
   if (new Set(palabras.filter((w) => PALABRAS_EN.has(w))).size >= 2) return false;
   if (/[áéíóúüñ¿¡]/i.test(t)) return true;
-  return palabras.some((w) => PALABRAS_ES.has(w));
+  return palabras.some((w) => PALABRAS_ES.has(w) || SUSTANTIVOS_ES.has(w) || PARTICIPIO_ES.test(w));
 }
 
 /** Un estado HTTP sin código útil → llave. */

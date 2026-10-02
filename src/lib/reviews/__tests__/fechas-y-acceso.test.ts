@@ -26,10 +26,18 @@ test("formatInvitationDate: lleva el día, en minúsculas", () => {
   assert.equal(formatInvitationDate("no es fecha"), "");
 });
 
+test("formatInvitationDate sigue el idioma de la interfaz: en inglés, «October 2, 2026»", () => {
+  assert.equal(formatInvitationDate("2026-10-02T18:00:00Z", "en"), "October 2, 2026");
+  assert.equal(formatInvitationDate("2026-10-02T18:00:00Z", "en-US"), "October 2, 2026");
+  assert.equal(formatInvitationDate("2026-10-02T18:00:00Z", "es"), "2 de octubre de 2026");
+  assert.equal(formatInvitationDate("2026-10-02T18:00:00Z", "es-MX"), "2 de octubre de 2026");
+  assert.equal(formatInvitationDate("no es fecha", "en"), "");
+});
+
 test("ninguna pantalla de reseñas pone `capitalize` sobre la fecha, y Invitaciones usa la fecha con día", () => {
   const inv = leer("src/app/dashboard/resenas/invitaciones.tsx");
   assert.ok(!/capitalize/.test(inv));
-  assert.equal((inv.match(/formatInvitationDate\(i\.createdAt\)/g) ?? []).length, 2);
+  assert.equal((inv.match(/formatInvitationDate\(i\.createdAt, locale\)/g) ?? []).length, 2);
   assert.ok(!/capitalize/.test(leer("src/app/dashboard/resenas/ResenasClient.tsx")));
   assert.ok(!/capitalize/.test(leer("src/components/dashboard/pequenas-rediseno/resenas.tsx")));
 });

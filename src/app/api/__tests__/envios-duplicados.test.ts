@@ -92,6 +92,8 @@ let pacientes: Map<string, Row>;
 let avisos: { evento: string; appointmentId: string }[];
 /** Notificaciones de resolución de cambio de cita. */
 let notificadas: string[];
+/** Invitaciones a reseña que habrían salido (ids de cita). */
+let invitaciones: string[];
 
 const prismaStub: any = {
   $executeRaw: async () => 1,
@@ -131,6 +133,11 @@ M.module("@/lib/whatsapp/avisos-cita", {
       return { enviado: true };
     },
   },
+});
+// invite.ts lleva `import "server-only"` (inexistente fuera del bundle de Next): se sustituye ENTERO por un doble que
+// solo anota la llamada, así la protección del módulo real sigue intacta y esta prueba no manda reseñas a nadie.
+M.module("@/lib/reviews/invite", {
+  namedExports: { sendReviewInvitation: async (appointmentId: string) => { invitaciones.push(appointmentId); } },
 });
 M.module("@/lib/agenda/resource-schedule.server", { namedExports: { loadResourceSchedule: async () => [] } });
 // portal del paciente
@@ -186,6 +193,7 @@ M.module("@/lib/whatsapp/inbox-log", { namedExports: { findPatientsByWhatsAppPho
 beforeEach(() => {
   avisos = [];
   notificadas = [];
+  invitaciones = [];
   pacientes = new Map();
   const base = (id: string, extra: Row = {}) => ({
     id, clinicId: "c1", patientId: "p1", doctorId: "d1", resourceId: null,
@@ -306,6 +314,7 @@ test("PATCH /status: cancelar dos veces a la vez avisa la cancelación UNA vez y
   const rs = await dos(go);
   assert.equal(avisos.length, 1, "doble clic en «Cancelar»: dos WhatsApp al paciente");
   assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(invitaciones, [], "cancelar una cita no pide reseña");
 });
 
 test("DELETE: cancelar dos veces a la vez avisa UNA vez (la segunda ya es «ok» sin avisar)", async () => {

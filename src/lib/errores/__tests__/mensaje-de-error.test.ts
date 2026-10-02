@@ -127,6 +127,22 @@ test("una frase en español, con o sin tilde, se respeta; en inglés técnico no
   }
 });
 
+test("una frase corta en español SIN tilde pasa; el inglés técnico corto no", () => {
+  for (const f of ["Paciente archivado", "Cita duplicada", "Factura cancelada", "Horario ocupado", "Usuario bloqueado", "Pago vencido", "Lote agotado"]) {
+    assert.ok(esFraseEnEspanol(f), f);
+    assert.equal(mensajeDeError(new Error(f), tEs), f);
+    assert.equal(mensajeDeError({ error: f }, tEs, { porDefecto: "No se pudo." }), f);
+  }
+  for (const f of [
+    "Invalid payload", "Validation failed", "Token expired", "Error 500", "Duplicate appointment", "Appointment cancelled",
+    "Patient archived", "Invoice not found", "Not allowed", "Missing field", "Socket hang up", "Bad credentials",
+    "Cannot read properties of undefined (reading 'id')", "Unexpected end of input", "Connection refused",
+  ]) {
+    assert.ok(!esFraseEnEspanol(f), f);
+    assert.equal(mensajeDeError(new Error(f), tEs, { porDefecto: "No se pudo." }), "No se pudo.", f);
+  }
+});
+
 test("un código que no conocemos NUNCA se enseña: estado HTTP, luego lo de la pantalla, luego lo genérico", () => {
   assert.equal(mensajeDeError("algo_raro_nuevo", tEs, { estado: 500 }), tEs("errores.interno"));
   assert.equal(mensajeDeError("algo_raro_nuevo", tEs, { estado: 403 }), tEs("errores.permiso"));
@@ -198,6 +214,16 @@ test("agenda, ficha, cobros y subidas: ningún toast.error pinta `err.message`/`
     assert.deepEqual(lineas, [], `${rel} enseña un error crudo:\n${lineas.join("\n")}`);
     assert.ok(texto.includes("mensajeDeError"), `${rel} no usa mensajeDeError`);
   }
+});
+
+test("Nueva factura: el motivo del trato, del link de Mercado Pago y del envío pasa por mensajeDeError, nunca `r.error` a pelo", () => {
+  const modal = readFileSync(join(process.cwd(), "src", "components/billing/invoice-editor-modal.tsx"), "utf8");
+  assert.ok(modal.includes('from "@/lib/errores/mensaje-de-error"'));
+  assert.ok(!/\$\{r\.error\}|\br\.error \?\?/.test(modal), "invoice-editor-modal pinta r.error sin traducir");
+  assert.equal((modal.match(/mensajeDeError\(r, t/g) ?? []).length, 3);
+  // El traductor entiende lo que devuelven guardarCondiciones / pedirLinkDePago / enviarFactura.
+  assert.equal(mensajeDeError({ ok: false, error: "internal_error" }, tEs, { porDefecto: "x" }), tEs("errores.interno"));
+  assert.equal(mensajeDeError({ link: null, error: null }, tEs, { porDefecto: "No se pudo generar el link." }), "No se pudo generar el link.");
 });
 
 test("esos mismos archivos tampoco pasan `x.error ?? \"…\"` a un toast ni a un aviso en pantalla", () => {

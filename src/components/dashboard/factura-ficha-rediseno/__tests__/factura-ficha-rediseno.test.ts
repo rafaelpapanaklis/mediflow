@@ -116,7 +116,8 @@ test("sin motivo del servidor no se afirma que NO se envió", () => {
   // nada útil, el respaldo sigue siendo «no se sabe si salió».
   assert.match(ficha, /mensajeDeError\(r, t, \{ porDefecto: t\("facturaFicha\.envioSinConfirmar"\) \}\)/);
   const modal = leer("components/billing/invoice-editor-modal.tsx");
-  assert.match(modal, /r\.error \? `\$\{t\("facturaFicha\.creadaSinEnviar"\)\} \$\{r\.error\}` : t\("facturaFicha\.creadaEnvioSinConfirmar"\)/);
+  // ws1-t2: con motivo, el motivo pasa por el traductor (nunca `${r.error}` a pelo); sin él, sigue «no se sabe».
+  assert.match(modal, /r\.error \? `\$\{t\("facturaFicha\.creadaSinEnviar"\)\} \$\{mensajeDeError\(r, t\)\}` : t\("facturaFicha\.creadaEnvioSinConfirmar"\)/);
 });
 
 test("expediente: BillingTab sigue siendo el camino apagado", () => {

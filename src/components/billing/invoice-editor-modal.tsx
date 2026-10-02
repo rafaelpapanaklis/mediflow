@@ -31,6 +31,7 @@ import { FormaDePagoFactura, EnvioFactura, FraseDelTrato, type EnvioAlCrear } fr
 import { copiarAlPortapapeles, pedirLinkDePago, useCobroMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
 import { METODO_MERCADO_PAGO } from "@/lib/quotes/condiciones-pago";
 import { enviarFactura, guardarCondiciones, useContactoDePaciente } from "@/components/dashboard/factura-ficha-rediseno/extras";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 // ws1-t4: «Editar» de una factura existente (borrador sin pagos) abre este editor.
 import { conceptosParaEditar, cuerpoDeEdicion } from "./editar-factura";
@@ -533,7 +534,7 @@ function InvoiceEditorBody({
       if (rediseno && out?.id && hayCondiciones(cond)) {
         const r = await guardarCondiciones(out.id, cond);
         if (r.ok) creada = { ...out, condicionesPago: r.condiciones };
-        else toast.error(r.error ?? t("facturaFicha.errorCondiciones"), { duration: 10000 });
+        else toast.error(mensajeDeError(r, t, { porDefecto: t("facturaFicha.errorCondiciones") }), { duration: 10000 });
       }
       // Mercado Pago: el link del saldo se crea ya (el servidor decide el monto),
       // así el correo/WhatsApp de abajo y el botón «copiar» reparten el MISMO.
@@ -558,14 +559,14 @@ function InvoiceEditorBody({
             { duration: 15000 },
           );
         } else {
-          toast.error(`${t("facturaMp.creadaSinLink")} ${r.error ?? t("facturaMp.errorGenerar")}`, { duration: 10000 });
+          toast.error(`${t("facturaMp.creadaSinLink")} ${mensajeDeError(r, t, { porDefecto: t("facturaMp.errorGenerar") })}`, { duration: 10000 });
         }
       }
       if (rediseno && out?.id && envio) {
         const r = await enviarFactura(out.id, envio, { linkPago: cobraConMercadoPago });
         if (r.ok) toast.success(t(envio === "correo" ? "facturaFicha.correoEnviado" : "facturaFicha.whatsAppEnviado"));
         // Sin motivo del servidor no se sabe si salió: no se afirma que no.
-        else toast.error(r.error ? `${t("facturaFicha.creadaSinEnviar")} ${r.error}` : t("facturaFicha.creadaEnvioSinConfirmar"), { duration: 10000 });
+        else toast.error(r.error ? `${t("facturaFicha.creadaSinEnviar")} ${mensajeDeError(r, t)}` : t("facturaFicha.creadaEnvioSinConfirmar"), { duration: 10000 });
         if (r.ok && r.avisoLink) toast(`${t("facturaMp.enviadoSinLink")} ${r.avisoLink}`, { duration: 10000 });
       }
       ocupado.current = false;
