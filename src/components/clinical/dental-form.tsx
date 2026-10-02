@@ -113,6 +113,12 @@ interface Props {
    * pre-llena todos los campos con los datos del record y handleSave
    * hace PATCH al record (no POST nuevo).
    */
+  /**
+   * ws1-t8 (revisión de ws1-t9, fallo 1): la cita que la ficha tiene «En consulta» («Iniciar consulta»). Si
+   * viene, «Guardar consulta» la manda tal cual en vez de adivinar la cita de hoy, y el servidor escribe la
+   * consulta en el borrador de esa cita: una nota por visita y «Completar consulta» la encuentra llena.
+   */
+  citaEnCursoId?: string | null;
   initialRecord?: {
     id: string;
     subjective: string | null;
@@ -146,7 +152,7 @@ function readAddenda(spec: any): Addendum[] {
     }));
 }
 
-export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
@@ -308,10 +314,11 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   const [todayAppointmentId, setTodayAppointmentId] = useState<string | null>(null);
   useEffect(() => {
     if (isEditing) return;
+    if (citaEnCursoId) { setTodayAppointmentId(citaEnCursoId); return; }
     let cancelled = false;
     fetchTodayAppointmentId(patientId).then(id => { if (!cancelled) setTodayAppointmentId(id); });
     return () => { cancelled = true; };
-  }, [isEditing, patientId]);
+  }, [isEditing, patientId, citaEnCursoId]);
   // Dictado por voz: agrega la transcripción AL FINAL del campo (nunca reemplaza).
   // setForm funcional para no pisar lo que se tecleó mientras se transcribía.
   const appendDictation = (key: string, sep: string) => (text: string) =>
@@ -657,8 +664,9 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         toast.success(t("clinical.dentalForm.updatedToast"));
       } else {
         // POST — crea record nuevo. autoInvoice si hay procedimientos con precio.
-        // Si el paciente tiene UNA cita hoy, la nota va ligada a ella.
-        const appointmentId = await fetchTodayAppointmentId(patientId);
+        // Con la consulta abierta («Iniciar consulta») va a SU cita y el servidor la escribe en el borrador de
+        // esa cita; si no, si el paciente tiene UNA cita hoy, la nota va ligada a ella.
+        const appointmentId = citaEnCursoId ?? (await fetchTodayAppointmentId(patientId));
         const res = await fetch("/api/clinical", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

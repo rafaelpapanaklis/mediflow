@@ -69,9 +69,12 @@ export function resolveNoteAppointmentId(
 ): string | null {
   const id = sanitizeAppointmentId(requested);
   if (!id) return null;
-  if (pickSingleAppointmentOfDay(todaysAppointments) !== id) return null;
   const appt = todaysAppointments.find((a) => a.id === id);
   if (!appt || !ctx.doctorId || appt.doctorId !== ctx.doctorId) return null;
+  // ws1-t8 (revisión de ws1-t9, fallo 1): la cita que el doctor tiene «En consulta» no es adivinar aunque el
+  // paciente tenga otra ese día: es la consulta abierta en la ficha («Iniciar consulta» ya creó su borrador).
+  if (String(appt.status ?? "") === "IN_PROGRESS") return id;
+  if (pickSingleAppointmentOfDay(todaysAppointments) !== id) return null;
   const starts = appt.startsAt ? new Date(appt.startsAt).getTime() : NaN;
   if (!Number.isFinite(starts) || starts - ctx.now.getTime() > MAX_EARLY_MS) return null;
   return id;

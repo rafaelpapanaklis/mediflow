@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo, useRef } from "react";
+import { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -202,6 +202,9 @@ const ImplantsTab = dynamicImport(
 // El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
 // Si en el futuro DaleControl expande a otras specialties, restaurar la
 // lógica de detección y los renders condicionales abajo.
+/** Un solo aviso «Iniciando consulta…» aunque se pulse desde la cabecera y desde Ortodoncia. */
+const TOAST_INICIANDO_CONSULTA = "iniciando-consulta";
+
 function detectSpecialty(_raw: string) {
   return "dental";
 }
@@ -665,6 +668,8 @@ export function PatientDetailClient({
   const tab = sinPermisoClinico ? TAB_SIN_PERMISO_CLINICO : tabPedida;
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
+  /** La cita que «Iniciar consulta» está arrancando (ws1-t8, fallo 3): botón ocupado hasta que la ficha la abre. */
+  const [iniciandoCitaId, setIniciandoCitaId] = useState<string | null>(null);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [expandedConsultas, setExpandedConsultas] = useState<Set<string>>(new Set());
 
@@ -1192,16 +1197,22 @@ export function PatientDetailClient({
   const [abrirControlOrto, setAbrirControlOrto] = useState(() =>
     abrirHojaAlLlegar({ tabDeLaDireccion: tabFromUrl, hoja: searchParams.get(PARAM_ABRIR_HOJA), seAtiendeConLaHoja: citaDeLaDireccionConHoja }),
   );
-  const alAbrirControlOrto = () => {
-    setAbrirControlOrto(false);
-    // Que recargar o volver atrás no abra la hoja otra vez. Con `null` (no `history.state`), o Next la devuelve.
-    if (typeof window !== "undefined" && searchParams.get(PARAM_ABRIR_HOJA)) {
-      const params = new URLSearchParams(window.location.search);
-      params.delete(PARAM_ABRIR_HOJA);
-      const qs = params.toString();
-      window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-    }
-  };
+  const alAbrirControlOrto = () => setAbrirControlOrto(false);
+  // Que recargar o volver atrás no abra la hoja otra vez: `hoja=1` se quita de la dirección. Con `null` (no
+  // `history.state`), o Next la devuelve. ws1-t8 (revisión de mejoras, ws1-t10 bloqueante 1): se quita AQUÍ, en
+  // un efecto de layout al llegar, y no al abrir la hoja. Next 14.2 convierte ese replaceState en una acción
+  // RESTORE de su router, y una RESTORE descarta la acción pendiente de la cola (su promesa nunca se resuelve) y
+  // tira las que esperaban detrás: el contexto de la hoja (server action) no salía nunca y el botón quedaba en
+  // «Abriendo la hoja…». Los efectos de layout corren antes que cualquier efecto normal de los hijos, así que
+  // aquí todavía no hay ninguna server action en la cola.
+  const hojaEnLaDireccion = searchParams.get(PARAM_ABRIR_HOJA);
+  useLayoutEffect(() => {
+    if (!hojaEnLaDireccion) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete(PARAM_ABRIR_HOJA);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [hojaEnLaDireccion]);
   const cambiarTipoDeConsulta = (valor: string) => {
     if (valor === TIPO_ORTODONCIA) {
       setAbrirControlOrto(true);
@@ -1237,12 +1248,18 @@ export function PatientDetailClient({
   // firme después se liga a esa cita y la cierra. Antes solo empujaba `?appointment=` y la cita seguía
   // «Agendada». Una cita de OTRO día no se arranca (sería darla por atendida antes de tiempo): solo se abre en
   // la dirección y, si se firma la hoja, el cajón avisa que esa cita no se toca (cerrar-cita-al-firmar.ts).
+  // ws1-t8 (revisión de ws1-t9, fallo 3): entre el clic y la consulta abierta pasan varios segundos (la ficha
+  // se vuelve a pedir al servidor). Mientras tanto el botón dice «Iniciando consulta…», no se puede volver a
+  // pulsar y un aviso lo dice; todo se apaga cuando la dirección ya trae esa cita (o a los 30 s, o si falla).
   const iniciarConsulta = async () => {
     const cita = paraIniciar.cita;
     if (!cita) {
       if (motivoSinIniciar) toast(motivoSinIniciar);
       return;
     }
+    if (iniciandoCitaId) return;
+    setIniciandoCitaId(cita.id);
+    toast.loading(textosConsulta.iniciandoConsulta, { id: TOAST_INICIANDO_CONSULTA });
     if (esCitaDeHoy(cita.startsAt, new Date(), zonaClinica) && cita.status !== "IN_PROGRESS") {
       const res = await fetch(`/api/appointments/${cita.id}/status`, {
         method: "PATCH",
@@ -1254,11 +1271,30 @@ export function PatientDetailClient({
         router.refresh();
       } else {
         const body = res ? await res.json().catch(() => ({})) : {};
+        toast.dismiss(TOAST_INICIANDO_CONSULTA);
         toast.error(body.reason ?? textosConsulta.noSeInicioLaConsulta);
       }
     }
+    if (searchParams.get("appointment") === cita.id) {
+      // Ya estaba en la dirección: no hay navegación que esperar.
+      setIniciandoCitaId(null);
+      toast.dismiss(TOAST_INICIANDO_CONSULTA);
+    }
     router.push(`?appointment=${cita.id}`);
   };
+  useEffect(() => {
+    if (!iniciandoCitaId) return;
+    const listo = () => {
+      setIniciandoCitaId(null);
+      toast.dismiss(TOAST_INICIANDO_CONSULTA);
+    };
+    if (searchParams.get("appointment") === iniciandoCitaId) {
+      listo();
+      return;
+    }
+    const tope = setTimeout(listo, 30_000);
+    return () => clearTimeout(tope);
+  }, [iniciandoCitaId, searchParams]);
   const lastAppt = appointments.find(a => new Date(a.date) < new Date() && a.status === "COMPLETED");
   // Derivamos totales del state local `invoices` para que el card "Finanzas"
   // y el sidebar "Estado de cuenta" reflejen mutaciones (cobrar/cancelar/
@@ -1292,7 +1328,11 @@ export function PatientDetailClient({
   );
 
   function handleRecordSaved(record: any) {
-    setRecords(prev => [record, ...prev]);
+    // ws1-t8 (revisión de ws1-t9, fallo 1): con la consulta abierta, «Guardar consulta» escribe en el borrador
+    // de la cita (mismo id): se reemplaza en la lista en vez de duplicarlo, y si quedó firmado, «Completar
+    // consulta» ya no le manda encima el SOAP vacío de la barra.
+    setRecords(prev => [record, ...prev.filter((r: any) => r.id !== record?.id)]);
+    if (record?.id && record?.specialtyData?.status === "SIGNED") notaFirmadaDeLaConsultaRef.current = record.id;
     if (record?.draftInvoice) {
       setInvoices(prev => [{ ...record.draftInvoice, payments: [] }, ...prev]);
       router.refresh();
@@ -1387,6 +1427,7 @@ export function PatientDetailClient({
   }, [activeApptId, tabFromUrl, consultLanding, consultaConHoja]);
 
   const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
+  const notaFirmadaDeLaConsultaRef = useRef<string | null>(null);
   const [soapDraft, setSoapDraft] = useState<SoapDraft>({
     subjective: "",
     objective: "",
@@ -1543,8 +1584,9 @@ export function PatientDetailClient({
       return;
     }
     try {
-      // Guarda el draft final si aún no se persistió (debounce pendiente).
-      if (clinicalNoteId) {
+      // Guarda el draft final si aún no se persistió (debounce pendiente). Si la nota de la consulta ya se
+      // guardó firmada desde «Nueva consulta», no se toca (una nota firmada no se edita).
+      if (clinicalNoteId && notaFirmadaDeLaConsultaRef.current !== clinicalNoteId) {
         await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -1738,6 +1780,7 @@ export function PatientDetailClient({
           onEdit={() => setShowEdit(true)}
           onStartConsult={() => void iniciarConsulta()}
           motivoSinIniciar={motivoSinIniciar}
+          iniciandoConsulta={iniciandoCitaId !== null}
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
           puedeCobrar={permisosCobro?.cobrar !== false}
@@ -2340,7 +2383,7 @@ export function PatientDetailClient({
               onIrACuestionario={() => setTab("cuestionario")}
               formulario={
                 <>
-                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} rediseno />}
+                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} citaEnCursoId={activeAppointment?.id ?? null} rediseno />}
                   {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -2383,7 +2426,7 @@ export function PatientDetailClient({
                 </div>
               </div>
               {showQuestionnaireWarning && <div className="mb-4">{questionnaireBanner}</div>}
-              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
+              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} citaEnCursoId={activeAppointment?.id ?? null} />}
               {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}

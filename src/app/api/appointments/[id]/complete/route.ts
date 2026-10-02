@@ -151,7 +151,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // NOM-004 CAMPOS-OBLIGATORIOS (brecha #19): no cerrar la cita FIRMANDO una nota
   // vacía. Si hay nota a firmar y está vacía, se bloquea el cierre (422).
-  const willSign = !!note && parsed.data.signNote !== false;
+  // Una nota YA firmada (p. ej. la consulta guardada con «Guardar consulta», que adoptó el borrador de esta
+  // cita) no se vuelve a firmar: su signedAt es el de verdad. La cita se cierra igual.
+  const yaFirmada = (note?.specialtyData as Record<string, unknown> | null)?.status === "SIGNED";
+  const willSign = !!note && parsed.data.signNote !== false && !yaFirmada;
   if (willSign && note && isClinicalNoteEmpty(note)) {
     return NextResponse.json({ error: EMPTY_NOTE_ERROR }, { status: 422 });
   }

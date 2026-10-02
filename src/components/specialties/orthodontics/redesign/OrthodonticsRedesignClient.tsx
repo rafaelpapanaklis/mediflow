@@ -377,6 +377,10 @@ export interface OrthodonticsRedesignClientProps {
   };
 }
 
+/** Tope de espera del contexto de la hoja de control antes de soltar «Abriendo la hoja…» (ws1-t8, bloqueante 9b). */
+const TOPE_CONTEXTO_HOJA_MS = 30_000;
+const SIN_RESPUESTA = Symbol("sin-respuesta");
+
 export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProps) {
   const [drawer, setDrawer] = useState<DrawerState>(null);
   // «Comparar» fotos: la etapa del lado derecho mientras el modal está abierto
@@ -480,14 +484,32 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     // ws1-t8 (punto 3): dentro de una consulta en curso, la hoja se liga a ESA cita (no a «la de control de hoy»).
     // Fallo 3 de la revisión de ws1-t9: sin consulta en curso, la cita de la dirección (una futura abierta con
     // «Iniciar consulta») llega igual, para que el cajón avise que firmar hoy no la marca como atendida.
-    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null, props.citaDeLaDireccionId ?? null).catch(() => null);
-    setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
-    setDrawer({ kind: "tcard-new" });
+    // ws1-t8 (revisión de mejoras, ws1-t10 bloqueante 1): si la respuesta tarda más de TOPE_CONTEXTO_HOJA_MS (Next
+    // ejecuta las server actions de una en una, y descarta la pendiente si la dirección cambia por debajo), el botón
+    // deja de decir «Abriendo la hoja…» y un aviso lo explica, en vez de quedarse colgado. NO se abre la hoja sin su
+    // contexto (perdería la cita): si la respuesta llega tarde, la hoja se abre entonces, como siempre.
+    const pedido = getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null, props.citaDeLaDireccionId ?? null).catch(() => null);
+    const abrirCon = (res: Awaited<typeof pedido>) => {
+      setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
+      setDrawer({ kind: "tcard-new" });
+    };
+    let tope: ReturnType<typeof setTimeout> | undefined;
+    const res = await Promise.race([
+      pedido,
+      new Promise<typeof SIN_RESPUESTA>((resolver) => { tope = setTimeout(() => resolver(SIN_RESPUESTA), TOPE_CONTEXTO_HOJA_MS); }),
+    ]);
+    clearTimeout(tope);
+    if (res === SIN_RESPUESTA) {
+      toast(textosConsulta.laHojaTardaEnAbrir, { id: "hoja-tarda", duration: 9000 });
+      void pedido.then(abrirCon);
+      return;
+    }
+    abrirCon(res);
     } finally {
       abriendoControlRef.current = false;
       setAbriendoControl(false);
     }
-  }, [t.treatmentPlanId, hojaDeHoyFirmada, props.citaEnCursoId, props.citaDeLaDireccionId, props.onCitaCerradaPorLaHoja, textosFirma]);
+  }, [t.treatmentPlanId, hojaDeHoyFirmada, props.citaEnCursoId, props.citaDeLaDireccionId, props.onCitaCerradaPorLaHoja, textosFirma, textosConsulta]);
 
   // H17 (QA ws1-t9, ws1-t3): quien llega desde «Abrir caso» del módulo
   // (Pacientes en tratamiento → elegir paciente) trae `?abrirCaso=1`: el

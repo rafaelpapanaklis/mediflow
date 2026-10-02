@@ -20,6 +20,12 @@ import {
   normalizeNoteStatus,
 } from "@/lib/clinical/note-validation";
 import { resolveNoteAppointmentId, sanitizeAppointmentId } from "@/lib/clinical/note-appointment-link";
+import {
+  esBorradorAdoptable,
+  fusionarConElBorrador,
+  specialtyDataAdoptada,
+  type NotaLigadaALaCita,
+} from "@/lib/clinical/borrador-de-la-cita";
 import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
 import {
   nextInvoiceNumber,
@@ -163,6 +169,7 @@ export async function POST(req: NextRequest) {
   // liga a la cita de otro doctor, a una que aún queda lejos, ni a una que ya
   // tiene nota (ver note-appointment-link.ts).
   let appointmentId: string | null = null;
+  let borradorDeLaCita: NotaLigadaALaCita | null = null;
   if (sanitizeAppointmentId(data.appointmentId)) {
     try {
       const timezone = (dbUser as any).clinic?.timezone || "America/Mexico_City";
@@ -180,8 +187,11 @@ export async function POST(req: NextRequest) {
         doctorId: dbUser.id,
         now: new Date(),
       });
-      // Una cita, una nota: si esa cita ya tiene la suya (el paciente volvió por
-      // la tarde, o la nota se creó desde «Iniciar consulta»), esta va suelta.
+      // Una cita, una nota. Si esa cita ya tiene la suya:
+      //   · un BORRADOR (lo creó «Iniciar consulta») → esta consulta lo ADOPTA y se escribe en él
+      //     (ws1-t8, revisión de ws1-t9 fallo 1: antes quedaban una firmada suelta + el borrador vacío,
+      //     y «Completar consulta» daba 422);
+      //   · una nota firmada (el paciente volvió por la tarde) → esta va suelta, como siempre.
       const alreadyLinked = candidate
         ? await prisma.medicalRecord.findFirst({
             where: {
@@ -189,10 +199,12 @@ export async function POST(req: NextRequest) {
               patientId: data.patientId,
               specialtyData: { path: ["appointmentId"], equals: candidate },
             },
-            select: { id: true },
+            select: { id: true, subjective: true, objective: true, assessment: true, plan: true, specialtyData: true },
+            orderBy: { createdAt: "desc" },
           })
         : null;
-      appointmentId = candidate && !alreadyLinked ? candidate : null;
+      if (candidate && esBorradorAdoptable(alreadyLinked)) borradorDeLaCita = alreadyLinked;
+      appointmentId = candidate && (!alreadyLinked || borradorDeLaCita) ? candidate : null;
     } catch (err) {
       // Ligar es un extra: si la lectura falla, la nota se guarda sin ligar.
       console.error("Error resolving appointment for clinical note:", err);
@@ -205,6 +217,41 @@ export async function POST(req: NextRequest) {
     ...(appointmentId ? { appointmentId } : {}),
     ...(status === "SIGNED" ? { signedAt: new Date().toISOString() } : {}),
   };
+
+  // El borrador de «Iniciar consulta» se ADOPTA: mismo registro (mismo id, misma cita), con lo que el doctor
+  // ya hubiera escrito en la barra de consulta delante de lo de «Nueva consulta». El id viene de una lectura
+  // filtrada por clinicId + patientId de la sesión, así que el update no puede caer en otra clínica.
+  if (borradorDeLaCita && appointmentId) {
+    const borrador = borradorDeLaCita;
+    const record = await prisma.medicalRecord.update({
+      where: { id: borrador.id },
+      data: {
+        doctorId: dbUser.id,
+        ...fusionarConElBorrador(borrador, data),
+        ...(data.diagnoses !== undefined ? { diagnoses: data.diagnoses } : {}),
+        ...(data.vitals ? { vitals: data.vitals } : {}),
+        specialtyData: specialtyDataAdoptada(borrador.specialtyData, cleanSpec, {
+          status,
+          appointmentId,
+          ...(status === "SIGNED" ? { signedAt: new Date().toISOString() } : {}),
+        }) as any,
+      },
+      include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    await logMutation({
+      req,
+      clinicId: dbUser.clinicId,
+      userId: dbUser.id,
+      entityType: "record",
+      entityId: record.id,
+      action: "update",
+      patientId: record.patientId,
+      texto: status === "SIGNED" ? "Guardó y firmó la nota de la consulta" : "Guardó la nota de la consulta",
+      before: { status: "DRAFT", appointmentId },
+      after: { status, appointmentId },
+    });
+    return finishCreate(dbUser, data, cleanSpec, record);
+  }
 
   const record = await prisma.medicalRecord.create({
     data: { clinicId: dbUser.clinicId, patientId: data.patientId, doctorId: dbUser.id,
@@ -235,6 +282,17 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  return finishCreate(dbUser, data, cleanSpec, record);
+}
+
+// Lo que sigue a guardar la nota, sea nueva o el borrador adoptado: factura borrador de los
+// procedimientos, revalidación y respuesta (misma forma en los dos caminos).
+async function finishCreate(
+  dbUser: NonNullable<Awaited<ReturnType<typeof getDbUser>>>,
+  data: z.infer<typeof CreateSchema>,
+  cleanSpec: Record<string, unknown>,
+  record: any,
+) {
   // ── Auto-create draft invoice from procedures (if any had prices) ──────────
   let draftInvoice = null;
   // ws1-t11 (11d): un «Paciente de prueba / no contactar» no genera cargos

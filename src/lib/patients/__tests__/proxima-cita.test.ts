@@ -126,7 +126,7 @@ test("fallo nuevo 1: recepción (su rol no pasa citas a «En consulta») o sin �
 test("fallo nuevo 1: la cabecera apaga «Iniciar consulta» con el motivo y la ficha no llama a una cita ajena", () => {
   const SRC = join(__dirname, "..", "..", "..");
   const hero = readFileSync(join(SRC, "components/dashboard/patient-detail/hero-card.tsx"), "utf8");
-  assert.match(hero, /disabled=\{!hasNextAppt \|\| !!motivoSinIniciar\}/);
+  assert.match(hero, /disabled=\{!hasNextAppt \|\| !!motivoSinIniciar \|\| iniciandoConsulta\}/);
   assert.match(hero, /motivoSinIniciar \?\? t\("patients\.heroCard\.startConsultTitle"\)/);
   const ficha = readFileSync(join(SRC, "app/dashboard/patients/[id]/patient-detail-client.tsx"), "utf8");
   assert.match(ficha, /motivoSinIniciar=\{motivoSinIniciar\}/);
@@ -136,4 +136,32 @@ test("fallo nuevo 1: la cabecera apaga «Iniciar consulta» con el motivo y la f
   assert.doesNotMatch(cuerpo, /nextAppt/, "«Iniciar consulta» no debe arrancar la próxima cita a secas");
   const pagina = readFileSync(join(SRC, "app/dashboard/patients/[id]/page.tsx"), "utf8");
   assert.match(pagina, /puedeEditarAgenda=\{hasPermission\(permsUser, "agenda\.edit"\)\}/);
+});
+
+// ═══ Revisión de mejoras (ws1-t9 del 2-oct), fallos 2 y 3 ═══════════════════════════════════════════════════
+test("fallo 2: recepción tampoco «inicia» la cita de OTRO día (P0155 con cita del 6 oct): botón apagado con motivo", () => {
+  const P0155 = [conDoctor("6-oct", "2026-10-06T16:00:00Z", "t9final-orto")];
+  const recepcion = { id: "rec", role: "RECEPTIONIST", puedeEditarAgenda: true };
+  assert.deepEqual(citaParaIniciarDesdeLaFicha(P0155, recepcion, AHORA, ZONA), { cita: null, motivo: "sinPermiso" });
+  // El doctor de esa cita y un ADMIN sí la ven propuesta (abre la dirección; no se arranca hasta ese día).
+  assert.equal(citaParaIniciarDesdeLaFicha(P0155, { id: "t9final-orto", role: "DOCTOR", puedeEditarAgenda: true }, AHORA, ZONA).cita?.id, "6-oct");
+  assert.equal(citaParaIniciarDesdeLaFicha(P0155, { id: "adm", role: "ADMIN", puedeEditarAgenda: true }, AHORA, ZONA).cita?.id, "6-oct");
+});
+
+test("fallo 3: tras «Iniciar consulta» el botón dice «Iniciando consulta…», se apaga y un segundo clic no hace nada", () => {
+  const SRC = join(__dirname, "..", "..", "..");
+  const ficha = readFileSync(join(SRC, "app/dashboard/patients/[id]/patient-detail-client.tsx"), "utf8");
+  const i = ficha.indexOf("const iniciarConsulta = async () => {");
+  const cuerpo = ficha.slice(i, ficha.indexOf("\n  };", i));
+  // El candado va ANTES del PATCH: un doble clic no re-PATCHea la cita.
+  assert.ok(cuerpo.indexOf("if (iniciandoCitaId) return;") > 0);
+  assert.ok(cuerpo.indexOf("if (iniciandoCitaId) return;") < cuerpo.indexOf("/status`"));
+  assert.match(cuerpo, /setIniciandoCitaId\(cita\.id\);/);
+  assert.match(cuerpo, /toast\.loading\(textosConsulta\.iniciandoConsulta/);
+  // Se suelta cuando la dirección ya trae la cita (o a los 30 s).
+  assert.match(ficha, /if \(searchParams\.get\("appointment"\) === iniciandoCitaId\) \{\s*listo\(\);/);
+  assert.match(ficha, /iniciandoConsulta=\{iniciandoCitaId !== null\}/);
+  const hero = readFileSync(join(SRC, "components/dashboard/patient-detail/hero-card.tsx"), "utf8");
+  assert.match(hero, /aria-busy=\{iniciandoConsulta \|\| undefined\}/);
+  assert.match(hero, /textosConsulta\.iniciandoConsulta/);
 });

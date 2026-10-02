@@ -14,6 +14,10 @@ const es = {
   citaDeOtroProfesional: "La próxima cita es con otro profesional: solo quien la atiende puede iniciarla.",
   /** «Iniciar consulta» apagado: la sesión no puede pasar citas a «En consulta» (rol o permiso). */
   sinPermisoParaIniciar: "Tu usuario no puede iniciar consultas: la inicia el doctor que atiende la cita.",
+  /** Entre el clic en «Iniciar consulta» y la consulta abierta (fallo 3): el botón y el aviso. */
+  iniciandoConsulta: "Iniciando consulta…",
+  /** La hoja de control no abrió en 30 s (bloqueante 9b): el botón se suelta; si la respuesta llega, abre sola. */
+  laHojaTardaEnAbrir: "La hoja de control está tardando en abrir. Si no aparece, vuelve a pulsar «Registrar control».",
 };
 
 const en: typeof es = {
@@ -21,6 +25,8 @@ const en: typeof es = {
   loEscritoPasaALaHoja: "What you wrote in “General dentistry” was moved to the check-up sheet.",
   citaDeOtroProfesional: "The next appointment is with another provider: only they can start it.",
   sinPermisoParaIniciar: "Your user can't start consultations: the attending doctor starts it.",
+  iniciandoConsulta: "Starting consultation…",
+  laHojaTardaEnAbrir: "The check-up sheet is taking long to open. If it doesn't show up, press “Record check-up” again.",
 };
 
 export type TextosConsultaFicha = typeof es;

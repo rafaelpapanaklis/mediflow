@@ -28,6 +28,7 @@ import {
   Trash2,
   Baby,
   Download,
+  Loader2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
@@ -35,6 +36,7 @@ import { edadLegible } from "@/lib/pediatrics/age";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 import { estadoSalud, puedePintarSinAlergias, saludPendiente, type EstadoCuestionario } from "@/lib/patients/salud-capturada";
 import { useTextosSaludCapturada } from "@/lib/patients/textos-salud-capturada";
+import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
 import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
 import { ROPA_MENU_FICHA } from "@/components/dashboard/portales-rediseno/ropa";
@@ -92,6 +94,8 @@ export interface HeroCardProps {
   /** El paciente tiene próxima cita pero la sesión no puede iniciarla (de otro doctor, o sin permiso): el
    *  botón «Iniciar consulta» se apaga y este texto dice por qué. null/ausente = se puede. */
   motivoSinIniciar?: string | null;
+  /** ws1-t8 (fallo 3): «Iniciar consulta» ya se pulsó y la ficha está abriendo la consulta. */
+  iniciandoConsulta?: boolean;
   onReschedule: () => void;
   onCharge: () => void;
   /** H14: sin billing.charge no se pinta «Cobrar» (la ruta lo revalida). */
@@ -193,6 +197,7 @@ export function HeroCard({
   canEdit = true,
   onStartConsult,
   motivoSinIniciar = null,
+  iniciandoConsulta = false,
   onReschedule,
   onCharge,
   puedeCobrar = true,
@@ -210,6 +215,7 @@ export function HeroCard({
 }: HeroCardProps) {
   const t = useT();
   const textosSalud = useTextosSaludCapturada();
+  const textosConsulta = useTextosConsultaFicha();
   const salud = estadoSalud(questionnaireStatus);
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -311,10 +317,19 @@ export function HeroCard({
         type="button"
         className={`${styles.btn} ${styles.btnPrimary}`}
         onClick={onStartConsult}
-        disabled={!hasNextAppt || !!motivoSinIniciar}
+        disabled={!hasNextAppt || !!motivoSinIniciar || iniciandoConsulta}
+        aria-busy={iniciandoConsulta || undefined}
         title={!hasNextAppt ? t("patients.heroCard.startConsultDisabledTitle") : motivoSinIniciar ?? t("patients.heroCard.startConsultTitle")}
       >
-        <Play size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.startConsult")}
+        {iniciandoConsulta ? (
+          <>
+            <Loader2 size={13} strokeWidth={1.75} className="animate-spin" aria-hidden /> {textosConsulta.iniciandoConsulta}
+          </>
+        ) : (
+          <>
+            <Play size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.startConsult")}
+          </>
+        )}
       </button>
       <button
         type="button"

@@ -213,6 +213,7 @@
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",
     "test:reminders-promise": "tsx --test src/lib/reminders/__tests__/promise.test.ts",
     "test:nota-ligada-a-cita": "tsx --test --experimental-test-module-mocks src/app/api/clinical/__tests__/nota-ligada-a-cita.test.ts",
+    "test:una-nota-por-visita": "tsx --test --experimental-test-module-mocks src/app/api/clinical/__tests__/una-nota-por-visita-dental.test.ts",
     "test:clinical-reminders": "tsx --test src/lib/clinical-shared/reminders/__tests__/worker-encola.test.ts",
     "test:wa-manual-reminder": "tsx --test src/lib/whatsapp/__tests__/manual-reminder-access.test.ts",
     "test:wa-recordatorio-manual": "tsx --test --experimental-test-module-mocks src/app/api/whatsapp/send/__tests__/variables.test.ts src/lib/reminders/__tests__/plantilla-variables.test.ts",

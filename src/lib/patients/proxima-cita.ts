@@ -72,10 +72,15 @@ export function motivoParaNoIniciar(
   zona: string,
 ): MotivoSinIniciar | null {
   if (!quien.puedeEditarAgenda) return "sinPermiso";
+  // ws1-t8 (revisión de ws1-t9, fallo 2): un rol que NUNCA puede pasar una cita a «En consulta» (recepción)
+  // tampoco inicia la de otro día. Antes solo se miraba con la de hoy y, con una cita futura, recepción veía
+  // «Iniciar consulta» activo y abría `?appointment=`.
+  const inicio = new Date(cita.startsAt);
+  const rol = (quien.role ?? "") as UserRole;
+  if (canTransition("CONFIRMED", "IN_PROGRESS", rol, ahora, inicio).code === "forbidden_role") return "sinPermiso";
   if (!esCitaQuePuedeMover(cita, quien)) return "deOtroProfesional";
   if (cita.status !== "IN_PROGRESS" && esCitaDeHoy(cita.startsAt, ahora, zona)) {
-    const inicio = new Date(cita.startsAt);
-    if (!canTransition(cita.status as AppointmentStatus, "IN_PROGRESS", (quien.role ?? "") as UserRole, ahora, inicio).ok) {
+    if (!canTransition(cita.status as AppointmentStatus, "IN_PROGRESS", rol, ahora, inicio).ok) {
       return "sinPermiso";
     }
   }

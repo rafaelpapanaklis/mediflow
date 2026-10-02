@@ -110,3 +110,33 @@ test("9b: los textos existen en español e inglés", async () => {
   assert.equal(textosFirmaControl("en").atencionCompleta, "Open full visit");
   assert.ok(textosFirmaControl("en").atencionCompletaAyuda.length > 20);
 });
+
+// ws1-t8 · revisión de mejoras (ws1-t10, bloqueante 1): «Abrir atención completa» dejaba el botón en «Abriendo la
+// hoja…» y la hoja no abría. El efecto de `abrirControlAlEntrar` lanzaba la server action del contexto y enseguida
+// `onControlAbierto` quitaba `hoja=1` con replaceState; Next 14.2 lo convierte en una acción RESTORE de su router,
+// que DESCARTA la acción pendiente (su promesa no se resuelve) y tira las que esperaban detrás.
+test("9b (bloqueante de la revisión): `hoja=1` se quita al LLEGAR, en un efecto de layout, no al abrir la hoja", () => {
+  const ficha = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
+  const i = ficha.indexOf("const alAbrirControlOrto =");
+  const alAbrir = ficha.slice(i, ficha.indexOf(";", i) + 1);
+  assert.equal(alAbrir, "const alAbrirControlOrto = () => setAbrirControlOrto(false);", "abrir la hoja ya no toca la dirección");
+  assert.match(
+    ficha,
+    /const hojaEnLaDireccion = searchParams\.get\(PARAM_ABRIR_HOJA\);\s*(?:\/\/[^\n]*\n\s*)*useLayoutEffect\(\(\) => \{\s*if \(!hojaEnLaDireccion\) return;[\s\S]{0,300}?window\.history\.replaceState\(null, "", [\s\S]{0,80}?\}, \[hojaEnLaDireccion\]\);/,
+  );
+  // Un solo replaceState de `hoja` en la ficha: el del efecto de layout.
+  assert.equal((ficha.match(/params\.delete\(PARAM_ABRIR_HOJA\)/g) ?? []).length, 1);
+});
+
+test("9b (bloqueante de la revisión): si el contexto de la hoja tarda, el botón se suelta y la hoja NO abre sin su cita", () => {
+  const cliente = leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(cliente, /const TOPE_CONTEXTO_HOJA_MS = 30_000;/);
+  const i = cliente.indexOf("const pedido = getTreatmentCardContextForPatient(");
+  assert.ok(i > 0, "el contexto se pide una sola vez y se espera con tope");
+  const cuerpo = cliente.slice(i, cliente.indexOf("} finally {", i));
+  assert.match(cuerpo, /await Promise\.race\(\[\s*pedido,/);
+  // Con el tope: aviso, y la hoja abre cuando llegue la respuesta (con su contexto), nunca con los defaults.
+  assert.match(cuerpo, /if \(res === SIN_RESPUESTA\) \{\s*toast\(textosConsulta\.laHojaTardaEnAbrir[^;]*;\s*void pedido\.then\(abrirCon\);\s*return;\s*\}/);
+  // Y el `finally` sigue apagando «Abriendo la hoja…».
+  assert.match(cliente, /\} finally \{\s*abriendoControlRef\.current = false;\s*setAbriendoControl\(false\);/);
+});
