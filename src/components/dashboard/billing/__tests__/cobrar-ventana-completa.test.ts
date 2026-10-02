@@ -301,7 +301,8 @@ test("`?charge=1` (barra del paciente, fin de consulta, paleta) abre el cobro en
   ] as const) assert.match(leer(archivo), patron, archivo);
   const pac = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
   assert.match(pac, /const cobroPedidoPorUrl = searchParams\.get\("charge"\) === "1";/);
-  assert.match(pac, /if \(permisosCobro\?\.cobrar === false\) \{ openBillingTab\(\); return; \}\s*openChargeShortcut\(\);/);
+  // ws1-t4 (8d): el borrador de hoy si lo hay; si no, «Cobrar hoy» (que enlaza las notas anteriores).
+  assert.match(pac, /if \(permisosCobro\?\.cobrar === false\) \{ openBillingTab\(\); return; \}[\s\S]{0,400}if \(borradorDeHoy\) \{ void openDirectPayment\(borradorDeHoy\); return; \}\s*if \(canViewBilling\) \{ setCobrarHoyAbierto\(true\); return; \}\s*openChargeShortcut\(\);/);
   assert.match(pac, /window\.history\.replaceState\(null, ""/, "el parámetro se quita para que un refresh no vuelva a abrirlo");
 });
 

@@ -1,0 +1,21 @@
+/* «Cobrar hoy» (ws1-t4, 8d). La hoja se viste con las clases del rediseño de factura
+   (factura-rediseno.module.css); aquí solo lo que esa hoja no trae: que las cabeceras
+   de bloque bajen de renglón en un teléfono y la ayuda de la casilla en su propia línea. */
+
+.cabeza {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.cabeza > :last-child {
+  flex-wrap: wrap;
+}
+
+.ayudaCasilla {
+  display: block;
+  margin-top: 2px;
+}
+
+.enlaceAviso {
+  align-self: flex-start;
+}

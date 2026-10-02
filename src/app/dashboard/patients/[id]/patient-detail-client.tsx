@@ -76,6 +76,9 @@ import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescrip
 import { PatientUploadsSection } from "@/components/patients/patient-uploads-section";
 import { PatientPhotosTab, RecentPhotosStrip } from "@/components/dashboard/patient-detail/patient-photos-tab";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
+// ws1-t4 (8d): concepto, pago recibido, saldo y comprobante en un paso.
+import { CobrarHoy } from "@/components/dashboard/cobrar-hoy/cobrar-hoy";
+import { pendientesPrevios } from "@/lib/invoices/cobrar-hoy";
 import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import toast from "react-hot-toast";
 import { CLAVE_ETIQUETA_CATEGORIA, CATEGORIAS_SUBIDA_FICHA, categoriaSugeridaParaSubida, filtrarArchivosPorGrupo, puedeCambiarTipo, SIN_FILTRO, type FiltroArchivos } from "@/lib/uploads/categorias-archivo";
@@ -741,6 +744,8 @@ export function PatientDetailClient({
   // Shortcut de HeroCard / SideCards: cobrar la factura más relevante
   // (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna procesable,
   // fallback al tab Facturación para que pueda crear una.
+  // ws1-t4 (8d): la hoja «Cobrar hoy» (nota nueva + pago, sin ventanas encadenadas).
+  const [cobrarHoyAbierto, setCobrarHoyAbierto] = useState(false);
   const openChargeShortcut = () => {
     if (!canViewBilling) return;
     const draft = invoices.find((inv: any) => inv.status === "DRAFT");
@@ -772,6 +777,12 @@ export function PatientDetailClient({
       // Sin URL editable: el ref ya evita repetirlo en esta carga.
     }
     if (permisosCobro?.cobrar === false) { openBillingTab(); return; }
+    // ws1-t4 (8d): «Cobrar» de la barra, de «Terminar consulta» y de la paleta quiere cobrar
+    // lo de HOY. El borrador que dejó la consulta, si lo hay; si no, «Cobrar hoy», que
+    // enlaza las notas anteriores por cobrar en vez de abrir la más vieja.
+    const borradorDeHoy = invoices.find((inv: any) => inv.status === "DRAFT");
+    if (borradorDeHoy) { void openDirectPayment(borradorDeHoy); return; }
+    if (canViewBilling) { setCobrarHoyAbierto(true); return; }
     openChargeShortcut();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cobroPedidoPorUrl]);
@@ -3406,6 +3417,7 @@ export function PatientDetailClient({
             patientName={fullName}
             patientPhone={patient.phone ?? null}
             onCharge={openChargeShortcut}
+            onCobrarHoy={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
             puedeCobrar={permisosCobro?.cobrar !== false}
             onOpenBilling={openBillingTab}
             canViewBilling={canViewBilling}
@@ -3644,6 +3656,20 @@ export function PatientDetailClient({
           setDuplicarFactura(null);
           router.refresh();
         }}
+      />
+
+      {/* ws1-t4 (8d): «Cobrar hoy» — crea la nota y registra el pago con las rutas de
+       *  siempre; no manda avisos de cobro (comprobante del pago, opcional y apagado). */}
+      <CobrarHoy
+        open={cobrarHoyAbierto}
+        onClose={() => setCobrarHoyAbierto(false)}
+        patientId={patient.id}
+        patientName={fullName}
+        clinicTaxMode={clinicTaxMode}
+        puedeEnviarComprobante={permisosCobro?.enviar === true}
+        pendientes={pendientesPrevios(invoices)}
+        onCobrarPendientes={() => { setCobrarHoyAbierto(false); openChargeShortcut(); }}
+        onListo={() => router.refresh()}
       />
 
       {/* Modal de detalle de nota SOAP — abre al hacer click en una row del

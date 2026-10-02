@@ -47,6 +47,8 @@ import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-anticipo";
+// ws1-t4 (8d): una cita terminada SIN nota se cobra en un paso (concepto + pago).
+import { CobrarHoy } from "@/components/dashboard/cobrar-hoy/cobrar-hoy";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
@@ -198,6 +200,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
     null,
   );
   const [buscandoFactura, setBuscandoFactura] = useState(false);
+  // ws1-t4 (8d): la cita sin nota que se está cobrando con «Cobrar hoy».
+  const [cobrarHoy, setCobrarHoy] = useState<{ id: string; motivo: string | null } | null>(null);
   const [editando, setEditando] = useState(false);
   const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
   // ws1-t10 (decisión 5): cómo cobra el caso de un control de ortodoncia. `undefined` = la
@@ -367,10 +371,14 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         // mensualidad, o se cobra desde su caso): decir «no tiene factura» y dejar
         // al usuario sin camino era el «Cobrar» que no sirve; el que sirve es el
         // recuadro de Ortodoncia de este mismo panel.
+        // ws1-t4 (8d): sin nota y fuera de ortodoncia, «Cobrar hoy» (concepto del motivo,
+        // pago y saldo en un paso, la nota ligada a ESTA cita) en vez de un callejón.
+        if (!esCitaOrtoConHoja(dto.reason ?? null)) {
+          setCobrarHoy({ id: dto.id, motivo: dto.reason ?? null });
+          return;
+        }
         toast(
-          esCitaOrtoConHoja(dto.reason ?? null)
-            ? "Este control no lleva factura propia: cóbralo desde el recuadro de Ortodoncia de esta cita (mensualidad o extra del caso)."
-            : "Esta cita todavía no tiene factura.",
+          "Este control no lleva factura propia: cóbralo desde el recuadro de Ortodoncia de esta cita (mensualidad o extra del caso).",
           { duration: 6000 },
         );
         return;
@@ -790,6 +798,21 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           abrirCobro
           onClose={() => setFactura(null)}
           onMutated={() => {
+            invalidateRangeCache();
+            router.refresh();
+          }}
+        />
+      )}
+
+      {cobrarHoy && cita.pacienteId && (
+        <CobrarHoy
+          open
+          onClose={() => setCobrarHoy(null)}
+          patientId={cita.pacienteId}
+          patientName={cita.nombrePaciente}
+          cita={cobrarHoy}
+          clinicTaxMode={clinicTaxMode}
+          onListo={() => {
             invalidateRangeCache();
             router.refresh();
           }}
