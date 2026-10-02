@@ -9618,6 +9618,7 @@
       "complete": "Complete",
       "emptyActive": "No patients waiting",
       "attendedToday": "Attended today",
+      "cancelledToday": "Cancelled today",
       "addToQueue": "Add to queue",
       "patientNameLabel": "Patient name *",
       "fullNamePlaceholder": "Full name",

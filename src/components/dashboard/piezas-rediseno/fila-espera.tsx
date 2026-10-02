@@ -44,6 +44,12 @@ const TONO_ESTADO: Record<string, Tono> = {
 export interface FilaEsperaProps {
   activeQueue: Turno[];
   doneQueue: Turno[];
+  /** Cancelados de hoy: aparte de «Atendidos hoy». */
+  cancelledQueue?: Turno[];
+  /** Turnos que de verdad esperan (en atención no cuenta): el subtítulo. */
+  waitingCount?: number;
+  /** Zona de la clínica para «Llegó». */
+  timezone?: string;
   form: { patientName: string; service: string };
   setForm: Dispatch<SetStateAction<{ patientName: string; service: string }>>;
   handleAdd: () => Promise<void>;
@@ -61,13 +67,22 @@ export interface FilaEsperaProps {
   puedeEditar?: boolean;
 }
 
-function horaLlegada(iso: string) {
-  return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+/** Hora de llegada en la zona de la clínica (no la del navegador); zona inválida → la del navegador. */
+export function horaLlegada(iso: string, timeZone?: string) {
+  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  try {
+    return new Date(iso).toLocaleTimeString("es-MX", { ...opts, ...(timeZone ? { timeZone } : {}) });
+  } catch {
+    return new Date(iso).toLocaleTimeString("es-MX", opts);
+  }
 }
 
 export function FilaEspera({
   activeQueue,
   doneQueue,
+  cancelledQueue = [],
+  waitingCount,
+  timezone,
   form,
   setForm,
   handleAdd,
@@ -95,7 +110,7 @@ export function FilaEspera({
     <RaizRediseno>
       <Cabecera
         titulo={t("pages.walkIn.title")}
-        subtitulo={t("pages.walkIn.waitingCount", { count: activeQueue.length })}
+        subtitulo={t("pages.walkIn.waitingCount", { count: waitingCount ?? activeQueue.length })}
         acciones={
           puedeAgregar ? (
             <Boton variante="principal" icono={<UserPlus size={16} strokeWidth={2} />} onClick={() => nombreRef.current?.focus()}>
@@ -152,11 +167,15 @@ export function FilaEspera({
                     <span aria-hidden>·</span>
                     <Clock size={12} strokeWidth={1.75} aria-hidden />
                     <span>
-                      {t("pages.walkIn.arrived")} {horaLlegada(item.joinedAt)}
+                      {t("pages.walkIn.arrived")} {horaLlegada(item.joinedAt, timezone)}
                     </span>
-                    <span aria-hidden>·</span>
-                    <span>{t("pages.walkIn.waitingLabel")}</span>
-                    <span className={s.espera}>{pintarEspera(item.joinedAt)}</span>
+                    {item.status !== "IN_PROGRESS" && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{t("pages.walkIn.waitingLabel")}</span>
+                        <span className={s.espera}>{pintarEspera(item.joinedAt)}</span>
+                      </>
+                    )}
                     {nombreDe?.(item.assignedTo) && (
                       <>
                         <span aria-hidden>·</span>
@@ -212,6 +231,20 @@ export function FilaEspera({
         {doneQueue.length > 0 && (
           <Tarjeta lista titulo={t("pages.walkIn.attendedToday")} accion={<span className={s.contador}>{doneQueue.length}</span>}>
             {doneQueue.map((item) => (
+              <div key={item.id} className={`${s.fila} ${s.filaApagada}`}>
+                <div className={s.filaCuerpo}>
+                  <p className={s.nombre}>{item.patientName}</p>
+                  <div className={s.detalle}>{item.service}</div>
+                </div>
+                <Etiqueta tono={TONO_ESTADO[item.status] ?? "neutra"}>{statusLabel(item.status)}</Etiqueta>
+              </div>
+            ))}
+          </Tarjeta>
+        )}
+
+        {cancelledQueue.length > 0 && (
+          <Tarjeta lista titulo={t("pages.walkIn.cancelledToday")} accion={<span className={s.contador}>{cancelledQueue.length}</span>}>
+            {cancelledQueue.map((item) => (
               <div key={item.id} className={`${s.fila} ${s.filaApagada}`}>
                 <div className={s.filaCuerpo}>
                   <p className={s.nombre}>{item.patientName}</p>

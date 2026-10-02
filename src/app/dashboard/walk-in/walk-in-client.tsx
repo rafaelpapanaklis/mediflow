@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
-import { FilaEspera } from "@/components/dashboard/piezas-rediseno/fila-espera";
+import { FilaEspera, horaLlegada } from "@/components/dashboard/piezas-rediseno/fila-espera";
 
 interface QueueItem {
   id: string;
@@ -54,7 +54,7 @@ function ElapsedTimer({ since }: { since: string }) {
   return <span className="text-xs font-medium">{elapsed}</span>;
 }
 
-export function WalkInClient({ initialQueue, profesionales = [], rediseno = false, puedeAgregar = true, puedeEditar = true }: {
+export function WalkInClient({ initialQueue, profesionales = [], rediseno = false, puedeAgregar = true, puedeEditar = true, timezone }: {
   initialQueue: QueueItem[];
   /** Quién puede recibir citas (regla única de la Agenda): la lista de «Asignar». La resuelve page.tsx. */
   profesionales?: { id: string; name: string }[];
@@ -65,6 +65,8 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   /** agenda.create / agenda.edit: la API los exige igual; aquí solo se esconde el botón. */
   puedeAgregar?: boolean;
   puedeEditar?: boolean;
+  /** Zona de la clínica: «Llegó» se pinta en ella, no en la del navegador. */
+  timezone?: string;
 }) {
   const t = useT();
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
@@ -160,7 +162,10 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   }
 
   const activeQueue = queue.filter(q => q.status !== "COMPLETED" && q.status !== "CANCELLED");
-  const doneQueue = queue.filter(q => q.status === "COMPLETED" || q.status === "CANCELLED");
+  // «Atendidos hoy» = solo los completados; los cancelados van aparte y «en atención» no es «en espera».
+  const doneQueue = queue.filter(q => q.status === "COMPLETED");
+  const cancelledQueue = queue.filter(q => q.status === "CANCELLED");
+  const waitingCount = activeQueue.filter(q => q.status !== "IN_PROGRESS").length;
 
   // REDISEÑO — mismo estado, mismos handlers, mismo refresco cada 30 s y el
   // mismo temporizador (llega como función para no duplicar su intervalo).
@@ -170,6 +175,9 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
       <FilaEspera
         activeQueue={activeQueue}
         doneQueue={doneQueue}
+        cancelledQueue={cancelledQueue}
+        waitingCount={waitingCount}
+        timezone={timezone}
         form={form}
         setForm={setForm}
         handleAdd={handleAdd}
@@ -191,7 +199,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-extrabold">{t("pages.walkIn.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.walkIn.waitingCount", { count: activeQueue.length })}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.walkIn.waitingCount", { count: waitingCount })}</p>
         </div>
         {puedeAgregar && (
           <Button onClick={() => setShowAdd(true)}>
@@ -216,13 +224,15 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
             <div className="flex items-center gap-4 text-muted-foreground mb-3">
               <div className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                <span className="text-xs">{t("pages.walkIn.arrived")} {new Date(item.joinedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="text-xs">{t("pages.walkIn.arrived")} {horaLlegada(item.joinedAt, timezone)}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                <span className="text-xs">{t("pages.walkIn.waitingLabel")} </span>
-                <ElapsedTimer since={item.joinedAt} />
-              </div>
+              {item.status !== "IN_PROGRESS" && (
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span className="text-xs">{t("pages.walkIn.waitingLabel")} </span>
+                  <ElapsedTimer since={item.joinedAt} />
+                </div>
+              )}
             </div>
             {nombreDe(item.assignedTo) && (
               <p className="text-xs text-muted-foreground mb-3">{t("pages.walkIn.assignedTo", { name: nombreDe(item.assignedTo) ?? "" })}</p>
@@ -272,6 +282,26 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
           <h2 className="text-lg font-bold mb-3 text-muted-foreground">{t("pages.walkIn.attendedToday")}</h2>
           <div className="space-y-2">
             {doneQueue.map(item => (
+              <div key={item.id} className="bg-muted/50 border border-border/50 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">{item.patientName}</p>
+                  <p className="text-xs text-muted-foreground">{item.service}</p>
+                </div>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${STATUS_COLORS[item.status] || ""}`}>
+                  {statusLabel(item.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cancelled queue */}
+      {cancelledQueue.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-bold mb-3 text-muted-foreground">{t("pages.walkIn.cancelledToday")}</h2>
+          <div className="space-y-2">
+            {cancelledQueue.map(item => (
               <div key={item.id} className="bg-muted/50 border border-border/50 rounded-xl p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">{item.patientName}</p>

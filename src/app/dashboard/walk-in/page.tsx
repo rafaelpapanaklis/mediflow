@@ -20,6 +20,8 @@ export default async function WalkInPage() {
   const puedeAgregar = hasPermission(quien, "agenda.create");
   const puedeEditar = hasPermission(quien, "agenda.edit");
   const clinicId = user.clinicId;
+  // La hora de llegada se pinta en la zona de la clínica, no en la del navegador.
+  const timezone = user.clinic?.timezone ?? "America/Mexico_City";
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -52,5 +54,5 @@ export default async function WalkInPage() {
   const profesionales = profesionalesDb.map((u) => ({ id: u.id, name: `${u.firstName} ${u.lastName}`.trim() }));
 
   return <WalkInClient key={clinicId} initialQueue={queue as any} profesionales={profesionales} rediseno={rediseno}
-    puedeAgregar={puedeAgregar} puedeEditar={puedeEditar} />;
+    puedeAgregar={puedeAgregar} puedeEditar={puedeEditar} timezone={timezone} />;
 }

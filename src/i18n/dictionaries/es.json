@@ -9618,6 +9618,7 @@
       "complete": "Completar",
       "emptyActive": "Sin pacientes en espera",
       "attendedToday": "Atendidos hoy",
+      "cancelledToday": "Cancelados hoy",
       "addToQueue": "Agregar a la fila",
       "patientNameLabel": "Nombre del paciente *",
       "fullNamePlaceholder": "Nombre completo",
