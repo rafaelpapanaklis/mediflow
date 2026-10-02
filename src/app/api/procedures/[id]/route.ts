@@ -4,7 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { datosDeCambio, leerOrthoIncluido } from "../entrada";
-import { evaluarCambioDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
+import { descripcionTrasCambioDeCobro, evaluarCambioDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { quitarProcedimiento } from "@/lib/procedures/quitar-procedimiento";
 import { quitarDepsPrisma } from "@/lib/procedures/quitar-procedimiento-db";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
@@ -55,9 +55,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // que venga en el body se sigue ignorando.
     const marcaDeControl = debeMarcarseComoControl(existing) ? { code: CODIGO_CONTROL_ORTO } : {};
 
+    // ws1-t6 (punto 6): si cambia «incluido / con costo aparte» y la descripción es la que
+    // sembró DaleControl («Con costo aparte.»), se reescribe para que diga lo mismo que la
+    // bandera. La que escribió la clínica, o la que se tecleó en este mismo guardado, no se toca.
+    const descripcionDelCobro = decision.aplicarIncluido
+      ? descripcionTrasCambioDeCobro({
+          // El nombre con el que se sembró (un cambio de nombre en este guardado no lo esconde).
+          nombre: existing.name,
+          actual: existing.description,
+          enviada: body.description === undefined ? undefined : entrada.data.description ?? null,
+          incluido: orthoIncluido,
+        })
+      : undefined;
+
     const updated = await prisma.procedureCatalog.update({
       where: { id: params.id },
-      data: { ...entrada.data, ...marcaDeControl },
+      data: { ...entrada.data, ...marcaDeControl, ...(descripcionDelCobro !== undefined ? { description: descripcionDelCobro } : {}) },
     });
 
     // Ola 2 de ortodoncia (ws1-t1) — orthoIncludedInTreatment va aparte, por

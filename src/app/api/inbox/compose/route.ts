@@ -52,6 +52,7 @@ import {
   lastInboundAtForPhone,
 } from "@/lib/whatsapp/inbox-log";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
+import { apartarAvisoDeCobro, esAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
 import { WhatsAppApiError, WhatsAppBlockedError, waErrorCode } from "@/lib/whatsapp/errors";
 import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
@@ -201,6 +202,8 @@ export async function GET(req: NextRequest) {
       patient,
       canSeeBilling,
       now,
+      // ws1-t6: el aviso de saldo se ofrece bloqueado si hoy ya salió un cobro a este número.
+      telefonoDestino: phone,
     });
 
     return NextResponse.json({
@@ -290,6 +293,7 @@ export async function POST(req: NextRequest) {
       patient,
       canSeeBilling,
       now,
+      telefonoDestino: to,
     });
     const built = byKind.get(kind);
     if (!built) return NextResponse.json({ error: "Esa plantilla ya no existe." }, { status: 400 });
@@ -305,6 +309,13 @@ export async function POST(req: NextRequest) {
     // pestañas abiertas mandarían DOS plantillas y Meta cobra las dos. El TTL
     // corto es el freno; se suelta solo si el envío falla, para poder reintentar
     // en el acto.
+    // ws1-t6: un aviso de cobro al día también desde el chat (la oferta ya lo bloqueó si salió
+    // uno; aquí se reserva contra dos envíos a la vez desde la factura y el chat).
+    const apartado = esAvisoDeCobro(kind)
+      ? await apartarAvisoDeCobro({ clinicId: ctx.clinicId, userId: ctx.userId, telefonos: [to], zonaHoraria: clinic.timezone })
+      : null;
+    if (apartado && !apartado.ok) return NextResponse.json({ code: apartado.code, error: apartado.error }, { status: 409 });
+    try {
     lockKey = `wa-compose:${ctx.clinicId}:${patient.id}:${kind}`;
     if (!(await acquireLock(lockKey, 20))) {
       lockKey = null; // el candado es de la otra petición: no lo soltamos nosotros
@@ -354,6 +365,9 @@ export async function POST(req: NextRequest) {
       }
       console.error(`[POST inbox/compose] fallo al enviar ${kind} (paciente ${patient.id}):`, e);
       return NextResponse.json({ error: "No se pudo enviar la plantilla." }, { status: 502 });
+    }
+    } finally {
+      if (apartado?.ok) await apartado.liberar();
     }
     // Salió: el candado se queda tomado hasta que venza su TTL. Se olvida la
     // llave para que ningún camino de error posterior lo suelte — soltarlo

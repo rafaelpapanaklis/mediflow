@@ -29,6 +29,7 @@ import { catalogEntryFor } from "@/lib/whatsapp/templates-catalog";
 import { parseWaTemplates, type WaTemplateMap } from "@/lib/whatsapp/template-config";
 import { WA_ERROR_CODE } from "@/lib/whatsapp/errors";
 import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
+import { esAvisoDeCobro, fraseAvisoYaEnviado, ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
 
 /** Dónde se dan de alta las plantillas (lo abre el enlace del composer). */
 export const TEMPLATES_MANAGE_HREF = "/dashboard/whatsapp/plantillas";
@@ -369,6 +370,12 @@ export async function buildTemplateOffering(args: {
   patient: TemplatePatient | null;
   canSeeBilling: boolean;
   now: Date;
+  /**
+   * ws1-t6: el teléfono al que saldría. Con él, el aviso de saldo se ofrece BLOQUEADO si ya
+   * salió un aviso de cobro a ese número en las últimas 24 h (un aviso de cobro al día, en
+   * todos los caminos). Sin él, como antes.
+   */
+  telefonoDestino?: string | null;
 }): Promise<TemplateOffering> {
   const facts = await loadTemplateFacts({
     clinicId: args.clinicId,
@@ -390,7 +397,30 @@ export async function buildTemplateOffering(args: {
     options.push(built.option);
     byKind.set(kind, built);
   }
+  await aplicarTopeDeCobro(options, {
+    clinicId: args.clinicId,
+    telefono: args.telefonoDestino ?? null,
+    zonaHoraria: args.clinic.timezone ?? null,
+  });
   return { options, byKind };
+}
+
+/**
+ * ws1-t6 — el aviso de saldo del Inbox no consultaba el tope: un paciente recibió tres avisos
+ * en dos minutos (dos desde la factura y el tercero desde aquí). Si ya salió un aviso de
+ * cobro a ese teléfono (de la factura, de Alertas, automático o de aquí), la opción se
+ * enseña bloqueada con el motivo y el POST la rechaza con el mismo motivo. Muta `options`.
+ */
+export async function aplicarTopeDeCobro(
+  options: InboxTemplateOption[],
+  args: { clinicId: string; telefono: string | null; zonaHoraria: string | null },
+  ultimo: (clinicId: string, telefono: string) => Promise<Date | null> = (c, t) => ultimoAvisoDeCobro(c, t),
+): Promise<void> {
+  const deCobro = options.filter((o) => esAvisoDeCobro(o.kind) && o.blockedReason === null);
+  if (deCobro.length === 0 || !args.telefono?.trim()) return;
+  const previo = await ultimo(args.clinicId, args.telefono).catch(() => null);
+  if (!previo) return;
+  for (const o of deCobro) o.blockedReason = fraseAvisoYaEnviado(previo, args.zonaHoraria);
 }
 
 /** Nombre completo para el encabezado del composer ("Se enviará a …"). */

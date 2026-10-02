@@ -213,18 +213,14 @@ function Ficha({
   const [destino, setDestino] = useState<DestinoDeEnvio>("auto");
   const esperando = cargandoContacto && contacto === undefined;
 
-  async function enviar(via: ViaEnvio, forzar = false) {
+  async function enviar(via: ViaEnvio) {
     setEnviando(via);
     setMensaje(null);
     setEnviado(null);
     // El trato dice Mercado Pago: el mensaje lleva el link del saldo (ws1-t1).
-    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago", forzar, destino });
-    // ws1-t4 #82: ya salió un aviso de cobro a ese teléfono hoy — se pregunta antes de mandar otro.
-    if (!r.ok && r.codigo === "AVISO_YA_ENVIADO") {
-      setEnviando(null);
-      if (window.confirm(`${r.error ?? ""}\n\n¿Mandarlo de todos modos?`)) await enviar(via, true);
-      return;
-    }
+    // ws1-t6: si hoy ya salió un aviso de cobro a ese teléfono, el servidor no manda otro
+    // (sin «de todos modos») y su motivo se enseña abajo, como cualquier otro.
+    const r = await enviarFactura(inv.id, via, { linkPago: condiciones?.metodo === "mercadopago", destino });
     if (r.ok) { setEnviado(via); setEnviadoA(r.enviadoA ?? []); }
     // Con motivo del servidor, se enseña tal cual. SIN motivo (se cortó la red o
     // la función) no se sabe si salió: no se afirma que no, para que nadie

@@ -50,6 +50,7 @@ import {
 import { findPatientByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppApiError, WhatsAppBlockedError, waErrorCode } from "@/lib/whatsapp/errors";
+import { apartarAvisoDeCobro, esAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
 import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
 export const dynamic = "force-dynamic";
@@ -171,6 +172,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       patient,
       canSeeBilling,
       now,
+      // ws1-t6: el aviso de saldo se ofrece bloqueado si hoy ya salió un cobro a este número.
+      telefonoDestino: (thread.externalId ?? "").trim() || (thread.patient?.phone ?? "").trim() || null,
     });
 
     return NextResponse.json({
@@ -253,6 +256,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const now = new Date();
     const patient = await resolveThreadPatient(thread, viewer);
+    // MANDA EL NÚMERO DEL HILO (ver abajo): se calcula antes para que el tope de cobro mire ese.
+    const telefonoDelHilo = (thread.externalId ?? "").trim() || (thread.patient?.phone ?? "").trim();
     // Los params se RECALCULAN aquí, nunca llegan del body: son el texto que
     // Meta le entrega al paciente firmado por la clínica.
     const { byKind } = await buildTemplateOffering({
@@ -261,6 +266,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       patient,
       canSeeBilling,
       now,
+      telefonoDestino: telefonoDelHilo || null,
     });
     const built = byKind.get(kind);
     if (!built) {
@@ -290,6 +296,13 @@ export async function POST(req: NextRequest, { params }: Params) {
         { status: 400 },
       );
     }
+
+    // ws1-t6: un aviso de cobro al día también desde el chat. La oferta ya lo bloqueó si salió
+    // uno; aquí se RESERVA para que dos clics (o la factura y el chat a la vez) no manden dos.
+    const apartado = esAvisoDeCobro(kind)
+      ? await apartarAvisoDeCobro({ clinicId: ctx.clinicId, userId: ctx.userId, telefonos: [to], zonaHoraria: clinic.timezone })
+      : null;
+    if (apartado && !apartado.ok) return NextResponse.json({ code: apartado.code, error: apartado.error }, { status: 409 });
 
     try {
       // Dentro de la ventana de 24 h sale `preview` como texto libre (gratis);
@@ -325,6 +338,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
       console.error(`[POST inbox/threads/:id/templates] fallo al enviar ${kind} (hilo ${thread.id}):`, e);
       return NextResponse.json({ error: "No se pudo enviar la plantilla." }, { status: 502 });
+    } finally {
+      if (apartado?.ok) await apartado.liberar();
     }
 
     // El InboxMessage ya lo creó sendWhatsAppLogged (crear otro aquí duplicaría

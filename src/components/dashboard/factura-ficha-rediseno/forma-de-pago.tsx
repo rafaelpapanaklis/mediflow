@@ -33,6 +33,9 @@ import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
 import type { ContactoPaciente, ViaEnvio } from "./datos";
+import type { VistaEnvioWhatsApp } from "@/lib/invoices/envio-factura-vista";
+import { buildMensajeFactura } from "@/lib/invoices/invoice-message";
+import { catalogEntryFor } from "@/lib/whatsapp/templates-catalog";
 import s from "./ficha.module.css";
 
 const ICONO_METODO = new Map(METHODS.map((m) => [m.value as string, m.icon]));
@@ -261,18 +264,31 @@ function Opcion({ activa, icono, titulo, pista, onClick, disabled = false, compa
 /** A quién se le manda la factura al crearla. `null` = no se envía (lo de hoy). */
 export type EnvioAlCrear = ViaEnvio | null;
 
+/** Lo del popup que hace falta para armar la vista del mensaje (ws1-t6). */
+export interface DatosVistaMensaje {
+  total: number;
+  conceptos: { description: string }[];
+  /** La factura se cobra por Mercado Pago: el mensaje lleva el link (se crea al guardar). */
+  conLinkMp: boolean;
+}
+
 export function EnvioFactura({
-  envio, contacto, hayPaciente, onChange,
+  envio, contacto, hayPaciente, onChange, vista,
 }: {
   envio: EnvioAlCrear;
   /** `null` = todavía no se sabe (o no hay paciente elegido). */
   contacto: ContactoPaciente | null;
   hayPaciente: boolean;
   onChange: (sig: EnvioAlCrear) => void;
+  /** ws1-t6: con esto, al elegir WhatsApp se enseña el texto exacto antes de guardar. */
+  vista?: DatosVistaMensaje;
 }) {
   const t = useT();
   const sinCorreo = contacto?.correo === false;
   const sinTelefono = contacto?.telefono === false;
+  // ws1-t6: si hoy no puede salir por WhatsApp (ya se le mandó un cobro, plantilla sin aprobar,
+  // WhatsApp desconectado…), la opción se apaga y se dice por qué ANTES de guardar.
+  const waBloqueado = !sinTelefono && contacto?.whatsapp?.modo === "blocked";
 
   return (
     <div className={c.bloque}>
@@ -298,7 +314,7 @@ export function EnvioFactura({
         />
         <Opcion
           activa={envio === "whatsapp"}
-          disabled={sinTelefono}
+          disabled={sinTelefono || waBloqueado}
           icono={<MessageCircle size={14} aria-hidden />}
           titulo={t("facturaFicha.envioWhatsApp")}
           pista={t("facturaFicha.envioWhatsAppPista")}
@@ -309,6 +325,42 @@ export function EnvioFactura({
       {!hayPaciente && <p className={s.motivoEnvio}>{t("facturaFicha.envioSinPaciente")}</p>}
       {sinCorreo && <p className={s.motivoEnvio}>{t("facturaFicha.sinCorreo")}</p>}
       {sinTelefono && <p className={s.motivoEnvio}>{t("facturaFicha.sinTelefono")}</p>}
+      {waBloqueado && contacto?.whatsapp?.motivo && (
+        <p className={s.motivoEnvio}>{`${t("facturaFicha.waNoSale")} ${contacto.whatsapp.motivo}`}</p>
+      )}
+      {envio === "whatsapp" && vista && contacto?.whatsapp && contacto.whatsapp.modo !== "blocked" && (
+        <VistaMensajeWhatsApp info={contacto.whatsapp} datos={vista} />
+      )}
+    </div>
+  );
+}
+
+/** «Lo que recibirá el paciente»: el texto que arma la ruta, con el folio y el link aún por crear. */
+function VistaMensajeWhatsApp({ info, datos }: { info: VistaEnvioWhatsApp; datos: DatosVistaMensaje }) {
+  const t = useT();
+  const folio = t("facturaFicha.vistaFolio");
+  const mensaje = buildMensajeFactura({
+    saludo: info.paciente,
+    clinicName: info.clinica,
+    clinicPhone: info.telefonoClinica,
+    invoiceNumber: folio,
+    total: datos.total,
+    balance: datos.total,
+    items: datos.conceptos,
+    linkPago: datos.conLinkMp ? { url: t("facturaFicha.vistaLink"), monto: datos.total } : null,
+  });
+  const entrada = catalogEntryFor("invoice_ready");
+  // Con plantilla, el paciente recibe el cuerpo aprobado con sus datos, no el texto libre.
+  const texto = info.modo === "template" && entrada
+    ? entrada.body.replace(/\{\{(\d+)\}\}/g, (_m, n: string) => mensaje.templateParams[Number(n) - 1] ?? "")
+    : mensaje.body;
+  return (
+    <div className={s.vistaMensaje} aria-live="polite">
+      <p className={s.vistaMensajeRotulo}>{t("facturaFicha.vistaTitulo")}</p>
+      <p className={s.vistaMensajeCanal}>
+        {t(info.modo === "template" ? "facturaFicha.vistaCanalPlantilla" : "facturaFicha.vistaCanalTexto")}
+      </p>
+      <p className={s.vistaMensajeTexto}>{texto}</p>
     </div>
   );
 }

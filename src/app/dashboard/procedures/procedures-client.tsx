@@ -11,7 +11,7 @@ import styles from "./procedures.module.css";
 import { gastoDe, margenDe } from "./margen";
 import { ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures-constantes";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
-import { etiquetaDeCobro } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
+import { descripcionContradiceCobro, descripcionTrasCambioDeCobro, etiquetaDeCobro } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { costoDeRecetaAction } from "@/app/actions/procedure-recipe-cost";
 // Mismos tokens `--pr-*` e Instrument Sans del rediseño de Pacientes: es el
 // idioma visual ya aprobado por Rafael, no uno nuevo. Se heredan por CSS
@@ -439,6 +439,12 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                               {p.description}
                             </div>
                           )}
+                          {/* ws1-t6: una descripción escrita a mano que dice lo contrario del cobro no se reescribe; se avisa. */}
+                          {p.category === ORTHO_CATALOG_CATEGORY && descripcionContradiceCobro(p.description, ortoIncluidos[p.id]) ? (
+                            <div className={rediseno ? styles.procDesc : "text-xs text-muted-foreground mt-0.5"} role="note">
+                              {t("pages.procedures.descripcionContradiceCobro")}
+                            </div>
+                          ) : null}
                         </td>
                         <td className={rediseno ? styles.priceCell : "px-3 py-3 text-right font-bold text-foreground whitespace-nowrap tabular-nums"}>
                           {formatCurrency(p.basePrice)}
@@ -685,7 +691,15 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                           onChange={(e) => {
                             // Se limpia en TODAS las opciones del grupo: si una conserva el aviso, el formulario sigue inválido.
                             e.currentTarget.form?.querySelectorAll<HTMLInputElement>('input[name="orto-cobro"]').forEach((r) => r.setCustomValidity(""));
-                            setForm({ ...form, orthoIncluded: op.valor });
+                            // ws1-t6: la descripción que sembró DaleControl («Con costo aparte.») cambia con
+                            // la bandera, a la vista antes de guardar; la escrita a mano se queda.
+                            const desc = descripcionTrasCambioDeCobro({
+                              nombre: editing?.name ?? form.name,
+                              actual: form.description,
+                              enviada: undefined,
+                              incluido: op.valor,
+                            });
+                            setForm({ ...form, orthoIncluded: op.valor, ...(desc !== undefined ? { description: desc } : {}) });
                           }}
                           className={rediseno ? styles.checkbox : "w-4 h-4 border-border text-brand-600 focus:ring-brand-500/40"}
                         />

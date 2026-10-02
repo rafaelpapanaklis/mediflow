@@ -82,7 +82,8 @@ export function useContactoDePaciente(patientId: string, activo: boolean): Conta
     const ctrl = new AbortController();
     fetch(`/api/invoices/condiciones?patientId=${encodeURIComponent(patientId)}`, { signal: ctrl.signal })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.contacto) setContacto(data.contacto); })
+      // ws1-t6: `whatsapp` = por qué canal saldría la nota (o por qué no), para enseñarlo antes de guardar.
+      .then((data) => { if (data?.contacto) setContacto({ ...data.contacto, whatsapp: data.whatsapp ?? null }); })
       .catch(() => { /* sin dato: no se deshabilita nada y la ruta de envío responde con su motivo */ });
     return () => ctrl.abort();
   }, [patientId, activo]);
@@ -103,14 +104,17 @@ export interface Resultado { ok: boolean; error: string | null }
 export async function enviarFactura(
   invoiceId: string,
   via: ViaEnvio,
-  /** `forzar` (WhatsApp): manda aunque ya haya salido un aviso de cobro a ese teléfono hoy (ws1-t4 #82). */
-  opciones: { linkPago?: boolean; forzar?: boolean; destino?: DestinoDeEnvio } = {},
+  /**
+   * ws1-t6: por WhatsApp sale la NOTA (folio, monto, link) y no el aviso de saldo. Ya no hay
+   * «forzar»: un aviso de cobro al día por paciente, sin excepción (lo decide el servidor).
+   */
+  opciones: { linkPago?: boolean; destino?: DestinoDeEnvio } = {},
 ): Promise<Resultado & { avisoLink: string | null; codigo?: string | null; enviadoA?: string[]; avisoParcial?: string | null }> {
   try {
     // `destino` (ws1-t10): a quién va cuando el caso tiene responsable de pago. Sin él, la ruta decide ("auto").
     const cuerpo = {
       ...(opciones.linkPago ? { linkPago: true } : {}),
-      ...(opciones.forzar ? { forzar: true } : {}),
+      ...(via === "whatsapp" ? { tipo: "factura" } : {}),
       ...(opciones.destino && opciones.destino !== "auto" ? { destino: opciones.destino } : {}),
     };
     const res = await fetch(`/api/invoices/${invoiceId}/${RUTA[via]}`, {

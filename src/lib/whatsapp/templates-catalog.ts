@@ -54,7 +54,7 @@ export interface WaCatalogEntry {
 }
 
 /**
- * Las OCHO de utilidad + la de marketing.
+ * Las NUEVE de utilidad que se crean solas (más dos de utilidad opcionales) + la de marketing.
  *
  * Reglas de Meta que respeta cada cuerpo (las verifica `checkTemplateBody`, y
  * el test las comprueba sobre todo el catálogo para que nadie las rompa al
@@ -177,6 +177,41 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
       "inbox.whatsapp.tplVarClinicPhone",
     ],
     sample: ["María", "Clínica Dental Sonrisa", "$1,200.00 MXN", "555 123 4567"],
+    optional: false,
+  },
+  {
+    // ws1-t6 — la NOTA recién hecha («Enviar la factura al paciente» del popup y de
+    // su ficha). Antes ese botón salía como dc_aviso_saldo («Tienes un saldo
+    // pendiente de…»), sin folio ni link: para el paciente era un aviso de deuda.
+    // {{5}} es CÓMO pagar: con Mercado Pago lleva el link («en línea en
+    // https://mpago.la/… o en la clínica»); sin él, el teléfono de la clínica. El
+    // link va en el cuerpo, como en dc_presupuesto_listo: una plantilla que dijera
+    // «te mandamos el link aparte» no serviría, porque fuera de ventana ese otro
+    // mensaje no sale. Default (se crea sola, como dc_aviso_saldo): el cron de
+    // plantillas la da de alta en las clínicas ya conectadas; hasta que Meta la
+    // aprueba, fuera de ventana NO se manda (no se disfraza de aviso de saldo).
+    kind: "invoice_ready",
+    name: "dc_factura_lista",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, {{2}} te comparte tu nota {{3}} por {{4}}. " +
+      "Puedes pagarla {{5}}. Si tienes dudas, responde este mensaje.",
+    labelKey: "inbox.whatsapp.tplKindInvoiceReady",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarInvoiceNumber",
+      "inbox.whatsapp.tplVarInvoiceAmount",
+      "inbox.whatsapp.tplVarHowToPay",
+    ],
+    sample: [
+      "María",
+      "Clínica Dental Sonrisa",
+      "MF-1042",
+      "$1,200.00 MXN",
+      "en línea en https://mpago.la/abc123 o en la clínica",
+    ],
     optional: false,
   },
   {

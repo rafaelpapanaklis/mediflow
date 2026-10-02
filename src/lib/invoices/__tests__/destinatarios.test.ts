@@ -303,7 +303,8 @@ describe("la ficha y la ventana", () => {
     const f = codigo("src/components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
     assert.match(f, /estadoDeEnvioEnFicha\(contacto, "telefono"\)/);
     assert.match(f, /estadoDeEnvioEnFicha\(contacto, "correo"\)/);
-    assert.match(f, /enviarFactura\(inv\.id, via, \{ linkPago: condiciones\?\.metodo === "mercadopago", forzar, destino \}\)/);
+    // ws1-t6: sin `forzar` (un aviso de cobro al día, sin excepción).
+    assert.match(f, /enviarFactura\(inv\.id, via, \{ linkPago: condiciones\?\.metodo === "mercadopago", destino \}\)/);
     assert.match(f, /A quién se envía la factura/);
   });
   it("la ventana completa no pide teléfono ni correo del paciente: llama a las mismas rutas, que deciden en el servidor", () => {

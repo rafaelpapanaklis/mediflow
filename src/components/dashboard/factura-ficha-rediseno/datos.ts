@@ -5,6 +5,7 @@
 // La aritmética del plan y sus palabras NO viven aquí: son las de
 // `lib/quotes/condiciones-pago.ts`, las mismas de Presupuestos.
 
+import type { VistaEnvioWhatsApp } from "@/lib/invoices/envio-factura-vista";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { fraseCondiciones } from "@/lib/invoices/correo-factura";
 import { notasVisibles } from "@/lib/invoices/marcas-internas";
@@ -38,6 +39,8 @@ export interface ContactoPaciente {
   telefono: boolean;
   /** ws1-t10: el responsable de pago del caso de la factura (tutor u otra persona), si lo hay. */
   responsable?: { nombre: string; parentesco: string; correo: boolean; telefono: boolean };
+  /** ws1-t6 — solo en el popup de Nueva factura: por qué canal saldría la nota por WhatsApp. */
+  whatsapp?: VistaEnvioWhatsApp | null;
 }
 
 export type ViaEnvio = "correo" | "whatsapp";

@@ -32,6 +32,7 @@ import { Prisma } from "@prisma/client";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 
 import { CODIGO_CONTROL_ORTO, ORTHO_CATALOG_CATEGORY } from "./catalog-procedures-constantes";
+import { descripcionSembrada } from "./procedimiento-ortodoncia-reglas";
 export { CODIGO_CONTROL_ORTO, ORTHO_CATALOG_CATEGORY };
 
 // ── El control se reconoce por su IDENTIFICADOR, no por su nombre ─────────
@@ -119,7 +120,7 @@ export function seOfreceParaAgendar(p: { name: string; category: string | null }
 // de registros…») y «Urgencia de ortodoncia» (antes «… fuera de control»).
 export const DEFAULT_ORTHO_PROCEDURES: readonly OrthoProcedureSeed[] = [
   // ── Incluidos en el tratamiento (no se cobran aparte) ──────────────────
-  { name: "Colocación de elásticos", basePrice: 0, orthoIncludedInTreatment: true, description: "Incluido en el tratamiento." },
+  { name: "Colocación de elásticos", basePrice: 0, orthoIncludedInTreatment: true, description: descripcionSembrada("Colocación de elásticos", true) },
 
   // ── El control: su cobro depende del modo de cobro de la clínica ───────
   {
@@ -130,16 +131,16 @@ export const DEFAULT_ORTHO_PROCEDURES: readonly OrthoProcedureSeed[] = [
   },
 
   // ── Con costo aparte ─────────────────────────────────────────────────
-  { name: "Valoración de ortodoncia", basePrice: 500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Toma de registros de ortodoncia", basePrice: 1500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Colocación de aparatología", basePrice: 3000, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Reposición de bracket", basePrice: 350, orthoIncludedInTreatment: false, description: "Con costo aparte, pasadas las reposiciones incluidas del caso." },
-  { name: "Retenedor superior", basePrice: 1800, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Retenedor inferior", basePrice: 1800, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Retiro de aparatología", basePrice: 1200, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Urgencia de ortodoncia", basePrice: 400, orthoIncludedInTreatment: false, description: "Fuera del control del mes. Con costo aparte." },
-  { name: "Microimplante (TAD)", basePrice: 2500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
-  { name: "Alineadores de refinamiento", basePrice: 4500, orthoIncludedInTreatment: false, description: "Con costo aparte." },
+  { name: "Valoración de ortodoncia", basePrice: 500, orthoIncludedInTreatment: false, description: descripcionSembrada("Valoración de ortodoncia", false) },
+  { name: "Toma de registros de ortodoncia", basePrice: 1500, orthoIncludedInTreatment: false, description: descripcionSembrada("Toma de registros de ortodoncia", false) },
+  { name: "Colocación de aparatología", basePrice: 3000, orthoIncludedInTreatment: false, description: descripcionSembrada("Colocación de aparatología", false) },
+  { name: "Reposición de bracket", basePrice: 350, orthoIncludedInTreatment: false, description: descripcionSembrada("Reposición de bracket", false) },
+  { name: "Retenedor superior", basePrice: 1800, orthoIncludedInTreatment: false, description: descripcionSembrada("Retenedor superior", false) },
+  { name: "Retenedor inferior", basePrice: 1800, orthoIncludedInTreatment: false, description: descripcionSembrada("Retenedor inferior", false) },
+  { name: "Retiro de aparatología", basePrice: 1200, orthoIncludedInTreatment: false, description: descripcionSembrada("Retiro de aparatología", false) },
+  { name: "Urgencia de ortodoncia", basePrice: 400, orthoIncludedInTreatment: false, description: descripcionSembrada("Urgencia de ortodoncia", false) },
+  { name: "Microimplante (TAD)", basePrice: 2500, orthoIncludedInTreatment: false, description: descripcionSembrada("Microimplante (TAD)", false) },
+  { name: "Alineadores de refinamiento", basePrice: 4500, orthoIncludedInTreatment: false, description: descripcionSembrada("Alineadores de refinamiento", false) },
 ];
 
 function esRelacionAusente(e: unknown): boolean {

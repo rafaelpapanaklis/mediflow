@@ -23,8 +23,43 @@ import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { contactosDeResponsablesDeFacturas } from "@/lib/orthodontics/responsable-telefono-db";
+import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
+import { ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
+import { vistaEnvioFactura, type VistaEnvioWhatsApp } from "@/lib/invoices/envio-factura-vista";
 
 export const dynamic = "force-dynamic";
+
+async function vistaWhatsAppDelPaciente(
+  clinicId: string,
+  p: { phone: string | null; firstName: string | null; lastName: string | null },
+): Promise<VistaEnvioWhatsApp> {
+  const telefono = (p.phone ?? "").trim();
+  // Menos de 7 consultas a la vez (el pooler). El token de WhatsApp NO se lee: solo si existe.
+  const [clinica, conToken, ultimoEntrante, ultimoCobro] = await Promise.all([
+    prisma.clinic.findFirst({
+      where: { id: clinicId },
+      select: { name: true, phone: true, timezone: true, waConnected: true, waPhoneNumberId: true, waTemplates: true },
+    }),
+    prisma.clinic.findFirst({ where: { id: clinicId, waAccessToken: { not: null } }, select: { id: true } }),
+    telefono ? lastInboundAtForPhone(clinicId, telefono).catch(() => null) : Promise.resolve(null),
+    telefono ? ultimoAvisoDeCobro(clinicId, telefono).catch(() => null) : Promise.resolve(null),
+  ]);
+  return vistaEnvioFactura({
+    clinica: {
+      name: clinica?.name ?? null,
+      phone: clinica?.phone ?? null,
+      timezone: clinica?.timezone ?? null,
+      waConnected: clinica?.waConnected ?? false,
+      waPhoneNumberId: clinica?.waPhoneNumberId ?? null,
+      conToken: Boolean(conToken),
+      waTemplates: clinica?.waTemplates ?? null,
+    },
+    paciente: p,
+    ultimoEntrante,
+    ultimoCobro,
+    ahora: new Date(),
+  });
+}
 
 /** La lista de Facturación trae como mucho 100 facturas. */
 const MAX_IDS = 100;
@@ -49,10 +84,16 @@ export async function GET(req: NextRequest) {
     if (deniedPatient) return deniedPatient;
     const p = await prisma.patient.findFirst({
       where: { id: patientId, clinicId: ctx.clinicId },
-      select: { email: true, phone: true },
+      select: { email: true, phone: true, firstName: true, lastName: true },
     });
     if (!p) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
-    return NextResponse.json({ contacto: { correo: tiene(p.email), telefono: tiene(p.phone) } });
+    // ws1-t6: por qué canal saldría «Enviar por WhatsApp» (o por qué no sale) para que el
+    // popup enseñe ANTES de guardar lo que recibirá el paciente. Nunca rompe la respuesta.
+    const whatsapp = await vistaWhatsAppDelPaciente(ctx.clinicId, p).catch((e) => {
+      console.error("[invoices/condiciones] no se pudo preparar la vista del envío por WhatsApp:", e);
+      return null;
+    });
+    return NextResponse.json({ contacto: { correo: tiene(p.email), telefono: tiene(p.phone) }, whatsapp });
   }
 
   const ids = Array.from(new Set(

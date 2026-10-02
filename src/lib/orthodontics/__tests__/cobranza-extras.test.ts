@@ -86,16 +86,15 @@ test("el candado de indicaciones busca el texto de ESE control, no cualquier «m
 });
 
 // ws1-t4 #82 — un aviso de cobro por teléfono al día también desde la factura.
-test("«Enviar por WhatsApp» de la factura no manda un segundo aviso de cobro el mismo día sin confirmar", () => {
+// ws1-t6: y ya SIN «mandar de todos modos» (tres avisos en dos minutos, tercer ticket de BEVADENT).
+test("«Enviar por WhatsApp» de la factura no manda un segundo aviso de cobro el mismo día, ni confirmando", () => {
   const ruta = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
-  assert.match(ruta, /const forzar = pedido\?\.forzar === true;/);
-  assert.match(ruta, /ultimoAvisoDeCobroEnTelefonos\(ctx\.clinicId, telefonos\)/);
-  assert.match(ruta, /code: "AVISO_YA_ENVIADO"/);
+  assert.doesNotMatch(ruta, /pedido\?\.forzar/);
+  assert.match(ruta, /apartarAvisoDeCobro\(\{ clinicId: ctx\.clinicId, userId: ctx\.userId, telefonos/);
   // el candado va ANTES de crear el link de pago (que escribe)
-  assert.ok(ruta.indexOf("AVISO_YA_ENVIADO") < ruta.indexOf("linkParaEnviar({"));
+  assert.ok(ruta.indexOf("apartarAvisoDeCobro({") < ruta.indexOf("linkParaEnviar({"));
   const modal = leer("components/dashboard/billing/invoice-detail-modal.tsx");
-  assert.match(modal, /data\.code === "AVISO_YA_ENVIADO"/);
-  assert.match(modal, /handleSendWhatsApp\(true\)/);
+  assert.doesNotMatch(modal, /handleSendWhatsApp\(true\)/);
 });
 
 // Correcciones de la revisión (revisor, ws1-t10).
@@ -123,14 +122,15 @@ test("pasar controles al doctor nuevo: ventana acotada, bloqueos de agenda y cho
   assert.match(m, /if \(!isOverlapError\(e\)\) throw e;/);
 });
 
-test("el tope de un aviso mira también el teléfono del responsable; la ficha rediseñada puede confirmar", () => {
+test("el tope de un aviso mira también el teléfono del responsable; la ficha rediseñada ya no puede forzarlo", () => {
   const r = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
   // ws1-t10: el responsable se lee una vez (contactoDelResponsableDeLaFactura) y su teléfono entra al tope junto con el del paciente.
   assert.match(r, /contactoDelResponsableDeLaFactura\(ctx\.clinicId, invoice\.id\)/);
   assert.match(r, /responsable\?\.telefono \? \[responsable\.telefono\]/);
-  assert.match(r, /en las últimas 24 h/);
-  assert.match(leer("components/dashboard/factura-ficha-rediseno/extras.ts"), /forzar/);
-  assert.match(leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /r\.codigo === "AVISO_YA_ENVIADO"/);
+  assert.match(r, /apartarAvisoDeCobro\(\{ clinicId: ctx\.clinicId, userId: ctx\.userId, telefonos,/);
+  // ws1-t6: la ficha ya no puede confirmar un segundo aviso (sin `forzar`).
+  assert.doesNotMatch(leer("components/dashboard/factura-ficha-rediseno/extras.ts"), /forzar: true/);
+  assert.doesNotMatch(leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx"), /r\.codigo === "AVISO_YA_ENVIADO"/);
 });
 
 test("el CFDI encuentra al responsable también desde la factura de un control/extra, y la precarga async no pisa otra factura", () => {

@@ -17,6 +17,8 @@
 import { prisma } from "@/lib/prisma";
 import { digitsLast10 } from "@/lib/inbox/send-core";
 import { lastSentOfKind } from "@/lib/orthodontics/whatsapp-dedupe";
+import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
+import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
 export const COBRANZA_AUTOMATICA_TYPE = "PAYMENT_DUE";
 export const ENTIDAD_RESERVA = "aviso_cobro";
@@ -50,14 +52,25 @@ export async function avisoAutomaticoDeCobroReciente(
   }
 }
 
+/**
+ * Los tipos de WhatsApp que son un AVISO DE COBRO: el aviso de saldo (factura, Alertas,
+ * Inbox, Sabina) y, desde ws1-t6, la nota enviada al paciente (`invoice_ready`: lleva
+ * monto y cómo pagar). El recibo de un pago ya hecho no es un cobro y no cuenta.
+ */
+export const TIPOS_AVISO_DE_COBRO = ["payment_notice", "invoice_ready"] as const satisfies readonly WhatsAppSendKind[];
+
+/** ¿Este envío cuenta para el tope de un aviso de cobro al día? */
+export function esAvisoDeCobro(kind: string): boolean {
+  return (TIPOS_AVISO_DE_COBRO as readonly string[]).includes(kind);
+}
+
 /** El más reciente de todos los avisos de cobro a ese teléfono (manual, de Alertas o automático). */
 export async function ultimoAvisoDeCobro(clinicId: string, phone: string, ahora: Date = new Date()): Promise<Date | null> {
-  const [manual, automatico] = await Promise.all([
-    lastSentOfKind(clinicId, phone, "payment_notice", ahora).catch(() => null),
+  const fechas = await Promise.all([
+    ...TIPOS_AVISO_DE_COBRO.map((k) => lastSentOfKind(clinicId, phone, k, ahora).catch(() => null)),
     avisoAutomaticoDeCobroReciente(clinicId, phone, ahora),
   ]);
-  if (manual && automatico) return manual > automatico ? manual : automatico;
-  return manual ?? automatico;
+  return fechas.reduce<Date | null>((mas, d) => (d && (!mas || d > mas) ? d : mas), null);
 }
 
 /** El más reciente entre varios teléfonos (paciente y responsable de pago). */
@@ -138,4 +151,61 @@ export async function reservarAvisoDeCobro(
       }
     },
   };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ws1-t6 — UN aviso de cobro por paciente al día, en TODOS los caminos
+   ═══════════════════════════════════════════════════════════════════════
+   Antes el tope se saltaba con «Mandar de todos modos» (`forzar`) y el aviso de saldo
+   enviado desde el Inbox (plantilla o texto) no lo consultaba: un paciente recibió tres
+   avisos en dos minutos. Ya no hay forzar. Todo envío manual de cobro pasa por aquí:
+   comprueba, RESERVA y vuelve a comprobar (otro envío pudo terminar en medio). */
+
+/** Un solo tipo, sin unión: el repo no compila en `strict` y no estrecha por `ok`. */
+export interface ApartadoDeCobro {
+  ok: boolean;
+  /** Con `ok: false`: por qué no se manda. */
+  code: "AVISO_YA_ENVIADO" | "AVISO_EN_CURSO" | null;
+  error: string | null;
+  /** Con `ok: true`: soltar la reserva al terminar el envío (salga o no). */
+  liberar: () => Promise<void>;
+}
+
+const nada = async () => {};
+
+/** Frase de «ya salió uno», con la hora en la zona de la clínica. */
+export function fraseAvisoYaEnviado(previo: Date, zonaHoraria: string | null | undefined): string {
+  return (
+    `Ya se le mandó un aviso de cobro por WhatsApp en las últimas 24 h (${horaDelAvisoPrevio(previo, zonaHoraria)}). ` +
+    "Para no saturar al paciente sale como máximo uno al día; el siguiente se podrá mandar cuando pasen 24 h."
+  );
+}
+
+export const FRASE_AVISO_EN_CURSO =
+  "Ya se está enviando un aviso de cobro a este teléfono. Espera unos segundos y revisa el Inbox antes de reintentar.";
+
+export interface DepsApartado {
+  ultimo: (clinicId: string, telefonos: string[]) => Promise<Date | null>;
+  reservar: (args: { clinicId: string; userId: string; telefonos: string[] }) => Promise<ResultadoReserva>;
+}
+
+export async function apartarAvisoDeCobro(
+  args: { clinicId: string; userId: string; telefonos: string[]; zonaHoraria?: string | null },
+  deps: DepsApartado = { ultimo: (c, t) => ultimoAvisoDeCobroEnTelefonos(c, t), reservar: (a) => reservarAvisoDeCobro(a) },
+): Promise<ApartadoDeCobro> {
+  const yaSalio = async (): Promise<ApartadoDeCobro | null> => {
+    const previo = await deps.ultimo(args.clinicId, args.telefonos).catch(() => null);
+    return previo ? { ok: false, code: "AVISO_YA_ENVIADO", error: fraseAvisoYaEnviado(previo, args.zonaHoraria), liberar: nada } : null;
+  };
+  const antes = await yaSalio();
+  if (antes) return antes;
+  const reserva = await deps.reservar({ clinicId: args.clinicId, userId: args.userId, telefonos: args.telefonos });
+  if (!reserva.ok) return { ok: false, code: "AVISO_EN_CURSO", error: FRASE_AVISO_EN_CURSO, liberar: nada };
+  const liberar = "liberar" in reserva ? reserva.liberar : nada;
+  const despues = await yaSalio();
+  if (despues) {
+    await liberar();
+    return despues;
+  }
+  return { ok: true, code: null, error: null, liberar };
 }

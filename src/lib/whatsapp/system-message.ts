@@ -21,6 +21,10 @@ export type WhatsAppSendKind =
   | "system"              // avisos de la plataforma (saldo IA, pagos…)
   | "manual_api"          // recordatorio disparado a mano desde el panel
   | "payment_notice"      // aviso de saldo pendiente de una factura
+  // ws1-t6 — «Enviar la factura» al crearla o desde su ficha: la NOTA (folio, monto y,
+  // si se cobra por Mercado Pago, su link). Plantilla dc_factura_lista. Antes salía
+  // como `payment_notice` y fuera de ventana el paciente recibía «Tienes un saldo pendiente».
+  | "invoice_ready"
   | "quote_ready"         // presupuesto listo con su liga pública
   | "consent"             // carta de consentimiento informado para firmar
   // ws1-t3 fase 1 — link (o, desde fase 2, datos bancarios) del anticipo
@@ -42,6 +46,7 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "system",
   "manual_api",
   "payment_notice",
+  "invoice_ready",
   "deposit_request",
   "payment_receipt",
   "quote_ready",

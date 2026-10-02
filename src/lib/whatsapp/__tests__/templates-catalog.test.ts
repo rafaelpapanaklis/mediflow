@@ -57,7 +57,7 @@ test("opcionales: reseñas (marketing) + anticipo y recibo (ws1-t3, UTILITY pero
   assert.ok(!DEFAULT_CATALOG_KINDS.includes("review"));
   assert.ok(!DEFAULT_CATALOG_KINDS.includes("deposit_request"));
   assert.ok(!DEFAULT_CATALOG_KINDS.includes("payment_receipt"));
-  assert.equal(DEFAULT_CATALOG_KINDS.length, 8);
+  assert.equal(DEFAULT_CATALOG_KINDS.length, 9);
 });
 
 test("checkTemplateBody rechaza lo que Meta rechaza", () => {

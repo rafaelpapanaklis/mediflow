@@ -38,6 +38,6 @@ test("pagoDelMesDeFactura nunca lanza: si la lectura falla, null (el aviso de si
 });
 
 test("la ruta y la tarjeta de Sabina usan el MISMO cálculo (la tarjeta enseña el texto exacto)", () => {
-  assert.match(leer("app/api/invoices/[id]/send-whatsapp/route.ts"), /const pagoDelMes = await pagoDelMesDeFactura\(prisma,/);
+  assert.match(leer("app/api/invoices/[id]/send-whatsapp/route.ts"), /const pagoDelMes = esFactura \? null : await pagoDelMesDeFactura\(prisma,/);
   assert.match(leer("lib/sabina/dinero/avisar-saldo.ts"), /pagoDelMes: await pagoDelMesDeFactura\(db,/);
 });

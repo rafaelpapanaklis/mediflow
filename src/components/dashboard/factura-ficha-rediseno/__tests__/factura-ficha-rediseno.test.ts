@@ -210,7 +210,8 @@ test("enviar nunca falla en silencio", () => {
   assert.ok(!/title=\{t\("facturaFicha\.sin/.test(ficha), "el motivo no puede vivir solo en un title");
   const popup = leer("components/dashboard/factura-ficha-rediseno/forma-de-pago.tsx");
   assert.match(popup, /disabled=\{sinCorreo\}/, "la opción de correo no se deshabilita en el popup");
-  assert.match(popup, /disabled=\{sinTelefono\}/, "la opción de WhatsApp no se deshabilita en el popup");
+  // ws1-t6: y también si hoy no puede salir (cobro ya enviado, plantilla sin aprobar…).
+  assert.match(popup, /disabled=\{sinTelefono \|\| waBloqueado\}/, "la opción de WhatsApp no se deshabilita en el popup");
 });
 
 test("los estados que ofrece la ficha son los que aceptan las rutas", () => {

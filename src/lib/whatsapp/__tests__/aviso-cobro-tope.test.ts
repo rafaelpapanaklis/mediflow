@@ -112,13 +112,115 @@ test("el aviso AUTOMÁTICO de mensualidad (fila PAYMENT_DUE enviada) cuenta; una
 });
 
 test("la ruta de la factura y el recordatorio de Alertas usan el tope nuevo y reservan antes de enviar", () => {
+  // ws1-t6: la ruta de la factura comprueba, reserva y vuelve a comprobar con apartarAvisoDeCobro.
   const r = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
-  assert.match(r, /ultimoAvisoDeCobroEnTelefonos\(ctx\.clinicId, telefonos\)/);
-  assert.match(r, /reservarAvisoDeCobro\(\{ clinicId: ctx\.clinicId, userId: ctx\.userId, telefonos \}\)/);
-  assert.match(r, /code: "AVISO_EN_CURSO"/);
-  assert.match(r, /finally \{\s*await reserva\.liberar\(\);/);
+  assert.match(r, /apartarAvisoDeCobro\(\{ clinicId: ctx\.clinicId, userId: ctx\.userId, telefonos, zonaHoraria: clinic\.timezone \}\)/);
+  assert.match(r, /code: apartado\.code/);
+  assert.match(r, /finally \{\s*await apartado\.liberar\(\);/);
   const m = leer("app/actions/orthodontics/whatsapp/sendMensualidadReminder.ts");
   assert.match(m, /ultimoAvisoDeCobro\(ctx\.clinicId, telefonoDestino, ahora\)/);
   assert.match(m, /reservarAvisoDeCobro\(\{ clinicId: ctx\.clinicId, userId: ctx\.userId, telefonos: \[telefonoDestino\] \}\)/);
   assert.match(m, /finally \{\s*await reserva\.liberar\(\);/);
+});
+
+/* ═══ ws1-t6 — UN aviso de cobro por paciente al día, en TODOS los caminos ═══ */
+
+import { apartarAvisoDeCobro, esAvisoDeCobro, TIPOS_AVISO_DE_COBRO, type DepsApartado } from "../aviso-cobro-tope";
+
+function depsDe(previos: Array<Date | null>, reservaOk = true) {
+  const llamadas = { ultimo: 0, reservar: 0, liberar: 0 };
+  const deps: DepsApartado = {
+    ultimo: async () => previos[Math.min(llamadas.ultimo++, previos.length - 1)] ?? null,
+    reservar: async () => {
+      llamadas.reservar++;
+      return reservaOk ? { ok: true, liberar: async () => { llamadas.liberar++; } } : { ok: false };
+    },
+  };
+  return { deps, llamadas };
+}
+
+test("ya salió un cobro en 24 h: no se reserva ni se manda, y no hay forma de forzarlo", async () => {
+  const { deps, llamadas } = depsDe([new Date(Date.now() - 60_000)]);
+  const r = await apartarAvisoDeCobro({ clinicId: "c1", userId: "u", telefonos: ["5511111111"], zonaHoraria: "America/Mexico_City" }, deps);
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.code, "AVISO_YA_ENVIADO");
+    assert.match(r.error, /como máximo uno al día/);
+    assert.doesNotMatch(r.error, /de todos modos|confirm/i);
+  }
+  assert.equal(llamadas.reservar, 0);
+});
+
+test("otro envío terminó entre la comprobación y la reserva: se suelta la reserva y no se manda", async () => {
+  const { deps, llamadas } = depsDe([null, new Date()]);
+  const r = await apartarAvisoDeCobro({ clinicId: "c1", userId: "u", telefonos: ["5511111111"] }, deps);
+  assert.equal(r.ok, false);
+  assert.equal(llamadas.reservar, 1);
+  assert.equal(llamadas.liberar, 1);
+});
+
+test("reserva viva de otro envío: AVISO_EN_CURSO", async () => {
+  const { deps } = depsDe([null], false);
+  const r = await apartarAvisoDeCobro({ clinicId: "c1", userId: "u", telefonos: ["5511111111"] }, deps);
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.code, "AVISO_EN_CURSO");
+});
+
+test("sin cobro previo: reserva y deja mandar", async () => {
+  const { deps, llamadas } = depsDe([null, null]);
+  const r = await apartarAvisoDeCobro({ clinicId: "c1", userId: "u", telefonos: ["5511111111"] }, deps);
+  assert.equal(r.ok, true);
+  if (r.ok) await r.liberar();
+  assert.equal(llamadas.liberar, 1);
+});
+
+test("la nota enviada (invoice_ready) cuenta como aviso de cobro; el recibo de un pago no", () => {
+  assert.deepEqual([...TIPOS_AVISO_DE_COBRO].sort(), ["invoice_ready", "payment_notice"]);
+  assert.equal(esAvisoDeCobro("invoice_ready"), true);
+  assert.equal(esAvisoDeCobro("payment_notice"), true);
+  assert.equal(esAvisoDeCobro("payment_receipt"), false);
+  assert.equal(esAvisoDeCobro("reminder"), false);
+  // ultimoAvisoDeCobro recorre TODOS los tipos (no solo payment_notice, como antes).
+  assert.match(leer("lib/whatsapp/aviso-cobro-tope.ts"), /TIPOS_AVISO_DE_COBRO\.map\(\(k\) => lastSentOfKind\(clinicId, phone, k, ahora\)/);
+});
+
+test("ningún camino manual deja forzar: la ruta ya no lee `forzar` y las pantallas no ofrecen «de todos modos»", () => {
+  const r = leer("app/api/invoices/[id]/send-whatsapp/route.ts");
+  assert.doesNotMatch(r, /pedido\?\.forzar|const forzar/);
+  for (const f of [
+    "components/dashboard/billing/invoice-detail-modal.tsx",
+    "components/dashboard/factura-ficha-rediseno/fichas-factura.tsx",
+    "components/dashboard/factura-ficha-rediseno/extras.ts",
+  ]) {
+    const src = leer(f);
+    assert.doesNotMatch(src, /"Mandar de todos modos"|¿Mandarlo de todos modos\?|AVISO_YA_ENVIADO/, f);
+    assert.doesNotMatch(src, /forzar: true/, f);
+  }
+});
+
+test("el aviso de saldo desde el Inbox (hilo y conversación nueva) también pasa por el tope", () => {
+  for (const f of ["app/api/inbox/threads/[id]/templates/route.ts", "app/api/inbox/compose/route.ts"]) {
+    const src = leer(f);
+    assert.match(src, /esAvisoDeCobro\(kind\)\s*\? await apartarAvisoDeCobro\(/, f);
+    assert.match(src, /if \(apartado\?\.ok\) await apartado\.liberar\(\);/, f);
+    // La oferta (GET y POST) mira el teléfono de destino para enseñarlo bloqueado.
+    assert.ok((src.match(/telefonoDestino:/g) ?? []).length >= 2, f);
+  }
+});
+
+import { aplicarTopeDeCobro } from "@/lib/inbox/template-offer";
+
+test("Inbox: con un cobro de hoy, la opción del aviso de saldo sale bloqueada con el motivo; las demás no", async () => {
+  const opciones: any[] = [
+    { kind: "payment_notice", labelKey: "", state: "approved", blockedReason: null, preview: "Hola" },
+    { kind: "reminder", labelKey: "", state: "approved", blockedReason: null, preview: "Hola" },
+  ];
+  await aplicarTopeDeCobro(opciones, { clinicId: "c1", telefono: "5511111111", zonaHoraria: null }, async () => new Date());
+  assert.match(opciones[0].blockedReason, /aviso de cobro/);
+  assert.equal(opciones[1].blockedReason, null);
+  // Sin cobro previo, o sin teléfono: nada cambia.
+  const otra: any[] = [{ kind: "payment_notice", blockedReason: null }];
+  await aplicarTopeDeCobro(otra, { clinicId: "c1", telefono: "5511111111", zonaHoraria: null }, async () => null);
+  await aplicarTopeDeCobro(otra, { clinicId: "c1", telefono: null, zonaHoraria: null }, async () => new Date());
+  assert.equal(otra[0].blockedReason, null);
 });

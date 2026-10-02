@@ -284,7 +284,9 @@ function InvoiceEditorBody({
   // deja de valer: no se manda nada a quien no se le puede mandar.
   const envio: EnvioAlCrear =
     (envioElegido === "correo" && contacto?.correo === false) ||
-    (envioElegido === "whatsapp" && contacto?.telefono === false)
+    (envioElegido === "whatsapp" && contacto?.telefono === false) ||
+    // ws1-t6: hoy no sale por WhatsApp (cobro ya enviado hoy, plantilla sin aprobar…): no se intenta.
+    (envioElegido === "whatsapp" && contacto?.whatsapp?.modo === "blocked")
       ? null
       : envioElegido;
 
@@ -836,6 +838,11 @@ function InvoiceEditorBody({
             contacto={contacto}
             hayPaciente={Boolean(effectivePatientId)}
             onChange={setEnvio}
+            vista={{
+              total: grandTotal,
+              conceptos: items.map((it) => ({ description: it.name })),
+              conLinkMp: cobraConMercadoPago,
+            }}
           />
         )}
       </div>

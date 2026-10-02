@@ -389,3 +389,32 @@
   line-height: 1.45;
   color: var(--m2-texto-3);
 }
+
+/* ws1-t6 — «Lo que recibirá el paciente»: el texto exacto del WhatsApp, antes de guardar. */
+.vistaMensaje {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-hover);
+}
+
+.vistaMensajeRotulo {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.vistaMensajeCanal { margin: 2px 0 8px; font-size: 12px; line-height: 1.45; color: var(--m2-texto-2); }
+
+.vistaMensajeTexto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--m2-texto);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -13,6 +13,12 @@
 // cerrada el aviso sale sin link y la respuesta lo dice (`linkPago.enMensaje`
 // = false) para que la pantalla ofrezca copiarlo.
 //
+// ws1-t6 · `{ tipo: "factura" }` («Enviar la factura» del popup y de la ficha): sale la
+// NOTA (lib/invoices/invoice-message: folio, monto, cómo pagar y el link de Mercado Pago
+// si lo hay) como `invoice_ready`; fuera de ventana, su plantilla dc_factura_lista o nada.
+// Y UN aviso de cobro por paciente al día en todos los caminos, sin forzar
+// (lib/whatsapp/aviso-cobro-tope: apartarAvisoDeCobro).
+//
 // Multi-tenant: clinicId de la sesión; la factura se verifica contra él y las
 // credenciales de WhatsApp son las de ESA clínica.
 
@@ -30,8 +36,8 @@ import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
 import { linkParaEnviar } from "@/lib/factura-mp/envio.server";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
-import { reservarAvisoDeCobro, ultimoAvisoDeCobroEnTelefonos } from "@/lib/whatsapp/aviso-cobro-tope";
-import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
+import { apartarAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
+import { buildMensajeFactura } from "@/lib/invoices/invoice-message";
 import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
 import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
 import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
@@ -89,6 +95,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // tiene teléfono» solo sale si ninguno de los dos tiene.
   const pedido = await req.json().catch(() => null);
   const destino = esDestinoDeEnvio(pedido?.destino) ? pedido.destino : "auto";
+  // ws1-t6: `tipo: "factura"` = «Enviar la factura» (popup de Nueva factura y su ficha): sale
+  // la NOTA (folio, monto, link) como `invoice_ready`. Sin él, el aviso de saldo de siempre
+  // (detalle de la factura, Sabina). Fuera de ventana, la nota NUNCA cae a la plantilla de
+  // saldo: si dc_factura_lista no está aprobada, no se manda y se dice por qué.
+  const esFactura = pedido?.tipo === "factura";
   const responsable = await contactoDelResponsableDeLaFactura(ctx.clinicId, invoice.id);
   const nombrePaciente = `${invoice.patient?.firstName ?? ""} ${invoice.patient?.lastName ?? ""}`.trim() || "Paciente";
   const patientPhone = invoice.patient?.phone?.trim() || null;
@@ -123,50 +134,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  // Link de Mercado Pago (ws1-t1). Nunca lanza: sin link, el aviso de siempre.
-
-  // ws1-t4 #82 — un aviso de cobro por teléfono al día. El recordatorio de mensualidad
-  // (Alertas) y este aviso salen con el mismo tipo `payment_notice`: mandar los dos el
-  // mismo día era mandar dos cobros con montos distintos ($6,000 vencido y $30,000 de
-  // saldo total). Se puede forzar a propósito con `forzar: true` (la pantalla lo pregunta).
-  // El recordatorio de Alertas y los cobros automáticos salen al teléfono del RESPONSABLE de
-  // pago; este aviso, al del paciente: se mira en los dos para que no le lleguen dos cobros
-  // al mismo hogar.
+  // ws1-t6 — UN aviso de cobro por paciente al día, venga de donde venga (esta ruta, el
+  // recordatorio de Alertas, el Inbox, Sabina o el cobro AUTOMÁTICO), y sin «mandar de
+  // todos modos»: el `forzar` que mandaba la pantalla ya no se lee (tres avisos en dos
+  // minutos, tercer ticket de BEVADENT). La nota enviada (`tipo: "factura"`) también
+  // cuenta: lleva el monto y cómo pagarlo. Se mira en el teléfono del paciente y en el
+  // del responsable de pago, para que no le lleguen dos cobros al mismo hogar.
   const telefonos = Array.from(new Set([...(patientPhone ? [patientPhone] : []), ...(responsable?.telefono ? [responsable.telefono] : [])]));
-  const forzar = pedido?.forzar === true;
-
-  /** ¿Ya salió un aviso de cobro en las últimas 24 h (manual, de Alertas o AUTOMÁTICO)? */
-  const respuestaSiYaSalio = async (): Promise<NextResponse | null> => {
-    const previo = await ultimoAvisoDeCobroEnTelefonos(ctx.clinicId, telefonos);
-    if (!previo) return null;
-    return NextResponse.json(
-      {
-        code: "AVISO_YA_ENVIADO",
-        error: `Ya se le mandó un aviso de cobro en las últimas 24 h (${horaDelAvisoPrevio(previo, clinic.timezone)}). Para que no reciba mensajes con montos distintos, no se manda otro a menos que lo confirmes.`,
-      },
-      { status: 409 },
-    );
-  };
-  if (!forzar) {
-    const yaSalio = await respuestaSiYaSalio();
-    if (yaSalio) return yaSalio;
-  }
-
-  // RESERVA antes de enviar: «comprobar y luego enviar» dejaba pasar dos clics o dos pestañas
-  // a la vez. Ver src/lib/whatsapp/aviso-cobro-tope.ts.
-  const reserva = await reservarAvisoDeCobro({ clinicId: ctx.clinicId, userId: ctx.userId, telefonos });
-  if (!reserva.ok) {
-    return NextResponse.json(
-      { code: "AVISO_EN_CURSO", error: "Ya se está enviando un aviso de cobro a este teléfono. Espera unos segundos y revisa el Inbox antes de reintentar." },
-      { status: 409 },
-    );
-  }
+  const apartado = await apartarAvisoDeCobro({ clinicId: ctx.clinicId, userId: ctx.userId, telefonos, zonaHoraria: clinic.timezone });
+  if (!apartado.ok) return NextResponse.json({ code: apartado.code, error: apartado.error }, { status: 409 });
   try {
-    // Otro envío pudo terminar entre la primera comprobación y la reserva.
-    if (!forzar) {
-      const yaSalio = await respuestaSiYaSalio();
-      if (yaSalio) return yaSalio;
-    }
   const { link, aviso: avisoLink } = await linkParaEnviar({
     clinicId: ctx.clinicId,
     invoiceId: invoice.id,
@@ -174,16 +151,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     pedido: pedido?.linkPago === true,
     puedeCobrar: denyIfMissingPermission(ctx, "billing.charge") === null,
   });
-  // ¿Viajará el link? Solo en texto libre (ventana de 24 h abierta). Es el mismo
-  // criterio con el que sendWhatsAppLogged elige entre texto y plantilla.
+  // ¿Viajará el link? El aviso de saldo solo lo lleva en texto libre (ventana de 24 h
+  // abierta: mismo criterio que sendWhatsAppLogged); la nota lo lleva también en su
+  // plantilla (dc_factura_lista, {{5}}).
   const enMensaje = link
-    ? isWithin24hWindow(await lastInboundAtForPhone(clinic.id, destinatarios[0].valor).catch(() => null), new Date())
+    ? esFactura || isWithin24hWindow(await lastInboundAtForPhone(clinic.id, destinatarios[0].valor).catch(() => null), new Date())
     : false;
 
   // El texto sale de lib/invoices/payment-notice: Sabina enseña ESE MISMO texto en
   // su tarjeta antes de que alguien confirme el envío.
   // Factura a plazos: el texto dice «Tu pago de este mes es $X (saldo total $Y)».
-  const pagoDelMes = await pagoDelMesDeFactura(prisma, {
+  const pagoDelMes = esFactura ? null : await pagoDelMesDeFactura(prisma, {
     clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
   });
 
@@ -202,18 +180,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const enviados: Destinatario[] = [];
   const fallos: { a: Destinatario; status: number; error: string }[] = [];
   for (const d of destinatarios) {
-    const { body, templateParams } = buildPaymentNotice({
-      // Al responsable se le saluda a él y se dice de quién es la nota.
-      patient: d.rol === "responsable" ? { firstName: d.nombre, lastName: "" } : invoice.patient,
-      aNombreDe: d.rol === "responsable" ? nombrePaciente : null,
-      clinicName: clinic.name,
-      clinicPhone,
-      invoiceNumber: invoice.invoiceNumber,
-      balance: invoice.balance,
-      pagoDelMes,
-      items: invoice.items,
-      linkPago: link,
-    });
+    // Al responsable se le saluda a él y se dice de quién es la nota.
+    const saludo = d.rol === "responsable" ? { firstName: d.nombre, lastName: "" } : invoice.patient;
+    const aNombreDe = d.rol === "responsable" ? nombrePaciente : null;
+    const { body, templateParams } = esFactura
+      ? buildMensajeFactura({
+          saludo, aNombreDe, clinicName: clinic.name, clinicPhone,
+          invoiceNumber: invoice.invoiceNumber, total: invoice.total, balance: invoice.balance,
+          items: invoice.items, linkPago: link,
+        })
+      : buildPaymentNotice({
+          patient: saludo,
+          aNombreDe,
+          clinicName: clinic.name,
+          clinicPhone,
+          invoiceNumber: invoice.invoiceNumber,
+          balance: invoice.balance,
+          pagoDelMes,
+          items: invoice.items,
+          linkPago: link,
+        });
     try {
       await sendWhatsAppLogged({
         clinic: {
@@ -225,7 +211,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
         to: d.valor,
         body,
-        kind: "payment_notice",
+        kind: esFactura ? "invoice_ready" : "payment_notice",
         patientId: invoice.patientId ?? null,
         templateParams,
         attachment,
@@ -259,6 +245,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       : avisoLink,
   });
   } finally {
-    await reserva.liberar();
+    await apartado.liberar();
   }
 }

@@ -86,3 +86,76 @@ export function etiquetaDeCobro(incluido: boolean | null | undefined): string | 
   if (incluido === false) return "Con costo aparte";
   return null;
 }
+
+// ── La descripción SEMBRADA sigue a la bandera (ws1-t6, punto 6 del tercer ticket) ──
+// La precarga escribe el cobro también en la descripción («Con costo aparte.»). Al
+// marcar después «Incluido», solo cambiaba la bandera: la lista enseñaba a la vez
+// «Incluido en el tratamiento» y «Con costo aparte.». El cobro obedece a la bandera;
+// el texto tiene que decir lo mismo. Solo se reescribe un texto que DaleControl
+// sembró (alguna de sus variantes): lo que la clínica escribió a mano no se toca.
+
+/** Lo que algunas filas de la precarga dicen ANTES del cobro. */
+const PREFIJO_SEMBRADO: Readonly<Record<string, string>> = {
+  "Urgencia de ortodoncia": "Fuera del control del mes. ",
+};
+/** Filas cuyo «con costo aparte» sembrado lleva un matiz propio. */
+const COSTO_APARTE_SEMBRADO: Readonly<Record<string, string>> = {
+  "Reposición de bracket": "Con costo aparte, pasadas las reposiciones incluidas del caso.",
+};
+
+/** La descripción que la precarga le pone a `nombre` con ese cobro. PURO. */
+export function descripcionSembrada(nombre: string, incluido: boolean): string {
+  const n = nombre.trim();
+  const cobro = incluido ? "Incluido en el tratamiento." : COSTO_APARTE_SEMBRADO[n] ?? "Con costo aparte.";
+  return `${PREFIJO_SEMBRADO[n] ?? ""}${cobro}`;
+}
+
+const normalizar = (t: string) => t.normalize("NFC").replace(/\s+/g, " ").trim();
+
+/** ¿Es `descripcion` un texto que sembró DaleControl (para ese nombre o el genérico)? */
+export function esDescripcionSembrada(nombre: string, descripcion: string | null | undefined): boolean {
+  const d = normalizar(descripcion ?? "");
+  if (!d) return false;
+  const variantes = [true, false].flatMap((v) => [descripcionSembrada(nombre, v), descripcionSembrada("", v)]);
+  return variantes.some((x) => normalizar(x) === d);
+}
+
+/**
+ * Al guardar un cambio de «incluido / con costo aparte»: la descripción que debe quedar,
+ * o `undefined` si no hay que tocarla. Se reescribe solo si la descripción que queda es
+ * un texto sembrado y quien guarda no la cambió en este mismo guardado (si la tecleó, manda
+ * lo que tecleó).
+ */
+export function descripcionTrasCambioDeCobro(p: {
+  nombre: string;
+  /** La que está guardada. */
+  actual: string | null | undefined;
+  /** La que llegó en el cuerpo (undefined = no vino). */
+  enviada: string | null | undefined;
+  incluido: boolean | null | undefined;
+}): string | undefined {
+  if (typeof p.incluido !== "boolean") return undefined;
+  const enviada = p.enviada === undefined ? undefined : normalizar(p.enviada ?? "");
+  if (enviada !== undefined && enviada !== normalizar(p.actual ?? "")) return undefined;
+  if (!esDescripcionSembrada(p.nombre, p.actual)) return undefined;
+  const nueva = descripcionSembrada(esDescripcionSembradaDe(p.nombre, p.actual) ? p.nombre : "", p.incluido);
+  return normalizar(nueva) === normalizar(p.actual ?? "") ? undefined : nueva;
+}
+
+/** ¿El texto sembrado es el PROPIO de ese nombre (no el genérico)? */
+function esDescripcionSembradaDe(nombre: string, descripcion: string | null | undefined): boolean {
+  const d = normalizar(descripcion ?? "");
+  return [true, false].some((v) => normalizar(descripcionSembrada(nombre, v)) === d);
+}
+
+/**
+ * ¿La descripción (escrita a mano) dice lo contrario de la bandera? Para avisar en la
+ * lista sin reescribir nada. Mismo criterio de lectura que `cobroDelProcedimiento`.
+ */
+export function descripcionContradiceCobro(descripcion: string | null | undefined, incluido: boolean | null | undefined): boolean {
+  if (typeof incluido !== "boolean") return false;
+  const d = (descripcion ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  if (incluido && /\bcon costo aparte\b/.test(d)) return true;
+  if (!incluido && /^\s*incluid[oa] en el tratamiento\b/.test(d)) return true;
+  return false;
+}
