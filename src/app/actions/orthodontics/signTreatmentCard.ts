@@ -357,7 +357,7 @@ export async function signTreatmentCard(
           }),
           prisma.orthoWireStep.findMany({
             where: { treatmentPlanId: plan.id, clinicId: plan.clinicId },
-            select: { id: true, status: true, appliedDate: true, completedDate: true },
+            select: { id: true, status: true, appliedDate: true, completedDate: true, archUpper: true, archLower: true },
           }),
         ]);
         if (posteriores === 0) {

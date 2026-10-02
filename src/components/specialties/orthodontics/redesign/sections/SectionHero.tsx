@@ -28,6 +28,7 @@ import {
 } from "../types";
 import { bracketsDelCaso, cooperacionDelPaciente, type ControlParaResumen } from "@/lib/orthodontics/resumen-del-caso";
 import { textoControlQueSigue, textoControlesHechos, type ProgresoDeControles } from "@/lib/orthodontics/plan-detalle";
+import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
 import orto from "../orto.module.css";
 
 export interface SectionHeroProps {
@@ -275,12 +276,5 @@ function HeroEmptyState({ onStart }: { onStart?: () => void }) {
 }
 
 function formatWireLabel(wire: { gauge: string; material: string }): string {
-  const matLabel: Record<string, string> = {
-    NITI: "NiTi",
-    SS: "SS",
-    TMA: "TMA",
-    BETA_TITANIUM: "β-Ti",
-  };
-  const m = matLabel[wire.material] ?? wire.material;
-  return `${m} ${wire.gauge}`;
+  return textoDeArco(wire);
 }

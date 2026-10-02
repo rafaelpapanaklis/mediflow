@@ -2,6 +2,7 @@
 // Vive aislado del schema Prisma para que la UI sea testeable sin BD.
 // Los adapters convierten Prisma rows → estos tipos.
 
+import { ETIQUETA_DE_MATERIAL } from "@/lib/orthodontics/material-de-arco";
 import type {
   OrthoApplianceSlot,
   OrthoBondingType,
@@ -82,12 +83,8 @@ export const SKELETAL_PATTERN_LABELS: Record<OrthoSkeletalPattern, string> = {
   BRAQUIFACIAL: "braquifacial",
 };
 
-export const WIRE_MATERIAL_LABELS: Record<OrthoWireMaterial, string> = {
-  NITI: "NiTi",
-  SS: "SS",
-  TMA: "TMA",
-  BETA_TITANIUM: "Beta-Titanium",
-};
+/** ws1-t12: una sola tabla para la ficha, la hoja, el historial y Sabina (`material-de-arco.ts`). */
+export const WIRE_MATERIAL_LABELS: Record<OrthoWireMaterial, string> = ETIQUETA_DE_MATERIAL;
 
 export const WIRE_SHAPE_LABELS: Record<OrthoWireShape, string> = {
   ROUND: "round",

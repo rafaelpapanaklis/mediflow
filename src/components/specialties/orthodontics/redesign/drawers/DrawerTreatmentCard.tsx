@@ -56,6 +56,7 @@ import { AvisarProximoControlButton } from "@/components/specialties/orthodontic
 import { addWireStep } from "@/app/actions/orthodontics/addWireStep";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { WIRE_GAUGE_RECT, WIRE_GAUGE_ROUND, WIRE_MATERIAL_OPTIONS } from "./wire-options";
+import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
 import {
   initialState,
   notaBaseParaPlantilla,
@@ -542,7 +543,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                     <option value="">Sin cambio</option>
                     {todosLosArcos.map((w) => (
                       <option key={w.id} value={w.id}>
-                        {wireText(w)}
+                        {`${wireText(w)}${arcadaDelArco(w)}`}
                       </option>
                     ))}
                     {props.treatmentPlanId ? <option value="__otro__">Otro arco…</option> : null}
@@ -1425,10 +1426,17 @@ function OtroArcoForm(props: {
 }) {
   const [material, setMaterial] = useState("NITI_SUPER");
   const [gauge, setGauge] = useState("014");
+  // ws1-t12 (punto 4c): la arcada se elige, como en «Agregar arco». Antes era siempre de las dos.
+  const [archUpper, setArchUpper] = useState(true);
+  const [archLower, setArchLower] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const shape = gauge.includes("x") ? "RECT" : "ROUND";
   const guardar = async () => {
+    if (!archUpper && !archLower) {
+      setError("Marca al menos una arcada: superior, inferior o las dos.");
+      return;
+    }
     setGuardando(true);
     setError(null);
     try {
@@ -1438,8 +1446,8 @@ function OtroArcoForm(props: {
         material,
         shape,
         gauge,
-        archUpper: true,
-        archLower: true,
+        archUpper,
+        archLower,
         durationWeeks: 6,
         auxiliaries: [],
       });
@@ -1447,25 +1455,8 @@ function OtroArcoForm(props: {
         setError(res.error);
         return;
       }
-      const dbMaterial = material.startsWith("NITI") ? "NITI" : material === "TMA" ? "TMA" : "SS";
-      props.onCreated({
-        id: res.data.wireStepId,
-        orderIndex: props.nextOrder,
-        phaseKey: props.phaseKey,
-        material: dbMaterial,
-        shape,
-        gauge,
-        purpose: null,
-        archUpper: true,
-        archLower: true,
-        durationWeeks: 6,
-        auxiliaries: [],
-        notes: null,
-        status: "PLANNED",
-        plannedDate: null,
-        appliedDate: null,
-        completedDate: null,
-      });
+      // ws1-t12 (punto 4d): la fila tal como quedó guardada (material y arcada), no una adivinanza de la pantalla.
+      props.onCreated(res.data.paso);
     } finally {
       setGuardando(false);
     }
@@ -1486,6 +1477,16 @@ function OtroArcoForm(props: {
           </option>
         ))}
       </select>
+      <div className="flex gap-3" role="group" aria-label="Arcada del arco">
+        <label className={orto.casilla}>
+          <input type="checkbox" checked={archUpper} onChange={(e) => setArchUpper(e.target.checked)} />
+          Superior
+        </label>
+        <label className={orto.casilla}>
+          <input type="checkbox" checked={archLower} onChange={(e) => setArchLower(e.target.checked)} />
+          Inferior
+        </label>
+      </div>
       {error ? <div className="text-[12px]" role="alert">{error}</div> : null}
       <div className="flex gap-2">
         <Btn variant="secondary" size="sm" onClick={guardar} disabled={guardando}>
@@ -1501,14 +1502,14 @@ function OtroArcoForm(props: {
 
 function wireText(wire: { gauge: string; material: string } | null): string {
   if (!wire) return "—";
-  const matLabel: Record<string, string> = {
-    NITI: "NiTi",
-    SS: "SS",
-    TMA: "TMA",
-    BETA_TITANIUM: "β-Ti",
-  };
-  const m = matLabel[wire.material] ?? wire.material;
-  return `${m} ${wire.gauge}`;
+  return textoDeArco(wire);
+}
+
+/** ws1-t12: en la lista de «Arco nuevo», de qué arcada es cada arco (dos «NiTi 014» se veían iguales). */
+function arcadaDelArco(w: { archUpper: boolean; archLower: boolean }): string {
+  if (w.archUpper && !w.archLower) return " · superior";
+  if (w.archLower && !w.archUpper) return " · inferior";
+  return "";
 }
 
 /** C5: "próximo control en N semanas" — parte de la fecha de ESTA visita, no de hoy. */

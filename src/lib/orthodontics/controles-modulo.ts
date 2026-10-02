@@ -95,6 +95,14 @@ export function citaAtendida(status: string): boolean {
   return status === "COMPLETED" || status === "CHECKED_OUT";
 }
 
+/**
+ * ¿Este control sigue por atender? Ni cancelado, ni falta, ni ya atendido. ws1-t12 (ticket BEVADENT 12): una cita
+ * futura que alguien ya marcó «Atendida» (la hoja se firmó antes de la fecha) contaba como control agendado.
+ */
+export function controlPendiente(status: string): boolean {
+  return status !== "CANCELLED" && status !== "NO_SHOW" && !citaAtendida(status);
+}
+
 /** El día de calendario de un instante, en la zona dada: "YYYY-MM-DD". */
 export function diaEnZona(instante: Date, zona: string): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -131,8 +139,10 @@ export interface ControlesDeLaSemana {
   hoy: CitaDeControl[];
   /** De mañana a `DIAS_DE_LA_SEMANA` días: solo los días que tienen controles. */
   proximosDias: DiaDeControles[];
-  /** Cuántos controles hay en `proximosDias`, sin contar los cancelados. */
+  /** Cuántos controles de `proximosDias` siguen por atender (`controlPendiente`): sin cancelados, faltas ni atendidos. */
   totalProximos: number;
+  /** De `proximosDias`, los que ya figuran como atendidos (se listan, pero no cuentan como agendados). */
+  atendidosProximos: number;
   /** De hoy: cuántos siguen en pie, cuántos ya se atendieron y cuántos faltaron. */
   resumenHoy: { enPie: number; atendidos: number; faltaron: number; cancelados: number };
 }
@@ -170,7 +180,8 @@ export function controlesDeLaSemana(citas: CitaDeControl[], hoy: string, zona: s
   return {
     hoy: deHoy,
     proximosDias,
-    totalProximos: proximosDias.reduce((s, d) => s + d.citas.filter((c) => c.status !== "CANCELLED").length, 0),
+    totalProximos: proximosDias.reduce((s, d) => s + d.citas.filter((c) => controlPendiente(c.status)).length, 0),
+    atendidosProximos: proximosDias.reduce((s, d) => s + d.citas.filter((c) => citaAtendida(c.status)).length, 0),
     resumenHoy,
   };
 }

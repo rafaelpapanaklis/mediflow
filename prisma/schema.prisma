@@ -6447,11 +6447,17 @@ enum OrthoSkeletalPattern {
   BRAQUIFACIAL
 }
 
+/// Los cuatro últimos los agrega sql/ws1-t12-material-de-arco.sql (ticket BEVADENT 4d: Cr-Co y Multi-stranded se
+/// guardaban como SS). Mientras no se pegue, addWireStep no los escribe (src/lib/orthodontics/material-de-arco.ts).
 enum OrthoWireMaterial {
   NITI
   SS
   TMA
   BETA_TITANIUM
+  NITI_SUPERELASTIC
+  NITI_THERMAL
+  MULTISTRANDED
+  CR_CO
 }
 
 enum OrthoWireShape {

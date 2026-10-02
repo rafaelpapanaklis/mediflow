@@ -451,6 +451,7 @@
     "test:soporte-mensaje-edicion": "tsx --test --experimental-test-module-mocks src/lib/support/__tests__/mensaje-edicion.test.ts src/lib/support/__tests__/mensaje-edicion-service.test.ts",
     "test:citas-estado-local": "tsx --test src/lib/patients/__tests__/correcciones-estado-cita.test.ts",
     "test:orto-arcos-optimistas": "tsx --test src/components/specialties/orthodontics/redesign/__tests__/pasos-de-arco-optimistas.test.ts",
+    "test:orto-arcos-y-controles": "tsx --test --experimental-test-module-mocks src/lib/orthodontics/__tests__/arcos-y-controles-ticket3.test.ts src/app/actions/orthodontics/__tests__/addWireStep.test.ts",
     "test:zona-admin": "tsx --test src/lib/admin/zona-horaria.test.ts",
     "test:dias-en-utc": "tsx --test src/lib/admin/__tests__/dias-en-utc.test.ts",
     "test:recarga-stripe": "tsx --test src/lib/ai-billing/__tests__/recarga-stripe.test.ts",

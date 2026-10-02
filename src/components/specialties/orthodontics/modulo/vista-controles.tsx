@@ -27,6 +27,8 @@ import {
 import type { OrthoControlesData } from "@/lib/orthodontics/controles-data";
 import {
   DIAS_DE_LA_SEMANA,
+  citaAtendida,
+  controlPendiente,
   estadoDeCita,
   fraseSinControl,
   rotuloDelDia,
@@ -57,6 +59,16 @@ const CLASE_ESTADO: Record<TonoEstado, string> = {
 };
 
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
+
+/**
+ * ws1-t12 (ticket BEVADENT 12): «2 controles · 1 ya atendido». Solo cuenta como control lo que sigue por atender; una
+ * cita futura ya marcada «Atendida» se lista y se dice aparte.
+ */
+function cuentaDeControles(pendientes: number, atendidos: number, uno: string, varios: string): string {
+  return [pendientes > 0 || atendidos === 0 ? plural(pendientes, uno, varios) : null, atendidos > 0 ? plural(atendidos, "ya atendido", "ya atendidos") : null]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export function VistaControles({
   data,
@@ -158,7 +170,11 @@ export function VistaControles({
         id="proximos-dias"
         icono={CalendarRange}
         titulo={`Próximos ${DIAS_DE_LA_SEMANA} días`}
-        sub={semana.totalProximos > 0 ? plural(semana.totalProximos, "control agendado", "controles agendados") : undefined}
+        sub={
+          semana.totalProximos > 0 || semana.atendidosProximos > 0
+            ? cuentaDeControles(semana.totalProximos, semana.atendidosProximos, "control agendado", "controles agendados")
+            : undefined
+        }
       >
         {semana.proximosDias.length === 0 ? (
           <p className={s.enOrden}>
@@ -172,7 +188,12 @@ export function VistaControles({
                 <h3 className={s.diaTitulo}>
                   {rotuloDelDia(d.dia, hoy)}
                   <span className={s.diaCuenta}>
-                    {plural(d.citas.filter((c) => c.status !== "CANCELLED").length, "control", "controles")}
+                    {cuentaDeControles(
+                      d.citas.filter((c) => controlPendiente(c.status)).length,
+                      d.citas.filter((c) => citaAtendida(c.status)).length,
+                      "control",
+                      "controles",
+                    )}
                   </span>
                 </h3>
                 <ul className={s.diaLista}>

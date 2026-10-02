@@ -8,8 +8,10 @@ import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { MATERIALES_DE_ARCO, MATERIALES_NUEVOS, materialParaGuardar } from "@/lib/orthodontics/material-de-arco";
+import { materialesNuevosEnLaBase } from "@/lib/orthodontics/material-de-arco-db";
 
-const wireMaterialEnum = z.enum(["NITI", "SS", "TMA", "BETA_TITANIUM"]);
+const wireMaterialEnum = z.enum(MATERIALES_DE_ARCO);
 const wireShapeEnum = z.enum(["ROUND", "RECT"]);
 const phaseEnum = z.enum([
   "ALIGNMENT",
@@ -20,21 +22,10 @@ const phaseEnum = z.enum([
   "RETENTION",
 ]);
 
-/** Map materiales del DrawerWireStep (UI granular) a OrthoWireMaterial (DB). */
-const MATERIAL_MAP: Record<string, z.infer<typeof wireMaterialEnum>> = {
-  NITI_SUPER: "NITI",
-  NITI_THERMO: "NITI",
-  NITI_CONV: "NITI",
-  SS: "SS",
-  TMA: "TMA",
-  MULTI: "SS",
-  CRCO: "SS",
-};
-
 const inputSchema = z.object({
   treatmentPlanId: z.string().uuid(),
   phase: phaseEnum,
-  /** Material UI key (NITI_SUPER, etc.) o material DB key. */
+  /** Clave del selector (NITI_SUPER…) o valor guardado (SS, CR_CO…): `materialParaGuardar`. */
   material: z.string().min(1),
   shape: wireShapeEnum,
   gauge: z.string().min(1),
@@ -90,8 +81,16 @@ export async function addWireStep(
   });
   if (!plan) return fail("Plan no encontrado");
 
-  const material = MATERIAL_MAP[data.material] ?? wireMaterialEnum.safeParse(data.material).data;
-  if (!material) return fail(`Material no soportado: ${data.material}`);
+  // ws1-t12 (punto 4d): se guarda el material que eligió el doctor, no su «familia» (antes Cr-Co y Multi-stranded
+  // quedaban como acero). Solo se pregunta a la base si eligió uno de los valores nuevos.
+  const sinComprobar = materialParaGuardar(data.material, true);
+  if (!sinComprobar.ok) return fail(sinComprobar.error);
+  const elegido = materialParaGuardar(
+    data.material,
+    MATERIALES_NUEVOS.has(sinComprobar.material) ? await materialesNuevosEnLaBase() : true,
+  );
+  if (!elegido.ok) return fail(elegido.error);
+  const material = elegido.material;
 
   try {
     const last = await prisma.orthoWireStep.findFirst({
@@ -147,6 +146,7 @@ export async function addWireStep(
       after: {
         phase: data.phase,
         material: data.material,
+        materialGuardado: material,
         shape: data.shape,
         gauge: data.gauge,
       },

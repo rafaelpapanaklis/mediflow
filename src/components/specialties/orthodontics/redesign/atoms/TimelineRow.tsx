@@ -10,6 +10,7 @@ import { fmtDate, clinicalSeverityColor } from "./format";
 import { Pill } from "./Pill";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import { textoDelMes } from "@/lib/orthodontics/mes-de-tratamiento";
+import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
 import orto from "../orto.module.css";
 
 export interface TimelineRowProps {
@@ -139,12 +140,5 @@ function Dato({ rotulo, children }: { rotulo: string; children: React.ReactNode 
 }
 
 function wireLabel(wire: { gauge: string; material: string }): string {
-  const matLabel: Record<string, string> = {
-    NITI: "NiTi",
-    SS: "SS",
-    TMA: "TMA",
-    BETA_TITANIUM: "β-Ti",
-  };
-  const m = matLabel[wire.material] ?? wire.material;
-  return `${m} ${wire.gauge}`;
+  return textoDeArco(wire);
 }

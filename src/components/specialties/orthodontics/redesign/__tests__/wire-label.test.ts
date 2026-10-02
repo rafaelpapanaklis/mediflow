@@ -3,16 +3,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { OrthoWireMaterial } from "../types";
+// ws1-t12: antes la prueba tenía su propia copia de la tabla; ahora prueba la que usan la ficha, la hoja y Sabina.
+import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
 
 function wireLabel(wire: { gauge: string; material: OrthoWireMaterial } | null): string {
-  if (!wire) return "—";
-  const map: Record<OrthoWireMaterial, string> = {
-    NITI: "NiTi",
-    SS: "SS",
-    TMA: "TMA",
-    BETA_TITANIUM: "β-Ti",
-  };
-  return `${map[wire.material]} ${wire.gauge}`;
+  return wire ? textoDeArco(wire) : "—";
 }
 
 describe("wireLabel", () => {
@@ -30,6 +25,10 @@ describe("wireLabel", () => {
   });
   it("β-Ti finishing", () => {
     assert.equal(wireLabel({ material: "BETA_TITANIUM", gauge: "19x25" }), "β-Ti 19x25");
+  });
+  it("Cr-Co y Multi-stranded con su nombre (ws1-t12; antes se guardaban como SS)", () => {
+    assert.equal(wireLabel({ material: "CR_CO", gauge: "016" }), "Cr-Co 016");
+    assert.equal(wireLabel({ material: "MULTISTRANDED", gauge: "016" }), "Multi-stranded 016");
   });
   it("null devuelve guion", () => {
     assert.equal(wireLabel(null), "—");

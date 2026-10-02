@@ -38,6 +38,7 @@
 
 import { z } from "zod";
 import { DIAS_SIN_CONTROL_URGENTE, fraseSinControl } from "@/lib/orthodontics/controles-modulo";
+import { textoDeArco } from "@/lib/orthodontics/material-de-arco";
 import { fraseDeAtraso, fraseDeProxima, fraseDeVencidos } from "@/lib/orthodontics/cobranza-modulo";
 import type { AgendaDb } from "./agenda-comun";
 import { resolverPaciente } from "./agenda-resolvedores";
@@ -87,8 +88,6 @@ const FASE: Record<string, string> = {
   RETENTION: "Retención",
 };
 
-/** Como lo dice la cabecera de la ficha (`formatWireLabel`). */
-const MATERIAL: Record<string, string> = { NITI: "NiTi", SS: "SS", TMA: "TMA", BETA_TITANIUM: "β-Ti" };
 
 export interface DatosOrtoCaso {
   modulo: EstadoModulo;
@@ -156,7 +155,8 @@ function arcoLegible(arco: { material: string; gauge: string; archUpper: boolean
   if (!arco) return null;
   const donde =
     arco.archUpper && arco.archLower ? "superior e inferior" : arco.archUpper ? "superior" : arco.archLower ? "inferior" : "";
-  return `${MATERIAL[arco.material] ?? arco.material} ${arco.gauge}${donde ? ` (${donde})` : ""}`;
+  // Como lo dice la cabecera de la ficha (`formatWireLabel`): la misma tabla de materiales (ws1-t12).
+  return `${textoDeArco(arco)}${donde ? ` (${donde})` : ""}`;
 }
 
 const SITUACION: Record<string, string> = {
