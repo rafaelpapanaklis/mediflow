@@ -25,7 +25,7 @@ import { citaAlFirmar, datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/ort
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
-import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
+import { precioDeControlDelCaso } from "@/lib/orthodontics/precio-control-del-caso-db";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { esPacienteDePrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
@@ -451,7 +451,8 @@ export async function signTreatmentCard(
         if (modo === "PAGO_POR_CONTROL" && esControlSinCita && (await existeFacturaDeControlSinCita(plan.clinicId, cardId))) {
           // Esta hoja ya tiene su factura: no se duplica.
         } else if (modo === "PAGO_POR_CONTROL") {
-          const precio = await buscarPrecioControlOrto(plan.clinicId);
+          // ws1-t12 (6b): el precio por control del CASO (copiado de su técnica al abrirlo); sin él, el del catálogo.
+          const precio = await precioDeControlDelCaso(plan.clinicId, plan.id);
           if (!precio) {
             avisoControlSinFacturar = `Este control no se facturó: falta precio de "${TIPO_CITA_CONTROL_ORTO}" en el catálogo (Configuración → Procedimientos de ortodoncia).`;
             console.warn("[ortho] signTreatmentCard: modo PAGO_POR_CONTROL sin \"Control de ortodoncia\" en el catálogo — no se facturó este control");
@@ -460,7 +461,7 @@ export async function signTreatmentCard(
               clinicId: plan.clinicId,
               appointmentId: citaDeControl ? citaDeControl.id : null,
               patientId: plan.patientId,
-              lineItems: [{ description: precio.name, unitPrice: precio.basePrice, quantity: 1 }],
+              lineItems: [{ description: precio.nombre, unitPrice: precio.precio, quantity: 1 }],
               ...(citaDeControl ? {} : { notes: notaDeControlSinCita(cardId) }),
               userId: ctx.userId,
             });

@@ -53,19 +53,23 @@ export interface OrthoConfiguracionClientProps {
    * pinta o no.
    */
   suscripcion: { currentPeriodEnd: string | null } | null;
+  /** ws1-t12: `settings.edit` (la página lo decide). Sin él, «Técnicas y precios» se ve pero no se cambia. */
+  puedeEditar?: boolean;
+  /** ws1-t12: false = falta sql/ws1-t12-precio-control-por-caso.sql (los controles se cobran con el catálogo). */
+  columnaPrecioDelCaso?: boolean;
 }
 
 const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
   PRECIO_TOTAL: "El caso tiene un precio total, que se paga con un enganche y mensualidades.",
   PAGO_POR_CONTROL:
-    "Sin precio total: cada control atendido se cobra aparte con el precio de «Control de ortodoncia» del catálogo, y la colocación/enganche va en su propia factura.",
+    "Sin precio total: la colocación (pago inicial) va en su propia factura y cada control atendido se cobra aparte con el precio por control de la técnica del caso (o, si la técnica no tiene, con «Control de ortodoncia» del catálogo).",
 };
 
 // Las plantillas, dónde se usa cada una y qué variables acepta viven en
 // plantillas-mensaje.ts (ws1-t5, ronda 6): la pantalla, el guardado y los dos
 // envíos leen de ahí, para que lo que aquí se promete sea lo que se manda.
 
-export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, opcionesDelPlan, suscripcion }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, opcionesDelPlan, suscripcion, puedeEditar = true, columnaPrecioDelCaso = true }: OrthoConfiguracionClientProps) {
   const [appointmentTypes, setAppointmentTypes] = useState<OrthoAppointmentTypeOption[]>(
     settings.appointmentTypes,
   );
@@ -83,6 +87,8 @@ export function OrthoConfiguracionClient({ settings, procedimientos: procedimien
 
   const controlDelCatalogo = activos.find((p) => p.name === TIPO_CITA_CONTROL_ORTO) ?? procedimientos.find((p) => p.name === TIPO_CITA_CONTROL_ORTO);
   const controlTienePrecio = Boolean(controlDelCatalogo?.isActive && controlDelCatalogo.basePrice > 0);
+  // ws1-t12: sin control en el catálogo solo se quedan sin cobrar las técnicas activas sin precio por control propio.
+  const algunaTecnicaSinPrecioDeControl = (tecnicasDeLaClinica?.tecnicas ?? []).some((x) => x.activa && !(Number(x.precioControl) > 0));
 
   async function cargarSugeridos() {
     setSembrando(true);
@@ -258,7 +264,7 @@ export function OrthoConfiguracionClient({ settings, procedimientos: procedimien
                   </label>
                 );
               })}
-              {billingMode === "PAGO_POR_CONTROL" && !controlTienePrecio ? (
+              {billingMode === "PAGO_POR_CONTROL" && !controlTienePrecio && (algunaTecnicaSinPrecioDeControl || !columnaPrecioDelCaso) ? (
                 <div
                   role="alert"
                   style={{
@@ -275,15 +281,21 @@ export function OrthoConfiguracionClient({ settings, procedimientos: procedimien
                 >
                   <AlertTriangle size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden />
                   <span>
-                    El catálogo no tiene «{TIPO_CITA_CONTROL_ORTO}» activo con precio — los controles no se facturarán
-                    solos hasta que lo agregues en «Procedimientos de ortodoncia», abajo.
+                    El catálogo no tiene «{TIPO_CITA_CONTROL_ORTO}» activo con precio — los controles de técnicas sin
+                    precio por control no se facturarán solos hasta que lo agregues en «Procedimientos de ortodoncia»,
+                    abajo, o les pongas su precio en «Técnicas y precios».
                   </span>
                 </div>
               ) : null}
             </div>
           </Tarjeta>
 
-          <TecnicasYPrecios iniciales={tecnicasDeLaClinica} />
+          <TecnicasYPrecios
+            iniciales={tecnicasDeLaClinica}
+            modoDeCobro={billingMode}
+            puedeEditar={puedeEditar}
+            columnaPrecioDelCaso={columnaPrecioDelCaso}
+          />
 
           <OpcionesDelPlanDeTratamiento iniciales={opcionesDelPlan} />
 

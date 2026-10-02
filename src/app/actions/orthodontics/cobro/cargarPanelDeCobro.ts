@@ -37,7 +37,8 @@ import { ESTADOS_LIGABLES, conceptoDeFactura, facturaSinLigarReciente } from "@/
 import { extrasPendientesPorCasos, idsDeFacturasLigadasAUnCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { getOrthoBillingActionContext } from "../_helpers";
 import { loadCasoParaCobro } from "./_ctx";
-import { buscarPrecioControlOrto, elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
+import { elegirPrecioColocacion, listarProcedimientosDeOrtodoncia, type OrthoProcedureRow } from "@/lib/orthodontics/catalog-procedures";
+import { precioDeControlDelCaso } from "@/lib/orthodontics/precio-control-del-caso-db";
 import { cargarPlanDetalle } from "@/lib/orthodontics/plan-detalle-db";
 import { cargarProgresoDeControles } from "@/lib/orthodontics/controles-hechos-db";
 import { aparatologiaElegida, estimadoPorControles, ordenarConSugeridosPrimero, procedimientosQueFaltanEnElCatalogo, procedimientosSugeridos, type EstimadoPorControles } from "@/lib/orthodontics/plan-detalle";
@@ -259,9 +260,10 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   if (previstos) {
     const [progreso, precio] = await Promise.all([
       cargarProgresoDeControles(ctx.clinicId, zonaDelCaso, [{ planId: treatmentPlanId, patientId: caso.patientId, inicio: caso.inicio }]),
-      billingMode === "PAGO_POR_CONTROL" ? buscarPrecioControlOrto(ctx.clinicId).catch(() => null) : Promise.resolve(null),
+      // ws1-t12 (6b): el precio por control del caso (de su técnica); sin él, el del catálogo.
+      billingMode === "PAGO_POR_CONTROL" ? precioDeControlDelCaso(ctx.clinicId, treatmentPlanId).catch(() => null) : Promise.resolve(null),
     ]);
-    const precioPorControl = precio?.basePrice ?? null;
+    const precioPorControl = precio?.precio ?? null;
     controlesDelPlan = {
       previstos,
       hechos: progreso.get(treatmentPlanId)?.hechos ?? 0,

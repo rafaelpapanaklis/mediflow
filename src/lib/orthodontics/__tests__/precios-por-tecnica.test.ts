@@ -66,6 +66,6 @@ test("guardar exige el permiso de Configuración y usa la clínica de la sesión
   // ws1-t10 (técnicas propias): el alta lee la lista de la clínica, que se siembra con estos precios.
   assert.match(leer("app/actions/orthodontics/getCaseIntakeOptions.ts"), /leerTecnicasDeLaClinica\(ctx\.clinicId\)/);
   assert.match(leer("components/specialties/orthodontics/redesign/drawers/DrawerNewCase.tsx"), /costoAProponer\(/);
-  assert.match(leer("components/specialties/orthodontics/configuracion/OrthoConfiguracionClient.tsx"), /<TecnicasYPrecios iniciales=/);
+  assert.match(leer("components/specialties/orthodontics/configuracion/OrthoConfiguracionClient.tsx"), /<TecnicasYPrecios\s+iniciales=/);
   assert.match(leer("app/dashboard/orthodontics/configuracion/page.tsx"), /leerTecnicasDeLaClinica\(user\.clinicId\)/);
 });

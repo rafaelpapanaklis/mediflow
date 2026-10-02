@@ -20,9 +20,13 @@ export async function guardarTecnicasDeLaClinicaAction(input: unknown): Promise<
   const problema = validarTecnicas(
     cruda.map((x) => {
       const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const precio = (v: unknown) => (typeof v === "string" || typeof v === "number" ? v : null);
       return {
         nombre: typeof o.nombre === "string" ? o.nombre : "",
-        precio: typeof o.precio === "string" || typeof o.precio === "number" ? o.precio : null,
+        precio: precio(o.precio),
+        // ws1-t12 (6b): pago inicial y precio por control de cada técnica.
+        pagoInicial: precio(o.pagoInicial),
+        precioControl: precio(o.precioControl),
       };
     }),
   );
@@ -43,7 +47,7 @@ export async function guardarTecnicasDeLaClinicaAction(input: unknown): Promise<
     action: ORTHO_AUDIT_ACTIONS.CLINIC_SETTINGS_UPDATED,
     entityType: "OrthodonticsClinicSettings",
     entityId: ctx.clinicId,
-    meta: { accion: "tecnicas-de-la-clinica", tecnicas: r.tecnicas.map((t) => ({ id: t.id, nombre: t.nombre, base: t.base, precio: t.precio, activa: t.activa })) },
+    meta: { accion: "tecnicas-de-la-clinica", tecnicas: r.tecnicas.map((t) => ({ id: t.id, nombre: t.nombre, base: t.base, precio: t.precio, pagoInicial: t.pagoInicial, precioControl: t.precioControl, activa: t.activa })) },
   });
   revalidatePath("/dashboard/orthodontics/configuracion");
   return ok({ tecnicas: r.tecnicas });

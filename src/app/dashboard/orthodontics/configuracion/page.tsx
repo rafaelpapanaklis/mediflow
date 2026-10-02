@@ -9,6 +9,7 @@ import { isFailure } from "@/app/actions/orthodontics/result";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { getCurrentUser } from "@/lib/auth";
 import { leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { columnaPrecioControlExiste } from "@/lib/orthodontics/precio-control-del-caso-db";
 import { leerOpcionesDelPlan } from "@/lib/orthodontics/plan-detalle-db";
 import { prisma } from "@/lib/prisma";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -45,7 +46,7 @@ export default async function OrthodonticsConfiguracionPage() {
   // ws1-t2 (28-sep-2026): la fila de clinic_modules de este módulo, para la
   // tarjeta "Suscripción" (cancelar). Sin `select` de más: solo lo que
   // `canRequestModuleCancellation` necesita para decidir si hay botón.
-  const [res, procRes, clinicModule, tecnicasDeLaClinica, opcionesDelPlan] = await Promise.all([
+  const [res, procRes, clinicModule, tecnicasDeLaClinica, opcionesDelPlan, columnaPrecioDelCaso] = await Promise.all([
     getOrthoClinicSettings(),
     listarProcedimientosDeOrtodonciaAction(),
     prisma.clinicModule.findFirst({
@@ -54,6 +55,7 @@ export default async function OrthodonticsConfiguracionPage() {
     }),
     leerTecnicasDeLaClinica(user.clinicId),
     leerOpcionesDelPlan(user.clinicId),
+    columnaPrecioControlExiste(),
   ]);
   if (isFailure(res)) {
     return (
@@ -71,6 +73,9 @@ export default async function OrthodonticsConfiguracionPage() {
       procedimientos={isFailure(procRes) ? [] : procRes.data.procedimientos}
       tecnicasDeLaClinica={tecnicasDeLaClinica}
       opcionesDelPlan={opcionesDelPlan}
+      // ws1-t12: guardar técnicas y precios pide settings.edit en el servidor; la pantalla lo refleja.
+      puedeEditar={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "settings.edit")}
+      columnaPrecioDelCaso={columnaPrecioDelCaso}
       suscripcion={
         canPurchaseModules(user.role) && cancelacion.ok
           ? { currentPeriodEnd: clinicModule?.currentPeriodEnd.toISOString() ?? null }

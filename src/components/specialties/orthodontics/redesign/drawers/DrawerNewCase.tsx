@@ -105,6 +105,8 @@ import { usePresupuestoDelAlta } from "./usePresupuestoDelAlta";
 import { CamposDelPlan, idDeSeccion } from "./CamposDelPlan";
 import { EJEMPLO_DE_RETENCION } from "@/lib/orthodontics/retencion-ejemplo";
 import { costoAProponer } from "@/lib/orthodontics/precios-por-tecnica";
+import { preciosDeLaTecnicaParaElAlta } from "@/lib/orthodontics/precio-control-del-caso";
+import { useTextosTecnicasYPrecios } from "@/components/specialties/orthodontics/configuracion/textos-tecnicas-y-precios";
 import {
   ID_TECNICA_ACTUAL,
   nombrePropioAGuardar,
@@ -319,6 +321,12 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const [puedeCobrar, setPuedeCobrar] = useState(false);
   const [despues, setDespues] = useState(false);
   const [precioColocacion, setPrecioColocacion] = useState("");
+  /** ws1-t12 (6b): «Colocación de aparatología» del catálogo; la técnica con pago inicial propio manda sobre él. */
+  const [colocacionCatalogo, setColocacionCatalogo] = useState<number | null>(null);
+  const colocacionSugeridaRef = useRef<string | null>(null);
+  const precioColocacionRef = useRef(precioColocacion);
+  precioColocacionRef.current = precioColocacion;
+  const txPrecios = useTextosTecnicasYPrecios();
   /** ws1-t12: precio de «Control de ortodoncia» del catálogo, para estimar el total en «Pago por control». */
   const [precioControl, setPrecioControl] = useState<number | null>(null);
   const [enganche, setEnganche] = useState("");
@@ -368,7 +376,10 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   const listaDeTecnicas = useMemo<TecnicaClinica[]>(() => {
     if (!editar || !caso) return tecnicas;
     const { opciones } = opcionesDeEdicion(tecnicas, { base: caso.tecnica, label: caso.tecnicaNombrePropio, nombreVisible: caso.tecnicaVisible });
-    return opciones.map((o) => ({ id: o.id, nombre: o.nombre, base: o.base, precio: tecnicas.find((t) => t.id === o.id)?.precio ?? null, activa: true }));
+    return opciones.map((o) => {
+      const t = tecnicas.find((x) => x.id === o.id);
+      return { id: o.id, nombre: o.nombre, base: o.base, precio: t?.precio ?? null, pagoInicial: t?.pagoInicial ?? null, precioControl: t?.precioControl ?? null, activa: true };
+    });
   }, [editar, caso, tecnicas]);
   const tecnica = listaDeTecnicas.find((x) => x.id === tecnicaId) ?? (editar ? null : (listaDeTecnicas[0] ?? null));
   const [planForm, setPlanForm] = useState<FormularioDelPlan>(() => (vista ? formularioDesdeLaVista(vista) : formularioVacio(null)));
@@ -396,13 +407,30 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   totalCostRef.current = totalCost;
   useEffect(() => {
     if (editar) return;
-    const precio = tecnica?.precio ?? null;
+    // ws1-t12 (6b): el «precio total» de la técnica es el de los casos a plazos. En «Pago por control» no se propone
+    // (el caso se cobra con el pago inicial y cada control; sin costo escrito se guarda un estimado).
+    const precio = billingMode === "PAGO_POR_CONTROL" ? null : (tecnica?.precio ?? null);
     const nuevo = costoAProponer({ actual: totalCostRef.current, ultimoSugerido: costoSugeridoRef.current, precio, hayPresupuesto: presupuesto != null });
     if (nuevo === null) return;
     costoSugeridoRef.current = nuevo === "" ? null : nuevo;
     setCostoSugerido(costoSugeridoRef.current);
     setTotalCost(nuevo);
-  }, [tecnica, presupuesto, editar]);
+  }, [tecnica, presupuesto, editar, billingMode]);
+  // ws1-t12 (6b): la colocación se propone con el pago inicial de la técnica (o el del catálogo), con la misma regla
+  // que el costo: solo pisa un campo vacío o lo que esta misma propuesta puso antes; lo tecleado se respeta.
+  const tecnicaConPrecios = tecnica && tecnica.id !== ID_TECNICA_ACTUAL ? tecnica : null;
+  const preciosAlta = preciosDeLaTecnicaParaElAlta(tecnicaConPrecios, { colocacion: colocacionCatalogo, control: precioControl });
+  useEffect(() => {
+    const nuevo = costoAProponer({
+      actual: precioColocacionRef.current,
+      ultimoSugerido: colocacionSugeridaRef.current,
+      precio: preciosAlta.colocacion,
+      hayPresupuesto: false,
+    });
+    if (nuevo === null) return;
+    colocacionSugeridaRef.current = nuevo === "" ? null : nuevo;
+    setPrecioColocacion(nuevo);
+  }, [preciosAlta.colocacion]);
   // El anclaje general y la prescripción/cementado generales SE DERIVAN del plan; esto es solo el valor de
   // arranque si no se elige ningún anclaje por arcada (el modelo lo exige).
   const anchorage = caso ? (vista?.anchorageType ?? "MODERATE") : "MODERATE";
@@ -464,8 +492,9 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       if (!editar) setBillingMode(res.data.billingMode);
       setPuedeCobrar(res.data.puedeCobrar);
       setPrecioControl(res.data.precioControl ?? null);
-      // El precio de la colocación arranca con el del catálogo (editable); sin él, se teclea.
-      setPrecioColocacion((actual) => (actual !== "" || res.data.precioColocacion == null ? actual : String(res.data.precioColocacion)));
+      // El precio de la colocación arranca con el pago inicial de la técnica o el del catálogo (editable, efecto de
+      // arriba); sin ninguno, se teclea.
+      setColocacionCatalogo(res.data.precioColocacion ?? null);
       // Solo las ACTIVAS de la clínica; si quitó todas, el selector queda vacío y el alta lo pide.
       setTecnicas(res.data.tecnicas);
       if (!editar) setTecnicaId((actual) => (res.data.tecnicas.some((x) => x.id === actual) ? actual : (res.data.tecnicas[0]?.id ?? "")));
@@ -621,7 +650,11 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
 
   const estadoPlan: EstadoDelPlan = { modo: billingMode, costoTotal: costo, precioColocacion, enganche, numPagos, primerPago };
   const vistaPrevia = vistaPreviaDelPlan(estadoPlan);
-  const estimadoDeControles = esPorControl ? estimadoPorControles(Number(planForm.controles) || null, precioControl) : null;
+  const estimadoDeControles = esPorControl ? estimadoPorControles(Number(planForm.controles) || null, preciosAlta.control) : null;
+  // ws1-t12 (6b): al editar, ¿la técnica elegida es otra que la del caso? (los próximos controles cambian de precio).
+  const cambiaLaTecnicaDelCaso =
+    editar && caso !== null && tecnicaConPrecios !== null &&
+    (tecnicaConPrecios.base !== caso.tecnica || (nombrePropioAGuardar(tecnicaConPrecios) ?? null) !== (caso.tecnicaNombrePropio ?? null));
 
   const guardarReferente = async () => {
     const problema = errorReferenteNuevo(referenteNuevo);
@@ -1438,7 +1471,33 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                             </p>
                           ) : null}
                         </Field>
+                        {esPorControl && !editar ? (
+                          <Field
+                            label={txPrecios.alta.precioControl}
+                            hint={
+                              preciosAlta.controlDeLaTecnica && tecnicaConPrecios
+                                ? txPrecios.alta.controlDeTecnica(tecnicaConPrecios.nombre)
+                                : preciosAlta.control !== null
+                                  ? txPrecios.alta.controlDelCatalogo
+                                  : txPrecios.alta.sinPrecioControl
+                            }
+                          >
+                            <div className={alta.valor}>{preciosAlta.control !== null ? pesos(preciosAlta.control) : "—"}</div>
+                          </Field>
+                        ) : null}
                       </div>
+
+                      {esPorControl && cambiaLaTecnicaDelCaso && tecnicaConPrecios ? (
+                        <div className={alta.vistaPrevia} role="status">
+                          <Info size={16} strokeWidth={1.75} aria-hidden />
+                          <span>
+                            {txPrecios.alta.cambioDeTecnica(
+                              tecnicaConPrecios.nombre,
+                              preciosAlta.controlDeLaTecnica && preciosAlta.control !== null ? pesos(preciosAlta.control) : null,
+                            )}
+                          </span>
+                        </div>
+                      ) : null}
 
                       {tieneFactura ? (
                         <div className={alta.vistaPrevia} role="status">
@@ -1473,7 +1532,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                               <div className={alta.cuadricula}>
                                 <Field
                                   label="Precio de la colocación (MXN)"
-                                  hint={precioColocacion.trim() === "" ? "No hay precio de «Colocación de aparatología» en tu catálogo: escríbelo, o déjalo vacío para armarlo después." : "Sale del catálogo de ortodoncia. Cámbialo si este paciente pactó otro."}
+                                  hint={
+                                    precioColocacion.trim() === ""
+                                      ? "No hay precio de «Colocación de aparatología» en tu catálogo: escríbelo, o déjalo vacío para armarlo después."
+                                      : preciosAlta.colocacionDeLaTecnica && tecnicaConPrecios && precioColocacion === colocacionSugeridaRef.current
+                                        ? txPrecios.alta.colocacionDeTecnica(tecnicaConPrecios.nombre)
+                                        : "Sale del catálogo de ortodoncia. Cámbialo si este paciente pactó otro."
+                                  }
                                   htmlFor={idColocacion}
                                 >
                                   <input
@@ -1543,7 +1608,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                           <span>
                             {estimadoDeControles
                               ? `Estimado: ${textoDelEstimado(estimadoDeControles)}`
-                              : `${planForm.controles} controles previstos. Para estimar el total falta el precio de «Control de ortodoncia» en el catálogo.`}
+                              : txPrecios.alta.estimadoSinPrecio(planForm.controles)}
                           </span>
                         </div>
                       ) : null}

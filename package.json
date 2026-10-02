@@ -295,6 +295,7 @@
     "test:quitar-procedimiento": "tsx --test src/lib/procedures/__tests__/quitar-procedimiento.test.ts",
     "test:orto-precios-tecnica": "tsx --test src/lib/orthodontics/__tests__/precios-por-tecnica.test.ts",
     "test:orto-tecnicas": "tsx --test src/lib/orthodontics/__tests__/tecnicas-de-la-clinica.test.ts",
+    "test:orto-precio-control": "tsx --test src/lib/orthodontics/__tests__/precio-control-por-tecnica.test.ts",
     "test:facturas-ligables": "tsx --test src/lib/orthodontics/cobro/__tests__/facturas-ligables.test.ts",
     "test:orto-lectura-sin-modulo": "tsx --test src/lib/orthodontics/__tests__/lectura-sin-modulo.test.ts",
     "test:monto-cobro-h68": "tsx --test src/lib/invoices/__tests__/monto-cobro-h68.test.ts",

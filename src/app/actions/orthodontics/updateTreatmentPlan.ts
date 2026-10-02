@@ -10,7 +10,9 @@ import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
 import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
-import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { cargarNombreDeTecnica, guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { fijarPrecioControlSegunTecnica } from "@/lib/orthodontics/precio-control-del-caso-db";
+import { cambioLaTecnica } from "@/lib/orthodontics/precio-control-del-caso";
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
 import { avisoDePrecioDesfasado } from "@/lib/orthodontics/cobro/precio-desfasado";
 
@@ -131,10 +133,24 @@ export async function updateTreatmentPlan(
 
     // ws1-t10: el nombre propio de la técnica. Si se manda, se guarda; si cambia el tipo base sin
     // mandar nombre, el anterior ya no corresponde y se limpia (se muestra el del tipo base).
+    // ws1-t12 (6b): el nombre ANTES de tocarlo, para saber si la técnica cambió de verdad.
+    const tocaTecnica = techniqueLabel !== undefined || (parsed.data.technique !== undefined && parsed.data.technique !== before.technique);
+    const nombreAntes = tocaTecnica ? await cargarNombreDeTecnica(ctx.clinicId, updated.id) : null;
     if (techniqueLabel !== undefined) {
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, updated.id, techniqueLabel);
     } else if (parsed.data.technique !== undefined && parsed.data.technique !== before.technique) {
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, updated.id, null);
+    }
+    // ws1-t12 (6b): con OTRA técnica, los próximos controles («Pago por control») se cobran con el precio por
+    // control de la nueva (o con el del catálogo si no tiene). Los ya facturados no se tocan. Sin lanzar.
+    let precioControl: { antes: number | null; despues: number | null } | null = null;
+    if (tocaTecnica) {
+      const baseNueva = parsed.data.technique ?? before.technique;
+      const labelNuevo = techniqueLabel !== undefined ? techniqueLabel : null;
+      if (cambioLaTecnica({ base: before.technique, label: nombreAntes }, { base: baseNueva, label: labelNuevo })) {
+        const r = await fijarPrecioControlSegunTecnica({ clinicId: ctx.clinicId, planId: updated.id, base: baseNueva, label: labelNuevo });
+        if (r.cambio) precioControl = { antes: r.antes, despues: r.despues };
+      }
     }
 
     // H46: el estado arrastra a la fase (y al régimen de retención). Es
@@ -168,11 +184,13 @@ export async function updateTreatmentPlan(
         status: before.status,
         totalCostMxn: before.totalCostMxn.toString(),
         treatingDoctorId: (before as { treatingDoctorId?: string | null }).treatingDoctorId ?? null,
+        ...(precioControl ? { precioPorControl: precioControl.antes } : {}),
       },
       after: {
         status: updated.status,
         totalCostMxn: updated.totalCostMxn.toString(),
         treatingDoctorId: (updated as { treatingDoctorId?: string | null }).treatingDoctorId ?? null,
+        ...(precioControl ? { precioPorControl: precioControl.despues } : {}),
       },
     });
 

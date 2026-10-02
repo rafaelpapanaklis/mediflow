@@ -167,7 +167,7 @@ export async function preciosDeLaClinicaParaElTurno(
       orderBy: { name: "asc" },
     });
     const tecnicas = tieneOrtodoncia
-      ? tecnicasActivas((await leerTecnicasDeLaClinica(clinicId)).tecnicas).map((t) => ({ nombre: t.nombre, precio: t.precio }))
+      ? tecnicasActivas((await leerTecnicasDeLaClinica(clinicId)).tecnicas).map((t) => ({ nombre: t.nombre, precio: t.precio, pagoInicial: t.pagoInicial, precioControl: t.precioControl }))
       : [];
     return preciosDelTurno(
       {

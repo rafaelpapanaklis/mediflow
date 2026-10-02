@@ -76,7 +76,11 @@ export interface ProcedimientoParaBot {
 
 export interface TecnicaParaBot {
   nombre: string;
+  /** Precio TOTAL del tratamiento (casos a plazos). */
   precio: number | null;
+  /** ws1-t12 (6b): pago inicial y precio de cada control («Pago por control»). Opcionales: ausentes = sin dato. */
+  pagoInicial?: number | null;
+  precioControl?: number | null;
 }
 
 export interface EntradaPreciosBot {
@@ -99,6 +103,11 @@ export interface EntradaPreciosBot {
 export interface Renglon {
   nombre: string;
   precio: number;
+  /**
+   * ws1-t12 (6b) — solo técnicas de ortodoncia: sus precios por separado. Con esto el renglón dice «pago inicial
+   * $X y $Y por cada control» en vez de un solo precio. `precio` queda como el primero que haya.
+   */
+  partes?: { inicial: number | null; control: number | null; total: number | null };
 }
 
 /** Lo que entra al prompt: reglas (parte fija, cacheada) y renglones de ESTE turno (parte variable). */
@@ -127,6 +136,21 @@ export function formatoPrecio(n: number, moneda = "MXN"): string {
     maximumFractionDigits: 2,
   });
   return `$${cifra} ${moneda}`;
+}
+
+/**
+ * Cómo se lee el precio de un renglón en el prompt. Una técnica con inicial/control los dice por separado: el
+ * paciente sabe que el inicial se paga al empezar y cada control en su visita (no son «mensualidades»).
+ */
+export function textoDelPrecio(r: Renglon, moneda = "MXN"): string {
+  if (!r.partes) return formatoPrecio(r.precio, moneda);
+  const { inicial, control, total } = r.partes;
+  const piezas: string[] = [];
+  if (inicial !== null) piezas.push(`pago inicial ${formatoPrecio(inicial, moneda)}`);
+  if (control !== null) piezas.push(`${formatoPrecio(control, moneda)} por cada control`);
+  let texto = piezas.join(" y ");
+  if (total !== null) texto += `; o precio total del tratamiento a plazos ${formatoPrecio(total, moneda)}`;
+  return texto;
 }
 
 /** Quita repetidos (mismo nombre sin importar mayúsculas: se queda el primero) y ordena por nombre. */
@@ -168,8 +192,13 @@ export function gruposDePrecios(e: EntradaPreciosBot): GruposDePrecios {
   if (e.tieneOrtodoncia) {
     for (const t of e.tecnicas) {
       const nombre = nombreLimpio(t.nombre);
-      if (!nombre || !esPrecioReal(t.precio)) continue;
-      ortodoncia.push({ nombre, precio: t.precio });
+      if (!nombre) continue;
+      const inicial = esPrecioReal(t.pagoInicial) ? t.pagoInicial : null;
+      const control = esPrecioReal(t.precioControl) ? t.precioControl : null;
+      const total = esPrecioReal(t.precio) ? t.precio : null;
+      const primero = inicial ?? control ?? total;
+      if (primero === null) continue;
+      ortodoncia.push(inicial === null && control === null ? { nombre, precio: primero } : { nombre, precio: primero, partes: { inicial, control, total } });
     }
   }
   return { procedimientos: depurar(procedimientos), ortodoncia: depurar(ortodoncia) };
@@ -329,6 +358,11 @@ export function preciosDelTurno(
         : `- De los «sin precio por este medio»: di que sí lo hacen, que el costo se da en la valoración, y ofrece agendarla; ${siAcepta}. Si insiste en saber el precio, responde EXACTAMENTE ${centinelas.handoff} (solo eso). No des el precio aunque aparezca en otro lado.`,
     );
   }
+  if (g.ortodoncia.some((x) => x.partes)) {
+    reglas.push(
+      "- En ortodoncia, «pago inicial» y «por cada control» son cobros distintos: el inicial se paga al empezar el tratamiento y cada control se paga en su visita. No los sumes, no calcules cuánto sale el tratamiento completo y no los llames mensualidades.",
+    );
+  }
   reglas.push(
     `- De un tratamiento que NO aparece en esa lista (o si no viene ninguna) no digas precio ni supongas nada: sigue las instrucciones y preguntas frecuentes de la clínica; si ahí no está, responde EXACTAMENTE ${centinelas.handoff}.`,
   );
@@ -342,7 +376,7 @@ export function preciosDelTurno(
   for (const x of grupos) {
     const rs = x.titulo === "Ortodoncia" && ortoEnGeneral ? x.renglones : coincidencias(x.renglones, claves, universo);
     for (const r of rs) {
-      if (x.encendido) conPrecio.push(`- ${r.nombre}: ${formatoPrecio(r.precio, moneda)}`);
+      if (x.encendido) conPrecio.push(`- ${r.nombre}: ${textoDelPrecio(r, moneda)}`);
       else sinPrecio.push(`- ${r.nombre}`);
     }
   }

@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { cargarNombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { techniqueLabel } from "@/lib/orthodontics/consent-texts";
 import { cargarCargosDeControlDelCaso } from "@/lib/orthodontics/cobranza-controles-db";
-import { buscarPrecioControlOrto } from "@/lib/orthodontics/catalog-procedures";
+import { precioDeControlDelCaso } from "@/lib/orthodontics/precio-control-del-caso-db";
 import { leerCondicionesDelConvenio } from "@/lib/orthodontics/cobro/condiciones-convenio-db";
 import { leerResponsableParaCfdi } from "@/lib/orthodontics/responsable-fiscal-db";
 import { labelParentesco } from "@/lib/consent/default-signer";
@@ -130,7 +130,7 @@ export async function exportFinancialAgreementPdf(
         })
       : Promise.resolve(null),
     porControl ? cargarCargosDeControlDelCaso(ctx.clinicId, plan.id) : Promise.resolve([]),
-    porControl ? buscarPrecioControlOrto(ctx.clinicId).catch(() => null) : Promise.resolve(null),
+    porControl ? precioDeControlDelCaso(ctx.clinicId, plan.id).catch(() => null) : Promise.resolve(null),
   ]);
 
   let responsable: ResponsableDelPago;
@@ -189,7 +189,7 @@ export async function exportFinancialAgreementPdf(
     cuotas,
     // ws1-t4: el del paciente (su libro), la cifra de su resumen, esté o no el caso con factura.
     saldoAFavor: panel.saldoAFavor ?? 0,
-    precioPorControl: precioControl?.basePrice ?? null,
+    precioPorControl: precioControl?.precio ?? null,
     // ws1-t12: los controles que prevé el plan de tratamiento (el estimado sale de ellos × el precio del control).
     controlesPrevistos: panel.controlesDelPlan?.previstos ?? null,
     cargosDeControl: cargos

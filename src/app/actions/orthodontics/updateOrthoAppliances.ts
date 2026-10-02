@@ -4,7 +4,9 @@
 // prescriptionNotes del plan ortodóntico activo. Wrapper sobre
 // updateTreatmentPlan acotado a campos de aparatología.
 
-import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { cargarNombreDeTecnica, guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { fijarPrecioControlSegunTecnica } from "@/lib/orthodontics/precio-control-del-caso-db";
+import { cambioLaTecnica } from "@/lib/orthodontics/precio-control-del-caso";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -82,10 +84,24 @@ export async function updateOrthoAppliances(
     });
 
     // ws1-t10: el nombre propio que manda la pantalla; si no manda y cambia el tipo base, el anterior ya no corresponde.
+    // ws1-t12 (6b): el nombre ANTES de tocarlo, para saber si la técnica cambió de verdad.
+    const tocaTecnica = techniqueLabel !== undefined || (data.technique !== undefined && data.technique !== before.technique);
+    const nombreAntes = tocaTecnica ? await cargarNombreDeTecnica(ctx.clinicId, treatmentPlanId) : null;
     if (techniqueLabel !== undefined) {
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, treatmentPlanId, techniqueLabel);
     } else if (data.technique !== undefined && data.technique !== before.technique) {
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, treatmentPlanId, null);
+    }
+    // ws1-t12 (6b): con OTRA técnica, los próximos controles («Pago por control») se cobran con el precio por
+    // control de la nueva (o con el del catálogo si no tiene). Los ya facturados no se tocan. Sin lanzar.
+    let precioControl: { antes: number | null; despues: number | null } | null = null;
+    if (tocaTecnica) {
+      const baseNueva = data.technique ?? before.technique;
+      const labelNuevo = techniqueLabel !== undefined ? techniqueLabel : null;
+      if (cambioLaTecnica({ base: before.technique, label: nombreAntes }, { base: baseNueva, label: labelNuevo })) {
+        const r = await fijarPrecioControlSegunTecnica({ clinicId: ctx.clinicId, planId: treatmentPlanId, base: baseNueva, label: labelNuevo });
+        if (r.cambio) precioControl = { antes: r.antes, despues: r.despues };
+      }
     }
 
     await auditOrtho({
@@ -99,8 +115,9 @@ export async function updateOrthoAppliances(
         bondingType: before.bondingType,
         technique: before.technique,
         prescriptionNotes: before.prescriptionNotes,
+        ...(precioControl ? { precioPorControl: precioControl.antes } : {}),
       },
-      after: updateData,
+      after: { ...updateData, ...(precioControl ? { precioPorControl: precioControl.despues } : {}) },
     });
 
     try {

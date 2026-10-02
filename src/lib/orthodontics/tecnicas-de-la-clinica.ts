@@ -17,8 +17,16 @@ export interface TecnicaClinica {
   id: string;
   nombre: string;
   base: TecnicaOrto;
-  /** MXN; null = sin precio (el alta no propone costo). */
+  /** MXN, precio TOTAL del tratamiento (modo «Precio total a plazos»); null = sin precio (el alta no propone costo). */
   precio: number | null;
+  /**
+   * ws1-t12 (ticket 3 de BEVADENT, 6b) — modo «Pago por control»: el pago inicial (la factura de colocación) y el
+   * precio de CADA control con esta técnica. null = sin precio propio: la colocación cae a «Colocación de
+   * aparatología» y el control a «Control de ortodoncia» del catálogo, como antes. Viven en el mismo JSON
+   * (`techniqueList`): una lista guardada antes de este cambio simplemente no los trae.
+   */
+  pagoInicial: number | null;
+  precioControl: number | null;
   /** false = «quitada»: no se ofrece en casos nuevos, los casos que ya la usan la siguen mostrando. */
   activa: boolean;
 }
@@ -46,11 +54,13 @@ export function tecnicasDeSiempre(precios?: PreciosPorTecnica | null): TecnicaCl
     nombre: t.label,
     base: t.key,
     precio: typeof precios?.[t.key] === "number" ? (precios[t.key] as number) : null,
+    pagoInicial: null,
+    precioControl: null,
     activa: true,
   }));
 }
 
-function precioValido(v: unknown): number | null {
+export function precioValido(v: unknown): number | null {
   const n = typeof v === "string" ? Number(v.replace(/[$,\s]/g, "")) : typeof v === "number" ? v : NaN;
   if (!Number.isFinite(n) || n <= 0 || n > PRECIO_MAXIMO) return null;
   return Math.round(n * 100) / 100;
@@ -72,7 +82,15 @@ export function normalizarTecnicas(raw: unknown): TecnicaClinica[] | null {
     const base = typeof o.base === "string" ? o.base : "";
     if (!ID_VALIDO.test(id) || vistos.has(id) || !nombre || !BASES.has(base)) continue;
     vistos.add(id);
-    out.push({ id, nombre, base: base as TecnicaOrto, precio: precioValido(o.precio), activa: o.activa !== false });
+    out.push({
+      id,
+      nombre,
+      base: base as TecnicaOrto,
+      precio: precioValido(o.precio),
+      pagoInicial: precioValido(o.pagoInicial),
+      precioControl: precioValido(o.precioControl),
+      activa: o.activa !== false,
+    });
     if (out.length >= TECNICAS_MAXIMAS) break;
   }
   return out;
@@ -101,7 +119,15 @@ export function restaurarDeSiempre(lista: readonly TecnicaClinica[]): TecnicaCli
   const propias = lista.filter((t) => !BASES.has(t.id));
   const de7 = TECNICAS_ORTO.map((t) => {
     const x = lista.find((y) => y.id === t.key);
-    return { id: t.key, nombre: t.label, base: t.key, precio: x?.precio ?? null, activa: true } as TecnicaClinica;
+    return {
+      id: t.key,
+      nombre: t.label,
+      base: t.key,
+      precio: x?.precio ?? null,
+      pagoInicial: x?.pagoInicial ?? null,
+      precioControl: x?.precioControl ?? null,
+      activa: true,
+    } as TecnicaClinica;
   });
   return [...de7, ...propias];
 }
@@ -117,8 +143,12 @@ export function idNuevoDeTecnica(existentes: readonly TecnicaClinica[], azar: nu
   return `t-${Date.now().toString(36)}`;
 }
 
+type PrecioCrudo = string | number | null | undefined;
+
 /** Mensaje para quien edita la lista, o null si se puede guardar. */
-export function validarTecnicas(lista: ReadonlyArray<{ nombre: string; precio: string | number | null }>): string | null {
+export function validarTecnicas(
+  lista: ReadonlyArray<{ nombre: string; precio: PrecioCrudo; pagoInicial?: PrecioCrudo; precioControl?: PrecioCrudo }>,
+): string | null {
   if (lista.length > TECNICAS_MAXIMAS) return `Máximo ${TECNICAS_MAXIMAS} técnicas.`;
   const vistos = new Set<string>();
   for (const t of lista) {
@@ -127,8 +157,10 @@ export function validarTecnicas(lista: ReadonlyArray<{ nombre: string; precio: s
     const clave = nombre.toLocaleLowerCase("es");
     if (vistos.has(clave)) return `«${nombre}» está repetida.`;
     vistos.add(clave);
-    const p = t.precio;
-    if (p !== null && String(p).trim() !== "" && precioValido(p) === null) return `Revisa el precio de «${nombre}».`;
+    const malo = (p: PrecioCrudo) => p !== null && p !== undefined && String(p).trim() !== "" && precioValido(p) === null;
+    if (malo(t.precio)) return `Revisa el precio total de «${nombre}».`;
+    if (malo(t.pagoInicial)) return `Revisa el pago inicial de «${nombre}».`;
+    if (malo(t.precioControl)) return `Revisa el precio por control de «${nombre}».`;
   }
   return null;
 }
@@ -178,4 +210,33 @@ export function opcionesDeEdicion(
   if (igual) return { opciones, seleccionadaId: igual.id };
   const nombre = label || limpiarNombre(actual.nombreVisible) || etiquetaEstandar(base);
   return { opciones: [{ id: ID_TECNICA_ACTUAL, nombre: `${nombre} (actual)`, base }, ...opciones], seleccionadaId: ID_TECNICA_ACTUAL };
+}
+
+/**
+ * ws1-t12 — la técnica de la lista de la clínica que corresponde a un caso, por lo que el caso guarda: su tipo
+ * base (`technique`) y su nombre propio (`techniqueLabel`, null = el nombre de siempre del tipo). Los nombres son
+ * únicos en la lista, así que hay a lo más una. null = la clínica ya no la tiene (o la renombró): quien llama cae
+ * a los precios del catálogo. Incluye las quitadas: un caso abierto con una técnica que ya no se ofrece la conserva.
+ */
+export function tecnicaDelCaso(
+  lista: readonly TecnicaClinica[],
+  caso: { base: string | null | undefined; label: string | null | undefined },
+): TecnicaClinica | null {
+  if (!caso.base) return null;
+  const label = limpiarNombre(caso.label);
+  const iguales = lista.filter((t) => t.base === caso.base && (label ? t.nombre === label : nombrePropioAGuardar(t) === null));
+  return iguales.find((t) => t.activa) ?? iguales[0] ?? null;
+}
+
+/**
+ * ws1-t12 — los nombres de las técnicas activas que en «Pago por control» no aportan nada: tienen precio total
+ * pero ni pago inicial ni precio por control (la lista de antes, donde un solo precio hacía de todo). Acepta las
+ * filas del editor (precios como texto) o técnicas ya normalizadas.
+ */
+export function soloConPrecioTotal(
+  lista: ReadonlyArray<{ nombre: string; activa: boolean; precio: unknown; pagoInicial: unknown; precioControl: unknown }>,
+): string[] {
+  return lista
+    .filter((t) => t.activa && limpiarNombre(t.nombre) !== "" && precioValido(t.precio) !== null && precioValido(t.pagoInicial) === null && precioValido(t.precioControl) === null)
+    .map((t) => limpiarNombre(t.nombre));
 }

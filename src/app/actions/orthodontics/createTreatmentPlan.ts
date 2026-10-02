@@ -9,7 +9,10 @@ import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
 import { guardarModoDeCobroDelCaso } from "@/lib/orthodontics/billing-mode-db";
-import { guardarNombreDeTecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { guardarNombreDeTecnicaDelCaso, leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
+import { tecnicaDelCaso } from "@/lib/orthodontics/tecnicas-de-la-clinica";
+import { fijarPrecioControlSegunTecnica } from "@/lib/orthodontics/precio-control-del-caso-db";
+import { preciosDeLaTecnicaParaElAlta } from "@/lib/orthodontics/precio-control-del-caso";
 import { aplicarPlanDetalle } from "@/lib/orthodontics/plan-detalle-guardar";
 import { leerOpcionesDelPlan } from "@/lib/orthodontics/plan-detalle-db";
 import { controlesSugeridos, validarContraOpciones, validarPlanDetalle, type PlanDetalle } from "@/lib/orthodontics/plan-detalle";
@@ -216,10 +219,16 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
   // factura con él (el cobro por control ignora el costo del caso). «Precio total» con costo 0 no se puede
   // estimar: se intenta con 0 y, si la base aún lo rechaza, se contesta claro (más abajo).
   if (billingModeDelCaso === "PAGO_POR_CONTROL" && !(costoDelCaso > 0)) {
-    const [colocacion, precioControl] = await Promise.all([
+    const [colocacionCatalogo, controlCatalogo, tecnicasDeLaClinica] = await Promise.all([
       precioDeColocacionDelCatalogo(ctx.clinicId).catch(() => null),
       buscarPrecioControlOrto(ctx.clinicId).then((r) => r?.basePrice ?? null).catch(() => null),
+      leerTecnicasDeLaClinica(ctx.clinicId).then((r) => r.tecnicas),
     ]);
+    // ws1-t12 (6b): el estimado usa el pago inicial y el precio por control de la técnica; sin ellos, el catálogo.
+    const { colocacion, control: precioControl } = preciosDeLaTecnicaParaElAlta(
+      tecnicaDelCaso(tecnicasDeLaClinica, { base: parsed.data.technique, label: parsed.data.techniqueLabel ?? null }),
+      { colocacion: colocacionCatalogo, control: controlCatalogo },
+    );
     const controlesPrevistos = planCompleto?.controlesPrevistos ?? controlesSugeridos(parsed.data.estimatedDurationMonths);
     const { costo, origen } = costoParaGuardarPorControl({
       estimado: estimarCostoPorControl({ colocacion, controlesPrevistos, precioControl }),
@@ -257,6 +266,18 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
       await guardarNombreDeTecnicaDelCaso(ctx.clinicId, created.id, parsed.data.techniqueLabel);
     }
 
+    // ws1-t12 (6b) — en «Pago por control» el caso copia el precio por control de su técnica: cada control se
+    // factura con él. Sin precio en la técnica (o sin sql/ws1-t12-precio-control-por-caso.sql) queda sin precio
+    // propio y se cobra con el del catálogo. Su propio paso, sin lanzar: nunca deshace el caso.
+    const precioControlDelCaso = await fijarPrecioControlSegunTecnica({
+      clinicId: ctx.clinicId,
+      planId: created.id,
+      base: parsed.data.technique,
+      label: parsed.data.techniqueLabel ?? null,
+      billingMode: billingModeDelCaso,
+      nuevo: true,
+    });
+
     // ws1-t12 — el plan completo, también en su propio paso y sin deshacer el caso: sin la columna
     // (sql/ortodoncia-plan-de-tratamiento.sql) el caso queda abierto y se avisa cómo completarlo.
     let avisoPlanDetalle: string | undefined;
@@ -283,6 +304,7 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
         durationMonths: created.estimatedDurationMonths,
         totalCostMxn: created.totalCostMxn.toString(),
         installed: Boolean(installedAt),
+        ...(precioControlDelCaso.cambio ? { precioPorControl: precioControlDelCaso.despues } : {}),
       },
     });
 

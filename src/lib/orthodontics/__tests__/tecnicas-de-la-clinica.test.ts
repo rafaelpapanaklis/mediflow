@@ -61,7 +61,8 @@ test("agregar y editar: una técnica propia lleva id estable, nombre, tipo base 
   const lista = normalizarTecnicas([...base, propia, { id: "x", nombre: "", base: "HYBRID" }, { id: "y", nombre: "Rara", base: "NOEXISTE" }, { id, nombre: "Repetida", base: "HYBRID" }])!;
   assert.equal(lista.length, 8);
   const z = lista.find((t) => t.id === id)!;
-  assert.deepEqual(z, { id, nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: 38500, activa: true });
+  // ws1-t12: sin pago inicial ni precio por control escritos, quedan vacíos (caen al catálogo).
+  assert.deepEqual(z, { id, nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: 38500, pagoInicial: null, precioControl: null, activa: true });
   // editar nombre y precio de una de siempre no cambia su id ni su tipo base
   const editada = normalizarTecnicas(base.map((t) => (t.id === "METAL_BRACKETS" ? { ...t, nombre: "Metálicos Damon", precio: 29000 } : t)))!;
   const m = editada.find((t) => t.id === "METAL_BRACKETS")!;
@@ -89,7 +90,7 @@ test("quitar = activa:false: no se ofrece en casos nuevos pero sigue en la lista
 });
 
 test("restaurar las de siempre: reactiva y devuelve el nombre, conserva precios y técnicas propias", () => {
-  const propia: TecnicaClinica = { id: "t-abc123", nombre: "Ortopedia", base: "HYBRID", precio: 9000, activa: true };
+  const propia: TecnicaClinica = { id: "t-abc123", nombre: "Ortopedia", base: "HYBRID", precio: 9000, pagoInicial: null, precioControl: null, activa: true };
   const lista: TecnicaClinica[] = [
     ...tecnicasDeSiempre({ METAL_BRACKETS: 25000 }).map((t) =>
       t.id === "METAL_BRACKETS" ? { ...t, nombre: "Otro nombre", activa: false } : t.id === "HYBRID" ? { ...t, activa: false } : t,
@@ -112,7 +113,7 @@ test("restaurar las de siempre: reactiva y devuelve el nombre, conserva precios 
 // ── El caso: tipo base + nombre, y el caso viejo con técnica quitada ─────────
 
 test("caso con técnica propia: guarda tipo base (enum) + nombre; con el nombre de siempre no guarda nombre", () => {
-  const zafiro: TecnicaClinica = { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: 38500, activa: true };
+  const zafiro: TecnicaClinica = { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: 38500, pagoInicial: null, precioControl: null, activa: true };
   assert.equal(nombrePropioAGuardar(zafiro), "Brackets de zafiro");
   assert.equal(zafiro.base, "CERAMIC_BRACKETS"); // lo que va a la columna `technique`
   assert.equal(nombrePropioAGuardar(tecnicasDeSiempre()[0]), null);
@@ -136,7 +137,7 @@ test("caso con técnica propia: guarda tipo base (enum) + nombre; con el nombre 
 
 test("técnica quitada: no se ofrece, pero el caso viejo la muestra por su nombre en todas las salidas", () => {
   const lista: TecnicaClinica[] = [
-    { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: null, activa: false },
+    { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: null, pagoInicial: null, precioControl: null, activa: false },
     ...tecnicasDeSiempre(),
   ];
   assert.ok(!tecnicasActivas(lista).some((t) => t.id === "t-1"));
@@ -224,8 +225,10 @@ test("guardar la lista exige el permiso de Configuración y usa la clínica de l
   assert.match(a, /getOrthoConfigActionContext\(\)/);
   assert.match(a, /guardarEnBase\(ctx\.clinicId, ctx\.userId, tecnicas\)/);
   assert.doesNotMatch(a.replace(/\/\/.*$/gm, ""), /input\.clinicId|clinicId:\s*input/);
-  const ui = leer("components/specialties/orthodontics/configuracion/TecnicasYPrecios.tsx");
-  assert.match(ui, /titulo="Técnicas y precios"/);
+  // ws1-t12: los textos (es/en) viven en textos-tecnicas-y-precios.ts; la tarjeta los toma de ahí.
+  assert.match(leer("components/specialties/orthodontics/configuracion/TecnicasYPrecios.tsx"), /titulo=\{tx\.titulo\}/);
+  const ui = leer("components/specialties/orthodontics/configuracion/textos-tecnicas-y-precios.ts");
+  assert.match(ui, /titulo: "Técnicas y precios"/);
   assert.match(ui, /Agregar técnica/);
   assert.match(ui, /Restaurar las de siempre/);
   assert.match(ui, /¿Quitar «/); // confirmación
@@ -324,7 +327,7 @@ test("límites del calendario: hoy en zona local y hoy + N años, en ISO", () =>
 // ── «Cambiar aparatología» y el asistente viejo (respuestas del gerente) ─────
 
 test("Cambiar aparatología: ofrece las ACTIVAS de la clínica y la actual del caso aunque esté quitada", () => {
-  const zafiro: TecnicaClinica = { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: null, activa: true };
+  const zafiro: TecnicaClinica = { id: "t-1", nombre: "Brackets de zafiro", base: "CERAMIC_BRACKETS", precio: null, pagoInicial: null, precioControl: null, activa: true };
   const activas = tecnicasActivas([...tecnicasDeSiempre().map((t) => (t.id === "LINGUAL_BRACKETS" ? { ...t, activa: false } : t)), zafiro]);
   // caso con técnica propia vigente: viene seleccionada, sin duplicarla
   let r = opcionesDeEdicion(activas, { base: "CERAMIC_BRACKETS", label: "Brackets de zafiro", nombreVisible: "Brackets de zafiro" });
