@@ -154,6 +154,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   // usuario ya cambió a mano en esta apertura.
   const [orthoTiposConDuracion, setOrthoTiposConDuracion] = useState<TipoDeCitaConDuracion[]>([]);
   const [orthoCasoActivo, setOrthoCasoActivo] = useState(false);
+  // Caso PLANEADO sin uno en curso: solo para proponer a su tratante (no sugiere duración).
+  const [orthoCasoPlaneado, setOrthoCasoPlaneado] = useState(false);
   // ws1-t8: el doctor tratante del caso (para proponerlo en un control de ortodoncia).
   const [orthoTratanteId, setOrthoTratanteId] = useState<string | null>(null);
   // Si la persona ya eligió doctor a mano, no se le vuelve a cambiar.
@@ -384,6 +386,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   useEffect(() => {
     if (!patient || !hayModuloOrto) {
       setOrthoCasoActivo(false);
+      setOrthoCasoPlaneado(false);
       setOrthoTratanteId(null);
       return;
     }
@@ -393,11 +396,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       .then((body) => {
         if (cancelled) return;
         setOrthoCasoActivo(Boolean(body?.hasActivePlan));
+        setOrthoCasoPlaneado(Boolean(body?.hasPlannedPlan));
         setOrthoTratanteId(typeof body?.treatingDoctorId === "string" && body.treatingDoctorId ? body.treatingDoctorId : null);
       })
       .catch(() => {
         if (!cancelled) {
           setOrthoCasoActivo(false);
+          setOrthoCasoPlaneado(false);
           setOrthoTratanteId(null);
         }
       });
@@ -409,6 +414,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   const entradaTratante = {
     motivo: reason,
     casoActivo: orthoCasoActivo,
+    casoPlaneado: orthoCasoPlaneado,
     tratanteId: orthoTratanteId,
     doctoresIds: (boot?.doctors ?? []).map((d) => d.id),
     doctorActual: doctorId,
@@ -418,9 +424,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     const propuesto = doctorAProponer(entradaTratante);
     if (propuesto) setDoctorId(propuesto);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reason, orthoCasoActivo, orthoTratanteId, boot, slotIso]);
+  }, [reason, orthoCasoActivo, orthoCasoPlaneado, orthoTratanteId, boot, slotIso]);
   const avisoOtroDoctor = avisarOtroDoctor(entradaTratante);
-  const nombreTratante = boot?.padron.find((d) => d.id === orthoTratanteId)?.shortName ?? null;
+  const nombreTratante = boot?.padron.find((d) => d.id === orthoTratanteId)?.displayName ?? null;
   const avisoTratanteFuera = tratanteFueraDeLaAgenda(entradaTratante);
 
   // Al elegir (o escribir) un motivo de ortodoncia para un paciente con caso,
@@ -667,9 +673,11 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                       style={nueva ? undefined : { borderColor: errors.doctorId ? "var(--danger)" : undefined }}
                     >
                       {boot.doctors.length === 0 && <option value="">{t("appointments.newApptDialog.optionNoActiveProfessionals")}</option>}
+                      {/* El nombre visible completo, único en el padrón (etiqueta-profesional.ts): con «Dr. » + el
+                          primer nombre salían «Dr. Dr», «Dr. Cuenta» y tres «Dr. QA» (revisión de ws1-t10). */}
                       {boot.doctors.map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.shortName}
+                          {d.displayName}
                         </option>
                       ))}
                     </select>
@@ -831,7 +839,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
               slotIso,
               duration,
               patientName: patient?.name ?? null,
-              doctorName: boot?.doctors.find((d) => d.id === doctorId)?.shortName ?? null,
+              doctorName: boot?.doctors.find((d) => d.id === doctorId)?.displayName ?? null,
               timezone: boot?.timezone ?? null,
               t,
               nueva,

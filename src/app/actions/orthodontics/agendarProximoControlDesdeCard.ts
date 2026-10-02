@@ -25,6 +25,7 @@ import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createBotAppointment, type CreateErrorCode } from "@/lib/agenda/bot-booking-service";
+import { fraseTratanteNoRecibeCitas } from "@/lib/agenda/roles-que-atienden-db";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { fechaHoraParaTexto } from "@/lib/movimientos-paciente/textos";
@@ -106,6 +107,8 @@ export async function agendarProximoControlDesdeCard(
     reason: TIPO_CITA_CONTROL_ORTO,
   });
 
+  // El tratante que no recibe citas, con su motivo (inactivo, casilla apagada, rol que no atiende).
+  if (!res.ok && res.error === "doctor_not_found") return fail(await fraseTratanteNoRecibeCitas(ctx.clinicId, plan.treatingDoctorId));
   if (!res.ok) return fail(MENSAJE_POR_ERROR[res.error]);
   await registrarMovimientoDelPaciente({
     clinicId: ctx.clinicId,

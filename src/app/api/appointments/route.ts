@@ -1,7 +1,8 @@
 import { hasPermission } from "@/lib/auth/permissions";
 import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { NextResponse, type NextRequest } from "next/server";
-import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -400,7 +401,7 @@ export async function POST(req: NextRequest) {
   });
   if (visDenied) return visDenied;
   if (!doctor) {
-    return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
+    return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, body.doctorId), { status: 404 });
   }
 
   // Motivo, pasado y paciente archivado (WS1-T3, N13): antes solo los frenaba el

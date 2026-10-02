@@ -183,7 +183,9 @@ export function VistaDia() {
               {r.iniciales}
             </span>
             <div className={s.cabeceraTextos}>
-              <div className={s.cabeceraNombre}>{r.nombre}</div>
+              {/* El nombre corto ÚNICO («Mariana C.»): con 20 columnas el completo se cortaba y solo quedaban
+                  las iniciales, repetidas (revisión de ws1-t10). El completo, al pasar el puntero. */}
+              <div className={s.cabeceraNombre} title={r.nombre}>{r.nombreCorto}</div>
               <div className={s.cabeceraSub}>{resumenDeColumna(paraResumen)}</div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
@@ -177,7 +178,7 @@ export async function PATCH(
       },
       select: { id: true },
     });
-    if (!d) return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
+    if (!d) return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, body.doctorId), { status: 404 });
     data.doctor = { connect: { id: body.doctorId } };
   }
 

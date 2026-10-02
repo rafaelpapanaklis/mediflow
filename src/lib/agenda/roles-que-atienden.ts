@@ -41,15 +41,73 @@ export function puedeRecibirCitas(u: {
 }
 
 /**
- * La frase del `doctor_not_found` de la Agenda (antes salía el código crudo en «Nueva cita»). La devuelve el
- * servidor en `reason` y la usa la pantalla si el cuerpo no la trae.
+ * La frase GENÉRICA del `doctor_not_found` de la Agenda: la usa la pantalla solo si el servidor no mandó
+ * `reason` (el servidor manda la del motivo concreto, `fraseNoRecibeCitas`).
  */
 export const FRASE_NO_RECIBE_CITAS =
-  "Ese profesional no puede recibir citas en la Agenda. Elige otro profesional o, si atiende, enciende «Aparece en la agenda» en Equipo.";
+  "Ese profesional no puede recibir citas en la Agenda: su cuenta está inactiva, tiene apagada «Aparece en la agenda» o su rol no atiende pacientes. Elige otro profesional.";
 
-/** El cuerpo de la respuesta 404 del servidor: código estable + frase para la persona. */
-export function cuerpoDoctorNoRecibeCitas(): { error: "doctor_not_found"; reason: string } {
-  return { error: "doctor_not_found", reason: FRASE_NO_RECIBE_CITAS };
+/**
+ * Por qué alguien NO puede recibir citas (revisión de ws1-t10: la frase hablaba de «Aparece en la agenda»
+ * también a una cuenta inactiva o a recepción). El orden es el del arreglo: un rol que no atiende no se arregla
+ * con la casilla, y una cuenta inactiva no se arregla encendiéndola.
+ */
+export type MotivoNoRecibeCitas = "no_encontrado" | "rol" | "inactivo" | "agenda_apagada";
+
+/** El motivo, o `null` si sí puede recibir citas. `null`/`undefined` = no existe en la clínica. */
+export function motivoNoRecibeCitas(
+  u: { role: string; isActive?: boolean | null; agendaActive?: boolean | null } | null | undefined,
+): MotivoNoRecibeCitas | null {
+  if (!u) return "no_encontrado";
+  if (!(ROLES_QUE_ATIENDEN as readonly string[]).includes(u.role)) return "rol";
+  if (u.isActive === false) return "inactivo";
+  if (u.agendaActive === false) return "agenda_apagada";
+  return null;
+}
+
+const ETIQUETA_ROL: Record<string, string> = { RECEPTIONIST: "Recepción", READONLY: "Solo lectura" };
+
+/**
+ * La frase de cada motivo. `tratante`: el doctor lo pone el caso de ortodoncia (no se elige en la ventana), así
+ * que el arreglo es cambiar el tratante del caso, no «elegir otro».
+ */
+export function fraseNoRecibeCitas(
+  motivo: MotivoNoRecibeCitas,
+  opts: { role?: string | null; tratante?: boolean } = {},
+): string {
+  const quien = opts.tratante ? "El doctor tratante de este caso" : "Ese profesional";
+  const otro = opts.tratante ? "Cambia el doctor tratante del caso" : "Elige otro profesional";
+  switch (motivo) {
+    case "inactivo":
+      return `${quien} no puede recibir citas: su cuenta está inactiva. ${otro} o reactiva su cuenta en Equipo.`;
+    case "agenda_apagada":
+      return `${quien} no puede recibir citas: tiene apagada «Aparece en la agenda». ${otro} o, si atiende, enciende esa casilla en su cuenta de Equipo.`;
+    case "rol": {
+      const rol = (opts.role && ETIQUETA_ROL[opts.role]) || null;
+      const quienRol = opts.tratante ? "El doctor tratante de este caso" : "Esa persona";
+      return `${quienRol} no puede recibir citas: ${rol ? `su rol (${rol})` : "su rol"} no atiende pacientes. ${otro}: un doctor, un administrador o el dueño.`;
+    }
+    case "no_encontrado":
+      return opts.tratante
+        ? `El doctor tratante de este caso ya no está en la clínica. ${otro}.`
+        : "Ese profesional ya no está en la clínica. Recarga la página y elige otro.";
+  }
+}
+
+/**
+ * El cuerpo de la respuesta 404 del servidor: código estable + frase del motivo concreto. `fila` = el usuario
+ * leído SOLO por `{ id, clinicId }` (sin la regla); sin fila = no existe en esta clínica.
+ */
+export function cuerpoDoctorNoRecibeCitas(
+  fila?: { role: string; isActive?: boolean | null; agendaActive?: boolean | null } | null,
+): { error: "doctor_not_found"; reason: string; motivo: MotivoNoRecibeCitas } {
+  // Si la fila SÍ cumple la regla (carrera: alguien la encendió entre las dos lecturas), la genérica.
+  const motivo = motivoNoRecibeCitas(fila);
+  return {
+    error: "doctor_not_found",
+    reason: motivo ? fraseNoRecibeCitas(motivo, { role: fila?.role }) : FRASE_NO_RECIBE_CITAS,
+    motivo: motivo ?? "no_encontrado",
+  };
 }
 
 /**

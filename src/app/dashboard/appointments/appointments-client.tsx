@@ -32,6 +32,8 @@ import { BookingRequestsPanel } from "./booking-requests-panel";
 import { tiposDeCitaParaCategoria } from "@/lib/agenda/tipos-cita-clasica";
 import { teleconsultaDisponible } from "@/lib/agenda/teleconsulta-por-categoria";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+// Sin «Dr.» delante: el título, si lo hay, ya viene en el nombre («Dr. Dr Juan», revisión de ws1-t10).
+import { nombreDeProfesional } from "@/lib/nombre-profesional";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -244,7 +246,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
               <div className="field-new">
                 <label className="field-new__label">{t("appointments.form.doctor")} <span className="req">*</span></label>
                 <select className="input-new" value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
-                  {doctors.map(d => <option key={d.id} value={d.id}>{t("appointments.doctorPrefix")} {d.firstName} {d.lastName}</option>)}
+                  {doctors.map(d => <option key={d.id} value={d.id}>{nombreDeProfesional(d)}</option>)}
                 </select>
               </div>
               <div className="field-new">
@@ -1089,7 +1091,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             style={{ width: "auto", minWidth: 180 }}
           >
             <option value="all">{t("appointments.filter.allDoctors")}</option>
-            {doctors.map(d => <option key={d.id} value={d.id}>{t("appointments.doctorPrefix")} {d.firstName} {d.lastName}</option>)}
+            {doctors.map(d => <option key={d.id} value={d.id}>{nombreDeProfesional(d)}</option>)}
           </select>
           <div className="segment-new">
             {([["month", "appointments.view.month", Calendar], ["week", "appointments.view.week", CalendarDays], ["day", "appointments.view.day", List]] as const).map(([v, lblKey, Icon]) => (

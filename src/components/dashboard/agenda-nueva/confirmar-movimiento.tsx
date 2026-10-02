@@ -83,7 +83,7 @@ export function ConfirmarMovimiento({
   const nombreDoctor = (id: string | null | undefined): string | null => {
     if (!id) return null;
     const d = state.doctors.find((x) => x.id === id);
-    return d?.shortName ?? d?.displayName ?? (original.doctor?.id === id ? original.doctor.shortName : null);
+    return d?.displayName ?? d?.shortName ?? (original.doctor?.id === id ? original.doctor.shortName : null);
   };
 
   const antes = {

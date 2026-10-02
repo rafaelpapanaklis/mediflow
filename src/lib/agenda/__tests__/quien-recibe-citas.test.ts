@@ -126,14 +126,14 @@ test("la columna en la que se hizo clic manda; una columna huérfana cae al prim
 });
 
 test("doctor_not_found sale en español claro, no como código crudo", () => {
-  const cuerpo = cuerpoDoctorNoRecibeCitas();
+  const cuerpo = cuerpoDoctorNoRecibeCitas({ role: "DOCTOR", isActive: true, agendaActive: false });
   assert.equal(cuerpo.error, "doctor_not_found", "el código se queda: lo leen Sabina y las pruebas");
-  assert.equal(cuerpo.reason, FRASE_NO_RECIBE_CITAS);
+  assert.match(cuerpo.reason, /Aparece en la agenda/);
+  assert.doesNotMatch(cuerpo.reason, /doctor_not_found|_/);
   assert.doesNotMatch(FRASE_NO_RECIBE_CITAS, /doctor_not_found|_/);
-  assert.match(FRASE_NO_RECIBE_CITAS, /Aparece en la agenda/);
   const dialogo = leer("src/components/dashboard/new-appointment/new-appointment-dialog.tsx");
   assert.match(dialogo, /errBody\.error === "doctor_not_found"[\s\S]{0,160}FRASE_NO_RECIBE_CITAS/);
-  assert.match(leer("src/lib/agenda-nueva/interacciones.ts"), /doctor_not_found[\s\S]{0,200}FRASE_NO_RECIBE_CITAS/);
+  assert.match(leer("src/lib/agenda-nueva/interacciones.ts"), /doctor_not_found[\s\S]{0,400}FRASE_NO_RECIBE_CITAS/);
 });
 
 test("aparecer en la agenda NO da permisos: los permisos no leen agendaActive", () => {
@@ -170,7 +170,9 @@ test("POST y PATCH de citas, y POST/PATCH de lista de espera, validan con RECIBE
     const h = handler(ruta, metodo);
     assert.match(h, /prisma\.user\.findFirst\(\{\s*where: \{[^}]*clinicId: session\.clinic\.id,\s*\.\.\.RECIBE_CITAS_WHERE,/, `${ruta} ${metodo}`);
     assert.doesNotMatch(h, /role: "DOCTOR"/, `${ruta} ${metodo}`);
-    assert.match(h, /NextResponse\.json\(cuerpoDoctorNoRecibeCitas\(\), \{ status: 404 \}\)/, `${ruta} ${metodo}`);
+    // Revisión de ws1-t10: el 404 dice el motivo (lee la fila por id + clínica de la sesión).
+    assert.match(h, /await cuerpoDoctorNoRecibeCitasDe\(\s*session\.clinic\.id,/, `${ruta} ${metodo}`);
+    assert.match(h, /\{ status: 404 \}/, `${ruta} ${metodo}`);
   }
 });
 
@@ -225,7 +227,8 @@ test("POST /api/treatments valida el doctor que llega del navegador: de la clín
   const busca = h.indexOf("where: { id: doctorId, clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE }");
   assert.ok(busca > 0, "no valida el doctorId");
   assert.ok(busca < h.indexOf("prisma.treatmentPlan.create("), "valida DESPUÉS de crear");
-  assert.match(h, /if \(!atiende\) return NextResponse\.json\(\{ error: FRASE_NO_RECIBE_CITAS, code: "doctor_not_found" \}, \{ status: 404 \}\)/);
+  assert.match(h, /await cuerpoDoctorNoRecibeCitasDe\(ctx\.clinicId, doctorId\)/);
+  assert.match(h, /NextResponse\.json\(\{ error: reason, code: "doctor_not_found", motivo \}, \{ status: 404 \}\)/);
   // Un DOCTOR sigue creando planes solo para sí mismo (no se valida su propio id).
   assert.match(h, /if \(!ctx\.isDoctor && typeof doctorId === "string" && doctorId\)/);
   // El doctor de otra clínica no existe aquí.

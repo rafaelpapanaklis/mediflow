@@ -176,7 +176,8 @@ export function PanelHuecos() {
               key={r.id}
               activo={doctorSel === r.id}
               onClick={() => setDoctorSel(r.id)}
-              etiqueta={r.nombreCorto}
+              // El nombre completo, como en «Nueva cita» (revisión de ws1-t10: «Dr. QA» ×3).
+              etiqueta={r.nombre}
               color={r.color}
             />
           ))}

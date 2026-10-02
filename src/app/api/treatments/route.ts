@@ -3,7 +3,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
-import { FRASE_NO_RECIBE_CITAS, RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
 
@@ -101,7 +102,11 @@ export async function POST(req: NextRequest) {
       where: { id: doctorId, clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE },
       select: { id: true },
     });
-    if (!atiende) return NextResponse.json({ error: FRASE_NO_RECIBE_CITAS, code: "doctor_not_found" }, { status: 404 });
+    if (!atiende) {
+      // Esta API contesta la frase en `error` (la pantalla la enseña tal cual) y el código en `code`.
+      const { reason, motivo } = await cuerpoDoctorNoRecibeCitasDe(ctx.clinicId, doctorId);
+      return NextResponse.json({ error: reason, code: "doctor_not_found", motivo }, { status: 404 });
+    }
   }
 
   const sessions = Number(totalSessions ?? 1);

@@ -170,8 +170,10 @@ export function mensajeDeRechazo(
   }
 
   if (error.error === "doctor_not_found") {
-    // ws1-t10: la regla es «puede recibir citas» (roles-que-atienden.ts), no solo «activo».
-    return `${FRASE_NO_RECIBE_CITAS} ${vuelta}`;
+    // ws1-t10: la regla es «puede recibir citas» (roles-que-atienden.ts), no solo «activo». El servidor manda
+    // en `reason` el motivo concreto (cuenta inactiva, casilla apagada, rol que no atiende); la genérica, si no.
+    const frase = typeof error.reason === "string" && error.reason.includes(" ") ? error.reason : FRASE_NO_RECIBE_CITAS;
+    return `${frase} ${vuelta}`;
   }
   if (error.error === "resource_not_found") {
     return `Esa unidad ya no está activa. ${vuelta}`;

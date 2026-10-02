@@ -24,6 +24,7 @@ import {
 } from "./time-utils";
 import { MOTIVO_APARTADO_LIBERADO, apartadoVencido } from "./apartado";
 import { ROLES_QUE_ATIENDEN } from "./roles-que-atienden";
+import { etiquetaCortaProfesional, etiquetasDeProfesionales } from "./etiqueta-profesional";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el MISMO include para poder enmascarar en una sola
@@ -47,26 +48,16 @@ type ApptWithIncludes = Omit<
   };
 };
 
-const NON_MEDICAL_CATEGORIES: ClinicCategory[] = [
-  "SPA",
-  "MASSAGE",
-  "BEAUTY_CENTER",
-  "NAIL_SALON",
-  "HAIR_SALON",
-  "BROW_LASH",
-  "LASER_HAIR_REMOVAL",
-];
 
 function patientName(p: { firstName: string; lastName: string | null }): string {
   return [p.firstName, p.lastName].filter(Boolean).join(" ").trim();
 }
 
-function professionalShortName(
-  user: { firstName: string; lastName: string },
-  category: ClinicCategory,
-): string {
-  const first = user.firstName.split(/\s+/)[0] ?? user.firstName;
-  return NON_MEDICAL_CATEGORIES.includes(category) ? first : `Dr. ${first}`;
+// El nombre corto del profesional de una cita: «Mariana C.» (etiqueta-profesional.ts). Antes «Dr. » + la
+// primera palabra del nombre en clínicas médicas: «Dr. Dr», «Dr. Cuenta» para el dueño, tres «Dr. QA»
+// (revisión de ws1-t10). Igual en todas las categorías: ya no se añade título.
+function professionalShortName(user: { firstName: string; lastName: string }): string {
+  return etiquetaCortaProfesional(user);
 }
 
 /**
@@ -87,7 +78,8 @@ function maskedPatient(
 
 export function appointmentToDTO(
   a: ApptWithIncludes,
-  category: ClinicCategory,
+  // Ya no cambia el nombre (no se añade «Dr.»): se queda en la firma para no tocar a sus llamadores.
+  _category: ClinicCategory,
   viewer?: VisibilityViewer | null,
 ): AgendaAppointmentDTO {
   // WS1-T5 — una cita apartada cuyo anticipo venció ya liberó su hueco,
@@ -102,7 +94,7 @@ export function appointmentToDTO(
     status: (vencida ? "CANCELLED" : a.status) as AppointmentStatus,
     patient: maskedPatient(a.patient, viewer),
     doctor: a.doctor
-      ? { id: a.doctor.id, shortName: professionalShortName(a.doctor, category) }
+      ? { id: a.doctor.id, shortName: professionalShortName(a.doctor) }
       : undefined,
     reason: a.type ?? undefined,
     isTeleconsult: a.mode === "TELECONSULTATION",
@@ -382,7 +374,7 @@ export async function fetchPendingValidation(
  */
 export async function fetchActiveDoctors(
   clinicId: string,
-  category: ClinicCategory,
+  _category: ClinicCategory,
 ): Promise<DoctorColumnDTO[]> {
   if (!clinicId) return [];
   const users = await prisma.user.findMany({
@@ -398,10 +390,13 @@ export async function fetchActiveDoctors(
     orderBy: { firstName: "asc" },
   });
 
+  // Nombre completo (selectores) y nombre corto (columnas), únicos dentro del padrón: dos «QA …» o el dueño y
+  // un doctor del mismo nombre ya no salen iguales (revisión de ws1-t10).
+  const etiquetas = etiquetasDeProfesionales(users);
   return users.map((u) => ({
     id: u.id,
-    displayName: `${u.firstName} ${u.lastName}`.trim(),
-    shortName: professionalShortName(u, category),
+    displayName: etiquetas.get(u.id)!.nombre,
+    shortName: etiquetas.get(u.id)!.corto,
     color: u.color ?? null,
     avatarUrl: u.avatarUrl ?? null,
     activeInAgenda: u.agendaActive,

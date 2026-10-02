@@ -197,13 +197,13 @@ test("PATCH /api/waitlist/[id] valida el doctor contra la clínica de la sesión
   assert.notEqual(update, -1, "no encuentro el update del PATCH");
   assert.ok(lookup < update, "el PATCH valida el doctor DESPUÉS de guardarlo");
   assert.ok(
-    patch.includes("cuerpoDoctorNoRecibeCitas()"),
-    'el PATCH no devuelve "doctor_not_found" (cuerpoDoctorNoRecibeCitas), el mismo código del POST hermano',
+    patch.includes("cuerpoDoctorNoRecibeCitasDe("),
+    'el PATCH no devuelve "doctor_not_found" (cuerpoDoctorNoRecibeCitasDe), el mismo código del POST hermano',
   );
 
   // El hermano, como referencia viva: si alguien le cambia la forma, se ve aquí.
   const post = handlerBody(fileOf("app/api/waitlist/route.ts"), "POST");
-  assert.ok(post.includes("cuerpoDoctorNoRecibeCitas()"), "el POST hermano ya no valida el doctor: revisa los dos juntos");
+  assert.ok(post.includes("cuerpoDoctorNoRecibeCitasDe("), "el POST hermano ya no valida el doctor: revisa los dos juntos");
 });
 
 test("PATCH /api/waitlist/[id] sigue admitiendo BORRAR el doctor preferido (null)", () => {

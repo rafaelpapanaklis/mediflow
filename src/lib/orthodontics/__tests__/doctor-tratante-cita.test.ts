@@ -53,7 +53,7 @@ test("el motivo se reconoce sin importar mayúsculas ni acentos", () => {
 });
 
 test("el endpoint devuelve el tratante y la ventana lo usa sin pisar una elección a mano", () => {
-  assert.match(leer("src/app/api/orthodontics/context/route.ts"), /treatingDoctorId: plan\?\.treatingDoctorId \?\? null/);
+  assert.match(leer("src/app/api/orthodontics/context/route.ts"), /treatingDoctorId: \(plan \?\? planeado\)\?\.treatingDoctorId \?\? null/);
   const d = leer("src/components/dashboard/new-appointment/new-appointment-dialog.tsx");
   assert.match(d, /body\?\.treatingDoctorId/);
   assert.match(d, /doctorAProponer\(entradaTratante\)/);

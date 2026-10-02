@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
+import { etiquetaCortaProfesional } from "@/lib/agenda/etiqueta-profesional";
 import {
   loadClinicSession,
   requireRole,
@@ -12,19 +14,10 @@ import type {
   WaitlistPriority,
 } from "@/lib/agenda/types";
 
-const NON_MEDICAL = [
-  "SPA",
-  "MASSAGE",
-  "BEAUTY_CENTER",
-  "NAIL_SALON",
-  "HAIR_SALON",
-  "BROW_LASH",
-  "LASER_HAIR_REMOVAL",
-];
-
-function shortName(firstName: string, _lastName: string, category: string): string {
-  const first = firstName.split(/\s+/)[0] ?? firstName;
-  return NON_MEDICAL.includes(category) ? first : `Dr. ${first}`;
+// El doctor preferido con el mismo nombre corto que las citas de la Agenda («Mariana C.»,
+// etiqueta-profesional.ts). Antes «Dr. » + la primera palabra: «Dr. Dr», «Dr. Cuenta» (revisión de ws1-t10).
+function shortName(firstName: string, lastName: string, _category: string): string {
+  return etiquetaCortaProfesional({ firstName, lastName });
 }
 
 // ─── GET ─────────────────────────────────────────────────────────
@@ -147,7 +140,7 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
     if (!d) {
-      return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
+      return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, body.preferredDoctorId), { status: 404 });
     }
   }
 

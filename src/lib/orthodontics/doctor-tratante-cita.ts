@@ -18,6 +18,11 @@ export interface EntradaDoctorTratante {
   motivo: string;
   /** El paciente tiene un caso en curso. */
   casoActivo: boolean;
+  /**
+   * El paciente tiene un caso PLANEADO (PLANNED, sin instalar) y ninguno en curso. Su tratante también se
+   * propone (revisión de ws1-t10: «Agendar» de un caso planeado abría con el primer doctor de la lista).
+   */
+  casoPlaneado?: boolean;
   /** `treatingDoctorId` del caso, o null. */
   tratanteId: string | null | undefined;
   /** Los doctores que se pueden elegir en la ventana. */
@@ -26,9 +31,14 @@ export interface EntradaDoctorTratante {
   doctorActual: string;
 }
 
-/** ¿Aplica la regla? Solo con motivo de control, caso activo y un tratante que se pueda elegir. */
+/** ¿Hay un caso (en curso o planeado) cuyo tratante cuente? */
+function hayCaso(e: EntradaDoctorTratante): boolean {
+  return Boolean(e.casoActivo || e.casoPlaneado);
+}
+
+/** ¿Aplica la regla? Solo con motivo de control, caso en curso o planeado y un tratante que se pueda elegir. */
 function aplica(e: EntradaDoctorTratante): e is EntradaDoctorTratante & { tratanteId: string } {
-  return Boolean(e.casoActivo && e.tratanteId && esMotivoDeControlOrto(e.motivo) && e.doctoresIds.includes(e.tratanteId));
+  return Boolean(hayCaso(e) && e.tratanteId && esMotivoDeControlOrto(e.motivo) && e.doctoresIds.includes(e.tratanteId));
 }
 
 /**
@@ -51,7 +61,7 @@ export function avisarOtroDoctor(e: EntradaDoctorTratante): boolean {
  */
 export function tratanteFueraDeLaAgenda(e: EntradaDoctorTratante): boolean {
   return Boolean(
-    e.casoActivo && e.tratanteId && esMotivoDeControlOrto(e.motivo) && !e.doctoresIds.includes(e.tratanteId),
+    hayCaso(e) && e.tratanteId && esMotivoDeControlOrto(e.motivo) && !e.doctoresIds.includes(e.tratanteId),
   );
 }
 

@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import {
   loadClinicSession,
   requireRole,
@@ -119,7 +120,10 @@ export async function PATCH(
         select: { id: true },
       });
       if (!d) {
-        return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
+        return NextResponse.json(
+          await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, parsed.data.preferredDoctorId),
+          { status: 404 },
+        );
       }
     }
     data.preferredDoctorId = parsed.data.preferredDoctorId;

@@ -93,6 +93,17 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  // Revisión de ws1-t10: un caso PLANEADO (aún sin instalar) también tiene tratante, y su primer control se
+  // agenda igual. Solo cuando no hay uno en curso; NO cuenta como caso activo (duración, fase y cobro siguen
+  // siendo del caso en curso).
+  const planeado = plan
+    ? null
+    : await prisma.orthodonticTreatmentPlan.findFirst({
+        where: { patientId, clinicId: ctx.clinicId, deletedAt: null, status: "PLANNED" },
+        orderBy: { createdAt: "desc" },
+        select: { treatingDoctorId: true },
+      });
+
   // M6: lo que sirve para AGENDAR (hay caso activo, doctor tratante, duración)
   // lo recibe quien tiene la llave de Ortodoncia, recepción incluida; técnica,
   // fase y mes de tratamiento son expediente y piden `medicalRecord.view`.
@@ -101,8 +112,10 @@ export async function GET(req: NextRequest) {
     orthodontics: true,
     moduleActive: true,
     hasActivePlan: Boolean(plan),
-    // ws1-t8: «Nueva cita» propone al doctor tratante del caso para el control de ortodoncia.
-    treatingDoctorId: plan?.treatingDoctorId ?? null,
+    hasPlannedPlan: Boolean(planeado),
+    // ws1-t8: «Nueva cita» propone al doctor tratante del caso para el control de ortodoncia (también el del
+    // caso planeado si no hay uno en curso).
+    treatingDoctorId: (plan ?? planeado)?.treatingDoctorId ?? null,
     technique: veClinico ? plan?.technique ?? null : null,
     currentPhase: veClinico ? plan?.phases[0]?.phaseKey ?? null : null,
     monthInTreatment: veClinico && plan?.installedAt
