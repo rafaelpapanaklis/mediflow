@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { revenuePaymentWhere } from "@/lib/caja";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import type { TFunction } from "@/i18n/t";
+import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
+import { ventanasDeReportes } from "./ventanas-de-reportes";
 
 async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try { return await p; }
@@ -16,24 +18,27 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
  * Analítica (`/dashboard/analytics/reports`). Una sola fuente: las dos enseñan
  * siempre las mismas cifras.
  */
-export async function cargarReportes(clinicId: string, t: TFunction) {
-  const now       = new Date();
+export async function cargarReportes(
+  clinicId: string,
+  t: TFunction,
+  /** La zona de la clínica si quien llama ya la tiene (la sesión); si no, se lee. */
+  timezone?: string | null,
+  ahora: Date = new Date(),
+) {
+  // 12h: los cortes de mes y de día van por el calendario de la CLÍNICA, no por
+  // el reloj del servidor (en Vercel, UTC): ver ventanas-de-reportes.ts.
+  const zona = timezone?.trim() || (await zonaDeClinica(clinicId));
+  const v = ventanasDeReportes(ahora, zona);
+  const ranges = v.meses;
 
-  // Build 6-month date ranges
-  const ranges = Array.from({ length: 6 }, (_, i) => {
-    const start = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    const end   = new Date(now.getFullYear(), now.getMonth() - (5 - i) + 1, 0, 23, 59, 59);
-    return { start, end, label: start.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }) };
-  });
-
-  // Fechas para KPIs actuales
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  const weekEnd = new Date(todayEnd.getTime() + 6 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // Fechas para KPIs actuales (fines exclusivos: se consultan con `lt`)
+  const startOfMonth = v.inicioMes;
+  const startOfLastMonth = v.inicioMesAnterior;
+  const endOfLastMonth = v.finMesAnterior;
+  const todayStart = v.inicioHoy;
+  const todayEnd = v.finHoy;
+  const weekEnd = v.finSemana;
+  const thirtyDaysAgo = v.hace30Dias;
 
   // Promise.all #1 — series mensuales (3 promesas)
   const [revenueResults, patientCounts, apptCounts] = await Promise.all([
@@ -43,15 +48,15 @@ export async function cargarReportes(clinicId: string, t: TFunction) {
     // dinero, y los pagos de facturas anuladas inflaban toda la serie.
     Promise.all(ranges.map(r =>
       safe(
-        prisma.payment.aggregate({ where: revenuePaymentWhere(clinicId, { gte: r.start, lte: r.end }), _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: revenuePaymentWhere(clinicId, { gte: r.start, lt: r.end }), _sum: { amount: true } }),
         { _sum: { amount: 0 } } as any,
       )
     )),
     Promise.all(ranges.map(r =>
-      safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lte: r.end } } }), 0)
+      safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lt: r.end } } }), 0)
     )),
     Promise.all(ranges.map(r =>
-      safe(prisma.appointment.count({ where: { clinicId, startsAt: { gte: r.start, lte: r.end } } }), 0)
+      safe(prisma.appointment.count({ where: { clinicId, startsAt: { gte: r.start, lt: r.end } } }), 0)
     )),
   ]);
 
@@ -78,7 +83,7 @@ export async function cargarReportes(clinicId: string, t: TFunction) {
   const [totalPatients, newThisMonth, newLastMonth, debtAggregate, debtCount] = await Promise.all([
     safe(prisma.patient.count({ where: { clinicId } }), 0),
     safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfMonth } } }), 0),
-    safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } } }), 0),
+    safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfLastMonth, lt: endOfLastMonth } } }), 0),
     safe(prisma.invoice.aggregate({
       where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
       _sum: { balance: true },
@@ -95,14 +100,14 @@ export async function cargarReportes(clinicId: string, t: TFunction) {
     safe(prisma.appointment.count({
       where: {
         clinicId,
-        startsAt: { gte: todayStart, lte: todayEnd },
+        startsAt: { gte: todayStart, lt: todayEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
       },
     }), 0),
     safe(prisma.appointment.count({
       where: {
         clinicId,
-        startsAt: { gte: todayStart, lte: weekEnd },
+        startsAt: { gte: todayStart, lt: weekEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
       },
     }), 0),

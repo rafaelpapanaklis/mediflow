@@ -30,7 +30,7 @@ export default async function AnalyticsReportsPage() {
   // evita calcular los reportes para luego redirigir.
   if (!(await menuDosNivelesEncendido(user.clinicId))) redirect("/dashboard/reports");
 
-  const { monthlyData, topTypes, byStatus, patientStats, clinicStats } = await cargarReportes(user.clinicId, t);
+  const { monthlyData, topTypes, byStatus, patientStats, clinicStats } = await cargarReportes(user.clinicId, t, user.clinic?.timezone);
 
   return (
     <ReportsRediseno

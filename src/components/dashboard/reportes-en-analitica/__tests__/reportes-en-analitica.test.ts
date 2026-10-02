@@ -111,7 +111,7 @@ test("la pestaña pide el mismo permiso que Reportes y lee las cifras de la mism
   }
   // La fuente conserva el criterio de ingresos de siempre y no pasa a nadie por alto.
   const fuente = leer("app/dashboard/reports/cargar-reportes.ts");
-  assert.match(fuente, /revenuePaymentWhere\(clinicId, \{ gte: r\.start, lte: r\.end \}\)/);
+  assert.match(fuente, /revenuePaymentWhere\(clinicId, \{ gte: r\.start, lt: r\.end \}\)/);
   assert.equal((fuente.match(/where: \{\s*clinicId\b|revenuePaymentWhere\(clinicId/g) ?? []).length,
     (fuente.match(/prisma\.[a-zA-Z]+\.(count|aggregate|groupBy|findMany)\(/g) ?? []).length,
     "cada consulta va aislada por clinicId");

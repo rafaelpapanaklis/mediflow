@@ -10,6 +10,7 @@ import { RaizRediseno } from "@/components/dashboard/reportes-rediseno/raiz";
 import { Vacio } from "@/components/dashboard/reportes-rediseno/piezas";
 import { fmtMXN } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
+import { nombreDeEstado, tasaDeAtendidas } from "./estados-de-cita";
 
 interface Props {
   monthlyData: { label: string; revenue: number; patients: number; appointments: number }[];
@@ -45,15 +46,7 @@ interface Props {
   enAnalitica?: boolean;
 }
 
-// id -> translation key; resolved via t() at render time (never at module scope)
-const STATUS_LABEL_KEYS: Record<string, string> = {
-  PENDING: "analytics.reports.statusPending",
-  CONFIRMED: "analytics.reports.statusConfirmed",
-  COMPLETED: "analytics.reports.statusCompleted",
-  CANCELLED: "analytics.reports.statusCancelled",
-  NO_SHOW: "analytics.reports.statusNoShow",
-  IN_PROGRESS: "analytics.reports.statusInProgress",
-};
+// Etiquetas de estado y «atendida»: ver estados-de-cita.ts (12i).
 
 // Paleta de las series. Con el rediseño encendido la primera serie es el
 // acento del menú de dos niveles (`--m2-activo`, que monta la raíz); apagado,
@@ -74,13 +67,11 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
   const totalRevenue  = monthlyData.reduce((s, d) => s + d.revenue, 0);
   const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
   const totalAppts    = monthlyData.reduce((s, d) => s + d.appointments, 0);
-  const totalStatus   = byStatus.reduce((s, b) => s + b._count.id, 0);
-  const completionRate = totalStatus > 0
-    ? Math.round(((byStatus.find(s => s.status === "COMPLETED")?._count.id ?? 0) / totalStatus) * 100)
-    : 0;
+  // 12i: atendida = COMPLETED y CHECKED_OUT (antes solo COMPLETED).
+  const completionRate = tasaDeAtendidas(byStatus);
   const avgTicket = totalAppts > 0 ? totalRevenue / totalAppts : 0;
   const pieData = byStatus.map(s => ({
-    name: STATUS_LABEL_KEYS[s.status] ? t(STATUS_LABEL_KEYS[s.status]) : s.status,
+    name: nombreDeEstado(s.status, t),
     value: s._count.id,
   }));
 

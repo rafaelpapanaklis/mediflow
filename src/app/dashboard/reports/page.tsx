@@ -17,7 +17,7 @@ export default async function ReportsPage() {
   // ni una cuenta cambiada) porque también lo lee la pestaña Reportes de
   // Analítica. Esta pantalla sigue viva para quien llegue por la URL de siempre.
   const { monthlyData, topTypes, byStatus, patientStats, clinicStats, rediseno } =
-    await cargarReportes(clinicId, t);
+    await cargarReportes(clinicId, t, user.clinic?.timezone);
 
   return (
     <ReportsClient
