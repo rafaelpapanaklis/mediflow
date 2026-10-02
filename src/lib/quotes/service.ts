@@ -127,6 +127,8 @@ export async function createQuoteWithFolio(args: {
   discountAmount?: number | null;
   validUntil: Date | null;
   notes: string | null;
+  /** Plan de tratamiento del que nace (ws1-t3, «Convertir en presupuesto»); lo valida quien llama. */
+  treatmentPlanId?: string | null;
 }) {
   const sanitized = await sanitizeItems(args.clinicId, args.items);
   const totals = computeTotals(sanitized, {
@@ -151,6 +153,7 @@ export async function createQuoteWithFolio(args: {
           total: totals.total,
           validUntil: args.validUntil,
           notes: args.notes,
+          ...(args.treatmentPlanId ? { treatmentPlanId: args.treatmentPlanId } : {}),
           items: { create: itemsData },
         },
         include: QUOTE_INCLUDE,

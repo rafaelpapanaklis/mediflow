@@ -1,0 +1,65 @@
+/* «Convertir en presupuesto» (ws1-t3). Solo lo que plan.module.css no tiene: la tabla de conceptos.
+   El resto de la ventana (velo, caja, pie, botones, avisos) reutiliza sus clases; los colores salen de
+   los `--m2-*` del menú y de los `--pr-*` del expediente, sin hex propios. */
+
+.tabla {
+  width: 100%;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 44px 84px 96px;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border-top: 1px solid var(--m2-borde);
+  font-variant-numeric: tabular-nums;
+}
+
+.fila:first-child { border-top: 0; }
+
+.encabezado {
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.nombre { min-width: 0; overflow-wrap: anywhere; }
+.num { text-align: right; }
+.apagado { color: var(--m2-texto-3); }
+.sinPrecio { color: var(--pr-alerta, var(--m2-texto-2)); font-weight: 600; }
+.pista { font-size: 11.5px; color: var(--m2-texto-3); }
+
+.total {
+  background: var(--m2-n1-fondo);
+  font-weight: 700;
+}
+
+.ya {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--pr-alerta-suave, var(--m2-hover));
+}
+
+.yaTitulo { font-weight: 600; }
+.yaTexto { color: var(--m2-texto-2); }
+
+.espacio { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+
+/* Móvil: cada concepto en dos renglones (nombre arriba; dientes, cantidad, precio e importe debajo). */
+@media (max-width: 640px) {
+  .fila {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .nombre { grid-column: 1 / -1; font-weight: 600; }
+  .encabezado { display: none; }
+  .num { text-align: left; }
+}

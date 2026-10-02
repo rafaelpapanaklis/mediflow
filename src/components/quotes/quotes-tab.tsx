@@ -64,6 +64,8 @@ interface QuotesTabProps {
   onViewInvoice?: (invoiceId: string) => void;
   /** Abre el plan de tratamiento ya generado (lo maneja el contenedor del expediente). */
   onViewPlan?: (planId: string) => void;
+  /** Presupuesto a abrir al llegar (ws1-t3: «Convertir en presupuesto» desde el plan). Si es borrador abre su editor; si no, solo la lista. */
+  abrirId?: string | null;
   /**
    * Se dispara con la factura que llega en una respuesta: la que nace al pulsar
    * «Generar factura» en un presupuesto aceptado, o el borrador de un
@@ -82,7 +84,7 @@ interface QuotesTabProps {
   rediseno?: boolean;
 }
 
-export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInvoiceCreated, rediseno = false }: QuotesTabProps) {
+export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrirId = null, onInvoiceCreated, rediseno = false }: QuotesTabProps) {
   const t = useT();
   const [quotes, setQuotes] = useState<QuoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +117,15 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
       setEditorOpen(true);
     }
   }, [prefill]);
+
+  // Llegar desde el plan con un borrador recién creado: se abre su editor, una sola vez por id.
+  const abiertoDesdePlan = useRef<string | null>(null);
+  useEffect(() => {
+    if (!abrirId || loading || abiertoDesdePlan.current === abrirId) return;
+    abiertoDesdePlan.current = abrirId;
+    const q = quotes.find((x) => x.id === abrirId);
+    if (q && q.status === "DRAFT") { setEditing(q); setInitialItems(null); setEditorOpen(true); }
+  }, [abrirId, loading, quotes]);
 
   function openNew() { setEditing(null); setInitialItems(null); setEditorOpen(true); }
   function openEdit(q: QuoteDTO) { setEditing(q); setInitialItems(null); setEditorOpen(true); }

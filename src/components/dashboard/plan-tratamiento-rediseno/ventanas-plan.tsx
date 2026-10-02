@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
+import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "./convertir-en-presupuesto";
 import s from "./plan.module.css";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
@@ -55,8 +56,10 @@ function Marco({ titulo, tituloId, angosta, bloqueado, onCerrar, children }: {
   );
 }
 
-export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar }: {
+export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar, onAbrirPresupuesto }: {
   plan: any; puedeEditar: boolean; onCerrar: () => void; onEditar: () => void;
+  /** Con él (y solo con él) sale «Convertir en presupuesto»: lo da quien puede crear presupuestos. */
+  onAbrirPresupuesto?: (q: PresupuestoDelPlan) => void;
 }) {
   const t = useT();
   // Hechas = con `completedAt` (N8, MAPA-pacientes §9), como todo el camino nuevo.
@@ -131,6 +134,9 @@ export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar }: {
       </div>
       <footer className={s.pie}>
         <button type="button" className={s.boton} onClick={onCerrar}>{t("common.close")}</button>
+        {onAbrirPresupuesto && (
+          <ConvertirEnPresupuesto planId={plan.id} planCosto={Number(plan.totalCost) || 0} onAbrirPresupuesto={onAbrirPresupuesto} />
+        )}
         {puedeEditar && (
           <button type="button" className={`${s.boton} ${s.botonPrincipal}`} onClick={onEditar}>
             <Edit size={14} strokeWidth={1.75} aria-hidden /> {t("patients.treatment.editBtn")}

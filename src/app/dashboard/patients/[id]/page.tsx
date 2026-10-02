@@ -350,6 +350,8 @@ export default async function PatientDetailPage({
   const canViewPrescriptions = hasPermission(permsUser, "prescription.view");
   // PLANES DE TRATAMIENTO (EQ-07): crear/editar/borrar y registrar sesiones.
   const canEditTreatments = hasPermission(permsUser, "treatments.edit");
+  // «Convertir en presupuesto» (ws1-t3): crea un presupuesto, así que pide lo mismo que POST /api/quotes.
+  const canCreateQuotes = hasPermission(permsUser, "billing.create") && hasPermission(permsUser, "treatments.view");
 
   // Mismo criterio para el EXPEDIENTE (P1-N2): sin "Ver expediente clínico" la
   // ficha se sigue abriendo (contacto, citas, facturación) pero el SOAP no sale
@@ -658,6 +660,7 @@ export default async function PatientDetailPage({
           canViewPrescriptions={canViewPrescriptions}
           canViewRecords={canViewRecords}
           canEditTreatments={canEditTreatments}
+          canCreateQuotes={canCreateQuotes}
           facturApiEnabled={Boolean((user.clinic as any).facturApiEnabled)}
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace
           // una factura nueva desde la ficha — igual que en Caja.

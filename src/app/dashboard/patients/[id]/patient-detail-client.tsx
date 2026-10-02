@@ -59,6 +59,7 @@ import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashb
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
 import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
+import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-tratamiento-rediseno/convertir-en-presupuesto";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
@@ -424,6 +425,8 @@ interface Props {
   canViewRecords?: boolean;
   /** "treatments.edit" (EQ-07) — crear, editar y borrar planes de tratamiento. */
   canEditTreatments?: boolean;
+  /** "billing.create" — «Convertir en presupuesto» desde el plan (ws1-t3): crea un presupuesto borrador. */
+  canCreateQuotes?: boolean;
   /**
    * "inbox.send" — el MISMO permiso con el que el Inbox deja responder. Decide
    * si la tarjeta de WhatsApp ofrece INICIAR la conversación cuando todavía no
@@ -509,6 +512,7 @@ export function PatientDetailClient({
   canViewPrescriptions = false,
   canViewRecords = false,
   canEditTreatments = false,
+  canCreateQuotes = false,
   facturApiEnabled = false,
   reminderOutcome = null,
   rediseno = false,
@@ -838,6 +842,8 @@ export function PatientDetailClient({
   }
 
   const [showNewTreatment, setShowNewTreatment] = useState(false);
+  // Presupuesto que la pestaña «Presupuestos» abre al llegar desde el plan (ws1-t3).
+  const [presupuestoAbrir, setPresupuestoAbrir] = useState<string | null>(null);
   const [savingTreatment, setSavingTreatment] = useState(false);
   const [treatmentForm, setTreatmentForm] = useState({
     doctorId: "",
@@ -2766,6 +2772,7 @@ export function PatientDetailClient({
                         puedeEditar={canEditTreatments}
                         onCerrar={() => setViewPlan(null)}
                         onEditar={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }}
+                        onAbrirPresupuesto={canCreateQuotes ? (q) => { setViewPlan(null); setPresupuestoAbrir(q.id); setTab("presupuestos"); } : undefined}
                       />
                     );
                   }
@@ -2826,6 +2833,9 @@ export function PatientDetailClient({
                         </div>
                         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
                           <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("common.close")}</button>
+                          {canCreateQuotes && (
+                            <ConvertirEnPresupuesto antigua planId={vp.id} planCosto={Number(vp.totalCost) || 0} onAbrirPresupuesto={(q) => { setViewPlan(null); setPresupuestoAbrir(q.id); setTab("presupuestos"); }} />
+                          )}
                           {canEditTreatments && (
                             <button type="button" onClick={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }} className="px-3 h-9 rounded-lg bg-[var(--brand)] text-white text-sm font-semibold hover:bg-[var(--violet-700)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98] inline-flex items-center gap-1.5"><Edit className="w-4 h-4" strokeWidth={1.75} />{t("patients.treatment.editBtn")}</button>
                           )}
@@ -3288,6 +3298,7 @@ export function PatientDetailClient({
                 else openBillingTab(); // factura recién creada aún no en el snapshot
               }}
               onViewPlan={() => setTab("tratamiento")}
+              abrirId={presupuestoAbrir}
               onInvoiceCreated={(inv) =>
                 // Nueva → al frente; ya conocida (el borrador ligado que el PATCH
                 // del presupuesto acaba de re-sincronizar) → se reemplaza en su
