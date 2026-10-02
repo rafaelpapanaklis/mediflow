@@ -226,6 +226,21 @@ test("Nueva factura: el motivo del trato, del link de Mercado Pago y del envío 
   assert.equal(mensajeDeError({ link: null, error: null }, tEs, { porDefecto: "No se pudo generar el link." }), "No se pudo generar el link.");
 });
 
+test("Nueva factura: «Crear factura» y «Guardar» con un 500 no enseñan «internal_error» (ni throw new Error(out.error) ni e.message a pelo)", () => {
+  const modal = readFileSync(join(process.cwd(), "src", "components/billing/invoice-editor-modal.tsx"), "utf8");
+  assert.ok(!/throw new Error\(out\.error/.test(modal), "invoice-editor-modal lanza el código del servidor como mensaje");
+  assert.ok(!/toast\.error\(\(e as Error\)\.message/.test(modal), "invoice-editor-modal pinta e.message a pelo");
+  // Crear y editar: respuesta no-ok (con el estado HTTP) y catch (red) pasan por el traductor.
+  assert.equal((modal.match(/mensajeDeError\(out, t, \{ estado: res\.status, porDefecto: t\("billing\.invoiceEditor\.error(?:Create|Update)"\) \}\)/g) ?? []).length, 2);
+  assert.equal((modal.match(/mensajeDeError\(e, t, \{ porDefecto: t\("billing\.invoiceEditor\.error(?:Create|Update)"\) \}\)/g) ?? []).length, 2);
+  // Lo que ve la persona con un 500 / un código desconocido / un corte de red.
+  const porDefecto = tEs("billing.invoiceEditor.errorCreate");
+  assert.equal(mensajeDeError({ error: "internal_error" }, tEs, { estado: 500, porDefecto }), tEs("errores.interno"));
+  assert.equal(mensajeDeError({}, tEs, { estado: 500, porDefecto }), tEs("errores.interno"));
+  assert.equal(mensajeDeError(new TypeError("Failed to fetch"), tEs, { porDefecto }), tEs("errores.red"));
+  assert.equal(mensajeDeError({ error: "El descuento excede el subtotal" }, tEs, { estado: 400, porDefecto }), "El descuento excede el subtotal");
+});
+
 test("esos mismos archivos tampoco pasan `x.error ?? \"…\"` a un toast ni a un aviso en pantalla", () => {
   const CRUDO = /(?:toast\.error|setErr|setError|setBloqueado)\(\s*\w+\??\.error\s*\?\?/;
   const NUEVOS = PANTALLAS.slice(-9);

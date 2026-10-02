@@ -458,11 +458,16 @@ function InvoiceEditorBody({
         setSaving(false);
         return;
       }
-      if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorUpdate"));
+      if (!res.ok) {
+        // Un código del servidor («internal_error») nunca se enseña crudo.
+        toast.error(mensajeDeError(out, t, { estado: res.status, porDefecto: t("billing.invoiceEditor.errorUpdate") }), { duration: 8000 });
+        setSaving(false);
+        return;
+      }
       toast.success(t("billing.invoiceEditor.updatedToast", { number: editar.invoiceNumber ?? "" }));
       onGuardada?.(out);
     } catch (e) {
-      toast.error((e as Error).message || t("billing.invoiceEditor.errorUpdate"), { duration: 8000 });
+      toast.error(mensajeDeError(e, t, { porDefecto: t("billing.invoiceEditor.errorUpdate") }), { duration: 8000 });
       setSaving(false);
     }
   }
@@ -517,7 +522,13 @@ function InvoiceEditorBody({
         body: JSON.stringify(payload),
       });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error || t("billing.invoiceEditor.errorCreate"));
+      if (!res.ok) {
+        // Un código del servidor («internal_error») nunca se enseña crudo.
+        ocupado.current = false;
+        toast.error(mensajeDeError(out, t, { estado: res.status, porDefecto: t("billing.invoiceEditor.errorCreate") }));
+        setSaving(false);
+        return;
+      }
       toast.success(t("billing.invoiceEditor.createdToast", { number: out.invoiceNumber ?? "" }));
       // Nació con el saldo a favor del paciente (anticipo) ya descontado.
       if (out?.anticipoAplicado > 0) {
@@ -574,7 +585,7 @@ function InvoiceEditorBody({
       // No reseteamos `saving`: el modal se cierra (open=false) y este cuerpo se desmonta.
     } catch (e) {
       ocupado.current = false;
-      toast.error((e as Error).message || t("billing.invoiceEditor.errorCreate"));
+      toast.error(mensajeDeError(e, t, { porDefecto: t("billing.invoiceEditor.errorCreate") }));
       setSaving(false);
     }
   }

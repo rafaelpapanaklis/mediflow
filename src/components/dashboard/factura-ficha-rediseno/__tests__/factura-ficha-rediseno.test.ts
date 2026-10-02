@@ -107,7 +107,8 @@ test("mientras guarda el trato o envía, el popup no se cierra (solo diseño nue
   assert.match(modal, /if \(!o && !ocupado\.current\) onClose\(\)/, "Esc o clic fuera cierran a media operación");
   assert.match(modal, /if \(rediseno && out\?\.id && \(hayCondiciones\(cond\) \|\| envio\)\) \{ ocupado\.current = true;/, "`ocupado` se enciende sin bandera");
   assert.equal((modal.match(/ocupado\.current = true/g) ?? []).length, 1, "`ocupado` solo se enciende en un sitio, detrás de `rediseno`");
-  assert.equal((modal.match(/ocupado\.current = false/g) ?? []).length, 2, "`ocupado` se apaga al terminar Y si algo lanza");
+  // ws1-t2: crear con respuesta no-ok ya no lanza, así que se apaga también en esa rama (terminar, no-ok, catch).
+  assert.equal((modal.match(/ocupado\.current = false/g) ?? []).length, 3, "`ocupado` se apaga al terminar, ante una respuesta no-ok Y si algo lanza");
 });
 
 test("sin motivo del servidor no se afirma que NO se envió", () => {
