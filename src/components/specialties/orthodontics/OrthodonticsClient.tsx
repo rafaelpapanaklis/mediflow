@@ -26,6 +26,7 @@ import { ControlAppointmentWizard } from "./controls/ControlAppointmentWizard";
 import { RecordPaymentDrawer } from "./payments/RecordPaymentDrawer";
 import { PhotoCompareSlider } from "./photos/PhotoCompareSlider";
 import { MigratedOrthoCasesCard } from "./MigratedOrthoCasesCard";
+import { PAYMENT_LABEL } from "./payments/PaymentStatusBadge";
 
 export interface OrthodonticsClientProps {
   patientId: string;
@@ -94,7 +95,8 @@ export function OrthodonticsClient(props: OrthodonticsClientProps) {
         toast.error(result.error);
         return;
       }
-      toast.success(`Status: ${result.data.status}`);
+      // 12i: el estado en español (antes salía «Status: ON_TIME»).
+      toast.success(`Estado del plan de pagos: ${PAYMENT_LABEL[result.data.status as keyof typeof PAYMENT_LABEL] ?? "sin clasificar"}`);
     } finally {
       setRecalculating(false);
     }

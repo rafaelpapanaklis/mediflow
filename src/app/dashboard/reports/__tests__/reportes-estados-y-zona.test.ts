@@ -157,3 +157,19 @@ test("sin zona de la sesión, el cargador la lee de la clínica (por el id de la
   const cobro = llamadas.find((c) => c.modelo === "payment")!;
   assert.equal(cobro.args.where.paidAt.gte.toISOString(), "2026-04-01T06:00:00.000Z");
 });
+
+// ── Otros estados crudos del panel dental (12i, «busca otros lugares») ──────
+
+test("el estado periimplantar y el del plan de pagos de orto tienen etiqueta para TODOS los valores del enum", async () => {
+  const { PeriImplantStatus, OrthoPaymentStatus } = await import("@prisma/client");
+  const { ETIQUETA_ESTADO_PERIIMPLANTAR } = await import("@/lib/periodontics/estado-periimplantar");
+  for (const v of Object.values(PeriImplantStatus)) assert.ok(ETIQUETA_ESTADO_PERIIMPLANTAR[v], `PeriImplantStatus ${v} sin etiqueta`);
+  const texto = readFileSync(join(process.cwd(), "src", "components/specialties/orthodontics/payments/PaymentStatusBadge.tsx"), "utf8");
+  for (const v of Object.values(OrthoPaymentStatus)) assert.ok(texto.includes(`${v}: "`), `OrthoPaymentStatus ${v} sin etiqueta`);
+});
+
+test("los avisos «Status: …» y «evaluación periimplantar: …» ya no pintan el código del enum", () => {
+  const leerSrc = (rel: string) => readFileSync(join(process.cwd(), "src", rel), "utf8");
+  assert.doesNotMatch(leerSrc("components/specialties/orthodontics/OrthodonticsClient.tsx"), /Status: \$\{result\.data\.status\}/);
+  assert.doesNotMatch(leerSrc("components/specialties/implants/drawers/MaintenanceDrawer.tsx"), /periimplantar: \$\{assessmentRes\.data\.status\}/);
+});

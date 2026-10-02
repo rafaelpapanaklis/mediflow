@@ -3,7 +3,8 @@
 
 import type { OrthoPaymentStatus } from "@prisma/client";
 
-const PAYMENT_LABEL: Record<OrthoPaymentStatus, string> = {
+/** Exportado: el aviso «Recalcular estado» del plan de pagos nombra el estado igual que la insignia (12i). */
+export const PAYMENT_LABEL: Record<OrthoPaymentStatus, string> = {
   ON_TIME: "Al corriente",
   LIGHT_DELAY: "Atraso leve",
   SEVERE_DELAY: "Atraso severo",

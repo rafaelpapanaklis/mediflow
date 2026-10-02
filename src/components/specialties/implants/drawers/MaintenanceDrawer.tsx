@@ -18,6 +18,7 @@ import {
   expectedMaxBoneLossMm,
   yearsBetween,
 } from "@/lib/implants/albrektsson-success";
+import { nombreEstadoPeriimplantar } from "@/lib/periodontics/estado-periimplantar";
 
 const MILESTONE_LABEL: Record<string, string> = {
   M_1_WEEK: "1 semana",
@@ -142,7 +143,7 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
         if (isFailure(assessmentRes)) {
           toast.error(`Control guardado · evaluación periimplantar: ${assessmentRes.error}`);
         } else {
-          toast.success(`Control guardado · evaluación periimplantar: ${assessmentRes.data.status}`, {
+          toast.success(`Control guardado · evaluación periimplantar: ${nombreEstadoPeriimplantar(assessmentRes.data.status)}`, {
             icon: "🔬",
           });
         }
