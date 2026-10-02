@@ -50,6 +50,8 @@ import {
 import toast from "react-hot-toast";
 import { instrumentSans } from "@/fonts/menu";
 import { useT } from "@/i18n/i18n-provider";
+import { CODIGO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
+import { useTextosPacienteDePrueba } from "@/lib/patients/textos-paciente-de-prueba";
 import { avisarCambioArmazon } from "@/lib/armazon/refrescar";
 import type { TFunction } from "@/i18n/t";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
@@ -354,6 +356,7 @@ const SMOOTH_SETTLE_MS = 400;
 
 export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido?: boolean }) {
   const t = useT();
+  const textosPrueba = useTextosPacienteDePrueba();
   const router = useRouter();
   const sp = useSearchParams();
   const patientIdFilter = sp.get("patientId");
@@ -1033,7 +1036,10 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
       // durante el POST). El modo se conserva: si estabas tomando notas en esa
       // conversación, sigues en notas.
       setDraftFor(activeThread.id, { text: "" });
-      if (data.sendError) {
+      if (data.sendError === CODIGO_NO_CONTACTAR) {
+        // ws1-t11 (11d): paciente de prueba / no contactar — se dice en humano.
+        toast(textosPrueba.inboxNoSalio, { icon: "⚠️" });
+      } else if (data.sendError) {
         toast(t("inbox.client.toastSavedButError", { error: data.sendError }), { icon: "⚠️" });
       } else {
         toast.success(composerMode === "internal" ? t("inbox.client.toastInternalNoteSaved") : t("inbox.client.toastMessageSent"));

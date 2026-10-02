@@ -25,6 +25,7 @@ import {
   nextInvoiceNumber,
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
+import { esPacienteDePrueba } from "@/lib/patients/paciente-de-prueba-db";
 
 export const dynamic = "force-dynamic";
 
@@ -236,7 +237,14 @@ export async function POST(req: NextRequest) {
 
   // ── Auto-create draft invoice from procedures (if any had prices) ──────────
   let draftInvoice = null;
-  if (data.autoInvoice && Array.isArray((cleanSpec as any).procedures) && (cleanSpec as any).procedures.length > 0) {
+  // ws1-t11 (11d): un «Paciente de prueba / no contactar» no genera cargos
+  // automáticos (la nota se guarda igual; cobrarle a mano sigue funcionando).
+  if (
+    data.autoInvoice &&
+    Array.isArray((cleanSpec as any).procedures) &&
+    (cleanSpec as any).procedures.length > 0 &&
+    !(await esPacienteDePrueba(dbUser.clinicId, data.patientId))
+  ) {
     try {
       const procedures = (cleanSpec as any).procedures as Array<{ id?: string; name: string; price: number; quantity: number }>;
 

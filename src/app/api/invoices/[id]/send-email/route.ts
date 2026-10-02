@@ -26,6 +26,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
+import { CODIGO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
 import { CHARGEABLE_INVOICE_STATUSES } from "@/components/dashboard/billing/invoice-status";
 import { buildCorreoFactura } from "@/lib/invoices/correo-factura";
 import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
@@ -139,7 +140,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       condiciones: porFactura.get(invoice.id) ?? null,
       linkPago: link,
     });
-    const { delivered } = await sendEmail({ to: d.valor, subject, html, text });
+    // ws1-t11 (11d): el freno mira al PACIENTE de la factura, también cuando
+    // el correo va a su responsable de pago.
+    const { delivered, bloqueado } = await sendEmail({
+      to: d.valor, subject, html, text,
+      paciente: { clinicId: ctx.clinicId, patientId: invoice.patientId ?? null },
+    });
+    if (bloqueado) {
+      return NextResponse.json({ error: bloqueado, code: CODIGO_NO_CONTACTAR }, { status: 409 });
+    }
     (delivered ? enviados : fallos).push(d);
   }
   if (enviados.length === 0) {

@@ -6,6 +6,8 @@ import { sendWhatsappMessage } from "@/lib/integrations/twilio-conversations";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { resolveWhatsappSendChannel, isWithin24hWindow } from "@/lib/inbox/send-core";
 import { sendEmail } from "@/lib/email";
+import { CODIGO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
+import { motivoParaNoContactar } from "@/lib/patients/paciente-de-prueba-db";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
@@ -142,9 +144,26 @@ export async function POST(req: NextRequest, { params }: Params) {
     let externalId: string | null = null;
     let sendError: string | null = null;
 
+    // ws1-t11 (11d) — «Paciente de prueba / no contactar»: la respuesta escrita
+    // a mano tampoco sale por WhatsApp ni por correo. Se guarda en el hilo (como
+    // cuando falla un envío) y se le dice al equipo por qué no salió. El hilo
+    // ligado a un paciente manda la marca de ese paciente; un hilo suelto, la
+    // de los dueños del número.
+    const frenado =
+      !parsed.data.isInternal && (thread.channel === "WHATSAPP" || thread.channel === "EMAIL")
+        ? await motivoParaNoContactar({
+            clinicId: dbUser.clinicId,
+            patientId: thread.patientId ?? null,
+            telefono: thread.channel === "WHATSAPP" ? thread.patient?.phone ?? null : null,
+            correo: thread.channel === "EMAIL" ? thread.patient?.email ?? null : null,
+          })
+        : null;
+
     // Las notas internas nunca salen al canal externo: solo se guardan.
     // Para respuestas reales, entregamos según el canal del hilo.
-    if (!parsed.data.isInternal) {
+    if (frenado) {
+      sendError = CODIGO_NO_CONTACTAR;
+    } else if (!parsed.data.isInternal) {
       if (thread.channel === "WHATSAPP") {
         const phone = thread.patient?.phone;
         if (!phone) {

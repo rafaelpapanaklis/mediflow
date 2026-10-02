@@ -51,6 +51,7 @@ import { DateField } from "@/components/ui/date-field";
 import { patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
 import { armarCsvExcel } from "@/lib/csv-excel";
 import styles from "./patients.module.css";
+import { EtiquetaListaPacienteDePrueba } from "@/components/dashboard/patient-detail/paciente-de-prueba";
 // REDISEÑO DE PACIENTES (WS1-T4) — la raíz que trae Instrument Sans y los
 // tokens `--pr-*`. Solo se monta con el interruptor `menu-dos-niveles`
 // encendido para la clínica; apagado, ni una clase de más.
@@ -73,6 +74,8 @@ interface PatientRow {
   gender: PatientGender;
   tags: string[];
   isVip: boolean;
+  /** ws1-t11 (11d): «Paciente de prueba / no contactar». */
+  esPrueba?: boolean;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   lastVisit: string | null;
   nextAppointment: { id: string; startsAt: string; status: string; type: string } | null;
@@ -1338,6 +1341,9 @@ function PatientRowComp({
             <span className={styles.patientInfo}>
               <span className={styles.patientName}>{highlightMatch(p.fullName, search)}</span>
               <span className={styles.patientMeta}>
+                {/* ws1-t11 (11d): en la línea de datos y no tras el nombre, que se
+                    recorta con «…» y se comería la etiqueta en nombres largos. */}
+                {p.esPrueba && <><EtiquetaListaPacienteDePrueba />{" "}</>}
                 {p.patientNumber}
                 {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
                 {genderShortLabel(p.gender) && ` · ${genderShortLabel(p.gender)}`}
@@ -1525,6 +1531,7 @@ function PatientsGrid({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 className={styles.gridName}>
                   {highlightMatch(p.fullName, search)}
+                  {p.esPrueba && <> <EtiquetaListaPacienteDePrueba /></>}
                   {p.lifecycleStage === "prospect" && (
                     <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "var(--brand)", background: "var(--brand-softer)", border: "1px solid var(--brand-soft)", borderRadius: 6, padding: "1px 6px", verticalAlign: "middle" }}>
                       Prospecto

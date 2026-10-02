@@ -478,3 +478,39 @@ export function renderCobranzaMessage(
     .replaceAll("{total}", vars.total)
     .trim();
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Reseñas — «Pedir reseña al terminar la cita» (ws1-t11, 11c del tercer
+// ticket de BEVADENT).
+//
+// Hasta hoy la invitación salía SIEMPRE al completar una cita
+// (src/lib/reviews/invite.ts), sin interruptor. Vive en
+// Clinic.reminderSettings.resenas —sub-objeto del MISMO Json que `recall`,
+// `eventos` y `cobranza`— → CERO cambio de schema y nada que pegar.
+//
+// ENCENDIDO DE FÁBRICA, al revés que eventos y cobranza: es lo que ya pasa en
+// producción, y apagarlo en silencio a todas las clínicas les quitaría las
+// reseñas sin que lo pidieran. Solo un `false` de verdad lo apaga.
+// ════════════════════════════════════════════════════════════════════
+
+export interface ResenasSettings {
+  /** Mandar la invitación a reseña (WhatsApp y correo) al terminar la cita. */
+  alTerminar: boolean;
+}
+
+export const DEFAULT_RESENAS_SETTINGS: ResenasSettings = { alTerminar: true };
+
+/** Valida/normaliza un `resenas` crudo. null solo si no es un objeto (400). */
+export function sanitizeResenasSettings(raw: unknown): ResenasSettings | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  return { alTerminar: o.alTerminar === false ? false : DEFAULT_RESENAS_SETTINGS.alTerminar };
+}
+
+/** Config de reseñas efectiva de la clínica (lee reminderSettings.resenas). */
+export function getResenasSettings(clinic: { reminderSettings?: unknown } | null | undefined): ResenasSettings {
+  const rs = clinic?.reminderSettings;
+  const resenas =
+    rs && typeof rs === "object" && !Array.isArray(rs) ? (rs as Record<string, unknown>).resenas : null;
+  return sanitizeResenasSettings(resenas) ?? { ...DEFAULT_RESENAS_SETTINGS };
+}

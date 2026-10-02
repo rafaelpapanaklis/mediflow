@@ -6,6 +6,8 @@ import {
   requireRole,
 } from "@/lib/agenda/api-helpers";
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
+import { idsDePacientesDePrueba } from "@/lib/patients/paciente-de-prueba-db";
+import { sinPruebaPorPatientId } from "@/lib/patients/paciente-de-prueba";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import { avisosDeExistencias, contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
 import { idsSinContar } from "@/lib/inventory/sin-contar.server";
@@ -32,13 +34,17 @@ export async function GET(req: NextRequest) {
   const periodParam = req.nextUrl.searchParams.get("period");
   const period: AdminPeriod = isValidPeriod(periodParam) ? periodParam : "month";
 
+  // ws1-t11 (11d): los «Pacientes de prueba / no contactar» no cuentan en el
+  // tablero. Lista vacía (lo normal, o sin el SQL pegado) = las consultas de siempre.
+  const prueba = await idsDePacientesDePrueba(session.clinic.id);
+
   const [kpisCurrent, kpisPrev, revenueSeries, alerts, team] =
     await Promise.all([
-      aggregateAdminPeriodKpis(period, session.clinic.id, session.clinic.timezone),
-      aggregatePreviousPeriodKpis(period, session.clinic.id, session.clinic.timezone),
-      buildRevenueSeries(session.clinic.id, session.clinic.timezone),
-      buildAlerts(session.clinic.id, session.clinic),
-      buildTeamPerformance(period, session.clinic.id, session.clinic.timezone, session.clinic.category),
+      aggregateAdminPeriodKpis(period, session.clinic.id, session.clinic.timezone, prueba),
+      aggregatePreviousPeriodKpis(period, session.clinic.id, session.clinic.timezone, prueba),
+      buildRevenueSeries(session.clinic.id, session.clinic.timezone, prueba),
+      buildAlerts(session.clinic.id, session.clinic, prueba),
+      buildTeamPerformance(period, session.clinic.id, session.clinic.timezone, session.clinic.category, prueba),
     ]);
 
   const data: HomeAdminData = {
@@ -174,8 +180,10 @@ async function aggregatePreviousPeriodKpis(
   period: AdminPeriod,
   clinicId: string,
   timezone: string,
+  prueba: readonly string[] = [],
 ) {
   const { from, to } = periodRangeUtc(period, timezone);
+  const sinPrueba = sinPruebaPorPatientId(prueba);
   const length = to.getTime() - from.getTime();
   const prevFrom = new Date(from.getTime() - length);
   const prevTo = from;
@@ -189,6 +197,7 @@ async function aggregatePreviousPeriodKpis(
         clinicId,
         startsAt: { gte: prevFrom, lt: prevTo },
         status: { notIn: ["CANCELLED"] },
+        ...sinPrueba,
       },
     }),
     prisma.appointment.count({
@@ -196,6 +205,7 @@ async function aggregatePreviousPeriodKpis(
         clinicId,
         startsAt: { gte: prevFrom, lt: prevTo },
         status: "COMPLETED",
+        ...sinPrueba,
       },
     }),
     prisma.appointment.count({
@@ -203,11 +213,12 @@ async function aggregatePreviousPeriodKpis(
         clinicId,
         startsAt: { gte: prevFrom, lt: prevTo },
         status: "NO_SHOW",
+        ...sinPrueba,
       },
     }),
     prisma.payment.aggregate({
       where: {
-        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+        invoice: { clinicId, status: { notIn: ["CANCELLED"] }, ...sinPrueba },
         paidAt: { gte: prevFrom, lt: prevSameTo },
         method: { not: "refund" },
       },
@@ -233,6 +244,7 @@ async function aggregatePreviousPeriodKpis(
 async function buildRevenueSeries(
   clinicId: string,
   timezone: string,
+  prueba: readonly string[] = [],
 ): Promise<HomeAdminData["revenueSeries"]> {
   const now = new Date();
   const np = getTzParts(now, timezone);
@@ -265,7 +277,7 @@ async function buildRevenueSeries(
   const payments = await prisma.payment
     .findMany({
       where: {
-        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+        invoice: { clinicId, status: { notIn: ["CANCELLED"] }, ...sinPruebaPorPatientId(prueba) },
         paidAt: { gte: from, lt: to },
         method: { not: "refund" },
       },
@@ -294,6 +306,7 @@ function pad2(n: number): string {
 async function buildAlerts(
   clinicId: string,
   clinic: { trialEndsAt: Date | null; subscriptionStatus: string | null },
+  prueba: readonly string[] = [],
 ): Promise<HomeAdminAlert[]> {
   const alerts: HomeAdminAlert[] = [];
 
@@ -352,6 +365,7 @@ async function buildAlerts(
         clinicId,
         status: { notIn: ["CANCELLED"] },
         dueDate: { lt: now },
+        ...sinPruebaPorPatientId(prueba),
       },
       select: { total: true, paid: true },
     });
@@ -407,6 +421,7 @@ async function buildTeamPerformance(
   clinicId: string,
   timezone: string,
   category: string,
+  prueba: readonly string[] = [],
 ): Promise<HomeAdminTeamRow[]> {
   const { from, to } = periodRangeUtc(period, timezone);
 
@@ -421,6 +436,7 @@ async function buildTeamPerformance(
         clinicId,
         startsAt: { gte: from, lt: to },
         status: { notIn: ["CANCELLED"] },
+        ...sinPruebaPorPatientId(prueba),
       },
       _count: { _all: true },
     }),

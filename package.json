@@ -382,6 +382,8 @@
     "//test:inventario-lotes-server": "WS1-T5, contra doble en memoria: reconciliacion con InventoryItem.quantity, atomicidad del consumo (receta o manual) dentro de $transaction, alta/baja de lote.",
     "test:inventario-lotes-server": "tsx --test src/lib/inventory/__tests__/lots-server.test.ts",
     "//test:alta-paciente": "Necesita --experimental-test-module-mocks: ejecuta DE VERDAD el POST de /api/patients (N7 y N8) con getAuthContext, buildPatientWhere y la visibilidad reales; sólo sustituye Prisma, la sesión de Supabase y los efectos de después del alta.",
+    "//test:paciente-de-prueba": "ws1-t11 (11c/11d): «Paciente de prueba / no contactar» (freno de WhatsApp, cola y correo; caminos de envío; cargos automáticos) y el interruptor «Pedir reseña al terminar la cita». Cada archivo en su proceso: dos parchean Module._load.",
+    "test:paciente-de-prueba": "tsx --test src/lib/patients/__tests__/paciente-de-prueba.test.ts src/lib/patients/__tests__/paciente-de-prueba-caminos.test.ts src/lib/patients/__tests__/paciente-de-prueba-envios.test.ts src/lib/reviews/__tests__/invite-interruptor-y-prueba.test.ts",
     "test:alta-paciente": "tsx --test --experimental-test-module-mocks src/app/api/patients/__tests__/alta-servidor.test.ts",
     "test:auth-una-consulta": "tsx --test --experimental-test-module-mocks src/lib/auth/__tests__/auth-una-consulta.test.ts",
     "test:sesion-en-cache": "tsx --test --experimental-test-module-mocks src/lib/auth/__tests__/sesion-en-cache.test.ts",

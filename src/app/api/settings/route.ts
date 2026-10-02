@@ -11,7 +11,10 @@ import {
   sanitizeRecallSettings,
   sanitizeAppointmentEventSettings,
   sanitizeCobranzaSettings,
+  sanitizeResenasSettings,
+  getResenasSettings,
 } from "@/lib/reminders/config";
+import { logMutation } from "@/lib/audit";
 import { esUrlDeLogoValida } from "@/lib/clinic-logo";
 import {
   esNombreDeClinicaValido, MENSAJE_NOMBRE_INVALIDO,
@@ -115,11 +118,15 @@ export async function PATCH(req: NextRequest) {
   // + reminderSettings.cobranza = el aviso de la mensualidad por vencer y el
   // permiso para que el bot diga el saldo (ws1-t3). CUARTA parte del mismo
   // Json, misma regla de mezcla.
-  if ("reminderSettings" in body || "recall" in body || "eventos" in body || "cobranza" in body) {
+  // + reminderSettings.resenas = «Pedir reseña al terminar la cita» (ws1-t11,
+  //   11c). Encendido si no hay nada guardado.
+  let resenasAntes: unknown = null;
+  if ("reminderSettings" in body || "recall" in body || "eventos" in body || "cobranza" in body || "resenas" in body) {
     const current = await prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
       select: { reminderSettings: true },
     });
+    resenasAntes = current?.reminderSettings ?? null;
     const cur =
       current?.reminderSettings &&
       typeof current.reminderSettings === "object" &&
@@ -187,11 +194,27 @@ export async function PATCH(req: NextRequest) {
       cobranzaPart = cur?.cobranza ? sanitizeCobranzaSettings(cur.cobranza) ?? undefined : undefined;
     }
 
+    // Parte de reseñas (ws1-t11, 11c).
+    let resenasPart: ReturnType<typeof sanitizeResenasSettings> | undefined;
+    if ("resenas" in body) {
+      if (body.resenas === null) {
+        resenasPart = undefined;
+      } else {
+        resenasPart = sanitizeResenasSettings(body.resenas);
+        if (!resenasPart) {
+          return NextResponse.json({ error: "resenas inválido" }, { status: 400 });
+        }
+      }
+    } else {
+      resenasPart = cur?.resenas ? sanitizeResenasSettings(cur.resenas) ?? undefined : undefined;
+    }
+
     const merged: Record<string, any> = {};
     if (apptPart) Object.assign(merged, apptPart);
     if (recallPart) merged.recall = recallPart;
     if (eventosPart) merged.eventos = eventosPart;
     if (cobranzaPart) merged.cobranza = cobranzaPart;
+    if (resenasPart) merged.resenas = resenasPart;
     data.reminderSettings = Object.keys(merged).length > 0 ? merged : Prisma.DbNull;
   }
 
@@ -212,6 +235,20 @@ export async function PATCH(req: NextRequest) {
   });
 
   revalidateAfter("clinic");
+  // ws1-t11 (11c): apagar o encender la invitación a reseña cambia lo que
+  // reciben TODOS los pacientes: queda en la bitácora quién y cuándo.
+  if ("resenas" in body) {
+    await logMutation({
+      req,
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      entityType: "clinic",
+      entityId: ctx.clinicId,
+      action: "update",
+      before: { pedirResenaAlTerminar: getResenasSettings({ reminderSettings: resenasAntes }).alTerminar },
+      after: { pedirResenaAlTerminar: getResenasSettings(clinic).alTerminar },
+    });
+  }
   // La fila completa incluye credenciales (Live Secret Key de Facturapi, tokens
   // de WhatsApp/Twilio/Google…) y esta ruta la puede llamar CUALQUIER usuario
   // autenticado de la clínica: se filtran antes de responder.

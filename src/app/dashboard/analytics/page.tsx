@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { idsDePacientesDePrueba } from "@/lib/patients/paciente-de-prueba-db";
+import { sinPruebaPorPatientId } from "@/lib/patients/paciente-de-prueba";
 import { OverviewClient } from "./overview-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
@@ -49,8 +51,12 @@ export default async function AnalyticsOverviewPage() {
   // El layout del panel ya lo resolvió en este mismo request y la respuesta
   // vive 60 s en memoria por clínica: aquí no hay viaje a la base. Falla
   // cerrado: apagado, la pantalla se pinta exactamente como hoy.
+  // ws1-t11 (11d): las citas de «Pacientes de prueba / no contactar» no
+  // cuentan. Lista vacía (lo normal) = las consultas de siempre.
+  const prueba = await idsDePacientesDePrueba(clinicId);
+  const sp = sinPruebaPorPatientId(prueba);
   const [totalAppts, rediseno] = await Promise.all([
-    prisma.appointment.count({ where: { clinicId } }),
+    prisma.appointment.count({ where: { clinicId, ...sp } }),
     menuDosNivelesEncendido(clinicId),
   ]);
   const insufficientData = totalAppts < MIN_APPTS_FOR_INSIGHTS;
@@ -72,20 +78,20 @@ export default async function AnalyticsOverviewPage() {
     noShowMonth, prevNoShowMonth,
     avgWaitMin, todayCount,
   ] = await Promise.all([
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: { not: "CANCELLED" } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: { not: "CANCELLED" } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: { in: ["COMPLETED", "CHECKED_OUT"] } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: { in: ["COMPLETED", "CHECKED_OUT"] } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: "NO_SHOW" } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: "NO_SHOW" } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: { not: "CANCELLED" }, ...sp } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: { not: "CANCELLED" }, ...sp } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: { in: ["COMPLETED", "CHECKED_OUT"] }, ...sp } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: { in: ["COMPLETED", "CHECKED_OUT"] }, ...sp } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: "NO_SHOW", ...sp } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: "NO_SHOW", ...sp } }),
     prisma.appointmentTimeline.aggregate({
       where: {
-        appointment: { clinicId, startsAt: { gte: firstMonth } },
+        appointment: { clinicId, startsAt: { gte: firstMonth }, ...sp },
         totalWaitMin: { not: null },
       },
       _avg: { totalWaitMin: true },
     }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: today, lte: todayEnd }, status: { not: "CANCELLED" } } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: { gte: today, lte: todayEnd }, status: { not: "CANCELLED" }, ...sp } }),
   ]);
 
   const noShowRate = monthAppts > 0 ? (noShowMonth / monthAppts) * 100 : 0;

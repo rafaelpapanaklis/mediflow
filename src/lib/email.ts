@@ -14,6 +14,14 @@ type EmailPayload = {
   html: string;
   /** Texto plano opcional (fallback). */
   text?: string;
+  /**
+   * ws1-t11 (11d) — el correo va a un PACIENTE de esta clínica. Con esto,
+   * `sendEmail` aplica el freno de «Paciente de prueba / no contactar» antes de
+   * llamar al proveedor (ver src/lib/patients/paciente-de-prueba.ts). Todo
+   * correo de la clínica a un paciente lo lleva; los de la plataforma a la
+   * clínica (bienvenida, planes, afiliados) no.
+   */
+  paciente?: { clinicId: string; patientId?: string | null };
 };
 
 /**
@@ -22,7 +30,23 @@ type EmailPayload = {
  * transporte configurado o el provider falla, `true` solo si Resend aceptó
  * el correo. Los llamadores que ignoran el retorno siguen funcionando igual.
  */
-export async function sendEmail(payload: EmailPayload): Promise<{ delivered: boolean }> {
+export async function sendEmail(
+  payload: EmailPayload,
+): Promise<{ delivered: boolean; /** ws1-t11: motivo si el freno lo paró (no se intentó). */ bloqueado?: string }> {
+  if (payload.paciente) {
+    // Import diferido: solo los correos a pacientes cargan Prisma aquí.
+    const { motivoParaNoContactar } = await import("@/lib/patients/paciente-de-prueba-db");
+    const motivo = await motivoParaNoContactar({
+      clinicId: payload.paciente.clinicId,
+      patientId: payload.paciente.patientId ?? null,
+      correo: payload.to,
+    });
+    if (motivo) {
+      console.log(`[email] no se envió «${payload.subject}»: paciente de prueba / no contactar`);
+      return { delivered: false, bloqueado: motivo };
+    }
+  }
+
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM ?? "DaleControl <no-reply@dalecontrol.com>";
 

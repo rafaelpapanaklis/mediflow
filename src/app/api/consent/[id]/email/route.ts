@@ -18,6 +18,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
+import { CODIGO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
 import { correoDelDocumento, enmascararCorreo } from "@/lib/patient-documents/envio";
 import { loadConsentDocumento } from "@/lib/consent/consent-pdf";
 
@@ -89,7 +90,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       cedula: doc.encabezado.cedula,
       cuerpoHtml: doc.html,
     });
-    const { delivered } = await sendEmail({ to: correo, subject, html, text });
+    // ws1-t11 (11d): freno de «Paciente de prueba / no contactar».
+    const { delivered, bloqueado } = await sendEmail({ to: correo, subject, html, text, paciente: { clinicId: ctx.clinicId, patientId: form.patientId } });
+    if (bloqueado) {
+      return NextResponse.json({ error: bloqueado, code: CODIGO_NO_CONTACTAR }, { status: 409 });
+    }
     if (!delivered) {
       return NextResponse.json(
         { error: "No se envió: el servicio de correo no aceptó el mensaje. Inténtalo más tarde o descarga el PDF.", code: "CORREO_NO_ENTREGADO" },
