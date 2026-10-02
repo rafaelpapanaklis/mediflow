@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
@@ -37,9 +36,6 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
-
   const [clinic, totalChairs, appts] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: clinicId },
@@ -51,7 +47,6 @@ export async function GET(req: NextRequest) {
     prisma.appointment.findMany({
       where: {
         clinicId,
-        ...sinPrueba.porPatientId,
         startsAt: { gte: from, lte: to },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         ...(resourceId ? { resourceId } : {}),
@@ -101,7 +96,6 @@ export async function GET(req: NextRequest) {
     by: ["resourceId"],
     where: {
       clinicId,
-      ...sinPrueba.porPatientId,
       startsAt: { gte: from, lte: to },
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       resourceId: { not: null },

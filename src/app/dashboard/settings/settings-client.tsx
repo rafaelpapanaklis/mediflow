@@ -15,7 +15,7 @@ import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT } from "@/i18n/i18n-provider";
 import { getResenasSettings } from "@/lib/reminders/config";
-import { useTextosPacienteDePrueba } from "@/lib/patients/textos-paciente-de-prueba";
+import { useTextosResena } from "@/lib/reviews/textos-resena";
 import toast from "react-hot-toast";
 import { claveAvisoErrorGcal } from "@/lib/google-calendar-callback";
 import dynamic from "next/dynamic";
@@ -156,7 +156,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const [clinic,   setClinic]   = useState(initClinic);
   // ws1-t11 (11c): encendido si la clínica nunca lo tocó (lo de siempre).
   const pedirResena = getResenasSettings(clinic as any).alTerminar;
-  const textosPrueba = useTextosPacienteDePrueba();
+  const textosResena = useTextosResena();
   // La categoría de una clínica DENTAL es fija: se decide con el valor que
   // mandó el SERVIDOR al cargar (no con el estado que edita el selector) y el
   // guardado la vuelve a imponer en /api/clinic. Otras categorías: como siempre.
@@ -440,7 +440,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       toast.success("Automatización actualizada");
     } catch {
       setClinic((c: any) => ({ ...c, reminderSettings: antes }));
-      toast.error(textosPrueba.resenaError);
+      toast.error(textosResena.resenaError);
     }
   }
 
@@ -1342,8 +1342,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     })}
                     {/* ws1-t11 (11c): encendido de fábrica, que es lo que ya pasaba. */}
                     <FilaInterruptor
-                      titulo={textosPrueba.resenaTitulo}
-                      descripcion={textosPrueba.resenaDescripcion}
+                      titulo={textosResena.resenaTitulo}
+                      descripcion={textosResena.resenaDescripcion}
                       activo={pedirResena}
                       onCambiar={() => savePedirResena(!pedirResena)}
                     />
@@ -2303,10 +2303,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 {/* ws1-t11 (11c): «Pedir reseña al terminar la cita». */}
                 <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${pedirResena ? "border-violet-500 bg-violet-600/10" : "border-border bg-transparent"}`}>
                   <div className="pr-4">
-                    <div className={`text-sm font-bold ${pedirResena ? "text-violet-700 dark:text-violet-300" : "text-foreground"}`}>{textosPrueba.resenaTitulo}</div>
-                    <div className="text-xs mt-0.5 text-muted-foreground">{textosPrueba.resenaDescripcion}</div>
+                    <div className={`text-sm font-bold ${pedirResena ? "text-violet-700 dark:text-violet-300" : "text-foreground"}`}>{textosResena.resenaTitulo}</div>
+                    <div className="text-xs mt-0.5 text-muted-foreground">{textosResena.resenaDescripcion}</div>
                   </div>
-                  <button type="button" role="switch" aria-checked={pedirResena} aria-label={textosPrueba.resenaTitulo} onClick={() => savePedirResena(!pedirResena)}
+                  <button type="button" role="switch" aria-checked={pedirResena} aria-label={textosResena.resenaTitulo} onClick={() => savePedirResena(!pedirResena)}
                     className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${pedirResena ? "bg-violet-600" : "bg-muted-foreground/30"}`}>
                     <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all" style={{ left: pedirResena ? "22px" : "2px" }} />
                   </button>

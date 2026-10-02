@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { ingresosDeCasosSinCitaPorDoctor } from "@/lib/orthodontics/produccion-db";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { PayrollDocument, type PayrollRow } from "@/lib/pdf/payroll-document";
@@ -54,29 +53,26 @@ export async function GET(req: NextRequest) {
 
   // Igual que /api/analytics/doctor-performance (fila 89): lo cobrado de los
   // casos de ortodoncia cuenta para el doctor que los llevaba.
-  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
   const ingresosOrto = await ingresosDeCasosSinCitaPorDoctor(
     clinicId,
     { desde: from, hasta: new Date(to.getTime() + 1) },
     user.clinic?.timezone || "America/Mexico_City",
-    sinPrueba,
   );
 
   const rows: PayrollRow[] = await Promise.all(
     doctors.map(async (doc) => {
       const [appts, satisfactions, timelines, invoiced] = await Promise.all([
         prisma.appointment.findMany({
-          where: { clinicId, ...sinPrueba.porPatientId, doctorId: doc.id, startsAt: { gte: from, lte: to } },
+          where: { clinicId, doctorId: doc.id, startsAt: { gte: from, lte: to } },
           select: { id: true, status: true, startsAt: true },
         }),
         prisma.patientSatisfaction.findMany({
-          where: { appointment: { doctorId: doc.id, clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } } },
+          where: { appointment: { doctorId: doc.id, clinicId, startsAt: { gte: from, lte: to } } },
           select: { score: true },
         }),
         prisma.appointmentTimeline.findMany({
           where: {
-            appointment: { doctorId: doc.id, clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } },
+            appointment: { doctorId: doc.id, clinicId, startsAt: { gte: from, lte: to } },
             totalConsultMin: { not: null },
           },
           select: { totalConsultMin: true },
@@ -85,7 +81,6 @@ export async function GET(req: NextRequest) {
           where: {
             clinicId,
             status: { in: ["PAID", "PARTIAL"] },
-            ...sinPrueba.porPatientId,
             appointment: { doctorId: doc.id, startsAt: { gte: from, lte: to } },
           },
           _sum: { paid: true },

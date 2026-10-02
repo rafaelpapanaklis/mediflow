@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { ingresosDeCasosSinCitaPorDoctor } from "@/lib/orthodontics/produccion-db";
 
 export const dynamic = "force-dynamic";
@@ -51,31 +50,28 @@ export async function GET(req: NextRequest) {
   // ortodoncia no nace de una cita, así que el doctor que más cobraba salía con
   // $0. Se suma aparte, por pago del periodo y menos reembolsos, a quien
   // llevaba el caso ese día (produccion.ts). `to` es inclusivo aquí.
-  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
   const ingresosOrto = await ingresosDeCasosSinCitaPorDoctor(
     clinicId,
     { desde: from, hasta: new Date(to.getTime() + 1) },
     user.clinic?.timezone || "America/Mexico_City",
-    sinPrueba,
   );
 
   const rows = await Promise.all(
     doctors.map(async (doc) => {
       const [appts, satisfactions, timelines, invoiced] = await Promise.all([
         prisma.appointment.findMany({
-          where: { clinicId, ...sinPrueba.porPatientId, doctorId: doc.id, startsAt: { gte: from, lte: to } },
+          where: { clinicId, doctorId: doc.id, startsAt: { gte: from, lte: to } },
           select: { id: true, status: true, startsAt: true },
         }),
         prisma.patientSatisfaction.findMany({
           where: {
-            appointment: { doctorId: doc.id, clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } },
+            appointment: { doctorId: doc.id, clinicId, startsAt: { gte: from, lte: to } },
           },
           select: { score: true },
         }),
         prisma.appointmentTimeline.findMany({
           where: {
-            appointment: { doctorId: doc.id, clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } },
+            appointment: { doctorId: doc.id, clinicId, startsAt: { gte: from, lte: to } },
             totalConsultMin: { not: null },
           },
           select: { totalConsultMin: true },
@@ -84,7 +80,6 @@ export async function GET(req: NextRequest) {
           where: {
             clinicId,
             status: { in: ["PAID", "PARTIAL"] },
-            ...sinPrueba.porPatientId,
             appointment: {
               doctorId: doc.id,
               startsAt: { gte: from, lte: to },

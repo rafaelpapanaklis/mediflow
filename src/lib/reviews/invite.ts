@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
 import { getResenasSettings } from "@/lib/reminders/config";
-import { esPacienteDePrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { buildAuthorName, marcaDeWamid, REVIEW_STATUS, REVIEW_TOKEN_TTL_DAYS } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -84,9 +83,6 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
     // ws1-t11 (11c): la clínica lo apagó (Configuración → Integraciones →
     // Automatizaciones). No se crea ni la fila pendiente: no hubo invitación.
     if (!getResenasSettings(appt.clinic).alTerminar) return;
-    // ws1-t11 (11d): paciente de prueba / no contactar. Tampoco se crea la
-    // fila: una invitación que no salió no debe contar en Reseñas.
-    if (await esPacienteDePrueba(appt.clinicId, appt.patientId)) return;
 
     const token = crypto.randomBytes(24).toString("base64url");
     const tokenExpiresAt = new Date(Date.now() + REVIEW_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -165,7 +161,6 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
         subject: `¿Cómo fue tu visita a ${clinicName}?`,
         html: buildInviteEmailHtml({ firstName, clinicName, url }),
         text: message,
-        paciente: { clinicId: appt.clinicId, patientId: appt.patientId },
       });
       if (delivered) channels.push("email");
     }

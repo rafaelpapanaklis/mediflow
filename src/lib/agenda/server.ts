@@ -1,6 +1,5 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { sinPruebaPorPatientId } from "@/lib/patients/paciente-de-prueba";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { cobranzaDelCasoUnificada } from "@/lib/orthodontics/cobranza-caso";
@@ -454,11 +453,8 @@ export async function aggregateAdminPeriodKpis(
   period: AdminPeriod,
   clinicId: string,
   timezone: string,
-  /** ws1-t11 (11d): ids de «Pacientes de prueba / no contactar» que no cuentan. */
-  excluirPacientes: readonly string[] = [],
 ): Promise<AdminPeriodKpiRow> {
   const { from, to } = periodRangeUtc(period, timezone);
-  const sinPrueba = sinPruebaPorPatientId(excluirPacientes);
 
   const [appts, completed, noShows, invoicedAgg] = await Promise.all([
     prisma.appointment.count({
@@ -466,7 +462,6 @@ export async function aggregateAdminPeriodKpis(
         clinicId,
         startsAt: { gte: from, lt: to },
         status: { notIn: ["CANCELLED"] },
-        ...sinPrueba,
       },
     }),
     prisma.appointment.count({
@@ -474,7 +469,6 @@ export async function aggregateAdminPeriodKpis(
         clinicId,
         startsAt: { gte: from, lt: to },
         status: "COMPLETED",
-        ...sinPrueba,
       },
     }),
     prisma.appointment.count({
@@ -482,12 +476,11 @@ export async function aggregateAdminPeriodKpis(
         clinicId,
         startsAt: { gte: from, lt: to },
         status: "NO_SHOW",
-        ...sinPrueba,
       },
     }),
     prisma.payment.aggregate({
       where: {
-        invoice: { clinicId, status: { notIn: ["CANCELLED"] }, ...sinPrueba },
+        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
         paidAt: { gte: from, lt: to },
         method: { not: "refund" },
       },

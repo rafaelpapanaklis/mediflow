@@ -2,8 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
-import type { FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 /**
  * GET /api/analytics/cohorts
@@ -56,7 +54,7 @@ interface RawCohort {
   retained_12: number;
 }
 
-function getCohorts(clinicId: string, f: FiltroSinPrueba): Promise<CohortResp> {
+function getCohorts(clinicId: string): Promise<CohortResp> {
   return unstable_cache(
     async (): Promise<CohortResp> => {
       // last_activity_ms = última cita no cancelada (epoch ms absoluto). Las
@@ -79,7 +77,6 @@ function getCohorts(clinicId: string, f: FiltroSinPrueba): Promise<CohortResp> {
           FROM "patients" p
           LEFT JOIN la ON la."patientId" = p."id"
           WHERE p."clinicId" = ${clinicId} AND p."deletedAt" IS NULL
-            AND NOT (p."id" = ANY(${f.ids}::text[]))
         )
         SELECT
           cohort,
@@ -118,7 +115,7 @@ function getCohorts(clinicId: string, f: FiltroSinPrueba): Promise<CohortResp> {
 
       return { cohorts, milestones: MILESTONES };
     },
-    ["analytics-cohorts", clinicId, f.clave],
+    ["analytics-cohorts", clinicId],
     { revalidate: REVALIDATE_SECONDS, tags: [`analytics-${clinicId}`] },
   )();
 }
@@ -128,7 +125,6 @@ export async function GET(_req: NextRequest) {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-  const data = await getCohorts(user.clinicId, await cargarFiltroSinPrueba(user.clinicId));
+  const data = await getCohorts(user.clinicId);
   return NextResponse.json(data);
 }

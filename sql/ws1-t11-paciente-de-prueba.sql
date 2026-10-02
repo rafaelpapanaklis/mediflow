@@ -1,3 +1,9 @@
+-- ⛔ FUNCIÓN CANCELADA (decisión 12 de Rafael, 2-oct-2026): «Paciente de prueba /
+-- no contactar» NO existe. Este archivo YA se pegó en producción y se conserva
+-- solo como registro de que la columna patients."isTestPatient" existe. El
+-- código ya no la lee ni la escribe. NO volver a pegarlo y NO borrar la columna
+-- sin permiso de Rafael.
+--
 -- ═══════════════════════════════════════════════════════════════════════
 -- DaleControl DENTAL — ws1-t11 · «PACIENTE DE PRUEBA / NO CONTACTAR» (11d,
 -- tercer ticket de BEVADENT; para TODAS las clínicas).

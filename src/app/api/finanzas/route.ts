@@ -3,7 +3,6 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { expenseWindowEnd, resolveFinanzasWindow } from "@/lib/finanzas-periodo";
 import { calcularResumenFinanzas } from "@/lib/finanzas-resumen.server";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,9 +42,7 @@ export async function GET(req: NextRequest) {
     // El cálculo vive en @/lib/finanzas-resumen.server (movido tal cual, sin
     // tocar una consulta ni una cuenta): lo lee también Sabina, así que la
     // pantalla y ella dicen siempre las mismas cifras.
-    // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar» (Sabina pasa el mismo filtro).
-    const sinPrueba = await cargarFiltroSinPrueba(clinicId);
-    return NextResponse.json(await calcularResumenFinanzas({ clinicId, from, to, expenseTo, sinPrueba }));
+    return NextResponse.json(await calcularResumenFinanzas({ clinicId, from, to, expenseTo }));
   } catch (err: any) {
     console.error("[finanzas] GET error:", err?.message ?? err);
     return NextResponse.json({ error: "Error al calcular el resumen de finanzas." }, { status: 500 });

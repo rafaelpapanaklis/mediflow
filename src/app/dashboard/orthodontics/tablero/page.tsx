@@ -20,7 +20,6 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { exigirModuloOrtodoncia } from "@/lib/orthodontics/exigir-modulo";
 import { loadOrthoTableroData, loadTodayControlsWithIndications } from "@/lib/orthodontics/tablero-data";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { loadPrimerosPasosOrtodoncia } from "@/lib/orthodontics/primeros-pasos-db";
 import { hasPermission } from "@/lib/auth/permissions";
 import { VistaTablero } from "@/components/specialties/orthodontics/modulo/vista-tablero";
@@ -30,10 +29,8 @@ export default async function OrthodonticsTableroPage() {
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
-  // ws1-t11 (11d): los indicadores no cuentan a los «Pacientes de prueba / no contactar».
-  const sinPrueba = await cargarFiltroSinPrueba(user.clinicId);
   const [data, controlesHoy] = await Promise.all([
-    loadOrthoTableroData(user.clinicId, user.clinic.timezone, viewer, new Date(), sinPrueba),
+    loadOrthoTableroData(user.clinicId, user.clinic.timezone, viewer),
     loadTodayControlsWithIndications(user.clinicId, user.clinic.timezone, viewer),
   ]);
 

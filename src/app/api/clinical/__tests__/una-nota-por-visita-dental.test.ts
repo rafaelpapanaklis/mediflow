@@ -118,7 +118,6 @@ mock.module("@/lib/branches", {
   namedExports: { getVisiblePatientClinicIds: async () => [CLINICA], sharedRecordScope: () => ({}), ownPrivateRecordsOnly: () => ({}) },
 });
 mock.module("@/lib/audit", { namedExports: { logMutation: async () => {} } });
-mock.module("@/lib/patients/paciente-de-prueba-db", { namedExports: { esPacienteDePrueba: async () => false } });
 mock.module("@/lib/invoices/next-invoice-number", {
   namedExports: { nextInvoiceNumber: async () => "F-1", withInvoiceNumberRetry: async (fn: any) => fn() },
 });

@@ -27,7 +27,6 @@
 import { z } from "zod";
 import { invoiceLineBases, itemQuantity, PRICE_ADJUST_FLAG, round2 } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { dbDe, definirHerramienta, fraseRecorte, lineasDeLista, pesos, pesosDeLista, recortar, visorDe, type Lista } from "./base";
 import { esquemaRango, resolverRango, type ParamsRango } from "./fechas";
 import type { SabinaCtx } from "../tipos";
@@ -87,12 +86,9 @@ export const tratamientosPorIngreso = definirHerramienta<ParamsTratamientos, Dat
     const db = dbDe(ctx);
     const rango = resolverRango(params, ctx.timezone, 90);
     const vis = relatedPatientVisibilityAnd(visorDe(ctx));
-    // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-    const sinPrueba = await cargarFiltroSinPrueba(ctx.clinicId);
 
     const where: Record<string, any> = {
       clinicId: ctx.clinicId, // 🔴 de la sesión
-      ...sinPrueba.porPatientId,
       status: { notIn: ["DRAFT", "CANCELLED"] },
       createdAt: { gte: rango.ventana.desde, lt: rango.ventana.hasta },
       ...(vis.length ? { AND: vis } : {}),

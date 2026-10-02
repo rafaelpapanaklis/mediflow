@@ -44,7 +44,6 @@
 
 import { z } from "zod";
 import { money } from "@/lib/caja";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { calcularResumenFinanzas, type ResumenFinanzas } from "@/lib/finanzas-resumen.server";
 import { costoDeRecetaPorProcedimiento } from "@/lib/inventory/costo-receta.server";
 import { gastoDe, margenDe } from "@/app/dashboard/procedures/margen";
@@ -158,8 +157,6 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
     const vista: VistaReportes = params.vista ?? "resumen";
     const ahora = new Date();
     const v = ventanaFinanzas(params, ahora);
-    // ws1-t11 (11d): los «Pacientes de prueba / no contactar» no cuentan, igual que en las pantallas.
-    const sinPrueba = await cargarFiltroSinPrueba(ctx.clinicId);
 
     const omitidas: SeccionOmitida[] = [];
     const puede = (seccion: string, permiso: PermissionKey): boolean => {
@@ -196,7 +193,7 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
     if (verFinanzas) {
       const conSaldos = vista === "resumen";
       const actual = await calcularResumenFinanzas(
-        { clinicId: ctx.clinicId, from: v.from, to: v.to, expenseTo: v.expenseTo, conSaldos, sinPrueba },
+        { clinicId: ctx.clinicId, from: v.from, to: v.to, expenseTo: v.expenseTo, conSaldos },
         db,
       );
       let anterior: ResumenFinanzas | null = null;
@@ -204,7 +201,7 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
       if (vista === "utilidad") {
         ventanaPrev = ventanaAnterior(v, ahora);
         anterior = await calcularResumenFinanzas(
-          { clinicId: ctx.clinicId, from: ventanaPrev.from, to: ventanaPrev.to, expenseTo: ventanaPrev.expenseTo, conSaldos: false, sinPrueba },
+          { clinicId: ctx.clinicId, from: ventanaPrev.from, to: ventanaPrev.to, expenseTo: ventanaPrev.expenseTo, conSaldos: false },
           db,
         );
       }
@@ -288,13 +285,12 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
     if (verPacientes) {
       const prev = ventanaAnterior(v, ahora);
       const [nuevos, nuevosAnterior, cumplidas] = await Promise.all([
-        db.patient.count({ where: { clinicId: ctx.clinicId, ...sinPrueba.paciente, createdAt: { gte: v.from, lte: v.to } } }),
-        db.patient.count({ where: { clinicId: ctx.clinicId, ...sinPrueba.paciente, createdAt: { gte: prev.from, lte: prev.to } } }),
+        db.patient.count({ where: { clinicId: ctx.clinicId, createdAt: { gte: v.from, lte: v.to } } }),
+        db.patient.count({ where: { clinicId: ctx.clinicId, createdAt: { gte: prev.from, lte: prev.to } } }),
         db.appointment.groupBy({
           by: ["patientId"],
           where: {
             clinicId: ctx.clinicId,
-            ...sinPrueba.porPatientId,
             startsAt: { gte: v.from, lte: v.to },
             status: { in: [...ESTADOS_CUMPLIDOS] },
           },

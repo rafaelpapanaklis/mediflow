@@ -174,17 +174,13 @@ export async function sweepClinic(
     if (wantEmail && p.email) {
       const mail = buildRecallEmail(clinic.name, message);
       try {
-        const { delivered, bloqueado } = await sendEmail({
+        const { delivered } = await sendEmail({
           to: p.email,
           subject: mail.subject,
           html: mail.html,
           text: mail.text,
-          // ws1-t11 (11d): freno de «Paciente de prueba / no contactar».
-          paciente: { clinicId: clinic.id, patientId: p.id },
         });
-        if (bloqueado) {
-          // No es un fallo del correo: no se intentó a propósito.
-        } else if (delivered) {
+        if (delivered) {
           res.sentEmail++;
           acted = true;
           rowsToCreate.push({

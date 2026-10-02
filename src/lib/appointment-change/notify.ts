@@ -150,11 +150,7 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
           doctorName: showDoctor ? doctorName : null,
           accent,
         });
-        await sendEmail({
-          to: patient.email, subject, html, text: message,
-          // ws1-t11 (11d): freno de «Paciente de prueba / no contactar».
-          paciente: { clinicId: cr.clinicId, patientId: cr.patientId },
-        });
+        await sendEmail({ to: patient.email, subject, html, text: message });
       } catch (e) {
         console.error("[appointment-change notify]", e);
       }

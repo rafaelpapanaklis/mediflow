@@ -28,7 +28,6 @@ import {
 import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 import { isTokenRevoked, WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { motivoDeBloqueo } from "@/lib/whatsapp/sin-plantilla";
-import { esPacienteNoContactarError } from "@/lib/patients/paciente-de-prueba";
 import { botonesRecordatorio } from "@/lib/whatsapp/interactivo";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
@@ -241,18 +240,13 @@ export async function processWhatsAppQueue(opts?: {
           subject: (r.payload as any)?.subject,
         });
 
-        const { delivered, bloqueado } = await sendEmail({
+        const { delivered } = await sendEmail({
           to: toEmail,
           subject: built.subject,
           html: built.html,
           text: built.text,
-          // ws1-t11 (11d): el freno de «Paciente de prueba / no contactar».
-          paciente: { clinicId: r.clinicId, patientId: r.appointment?.patientId ?? null },
         });
-        if (bloqueado) {
-          await markCancelled(r.id, bloqueado);
-          summary.skipped++;
-        } else if (!delivered) {
+        if (!delivered) {
           await markFailed(r.id, "Email no entregado (provider no configurado o error)");
           summary.failed++;
         } else {
@@ -291,19 +285,13 @@ export async function processWhatsAppQueue(opts?: {
           phone: r.appointment.patient.phone,
         };
       } else if (r.patientPhone) {
-        // ws1-t11 (11d): hasta 2, para saber si el número es de UN paciente.
-        // Con dos (hermanos, o un paciente de prueba que comparte el número)
-        // no se adivina a quién va: sin id, el freno de «no contactar» mira a
-        // todos los dueños del número (send-and-log) en vez de al primero.
-        const encontrados = await prisma.patient.findMany({
+        const found = await prisma.patient.findFirst({
           where: { clinicId: r.clinicId, phone: r.patientPhone, deletedAt: null },
           select: { id: true, firstName: true, lastName: true, phone: true },
-          take: 2,
         });
-        const found = encontrados[0] ?? null;
         if (found?.phone) {
           patientCtx = {
-            id: encontrados.length === 1 ? found.id : null,
+            id: found.id,
             firstName: found.firstName,
             lastName: found.lastName,
             phone: found.phone,
@@ -418,13 +406,6 @@ export async function processWhatsAppQueue(opts?: {
       // Pausa breve para respetar rate limits.
       await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (e) {
-      // ws1-t11 (11d): paciente de prueba / no contactar. No es un fallo: no se
-      // intentó a propósito. Queda CANCELADA con el motivo, no FALLIDA.
-      if (esPacienteNoContactarError(e)) {
-        await markCancelled(r.id, e.message);
-        summary.skipped++;
-        continue;
-      }
       const crudo = e instanceof Error ? e.message : "error desconocido";
       // Bloqueo por ventana de 24 h de un recordatorio SIN cita (cumpleaños,
       // recall, seguimientos): se guarda el motivo real, no «faltan 5 datos».
@@ -453,17 +434,6 @@ async function markFailed(id: string, reason: string): Promise<void> {
     });
   } catch {
     /* swallow — el registro queda SENT (claim); preferible a duplicar */
-  }
-}
-
-async function markCancelled(id: string, reason: string): Promise<void> {
-  try {
-    await prisma.whatsAppReminder.update({
-      where: { id },
-      data: { status: WA_REMINDER_STATUS.CANCELLED, errorMsg: reason },
-    });
-  } catch {
-    /* swallow — igual que markFailed */
   }
 }
 

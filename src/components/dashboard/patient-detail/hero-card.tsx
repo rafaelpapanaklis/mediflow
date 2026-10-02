@@ -42,12 +42,6 @@ import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
 import { ROPA_MENU_FICHA } from "@/components/dashboard/portales-rediseno/ropa";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
-import {
-  DialogoPacienteDePrueba,
-  EtiquetaPacienteDePrueba,
-  ItemMenuPacienteDePrueba,
-  usePacienteDePrueba,
-} from "./paciente-de-prueba";
 
 export interface HeroCardProps {
   patient: {
@@ -219,8 +213,6 @@ export function HeroCard({
   const salud = estadoSalud(questionnaireStatus);
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
-  // ws1-t11 (11d): «Paciente de prueba / no contactar».
-  const prueba = usePacienteDePrueba(patient.id);
   const age = ageFromDob(patient.dob);
   const fullName = `${patient.firstName} ${patient.lastName}`.trim();
   const initials = patientInitials(patient.firstName, patient.lastName);
@@ -496,11 +488,6 @@ export function HeroCard({
             >
               <Calendar size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
             </button>
-            <ItemMenuPacienteDePrueba
-              estado={prueba}
-              className={styles.heroMenuItem}
-              onElegir={() => setMoreOpen(false)}
-            />
             {canDelete && onDelete && (
               <>
                 <div className={styles.heroMenuDivider} role="separator" />
@@ -637,8 +624,6 @@ export function HeroCard({
       </div>
 
       <div className={styles.heroAlerts} role="group" aria-label={t("patients.heroCard.alertsAria")}>
-        {/* ws1-t11 (11d): lo primero que se lee, antes que las alertas clínicas. */}
-        <EtiquetaPacienteDePrueba estado={prueba} className={`${styles.alertChip} ${styles.warning}`} />
         {/* ── Rediseño: una sola lista, ya sin repetidos ─────────────── */}
         {rediseno && alertas.concat(noRiesgoVisibles).map((c) => (
           <span key={c.clave} className={`${styles.alertChip} ${tonoChip[c.tono] ?? ""}`}>
@@ -751,7 +736,6 @@ export function HeroCard({
           </span>
         )}
       </div>
-      <DialogoPacienteDePrueba estado={prueba} />
     </section>
   );
 }

@@ -124,12 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           inviteUrl,
           clinicName: ctx.clinic?.name ?? null,
         });
-        // ws1-t11 (11d): freno de «Paciente de prueba / no contactar» (la cuenta
-        // y el enlace sí se crean; solo no sale el correo).
-        await sendEmail({
-          to: email, subject: content.subject, html: content.html, text: content.text,
-          paciente: { clinicId: ctx.clinicId, patientId: patient.id },
-        });
+        await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text });
       } catch (err) {
         // El correo es best-effort: la cuenta/link ya existen, así que un fallo
         // de envío NO tumba la invitación (se puede reenviar). Solo lo logueamos.

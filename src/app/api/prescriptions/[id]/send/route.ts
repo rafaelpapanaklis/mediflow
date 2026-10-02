@@ -4,7 +4,6 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
-import { CODIGO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
@@ -141,17 +140,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       `Hola ${rx.patient.firstName}, tu receta médica de ${rx.clinic.name} fue emitida el ${issuedDate}.\n\n` +
       `Consúltala, verifica su validez y descarga el PDF aquí: ${verifyUrl}\n\n` +
       `Enviado con DaleControl`;
-    const { delivered, bloqueado } = await sendEmail({
+    const { delivered } = await sendEmail({
       to: rx.patient.email,
       subject: `Tu receta médica — ${rx.clinic.name}`,
       html,
       text,
-      // ws1-t11 (11d): freno de «Paciente de prueba / no contactar».
-      paciente: { clinicId: ctx.clinicId, patientId: rx.patientId },
     });
-    if (bloqueado) {
-      return NextResponse.json({ error: CODIGO_NO_CONTACTAR, detail: bloqueado }, { status: 409 });
-    }
     if (!delivered) {
       return NextResponse.json(
         { error: "send_failed", detail: "El transporte de correo no está configurado o rechazó el envío." },

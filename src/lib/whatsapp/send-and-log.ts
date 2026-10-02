@@ -46,8 +46,6 @@ import {
   specForKind,
 } from "@/lib/whatsapp/template-config";
 import { WhatsAppApiError, WhatsAppBlockedError, isBillingError, isTokenRevoked } from "@/lib/whatsapp/errors";
-import { PacienteNoContactarError } from "@/lib/patients/paciente-de-prueba";
-import { motivoParaNoContactar } from "@/lib/patients/paciente-de-prueba-db";
 
 export type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
@@ -146,22 +144,6 @@ export interface SendWhatsAppLoggedArgs {
  */
 export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<any> {
   const clinic = await resolveClinic(args);
-
-  // 0) ws1-t11 (11d) — «Paciente de prueba / no contactar». ESTE es el freno de
-  //    todo WhatsApp a pacientes: cola (recordatorios, recall, cumpleaños,
-  //    seguimientos, cobranza), reseñas, avisos de cita, anticipos y cada botón
-  //    «enviar por WhatsApp» del panel pasan por aquí. Los avisos de "system" a
-  //    la clínica o a un doctor no se frenan (su número puede ser el mismo que
-  //    el del paciente de prueba que dio de alta). Se lanza ANTES de llamar a
-  //    Meta y antes de tocar el Inbox: no sale nada y no se registra como enviado.
-  if ((args.linkPatient ?? args.kind !== "system") && clinic?.id) {
-    const motivo = await motivoParaNoContactar({
-      clinicId: clinic.id,
-      patientId: args.patientId ?? null,
-      telefono: args.to,
-    });
-    if (motivo) throw new PacienteNoContactarError();
-  }
 
   // 1) ¿Texto libre o plantilla? (M-09, el P0.)
   //    WhatsApp solo acepta texto libre dentro de las 24 h siguientes al último

@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
-import { CODIGO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
 import { correoDelDocumento, enmascararCorreo } from "@/lib/patient-documents/envio";
 import { entrar, ESCRIBIR } from "../../_lib/http";
 import { cargarNotaParaSalida, soloFirmadas } from "../../_lib/salida";
@@ -46,11 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const { subject, html, text } = correoDelDocumento(s.doc);
-    // ws1-t11 (11d): freno de «Paciente de prueba / no contactar».
-    const { delivered, bloqueado } = await sendEmail({ to: correo, subject, html, text, paciente: { clinicId: ctx.clinicId, patientId: s.patientId } });
-    if (bloqueado) {
-      return NextResponse.json({ error: bloqueado, code: CODIGO_NO_CONTACTAR }, { status: 409 });
-    }
+    const { delivered } = await sendEmail({ to: correo, subject, html, text });
     if (!delivered) {
       return NextResponse.json(
         { error: "No se envió: el servicio de correo no aceptó el mensaje. Inténtalo más tarde o descarga el PDF.", code: "CORREO_NO_ENTREGADO" },

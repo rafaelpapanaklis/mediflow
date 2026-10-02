@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import {
@@ -43,13 +42,10 @@ export async function GET(req: NextRequest) {
   // Traemos los pagos de la ventana UNA sola vez y agrupamos en JS: evita las
   // 24/31 queries que haría un loop por bucket.
   let degraded = false;
-  // ws1-t11 (11d): los pagos de «Pacientes de prueba / no contactar» no cuentan
-  // (la tarjeta del home ya los saca, ver home/admin: la gráfica debe sumar igual).
-  const sinPrueba = await cargarFiltroSinPrueba(session.clinic.id);
   const payments = await prisma.payment
     .findMany({
       where: {
-        invoice: { clinicId: session.clinic.id, status: { notIn: ["CANCELLED"] }, ...sinPrueba.porPatientId },
+        invoice: { clinicId: session.clinic.id, status: { notIn: ["CANCELLED"] } },
         paidAt: { gte: from, lt: to },
         method: { not: "refund" },
       },

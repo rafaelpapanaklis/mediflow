@@ -2,8 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
-import type { FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 /**
  * GET /api/analytics/churn-risk
@@ -54,7 +52,7 @@ interface RawChurn {
   balance: number;
 }
 
-function getChurnRisk(clinicId: string, f: FiltroSinPrueba): Promise<ChurnResp> {
+function getChurnRisk(clinicId: string): Promise<ChurnResp> {
   return unstable_cache(
     async (): Promise<ChurnResp> => {
       const clinicRows = await prisma.$queryRaw<Array<{ recallMonths: number }>>`
@@ -100,7 +98,6 @@ function getChurnRisk(clinicId: string, f: FiltroSinPrueba): Promise<ChurnResp> 
         WHERE p."clinicId" = ${clinicId}
           AND p."deletedAt" IS NULL
           AND p."status" = 'ACTIVE'
-          AND NOT (p."id" = ANY(${f.ids}::text[]))
           AND (
             ( COALESCE(a.has_upcoming, false) = false AND (
                 (a.last_visit IS NOT NULL AND (EXTRACT(EPOCH FROM a.last_visit) * 1000) < ${recallCutoffMs}) OR
@@ -144,7 +141,7 @@ function getChurnRisk(clinicId: string, f: FiltroSinPrueba): Promise<ChurnResp> 
 
       return { recallMonths, count: atRisk.length, patients: atRisk.slice(0, 100) };
     },
-    ["analytics-churn-risk", clinicId, f.clave],
+    ["analytics-churn-risk", clinicId],
     { revalidate: REVALIDATE_SECONDS, tags: [`analytics-${clinicId}`] },
   )();
 }
@@ -154,7 +151,6 @@ export async function GET(_req: NextRequest) {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-  const data = await getChurnRisk(user.clinicId, await cargarFiltroSinPrueba(user.clinicId));
+  const data = await getChurnRisk(user.clinicId);
   return NextResponse.json(data);
 }

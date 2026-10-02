@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { marcadosDePrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
@@ -512,11 +511,6 @@ async function v2Handler(
   }
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const hasMore = page < totalPages;
-
-  // ws1-t11 (11d): «Paciente de prueba / no contactar» — una consulta para la
-  // página entera (ids de ESTA clínica). Sin el SQL pegado, nadie lo es.
-  const dePrueba = await marcadosDePrueba(ctx.clinicId, pageSlice.map((p) => p.id));
-  pageSlice = pageSlice.map((p) => ({ ...p, esPrueba: dePrueba.has(p.id) }));
 
   return NextResponse.json({
     // P1-N1, defensa en profundidad. HOY es no-op: `enriched` se arma campo por

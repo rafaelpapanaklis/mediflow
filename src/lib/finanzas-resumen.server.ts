@@ -9,7 +9,6 @@ import {
 } from "@/lib/caja";
 import { bucketKeyOf, eachBucket } from "@/lib/analytics/query";
 import { NOT_A_SALE_STATUSES, serieEnd } from "@/lib/finanzas-periodo";
-import { SIN_FILTRO_DE_PRUEBA, type FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 // ═══════════════════════════════════════════════════════════════════
 // El cálculo de FINANZAS (ingresos, gastos, utilidad, por doctor, saldos).
@@ -61,15 +60,10 @@ export interface ResumenFinanzas {
  * dónde llegan los GASTOS (ver `expenseWindowEnd`).
  */
 export async function calcularResumenFinanzas(
-  params: {
-    clinicId: string; from: Date; to: Date; expenseTo: Date; conSaldos?: boolean;
-    /** ws1-t11 (11d): los «Pacientes de prueba / no contactar» no cuentan (`cargarFiltroSinPrueba`). */
-    sinPrueba?: FiltroSinPrueba;
-  },
+  params: { clinicId: string; from: Date; to: Date; expenseTo: Date; conSaldos?: boolean },
   db: FinanzasDb = prisma,
 ): Promise<ResumenFinanzas> {
   const { clinicId, from, to, expenseTo } = params;
-  const sinPrueba = params.sinPrueba ?? SIN_FILTRO_DE_PRUEBA;
   // `clinicId: undefined` no filtra nada en Prisma: sin clínica no se consulta.
   if (!clinicId) throw new Error("sesion_invalida: falta clinicId");
 
@@ -77,7 +71,7 @@ export async function calcularResumenFinanzas(
   // (revenuePaymentWhere, el mismo criterio que el home y la agenda). Ojo:
   // esto excluye la FILA del reembolso, no el pago original — el neto se
   // calcula abajo con netRevenueSeries.
-  const revenueWhere = sinPrueba.pago(revenuePaymentWhere(clinicId, { gte: from, lte: to }));
+  const revenueWhere = revenuePaymentWhere(clinicId, { gte: from, lte: to });
 
   // Lote 1 — agregados (máx 6 promesas por Promise.all, regla del repo).
   const [efectivoAgg, ventas, citas, saldos] = await Promise.all([
@@ -96,20 +90,18 @@ export async function calcularResumenFinanzas(
     // confirma, no se puede cobrar ni enviar — no es una venta. Mismo
     // criterio que porCobrar aquí abajo y que caja.ts.
     db.invoice.count({
-      where: { clinicId, ...sinPrueba.porPatientId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
+      where: { clinicId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
     }),
     // citas del periodo (startsAt) con status distinto de cancelada
     // (NO_SHOW sí cuenta: la cita existió).
     db.appointment.count({
-      where: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to }, status: { not: "CANCELLED" } },
+      where: { clinicId, startsAt: { gte: from, lte: to }, status: { not: "CANCELLED" } },
     }),
     // porCobrar / vencido: los saldos GLOBALES de la clínica (no limitados
     // al periodo), de `computeReceivables` — la MISMA función que pinta Caja.
     // Antes aquí «vencido» era el saldo entero de toda factura con `dueDate`
     // pasada, y una factura a plazos con una mensualidad atrasada no contaba.
-    params.conSaldos === false
-      ? Promise.resolve(null)
-      : computeReceivables(clinicId, new Date(), db, undefined, sinPrueba.ids.length ? { filtro: sinPrueba.porPatientId } : {}),
+    params.conSaldos === false ? Promise.resolve(null) : computeReceivables(clinicId, new Date(), db),
   ]);
 
   // Lote 2 — filas del periodo para serie/porDoctor (se agrupan en JS; un
@@ -125,12 +117,12 @@ export async function calcularResumenFinanzas(
     // RESTA. Sin esto, un cobro de $10,000 reembolsado completo dentro del
     // mismo mes seguía reportando $10,000 de ingresos y de utilidad.
     db.payment.findMany({
-      where:  sinPrueba.pago(refundPaymentWhere(clinicId, { gte: from, lte: to })),
+      where:  refundPaymentWhere(clinicId, { gte: from, lte: to }),
       select: { amount: true, paidAt: true },
     }),
     // Misma población que `ventas`: sin borradores ni canceladas.
     db.invoice.findMany({
-      where:  { clinicId, ...sinPrueba.porPatientId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
+      where:  { clinicId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
       select: { doctorId: true, total: true },
     }),
     Promise.resolve(

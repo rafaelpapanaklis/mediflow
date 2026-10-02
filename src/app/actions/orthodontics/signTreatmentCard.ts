@@ -28,7 +28,6 @@ import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { precioDeControlDelCaso } from "@/lib/orthodontics/precio-control-del-caso-db";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
-import { esPacienteDePrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
 import { notaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita";
@@ -439,14 +438,7 @@ export async function signTreatmentCard(
     // camino «sin cita» no aplica). `crearFacturaDesdeCita` no duplica si la cita ya tiene factura.
     const esControlConCita = !!citaDeControl;
     const esControlSinCita = !citaDeControl && !yaEstabaFirmada;
-    // ws1-t11 (11d): un «Paciente de prueba / no contactar» no genera cargos
-    // automáticos. Se avisa igual que cualquier control no facturado: si de
-    // verdad hay que cobrarle, se cobra a mano.
-    const pacienteDePrueba = (esControlConCita || esControlSinCita) && (await esPacienteDePrueba(plan.clinicId, plan.patientId));
-    if (pacienteDePrueba) {
-      avisoControlSinFacturar = "Este control no se facturó: es un paciente de prueba / no contactar. Si hay que cobrarle, hazlo a mano desde Caja.";
-    }
-    if (!pacienteDePrueba && (esControlConCita || esControlSinCita)) {
+    if (esControlConCita || esControlSinCita) {
       try {
         const modo = normalizarOrthoBillingMode(await cargarModoDeCobro(plan.clinicId, plan.id));
         if (modo === "PAGO_POR_CONTROL" && esControlSinCita && (await existeFacturaDeControlSinCita(plan.clinicId, cardId))) {

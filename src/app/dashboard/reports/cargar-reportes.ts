@@ -4,8 +4,6 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import type { TFunction } from "@/i18n/t";
 import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
 import { ventanasDeReportes } from "./ventanas-de-reportes";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
-import { SIN_FILTRO_DE_PRUEBA } from "@/lib/patients/paciente-de-prueba";
 
 async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try { return await p; }
@@ -42,14 +40,6 @@ export async function cargarReportes(
   const weekEnd = v.finSemana;
   const thirtyDaysAgo = v.hace30Dias;
 
-  // ws1-t11 (11d): los «Pacientes de prueba / no contactar» no cuentan. Sin
-  // ninguno (o sin el SQL pegado) los tres son `{}` y cada consulta queda
-  // exactamente como antes. Van en spread DENTRO de `{ clinicId, … }`: ninguna
-  // de estas consultas filtra ya por `id` ni por `patientId`.
-  const sinPrueba = await safe(cargarFiltroSinPrueba(clinicId), SIN_FILTRO_DE_PRUEBA);
-  const sinPruebaPac = sinPrueba.paciente;
-  const sinPruebaCita = sinPrueba.porPatientId;
-
   // Promise.all #1 — series mensuales (3 promesas)
   const [revenueResults, patientCounts, apptCounts] = await Promise.all([
     // Ingresos del mes SIN reembolsos ni facturas canceladas (revenuePaymentWhere,
@@ -58,15 +48,15 @@ export async function cargarReportes(
     // dinero, y los pagos de facturas anuladas inflaban toda la serie.
     Promise.all(ranges.map(r =>
       safe(
-        prisma.payment.aggregate({ where: sinPrueba.pago(revenuePaymentWhere(clinicId, { gte: r.start, lt: r.end })), _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: revenuePaymentWhere(clinicId, { gte: r.start, lt: r.end }), _sum: { amount: true } }),
         { _sum: { amount: 0 } } as any,
       )
     )),
     Promise.all(ranges.map(r =>
-      safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lt: r.end }, ...sinPruebaPac } }), 0)
+      safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lt: r.end } } }), 0)
     )),
     Promise.all(ranges.map(r =>
-      safe(prisma.appointment.count({ where: { clinicId, startsAt: { gte: r.start, lt: r.end }, ...sinPruebaCita } }), 0)
+      safe(prisma.appointment.count({ where: { clinicId, startsAt: { gte: r.start, lt: r.end } } }), 0)
     )),
   ]);
 
@@ -79,11 +69,11 @@ export async function cargarReportes(
   // promesas, sigue bajo 7) para no añadir un viaje aparte a la base.
   const [topTypes, byStatus, rediseno] = await Promise.all([
     safe(prisma.appointment.groupBy({
-      by: ["type"], where: { clinicId, ...sinPruebaCita },
+      by: ["type"], where: { clinicId },
       _count: { id: true }, orderBy: { _count: { id: "desc" } }, take: 6,
     }), [] as any[]),
     safe(prisma.appointment.groupBy({
-      by: ["status"], where: { clinicId, ...sinPruebaCita },
+      by: ["status"], where: { clinicId },
       _count: { id: true },
     }), [] as any[]),
     menuDosNivelesEncendido(clinicId),
@@ -91,15 +81,15 @@ export async function cargarReportes(
 
   // Promise.all #3 — KPIs actuales de pacientes y deuda (5 promesas)
   const [totalPatients, newThisMonth, newLastMonth, debtAggregate, debtCount] = await Promise.all([
-    safe(prisma.patient.count({ where: { clinicId, ...sinPruebaPac } }), 0),
-    safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfMonth }, ...sinPruebaPac } }), 0),
-    safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfLastMonth, lt: endOfLastMonth }, ...sinPruebaPac } }), 0),
+    safe(prisma.patient.count({ where: { clinicId } }), 0),
+    safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfMonth } } }), 0),
+    safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfLastMonth, lt: endOfLastMonth } } }), 0),
     safe(prisma.invoice.aggregate({
-      where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] }, ...sinPruebaCita },
+      where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
       _sum: { balance: true },
     }), { _sum: { balance: 0 } } as any),
     safe(prisma.invoice.findMany({
-      where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] }, ...sinPruebaCita },
+      where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
       select: { patientId: true },
       distinct: ["patientId"],
     }).then(rows => rows.length), 0),
@@ -112,7 +102,6 @@ export async function cargarReportes(
         clinicId,
         startsAt: { gte: todayStart, lt: todayEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
-        ...sinPruebaCita,
       },
     }), 0),
     safe(prisma.appointment.count({
@@ -120,7 +109,6 @@ export async function cargarReportes(
         clinicId,
         startsAt: { gte: todayStart, lt: weekEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
-        ...sinPruebaCita,
       },
     }), 0),
     safe(prisma.user.count({ where: { clinicId, role: "DOCTOR", isActive: true } }), 0),
@@ -132,7 +120,7 @@ export async function cargarReportes(
     }), [] as any[]),
     safe(prisma.appointment.groupBy({
       by: ["resourceId"],
-      where: { clinicId, startsAt: { gte: thirtyDaysAgo }, resourceId: { not: null }, status: { notIn: ["CANCELLED", "NO_SHOW"] }, ...sinPruebaCita },
+      where: { clinicId, startsAt: { gte: thirtyDaysAgo }, resourceId: { not: null }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 5,

@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +47,10 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
-  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
-
   // Trae appts con timeline join. Solo las que tienen ambos timestamps.
   const appts = await prisma.appointment.findMany({
     where: {
       clinicId,
-      ...sinPrueba.porPatientId,
       startsAt: { gte: from, lte: to },
       timeline: {
         consultStartAt: { not: null },

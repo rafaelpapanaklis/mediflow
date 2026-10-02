@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createHmac, timingSafeEqual } from "crypto";
 import { sendWhatsAppInteractive, sendWhatsAppMessage } from "@/lib/whatsapp";
-import { MOTIVO_NO_CONTACTAR } from "@/lib/patients/paciente-de-prueba";
-import { motivoParaNoContactar } from "@/lib/patients/paciente-de-prueba-db";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
 import { entenderNotaDeVoz } from "@/lib/whatsapp/bot/nota-de-voz";
@@ -757,11 +755,6 @@ async function turnoDelBot(args: {
   const { clinic, thread, inMsg, now, from, rawText, patient } = args;
   const eleccion = args.eleccion ?? null;
 
-  // ws1-t11 (11d) — número de un «Paciente de prueba / no contactar»: el bot
-  // ni piensa (no gasta IA, no agenda, no pide anticipos). El mensaje que
-  // llegó ya quedó arriba en la bandeja para el equipo.
-  if (await motivoParaNoContactar({ clinicId: clinic.id, telefono: from })) return;
-
   // Atajo: hilo en pausa SIN marca de handoff (la pausó una persona o un eco
   // del celular) → el bot calla, sin gastar candado ni rate-limit. La pausa de
   // un handoff del bot se evalúa abajo, ya con el turno tomado.
@@ -1080,29 +1073,6 @@ async function enviarYRegistrar(args: {
 }): Promise<boolean> {
   const { waAccessToken, waPhoneNumberId } = args.clinic;
   if (!waAccessToken || !waPhoneNumberId) return false;
-
-  // ws1-t11 (11d) — «Paciente de prueba / no contactar»: el bot tampoco le
-  // contesta. Aquí no se sabe de cuál paciente es el número, así que basta con
-  // que uno de sus dueños esté marcado (paciente-de-prueba.ts). La respuesta
-  // queda en la bandeja como NO enviada, con el motivo: el equipo ve qué pasó.
-  if (await motivoParaNoContactar({ clinicId: args.clinic.id, telefono: args.to })) {
-    try {
-      await prisma.inboxMessage.create({
-        data: {
-          threadId: args.threadId,
-          direction: "OUT",
-          body: args.body,
-          sentAt: new Date(),
-          externalId: args.origen === "bot" ? buildBotReplyExternalId(null) : buildSystemExternalId("reminder", null),
-          deliveryStatus: "FAILED",
-          errorTitle: MOTIVO_NO_CONTACTAR,
-        },
-      });
-    } catch (e) {
-      console.error("[whatsapp/webhook] no se pudo registrar la respuesta frenada:", e);
-    }
-    return false;
-  }
 
   let wamid: string | null = null;
   let fallo: unknown = null;

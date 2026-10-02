@@ -1,18 +1,23 @@
-// ws1-t11 (11c y 11d) — la invitación a reseña respeta «Pedir reseña al
-// terminar la cita» y no se crea para un «Paciente de prueba / no contactar».
-// Correr: npm run test:paciente-de-prueba
+// ws1-t11 (11c) — la invitación a reseña respeta «Pedir reseña al terminar la
+// cita». Y, desde que Rafael canceló «Paciente de prueba / no contactar»
+// (decisión 12, 2-oct-2026), nada vuelve a leer su columna de «patients»:
+// quedó pegada en producción (sql/ws1-t11-paciente-de-prueba.sql) pero sin uso.
+// Correr: npm run test:resena-interruptor
 // Mismo andamio que invite-paciente-y-entrega.test.ts (Module._load: invite.ts
 // lleva "server-only").
 import Module from "node:module";
+import fs from "node:fs";
 import path from "node:path";
 import { before, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
+// Partido a propósito: así esta prueba no se encuentra a sí misma.
+const COLUMNA = "isTest" + "Patient";
 
 const e = {
   reminderSettings: null as unknown,
-  prueba: false,
+  consultasCrudas: [] as string[],
   creadas: 0,
   whatsapp: 0,
   correos: [] as any[],
@@ -21,10 +26,8 @@ const dobles = new Map<string, unknown>();
 dobles.set(path.join(RAIZ, "src/lib/prisma.ts"), {
   prisma: {
     $queryRaw: async (strings: TemplateStringsArray) => {
-      const sql = strings.join("?");
-      if (sql.includes("information_schema.columns")) return [{ n: 1 }];
-      if (sql.includes('SELECT "isTestPatient" AS v')) return [{ v: e.prueba }];
-      throw new Error("consulta no esperada: " + sql);
+      e.consultasCrudas.push(strings.join("?"));
+      return [];
     },
     clinicReview: {
       findUnique: async () => null,
@@ -34,7 +37,7 @@ dobles.set(path.join(RAIZ, "src/lib/prisma.ts"), {
     appointment: {
       findUnique: async () => ({
         id: "ap1", clinicId: "cl1", patientId: "pP", status: "COMPLETED",
-        patient: { firstName: "Prueba", lastName: "Orto", phone: "0000000000", email: "p@ejemplo.mx" },
+        patient: { firstName: "Ana", lastName: "Orto", phone: "0000000000", email: "p@ejemplo.mx" },
         clinic: {
           name: "Clínica", waConnected: true, waPhoneNumberId: "pn", waAccessToken: "t", waTemplates: null,
           reminderSettings: e.reminderSettings,
@@ -74,21 +77,29 @@ before(async () => {
 });
 beforeEach(() => {
   e.reminderSettings = null;
-  e.prueba = false;
+  e.consultasCrudas = [];
   e.creadas = 0;
   e.whatsapp = 0;
   e.correos = [];
 });
 
-describe("sendReviewInvitation — interruptor y paciente de prueba", () => {
-  it("de fábrica (nada guardado) se invita como siempre", async () => {
+describe("sendReviewInvitation — «Pedir reseña al terminar la cita»", () => {
+  it("de fábrica (nada guardado) se invita como siempre, sin consultas crudas", async () => {
     await sendReviewInvitation("ap1");
     assert.equal(e.creadas, 1);
     assert.equal(e.whatsapp, 1);
     assert.equal(e.correos.length, 1);
+    assert.deepEqual(e.consultasCrudas, []);
   });
 
-  it("11c — con «Pedir reseña al terminar la cita» apagado no se crea ni se manda nada", async () => {
+  it("encendido a mano también invita", async () => {
+    e.reminderSettings = { resenas: { alTerminar: true } };
+    await sendReviewInvitation("ap1");
+    assert.equal(e.creadas, 1);
+    assert.equal(e.whatsapp, 1);
+  });
+
+  it("apagado no se crea ni se manda nada", async () => {
     e.reminderSettings = { resenas: { alTerminar: false } };
     await sendReviewInvitation("ap1");
     assert.equal(e.creadas, 0);
@@ -96,16 +107,39 @@ describe("sendReviewInvitation — interruptor y paciente de prueba", () => {
     assert.equal(e.correos.length, 0);
   });
 
-  it("11d — al paciente de prueba no se le crea la invitación (no cuenta en Reseñas)", async () => {
-    e.prueba = true;
+  it("el correo ya no lleva la marca `paciente` del freno de prueba", async () => {
     await sendReviewInvitation("ap1");
-    assert.equal(e.creadas, 0);
-    assert.equal(e.whatsapp, 0);
-    assert.equal(e.correos.length, 0);
+    assert.equal("paciente" in e.correos[0], false);
+  });
+});
+
+describe("«Paciente de prueba / no contactar» no existe (decisión 12)", () => {
+  function archivos(dir: string, out: string[] = []): string[] {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.name === "node_modules" || ent.name.startsWith(".")) continue;
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) archivos(p, out);
+      else if (/\.(ts|tsx|js|mjs|cjs|json|prisma)$/.test(ent.name)) out.push(p);
+    }
+    return out;
+  }
+
+  it(`nada en src/ ni en prisma/ lee la columna ${COLUMNA}`, () => {
+    const con = [...archivos(path.join(RAIZ, "src")), ...archivos(path.join(RAIZ, "prisma"))]
+      .filter((f) => fs.readFileSync(f, "utf8").includes(COLUMNA))
+      .map((f) => path.relative(RAIZ, f));
+    assert.deepEqual(con, []);
   });
 
-  it("el correo de la invitación lleva el paciente (lo frena sendEmail si hace falta)", async () => {
-    await sendReviewInvitation("ap1");
-    assert.deepEqual(e.correos[0].paciente, { clinicId: "cl1", patientId: "pP" });
+  it("no quedan sus módulos, su API ni su pantalla", () => {
+    for (const r of [
+      "src/lib/patients/paciente-de-prueba.ts",
+      "src/lib/patients/paciente-de-prueba-db.ts",
+      "src/lib/patients/textos-paciente-de-prueba.ts",
+      "src/app/api/patients/[id]/prueba/route.ts",
+      "src/components/dashboard/patient-detail/paciente-de-prueba.tsx",
+    ]) {
+      assert.equal(fs.existsSync(path.join(RAIZ, r)), false, r);
+    }
   });
 });
