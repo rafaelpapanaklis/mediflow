@@ -125,6 +125,7 @@ import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { citaParaIniciarDesdeLaFicha, esCitaDeHoy, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
 import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { abrirHojaAlLlegar, PARAM_ABRIR_HOJA, seAtiendeConLaHoja, TAB_ORTODONCIA } from "@/lib/orthodontics/consulta-de-cita-orto";
 import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarControlFirmadoDeHoy";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useTextosFirmaControl } from "@/components/specialties/orthodontics/redesign/textos-firma-control";
@@ -621,8 +622,21 @@ export function PatientDetailClient({
   // El porqué (y por qué era SOAP hasta ahora) está en consult-landing.ts.
   const consultLandingPermitido = (id: string | null) =>
     id !== null && (canViewRecords || !PESTANAS_DEL_EXPEDIENTE.includes(id)) ? id : null;
+  // ws1-t8 (ticket 3, mejora 3b): una cita de ortodoncia («Control de ortodoncia» y las demás con hoja) se atiende
+  // con la hoja de control, no con «Nueva consulta → Dental general»: la decide la CITA, no la clínica. Reglas y
+  // pruebas en consulta-de-cita-orto.ts.
+  const casoOrtoActivo =
+    Boolean(orthoRedesignVM?.treatment.treatmentPlanId) && orthoRedesignVM?.treatment.status !== "no-iniciado";
+  const moduloOrtoParaAtender = hayDatosOrto && !orthoSoloLectura && Boolean(orthoRedesignVM);
+  const atiendeConLaHoja = (cita: { type?: string | null; status?: string | null; startsAt: string | Date } | null | undefined) =>
+    seAtiendeConLaHoja({ cita, moduloOrtodoncia: moduloOrtoParaAtender, casoActivo: casoOrtoActivo, ahora: new Date(), zona: zonaClinica });
+  const citaDeLaDireccion = searchParams.get("appointment")
+    ? (appointments as any[]).find((a) => a.id === searchParams.get("appointment")) ?? null
+    : null;
+  const citaDeLaDireccionConHoja = atiendeConLaHoja(citaDeLaDireccion);
   const consultTab = searchParams.get("appointment")
-    ? consultLandingPermitido(consultLandingTab(clinicCategory))
+    ? (citaDeLaDireccionConHoja ? consultLandingPermitido(TAB_ORTODONCIA) : null) ??
+      consultLandingPermitido(consultLandingTab(clinicCategory))
     : null;
   const initialTab = deepLinkTab ?? menuTab ?? consultTab ?? "resumen";
   const [tabPedida, setTab] = useState(initialTab);
@@ -1153,7 +1167,21 @@ export function PatientDetailClient({
   // ortodoncia ES la hoja de control. Elegirla lleva a la pestaña Ortodoncia y
   // abre ahí la hoja, la misma de «Registrar control». Si el paciente nunca
   // tuvo caso, esa pestaña ofrece «Abrir caso de ortodoncia».
-  const [abrirControlOrto, setAbrirControlOrto] = useState(false);
+  // ws1-t8 (mejora 9b): «Abrir atención completa» del panel de la cita llega con `?tab=ortodoncia&hoja=1` y la
+  // hoja de esa cita se abre sola.
+  const [abrirControlOrto, setAbrirControlOrto] = useState(() =>
+    abrirHojaAlLlegar({ tabDeLaDireccion: tabFromUrl, hoja: searchParams.get(PARAM_ABRIR_HOJA), seAtiendeConLaHoja: citaDeLaDireccionConHoja }),
+  );
+  const alAbrirControlOrto = () => {
+    setAbrirControlOrto(false);
+    // Que recargar o volver atrás no abra la hoja otra vez. Con `null` (no `history.state`), o Next la devuelve.
+    if (typeof window !== "undefined" && searchParams.get(PARAM_ABRIR_HOJA)) {
+      const params = new URLSearchParams(window.location.search);
+      params.delete(PARAM_ABRIR_HOJA);
+      const qs = params.toString();
+      window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+    }
+  };
   const cambiarTipoDeConsulta = (valor: string) => {
     if (valor === TIPO_ORTODONCIA) {
       setAbrirControlOrto(true);
@@ -1315,6 +1343,7 @@ export function PatientDetailClient({
   // `?appointment=` sin remontar el componente, así que el estado inicial de
   // `tab` ya pasó. Con `?tab=` explícito en la URL manda la URL.
   const activeApptId = activeAppointment?.id ?? null;
+  const consultaConHoja = atiendeConLaHoja(activeAppointment);
   const consultLanding = consultLandingPermitido(consultLandingTab(clinicCategory));
   const landedForApptRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1324,9 +1353,18 @@ export function PatientDetailClient({
     }
     if (landedForApptRef.current === activeApptId) return;
     landedForApptRef.current = activeApptId;
-    if (tabFromUrl || !consultLanding) return;
+    if (tabFromUrl) return;
+    // ws1-t8 (mejora 3b): la cita de ortodoncia cae en Ortodoncia con su hoja abierta, ligada a ESTA cita
+    // (citaEnCursoId); al firmarla adopta la nota de la consulta y la cierra.
+    if (consultaConHoja && consultLandingPermitido(TAB_ORTODONCIA)) {
+      setTab(TAB_ORTODONCIA);
+      setAbrirControlOrto(true);
+      return;
+    }
+    if (!consultLanding) return;
     setTab(consultLanding);
-  }, [activeApptId, tabFromUrl, consultLanding]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeApptId, tabFromUrl, consultLanding, consultaConHoja]);
 
   const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
   const [soapDraft, setSoapDraft] = useState<SoapDraft>({
@@ -1830,7 +1868,9 @@ export function PatientDetailClient({
                   desmontarlo a media frase perdería lo tecleado. En
                   cualquier otra pestaña sigue siendo la superficie de la
                   sesión, tal cual. */}
-              <div style={{ display: tab === CONSULT_FORM_TAB ? "none" : undefined }}>
+              {/* ws1-t8 (3b): lo mismo en Ortodoncia cuando la cita se atiende con la hoja de control: la hoja ES
+                  la nota de la visita (al firmarla adopta este borrador y cierra la consulta). */}
+              <div style={{ display: tab === CONSULT_FORM_TAB || (tab === TAB_ORTODONCIA && consultaConHoja) ? "none" : undefined }}>
                 <SoapEditorInline
                   appointment={{
                     id: activeAppointment.id,
@@ -2234,7 +2274,7 @@ export function PatientDetailClient({
               // como respaldo cuando no hay nada que cobrar o aún no carga.
               onCollect={openBillingTab}
               abrirControlAlEntrar={abrirControlOrto}
-              onControlAbierto={() => setAbrirControlOrto(false)}
+              onControlAbierto={alAbrirControlOrto}
               citaEnCursoId={activeAppointment?.id ?? null}
               citaDeLaDireccionId={consultClosed ? null : consultAppointmentId}
               onConsultaCerradaPorLaHoja={cerrarConsultaPorLaHoja}

@@ -36,6 +36,9 @@ const es = {
   hojaFirmadaLigadaSinCerrar: "El control de hoy ya estaba firmado y quedó ligado a esta cita. La consulta tiene su propia nota: termínala para cerrar la cita.",
   /** Botón de la fila (Hoy, panel de la cita, Tablero, Controles) cuando el control de esa cita ya está firmado. */
   verControl: "Ver control",
+  // ws1-t8 (mejora 9b): el panel de la cita abre la ficha del caso con la hoja de esa cita, no solo el cajón rápido.
+  atencionCompleta: "Abrir atención completa",
+  atencionCompletaAyuda: "El caso entero (arcos, fotos, historial) con la hoja de esta cita abierta.",
 };
 
 const en: typeof es = {
@@ -52,6 +55,8 @@ const en: typeof es = {
   hojaFirmadaLigadaYCitaCerrada: "Today's check-up was already signed: it is now this appointment's check-up and the appointment was marked as attended.",
   hojaFirmadaLigadaSinCerrar: "Today's check-up was already signed and is now linked to this appointment. The visit has its own note: finish it to close the appointment.",
   verControl: "View check-up",
+  atencionCompleta: "Open full visit",
+  atencionCompletaAyuda: "The whole case (wires, photos, history) with this appointment's sheet open.",
 };
 
 export type TextosFirmaControl = typeof es;

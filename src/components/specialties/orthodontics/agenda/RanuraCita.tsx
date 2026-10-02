@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Maximize2 } from "lucide-react";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { getTreatmentPlanIdForAppointment } from "@/app/actions/orthodontics/getTreatmentPlanIdForAppointment";
@@ -8,6 +10,10 @@ import { ESTADO_VACIO_RANURA_CITA, esRespuestaCaida, resolverEstadoRanuraCita } 
 import { ResumenCobranza } from "../cobranza/ResumenCobranza";
 import { BotonHojaControl } from "./BotonHojaControl";
 import { RAIZ_ORTO } from "../redesign/raiz";
+import { Btn } from "../redesign/atoms/Btn";
+import orto from "../redesign/orto.module.css";
+import { useTextosFirmaControl } from "../redesign/textos-firma-control";
+import { enlaceAtencionCompleta } from "@/lib/orthodontics/consulta-de-cita-orto";
 
 // Ortodoncia — Ola 1 (ws1-t4, Control y agenda, sep-2026): única ranura del
 // panel de la cita (agenda-nueva/panel-cita.tsx). Se autocalifica sola: solo
@@ -42,6 +48,8 @@ export interface RanuraCitaProps {
 
 export function RanuraCita({ dto, onModoDeCobro }: RanuraCitaProps) {
   const esControl = esCitaOrtoConHoja(dto.reason ?? null);
+  const router = useRouter();
+  const textosFirma = useTextosFirmaControl();
   const [state, setState] = useState(ESTADO_VACIO_RANURA_CITA);
   // H41: si la consulta se aborta (dev lento, 502) reintenta una vez y, si
   // vuelve a fallar, avisa con «Reintentar» en vez de quedarse vacía.
@@ -119,7 +127,23 @@ export function RanuraCita({ dto, onModoDeCobro }: RanuraCitaProps) {
     <div className={`${RAIZ_ORTO} flex flex-col gap-[10px]`}>
       <ResumenCobranza treatmentPlanId={state.treatmentPlanId} />
       {state.canOpenClinicalCard ? (
-        <BotonHojaControl appointmentId={dto.id} treatmentPlanId={state.treatmentPlanId} firmada={state.hojaFirmada} />
+        <>
+          <BotonHojaControl appointmentId={dto.id} treatmentPlanId={state.treatmentPlanId} firmada={state.hojaFirmada} />
+          {/* ws1-t8 (ticket 3, mejora 9b): el cajón rápido no basta para atender — la ficha del caso, en Ortodoncia,
+              con la hoja de ESTA cita abierta (ligada a ella; al firmarla cierra la cita). Mismo permiso que el cajón. */}
+          <Btn
+            variant="secondary"
+            className="w-full"
+            icon={<Maximize2 size={15} strokeWidth={1.75} aria-hidden />}
+            onClick={() => router.push(enlaceAtencionCompleta(dto.patient.id, dto.id))}
+            aria-describedby={`atencion-completa-${dto.id}`}
+          >
+            {textosFirma.atencionCompleta}
+          </Btn>
+          <p id={`atencion-completa-${dto.id}`} className={orto.datoSub}>
+            {textosFirma.atencionCompletaAyuda}
+          </p>
+        </>
       ) : null}
     </div>
   );
