@@ -21,7 +21,7 @@ import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 import { computeReceivables, whereFacturasVencidas } from "@/lib/caja";
 import { soltarFacturaCanceladaDeCita } from "@/lib/invoices/cita-factura-cancelada.server";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
-import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -159,12 +159,12 @@ export async function POST(req: NextRequest) {
     const taxRate = rawRate;
 
     // Doctor atribuido (opcional). Se valida que sea de ESTA clínica (aislamiento) y con la misma regla que la
-    // lista de la pantalla (GET /api/agenda/doctors, ws1-t10): el dueño que atiende ya sale ahí y no puede
-    // rebotar aquí.
+    // lista de la pantalla (GET /api/agenda/doctors, ws1-t10): quien atiende y está activo, con o sin «Aparece
+    // en la agenda» (esa casilla solo controla la agenda).
     let doctorId: string | null = null;
     if (typeof body.doctorId === "string" && body.doctorId.trim()) {
       const doc = await prisma.user.findFirst({
-        where: { id: body.doctorId.trim(), clinicId, ...RECIBE_CITAS_WHERE },
+        where: { id: body.doctorId.trim(), clinicId, ...ATIENDE_WHERE },
         select: { id: true },
       });
       if (!doc) return NextResponse.json({ error: "Doctor inválido para esta clínica" }, { status: 400 });

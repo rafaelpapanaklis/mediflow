@@ -30,8 +30,9 @@
 /**
  * El doctor con el que nace la factura: `createdById` si está entre los DOCTOR
  * de la clínica, o `null`. `esDoctorDeLaClinica` es el resultado de haberlo
- * buscado con `{ id, clinicId, role: "DOCTOR" }`, el MISMO filtro con el que
- * POST /api/invoices valida el doctor que manda el editor.
+ * buscado con `{ id, clinicId, role: "DOCTOR" }`. POST /api/invoices acepta a
+ * más gente (quien atiende y está activo: DOCTOR, ADMIN o SUPER_ADMIN, ws1-t10),
+ * así que un DOCTOR activo puesto aquí también pasaría por el editor.
  */
 export function doctorDeLaFactura(
   createdById: string | null | undefined,

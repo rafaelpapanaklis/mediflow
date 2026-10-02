@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { doctorDeLaFactura } from "../doctor-de-la-factura";
+import { ATIENDE_WHERE, ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 
 test("doctor: el que creó el presupuesto, solo si es DOCTOR de la clínica", () => {
   assert.equal(doctorDeLaFactura("u-doc", true), "u-doc");
@@ -22,10 +23,16 @@ test("doctor: el que creó el presupuesto, solo si es DOCTOR de la clínica", ()
 const ALTA = readFileSync(join(__dirname, "..", "create-invoice-from-quote.ts"), "utf8");
 const sinComentarios = ALTA.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-test("el alta valida al doctor con el mismo filtro que POST /api/invoices, por clinicId de la sesión", () => {
+test("el alta valida al doctor por clinicId de la sesión, y POST /api/invoices acepta a ese doctor", () => {
   assert.match(sinComentarios, /where: \{ id: quote\.createdById, clinicId: ctx\.clinicId, role: "DOCTOR" \}/);
   const post = readFileSync(join(__dirname, "..", "..", "..", "app", "api", "invoices", "route.ts"), "utf8");
-  assert.match(post, /where: \{ id: body\.doctorId\.trim\(\), clinicId, role: "DOCTOR" \}/, "POST /api/invoices cambió su filtro: revisa que los dos sigan diciendo lo mismo");
+  // ws1-t10 (decisión de Rafael, 2-oct-2026): POST /api/invoices acepta a quien ATIENDE y está activo
+  // (DOCTOR, ADMIN o SUPER_ADMIN), con o sin «Aparece en la agenda». El alta sigue poniendo solo al DOCTOR que
+  // creó el presupuesto (un administrador que lo creó no es quien atendió): lo que el alta pone, el POST lo acepta.
+  assert.match(post, /where: \{ id: body\.doctorId\.trim\(\), clinicId, \.\.\.ATIENDE_WHERE \}/, "POST /api/invoices cambió su filtro: revisa que siga aceptando al doctor que pone el alta");
+  assert.ok((ROLES_QUE_ATIENDEN as readonly string[]).includes("DOCTOR"), "el rol del alta está entre los que el POST acepta");
+  assert.deepEqual(ATIENDE_WHERE.role.in, [...ROLES_QUE_ATIENDEN]);
+  assert.equal("agendaActive" in ATIENDE_WHERE, false, "la casilla de la agenda no decide quién va en una factura");
   // Nunca «quien pulsa el botón».
   assert.ok(!/doctorId:\s*ctx\.userId/.test(sinComentarios), "el doctor no es quien factura");
 });

@@ -1,20 +1,21 @@
 /**
- * El doctor de la factura sigue la regla única de la Agenda — ws1-t10, revisión final (fallo 7), 2-oct-2026.
+ * El doctor de la factura: quien ATIENDE y está activo — ws1-t10, revisión final (fallo 7), 2-oct-2026.
  *
  * `GET /api/agenda/doctors` (la lista del doctor en «Nueva factura», invoice-editor-modal) seguía con
- * `role: "DOCTOR"` a secas: el dueño o administrador que atiende no salía, y un doctor con «Aparece en la agenda»
- * apagada sí. `POST /api/invoices` validaba el doctor con la misma lista vieja: abrir la lista sin abrir la
- * validación habría dado «Doctor inválido para esta clínica» al elegir al dueño. Ahora las dos usan
- * `RECIBE_CITAS_WHERE` (DOCTOR, ADMIN o SUPER_ADMIN activo y con la casilla marcada), siempre con el clinicId de
- * la sesión.
+ * `role: "DOCTOR"` a secas: el dueño o administrador que atiende no salía. `POST /api/invoices` validaba el
+ * doctor con la misma lista vieja: abrir la lista sin abrir la validación habría dado «Doctor inválido para esta
+ * clínica» al elegir al dueño. Ahora las dos usan `ATIENDE_WHERE` (DOCTOR, ADMIN o SUPER_ADMIN activo), siempre
+ * con el clinicId de la sesión. Decisión de Rafael (2-oct-2026): «Aparece en la agenda» SOLO controla la agenda,
+ * así que en la factura salen también los que la tienen apagada; en la agenda, no.
  *
  * Run: npm run test:aparece-en-agenda
  *
  * Llama a los HANDLERS REALES con `mock.module` sobre prisma y la sesión: no toca ninguna base. Con el código
- * viejo fallan las dos: la lista no trae al dueño ni al admin (y sí al doctor apagado) y el POST rechaza al dueño.
+ * viejo fallan: la lista no trae al dueño ni al admin y el POST los rechaza.
  */
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { RECIBE_CITAS_WHERE, puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
 
 type Fila = { id: string; clinicId: string; role: string; isActive: boolean; agendaActive: boolean; firstName: string; lastName: string };
 
@@ -84,16 +85,33 @@ const sesionFactura: any = { clinicId: "c1", userId: "u1", role: "ADMIN", permis
 (mock as any).module("@/lib/audit", { namedExports: { logMutation: async () => {}, logAudit: async () => {} } });
 (mock as any).module("@/lib/cache/revalidate", { namedExports: { revalidateAfter: () => {} } });
 
-test("GET /api/agenda/doctors: el dueño y el admin que atienden salen; el apagado, la baja, recepción y otra clínica no", async () => {
+async function listaDeLaFactura(): Promise<Array<{ id: string; name: string; activeInAgenda: boolean }>> {
   const { GET } = await import("@/app/api/agenda/doctors/route");
   const res: any = await GET();
   assert.equal(res.status, 200);
-  const { doctors } = await res.json();
+  return (await res.json()).doctors;
+}
+
+test("GET /api/agenda/doctors: todos los que atienden y están activos, con o sin la casilla; la baja, recepción y otra clínica no", async () => {
+  const doctors = await listaDeLaFactura();
   assert.deepEqual(
-    doctors.map((d: { id: string }) => d.id).sort(),
-    ["admin", "doc", "dueno"],
+    doctors.map((d) => d.id).sort(),
+    ["admin", "doc", "doc-apagado", "dueno", "dueno-fuera"],
   );
-  assert.equal(doctors.find((d: { id: string }) => d.id === "dueno").name, "Johnnifer Dueño");
+  assert.equal(doctors.find((d) => d.id === "dueno")!.name, "Johnnifer Dueño");
+});
+
+test("el dueño con «Aparece en la agenda» apagada SÍ sale en la factura y NO en la agenda", async () => {
+  const dueno = USUARIOS.find((u) => u.id === "dueno-fuera")!;
+  // Factura: sale en la lista de «Nueva factura» (con su casilla tal cual) y el POST lo acepta.
+  const enLaLista = (await listaDeLaFactura()).find((d) => d.id === dueno.id);
+  assert.ok(enLaLista, "sale en la lista del doctor de la factura");
+  assert.equal(enLaLista!.activeInAgenda, false);
+  assert.equal(await aceptaAlDoctor(dueno.id), true, "el POST de la factura lo acepta");
+  // Agenda: la regla de quién recibe citas (la que usan columnas, «Nueva cita», el POST/PATCH de citas, la lista
+  // de espera y la reserva) lo deja fuera.
+  assert.equal(puedeRecibirCitas(dueno), false);
+  assert.equal(USUARIOS.some((u) => u.id === dueno.id && cumple(u, { clinicId: "c1", ...RECIBE_CITAS_WHERE })), false);
 });
 
 function crear(doctorId: string): any {
@@ -121,10 +139,12 @@ async function aceptaAlDoctor(doctorId: string): Promise<boolean> {
 }
 
 test("POST /api/invoices valida el doctor con la MISMA regla que la lista (y por la clínica de la sesión)", async () => {
+  const lista = (await listaDeLaFactura()).map((d) => d.id);
+  for (const u of USUARIOS) {
+    assert.equal(await aceptaAlDoctor(u.id), lista.includes(u.id), `${u.id}: lo que enseña la lista es lo que acepta el POST`);
+  }
   assert.equal(await aceptaAlDoctor("dueno"), true, "el dueño que atiende ya sale en la lista: no puede rebotar");
-  assert.equal(await aceptaAlDoctor("admin"), true);
-  assert.equal(await aceptaAlDoctor("doc"), true);
-  for (const id of ["dueno-fuera", "doc-apagado", "doc-baja", "recep", "doc-otra"]) {
+  for (const id of ["doc-baja", "recep", "doc-otra"]) {
     assert.equal(await aceptaAlDoctor(id), false, id);
   }
   for (const w of wheresDelDoctor) assert.equal(w.clinicId, "c1", "siempre con el clinicId de la sesión");

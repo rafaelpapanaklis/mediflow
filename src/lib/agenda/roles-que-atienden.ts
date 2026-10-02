@@ -20,12 +20,21 @@
 export const ROLES_QUE_ATIENDEN = ["DOCTOR", "ADMIN", "SUPER_ADMIN"] as const;
 
 /**
+ * Quien ATIENDE: rol que atiende y cuenta activa, SIN mirar «Aparece en la agenda». Es el doctor que se puede
+ * poner en una factura (GET /api/agenda/doctors de «Nueva factura» y la validación de POST /api/invoices):
+ * decisión de Rafael del 2-oct-2026, la casilla SOLO controla la agenda. El `clinicId` lo pone quien consulta.
+ */
+export const ATIENDE_WHERE = {
+  role: { in: [...ROLES_QUE_ATIENDEN] },
+  isActive: true,
+};
+
+/**
  * El filtro de Prisma de «puede recibir citas», para mezclar con `{ id, clinicId }`. El `clinicId` lo pone
  * SIEMPRE quien consulta, de la sesión.
  */
 export const RECIBE_CITAS_WHERE = {
-  role: { in: [...ROLES_QUE_ATIENDEN] },
-  isActive: true,
+  ...ATIENDE_WHERE,
   agendaActive: true,
 };
 
