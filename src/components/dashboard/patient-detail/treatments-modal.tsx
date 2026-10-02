@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/utils";
 import { sumInvoiceItems, itemLineTotal } from "@/lib/invoice-totals";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 export interface SuggestedTreatment {
   code?: string;
@@ -109,7 +110,7 @@ export function TreatmentsModal({
       onInvoiced?.(data.invoice);
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("patients.treatmentsModal.invoiceFailed"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.treatmentsModal.invoiceFailed") }));
     } finally {
       setCreating(false);
     }
@@ -146,7 +147,7 @@ export function TreatmentsModal({
       toast.success(t("patients.treatmentsModal.quoteCreated", { folio: data.folio }));
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("patients.treatmentsModal.quoteFailed"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.treatmentsModal.quoteFailed") }));
     } finally {
       setCreatingQuote(false);
     }

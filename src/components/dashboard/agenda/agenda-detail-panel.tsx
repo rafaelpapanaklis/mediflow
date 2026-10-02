@@ -47,6 +47,7 @@ import {
   type AppointmentStatus,
 } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface ActionDef {
   status: AppointmentStatus;
@@ -285,7 +286,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       }
       toast.success(t("agenda.detailPanel.reminderSent"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("agenda.detailPanel.whatsappError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("agenda.detailPanel.whatsappError") }));
     } finally {
       setWaSending(false);
     }
@@ -352,7 +353,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       const data = await res.json();
       setChargingInvoice(data.invoice);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("agenda.detailPanel.chargeError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("agenda.detailPanel.chargeError") }));
     } finally {
       setResolvingCharge(false);
     }

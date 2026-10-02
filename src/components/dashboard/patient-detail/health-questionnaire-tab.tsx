@@ -15,6 +15,7 @@ import {
   type QGroup,
 } from "@/lib/health-questionnaire";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface Props {
   patientId: string;
@@ -222,7 +223,7 @@ export function HealthQuestionnaireTab({ patientId, onSaved }: Props) {
       toast.success("Cuestionario guardado");
       onSaved?.();
     } catch (err: any) {
-      toast.error(err.message ?? "No se pudo guardar");
+      toast.error(mensajeDeError(err, t, { porDefecto: "No se pudo guardar" }));
     } finally {
       setSaving(false);
     }

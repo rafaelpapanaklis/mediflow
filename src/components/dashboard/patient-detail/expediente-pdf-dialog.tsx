@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /** Lo que devuelve GET …/expediente-pdf?estimar=1. */
 interface Estimacion {
@@ -116,7 +117,7 @@ export function ExpedientePdfDialog({ open, onOpenChange, patient }: ExpedienteP
       toast.success(t("patients.expedientePdf.listo"));
       onOpenChange(false);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t("patients.expedientePdf.error"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.expedientePdf.error") }));
     } finally {
       setGenerando(false);
     }

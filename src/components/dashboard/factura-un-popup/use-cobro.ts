@@ -13,6 +13,7 @@ import { montoInicialDeCobro } from "@/components/dashboard/billing/monto-inicia
 import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada";
 // ws1-t4: en un caso de ortodoncia, pagar de más es un adelanto (la MISMA pieza que la ventana de cobro).
 import { useSaldoOrto, registrarCobroConAdelanto } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -152,7 +153,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
       toast.success(t("clinical.paymentModal.registerSuccess"));
       alCobrar();
     } catch (err: any) {
-      toast.error(err.message ?? t("clinical.paymentModal.registerErrorGeneric"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("clinical.paymentModal.registerErrorGeneric") }));
     } finally {
       setSaving(false);
       alOcupar(false);

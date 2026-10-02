@@ -23,6 +23,8 @@ import { fmtMXNdec } from "@/lib/format";
 import { paidAtInstant } from "@/lib/billing/paid-at";
 import { repartirCobro, type FacturaDelCaso } from "@/lib/orthodontics/saldo-a-favor/adelanto-core";
 import s from "./saldo-orto.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface InfoSaldoOrto {
   caso: { planId: string; modo: string } | null;
@@ -109,6 +111,7 @@ export function SaldoOrtoEnCobro({
   /** Se aplicó saldo a favor: quien monta refresca la factura (y cierra si quedó pagada). */
   alAplicar: (r: { aplicado: number; pagada: boolean }) => void;
 }) {
+  const t = useT();
   const [aplicando, setAplicando] = useState(false);
   const excedente = Math.round((importe - balance) * 100) / 100;
   const reparto = useMemo(() => {
@@ -140,7 +143,7 @@ export function SaldoOrtoEnCobro({
       toast.success(`Se usaron ${fmtMXNdec(aplicado)} del saldo a favor`);
       alAplicar({ aplicado, pagada: body?.factura?.status === "PAID" });
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo usar el saldo a favor.");
+      toast.error(mensajeDeError(e, t, { porDefecto: "No se pudo usar el saldo a favor." }));
     } finally {
       setAplicando(false);
     }

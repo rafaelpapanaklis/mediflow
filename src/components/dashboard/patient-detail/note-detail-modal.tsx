@@ -18,6 +18,7 @@ import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useT } from "@/i18n/i18n-provider";
 import { DentalRecordDetail } from "@/components/clinical/records-list";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface Cie10Code {
   code: string;
@@ -129,7 +130,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      toast.error(data.error ?? t("patients.noteDetailModal.addDxError"));
+      toast.error(mensajeDeError(data, t, { porDefecto: t("patients.noteDetailModal.addDxError") }));
       return;
     }
     await reloadDxs();
@@ -188,7 +189,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
       toast.success(signAfter ? t("patients.noteDetailModal.signedToast") : t("patients.noteDetailModal.savedToast"));
       if (signAfter) onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (signAfter ? t("patients.noteDetailModal.signError") : t("patients.noteDetailModal.saveError")));
+      toast.error(mensajeDeError(err, t, { porDefecto: (signAfter ? t("patients.noteDetailModal.signError") : t("patients.noteDetailModal.saveError")) }));
     } finally {
       setSaving(false);
       setSigning(false);

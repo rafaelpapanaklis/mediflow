@@ -66,6 +66,7 @@ import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catal
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { pagadoEsSoloAnticipo } from "@/lib/patient-credit-core";
 import { notasVisibles } from "@/lib/invoices/marcas-internas";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 const METHOD_LABEL_KEYS: Record<string, string> = {
   cash: "clinical.invoiceDetail.methodCash", debit: "clinical.invoiceDetail.methodDebit", credit: "clinical.invoiceDetail.methodCredit",
@@ -413,7 +414,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       const res = await fetch(`/api/invoices/${invoice.id}/send-receipt`, { method: "POST" });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(out?.error ?? "No se pudo enviar el recibo.");
+        toast.error(mensajeDeError(out, t, { porDefecto: "No se pudo enviar el recibo." }));
         return;
       }
       toast.success("Recibo enviado por WhatsApp.");
@@ -612,7 +613,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       }
       await onMutated(); // refresca la lista del parent sin cerrar el modal
     } catch (err: any) {
-      toast.error(err.message ?? t("common.genericError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("common.genericError") }));
     } finally {
       setBusy(false);
     }
@@ -670,7 +671,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       // parent tenga que cablear router.refresh() en onMutated.
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? t("common.genericError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("common.genericError") }));
     } finally {
       setBusy(false);
     }
@@ -737,7 +738,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     } catch (err: any) {
       // El motivo puede ser largo (plantilla en revisión, sin método de pago…):
       // más duración para alcanzar a leerlo.
-      toast.error(err.message ?? t("common.genericError"), { duration: 8000 });
+      toast.error(mensajeDeError(err, t, { porDefecto: t("common.genericError") }), { duration: 8000 });
     } finally {
       setBusy(false);
     }
@@ -801,7 +802,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       // de handlePaymentSuccess. El refresh ocurre al cerrar el PaymentModal.
       setPaymentOpen(true);
     } catch (err: any) {
-      toast.error(err.message ?? t("common.genericError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("common.genericError") }));
     } finally {
       setBusy(false);
     }

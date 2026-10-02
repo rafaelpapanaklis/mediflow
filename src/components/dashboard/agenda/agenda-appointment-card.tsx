@@ -18,6 +18,7 @@ import { nextLogicalStatus, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface Props {
   appointment: AgendaAppointmentDTO;
@@ -194,7 +195,7 @@ export function AgendaAppointmentCard({
         // (No tenemos REPLACE_APPOINTMENT con el shape completo aquí.)
       } catch (err) {
         dispatch({ type: "ROLLBACK_STATUS", original });
-        toast.error(err instanceof Error ? err.message : t("agenda.apptCard.approveFailed"));
+        toast.error(mensajeDeError(err, t, { porDefecto: t("agenda.apptCard.approveFailed") }));
       } finally {
         setPendingNext(false);
       }

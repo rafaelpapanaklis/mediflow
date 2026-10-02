@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
@@ -82,7 +83,7 @@ export function PaymentMethodModal({
       }
       window.location.href = data.url;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("shell.paymentMethodModal.errStripe"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("shell.paymentMethodModal.errStripe") }));
       setPending(null);
     }
   }

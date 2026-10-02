@@ -9,6 +9,7 @@ import { DateField } from "@/components/ui/date-field";
 import { PatientVisibilityPicker } from "@/components/dashboard/patient-visibility-picker";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /**
  * La ROPA de la ventana: la de siempre o la del diseño nuevo (ws1-t5,
@@ -203,7 +204,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
       setForm(emptyForm);
       toast.success(t("shell.newPatient.created", { name: patient.firstName }));
     } catch (err: any) {
-      toast.error(err.message ?? t("shell.newPatient.errCreate"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("shell.newPatient.errCreate") }));
     } finally { setLoading(false); }
   }
 

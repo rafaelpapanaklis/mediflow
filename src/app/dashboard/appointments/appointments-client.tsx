@@ -31,6 +31,7 @@ import {
 import { BookingRequestsPanel } from "./booking-requests-panel";
 import { tiposDeCitaParaCategoria } from "@/lib/agenda/tipos-cita-clasica";
 import { teleconsultaDisponible } from "@/lib/agenda/teleconsulta-por-categoria";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -580,7 +581,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       // La API guarda la cita fuera de horario pero avisa; si no lo mostramos,
       // el aviso se pierde.
       if (body.scheduleWarning?.message) toast(body.scheduleWarning.message, { duration: 6000 });
-    } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t)); } finally { setLoading(false); }
   }
 
   // Improvement 5: Edit existing appointment
@@ -619,7 +620,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setShowDetail(null);
       toast.success(t("appointments.toast.updated"));
       if (body.scheduleWarning?.message) toast(body.scheduleWarning.message, { duration: 6000 });
-    } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t)); } finally { setLoading(false); }
   }
 
   /**
@@ -640,7 +641,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setAppts(prev => prev.map(a => a.id === id ? { ...a, status: nuevo } : a));
       setShowDetail(prev => prev?.id === id ? { ...prev, status: nuevo } : prev);
       toast.success(t("appointments.toast.statusUpdated"));
-    } catch (err: any) { toast.error(err.message ?? t("appointments.toast.updateError")); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t, { porDefecto: t("appointments.toast.updateError") })); }
   }
 
   async function sendWA(apptId: string) {
@@ -654,7 +655,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setAppts(prev => prev.map(a => a.id === apptId ? { ...a, reminderSent: true } : a));
       setShowDetail(prev => prev?.id === apptId ? { ...prev, reminderSent: true } : prev);
       toast.success(t("appointments.toast.whatsappSent"));
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t)); }
   }
 
   // FIX: Verify API response before removing from state
@@ -688,7 +689,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setAppts(prev => prev.map(a => a.id === id ? { ...a, status: "CANCELLED" } : a));
       setShowDetail(prev => prev?.id === id ? { ...prev, status: "CANCELLED" } : prev);
       toast.success(t("appointments.toast.cancelled"));
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t)); }
   }
 
   // Pill usada en MonthView y WeekView — colorea según status (DS tokens).
@@ -1298,7 +1299,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                               await navigator.clipboard.writeText(`${window.location.origin}${d.path}`);
                               toast.success(t("appointments.teleconsult.paymentLinkCopied"));
                             } catch (e: any) {
-                              toast.error(e?.message ?? "No se pudo generar la liga de pago");
+                              toast.error(mensajeDeError(e, t, { porDefecto: "No se pudo generar la liga de pago" }));
                             }
                           }}
                           className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-border hover:bg-muted text-sm font-bold transition-colors">

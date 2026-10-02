@@ -41,6 +41,7 @@ import type { ConsentMissingItem } from "@/lib/consent/document-data";
 import { ConsentMissingNotice } from "./consent-missing-notice";
 import s from "./consent-documento.module.css";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /** Lo que devuelve GET /api/consent/preview. */
 export interface PreviewCarta {
@@ -253,7 +254,7 @@ export function ConsentEditor({
         else c.setSelectionRange(0, 0);
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(mensajeDeError(err, t, { porDefecto: String(err) }));
     } finally {
       setTrayendo(false);
     }
@@ -296,7 +297,7 @@ export function ConsentEditor({
       });
       await onCreado({ id: out.id, signUrl: out.signUrl });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(mensajeDeError(err, t));
     } finally {
       setGuardando(false);
     }

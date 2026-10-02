@@ -27,6 +27,7 @@ import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
 // ws1-t4: en un caso de ortodoncia, pagar de más es un adelanto (la MISMA pieza que el cobro en el detalle).
 import { useSaldoOrto, registrarCobroConAdelanto, SaldoOrtoEnCobro } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
 import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 /**
@@ -162,7 +163,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
       toast.success(t("clinical.paymentModal.registerSuccess"));
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message ?? t("clinical.paymentModal.registerErrorGeneric"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("clinical.paymentModal.registerErrorGeneric") }));
     } finally {
       setSaving(false);
     }

@@ -14,6 +14,7 @@ import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 import { Tratamientos } from "@/components/dashboard/piezas-rediseno/tratamientos";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
 const STATUS_TONE: Record<string, { tone: StatusTone; labelKey: string }> = {
@@ -153,7 +154,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setForm({ patientId:"", doctorId:currentUserId, name:"", description:"", totalSessions:"6", sessionIntervalDays:"30", totalCost:"" });
       toast.success(t("pages.treatments.planCreated"));
       router.refresh();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t)); }
     finally { setSaving(false); }
   }
 
@@ -210,7 +211,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setSelProcedureId("");
       toast.success(data.completed ? t("pages.treatments.treatmentCompletedToast") : t("pages.treatments.sessionRecorded", { num: data.sessionNumber }));
       router.refresh();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: any) { toast.error(mensajeDeError(err, t)); }
     finally { setSaving(false); }
   }
 

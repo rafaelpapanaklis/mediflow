@@ -10,6 +10,7 @@ import type { PaginaDeMovimientos, MovimientoVista } from "@/lib/movimientos-pac
 import { RaizRediseno } from "./raiz";
 import s from "./rediseno.module.css";
 import m from "./movimientos.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /**
  * Movimientos del paciente (ws1-t12).
@@ -55,6 +56,7 @@ function urlDe(patientId: string, q: Consulta, formato?: "csv" | "pdf"): string 
 }
 
 function useMovimientos(patientId: string, q: Consulta) {
+  const t = useT();
   const [datos, setDatos] = useState<PaginaDeMovimientos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,7 @@ function useMovimientos(patientId: string, q: Consulta) {
       })
       .catch((e) => {
         if (isAbortError(e)) return;
-        setError(String(e.message ?? e));
+        setError(mensajeDeError(e, t));
         setCargando(false);
       });
     return () => ctrl.abort();

@@ -46,6 +46,7 @@ import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { facturaEditableEnEditor } from "@/components/billing/editar-factura";
 import s from "./ficha.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /** Los seis tonos de `invoice-status.ts`, en las etiquetas de esta hoja. */
 const TONO_ETIQUETA: Record<InvoiceStatusTone, string> = {
@@ -228,7 +229,7 @@ function Ficha({
     // Con motivo del servidor, se enseña tal cual. SIN motivo (se cortó la red o
     // la función) no se sabe si salió: no se afirma que no, para que nadie
     // reenvíe a ciegas y el paciente reciba dos mensajes.
-    else setMensaje(r.error ?? t("facturaFicha.envioSinConfirmar"));
+    else setMensaje(mensajeDeError(r, t, { porDefecto: t("facturaFicha.envioSinConfirmar") }));
     // Salió, pero sin el link de Mercado Pago que debía llevar (ws1-t1): se dice.
     if (r.ok && r.avisoLink) setMensaje(`${t("facturaMp.enviadoSinLink")} ${r.avisoLink}`);
     // Salió a uno y a otro no (ws1-t10): se dice.

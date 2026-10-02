@@ -11,6 +11,7 @@ import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import { batchValidateAppointments } from "@/lib/agenda/mutations";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /**
  * La ROPA del rediseño (ws1-t1, hallazgo 9): una clase por cada pieza del
@@ -97,7 +98,7 @@ export function AgendaValidateBanner({ ropa }: { ropa?: ValidarRopa } = {}) {
       router.refresh();
     } catch (err) {
       dispatch({ type: "ROLLBACK_STATUS", original });
-      toast.error(err instanceof Error ? err.message : t("agenda.validateBanner.processError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("agenda.validateBanner.processError") }));
     } finally {
       markBusy(appt.id, false);
     }
@@ -120,7 +121,7 @@ export function AgendaValidateBanner({ ropa }: { ropa?: ValidarRopa } = {}) {
       }
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("agenda.validateBanner.batchError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("agenda.validateBanner.batchError") }));
     } finally {
       setBulkRunning(false);
     }

@@ -40,6 +40,8 @@ import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashbo
 import a from "@/components/dashboard/cobros-inventario-rediseno/anticipo.module.css";
 import { useRedisenoActivo } from "@/components/dashboard/cobros-inventario-rediseno/rediseno-activo";
 import { conPuntoFinal } from "@/lib/anticipos/core";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 // ws1-t1 (M4): SIEMPRE con la zona de la CLÍNICA (viene del GET), nunca la
@@ -118,6 +120,7 @@ export interface ModalPedirAnticipoProps {
 }
 
 export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, rediseno: redisenoProp }: ModalPedirAnticipoProps) {
+  const t = useT();
   const redisenoDetectado = useRedisenoActivo();
   const rediseno = redisenoProp ?? redisenoDetectado;
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
@@ -196,7 +199,7 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
         const res = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
-          toast.error(out?.error ?? "No se pudo pedir el anticipo.");
+          toast.error(mensajeDeError(out, t, { porDefecto: "No se pudo pedir el anticipo." }));
           return;
         }
         setResultado({ deposit: out.deposit, texto: out.texto, whatsapp: out.whatsapp });

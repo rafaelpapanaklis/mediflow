@@ -31,6 +31,7 @@ import type { RutasDeDocumento } from "@/components/dashboard/documentos-pacient
 import type { ConsentDocumentoDTO, ConsentFirmaDTO } from "@/lib/consent/documento";
 import type { ConsentDTO } from "@/lib/consent/types";
 import s from "./consent-documento.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /** A dónde pega cada acción de la barra. Sin permiso, ese botón ni se pinta. */
 export function rutasDeConsentimiento(
@@ -214,7 +215,7 @@ export function ConsentVisor({
         const json = await res.json().catch(() => null);
         if (cancelado) return;
         if (res.ok && json) setDoc(json as ConsentDocumentoDTO);
-        else setError((json && json.error) || t("consentDoc.loadError"));
+        else setError(mensajeDeError(json, t, { porDefecto: t("consentDoc.loadError") }));
       })
       .catch(() => { if (!cancelado) setError(t("consentDoc.loadError")); });
     return () => { cancelado = true; };

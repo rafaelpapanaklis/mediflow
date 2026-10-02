@@ -12,6 +12,8 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { avisoDeDinero, ultimaMarca } from "@/lib/anticipos/cita-cancelada-core";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 export function AvisoDineroCitaCancelada({
   invoiceId,
@@ -28,6 +30,7 @@ export function AvisoDineroCitaCancelada({
   puedeCobrar: boolean;
   onListo?: () => void;
 }) {
+  const t = useT();
   const [enviando, setEnviando] = useState<"a_favor" | "reembolso" | "devuelto" | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const marca = ultimaMarca(notas);
@@ -44,7 +47,7 @@ export function AvisoDineroCitaCancelada({
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(out?.error ?? "No se pudo guardar la decisión.", { duration: 9000 });
+        toast.error(mensajeDeError(out, t, { porDefecto: "No se pudo guardar la decisión." }), { duration: 9000 });
         return;
       }
       toast.success(decision === "a_favor" ? "Quedó a favor del paciente; la factura se canceló." : "Marcado para reembolso.");

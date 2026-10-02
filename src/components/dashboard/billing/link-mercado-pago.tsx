@@ -22,6 +22,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import s from "./link-mercado-pago.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 export interface LinkDePago {
   url: string;
@@ -181,7 +182,7 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
       setLink(r.link);
       alCambiar?.(r.link);
     } else {
-      setError(r.error ?? t("facturaMp.errorGenerar"));
+      setError(mensajeDeError(r, t, { porDefecto: t("facturaMp.errorGenerar") }));
     }
   }, [invoiceId, alCambiar, t]);
 

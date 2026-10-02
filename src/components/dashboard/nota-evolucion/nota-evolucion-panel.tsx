@@ -33,6 +33,7 @@ import { combinarConPlantilla } from "@/lib/patient-documents/combinar-plantilla
 import { NotaVisor } from "./nota-documento";
 import estilos from "./editor.module.css";
 import type { NotaCompleta, NotaResumen, PlantillaNota, PreviewNota } from "./tipos";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 type Vista =
   | { tipo: "lista" }
@@ -105,7 +106,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
         setVista({ tipo: "leer", nota });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(mensajeDeError(err, t, { porDefecto: String(err) }));
     } finally {
       setOcupado(false);
     }
@@ -118,7 +119,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
       const hoja = await pedir<PreviewNota>(`/api/patient-documents/preview?patientId=${encodeURIComponent(patientId)}`);
       setVista({ tipo: "editar", hoja, notaId: null });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(mensajeDeError(err, t, { porDefecto: String(err) }));
     } finally {
       setOcupado(false);
     }
@@ -140,7 +141,7 @@ export function NotaEvolucionPanel({ patientId, currentUserId, canWrite }: Props
       await cargar();
       setVista(firmar ? { tipo: "leer", nota } : { tipo: "lista" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(mensajeDeError(err, t, { porDefecto: String(err) }));
     } finally {
       setOcupado(false);
     }
@@ -362,7 +363,7 @@ function Editor({
           : t("notaEvolucionDoc.editor.templateApplied", { name: p.name }),
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(mensajeDeError(err, t, { porDefecto: String(err) }));
     } finally {
       setTrayendo(false);
     }

@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Label } from "@/components/ui/label";
 import { MOTIVO_MINIMO, textoMetodo } from "@/lib/anticipos/anular-core";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -42,6 +44,7 @@ export function AnularAnticipo({
   onListo?: () => void;
   className?: string;
 }) {
+  const t = useT();
   const [anulables, setAnulables] = useState<Anulable[]>([]);
   const [dialogo, setDialogo] = useState(false);
   const [elegido, setElegido] = useState<string>("");
@@ -80,7 +83,7 @@ export function AnularAnticipo({
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(out?.error ?? "No se pudo anular el anticipo.");
+        toast.error(mensajeDeError(out, t, { porDefecto: "No se pudo anular el anticipo." }));
         return;
       }
       if (out?.aviso) toast(out.aviso, { duration: 10000 });

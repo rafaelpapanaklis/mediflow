@@ -18,6 +18,8 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
 import { nombreDelPacienteDeFactura } from "./cobrar-en-factura-core";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface CobrarEnFacturaProps {
   invoiceId: string;
@@ -46,6 +48,7 @@ export interface CobrarEnFacturaProps {
 }
 
 export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, rediseno, clinicTaxMode, onClose, onRefrescar, onCobrado, onLista }: CobrarEnFacturaProps) {
+  const t = useT();
   const [factura, setFactura] = useState<any | null>(null);
 
   useEffect(() => {
@@ -60,7 +63,7 @@ export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, redisen
       .then((d) => { if (vivo) { setFactura(d); onLista?.(); } })
       .catch((e: any) => {
         if (!vivo) return;
-        toast.error(e?.message ?? "No se pudo abrir la factura.");
+        toast.error(mensajeDeError(e, t, { porDefecto: "No se pudo abrir la factura." }));
         onClose();
       });
     return () => { vivo = false; };

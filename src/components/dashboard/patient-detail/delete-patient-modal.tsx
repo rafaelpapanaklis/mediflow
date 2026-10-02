@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /** Espejo de PatientDeleteBlocker (@/lib/patient-deletion) del lado cliente. */
 interface DeleteBlocker {
@@ -107,7 +108,7 @@ export function DeletePatientModal({ open, onOpenChange, patient }: DeletePatien
       router.push("/dashboard/patients");
       router.refresh();
     } catch (err: any) {
-      toast.error(err?.message ?? t("patients.deleteModal.archiveError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.deleteModal.archiveError") }));
     } finally {
       setBusy(null);
     }
@@ -135,7 +136,7 @@ export function DeletePatientModal({ open, onOpenChange, patient }: DeletePatien
       router.push("/dashboard/patients");
       router.refresh();
     } catch (err: any) {
-      toast.error(err?.message ?? t("patients.deleteModal.deleteError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.deleteModal.deleteError") }));
     } finally {
       setBusy(null);
     }

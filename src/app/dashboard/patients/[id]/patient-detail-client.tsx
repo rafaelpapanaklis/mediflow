@@ -115,6 +115,7 @@ import { SelectorDeCasos } from "@/components/specialties/orthodontics/modulo/se
 import type { CasoDelPaciente } from "@/lib/orthodontics/casos-del-paciente";
 import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
 import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
 // cliente para poder traducir el texto con useT — el `loading` de dynamicImport
@@ -769,7 +770,7 @@ export function PatientDetailClient({
       toast.success(t("patients.deleteRecord.success"));
       setRecords((prev) => prev.filter((r) => r.id !== record.id));
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.toast.deleteError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.toast.deleteError") }));
     }
   }
 
@@ -786,7 +787,7 @@ export function PatientDetailClient({
       marcarEstadoDeCita(appt.id, "CANCELLED");
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.cancelAppt.error"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.cancelAppt.error") }));
     }
   }
 
@@ -801,7 +802,7 @@ export function PatientDetailClient({
       toast.success(t("patients.deleteFile.success"));
       setFiles((prev) => prev.filter((f) => f.id !== file.id));
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.toast.deleteError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.toast.deleteError") }));
     }
   }
 
@@ -816,7 +817,7 @@ export function PatientDetailClient({
       toast.success(t("patients.deleteTreatment.success"));
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.toast.deleteError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.toast.deleteError") }));
     }
   }
 
@@ -888,7 +889,7 @@ export function PatientDetailClient({
       setShowNewTreatment(false);
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.createTreatment.error"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.createTreatment.error") }));
     } finally {
       setSavingTreatment(false);
     }
@@ -916,7 +917,7 @@ export function PatientDetailClient({
       setEditPlan(null);
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.treatment.updateFailed"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.treatment.updateFailed") }));
     } finally {
       setSavingEditPlan(false);
     }
@@ -1018,7 +1019,7 @@ export function PatientDetailClient({
       toast.success(t("patients.uploadFile.success"));
       setArchivoPorTipificar(null);
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.uploadFile.error"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.uploadFile.error") }));
     } finally {
       setUploadingFile(false);
     }
@@ -1034,7 +1035,7 @@ export function PatientDetailClient({
       setExpandedFile(fileId);
       toast.success(t("patients.analyze.success", { count: data.analysis.findings?.length ?? 0 }));
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.analyze.error"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.analyze.error") }));
     } finally {
       setAnalyzing(null);
     }
@@ -1054,7 +1055,7 @@ export function PatientDetailClient({
       await navigator.clipboard.writeText(data.portalUrl);
       toast.success(t("patients.portal.copied"));
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.portal.error"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.portal.error") }));
     } finally {
       setGeneratingPortal(false);
     }
@@ -1090,7 +1091,7 @@ export function PatientDetailClient({
         toast.success(t("patients.portal.inviteSent"));
       }
     } catch (err: any) {
-      toast.error(err.message ?? t("patients.portal.inviteError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.portal.inviteError") }));
     } finally {
       setInvitingPortal(false);
     }
@@ -1328,8 +1329,7 @@ export function PatientDetailClient({
           });
         }
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : t("patients.consult.draftCreateFailed"),
+        toast.error(           mensajeDeError(err, t, { porDefecto: t("patients.consult.draftCreateFailed") }),
         );
       }
     })();
@@ -1389,7 +1389,7 @@ export function PatientDetailClient({
           mime: uploaded.mimeType ?? file.type,
         };
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : t("patients.attach.failed"));
+        toast.error(mensajeDeError(err, t, { porDefecto: t("patients.attach.failed") }));
         return null;
       }
     },
@@ -1441,7 +1441,7 @@ export function PatientDetailClient({
         });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("patients.consult.completeFailed"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.consult.completeFailed") }));
       return;
     }
     setConsultClosed(true);
@@ -3502,7 +3502,7 @@ export function PatientDetailClient({
                 toast.success(t("patients.edit.saved"));
                 setShowEdit(false);
                 router.refresh();
-              } catch (err: any) { toast.error(err.message ?? t("patients.edit.saveError")); }
+              } catch (err: any) { toast.error(mensajeDeError(err, t, { porDefecto: t("patients.edit.saveError") })); }
               finally { setEditSaving(false); }
             }}>{editSaving ? t("common.saving") : t("common.saveChanges")}</Button>
             </div>

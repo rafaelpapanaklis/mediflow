@@ -55,6 +55,7 @@ import styles from "./patients.module.css";
 // tokens `--pr-*`. Solo se monta con el interruptor `menu-dos-niveles`
 // encendido para la clínica; apagado, ni una clase de más.
 import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /* ─── Types ─── */
 
@@ -428,7 +429,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : t("patients.list.loadError"));
+        setError(mensajeDeError(err, t, { porDefecto: t("patients.list.loadError") }));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

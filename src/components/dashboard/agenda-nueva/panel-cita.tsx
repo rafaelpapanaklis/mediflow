@@ -66,6 +66,8 @@ import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
 import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
 import { useCancelarConDinero, type DineroDeLaCitaDTO } from "./cancelar-con-dinero";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 /* ═══ Flujo de la cita ══════════════════════════════════════════════════
    El diseño enseña cinco pasos: Confirmada → Llegó → En consulta → Atendida
@@ -174,6 +176,7 @@ export interface PanelCitaProps {
 }
 
 export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
+  const t = useT();
   const { state, dispatch, permissions, invalidateRangeCache } = useAgenda();
   // El MISMO reloj por minuto que la cuadrícula: sin él, los minutos de espera
   // se congelaban al abrir el panel y «No asistió» no aparecía al cumplirse la
@@ -345,7 +348,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
       if (!res.ok) throw new Error(cuerpo?.error ?? "No se pudo enviar el WhatsApp.");
       toast.success("Recordatorio enviado por WhatsApp.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo enviar el WhatsApp.");
+      toast.error(mensajeDeError(err, t, { porDefecto: "No se pudo enviar el WhatsApp." }));
     } finally {
       setEnviandoWa(false);
     }
@@ -373,7 +376,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
       if (!res.ok) throw new Error(cuerpo?.error ?? "No se pudo abrir el cobro.");
       setFactura(cuerpo.invoice);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo abrir el cobro.");
+      toast.error(mensajeDeError(err, t, { porDefecto: "No se pudo abrir el cobro." }));
     } finally {
       setBuscandoFactura(false);
     }

@@ -28,6 +28,7 @@ import { todayLocalISO } from "@/lib/billing/paid-at";
 // Presupuestos. Ver components/dashboard/factura-ficha-rediseno/.
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
 import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 // Mapa de estados de factura → fuente única invoice-status.ts, compartida con
 // la ficha del paciente y el modal de detalle (la divergencia entre copias
@@ -308,7 +309,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       }
       if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
     } catch (err: any) {
-      toast.error(err.message ?? t("billing.billingClient.toastCfdiStampError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("billing.billingClient.toastCfdiStampError") }));
     } finally {
       setCfdiLoading(false);
     }

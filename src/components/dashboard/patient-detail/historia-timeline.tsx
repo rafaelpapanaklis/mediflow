@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 type TimelineEventType =
   | "soap"
@@ -153,7 +154,7 @@ export function HistoriaTimeline({
       })
       .catch((e) => {
         if (isAbortError(e)) return;
-        setError(String(e.message ?? e));
+        setError(mensajeDeError(e, t));
         setLoading(false);
       });
     return () => ctrl.abort();
@@ -198,7 +199,7 @@ export function HistoriaTimeline({
       setEvents((prev) => [...prev, ...(data.events ?? [])]);
       setNextCursor(data.nextCursor ?? null);
     } catch (e) {
-      setError(String((e as Error).message ?? e));
+      setError(mensajeDeError(e, t));
     } finally {
       setLoadingMore(false);
     }

@@ -47,6 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 const STAGE_ORDER: ClinicalPhotoStage[] = ["pre", "during", "post", "control"];
 
@@ -310,7 +311,7 @@ export function PatientPhotosTab({ patientId, onCountChange }: PatientPhotosTabP
       if (!window.confirm(t("patients.fotosTab.deleteConfirm"))) return;
       const res = await deleteClinicalPhotoAction({ id: photo.id });
       if (isFailure(res)) {
-        toast.error(res.error);
+        toast.error(mensajeDeError(res, t));
         return;
       }
       setLightboxIndex(null);

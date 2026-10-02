@@ -29,6 +29,8 @@ import { montoInicialAnticipoRecibido } from "@/lib/anticipos/registrar-prellena
 // H25: el mismo aviso de «caja cerrada» que «Registrar pago» (una sola pieza).
 import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
 import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -68,6 +70,7 @@ export interface ModalRegistrarAnticipoProps {
 }
 
 export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, anticipoPendiente, onListo, rediseno: redisenoProp }: ModalRegistrarAnticipoProps) {
+  const t = useT();
   const redisenoDetectado = useRedisenoActivo();
   const rediseno = redisenoProp ?? redisenoDetectado;
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
@@ -119,7 +122,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(out?.error ?? "No se pudo registrar el anticipo.");
+        toast.error(mensajeDeError(out, t, { porDefecto: "No se pudo registrar el anticipo." }));
         return;
       }
       if (out.registrado?.anomalia) {

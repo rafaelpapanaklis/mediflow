@@ -33,6 +33,7 @@ import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-redise
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import { findingRegions, type AiFinding } from "./finding-regions";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface Patient {
   id: string;
@@ -553,7 +554,7 @@ export function XraysClient({
       setActiveFileId(record.id);
       toast.success(t("pages.xrays.uploadSuccess"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("pages.xrays.uploadError"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("pages.xrays.uploadError") }));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -594,7 +595,7 @@ export function XraysClient({
               : t("pages.xrays.analyzeAiDone"),
         );
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : t("pages.xrays.analyzeError"));
+        toast.error(mensajeDeError(err, t, { porDefecto: t("pages.xrays.analyzeError") }));
       } finally {
         setAnalyzing(false);
       }

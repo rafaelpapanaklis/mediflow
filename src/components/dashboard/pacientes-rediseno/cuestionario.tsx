@@ -34,6 +34,7 @@ import {
 import { useT } from "@/i18n/i18n-provider";
 import { fechaLarga } from "./fechas";
 import s from "./rediseno.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 /**
  * Cuestionario de salud, rediseñado.
@@ -338,7 +339,7 @@ export function Cuestionario({ patientId, onSaved }: Props) {
       toast.success(t("pacientesRediseno.cuestionario.guardado"));
       onSaved?.();
     } catch (err: any) {
-      toast.error(err.message ?? t("pacientesRediseno.cuestionario.errorGuardar"));
+      toast.error(mensajeDeError(err, t, { porDefecto: t("pacientesRediseno.cuestionario.errorGuardar") }));
     } finally {
       setGuardando(false);
     }

@@ -58,6 +58,7 @@ import { resolveConsentDoctorId } from "@/lib/consent/default-signer";
 import { ConsentVisor } from "./consent-documento";
 import { ConsentEditor, urlPreviewCarta, type PreviewCarta } from "./consent-editor";
 import styles from "./patient-detail.module.css";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface DoctorOption {
   id: string;
@@ -965,7 +966,7 @@ function CountersignModal({
       toast.success(t("patients.consents.countersigned"));
       await onDone();
     } catch (e) {
-      setError((e as Error).message);
+      setError(mensajeDeError(e, t));
     } finally {
       setBusy(false);
     }

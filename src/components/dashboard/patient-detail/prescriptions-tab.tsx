@@ -5,6 +5,7 @@ import { FileDown, Loader2, Mail, MessageCircle, Pill, Plus, ShieldCheck, Trash2
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 interface RxCums {
   descripcion?: string | null;
@@ -109,7 +110,7 @@ export function PrescriptionsTab({ patientId, pacientesRediseno = false }: Props
       toast.success(t("patients.prescriptionsTab.deleted"));
       load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(mensajeDeError(err, t, { porDefecto: String(err) }));
     } finally {
       setBusy(null);
     }

@@ -14,6 +14,8 @@ import { Receipt, Download, FileText } from "lucide-react";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { fmtMXNdec } from "@/lib/format";
 import type { CfdiDePago } from "@/components/dashboard/plan-de-pagos/use-pagos-cfdi";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface PaymentCfdiButtonProps {
   paymentId: string;
@@ -30,6 +32,7 @@ const METODO_A_FORMA_SAT: Record<string, string> = {
 };
 
 export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [bloqueado, setBloqueado] = useState<string | null>(null);
@@ -114,14 +117,14 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
           setBloqueado(data.error ?? "El CFDI de este pago quedó en un estado incierto. No lo vuelvas a intentar.");
           return;
         }
-        toast.error(data.error ?? "No se pudo facturar este pago.");
+        toast.error(mensajeDeError(data, t, { porDefecto: "No se pudo facturar este pago." }));
         return;
       }
       toast.success(`CFDI del pago timbrado: ${data.descripcion ?? ""}`.trim());
       setOpen(false);
       props.onStamped();
     } catch (e: any) {
-      toast.error(e?.message ?? "Error al facturar este pago.");
+      toast.error(mensajeDeError(e, t, { porDefecto: "Error al facturar este pago." }));
     } finally {
       setBusy(false);
     }

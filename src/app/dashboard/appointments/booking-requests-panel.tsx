@@ -15,6 +15,8 @@ import { useRouter } from "next/navigation";
 import { CalendarClock, Check, ChevronDown, ChevronUp, Loader2, Phone, Stethoscope, UserPlus, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { isAbortError } from "@/lib/fetch-safe";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 
 interface SolicitudDTO {
   id: string;
@@ -51,6 +53,7 @@ function edad(dob: string | null): string | null {
 }
 
 export function BookingRequestsPanel({ initialOpen = false }: { initialOpen?: boolean }) {
+  const t = useT();
   const router = useRouter();
   const [solicitudes, setSolicitudes] = useState<SolicitudDTO[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -106,7 +109,7 @@ export function BookingRequestsPanel({ initialOpen = false }: { initialOpen?: bo
         );
         return;
       }
-      if (!res.ok) { toast.error(data.error ?? "No pudimos confirmar la cita"); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { porDefecto: "No pudimos confirmar la cita" })); return; }
 
       toast.success(`Cita creada con ${data.doctorName ?? "el doctor"} · expediente nuevo`);
       setSolicitudes(list => list.filter(x => x.id !== s.id));
@@ -128,7 +131,7 @@ export function BookingRequestsPanel({ initialOpen = false }: { initialOpen?: bo
         body: JSON.stringify({ action: "reject", reason: motivo.trim() || undefined }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast.error(data.error ?? "No pudimos rechazar la solicitud"); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { porDefecto: "No pudimos rechazar la solicitud" })); return; }
       toast.success("Solicitud rechazada");
       setSolicitudes(list => list.filter(x => x.id !== s.id));
       setRechazando(null);
