@@ -4,6 +4,12 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateBotConfig, toConfigDTO, toFaqDTO, buildConfigUpdate } from "./service";
 import { errorDeTamanoDePersona, PERSONA_MAX_CARACTERES } from "@/lib/whatsapp/bot/ai-prompt";
+import {
+  columnasDePreciosExisten,
+  estadoDePreciosDelBot,
+  guardarInterruptoresDePrecios,
+  interruptoresDelBody,
+} from "@/lib/whatsapp/bot/precios-bot";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +28,12 @@ export async function GET() {
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
   });
 
+  // ws1-t3 — los dos interruptores de precios (SQL crudo, tolerante a que
+  // la columna aún no exista: apagados).
+  const precios = await estadoDePreciosDelBot(ctx.clinicId);
+
   return NextResponse.json({
-    config: toConfigDTO(config),
+    config: { ...toConfigDTO(config), ...precios },
     faqs: faqs.map(toFaqDTO),
   });
 }
@@ -31,7 +41,8 @@ export async function GET() {
 /**
  * PATCH /api/whatsapp/bot
  * Actualiza enabled, botName, persona, greeting, businessHours, afterHoursMsg,
- * canAnswerFaq, canBookAppointments, fallbackToHuman (whitelist). clinicId de
+ * canAnswerFaq, canBookAppointments, fallbackToHuman y (ws1-t3, SQL crudo)
+ * canQuoteProcedurePrices / canQuoteOrthoPrices (whitelist). clinicId de
  * la sesión; nunca del body.
  *
  * Exige "whatsapp.send": lo que se guarda aquí (persona, saludo, FAQs) es
@@ -70,11 +81,30 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  // ws1-t3 — interruptores de precios. Encender sin el SQL pegado se rechaza
+  // ANTES de guardar nada (apagado no hace falta guardarlo: ya lo está).
+  const precios = interruptoresDelBody(body);
+  if ((precios.canQuoteProcedurePrices === true || precios.canQuoteOrthoPrices === true) && !(await columnasDePreciosExisten(true))) {
+    return NextResponse.json(
+      { error: "Dar precios por WhatsApp todavía no está activo en tu clínica.", code: "precios_sql_pendiente" },
+      { status: 503 },
+    );
+  }
+
   const data = buildConfigUpdate(body);
   const updated = await prisma.whatsAppBotConfig.update({
     where: { clinicId: ctx.clinicId },
     data,
   });
 
-  return NextResponse.json({ config: toConfigDTO(updated) });
+  const guardado = await guardarInterruptoresDePrecios(ctx.clinicId, precios);
+  // `"motivo" in`: con strict apagado, `!guardado.ok` no estrecha la unión.
+  if ("motivo" in guardado) {
+    return NextResponse.json(
+      { error: "Se guardó la configuración, pero no los interruptores de precios. Vuelve a intentarlo.", code: "precios_no_guardados" },
+      { status: guardado.motivo === "sin-columna" ? 503 : 500 },
+    );
+  }
+
+  return NextResponse.json({ config: { ...toConfigDTO(updated), ...(await estadoDePreciosDelBot(ctx.clinicId)) } });
 }

@@ -39,6 +39,9 @@ const estado = {
   /** Lo que devuelve «Así hablamos» (ws1-t11); "" = sin ejemplos o sin SQL. */
   tono: "",
   tonoPedidoPara: [] as string[],
+  /** Bloque de precios (ws1-t3); "" = interruptores sin datos o sin SQL. */
+  precios: "",
+  preciosPedidosPara: [] as Array<{ clinicId: string; puedeAgendar: boolean }>,
 };
 
 globalThis.fetch = (async (url: unknown, init?: { body?: string; signal?: AbortSignal }) => {
@@ -65,6 +68,14 @@ const dobles = new Map<string, unknown>([
     chargeUsage: async (args: Fila) => { estado.cobros.push(args); return null; },
   }],
   [path.join(RAIZ, "src/lib/ai-billing/interruptores.server.ts"), { funcionIaApagada: async () => false }],
+  // ws1-t3 — precios del panel: aquí solo se comprueba DÓNDE entra el bloque
+  // (sus reglas se prueban en precios-bot.test.ts).
+  [path.join(RAIZ, "src/lib/whatsapp/bot/precios-bot.ts"), {
+    bloqueDePreciosDeLaClinica: async (clinicId: string, opciones: { puedeAgendar: boolean }) => {
+      estado.preciosPedidosPara.push({ clinicId, ...opciones });
+      return estado.precios;
+    },
+  }],
   [path.join(RAIZ, "src/lib/whatsapp/bot/aprende/tono-prompt.ts"), {
     bloqueDeTonoDeLaClinica: async (clinicId: string) => {
       estado.tonoPedidoPara.push(clinicId);
@@ -104,6 +115,8 @@ beforeEach(() => {
   estado.modo = "ok";
   estado.tono = "";
   estado.tonoPedidoPara.length = 0;
+  estado.precios = "";
+  estado.preciosPedidosPara.length = 0;
   estado.texto = "Claro, abrimos a las 9.";
   estado.uso = { input_tokens: 300, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
 });
@@ -234,4 +247,14 @@ test("si no se va a llamar a la IA (mensaje vacío), no se consultan los ejemplo
   // La consulta va después de los cortes (vacío, IA apagada, sin saldo).
   await ai.generateAiReply({ ...INPUT, incomingText: "   " }, CONFIG, FAQS);
   assert.equal(estado.tonoPedidoPara.length, 0);
+});
+
+test("ws1-t3: el bloque de precios de la clínica del turno entra en la parte cacheada, después de las FAQs", async () => {
+  estado.precios = "PRECIOS Y TRATAMIENTOS DE LA CLÍNICA (salen del panel de la clínica):\nProcedimientos:\n- Limpieza: $650 MXN";
+  await ai.generateAiReply(INPUT, CONFIG, FAQS);
+  assert.deepEqual(estado.preciosPedidosPara, [{ clinicId: "clinica_prueba", puedeAgendar: true }]);
+  const [fijo, variable] = estado.cuerpos[0].system;
+  assert.deepEqual(fijo.cache_control, { type: "ephemeral" });
+  assert.ok(fijo.text.indexOf("Limpieza: $650 MXN") > fijo.text.indexOf("De 9 a 18."));
+  assert.ok(!variable.text.includes("$650"));
 });

@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } from "lucide-react";
 import type { BotConfigDTO, BotFaqDTO } from "@/lib/whatsapp/bot/types";
 import type { EditableConfig, ScheduleState } from "@/app/dashboard/whatsapp/bot/bot-client";
+import type { TextosPreciosBot } from "@/app/dashboard/whatsapp/bot/textos-precios";
 import { PERSONA_TEMPLATES } from "@/app/dashboard/whatsapp/bot/persona-templates";
 import { avisoDeTamanoDePersona } from "@/lib/whatsapp/bot/ai-prompt";
 import { RaizWhatsApp } from "./raiz";
@@ -44,13 +45,15 @@ export type BotVM = {
   addFaq: () => Promise<unknown>;
   patchFaq: (id: string, patch: Partial<Pick<BotFaqDTO, "question" | "answer" | "enabled" | "order">>) => Promise<unknown>;
   deleteFaq: (id: string) => Promise<unknown>;
+  /** ws1-t3 — textos es/en de los interruptores de precios (los mismos que la vista de siempre). */
+  textosPrecios: TextosPreciosBot;
 };
 
 export function BotRediseno({ vm }: { vm: BotVM }) {
   const {
     canEdit, loading, loadError, config, form, setForm, schedule, setSchedule, faqs, setFaqs,
     newQuestion, setNewQuestion, newAnswer, setNewAnswer, addingFaq, saving, savingEnabled,
-    saveConfig, toggleEnabled, addFaq, patchFaq, deleteFaq,
+    saveConfig, toggleEnabled, addFaq, patchFaq, deleteFaq, textosPrecios: tp,
   } = vm;
 
   if (loading) {
@@ -220,6 +223,27 @@ export function BotRediseno({ vm }: { vm: BotVM }) {
                     titulo="Agendar citas"
                     desc="Permite que el bot proponga horarios y agende citas."
                     disabled={saving || !canEdit}
+                  />
+                  {/* ws1-t3 — precios del panel: mismos textos y reglas que la vista de siempre. */}
+                  <FilaInterruptor
+                    on={form.canQuoteProcedurePrices}
+                    onToggle={() => setForm((f) => ({ ...f, canQuoteProcedurePrices: !f.canQuoteProcedurePrices }))}
+                    titulo={tp.procedimientosTitulo}
+                    desc={config.preciosDisponibles === false ? `${tp.procedimientosDesc} ${tp.sqlPendiente}` : tp.procedimientosDesc}
+                    disabled={saving || !canEdit || config.preciosDisponibles === false}
+                  />
+                  <FilaInterruptor
+                    on={form.canQuoteOrthoPrices}
+                    onToggle={() => setForm((f) => ({ ...f, canQuoteOrthoPrices: !f.canQuoteOrthoPrices }))}
+                    titulo={tp.ortodonciaTitulo}
+                    desc={
+                      config.preciosDisponibles === false
+                        ? `${tp.ortodonciaDesc} ${tp.sqlPendiente}`
+                        : config.tieneOrtodoncia === false
+                          ? `${tp.ortodonciaDesc} ${tp.ortodonciaSinModulo}`
+                          : tp.ortodonciaDesc
+                    }
+                    disabled={saving || !canEdit || config.preciosDisponibles === false || config.tieneOrtodoncia === false}
                   />
                   <FilaInterruptor
                     on={form.fallbackToHuman}

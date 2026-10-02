@@ -70,6 +70,19 @@ export interface BotConfigDTO {
    * SIEMPRE lo resuelve a un boolean explícito.
    */
   canAnswerOrthoControl?: boolean;
+  /**
+   * ws1-t3 (2-oct-2026) — «Dar precios de Procedimientos» y «Dar precios de
+   * Ortodoncia». Columnas de `whatsapp_bot_configs` que NO están en
+   * schema.prisma (sql/ws1-t3-bot-precios.sql; ver bot/precios-bot.ts): el
+   * motor no las lee de aquí, las lee ai.ts al armar el prompt. Aquí solo
+   * viajan a la pantalla. OPCIONALES: ausente = apagado.
+   */
+  canQuoteProcedurePrices?: boolean;
+  canQuoteOrthoPrices?: boolean;
+  /** Solo para la pantalla: false = falta pegar el SQL (interruptores deshabilitados). */
+  preciosDisponibles?: boolean;
+  /** Solo para la pantalla: ¿la clínica tiene el módulo de Ortodoncia? */
+  tieneOrtodoncia?: boolean;
   fallbackToHuman: boolean;
   /** TZ de la clínica: el saldo necesita saber qué día es HOY donde atienden. */
   timezone?: string;

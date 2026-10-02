@@ -116,8 +116,9 @@ export function buildSystemPrompt(
   faqs: BotFaqDTO[],
   now: Date,
   ejemplosTono?: string,
+  bloquePrecios?: string,
 ): string {
-  const { fijo, variable } = partesDelPrompt(input, config, faqs, now, ejemplosTono);
+  const { fijo, variable } = partesDelPrompt(input, config, faqs, now, ejemplosTono, bloquePrecios);
   return `${fijo}\n\n${variable}`;
 }
 
@@ -135,8 +136,9 @@ export function buildSystemBlocks(
   faqs: BotFaqDTO[],
   now: Date,
   ejemplosTono?: string,
+  bloquePrecios?: string,
 ): SystemBlock[] {
-  const { fijo, variable } = partesDelPrompt(input, config, faqs, now, ejemplosTono);
+  const { fijo, variable } = partesDelPrompt(input, config, faqs, now, ejemplosTono, bloquePrecios);
   return [
     { type: "text", text: fijo, cache_control: { type: "ephemeral" } },
     { type: "text", text: variable },
@@ -149,6 +151,7 @@ function partesDelPrompt(
   faqs: BotFaqDTO[],
   now: Date,
   ejemplosTono?: string,
+  bloquePrecios?: string,
 ): { fijo: string; variable: string } {
   const botName = config.botName?.trim() || "Asistente";
   const persona = config.persona?.trim();
@@ -156,6 +159,9 @@ function partesDelPrompt(
   const patientFirst = input.patient?.firstName?.trim();
   const puedeAgendar = config.canBookAppointments === true;
   const centinelaCita = puedeAgendar ? AGENDA_SENTINEL : HANDOFF_SENTINEL;
+  // ws1-t3 — precios del panel (bot/precios-core.ts). "" = sin bloque: el
+  // prompt queda exactamente como antes.
+  const precios = bloquePrecios?.trim() ?? "";
 
   const faqBlock = faqs.length
     ? faqs.map((f, i) => `${i + 1}. P: ${f.question}\n   R: ${f.answer}`).join("\n")
@@ -169,7 +175,9 @@ function partesDelPrompt(
     "- Sé breve y claro, como un mensaje de WhatsApp: 1 a 3 frases. Sin markdown, sin títulos, sin listas largas.",
     "- Responde de verdad a lo que preguntaron. No cierres con ofertas genéricas ni preguntas vacías.",
     "- Responde con naturalidad a saludos, agradecimientos y cortesías (hola, gracias, hasta luego).",
-    "- Para DATOS de la clínica usa ÚNICAMENTE las instrucciones y las preguntas frecuentes de más abajo. NO inventes precios, horarios, servicios, ubicación ni promociones.",
+    precios
+      ? "- Para DATOS de la clínica usa ÚNICAMENTE las instrucciones, las preguntas frecuentes y la lista de PRECIOS Y TRATAMIENTOS de más abajo. NO inventes precios, horarios, servicios, ubicación ni promociones."
+      : "- Para DATOS de la clínica usa ÚNICAMENTE las instrucciones y las preguntas frecuentes de más abajo. NO inventes precios, horarios, servicios, ubicación ni promociones.",
     "- No des diagnósticos, indicaciones, síntomas, dosis ni consejos médicos.",
     "- NO tienes herramientas: no puedes consultar la agenda, reservar, mover citas, revisar archivos ni pasarle nada al equipo. Nunca digas que vas a revisar o verificar algo, ni que enviaste una solicitud.",
     "- NUNCA propongas, inventes ni confirmes días u horarios concretos para una cita.",
@@ -192,6 +200,11 @@ function partesDelPrompt(
     "",
     "INFORMACIÓN DE LA CLÍNICA (preguntas frecuentes):",
     faqBlock,
+    // ws1-t3 — precios y tratamientos del panel. En la parte FIJA: cambian
+    // solo cuando la clínica edita su catálogo o los interruptores, así que
+    // no rompen la caché turno a turno.
+    precios ? "" : null,
+    precios || null,
   ];
 
   // Lo que cambia en cada turno va aparte y al final (fuera de la caché).

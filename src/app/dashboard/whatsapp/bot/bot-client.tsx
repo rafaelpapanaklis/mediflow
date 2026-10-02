@@ -12,6 +12,7 @@ import type { BotConfigDTO, BotFaqDTO, BotBusinessHours } from "@/lib/whatsapp/b
 import { PERSONA_TEMPLATES } from "./persona-templates";
 import { avisoDeTamanoDePersona } from "@/lib/whatsapp/bot/ai-prompt";
 import { BotRediseno } from "@/components/dashboard/whatsapp-rediseno/bot";
+import { useTextosPreciosBot } from "./textos-precios";
 
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
 const DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -30,6 +31,9 @@ export type EditableConfig = {
   canAnswerFaq: boolean;
   canBookAppointments: boolean;
   fallbackToHuman: boolean;
+  // ws1-t3 — interruptores de precios (apagados de fábrica).
+  canQuoteProcedurePrices: boolean;
+  canQuoteOrthoPrices: boolean;
 };
 
 function emptySchedule(): ScheduleState {
@@ -64,6 +68,8 @@ function editableFromConfig(c: BotConfigDTO): EditableConfig {
     canAnswerFaq: c.canAnswerFaq,
     canBookAppointments: c.canBookAppointments,
     fallbackToHuman: c.fallbackToHuman,
+    canQuoteProcedurePrices: c.canQuoteProcedurePrices === true,
+    canQuoteOrthoPrices: c.canQuoteOrthoPrices === true,
   };
 }
 
@@ -159,6 +165,7 @@ export function BotClient({
   rediseno?: boolean;
 }) {
   const askConfirm = useConfirm();
+  const tp = useTextosPreciosBot();
   // Sin permiso de escritura la pantalla es de solo lectura: las mutaciones se
   // frenan aquí además del 403 del servidor (que es el gate de verdad).
   const noPermissionToast = () => toast.error(SIN_PERMISO);
@@ -181,6 +188,8 @@ export function BotClient({
     canAnswerFaq: true,
     canBookAppointments: true,
     fallbackToHuman: true,
+    canQuoteProcedurePrices: false,
+    canQuoteOrthoPrices: false,
   });
   const [schedule, setSchedule] = useState<ScheduleState>(emptySchedule());
 
@@ -240,6 +249,8 @@ export function BotClient({
         canAnswerFaq: form.canAnswerFaq,
         canBookAppointments: form.canBookAppointments,
         fallbackToHuman: form.fallbackToHuman,
+        canQuoteProcedurePrices: form.canQuoteProcedurePrices,
+        canQuoteOrthoPrices: form.canQuoteOrthoPrices,
         businessHours: buildBusinessHours(),
       };
       const res = await fetch("/api/whatsapp/bot", {
@@ -402,7 +413,7 @@ export function BotClient({
         vm={{
           canEdit, loading, loadError, config, form, setForm, schedule, setSchedule, faqs, setFaqs,
           newQuestion, setNewQuestion, newAnswer, setNewAnswer, addingFaq, saving, savingEnabled,
-          saveConfig, toggleEnabled, addFaq, patchFaq, deleteFaq,
+          saveConfig, toggleEnabled, addFaq, patchFaq, deleteFaq, textosPrecios: tp,
         }}
       />
     );
@@ -642,6 +653,28 @@ export function BotClient({
                 title="Agendar citas"
                 desc="Permite que el bot proponga horarios y agende citas."
                 disabled={saving || !canEdit}
+              />
+              {/* ws1-t3 — precios del panel. Sin el SQL pegado salen apagados
+                  y deshabilitados; el de Ortodoncia, sin el módulo. */}
+              <ToggleRow
+                on={form.canQuoteProcedurePrices}
+                onToggle={() => setForm((f) => ({ ...f, canQuoteProcedurePrices: !f.canQuoteProcedurePrices }))}
+                title={tp.procedimientosTitulo}
+                desc={config.preciosDisponibles === false ? `${tp.procedimientosDesc} ${tp.sqlPendiente}` : tp.procedimientosDesc}
+                disabled={saving || !canEdit || config.preciosDisponibles === false}
+              />
+              <ToggleRow
+                on={form.canQuoteOrthoPrices}
+                onToggle={() => setForm((f) => ({ ...f, canQuoteOrthoPrices: !f.canQuoteOrthoPrices }))}
+                title={tp.ortodonciaTitulo}
+                desc={
+                  config.preciosDisponibles === false
+                    ? `${tp.ortodonciaDesc} ${tp.sqlPendiente}`
+                    : config.tieneOrtodoncia === false
+                      ? `${tp.ortodonciaDesc} ${tp.ortodonciaSinModulo}`
+                      : tp.ortodonciaDesc
+                }
+                disabled={saving || !canEdit || config.preciosDisponibles === false || config.tieneOrtodoncia === false}
               />
               <ToggleRow
                 on={form.fallbackToHuman}
