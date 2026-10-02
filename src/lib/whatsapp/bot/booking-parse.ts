@@ -69,6 +69,18 @@ const MES_PROXIMO_RE = /\b(?:proximo|siguiente|otro)\s+mes\b|\bmes\s+que\s+(?:en
 /** Un mes por su nombre, con año opcional: «enero», «marzo de 2027». */
 const MES_NOMBRADO_RE = new RegExp(`\\b(${Object.keys(MONTHS).join("|")})\\b(?:\\s+(?:de|del)\\s+(\\d{4}))?`);
 
+/**
+ * ws1-t5 — «a mediados de <mes>» (decisión de Rafael, 2-oct-2026): no se
+ * pregunta el día; se busca lugar del 12 al 18 de ese mes y se ofrece.
+ */
+export const MEDIADOS_DESDE_DIA = 12;
+export const MEDIADOS_HASTA_DIA = 18;
+
+/** «a mediados de marzo», «mediados de marzo de 2027», «a mediados del próximo mes». */
+const MEDIADOS_RE = new RegExp(
+  `\\bmediados\\b\\s*(?:de(?:l)?\\s+)?(?:(?:el\\s+)?mes\\s+de\\s+)?(?:(${Object.keys(MONTHS).join("|")})(?:\\s+(?:de|del)\\s+(\\d{4}))?|(?:el\\s+)?(?:proximo|siguiente|otro)\\s+mes|mes\\s+que\\s+(?:entra|viene))?`,
+);
+
 /** «la otra semana», «la próxima semana», «la semana que viene» (sin día). */
 const SEMANA_PROXIMA_RE = /\b(?:proxima|siguiente|otra)\s+semana\b|\bsemana\s+que\s+(?:viene|entra)\b/;
 
@@ -250,6 +262,48 @@ export function fechaEnMes(text: string, mes: string): string | null {
 }
 
 /**
+ * ws1-t5 — «a mediados de marzo»: el rango del 12 al 18 de ese mes en que se
+ * busca lugar. El mes sigue la regla de `mesPedidoSinDia` (si ya pasó, el del
+ * año que viene; el año escrito manda). En el mes en curso: si el 18 ya pasó,
+ * el del año que viene; si hoy cae entre el 12 y el 18, desde hoy. Sin mes
+ * («a mediados», contestando «¿qué día de marzo?») se usa `mesPedido`.
+ * null si el texto no dice «mediados».
+ */
+export function mediadosDeMes(
+  text: string,
+  timezone: string,
+  now: Date = new Date(),
+  mesPedido?: string,
+): { desde: string; hasta: string } | null {
+  const t = foldAccents(text);
+  const m = t.match(MEDIADOS_RE);
+  if (!m) return null;
+  const p = getTzParts(now, timezone);
+  const today = `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
+  let year: number;
+  let month: number;
+  if (m[1]) {
+    month = MONTHS[m[1]];
+    if (m[2]) year = parseInt(m[2], 10);
+    else if (month < p.month || (month === p.month && p.day > MEDIADOS_HASTA_DIA)) year = p.year + 1;
+    else year = p.year;
+  } else if (MES_PROXIMO_RE.test(t)) {
+    const sig = mesSiguiente(today);
+    year = parseInt(sig.slice(0, 4), 10);
+    month = parseInt(sig.slice(5, 7), 10);
+  } else if (mesPedido) {
+    year = parseInt(mesPedido.slice(0, 4), 10);
+    month = parseInt(mesPedido.slice(5, 7), 10);
+  } else {
+    return null;
+  }
+  const desde = `${year}-${pad2(month)}-${pad2(MEDIADOS_DESDE_DIA)}`;
+  const hasta = `${year}-${pad2(month)}-${pad2(MEDIADOS_HASTA_DIA)}`;
+  if (hasta < today) return null; // solo con año escrito en el pasado
+  return { desde: desde < today ? today : desde, hasta };
+}
+
+/**
  * ws1-t5 — la respuesta a «¿qué día de noviembre te acomoda?»: «el 10», «10»
  * o «el lunes» son de ESE mes; una fecha que se sostiene sola («15 de
  * diciembre», «15/12», «en 3 semanas», «mañana») manda tal cual.
@@ -260,6 +314,8 @@ export function fechaDentroDelMesPedido(
   timezone: string,
   now: Date = new Date(),
 ): string | null {
+  const mediados = mediadosDeMes(text, timezone, now, mes);
+  if (mediados) return mediados.desde;
   const t = foldAccents(text);
   const sostieneSola =
     /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/\-]\d{1,2}\b/.test(t) ||
@@ -282,6 +338,7 @@ export function fechaDentroDelMesPedido(
 export function mesPedidoSinDia(text: string, timezone: string, now: Date = new Date()): string | null {
   const t = foldAccents(text);
   const p = getTzParts(now, timezone);
+  if (MEDIADOS_RE.test(t) && mediadosDeMes(text, timezone, now)) return null; // se busca, no se pregunta
   if (MES_PROXIMO_RE.test(t)) {
     if (parseDateInput(text, timezone, now)) return null;
     return mesSiguiente(`${p.year}-${pad2(p.month)}-${pad2(p.day)}`);
@@ -380,6 +437,11 @@ function parseFecha(text: string, timezone: string, now: Date, conSoloDia: boole
     }
     return conAnoImplicito(today, month, day);
   }
+
+  // ws1-t5 — «a mediados de marzo»: el primer día del rango 12–18 (el flujo
+  // busca en el resto del rango con `mediadosDeMes`).
+  const mediados = mediadosDeMes(text, timezone, now);
+  if (mediados) return mediados.desde;
 
   // ws1-t5 (añadido) — «enero 10», «para marzo 3»: mes y después el día.
   const mesDia = t.match(

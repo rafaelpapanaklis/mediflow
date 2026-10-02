@@ -9,6 +9,7 @@ import {
   formatTimeHuman,
   interpretarEleccionDeHorario,
   isMenuWord,
+  mediadosDeMes,
   mesPedidoSinDia,
   nombreDeMes,
   parseChoiceIndex,
@@ -109,6 +110,12 @@ export interface BookingState {
    * ese mes, y «el 10» se lee dentro de ESE mes (no el próximo 10).
    */
   mesPedido?: string;
+  /**
+   * ws1-t5 — «a mediados de marzo»: si `dateISO` (el 12) no tiene lugar, la
+   * búsqueda hacia adelante llega hasta este día (el 18) en vez de los
+   * DIAS_A_BUSCAR_HACIA_ADELANTE. Se usa una vez.
+   */
+  buscarHasta?: string;
   /**
    * ws1-t1 (#12) — en un número compartido eligió «otra persona»: al pedir su
    * nombre se crea un paciente NUEVO en vez de reutilizar al primero del número.
@@ -424,7 +431,7 @@ async function resolvePhone(input: BotTurnInput, deps: BookingDeps): Promise<str
 }
 
 /** Lo que se arrastra desde el mensaje que abrió el flujo (fecha y turno pedidos). */
-type Precarga = Pick<BookingState, "fechaPedida" | "turno" | "mesPedido">;
+type Precarga = Pick<BookingState, "fechaPedida" | "turno" | "mesPedido" | "buscarHasta">;
 
 /**
  * ws1-t1 — «quiero cita el lunes en la tarde»: la fecha (si es de hoy en
@@ -435,6 +442,11 @@ function precargaDelMensaje(text: string, tz: string): Precarga {
   const out: Precarga = {};
   const fecha = parseDateInput(text, tz);
   if (fecha && fecha >= todayInTz(tz)) out.fechaPedida = fecha;
+  const mediados = mediadosDeMes(text, tz);
+  if (mediados) {
+    out.fechaPedida = mediados.desde;
+    out.buscarHasta = mediados.hasta;
+  }
   // ws1-t5 — «el próximo mes» sin día: se pregunta qué día de ese mes.
   const mes = fecha ? null : mesPedidoSinDia(text, tz);
   if (mes) out.mesPedido = mes;
@@ -519,7 +531,12 @@ async function stepWho(
     return miss(state, `¿Para quién es? Responde con el número:\n${numberedList(options)}`);
   }
   const elegido = options[idx];
-  const precarga: Precarga = { fechaPedida: state.fechaPedida, turno: state.turno, mesPedido: state.mesPedido };
+  const precarga: Precarga = {
+    fechaPedida: state.fechaPedida,
+    turno: state.turno,
+    mesPedido: state.mesPedido,
+    buscarHasta: state.buscarHasta,
+  };
   const phone = input.patient?.phone ?? null;
   if (elegido.id === OPCION_OTRA_PERSONA) {
     // Sin paciente: el flujo pedirá su nombre y lo dará de alta aparte.
@@ -841,6 +858,7 @@ async function stepDate(
     return miss(state, 'Esa fecha ya pasó. Indícame una fecha futura (por ejemplo "mañana").');
   }
   state.misses = 0;
+  state.buscarHasta = mediadosDeMes(input.incomingText, tz, undefined, state.mesPedido)?.hasta;
   state.mesPedido = undefined;
   state.dateISO = dateISO;
   return presentSlots(input, state, tz, deps);
@@ -887,11 +905,15 @@ async function presentSlots(
 
     // ws1-t5 — en vez de solo pedir otra fecha, se busca el día más cercano
     // con lugar (mismo doctor y duración), día por día y con tope.
+    const hasta = state.buscarHasta;
     const siguiente = await siguienteDiaConLugar(input, state, deps);
     if (!siguiente) {
       state.step = "date";
+      const tampoco = hasta
+        ? `Tampoco encontré lugar hasta el ${formatDateHuman(hasta, tz)}.`
+        : `Tampoco encontré lugar en los ${DIAS_A_BUSCAR_HACIA_ADELANTE} días siguientes.`;
       return step(
-        `${prefix}${motivo} Tampoco encontré lugar en los ${DIAS_A_BUSCAR_HACIA_ADELANTE} días siguientes. ${pregunta}`,
+        `${prefix}${motivo} ${tampoco} ${pregunta}`,
         state.mode,
         state,
       );
@@ -901,6 +923,7 @@ async function presentSlots(
     human = formatDateHuman(siguiente.dateISO, tz);
     prefix = `${prefix}${motivo} El día más cercano con lugar es el ${human}.\n`;
   }
+  state.buscarHasta = undefined; // el rango de «a mediados» se usa una sola vez
 
   // ws1-t1 — «en la tarde»: primero los huecos de ese turno. Si ese turno no
   // tiene ninguno, se dice y se enseñan los que hay. Escribir otra hora libre
@@ -941,7 +964,10 @@ async function siguienteDiaConLugar(
   deps: BookingDeps,
 ): Promise<{ dateISO: string; res: SlotResult } | null> {
   if (!state.doctorId || !state.dateISO) return null;
-  for (let i = 1; i <= DIAS_A_BUSCAR_HACIA_ADELANTE; i++) {
+  // ws1-t5 — «a mediados de <mes>»: hasta el 18 de ese mes, no 7 días.
+  const hasta = state.buscarHasta;
+  state.buscarHasta = undefined;
+  for (let i = 1; hasta ? addDaysISO(state.dateISO, i) <= hasta : i <= DIAS_A_BUSCAR_HACIA_ADELANTE; i++) {
     const dateISO = addDaysISO(state.dateISO, i);
     const res = await deps.getAvailableSlots({
       clinicId: input.clinicId,
@@ -974,6 +1000,7 @@ async function stepSlot(
       state.options = undefined;
       state.slots = undefined;
       state.dateISO = otroDia;
+      state.buscarHasta = mediadosDeMes(input.incomingText, tz)?.hasta;
       return presentSlots(input, state, tz, deps);
     }
     const mes = otroDia ? null : mesPedidoSinDia(input.incomingText, tz);

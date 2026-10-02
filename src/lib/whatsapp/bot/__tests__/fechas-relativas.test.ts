@@ -19,6 +19,7 @@ import {
   addDaysISO,
   detectaIntencionDeAgenda,
   fechaDentroDelMesPedido,
+  mediadosDeMes,
   mesPedidoSinDia,
   nombreDeMes,
   parseDateInput,
@@ -374,7 +375,6 @@ describe("mes sin día («en enero», «¿hay lugar en febrero?»)", () => {
     [NOV20, "en enero", "2027-01"],
     [NOV20, "para enero", "2027-01"],
     [NOV20, "¿hay lugar en febrero?", "2027-02"],
-    [NOV20, "a mediados de marzo", "2027-03"],
     [NOV20, "en noviembre", "2026-11"], // el mes en curso es este
     [NOV20, "en diciembre", "2026-12"],
     [NOV20, "en octubre", "2027-10"], // ya pasó: el del año que viene
@@ -382,7 +382,6 @@ describe("mes sin día («en enero», «¿hay lugar en febrero?»)", () => {
     [DIC15, "en enero", "2027-01"], // nunca el de hace 11 meses
     [DIC15, "para enero", "2027-01"],
     [DIC15, "¿hay lugar en febrero?", "2027-02"],
-    [DIC15, "a mediados de marzo", "2027-03"],
     [DIC15, "en diciembre", "2026-12"],
     [DIC15, "en noviembre", "2027-11"],
   ];
@@ -430,5 +429,108 @@ describe("mes sin día («en enero», «¿hay lugar en febrero?»)", () => {
     const r2 = await c.say("el 10");
     assert.deepEqual(consultas, ["2030-02-10"]);
     assert.match(r2.reply ?? "", /Horarios disponibles el domingo, 10 de febrero de 2030/);
+  });
+});
+
+// ── ws1-t5 (decisión de Rafael): «a mediados de <mes>» busca del 12 al 18 ────
+
+describe("«a mediados de <mes>»: se busca lugar del 12 al 18, no se pregunta el día", () => {
+  const NOV20 = cdmx("2026-11-20T12:00:00");
+  const DIC15 = cdmx("2026-12-15T12:00:00");
+  const DIC21 = cdmx("2026-12-21T12:00:00");
+
+  const casos: Array<[Date, string, string, string]> = [
+    [NOV20, "a mediados de marzo", "2027-03-12", "2027-03-18"],
+    [NOV20, "¿hay lugar a mediados de enero?", "2027-01-12", "2027-01-18"],
+    [NOV20, "mediados de diciembre", "2026-12-12", "2026-12-18"],
+    [NOV20, "a mediados del próximo mes", "2026-12-12", "2026-12-18"],
+    [NOV20, "a mediados de octubre", "2027-10-12", "2027-10-18"], // ya pasó: el del año que entra
+    [NOV20, "a mediados de marzo de 2028", "2028-03-12", "2028-03-18"],
+    [DIC15, "a mediados de enero", "2027-01-12", "2027-01-18"],
+    [DIC15, "a mediados del mes que entra", "2027-01-12", "2027-01-18"],
+    [DIC15, "a mediados de diciembre", "2026-12-15", "2026-12-18"], // dentro del rango: desde hoy
+    [DIC21, "a mediados de diciembre", "2027-12-12", "2027-12-18"], // el 18 ya pasó: el del año que entra
+  ];
+  for (const [now, texto, desde, hasta] of casos) {
+    const hoy = todayISOForTests(now, CDMX);
+    it(`hoy ${hoy}: «${texto}» → del ${desde} al ${hasta}`, () => {
+      assert.deepEqual(mediadosDeMes(texto, CDMX, now), { desde, hasta });
+      assert.equal(parseDateInput(texto, CDMX, now), desde);
+      assert.equal(mesPedidoSinDia(texto, CDMX, now), null); // no pregunta el día
+    });
+  }
+
+  it("el mes en curso sin «mediados» sigue siendo este año (decisión 2)", () => {
+    assert.equal(mesPedidoSinDia("¿hay lugar en diciembre?", CDMX, DIC21), "2026-12");
+  });
+
+  it("«a mediados» a secas contestando «¿qué día de marzo?» es del 12 de ese marzo", () => {
+    assert.equal(mediadosDeMes("a mediados", CDMX, DIC15), null);
+    assert.deepEqual(mediadosDeMes("a mediados", CDMX, DIC15, "2027-03"), { desde: "2027-03-12", hasta: "2027-03-18" });
+    assert.equal(fechaDentroDelMesPedido("a mediados", "2027-03", CDMX, DIC15), "2027-03-12");
+  });
+
+  it("entra al agendado antes que las FAQ", () => {
+    assert.equal(pideCitaConFecha("¿hay lugar a mediados de enero?", CDMX, DIC15), true);
+  });
+
+  it("flujo: si el 12 tiene lugar, ofrece sus horarios directo", async () => {
+    const consultas: string[] = [];
+    const c = makeConvo(makeDeps({ "2030-03-12": { closed: false, slots: ["09:00"] } }, consultas));
+    const r1 = await c.say("¿hay lugar a mediados de marzo de 2030?");
+    assert.match(r1.reply ?? "", /Con gusto reviso el martes, 12 de marzo de 2030/);
+    const r2 = await c.say("1");
+    assert.deepEqual(consultas, ["2030-03-12"]);
+    assert.match(r2.reply ?? "", /Horarios disponibles el martes, 12 de marzo de 2030/);
+    assert.equal(c.state.buscarHasta, undefined);
+  });
+
+  it("flujo: el 12 lleno → busca dentro del rango y ofrece el primero con lugar", async () => {
+    const consultas: string[] = [];
+    const c = makeConvo(
+      makeDeps(
+        { "2030-03-12": { closed: false, slots: [] }, "2030-03-15": { closed: false, slots: ["10:00"] } },
+        consultas,
+      ),
+    );
+    await c.say("quiero cita a mediados de marzo de 2030");
+    const r = await c.say("1");
+    assert.deepEqual(consultas, ["2030-03-12", "2030-03-13", "2030-03-14", "2030-03-15"]);
+    assert.match(r.reply ?? "", /El día más cercano con lugar es el viernes, 15 de marzo de 2030/);
+  });
+
+  it("flujo: sin lugar del 12 al 18 → lo dice y NO sigue al 19", async () => {
+    const consultas: string[] = [];
+    const c = makeConvo(makeDeps({ "2030-03-19": { closed: false, slots: ["09:00"] } }, consultas));
+    await c.say("¿tienen lugar a mediados de marzo de 2030?");
+    const r = await c.say("1");
+    assert.deepEqual(consultas, [
+      "2030-03-12", "2030-03-13", "2030-03-14", "2030-03-15", "2030-03-16", "2030-03-17", "2030-03-18",
+    ]);
+    assert.match(r.reply ?? "", /Tampoco encontré lugar hasta el lunes, 18 de marzo de 2030\. ¿Qué otra fecha te acomoda\?/);
+    assert.equal(c.state.step, "date");
+    assert.equal(c.state.buscarHasta, undefined);
+  });
+
+  it("flujo: después del rango, otra fecha vuelve a buscar 7 días", async () => {
+    const consultas: string[] = [];
+    const c = makeConvo(makeDeps({}, consultas));
+    await c.say("¿tienen lugar a mediados de marzo de 2030?");
+    await c.say("1");
+    consultas.length = 0;
+    await c.say("el 1 de abril de 2030");
+    assert.equal(consultas.length, 8); // el día + 7
+  });
+
+  it("flujo: «en marzo de 2030» pregunta el día y «a mediados» busca del 12 al 18", async () => {
+    const consultas: string[] = [];
+    const c = makeConvo(makeDeps({ "2030-03-14": { closed: false, slots: ["09:00"] } }, consultas));
+    await c.say("quiero una cita");
+    await c.say("1");
+    const r1 = await c.say("en marzo de 2030");
+    assert.match(r1.reply ?? "", /¿Qué día de marzo de 2030 te acomoda\?/);
+    const r2 = await c.say("a mediados");
+    assert.deepEqual(consultas, ["2030-03-12", "2030-03-13", "2030-03-14"]);
+    assert.match(r2.reply ?? "", /Horarios disponibles el jueves, 14 de marzo de 2030/);
   });
 });
