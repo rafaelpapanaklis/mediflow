@@ -128,7 +128,8 @@ import type { CasoDelPaciente } from "@/lib/orthodontics/casos-del-paciente";
 import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
 import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
-import { citaParaIniciarDesdeLaFicha, esCitaDeHoy, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
+import { citaParaIniciarDesdeLaFicha, iniciarConsultaArrancaLaCita, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
+import { adelantoDeLaRespuesta, textoDelAdelanto } from "@/lib/agenda/adelanto-texto";
 import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { abrirHojaAlLlegar, PARAM_ABRIR_HOJA, seAtiendeConLaHoja, TAB_ORTODONCIA } from "@/lib/orthodontics/consulta-de-cita-orto";
@@ -1246,8 +1247,8 @@ export function PatientDetailClient({
   // «Iniciar consulta» (cabecera y «Iniciar visita» de Ortodoncia). Con la cita de HOY hace lo mismo que
   // «Pasar a consulta» de la Agenda: la pasa a «En consulta» y la ficha abre la consulta, así la hoja que se
   // firme después se liga a esa cita y la cierra. Antes solo empujaba `?appointment=` y la cita seguía
-  // «Agendada». Una cita de OTRO día no se arranca (sería darla por atendida antes de tiempo): solo se abre en
-  // la dirección y, si se firma la hoja, el cajón avisa que esa cita no se toca (cerrar-cita-al-firmar.ts).
+  // «Agendada». ws1-t8 (decisión 6 de Rafael): con una cita de un día FUTURO hace lo mismo — el paciente llegó
+  // hoy y el servidor trae la cita a hoy (sin avisarle), y aquí se dice. Una de un día pasado no se arranca.
   // ws1-t8 (revisión de ws1-t9, fallo 3): entre el clic y la consulta abierta pasan varios segundos (la ficha
   // se vuelve a pedir al servidor). Mientras tanto el botón dice «Iniciando consulta…», no se puede volver a
   // pulsar y un aviso lo dice; todo se apaga cuando la dirección ya trae esa cita (o a los 30 s, o si falla).
@@ -1260,13 +1261,15 @@ export function PatientDetailClient({
     if (iniciandoCitaId) return;
     setIniciandoCitaId(cita.id);
     toast.loading(textosConsulta.iniciandoConsulta, { id: TOAST_INICIANDO_CONSULTA });
-    if (esCitaDeHoy(cita.startsAt, new Date(), zonaClinica) && cita.status !== "IN_PROGRESS") {
+    if (iniciarConsultaArrancaLaCita(cita, new Date(), zonaClinica)) {
       const res = await fetch(`/api/appointments/${cita.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       }).catch(() => null);
       if (res?.ok) {
+        const adelanto = adelantoDeLaRespuesta(await res.clone().json().catch(() => null));
+        if (adelanto) toast(textoDelAdelanto(adelanto, zonaClinica), { duration: 10000 });
         marcarEstadoDeCita(cita.id, "IN_PROGRESS");
         router.refresh();
       } else {

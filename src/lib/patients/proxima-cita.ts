@@ -56,6 +56,17 @@ export function esCitaDeHoy(startsAt: string | Date, ahora: Date, zona: string):
 // PATCH /status: sin «Editar/mover citas» nada; un doctor solo las suyas; y con la de HOY, que su rol pueda
 // pasarla a «En consulta» (recepción no puede). Si no hay ninguna, el botón no se ofrece.
 
+/**
+ * ws1-t8 (decisión 6 de Rafael): «Iniciar consulta» pasa la cita a «En consulta» si es de HOY o de un día
+ * FUTURO (el paciente de mañana llegó hoy: el servidor la trae a hoy, ver adelantar-cita-a-hoy.ts). Una de un
+ * día pasado o ya «En consulta» no se toca.
+ */
+export function iniciarConsultaArrancaLaCita(cita: { status: string; startsAt: string | Date }, ahora: Date, zona: string): boolean {
+  if (cita.status === "IN_PROGRESS") return false;
+  const inicio = new Date(cita.startsAt);
+  return !isNaN(inicio.getTime()) && diaEnZona(inicio, zona) >= diaEnZona(ahora, zona);
+}
+
 export interface QuienIniciaLaConsulta {
   id: string;
   role?: string | null;
@@ -79,7 +90,7 @@ export function motivoParaNoIniciar(
   const rol = (quien.role ?? "") as UserRole;
   if (canTransition("CONFIRMED", "IN_PROGRESS", rol, ahora, inicio).code === "forbidden_role") return "sinPermiso";
   if (!esCitaQuePuedeMover(cita, quien)) return "deOtroProfesional";
-  if (cita.status !== "IN_PROGRESS" && esCitaDeHoy(cita.startsAt, ahora, zona)) {
+  if (iniciarConsultaArrancaLaCita(cita, ahora, zona)) {
     if (!canTransition(cita.status as AppointmentStatus, "IN_PROGRESS", rol, ahora, inicio).ok) {
       return "sinPermiso";
     }

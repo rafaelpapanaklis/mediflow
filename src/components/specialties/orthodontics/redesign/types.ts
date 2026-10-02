@@ -189,6 +189,8 @@ export interface OrthoTreatmentDTO {
   elastics?: { pct: number | null; diasRegistrados: number; ventanaDias: number; metaHoras: number };
   /** El estado del caso en palabras: «En curso», «Pausado», «En retención»… */
   caseStatusLabel?: string;
+  /** ws1-t8 (decisión 13): el caso sigue «Por colocar» (sin colocación registrada). */
+  casoPorColocar?: boolean;
   totalCost: number;
   paid: number;
 }

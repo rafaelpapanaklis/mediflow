@@ -20,6 +20,12 @@ import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
+import {
+  MOTIVO_RECORDATORIOS_ADELANTO,
+  adelantoParaRespuesta,
+  prepararAdelantoAHoy,
+} from "@/lib/agenda/adelantar-cita-a-hoy";
+import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -46,7 +52,7 @@ export async function PATCH(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, startsAt: true, doctorId: true, patientId: true },
+    select: { id: true, status: true, startsAt: true, endsAt: true, doctorId: true, patientId: true, resourceId: true, overrideReason: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -110,6 +116,19 @@ export async function PATCH(
 
   const sideEffects = sideEffectsOf(body.status, now);
 
+  // ws1-t8 (decisión 6 de Rafael): el paciente de una cita de un día FUTURO llegó hoy (llegada, sillón o
+  // consulta): la cita se trae a hoy, empieza ahora y dura lo mismo, con su doctor. Sin aviso de
+  // reprogramada al paciente; los recordatorios de la fecha vieja se cancelan. Ver adelantar-cita-a-hoy.ts.
+  const zonaClinica = session.clinic.timezone || "America/Mexico_City";
+  const adelanto = await prepararAdelantoAHoy({
+    clinicId: session.clinic.id,
+    cita: existing,
+    destino: body.status,
+    ahora: now,
+    zona: zonaClinica,
+    userId: session.user.id,
+  });
+
   // Estados que CIERRAN la cita: sus recordatorios pendientes ya no tienen a
   // quién avisar. El worker se negaba a enviarlos (re-check al salir), pero la
   // fila seguía en "En cola" en el panel hasta que le tocaba turno. Va en la
@@ -132,7 +151,9 @@ export async function PATCH(
         }
       : {};
 
-  const updated = await prisma.$transaction(async (tx) => {
+  let updated;
+  try {
+  updated = await prisma.$transaction(async (tx) => {
     // M11 (ws1-t10): el cambio de estado reclama la cita con el estado que se
     // leyó arriba. Con dos peticiones a la vez (doble clic en «Cancelar») solo
     // una ve `count === 1`; la otra sale con 409 sin avisar al paciente otra vez.
@@ -142,6 +163,7 @@ export async function PATCH(
         status: body.status,
         ...sideEffects,
         ...cancelFields,
+        ...(adelanto?.datos ?? {}),
       },
     });
     if (reclamo.count !== 1) return null;
@@ -160,8 +182,25 @@ export async function PATCH(
             : "Cancelado: la cita se canceló",
       });
     }
+    if (adelanto) {
+      await cancelPendingRemindersForAppointment(tx, {
+        appointmentId: params.id,
+        clinicId: session.clinic.id,
+        reason: MOTIVO_RECORDATORIOS_ADELANTO,
+      });
+    }
     return row;
   });
+  } catch (err) {
+    // Otra cita entró en ese hueco entre la lectura y la escritura (el no-solape de la base manda).
+    if (adelanto && isAppointmentOverlapError(err)) {
+      return NextResponse.json(
+        { error: "invalid_transition", reason: "Otra cita acaba de ocupar esta hora con el mismo doctor o sillón. Intenta de nuevo." },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
   if (!updated) {
     return NextResponse.json(
       { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
@@ -178,7 +217,8 @@ export async function PATCH(
   // Google Calendar: cancelar o marcar no-asistió saca la cita del calendario
   // (borra el evento y limpia su id) y reactivarla la vuelve a poner. Los demás
   // cambios de estado no mueven nada allí. No lanza y no alarga la respuesta.
-  if (closesAppointment !== (existing.status === "CANCELLED" || existing.status === "NO_SHOW")) {
+  // El adelanto a hoy mueve el evento.
+  if (adelanto || closesAppointment !== (existing.status === "CANCELLED" || existing.status === "NO_SHOW")) {
     await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
   }
 
@@ -187,6 +227,24 @@ export async function PATCH(
   // dejaba ninguna fila en la bitácora.
   {
     const zona = await zonaDeClinica(session.clinic.id);
+    if (adelanto) {
+      await registrarMovimientoDelPaciente({
+        clinicId: session.clinic.id,
+        userId: session.user.id,
+        patientId: existing.patientId,
+        entityType: "appointment",
+        entityId: params.id,
+        action: "update",
+        texto: textoCita.adelantadaAHoy(adelanto.antes.startsAt, adelanto.despues.startsAt, zona),
+        campos: Object.keys(adelanto.datos),
+        cambios: {
+          startsAt: { before: adelanto.antes.startsAt, after: adelanto.despues.startsAt },
+          endsAt: { before: adelanto.antes.endsAt, after: adelanto.despues.endsAt },
+          ...(adelanto.sinSillon ? { resourceId: { before: existing.resourceId, after: null } } : {}),
+        },
+        req,
+      });
+    }
     await registrarMovimientoDelPaciente({
       clinicId: session.clinic.id,
       userId: session.user.id,
@@ -285,6 +343,11 @@ export async function PATCH(
   revalidateAfter("appointments");
   revalidatePatientProfile(updated.patientId);
   return NextResponse.json(
-    { appointment: appointmentToDTO(updated, session.clinic.category), whatsapp, dineroCita },
+    {
+      appointment: appointmentToDTO(updated, session.clinic.category),
+      whatsapp,
+      dineroCita,
+      adelantada: adelanto ? adelantoParaRespuesta(adelanto) : null,
+    },
   );
 }

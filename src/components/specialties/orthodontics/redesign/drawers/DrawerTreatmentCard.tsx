@@ -45,6 +45,7 @@ import { EvolutionTemplatePicker } from "@/components/clinical-shared/EvolutionT
 import { aplicarPlantillaAlControl } from "@/lib/orthodontics/consulta-ortodoncia";
 import { avisoSinArcosPlanificados, huecosDeLaNota, mensajeDeHuecos, proximaFechaDeControl } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
+import { pasoAlFirmar } from "@/lib/orthodontics/caso-por-colocar";
 import { zonaFijada } from "../atoms/format";
 import { useTextosFirmaControl } from "../textos-firma-control";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
@@ -194,6 +195,17 @@ export interface DrawerTreatmentCardProps {
    * capturó fecha (ws1-t9 #11). Sin él (la Agenda no lo pasa) ese botón no se ofrece.
    */
   paciente?: { id: string; nombre: string; doctorId?: string | null } | null;
+  /**
+   * ws1-t8 (decisión 13 de Rafael): el caso sigue «Por colocar». «Firmar control» pregunta antes, con dos
+   * botones: «Registrar la colocación primero» / «Firmar el control de todos modos». No bloquea.
+   */
+  casoPorColocar?: boolean;
+  /**
+   * «Registrar la colocación primero»: el cajón guarda la hoja como borrador (con `onSave`) y, si se guardó,
+   * llama a esto. La ficha abre «Datos del caso» (fecha de colocación); la Agenda lleva a la ficha. Sin él, el
+   * aviso solo ofrece firmar igual.
+   */
+  onRegistrarColocacion?: () => void;
   onClose: () => void;
   /**
    * Devuelve el `cardId` con el que quedó la tarjeta (creada o
@@ -235,6 +247,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   //      "learn-card-id") es lo que arregla esto: se pone al valor que
   //      `onSave`/`onSign` confirma, y `buildSubmit()` lo usa primero.
   const [enVuelo, setEnVuelo] = useState(false);
+  // ws1-t8 (decisión 13): el aviso «Por colocar» antes de firmar, y si ya se eligió firmar igual.
+  const [preguntaPorColocar, setPreguntaPorColocar] = useState(false);
+  const [firmarIgualAceptado, setFirmarIgualAceptado] = useState(false);
 
   // Re-init si cambia la card target.
   useEffect(() => {
@@ -402,6 +417,44 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   // Fila 12 (c): solo el Plan es obligatorio (S/O/A opcionales); un Plan
   // precargado sin tocar no cuenta. Misma regla en el servidor (canSignSoap).
   const canSign = puedeFirmarNota(state.soap, state.notaPrecargada) && !avisoDeHuecos;
+
+  const firmar = async () => {
+    if (enVuelo || !props.onSign) return;
+    setEnVuelo(true);
+    try {
+      const submit = buildSubmit();
+      const id = await props.onSign(submit);
+      if (id) {
+        dispatch({ kind: "learn-card-id", id });
+        // M11: solo se ofrece Agendar/Avisar si el llamador
+        // confirmó un cardId real — si falló, `id` viene
+        // falsy y el error ya se mostró por su cuenta
+        // (toast/aviso propio de cada caller).
+        setJustSigned({ cardId: id, nextDate: submit.nextDate, nextDurationMin: submit.nextDurationMin });
+        setProcRecarga((n) => n + 1);
+      }
+    } finally {
+      setEnVuelo(false);
+    }
+  };
+
+  // ws1-t8 (decisión 13): «Registrar la colocación primero» no pierde lo escrito: guarda la hoja como borrador y,
+  // solo si se guardó, pasa a registrar la colocación. Si no se guardó, el error ya salió y la hoja sigue abierta.
+  const registrarColocacionPrimero = async () => {
+    if (enVuelo || !props.onRegistrarColocacion) return;
+    setEnVuelo(true);
+    try {
+      if (props.onSave) {
+        const id = await props.onSave(buildSubmit());
+        if (!id) return;
+        dispatch({ kind: "learn-card-id", id });
+      }
+      setPreguntaPorColocar(false);
+      props.onRegistrarColocacion();
+    } finally {
+      setEnVuelo(false);
+    }
+  };
 
   // M11 (Ronda 6): control recién firmado en ESTA sesión del cajón —
   // pantalla de cierre con Agendar/Avisar en el momento, en vez de cerrar en
@@ -925,6 +978,43 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
           ) : null}
         </div>
 
+        {!isReadOnly && preguntaPorColocar ? (
+          // Entre el cuerpo y el pie: siempre a la vista junto a «Firmar control», sin hacer scroll.
+          <div
+            className={`${orto.aviso} ${orto.avisoAlerta}`}
+            style={{ margin: "0 20px 12px" }}
+            role="alertdialog"
+            aria-labelledby="aviso-por-colocar-titulo"
+            aria-describedby="aviso-por-colocar-cuerpo"
+            data-aviso-por-colocar
+          >
+            <div className={orto.avisoTexto}>
+              <strong id="aviso-por-colocar-titulo" className="block">{textosFirma.porColocarTitulo}</strong>
+              <span id="aviso-por-colocar-cuerpo">{textosFirma.porColocarCuerpo}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-[8px]">
+              {props.onRegistrarColocacion ? (
+                <Btn variant="primary" size="sm" autoFocus disabled={enVuelo} onClick={() => void registrarColocacionPrimero()}>
+                  {textosFirma.porColocarRegistrar}
+                </Btn>
+              ) : null}
+              <Btn
+                variant="secondary"
+                size="sm"
+                autoFocus={!props.onRegistrarColocacion}
+                disabled={enVuelo}
+                onClick={() => {
+                  setFirmarIgualAceptado(true);
+                  setPreguntaPorColocar(false);
+                  void firmar();
+                }}
+              >
+                {textosFirma.porColocarFirmarIgual}
+              </Btn>
+            </div>
+          </div>
+        ) : null}
+
         <footer className={orto.cajonPie}>
           {props.card && props.onSharePatient ? (
             <Btn
@@ -966,22 +1056,12 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
               icon={<Check size={15} strokeWidth={1.75} aria-hidden />}
               onClick={async () => {
                 if (enVuelo) return;
-                setEnVuelo(true);
-                try {
-                  const submit = buildSubmit();
-                  const id = await props.onSign!(submit);
-                  if (id) {
-                    dispatch({ kind: "learn-card-id", id });
-                    // M11: solo se ofrece Agendar/Avisar si el llamador
-                    // confirmó un cardId real — si falló, `id` viene
-                    // falsy y el error ya se mostró por su cuenta
-                    // (toast/aviso propio de cada caller).
-                    setJustSigned({ cardId: id, nextDate: submit.nextDate, nextDurationMin: submit.nextDurationMin });
-                    setProcRecarga((n) => n + 1);
-                  }
-                } finally {
-                  setEnVuelo(false);
+                // ws1-t8 (decisión 13): caso «Por colocar» → primero el aviso con sus dos botones.
+                if (pasoAlFirmar({ casoPorColocar: props.casoPorColocar, firmarIgualAceptado }) === "preguntar") {
+                  setPreguntaPorColocar(true);
+                  return;
                 }
+                await firmar();
               }}
               disabled={!canSign || enVuelo}
               title={avisoDeHuecos ?? (!canSign ? "Escribe el Plan (P) de este control para firmarlo" : undefined)}

@@ -22,6 +22,7 @@ import { Fragment, startTransition, useCallback, useMemo, useState } from "react
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { adelantoDeLaRespuesta, textoDelAdelanto } from "@/lib/agenda/adelanto-texto";
 import {
   AlertTriangle,
   ArrowRight,
@@ -908,6 +909,9 @@ async function patchConMotivo(
   });
   const cuerpo = await res.json().catch(() => ({}));
   if (!res.ok) throw { status: res.status, ...cuerpo };
+  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy.
+  const adelanto = adelantoDeLaRespuesta(cuerpo);
+  if (adelanto) toast(textoDelAdelanto(adelanto), { duration: 10000 });
   // H15: qué pasó con el dinero de la cita, dicho en palabras.
   const d = cuerpo.dineroCita as { decision: string | null; monto: number; motivo: string | null } | null | undefined;
   if (d && d.monto > 0) {

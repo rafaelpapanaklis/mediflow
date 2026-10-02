@@ -199,6 +199,14 @@ export async function signTreatmentCard(
     : null;
   const decisionCita = citaDeControl && clinicaZona ? citaAlFirmar(citaDeControl, new Date(), clinicaZona) : null;
   const citaDeOtroDiaSinTocar = decisionCita && "diaDeLaCita" in decisionCita ? decisionCita.diaDeLaCita : undefined;
+  // ws1-t8 (decisión 6 de Rafael): una cita futura con el paciente ya presente no se firma «como futura»: se
+  // trae a hoy (como al marcar su llegada) y se liga y cierra como la cita de hoy que es. Import dinámico: el
+  // módulo arrastra los recordatorios (server-only) y solo hace falta en este caso.
+  if (citaDeControl && clinicaZona && decisionCita?.ligar && decisionCita.visitaHoy) {
+    const { adelantarCitaPresenteAHoy } = await import("@/lib/agenda/adelantar-cita-a-hoy");
+    const inicioDeHoy = await adelantarCitaPresenteAHoy({ clinicId: ctx.clinicId, appointmentId: citaDeControl.id, userId: ctx.userId, zona: clinicaZona });
+    if (inicioDeHoy) citaDeControl = { ...citaDeControl, startsAt: inicioDeHoy };
+  }
   if (citaDeOtroDiaSinTocar) citaDeControl = null;
   // La cita a la que queda ligada la hoja: `undefined` = no se toca la columna; `null` = se desliga (una hoja
   // guardada antes como borrador ligada a esa cita futura deja de estarlo).

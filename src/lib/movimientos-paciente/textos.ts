@@ -68,6 +68,9 @@ export const textoCita = {
     `Completó la consulta del ${fechaHoraParaTexto(startsAt, tz)}`,
   eliminada: (startsAt: Date | string, tz?: string | null) =>
     `Eliminó la cita del ${fechaHoraParaTexto(startsAt, tz)}`,
+  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy.
+  adelantadaAHoy: (antes: Date | string, despues: Date | string, tz?: string | null) =>
+    `Adelantó a hoy la cita del ${fechaHoraParaTexto(antes, tz)} porque el paciente llegó: ahora es del ${fechaHoraParaTexto(despues, tz)} (sin avisar al paciente)`,
   estado: (startsAt: Date | string, de: string | null | undefined, a: string, tz?: string | null) =>
     `Cambió la cita del ${fechaHoraParaTexto(startsAt, tz)} de «${estadoDeCita(de)}» a «${estadoDeCita(a)}»`,
 };

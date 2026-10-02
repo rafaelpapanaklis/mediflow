@@ -39,6 +39,13 @@ const es = {
   // ws1-t8 (mejora 9b): el panel de la cita abre la ficha del caso con la hoja de esa cita, no solo el cajón rápido.
   atencionCompleta: "Abrir atención completa",
   atencionCompletaAyuda: "El caso entero (arcos, fotos, historial) con la hoja de esta cita abierta.",
+  // ws1-t8 (decisión 13 de Rafael): firmar un control en un caso «Por colocar» avisa, no bloquea.
+  porColocarTitulo: "Este caso sigue «Por colocar»",
+  porColocarCuerpo:
+    "Todavía no tiene registrada la colocación de la aparatología. Si hoy se colocó, regístrala primero para que el caso quede «En curso» y los meses cuenten desde hoy.",
+  porColocarRegistrar: "Registrar la colocación primero",
+  porColocarFirmarIgual: "Firmar el control de todos modos",
+  porColocarBorradorGuardado: "Guardamos la hoja como borrador. Pon la fecha de colocación en «Datos del caso» y vuelve a «Registrar control» para firmarla.",
 };
 
 const en: typeof es = {
@@ -57,6 +64,12 @@ const en: typeof es = {
   verControl: "View check-up",
   atencionCompleta: "Open full visit",
   atencionCompletaAyuda: "The whole case (wires, photos, history) with this appointment's sheet open.",
+  porColocarTitulo: "This case is still “To be placed”",
+  porColocarCuerpo:
+    "The appliance placement hasn't been recorded yet. If it was placed today, record it first so the case becomes “In progress” and months count from today.",
+  porColocarRegistrar: "Record the placement first",
+  porColocarFirmarIgual: "Sign the check-up anyway",
+  porColocarBorradorGuardado: "The sheet was saved as a draft. Set the placement date in “Case details” and go back to “Record check-up” to sign it.",
 };
 
 export type TextosFirmaControl = typeof es;

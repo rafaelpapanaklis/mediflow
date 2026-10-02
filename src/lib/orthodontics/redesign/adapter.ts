@@ -39,6 +39,7 @@ import { PHASE_LABELS } from "@/components/specialties/orthodontics/redesign/typ
 import { resolveCurrentWire } from "./current-wire";
 import { arcosActuales } from "@/lib/orthodontics/arcos-actuales";
 import { nombreDeTecnica } from "../tecnicas-de-la-clinica";
+import { esCasoPorColocar } from "@/lib/orthodontics/caso-por-colocar";
 
 // Tipos auxiliares para include shapes que load-data devolverá.
 
@@ -295,6 +296,8 @@ function adaptTreatment(args: {
     ...(plan && ETIQUETA_DEL_ESTADO[String(plan.status)]
       ? { caseStatusLabel: ETIQUETA_DEL_ESTADO[String(plan.status)] }
       : {}),
+    // ws1-t8 (decisión 13): firmar un control en un caso «Por colocar» avisa antes.
+    ...(plan && esCasoPorColocar(String(plan.status)) ? { casoPorColocar: true } : {}),
     totalCost,
     paid,
   };

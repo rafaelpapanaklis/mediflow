@@ -63,6 +63,7 @@ export async function getTreatmentCardContextForAppointment(
       clinicId: true,
       patientId: true,
       installedAt: true,
+      status: true,
       startDate: true,
       createdAt: true,
       // Fila 12: datos de la nota precargada.

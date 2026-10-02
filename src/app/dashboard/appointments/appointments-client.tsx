@@ -16,6 +16,7 @@ import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import styles from "./appointments.module.css";
 import toast from "react-hot-toast";
+import { adelantoDeLaRespuesta, textoDelAdelanto } from "@/lib/agenda/adelanto-texto";
 import { useConfirm, useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import type { AppointmentStatus } from "@/lib/agenda/types";
@@ -643,6 +644,9 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setAppts(prev => prev.map(a => a.id === id ? { ...a, status: nuevo } : a));
       setShowDetail(prev => prev?.id === id ? { ...prev, status: nuevo } : prev);
       toast.success(t("appointments.toast.statusUpdated"));
+      // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy.
+      const adelanto = adelantoDeLaRespuesta(body);
+      if (adelanto) { toast(textoDelAdelanto(adelanto), { duration: 10000 }); router.refresh(); }
     } catch (err: any) { toast.error(mensajeDeError(err, t, { porDefecto: t("appointments.toast.updateError") })); }
   }
 

@@ -24,6 +24,7 @@ import {
   type BracketPendiente,
 } from "@/lib/orthodontics/precarga-hoja-control";
 import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
+import { esCasoPorColocar } from "@/lib/orthodontics/caso-por-colocar";
 import { arcosActuales } from "@/lib/orthodontics/arcos-actuales";
 import type { OrthoPaymentStatus, OrthoTechnique } from "@prisma/client";
 import type {
@@ -85,6 +86,8 @@ export interface TreatmentCardAgendaContext {
   controlesPrevistos: number | null;
   /** ws1-t10: la técnica del caso, para filtrar las plantillas de nota de la hoja. */
   technique: OrthoTechnique | null;
+  /** ws1-t8 (decisión 13): el caso sigue «Por colocar»; al firmar, el cajón avisa (no bloquea). */
+  casoPorColocar: boolean;
   defaultsForNew: {
     cardNumber: number;
     /**
@@ -132,6 +135,8 @@ export async function buildTreatmentCardContext(
     installedAt: Date | null;
     startDate: Date | null;
     createdAt?: Date | null;
+    /** ws1-t8 (decisión 13): el estado del caso, para avisar al firmar un control «Por colocar». */
+    status?: string | null;
     /** Fila 12: para la nota precargada. Opcionales: sin ellos la nota sale más genérica. */
     technique?: OrthoTechnique | null;
     patient?: { firstName: string; lastName: string } | null;
@@ -256,6 +261,7 @@ export async function buildTreatmentCardContext(
     availableWires: wireDTOs,
     controlesPrevistos: progreso?.previstos ?? null,
     technique: plan.technique ?? null,
+    casoPorColocar: esCasoPorColocar(plan.status),
     defaultsForNew: {
       cardNumber: maxCardNumber + 1,
       controlNumero,

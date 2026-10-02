@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { adelantoDeLaRespuesta, textoDelAdelanto } from "@/lib/agenda/adelanto-texto";
 import * as Popover from "@radix-ui/react-popover";
 import {
   Pencil,
@@ -107,6 +108,9 @@ async function patchStatusWithReason(
     };
   }
   const body = (await res.json()) as { appointment: AgendaAppointmentDTO };
+  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy.
+  const adelanto = adelantoDeLaRespuesta(body);
+  if (adelanto) toast(textoDelAdelanto(adelanto), { duration: 10000 });
   return body.appointment;
 }
 

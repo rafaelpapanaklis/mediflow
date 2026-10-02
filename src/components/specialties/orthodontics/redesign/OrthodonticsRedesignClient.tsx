@@ -449,6 +449,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     [notaDeLaConsulta, vm.patient.id],
   );
   const pacienteParaAgendar = { id: vm.patient.id, nombre: vm.patient.fullName, doctorId: null };
+  // ws1-t8 (decisión 13): «Registrar la colocación primero» desde la hoja de un caso «Por colocar». La hoja ya se
+  // guardó como borrador; se abre «Datos del caso» (fecha de colocación). Sin ese permiso el aviso solo deja firmar.
+  const registrarColocacion = props.onUpdateCaseSettings
+    ? () => {
+        setDrawer({ kind: "case-settings" });
+        toast(textosFirma.porColocarBorradorGuardado, { duration: 10000 });
+      }
+    : undefined;
 
   const abrirRegistrarControl = useCallback(async () => {
     if (!t.treatmentPlanId) return;
@@ -996,6 +1004,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       {drawer?.kind === "tcard" && cardForDrawer ? (
         <DrawerTreatmentCard
           paciente={pacienteParaAgendar}
+          casoPorColocar={t.casoPorColocar === true || nuevoControlCtx?.casoPorColocar === true}
+          onRegistrarColocacion={registrarColocacion}
           key={cardForDrawer.id}
           card={cardForDrawer}
           availableWires={wireSequence}
@@ -1016,6 +1026,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       {drawer?.kind === "tcard-new" && nuevoControlCtx?.existingCard ? (
         <DrawerTreatmentCard
           paciente={pacienteParaAgendar}
+          casoPorColocar={t.casoPorColocar === true || nuevoControlCtx?.casoPorColocar === true}
+          onRegistrarColocacion={registrarColocacion}
           key={nuevoControlCtx.existingCard.id}
           card={
             notaDeLaConsulta && nuevoControlCtx.existingCard.status !== "SIGNED"
@@ -1036,6 +1048,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ) : drawer?.kind === "tcard-new" && nuevoControlCtx ? (
         <DrawerTreatmentCard
           paciente={pacienteParaAgendar}
+          casoPorColocar={t.casoPorColocar === true || nuevoControlCtx?.casoPorColocar === true}
+          onRegistrarColocacion={registrarColocacion}
           key="new-card-con-cita"
           card={null}
           appointmentId={nuevoControlCtx.appointmentId}
@@ -1070,6 +1084,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ) : drawer?.kind === "tcard-new" && !nuevoControlCtx && newCardDefaults ? (
         <DrawerTreatmentCard
           paciente={pacienteParaAgendar}
+          casoPorColocar={t.casoPorColocar === true || nuevoControlCtx?.casoPorColocar === true}
+          onRegistrarColocacion={registrarColocacion}
           key="new-card"
           card={null}
           controlesPrevistos={controlesPrevistosDelCaso}

@@ -77,7 +77,8 @@ test("«Iniciar consulta» (cabecera e «Iniciar visita» de Ortodoncia) pasa la
   const cuerpo = ficha.slice(i, ficha.indexOf("\n  };", i));
   // Revisión final (fallo nuevo 1): arranca la cita que la sesión PUEDE iniciar, no la próxima a secas.
   assert.match(cuerpo, /const cita = paraIniciar\.cita;/);
-  assert.match(cuerpo, /esCitaDeHoy\(cita\.startsAt, new Date\(\), zonaClinica\)/);
+  // ws1-t8 (decisión 6): también con la cita de un día futuro (el servidor la trae a hoy).
+  assert.match(cuerpo, /iniciarConsultaArrancaLaCita\(cita, new Date\(\), zonaClinica\)/);
   assert.match(cuerpo, /\/api\/appointments\/\$\{cita\.id\}\/status/);
   assert.match(cuerpo, /status: "IN_PROGRESS"/);
   assert.match(cuerpo, /marcarEstadoDeCita\(cita\.id, "IN_PROGRESS"\)/);

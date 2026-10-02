@@ -64,6 +64,9 @@ interface LoadedContext {
   cita: { estado: string | null; inicio: string | null };
   controlesPrevistos: number | null;
   tecnica: string | null;
+  /** ws1-t8 (decisión 13): el caso sigue «Por colocar»; al firmar, el cajón avisa. */
+  casoPorColocar: boolean;
+  patientId: string;
   availableWires: WireStepDTO[];
   availablePhotoSets: Array<{ id: string; label: string }>;
   defaultsForNew: {
@@ -114,6 +117,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
         cita: { estado: res.data.appointmentStatus, inicio: res.data.appointmentStartsAt },
         controlesPrevistos: res.data.controlesPrevistos,
         tecnica: res.data.technique,
+        casoPorColocar: res.data.casoPorColocar === true,
+        patientId: res.data.patientId,
         availableWires: res.data.availableWires,
         availablePhotoSets: res.data.availablePhotoSets,
         defaultsForNew: res.data.defaultsForNew,
@@ -191,7 +196,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
     // cerrando: eso no cambió.
     if (!firmar) {
       cerrar();
-      return;
+      // ws1-t8 (decisión 13): el cajón sabe así que el borrador se guardó (y puede ir a registrar la colocación).
+      return res.data.cardId;
     }
     return res.data.cardId;
   };
@@ -242,6 +248,13 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
                   soapPrefill: ctx.defaultsForNew.soapPrefill,
                 }
           }
+          casoPorColocar={ctx.casoPorColocar}
+          // ws1-t8 (decisión 13): la colocación se registra en la ficha (Ortodoncia → «Datos del caso»). La hoja
+          // ya quedó guardada como borrador; desde ahí, «Registrar control» la continúa.
+          onRegistrarColocacion={() => {
+            toast(textosFirma.porColocarBorradorGuardado, { duration: 10000 });
+            window.location.assign(`/dashboard/patients/${encodeURIComponent(ctx.patientId)}?tab=ortodoncia`);
+          }}
           onClose={cerrar}
           onSave={(payload) => guardar(payload, false)}
           onSign={(payload) => guardar(payload, true)}
