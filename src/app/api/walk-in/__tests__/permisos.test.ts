@@ -34,6 +34,7 @@ beforeEach(() => {
 (mock as any).module("@/lib/prisma", {
   namedExports: {
     prisma: {
+      $transaction: async (fn: any) => fn({ $queryRaw: async () => [], walkInQueue: { updateMany: async () => ({ count: 1 }) }, appointment: { findFirst: async () => null } }),
       walkInQueue: {
         findMany: async (a: any) => { tocadas.push("findMany"); assert.equal(a.where.clinicId, "c1"); return []; },
         findFirst: async () => ({ id: "w1", clinicId: "c1" }),

@@ -10,7 +10,8 @@
 // rechaza y se contesta 409 SIN tocar la fila (la transacción se deshace): se elige otro profesional.
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { assertPatientVisible, ensureUserCanSeePatient } from "@/lib/patient-visibility";
@@ -56,7 +57,8 @@ export async function iniciarConsultaWalkIn(args: {
     where: { id: doctorId, clinicId, ...RECIBE_CITAS_WHERE },
     select: { id: true },
   });
-  if (!profesional) return { ok: false, status: 404, body: cuerpoDoctorNoRecibeCitas() as Record<string, unknown> };
+  // Con el MOTIVO concreto (recepción, cuenta inactiva, casilla apagada…), como Citas y la lista de espera.
+  if (!profesional) return { ok: false, status: 404, body: await cuerpoDoctorNoRecibeCitasDe(clinicId, doctorId) };
 
   if (entry.patientId) {
     const denegado = await assertPatientVisible(entry.patientId, actor);

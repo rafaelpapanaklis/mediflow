@@ -331,6 +331,8 @@
     "waitlist": {
       "title": "Fila de espera",
       "emptySubtitle": "Nadie en la fila",
+      "assignedTo": "Asignado a {name}",
+      "viewQueue": "Ver fila de espera",
       "subtitle": {
         "one": "{count} paciente en la fila",
         "other": "{count} pacientes en la fila"
@@ -9723,6 +9725,11 @@
       "assignedTo": "Asignado a {name}",
       "noProfessionals": "No hay profesionales que reciban citas. Enciende «Aparece en la agenda» en Equipo.",
       "chooseToStart": "Elige quién atenderá al paciente para iniciar la consulta.",
+      "patientLinked": "Ligado a su expediente: no se creará un paciente nuevo.",
+      "patientUnlink": "Cambiar",
+      "existingPatients": "¿Ya es paciente? Elígelo para usar su expediente:",
+      "sameNameQuestion": "Ya hay un paciente con ese nombre. ¿Es esta persona?",
+      "addAsNew": "No, es un paciente nuevo",
       "statusWaiting": "Esperando",
       "statusAssigned": "Asignado",
       "statusInProgress": "En atención",

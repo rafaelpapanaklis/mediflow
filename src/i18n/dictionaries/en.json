@@ -331,6 +331,8 @@
     "waitlist": {
       "title": "Walk-in queue",
       "emptySubtitle": "Nobody in the queue",
+      "assignedTo": "Assigned to {name}",
+      "viewQueue": "View waiting queue",
       "subtitle": {
         "one": "{count} patient in the queue",
         "other": "{count} patients in the queue"
@@ -9723,6 +9725,11 @@
       "assignedTo": "Assigned to {name}",
       "noProfessionals": "No professionals can receive appointments. Turn on “Appears in the agenda” in Team.",
       "chooseToStart": "Choose who will see the patient to start the consultation.",
+      "patientLinked": "Linked to their record: no new patient will be created.",
+      "patientUnlink": "Change",
+      "existingPatients": "Already a patient? Pick them to use their record:",
+      "sameNameQuestion": "There is already a patient with that name. Is it this person?",
+      "addAsNew": "No, it's a new patient",
       "statusWaiting": "Waiting",
       "statusAssigned": "Assigned",
       "statusInProgress": "In progress",

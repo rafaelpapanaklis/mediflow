@@ -157,12 +157,19 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
             : t("home.waitlist.subtitle", { count: data.waitlist.length })
         }
         accion={
-          puedeAgregarEspera ? (
-            <button type="button" className={`${s.boton} ${s.botonPeq}`} onClick={agregarAEspera}>
-              <Plus size={14} strokeWidth={1.75} aria-hidden />
-              {t("common.add")}
-            </button>
-          ) : undefined
+          <>
+            {/* La fila completa (asignar, iniciar, completar) vive en /dashboard/walk-in (ws1-t4, fallo 6). */}
+            <Link href="/dashboard/walk-in" className={s.tarjetaEnlace}>
+              {t("home.waitlist.viewQueue")}
+              <ChevronRight size={13} strokeWidth={1.75} aria-hidden />
+            </Link>
+            {puedeAgregarEspera && (
+              <button type="button" className={`${s.boton} ${s.botonPeq}`} onClick={agregarAEspera}>
+                <Plus size={14} strokeWidth={1.75} aria-hidden />
+                {t("common.add")}
+              </button>
+            )}
+          </>
         }
         lista
       >
@@ -189,9 +196,11 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
             <div key={it.id} className={s.fila}>
               <div className={s.filaCuerpo}>
                 <span className={`${s.nombre} ${s.nombreFijo}`}>{it.patient.name}</span>
-                {it.reason && (
+                {(it.reason || it.assignedToName) && (
                   <div className={s.detalle}>
-                    <span>{it.reason}</span>
+                    {it.reason && <span>{it.reason}</span>}
+                    {it.reason && it.assignedToName && <span aria-hidden>·</span>}
+                    {it.assignedToName && <span>{t("home.waitlist.assignedTo", { name: it.assignedToName })}</span>}
                   </div>
                 )}
               </div>

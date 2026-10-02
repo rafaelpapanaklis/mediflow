@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { iniciarConsultaWalkIn } from "@/lib/walk-in/iniciar-consulta";
+import { cerrarFilaConSuCita } from "@/lib/walk-in/cerrar-con-cita";
 
 // «Asignar» solo MARCA quién atenderá; «Iniciar» crea la cita (ver src/lib/walk-in/iniciar-consulta.ts).
 // Contrato de la fila: el cliente manda `{ action }` (y `assignedTo` al asignar). El servidor decide el estado
@@ -52,6 +54,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json(await prisma.walkInQueue.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } }));
   }
 
+  // «Completar»/«Cancelar» cierran también la cita que creó «Iniciar» (src/lib/walk-in/cerrar-con-cita.ts).
+  if (action === "complete" || action === "cancel") {
+    // Cancelar una fila que ya es cita (en atención) cancela una cita: el mismo permiso que en la Agenda.
+    if (action === "cancel" && entry.status === "IN_PROGRESS") {
+      const sinBorrar = denyIfMissingPermission(ctx, "agenda.delete");
+      if (sinBorrar) return sinBorrar;
+    }
+    const r = await cerrarFilaConSuCita({
+      req,
+      actor: { userId: ctx.userId, clinicId: ctx.clinicId },
+      fila: entry,
+      accion: action,
+      desde: regla.desde,
+    });
+    if ("body" in r) return NextResponse.json({ ...r.body, status: entry.status }, { status: r.status });
+    return NextResponse.json(await prisma.walkInQueue.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } }));
+  }
+
   const data: Record<string, unknown> = { status: regla.a };
   if (action === "assign") {
     const assignedTo = typeof body?.assignedTo === "string" ? body.assignedTo : "";
@@ -61,10 +81,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       where: { id: assignedTo, clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE },
       select: { id: true },
     });
-    if (!profesional) return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
+    // Con el MOTIVO concreto (recepción, cuenta inactiva, casilla apagada…), como Citas y la lista de espera.
+    if (!profesional) return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(ctx.clinicId, assignedTo), { status: 404 });
     data.assignedTo = profesional.id;
   }
-  if (action === "complete") data.completedAt = new Date();
 
   // La transición se valida en la misma escritura (status en el where): dos clics a la vez no la pisan.
   const { count } = await prisma.walkInQueue.updateMany({

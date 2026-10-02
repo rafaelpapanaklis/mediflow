@@ -5,6 +5,7 @@ import { Clock, UserPlus } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { RaizRediseno } from "./raiz";
 import { Boton, Cabecera, Campo, Etiqueta, Tarjeta, Vacio, clases as s, type Tono } from "./piezas";
+import type { PacienteEncontrado } from "@/lib/walk-in/paciente-de-la-fila";
 
 /**
  * Fila de espera (walk-in), vestida con el lenguaje del menú de dos niveles.
@@ -50,9 +51,11 @@ export interface FilaEsperaProps {
   waitingCount?: number;
   /** Zona de la clínica para «Llegó». */
   timezone?: string;
-  form: { patientName: string; service: string };
-  setForm: Dispatch<SetStateAction<{ patientName: string; service: string }>>;
-  handleAdd: () => Promise<void>;
+  form: { patientName: string; service: string; patientId?: string | null };
+  setForm: Dispatch<SetStateAction<{ patientName: string; service: string; patientId: string | null }>>;
+  handleAdd: (opciones?: { comoNuevo?: boolean }) => Promise<void>;
+  /** El buscador de pacientes del nombre (walk-in-client.tsx): elegir uno existente en vez de duplicarlo. */
+  paciente?: PacienteDeLaFila;
   handleAction: (id: string, action: string, assignedTo?: string) => Promise<void>;
   /** Quién puede recibir citas: la lista del selector de «Asignar». */
   profesionales?: { id: string; name: string }[];
@@ -65,6 +68,16 @@ export interface FilaEsperaProps {
   /** agenda.create / agenda.edit (la API los exige igual; aquí solo se esconde). */
   puedeAgregar?: boolean;
   puedeEditar?: boolean;
+}
+
+export interface PacienteDeLaFila {
+  encontrados: PacienteEncontrado[];
+  elegido: string | null;
+  preguntarSiEsNuevo: boolean;
+  cambiarNombre: (nombre: string) => void;
+  elegir: (p: PacienteEncontrado) => void;
+  soltar: () => void;
+  agregarComoNuevo: () => void;
 }
 
 /** Hora de llegada en la zona de la clínica (no la del navegador); zona inválida → la del navegador. */
@@ -86,6 +99,7 @@ export function FilaEspera({
   form,
   setForm,
   handleAdd,
+  paciente,
   handleAction,
   profesionales = [],
   asignandoId = null,
@@ -130,7 +144,9 @@ export function FilaEspera({
                 className={s.campoEntrada}
                 placeholder={t("pages.walkIn.fullNamePlaceholder")}
                 value={form.patientName}
-                onChange={(e) => setForm((f) => ({ ...f, patientName: e.target.value }))}
+                onChange={(e) =>
+                  paciente ? paciente.cambiarNombre(e.target.value) : setForm((f) => ({ ...f, patientName: e.target.value, patientId: null }))
+                }
                 onKeyDown={alTeclear}
                 autoComplete="off"
               />
@@ -146,10 +162,37 @@ export function FilaEspera({
                 autoComplete="off"
               />
             </Campo>
-            <Boton variante="principal" onClick={handleAdd} icono={<UserPlus size={16} strokeWidth={2} />}>
+            <Boton variante="principal" onClick={() => void handleAdd()} icono={<UserPlus size={16} strokeWidth={2} />}>
               {t("common.add")}
             </Boton>
           </div>
+          {paciente?.elegido && (
+            <div className={s.detalle}>
+              <span>{t("pages.walkIn.patientLinked")}</span>
+              <span aria-hidden>·</span>
+              <button type="button" className={s.enlace} onClick={paciente.soltar}>{t("pages.walkIn.patientUnlink")}</button>
+            </div>
+          )}
+          {paciente && !paciente.elegido && paciente.encontrados.length > 0 && (
+            <div className={s.lista} aria-label={t("pages.walkIn.existingPatients")}>
+              <div className={s.detalle}>
+                {paciente.preguntarSiEsNuevo ? t("pages.walkIn.sameNameQuestion") : t("pages.walkIn.existingPatients")}
+              </div>
+              {paciente.encontrados.map((p) => (
+                <button key={p.id} type="button" className={`${s.fila} ${s.filaBoton}`} onClick={() => paciente.elegir(p)}>
+                  <div className={s.filaCuerpo}>
+                    <p className={s.nombre}>{p.name}</p>
+                    {p.phone && <div className={s.detalle}>{p.phone}</div>}
+                  </div>
+                </button>
+              ))}
+              {paciente.preguntarSiEsNuevo && (
+                <div>
+                  <Boton peq onClick={paciente.agregarComoNuevo}>{t("pages.walkIn.addAsNew")}</Boton>
+                </div>
+              )}
+            </div>
+          )}
         </Tarjeta>}
 
         {activeQueue.length > 0 ? (
@@ -215,7 +258,7 @@ export function FilaEspera({
                       {t("pages.walkIn.complete")}
                     </Boton>
                   )}
-                  {item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
+                  {asignandoId !== item.id && item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
                     <Boton peq variante="peligro" onClick={() => handleAction(item.id, "cancel")}>
                       {t("common.cancel")}
                     </Boton>

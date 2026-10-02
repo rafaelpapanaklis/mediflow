@@ -7,6 +7,9 @@ import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { FilaEspera, horaLlegada } from "@/components/dashboard/piezas-rediseno/fila-espera";
+import {
+  MAX_SUGERENCIAS, MIN_LETRAS_BUSQUEDA, cuerpoAlAgregar, decidirAlAgregar, type PacienteEncontrado,
+} from "@/lib/walk-in/paciente-de-la-fila";
 
 interface QueueItem {
   id: string;
@@ -71,7 +74,12 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   const t = useT();
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ patientName: "", service: "" });
+  // `patientId`: el paciente del expediente que recepción eligió en el buscador; null = nadie elegido todavía.
+  const [form, setForm] = useState<{ patientName: string; service: string; patientId: string | null }>({ patientName: "", service: "", patientId: null });
+  // Pacientes de la clínica que se parecen a lo escrito (nombre o teléfono), para no duplicar expedientes.
+  const [encontrados, setEncontrados] = useState<PacienteEncontrado[]>([]);
+  // «Agregar» con alguien del mismo nombre y sin elegir: se pregunta si es esa persona o es otra.
+  const [preguntarSiEsNuevo, setPreguntarSiEsNuevo] = useState(false);
   // Fila a la que se le está eligiendo profesional (el «Asignar» abre el selector en esa fila).
   const [asignandoId, setAsignandoId] = useState<string | null>(null);
   // «Iniciar» sin profesional asignado abre el selector; al elegir, la misma elección inicia la consulta.
@@ -109,27 +117,91 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
     };
   }, []);
 
-  async function handleAdd() {
+  async function buscarPacientes(q: string, signal?: AbortSignal): Promise<PacienteEncontrado[]> {
+    if (q.length < MIN_LETRAS_BUSQUEDA) return [];
+    try {
+      const res = await fetch(`/api/patients/search?q=${encodeURIComponent(q)}`, { signal });
+      if (!res.ok) return [];
+      const j = await res.json();
+      return Array.isArray(j?.hits) ? j.hits.slice(0, MAX_SUGERENCIAS) : [];
+    } catch {
+      return []; // abortada o sin red: sin sugerencias
+    }
+  }
+
+  // Busca en los pacientes de la clínica mientras se escribe el nombre (o el teléfono), con una pausa de 300 ms.
+  // Con un paciente ya elegido no se busca: el nombre es el suyo.
+  useEffect(() => {
+    const q = form.patientName.trim();
+    if (!puedeAgregar || form.patientId || q.length < MIN_LETRAS_BUSQUEDA) { setEncontrados([]); return; }
+    const ctrl = new AbortController();
+    const temporizador = setTimeout(async () => {
+      const lista = await buscarPacientes(q, ctrl.signal);
+      if (!ctrl.signal.aborted) setEncontrados(lista);
+    }, 300);
+    return () => { clearTimeout(temporizador); ctrl.abort(); };
+  }, [form.patientName, form.patientId, puedeAgregar]);
+
+  function cambiarNombre(patientName: string) {
+    // Escribir otra cosa suelta al paciente elegido: ya no es él.
+    setForm(f => ({ ...f, patientName, patientId: null }));
+    setPreguntarSiEsNuevo(false);
+  }
+
+  function elegirPaciente(p: PacienteEncontrado) {
+    setForm(f => ({ ...f, patientName: p.name, patientId: p.id }));
+    setEncontrados([]);
+    setPreguntarSiEsNuevo(false);
+  }
+
+  function soltarPaciente() {
+    setForm(f => ({ ...f, patientId: null }));
+  }
+
+  async function handleAdd(opciones?: { comoNuevo?: boolean }) {
     if (!form.patientName.trim() || !form.service.trim()) {
       toast.error(t("pages.walkIn.nameServiceRequired"));
+      return;
+    }
+    // Ya hay un paciente con ese nombre y no se eligió: puede ser la misma persona. Se pregunta antes. Se busca
+    // otra vez aquí: con Enter rápido la búsqueda de la pausa aún no ha vuelto.
+    let lista = encontrados;
+    if (!form.patientId && !opciones?.comoNuevo) {
+      lista = await buscarPacientes(form.patientName.trim());
+      setEncontrados(lista);
+    }
+    if (decidirAlAgregar({ ...form, encontrados: lista, comoNuevo: opciones?.comoNuevo }) === "preguntar") {
+      setPreguntarSiEsNuevo(true);
       return;
     }
     try {
       const res = await fetch("/api/walk-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(cuerpoAlAgregar(form)),
       });
       if (!res.ok) throw new Error();
       const created = await res.json();
       setQueue(prev => [...prev, created]);
       setShowAdd(false);
-      setForm({ patientName: "", service: "" });
+      setForm({ patientName: "", service: "", patientId: null });
+      setEncontrados([]);
+      setPreguntarSiEsNuevo(false);
       toast.success(t("pages.walkIn.patientAdded"));
     } catch {
       toast.error(t("pages.walkIn.addError"));
     }
   }
+
+  const paciente = {
+    encontrados,
+    elegido: form.patientId,
+    preguntarSiEsNuevo,
+    cambiarNombre,
+    elegir: elegirPaciente,
+    soltar: soltarPaciente,
+    agregarComoNuevo: () => handleAdd({ comoNuevo: true }),
+  };
 
   async function handleAction(id: string, action: string, assignedTo?: string) {
     // «Iniciar» crea la cita del momento y necesita profesional: si la fila no lo trae, se le pide elegir uno.
@@ -196,6 +268,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
         timezone={timezone}
         form={form}
         setForm={setForm}
+        paciente={paciente}
         handleAdd={handleAdd}
         handleAction={handleAction}
         profesionales={profesionales}
@@ -278,7 +351,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
               {item.status === "IN_PROGRESS" && (
                 <Button size="sm" onClick={() => handleAction(item.id, "complete")}>{t("pages.walkIn.complete")}</Button>
               )}
-              {item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
+              {asignandoId !== item.id && item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
                 <Button size="sm" variant="outline" className="text-rose-500 border-rose-300 hover:bg-rose-50" onClick={() => handleAction(item.id, "cancel")}>{t("common.cancel")}</Button>
               )}
             </div>}
@@ -345,7 +418,8 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
                 <Label className="text-sm">{t("pages.walkIn.patientNameLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder={t("pages.walkIn.fullNamePlaceholder")}
-                  value={form.patientName} onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))} />
+                  value={form.patientName} onChange={e => cambiarNombre(e.target.value)} autoComplete="off" />
+                <SugerenciasPacienteSimple paciente={paciente} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">{t("pages.walkIn.serviceLabel")}</Label>
@@ -356,10 +430,48 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
             </div>
             <div className="px-6 py-4 flex gap-3 shrink-0 border-t border-border">
               <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("common.add")}</Button>
+              <Button onClick={() => handleAdd()} className="flex-1 h-11 text-base">{t("common.add")}</Button>
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Pacientes de la clínica que se parecen a lo escrito, en la pantalla de siempre (sin el rediseño). */
+function SugerenciasPacienteSimple({ paciente }: { paciente: {
+  encontrados: PacienteEncontrado[];
+  elegido: string | null;
+  preguntarSiEsNuevo: boolean;
+  elegir: (p: PacienteEncontrado) => void;
+  soltar: () => void;
+  agregarComoNuevo: () => void;
+} }) {
+  const t = useT();
+  if (paciente.elegido) {
+    return (
+      <p className="text-xs text-muted-foreground flex items-center gap-2">
+        {t("pages.walkIn.patientLinked")}
+        <button type="button" className="underline" onClick={paciente.soltar}>{t("pages.walkIn.patientUnlink")}</button>
+      </p>
+    );
+  }
+  if (paciente.encontrados.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-border p-2 space-y-1">
+      <p className="text-xs font-semibold text-muted-foreground px-1">
+        {paciente.preguntarSiEsNuevo ? t("pages.walkIn.sameNameQuestion") : t("pages.walkIn.existingPatients")}
+      </p>
+      {paciente.encontrados.map(p => (
+        <button key={p.id} type="button" onClick={() => paciente.elegir(p)}
+          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-muted text-sm">
+          <span className="font-medium">{p.name}</span>
+          {p.phone && <span className="text-muted-foreground"> · {p.phone}</span>}
+        </button>
+      ))}
+      {paciente.preguntarSiEsNuevo && (
+        <Button size="sm" variant="outline" onClick={paciente.agregarComoNuevo}>{t("pages.walkIn.addAsNew")}</Button>
       )}
     </div>
   );

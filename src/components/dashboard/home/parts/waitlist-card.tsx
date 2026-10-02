@@ -1,5 +1,6 @@
 // src/components/dashboard/home/parts/waitlist-card.tsx
 "use client";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import { HomeSection } from "../home-section";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -24,16 +25,22 @@ export function WaitlistCard({ items, onAdd }: Props) {
           : t("home.waitlist.subtitle", { count: items.length })
       }
       action={
-        onAdd ? (
-          <ButtonNew
-            size="sm"
-            variant="secondary"
-            icon={<Plus size={14} strokeWidth={1.75} />}
-            onClick={onAdd}
-          >
-            {t("common.add")}
-          </ButtonNew>
-        ) : undefined
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* La fila completa (asignar, iniciar, completar) vive en /dashboard/walk-in (ws1-t4, fallo 6). */}
+          <Link href="/dashboard/walk-in" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--brand)" }}>
+            {t("home.waitlist.viewQueue")}
+          </Link>
+          {onAdd && (
+            <ButtonNew
+              size="sm"
+              variant="secondary"
+              icon={<Plus size={14} strokeWidth={1.75} />}
+              onClick={onAdd}
+            >
+              {t("common.add")}
+            </ButtonNew>
+          )}
+        </div>
       }
       noPad
     >
@@ -60,9 +67,11 @@ export function WaitlistCard({ items, onAdd }: Props) {
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-1)" }}>
                   {it.patient.name}
                 </div>
-                {it.reason && (
+                {(it.reason || it.assignedToName) && (
                   <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
-                    {it.reason}
+                    {[it.reason, it.assignedToName ? t("home.waitlist.assignedTo", { name: it.assignedToName }) : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 )}
               </div>

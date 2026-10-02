@@ -37,6 +37,8 @@ export interface WaitlistEntry {
   patient: { id: string; name: string };
   reason?: string;
   since: string;
+  /** Fila de walk-in ya asignada: el nombre de quien atenderá (la tarjeta de Hoy lo enseña). */
+  assignedToName?: string | null;
 }
 
 export interface HomeReceptionistData {

@@ -22,10 +22,19 @@ beforeEach(() => {
   wheresUser = [];
 });
 
+async function updateFila(a: any) {
+  assert.equal(a.where.clinicId, "c1");
+  if (a.where.id !== fila.id || !a.where.status.in.includes(fila.status)) return { count: 0 };
+  Object.assign(fila, a.data);
+  return { count: 1 };
+}
+
 (mock as any).module("@/lib/auth-context", { namedExports: { getAuthContext: async () => ctx } });
 (mock as any).module("@/lib/prisma", {
   namedExports: {
     prisma: {
+      // «Completar»/«Cancelar» cierran fila y cita en una transacción (revision-final.test.ts); aquí no hay cita.
+      $transaction: async (fn: any) => fn({ $queryRaw: async () => [], walkInQueue: { updateMany: (a: any) => updateFila(a) }, appointment: { findFirst: async () => null } }),
       user: {
         // Solo "doc1" de c1 cumple la regla; el filtro llega entero para comprobar tenant y regla.
         findFirst: async (a: any) => {
@@ -35,12 +44,7 @@ beforeEach(() => {
       },
       walkInQueue: {
         findFirst: async (a: any) => (a.where.id === fila.id && a.where.clinicId === fila.clinicId ? { ...fila } : null),
-        updateMany: async (a: any) => {
-          assert.equal(a.where.clinicId, "c1");
-          if (a.where.id !== fila.id || !a.where.status.in.includes(fila.status)) return { count: 0 };
-          Object.assign(fila, a.data);
-          return { count: 1 };
-        },
+        updateMany: (a: any) => updateFila(a),
       },
     },
   },

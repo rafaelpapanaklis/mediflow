@@ -123,11 +123,24 @@ export async function GET() {
   }
 
   // ─── Waitlist ─────────────────────────────────────────────────
+  // A quién se asignó cada fila (ws1-t4, fallo 6): una lectura más, solo si alguna está asignada, y con el
+  // tenant de la sesión (un id ajeno no trae nombre).
+  const asignados = Array.from(new Set(waitlistRows.map((e) => e.assignedTo).filter((v): v is string => !!v)));
+  const nombres = new Map<string, string>();
+  if (asignados.length > 0) {
+    const usuarios = await prisma.user.findMany({
+      where: { id: { in: asignados }, clinicId: session.clinic.id },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    for (const u of usuarios) nombres.set(u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
+  }
+
   const waitlist: WaitlistEntryHome[] = waitlistRows.map((e) => ({
     id: e.id,
     patient: { id: e.patientId ?? "", name: e.patientName },
     reason: e.service || undefined,
     since: e.joinedAt.toISOString(),
+    assignedToName: (e.assignedTo && nombres.get(e.assignedTo)) || null,
   }));
 
   const data: HomeReceptionistData = {
