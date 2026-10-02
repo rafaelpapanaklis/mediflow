@@ -117,7 +117,7 @@ test("la regla del tratante IMPORTA la de la Agenda (no tiene su propia copia de
 
 // ─── el SQL de las clínicas ya creadas ───────────────────────────────────────
 
-test("el SQL solo desmarca SUPER_ADMIN de clínicas ya creadas, deja a Johnnifer y no borra nada", () => {
+test("el SQL solo desmarca SUPER_ADMIN de clínicas ya creadas, deja al único que atiende, a BEVADENT y a QA, y no borra nada", () => {
   const sql = leer("sql/ws1-t10-dueno-fuera-de-agenda.sql");
   const activo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
   const updates = activo.match(/\bUPDATE\b[\s\S]*?;/gi) ?? [];
@@ -126,10 +126,19 @@ test("el SQL solo desmarca SUPER_ADMIN de clínicas ya creadas, deja a Johnnifer
   assert.match(u, /UPDATE public\.users u/);
   assert.match(u, /SET "agendaActive" = false,\s+"updatedAt"\s+= now\(\)/);
   assert.match(u, /u\.role = 'SUPER_ADMIN'/);
-  assert.match(u, /u\.id <> 'cmu7uttet000oq2n0g0ucee1q'/, "Johnnifer (BEVADENT) se queda marcado");
+  assert.match(u, /u\."agendaActive" = true/, "volver a pegarlo no toca a nadie más");
   assert.match(u, /c\."createdAt" < TIMESTAMPTZ '2026-10-02 00:00:00-06'/, "solo clínicas ya creadas");
+  assert.match(u, /c\.id NOT IN \('cmu7uttes000nq2n003bhxazo', 'clinica_qa_prueba'\)/, "BEVADENT y QA se quedan marcados");
+  // El único que atiende se queda: solo se desmarca si hay un DOCTOR o ADMIN activo y marcado en su clínica.
+  assert.match(
+    u,
+    /AND EXISTS \(SELECT 1 FROM public\.users d\s+WHERE d\."clinicId" = u\."clinicId" AND d\."isActive" AND d\."agendaActive"\s+AND d\.role IN \('DOCTOR', 'ADMIN'\)\)/,
+  );
   assert.match(u, /RETURNING/, "devuelve la lista de clínicas afectadas");
   assert.doesNotMatch(activo, /\b(DELETE|DROP|TRUNCATE|ALTER|INSERT)\b/i);
-  // Antes y después: dos SELECT de solo lectura.
-  assert.equal((activo.match(/^SELECT\b/gim) ?? []).length, 2);
+  // Antes (con lo que le pasará a cada clínica), después por clínica y conteos: tres lecturas.
+  const lecturas = activo.split(";").map((x) => x.trim()).filter((x) => /^(SELECT|WITH)\b/i.test(x));
+  assert.equal(lecturas.length, 3);
+  assert.match(lecturas[0]!, /queda_sin_nadie/);
+  assert.match(lecturas[2]!, /clinicas_sin_nadie_en_agenda/);
 });
