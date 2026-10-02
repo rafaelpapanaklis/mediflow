@@ -180,7 +180,7 @@ test("el dueño no se puede desactivar a sí mismo (y el resto del cuerpo tampoc
   assert.equal(estado.updates.length, 0);
 });
 
-test("«Atiende pacientes» (agendaActive): el dueño lo apaga y lo enciende; solo vale un booleano", async () => {
+test("«Aparece en la agenda» (agendaActive): el dueño lo apaga y lo enciende; solo vale un booleano", async () => {
   assert.equal((await PATCH("us-dueno", { agendaActive: false })).status, 200);
   assert.equal(fila("us-dueno").agendaActive, false);
   assert.equal((await PATCH("us-dueno", { agendaActive: true })).status, 200);
@@ -261,7 +261,7 @@ test("motivoRolFijo: el dueño siempre; uno mismo siempre; el alta y los demás,
   assert.equal(motivoRolFijo({ esEdicion: false, rol: "DOCTOR", esYo: true }), null);
 });
 
-test("«Atiende pacientes» y «Horario»: el doctor siempre; administrador y dueño solo si atienden; recepción nunca", () => {
+test("«Aparece en la agenda» y «Horario»: el doctor siempre; administrador y dueño solo si atienden; recepción nunca", () => {
   assert.equal(formDeMiembro({ ...miembroDueno, agendaActive: undefined }).agendaActive, true, "sin dato = atiende (default de la base)");
   assert.equal(formDeMiembro({ ...miembroDueno, agendaActive: false }).agendaActive, false);
 

@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
+import { FRASE_NO_RECIBE_CITAS, RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
 
@@ -90,6 +91,18 @@ export async function POST(req: NextRequest) {
 
   // Doctors can only create plans for themselves
   const assignedDoctorId = ctx.isDoctor ? ctx.userId : (doctorId ?? ctx.userId);
+
+  // ws1-t10: el doctor elegido llega del navegador. Tiene que ser de ESTA
+  // clínica y poder atender (la misma regla que la Agenda: rol que atiende,
+  // activo y «Aparece en la agenda»). Antes se guardaba cualquier id, también el
+  // de recepción o el de otra clínica.
+  if (!ctx.isDoctor && typeof doctorId === "string" && doctorId) {
+    const atiende = await prisma.user.findFirst({
+      where: { id: doctorId, clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE },
+      select: { id: true },
+    });
+    if (!atiende) return NextResponse.json({ error: FRASE_NO_RECIBE_CITAS, code: "doctor_not_found" }, { status: 404 });
+  }
 
   const sessions = Number(totalSessions ?? 1);
   const interval = Number(sessionIntervalDays ?? 30);

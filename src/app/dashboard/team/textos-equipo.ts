@@ -62,12 +62,12 @@ const es = {
   desactivadoConRegistros: "Desactivado en lugar de eliminado: tiene citas o registros",
   // Edición
   sinCambios: "No hay cambios que guardar",
-  // Rol fijo (el dueño y uno mismo) y «Atiende pacientes»
+  // Rol fijo (el dueño y uno mismo) y «Aparece en la agenda» (ws1-t10: antes «Atiende pacientes»)
   rolDuenoDesc: "Dueño de la cuenta",
-  rolDuenoAyuda: "El rol del dueño no se cambia. Todos los demás datos sí puedes editarlos aquí: nombre, teléfono, cédulas, especialidad, color y si atiendes pacientes.",
+  rolDuenoAyuda: "El rol del dueño no se cambia. Todos los demás datos sí puedes editarlos aquí: nombre, teléfono, cédulas, especialidad, color y si apareces en la agenda.",
   rolPropioAyuda: "No puedes cambiar tu propio rol. Los demás datos sí.",
-  atiendeTitulo: "Atiende pacientes",
-  atiendeDesc: "Aparece en la agenda y se le pueden asignar casos. Apágalo si solo administra.",
+  atiendeTitulo: "Aparece en la agenda",
+  atiendeDesc: "Recibe citas: sale como columna en la Agenda y en «Nueva cita», y se le pueden asignar casos. Apágalo si solo administra. No cambia sus permisos.",
 };
 
 const en: typeof es = {
@@ -118,10 +118,10 @@ const en: typeof es = {
   desactivadoConRegistros: "Deactivated instead of deleted: they have appointments or records",
   sinCambios: "There are no changes to save",
   rolDuenoDesc: "Account owner",
-  rolDuenoAyuda: "The owner's role cannot be changed. You can edit everything else here: name, phone, license numbers, specialty, color and whether you see patients.",
+  rolDuenoAyuda: "The owner's role cannot be changed. You can edit everything else here: name, phone, license numbers, specialty, color and whether you show up in the agenda.",
   rolPropioAyuda: "You cannot change your own role. Everything else you can.",
-  atiendeTitulo: "Sees patients",
-  atiendeDesc: "Shows up in the agenda and can be assigned cases. Turn it off if they only administer.",
+  atiendeTitulo: "Shows up in the agenda",
+  atiendeDesc: "Receives appointments: appears as a column in the Agenda and in “New appointment”, and can be assigned cases. Turn it off if they only administer. It doesn't change their permissions.",
 };
 
 export const TEXTOS_EQUIPO = { es, en } as const;

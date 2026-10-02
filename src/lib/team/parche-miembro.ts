@@ -36,7 +36,7 @@ export interface DatosEditablesDeMiembro {
   cedulaProfesional: string;
   especialidad: string;
   cedulaEspecialidad: string;
-  /** «Atiende pacientes»: aparece en la agenda y se le pueden asignar casos. */
+  /** «Aparece en la agenda»: recibe citas (roles-que-atienden.ts) y se le pueden asignar casos. */
   agendaActive: boolean;
 }
 
@@ -134,7 +134,7 @@ export function rolLlevaDatosClinicos(role: string): boolean {
 }
 
 /**
- * ¿Se le ofrece «Atiende pacientes»? Quien tiene agenda propia: el doctor, el
+ * ¿Se le ofrece «Aparece en la agenda»? Quien tiene agenda propia: el doctor, el
  * administrador y el dueño. Recepción y solo lectura no atienden.
  */
 export function puedeMarcarAtiende(role: string): boolean {

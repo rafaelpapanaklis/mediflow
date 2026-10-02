@@ -43,3 +43,19 @@ export function doctorAProponer(e: EntradaDoctorTratante): string | null {
 export function avisarOtroDoctor(e: EntradaDoctorTratante): boolean {
   return aplica(e) && Boolean(e.doctorActual) && e.doctorActual !== e.tratanteId;
 }
+
+/**
+ * ws1-t10: control de un caso cuyo tratante NO puede recibir citas (no aparece en la agenda o ya no está
+ * activo): la ventana agenda con otro profesional y lo dice, en vez de mandar al tratante y que el servidor
+ * conteste doctor_not_found.
+ */
+export function tratanteFueraDeLaAgenda(e: EntradaDoctorTratante): boolean {
+  return Boolean(
+    e.casoActivo && e.tratanteId && esMotivoDeControlOrto(e.motivo) && !e.doctoresIds.includes(e.tratanteId),
+  );
+}
+
+export function fraseTratanteFueraDeLaAgenda(nombreTratante: string | null): string {
+  const quien = nombreTratante ? `El doctor tratante de este caso (${nombreTratante})` : "El doctor tratante de este caso";
+  return `${quien} no aparece en la agenda, así que el control se agenda con otro profesional. Si atiende, enciende «Aparece en la agenda» en su cuenta de Equipo.`;
+}

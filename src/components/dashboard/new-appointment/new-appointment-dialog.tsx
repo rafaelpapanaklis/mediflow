@@ -39,7 +39,13 @@ import {
   type DuracionSugerida,
   type TipoDeCitaConDuracion,
 } from "@/lib/orthodontics/duracion-cita-sugerida";
-import { avisarOtroDoctor, doctorAProponer } from "@/lib/orthodontics/doctor-tratante-cita";
+import {
+  avisarOtroDoctor,
+  doctorAProponer,
+  fraseTratanteFueraDeLaAgenda,
+  tratanteFueraDeLaAgenda,
+} from "@/lib/orthodontics/doctor-tratante-cita";
+import { FRASE_NO_RECIBE_CITAS, doctorQueRecibeCitas } from "@/lib/agenda/roles-que-atienden";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
@@ -74,7 +80,10 @@ interface Props {
 }
 
 interface BootData {
+  /** Quien puede recibir citas (`puedeRecibirCitas`): las opciones de «Profesional». */
   doctors: DoctorColumnDTO[];
+  /** Todo el padrón de la Agenda, también los apagados: solo para poner nombre a un tratante fuera de la lista. */
+  padron: DoctorColumnDTO[];
   resources: ResourceDTO[];
   timezone: string;
   slotMinutes: number;
@@ -218,8 +227,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         } catch {
           /* default false */
         }
+        const padron: DoctorColumnDTO[] = body.doctors ?? [];
         setBoot({
-          doctors: body.doctors ?? [],
+          // ws1-t10: solo quien puede recibir citas. Antes salía todo el padrón
+          // (también quien tiene «Aparece en la agenda» apagada) y el servidor
+          // rechazaba la cita con doctor_not_found.
+          doctors: padron.filter((d) => d.activeInAgenda !== false),
+          padron,
           resources: body.resources ?? [],
           timezone: body.timezone,
           slotMinutes: body.slotMinutes,
@@ -309,15 +323,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       setSlotIso(null);
     }
 
-    if (initialSlot?.doctorId) {
-      setDoctorId(initialSlot.doctorId);
-    } else if (params?.initialDoctorId) {
-      setDoctorId(params.initialDoctorId);
-    } else if (boot.doctors[0]) {
-      setDoctorId(boot.doctors[0].id);
-    } else {
-      setDoctorId("");
-    }
+    // ws1-t10 (1a): el doctor que llega de fuera (la columna, «Agendar
+    // próxima» con el tratante del caso) solo se usa si está en la lista. Antes
+    // se aceptaba cualquiera: el <select> enseñaba al primero de la lista y la
+    // cita se mandaba con el otro → doctor_not_found.
+    setDoctorId(
+      doctorQueRecibeCitas([initialSlot?.doctorId, params?.initialDoctorId], boot.doctors.map((d) => d.id)),
+    );
 
     setResourceId(initialSlot?.resourceId ?? "");
   }, [isOpen, boot, params]);
@@ -408,7 +420,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reason, orthoCasoActivo, orthoTratanteId, boot, slotIso]);
   const avisoOtroDoctor = avisarOtroDoctor(entradaTratante);
-  const nombreTratante = boot?.doctors.find((d) => d.id === orthoTratanteId)?.shortName ?? null;
+  const nombreTratante = boot?.padron.find((d) => d.id === orthoTratanteId)?.shortName ?? null;
+  const avisoTratanteFuera = tratanteFueraDeLaAgenda(entradaTratante);
 
   // Al elegir (o escribir) un motivo de ortodoncia para un paciente con caso,
   // propone la duración de ese tipo de cita — salvo que el usuario ya la haya
@@ -540,6 +553,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         // Reglas del servidor (pasado, paciente archivado, motivo): su frase, no el código crudo.
         toast.error(
           bookingRuleMessage(errBody) ??
+            // ws1-t10 (1c): el doctor que no puede recibir citas, en español claro (antes «doctor_not_found»).
+            (errBody.error === "doctor_not_found"
+              ? (typeof errBody.reason === "string" && errBody.reason) || FRASE_NO_RECIBE_CITAS
+              : null) ??
             errBody.error ??
             t("appointments.newApptDialog.toastCreateFailed"),
         );
@@ -683,6 +700,18 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                   >
                     <span {...(nueva ? { className: nc.pediatriaTexto } : { style: pediatricHintStyle })}>
                       {`El doctor tratante de este caso es ${nombreTratante}. Estás agendando el control con otro doctor.`}
+                    </span>
+                  </div>
+                ) : null}
+
+                {avisoTratanteFuera ? (
+                  <div
+                    {...(nueva ? { className: nc.pediatria } : { style: pediatricBannerStyle })}
+                    role="note"
+                    data-tratante-fuera-de-agenda
+                  >
+                    <span {...(nueva ? { className: nc.pediatriaTexto } : { style: pediatricHintStyle })}>
+                      {fraseTratanteFueraDeLaAgenda(nombreTratante)}
                     </span>
                   </div>
                 ) : null}

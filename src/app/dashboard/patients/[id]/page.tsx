@@ -15,6 +15,7 @@ import { PatientDetailClient } from "./patient-detail-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { fetchActiveDoctors, fetchResources } from "@/lib/agenda/server";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { hasPermission } from "@/lib/auth/permissions";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
@@ -129,9 +130,13 @@ export default async function PatientDetailPage({
         },
       },
     }),
+    // Quién se ofrece como doctor del plan de tratamiento (y de Consentimientos):
+    // la regla única de «quién puede atender» (roles-que-atienden.ts, ws1-t10).
+    // Antes eran TODOS los usuarios activos, recepción incluida.
     prisma.user.findMany({
-      where:  { clinicId: user.clinicId, isActive: true },
+      where:  { clinicId: user.clinicId, ...RECIBE_CITAS_WHERE },
       select: { id: true, firstName: true, lastName: true },
+      orderBy: { firstName: "asc" },
     }),
     // Consentimientos del paciente en ESTA sede. Los borrados lógicos quedan
     // fuera; los firmados nunca se borran, así que siempre están. Sin permiso

@@ -23,6 +23,7 @@ import {
   type AdminPeriod,
 } from "./time-utils";
 import { MOTIVO_APARTADO_LIBERADO, apartadoVencido } from "./apartado";
+import { ROLES_QUE_ATIENDEN } from "./roles-que-atienden";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el MISMO include para poder enmascarar en una sola
@@ -370,12 +371,22 @@ export async function fetchPendingValidation(
   return rows.map((r) => appointmentToDTO(r, category, viewer));
 }
 
+/**
+ * El padrón de profesionales de la Agenda: quien tiene un rol que atiende
+ * (DOCTOR, ADMIN, SUPER_ADMIN — `roles-que-atienden.ts`) y la cuenta activa.
+ * `activeInAgenda` (= «Aparece en la agenda» de Equipo) dice quién sale como
+ * columna y en «Nueva cita»: es la regla `puedeRecibirCitas`. Los apagados
+ * vienen igual para el interruptor de «Equipo» de la Agenda y para pintar sus
+ * citas viejas como columna huérfana. Antes era `role: "DOCTOR"` a secas y el
+ * dueño que atiende no salía (ws1-t10, 2-oct-2026).
+ */
 export async function fetchActiveDoctors(
   clinicId: string,
   category: ClinicCategory,
 ): Promise<DoctorColumnDTO[]> {
+  if (!clinicId) return [];
   const users = await prisma.user.findMany({
-    where: { clinicId, role: "DOCTOR", isActive: true },
+    where: { clinicId, role: { in: [...ROLES_QUE_ATIENDEN] }, isActive: true },
     select: {
       id: true,
       firstName: true,

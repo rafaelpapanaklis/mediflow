@@ -19,6 +19,7 @@
  */
 
 import { NOT_MOVABLE_STATUSES, bookingRuleMessage } from "@/lib/agenda/booking-rules";
+import { FRASE_NO_RECIBE_CITAS } from "@/lib/agenda/roles-que-atienden";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { slotFromOffsetY } from "@/lib/agenda/hover-slot";
@@ -169,7 +170,8 @@ export function mensajeDeRechazo(
   }
 
   if (error.error === "doctor_not_found") {
-    return `Ese doctor ya no está activo en la clínica. ${vuelta}`;
+    // ws1-t10: la regla es «puede recibir citas» (roles-que-atienden.ts), no solo «activo».
+    return `${FRASE_NO_RECIBE_CITAS} ${vuelta}`;
   }
   if (error.error === "resource_not_found") {
     return `Esa unidad ya no está activa. ${vuelta}`;

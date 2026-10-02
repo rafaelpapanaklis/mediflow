@@ -43,7 +43,8 @@ const MENSAJE_POR_ERROR: Record<CreateErrorCode, string> = {
   blocked: "Ese hueco está bloqueado en la Agenda — agenda el control a mano.",
   doctor_off: "El doctor tratante no atiende a esa hora — agenda el control a mano o cambia la fecha.",
   overlap: "Ya hay una cita en ese horario para el doctor tratante (puede ser la que ya creaste desde aquí).",
-  doctor_not_found: "El doctor tratante de este caso ya no está activo en la clínica.",
+  // ws1-t10: la regla es «puede recibir citas» (roles-que-atienden.ts): activo Y con «Aparece en la agenda».
+  doctor_not_found: "El doctor tratante de este caso no puede recibir citas: ya no está activo o tiene apagada «Aparece en la agenda» en Equipo.",
   patient_not_found: "El paciente de este caso no se encontró.",
   invalid: "La fecha/hora del próximo control no es válida.",
   pago_no_disponible: "No se pudo generar el link de pago.",

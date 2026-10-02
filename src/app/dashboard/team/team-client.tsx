@@ -81,7 +81,7 @@ interface FormState {
   cedulaProfesional: string;
   especialidad: string;
   cedulaEspecialidad: string;
-  // «Atiende pacientes» (solo se edita, no en el alta).
+  // «Aparece en la agenda» (solo se edita, no en el alta).
   agendaActive: boolean;
   // ws1-t3: «¿solo dental o también ortodoncista?». "" = no aplica / sin contestar.
   accesoOrtodoncia: RespuestaModulo;
@@ -358,7 +358,8 @@ function MemberForm({
         />
       )}
 
-      {/* «Atiende pacientes»: solo al editar, y solo a quien tiene agenda propia. */}
+      {/* «Aparece en la agenda» (User.agendaActive; antes «Atiende pacientes»): solo al editar, y solo a quien
+          puede tener agenda (doctor, admin, dueño). Marcada por defecto: la base la crea en true. */}
       {isEdit && puedeMarcarAtiende(form.role) && (
         <label className="flex items-start gap-3 cursor-pointer" data-atiende-pacientes
           style={{ padding: "10px 12px", borderRadius: "var(--radius)", border: `1px solid ${bordeSuave}` }}>

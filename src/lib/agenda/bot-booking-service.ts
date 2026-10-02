@@ -7,7 +7,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
-import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { HECHOS_DENTRO_DEL_CONTROL, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
 import {
@@ -377,8 +377,9 @@ export async function createBotAppointment(params: {
   const [patient, doctor] = await Promise.all([
     prisma.patient.findFirst({ where: { id: patientId, clinicId }, select: { id: true } }),
     prisma.user.findFirst({
-      // Los mismos roles que la lista de doctores tratantes: un dueño que atiende también recibe citas (roles-que-atienden.ts).
-      where: { id: doctorId, clinicId, role: { in: [...ROLES_QUE_ATIENDEN] }, isActive: true },
+      // La regla única de «quién puede recibir citas» (roles-que-atienden.ts): rol que atiende, activo y con
+      // «Aparece en la agenda» encendida (ws1-t10). La misma que la Agenda del panel.
+      where: { id: doctorId, clinicId, ...RECIBE_CITAS_WHERE },
       select: { id: true },
     }),
   ]);
@@ -627,8 +628,9 @@ export async function listBookableDoctors(clinicId: string) {
   return prisma.user.findMany({
     // ws1-t1 (#6) — los mismos roles que acepta el alta (createBotAppointment):
     // en un consultorio cuyo único dentista es el dueño, el bot decía «no hay
-    // profesionales disponibles».
-    where: { clinicId, role: { in: [...ROLES_QUE_ATIENDEN] }, isActive: true },
+    // profesionales disponibles». ws1-t10: y solo quien aparece en la agenda —
+    // la administradora que no atiende ya no se ofrece al paciente.
+    where: { clinicId, ...RECIBE_CITAS_WHERE },
     orderBy: { firstName: "asc" },
     select: { id: true, firstName: true, lastName: true },
   });

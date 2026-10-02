@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
 import {
   loadClinicSession,
   requireRole,
@@ -40,7 +41,7 @@ export async function PATCH(
 
   const existing = await prisma.waitlistEntry.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, resolvedAt: true, patientId: true },
+    select: { id: true, resolvedAt: true, patientId: true, preferredDoctorId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -104,18 +105,21 @@ export async function PATCH(
     // doctor preferido, incluido el de OTRA clínica — y el GET de /waitlist
     // filtra por preferredDoctorId cuando quien mira es un DOCTOR, así que la
     // entrada quedaba apuntando fuera del tenant. Misma validación (y mismo 404)
-    // que el POST hermano de waitlist/route.ts: de esta clínica y con rol DOCTOR.
-    if (parsed.data.preferredDoctorId) {
+    // que el POST hermano de waitlist/route.ts: de esta clínica y que pueda
+    // recibir citas (roles-que-atienden.ts, ws1-t10). Reenviar el que ya tenía
+    // no se vuelve a validar: la entrada vieja de alguien a quien se sacó de la
+    // agenda se sigue pudiendo editar.
+    if (parsed.data.preferredDoctorId && parsed.data.preferredDoctorId !== existing.preferredDoctorId) {
       const d = await prisma.user.findFirst({
         where: {
           id: parsed.data.preferredDoctorId,
           clinicId: session.clinic.id,
-          role: "DOCTOR",
+          ...RECIBE_CITAS_WHERE,
         },
         select: { id: true },
       });
       if (!d) {
-        return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+        return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
       }
     }
     data.preferredDoctorId = parsed.data.preferredDoctorId;

@@ -351,6 +351,7 @@
     "test:pdf-cabecera": "tsx --test src/lib/pdf/__tests__/clinic-letterhead.test.ts",
     "test:pdf-documentos": "tsx --tsconfig tsconfig.test.json --test src/lib/pdf/__tests__/documentos-cabecera.test.tsx",
     "test:agenda-doctor-de-la-cita": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/agenda/__tests__/doctor-de-la-cita.test.ts",
+    "test:agenda-quien-recibe-citas": "tsx --tsconfig tsconfig.test.json --test src/lib/agenda/__tests__/quien-recibe-citas.test.ts",
     "test:orto-alertas-repintar": "tsx --test --experimental-test-module-mocks src/lib/orthodontics/__tests__/alertas-repintar.test.ts",
     "test:orto-guarda-pdf": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/orthodontics/pdf/__tests__/guarda-del-caso.test.ts",
     "test:orto-pdf": "tsx --tsconfig tsconfig.test.json --test src/lib/orthodontics/pdf/__tests__/convenio-y-membrete.test.tsx",

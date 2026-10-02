@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
@@ -161,17 +162,22 @@ export async function PATCH(
 
   const data: Prisma.AppointmentUpdateInput = {};
 
-  if (body.doctorId) {
+  // Solo se valida si CAMBIA el doctor: reenviar el mismo (el formulario manda
+  // todo) no debe impedir mover la hora de una cita vieja de alguien a quien ya
+  // se sacó de la agenda.
+  if (body.doctorId && body.doctorId !== existing.doctorId) {
+    // La misma regla que el alta: rol que atiende + activo + «Aparece en la
+    // agenda» (roles-que-atienden.ts, ws1-t10). Mover o reagendar a la columna
+    // del dueño que atiende ya no da doctor_not_found.
     const d = await prisma.user.findFirst({
       where: {
         id: body.doctorId,
         clinicId: session.clinic.id,
-        role: "DOCTOR",
-        isActive: true,
+        ...RECIBE_CITAS_WHERE,
       },
       select: { id: true },
     });
-    if (!d) return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+    if (!d) return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
     data.doctor = { connect: { id: body.doctorId } };
   }
 

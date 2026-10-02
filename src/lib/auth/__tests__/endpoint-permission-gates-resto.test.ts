@@ -162,8 +162,8 @@ for (const [rel, method, escritura] of [
 // ─────────────────────────────────────────────────────────────────────
 // 3 · Hallazgo 46 — el doctor preferido tiene que ser de ESTA clínica
 //
-// El POST de waitlist/route.ts ya lo valida (clinicId de la sesión + rol
-// DOCTOR, 404 si no). El PATCH guardaba el UUID tal cual, así que una entrada
+// El POST de waitlist/route.ts ya lo valida (clinicId de la sesión + quien
+// puede recibir citas, 404 si no). El PATCH guardaba el UUID tal cual, así que una entrada
 // de la lista de espera podía quedar apuntando a un doctor de otra clínica —
 // y el GET de /waitlist filtra por preferredDoctorId cuando quien mira es un
 // DOCTOR. Este test compara las dos puertas: la misma validación, en las dos.
@@ -185,9 +185,11 @@ test("PATCH /api/waitlist/[id] valida el doctor contra la clínica de la sesión
     /clinicId:\s*session\.clinic\.id/.test(where),
     "el findFirst del doctor no filtra por session.clinic.id: no está aislado por tenant",
   );
+  // ws1-t10: el rol ya no es DOCTOR a secas sino la regla única de «quién
+  // puede recibir citas» (RECIBE_CITAS_WHERE de roles-que-atienden.ts).
   assert.ok(
-    /role:\s*["']DOCTOR["']/.test(where),
-    "el findFirst del doctor no exige role DOCTOR, como sí hace el POST hermano",
+    /\.\.\.RECIBE_CITAS_WHERE/.test(where),
+    "el findFirst del doctor no exige la regla de quién recibe citas, como sí hace el POST hermano",
   );
 
   // Y tiene que cortar ANTES de guardar, con el mismo 404 del hermano.
@@ -195,13 +197,13 @@ test("PATCH /api/waitlist/[id] valida el doctor contra la clínica de la sesión
   assert.notEqual(update, -1, "no encuentro el update del PATCH");
   assert.ok(lookup < update, "el PATCH valida el doctor DESPUÉS de guardarlo");
   assert.ok(
-    patch.includes("doctor_not_found"),
-    'el PATCH no devuelve "doctor_not_found", el mismo código del POST hermano',
+    patch.includes("cuerpoDoctorNoRecibeCitas()"),
+    'el PATCH no devuelve "doctor_not_found" (cuerpoDoctorNoRecibeCitas), el mismo código del POST hermano',
   );
 
   // El hermano, como referencia viva: si alguien le cambia la forma, se ve aquí.
   const post = handlerBody(fileOf("app/api/waitlist/route.ts"), "POST");
-  assert.ok(post.includes("doctor_not_found"), "el POST hermano ya no valida el doctor: revisa los dos juntos");
+  assert.ok(post.includes("cuerpoDoctorNoRecibeCitas()"), "el POST hermano ya no valida el doctor: revisa los dos juntos");
 });
 
 test("PATCH /api/waitlist/[id] sigue admitiendo BORRAR el doctor preferido (null)", () => {
@@ -209,7 +211,8 @@ test("PATCH /api/waitlist/[id] sigue admitiendo BORRAR el doctor preferido (null
   // `!== undefined`: mandar null limpia el campo y NO puede dar 404, porque
   // "sin doctor preferido" es un estado legítimo de la lista de espera.
   const patch = handlerBody(fileOf("app/api/waitlist/[id]/route.ts"), "PATCH");
-  const guard = patch.indexOf("if (parsed.data.preferredDoctorId) {");
+  // ws1-t10: el guard truthy además salta el doctor que ya tenía (`&& … !== existing.preferredDoctorId`).
+  const guard = patch.indexOf("if (parsed.data.preferredDoctorId && ");
   const lookup = patch.indexOf("prisma.user.findFirst(");
   assert.notEqual(guard, -1, "la validación del doctor no está detrás de un guard truthy: un null daría 404");
   assert.ok(guard < lookup, "el guard truthy tiene que envolver al findFirst");

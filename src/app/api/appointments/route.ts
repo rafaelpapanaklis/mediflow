@@ -1,6 +1,7 @@
 import { hasPermission } from "@/lib/auth/permissions";
 import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { NextResponse, type NextRequest } from "next/server";
+import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -361,12 +362,14 @@ export async function POST(req: NextRequest) {
       where: { id: body.patientId, clinicId: session.clinic.id },
       select: { id: true, status: true },
     }),
+    // Quien puede recibir citas: rol que atiende + activo + «Aparece en la
+    // agenda» (roles-que-atienden.ts). Antes `role: "DOCTOR"` a secas y el
+    // dueño tratante de ortodoncia daba doctor_not_found (ws1-t10).
     prisma.user.findFirst({
       where: {
         id: body.doctorId,
         clinicId: session.clinic.id,
-        role: "DOCTOR",
-        isActive: true,
+        ...RECIBE_CITAS_WHERE,
       },
       select: { id: true },
     }),
@@ -397,7 +400,7 @@ export async function POST(req: NextRequest) {
   });
   if (visDenied) return visDenied;
   if (!doctor) {
-    return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+    return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
   }
 
   // Motivo, pasado y paciente archivado (WS1-T3, N13): antes solo los frenaba el

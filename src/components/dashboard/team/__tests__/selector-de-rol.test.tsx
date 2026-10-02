@@ -99,9 +99,12 @@ test("los textos nuevos existen en español e inglés, con las mismas claves", (
     assert.notEqual(TEXTOS_EQUIPO.es[c], TEXTOS_EQUIPO.en[c], `${c} sin traducir`);
   }
   assert.match(TEXTOS_EQUIPO.es.rolDuenoAyuda, /cédulas/);
+  // ws1-t10: la casilla se llama como lo que hace (Rafael: «Aparece en la agenda»).
+  assert.equal(TEXTOS_EQUIPO.es.atiendeTitulo, "Aparece en la agenda");
+  assert.match(TEXTOS_EQUIPO.es.atiendeDesc, /No cambia sus permisos/);
 });
 
-test("la casilla «Atiende pacientes» solo sale al editar y a quien tiene agenda propia", () => {
+test("la casilla «Aparece en la agenda» solo sale al editar y a quien tiene agenda propia", () => {
   const src = readFileSync(join(__dirname, "..", "..", "..", "..", "app", "dashboard", "team", "team-client.tsx"), "utf8");
   assert.match(src, /isEdit && puedeMarcarAtiende\(form\.role\) && \(/);
   assert.match(src, /ofreceHorario\(m\)/, "el botón Horario sale también para el dueño que atiende");

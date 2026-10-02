@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
@@ -35,11 +36,14 @@ export async function PATCH(req: Request, { params }: Params) {
     );
   }
 
+  // El padrón de la Agenda (`fetchActiveDoctors`): cualquier rol que atiende,
+  // también el dueño y el administrador (ws1-t10). Antes solo DOCTOR y el
+  // interruptor de la Agenda daba 404 en su fila. Recepción sigue fuera.
   const target = await prisma.user.findFirst({
     where: {
       id: params.id,
       clinicId: session.clinic.id,
-      role: "DOCTOR",
+      role: { in: [...ROLES_QUE_ATIENDEN] },
       isActive: true,
     },
     select: { id: true },

@@ -31,9 +31,9 @@ test("una sola lista de roles que atienden: DOCTOR, ADMIN y SUPER_ADMIN", () => 
   assert.deepEqual([...ROLES_QUE_ATIENDEN], ["DOCTOR", "ADMIN", "SUPER_ADMIN"]);
 });
 
-test("el agendado valida al doctor con esa lista (y por clínica y usuario activo), no con `role: \"DOCTOR\"` a secas", () => {
+test("el agendado valida al doctor con la regla única de «quién recibe citas» (por clínica), no con `role: \"DOCTOR\"` a secas", () => {
   const c = crearCita();
-  assert.match(c, /prisma\.user\.findFirst\(\{\s*where: \{ id: doctorId, clinicId, role: \{ in: \[\.\.\.ROLES_QUE_ATIENDEN\] \}, isActive: true \}/);
+  assert.match(c, /prisma\.user\.findFirst\(\{\s*where: \{ id: doctorId, clinicId, \.\.\.RECIBE_CITAS_WHERE \}/);
   assert.doesNotMatch(c, /role: "DOCTOR"/);
   assert.match(c, /if \(!doctor\) return \{ ok: false, error: "doctor_not_found" \}/);
 });
@@ -41,7 +41,8 @@ test("el agendado valida al doctor con esa lista (y por clínica y usuario activ
 test("la lista de doctores tratantes y la validación del agendado importan la MISMA constante", () => {
   const agendado = leer("src/lib/agenda/bot-booking-service.ts");
   const tratantes = leer("src/lib/orthodontics/doctores-tratantes-db.ts");
-  for (const f of [agendado, tratantes]) assert.match(f, /import \{ ROLES_QUE_ATIENDEN \} from "@\/lib\/agenda\/roles-que-atienden"/);
+  assert.match(agendado, /import \{ RECIBE_CITAS_WHERE \} from "@\/lib\/agenda\/roles-que-atienden"/);
+  assert.match(tratantes, /import \{ ROLES_QUE_ATIENDEN \} from "@\/lib\/agenda\/roles-que-atienden"/);
   assert.match(tratantes, /role: \{ in: \[\.\.\.ROLES_QUE_ATIENDEN\] \}/);
   // Nadie más define su propia lista de «quien atiende» en el módulo (se re-exporta la de agenda).
   const puro = sinComentarios(leer("src/lib/orthodontics/doctores-tratantes.ts"));

@@ -147,7 +147,8 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
   /**
    * Los responsables que la agenda enseña, y solo ésos.
    *
-   * `state.doctors` trae TODOS los usuarios con rol DOCTOR activos, estén o no
+   * `state.doctors` trae TODOS los usuarios activos con un rol que atiende
+   * (DOCTOR, ADMIN, SUPER_ADMIN — ws1-t10), estén o no
    * puestos en la agenda (`fetchActiveDoctors` marca cuál con `activeInAgenda`,
    * que sale de `agendaActive`). Meterlos a todos tenía dos consecuencias, y la
    * segunda es la grave:

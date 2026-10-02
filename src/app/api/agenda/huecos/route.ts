@@ -83,7 +83,9 @@ export async function GET(req: Request) {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  let candidatos = activos.filter((d) => pedidos.length === 0 || pedidos.includes(d.id));
+  // Solo quien puede recibir citas («Aparece en la agenda», ws1-t10): un hueco
+  // de alguien apagado no se podría agendar.
+  let candidatos = activos.filter((d) => d.activeInAgenda && (pedidos.length === 0 || pedidos.includes(d.id)));
   if (session.user.role === "DOCTOR") {
     candidatos = candidatos.filter((d) => d.id === session.user.id);
   }

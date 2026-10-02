@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
 import {
   loadClinicSession,
   requireRole,
@@ -134,16 +135,19 @@ export async function POST(req: NextRequest) {
   if (hidden) return hidden;
 
   if (body.preferredDoctorId) {
+    // Doctor preferido = alguien que puede recibir citas (roles-que-atienden.ts,
+    // ws1-t10): el dueño que atiende sí; recepción o quien no aparece en la
+    // agenda, no — la cita que saldría de esta entrada no se podría crear.
     const d = await prisma.user.findFirst({
       where: {
         id: body.preferredDoctorId,
         clinicId: session.clinic.id,
-        role: "DOCTOR",
+        ...RECIBE_CITAS_WHERE,
       },
       select: { id: true },
     });
     if (!d) {
-      return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+      return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
     }
   }
 
