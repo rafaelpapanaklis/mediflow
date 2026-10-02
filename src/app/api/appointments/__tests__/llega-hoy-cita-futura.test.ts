@@ -14,6 +14,7 @@
  */
 import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { fechaHoraParaTexto, horaParaTexto } from "@/lib/movimientos-paciente/textos";
 
 const TZ = "America/Mexico_City";
 const MIN = 60_000;
@@ -174,9 +175,17 @@ test("«En consulta» de una cita de pasado mañana la trae a HOY: empieza ahora
   assert.equal(recordatoriosCancelados.length, 1);
   assert.match(recordatoriosCancelados[0].reason, /adelantó a hoy/);
   assert.deepEqual(llamadasGoogle, ["a1"]);
-  const mov = movimientos.find((m) => /Adelantó a hoy/.test(m.texto ?? ""));
+  const mov = movimientos.find((m) => /^Cita adelantada del /.test(m.texto ?? ""));
   assert.ok(mov, "queda en Movimientos");
   assert.equal(mov.cambios.startsAt.before, antes);
+  // ws1-t10 (revisión final, fallo 4): «Cita adelantada del <fecha vieja> a hoy <hora nueva>», y el renglón del
+  // estado nombra la cita por su hora NUEVA (antes decía «Cambió la cita del <fecha vieja>…», como si siguiera allí).
+  assert.equal(
+    mov.texto,
+    `Cita adelantada del ${fechaHoraParaTexto(antes, TZ)} a hoy ${horaParaTexto(escrito.startsAt, TZ)} porque el paciente llegó (sin avisar al paciente)`,
+  );
+  const estado = movimientos.find((m) => m.campos?.[0] === "status");
+  assert.equal(estado.texto, `Cambió la cita del ${fechaHoraParaTexto(escrito.startsAt, TZ)} de «Agendada» a «En consulta»`);
   const cuerpo = await res.json();
   assert.equal(cuerpo.adelantada.de, antes.toISOString());
   assert.equal(cuerpo.adelantada.sinSillon, false);
@@ -206,7 +215,9 @@ test("POST /check-in de una cita futura la trae a hoy, sin aviso y con Google y 
     assert.equal(avisosWhatsApp.length, 0);
     assert.equal(recordatoriosCancelados.length, 1);
     assert.deepEqual(llamadasGoogle, ["a1"]);
-    assert.ok(movimientos.some((m) => /Adelantó a hoy/.test(m.texto ?? "")));
+    assert.ok(movimientos.some((m) => /^Cita adelantada del .+ a hoy \d\d:\d\d /.test(m.texto ?? "")));
+    const estado = movimientos.find((m) => m.campos?.[0] === "status");
+    assert.equal(estado.texto, `Cambió la cita del ${fechaHoraParaTexto(escrito.startsAt, TZ)} de «Agendada» a «Registrado en recepción»`);
     assert.ok((await res.json()).adelantada);
   } finally {
     session.user.role = "DOCTOR";

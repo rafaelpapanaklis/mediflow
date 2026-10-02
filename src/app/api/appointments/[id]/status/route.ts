@@ -252,10 +252,11 @@ export async function PATCH(
       entityType: "appointment",
       entityId: params.id,
       action: "update",
+      // Con adelanto, la cita ya es de hoy: nombrarla por su fecha vieja se leía como si siguiera allí.
       texto:
         body.status === "CANCELLED"
           ? textoCita.cancelada(existing.startsAt, zona)
-          : textoCita.estado(existing.startsAt, existing.status, body.status, zona),
+          : textoCita.estado(adelanto ? adelanto.despues.startsAt : existing.startsAt, existing.status, body.status, zona),
       campos: ["status"],
       cambios: { status: { before: existing.status, after: body.status } },
       req,

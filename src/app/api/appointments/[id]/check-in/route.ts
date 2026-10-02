@@ -140,7 +140,8 @@ export async function POST(
     entityType: "appointment",
     entityId: params.id,
     action: "update",
-    texto: textoCita.estado(existing.startsAt, existing.status, "CHECKED_IN", zona),
+    // Con adelanto, la cita ya es de hoy: nombrarla por su fecha vieja se leía como si siguiera allí.
+    texto: textoCita.estado(adelanto ? adelanto.despues.startsAt : existing.startsAt, existing.status, "CHECKED_IN", zona),
     campos: ["status"],
     cambios: { status: { before: existing.status, after: "CHECKED_IN" } },
     req,

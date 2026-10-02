@@ -38,6 +38,14 @@ export function fechaHoraParaTexto(d: Date | string | null | undefined, tz?: str
     .replace(",", "");
 }
 
+/** «14:13» en la zona de la clínica. */
+export function horaParaTexto(d: Date | string | null | undefined, tz?: string | null): string {
+  if (!d) return "hora sin definir";
+  const fecha = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(fecha.getTime())) return "hora sin definir";
+  return new Intl.DateTimeFormat("es-MX", { timeZone: zonaValida(tz), hour: "2-digit", minute: "2-digit", hour12: false }).format(fecha);
+}
+
 export const ESTADO_CITA: Record<string, string> = {
   PENDING: "Pendiente",
   SCHEDULED: "Agendada",
@@ -68,9 +76,10 @@ export const textoCita = {
     `Completó la consulta del ${fechaHoraParaTexto(startsAt, tz)}`,
   eliminada: (startsAt: Date | string, tz?: string | null) =>
     `Eliminó la cita del ${fechaHoraParaTexto(startsAt, tz)}`,
-  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy.
+  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy. «Hoy» es el día
+  // del movimiento (cada fila lleva su fecha): la hora nueva sola se lee sin confundirla con la fecha vieja.
   adelantadaAHoy: (antes: Date | string, despues: Date | string, tz?: string | null) =>
-    `Adelantó a hoy la cita del ${fechaHoraParaTexto(antes, tz)} porque el paciente llegó: ahora es del ${fechaHoraParaTexto(despues, tz)} (sin avisar al paciente)`,
+    `Cita adelantada del ${fechaHoraParaTexto(antes, tz)} a hoy ${horaParaTexto(despues, tz)} porque el paciente llegó (sin avisar al paciente)`,
   estado: (startsAt: Date | string, de: string | null | undefined, a: string, tz?: string | null) =>
     `Cambió la cita del ${fechaHoraParaTexto(startsAt, tz)} de «${estadoDeCita(de)}» a «${estadoDeCita(a)}»`,
 };
