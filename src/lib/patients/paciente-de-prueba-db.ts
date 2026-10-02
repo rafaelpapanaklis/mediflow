@@ -14,7 +14,14 @@
 // pruebas cargan con tsx/node:test (mismo criterio que crear-desde-cita.server.ts).
 
 import { prisma } from "@/lib/prisma";
-import { MOTIVO_NO_CONTACTAR, correoNormalizado, debeBloquearse, ultimos10 } from "./paciente-de-prueba";
+import {
+  MOTIVO_NO_CONTACTAR,
+  correoNormalizado,
+  debeBloquearse,
+  filtroSinPrueba,
+  ultimos10,
+  type FiltroSinPrueba,
+} from "./paciente-de-prueba";
 
 // ── ¿Ya se pegó el SQL? ─────────────────────────────────────────────────────
 // La respuesta vive en globalThis (`next dev` recarga módulos y una variable
@@ -84,6 +91,14 @@ export async function idsDePacientesDePrueba(clinicId: string | null | undefined
     console.error("[paciente-de-prueba] no se pudieron leer los pacientes de prueba:", e);
     return [];
   }
+}
+
+/**
+ * EL filtro de métricas ya cargado (ver `FiltroSinPrueba`). Una consulta por
+ * pantalla; nunca lanza: si falla, el filtro vacío y la métrica como antes.
+ */
+export async function cargarFiltroSinPrueba(clinicId: string | null | undefined): Promise<FiltroSinPrueba> {
+  return filtroSinPrueba(await idsDePacientesDePrueba(clinicId));
 }
 
 /** De estos pacientes, cuáles están marcados (para pintar la etiqueta en una lista). */

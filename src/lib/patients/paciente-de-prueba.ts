@@ -110,6 +110,52 @@ export function sinPruebaEnPago<T extends { invoice?: unknown }>(where: T, ids: 
 }
 
 /**
+ * EL filtro de métricas: todo reporte, tablero o pantalla de Analítica saca a
+ * los pacientes de prueba con esto (lo carga `cargarFiltroSinPrueba` en
+ * `paciente-de-prueba-db.ts`). Una sola pieza para las cuatro formas en que se
+ * cuenta en la app:
+ *   · `paciente`      → `where` de Patient (`enPaciente(where)` si ya trae `id`/`AND`)
+ *   · `porPatientId`  → `where` de una tabla con `patientId` NOT NULL (citas, facturas)
+ *   · `cita`          → `where` de lo que cuelga de una cita (`{ appointment: f.cita({...}) }`)
+ *   · `pago(where)`   → `where` de Payment (cuelga de su factura)
+ *   · `cuenta(id)`    → filas ya traídas a JS (y `patientId` que puede ser null)
+ *   · `ids`           → SQL crudo: `NOT (x."patientId" = ANY(${f.ids}::text[]))`
+ *                       (con la lista vacía es siempre verdadero)
+ *   · `clave`         → para la llave de una caché (`unstable_cache`)
+ * Sin pacientes de prueba (lo normal) todo es `{}`/identidad y la consulta
+ * queda EXACTAMENTE como antes.
+ */
+export type FiltroSinPrueba = {
+  ids: string[];
+  paciente: { id?: { notIn: string[] } };
+  enPaciente: <T extends Record<string, unknown>>(where: T) => T;
+  porPatientId: { patientId?: { notIn: string[] } };
+  cita: <T extends Record<string, unknown>>(where: T) => T;
+  pago: <T extends { invoice?: unknown }>(where: T) => T;
+  cuenta: (patientId: string | null | undefined) => boolean;
+  clave: string;
+};
+
+export function filtroSinPrueba(idsDePrueba: readonly string[]): FiltroSinPrueba {
+  const ids = Array.from(new Set(idsDePrueba.filter(Boolean))).sort();
+  const set = new Set(ids);
+  const porPatientId = sinPruebaPorPatientId(ids);
+  return {
+    ids,
+    paciente: sinPruebaEnPaciente(ids),
+    enPaciente: (where) => unirWhere(where, sinPruebaEnPaciente(ids)),
+    porPatientId,
+    cita: (where) => unirWhere(where, porPatientId),
+    pago: (where) => sinPruebaEnPago(where, ids),
+    cuenta: (patientId) => !patientId || !set.has(patientId),
+    clave: ids.length ? `sin-prueba:${ids.join(",")}` : "sin-prueba:-",
+  };
+}
+
+/** El filtro vacío (sin pacientes de prueba): no cambia nada. */
+export const SIN_FILTRO_DE_PRUEBA: FiltroSinPrueba = filtroSinPrueba([]);
+
+/**
  * Une dos `where` de Prisma sin que el segundo pise el `AND` del primero.
  * (`{ ...a, ...b }` perdería el AND de `a` si `b` también trae uno.)
  */

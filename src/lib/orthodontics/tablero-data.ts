@@ -61,6 +61,7 @@ import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-h
 import { inicioDelCaso } from "./controles-hechos";
 import { cargarCasosIncompletos, type CasoIncompleto } from "./casos-incompletos-db";
 import { casosConHojaDeHoyFirmadaSinCita } from "./hoja-firmada-de-la-cita-db";
+import { SIN_FILTRO_DE_PRUEBA, type FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 function esRelacionAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -342,8 +343,14 @@ export async function loadOrthoTableroData(
   zonaHoraria: string,
   viewer: VisibilityViewer,
   ahora: Date = new Date(),
+  // ws1-t11 (11d): los casos de «Pacientes de prueba / no contactar» no cuentan
+  // en ningún indicador (`cargarFiltroSinPrueba`). «Controles de hoy» sí: es la
+  // agenda del día y tiene que cuadrar con la lista de al lado.
+  sinPrueba: FiltroSinPrueba = SIN_FILTRO_DE_PRUEBA,
 ): Promise<OrthoTableroData> {
-  const { cases, invoiceIdByPlanId } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
+  const cargados = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
+  const { invoiceIdByPlanId } = cargados;
+  const cases = cargados.cases.filter((c) => sinPrueba.cuenta(c.patientId));
 
   const { startUtc: todayStart, endUtc: todayEnd } = calendarDayRangeUtc(hoyEnZona(ahora, zonaHoraria), zonaHoraria);
 
@@ -363,7 +370,7 @@ export async function loadOrthoTableroData(
         AND: relatedPatientVisibilityAnd(viewer),
       },
     }),
-    cargarValoracionesDelTablero(clinicId, viewer, ahora),
+    cargarValoracionesDelTablero(clinicId, viewer, ahora, sinPrueba),
   ]);
 
   // Producción del mes (fila 88): cada cobro de una factura del caso, MENOS

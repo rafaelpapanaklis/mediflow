@@ -15,6 +15,7 @@ import {
   textoDelTipoValoracion,
   type ResumenDeValoraciones,
 } from "./valoraciones-tablero";
+import { SIN_FILTRO_DE_PRUEBA, type FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 /** Hasta dónde se mira hacia adelante para contar las valoraciones agendadas. */
 const DIAS_DE_FUTURO = 180;
@@ -23,6 +24,8 @@ export async function cargarValoracionesDelTablero(
   clinicId: string,
   viewer: VisibilityViewer,
   ahora: Date = new Date(),
+  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
+  sinPrueba: FiltroSinPrueba = SIN_FILTRO_DE_PRUEBA,
 ): Promise<ResumenDeValoraciones> {
   // `clinicId: undefined` en Prisma NO filtra: sin clínica no se consulta nada.
   if (!clinicId) return resumirValoraciones([], [], ahora);
@@ -33,6 +36,7 @@ export async function cargarValoracionesDelTablero(
   const citas = await prisma.appointment.findMany({
     where: {
       clinicId,
+      ...sinPrueba.porPatientId,
       type: tipo,
       startsAt: {
         gte: new Date(ahora.getTime() - DIAS_VENTANA_VALORACIONES * 86_400_000),

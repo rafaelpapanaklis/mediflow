@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,8 @@ export async function GET(req: NextRequest) {
   const resourceIds = resources.map((r) => r.id);
   const revenueByResource = new Map<string, number>();
   if (resourceIds.length > 0) {
+    // ws1-t11 (11d): sin los cobros de «Pacientes de prueba / no contactar».
+    const sinPrueba = await cargarFiltroSinPrueba(clinicId);
     console.time("resource-costs:revenue");
     const rows = await prisma.$queryRaw<Array<{ resourceId: string; revenue: number }>>`
       SELECT a."resourceId" AS "resourceId",
@@ -83,6 +86,7 @@ export async function GET(req: NextRequest) {
         AND a."startsAt" >= ${monthStart}
         AND a."startsAt" <= ${monthEnd}
         AND a."resourceId" IN (${Prisma.join(resourceIds)})
+        AND NOT (i."patientId" = ANY(${sinPrueba.ids}::text[]))
       GROUP BY a."resourceId"
     `;
     console.timeEnd("resource-costs:revenue");

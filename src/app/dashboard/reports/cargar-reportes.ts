@@ -4,8 +4,8 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import type { TFunction } from "@/i18n/t";
 import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
 import { ventanasDeReportes } from "./ventanas-de-reportes";
-import { idsDePacientesDePrueba } from "@/lib/patients/paciente-de-prueba-db";
-import { sinPruebaEnPaciente, sinPruebaEnPago, sinPruebaPorPatientId } from "@/lib/patients/paciente-de-prueba";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
+import { SIN_FILTRO_DE_PRUEBA } from "@/lib/patients/paciente-de-prueba";
 
 async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try { return await p; }
@@ -46,9 +46,9 @@ export async function cargarReportes(
   // ninguno (o sin el SQL pegado) los tres son `{}` y cada consulta queda
   // exactamente como antes. Van en spread DENTRO de `{ clinicId, … }`: ninguna
   // de estas consultas filtra ya por `id` ni por `patientId`.
-  const prueba = await safe(idsDePacientesDePrueba(clinicId), [] as string[]);
-  const sinPruebaPac = sinPruebaEnPaciente(prueba);
-  const sinPruebaCita = sinPruebaPorPatientId(prueba);
+  const sinPrueba = await safe(cargarFiltroSinPrueba(clinicId), SIN_FILTRO_DE_PRUEBA);
+  const sinPruebaPac = sinPrueba.paciente;
+  const sinPruebaCita = sinPrueba.porPatientId;
 
   // Promise.all #1 — series mensuales (3 promesas)
   const [revenueResults, patientCounts, apptCounts] = await Promise.all([
@@ -58,7 +58,7 @@ export async function cargarReportes(
     // dinero, y los pagos de facturas anuladas inflaban toda la serie.
     Promise.all(ranges.map(r =>
       safe(
-        prisma.payment.aggregate({ where: sinPruebaEnPago(revenuePaymentWhere(clinicId, { gte: r.start, lt: r.end }), prueba), _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: sinPrueba.pago(revenuePaymentWhere(clinicId, { gte: r.start, lt: r.end })), _sum: { amount: true } }),
         { _sum: { amount: 0 } } as any,
       )
     )),

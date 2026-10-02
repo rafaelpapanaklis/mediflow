@@ -6,6 +6,7 @@ import { resolveFinanzasWindow } from "@/lib/finanzas-periodo";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { loadOrthoCases } from "@/lib/orthodontics/tablero-data";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { produccionPorDoctor, totalesDePagos } from "@/lib/orthodontics/produccion";
 import {
   cargarCambiosDeDoctor,
@@ -63,7 +64,11 @@ export async function GET(req: NextRequest) {
     const ahora = new Date();
     const viewer = { userId: ctx.userId, role: ctx.role, clinicId };
 
-    const { cases, invoiceIdByPlanId } = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
+    // ws1-t11 (11d): los casos de «Pacientes de prueba / no contactar» no cuentan.
+    const sinPrueba = await cargarFiltroSinPrueba(clinicId);
+    const cargados = await loadOrthoCases(clinicId, zonaHoraria, viewer, ahora);
+    const { invoiceIdByPlanId } = cargados;
+    const cases = cargados.cases.filter((c) => sinPrueba.cuenta(c.patientId));
 
     // `to` es inclusivo en Finanzas; el cargador usa [desde, hasta).
     const rango = { desde: win.from, hasta: new Date(win.to.getTime() + 1) };

@@ -31,6 +31,7 @@
 
 import { z } from "zod";
 import { money, netRevenueSeries, refundPaymentWhere, revenuePaymentWhere } from "@/lib/caja";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { dbDe, definirHerramienta, pesos } from "./base";
 import {
   claveBucket,
@@ -82,14 +83,16 @@ export const ingresosPorPeriodo = definirHerramienta<ParamsIngresos, DatosIngres
     const rango = resolverRango(params, ctx.timezone, 30);
     const agrupar: Agrupacion = params.agrupar ?? "dia";
     const paidAt = { gte: rango.ventana.desde, lt: rango.ventana.hasta };
+    // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar» (como el tablero y Finanzas).
+    const sinPrueba = await cargarFiltroSinPrueba(ctx.clinicId);
 
     const [cobros, devueltos] = await Promise.all([
       db.payment.findMany({
-        where: revenuePaymentWhere(ctx.clinicId, paidAt),
+        where: sinPrueba.pago(revenuePaymentWhere(ctx.clinicId, paidAt)),
         select: { amount: true, paidAt: true },
       }),
       db.payment.findMany({
-        where: refundPaymentWhere(ctx.clinicId, paidAt),
+        where: sinPrueba.pago(refundPaymentWhere(ctx.clinicId, paidAt)),
         select: { amount: true, paidAt: true },
       }),
     ]);

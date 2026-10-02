@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { patientVisibilityFilter } from "@/lib/patient-visibility";
 import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
 
@@ -91,13 +92,17 @@ export async function GET(req: NextRequest) {
   // default a `new Date()`): WaitingRoomAlert pollea sin parámetros, y si la
   // clave llevara el `to` ya resuelto nunca repetiría (cambia cada milisegundo)
   // y el TTL nunca acertaría.
+  // ws1-t11 (11d): el histórico no cuenta a los «Pacientes de prueba / no
+  // contactar». La pastilla y la lista de quién espera AHORA (abajo) sí los
+  // ven: son operación del momento (alguien está sentado en la sala), no métrica.
+  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
   const timelines = await cachedByKey(
-    claveDeClinica("waiting-room-timelines", clinicId, fromParam ?? "-", toParam ?? "-"),
+    claveDeClinica("waiting-room-timelines", clinicId, fromParam ?? "-", toParam ?? "-", sinPrueba.clave),
     CACHE_TTL_MS,
     () =>
       prisma.appointmentTimeline.findMany({
         where: {
-          appointment: { clinicId, startsAt: { gte: from, lte: to } },
+          appointment: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } },
           totalWaitMin: { not: null },
         },
         select: {

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +42,12 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
+  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
+
   // Funnel: una sola query a appointments con conteo por status.
   const appts = await prisma.appointment.findMany({
-    where: { clinicId, startsAt: { gte: from, lte: to } },
+    where: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } },
     select: { id: true, status: true },
   });
 
@@ -61,7 +65,7 @@ export async function GET(req: NextRequest) {
 
   // Tiempos promedio por etapa — desde AppointmentTimeline.
   const timelines = await prisma.appointmentTimeline.findMany({
-    where: { appointment: { clinicId, startsAt: { gte: from, lte: to } } },
+    where: { appointment: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } } },
     select: {
       arrivedAt: true,
       inChairAt: true,

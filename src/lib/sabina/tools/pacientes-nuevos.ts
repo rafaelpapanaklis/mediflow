@@ -19,6 +19,7 @@
  */
 
 import { buildPatientWhere } from "@/lib/auth-context";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import {
   comoAuthContext,
   dbDe,
@@ -80,12 +81,14 @@ export const pacientesNuevos = definirHerramienta<ParamsNuevos, DatosNuevos>({
     const antesDesde = sumarDias(antesHasta, -(rango.dias - 1));
     const ventanaAntes = ventanaDeRango(antesDesde, antesHasta, ctx.timezone);
 
-    const where = buildPatientWhere(auth, {
+    // ws1-t11 (11d): los «Pacientes de prueba / no contactar» no son pacientes nuevos.
+    const sinPrueba = await cargarFiltroSinPrueba(ctx.clinicId);
+    const where = sinPrueba.enPaciente(buildPatientWhere(auth, {
       createdAt: { gte: rango.ventana.desde, lt: rango.ventana.hasta },
-    });
-    const whereAntes = buildPatientWhere(auth, {
+    }) as Record<string, unknown>);
+    const whereAntes = sinPrueba.enPaciente(buildPatientWhere(auth, {
       createdAt: { gte: ventanaAntes.desde, lt: ventanaAntes.hasta },
-    });
+    }) as Record<string, unknown>);
 
     const [total, filas, periodoAnterior, origenes] = await Promise.all([
       db.patient.count({ where }),

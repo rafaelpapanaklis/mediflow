@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +35,12 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000);
 
+  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
+  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
+
   const [appts, upcomingPredictions] = await Promise.all([
     prisma.appointment.findMany({
-      where: { clinicId, startsAt: { gte: from, lte: to } },
+      where: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: from, lte: to } },
       select: {
         id: true,
         status: true,
@@ -48,7 +52,7 @@ export async function GET(req: NextRequest) {
       where: {
         // Filtro tenant vía relation: la predicción no tiene clinicId
         // directo, pero su appointment sí.
-        appointment: { clinicId, startsAt: { gte: new Date() } },
+        appointment: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: new Date() } },
         probability: { gte: 0.6 },
       },
       select: {

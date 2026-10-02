@@ -3,8 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { idsDePacientesDePrueba } from "@/lib/patients/paciente-de-prueba-db";
-import { sinPruebaPorPatientId } from "@/lib/patients/paciente-de-prueba";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { OverviewClient } from "./overview-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
@@ -53,8 +52,7 @@ export default async function AnalyticsOverviewPage() {
   // cerrado: apagado, la pantalla se pinta exactamente como hoy.
   // ws1-t11 (11d): las citas de «Pacientes de prueba / no contactar» no
   // cuentan. Lista vacía (lo normal) = las consultas de siempre.
-  const prueba = await idsDePacientesDePrueba(clinicId);
-  const sp = sinPruebaPorPatientId(prueba);
+  const sp = (await cargarFiltroSinPrueba(clinicId)).porPatientId;
   const [totalAppts, rediseno] = await Promise.all([
     prisma.appointment.count({ where: { clinicId, ...sp } }),
     menuDosNivelesEncendido(clinicId),

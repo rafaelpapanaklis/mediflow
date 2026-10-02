@@ -7,6 +7,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { calcularResumenFinanzas } from "@/lib/finanzas-resumen.server";
+import { filtroSinPrueba } from "../paciente-de-prueba";
 
 const RAIZ = join(__dirname, "../../../..");
 const SRC = join(RAIZ, "src");
@@ -110,5 +112,139 @@ describe("Cargos automáticos", () => {
       const t = TODOS.find((f) => f.ruta === ruta)!.texto;
       assert.match(t, /esPacienteDePrueba\(/, `${ruta} factura solo sin mirar la marca`);
     }
+  });
+});
+
+describe("Métricas: ninguna pantalla de números cuenta al paciente de prueba", () => {
+  // Cada una carga EL filtro (`cargarFiltroSinPrueba`) y lo aplica. Si mañana
+  // aparece una pantalla de métricas nueva, la búsqueda de abajo la encuentra.
+  const PANTALLAS: Record<string, string> = {
+    "src/app/dashboard/analytics/page.tsx": "Analítica → Resumen",
+    "src/app/dashboard/reports/cargar-reportes.ts": "Reportes (y su pestaña en Analítica)",
+    "src/app/api/dashboard/home/admin/route.ts": "tablero de inicio del dueño",
+    "src/app/api/dashboard/home/revenue/route.ts": "gráfica de ingresos del inicio",
+    "src/app/api/analytics/no-shows/route.ts": "Analítica → Inasistencias",
+    "src/app/api/analytics/cohorts/route.ts": "Analítica → CRM (cohortes)",
+    "src/app/api/analytics/churn-risk/route.ts": "Analítica → CRM (en riesgo)",
+    "src/app/api/analytics/patients-value/route.ts": "Analítica → CRM (valor)",
+    "src/app/api/analytics/doctor-performance/route.ts": "Analítica → Doctores",
+    "src/app/api/analytics/payroll-pdf/route.ts": "Analítica → Doctores (nómina PDF)",
+    "src/app/api/analytics/occupancy/route.ts": "Analítica → Ocupación",
+    "src/app/api/analytics/efficiency-score/route.ts": "Analítica → Ocupación (eficiencia)",
+    "src/app/api/analytics/procedures/route.ts": "Analítica → Procedimientos",
+    "src/app/api/analytics/resource-costs/route.ts": "Analítica → Costos",
+    "src/app/api/analytics/waiting-room/route.ts": "Analítica → Sala de espera",
+    "src/app/api/analytics/journey/route.ts": "Analítica → Recorrido",
+    "src/app/api/finanzas/route.ts": "Finanzas",
+    "src/app/api/finanzas/ortodoncia/route.ts": "Finanzas → Ortodoncia",
+    "src/app/dashboard/orthodontics/tablero/page.tsx": "tablero de Ortodoncia",
+    "src/lib/sabina/tools/reportes.ts": "Sabina · reportes",
+    "src/lib/sabina/tools/ingresos-por-periodo.ts": "Sabina · ingresos",
+    "src/lib/sabina/tools/pacientes-nuevos.ts": "Sabina · pacientes nuevos",
+    "src/lib/sabina/tools/tratamientos-por-ingreso.ts": "Sabina · tratamientos por ingreso",
+    "src/lib/sabina/tools/orto-motor.ts": "Sabina · tablero de ortodoncia",
+  };
+  // De /api/analytics, lo que NO es una métrica de la clínica.
+  const NO_METRICA: Record<string, string> = {
+    "src/app/api/analytics/no-shows/predict/route.ts": "predicción de UNA cita (su propio historial)",
+    "src/app/api/analytics/ai-insight/route.ts": "recibe los números que ya pintó la pantalla",
+  };
+  const texto = (ruta: string) => {
+    const f = TODOS.find((x) => x.ruta === ruta);
+    assert.ok(f, `no existe ${ruta}`);
+    return sinComentarios(f.texto);
+  };
+
+  it("cada pantalla de métricas carga el filtro", () => {
+    const faltan = Object.keys(PANTALLAS).filter((r) => !/cargarFiltroSinPrueba\(/.test(texto(r)));
+    assert.deepEqual(faltan, [], "Estas pantallas cuentan al paciente de prueba");
+  });
+
+  it("toda ruta de /api/analytics que cuenta pacientes, citas o dinero está en la lista", () => {
+    const LEE = /prisma\.(appointment|appointmentTimeline|patientSatisfaction|invoice|payment|patient|noShowPrediction)\.|FROM\s+"?(appointments|invoices|patients|payments)"?/;
+    const nuevas = TODOS.filter((f) => f.ruta.startsWith("src/app/api/analytics/") && LEE.test(sinComentarios(f.texto)))
+      .map((f) => f.ruta)
+      .filter((r) => !(r in PANTALLAS) && !(r in NO_METRICA));
+    assert.deepEqual(nuevas, [], "Ruta de analítica nueva: aplica cargarFiltroSinPrueba y añádela a PANTALLAS");
+  });
+
+  it("el SQL crudo de Analítica también saca a los de prueba", () => {
+    for (const r of [
+      "src/app/api/analytics/cohorts/route.ts",
+      "src/app/api/analytics/churn-risk/route.ts",
+      "src/app/api/analytics/patients-value/route.ts",
+      "src/app/api/analytics/resource-costs/route.ts",
+    ]) {
+      assert.match(texto(r), /NOT \(\w+\."(id|patientId)" = ANY\(\$\{\w+\.ids\}::text\[\]\)\)/, `${r} sin el filtro en el SQL`);
+    }
+    // Las que cachean por clínica llevan el filtro en la llave (marcar a alguien no espera 5 minutos).
+    for (const r of ["src/app/api/analytics/cohorts/route.ts", "src/app/api/analytics/churn-risk/route.ts", "src/app/api/analytics/patients-value/route.ts", "src/app/api/analytics/waiting-room/route.ts"]) {
+      assert.match(texto(r), /\.clave\b/, `${r}: la caché no cambia al marcar a un paciente`);
+    }
+  });
+
+  it("los cargadores compartidos aplican el filtro que reciben", () => {
+    const fin = texto("src/lib/finanzas-resumen.server.ts");
+    assert.match(fin, /sinPrueba\.pago\(revenuePaymentWhere\(/);
+    assert.match(fin, /sinPrueba\.pago\(refundPaymentWhere\(/);
+    assert.equal((fin.match(/\.\.\.sinPrueba\.porPatientId/g) ?? []).length, 3, "ventas, citas y facturas por doctor");
+    assert.match(fin, /filtro: sinPrueba\.porPatientId/, "por cobrar / vencido");
+    const tablero = texto("src/lib/orthodontics/tablero-data.ts");
+    assert.match(tablero, /cases\.filter\(\(c\) => sinPrueba\.cuenta\(c\.patientId\)\)/);
+    assert.match(texto("src/lib/orthodontics/produccion-db.ts"), /\.\.\.sinPrueba\.porPatientId/);
+    assert.match(texto("src/lib/orthodontics/valoraciones-tablero-db.ts"), /\.\.\.sinPrueba\.porPatientId/);
+    // Quien llama a los cargadores les pasa el filtro (sin él, el valor por defecto no saca a nadie).
+    assert.match(texto("src/app/api/finanzas/route.ts"), /calcularResumenFinanzas\(\{[^}]*sinPrueba/);
+    assert.equal((texto("src/lib/sabina/tools/reportes.ts").match(/conSaldos(: false)?, sinPrueba \}/g) ?? []).length, 2);
+    assert.match(texto("src/app/dashboard/orthodontics/tablero/page.tsx"), /loadOrthoTableroData\(.*, sinPrueba\)/);
+    for (const r of ["src/app/api/analytics/doctor-performance/route.ts", "src/app/api/analytics/payroll-pdf/route.ts"]) {
+      assert.match(texto(r), /ingresosDeCasosSinCitaPorDoctor\([\s\S]*?sinPrueba,\s*\)/, `${r}: lo de ortodoncia cuenta al de prueba`);
+    }
+  });
+});
+
+describe("Finanzas (pantalla y Sabina) con un doble de base", () => {
+  type Llamada = { modelo: string; op: string; where: unknown };
+  function dobleDeBase() {
+    const llamadas: Llamada[] = [];
+    const op = (modelo: string, nombre: string, resp: unknown) => async (args?: { where?: unknown }) => {
+      llamadas.push({ modelo, op: nombre, where: args?.where });
+      return resp;
+    };
+    const db = {
+      payment: { aggregate: op("payment", "aggregate", { _sum: { amount: 0 } }), findMany: op("payment", "findMany", []) },
+      invoice: { count: op("invoice", "count", 0), findMany: op("invoice", "findMany", []) },
+      appointment: { count: op("appointment", "count", 0) },
+      expense: { findMany: op("expense", "findMany", []) },
+      user: { findMany: op("user", "findMany", []) },
+      clinic: { findUnique: op("clinic", "findUnique", { timezone: "America/Mexico_City" }) },
+    };
+    return { db, llamadas };
+  }
+  /** ¿Este where saca al paciente `id` (en `patientId`, a cualquier profundidad)? */
+  function saca(where: unknown, id: string): boolean {
+    if (!where || typeof where !== "object") return false;
+    const w = where as Record<string, unknown>;
+    const pid = w.patientId as { notIn?: unknown } | undefined;
+    if (pid && Array.isArray(pid.notIn) && pid.notIn.includes(id)) return true;
+    return Object.values(w).some((v) => (Array.isArray(v) ? v.some((x) => saca(x, id)) : saca(v, id)));
+  }
+  const ventana = { clinicId: "cl-1", from: new Date("2026-09-01T06:00:00Z"), to: new Date("2026-10-01T05:59:59Z"), expenseTo: new Date("2026-10-01T05:59:59Z") };
+  const DE_DINERO_O_CITAS = new Set(["payment", "invoice", "appointment"]);
+
+  it("con el filtro, cada cobro, reembolso, venta, cita y saldo por cobrar saca al paciente de prueba", async () => {
+    const { db, llamadas } = dobleDeBase();
+    await calcularResumenFinanzas({ ...ventana, sinPrueba: filtroSinPrueba(["pr-1"]) }, db);
+    const deDinero = llamadas.filter((l) => DE_DINERO_O_CITAS.has(l.modelo));
+    assert.ok(deDinero.length >= 7, `se esperaban las 7 lecturas de dinero/citas, hubo ${deDinero.length}`);
+    const sinFiltro = deDinero.filter((l) => !saca(l.where, "pr-1")).map((l) => `${l.modelo}.${l.op}`);
+    assert.deepEqual(sinFiltro, [], "Estas lecturas de Finanzas cuentan al paciente de prueba");
+  });
+
+  it("sin pacientes de prueba las consultas no cambian (nadie queda fuera)", async () => {
+    const { db, llamadas } = dobleDeBase();
+    await calcularResumenFinanzas({ ...ventana, sinPrueba: filtroSinPrueba([]) }, db);
+    assert.ok(llamadas.every((l) => !JSON.stringify(l.where ?? {}).includes("notIn\":[\"pr")));
+    assert.ok(llamadas.every((l) => !JSON.stringify(l.where ?? {}).includes("patientId")), "ningún filtro por paciente de más");
   });
 });

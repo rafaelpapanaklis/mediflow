@@ -27,6 +27,7 @@ import {
   type CambioDeDoctor,
   type PagoDeCaso,
 } from "./produccion";
+import { SIN_FILTRO_DE_PRUEBA, type FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 export interface CasoParaProduccion {
   planId: string;
@@ -174,11 +175,15 @@ export async function cargarNombresDeDoctores(clinicId: string, ids: Array<strin
  * que `treatingDoctorId`/`invoiceId` (sql/ortodoncia-nucleo.sql) no existan:
  * devuelve lista vacía, no hay dinero de casos que atribuir.
  */
-export async function cargarCasosParaProduccion(clinicId: string): Promise<CasoParaProduccion[]> {
+export async function cargarCasosParaProduccion(
+  clinicId: string,
+  // ws1-t11 (11d): sin los casos de «Pacientes de prueba / no contactar».
+  sinPrueba: FiltroSinPrueba = SIN_FILTRO_DE_PRUEBA,
+): Promise<CasoParaProduccion[]> {
   if (!clinicId) return [];
   try {
     const planes = await prisma.orthodonticTreatmentPlan.findMany({
-      where: { clinicId, deletedAt: null },
+      where: { clinicId, deletedAt: null, ...sinPrueba.porPatientId },
       select: { id: true, invoiceId: true, treatingDoctorId: true },
       take: 5000,
     });
@@ -200,10 +205,11 @@ export async function ingresosDeCasosSinCitaPorDoctor(
   clinicId: string,
   rango: { desde: Date; hasta: Date },
   zonaHoraria: string,
+  sinPrueba: FiltroSinPrueba = SIN_FILTRO_DE_PRUEBA,
 ): Promise<Map<string, number>> {
   const salida = new Map<string, number>();
   try {
-    const casos = await cargarCasosParaProduccion(clinicId);
+    const casos = await cargarCasosParaProduccion(clinicId, sinPrueba);
     if (casos.length === 0) return salida;
     const pagos = pagosSinCita(await cargarPagosDeCasos(clinicId, casos, rango));
     if (pagos.length === 0) return salida;

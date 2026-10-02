@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
+import type { FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 export const dynamic = "force-dynamic";
 
@@ -37,18 +39,21 @@ export async function GET(req: NextRequest) {
   const operativeHoursPerDoctor = Math.max(0, clinic.agendaDayEnd - clinic.agendaDayStart);
   const slotMinutes = clinic.defaultSlotMinutes ?? 15;
 
+  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
+  const sinPrueba = await cargarFiltroSinPrueba(clinicId);
+
   const [activeDoctors, todayAppts] = await Promise.all([
     prisma.user.count({
       where: { clinicId, isActive: true, agendaActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
     }),
     prisma.appointment.findMany({
-      where: { clinicId, startsAt: { gte: day, lte: dayEnd } },
+      where: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: day, lte: dayEnd } },
       select: { startsAt: true, endsAt: true, status: true },
     }),
   ]);
 
   const score = computeScore(todayAppts, activeDoctors, operativeHoursPerDoctor, slotMinutes);
-  const monthAverage = await computeMonthAverage(clinicId, day, activeDoctors, operativeHoursPerDoctor, slotMinutes);
+  const monthAverage = await computeMonthAverage(clinicId, day, activeDoctors, operativeHoursPerDoctor, slotMinutes, sinPrueba);
 
   return NextResponse.json({
     score,
@@ -93,12 +98,13 @@ async function computeMonthAverage(
   activeDoctors: number,
   operativeHoursPerDoctor: number,
   slotMinutes: number,
+  sinPrueba: FiltroSinPrueba,
 ): Promise<number> {
   const monthStart = new Date(refDay.getFullYear(), refDay.getMonth(), 1);
   const monthEnd = new Date(refDay.getFullYear(), refDay.getMonth() + 1, 0, 23, 59, 59);
 
   const monthAppts = await prisma.appointment.findMany({
-    where: { clinicId, startsAt: { gte: monthStart, lte: monthEnd } },
+    where: { clinicId, ...sinPrueba.porPatientId, startsAt: { gte: monthStart, lte: monthEnd } },
     select: { startsAt: true, endsAt: true, status: true },
   });
 

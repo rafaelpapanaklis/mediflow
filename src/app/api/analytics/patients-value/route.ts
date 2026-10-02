@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
+import type { FiltroSinPrueba } from "@/lib/patients/paciente-de-prueba";
 
 /**
  * GET /api/analytics/patients-value
@@ -67,7 +69,7 @@ interface RawRow {
   t_paying: number;
 }
 
-function getPatientsValue(clinicId: string): Promise<ValueResp> {
+function getPatientsValue(clinicId: string, f: FiltroSinPrueba): Promise<ValueResp> {
   return unstable_cache(
     async (): Promise<ValueResp> => {
       const now = new Date();
@@ -111,6 +113,7 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
           WHERE p."clinicId" = ${clinicId}
             AND p."deletedAt" IS NULL
             AND p."status" <> 'ARCHIVED'
+            AND NOT (p."id" = ANY(${f.ids}::text[]))
         )
         SELECT pp.*,
                SUM(pp.invoiced) OVER ()                                 AS t_invoiced,
@@ -150,7 +153,7 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
 
       return { totals, top };
     },
-    ["analytics-patients-value", clinicId],
+    ["analytics-patients-value", clinicId, f.clave],
     { revalidate: REVALIDATE_SECONDS, tags: [`analytics-${clinicId}`] },
   )();
 }
@@ -160,6 +163,7 @@ export async function GET(_req: NextRequest) {
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const data = await getPatientsValue(user.clinicId);
+  // ws1-t11 (11d): sin los «Pacientes de prueba / no contactar».
+  const data = await getPatientsValue(user.clinicId, await cargarFiltroSinPrueba(user.clinicId));
   return NextResponse.json(data);
 }

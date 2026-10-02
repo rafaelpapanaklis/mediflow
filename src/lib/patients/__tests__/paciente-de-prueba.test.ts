@@ -13,6 +13,8 @@ import {
   ultimos10,
   correoNormalizado,
   unirWhere,
+  filtroSinPrueba,
+  SIN_FILTRO_DE_PRUEBA,
   MOTIVO_NO_CONTACTAR,
 } from "../paciente-de-prueba";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
@@ -68,6 +70,48 @@ describe("cláusulas de métricas", () => {
   it("unirWhere no pisa una clave que ya trae el where (va al AND)", () => {
     const r = unirWhere({ clinicId: "c1", patientId: "p9", AND: [{ x: 1 }] }, { patientId: { notIn: ["p1"] } });
     assert.deepEqual(r, { clinicId: "c1", patientId: "p9", AND: [{ x: 1 }, { patientId: { notIn: ["p1"] } }] });
+  });
+});
+
+describe("EL filtro de métricas (filtroSinPrueba): una pieza para todas las pantallas", () => {
+  it("sin pacientes de prueba es identidad: la consulta queda como antes", () => {
+    const f = filtroSinPrueba([]);
+    assert.deepEqual(f.ids, []);
+    assert.deepEqual(f.paciente, {});
+    assert.deepEqual(f.porPatientId, {});
+    const w = { invoice: { clinicId: "c1" }, paidAt: { gte: 1 } };
+    assert.equal(f.pago(w), w);
+    const c = { clinicId: "c1", startsAt: { gte: 1 } };
+    assert.equal(f.cita(c), c);
+    assert.equal(f.enPaciente(c), c);
+    assert.equal(f.cuenta("p1"), true);
+    assert.equal(f.clave, SIN_FILTRO_DE_PRUEBA.clave);
+  });
+  it("con ids saca a esos pacientes en cada forma", () => {
+    const f = filtroSinPrueba(["p2", "p1", "p1", ""]);
+    assert.deepEqual(f.ids, ["p1", "p2"], "únicos, sin vacíos y en orden (la clave de caché no depende del orden)");
+    assert.deepEqual(f.paciente, { id: { notIn: ["p1", "p2"] } });
+    assert.deepEqual(f.porPatientId, { patientId: { notIn: ["p1", "p2"] } });
+    assert.deepEqual(f.pago({ invoice: { clinicId: "c1" }, method: { not: "refund" } }), {
+      invoice: { clinicId: "c1", patientId: { notIn: ["p1", "p2"] } },
+      method: { not: "refund" },
+    });
+    // Un where que ya filtra por paciente no se pisa: el filtro va al AND.
+    assert.deepEqual(f.cita({ clinicId: "c1", patientId: "p9" }), {
+      clinicId: "c1",
+      patientId: "p9",
+      AND: [{ patientId: { notIn: ["p1", "p2"] } }],
+    });
+    assert.deepEqual(f.enPaciente({ clinicId: "c1", id: { in: ["p1", "p3"] } }), {
+      clinicId: "c1",
+      id: { in: ["p1", "p3"] },
+      AND: [{ id: { notIn: ["p1", "p2"] } }],
+    });
+    assert.equal(f.cuenta("p1"), false);
+    assert.equal(f.cuenta("p3"), true);
+    assert.equal(f.cuenta(null), true, "una fila sin paciente no es de prueba");
+    assert.notEqual(f.clave, SIN_FILTRO_DE_PRUEBA.clave, "marcar a alguien cambia la llave de la caché");
+    assert.equal(f.clave, filtroSinPrueba(["p1", "p2"]).clave);
   });
 });
 

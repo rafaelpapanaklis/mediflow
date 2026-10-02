@@ -42,6 +42,7 @@ import {
   vistaPreviaSinModulo,
 } from "@/lib/orthodontics/contratar";
 import { loadOrthoCases, loadOrthoTableroData, type OrthoTableroData } from "@/lib/orthodontics/tablero-data";
+import { cargarFiltroSinPrueba } from "@/lib/patients/paciente-de-prueba-db";
 import { loadOrthoControles, type OrthoControlesData } from "@/lib/orthodontics/controles-data";
 import { casosSinControl, historialDeControles, type CasoSinControl } from "@/lib/orthodontics/controles-modulo";
 import {
@@ -156,7 +157,8 @@ export async function leerCobranza(ctx: SabinaCtx, ahora: Date = new Date()): Pr
 
 /** El Tablero, tal cual: de aquí sale lo del mes (proyección T6, producción T4, vencido T3). */
 export async function leerTablero(ctx: SabinaCtx, ahora: Date = new Date()): Promise<OrthoTableroData> {
-  return loadOrthoTableroData(ctx.clinicId, zonaDe(ctx), visorDe(ctx), ahora);
+  // ws1-t11 (11d): mismo filtro que la pantalla (sin «Pacientes de prueba / no contactar»).
+  return loadOrthoTableroData(ctx.clinicId, zonaDe(ctx), visorDe(ctx), ahora, await cargarFiltroSinPrueba(ctx.clinicId));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
