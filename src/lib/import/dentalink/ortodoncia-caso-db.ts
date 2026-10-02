@@ -175,15 +175,15 @@ const SIN_DATO = "histórico administrativo";
 
 export function construirRegistros(p: PlanDelCaso, o: OpcionesDeRegistros): RegistrosDelCaso {
   const opcionales = o.columnasOpcionales !== false;
-  const diagnosticoId = newId();
-  const planId = newId();
+  const diagnosticoId = newId("OrthodonticDiagnosis");
+  const planId = newId("OrthodonticTreatmentPlan");
   let numero = o.primerNumero;
   const facturas: Record<string, unknown>[] = [];
   const pagosMigrados: Record<string, unknown>[] = [];
   const facturasLigadas: string[] = [];
 
   const nuevaFactura = (c: CargoDelCaso, extra: { notes: string; appointmentId?: string }): string => {
-    const id = newId();
+    const id = newId("Invoice");
     const campos = invoiceFieldsFromQuote({
       discountAmount: 0,
       items: c.items.map((it) => ({ name: it.name, toothFdi: null, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount })),
@@ -211,7 +211,7 @@ export function construirRegistros(p: PlanDelCaso, o: OpcionesDeRegistros): Regi
     });
     if (pagado > 0) {
       pagosMigrados.push({
-        id: newId(),
+        id: newId("MigratedPayment"),
         clinicId: o.clinicId,
         patientId: o.patientId,
         amount: pagado,
@@ -233,7 +233,7 @@ export function construirRegistros(p: PlanDelCaso, o: OpcionesDeRegistros): Regi
   const hojas: Record<string, unknown>[] = [];
   const clavesDeControl: Array<{ externalId: string; localId: string }> = [];
   for (const c of p.controles) {
-    const hojaId = newId();
+    const hojaId = newId("OrthoTreatmentCard");
     const clave = claveControlCaso(p.folio, c.dia);
     const cita = clave ? o.citasDeControl?.get(clave) : undefined;
     hojas.push({
@@ -284,7 +284,7 @@ export function construirRegistros(p: PlanDelCaso, o: OpcionesDeRegistros): Regi
     } else if (p.status === "IN_PROGRESS" && i === 0) {
       status = "IN_PROGRESS"; startedAt = inicio;
     }
-    return { id: newId(), treatmentPlanId: planId, clinicId: o.clinicId, phaseKey, orderIndex: i, status, startedAt, completedAt };
+    return { id: newId("OrthodonticPhase"), treatmentPlanId: planId, clinicId: o.clinicId, phaseKey, orderIndex: i, status, startedAt, completedAt };
   });
 
   const diagnostico = {

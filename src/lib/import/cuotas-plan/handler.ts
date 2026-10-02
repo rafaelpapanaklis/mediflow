@@ -339,7 +339,7 @@ export const installmentPlansHandler: EntityHandler = {
       throw e;
     }
 
-    for (const r of toInsert) r.data.newId = newId();
+    for (const r of toInsert) r.data.newId = newId("MigratedInstallment");
 
     let created = 0;
     for (let i = 0; i < toInsert.length; i += BATCH) {

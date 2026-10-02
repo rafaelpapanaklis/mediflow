@@ -6,14 +6,15 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
-  scenarioId: z.string().uuid().optional(),
+  treatmentPlanId: idDeLaBase(),
+  scenarioId: idDeLaBase().optional(),
   /** Días hasta expiración del token. Default 7. */
   expiresInDays: z.number().int().positive().max(30).default(7),
 });

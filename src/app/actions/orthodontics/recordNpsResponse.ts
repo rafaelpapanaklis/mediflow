@@ -5,13 +5,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
-  npsScheduleId: z.string().uuid(),
+  npsScheduleId: idDeLaBase(),
   npsScore: z.number().int().min(0).max(10),
   patientComment: z.string().max(2000).nullable().optional(),
 });

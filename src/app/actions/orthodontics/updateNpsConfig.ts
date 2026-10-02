@@ -8,13 +8,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   /** Días desde debond para enviar NPS +3D (default 3). */
   windowEarlyDays: z.number().int().min(1).max(14).default(3),
   /** Días desde debond para NPS +6M (default 180). */

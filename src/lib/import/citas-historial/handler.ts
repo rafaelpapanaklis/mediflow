@@ -417,7 +417,7 @@ export const appointmentHistoryHandler: EntityHandler = {
     // 1) Los controles atendidos de un caso de ortodoncia: cita COMPLETADA (nunca SCHEDULED: nada que recordar).
     const controles = toInsert.filter((r) => r.data.comoControl);
     if (controles.length > 0) {
-      for (const r of controles) r.data.newId = newId();
+      for (const r of controles) r.data.newId = newId("Appointment");
       const build = (rs: PreviewRow[]) => rs.map((r) => ({
         id: r.data.newId as string,
         clinicId,
@@ -489,7 +489,7 @@ export const appointmentHistoryHandler: EntityHandler = {
         }
         throw e;
       }
-      for (const r of visitas) r.data.newId = newId();
+      for (const r of visitas) r.data.newId = newId("MigratedVisit");
       const build = (rs: PreviewRow[]) => rs.map((r) => ({
         id: r.data.newId as string,
         clinicId,

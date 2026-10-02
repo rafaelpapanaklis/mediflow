@@ -259,6 +259,15 @@ test("registros: facturas numeradas, pagos MIGRADOS (nunca payments), hojas firm
   assert.match(String((r.diagnostico as any).clinicalSummary), /no mediciones/);
   assert.ok(String((r.diagnostico as any).clinicalSummary).length >= 40, "cumple el mínimo del formulario");
   assert.ok(String((r.plan as any).retentionPlanText).length >= 20);
+  // «Invalid uuid» de BEVADENT: cada id con el formato que declara su modelo (uuid en ortodoncia; cuid en facturas
+  // y pagos migrados). Antes todo salía cuid y las acciones del módulo, que validaban uuid, rechazaban el caso.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const CUID = /^c[0-9a-z]{24}$/;
+  assert.match(r.ids.plan, UUID);
+  assert.equal((r.plan as any).id, r.ids.plan);
+  assert.match(r.ids.diagnostico, UUID);
+  for (const x of [...r.fases, ...r.hojas]) assert.match(String((x as any).id), UUID);
+  for (const x of [...r.facturas, ...r.pagosMigrados]) assert.match(String((x as any).id), CUID);
 
   // Sin columnas opcionales (SQL sin pegar): el caso entra igual, sin doctor tratante ni factura ligada.
   const sinOpc = construirRegistros(p, { clinicId: CLINICA, userId: DUENO, origen: "Dentalink", ahora: dia("2026-09-29"), primerNumero: 1, patientId: "p1", doctorId: DUENO, columnasOpcionales: false });

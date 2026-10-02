@@ -284,6 +284,7 @@
     "test:orto-saldo-cabecera": "tsx --test src/lib/orthodontics/__tests__/saldo-cabecera.test.ts",
     "test:orto-cambio-doctor": "tsx --test src/lib/orthodontics/__tests__/cambio-de-doctor.test.ts",
     "test:orto-reposiciones": "tsx --test src/lib/orthodontics/cobro/__tests__/reposiciones.test.ts",
+    "test:ids-de-la-base": "tsx --test --experimental-test-module-mocks src/lib/validation/__tests__/id.test.ts src/lib/import/__tests__/formato-de-id.test.ts src/app/actions/orthodontics/__tests__/ids-importados.test.ts",
     "test:orto-firma-hoja": "tsx --test --experimental-test-module-mocks src/lib/orthodontics/__tests__/firma-hoja-bevadent.test.ts src/lib/orthodontics/__tests__/una-nota-por-visita.test.ts src/lib/orthodontics/__tests__/hoja-de-control-reglas.test.ts src/lib/orthodontics/__tests__/procedimientos-de-hoja-db.test.ts src/lib/orthodontics/__tests__/cerrar-cita-al-firmar.test.ts src/lib/orthodontics/__tests__/ligar-hoja-firmada.test.ts src/lib/orthodontics/__tests__/aviso-cita-futura-ficha.test.ts src/app/actions/orthodontics/__tests__/getTreatmentCardContextForAppointment.test.ts",
     "test:salud-capturada": "tsx --test src/lib/patients/__tests__/salud-capturada.test.ts && tsx --tsconfig tsconfig.test.json --test src/components/dashboard/patient-detail/__tests__/hero-salud-capturada.test.tsx",
     "test:ayuda-de-pasos": "tsx --test src/lib/agenda/__tests__/ayuda-de-pasos.test.ts",

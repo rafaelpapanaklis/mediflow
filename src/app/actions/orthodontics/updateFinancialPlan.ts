@@ -10,12 +10,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   totalAmount: z.number().positive().max(500_000),
   initialDownPayment: z.number().nonnegative().max(500_000),
   /** 3, 6, 12, 18, 24 — o cualquier valor entre 1 y 60. */

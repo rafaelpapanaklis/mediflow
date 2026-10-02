@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoBillingActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -14,8 +15,8 @@ import type { OrthoPaymentMethod } from "@prisma/client";
 const methodEnum = z.enum(["tarjeta", "transfer", "efectivo", "msi"]);
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
-  installmentId: z.string().uuid().optional(),
+  treatmentPlanId: idDeLaBase(),
+  installmentId: idDeLaBase().optional(),
   method: methodEnum,
 });
 

@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { locationHasValidFdi } from "./_predicates";
@@ -13,7 +14,7 @@ import { fail, isFailure, ok, type ActionResult } from "./result";
 const brandEnum = z.enum(["DENTOS", "SPIDER", "IMTEC", "OTHER"]);
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   brand: brandEnum,
   size: z.string().min(1).max(40),
   location: z

@@ -6,7 +6,7 @@
 // Se guarda con su fecha original, se dice de dónde vino y jamás se hace pasar
 // por algo que se firmó, se cotizó o se cobró en esta clínica.
 
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { escapeHtml, sanitizeTemplateHtml } from "@/lib/document-templates/sanitize";
 import { formatConsentDate } from "@/lib/consent/dates";
 import { norm } from "./engine";
@@ -302,10 +302,50 @@ export function folioDeNotaActiva(notes: string | null | undefined): string | nu
   return null;
 }
 
-/** Id con la forma de los cuid de Prisma (c + 24 minúsculas/dígitos), para insertar cabecera y líneas en lote. */
-export function newId(): string {
+/**
+ * Formato del id de cada modelo en el que el importador inserta con id PROPIO (para ligar cabecera y líneas en lote).
+ * Tiene que ser el mismo que su `@default(...)` en prisma/schema.prisma: lo comprueba __tests__/formato-de-id.test.ts.
+ *
+ * 🔴 ws1-t12 (oct-2026): antes todo salía con forma de cuid, también en los modelos uuid de ortodoncia, y en BEVADENT
+ * quedaron casos, fases, diagnósticos y hojas de control con id cuid (la firma del control decía «Invalid uuid»).
+ * Esos ids NO se reescriben (son datos de clientes); el código los acepta con `idDeLaBase()` (src/lib/validation/id.ts).
+ * Un modelo nuevo se añade AQUÍ con su formato, y la prueba lo contrasta con el esquema.
+ */
+export const FORMATO_DE_ID = {
+  Patient: "cuid",
+  Guardian: "cuid",
+  PatientCredit: "cuid",
+  Invoice: "cuid",
+  Appointment: "cuid",
+  Quote: "cuid",
+  QuoteItem: "cuid",
+  TreatmentPlan: "cuid",
+  TreatmentSession: "cuid",
+  ProcedureCatalog: "cuid",
+  MigratedPayment: "cuid",
+  MigratedOrthoCase: "cuid",
+  MigratedLabExpense: "cuid",
+  MigratedInstallment: "cuid",
+  MigratedVisit: "cuid",
+  OrthodonticDiagnosis: "uuid",
+  OrthodonticTreatmentPlan: "uuid",
+  OrthodonticPhase: "uuid",
+  OrthoTreatmentCard: "uuid",
+  /** Tabla de SQL crudo (sql/import-ids-externos.sql), sin modelo de Prisma: "id" TEXT sin default. */
+  import_external_ids: "cuid",
+} as const satisfies Record<string, "cuid" | "uuid">;
+
+export type ModeloConIdPropio = keyof typeof FORMATO_DE_ID;
+
+/** Id con la forma de los cuid de Prisma (c + 24 minúsculas/dígitos). */
+function cuidDeImportacion(): string {
   const bytes = randomBytes(24);
   let s = "c";
   for (let i = 0; i < 24; i++) s += "0123456789abcdefghijklmnopqrstuvwxyz"[bytes[i] % 36];
   return s;
+}
+
+/** Id nuevo para una fila de `modelo`, con el formato que declara su `@default` (uuid o cuid). */
+export function newId(modelo: ModeloConIdPropio): string {
+  return FORMATO_DE_ID[modelo] === "uuid" ? randomUUID() : cuidDeImportacion();
 }

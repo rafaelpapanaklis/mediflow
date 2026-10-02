@@ -175,7 +175,7 @@ export async function asegurarCatalogoDentalink(
       }
       const hit = (p.codigo && porCodigo.get(p.codigo)) || porNombre.get(p.clave);
       if (hit) { r.ids.set(p.clave, hit.id); r.existentes++; continue; }
-      const id = newId();
+      const id = newId("ProcedureCatalog");
       r.ids.set(p.clave, id);
       crear.push({ id, clinicId, name: p.nombre, code: p.codigo, category: p.categoria, basePrice: p.precio, description: "Creado al importar desde Dentalink." });
       if (p.ortodoncia) orto.push(id);

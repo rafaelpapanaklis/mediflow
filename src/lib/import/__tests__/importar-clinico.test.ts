@@ -510,7 +510,8 @@ test("piezas puras: listas, textos, títulos y folio original", async () => {
   assert.equal(m.folioDeNotas("Presupuesto migrado…\nFolio original: A-17\nDoctor: X"), "A-17");
   assert.equal(m.folioDeNotas("sin folio"), null);
   assert.equal(m.sanitizeFdi("11, 12 y 21"), "11,12,21");
-  assert.match(m.newId(), /^c[0-9a-z]{24}$/);
+  assert.match(m.newId("Patient"), /^c[0-9a-z]{24}$/);
+  assert.match(m.newId("OrthodonticTreatmentPlan"), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 // ═══ LO QUE ENCONTRÓ LA REVISIÓN ═══════════════════════════════════════════

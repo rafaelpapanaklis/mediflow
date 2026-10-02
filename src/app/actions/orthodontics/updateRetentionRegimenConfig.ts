@@ -12,6 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -28,7 +29,7 @@ const retainerEnum = z.enum([
 const gaugeEnum = z.enum(["G_0175", "G_0195", "G_021"]);
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   upperRetainer: retainerEnum.nullable().optional(),
   upperDescription: z.string().max(500).nullable().optional(),
   lowerRetainer: retainerEnum.nullable().optional(),

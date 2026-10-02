@@ -7,13 +7,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   /** Fecha de referencia (default ahora). */
   completedAt: z
     .string()

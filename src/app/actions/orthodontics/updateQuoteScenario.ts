@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -17,7 +18,7 @@ const paymentModeEnum = z.enum([
 ]);
 
 const inputSchema = z.object({
-  scenarioId: z.string().uuid(),
+  scenarioId: idDeLaBase(),
   label: z.string().min(2).max(120).optional(),
   paymentMode: paymentModeEnum.optional(),
   downPayment: z.number().nonnegative().max(500_000).optional(),

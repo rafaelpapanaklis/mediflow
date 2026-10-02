@@ -885,7 +885,7 @@ export const patientsHandler: EntityHandler = {
     }
 
     // El id se fija ANTES de insertar: así se sabe a quién corresponde cada ID externo.
-    for (const r of toInsert) r.data.newId = newId();
+    for (const r of toInsert) r.data.newId = newId("Patient");
 
     const created = await insertNumbered({
       rows: toInsert,
@@ -942,7 +942,7 @@ export const patientsHandler: EntityHandler = {
       try {
         const creados = await idsCreados("patient", clinicId, conApoderado.map((r) => r.data.newId as string));
         const data = conApoderado.filter((r) => creados.has(r.data.newId)).map((r) => ({
-          id: newId(),
+          id: newId("Guardian"),
           clinicId,
           patientId: r.data.newId as string,
           fullName: r.data.guardianName as string,
@@ -1217,7 +1217,7 @@ export const balancesHandler: EntityHandler = {
   async commit(rows, clinicId, skipDuplicates, ctx) {
     const toInsert = pickInsertable(rows, skipDuplicates);
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
-    for (const r of toInsert) r.data.newId = newId();
+    for (const r of toInsert) r.data.newId = newId(r.data.kind === "credit" ? "PatientCredit" : "Invoice");
 
     // Divide por tipo: adeudos → factura de apertura; a favor → PatientCredit; y —ws1-t10— la mora de un tratamiento
     // ya importado NO crea deuda: se anota en el tratamiento.
@@ -1795,7 +1795,7 @@ export const appointmentsHandler: EntityHandler = {
   async commit(rows, clinicId, skipDuplicates, ctx) {
     const toInsert = pickInsertable(rows, skipDuplicates);
     if (toInsert.length === 0) return { created: 0, skipped: 0 };
-    for (const r of toInsert) r.data.newId = newId();
+    for (const r of toInsert) r.data.newId = newId("Appointment");
     const build = (slice: PreviewRow[]) =>
       slice.map((r) => ({
         id: r.data.newId as string,
@@ -2934,7 +2934,7 @@ export const quotesHandler: EntityHandler = {
         errors: [],
         warnings: [],
         data: {
-          id: newId(),
+          id: newId("Quote"),
           lines,
           totals,
           patientId: first.patientId,
@@ -2977,7 +2977,7 @@ export const quotesHandler: EntityHandler = {
             createdAt: h.data.createdAt,
           },
           items: (h.data.totals.items as any[]).map((it, i) => ({
-            id: newId(),
+            id: newId("QuoteItem"),
             quoteId: h.data.id,
             procedureId: it.procedureId ?? null,
             name: it.name,
@@ -3575,9 +3575,9 @@ export const treatmentPlansHandler: EntityHandler = {
         })),
       });
 
-      const quoteId = newId();
-      const treatmentPlanId = newId();
-      const invoiceId = newId();
+      const quoteId = newId("Quote");
+      const treatmentPlanId = newId("TreatmentPlan");
+      const invoiceId = newId("Invoice");
 
       return {
         row: lines[0].row,
@@ -3605,7 +3605,7 @@ export const treatmentPlansHandler: EntityHandler = {
           planStatus: hayPendiente ? "ACTIVE" : "COMPLETED",
           startDate, endDate, nextExpectedDate,
           sessions: diasOrdenados.map((d, i) => ({
-            id: newId(),
+            id: newId("TreatmentSession"),
             treatmentId: treatmentPlanId,
             sessionNumber: i + 1,
             notes: oneLine(`Migrado: ${d.nombres.join(", ")}`, 500),
@@ -3615,7 +3615,7 @@ export const treatmentPlansHandler: EntityHandler = {
           // El abono NO se guarda como Payment: Caja y Finanzas suman todos los Payment por fecha. Va a «pagos
           // migrados» (historia de solo lectura en la ficha); la factura conserva su paid/balance/status.
           payment: paid > 0
-            ? { id: newId(), clinicId, patientId: first.patientId, amount: paid, method: null, concept: `Abono del tratamiento${pickFirst("folioOriginal") ? ` ${pickFirst("folioOriginal")}` : ""}`, doctorId: pickFirst("doctorId") || ctx.userId, paidAt: fechaAbono, origin: origen, createdById: ctx.userId }
+            ? { id: newId("MigratedPayment"), clinicId, patientId: first.patientId, amount: paid, method: null, concept: `Abono del tratamiento${pickFirst("folioOriginal") ? ` ${pickFirst("folioOriginal")}` : ""}`, doctorId: pickFirst("doctorId") || ctx.userId, paidAt: fechaAbono, origin: origen, createdById: ctx.userId }
             : null,
         },
       };
@@ -3650,7 +3650,7 @@ export const treatmentPlansHandler: EntityHandler = {
           invoiceId: h.data.invoiceId,
         },
         items: (h.data.totals.items as any[]).map((it, i) => ({
-          id: newId(),
+          id: newId("QuoteItem"),
           quoteId: h.data.quoteId,
           procedureId: it.procedureId ?? null,
           name: it.name,

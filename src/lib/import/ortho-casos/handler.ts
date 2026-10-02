@@ -297,7 +297,7 @@ export const orthoCasesHandler: EntityHandler = {
       throw e;
     }
 
-    for (const r of toInsert) r.data.newId = newRowId();
+    for (const r of toInsert) r.data.newId = newRowId("MigratedOrthoCase");
 
     let created = 0;
     for (let i = 0; i < toInsert.length; i += BATCH) {

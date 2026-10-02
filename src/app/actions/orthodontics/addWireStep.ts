@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -23,7 +24,7 @@ const phaseEnum = z.enum([
 ]);
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   phase: phaseEnum,
   /** Clave del selector (NITI_SUPER…) o valor guardado (SS, CR_CO…): `materialParaGuardar`. */
   material: z.string().min(1),

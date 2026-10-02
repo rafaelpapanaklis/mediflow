@@ -59,7 +59,7 @@ export async function guardarExternosOrthoCase(
   if (typeof clinicId !== "string" || !clinicId) throw new Error("guardarExternosOrthoCase: falta clinicId");
   try {
     for (let i = 0; i < pares.length; i += LOTE) {
-      const json = JSON.stringify(pares.slice(i, i + LOTE).map((p) => ({ id: newId(), ext: p.externalId, loc: p.localId })));
+      const json = JSON.stringify(pares.slice(i, i + LOTE).map((p) => ({ id: newId("import_external_ids"), ext: p.externalId, loc: p.localId })));
       await prisma.$executeRaw`
         INSERT INTO "import_external_ids" ("id", "clinicId", "source", "entity", "externalId", "localId")
         SELECT x.id, ${clinicId}, ${source}, ${ENTITY}, x.ext, x.loc

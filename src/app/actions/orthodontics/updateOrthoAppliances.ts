@@ -9,6 +9,7 @@ import { fijarPrecioControlSegunTecnica } from "@/lib/orthodontics/precio-contro
 import { cambioLaTecnica } from "@/lib/orthodontics/precio-control-del-caso";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -36,7 +37,7 @@ const techniqueEnum = z.enum([
 ]);
 
 const inputSchema = z.object({
-  treatmentPlanId: z.string().uuid(),
+  treatmentPlanId: idDeLaBase(),
   prescriptionSlot: slotEnum.optional(),
   bondingType: bondingEnum.optional(),
   technique: techniqueEnum.optional(),

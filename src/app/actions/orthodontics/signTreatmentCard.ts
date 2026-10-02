@@ -13,6 +13,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import type { Pedido } from "@/lib/orthodontics/procedimientos-de-visita";
@@ -55,8 +56,8 @@ const elasticZoneEnum = z.enum(["ANTERIOR", "POSTERIOR", "INTERMAXILAR"]);
 const gingivitisEnum = z.enum(["AUSENTE", "LEVE", "MODERADA", "SEVERA"]);
 
 const inputSchema = z.object({
-  cardId: z.string().uuid().nullable(),
-  treatmentPlanId: z.string().uuid(),
+  cardId: idDeLaBase().nullable(),
+  treatmentPlanId: idDeLaBase(),
   cardNumber: z.number().int().positive(),
   visitDate: z.string().min(1),
   durationMin: z.number().int().positive().default(30),
@@ -69,8 +70,8 @@ const inputSchema = z.object({
     "RETENTION",
   ]),
   monthAt: z.number().nonnegative(),
-  wireFromId: z.string().uuid().nullable().optional(),
-  wireToId: z.string().uuid().nullable().optional(),
+  wireFromId: idDeLaBase().nullable().optional(),
+  wireToId: idDeLaBase().nullable().optional(),
   soap: z.object({
     s: z.string(),
     o: z.string(),
@@ -111,7 +112,7 @@ const inputSchema = z.object({
     )
     .default([]),
   hasProgressPhoto: z.boolean().default(false),
-  photoSetId: z.string().uuid().nullable().optional(),
+  photoSetId: idDeLaBase().nullable().optional(),
   nextDate: z.string().nullable().optional(),
   nextDurationMin: z.number().int().positive().nullable().optional(),
   /** C6: la cita de Agenda que originó esta hoja (BotonHojaControl). */

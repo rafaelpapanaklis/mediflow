@@ -4,13 +4,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 const inputSchema = z.object({
-  patientId: z.string().uuid(),
+  patientId: idDeLaBase(),
   /** Etiqueta del catálogo seleccionada (ej. "Retenedor Hawley sup"). */
   catalog: z.string().min(1).max(120),
   description: z.string().max(500),
