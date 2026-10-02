@@ -278,3 +278,40 @@ test("#9: el aviso de ayer no cuenta para hoy", async () => {
   estado.outs.push({ threadId: "t1", body: AVISO_NOCHE, sentAt: new Date(Date.now() - 30 * 60 * 60 * 1000) });
   assert.equal((await turno("hola")).reply, AVISO_NOCHE);
 });
+
+/* ── ws1-t5: disponibilidad en una fecha concreta ───────────────────── */
+
+const FAQS_AGENDA = [
+  { id: "h1", question: "¿Qué horario tienen?", answer: "Lunes a viernes de 9 a 18.", enabled: true, order: 0 },
+  { id: "h2", question: "¿Hay disponibilidad?", answer: "Escríbenos para revisar.", enabled: true, order: 1 },
+];
+
+for (const pregunta of [
+  "¿hay disponibilidad el 20 de mayo?",
+  "¿tienen lugar el 15 de junio?",
+  "¿hay algún espacio en 3 semanas?",
+  "¿tienen disponibilidad el próximo mes?",
+]) {
+  test(`ws1-t5: «${pregunta}» va a la agenda real, no a la FAQ ni a la IA`, async () => {
+    estado.config = configBase({ faqs: FAQS_AGENDA });
+    estado.textoModelo = "NO DEBERÍA CONTESTAR LA IA";
+    const r = await turno(pregunta);
+    assert.deepEqual(estado.agenda, [pregunta]);
+    assert.equal(estado.prompts.length, 0);
+    assert.equal(r.reply, "AGENDA-REAL: ¿qué servicio?");
+  });
+}
+
+test("ws1-t5: «¿Qué horario tienen?» sigue siendo la FAQ del horario", async () => {
+  estado.config = configBase({ faqs: FAQS_AGENDA });
+  const r = await turno("¿Qué horario tienen?");
+  assert.equal(r.reply, "Lunes a viernes de 9 a 18.");
+  assert.equal(estado.agenda.length, 0);
+});
+
+test("ws1-t5: con el agendado apagado, la pregunta con fecha no entra a la agenda", async () => {
+  estado.config = configBase({ faqs: FAQS_AGENDA, canBookAppointments: false });
+  const r = await turno("¿hay disponibilidad el 20 de mayo?");
+  assert.equal(estado.agenda.length, 0);
+  assert.equal(r.reply, "Escríbenos para revisar."); // la FAQ, como antes
+});

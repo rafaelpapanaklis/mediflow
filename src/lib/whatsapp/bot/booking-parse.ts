@@ -29,6 +29,51 @@ const WEEKDAYS: Record<string, number> = {
  */
 const DIAS_PARA_PASAR_AL_ANO_SIGUIENTE = 60;
 
+/**
+ * ws1-t5 (fechas relativas) — «en ocho días» y «en quince días»: en México
+ * también se dicen por «en una semana» y «en dos semanas». Con `false` se leen
+ * al pie de la letra (+8, +15), que es lo que el paciente ve escrito en la
+ * fecha que el bot le confirma; con `true`, como semanas (+7, +14). Decisión
+ * para Rafael (ver el reporte de ws1-t5).
+ */
+const OCHO_Y_QUINCE_DIAS_COMO_SEMANAS = false;
+
+/** Números en letra que entiende «en tres semanas», «dentro de diez días». */
+const NUMEROS_EN_LETRA: Record<string, number> = {
+  un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7,
+  ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14,
+  quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19,
+  veinte: 20, veintiun: 21, veintiuno: 21, veintiuna: 21, veintidos: 22,
+  veintitres: 23, veinticuatro: 24, veinticinco: 25, veintiseis: 26,
+  veintisiete: 27, veintiocho: 28, veintinueve: 29, treinta: 30,
+  "un par de": 2,
+};
+
+// Más largas primero: «un par de» antes que «un», «veintiuno» antes que «veinte».
+const NUM_RE = `(\\d{1,3}|${Object.keys(NUMEROS_EN_LETRA)
+  .sort((a, b) => b.length - a.length)
+  .map((k) => k.replace(/ /g, "\\s+"))
+  .join("|")})`;
+
+/**
+ * «en 3 semanas», «dentro de diez días», «de aquí a un mes», «en unas dos o
+ * tres semanas» (manda el primer número: el día más cercano).
+ */
+const RELATIVA_RE = new RegExp(
+  `\\b(?:para\\s+)?(?:en|dentro\\s+de|de\\s+aqui\\s+a)\\s+(?:(?:unos|unas|como|aproximadamente|aprox|mas\\s+o\\s+menos)\\s+)?${NUM_RE}(?:\\s+(?:o|a|y|u)\\s+${NUM_RE})?\\s+(dias?|semanas?|mes(?:es)?)\\b`,
+);
+
+/** «el próximo mes», «el mes que entra», «el mes que viene», «el otro mes». */
+const MES_PROXIMO_RE = /\b(?:proximo|siguiente|otro)\s+mes\b|\bmes\s+que\s+(?:entra|viene)\b/;
+
+/** «la otra semana», «la próxima semana», «la semana que viene» (sin día). */
+const SEMANA_PROXIMA_RE = /\b(?:proxima|siguiente|otra)\s+semana\b|\bsemana\s+que\s+(?:viene|entra)\b/;
+
+const NOMBRES_DE_MES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
 export function normalizeLast10(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
 }
@@ -88,11 +133,173 @@ function proximoDiaDelMes(today: string, day: number): string | null {
   return null;
 }
 
+function numeroDe(token: string): number | null {
+  const t = token.replace(/\s+/g, " ");
+  if (/^\d+$/.test(t)) return parseInt(t, 10);
+  return NUMEROS_EN_LETRA[t] ?? null;
+}
+
+/** Último día del mes (1-12) de ese año. */
+function diasDelMes(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * Suma meses de calendario: mismo número de día, recortado al último día del
+ * mes destino («en un mes» desde el 31 de octubre → 30 de noviembre).
+ */
+function sumarMesesISO(iso: string, meses: number): string {
+  const y = parseInt(iso.slice(0, 4), 10);
+  const m = parseInt(iso.slice(5, 7), 10);
+  const d = parseInt(iso.slice(8, 10), 10);
+  const total = y * 12 + (m - 1) + meses;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return `${year}-${pad2(month)}-${pad2(Math.min(d, diasDelMes(year, month)))}`;
+}
+
+/** El mes siguiente al de `today`, como "YYYY-MM". */
+function mesSiguiente(today: string): string {
+  return sumarMesesISO(`${today.slice(0, 7)}-01`, 1).slice(0, 7);
+}
+
+/** Lunes (ISO) de la semana de lunes a domingo que contiene `iso`. */
+function lunesDeLaSemana(iso: string): string {
+  const dow = new Date(`${iso}T12:00:00Z`).getUTCDay();
+  return addDaysISO(iso, -((dow + 6) % 7));
+}
+
+/** El día de la semana nombrado en el texto (0=domingo…6=sábado), o null. */
+function diaDeLaSemanaNombrado(t: string): number | null {
+  for (const name of Object.keys(WEEKDAYS)) {
+    if (new RegExp(`\\b${name}\\b`).test(t)) return WEEKDAYS[name];
+  }
+  return null;
+}
+
+/** Primer `dow` (0=domingo) del mes "YYYY-MM". */
+function primerDiaDeSemanaDelMes(mes: string, dow: number): string {
+  const primero = `${mes}-01`;
+  const dowPrimero = new Date(`${primero}T12:00:00Z`).getUTCDay();
+  return addDaysISO(primero, (dow - dowPrimero + 7) % 7);
+}
+
+/**
+ * ws1-t5 — «en 3 semanas», «dentro de diez días», «en 2 meses». Con un día de
+ * la semana («el martes en tres semanas») es ese día de la semana calendario
+ * (lunes a domingo) en la que cae la fecha, igual que «el jueves de la próxima
+ * semana». Devuelve null si el texto no trae una fecha relativa.
+ */
+function fechaRelativa(t: string, today: string): string | null {
+  const m = t.match(RELATIVA_RE);
+  if (!m) return null;
+  let n = numeroDe(m[1]);
+  if (n === null) return null;
+  const unidad = m[3];
+  let destino: string;
+  if (unidad.startsWith("dia")) {
+    if (OCHO_Y_QUINCE_DIAS_COMO_SEMANAS && (n === 8 || n === 15)) n = n === 8 ? 7 : 14;
+    destino = addDaysISO(today, n);
+  } else if (unidad.startsWith("semana")) {
+    destino = addDaysISO(today, n * 7);
+  } else {
+    destino = sumarMesesISO(today, n);
+  }
+  const dow = diaDeLaSemanaNombrado(t);
+  if (dow !== null) {
+    const conDia = addDaysISO(lunesDeLaSemana(destino), (dow + 6) % 7);
+    if (conDia >= today) return conDia;
+  }
+  return destino;
+}
+
+/**
+ * ws1-t5 — «el 15 del próximo mes» → ese día; «el lunes del mes que entra» →
+ * el primer lunes de ese mes. Sin día («el próximo mes» a secas) devuelve
+ * null: el flujo pregunta qué día (ver `mesPedidoSinDia`).
+ */
+function fechaEnMesProximo(t: string, today: string): string | null {
+  if (!MES_PROXIMO_RE.test(t)) return null;
+  const mes = mesSiguiente(today);
+  return fechaEnMes(t, mes);
+}
+
+/**
+ * Un día dentro de un mes ya sabido ("YYYY-MM"): «el 10», «10», «día 10» o
+ * un día de la semana («el lunes» → el primer lunes de ese mes). null si no
+ * trae día o si ese mes no tiene ese número («el 31» en noviembre).
+ */
+export function fechaEnMes(text: string, mes: string): string | null {
+  const t = foldAccents(text);
+  const year = parseInt(mes.slice(0, 4), 10);
+  const month = parseInt(mes.slice(5, 7), 10);
+  const num =
+    t.match(/\b(?:el|dia)\s+(\d{1,2})\b(?!\s*(?::|am\b|pm\b|hrs?\b|horas?\b))/) ??
+    t.match(/^(\d{1,2})\s*[.!]?$/) ??
+    t.match(/\b(\d{1,2})\s+(?:de|del)\s+(?:el\s+)?(?:proximo|siguiente|otro|mes)\b/);
+  if (num) {
+    const day = parseInt(num[1], 10);
+    return esFechaReal(year, month, day) ? `${mes}-${pad2(day)}` : null;
+  }
+  const dow = diaDeLaSemanaNombrado(t);
+  if (dow !== null) return primerDiaDeSemanaDelMes(mes, dow);
+  return null;
+}
+
+/**
+ * ws1-t5 — la respuesta a «¿qué día de noviembre te acomoda?»: «el 10», «10»
+ * o «el lunes» son de ESE mes; una fecha que se sostiene sola («15 de
+ * diciembre», «15/12», «en 3 semanas», «mañana») manda tal cual.
+ */
+export function fechaDentroDelMesPedido(
+  text: string,
+  mes: string,
+  timezone: string,
+  now: Date = new Date(),
+): string | null {
+  const t = foldAccents(text);
+  const sostieneSola =
+    /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/\-]\d{1,2}\b/.test(t) ||
+    Object.keys(MONTHS).some((m) => new RegExp(`\\b${m}\\b`).test(t)) ||
+    RELATIVA_RE.test(t) ||
+    /\b(hoy|manana)\b/.test(t);
+  if (sostieneSola) return parseDateInput(text, timezone, now);
+  const enMes = fechaEnMes(text, mes);
+  if (enMes) return enMes;
+  // «el 31» en noviembre: ese mes no lo tiene. No se salta al 31 de diciembre.
+  if (/\b(?:el|dia)\s+\d{1,2}\b|^\d{1,2}\s*[.!]?$/.test(t)) return null;
+  return parseDateInput(text, timezone, now);
+}
+
+/**
+ * ws1-t5 — «el próximo mes» / «el mes que entra» SIN día: el mes ("YYYY-MM")
+ * para que el bot pregunte qué día de ese mes. null si el texto trae una
+ * fecha concreta o no habla del mes que viene.
+ */
+export function mesPedidoSinDia(text: string, timezone: string, now: Date = new Date()): string | null {
+  const t = foldAccents(text);
+  if (!MES_PROXIMO_RE.test(t)) return null;
+  if (parseDateInput(text, timezone, now)) return null;
+  const p = getTzParts(now, timezone);
+  return mesSiguiente(`${p.year}-${pad2(p.month)}-${pad2(p.day)}`);
+}
+
+/** «noviembre» o «enero de 2027» (con año solo si no es el de `now` en la clínica). */
+export function nombreDeMes(mes: string, timezone: string, now: Date = new Date()): string {
+  const nombre = NOMBRES_DE_MES[parseInt(mes.slice(5, 7), 10) - 1] ?? mes;
+  const otroAno = mes.slice(0, 4) !== String(getTzParts(now, timezone).year);
+  return otroAno ? `${nombre} de ${mes.slice(0, 4)}` : nombre;
+}
+
 /**
  * Parsea la fecha que escribe el paciente, SIEMPRE contra el «hoy» de la
  * clínica (`timezone`), no el del servidor. Entiende, en este orden:
  *   1. ISO (2026-10-15) y DD/MM[/AAAA].
  *   2. "15 de octubre [de 2026]", "15 octubre", "1ro de octubre".
+ *   2b. ws1-t5 — relativas: "en 3 semanas", "dentro de diez días", "en 2
+ *      meses", "de aquí a un mes" (+ día de la semana: "el martes en tres
+ *      semanas"); y el mes que viene con día: "el 15 del próximo mes", "el
+ *      lunes del mes que entra" (sin día → null: ver `mesPedidoSinDia`).
  *   3. Día de la semana: "el martes" → el próximo martes (hoy no cuenta: el
  *      mismo día se lee como la semana que viene, salvo "hoy jueves");
  *      "el jueves de la próxima/siguiente semana" → el jueves de la semana
@@ -100,12 +307,28 @@ function proximoDiaDelMes(today: string, day: number): string | null {
  *      manda el número.
  *   4. "pasado mañana", "hoy", "mañana" — pero "por/en/de la mañana" es un
  *      turno, no el día de mañana ("el martes por la mañana" es el martes).
+ *   4b. ws1-t5 — "la otra semana", "la próxima semana", "la semana que viene"
+ *      sin día → el lunes de esa semana (el flujo busca hacia adelante si ese
+ *      lunes no hay lugar).
  *   5. "el 15" / "día 15" → el próximo día 15.
  * Sin año, una fecha muy pasada se pasa al año siguiente (ver
  * DIAS_PARA_PASAR_AL_ANO_SIGUIENTE). `now` es inyectable para las pruebas.
  * Devuelve "YYYY-MM-DD" o null si no reconoce nada.
  */
 export function parseDateInput(text: string, timezone: string, now: Date = new Date()): string | null {
+  return parseFecha(text, timezone, now, true);
+}
+
+/**
+ * ws1-t5 — como `parseDateInput`, pero sin el «el 15» a secas (paso 5). Lo usa
+ * el paso de elegir horario: ahí «el 3» es la opción 3 de la lista, mientras
+ * que «mañana», «el jueves» o «en 3 semanas» son otro día.
+ */
+export function parseFechaConPalabras(text: string, timezone: string, now: Date = new Date()): string | null {
+  return parseFecha(text, timezone, now, false);
+}
+
+function parseFecha(text: string, timezone: string, now: Date, conSoloDia: boolean): string | null {
   const t = foldAccents(text);
   const p = getTzParts(now, timezone);
   const today = `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
@@ -128,8 +351,12 @@ export function parseDateInput(text: string, timezone: string, now: Date = new D
     return conAnoImplicito(today, month, day);
   }
 
-  const named = t.match(/\b(\d{1,2})\s*(?:ro|ero|o|°|º)?\s+(?:de\s+)?([a-z]+)(?:\s+(?:de|del)\s+(\d{4}))?/);
-  if (named && MONTHS[named[2]]) {
+  // ws1-t5 — el primer «N <mes>» de verdad: antes solo se miraba el primer
+  // «N palabra», y en «en 3 semanas o el 20 de mayo» era «3 semanas».
+  const named = [...t.matchAll(/\b(\d{1,2})\s*(?:ro|ero|o|°|º)?\s+(?:de\s+)?([a-z]+)(?:\s+(?:de|del)\s+(\d{4}))?/g)].find(
+    (m) => MONTHS[m[2]],
+  );
+  if (named) {
     const day = parseInt(named[1], 10);
     const month = MONTHS[named[2]];
     if (named[3]) {
@@ -138,6 +365,10 @@ export function parseDateInput(text: string, timezone: string, now: Date = new D
     }
     return conAnoImplicito(today, month, day);
   }
+
+  const relativa = fechaRelativa(t, today);
+  if (relativa) return relativa;
+  if (MES_PROXIMO_RE.test(t)) return fechaEnMesProximo(t, today);
 
   const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay();
   // "mañana" como día (no como turno: "la mañana", "las mañanas").
@@ -165,6 +396,10 @@ export function parseDateInput(text: string, timezone: string, now: Date = new D
   if (dijoHoy) return today;
   if (dijoManana) return addDaysISO(today, 1);
 
+  // ws1-t5 — «la otra semana» sin día: el lunes de esa semana.
+  if (SEMANA_PROXIMA_RE.test(t)) return addDaysISO(lunesDeLaSemana(today), 7);
+
+  if (!conSoloDia) return null;
   const soloDia = t.match(/\b(?:el|dia)\s+(\d{1,2})\b(?!\s*(?::|am\b|pm\b|hrs?\b|horas?\b))/);
   if (soloDia) return proximoDiaDelMes(today, parseInt(soloDia[1], 10));
 
@@ -189,10 +424,31 @@ export function detectaIntencionDeAgenda(text: string): "book" | "reschedule" | 
   ) {
     return "book";
   }
-  if (/\b(hay|tienen|tendran|habra|tiene) (espacio|lugar|disponibilidad|citas?)\b|\bdisponibilidad\b/.test(n)) {
+  // ws1-t5 — preguntas de disponibilidad: «¿hay algún espacio…?», «¿tienen
+  // cupo…?», «¿qué horarios disponibles hay…?», «¿me pueden atender el 20?».
+  if (
+    /\b(hay|tienen|tendran|habra|tiene|tendra) (algun |algo de |un |una )?(espacio|espacito|lugar|lugarcito|cupo|disponibilidad|citas?|turnos?)\b|\bdisponibilidad\b/.test(
+      n,
+    )
+  ) {
+    return "book";
+  }
+  if (/\bhorarios? (libres?|disponibles?)\b|\b(me|nos|la|lo|los|las) (pueden|podrian|puede|podria) (atender|recibir)\b/.test(n)) {
     return "book";
   }
   return null;
+}
+
+/**
+ * ws1-t5 — ¿pide cita (o pregunta disponibilidad) para un día o mes concreto?
+ * «¿hay disponibilidad el 20 de mayo?», «¿tienen lugar en 3 semanas?». El
+ * motor la manda a la agenda ANTES que las FAQ: una FAQ genérica («¿hay
+ * disponibilidad?») no contesta por ESE día, la agenda sí. «¿Qué horario
+ * tienen?» no pide cita y sigue siendo FAQ.
+ */
+export function pideCitaConFecha(text: string, timezone: string, now: Date = new Date()): boolean {
+  if (detectaIntencionDeAgenda(text) !== "book") return false;
+  return parseDateInput(text, timezone, now) !== null || mesPedidoSinDia(text, timezone, now) !== null;
 }
 
 /** Parsea "16:30", "4pm", "4 pm". Devuelve "HH:MM" 24h o null. */

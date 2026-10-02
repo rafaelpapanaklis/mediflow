@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { generateAiReply } from "./ai";
 import { handleBookingTurn, isBookingInProgress } from "./booking";
-import { detectaIntencionDeAgenda } from "./booking-parse";
+import { detectaIntencionDeAgenda, pideCitaConFecha } from "./booking-parse";
 import { handleSaldoTurn, isSaldoInProgress } from "./saldo";
 import { getCobranzaSettings } from "@/lib/reminders/config";
 import { loadOrthoClinicSettings } from "@/lib/orthodontics/clinic-settings-db";
@@ -161,6 +161,7 @@ function detectBookingIntent(text: string): BotIntent | null {
 /**
  * Motor híbrido del bot. Orden:
  *   1) Saldo (ws1-t3) si preguntan por dinero y canAnswerBalance.
+ *   1b) Agenda si pide cita para un día concreto (ws1-t5), antes que la FAQ.
  *   2) FAQ por reglas (rápido y barato).
  *   3) Agenda (T4) si hay intención de cita y canBookAppointments.
  *   3b) Fuera de horario: el aviso de la clínica, una vez por hilo y día (#9).
@@ -213,6 +214,16 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
   {
     const saldo = await handleSaldoTurn(input, config);
     if (saldo) return conMarcaDeHandoff(saldo, "sin_respuesta");
+  }
+
+  // 1b) ws1-t5 — pide cita o pregunta disponibilidad para un día concreto
+  //     («¿hay disponibilidad el 20 de mayo?», «¿tienen lugar en 3 semanas?»):
+  //     a la agenda real ANTES que la FAQ. Una FAQ genérica no contesta por
+  //     ESE día y la agenda sí. «¿Qué horario tienen?» no pide cita: sigue
+  //     siendo FAQ (abajo).
+  if (config.canBookAppointments && pideCitaConFecha(input.incomingText, timezone)) {
+    const booking = await handleBookingTurn(input, config);
+    if (booking) return conMarcaDeHandoff(booking, "agenda");
   }
 
   // 2) FAQ por reglas.

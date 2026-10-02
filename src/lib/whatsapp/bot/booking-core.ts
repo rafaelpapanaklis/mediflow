@@ -1,14 +1,19 @@
 import { todayInTz } from "@/lib/agenda/time-utils";
 import {
   detectaInteresOrtodoncia,
+  addDaysISO,
   esCancelacionClara,
+  fechaDentroDelMesPedido,
   foldAccents,
   formatDateHuman,
   formatTimeHuman,
   interpretarEleccionDeHorario,
   isMenuWord,
+  mesPedidoSinDia,
+  nombreDeMes,
   parseChoiceIndex,
   parseDateInput,
+  parseFechaConPalabras,
   respuestaSiNo,
   toISODate,
   turnoPedido,
@@ -99,6 +104,11 @@ export interface BookingState {
   fechaPedida?: string;
   /** ws1-t1 — «en la tarde» / «en la mañana»: se enseñan primero esos huecos. */
   turno?: "manana" | "tarde";
+  /**
+   * ws1-t5 — «el próximo mes» sin día ("YYYY-MM"): el bot pregunta qué día de
+   * ese mes, y «el 10» se lee dentro de ESE mes (no el próximo 10).
+   */
+  mesPedido?: string;
   /**
    * ws1-t1 (#12) — en un número compartido eligió «otra persona»: al pedir su
    * nombre se crea un paciente NUEVO en vez de reutilizar al primero del número.
@@ -218,6 +228,12 @@ export interface BookingDeps {
 // valiendo: `state.slots` guarda hasta 40).
 const MAX_SLOTS_SHOWN = 10;
 const MAX_MISSES = 2;
+/**
+ * ws1-t5 — si el día que pidió el paciente no tiene lugar, cuántos días
+ * siguientes se revisan (uno por uno, como la consulta de ese día) para
+ * ofrecerle el más cercano con lugar. Decisión para Rafael (reporte ws1-t5).
+ */
+const DIAS_A_BUSCAR_HACIA_ADELANTE = 7;
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min de inactividad
 
 /**
@@ -408,7 +424,7 @@ async function resolvePhone(input: BotTurnInput, deps: BookingDeps): Promise<str
 }
 
 /** Lo que se arrastra desde el mensaje que abrió el flujo (fecha y turno pedidos). */
-type Precarga = Pick<BookingState, "fechaPedida" | "turno">;
+type Precarga = Pick<BookingState, "fechaPedida" | "turno" | "mesPedido">;
 
 /**
  * ws1-t1 — «quiero cita el lunes en la tarde»: la fecha (si es de hoy en
@@ -419,6 +435,9 @@ function precargaDelMensaje(text: string, tz: string): Precarga {
   const out: Precarga = {};
   const fecha = parseDateInput(text, tz);
   if (fecha && fecha >= todayInTz(tz)) out.fechaPedida = fecha;
+  // ws1-t5 — «el próximo mes» sin día: se pregunta qué día de ese mes.
+  const mes = fecha ? null : mesPedidoSinDia(text, tz);
+  if (mes) out.mesPedido = mes;
   const turno = turnoPedido(text);
   if (turno) out.turno = turno;
   return out;
@@ -500,7 +519,7 @@ async function stepWho(
     return miss(state, `¿Para quién es? Responde con el número:\n${numberedList(options)}`);
   }
   const elegido = options[idx];
-  const precarga: Precarga = { fechaPedida: state.fechaPedida, turno: state.turno };
+  const precarga: Precarga = { fechaPedida: state.fechaPedida, turno: state.turno, mesPedido: state.mesPedido };
   const phone = input.patient?.phone ?? null;
   if (elegido.id === OPCION_OTRA_PERSONA) {
     // Sin paciente: el flujo pedirá su nombre y lo dará de alta aparte.
@@ -589,8 +608,15 @@ async function startCatalogo(
     label: s.duration ? `${s.name} (${s.duration} min)` : s.name,
   }));
   state.options = options;
+  // ws1-t5 — preguntó por un día («¿hay lugar el 20 de mayo?»): se le dice
+  // que se revisa ESE día; los horarios dependen del servicio y del doctor.
+  let saludo = "¡Con gusto te agendo! 🦷";
+  if (state.fechaPedida) {
+    const tz = await deps.getClinicTimezone(input.clinicId);
+    saludo = `¡Con gusto reviso el ${formatDateHuman(state.fechaPedida, tz)}! 🦷`;
+  }
   return step(
-    `¡Con gusto te agendo! 🦷\n¿Qué servicio necesitas? Responde con el número:\n${numberedList(options)}`,
+    `${saludo}\n¿Qué servicio necesitas? Responde con el número:\n${numberedList(options)}`,
     "create",
     state,
   );
@@ -692,7 +718,17 @@ async function pedirFecha(
     state.fechaPedida = undefined;
     if (state.dateISO >= todayInTz(tz)) return presentSlots(input, state, tz, deps, prefijo);
   }
+  if (state.mesPedido) {
+    const tz = await deps.getClinicTimezone(input.clinicId);
+    const pregunta = preguntaDiaDelMes(state.mesPedido, tz);
+    return step(prefijo ? `${prefijo}\n${pregunta}` : pregunta, state.mode, state);
+  }
   return step(prefijo ? `${prefijo}\n${askDateText(state)}` : askDateText(state), state.mode, state);
+}
+
+/** ws1-t5 — «el próximo mes» sin día: ¿qué día de ese mes? */
+function preguntaDiaDelMes(mes: string, tz: string): string {
+  return `¿Qué día de ${nombreDeMes(mes, tz)} te acomoda? Escríbeme el número del día, por ejemplo "el 10".`;
 }
 
 // ── Pasos ───────────────────────────────────────────────────────────────────
@@ -784,14 +820,28 @@ async function stepDate(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const tz = await deps.getClinicTimezone(input.clinicId);
-  const dateISO = parseDateInput(input.incomingText, tz);
+  // ws1-t5 — tras «¿qué día de noviembre?», «el 10» (o «el lunes») es de ESE
+  // mes. Una fecha completa («15 de diciembre», «en 3 semanas») sigue mandando.
+  let dateISO: string | null = null;
+  if (state.mesPedido) dateISO = fechaDentroDelMesPedido(input.incomingText, state.mesPedido, tz);
+  dateISO ??= parseDateInput(input.incomingText, tz);
   if (!dateISO) {
-    return miss(state, 'No reconocí la fecha. Escribe algo como "mañana", "el jueves" o "15/10".');
+    const mes = mesPedidoSinDia(input.incomingText, tz);
+    if (mes) {
+      state.misses = 0;
+      state.mesPedido = mes;
+      return step(preguntaDiaDelMes(mes, tz), state.mode, state);
+    }
+    if (state.mesPedido) {
+      return miss(state, preguntaDiaDelMes(state.mesPedido, tz));
+    }
+    return miss(state, 'No reconocí la fecha. Escribe algo como "mañana", "el jueves", "en 3 semanas" o "15/10".');
   }
   if (dateISO < todayInTz(tz)) {
     return miss(state, 'Esa fecha ya pasó. Indícame una fecha futura (por ejemplo "mañana").');
   }
   state.misses = 0;
+  state.mesPedido = undefined;
   state.dateISO = dateISO;
   return presentSlots(input, state, tz, deps);
 }
@@ -806,44 +856,50 @@ async function presentSlots(
   if (!state.doctorId || !state.dateISO) {
     return done("Algo salió mal con tu solicitud. Intentémoslo de nuevo más tarde.", state.mode);
   }
-  const res = await deps.getAvailableSlots({
+  let res = await deps.getAvailableSlots({
     clinicId: input.clinicId,
     doctorId: state.doctorId,
     dateISO: state.dateISO,
     durationMin: state.durationMin ?? 0,
   });
-  const human = formatDateHuman(state.dateISO, tz);
-  const prefix = note ? `${note}\n` : "";
+  let human = formatDateHuman(state.dateISO, tz);
+  let prefix = note ? `${note}\n` : "";
 
-  if (res.closed) {
-    state.step = "date";
-    // WS1-T2 — si el día está cerrado por un BLOQUEO, se dice el motivo. «No
-    // hay atención» invita a insistir ese mismo día; «cerrado por vacaciones»
-    // hace que la persona pregunte por otra fecha, que es la conversación que
-    // lleva a algún sitio. El motivo lo escribió la clínica y no nombra a
-    // nadie: quien está del otro lado no tiene por qué saber de quién es.
-    if (res.reason === "blocked" && res.mensajeBloqueo) {
+  if (res.closed || res.slots.length === 0) {
+    // Por qué ESE día no. WS1-T2 — si lo cerró un BLOQUEO, se dice el motivo:
+    // «no hay atención» invita a insistir ese mismo día; «cerrado por
+    // vacaciones» hace que la persona pregunte por otra fecha. El motivo lo
+    // escribió la clínica y no nombra a nadie. WS1-T2 · horario — si la
+    // clínica abre pero ESTE doctor no, se dice con su nombre (lo eligió en
+    // este mismo chat) y sin explicar su horario.
+    let motivo: string;
+    let pregunta = "¿Qué otra fecha te acomoda?";
+    if (!res.closed) {
+      motivo = `No quedan horarios disponibles el ${human}.`;
+      pregunta = "¿Quieres probar otra fecha?";
+    } else if (res.reason === "blocked" && res.mensajeBloqueo) {
+      motivo = `Ese día (${human}) la agenda está cerrada: ${res.mensajeBloqueo}.`;
+    } else if (res.reason === "doctor_off") {
+      motivo = `${state.doctorName ?? "El profesional"} no atiende ese día (${human}).`;
+    } else {
+      motivo = `Ese día (${human}) no hay atención.`;
+    }
+
+    // ws1-t5 — en vez de solo pedir otra fecha, se busca el día más cercano
+    // con lugar (mismo doctor y duración), día por día y con tope.
+    const siguiente = await siguienteDiaConLugar(input, state, deps);
+    if (!siguiente) {
+      state.step = "date";
       return step(
-        `${prefix}Ese día (${human}) la agenda está cerrada: ${res.mensajeBloqueo}. ¿Qué otra fecha te acomoda?`,
+        `${prefix}${motivo} Tampoco encontré lugar en los ${DIAS_A_BUSCAR_HACIA_ADELANTE} días siguientes. ${pregunta}`,
         state.mode,
         state,
       );
     }
-    // WS1-T2 · horario — la clínica abre, pero ESTE doctor no atiende ese día.
-    // Se dice con su nombre (la persona lo eligió en este mismo chat) y sin
-    // explicar su horario: basta con que ese día no, y con pedir otra fecha.
-    if (res.reason === "doctor_off") {
-      return step(
-        `${prefix}${state.doctorName ?? "El profesional"} no atiende ese día (${human}). ¿Qué otra fecha te acomoda?`,
-        state.mode,
-        state,
-      );
-    }
-    return step(`${prefix}Ese día (${human}) no hay atención. ¿Qué otra fecha te acomoda?`, state.mode, state);
-  }
-  if (res.slots.length === 0) {
-    state.step = "date";
-    return step(`${prefix}No quedan horarios disponibles el ${human}. ¿Quieres probar otra fecha?`, state.mode, state);
+    state.dateISO = siguiente.dateISO;
+    res = siguiente.res;
+    human = formatDateHuman(siguiente.dateISO, tz);
+    prefix = `${prefix}${motivo} El día más cercano con lugar es el ${human}.\n`;
   }
 
   // ws1-t1 — «en la tarde»: primero los huecos de ese turno. Si ese turno no
@@ -874,6 +930,30 @@ async function presentSlots(
   );
 }
 
+/**
+ * ws1-t5 — el primer día con horarios libres después de `state.dateISO`, hasta
+ * DIAS_A_BUSCAR_HACIA_ADELANTE días. Una consulta por día, en serie (nunca en
+ * paralelo: el pooler se satura) y parando en el primero que tenga lugar.
+ */
+async function siguienteDiaConLugar(
+  input: BotTurnInput,
+  state: BookingState,
+  deps: BookingDeps,
+): Promise<{ dateISO: string; res: SlotResult } | null> {
+  if (!state.doctorId || !state.dateISO) return null;
+  for (let i = 1; i <= DIAS_A_BUSCAR_HACIA_ADELANTE; i++) {
+    const dateISO = addDaysISO(state.dateISO, i);
+    const res = await deps.getAvailableSlots({
+      clinicId: input.clinicId,
+      doctorId: state.doctorId,
+      dateISO,
+      durationMin: state.durationMin ?? 0,
+    });
+    if (!res.closed && res.slots.length > 0) return { dateISO, res };
+  }
+  return null;
+}
+
 async function stepSlot(
   input: BotTurnInput,
   state: BookingState,
@@ -882,6 +962,30 @@ async function stepSlot(
   const options = state.options ?? [];
   // ws1-t3 — tocó una fila de la lista: esa hora, sin interpretar el título.
   const tocado = indiceTocado(input, state, options);
+  // ws1-t5 — ante la lista de horarios el paciente puede pedir OTRO día
+  // («mejor el jueves», «en 3 semanas», «el 15 de junio», «el próximo mes»):
+  // se le enseñan los de ese día en vez de un «elige por número». «El 3» o
+  // «la 2» a secas siguen siendo opciones de la lista.
+  if (tocado === null) {
+    const tz = await deps.getClinicTimezone(input.clinicId);
+    const otroDia = parseFechaConPalabras(input.incomingText, tz);
+    if (otroDia && otroDia >= todayInTz(tz) && otroDia !== state.dateISO) {
+      state.misses = 0;
+      state.options = undefined;
+      state.slots = undefined;
+      state.dateISO = otroDia;
+      return presentSlots(input, state, tz, deps);
+    }
+    const mes = otroDia ? null : mesPedidoSinDia(input.incomingText, tz);
+    if (mes) {
+      state.misses = 0;
+      state.options = undefined;
+      state.slots = undefined;
+      state.step = "date";
+      state.mesPedido = mes;
+      return step(preguntaDiaDelMes(mes, tz), state.mode, state);
+    }
+  }
   // ws1-t1 (#2) — una hora escrita como hora («a las 10», «10 am», «10:30», o
   // «10» si ese hueco existe) es esa hora, no la opción número 10.
   const eleccion =
