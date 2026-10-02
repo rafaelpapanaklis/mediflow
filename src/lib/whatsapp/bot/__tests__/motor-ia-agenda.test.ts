@@ -315,3 +315,10 @@ test("ws1-t5: con el agendado apagado, la pregunta con fecha no entra a la agend
   assert.equal(estado.agenda.length, 0);
   assert.equal(r.reply, "Escríbenos para revisar."); // la FAQ, como antes
 });
+
+test("ws1-t5 (añadido): «¿hay lugar en febrero?» va a la agenda, no a la FAQ", async () => {
+  estado.config = configBase({ faqs: FAQS_AGENDA });
+  const r = await turno("¿hay lugar en febrero?");
+  assert.deepEqual(estado.agenda, ["¿hay lugar en febrero?"]);
+  assert.equal(r.reply, "AGENDA-REAL: ¿qué servicio?");
+});

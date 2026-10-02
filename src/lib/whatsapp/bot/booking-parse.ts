@@ -66,6 +66,9 @@ const RELATIVA_RE = new RegExp(
 /** «el próximo mes», «el mes que entra», «el mes que viene», «el otro mes». */
 const MES_PROXIMO_RE = /\b(?:proximo|siguiente|otro)\s+mes\b|\bmes\s+que\s+(?:entra|viene)\b/;
 
+/** Un mes por su nombre, con año opcional: «enero», «marzo de 2027». */
+const MES_NOMBRADO_RE = new RegExp(`\\b(${Object.keys(MONTHS).join("|")})\\b(?:\\s+(?:de|del)\\s+(\\d{4}))?`);
+
 /** «la otra semana», «la próxima semana», «la semana que viene» (sin día). */
 const SEMANA_PROXIMA_RE = /\b(?:proxima|siguiente|otra)\s+semana\b|\bsemana\s+que\s+(?:viene|entra)\b/;
 
@@ -278,10 +281,22 @@ export function fechaDentroDelMesPedido(
  */
 export function mesPedidoSinDia(text: string, timezone: string, now: Date = new Date()): string | null {
   const t = foldAccents(text);
-  if (!MES_PROXIMO_RE.test(t)) return null;
-  if (parseDateInput(text, timezone, now)) return null;
   const p = getTzParts(now, timezone);
-  return mesSiguiente(`${p.year}-${pad2(p.month)}-${pad2(p.day)}`);
+  if (MES_PROXIMO_RE.test(t)) {
+    if (parseDateInput(text, timezone, now)) return null;
+    return mesSiguiente(`${p.year}-${pad2(p.month)}-${pad2(p.day)}`);
+  }
+  // ws1-t5 (añadido) — un mes por su nombre, sin día: «en enero», «para
+  // enero», «¿hay lugar en febrero?», «a mediados de marzo». Si ese mes ya
+  // pasó este año es el del año que viene (dicho en diciembre, «enero» es el
+  // enero que entra, nunca el de hace 11 meses); el mes en curso es este.
+  // «enero de 2028» respeta el año escrito.
+  const nombrado = t.match(MES_NOMBRADO_RE);
+  if (!nombrado) return null;
+  if (parseDateInput(text, timezone, now)) return null;
+  const month = MONTHS[nombrado[1]];
+  const year = nombrado[2] ? parseInt(nombrado[2], 10) : month < p.month ? p.year + 1 : p.year;
+  return `${year}-${pad2(month)}`;
 }
 
 /** «noviembre» o «enero de 2027» (con año solo si no es el de `now` en la clínica). */
@@ -366,6 +381,20 @@ function parseFecha(text: string, timezone: string, now: Date, conSoloDia: boole
     return conAnoImplicito(today, month, day);
   }
 
+  // ws1-t5 (añadido) — «enero 10», «para marzo 3»: mes y después el día.
+  const mesDia = t.match(
+    new RegExp(`\\b(${Object.keys(MONTHS).join("|")})\\s+(\\d{1,2})\\b(?!\\s*(?::|am\\b|pm\\b|hrs?\\b|horas?\\b|\\d))(?:\\s+(?:de|del)\\s+(\\d{4}))?`),
+  );
+  if (mesDia) {
+    const month = MONTHS[mesDia[1]];
+    const day = parseInt(mesDia[2], 10);
+    if (mesDia[3]) {
+      const year = parseInt(mesDia[3], 10);
+      return esFechaReal(year, month, day) ? `${year}-${pad2(month)}-${pad2(day)}` : null;
+    }
+    return conAnoImplicito(today, month, day);
+  }
+
   const relativa = fechaRelativa(t, today);
   if (relativa) return relativa;
   if (MES_PROXIMO_RE.test(t)) return fechaEnMesProximo(t, today);
@@ -399,8 +428,19 @@ function parseFecha(text: string, timezone: string, now: Date, conSoloDia: boole
   // ws1-t5 — «la otra semana» sin día: el lunes de esa semana.
   if (SEMANA_PROXIMA_RE.test(t)) return addDaysISO(lunesDeLaSemana(today), 7);
 
-  if (!conSoloDia) return null;
   const soloDia = t.match(/\b(?:el|dia)\s+(\d{1,2})\b(?!\s*(?::|am\b|pm\b|hrs?\b|horas?\b))/);
+  // ws1-t5 (añadido) — «en enero, el 15»: el día es de ESE mes, no del que viene.
+  const mesSuelto = t.match(MES_NOMBRADO_RE);
+  if (soloDia && mesSuelto) {
+    const month = MONTHS[mesSuelto[1]];
+    const day = parseInt(soloDia[1], 10);
+    if (mesSuelto[2]) {
+      const year = parseInt(mesSuelto[2], 10);
+      return esFechaReal(year, month, day) ? `${year}-${pad2(month)}-${pad2(day)}` : null;
+    }
+    return conAnoImplicito(today, month, day);
+  }
+  if (!conSoloDia) return null;
   if (soloDia) return proximoDiaDelMes(today, parseInt(soloDia[1], 10));
 
   return null;

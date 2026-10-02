@@ -363,3 +363,72 @@ describe("agendado: disponibilidad en cualquier fecha", () => {
     assert.equal(c.state.step, "confirm");
   });
 });
+
+// ── ws1-t5 (añadido): un mes sin día ─────────────────────────────────────────
+
+describe("mes sin día («en enero», «¿hay lugar en febrero?»)", () => {
+  const NOV20 = cdmx("2026-11-20T12:00:00");
+  const DIC15 = cdmx("2026-12-15T12:00:00");
+
+  const casos: Array<[Date, string, string]> = [
+    [NOV20, "en enero", "2027-01"],
+    [NOV20, "para enero", "2027-01"],
+    [NOV20, "¿hay lugar en febrero?", "2027-02"],
+    [NOV20, "a mediados de marzo", "2027-03"],
+    [NOV20, "en noviembre", "2026-11"], // el mes en curso es este
+    [NOV20, "en diciembre", "2026-12"],
+    [NOV20, "en octubre", "2027-10"], // ya pasó: el del año que viene
+    [NOV20, "enero de 2028", "2028-01"], // el año escrito manda
+    [DIC15, "en enero", "2027-01"], // nunca el de hace 11 meses
+    [DIC15, "para enero", "2027-01"],
+    [DIC15, "¿hay lugar en febrero?", "2027-02"],
+    [DIC15, "a mediados de marzo", "2027-03"],
+    [DIC15, "en diciembre", "2026-12"],
+    [DIC15, "en noviembre", "2027-11"],
+  ];
+  for (const [now, texto, mes] of casos) {
+    const hoy = todayISOForTests(now, CDMX);
+    it(`hoy ${hoy}: «${texto}» → pregunta qué día de ${mes}`, () => {
+      assert.equal(parseDateInput(texto, CDMX, now), null);
+      assert.equal(mesPedidoSinDia(texto, CDMX, now), mes);
+    });
+  }
+
+  it("la pregunta nombra el mes, con año si no es el de la clínica", () => {
+    assert.equal(nombreDeMes("2027-01", CDMX, DIC15), "enero de 2027");
+    assert.equal(nombreDeMes("2026-12", CDMX, DIC15), "diciembre");
+  });
+
+  it("con día sigue siendo una fecha (no se pregunta)", () => {
+    for (const now of [NOV20, DIC15]) {
+      assert.equal(parseDateInput("el 10 de enero", CDMX, now), "2027-01-10");
+      assert.equal(parseDateInput("10/01", CDMX, now), "2027-01-10");
+      assert.equal(parseDateInput("enero 10", CDMX, now), "2027-01-10");
+      assert.equal(parseDateInput("en enero, el 15", CDMX, now), "2027-01-15"); // no el próximo 15
+      assert.equal(mesPedidoSinDia("el 10 de enero", CDMX, now), null);
+    }
+  });
+
+  it("la respuesta «el 10» a «¿qué día de enero?» es el 10 de enero del año que entra", () => {
+    assert.equal(fechaDentroDelMesPedido("el 10", "2027-01", CDMX, DIC15), "2027-01-10");
+    assert.equal(fechaDentroDelMesPedido("el lunes", "2027-01", CDMX, DIC15), "2027-01-04");
+  });
+
+  it("«¿hay lugar en febrero?» entra al agendado (va antes que las FAQ)", () => {
+    assert.equal(pideCitaConFecha("¿hay lugar en febrero?", CDMX, DIC15), true);
+    assert.equal(pideCitaConFecha("¿tienen disponibilidad en enero?", CDMX, NOV20), true);
+    assert.equal(pideCitaConFecha("¿Qué horario tienen en diciembre?", CDMX, NOV20), false);
+  });
+
+  it("flujo: «¿hay lugar en febrero de 2030?» → servicio → «¿Qué día de febrero de 2030…?» → «el 10»", async () => {
+    const consultas: string[] = [];
+    const c = makeConvo(makeDeps({ "2030-02-10": { closed: false, slots: ["09:00"] } }, consultas));
+    await c.say("¿hay lugar en febrero de 2030?");
+    const r1 = await c.say("1");
+    assert.match(r1.reply ?? "", /¿Qué día de febrero de 2030 te acomoda\?/);
+    assert.equal(consultas.length, 0);
+    const r2 = await c.say("el 10");
+    assert.deepEqual(consultas, ["2030-02-10"]);
+    assert.match(r2.reply ?? "", /Horarios disponibles el domingo, 10 de febrero de 2030/);
+  });
+});
