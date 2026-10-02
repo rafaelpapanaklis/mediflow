@@ -4,8 +4,9 @@
  *
  * Run: npm run test:aparece-en-agenda
  *
- *   1) clínica NUEVA → el dueño nace marcado (registro, registro con Google y sede nueva); las ya creadas
- *      se desmarcan con sql/ws1-t10-dueno-fuera-de-agenda.sql, salvo el dueño de BEVADENT.
+ *   1) clínica NUEVA → el dueño nace marcado (registro y registro con Google); las ya creadas se desmarcan con
+ *      sql/ws1-t10-dueno-fuera-de-agenda.sql, salvo donde el dueño es el único que atiende, BEVADENT y la de QA.
+ *      Una SEDE nueva copia la casilla del dueño en su sede principal (no es una clínica nueva).
  *   2) un ADMIN dado de alta en Equipo (POST /api/team) nace DESMARCADO; el doctor, marcado.
  *   3) el tratante de ortodoncia = quien puede recibir citas en la Agenda (+ acceso al módulo): un Super Admin
  *      desmarcado no es doctor, aunque marque Ortodoncia como especialidad.
@@ -64,17 +65,43 @@ test("POST /api/team escribe la casilla con la regla y con el rol que de verdad 
   assert.match(ruta, /import \{ agendaActiveAlCrear \} from "@\/lib\/agenda\/roles-que-atienden"/);
 });
 
-test("registro, registro con Google y sede nueva crean al dueño MARCADO (explícito, no por el default de la base)", () => {
-  for (const f of [
-    "src/app/api/auth/register/route.ts",
-    "src/app/api/auth/register-oauth/route.ts",
-    "src/app/api/clinics/route.ts",
-  ]) {
+test("registro y registro con Google crean al dueño MARCADO (explícito, no por el default de la base)", () => {
+  for (const f of ["src/app/api/auth/register/route.ts", "src/app/api/auth/register-oauth/route.ts"]) {
     const fuente = sinComentarios(leer(f));
     const dueno = bloque(fuente, "users:", "create:");
     assert.match(dueno, /role: "SUPER_ADMIN"/, f);
     assert.match(dueno, /agendaActive: agendaActiveAlCrear\("SUPER_ADMIN"\)/, f);
   }
+});
+
+// ─── sede nueva: copia la casilla de la sede principal ──────────────────────
+
+const agendaActiveDeSedeNueva = (principal: { agendaActive?: boolean | null } | null): boolean => {
+  const f = (reglas as Record<string, unknown>).agendaActiveDeSedeNueva;
+  assert.equal(typeof f, "function", "roles-que-atienden.ts exporta agendaActiveDeSedeNueva");
+  return (f as (p: typeof principal) => boolean)(principal);
+};
+
+test("sede nueva: el dueño lleva la MISMA casilla que en su sede principal", () => {
+  assert.equal(agendaActiveDeSedeNueva({ agendaActive: false }), false, "desmarcado en la principal → desmarcado");
+  assert.equal(agendaActiveDeSedeNueva({ agendaActive: true }), true);
+  assert.equal(agendaActiveDeSedeNueva({ agendaActive: null }), true, "sin el dato = default de la base");
+  assert.equal(agendaActiveDeSedeNueva(null), true, "si no se encontrara la principal, como un dueño nuevo");
+});
+
+test("POST /api/clinics lee la sede principal por el supabaseId de la SESIÓN y copia su casilla", () => {
+  const ruta = sinComentarios(leer("src/app/api/clinics/route.ts"));
+  assert.match(ruta, /const supabaseId: string = ctx\.user\.supabaseId;/);
+  const lectura = bloque(ruta, "const filaEnSedePrincipal", "prisma.user.findFirst(");
+  assert.match(lectura, /where: \{ supabaseId, role: "SUPER_ADMIN", isActive: true \}/);
+  assert.match(lectura, /orderBy: \{ clinic: \{ createdAt: "asc" \} \}/, "la principal = la clínica más antigua");
+  assert.match(lectura, /select: \{ agendaActive: true \}/, "solo se lee la casilla");
+  // Se lee ANTES de crear la sede (si no, la sede nueva podría ser «la principal» de sí misma).
+  assert.ok(ruta.indexOf("const filaEnSedePrincipal") < ruta.indexOf("prisma.clinic.create("));
+  const dueno = bloque(ruta, "users:", "create:");
+  assert.match(dueno, /role: "SUPER_ADMIN"/);
+  assert.match(dueno, /agendaActive: agendaActiveDeSedeNueva\(filaEnSedePrincipal\)/);
+  assert.doesNotMatch(dueno, /agendaActiveAlCrear/, "una sede no es una clínica nueva");
 });
 
 // ─── 3 · el tratante de ortodoncia sigue la regla de la Agenda ───────────────

@@ -52,6 +52,16 @@ export function agendaActiveAlCrear(role: string): boolean {
 }
 
 /**
+ * La casilla del dueño en una SEDE nueva: la COPIA de la suya en su sede principal (decisión de Rafael,
+ * 2-oct-2026; una sede no es una clínica nueva). `principal` = su fila SUPER_ADMIN activa en la clínica más
+ * antigua del mismo supabaseId; si no se encontrara, la de un dueño nuevo (marcado).
+ */
+export function agendaActiveDeSedeNueva(principal: { agendaActive?: boolean | null } | null | undefined): boolean {
+  if (!principal) return agendaActiveAlCrear("SUPER_ADMIN");
+  return principal.agendaActive !== false;
+}
+
+/**
  * La frase GENÉRICA del `doctor_not_found` de la Agenda: la usa la pantalla solo si el servidor no mandó
  * `reason` (el servidor manda la del motivo concreto, `fraseNoRecibeCitas`).
  */
