@@ -12,7 +12,7 @@ import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
 import { aceptacionEncendida, leerAceptaciones } from "@/lib/quotes/aceptacion-db";
 import { cobrosDePresupuestos } from "@/lib/quotes/cargos.server";
 import { hasPermission } from "@/lib/auth/permissions";
-import { diaDeVigencia } from "@/lib/quotes/vigencia";
+import { diaDeVigencia, estaVencida } from "@/lib/quotes/vigencia";
 
 export const dynamic = "force-dynamic";
 
@@ -38,16 +38,25 @@ export async function GET(req: NextRequest) {
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
-  // Vencimiento perezoso: PRESENTED con validUntil pasada → EXPIRED.
-  await prisma.quote.updateMany({
-    where: {
-      clinicId: ctx.clinicId,
-      patientId,
-      status: "PRESENTED",
-      validUntil: { lt: new Date() },
-    },
-    data: { status: "EXPIRED" },
+  // La zona de la clínica: el día de vigencia (que se pinta) y el momento en
+  // que vence salen de ella.
+  const zona = (await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }))?.timezone ?? null;
+
+  // Vencimiento perezoso: PRESENTED cuyo día de vigencia ya terminó en la
+  // clínica → EXPIRED. La base solo trae los que tienen el instante pasado
+  // (un día de vigencia nunca termina antes de su instante guardado); de esos,
+  // vencen los que `estaVencida` dice, no los que pasaron la medianoche UTC.
+  const candidatos = await prisma.quote.findMany({
+    where: { clinicId: ctx.clinicId, patientId, status: "PRESENTED", validUntil: { lt: new Date() } },
+    select: { id: true, validUntil: true },
   });
+  const vencidos = candidatos.filter((q) => estaVencida(q.validUntil, zona)).map((q) => q.id);
+  if (vencidos.length > 0) {
+    await prisma.quote.updateMany({
+      where: { clinicId: ctx.clinicId, patientId, status: "PRESENTED", id: { in: vencidos } },
+      data: { status: "EXPIRED" },
+    });
+  }
 
   const quotes = await prisma.quote.findMany({
     where: { clinicId: ctx.clinicId, patientId },
@@ -86,9 +95,8 @@ export async function GET(req: NextRequest) {
     return { ...q, items: q.items.filter((it) => si.has(it.id)) };
   });
   const casos = await casosDesdePresupuestos(ctx, paraCasos);
-  // La vigencia se pinta como DÍA en la zona de la clínica, el mismo que ve el
-  // paciente en la liga (antes: UTC aquí, hora del navegador allá).
-  const zona = (await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }))?.timezone ?? null;
+  // La vigencia se pinta como DÍA en la zona de la clínica (`zona`, leída
+  // arriba), el mismo que ve el paciente en la liga.
   const userPerm = { role: ctx.role, permissionsOverride: ctx.permissionsOverride ?? [] };
   const permisos = {
     aceptar: hasPermission(userPerm, "billing.edit"),

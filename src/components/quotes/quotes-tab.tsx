@@ -16,6 +16,7 @@ import { DictationMic, appendDictado } from "@/components/clinical/shared/dictat
 import { AceptarConceptos, CobrarPresupuesto, LineaDeCobro } from "@/components/dashboard/presupuesto-nuevo/aceptacion-y-cobro";
 import { cargadosEnOtrosPresupuestos, importesDeTarjeta } from "@/lib/quotes/aceptacion";
 import { fechaDeVigencia } from "@/lib/quotes/vigencia";
+import { ElegirDoctorDelPlan, pedidoDeDoctor, type PedidoDeDoctor } from "@/components/quotes/elegir-doctor-del-plan";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -222,11 +223,14 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // «Crear plan» sin doctor que atienda: el servidor pide elegirlo.
+  const [elegirDoctor, setElegirDoctor] = useState<PedidoDeDoctor | null>(null);
   const [waSent, setWaSent] = useState(false);
   // ws1-t6: «¿Qué acepta el paciente?» y «Se cobrará hoy» (con el SQL aplicado).
   const [aceptando, setAceptando] = useState(false);
   const [cobrando, setCobrando] = useState(false);
   const cobro = quote.cobro;
+  const importes = importesDeTarjeta(quote.total, cobro, quote.discountAmount);
   const puedeAceptar = quote.permisos?.aceptar ?? true;
   const puedeCargar = quote.permisos?.cargar ?? true;
   const cfg = STATUS_CFG[cobro?.alcance === "parcial" ? "EXPIRED" : quote.status] ?? STATUS_CFG.DRAFT;
@@ -240,6 +244,8 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
         body: body ? JSON.stringify(body) : undefined,
       });
       const out = await res.json().catch(() => ({}));
+      // «Crear plan» que pide elegir doctor: no es un error, se pinta el selector.
+      if (!res.ok && out.elegirDoctor) return out;
       if (!res.ok) throw new Error(out.error ?? t("quotes.card.errorFallback"));
       await onChanged();
       return out;
@@ -335,14 +341,14 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
         </div>
         <div className="text-right flex-shrink-0">
           {/* Aceptado en parte: grande lo aceptado (lo que se debe), chico el total cotizado. */}
-          <div className="text-lg font-bold text-foreground">{money(importesDeTarjeta(quote.total, cobro).principal)}</div>
+          <div className="text-lg font-bold text-foreground">{money(importes.principal)}</div>
           {cobro?.alcance === "parcial" && (
             <div className="text-[11px] text-muted-foreground">
               {t("presupuestoAceptacion.importeAceptado")} · {t("presupuestoAceptacion.deCotizado", { total: money(quote.total) })}
             </div>
           )}
-          {quote.discountAmount > 0 && (
-            <div className="text-[11px] text-muted-foreground">{t("quotes.card.discountShort", { amount: money(quote.discountAmount) })}</div>
+          {importes.descuento > 0 && (
+            <div className="text-[11px] text-muted-foreground">{t("quotes.card.discountShort", { amount: money(importes.descuento) })}</div>
           )}
         </div>
       </div>
@@ -440,6 +446,7 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
                 if (quote.casoOrtodoncia?.href) { window.location.assign(quote.casoOrtodoncia.href); return; }
                 const out = await post(`/api/quotes/${quote.id}/treatment-plan`);
                 if (out?.casoOrtodoncia?.href) { window.location.assign(out.casoOrtodoncia.href); return; }
+                setElegirDoctor(pedidoDeDoctor(out, false));
                 if (out?.treatmentPlanId) onViewPlan?.(out.treatmentPlanId);
               }}
               tone="primary"
@@ -456,6 +463,7 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
               <Btn
                 onClick={async () => {
                   const out = await post(`/api/quotes/${quote.id}/treatment-plan?general=1`);
+                  setElegirDoctor(pedidoDeDoctor(out, true));
                   if (out?.treatmentPlanId) onViewPlan?.(out.treatmentPlanId);
                 }}
                 tone="default"
@@ -495,6 +503,30 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
       )}
 
       {msg && <p className="text-[11px] text-rose-600 mt-2">{msg}</p>}
+      {elegirDoctor && (
+        <ElegirDoctorDelPlan
+          pedido={elegirDoctor}
+          ocupado={busy}
+          clases={{
+            caja: "flex items-center gap-1.5 flex-wrap mt-2",
+            texto: "basis-full text-[11px] text-amber-700",
+            select: "text-[11px] px-2 py-1 rounded-lg border border-border bg-background",
+            boton: "text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-border text-muted-foreground hover:bg-muted/50",
+            botonPrincipal: "text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50",
+          }}
+          onCancelar={() => setElegirDoctor(null)}
+          onCrear={async (doctorId) => {
+            const out = await post(
+              `/api/quotes/${quote.id}/treatment-plan${elegirDoctor.general ? "?general=1" : ""}`,
+              { doctorId },
+            );
+            if (out?.treatmentPlanId) {
+              setElegirDoctor(null);
+              onViewPlan?.(out.treatmentPlanId);
+            }
+          }}
+        />
+      )}
       {waSent && (
         <p className="text-[11px] text-emerald-600 mt-2">
           {t("quotes.card.waSentToast")}{" "}

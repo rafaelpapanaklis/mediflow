@@ -12,9 +12,10 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { diaDeVigencia, fechaDeDia, fechaDeVigencia } from "@/lib/quotes/vigencia";
+import { diaDeVigencia, estaVencida, fechaDeDia, fechaDeVigencia, venceEl } from "@/lib/quotes/vigencia";
 import { toPublicView } from "@/lib/quotes/serialize";
-import { cargadosEnOtrosPresupuestos, claveDeConcepto, importesDeTarjeta } from "@/lib/quotes/aceptacion";
+import { armarAceptacion, cargadosEnOtrosPresupuestos, claveDeConcepto, importesDeTarjeta, netoDeConceptos } from "@/lib/quotes/aceptacion";
+import { doctorDelPlan } from "@/lib/quotes/doctor-del-plan";
 
 // ── 2 · vigencia ────────────────────────────────────────────────────────────
 
@@ -63,13 +64,14 @@ test("la liga y la tarjeta del panel pintan el MISMO día (el caso de la revisi�
 // ── 3 · importe grande de la tarjeta ────────────────────────────────────────
 
 test("aceptado en parte: grande lo aceptado ($1,500) y aparte el total cotizado ($10,000)", () => {
-  assert.deepEqual(importesDeTarjeta(10000, { alcance: "parcial", totalAceptado: 1500 }), { principal: 1500, cotizado: 10000 });
+  assert.deepEqual(importesDeTarjeta(10000, { alcance: "parcial", totalAceptado: 1500 }), { principal: 1500, cotizado: 10000, descuento: 0 });
 });
 
 test("aceptado completo, o sin aceptación por concepto: el total, como siempre", () => {
-  assert.deepEqual(importesDeTarjeta(10000, { alcance: "total", totalAceptado: 10000 }), { principal: 10000, cotizado: null });
-  assert.deepEqual(importesDeTarjeta(10000, undefined), { principal: 10000, cotizado: null });
-  assert.deepEqual(importesDeTarjeta(10000, null), { principal: 10000, cotizado: null });
+  assert.deepEqual(importesDeTarjeta(10000, { alcance: "total", totalAceptado: 10000 }), { principal: 10000, cotizado: null, descuento: 0 });
+  assert.deepEqual(importesDeTarjeta(10000, undefined), { principal: 10000, cotizado: null, descuento: 0 });
+  assert.deepEqual(importesDeTarjeta(10000, null), { principal: 10000, cotizado: null, descuento: 0 });
+  assert.equal(importesDeTarjeta(9000, { alcance: "total", totalAceptado: 9000, descuentoAceptado: 1000 }, 1000).descuento, 1000);
 });
 
 // ── 6 · aviso al cargar el duplicado ────────────────────────────────────────
@@ -121,4 +123,49 @@ test("factura vieja del presupuesto (sin quote_charges): avisa con el folio del 
 test("sin aceptación por concepto (sin SQL) no hay aviso", () => {
   const sinCobro = { ...ORIGINAL, cobro: undefined };
   assert.equal(cargadosEnOtrosPresupuestos("q13", [sinCobro, DUPLICADO]).size, 0);
+});
+
+// ── Revisión final de ws1-t2 ────────────────────────────────────────────────
+
+test("fallo 1: aceptado en parte, el renglón del descuento es la parte de lo aceptado (P-0015: $150, no $1,000)", () => {
+  const imp = importesDeTarjeta(9000, { alcance: "parcial", totalAceptado: 1350, descuentoAceptado: 150 }, 1000);
+  assert.deepEqual(imp, { principal: 1350, cotizado: 9000, descuento: 150 });
+});
+
+test("fallo 2: lo aceptado con su parte del descuento global (P-0017: $6,200 de lista → $5,580)", () => {
+  const p = {
+    discountAmount: 700,
+    items: [
+      { id: "a", name: "Corona", toothFdi: "11", quantity: 1, unitPrice: 6200 },
+      { id: "b", name: "Limpieza", toothFdi: null, quantity: 1, unitPrice: 800 },
+    ],
+  };
+  const r = armarAceptacion(p, ["a"]);
+  assert.equal(netoDeConceptos(r, ["a"]), 5580);
+  assert.equal(netoDeConceptos(r, ["b"]), 0, "lo no aceptado no suma");
+  assert.equal(netoDeConceptos(armarAceptacion(p, ["a", "b"]), ["a", "b"]), 6300);
+});
+
+test("fallo 3: el día de vigencia cuenta completo en la zona de la clínica", () => {
+  const z = "America/Mexico_City";
+  const vu = "2026-10-02T00:00:00.000Z"; // «válido hasta el 2 oct», como lo guarda el editor
+  assert.equal(estaVencida(vu, z, new Date("2026-10-02T00:00:01.000Z")), false, "1 oct 18:00 en México: vigente");
+  assert.equal(estaVencida(vu, z, new Date("2026-10-03T05:59:59.000Z")), false, "2 oct 23:59 en México: vigente");
+  assert.equal(estaVencida(vu, z, new Date("2026-10-03T06:00:00.000Z")), true, "3 oct 00:00 en México: vencido");
+  assert.equal(venceEl(vu, z)?.toISOString(), "2026-10-03T06:00:00.000Z");
+  // Otra zona: Madrid (UTC+2 en octubre) vence a las 22:00 UTC del 2.
+  assert.equal(venceEl(vu, "Europe/Madrid")?.toISOString(), "2026-10-02T22:00:00.000Z");
+  // Tijuana con horario de verano en octubre (UTC−7).
+  assert.equal(venceEl(vu, "America/Tijuana")?.toISOString(), "2026-10-03T07:00:00.000Z");
+  // Instante de «Presentar» (+30 días): su día es el del reloj de la clínica.
+  assert.equal(venceEl("2026-11-01T03:00:00.000Z", z)?.toISOString(), "2026-11-01T06:00:00.000Z");
+  assert.equal(estaVencida(null, z), false);
+  assert.equal(estaVencida(vu, "No/Existe", new Date("2026-10-03T05:00:00.000Z")), false, "zona basura → la de por defecto");
+});
+
+test("fallo 4: el doctor del plan es el primer candidato que atiende; si ninguno, null (se pide elegir)", () => {
+  assert.equal(doctorDelPlan(["recepcion", "d1"], ["d1"]), "d1");
+  assert.equal(doctorDelPlan(["dueno", "d1"], ["dueno", "d1"]), "dueno");
+  assert.equal(doctorDelPlan(["recepcion", null], ["d1"]), null, "nunca el primero de la lista ni quien pulsa");
+  assert.equal(doctorDelPlan([undefined, null], []), null);
 });

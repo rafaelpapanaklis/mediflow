@@ -9,6 +9,7 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { estaVencida } from "./vigencia";
 
 // Interfaz plana y no union discriminado: tsconfig no está en strict y sin
 // strictNullChecks `if (!r.ok)` NO estrecha el tipo — los campos opcionales
@@ -45,8 +46,12 @@ export async function presentQuote(args: {
   const now = new Date();
   const data: any = { status: "PRESENTED", presentedAt: now };
   if (!current.acceptToken) data.acceptToken = randomBytes(20).toString("hex");
-  const vu = current.validUntil ? new Date(current.validUntil) : null;
-  if (!vu || vu.getTime() <= now.getTime()) {
+  // Vencida = su día de vigencia ya terminó en la zona de la clínica, la misma
+  // regla que la liga y la lista (vigencia.ts). «Válido hasta hoy» no se renueva.
+  const zona = current.validUntil
+    ? (await prisma.clinic.findUnique({ where: { id: args.clinicId }, select: { timezone: true } }))?.timezone ?? null
+    : null;
+  if (!current.validUntil || estaVencida(current.validUntil, zona, now)) {
     data.validUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   }
 

@@ -11,15 +11,17 @@ import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 import { aceptacionEncendida, leerAceptaciones } from "@/lib/quotes/aceptacion-db";
 import { aceptarPresupuesto, PresupuestoError } from "@/lib/quotes/cargos.server";
 import { resumirAceptacion } from "@/lib/quotes/aceptacion";
+import { estaVencida } from "@/lib/quotes/vigencia";
 
 export const dynamic = "force-dynamic";
 
 interface Params { params: { token: string } }
 
-function isExpired(validUntil: Date | null, status: string): boolean {
+// El día de vigencia cuenta completo en la zona de la clínica (vigencia.ts):
+// «válido hasta el 2 oct» se acepta hasta las 23:59 del 2 oct de la clínica.
+function isExpired(validUntil: Date | null, status: string, zona: string | null): boolean {
   if (status === "EXPIRED") return true;
-  if (!validUntil) return false;
-  return new Date().getTime() > new Date(validUntil).getTime();
+  return estaVencida(validUntil, zona);
 }
 
 /**
@@ -40,7 +42,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
-  const expired = isExpired(quote.validUntil, quote.status);
+  const expired = isExpired(quote.validUntil, quote.status, quote.clinic.timezone);
 
   // Firma estampada (si ya aceptó): signed URL de corta vida para que la vea.
   const signatureUrl = quote.signatureUrl
@@ -97,7 +99,10 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const quote = await prisma.quote.findUnique({
     where: { acceptToken: params.token },
-    select: { id: true, clinicId: true, status: true, validUntil: true, signatureUrl: true },
+    select: {
+      id: true, clinicId: true, status: true, validUntil: true, signatureUrl: true,
+      clinic: { select: { timezone: true } },
+    },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
@@ -107,7 +112,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (quote.status === "REJECTED") {
     return NextResponse.json({ error: "Este presupuesto no está disponible" }, { status: 409 });
   }
-  if (isExpired(quote.validUntil, quote.status)) {
+  if (isExpired(quote.validUntil, quote.status, quote.clinic?.timezone ?? null)) {
     // Marca EXPIRED para que el panel lo refleje.
     if (quote.status !== "EXPIRED") {
       await prisma.quote.update({ where: { id: quote.id }, data: { status: "EXPIRED" } }).catch(() => {});

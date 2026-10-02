@@ -27,6 +27,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import r from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
 import s from "./presupuesto.module.css";
 import { AceptarConceptos, CobrarPresupuesto, LineaDeCobro } from "./aceptacion-y-cobro";
+import { ElegirDoctorDelPlan, pedidoDeDoctor, type PedidoDeDoctor } from "@/components/quotes/elegir-doctor-del-plan";
 
 /** Mismas cinco palabras y mismos colores que la lista de siempre. */
 const ESTADO: Record<QuoteStatus, { clave: string; tono: string }> = {
@@ -118,6 +119,8 @@ function Ficha({
   const [cobrando, setCobrando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  // «Crear plan» sin doctor que atienda: el servidor pide elegirlo.
+  const [elegirDoctor, setElegirDoctor] = useState<PedidoDeDoctor | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [waEnviado, setWaEnviado] = useState(false);
   const estado = ESTADO[quote.status] ?? ESTADO.DRAFT;
@@ -135,6 +138,8 @@ function Ficha({
         headers: { "Content-Type": "application/json" },
       });
       const salida = await res.json().catch(() => ({}));
+      // «Crear plan» que pide elegir doctor: no es un error, se pinta el selector.
+      if (!res.ok && salida.elegirDoctor) return salida;
       if (!res.ok) throw new Error(salida.error ?? t("presupuestoNuevo.errorAccion"));
       await onRecargar();
       return salida;
@@ -223,7 +228,7 @@ function Ficha({
   );
 
   // Aceptado en parte: grande lo aceptado (lo que se debe), chico el total cotizado.
-  const importes = importesDeTarjeta(quote.total, cobro);
+  const importes = importesDeTarjeta(quote.total, cobro, quote.discountAmount);
   const editable = quote.status === "DRAFT" || quote.status === "PRESENTED";
   const plan = hayCondiciones(quote.condicionesPago) && quote.condicionesPago?.modo === "plazos"
     ? frasePlan(quote.total, quote.condicionesPago)
@@ -264,9 +269,9 @@ function Ficha({
             {t("presupuestoAceptacion.importeAceptado")} · {t("presupuestoAceptacion.deCotizado", { total: dinero(importes.cotizado) })}
           </p>
         )}
-        {quote.discountAmount > 0 && (
+        {importes.descuento > 0 && (
           <p className={s.fichaDescuento}>
-            −{dinero(quote.discountAmount)} {t("presupuestoNuevo.deDescuento")}
+            −{dinero(importes.descuento)} {t("presupuestoNuevo.deDescuento")}
           </p>
         )}
       </div>
@@ -372,6 +377,7 @@ function Ficha({
                 if (quote.casoOrtodoncia?.href) { window.location.assign(quote.casoOrtodoncia.href); return; }
                 const salida = await post(`/api/quotes/${quote.id}/treatment-plan`);
                 if (salida?.casoOrtodoncia?.href) { window.location.assign(salida.casoOrtodoncia.href); return; }
+                setElegirDoctor(pedidoDeDoctor(salida, false));
                 if (salida?.treatmentPlanId) onVerPlan?.(salida.treatmentPlanId);
               }}
             >
@@ -387,6 +393,7 @@ function Ficha({
               <Accion
                 onClick={async () => {
                   const salida = await post(`/api/quotes/${quote.id}/treatment-plan?general=1`);
+                  setElegirDoctor(pedidoDeDoctor(salida, true));
                   if (salida?.treatmentPlanId) onVerPlan?.(salida.treatmentPlanId);
                 }}
               >
@@ -429,6 +436,30 @@ function Ficha({
       )}
 
       {mensaje && <p className={s.fichaMensaje}>{mensaje}</p>}
+      {elegirDoctor && (
+        <ElegirDoctorDelPlan
+          pedido={elegirDoctor}
+          ocupado={ocupado}
+          clases={{
+            caja: s.fichaAcciones,
+            texto: s.fichaMensaje,
+            select: r.campoEntrada,
+            boton: s.accion,
+            botonPrincipal: `${s.accion} ${s.accionPrincipal}`,
+          }}
+          onCancelar={() => setElegirDoctor(null)}
+          onCrear={async (doctorId) => {
+            const salida = await postConCuerpo(
+              `/api/quotes/${quote.id}/treatment-plan${elegirDoctor.general ? "?general=1" : ""}`,
+              { doctorId },
+            );
+            if (salida?.treatmentPlanId) {
+              setElegirDoctor(null);
+              onVerPlan?.(salida.treatmentPlanId);
+            }
+          }}
+        />
+      )}
       {waEnviado && (
         <p className={s.fichaAviso}>
           {t("quotes.card.waSentToast")}{" "}

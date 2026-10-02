@@ -353,6 +353,7 @@ export async function cobrosDePresupuestos(
       via: guardada?.via ?? null,
       aceptados: renglones.filter((r) => r.aceptado).map((r) => r.quoteItemId),
       totalAceptado: est.totalAceptado,
+      descuentoAceptado: res.descuento,
       noAceptado: res.noAceptado,
       cargado: est.cargado,
       porCargar: est.porCargar,
@@ -381,9 +382,22 @@ export async function conceptosAceptados<T extends { id: string }>(
   quoteId: string,
   items: T[],
 ): Promise<T[]> {
+  return (await aceptacionDelPresupuesto(clinicId, quoteId, items)).aceptados;
+}
+
+/**
+ * Los conceptos aceptados y los renglones guardados (con la parte del
+ * descuento global de cada uno). Sin renglones guardados: todos, y `renglones`
+ * null (quien la llama reparte con `aceptacionImplicita`).
+ */
+export async function aceptacionDelPresupuesto<T extends { id: string }>(
+  clinicId: string,
+  quoteId: string,
+  items: T[],
+): Promise<{ aceptados: T[]; renglones: RenglonAceptado[] | null }> {
   const acc = await leerAceptaciones(prisma, clinicId, [quoteId]);
   const guardada = acc.porQuote.get(quoteId);
-  if (!guardada) return items;
+  if (!guardada) return { aceptados: items, renglones: null };
   const si = new Set(guardada.renglones.filter((r) => r.aceptado).map((r) => r.quoteItemId));
-  return items.filter((i) => si.has(i.id));
+  return { aceptados: items.filter((i) => si.has(i.id)), renglones: guardada.renglones };
 }

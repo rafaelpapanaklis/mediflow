@@ -33,6 +33,7 @@ import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { dbDineroDe, dinero, foliosCandidatos, folioTecleado, pacienteConFolio, resolverPacienteDinero } from "../dinero/comun";
 import { definirHerramienta, fraseRecorte, lineasDeLista, plural, recortar, visorDe, type Lista } from "./base";
 import { fechaDe } from "./fechas";
+import { diaDeVigencia, estaVencida } from "@/lib/quotes/vigencia";
 import type { SabinaCtx } from "../tipos";
 
 const parametros = z.object({
@@ -130,9 +131,12 @@ const SELECT_ITEMS = {
   orderBy: { sortOrder: "asc" },
 } as const;
 
-/** La regla de vencimiento de `GET /api/quotes`: PRESENTED con `validUntil` pasada es EXPIRED. */
-export function estadoEfectivo(status: string, validUntil: Date | null, ahora: Date): string {
-  if (status === "PRESENTED" && validUntil && validUntil.getTime() < ahora.getTime()) return "EXPIRED";
+/**
+ * La regla de vencimiento de `GET /api/quotes`: PRESENTED cuyo día de vigencia
+ * ya terminó en la zona de la clínica es EXPIRED (vigencia.ts).
+ */
+export function estadoEfectivo(status: string, validUntil: Date | null, ahora: Date, zona?: string | null): string {
+  if (status === "PRESENTED" && estaVencida(validUntil, zona, ahora)) return "EXPIRED";
   return status;
 }
 
@@ -154,10 +158,11 @@ function aFila(q: any, ctx: SabinaCtx, ahora: Date, conDetalle: boolean): FilaPr
   return {
     folio: q.folio,
     titulo: String(q.title ?? "").slice(0, 80),
-    estado: etiquetaDe(estadoEfectivo(String(q.status), vence, ahora)),
-    clave: estadoEfectivo(String(q.status), vence, ahora),
+    estado: etiquetaDe(estadoEfectivo(String(q.status), vence, ahora, ctx.timezone)),
+    clave: estadoEfectivo(String(q.status), vence, ahora, ctx.timezone),
     fecha: fechaDe(new Date(q.createdAt), ctx.timezone),
-    vigencia: dia(q.validUntil),
+    // El día de vigencia que pintan la tarjeta y la liga (medianoche UTC = ese día).
+    vigencia: diaDeVigencia(q.validUntil, ctx.timezone),
     total: round2(num(q.total)),
     conceptos: conceptosCortos(items),
     ...(conDetalle
@@ -284,9 +289,9 @@ export const presupuestos = definirHerramienta<ParamsPresupuestos, DatosPresupue
       paciente: nombreDe(q.patient),
       folio: String(q.folio),
       titulo: String(q.title ?? "").slice(0, 80),
-      clave: estadoEfectivo(String(q.status), q.validUntil ? new Date(q.validUntil) : null, ahora),
+      clave: estadoEfectivo(String(q.status), q.validUntil ? new Date(q.validUntil) : null, ahora, ctx.timezone),
       total: round2(num(q.total)),
-      vigencia: q.validUntil ? fechaDe(new Date(q.validUntil), ctx.timezone) : null,
+      vigencia: diaDeVigencia(q.validUntil, ctx.timezone),
     }));
     const grupo = (estado: string) => {
       const l = leidas.filter((x) => x.clave === estado);

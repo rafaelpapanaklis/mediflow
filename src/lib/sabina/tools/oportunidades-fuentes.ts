@@ -28,6 +28,7 @@ import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { comoAuthContext, pesos, recortar, tienePermiso, visorDe, type Lista } from "./base";
 import { ESTADOS_ACTIVOS } from "./estados";
 import { fechaDe, inicioDeHoy } from "./fechas";
+import { estaVencida } from "@/lib/quotes/vigencia";
 import {
   DIA_MS,
   GRACIA_CAIDAS_DIAS,
@@ -369,12 +370,11 @@ export async function seccionSinRespuesta(
 
   const filas: FilaEscape[] = (filasCrudas as any[]).map((q) => {
     const valor = round2(num(q.total));
-    // Contra el INICIO DE HOY en la clínica, igual que «vencida» en por_cobrar:
-    // con `ahora` a secas, un presupuesto que vence hoy salía «ya caducado»
-    // durante todo su último día válido. Dos criterios de vencimiento en la
-    // misma respuesta es una contradicción que el doctor sí nota.
-    const vence = q.validUntil ? new Date(q.validUntil) : null;
-    const caducado = vence !== null && vence.getTime() < inicioDeHoy(ctx.timezone).getTime();
+    // Con la regla de la liga y del panel (vigencia.ts): el día de vigencia
+    // cuenta completo en la zona de la clínica. Antes, contra el inicio de hoy,
+    // «válido hasta hoy» guardado a medianoche UTC salía «ya caducado» todo su
+    // último día.
+    const caducado = estaVencida(q.validUntil, ctx.timezone, ahora);
     return {
       tipo: "sin_respuesta" as const,
       paciente: nombreDe(q.patient),

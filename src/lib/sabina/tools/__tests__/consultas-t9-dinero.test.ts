@@ -201,7 +201,9 @@ test("presupuestos: un presentado con la vigencia pasada sale «vencido», con l
 
   // La regla es la de la ruta del panel, no una parecida.
   const ruta = readFileSync(path.join(RAIZ, "src/app/api/quotes/route.ts"), "utf8");
-  assert.match(ruta, /status: "PRESENTED",\s*validUntil: \{ lt: new Date\(\) \},\s*\},\s*data: \{ status: "EXPIRED" \}/);
+  // (revisión final de ws1-t2: las dos usan `estaVencida`, el día de vigencia completo en la zona de la clínica)
+  assert.match(ruta, /estaVencida\(q\.validUntil, zona\)/);
+  assert.match(ruta, /data: \{ status: "EXPIRED" \}/);
   const ahora = new Date("2026-10-01T12:00:00Z");
   assert.equal(estadoEfectivo("PRESENTED", new Date("2026-09-30T12:00:00Z"), ahora), "EXPIRED");
   assert.equal(estadoEfectivo("PRESENTED", new Date("2026-10-02T12:00:00Z"), ahora), "PRESENTED");

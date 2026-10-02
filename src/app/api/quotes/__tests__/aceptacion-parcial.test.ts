@@ -24,6 +24,10 @@ const db = {
   invoices: [] as Row[],
   aceptacion: [] as Row[],
   cargos: [] as Row[],
+  users: [] as Row[],
+  planes: [] as Row[],
+  primaryDoctorId: null as string | null,
+  zona: "America/Mexico_City",
   seq: 0,
   folio: 0,
 };
@@ -38,6 +42,10 @@ beforeEach(async () => {
   db.invoices = [];
   db.aceptacion = [];
   db.cargos = [];
+  db.users = [];
+  db.planes = [];
+  db.primaryDoctorId = null;
+  db.zona = "America/Mexico_City";
   db.seq = 0;
   db.folio = 0;
   sondas.regclass = 0;
@@ -108,7 +116,8 @@ async function executeRaw(strings: TemplateStringsArray, ...raw: any[]) {
 }
 
 const dondeQuote = (where: any) => (x: Row) =>
-  (!where?.id || x.id === where.id) && (!where?.clinicId || x.clinicId === where.clinicId) &&
+  (!where?.id || (typeof where.id === "string" ? x.id === where.id : !!where.id.in?.includes(x.id))) &&
+  (!where?.acceptToken || x.acceptToken === where.acceptToken) && (!where?.clinicId || x.clinicId === where.clinicId) &&
   (!where?.patientId || x.patientId === where.patientId) &&
   (typeof where?.status !== "string" || x.status === where.status) &&
   (!where?.validUntil?.lt || (x.validUntil && x.validUntil < where.validUntil.lt));
@@ -122,6 +131,14 @@ function facturaCoincide(inv: Row, where: any): boolean {
   return true;
 }
 
+/** El filtro de usuarios que usan las rutas: id / id.in, clinicId, role.in, isActive, agendaActive. */
+const usuarioCoincide = (where: any) => (u: Row) =>
+  (!where?.id || (typeof where.id === "string" ? u.id === where.id : !!where.id.in?.includes(u.id))) &&
+  (!where?.clinicId || u.clinicId === where.clinicId) &&
+  (where?.role === undefined || (typeof where.role === "string" ? u.role === where.role : where.role.in.includes(u.role))) &&
+  (where?.isActive === undefined || u.isActive === where.isActive) &&
+  (where?.agendaActive === undefined || u.agendaActive === where.agendaActive);
+
 const prismaStub: any = {
   $queryRaw: (s: TemplateStringsArray, ...v: any[]) => queryRawEn(null, s, ...v),
   $executeRaw: executeRaw,
@@ -134,6 +151,10 @@ const prismaStub: any = {
     findFirst: async ({ where }: any = {}) => {
       const q = db.quotes.find(dondeQuote(where));
       return q ? copia(q) : null;
+    },
+    findUnique: async ({ where }: any = {}) => {
+      const q = db.quotes.find(dondeQuote(where));
+      return q ? copia({ ...q, clinic: { name: "Clínica", logoUrl: null, timezone: db.zona } }) : null;
     },
     findMany: async ({ where }: any = {}) => copia(db.quotes.filter(dondeQuote(where))),
     update: async ({ where, data }: any) => {
@@ -159,9 +180,24 @@ const prismaStub: any = {
     },
     findMany: async ({ where }: any = {}) => copia(db.invoices.filter((i) => facturaCoincide(i, where))),
   },
-  clinic: { findUnique: async () => ({ cfdiTaxMode: "exempt" }) },
-  user: { findFirst: async () => null },
-  patient: { findFirst: async ({ where }: any) => (where?.clinicId === "c1" ? { id: "p1" } : null) },
+  clinic: { findUnique: async () => ({ cfdiTaxMode: "exempt", timezone: db.zona }) },
+  user: {
+    findFirst: async ({ where }: any = {}) => copia(db.users.find(usuarioCoincide(where)) ?? null),
+    findMany: async ({ where }: any = {}) => copia(db.users.filter(usuarioCoincide(where))),
+  },
+  patient: {
+    findFirst: async ({ where }: any) =>
+      (where?.clinicId === "c1" ? { id: "p1", primaryDoctorId: db.primaryDoctorId } : null),
+  },
+  treatmentPlan: {
+    create: async ({ data }: any) => {
+      const fila = { id: nuevoId("plan"), ...data };
+      db.planes.push(fila);
+      return copia(fila);
+    },
+    findFirst: async ({ where }: any) =>
+      copia(db.planes.find((p) => p.id === where?.id && p.clinicId === where?.clinicId) ?? null),
+  },
 };
 
 const authCtx: any = { clinicId: "c1", userId: "u1", role: "ADMIN", permissionsOverride: null };
@@ -380,4 +416,121 @@ test("GET /api/quotes: el aceptado en parte trae su resumen de cobro y los permi
   assert.equal(q.cobro.totalAceptado, 1500);
   assert.equal(q.cobro.porCargar, 1500);
   assert.equal(q.cobro.noAceptado, 8500);
+});
+
+// ── Revisión final de ws1-t2 (fallos 1-4) ───────────────────────────────────
+
+const DOCTORA = { id: "d1", clinicId: "c1", role: "DOCTOR", isActive: true, agendaActive: true, firstName: "Dra.", lastName: "Ruiz" };
+const RECEPCION = { id: "u2", clinicId: "c1", role: "RECEPTIONIST", isActive: true, agendaActive: true, firstName: "T9final", lastName: "Recepcion" };
+const DOCTORA_AJENA = { id: "d9", clinicId: "c2", role: "DOCTOR", isActive: true, agendaActive: true, firstName: "Otra", lastName: "Clínica" };
+
+test("fallo 1: la tarjeta de «Aceptado en parte» trae el descuento de LO ACEPTADO, no el del presupuesto entero", async () => {
+  // $10,000 − $1,000 de descuento global; acepta solo la resina ($1,500 → le tocan $150).
+  sembrar({ discountAmount: 1000, total: 9000 });
+  const estado = await import("@/app/api/quotes/[id]/status/route");
+  const lista = await import("@/app/api/quotes/route");
+  const { importesDeTarjeta } = await import("@/lib/quotes/aceptacion");
+  await estado.POST(req({ action: "accept", itemIds: ["resina"] }), P);
+  const q = (await leer(await lista.GET(req()))).body[0];
+  assert.equal(q.cobro.totalAceptado, 1350);
+  assert.equal(q.cobro.descuentoAceptado, 150);
+  assert.equal(importesDeTarjeta(q.total, q.cobro, q.discountAmount).descuento, 150, "no «−$1,000 de descuento»");
+});
+
+test("fallo 2: «Crear plan» de un aceptado en parte con descuento global cuesta lo aceptado ($1,350), no el precio de lista", async () => {
+  db.users = [DOCTORA];
+  sembrar({ discountAmount: 1000, total: 9000, createdById: "d1" });
+  const estado = await import("@/app/api/quotes/[id]/status/route");
+  const plan = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  await estado.POST(req({ action: "accept", itemIds: ["resina"] }), P);
+  const r = await leer(await plan.POST(req(), P));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(db.planes.length, 1);
+  assert.equal(db.planes[0].totalCost, 1350);
+});
+
+test("fallo 2: aceptado completo, el plan sigue costando el total del presupuesto", async () => {
+  db.users = [DOCTORA];
+  sembrar({ discountAmount: 1000, total: 9000, createdById: "d1" });
+  const estado = await import("@/app/api/quotes/[id]/status/route");
+  const plan = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  await estado.POST(req({ action: "accept" }), P);
+  assert.equal((await plan.POST(req(), P)).status, 201);
+  assert.equal(db.planes[0].totalCost, 9000);
+});
+
+test("fallo 4: el plan NO queda a nombre de recepción; va al doctor de cabecera que atiende", async () => {
+  db.users = [DOCTORA, RECEPCION];
+  db.primaryDoctorId = "d1";
+  sembrar({ createdById: "u2" });
+  const estado = await import("@/app/api/quotes/[id]/status/route");
+  const plan = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  await estado.POST(req({ action: "accept" }), P);
+  const r = await leer(await plan.POST(req(), P));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(db.planes[0].doctorId, "d1");
+});
+
+test("fallo 4: quien hizo el presupuesto, si atiende, es el doctor del plan", async () => {
+  const dueno = { ...DOCTORA, id: "u1", role: "SUPER_ADMIN" };
+  db.users = [dueno, DOCTORA];
+  db.primaryDoctorId = "d1";
+  sembrar({ createdById: "u1" });
+  const estado = await import("@/app/api/quotes/[id]/status/route");
+  const plan = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  await estado.POST(req({ action: "accept" }), P);
+  assert.equal((await plan.POST(req(), P)).status, 201);
+  assert.equal(db.planes[0].doctorId, "u1");
+});
+
+test("fallo 4: sin nadie que atienda, pide elegir (409 con la lista) y no crea nada; elegido, lo crea a su nombre", async () => {
+  // El creador es recepción y el de cabecera tiene apagada «Aparece en la agenda».
+  db.users = [RECEPCION, { ...DOCTORA, id: "d2", agendaActive: false }, DOCTORA, DOCTORA_AJENA];
+  db.primaryDoctorId = "d2";
+  sembrar({ createdById: "u2" });
+  const estado = await import("@/app/api/quotes/[id]/status/route");
+  const plan = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  await estado.POST(req({ action: "accept" }), P);
+
+  const pide = await leer(await plan.POST(req(), P));
+  assert.equal(pide.status, 409, JSON.stringify(pide.body));
+  assert.equal(pide.body.elegirDoctor, true);
+  assert.deepEqual(pide.body.doctores.map((d: any) => d.id), ["d1"], "solo quien atiende, y de esta clínica");
+  assert.equal(db.planes.length, 0);
+
+  // Recepción o una doctora de otra clínica no valen aunque se manden a mano.
+  assert.equal((await plan.POST(req({ doctorId: "u2" }), P)).status, 400);
+  assert.equal((await plan.POST(req({ doctorId: "d9" }), P)).status, 400);
+  assert.equal(db.planes.length, 0);
+
+  const crea = await leer(await plan.POST(req({ doctorId: "d1" }), P));
+  assert.equal(crea.status, 201, JSON.stringify(crea.body));
+  assert.equal(db.planes[0].doctorId, "d1");
+});
+
+/** «YYYY-MM-DD» de hoy (o de hace `dias`) en Ciudad de México. */
+function diaEnMexico(dias = 0): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(Date.now() - dias * 24 * 60 * 60 * 1000));
+}
+
+test("fallo 3: «válido hasta HOY» (medianoche UTC de hoy) sigue vigente en el panel; el de ayer vence", async () => {
+  sembrar({ validUntil: new Date(`${diaEnMexico()}T00:00:00.000Z`) });
+  sembrar({ id: "q2", folio: "P-0002", acceptToken: "tok2", validUntil: new Date(`${diaEnMexico(1)}T00:00:00.000Z`) });
+  const lista = await import("@/app/api/quotes/route");
+  const r = await leer(await lista.GET(req()));
+  assert.equal(r.status, 200);
+  assert.equal(db.quotes.find((q) => q.id === "q1")!.status, "PRESENTED", "su último día cuenta completo en la clínica");
+  assert.equal(db.quotes.find((q) => q.id === "q2")!.status, "EXPIRED");
+});
+
+test("fallo 3: la liga pública acepta «válido hasta hoy» y rechaza el de ayer", async () => {
+  sembrar({ validUntil: new Date(`${diaEnMexico()}T00:00:00.000Z`) });
+  sembrar({ id: "q2", folio: "P-0002", acceptToken: "tok2", validUntil: new Date(`${diaEnMexico(1)}T00:00:00.000Z`) });
+  const liga = await import("@/app/api/presupuesto/[token]/route");
+  const hoy = await leer(await liga.GET(req(), { params: { token: "tok" } }));
+  assert.equal(hoy.status, 200, JSON.stringify(hoy.body));
+  assert.equal(hoy.body.expired, false);
+  const ayer = await leer(await liga.GET(req(), { params: { token: "tok2" } }));
+  assert.equal(ayer.body.expired, true);
 });

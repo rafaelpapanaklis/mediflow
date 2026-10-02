@@ -194,6 +194,19 @@ export function resumirAceptacion(renglones: RenglonAceptado[], totalPresupuesto
   };
 }
 
+/**
+ * Lo que cuestan, ya aceptados, los conceptos `ids`: su importe menos su parte
+ * del descuento global (el «Crear plan» de un presupuesto aceptado en parte o
+ * mixto). Los no aceptados no suman.
+ */
+export function netoDeConceptos(renglones: RenglonAceptado[], ids: ReadonlyArray<string>): number {
+  return pesos(
+    renglones
+      .filter((r) => r.aceptado && ids.indexOf(r.quoteItemId) !== -1)
+      .reduce((s, r) => s + cents(netoDe(r)), 0),
+  );
+}
+
 /* ── 2. Cargos ────────────────────────────────────────────────────────── */
 
 /** Una fila de quote_charges cuya factura sigue viva (no cancelada). */
@@ -384,6 +397,8 @@ export interface CobroDePresupuesto {
   via: ViaAceptacion | null;
   aceptados: string[];
   totalAceptado: number;
+  /** La parte del descuento global que lleva lo aceptado (Σ descuentoGlobal de los aceptados). */
+  descuentoAceptado?: number;
   noAceptado: number;
   cargado: number;
   porCargar: number;
@@ -401,10 +416,16 @@ export interface CobroDePresupuesto {
  */
 export function importesDeTarjeta(
   total: number,
-  cobro: Pick<CobroDePresupuesto, "alcance" | "totalAceptado"> | null | undefined,
-): { principal: number; cotizado: number | null } {
-  if (cobro?.alcance === "parcial") return { principal: cobro.totalAceptado, cotizado: total };
-  return { principal: total, cotizado: null };
+  cobro: Pick<CobroDePresupuesto, "alcance" | "totalAceptado" | "descuentoAceptado"> | null | undefined,
+  descuento = 0,
+): { principal: number; cotizado: number | null; descuento: number } {
+  // El renglón chico del descuento acompaña al importe grande: aceptado en
+  // parte, la parte del descuento de LO ACEPTADO (revisión final de ws1-t2:
+  // aceptó $1,350 y decía «−$1,000 de descuento», el del presupuesto entero).
+  if (cobro?.alcance === "parcial") {
+    return { principal: cobro.totalAceptado, cotizado: total, descuento: round2(cobro.descuentoAceptado ?? 0) };
+  }
+  return { principal: total, cotizado: null, descuento: round2(descuento) };
 }
 
 /**

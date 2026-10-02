@@ -11,7 +11,16 @@
 // paciente: el mismo presupuesto decía «vence 1 nov» en la tarjeta y «Válido
 // hasta 31/10» en la liga. Ahora el servidor calcula el día con la zona de la
 // clínica y las dos pantallas pintan ese día, sin volver a pasar por `Date`.
+//
+// Y el MOMENTO en que vence sale de ese mismo día (revisión final de ws1-t2):
+// comparar el instante guardado contra «ahora» daba por vencido «válido hasta
+// el 2 oct» el 1 oct a las 18:00 de México (medianoche UTC). El día de
+// vigencia cuenta COMPLETO en la zona de la clínica: vence al empezar el día
+// siguiente. Lo usan la liga pública, el vencimiento perezoso del panel,
+// «Presentar» y Sabina (`estaVencida`).
 // ═══════════════════════════════════════════════════════════════════════════
+
+import { inicioDelDiaEnZona } from "@/lib/inventory/fecha-calendario";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
@@ -37,6 +46,27 @@ export function diaDeVigencia(valor: string | Date | null | undefined, zona: str
     // Zona inválida guardada en la clínica: la de por defecto, nunca un error.
     return diaDeVigencia(d, ZONA_POR_DEFECTO);
   }
+}
+
+/**
+ * El instante en que el presupuesto deja de valer: el inicio del día SIGUIENTE
+ * a su día de vigencia, en la zona de la clínica. null si no hay fecha.
+ */
+export function venceEl(valor: string | Date | null | undefined, zona: string | null | undefined): Date | null {
+  const dia = diaDeVigencia(valor, zona);
+  if (!dia) return null;
+  const siguiente = new Date(Date.parse(`${dia}T00:00:00.000Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return inicioDelDiaEnZona(siguiente, zona);
+}
+
+/** ¿Ya venció? Sin fecha, nunca. */
+export function estaVencida(
+  valor: string | Date | null | undefined,
+  zona: string | null | undefined,
+  ahora: Date = new Date(),
+): boolean {
+  const fin = venceEl(valor, zona);
+  return !!fin && ahora.getTime() >= fin.getTime();
 }
 
 /** "2026-11-01" → "1 nov 2026". "—" si no es un día. */

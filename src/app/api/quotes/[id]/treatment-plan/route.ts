@@ -7,7 +7,11 @@ import { distinctPhaseCount } from "@/lib/quotes/compute";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
 import { conceptosGenerales } from "@/lib/quotes/ortodoncia";
-import { conceptosAceptados } from "@/lib/quotes/cargos.server";
+import { aceptacionDelPresupuesto } from "@/lib/quotes/cargos.server";
+import { aceptacionImplicita, netoDeConceptos } from "@/lib/quotes/aceptacion";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
+import { doctorDelPlan, FRASE_ELEGIR_DOCTOR_DEL_PLAN } from "@/lib/quotes/doctor-del-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +30,12 @@ interface Params { params: { id: string } }
  * Presupuesto MIXTO (tratamiento de ortodoncia + «Resina 16», «Extracción
  * 18»…): con `?general=1` crea el plan general SOLO con los conceptos que no
  * son de ortodoncia (su coste y sus fases). El tratamiento sigue yendo al caso.
+ *
+ * Costo (revisión final de ws1-t2): aceptado en parte, o solo «el resto» de un
+ * mixto, el plan cuesta lo ACEPTADO con su parte del descuento global, no la
+ * suma de precios de lista. Doctor: el que cumple «quién atiende» de la Agenda
+ * (doctor-del-plan.ts); si nadie, 409 `{ elegirDoctor, doctores }` y la tarjeta
+ * pide elegir y reenvía con `{ doctorId }`.
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
@@ -41,7 +51,12 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    include: { items: { select: { id: true, phase: true, name: true, lineTotal: true } } },
+    include: {
+      items: {
+        select: { id: true, phase: true, name: true, toothFdi: true, quantity: true, unitPrice: true, discount: true, lineTotal: true },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
@@ -76,7 +91,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   // Solo lo que el paciente ACEPTÓ (ws1-t6): de un presupuesto aceptado en
   // parte, el plan lleva esos conceptos y su costo, no el presupuesto entero.
-  const aceptados = await conceptosAceptados(ctx.clinicId, quote.id, quote.items);
+  const acc = await aceptacionDelPresupuesto(ctx.clinicId, quote.id, quote.items);
+  const aceptados = acc.aceptados;
   const parcial = aceptados.length < quote.items.length;
 
   // De ortodoncia y con el módulo: se ofrece el caso, no un plan general.
@@ -89,7 +105,46 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ casoOrtodoncia: caso });
   }
 
-  const doctorId = quote.createdById ?? ctx.userId;
+  // El doctor del plan: el elegido en la tarjeta, o quien hizo el presupuesto,
+  // o el de cabecera del paciente — el primero que atiende en la Agenda.
+  let elegido: string | null = null;
+  try {
+    const cuerpo = await req.json();
+    if (cuerpo && typeof cuerpo.doctorId === "string" && cuerpo.doctorId) elegido = cuerpo.doctorId;
+  } catch {
+    // Sin cuerpo: «Crear plan» de siempre.
+  }
+  const paciente = elegido
+    ? null
+    : await prisma.patient.findFirst({ where: { id: quote.patientId, clinicId: ctx.clinicId }, select: { primaryDoctorId: true } });
+  const candidatos = elegido ? [elegido] : [quote.createdById, paciente?.primaryDoctorId];
+  const ids = candidatos.filter((x): x is string => !!x);
+  const atienden = ids.length
+    ? (await prisma.user.findMany({
+        where: { id: { in: ids }, clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE },
+        select: { id: true },
+      })).map((u) => u.id)
+    : [];
+  const doctorId = doctorDelPlan(candidatos, atienden);
+  if (!doctorId) {
+    if (elegido) {
+      const { reason } = await cuerpoDoctorNoRecibeCitasDe(ctx.clinicId, elegido);
+      return NextResponse.json({ error: reason }, { status: 400 });
+    }
+    const lista = await prisma.user.findMany({
+      where: { clinicId: ctx.clinicId, ...RECIBE_CITAS_WHERE },
+      select: { id: true, firstName: true, lastName: true },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    });
+    return NextResponse.json(
+      {
+        error: FRASE_ELEGIR_DOCTOR_DEL_PLAN,
+        elegirDoctor: true,
+        doctores: lista.map((u) => ({ id: u.id, nombre: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() })),
+      },
+      { status: 409 },
+    );
+  }
   // Mixto: el plan general solo lleva lo que no es de ortodoncia.
   const items = soloElResto ? conceptosGenerales(aceptados) : aceptados;
   const totalSessions = distinctPhaseCount(items.map((i) => ({ phase: i.phase == null ? null : Number(i.phase) })));
@@ -107,8 +162,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       description: `Generado desde presupuesto ${quote.folio}`,
       totalSessions,
       sessionIntervalDays,
+      // Lo aceptado con su parte del descuento global (no la suma de lineTotal).
       totalCost: soloElResto || parcial
-        ? Math.round(items.reduce((s, i) => s + (Number(i.lineTotal) || 0), 0) * 100) / 100
+        ? netoDeConceptos(acc.renglones ?? aceptacionImplicita(quote), items.map((i) => i.id))
         : Number(quote.total) || 0,
       status: "ACTIVE",
       startDate,
