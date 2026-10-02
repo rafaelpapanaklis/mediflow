@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   asistenciaDelCaso,
+  hojasFirmadas,
   proximaCitaDelCaso,
   usoDeElasticos,
   visitasDelCaso,
@@ -234,5 +235,44 @@ describe("un control de hoy ya atendido cuenta aunque estuviera agendado más ta
   it("una cita de MAÑANA con hoja no cuenta todavía", () => {
     const manana = { ...cita("COMPLETED"), startsAt: new Date("2026-09-29T18:00:00.000Z") };
     assert.equal(visitasDelCaso([manana], [{ appointmentId: "c-hoy", visitDate: AHORA }], AHORA, ZONA).total, 0);
+  });
+});
+
+// ws1-t8 (revisión final de ortodoncia, fallo 2): un BORRADOR de hoja no es un control hecho. Tras «Registrar la
+// colocación primero» la cabecera decía «Asistencia 100 % · 1 de 1 controles» y «Visitas 1» sin nada firmado.
+describe("solo las hojas FIRMADAS cuentan como control hecho", () => {
+  const leerFuente = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
+  // Viernes 2-oct-2026, 16:00 en Ciudad de México; el control era a las 19:00 y sigue agendado.
+  const ahora = new Date("2026-10-02T22:00:00.000Z");
+  const control: CitaDeControlDelCaso = {
+    id: "control-hoy",
+    startsAt: new Date("2026-10-03T01:00:00.000Z"),
+    endsAt: new Date("2026-10-03T01:30:00.000Z"),
+    status: "CONFIRMED",
+  };
+  const borrador = { status: "DRAFT", appointmentId: "control-hoy", visitDate: new Date("2026-10-02T21:00:00.000Z") };
+
+  it("hojasFirmadas deja fuera los borradores", () => {
+    const firmada = { status: "SIGNED", appointmentId: null, visitDate: new Date("2026-09-01T16:00:00.000Z") };
+    assert.deepEqual(hojasFirmadas([borrador, firmada]), [{ appointmentId: null, visitDate: firmada.visitDate }]);
+  });
+
+  it("con solo un borrador: «Asistencia —» y «Visitas 0»", () => {
+    const hojas = hojasFirmadas([borrador]);
+    assert.deepEqual(asistenciaDelCaso([control], hojas, ahora, undefined, ZONA), { pct: null, asistio: 0, falto: 0 });
+    assert.equal(visitasDelCaso([control], hojas, ahora, ZONA).total, 0);
+  });
+
+  it("al firmarla, cuenta", () => {
+    const hojas = hojasFirmadas([{ ...borrador, status: "SIGNED" }]);
+    assert.equal(asistenciaDelCaso([control], hojas, ahora, undefined, ZONA).asistio, 1);
+    assert.equal(visitasDelCaso([control], hojas, ahora, ZONA).total, 1);
+  });
+
+  it("la ficha calcula «Asistencia» y «Visitas» con las hojas firmadas", () => {
+    const loader = leerFuente("src/lib/orthodontics/redesign/loader.ts");
+    assert.match(loader, /const hojasQueCuentan = hojasFirmadas\(treatmentCards/);
+    assert.match(loader, /asistenciaDelCaso\(indicadores\.citas, hojasQueCuentan,/);
+    assert.match(loader, /visitasDelCaso\(indicadores\.citas, hojasQueCuentan,/);
   });
 });

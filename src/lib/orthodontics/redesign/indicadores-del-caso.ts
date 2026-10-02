@@ -43,6 +43,20 @@ export interface HojaDeControlDelCaso {
   visitDate: Date;
 }
 
+/**
+ * ws1-t8 (revisión final de ortodoncia, fallo 2): las hojas que cuentan para «Asistencia» y «Visitas» son las
+ * FIRMADAS. Un borrador (p. ej. el que queda al elegir «Registrar la colocación primero») todavía no es un control
+ * hecho: antes contaba, y la cabecera decía «Asistencia 100 % · 1 de 1 controles» y «Visitas 1» sin ningún control
+ * firmado. Una cita a la que el paciente SÍ llegó sigue contando por sí misma, tenga hoja o no.
+ */
+export function hojasFirmadas(
+  hojas: ReadonlyArray<{ status?: string | null; appointmentId?: string | null; visitDate: Date }>,
+): HojaDeControlDelCaso[] {
+  return hojas
+    .filter((h) => h.status === "SIGNED")
+    .map((h) => ({ appointmentId: h.appointmentId ?? null, visitDate: h.visitDate }));
+}
+
 /** El paciente llegó a la clínica, aunque la consulta no haya terminado. */
 const VINO = new Set(["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT"]);
 /** La cita ya terminó: no puede ser «la próxima». */

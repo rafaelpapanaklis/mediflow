@@ -73,6 +73,7 @@ import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireS
 import { DrawerAddTad, type DrawerAddTadSubmit } from "./drawers/DrawerAddTad";
 import { DrawerNewCase, type DrawerEditarPlanSubmit, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
+import { tratamientoConCasoGuardado, type CasoGuardado } from "@/lib/orthodontics/redesign/caso-guardado";
 import { ModalCompare } from "./drawers/ModalCompare";
 import {
   MOTIVO_SIN_REPORTE_DE_AVANCE,
@@ -88,7 +89,7 @@ import layout from "./ortho-redesign-layout.module.css";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 import { proximaFechaDeVisitaPorDefecto } from "@/lib/orthodontics/redesign/next-card-visit-default";
-import type { OrthoRedesignViewModel, OrthoPhaseKey, WireStepDTO } from "./types";
+import type { OrthoRedesignViewModel, OrthoPhaseKey, OrthoTreatmentDTO, WireStepDTO } from "./types";
 import {
   agregarPasoLocal,
   descartarPasosAlcanzados,
@@ -298,7 +299,7 @@ export interface OrthodonticsRedesignClientProps {
   onOpenImagingRecords?: () => void;
   /** Ola 1 (ws1-t6) — A5/A6/A7/A11: cambiar doctor tratante, responsable del
    *  pago, fecha de colocación o estado del caso ya abierto. */
-  onUpdateCaseSettings?: (payload: DrawerCaseSettingsPayload) => Promise<void> | void;
+  onUpdateCaseSettings?: (payload: DrawerCaseSettingsPayload) => Promise<CasoGuardado | void> | CasoGuardado | void;
   /** Ola 1 (ws1-t6) — A10: si ya existe un consentimiento GENERAL de
    *  ortodoncia firmado (`ConsentForm`, no el propio `OrthodonticConsent`
    *  que se oculta). `null` = todavía cargando/no se pudo saber; no pinta
@@ -401,7 +402,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   };
 
   const vm = props.vm;
-  const t = vm.treatment;
+  // ws1-t8 (revisión final de ortodoncia, fallo 1): lo que el servidor confirmó al guardar «Datos del caso» (la
+  // colocación pasa un caso «Por colocar» a «En curso») se pinta al momento, sin esperar al refresco de la página.
+  // Vale mientras la página siga trayendo el mismo caso que había al guardar; cuando trae el suyo, manda el servidor.
+  const [casoGuardado, setCasoGuardado] = useState<{ base: OrthoTreatmentDTO; guardado: CasoGuardado } | null>(null);
+  const t =
+    casoGuardado && casoGuardado.base === vm.treatment
+      ? tratamientoConCasoGuardado(vm.treatment, casoGuardado.guardado)
+      : vm.treatment;
 
   // «Agregar arco»: la fila recién creada se pinta al instante; el refresh de la
   // página tarda segundos en traerla. Ligada al paciente para no arrastrarla a
@@ -1330,7 +1338,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           treatmentPlanId={t.treatmentPlanId}
           onClose={closeDrawer}
           onConfirm={async (payload) => {
-            await props.onUpdateCaseSettings?.(payload);
+            const guardado = await props.onUpdateCaseSettings?.(payload);
+            if (guardado) setCasoGuardado({ base: vm.treatment, guardado });
             closeDrawer();
           }}
         />

@@ -1609,6 +1609,7 @@ export function PatientDetailClient({
         const ligada = await ligarControlFirmadoDeHoy(planOrto, activeAppointment.id).catch(() => null);
         if (ligada && !isFailure(ligada) && ligada.data.citaCerrada) {
           toast.success(textosFirma.hojaFirmadaLigadaYCitaCerrada);
+          marcarEstadoDeCita(activeAppointment.id, "COMPLETED");
           setConsultClosed(true);
           setClinicalNoteId(null);
           const params = new URLSearchParams(searchParams.toString());
@@ -1635,6 +1636,9 @@ export function PatientDetailClient({
       }
       const data = await res.json().catch(() => ({}));
       toast.success(t("patients.consult.completedSigned"));
+      // ws1-t8 (revisión final de ortodoncia, fallo 5): la cabecera («Próxima cita … · Iniciar consulta») seguía con
+      // la cita recién completada hasta recargar. El servidor ya la cerró: se pinta al momento, como al cancelar.
+      marcarEstadoDeCita(activeAppointment.id, "COMPLETED");
       // Si el server detectó tratamientos, abrir el modal de facturación.
       const suggested: SuggestedTreatment[] = data.suggestedTreatments ?? [];
       if (suggested.length > 0) {
@@ -1655,13 +1659,14 @@ export function PatientDetailClient({
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : window.location.pathname);
     router.refresh();
-  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router, orthoData?.plan?.id, orthoRedesignVM?.treatmentCards, textosFirma]);
+  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router, orthoData?.plan?.id, orthoRedesignVM?.treatmentCards, textosFirma, marcarEstadoDeCita]);
 
   // ws1-t8 (ticket BEVADENT, punto 3): firmar la hoja de control de la cita en curso YA cerró la cita y su nota
   // (la hoja adoptó el borrador de esta consulta). La consulta se cierra aquí sin volver a pedir nota.
   const cerrarConsultaPorLaHoja = useCallback(
     (appointmentId: string) => {
       if (!activeAppointment || activeAppointment.id !== appointmentId) return;
+      marcarEstadoDeCita(appointmentId, "COMPLETED");
       setConsultClosed(true);
       setClinicalNoteId(null);
       const params = new URLSearchParams(searchParams.toString());
@@ -1670,7 +1675,7 @@ export function PatientDetailClient({
       router.replace(qs ? `?${qs}` : window.location.pathname);
       router.refresh();
     },
-    [activeAppointment, searchParams, router],
+    [activeAppointment, searchParams, router, marcarEstadoDeCita],
   );
 
   const consultDoctorName =

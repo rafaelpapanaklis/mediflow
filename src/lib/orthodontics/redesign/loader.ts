@@ -18,6 +18,7 @@ import type { ElasticsLogEntry } from "@/lib/orthodontics/elastics/compliance";
 import {
   VENTANA_ELASTICOS_DIAS,
   asistenciaDelCaso,
+  hojasFirmadas,
   proximaCitaDelCaso,
   usoDeElasticos,
   visitasDelCaso,
@@ -383,9 +384,12 @@ export async function loadOrthoRedesignData(
     appointmentId: c.appointmentId ?? null,
     visitDate: c.visitDate,
   }));
-  const attendance = asistenciaDelCaso(indicadores.citas, hojasDeControl, ahora, undefined, indicadores.zona);
+  // ws1-t8 (revisión final, fallo 2): «Asistencia» y «Visitas» solo cuentan hojas FIRMADAS; un borrador no es un
+  // control hecho. («Control X de N» sigue con `hojasDeControl`, la misma cuenta que listas y Agenda.)
+  const hojasQueCuentan = hojasFirmadas(treatmentCards as Array<{ status?: string | null; appointmentId?: string | null; visitDate: Date }>);
+  const attendance = asistenciaDelCaso(indicadores.citas, hojasQueCuentan, ahora, undefined, indicadores.zona);
   const elastics = usoDeElasticos(indicadores.elasticos);
-  const visitasReales = visitasDelCaso(indicadores.citas, hojasDeControl, ahora, indicadores.zona);
+  const visitasReales = visitasDelCaso(indicadores.citas, hojasQueCuentan, ahora, indicadores.zona);
   // Los dos números de siempre se conservan para quien todavía los lee; ya no
   // se inventan: sin datos valen 0 y la pantalla pinta «—» (ver `attendance`).
   const attendancePct = attendance.pct ?? 0;

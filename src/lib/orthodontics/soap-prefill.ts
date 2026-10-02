@@ -13,6 +13,12 @@ export interface OrthoSoapPrefillInput {
   hygieneScore?: number | null;
   bracketsLooseFdis?: number[];
   appliancesIntact?: boolean;
+  /**
+   * ws1-t8 (revisión final de ortodoncia, fallo 3): el caso sigue «Por colocar» (sin colocación registrada). La
+   * nota no habla de mes de tratamiento, fase, aparatología íntegra ni «próxima cita en 4 semanas»: todavía no hay
+   * tratamiento.
+   */
+  porColocar?: boolean;
 }
 
 export interface OrthoSoapPrefillOutput {
@@ -60,6 +66,15 @@ export function buildOrthoSoapPrefill(input: OrthoSoapPrefillInput): OrthoSoapPr
   const A = `Tratamiento progresando en fase ${phaseLabel}.${
     input.paymentStatus ? ` Adeudo financiero: ${paymentSuffix}.` : ""
   }`;
+
+  if (input.porColocar) {
+    return {
+      S: `${input.patientName}, caso por colocar (aún sin aparatología). Refiere [completar — asintomático, dudas, molestias].`,
+      O: `Sin aparatología colocada.${input.hygieneScore == null ? "" : ` Higiene: ${input.hygieneScore}/100.`}`,
+      A: `Caso por colocar: todavía sin tratamiento activo.${input.paymentStatus ? ` Adeudo financiero: ${paymentSuffix}.` : ""}`,
+      P: `Colocación de aparatología: [completar — fecha y arcada].`,
+    };
+  }
 
   const remindCollect =
     input.paymentStatus === "LIGHT_DELAY" || input.paymentStatus === "SEVERE_DELAY"

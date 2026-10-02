@@ -86,6 +86,8 @@ export interface DatosNotaPrecargada {
   paymentStatus: OrthoPaymentStatus | null;
   /** FDI de los brackets que siguen caídos (se mencionan en el Objetivo). */
   bracketsPendientesFdi: number[];
+  /** ws1-t8 (revisión final, fallo 3): el caso sigue «Por colocar»; la nota no habla de tratamiento en curso. */
+  porColocar?: boolean;
 }
 
 /** La nota S/O/A/P con la que arranca una hoja nueva. */
@@ -98,6 +100,7 @@ export function notaPrecargada(d: DatosNotaPrecargada): NotaSoap {
     paymentStatus: d.paymentStatus,
     bracketsLooseFdis: d.bracketsPendientesFdi,
     appliancesIntact: d.bracketsPendientesFdi.length === 0,
+    porColocar: d.porColocar === true,
   });
   return {
     s: completarAHuecos(n.S),

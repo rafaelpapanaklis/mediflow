@@ -762,6 +762,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               }
             }
             router.refresh();
+            // ws1-t8 (revisión final, fallo 1): la ficha pinta al momento el estado que quedó guardado.
+            return res.data.casoGuardado;
           }}
           onUpdateDiagnosis={async (payload) => {
             const res = await updateDiagnosis({

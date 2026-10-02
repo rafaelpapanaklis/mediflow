@@ -113,3 +113,75 @@ describe("las pantallas que abren la hoja le dicen si el caso está «Por coloca
     assert.match(agenda, /if \(!firmar\) \{\s*cerrar\(\);[\s\S]{0,200}return res\.data\.cardId;/);
   });
 });
+
+// ── Revisión final de ortodoncia (ws1-t8, fallos 1 y 3) ──────────────────────────────────────────────────────────
+import { tratamientoConCasoGuardado, ETIQUETA_DEL_ESTADO } from "../redesign/caso-guardado";
+import { notaPrecargada } from "../precarga-hoja-control";
+import type { OrthoTreatmentDTO } from "@/components/specialties/orthodontics/redesign/types";
+
+describe("fallo 1: guardar la colocación pasa la cabecera a «En curso» sin recargar", () => {
+  const porColocar = {
+    patientId: "p1",
+    treatmentPlanId: "plan1",
+    status: "en-tratamiento",
+    startDate: null,
+    caseStatusLabel: ETIQUETA_DEL_ESTADO.PLANNED,
+    casoPorColocar: true,
+  } as unknown as OrthoTreatmentDTO;
+
+  it("con lo que devolvió el servidor: «En curso», ya no «Por colocar», y la fecha de colocación", () => {
+    const t = tratamientoConCasoGuardado(porColocar, { status: "IN_PROGRESS", installedAt: "2026-10-02T06:00:00.000Z" });
+    assert.equal(t.caseStatusLabel, "En curso");
+    assert.equal(t.casoPorColocar, undefined);
+    assert.equal(t.startDate, "2026-10-02T06:00:00.000Z");
+    assert.equal(t.status, "en-tratamiento");
+  });
+
+  it("si el caso sigue PLANNED (no se puso fecha), sigue «Por colocar»", () => {
+    const t = tratamientoConCasoGuardado(porColocar, { status: "PLANNED", installedAt: null });
+    assert.equal(t.caseStatusLabel, "Por colocar");
+    assert.equal(t.casoPorColocar, true);
+  });
+
+  it("la acción devuelve el estado guardado y la ficha lo pinta al momento", () => {
+    const accion = leer("src/app/actions/orthodontics/updateTreatmentPlan.ts");
+    assert.match(accion, /casoGuardado: \{ status: String\(updated\.status\), installedAt:/);
+    const pestana = leer("src/components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx");
+    assert.match(pestana, /return res\.data\.casoGuardado;/);
+    const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+    assert.match(ficha, /const guardado = await props\.onUpdateCaseSettings\?\.\(payload\);\s*if \(guardado\) setCasoGuardado\(\{ base: vm\.treatment, guardado \}\);/);
+    assert.match(ficha, /casoGuardado && casoGuardado\.base === vm\.treatment\s*\? tratamientoConCasoGuardado\(vm\.treatment, casoGuardado\.guardado\)/);
+  });
+});
+
+describe("fallo 3: la nota precargada de un caso «Por colocar» no habla de tratamiento en curso", () => {
+  const datos = {
+    patientName: "Ana Ortega",
+    monthAt: 0,
+    technique: "METAL_BRACKETS" as never,
+    phaseKey: "ALIGNMENT" as never,
+    paymentStatus: null,
+    bracketsPendientesFdi: [],
+  };
+
+  it("sin colocación: ni fase, ni «aparatología íntegra», ni «progresando», ni «próxima cita en 4 semanas»", () => {
+    const n = notaPrecargada({ ...datos, porColocar: true });
+    const todo = `${n.s}\n${n.o}\n${n.a}\n${n.p}`;
+    assert.doesNotMatch(todo, /Fase actual|íntegra|progresando|Próxima cita en 4 semanas|mes 0/);
+    assert.match(n.o, /Sin aparatología colocada/);
+    assert.match(n.a, /por colocar/i);
+    assert.match(n.p, /Colocación de aparatología: ____/);
+  });
+
+  it("un caso en curso conserva la nota de siempre", () => {
+    const n = notaPrecargada({ ...datos, monthAt: 3 });
+    assert.match(n.o, /Aparatología íntegra\. Fase actual: /);
+    assert.match(n.a, /Tratamiento progresando en fase /);
+    assert.match(n.p, /Próxima cita en 4 semanas/);
+  });
+
+  it("el contexto de la hoja le dice a la nota si el caso sigue «Por colocar»", () => {
+    const ctx = leer("src/lib/orthodontics/treatment-card-context.ts");
+    assert.match(ctx, /bracketsPendientesFdi: lastPendingBrackets\.map\(\(b\) => b\.toothFdi\),\s*porColocar: esCasoPorColocar\(plan\.status\),/);
+  });
+});

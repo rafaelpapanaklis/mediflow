@@ -99,3 +99,24 @@ test("la ficha del paciente lee las citas ya corregidas y «Cancelar» las anota
   assert.match(ventana, /onEstadoCambiado\?\.\(cita\.id, "CANCELLED"\)/);
   assert.match(ventana, /onEstadoCambiado\?\.\(cita\.id, destino\)/);
 });
+
+// ws1-t8 (revisión final de ortodoncia, fallo 5): tras «Completar consulta» la cabecera seguía con «Próxima cita
+// … · Iniciar consulta» de la cita recién completada hasta recargar. La ficha la anota COMPLETED al momento.
+import { proximaCitaDeLaFicha } from "../proxima-cita";
+
+test("una cita completada en la ficha deja de ser la «próxima» sin esperar al servidor", () => {
+  const ahora = new Date("2026-10-02T20:40:00.000Z"); // 14:40 en CDMX
+  const servidor = [{ id: "hoy", status: "IN_PROGRESS", startsAt: "2026-10-02T20:30:00.000Z" }];
+  assert.equal(proximaCitaDeLaFicha(servidor, ahora, "America/Mexico_City")?.id, "hoy");
+  const corr = registrarCorreccion(servidor, {}, "hoy", "COMPLETED");
+  assert.equal(proximaCitaDeLaFicha(aplicarCorrecciones(servidor, corr), ahora, "America/Mexico_City"), null);
+});
+
+test("«Completar consulta» (y la hoja que cierra la cita) anotan la cita como COMPLETED", () => {
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  const fin = ficha.slice(ficha.indexOf("const handleEndConsult"), ficha.indexOf("const cerrarConsultaPorLaHoja"));
+  // Las dos salidas buenas: la hoja ya firmada cerró la cita, y el PATCH /complete respondió bien.
+  assert.equal((fin.match(/marcarEstadoDeCita\(activeAppointment\.id, "COMPLETED"\)/g) ?? []).length, 2);
+  const porLaHoja = ficha.slice(ficha.indexOf("const cerrarConsultaPorLaHoja"), ficha.indexOf("const consultDoctorName"));
+  assert.match(porLaHoja, /marcarEstadoDeCita\(appointmentId, "COMPLETED"\)/);
+});

@@ -9,7 +9,6 @@
 // renderiza empty states.
 
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
-import { ETIQUETA_ESTADO_CASO } from "@/lib/orthodontics/resumen-para-ficha";
 import type {
   OrthodonticDiagnosis,
   OrthodonticTreatmentPlan,
@@ -40,6 +39,7 @@ import { resolveCurrentWire } from "./current-wire";
 import { arcosActuales } from "@/lib/orthodontics/arcos-actuales";
 import { nombreDeTecnica } from "../tecnicas-de-la-clinica";
 import { esCasoPorColocar } from "@/lib/orthodontics/caso-por-colocar";
+import { ETIQUETA_DEL_ESTADO, estadoDeLaFicha } from "./caso-guardado";
 
 // Tipos auxiliares para include shapes que load-data devolverá.
 
@@ -222,16 +222,6 @@ export function adaptToOrthoRedesignViewModel(
   };
 }
 
-/** Las mismas palabras que `resumen-para-ficha.ts`: un solo nombre para cada estado. */
-const ETIQUETA_DEL_ESTADO: Record<string, string> = {
-  PLANNED: ETIQUETA_ESTADO_CASO.planeado,
-  IN_PROGRESS: ETIQUETA_ESTADO_CASO["en-curso"],
-  ON_HOLD: ETIQUETA_ESTADO_CASO.pausado,
-  RETENTION: ETIQUETA_ESTADO_CASO.retencion,
-  COMPLETED: ETIQUETA_ESTADO_CASO.terminado,
-  DROPPED_OUT: ETIQUETA_ESTADO_CASO.abandonado,
-};
-
 function adaptTreatment(args: {
   legacy: OrthoTabData;
   wireCurrent: WireStepDTO | null;
@@ -258,12 +248,7 @@ function adaptTreatment(args: {
       ? toNumber(l.paymentPlan.paidAmount)
       : 0;
 
-  let status: OrthoTreatmentDTO["status"] = "no-iniciado";
-  if (plan) {
-    if (plan.status === "RETENTION") status = "retencion";
-    else if (plan.status === "COMPLETED") status = "completado";
-    else status = "en-tratamiento";
-  }
+  const status: OrthoTreatmentDTO["status"] = plan ? estadoDeLaFicha(String(plan.status)) : "no-iniciado";
 
   return {
     patientId: l.patientId,

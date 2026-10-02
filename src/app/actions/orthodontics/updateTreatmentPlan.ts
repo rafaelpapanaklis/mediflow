@@ -15,6 +15,7 @@ import { fijarPrecioControlSegunTecnica } from "@/lib/orthodontics/precio-contro
 import { cambioLaTecnica } from "@/lib/orthodontics/precio-control-del-caso";
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
 import { avisoDePrecioDesfasado } from "@/lib/orthodontics/cobro/precio-desfasado";
+import type { CasoGuardado } from "@/lib/orthodontics/redesign/caso-guardado";
 
 // Ola 1 (ws1-t6) — columnas de sql/ortodoncia-alta-caso.sql (A5/A11): si el
 // update las toca y aún no existen (P2021/P2022), reintenta sin ellas.
@@ -22,7 +23,7 @@ const ALTA_CASO_PLAN_FIELDS = ["treatingDoctorId", "responsibleGuardianId"] as c
 
 export async function updateTreatmentPlan(
   input: unknown,
-): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; controlesConOtroDoctor: number; avisoPrecioDesfasado?: string }>> {
+): Promise<ActionResult<{ id: string; altaCasoFieldsSaved: boolean; controlesConOtroDoctor: number; casoGuardado: CasoGuardado; avisoPrecioDesfasado?: string }>> {
   // A11 (revisión cruzada): si el payload SOLO trae treatmentPlanId +
   // responsibleGuardianId/newResponsibleGuardian, acepta billing.* además de
   // medicalRecord.edit — recepción arma/cambia quién paga sin necesitar el
@@ -194,6 +195,7 @@ export async function updateTreatmentPlan(
       },
     });
 
+    revalidatePath(`/dashboard/patients/${updated.patientId}`);
     revalidatePath(`/dashboard/patients/${updated.patientId}/orthodontics`);
     revalidatePath(`/dashboard/specialties/orthodontics/${updated.patientId}`);
     revalidatePath(`/dashboard/specialties/orthodontics`);
@@ -233,7 +235,15 @@ export async function updateTreatmentPlan(
         console.warn("[ortho] updateTreatmentPlan: no se pudo comparar el precio con la factura:", e);
       }
     }
-    return ok({ id: updated.id, altaCasoFieldsSaved, controlesConOtroDoctor: controlesFuturosConOtroDoctor, ...(avisoPrecioDesfasado ? { avisoPrecioDesfasado } : {}) });
+    return ok({
+      id: updated.id,
+      altaCasoFieldsSaved,
+      controlesConOtroDoctor: controlesFuturosConOtroDoctor,
+      // ws1-t8 (revisión final de ortodoncia, fallo 1): el estado y la colocación como quedaron, para que la ficha
+      // los pinte sin esperar al refresco (guardar la colocación de un caso «Por colocar» lo pasa a «En curso»).
+      casoGuardado: { status: String(updated.status), installedAt: updated.installedAt ? updated.installedAt.toISOString() : null },
+      ...(avisoPrecioDesfasado ? { avisoPrecioDesfasado } : {}),
+    });
   } catch (e) {
     console.error("[ortho] updateTreatmentPlan failed:", e);
     return fail("No se pudo actualizar el plan");

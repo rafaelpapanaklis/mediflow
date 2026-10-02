@@ -231,6 +231,7 @@ export async function buildTreatmentCardContext(
     phaseKey: phase,
     paymentStatus: plan.paymentPlan?.status ?? null,
     bracketsPendientesFdi: lastPendingBrackets.map((b) => b.toothFdi),
+    porColocar: esCasoPorColocar(plan.status),
   });
 
   // ws1-t10: «Control X de N» con la cuenta de la ficha (visitas del caso). Sin previstos en el plan no hay «de N».
