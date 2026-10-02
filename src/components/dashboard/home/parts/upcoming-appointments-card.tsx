@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Video, Calendar } from "lucide-react";
 import { HomeSection } from "../home-section";
-import { formatShortTime } from "@/lib/home/greet";
+import { diaEnZona, diasHastaEnZona, formatShortTime, zonaValida } from "@/lib/home/greet";
 import type { AppointmentStatus } from "@/lib/home/types";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
@@ -51,7 +51,7 @@ const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
   CANCELLED:   "home.upcoming.statusCancelled",
 };
 
-export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
+export function UpcomingAppointmentsCard({ limit = 5, timeZone }: { limit?: number; timeZone?: string | null }) {
   const router = useRouter();
   const t = useT();
   const [items, setItems] = useState<UpcomingItem[] | null>(null);
@@ -99,13 +99,12 @@ export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
               item={it}
               last={i === items.length - 1}
               t={t}
+              timeZone={timeZone}
               // P1-15: /dashboard/appointments/[id] no existe (404). Igual que
               // el command-palette: agenda del día + ?highlight=. La fecha se
-              // deriva en la tz del navegador — la misma aproximación que ya
-              // usa formatShortTime para pintar la hora de estas filas.
+              // deriva en la tz de la clínica, la misma que pinta la hora.
               onOpen={() => {
-                const d = new Date(it.startsAt);
-                const dateISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                const dateISO = diaEnZona(it.startsAt, timeZone);
                 router.push(`/dashboard/agenda?date=${dateISO}&highlight=${it.id}`);
               }}
               onPatient={() => router.push(`/dashboard/patients/${it.patientId}`)}
@@ -121,16 +120,18 @@ function Row({
   item,
   last,
   t,
+  timeZone,
   onOpen,
   onPatient,
 }: {
   item: UpcomingItem;
   last: boolean;
   t: TFunction;
+  timeZone?: string | null;
   onOpen: () => void;
   onPatient: () => void;
 }) {
-  const when = formatWhen(item.startsAt, t);
+  const when = formatWhen(item.startsAt, t, timeZone);
 
   return (
     <div
@@ -285,25 +286,22 @@ function chipStyle(status: AppointmentStatus): CSSProperties {
 }
 
 /**
- * Hora relativa legible en la zona del navegador:
+ * Hora relativa legible en la zona de la clínica:
  * "Hoy 14:30" · "Mañana 09:00" · "Lun 12 jun · 10:00".
  */
-function formatWhen(iso: string, t: TFunction): string {
+function formatWhen(iso: string, t: TFunction, timeZone?: string | null): string {
   const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) =>
-    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dayDiff = Math.round((startOfDay(d) - startOfDay(now)) / 86_400_000);
-  const time = formatShortTime(iso);
+  const dayDiff = diasHastaEnZona(iso, new Date(), timeZone);
+  const time = formatShortTime(iso, timeZone);
   const intlLocale = t("home.upcoming.intlLocale");
 
   if (dayDiff <= 0) return t("home.upcoming.whenToday", { time });
   if (dayDiff === 1) return t("home.upcoming.whenTomorrow", { time });
 
   const wd = cap(
-    new Intl.DateTimeFormat(intlLocale, { weekday: "short" }).format(d).replace(".", ""),
+    new Intl.DateTimeFormat(intlLocale, { weekday: "short", timeZone: zonaValida(timeZone) }).format(d).replace(".", ""),
   );
-  const dm = new Intl.DateTimeFormat(intlLocale, { day: "numeric", month: "short" })
+  const dm = new Intl.DateTimeFormat(intlLocale, { day: "numeric", month: "short", timeZone: zonaValida(timeZone) })
     .format(d)
     .replace(".", "");
   return `${wd} ${dm} · ${time}`;

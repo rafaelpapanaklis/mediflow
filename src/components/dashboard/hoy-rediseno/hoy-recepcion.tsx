@@ -101,6 +101,7 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
               <FilaCita
                 key={appt.id}
                 appt={appt}
+                timeZone={clinic.timezone}
                 onCheckIn={handleCheckIn}
                 onCall={handleCall}
                 onWhatsApp={handleWhatsApp}

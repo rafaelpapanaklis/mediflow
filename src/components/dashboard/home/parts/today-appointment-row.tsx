@@ -44,6 +44,8 @@ const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
 interface Props {
   appt: AppointmentDTO;
   compact?: boolean;
+  /** Zona de la clínica: la hora se pinta ahí, no en la del navegador. */
+  timeZone?: string | null;
   onCheckIn?: (id: string) => void;
   onCall?: (id: string) => void;
   onWhatsApp?: (id: string) => void;
@@ -52,6 +54,7 @@ interface Props {
 export function TodayAppointmentRow({
   appt,
   compact,
+  timeZone,
   onCheckIn,
   onCall,
   onWhatsApp,
@@ -89,7 +92,7 @@ export function TodayAppointmentRow({
           whiteSpace: "nowrap",
         }}
       >
-        {formatShortTime(appt.startsAt)}
+        {formatShortTime(appt.startsAt, timeZone)}
       </span>
 
       <div style={{ flex: 1, minWidth: 0 }}>

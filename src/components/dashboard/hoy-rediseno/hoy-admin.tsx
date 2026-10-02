@@ -109,7 +109,7 @@ export function HoyAdmin({ clinic, data, period }: Props) {
         {/* La gráfica arranca en el mismo periodo que los KPIs: su total es el
             número de la tarjeta de ingresos, no otro recorte. */}
         <TarjetaIngresos period={period} />
-        <TarjetaProximas />
+        <TarjetaProximas timeZone={clinic.timezone} />
       </div>
 
       <Tarjeta

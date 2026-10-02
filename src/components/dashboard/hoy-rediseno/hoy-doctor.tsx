@@ -65,7 +65,7 @@ export function HoyDoctor({ user, clinic, data }: Props) {
           si la sede no tiene el módulo. Sin dinero: eso va en el Hoy del dueño. */}
       <OrtodonciaEnHoy soloControles />
 
-      {data.nextAppointment && <SiguientePaciente appt={data.nextAppointment} />}
+      {data.nextAppointment && <SiguientePaciente appt={data.nextAppointment} timeZone={clinic.timezone} />}
 
       <div className={s.rejillaPar}>
         <Tarjeta
@@ -88,7 +88,7 @@ export function HoyDoctor({ user, clinic, data }: Props) {
         >
           {restoDelDia.length === 0
             ? !data.nextAppointment && <VacioCitasHoy />
-            : restoDelDia.map((appt) => <FilaCita key={appt.id} appt={appt} compacta />)}
+            : restoDelDia.map((appt) => <FilaCita key={appt.id} appt={appt} compacta timeZone={clinic.timezone} />)}
         </Tarjeta>
 
         <Tarjeta
@@ -155,7 +155,7 @@ export function HoyDoctor({ user, clinic, data }: Props) {
 
 type SiguienteCita = NonNullable<HomeDoctorData["nextAppointment"]>;
 
-function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
+function SiguientePaciente({ appt, timeZone }: { appt: SiguienteCita; timeZone?: string | null }) {
   const t = useT();
   const router = useRouter();
   const { startConsult, consult } = useActiveConsult();
@@ -195,7 +195,7 @@ function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
           <h2 className={s.heroeNombre}>{appt.patient.name}</h2>
           {edadSexo && <div className={s.heroeDatos}>{edadSexo}</div>}
           <div className={s.heroeMotivo}>
-            <span className={s.hora}>{formatShortTime(appt.startsAt)}</span>
+            <span className={s.hora}>{formatShortTime(appt.startsAt, timeZone)}</span>
             <span>{appt.reason ?? t("home.heroNextPatient.defaultReason")}</span>
           </div>
 

@@ -173,5 +173,22 @@ export function candidatosDeEmparejamiento(fileName: string, folderName?: string
   return Array.from(new Set(candidatos.filter(Boolean)));
 }
 
+/**
+ * Empareja por el FOLIO visible del paciente (`patientNumber`, «P0166»): es lo
+ * que la clínica ve en su ficha, único por clínica. Compara sin importar
+ * mayúsculas ni espacios; `folios` es folio normalizado → id de paciente (solo
+ * los que quien importa puede ver). Devuelve el primer candidato que case.
+ */
+export function emparejarPorFolio(
+  candidatos: string[],
+  folios: Map<string, string>,
+): { patientId: string; candidate: string } | null {
+  for (const c of candidatos) {
+    const id = folios.get(c.trim().toUpperCase());
+    if (id) return { patientId: id, candidate: c };
+  }
+  return null;
+}
+
 /** Bytes → "1.4 MB" / "930 KB". Reexportado del módulo de estudios (mismo formato). */
 export { formatBytes } from "./patient-study-upload";

@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { normName } from "@/lib/import/engine";
 import { cargarExternos, limpiarId } from "@/lib/import/externos";
-import { candidatosDeEmparejamiento, guessFileCategory } from "@/lib/uploads/patient-bulk-file-upload";
+import { candidatosDeEmparejamiento, emparejarPorFolio, guessFileCategory } from "@/lib/uploads/patient-bulk-file-upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,15 +67,18 @@ export async function POST(req: NextRequest) {
 
   const patients = await prisma.patient.findMany({
     where: { clinicId: ctx.clinicId, deletedAt: null },
-    select: { id: true, firstName: true, lastName: true, visibleUserIds: true },
+    select: { id: true, firstName: true, lastName: true, patientNumber: true, visibleUserIds: true },
   });
   const byName = new Map<string, string[]>();
   const nameById = new Map<string, string>();
+  const byFolio = new Map<string, string>();
   for (const p of patients) {
     if (!canSeePatient({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }, p.visibleUserIds)) continue;
     const full = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
     nameById.set(p.id, full);
     pushKey(byName, normName(full), p.id);
+    // `patientNumber` es único por clínica: no hay ambigüedad posible.
+    if (p.patientNumber) byFolio.set(p.patientNumber.trim().toUpperCase(), p.id);
   }
   // ID externo: solo si se eligió un sistema de origen (mismo criterio que
   // loadPatientIndex del motor de importación) — en "Mi Excel"/"Otro" una
@@ -85,7 +88,7 @@ export async function POST(req: NextRequest) {
   const matches = files.map((f) => {
     const candidatos = candidatosDeEmparejamiento(f.fileName ?? "", f.folderName);
     let patientId: string | null = null;
-    let matchedBy: "externalId" | "name" | null = null;
+    let matchedBy: "externalId" | "folio" | "name" | null = null;
     let candidate: string | null = null;
     let ambiguous = false;
 
@@ -95,6 +98,11 @@ export async function POST(req: NextRequest) {
         const id = ext ? externos.mapa.get(ext) : undefined;
         if (id && nameById.has(id)) { patientId = id; matchedBy = "externalId"; candidate = c; break; }
       }
+    }
+    if (!patientId) {
+      // El folio que la clínica ve en la ficha («P0166_rx.jpg»); no depende del sistema de origen.
+      const porFolio = emparejarPorFolio(candidatos, byFolio);
+      if (porFolio) { patientId = porFolio.patientId; matchedBy = "folio"; candidate = porFolio.candidate; }
     }
     if (!patientId) {
       for (const c of candidatos) {

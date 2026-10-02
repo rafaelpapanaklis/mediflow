@@ -27,12 +27,14 @@ interface Props {
   appt: AppointmentDTO;
   /** Sin mandos (la vista del doctor). */
   compacta?: boolean;
+  /** Zona de la clínica: la hora se pinta ahí, no en la del navegador. */
+  timeZone?: string | null;
   onCheckIn?: (id: string) => void;
   onCall?: (id: string) => void;
   onWhatsApp?: (id: string) => void;
 }
 
-export function FilaCita({ appt, compacta, onCheckIn, onCall, onWhatsApp }: Props) {
+export function FilaCita({ appt, compacta, timeZone, onCheckIn, onCall, onWhatsApp }: Props) {
   const router = useRouter();
   const t = useT();
   const puedeCheckIn = appt.status === "SCHEDULED" || appt.status === "CONFIRMED";
@@ -42,7 +44,7 @@ export function FilaCita({ appt, compacta, onCheckIn, onCall, onWhatsApp }: Prop
 
   return (
     <div className={s.fila}>
-      <span className={s.hora}>{formatShortTime(appt.startsAt)}</span>
+      <span className={s.hora}>{formatShortTime(appt.startsAt, timeZone)}</span>
 
       <div className={s.filaCuerpo}>
         <button

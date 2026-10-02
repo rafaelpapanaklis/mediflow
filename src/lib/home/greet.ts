@@ -12,7 +12,7 @@
  */
 const ZONA_POR_DEFECTO = "America/Mexico_City";
 
-function zonaValida(timeZone: string | null | undefined): string | undefined {
+export function zonaValida(timeZone: string | null | undefined): string | undefined {
   if (!timeZone) return undefined;
   try {
     new Intl.DateTimeFormat("es-MX", { timeZone });
@@ -84,12 +84,39 @@ export function formatTimeUntil(iso: string, now: Date = new Date()): string {
   return `en ${diffH} h`;
 }
 
-export function formatShortTime(iso: string): string {
+/**
+ * Hora de una cita «HH:mm». Con `timeZone` (la de la clínica) pinta en esa zona;
+ * sin ella cae a la del navegador (home vieja sin ese dato). Una cita de las
+ * 15:00 en CDMX no puede decir 17:00 porque el navegador esté en Nueva York.
+ */
+export function formatShortTime(iso: string, timeZone?: string | null): string {
+  const zona = zonaValida(timeZone);
   return new Intl.DateTimeFormat("es-MX", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    ...(zona ? { timeZone: zona } : {}),
   }).format(new Date(iso));
+}
+
+/** Día de calendario «YYYY-MM-DD» de un instante, en la zona de la clínica. */
+export function diaEnZona(iso: string | Date, timeZone?: string | null): string {
+  const zona = zonaValida(timeZone);
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    ...(zona ? { timeZone: zona } : {}),
+  }).format(typeof iso === "string" ? new Date(iso) : iso);
+}
+
+/** Días de calendario entre `now` y `iso` (0 = hoy, 1 = mañana), contados en la zona de la clínica. */
+export function diasHastaEnZona(iso: string, now: Date = new Date(), timeZone?: string | null): number {
+  const dia = (k: string) => {
+    const [y, m, d] = k.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((dia(diaEnZona(iso, timeZone)) - dia(diaEnZona(now, timeZone))) / 86_400_000);
 }
 
 export function firstName(fullName: string): string {

@@ -60,7 +60,7 @@ export function HomeDoctor({ user, clinic, data }: Props) {
           solo si no hay ninguno o si la sede no tiene el módulo. */}
       <OrtodonciaEnHoy soloControles />
 
-      {data.nextAppointment && <HeroNextPatient appt={data.nextAppointment} />}
+      {data.nextAppointment && <HeroNextPatient appt={data.nextAppointment} timeZone={clinic.timezone} />}
 
       {/* Dos columnas iguales; colapsa por ancho de CONTENEDOR, no de
           viewport (ver home.module.css). */}
@@ -91,7 +91,7 @@ export function HomeDoctor({ user, clinic, data }: Props) {
           ) : (
             <div>
               {restOfDay.map((appt) => (
-                <TodayAppointmentRow key={appt.id} appt={appt} compact />
+                <TodayAppointmentRow key={appt.id} appt={appt} compact timeZone={clinic.timezone} />
               ))}
             </div>
           )}

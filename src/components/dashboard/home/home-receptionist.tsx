@@ -123,6 +123,7 @@ export function HomeReceptionist({ user, clinic, data, puedeAgregarEspera = true
                 >
                   <TodayAppointmentRow
                     appt={appt}
+                    timeZone={clinic.timezone}
                     onCheckIn={handleCheckIn}
                     onCall={handleCall}
                     onWhatsApp={handleWhatsApp}

@@ -13,7 +13,7 @@ import { destinoDeLaCitaEnHoy } from "@/lib/orthodontics/hoy";
 
 type NextAppt = NonNullable<HomeDoctorData["nextAppointment"]>;
 
-export function HeroNextPatient({ appt }: { appt: NextAppt }) {
+export function HeroNextPatient({ appt, timeZone }: { appt: NextAppt; timeZone?: string | null }) {
   const t = useT();
   const router = useRouter();
   const { startConsult, consult } = useActiveConsult();
@@ -135,7 +135,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
                 whiteSpace: "nowrap",
               }}
             >
-              {formatShortTime(appt.startsAt)}
+              {formatShortTime(appt.startsAt, timeZone)}
             </span>
             <span style={{ minWidth: 0 }}>
               {appt.reason ?? t("home.heroNextPatient.defaultReason")}

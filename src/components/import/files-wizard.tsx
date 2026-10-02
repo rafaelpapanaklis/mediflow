@@ -51,7 +51,7 @@ interface FilaArchivo {
   folderName: string | null;
   patientId: string | null;
   patientName: string | null;
-  matchedBy: "externalId" | "name" | null;
+  matchedBy: "externalId" | "folio" | "name" | null;
   ambiguous?: boolean;
   category: FileCategoryValue;
   /** Se llena después de intentar subir. */
@@ -162,7 +162,7 @@ export function FilesWizard({ t, originId, onClose }: Props) {
         return;
       }
       const j = (await res.json()) as {
-        matches: Array<{ index: number; patientId: string | null; patientName: string | null; matchedBy: "externalId" | "name" | null; ambiguous?: boolean; category: string }>;
+        matches: Array<{ index: number; patientId: string | null; patientName: string | null; matchedBy: "externalId" | "folio" | "name" | null; ambiguous?: boolean; category: string }>;
       };
       const porIndice = new Map(j.matches.map((m) => [m.index, m]));
       setFilas(
@@ -246,7 +246,7 @@ export function FilesWizard({ t, originId, onClose }: Props) {
           <div className="imp-dropzone" role="presentation">
             <span className="imp-dz__ic" aria-hidden><UploadCloud size={28} /></span>
             <h4>Elige archivos o una carpeta por paciente</h4>
-            <p>Nómbralos con el ID o el nombre del paciente (&ldquo;12345_rx.jpg&rdquo;), o usa una carpeta por paciente.</p>
+            <p>Nómbralos con el folio del paciente (&ldquo;P0166_rx.jpg&rdquo;), su ID del sistema de origen o su nombre, o usa una carpeta por paciente.</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
               <button type="button" className="btn-new btn-new--secondary" onClick={() => inputRef.current?.click()} disabled={cargando}>
                 Elegir archivos
@@ -299,7 +299,7 @@ export function FilesWizard({ t, originId, onClose }: Props) {
                           <>
                             {f.patientName}
                             <span style={{ marginLeft: 6, fontSize: 11, color: "var(--text-3)" }}>
-                              ({f.matchedBy === "externalId" ? "por ID" : "por nombre"})
+                              ({f.matchedBy === "externalId" ? "por ID" : f.matchedBy === "folio" ? "por folio" : "por nombre"})
                             </span>
                           </>
                         ) : reasignando === i ? (

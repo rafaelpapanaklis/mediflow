@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { CalendarClock, Video } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
-import { formatShortTime } from "@/lib/home/greet";
+import { diaEnZona, diasHastaEnZona, formatShortTime, zonaValida } from "@/lib/home/greet";
 import type { AppointmentStatus } from "@/lib/home/types";
 import { EtiquetaEstado, Tarjeta, Vacio } from "./piezas";
 import s from "./hoy.module.css";
@@ -28,7 +28,7 @@ interface Proxima {
   isTeleconsult: boolean;
 }
 
-export function TarjetaProximas({ limite = 5 }: { limite?: number }) {
+export function TarjetaProximas({ limite = 5, timeZone }: { limite?: number; timeZone?: string | null }) {
   const t = useT();
   const [citas, setCitas] = useState<Proxima[] | null>(null);
   const [error, setError] = useState(false);
@@ -73,7 +73,7 @@ export function TarjetaProximas({ limite = 5 }: { limite?: number }) {
       ) : (
         <div role="list" className={s.apilado} style={{ gap: 6 }}>
           {citas.map((cita) => (
-            <FilaProxima key={cita.id} cita={cita} />
+            <FilaProxima key={cita.id} cita={cita} timeZone={timeZone} />
           ))}
         </div>
       )}
@@ -81,16 +81,15 @@ export function TarjetaProximas({ limite = 5 }: { limite?: number }) {
   );
 }
 
-function FilaProxima({ cita }: { cita: Proxima }) {
+function FilaProxima({ cita, timeZone }: { cita: Proxima; timeZone?: string | null }) {
   const t = useT();
   const router = useRouter();
-  const cuando = cuandoLegible(cita.startsAt, t);
+  const cuando = cuandoLegible(cita.startsAt, t, timeZone);
 
   // P1-15: /dashboard/appointments/[id] no existe. Agenda del día + ?highlight=;
-  // la fecha se deriva en la zona del navegador, la misma que pinta la hora.
+  // la fecha se deriva en la zona de la clínica, la misma que pinta la hora.
   const abrirCita = () => {
-    const d = new Date(cita.startsAt);
-    const dia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const dia = diaEnZona(cita.startsAt, timeZone);
     router.push(`/dashboard/agenda?date=${dia}&highlight=${cita.id}`);
   };
 
@@ -141,20 +140,18 @@ function FilaProxima({ cita }: { cita: Proxima }) {
   );
 }
 
-/** «Hoy 14:30» · «Mañana 09:00» · «Lun 12 jun · 10:00», en la zona del navegador. */
-function cuandoLegible(iso: string, t: TFunction): string {
+/** «Hoy 14:30» · «Mañana 09:00» · «Lun 12 jun · 10:00», en la zona de la clínica. */
+function cuandoLegible(iso: string, t: TFunction, timeZone?: string | null): string {
   const d = new Date(iso);
-  const ahora = new Date();
-  const inicioDia = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dias = Math.round((inicioDia(d) - inicioDia(ahora)) / 86_400_000);
-  const hora = formatShortTime(iso);
+  const dias = diasHastaEnZona(iso, new Date(), timeZone);
+  const hora = formatShortTime(iso, timeZone);
   const locale = t("home.upcoming.intlLocale");
 
   if (dias <= 0) return t("home.upcoming.whenToday", { time: hora });
   if (dias === 1) return t("home.upcoming.whenTomorrow", { time: hora });
 
-  const semana = capitalizar(new Intl.DateTimeFormat(locale, { weekday: "short" }).format(d).replace(".", ""));
-  const diaMes = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(d).replace(".", "");
+  const semana = capitalizar(new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: zonaValida(timeZone) }).format(d).replace(".", ""));
+  const diaMes = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: zonaValida(timeZone) }).format(d).replace(".", "");
   return `${semana} ${diaMes} · ${hora}`;
 }
 

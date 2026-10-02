@@ -149,7 +149,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
             total es el número de la tarjeta de ingresos, no otro recorte. */}
         <RevenueTrendCard period={period} />
 
-        <UpcomingAppointmentsCard />
+        <UpcomingAppointmentsCard timeZone={clinic.timezone} />
       </div>
 
       <HomeSection
