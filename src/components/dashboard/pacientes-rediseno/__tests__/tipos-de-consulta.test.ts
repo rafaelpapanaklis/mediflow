@@ -98,5 +98,7 @@ test("elegir «Ortodoncia» lleva a la hoja de control, no a otro formulario", (
     /if \(valor === TIPO_ORTODONCIA\) \{\s*setAbrirControlOrto\(true\);\s*setTab\("ortodoncia"\);\s*return;\s*\}/,
   );
   assert.match(ficha, /abrirControlAlEntrar=\{abrirControlOrto\}/);
-  assert.match(ficha, /onControlAbierto=\{\(\) => setAbrirControlOrto\(false\)\}/);
+  // Al abrirse la hoja se baja la bandera (que volver o recargar no la abra otra vez): la ficha
+  // cablea `onControlAbierto` a un manejador, y ese manejador es el que baja la bandera.
+  assert.match(ficha, /const (\w+) = \(\) => setAbrirControlOrto\(false\);[\s\S]*onControlAbierto=\{\1\}/);
 });

@@ -13,6 +13,8 @@ import { PERSONA_TEMPLATES } from "./persona-templates";
 import { avisoDeTamanoDePersona } from "@/lib/whatsapp/bot/ai-prompt";
 import { BotRediseno } from "@/components/dashboard/whatsapp-rediseno/bot";
 import { useTextosPreciosBot } from "./textos-precios";
+import { useT } from "@/i18n/i18n-provider";
+import { ErrorLegible, SIN_PERMISO, mensajeDeCatch, mensajeDeRespuestaBot } from "./mensaje-de-respuesta";
 
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
 const DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -140,21 +142,6 @@ function ToggleRow({
   );
 }
 
-// Mensaje único de "sin permiso": lo usan el gate del cliente y el 403 del
-// servidor, para que la clínica lea lo mismo venga de donde venga.
-const SIN_PERMISO = "No tienes permiso para configurar el bot de WhatsApp";
-
-/** Texto legible de una respuesta de error: el campo `error` del JSON si lo hay. */
-async function textoDeError(res: Response): Promise<string> {
-  const crudo = (await res.text().catch(() => "")).trim();
-  try {
-    const json = JSON.parse(crudo);
-    return typeof json?.error === "string" ? json.error : crudo;
-  } catch {
-    return crudo;
-  }
-}
-
 export function BotClient({
   canEdit = true,
   // Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el menú
@@ -166,6 +153,7 @@ export function BotClient({
 }) {
   const askConfirm = useConfirm();
   const tp = useTextosPreciosBot();
+  const t = useT();
   // Sin permiso de escritura la pantalla es de solo lectura: las mutaciones se
   // frenan aquí además del 403 del servidor (que es el gate de verdad).
   const noPermissionToast = () => toast.error(SIN_PERMISO);
@@ -206,7 +194,7 @@ export function BotClient({
     (async () => {
       try {
         const res = await fetch("/api/whatsapp/bot");
-        if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Error");
+        if (!res.ok) throw new ErrorLegible(await mensajeDeRespuestaBot(res, t, "No se pudo cargar el bot"));
         const data: { config: BotConfigDTO; faqs: BotFaqDTO[] } = await res.json();
         if (!alive) return;
         setConfig(data.config);
@@ -216,7 +204,7 @@ export function BotClient({
       } catch (err: unknown) {
         if (!alive) return;
         setLoadError(true);
-        toast.error(err instanceof Error && err.message ? err.message : "No se pudo cargar el bot");
+        toast.error(mensajeDeCatch(err, t, "No se pudo cargar el bot"));
       } finally {
         if (alive) setLoading(false);
       }
@@ -260,14 +248,14 @@ export function BotClient({
       });
       // El servidor manda un texto legible (p. ej. el tope de la persona): se
       // muestra ese, no el JSON crudo.
-      if (!res.ok) throw new Error((res.status === 403 ? SIN_PERMISO : await textoDeError(res)) || "Error");
+      if (!res.ok) throw new ErrorLegible(await mensajeDeRespuestaBot(res, t, "No se pudo guardar"));
       const data: { config: BotConfigDTO } = await res.json();
       setConfig(data.config);
       setForm(editableFromConfig(data.config));
       setSchedule(scheduleFromConfig(data.config.businessHours));
       toast.success("Configuración guardada");
     } catch (err: unknown) {
-      toast.error(err instanceof Error && err.message ? err.message : "No se pudo guardar");
+      toast.error(mensajeDeCatch(err, t, "No se pudo guardar"));
     } finally {
       setSaving(false);
     }
@@ -306,7 +294,7 @@ export function BotClient({
       } else {
         // Un 403 aquí significa que el permiso cambió a mitad de sesión: se dice
         // con las palabras de esta pantalla, no con la llave interna del servidor.
-        mensajeServidor = res.status === 403 ? SIN_PERMISO : await textoDeError(res);
+        mensajeServidor = await mensajeDeRespuestaBot(res, t, "No se pudo guardar: el interruptor se quedó como estaba");
       }
     } catch {
       // Sin red, fetch tira TypeError("Failed to fetch"): ese texto en inglés
@@ -343,7 +331,7 @@ export function BotClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, answer, enabled: true, order }),
       });
-      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Error");
+      if (!res.ok) throw new ErrorLegible(await mensajeDeRespuestaBot(res, t, "No se pudo agregar"));
       const data: { faq: BotFaqDTO } = await res.json();
       // Reemplazamos el placeholder por el FAQ real del servidor.
       setFaqs((prev) => prev.map((f) => (f.id === tempId ? data.faq : f)));
@@ -353,7 +341,7 @@ export function BotClient({
       setFaqs((prev) => prev.filter((f) => f.id !== tempId));
       setNewQuestion(question);
       setNewAnswer(answer);
-      toast.error(err instanceof Error && err.message ? err.message : "No se pudo agregar");
+      toast.error(mensajeDeCatch(err, t, "No se pudo agregar"));
     } finally {
       setAddingFaq(false);
     }
@@ -370,12 +358,12 @@ export function BotClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Error");
+      if (!res.ok) throw new ErrorLegible(await mensajeDeRespuestaBot(res, t, "No se pudo actualizar"));
       const data: { faq: BotFaqDTO } = await res.json();
       setFaqs((prev) => prev.map((f) => (f.id === id ? data.faq : f)));
     } catch (err: unknown) {
       setFaqs(before); // revertir
-      toast.error(err instanceof Error && err.message ? err.message : "No se pudo actualizar");
+      toast.error(mensajeDeCatch(err, t, "No se pudo actualizar"));
     }
   }
 
@@ -393,11 +381,11 @@ export function BotClient({
     setFaqs((prev) => prev.filter((f) => f.id !== id));
     try {
       const res = await fetch(`/api/whatsapp/bot/faqs/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Error");
+      if (!res.ok) throw new ErrorLegible(await mensajeDeRespuestaBot(res, t, "No se pudo eliminar"));
       toast.success("FAQ eliminada");
     } catch (err: unknown) {
       setFaqs(before); // revertir
-      toast.error(err instanceof Error && err.message ? err.message : "No se pudo eliminar");
+      toast.error(mensajeDeCatch(err, t, "No se pudo eliminar"));
     }
   }
 
