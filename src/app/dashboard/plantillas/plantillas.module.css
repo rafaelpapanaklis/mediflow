@@ -517,3 +517,41 @@
   .editor { min-height: 200px; padding: 14px 16px; }
   .editorEmpty::before { inset: 14px 16px auto 16px; }
 }
+
+/* ─── Notas de ortodoncia (hoja de control) ─── */
+.textarea {
+  min-height: 84px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+}
+.textarea:focus { border-color: var(--border-brand); box-shadow: var(--ring); }
+.textarea:disabled { background: var(--bg-elev-2); color: var(--text-2); cursor: default; }
+.input:disabled { background: var(--bg-elev-2); color: var(--text-2); cursor: default; }
+.seccionLetra { color: var(--brand); font-weight: 700; margin-right: 6px; }
+.notaAyuda { font-size: 13px; color: var(--text-3); line-height: 1.45; margin: 0; }
+.aviso {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.avisoInfo {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.markerNota { margin-top: 8px; font-size: 12px; color: var(--text-3); line-height: 1.45; }
+.headAcciones { display: flex; gap: 8px; align-items: center; }

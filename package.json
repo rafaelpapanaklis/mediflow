@@ -451,6 +451,7 @@
     "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts",
     "test:document-templates": "tsx --test src/lib/document-templates/__tests__/document-templates.test.ts",
     "test:plantillas": "tsx --test src/app/dashboard/plantillas/__tests__/plantillas-pulido.test.ts",
+    "test:plantillas-orto-nota": "tsx --test src/lib/orthodontics/__tests__/plantillas-nota.test.ts",
     "test:admin-soporte-lectura": "tsx --test src/app/admin/soporte/__tests__/lectura-clinica.test.ts",
     "//test:soporte-mensaje-edicion": "ws1-t10: soporte edita, retira («Respuesta retirada por soporte») y adjunta a una respuesta ya enviada — reglas puras, la ruta PATCH/DELETE real sobre el service real con un Prisma en memoria (incluido «sin el SQL aplicado» → 503) y candados de las pantallas.",
     "test:soporte-mensaje-edicion": "tsx --test --experimental-test-module-mocks src/lib/support/__tests__/mensaje-edicion.test.ts src/lib/support/__tests__/mensaje-edicion-service.test.ts",

@@ -9,7 +9,9 @@ import {
   DOCUMENT_TEMPLATE_KINDS,
   type DocumentTemplateKindValue,
 } from "@/lib/document-templates/kinds";
+import type { PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
 import { PlantillaModal } from "./plantilla-modal";
+import { PlantillasOrto } from "./plantillas-orto";
 import { fueEditada, ordenarPlantillas } from "./tarjeta";
 import styles from "./plantillas.module.css";
 
@@ -25,8 +27,14 @@ export interface PlantillaFila {
   precargada: boolean;
 }
 
+/** La pestaña de las notas de la hoja de control de Ortodoncia (otra tabla; ver plantillas-orto.tsx). */
+const TAB_ORTO = "ORTO" as const;
+type Pestana = DocumentTemplateKindValue | typeof TAB_ORTO;
+
 interface Props {
   initialTemplates: PlantillaFila[];
+  /** Las notas de ortodoncia de la clínica; `null` = sin el módulo (la pestaña no sale) o no se pudieron leer. */
+  initialOrto?: PlantillaNotaDTO[] | null;
 }
 
 // Pestañas y no dos listas: en la ficha del paciente cada sitio enseña SOLO las
@@ -41,12 +49,15 @@ const VACIO_KEY: Record<DocumentTemplateKindValue, string> = {
   CONSENTIMIENTO: "pages.plantillas.vacioConsentimiento",
 };
 
-export function PlantillasClient({ initialTemplates }: Props) {
+export function PlantillasClient({ initialTemplates, initialOrto = null }: Props) {
   const t = useT();
   const locale = useLocale();
   const askConfirm = useConfirm();
   const [templates, setTemplates] = useState<PlantillaFila[]>(initialTemplates);
-  const [kind, setKind] = useState<DocumentTemplateKindValue>("NOTA_EVOLUCION");
+  const [pestana, setPestana] = useState<Pestana>("NOTA_EVOLUCION");
+  const [orto, setOrto] = useState<PlantillaNotaDTO[] | null>(initialOrto);
+  // En la pestaña de ortodoncia no hay un tipo de documento: «Nueva plantilla» de la cabecera no aplica (la pestaña trae la suya).
+  const kind: DocumentTemplateKindValue = pestana === TAB_ORTO ? "NOTA_EVOLUCION" : pestana;
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<{ editing: PlantillaFila | null } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -143,10 +154,12 @@ export function PlantillasClient({ initialTemplates }: Props) {
           <h1 className={styles.title}>{t("pages.plantillas.title")}</h1>
           <p className={styles.subtitle}>{t("pages.plantillas.subtitle")}</p>
         </div>
-        <button type="button" className={styles.btnPrimary} onClick={() => setModal({ editing: null })}>
-          <Plus size={16} aria-hidden />
-          {t("pages.plantillas.nueva")}
-        </button>
+        {pestana !== TAB_ORTO && (
+          <button type="button" className={styles.btnPrimary} onClick={() => setModal({ editing: null })}>
+            <Plus size={16} aria-hidden />
+            {t("pages.plantillas.nueva")}
+          </button>
+        )}
       </header>
 
       <div className={styles.tabs} role="tablist" aria-label={t("pages.plantillas.title")}>
@@ -156,11 +169,11 @@ export function PlantillasClient({ initialTemplates }: Props) {
             type="button"
             role="tab"
             id={`plantillas-tab-${k}`}
-            aria-selected={kind === k}
+            aria-selected={pestana === k}
             aria-controls="plantillas-panel"
-            className={`${styles.tab} ${kind === k ? styles.tabActive : ""}`}
+            className={`${styles.tab} ${pestana === k ? styles.tabActive : ""}`}
             onClick={() => {
-              setKind(k);
+              setPestana(k);
               setSearch("");
             }}
           >
@@ -168,9 +181,30 @@ export function PlantillasClient({ initialTemplates }: Props) {
             <span className={styles.tabCount}>{conteo[k] ?? 0}</span>
           </button>
         ))}
+        {orto && (
+          <button
+            type="button"
+            role="tab"
+            id={`plantillas-tab-${TAB_ORTO}`}
+            aria-selected={pestana === TAB_ORTO}
+            aria-controls="plantillas-panel"
+            className={`${styles.tab} ${pestana === TAB_ORTO ? styles.tabActive : ""}`}
+            onClick={() => {
+              setPestana(TAB_ORTO);
+              setSearch("");
+            }}
+          >
+            {t("pages.plantillas.tabOrto")}
+            <span className={styles.tabCount}>{orto.length}</span>
+          </button>
+        )}
       </div>
 
-      <section id="plantillas-panel" role="tabpanel" aria-labelledby={`plantillas-tab-${kind}`} className={styles.panel}>
+      <section id="plantillas-panel" role="tabpanel" aria-labelledby={`plantillas-tab-${pestana}`} className={styles.panel}>
+        {pestana === TAB_ORTO && orto ? (
+          <PlantillasOrto filas={orto} onChange={setOrto} />
+        ) : (
+          <>
         {delTipo.length > 0 && (
           <label className={styles.search}>
             <Search size={16} aria-hidden />
@@ -261,6 +295,8 @@ export function PlantillasClient({ initialTemplates }: Props) {
               </li>
             ))}
           </ul>
+        )}
+          </>
         )}
       </section>
 

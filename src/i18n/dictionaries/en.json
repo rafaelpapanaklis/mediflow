@@ -9322,6 +9322,51 @@
         "NAME_TAKEN": "A template of this type with that name already exists.",
         "NOT_FOUND": "That template no longer exists.",
         "generico": "Could not save. Please try again."
+      },
+      "tabOrto": "Orthodontics notes",
+      "orto": {
+        "ayuda": "These are the templates offered under “Templates” in the Orthodontics control sheet. Factory templates are never changed: copy one and edit the copy.",
+        "vacio": "There are no orthodontics note templates yet.",
+        "vacioAyuda": "Create the first one and it will show up in the control sheet.",
+        "tipo": "Orthodontics note (control sheet)",
+        "nueva": "New orthodontics note template",
+        "tituloCopia": "Copy template",
+        "ver": "Factory template",
+        "deFabrica": "Factory",
+        "copiar": "Copy and edit",
+        "copiarYEditar": "Copy and edit",
+        "sufijoCopia": "copy",
+        "avisoFabrica": "This template comes with the app and is never changed, so you can always go back to it. Press “Copy and edit” to make your own version.",
+        "avisoCopia": "You are making a copy: the original template stays as it is.",
+        "nombrePlaceholder": "E.g. Monthly check with elastics",
+        "seccion": {
+          "S": "Subjective: what the patient reports",
+          "O": "Objective: what you find on examination",
+          "A": "Assessment: your reading of the case",
+          "P": "Plan: what comes next"
+        },
+        "marcadoresTitulo": "Control sheet markers",
+        "marcadoresAyuda": "Press one to insert it at the cursor. When the template is picked in the sheet, it is replaced with that visit's real value.",
+        "marcadoresHueco": "Any other {{marker}} you write becomes a “____” blank to fill in by hand; the sheet warns before signing if one is left in the Plan.",
+        "marcadores": {
+          "mes": "Treatment month of this visit",
+          "duracion": "Estimated length of the case, in months",
+          "fase": "Current treatment phase",
+          "arcoActual": "Archwire the patient arrives with",
+          "arcoNuevo": "Archwire placed at this visit"
+        },
+        "marcadorDesconocido": "The control sheet does not know {lista}: it will become a “____” blank to fill in by hand.",
+        "errores": {
+          "NAME_REQUIRED": "Give the template a name.",
+          "NAME_TOO_LONG": "The name is too long.",
+          "SOAP_INVALID": "The template text is not valid.",
+          "SOAP_EMPTY": "Write at least one section of the note.",
+          "SOAP_TOO_LONG": "One of the sections is too long.",
+          "NAME_TAKEN": "A template with that name already exists (it may be deactivated).",
+          "FACTORY_READONLY": "Factory templates are not changed: copy it and edit the copy.",
+          "NOT_FOUND": "That template no longer exists.",
+          "MODULE_REQUIRED": "Your clinic does not have the Orthodontics module."
+        }
       }
     },
     "procedures": {

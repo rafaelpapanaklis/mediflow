@@ -9322,6 +9322,51 @@
         "NAME_TAKEN": "Ya existe una plantilla de este tipo con ese nombre.",
         "NOT_FOUND": "Esa plantilla ya no existe.",
         "generico": "No se pudo guardar. Inténtalo de nuevo."
+      },
+      "tabOrto": "Notas de ortodoncia",
+      "orto": {
+        "ayuda": "Son las plantillas que aparecen en «Plantillas» dentro de la hoja de control de Ortodoncia. Las de fábrica no se modifican: cópialas y edita la copia.",
+        "vacio": "Todavía no hay plantillas de nota de ortodoncia.",
+        "vacioAyuda": "Crea la primera y aparecerá en la hoja de control.",
+        "tipo": "Nota de ortodoncia (hoja de control)",
+        "nueva": "Nueva plantilla de nota de ortodoncia",
+        "tituloCopia": "Copiar plantilla",
+        "ver": "Plantilla de fábrica",
+        "deFabrica": "De fábrica",
+        "copiar": "Copiar y editar",
+        "copiarYEditar": "Copiar y editar",
+        "sufijoCopia": "copia",
+        "avisoFabrica": "Esta plantilla viene de fábrica y no se modifica, para que siempre puedas volver a ella. Pulsa «Copiar y editar» para hacer tu propia versión.",
+        "avisoCopia": "Vas a crear una copia: la plantilla original se queda como está.",
+        "nombrePlaceholder": "Ej. Control mensual con elásticos",
+        "seccion": {
+          "S": "Subjetivo: lo que refiere el paciente",
+          "O": "Objetivo: lo que encuentras en la exploración",
+          "A": "Análisis: tu valoración del caso",
+          "P": "Plan: lo que sigue para el próximo control"
+        },
+        "marcadoresTitulo": "Marcadores de la hoja de control",
+        "marcadoresAyuda": "Pulsa uno para insertarlo donde está el cursor. Al elegir la plantilla en la hoja, se sustituye por el dato real de ese control.",
+        "marcadoresHueco": "Cualquier otro marcador {{así}} que escribas se convierte en un hueco «____» que se rellena a mano; la hoja avisa antes de firmar si queda alguno en el Plan.",
+        "marcadores": {
+          "mes": "Mes de tratamiento de esta visita",
+          "duracion": "Duración estimada del caso, en meses",
+          "fase": "Fase actual del tratamiento",
+          "arcoActual": "Arco con el que llega el paciente",
+          "arcoNuevo": "Arco que se coloca en este control"
+        },
+        "marcadorDesconocido": "La hoja de control no conoce {lista}: quedará como hueco «____» para escribirlo a mano.",
+        "errores": {
+          "NAME_REQUIRED": "Ponle un nombre a la plantilla.",
+          "NAME_TOO_LONG": "El nombre es demasiado largo.",
+          "SOAP_INVALID": "El texto de la plantilla no es válido.",
+          "SOAP_EMPTY": "Escribe al menos una sección de la nota.",
+          "SOAP_TOO_LONG": "Una de las secciones es demasiado larga.",
+          "NAME_TAKEN": "Ya existe una plantilla con ese nombre (puede estar desactivada).",
+          "FACTORY_READONLY": "Las plantillas de fábrica no se modifican: cópiala y edita la copia.",
+          "NOT_FOUND": "Esa plantilla ya no existe.",
+          "MODULE_REQUIRED": "Tu clínica no tiene contratado el módulo de Ortodoncia."
+        }
       }
     },
     "procedures": {
