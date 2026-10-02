@@ -7,6 +7,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { useAgendaOpcional } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { claveDelHueco, conflictoVigente, type ConflictoDelServidor } from "@/lib/agenda/conflicto-editar-cita";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
 import type { AgendaAppointmentDTO, DoctorColumnDTO, ResourceDTO } from "@/lib/agenda/types";
@@ -136,7 +137,11 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   const state = prestado ?? agenda!.state;
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [conflict, setConflict] = useState<string | null>(null);
+  /**
+   * El último «se solapa» / «sillón cerrado» del servidor, con el hueco al que se refiere. Lo que se pinta es
+   * `conflict` (abajo): este, si el hueco no ha cambiado, o el que se recalcula para el hueco nuevo.
+   */
+  const [conflictoServidor, setConflict] = useState<ConflictoDelServidor | null>(null);
   /**
    * WS1-T3 — el bloqueo sobre el que se está preguntando, o `null`. Mientras
    * no sea `null` hay una confirmación en pantalla y NADA se ha guardado.
@@ -192,6 +197,20 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   }, [isOpen, onClose, bloqueoPendiente]);
 
   if (!isOpen || !appt || !form) return null;
+
+  // Menores de la revisión final (ws1-t10): el aviso se recalcula al cambiar doctor, sillón, día, hora o
+  // duración — antes se quedaba el de Mariana (y «Sobrescribir y guardar») tras pasar a un doctor libre.
+  const inicioIso = localToIso(form.date, form.startTime, state.timezone);
+  const conflict = conflictoVigente({
+    delServidor: conflictoServidor,
+    hueco: form,
+    rango: inicioIso
+      ? { startsAt: inicioIso, endsAt: new Date(new Date(inicioIso).getTime() + form.durationMin * 60_000).toISOString() }
+      : null,
+    citaId: appt.id,
+    // Desde el expediente (`prestado`) no hay citas cargadas: sin aviso hasta que conteste el servidor.
+    citas: prestado ? [] : agenda!.state.appointments,
+  });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -256,7 +275,9 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
         endsAt: endsAtIso,
         doctorId: form.doctorId,
         resourceId: form.resourceId || null,
-        ...(form.overrideReason ? { overrideReason: form.overrideReason } : {}),
+        // El motivo para forzar solo viaja si el aviso sigue en pantalla: apaga el no-solape en el servidor, y
+        // uno escrito para el doctor de antes no puede colar la cita sobre otra en el hueco nuevo.
+        ...(conflict && form.overrideReason ? { overrideReason: form.overrideReason } : {}),
         ...(form.reason !== (appt.reason ?? "") ? { reason: form.reason } : {}),
         // Solo «ya lo confirmé»; el motivo lo escribe el servidor. NO va por
         // `overrideReason`, cuyo valor apaga el no-solape.
@@ -272,21 +293,23 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       const e = err as ApiError & { message?: string };
       // overlap → mostrar conflict warning con copy descriptivo (doctor vs sillón vs ambos).
       if (e?.error === "appointment_overlap") {
-        setConflict(
-          describeOverlapConflict(e.conflictingAppointment, {
+        setConflict({
+          clave: claveDelHueco(form),
+          texto: describeOverlapConflict(e.conflictingAppointment, {
             doctorId: form.doctorId,
             resourceId: form.resourceId || null,
           }),
-        );
+        });
       } else if (e?.error === "resource_unavailable") {
         const resourceName =
           state.resources.find((r) => r.id === form.resourceId)?.name ?? null;
-        setConflict(
-          describeResourceUnavailable(
+        setConflict({
+          clave: claveDelHueco(form),
+          texto: describeResourceUnavailable(
             e.reason as "outside_schedule" | "resource_closed_this_day" | undefined,
             resourceName,
           ),
-        );
+        });
       } else {
         const detail = e?.reason ?? e?.error ?? e?.message ?? t("agenda.editApptModal.updateFailed");
         const prefix = e?.status ? `[${e.status}] ` : "";

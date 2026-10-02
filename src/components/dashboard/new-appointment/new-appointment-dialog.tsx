@@ -934,17 +934,19 @@ function summaryNode({
     );
   }
   const time = formatSlotTime(slotIso, timezone);
-  const firstName = patientName ? patientName.split(" ")[0] : null;
+  // El nombre visible completo del paciente (menores de la revisión final, ws1-t10). Antes era la primera
+  // palabra: «QA Importado Eta» salía «QA», y con el doctor detrás se leía «QA con Cuenta de Prueba».
+  const nombrePaciente = patientName ? patientName.replace(/\s+/g, " ").trim() || null : null;
   const bold: React.CSSProperties = { color: "var(--text-1)", fontWeight: 600 };
   const fuerte = nueva ? { className: nc.resumenFuerte } : { style: bold };
   return (
     <>
       <b {...fuerte}>{time}</b>
       {` · ${t("appointments.newApptDialog.summaryMinutes", { count: duration })}`}
-      {firstName ? (
+      {nombrePaciente ? (
         <>
           {" · "}
-          <b {...fuerte}>{firstName}</b>
+          <b {...fuerte}>{nombrePaciente}</b>
         </>
       ) : null}
       {doctorName ? (

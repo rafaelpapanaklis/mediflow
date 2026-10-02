@@ -122,6 +122,8 @@ import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarControlFirmadoDeHoy";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useTextosFirmaControl } from "@/components/specialties/orthodontics/redesign/textos-firma-control";
+import { nombreDeProfesional } from "@/lib/nombre-profesional";
+import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
 // cliente para poder traducir el texto con useT — el `loading` de dynamicImport
@@ -854,6 +856,7 @@ export function PatientDetailClient({
       });
     }
   }, [showNewTreatment, doctors]);
+  const etiquetasDoctoresPlan = useMemo(() => etiquetasDeProfesionales(doctors ?? []), [doctors]);
 
   const [viewPlan, setViewPlan] = useState<any | null>(null);
   const [editPlan, setEditPlan] = useState<any | null>(null);
@@ -2536,7 +2539,7 @@ export function PatientDetailClient({
                             <div>
                               <div className="font-bold text-sm">{plan.name}</div>
                               <div className="text-xs text-muted-foreground mt-0.5">
-                                {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
+                                {nombreDeProfesional(plan.doctor)}
                               </div>
                               {plan.description && (
                                 <div className="text-xs text-muted-foreground mt-1">{plan.description}</div>
@@ -2635,8 +2638,9 @@ export function PatientDetailClient({
                             value={treatmentForm.doctorId}
                             onChange={(e) => setTreatmentForm(f => ({ ...f, doctorId: e.target.value }))}
                           >
+                            {/* Mismo formateador que los selectores de la Agenda (ws1-t10): sin «Dr/a. Dr …». */}
                             {(doctors ?? []).map((d: any) => (
-                              <option key={d.id} value={d.id}>{t("patients.doctorPrefix")} {d.firstName} {d.lastName}</option>
+                              <option key={d.id} value={d.id}>{etiquetasDoctoresPlan.get(d.id)?.nombre}</option>
                             ))}
                           </select>
                         </div>

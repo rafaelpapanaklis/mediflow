@@ -119,6 +119,23 @@ export const COLCHON_REJILLA = 8;
 /** Alto del encabezado de columnas en Día. */
 export const ALTO_ENCABEZADO_DIA = 60;
 
+/**
+ * Ancho mínimo de una columna de Día (menores de la revisión final, ws1-t10). Con 22 columnas a 1280 px cada
+ * una medía ~45 px: el nombre corto quedaba en 0 px y solo se veían las iniciales, repetidas. Por debajo de
+ * esto la cabecera ya es la compacta (sin círculo, nombre en dos renglones) y la rejilla se desplaza en
+ * horizontal, como Semana.
+ */
+export const ANCHO_MINIMO_COLUMNA_DIA = 88;
+
+/**
+ * Lo que Día le pasa a la cuadrícula como `anchoMinimoColumna`. Solo cuando las columnas ya no caben en el
+ * suelo de 720 px de las pantallas estrechas: el mínimo va en un `style` y le ganaría a ese suelo, así que con
+ * pocas columnas (3 × 88 = 264 px) no se pasa nada y todo queda como estaba.
+ */
+export function anchoMinimoColumnaDia(columnas: number): number | undefined {
+  return ANCHO_EJE + columnas * ANCHO_MINIMO_COLUMNA_DIA > 720 ? ANCHO_MINIMO_COLUMNA_DIA : undefined;
+}
+
 /** Alto del encabezado de columnas en Semana (lo usa ws1-t2). */
 export const ALTO_ENCABEZADO_SEMANA = 52;
 

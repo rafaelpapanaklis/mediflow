@@ -1104,7 +1104,15 @@
 
 /* ═══ Encabezado de columna de Día ══════════════════════════════════════ */
 
+/* El contenedor de la consulta de abajo: la cabecera se mide a sí misma, no a la ventana (cuántas columnas
+   hay lo decide la clínica, no la pantalla). */
+.cabeceraDiaMarco {
+  height: 100%;
+  container-type: inline-size;
+}
+
 .cabeceraDia {
+  position: relative;
   height: 100%;
   display: flex;
   align-items: center;
@@ -1143,6 +1151,46 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Cabecera compacta (menores de la revisión final, ws1-t10): con muchas columnas el círculo de 32 px y los
+   32 px de relleno se comían la columna entera y el nombre medía 0 px. Aquí el círculo pasa a ser una franja
+   del color del doctor arriba (las iniciales se repetían: «WS» ×3) y el nombre corto, que es único, usa todo
+   el ancho en hasta dos renglones. */
+@container (max-width: 150px) {
+  .cabeceraDia {
+    gap: 0;
+    padding: 0 6px;
+  }
+
+  .avatarResponsable {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 3px;
+    border-radius: 0;
+    font-size: 0;
+  }
+
+  .cabeceraTextos {
+    width: 100%;
+  }
+
+  .cabeceraNombre {
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .cabeceraSub {
+    font-size: 11px;
+  }
 }
 
 /* ═══ Tarjeta de cita ═══════════════════════════════════════════════════ */

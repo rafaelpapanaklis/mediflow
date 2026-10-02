@@ -13,6 +13,7 @@ import {
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import s from "./plan.module.css";
+import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /**
@@ -72,6 +73,7 @@ const renglonNuevo = (parcial: Partial<Renglon> = {}): Renglon => ({
 
 export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencias, guardando, onCerrar, onCrear }: VentanaNuevoPlanProps) {
   const t = useT();
+  const nombresDoctores = useMemo(() => etiquetasDeProfesionales(doctores), [doctores]);
   const [plan, setPlan] = useState<PlanClinico>(PLAN_VACIO);
   const [tarifario, setTarifario] = useState<Procedimiento[]>([]);
   const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
@@ -205,8 +207,11 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                   value={form.doctorId}
                   onChange={(e) => setForm((f) => ({ ...f, doctorId: e.target.value }))}
                 >
+                  {/* El nombre visible completo, único en la lista: el mismo formateador que los selectores de la
+                      Agenda (etiqueta-profesional.ts). Con «Dr/a. » delante salía «Dr/a. Dr Import…» (menores de
+                      la revisión final, ws1-t10); el título que alguien escribió en su nombre se respeta. */}
                   {doctores.map((d) => (
-                    <option key={d.id} value={d.id}>{t("patients.doctorPrefix")} {d.firstName} {d.lastName}</option>
+                    <option key={d.id} value={d.id}>{nombresDoctores.get(d.id)?.nombre}</option>
                   ))}
                 </select>
               </div>

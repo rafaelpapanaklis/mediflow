@@ -41,7 +41,7 @@ import {
   topDeCita,
   ventanaDeRejilla,
 } from "@/lib/agenda-nueva/geometria";
-import { ALTO_ENCABEZADO_DIA } from "@/lib/agenda-nueva/tokens";
+import { ALTO_ENCABEZADO_DIA, anchoMinimoColumnaDia } from "@/lib/agenda-nueva/tokens";
 import { aCitaVista, resumenDeColumna, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
@@ -178,15 +178,20 @@ export function VistaDia() {
         cerrada: horarioDelDia.cerrado,
         vacia: vistas.length === 0 && !horarioDelDia.cerrado ? "Sin citas" : null,
         encabezado: (
-          <div className={s.cabeceraDia}>
-            <span className={s.avatarResponsable} style={{ background: r.color }}>
-              {r.iniciales}
-            </span>
-            <div className={s.cabeceraTextos}>
-              {/* El nombre corto ÚNICO («Mariana C.»): con 20 columnas el completo se cortaba y solo quedaban
-                  las iniciales, repetidas (revisión de ws1-t10). El completo, al pasar el puntero. */}
-              <div className={s.cabeceraNombre} title={r.nombre}>{r.nombreCorto}</div>
-              <div className={s.cabeceraSub}>{resumenDeColumna(paraResumen)}</div>
+          // El marco es el contenedor de la consulta `@container`: con la columna estrecha (muchas columnas) la
+          // cabecera pasa a compacta — sin círculo de iniciales, que se repetían («WS» ×3), y con el nombre corto
+          // en dos renglones. El nombre completo sale al pasar el puntero por TODA la cabecera, círculo incluido.
+          <div className={s.cabeceraDiaMarco} title={r.nombre}>
+            <div className={s.cabeceraDia}>
+              <span className={s.avatarResponsable} style={{ background: r.color }} aria-hidden>
+                {r.iniciales}
+              </span>
+              <div className={s.cabeceraTextos}>
+                {/* El nombre corto ÚNICO («Mariana C.»): con 20 columnas el completo se cortaba y solo quedaban
+                    las iniciales, repetidas (revisión de ws1-t10). El completo, al pasar el puntero. */}
+                <div className={s.cabeceraNombre} title={r.nombre}>{r.nombreCorto}</div>
+                <div className={s.cabeceraSub}>{resumenDeColumna(paraResumen)}</div>
+              </div>
             </div>
           </div>
         ),
@@ -267,6 +272,7 @@ export function VistaDia() {
       columnas={columnasConSombra}
       slotMinutes={state.slotMinutes}
       altoEncabezado={ALTO_ENCABEZADO_DIA}
+      anchoMinimoColumna={anchoMinimoColumnaDia(columnasConSombra.length)}
       ahoraMin={ahoraMin}
       columnaAhora={null}
       sinColumnas={

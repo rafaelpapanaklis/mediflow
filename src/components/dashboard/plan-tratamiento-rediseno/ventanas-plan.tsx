@@ -7,6 +7,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
 import s from "./plan.module.css";
+import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 
 /**
@@ -72,7 +73,8 @@ export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar }: {
           <div className={s.verCabeza}>
             <div>
               <div className={s.verNombre}>{plan.name}</div>
-              <div className={s.verDoctor}>{t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}</div>
+              {/* Sin «Dr/a. » delante: con un nombre que ya trae el título salía «Dr/a. Dr Import…» (ws1-t10). */}
+              <div className={s.verDoctor}>{nombreDeProfesional(plan.doctor)}</div>
             </div>
             <span className={`${s.etiqueta} ${clases[estado.tono]}`}>{t(estado.labelKey)}</span>
           </div>
