@@ -67,7 +67,9 @@ mock.module("@/lib/prisma", {
         },
       },
       orthoWireStep: { findMany: async () => [] },
-      orthoTreatmentCard: { findMany: async () => [] },
+      // ws1-t8 (revisión de ws1-t9, fallo 2): al abrir desde la cita se busca una hoja firmada de hoy sin cita
+      // que ligar (ligar-hoja-firmada-db.ts); aquí no hay ninguna.
+      orthoTreatmentCard: { findMany: async () => [], findFirst: async () => null },
       orthodonticPhase: { findFirst: async () => (faseEnCurso ? { phaseKey: faseEnCurso } : null) },
       orthoPhotoSet: { findMany: async () => [] },
       // Ronda 6 (ws1-t8): `buildTreatmentCardContext` ahora recibe el
@@ -77,6 +79,9 @@ mock.module("@/lib/prisma", {
     },
   },
 });
+
+// El ligador de la hoja firmada sin cita invita a reseña al cerrar la cita (importa `server-only`).
+mock.module("@/lib/reviews/invite", { namedExports: { sendReviewInvitation: async () => undefined } });
 
 // `loadPatientForOrtho` real vive en `_helpers.ts`, que importa
 // `getAuthContext` (→ next/headers, rompe fuera de un request de Next). Se

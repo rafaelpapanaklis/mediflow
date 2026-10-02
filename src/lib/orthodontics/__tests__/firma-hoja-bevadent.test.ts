@@ -111,7 +111,7 @@ test("punto 3: la hoja abierta dentro de una consulta se liga a ESA cita y la fi
   assert.match(ficha, /citaEnCursoId=\{activeAppointment\?\.id \?\? null\}/);
   assert.match(ficha, /onConsultaCerradaPorLaHoja=\{cerrarConsultaPorLaHoja\}/);
   const cliente = leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
-  assert.match(cliente, /getTreatmentCardContextForPatient\(t\.treatmentPlanId, props\.citaEnCursoId \?\? null\)/);
+  assert.match(cliente, /getTreatmentCardContextForPatient\(t\.treatmentPlanId, props\.citaEnCursoId \?\? null, props\.citaDeLaDireccionId \?\? null\)/);
   const accion = leer("app/actions/orthodontics/getTreatmentCardContextForPatient.ts");
   assert.match(accion, /status: \{ in: \["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"\] \}/);
   const tab = leer("components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx");

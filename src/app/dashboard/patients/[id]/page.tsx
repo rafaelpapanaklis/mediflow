@@ -687,6 +687,7 @@ export default async function PatientDetailPage({
           fotosCount={fotosCount}
           rediseno={rediseno}
           {...(agendaCitas ? { agendaCitas } : {})}
+          zonaClinica={tz}
         />
       </ErrorBoundary>
     </div>

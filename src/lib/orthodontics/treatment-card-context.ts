@@ -69,6 +69,11 @@ export interface TreatmentCardAgendaContext {
   appointmentStatus: string | null;
   /** ws1-t8: cuándo es esa cita (ISO). La fecha de la visita puede ser hoy aunque la cita sea de otro día. */
   appointmentStartsAt: string | null;
+  /**
+   * ws1-t8 (revisión de ws1-t9, fallo 2): al abrir, la hoja de hoy ya firmada «sin cita» quedó ligada a ESTA
+   * cita (y la cita cerrada, si `citaCerrada`). Solo lo pone getTreatmentCardContextForAppointment.
+   */
+  hojaFirmadaLigada?: { citaCerrada: boolean } | null;
   /** Ya hay una hoja ligada a ESTA cita, o una hoja de HOY del mismo caso
    * (se reabre/continúa, no se crea otra — hallazgo 7). */
   existingCard: TreatmentCardDTO | null;
@@ -168,7 +173,10 @@ export async function buildTreatmentCardContext(
   // una segunda del mismo día.
   // «Hoy» es el día de ESTA cita, no el del reloj: visto en vivo, abrir la
   // cita de mañana enseñaba la hoja firmada de hoy en vez de una nueva.
-  const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone, appt?.startsAt ?? new Date());
+  // ws1-t8 (punto 12 y fallo 3 de la revisión de ws1-t9): si la visita es de HOY aunque la cita sea de otro día
+  // (cita futura adelantada, o futura sin el paciente que no se tocará), la hoja a continuar es la de hoy.
+  const visitaHoy = appt?.status ? citaAlFirmar({ status: appt.status, startsAt: appt.startsAt }, new Date(), clinicTimezone).visitaHoy : false;
+  const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone, appt && !visitaHoy ? appt.startsAt : new Date());
   const raw = linkedToAppt ?? deHoy;
   const existingCard = raw ? adaptCard(raw, wireById) : null;
 
@@ -182,7 +190,6 @@ export async function buildTreatmentCardContext(
     phaseInProgress?.phaseKey ?? lastSignedCard?.phaseKey ?? "ALIGNMENT";
   // ws1-t8 (punto 12): una cita de un día futuro que ya se está atendiendo (paciente presente) es una visita de
   // HOY, adelantada: la hoja nace con la fecha de hoy, la misma que pondrá la firma (cerrar-cita-al-firmar.ts).
-  const visitaHoy = appt?.status ? citaAlFirmar({ status: appt.status, startsAt: appt.startsAt }, new Date(), clinicTimezone).visitaHoy : false;
   const visitDate = appt && !visitaHoy ? appt.startsAt.toISOString() : new Date().toISOString();
   // ws1-t10: meses reales desde la colocación al día de la visita (antes, meses de calendario contra «hoy»).
   const monthAt = mesDeTratamiento(plan.installedAt ?? plan.startDate, new Date(visitDate));

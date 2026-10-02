@@ -21,6 +21,13 @@
 // la hoja salía sin cita, con una segunda nota). Solo vale si la cita es de este paciente y el
 // paciente está presente (llegó, en sillón o en consulta); si no, se sigue la regla de siempre.
 //
+// ws1-t8 (revisión de ws1-t9, fallo 3): sin consulta en curso, la ficha manda además la cita de su dirección
+// (`?appointment=`, la que abrió «Iniciar consulta»). Solo se usa si es de un día FUTURO y el paciente no ha
+// llegado: la hoja nace con ella para que el cajón AVISE antes de firmar que esa cita no se marca como atendida,
+// y la firma la deja intacta y lo repite en el aviso (cerrar-cita-al-firmar.ts). Antes ese aviso no se podía
+// ver desde ninguna pantalla: la hoja se firmaba sin cita y sin decir nada. Una cita de hoy o pasada sigue la
+// regla de siempre (la de control de hoy).
+//
 // En los dos casos, `buildTreatmentCardContext` aplica la misma regla de
 // "hoja de hoy" (hallazgo 7): si el plan YA tiene una hoja de hoy —ligada a
 // otra cita, o sin cita— se continúa esa en vez de crear una segunda.
@@ -32,10 +39,12 @@ import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
 import { buildTreatmentCardContext, type TreatmentCardAgendaContext } from "@/lib/orthodontics/treatment-card-context";
+import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
 
 export async function getTreatmentCardContextForPatient(
   treatmentPlanId: string,
   citaEnCursoId?: string | null,
+  citaDeLaDireccionId?: string | null,
 ): Promise<ActionResult<TreatmentCardAgendaContext>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
@@ -75,6 +84,21 @@ export async function getTreatmentCardContextForPatient(
       select: { id: true, startsAt: true, endsAt: true, status: true },
     });
     if (enCurso) return ok(await buildTreatmentCardContext(plan, enCurso, timezone));
+  }
+
+  if (citaDeLaDireccionId && citaDeLaDireccionId !== citaEnCursoId) {
+    const deLaDireccion = await prisma.appointment.findFirst({
+      where: {
+        id: citaDeLaDireccionId,
+        clinicId: ctx.clinicId,
+        patientId: plan.patientId,
+        status: { notIn: ["CANCELLED", "NO_SHOW", "COMPLETED", "CHECKED_OUT"] },
+      },
+      select: { id: true, startsAt: true, endsAt: true, status: true },
+    });
+    if (deLaDireccion && !citaAlFirmar(deLaDireccion, new Date(), timezone).ligar) {
+      return ok(await buildTreatmentCardContext(plan, deLaDireccion, timezone));
+    }
   }
 
   const { startUtc, endUtc } = calendarDayRangeUtc(hoyEnZona(new Date(), timezone), timezone);

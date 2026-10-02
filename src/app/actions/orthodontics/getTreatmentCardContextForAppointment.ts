@@ -41,6 +41,7 @@ import {
   buildTreatmentCardContext,
   type TreatmentCardAgendaContext,
 } from "@/lib/orthodontics/treatment-card-context";
+import { ligarHojaFirmadaDeHoyALaCita } from "@/lib/orthodontics/ligar-hoja-firmada-db";
 
 // El núcleo `buildTreatmentCardContext` vive en
 // src/lib/orthodontics/treatment-card-context.ts: exportado desde este archivo
@@ -87,6 +88,25 @@ export async function getTreatmentCardContextForAppointment(
   if (!appt) return fail("Cita no encontrada para este paciente");
 
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
-  const context = await buildTreatmentCardContext(plan, appt, clinic?.timezone ?? "America/Mexico_City");
-  return ok(context);
+  const zona = clinic?.timezone ?? "America/Mexico_City";
+
+  // ws1-t8 (revisión de ws1-t9, fallo 2): si la hoja de hoy ya se firmó «sin cita» (antes de que existiera esta
+  // cita), abrirla desde esta cita de hoy la liga y cierra la cita: era «por registrar» con el control ya hecho.
+  const ligada = await ligarHojaFirmadaDeHoyALaCita({
+    clinicId: ctx.clinicId,
+    patientId: plan.patientId,
+    planId: plan.id,
+    cita: appt,
+    rol: String(ctx.role),
+    zona,
+  });
+  const citaVigente = ligada.citaCerrada
+    ? ((await prisma.appointment.findFirst({
+        where: { id: appt.id, clinicId: ctx.clinicId },
+        select: { id: true, startsAt: true, endsAt: true, status: true },
+      })) ?? appt)
+    : appt;
+
+  const context = await buildTreatmentCardContext(plan, citaVigente, zona);
+  return ok(ligada.cardId ? { ...context, hojaFirmadaLigada: { citaCerrada: ligada.citaCerrada !== null } } : context);
 }

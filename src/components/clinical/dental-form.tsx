@@ -424,6 +424,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // primer render (con los campos vacíos) pisaría el borrador que iba a
   // recuperarse.
   const draftReadRef = useRef(false);
+  // ws1-t8 (revisión de ws1-t9, fallo 6): la escritura pendiente del borrador. Al cambiar de pestaña (p. ej.
+  // «Nueva consulta» → tipo Ortodoncia) el formulario se desmonta y el temporizador se cancelaba: lo tecleado en
+  // los últimos 700 ms no llegaba al borrador, que es de donde la hoja de control lo recoge. Se escribe al salir.
+  const draftPendienteRef = useRef<(() => void) | null>(null);
 
   /**
    * ¿Hay algo escrito ahí dentro? Recursiva a propósito: `form` no es plano —
@@ -441,6 +445,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   }
 
   const clearDraft = useCallback(() => {
+    draftPendienteRef.current = null;
     if (!draftKey) return;
     try { window.sessionStorage.removeItem(draftKey); } catch { /* sin almacenamiento */ }
   }, [draftKey]);
@@ -469,7 +474,8 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
   useEffect(() => {
     if (!draftKey || !draftReadRef.current) return;
-    const id = window.setTimeout(() => {
+    const escribir = () => {
+      draftPendienteRef.current = null;
       try {
         const hayAlgoQueGuardar =
           tieneContenido(form) || tieneContenido(vitals) || tieneContenido(exploracion) ||
@@ -482,9 +488,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           }));
         }
       } catch { /* sin almacenamiento: se sigue sin borrador */ }
-    }, 700);
+    };
+    draftPendienteRef.current = escribir;
+    const id = window.setTimeout(escribir, 700);
     return () => window.clearTimeout(id);
   }, [draftKey, form, vitals, exploracion, pronostico, selectedProcs]);
+  useEffect(() => () => draftPendienteRef.current?.(), []);
 
   /** Tira el borrador y deja el formulario como recién abierto. */
   function discardDraft() {

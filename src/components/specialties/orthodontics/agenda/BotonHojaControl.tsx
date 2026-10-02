@@ -95,6 +95,14 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
         setError(res.error);
         return;
       }
+      // Revisión de ws1-t9, fallo 2: la hoja de hoy ya estaba firmada «sin cita»; al abrirla desde esta cita quedó
+      // ligada a ella (y la cita cerrada). Se dice, para que nadie la busque «por registrar».
+      if (res.data.hojaFirmadaLigada) {
+        toast.success(
+          res.data.hojaFirmadaLigada.citaCerrada ? textosFirma.hojaFirmadaLigadaYCitaCerrada : textosFirma.hojaFirmadaLigadaSinCerrar,
+          { duration: 9000 },
+        );
+      }
       setCtx({
         card: res.data.existingCard,
         cita: { estado: res.data.appointmentStatus, inicio: res.data.appointmentStartsAt },

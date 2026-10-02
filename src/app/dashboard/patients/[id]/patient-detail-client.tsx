@@ -116,6 +116,12 @@ import type { CasoDelPaciente } from "@/lib/orthodontics/casos-del-paciente";
 import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
 import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { esCitaDeHoy, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
+import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
+import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
+import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarControlFirmadoDeHoy";
+import { isFailure } from "@/app/actions/orthodontics/result";
+import { useTextosFirmaControl } from "@/components/specialties/orthodontics/redesign/textos-firma-control";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
 // cliente para poder traducir el texto con useT — el `loading` de dynamicImport
@@ -453,6 +459,8 @@ interface Props {
    * de Citas solo lista, como siempre.
    */
   agendaCitas?: AgendaDelExpediente;
+  /** Zona de la clínica: «hoy» para elegir la próxima cita es el día de la clínica, no el del navegador. */
+  zonaClinica?: string;
 }
 
 export function PatientDetailClient({
@@ -501,8 +509,11 @@ export function PatientDetailClient({
   reminderOutcome = null,
   rediseno = false,
   agendaCitas,
+  zonaClinica = "America/Mexico_City",
 }: Props) {
   const t = useT();
+  const textosConsulta = useTextosConsultaFicha();
+  const textosFirma = useTextosFirmaControl();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -1127,7 +1138,32 @@ export function PatientDetailClient({
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null;
   const initials = getInitials(patient.firstName, patient.lastName);
   const color    = avatarColor(patient.id);
-  const nextAppt = appointments.find(a => new Date(a.date) >= new Date() && !["CANCELLED","NO_SHOW"].includes(a.status));
+  // ws1-t8 (revisión de ws1-t9, fallo 1): la lista viene de la más lejana a la más vieja; antes esto tomaba la
+  // futura MÁS LEJANA y nunca la de hoy. Ahora: la que se está atendiendo, la de hoy, o la futura más próxima.
+  const nextAppt = proximaCitaDeLaFicha(appointments, new Date(), zonaClinica) ?? undefined;
+  // «Iniciar consulta» (cabecera y «Iniciar visita» de Ortodoncia). Con la cita de HOY hace lo mismo que
+  // «Pasar a consulta» de la Agenda: la pasa a «En consulta» y la ficha abre la consulta, así la hoja que se
+  // firme después se liga a esa cita y la cierra. Antes solo empujaba `?appointment=` y la cita seguía
+  // «Agendada». Una cita de OTRO día no se arranca (sería darla por atendida antes de tiempo): solo se abre en
+  // la dirección y, si se firma la hoja, el cajón avisa que esa cita no se toca (cerrar-cita-al-firmar.ts).
+  const iniciarConsulta = async () => {
+    if (!nextAppt) return;
+    if (esCitaDeHoy(nextAppt.startsAt, new Date(), zonaClinica) && nextAppt.status !== "IN_PROGRESS") {
+      const res = await fetch(`/api/appointments/${nextAppt.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      }).catch(() => null);
+      if (res?.ok) {
+        marcarEstadoDeCita(nextAppt.id, "IN_PROGRESS");
+        router.refresh();
+      } else {
+        const body = res ? await res.json().catch(() => ({})) : {};
+        toast.error(body.reason ?? textosConsulta.noSeInicioLaConsulta);
+      }
+    }
+    router.push(`?appointment=${nextAppt.id}`);
+  };
   const lastAppt = appointments.find(a => new Date(a.date) < new Date() && a.status === "COMPLETED");
   // Derivamos totales del state local `invoices` para que el card "Finanzas"
   // y el sidebar "Estado de cuenta" reflejen mutaciones (cobrar/cancelar/
@@ -1415,6 +1451,24 @@ export function PatientDetailClient({
           }),
         });
       }
+      // ws1-t8 (revisión de ws1-t9, fallo 2): la hoja de control de hoy ya se firmó «sin cita» (antes de abrir
+      // esta consulta). Esa hoja ES la nota de la visita: se liga a esta cita y la cierra, sin pedir otra nota.
+      // Si en la consulta se escribió una nota propia, la cita no se cierra ahí y sigue el camino de siempre.
+      const planOrto = orthoData?.plan?.id ?? null;
+      if (planOrto && hojaFirmadaDeHoy(orthoRedesignVM?.treatmentCards ?? [])) {
+        const ligada = await ligarControlFirmadoDeHoy(planOrto, activeAppointment.id).catch(() => null);
+        if (ligada && !isFailure(ligada) && ligada.data.citaCerrada) {
+          toast.success(textosFirma.hojaFirmadaLigadaYCitaCerrada);
+          setConsultClosed(true);
+          setClinicalNoteId(null);
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete("appointment");
+          const qs = params.toString();
+          router.replace(qs ? `?${qs}` : window.location.pathname);
+          router.refresh();
+          return;
+        }
+      }
       // Completa cita + firma nota + crea snapshot odontograma + diff →
       // suggestedTreatments en respuesta (transacción server-side).
       const res = await fetch(`/api/appointments/${activeAppointment.id}/complete`, {
@@ -1451,7 +1505,7 @@ export function PatientDetailClient({
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : window.location.pathname);
     router.refresh();
-  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router]);
+  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router, orthoData?.plan?.id, orthoRedesignVM?.treatmentCards, textosFirma]);
 
   // ws1-t8 (ticket BEVADENT, punto 3): firmar la hoja de control de la cita en curso YA cerró la cita y su nota
   // (la hoja adoptó el borrador de esta consulta). La consulta se cierra aquí sin volver a pedir nota.
@@ -1574,12 +1628,7 @@ export function PatientDetailClient({
           onInvitePortal={invitePortal}
           onGeneratePortal={generatePortalLink}
           onEdit={() => setShowEdit(true)}
-          onStartConsult={() => {
-            if (nextAppt) {
-              // En commit 6 esto creará el draft note + activará context bar.
-              router.push(`?appointment=${nextAppt.id}`);
-            }
-          }}
+          onStartConsult={() => void iniciarConsulta()}
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
           puedeCobrar={permisosCobro?.cobrar !== false}
@@ -2135,7 +2184,9 @@ export function PatientDetailClient({
               abrirControlAlEntrar={abrirControlOrto}
               onControlAbierto={() => setAbrirControlOrto(false)}
               citaEnCursoId={activeAppointment?.id ?? null}
+              citaDeLaDireccionId={consultClosed ? null : consultAppointmentId}
               onConsultaCerradaPorLaHoja={cerrarConsultaPorLaHoja}
+              onIniciarConsulta={() => void iniciarConsulta()}
             />
             </SoloLectura>
           )}

@@ -165,6 +165,8 @@ export interface DrawerTreatmentCardProps {
     lastPendingBrackets?: Array<{ toothFdi: number; brokenDate: string; notes: string | null }>;
     /** Fila 12: nota S/O/A/P con la que arranca la hoja (soap-prefill). */
     soapPrefill?: SOAP | null;
+    /** Revisión de ws1-t9, fallo 6: lo escrito en «Nueva consulta» antes de cambiar a Ortodoncia (va delante de la precarga). */
+    notaDeLaConsulta?: SOAP | null;
   };
   /**
    * C4: foto-sets ya existentes del caso (subidos desde la sección de fotos)
@@ -1011,6 +1013,7 @@ function precargaDesdeDefaults(d: DrawerTreatmentCardProps["defaultsForNew"]): P
     brackets: d.lastPendingBrackets ?? [],
     indications: d.lastIndications ?? null,
     nota: d.soapPrefill ?? null,
+    notaDeLaConsulta: d.notaDeLaConsulta ?? null,
     duracionProximoMin: d.proximoControlMin ?? null,
   };
 }

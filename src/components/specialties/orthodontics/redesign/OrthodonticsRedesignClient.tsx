@@ -18,6 +18,10 @@ import {
 } from "@/app/actions/orthodontics/getTreatmentCardContextForPatient";
 import type { TreatmentCardAgendaContext } from "@/app/actions/orthodontics/getTreatmentCardContextForAppointment";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarControlFirmadoDeHoy";
+import { useTextosFirmaControl } from "./textos-firma-control";
+import { borrarBorradorDental, leerNotaDelBorradorDental, unirNotaDeLaConsulta, type NotaSOAP } from "@/lib/patients/borrador-dental";
+import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
 import { useCompletarAlLlegar } from "./useCompletarAlLlegar";
 import { SectionHero } from "./sections/SectionHero";
@@ -278,6 +282,16 @@ export interface OrthodonticsRedesignClientProps {
    * que se abre se liga a ella y, al firmarla, adopta su nota y cierra la consulta: una sola nota por visita.
    */
   citaEnCursoId?: string | null;
+  /**
+   * ws1-t8 (revisión de ws1-t9, fallo 3): la cita de `?appointment=` aunque no esté en curso. Solo se usa si no hay
+   * consulta en curso; el servidor la toma únicamente si es de un día FUTURO, para que el cajón avise que no se toca.
+   */
+  citaDeLaDireccionId?: string | null;
+  /**
+   * ws1-t8 (revisión de ws1-t9, fallo 2): «Ver el control de hoy» ligó la hoja firmada «sin cita» a la cita de hoy
+   * y la cerró. Que la ficha cierre la consulta (si era la de la consulta en curso) o se refresque.
+   */
+  onCitaCerradaPorLaHoja?: (appointmentId: string) => void;
   /** A9 · enlaza a las radiografías/escaneos que ya existen en el
    *  expediente, en vez de mandar al asistente de diagnóstico (bug heredado
    *  de reusar `onStartDiagnosisWizard` para "subir registro"). */
@@ -411,6 +425,25 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   // ws1-t9 #17: la hoja de hoy YA firmada. No se ofrece «Registrar control de hoy» otra vez:
   // se dice y se puede ver.
   const hojaDeHoyFirmada = hojaFirmadaDeHoy(vm.treatmentCards);
+  const textosFirma = useTextosFirmaControl();
+  const textosConsulta = useTextosConsultaFicha();
+  // Fallo 6 de la revisión de ws1-t9: la nota que traía «Nueva consulta → Dental general» al cambiar a Ortodoncia.
+  // Va a la hoja nueva (o a la de hoy en borrador); el borrador dental se borra cuando la hoja se guarda o firma.
+  const [notaDeLaConsulta, setNotaDeLaConsulta] = useState<NotaSOAP | null>(null);
+  const conNotaDeLaConsulta = useCallback(
+    (fn: ((payload: DrawerCardSubmit) => Promise<string | null | void> | string | null | void) | undefined) =>
+      fn && notaDeLaConsulta
+        ? async (payload: DrawerCardSubmit) => {
+            const r = await fn(payload);
+            if (r) {
+              borrarBorradorDental(vm.patient.id);
+              setNotaDeLaConsulta(null);
+            }
+            return r;
+          }
+        : fn,
+    [notaDeLaConsulta, vm.patient.id],
+  );
   const pacienteParaAgendar = { id: vm.patient.id, nombre: vm.patient.fullName, doctorId: null };
 
   const abrirRegistrarControl = useCallback(async () => {
@@ -419,6 +452,18 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     if (hojaDeHoyFirmada) {
       toast("El control de hoy ya está firmado. Aquí lo puedes ver.", { id: "control-hoy-firmado", duration: 6000 });
       setDrawer({ kind: "tcard", cardId: hojaDeHoyFirmada.id });
+      // Fallo 2 de la revisión de ws1-t9: si se firmó «sin cita» y después apareció la cita de hoy (o se abrió la
+      // consulta), la hoja se liga a esa cita y la cierra — una nota por visita. Sin cita de hoy no hace nada.
+      void ligarControlFirmadoDeHoy(t.treatmentPlanId, props.citaEnCursoId ?? null)
+        .then((r) => {
+          if (isFailure(r) || !r.data.cardId) return;
+          toast.success(
+            r.data.citaCerrada ? textosFirma.hojaFirmadaLigadaYCitaCerrada : textosFirma.hojaFirmadaLigadaSinCerrar,
+            { id: "control-hoy-firmado", duration: 9000 },
+          );
+          if (r.data.citaCerrada) props.onCitaCerradaPorLaHoja?.(r.data.citaCerrada);
+        })
+        .catch(() => undefined);
       return;
     }
     abriendoControlRef.current = true;
@@ -433,14 +478,16 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     // Si la consulta se cae (red, servidor reiniciando) tampoco se queda sin
     // abrir: mismo degradado que un fallo devuelto por la action.
     // ws1-t8 (punto 3): dentro de una consulta en curso, la hoja se liga a ESA cita (no a «la de control de hoy»).
-    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null).catch(() => null);
+    // Fallo 3 de la revisión de ws1-t9: sin consulta en curso, la cita de la dirección (una futura abierta con
+    // «Iniciar consulta») llega igual, para que el cajón avise que firmar hoy no la marca como atendida.
+    const res = await getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null, props.citaDeLaDireccionId ?? null).catch(() => null);
     setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
     setDrawer({ kind: "tcard-new" });
     } finally {
       abriendoControlRef.current = false;
       setAbriendoControl(false);
     }
-  }, [t.treatmentPlanId, hojaDeHoyFirmada, props.citaEnCursoId]);
+  }, [t.treatmentPlanId, hojaDeHoyFirmada, props.citaEnCursoId, props.citaDeLaDireccionId, props.onCitaCerradaPorLaHoja, textosFirma]);
 
   // H17 (QA ws1-t9, ws1-t3): quien llega desde «Abrir caso» del módulo
   // (Pacientes en tratamiento → elegir paciente) trae `?abrirCaso=1`: el
@@ -458,7 +505,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const casoActivo = Boolean(t.treatmentPlanId) && t.status !== "no-iniciado";
   useEffect(() => {
     if (!abrirControlAlEntrar) return;
-    if (casoActivo) void abrirRegistrarControl();
+    if (casoActivo) {
+      // Fallo 6 de la revisión de ws1-t9: lo que ya se escribió en «Dental general» pasa a la hoja.
+      const nota = hojaDeHoyFirmada ? null : leerNotaDelBorradorDental(vm.patient.id);
+      setNotaDeLaConsulta(nota);
+      if (nota) toast(textosConsulta.loEscritoPasaALaHoja, { duration: 7000 });
+      void abrirRegistrarControl();
+    }
     onControlAbierto?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirControlAlEntrar]);
@@ -942,7 +995,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         <DrawerTreatmentCard
           paciente={pacienteParaAgendar}
           key={nuevoControlCtx.existingCard.id}
-          card={nuevoControlCtx.existingCard}
+          card={
+            notaDeLaConsulta && nuevoControlCtx.existingCard.status !== "SIGNED"
+              ? { ...nuevoControlCtx.existingCard, soap: unirNotaDeLaConsulta(notaDeLaConsulta, nuevoControlCtx.existingCard.soap) }
+              : nuevoControlCtx.existingCard
+          }
           appointmentId={nuevoControlCtx.appointmentId}
           cita={{ estado: nuevoControlCtx.appointmentStatus ?? null, inicio: nuevoControlCtx.appointmentStartsAt ?? null }}
           availableWires={nuevoControlCtx.availableWires}
@@ -951,8 +1008,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           tecnica={t.appliance.technique ?? nuevoControlCtx.technique}
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
-          onSave={props.onCardDraftSaved}
-          onSign={props.onCardSigned}
+          onSave={conNotaDeLaConsulta(props.onCardDraftSaved)}
+          onSign={conNotaDeLaConsulta(props.onCardSigned)}
         />
       ) : drawer?.kind === "tcard-new" && nuevoControlCtx ? (
         <DrawerTreatmentCard
@@ -979,13 +1036,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             lastPendingBrackets: nuevoControlCtx.defaultsForNew.lastPendingBrackets,
             proximoControlMin: nuevoControlCtx.defaultsForNew.proximoControlMin,
             soapPrefill: nuevoControlCtx.defaultsForNew.soapPrefill,
+            notaDeLaConsulta,
           }}
           availableWires={nuevoControlCtx.availableWires}
           treatmentPlanId={t.treatmentPlanId || undefined}
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
-          onSave={props.onCardDraftSaved}
-          onSign={props.onCardSigned}
+          onSave={conNotaDeLaConsulta(props.onCardDraftSaved)}
+          onSign={conNotaDeLaConsulta(props.onCardSigned)}
         />
       ) : drawer?.kind === "tcard-new" && !nuevoControlCtx && newCardDefaults ? (
         <DrawerTreatmentCard
@@ -1003,12 +1061,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             arcosActuales: newCardDefaults.arcosActuales,
             visitDate: newCardDefaults.visitDate,
             monthTotal: t.monthTotal > 0 ? t.monthTotal : null,
+            notaDeLaConsulta,
           }}
           availableWires={wireSequence}
           treatmentPlanId={t.treatmentPlanId || undefined}
           onClose={closeDrawer}
-          onSave={props.onCardDraftSaved}
-          onSign={props.onCardSigned}
+          onSave={conNotaDeLaConsulta(props.onCardDraftSaved)}
+          onSign={conNotaDeLaConsulta(props.onCardSigned)}
         />
       ) : null}
 

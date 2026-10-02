@@ -205,6 +205,13 @@ export interface OrthodonticsPatientTabProps {
   citaEnCursoId?: string | null;
   /** La firma de la hoja cerró la cita de la consulta en curso: que la ficha cierre la consulta sin pedir otra nota. */
   onConsultaCerradaPorLaHoja?: (appointmentId: string) => void;
+  /**
+   * ws1-t8 (revisión de ws1-t9, fallo 3): la cita de `?appointment=` aunque no esté en curso (p. ej. la del 6-oct
+   * abierta hoy con «Iniciar consulta»). La hoja la recibe para AVISAR, antes de firmar, que esa cita no se toca.
+   */
+  citaDeLaDireccionId?: string | null;
+  /** «Iniciar visita»: el mismo «Iniciar consulta» de la cabecera (arranca la cita de hoy). */
+  onIniciarConsulta?: () => void;
 }
 
 /** La pestaña «Ortodoncia» completa: banda de rediseño + ficha nueva o legacy. */
@@ -226,6 +233,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     onControlAbierto,
     citaEnCursoId,
     onConsultaCerradaPorLaHoja,
+    citaDeLaDireccionId,
+    onIniciarConsulta,
   } = props;
   const textosFirma = useTextosFirmaControl();
   const router = useRouter();
@@ -678,7 +687,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 : null,
             },
             onStartVisit: () => {
-              if (nextAppt) router.push(`?appointment=${nextAppt.id}`);
+              if (nextAppt && onIniciarConsulta) onIniciarConsulta();
+              else if (nextAppt) router.push(`?appointment=${nextAppt.id}`);
               else toast(t("patients.ortho.scheduleApptFirst"));
             },
             onScheduleNext,
@@ -695,6 +705,11 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           abrirControlAlEntrar={abrirControlAlEntrar}
           onControlAbierto={onControlAbierto}
           citaEnCursoId={citaEnCursoId ?? null}
+          citaDeLaDireccionId={citaDeLaDireccionId ?? null}
+          onCitaCerradaPorLaHoja={(id) => {
+            if (id === citaEnCursoId) onConsultaCerradaPorLaHoja?.(id);
+            else router.refresh();
+          }}
           onOpenImagingRecords={() => {
             // A9 · enlaza a lo que ya existe en el expediente (radiografías,
             // panorámica, lateral de cráneo, modelos 3D) en vez de mandar al

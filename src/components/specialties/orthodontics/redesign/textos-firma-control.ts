@@ -31,6 +31,9 @@ const es = {
   firmadaSinTocarCita: (dia: string) =>
     `Control firmado como visita de hoy. La cita del ${fechaCorta(dia, "es")} no se tocó: si ya no hace falta, muévela o cancélala en la Agenda.`,
   consultaTerminada: "Control firmado y consulta terminada",
+  // Revisión de ws1-t9, fallo 2: la hoja de hoy se firmó «sin cita» y después apareció la cita de hoy.
+  hojaFirmadaLigadaYCitaCerrada: "El control de hoy ya estaba firmado: quedó como el control de esta cita y la cita se marcó como atendida.",
+  hojaFirmadaLigadaSinCerrar: "El control de hoy ya estaba firmado y quedó ligado a esta cita. La consulta tiene su propia nota: termínala para cerrar la cita.",
 };
 
 const en: typeof es = {
@@ -44,6 +47,8 @@ const en: typeof es = {
   firmadaSinTocarCita: (dia) =>
     `Check-up signed as today's visit. The ${fechaCorta(dia, "en")} appointment was left as is: if it's no longer needed, move or cancel it in the Schedule.`,
   consultaTerminada: "Check-up signed and visit closed",
+  hojaFirmadaLigadaYCitaCerrada: "Today's check-up was already signed: it is now this appointment's check-up and the appointment was marked as attended.",
+  hojaFirmadaLigadaSinCerrar: "Today's check-up was already signed and is now linked to this appointment. The visit has its own note: finish it to close the appointment.",
 };
 
 export type TextosFirmaControl = typeof es;

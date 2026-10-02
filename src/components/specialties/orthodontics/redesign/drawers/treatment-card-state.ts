@@ -4,6 +4,7 @@
 // que ya llevó a mover `phase-criteria.ts`/`wire-options.ts` — el
 // contenido es el mismo, movido tal cual).
 
+import { unirNotaDeLaConsulta } from "@/lib/patients/borrador-dental";
 import type {
   ElasticDTO,
   IPRPointDTO,
@@ -73,6 +74,12 @@ export interface PrecargaHoja {
   brackets?: ReadonlyArray<{ toothFdi: number; brokenDate: string; notes?: string | null }>;
   indications?: string | null;
   nota?: SOAP | null;
+  /**
+   * ws1-t8 (revisión de ws1-t9, fallo 6): lo que el doctor ya escribió en «Nueva consulta → Dental general» antes
+   * de cambiar a Ortodoncia. Va en la nota inicial, delante de la precarga, y NO cuenta como precargado: un Plan
+   * escrito por el doctor permite firmar.
+   */
+  notaDeLaConsulta?: SOAP | null;
   /** Duración sugerida de «Próximo control» (Configuración); sin dato, 30. */
   duracionProximoMin?: number | null;
 }
@@ -148,7 +155,7 @@ export function initialState(
   const indications = p.indications?.trim() ? p.indications : "";
   const nota = p.nota ? { ...p.nota } : null;
   return {
-    soap: nota ? { ...nota } : { s: "", o: "", a: "", p: "" },
+    soap: p.notaDeLaConsulta ? unirNotaDeLaConsulta(p.notaDeLaConsulta, nota) : nota ? { ...nota } : { s: "", o: "", a: "", p: "" },
     plaquePct: null,
     gingivitis: null,
     whiteSpots: false,
