@@ -142,6 +142,15 @@ export function filtrarArchivosPorGrupo<T extends { category: string }>(archivos
   });
 }
 
+/**
+ * Archivo que debe quedar abierto en el visor tras filtrar: el actual si sigue en la
+ * lista visible; si no, el primero de la lista; null si el filtro no deja nada.
+ */
+export function archivoActivoTrasFiltrar<T extends { id: string }>(visibles: T[], activoId: string | null): string | null {
+  if (activoId && visibles.some((f) => f.id === activoId)) return activoId;
+  return visibles[0]?.id ?? null;
+}
+
 export function contarPorGrupo<T extends { category: string }>(archivos: T[]): Record<GrupoArchivo, number> {
   const n: Record<GrupoArchivo, number> = { radiografias: 0, fotos: 0, documentos: 0, ortodoncia: 0 };
   for (const f of archivos) n[grupoDeCategoria(f.category)] += 1;

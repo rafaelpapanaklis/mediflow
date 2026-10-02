@@ -2496,7 +2496,7 @@
       "npsConfigSaved": "Configuración NPS guardada",
       "g15Scheduled": "Foto-set mes 12 programado",
       "scenarioUpdated": "Escenario actualizado",
-      "wireStepAdded": "Wire step agregado",
+      "wireStepAdded": "Paso de arco agregado",
       "tadBrandPrompt": "Marca TAD (DENTOS, SPIDER, IMTEC, OTHER):",
       "tadSizePrompt": "Tamaño (ej. 1.4×6mm):",
       "tadLocationPrompt": "Ubicación (ej. vestibular sup. der entre 14 y 15):",
@@ -9822,6 +9822,7 @@
       "xrayHistory": "Historial de radiografías",
       "historyLabel": "Historial",
       "timelineEmptyUploadFirst": "Sin radiografías. Sube la primera arriba.",
+      "timelineEmptyFiltered": "Ningún archivo coincide con el filtro o la búsqueda.",
       "timelineEmptySelectPatient": "Selecciona un paciente para ver su historial.",
       "findingsCount": {
         "one": "{count} hallazgo",

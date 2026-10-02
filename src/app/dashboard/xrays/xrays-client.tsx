@@ -34,7 +34,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import { findingRegions, type AiFinding } from "./finding-regions";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
-import { CLAVE_ETIQUETA_CATEGORIA, SIN_FILTRO, filtrarArchivosPorGrupo, puedeCambiarTipo, type FiltroArchivos } from "@/lib/uploads/categorias-archivo";
+import { CLAVE_ETIQUETA_CATEGORIA, SIN_FILTRO, archivoActivoTrasFiltrar, filtrarArchivosPorGrupo, puedeCambiarTipo, type FiltroArchivos } from "@/lib/uploads/categorias-archivo";
 import { ChipsFiltroArchivos } from "@/components/xrays/chips-filtro-archivos";
 import { CambiarTipoDialog, type ArchivoCambiable } from "@/components/xrays/cambiar-tipo-dialog";
 
@@ -393,6 +393,13 @@ export function XraysClient({
     () => (selectedPatientId ? files.filter((f) => f.patient.id === selectedPatientId) : files),
     [files, selectedPatientId],
   );
+
+  // Al filtrar/buscar, la placa abierta y «Cambiar tipo» siguen la lista visible.
+  useEffect(() => {
+    if (!selectedPatientId) return;
+    const siguiente = archivoActivoTrasFiltrar(filteredFiles, activeFileId);
+    if (siguiente !== activeFileId) setActiveFileId(siguiente);
+  }, [filteredFiles, activeFileId, selectedPatientId]);
 
   const activeFile = useMemo(
     () => files.find((f) => f.id === activeFileId) ?? null,
@@ -998,7 +1005,9 @@ export function XraysClient({
           {filteredFiles.length === 0 ? (
             <div className={c.emptyState}>
               {selectedPatient
-                ? t("pages.xrays.timelineEmptyUploadFirst")
+                ? (archivosParaChips.length > 0
+                    ? t("pages.xrays.timelineEmptyFiltered")
+                    : t("pages.xrays.timelineEmptyUploadFirst"))
                 : t("pages.xrays.timelineEmptySelectPatient")}
             </div>
           ) : (

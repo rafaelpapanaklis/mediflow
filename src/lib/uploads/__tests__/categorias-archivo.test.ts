@@ -83,3 +83,25 @@ test("5a: la ficha ya no manda «Periapical» fijo", () => {
   assert.ok(!/append\("category", "XRAY_PERIAPICAL"\)/.test(f));
   assert.ok(/append\("category", tipoArchivo\)/.test(f));
 });
+
+test("archivoActivoTrasFiltrar: sigue el filtro del visor", async () => {
+  const { archivoActivoTrasFiltrar } = await import("../categorias-archivo");
+  const lista = [{ id: "a" }, { id: "b" }];
+  assert.equal(archivoActivoTrasFiltrar(lista, "b"), "b");
+  assert.equal(archivoActivoTrasFiltrar(lista, "oculto"), "a");
+  assert.equal(archivoActivoTrasFiltrar(lista, null), "a");
+  assert.equal(archivoActivoTrasFiltrar([], "oculto"), null);
+});
+
+test("visor: cuadro con margen, mensaje de filtro y toast en español", () => {
+  const raiz = join(__dirname, "../../../..");
+  const dlg = readFileSync(join(raiz, "src/components/xrays/cambiar-tipo-dialog.tsx"), "utf8");
+  assert.match(dlg, /space-y-3 px-6/);
+  const es = JSON.parse(readFileSync(join(raiz, "src/i18n/dictionaries/es.json"), "utf8"));
+  const en = JSON.parse(readFileSync(join(raiz, "src/i18n/dictionaries/en.json"), "utf8"));
+  assert.ok(es.pages.xrays.timelineEmptyFiltered);
+  assert.ok(en.pages.xrays.timelineEmptyFiltered);
+  assert.doesNotMatch(es.patients.ortho.wireStepAdded, /wire step/i);
+  const cli = readFileSync(join(raiz, "src/app/dashboard/xrays/xrays-client.tsx"), "utf8");
+  assert.match(cli, /timelineEmptyFiltered/);
+});

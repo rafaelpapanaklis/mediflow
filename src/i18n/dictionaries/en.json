@@ -9822,6 +9822,7 @@
       "xrayHistory": "X-ray history",
       "historyLabel": "History",
       "timelineEmptyUploadFirst": "No x-rays. Upload the first one above.",
+      "timelineEmptyFiltered": "No files match the filter or search.",
       "timelineEmptySelectPatient": "Select a patient to view their history.",
       "findingsCount": {
         "one": "{count} finding",

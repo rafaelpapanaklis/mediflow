@@ -67,7 +67,7 @@ export function CambiarTipoDialog({
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle className="text-foreground font-bold">{t("patients.xrays.cambiarTipo.titulo")}</DialogTitle></DialogHeader>
         {archivo && (
-          <div className="space-y-3">
+          <div className="space-y-3 px-6 pt-4 pb-4">
             <p className="text-sm text-muted-foreground break-all">{archivo.name}</p>
             <p className="text-sm">
               {t("patients.xrays.cambiarTipo.actual")}: <strong>{etiqueta(archivo.category)}</strong>
