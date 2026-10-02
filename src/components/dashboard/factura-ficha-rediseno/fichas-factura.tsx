@@ -209,6 +209,9 @@ function Ficha({
   const envioCorreo = estadoDeEnvioEnFicha(contacto, "correo");
   const sinCorreo = ofreceCorreo && !envioCorreo.puede;
   const sinTelefono = ofreceWhatsApp && !envioWa.puede;
+  // Revisión ws1-t2 #6: como en el popup, si hoy no sale por WhatsApp (desconectado, ya hubo un
+  // cobro en 24 h, sin plantilla…) el botón se apaga y el motivo se dice ANTES de pulsar.
+  const waNoSale = ofreceWhatsApp && !sinTelefono && contacto?.whatsapp?.modo === "blocked";
   const responsable = contacto?.responsable ?? null;
   const [destino, setDestino] = useState<DestinoDeEnvio>("auto");
   const esperando = cargandoContacto && contacto === undefined;
@@ -329,7 +332,7 @@ function Ficha({
           <button
             type="button"
             className={`${s.accion} ${s.accionPrincipal}`}
-            disabled={enviando !== null || sinTelefono || esperando}
+            disabled={enviando !== null || sinTelefono || waNoSale || esperando}
             onClick={() => enviar("whatsapp")}
           >
             <MessageCircle size={13} aria-hidden />
@@ -354,6 +357,9 @@ function Ficha({
         </button>
 
         {sinTelefono && <p className={s.motivo}>{envioWa.motivo ?? t("facturaFicha.sinTelefono")}</p>}
+        {waNoSale && contacto?.whatsapp?.motivo && (
+          <p className={s.motivo}>{`${t("facturaFicha.waNoSale")} ${contacto.whatsapp.motivo}`}</p>
+        )}
         {sinCorreo && <p className={s.motivo}>{envioCorreo.motivo ?? t("facturaFicha.sinCorreo")}</p>}
         {mensaje && <p className={s.fichaMensaje} role="alert">{mensaje}</p>}
         {enviado && responsable && enviadoA.length > 0 && (

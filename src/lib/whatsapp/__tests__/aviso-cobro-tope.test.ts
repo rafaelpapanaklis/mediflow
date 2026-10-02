@@ -121,6 +121,9 @@ test("la ruta de la factura y el recordatorio de Alertas usan el tope nuevo y re
   assert.match(m, /ultimoAvisoDeCobro\(ctx\.clinicId, telefonoDestino, ahora\)/);
   assert.match(m, /reservarAvisoDeCobro\(\{ clinicId: ctx\.clinicId, userId: ctx\.userId, telefonos: \[telefonoDestino\] \}\)/);
   assert.match(m, /finally \{\s*await reserva\.liberar\(\);/);
+  // ws1-t6 (revisión ws1-t2 #13): la hora del aviso previo sale en la zona de la clínica, no en la del servidor.
+  assert.match(m, /horaDelAvisoPrevio\(yaEnviado, clinic\.timezone\)/);
+  assert.doesNotMatch(m, /yaEnviado\.toLocaleTimeString/);
 });
 
 /* ═══ ws1-t6 — UN aviso de cobro por paciente al día, en TODOS los caminos ═══ */

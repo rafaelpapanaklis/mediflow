@@ -289,6 +289,8 @@ export function EnvioFactura({
   // ws1-t6: si hoy no puede salir por WhatsApp (ya se le mandó un cobro, plantilla sin aprobar,
   // WhatsApp desconectado…), la opción se apaga y se dice por qué ANTES de guardar.
   const waBloqueado = !sinTelefono && contacto?.whatsapp?.modo === "blocked";
+  // La pista promete «abajo ves el texto exacto» solo cuando de verdad se va a ver.
+  const conTexto = Boolean(vista && contacto?.whatsapp && contacto.whatsapp.modo !== "blocked" && !sinTelefono);
 
   return (
     <div className={c.bloque}>
@@ -317,7 +319,7 @@ export function EnvioFactura({
           disabled={sinTelefono || waBloqueado}
           icono={<MessageCircle size={14} aria-hidden />}
           titulo={t("facturaFicha.envioWhatsApp")}
-          pista={t("facturaFicha.envioWhatsAppPista")}
+          pista={t(conTexto ? "facturaFicha.envioWhatsAppPista" : "facturaFicha.envioWhatsAppPistaSinTexto")}
           onClick={() => onChange("whatsapp")}
         />
       </div>

@@ -39,7 +39,8 @@ export interface ContactoPaciente {
   telefono: boolean;
   /** ws1-t10: el responsable de pago del caso de la factura (tutor u otra persona), si lo hay. */
   responsable?: { nombre: string; parentesco: string; correo: boolean; telefono: boolean };
-  /** ws1-t6 — solo en el popup de Nueva factura: por qué canal saldría la nota por WhatsApp. */
+  /** ws1-t6 — por qué canal saldría la nota por WhatsApp (o por qué no). En las fichas solo llega si
+   *  son pocos teléfonos (ver api/invoices/condiciones); sin él, decide la ruta de envío. */
   whatsapp?: VistaEnvioWhatsApp | null;
 }
 

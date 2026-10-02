@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildMensajeFactura } from "../invoice-message";
-import { vistaEnvioFactura, type DatosVistaEnvio } from "../envio-factura-vista";
+import { masReciente, motivoDeLaClinica, vistaEnvioFactura, type DatosVistaEnvio } from "../envio-factura-vista";
 import { catalogEntryFor, checkCatalogEntry, countTemplateVariables, DEFAULT_CATALOG_KINDS } from "@/lib/whatsapp/templates-catalog";
 import { decideSendMode } from "@/lib/whatsapp/send-mode";
 import { WHATSAPP_SEND_KINDS } from "@/lib/whatsapp/system-message";
@@ -104,6 +104,9 @@ test("vista antes de guardar: ventana cerrada y solo la plantilla de saldo → b
   assert.equal(v.modo, "blocked");
   assert.match(v.motivo ?? "", /no ha escrito en las últimas 24 h/);
   assert.match(v.motivo ?? "", /correo o compártele el link/);
+  // Revisión ws1-t2 #5: sin la «y» que sobraba del motivo de decideSendMode.
+  assert.match(v.motivo ?? "", /todavía no se puede usar \(falta configurar la plantilla/);
+  assert.doesNotMatch(v.motivo ?? "", /\(y /);
 });
 
 test("vista antes de guardar: ventana cerrada con dc_factura_lista aprobada → plantilla", () => {
@@ -114,7 +117,7 @@ test("vista antes de guardar: ventana cerrada con dc_factura_lista aprobada → 
 test("vista antes de guardar: en revisión de Meta → bloqueado, dice que está en revisión", () => {
   const v = vistaEnvioFactura(datos({ clinica: { ...datos().clinica, waTemplates: { invoice_ready: { name: "dc_factura_lista", lang: "es_MX", status: "PENDING" } } } }));
   assert.equal(v.modo, "blocked");
-  assert.match(v.motivo ?? "", /todavía no aprueba/);
+  assert.match(v.motivo ?? "", /todavía no se puede usar \(Meta todavía no aprueba/);
 });
 
 test("vista antes de guardar: ya salió un cobro hoy → bloqueado aunque la ventana esté abierta", () => {
@@ -145,4 +148,40 @@ test("el popup enseña el texto con el MISMO armador que la ruta y apaga WhatsAp
   assert.match(e, /envioElegido === "whatsapp" && contacto\?\.whatsapp\?\.modo === "blocked"/);
   assert.match(e, /vista=\{\{/);
   assert.match(leer("app/api/invoices/condiciones/route.ts"), /vistaEnvioFactura\(/);
+});
+
+/* ── Revisión ws1-t2 #5 y #6 ─────────────────────────────────────────── */
+
+test("lo de la clínica (desconectado, sin teléfono) se decide aparte y es lo mismo que dice la vista", () => {
+  assert.equal(motivoDeLaClinica(datos().clinica), null);
+  const sinToken = { ...datos().clinica, conToken: false };
+  assert.match(motivoDeLaClinica(sinToken) ?? "", /no está conectado/);
+  assert.equal(vistaEnvioFactura(datos({ clinica: sinToken })).motivo, motivoDeLaClinica(sinToken));
+  assert.match(motivoDeLaClinica({ ...datos().clinica, phone: "" }) ?? "", /Falta el teléfono de la clínica/);
+  assert.equal(masReciente([null, new Date("2026-10-01T00:00:00Z"), new Date("2026-10-02T00:00:00Z"), undefined])?.toISOString(), "2026-10-02T00:00:00.000Z");
+  assert.equal(masReciente([null, undefined]), null);
+});
+
+test("la ficha de una factura ya creada apaga «Enviar por WhatsApp» y dice el motivo ANTES de pulsar, como el popup", () => {
+  const f = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
+  assert.match(f, /const waNoSale = ofreceWhatsApp && !sinTelefono && contacto\?\.whatsapp\?\.modo === "blocked";/);
+  assert.match(f, /disabled=\{enviando !== null \|\| sinTelefono \|\| waNoSale \|\| esperando\}/);
+  assert.match(f, /t\("facturaFicha\.waNoSale"\)\} \$\{contacto\.whatsapp\.motivo\}/);
+  const r = leer("app/api/invoices/condiciones/route.ts");
+  // Con la misma pieza que el popup, solo para las que ofrecen WhatsApp, y sin ráfagas al pooler.
+  assert.match(r, /vistasWhatsAppDeFacturas\(ctx\.clinicId, conWhatsApp\)/);
+  assert.match(r, /\.filter\(\(inv\) => sePuedeEnviarPorWhatsApp\(inv\.status\)\)/);
+  assert.match(r, /if \(porClave\.size > MAX_TELEFONOS_VISTA\) return out;/);
+  assert.match(r, /ultimoAvisoDeCobro\(clinicId, tel, ahora\)/);
+});
+
+test("la pista de «Por WhatsApp» solo promete «abajo ves el texto» cuando se va a ver", () => {
+  const f = leer("components/dashboard/factura-ficha-rediseno/forma-de-pago.tsx");
+  assert.match(f, /t\(conTexto \? "facturaFicha\.envioWhatsAppPista" : "facturaFicha\.envioWhatsAppPistaSinTexto"\)/);
+  const es = JSON.parse(leer("i18n/dictionaries/es.json"));
+  const en = JSON.parse(leer("i18n/dictionaries/en.json"));
+  for (const d of [es, en]) {
+    assert.ok(d.facturaFicha.envioWhatsAppPistaSinTexto, "falta la clave en un idioma");
+    assert.doesNotMatch(d.facturaFicha.envioWhatsAppPistaSinTexto, /Abajo|below/);
+  }
 });

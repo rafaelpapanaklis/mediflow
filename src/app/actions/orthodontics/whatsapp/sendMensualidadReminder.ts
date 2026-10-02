@@ -34,6 +34,7 @@ import {
 } from "@/lib/orthodontics/plantillas-mensaje";
 import { formatoPesos } from "@/lib/anticipos/core";
 import { reservarAvisoDeCobro, ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
+import { horaDelAvisoPrevio } from "@/lib/invoices/aviso-del-dia";
 import { formatDateHuman } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
@@ -151,7 +152,8 @@ export async function sendMensualidadReminder(
     return ok({
       texto,
       enviado: false,
-      motivoNoEnviado: `Ya se le mandó un recordatorio hoy (${yaEnviado.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}). Si de verdad hace falta otro, cópialo.`,
+      // La hora en la zona de la clínica (como fraseAvisoYaEnviado), no en la del servidor (UTC en Vercel).
+      motivoNoEnviado: `Ya se le mandó un aviso de cobro en las últimas 24 h (${horaDelAvisoPrevio(yaEnviado, clinic.timezone)}). Si de verdad hace falta otro, cópialo.`,
     });
   }
 

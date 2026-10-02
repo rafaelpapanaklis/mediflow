@@ -604,24 +604,45 @@ test("🔴 aviso: si la ventana se cierra entre la tarjeta y el botón, el texto
   ventana.ultimoMensajeDelPaciente = new Date(Date.now() - 60 * 60_000);
 });
 
-test("🔴 aviso: UNO por factura al día — lo que ya salió hoy por el Inbox o por Sabina lo frena", async () => {
-  // Salió hoy el de esta misma nota.
+test("🔴 aviso: UN cobro por teléfono cada 24 h, con la regla de la ruta — lo que ya salió por el Inbox, el automático o Sabina lo frena", async () => {
+  // Salió hace un minuto el de esta misma nota.
   const mismo = baseDinero((d) => avisoEnInbox(d, "5599990000", "Hola Juan Pérez, … de tu nota MF-0010 (Limpieza dental). ¡Gracias!"));
   const r1 = await accionAvisarSaldo.preparar(recepcion(mismo), { factura: "MF-0010" });
   assert.equal(r1.tipo, "no_se_puede");
-  assert.match((r1 as any).frase, /ya salió un aviso de saldo a Juan Pérez.*no preparo otro/);
+  assert.match((r1 as any).frase, /Ya salió un aviso de cobro a Juan Pérez en las últimas 24 h.*no preparo otro hasta que pasen 24 h/);
 
-  // Salió uno por plantilla (no dice de qué nota): cuenta, para no mandarle dos cobros el mismo día.
+  // Salió uno por plantilla (no dice de qué nota): cuenta.
   const plantilla = baseDinero((d) => avisoEnInbox(d, "+52 1 55 9999 0000", "Hola Juan Pérez, te saludamos de Clínica QA. Tienes un saldo pendiente de $2,000.00 MXN."));
   assert.equal((await accionAvisarSaldo.preparar(recepcion(plantilla), { factura: "MF-0010" })).tipo, "no_se_puede");
 
-  // Salió el de OTRA nota: este sí se puede.
+  // Salió el de OTRA nota al mismo teléfono: también frena (la ruta contestaría 409 al confirmar).
   const otra = baseDinero((d) => avisoEnInbox(d, "5599990000", "Hola Juan Pérez, … de tu nota MF-0011 (Resina)."));
-  assert.equal((await accionAvisarSaldo.preparar(recepcion(otra), { factura: "MF-0010" })).tipo, "propuesta");
+  assert.equal((await accionAvisarSaldo.preparar(recepcion(otra), { factura: "MF-0010" })).tipo, "no_se_puede");
 
-  // Uno de AYER no cuenta.
+  // La NOTA enviada (`invoice_ready`) también es un cobro.
+  const nota = baseDinero((d) => {
+    avisoEnInbox(d, "5599990000", "Hola Juan Pérez, Clínica QA te comparte tu nota MF-0011 …");
+    d.inboxMessages[d.inboxMessages.length - 1].externalId = "sys:invoice_ready:wamid-nota";
+  });
+  assert.equal((await accionAvisarSaldo.preparar(recepcion(nota), { factura: "MF-0010" })).tipo, "no_se_puede");
+
+  // 24 h corridas, no desde medianoche: uno de hace 20 h frena aunque haya sido «ayer».
+  const hace20h = baseDinero((d) => avisoEnInbox(d, "5599990000", "… de tu nota MF-0010 …", 20 * 3600));
+  assert.equal((await accionAvisarSaldo.preparar(recepcion(hace20h), { factura: "MF-0010" })).tipo, "no_se_puede");
+
+  // Uno de hace 36 h no cuenta.
   const ayer = baseDinero((d) => avisoEnInbox(d, "5599990000", "… de tu nota MF-0010 …", 36 * 3600));
   assert.equal((await accionAvisarSaldo.preparar(recepcion(ayer), { factura: "MF-0010" })).tipo, "propuesta");
+
+  // El cobro AUTOMÁTICO de mensualidad (cola de recordatorios, PAYMENT_DUE) también frena.
+  const conAutomatico = baseDinero();
+  let pedido: any = null;
+  conAutomatico.whatsAppReminder = {
+    findFirst: async (args: any) => { pedido = args; return { sentAt: new Date(Date.now() - 2 * 3600_000) }; },
+  };
+  assert.equal((await accionAvisarSaldo.preparar(recepcion(conAutomatico), { factura: "MF-0010" })).tipo, "no_se_puede");
+  assert.equal(pedido?.where?.clinicId, CL_A, "el automático se busca en la clínica de la sesión");
+  assert.equal(pedido?.where?.type, "PAYMENT_DUE");
 
   // Sabina lo mandó hoy (aunque el Inbox no lo tenga).
   const porSabina = baseDinero((d) => rastroDeAviso(d, "inv-juan-1", { ok: true, status: 200 }));
@@ -633,7 +654,8 @@ test("🔴 aviso: UNO por factura al día — lo que ya salió hoy por el Inbox 
   const deAyer = baseDinero((d) => rastroDeAviso(d, "inv-juan-1", { ok: true, status: 200 }, undefined, casiMedianoche));
   assert.equal((await accionAvisarSaldo.preparar(recepcion(deAyer), { factura: "MF-0010" })).tipo, "propuesta");
 
-  // Un aviso de OTRA factura que mandó Sabina no frena este.
+  // El RASTRO de Sabina es por factura: el de otra no frena este por sí solo (si salió, ya lo
+  // frena su mensaje en el Inbox, como en el caso «otra nota» de arriba).
   const otraPorSabina = baseDinero((d) => rastroDeAviso(d, "inv-juan-2", { ok: true, status: 200 }));
   assert.equal((await accionAvisarSaldo.preparar(recepcion(otraPorSabina), { factura: "MF-0010" })).tipo, "propuesta");
 });

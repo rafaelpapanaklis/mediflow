@@ -49,6 +49,19 @@ export const MOTIVO_SIN_PLANTILLA_FACTURA =
   "El paciente no ha escrito en las últimas 24 h y WhatsApp solo deja mandarle una plantilla aprobada por Meta. " +
   "La de la nota todavía no se puede usar";
 
+/**
+ * PURO: por qué en esta clínica no sale NINGUNA nota por WhatsApp (desconectado, sin teléfono
+ * de la clínica), o null. Lo comparten el popup y las fichas (que así no consultan nada por
+ * paciente cuando la respuesta es la misma para todos).
+ */
+export function motivoDeLaClinica(clinica: DatosVistaEnvio["clinica"]): string | null {
+  if (!clinica.waConnected || !clinica.waPhoneNumberId || !clinica.conToken) {
+    return "WhatsApp no está conectado en esta clínica (Configuración → WhatsApp).";
+  }
+  if (!(clinica.phone ?? "").trim()) return "Falta el teléfono de la clínica (Configuración → Clínica): el mensaje lo necesita para decir dónde pagar.";
+  return null;
+}
+
 /** PURO: el canal por el que saldría la nota, o por qué no sale. */
 export function vistaEnvioFactura(d: DatosVistaEnvio): VistaEnvioWhatsApp {
   const base = {
@@ -57,10 +70,8 @@ export function vistaEnvioFactura(d: DatosVistaEnvio): VistaEnvioWhatsApp {
     paciente: { firstName: d.paciente.firstName ?? "", lastName: d.paciente.lastName ?? "" },
   };
   const no = (motivo: string): VistaEnvioWhatsApp => ({ ...base, modo: "blocked", motivo });
-  if (!d.clinica.waConnected || !d.clinica.waPhoneNumberId || !d.clinica.conToken) {
-    return no("WhatsApp no está conectado en esta clínica (Configuración → WhatsApp).");
-  }
-  if (!base.telefonoClinica) return no("Falta el teléfono de la clínica (Configuración → Clínica): el mensaje lo necesita para decir dónde pagar.");
+  const deLaClinica = motivoDeLaClinica(d.clinica);
+  if (deLaClinica) return no(deLaClinica);
   if (!(d.paciente.phone ?? "").trim()) return no("El paciente no tiene teléfono registrado.");
   if (d.ultimoCobro) return no(fraseAvisoYaEnviado(d.ultimoCobro, d.clinica.timezone));
   const decision = decideSendMode({
@@ -72,8 +83,15 @@ export function vistaEnvioFactura(d: DatosVistaEnvio): VistaEnvioWhatsApp {
   });
   if (decision.mode === "blocked") {
     // «falta configurar» / «en revisión» / «rechazada»: lo que dice decideSendMode, tras el porqué.
-    const detalle = decision.reason.replace(/^Fuera de la ventana de 24 h:?\s*/i, "");
+    // El prefijo llega como «Fuera de la ventana de 24 h:» o «Fuera de la ventana de 24 h y»:
+    // se quitan los dos, o quedaba «(y falta configurar…)».
+    const detalle = decision.reason.replace(/^Fuera de la ventana de 24 h(?:\s*:|\s+y\b)?\s*/i, "");
     return no(`${MOTIVO_SIN_PLANTILLA_FACTURA} (${detalle.replace(/\.$/, "")}). Mándala por correo o compártele el link.`);
   }
   return { ...base, modo: decision.mode, motivo: null };
+}
+
+/** El más reciente de varias fechas (paciente y responsable de pago), o null. */
+export function masReciente(fechas: Array<Date | null | undefined>): Date | null {
+  return fechas.reduce<Date | null>((mas, d) => (d && (!mas || d > mas) ? d : mas), null);
 }

@@ -5,13 +5,15 @@
  *
  * 🔴 LO QUE SABINA PONE PORQUE EL SERVIDOR NO LO PONE (MAPA-dinero F9 y §7.11)
  *
- *  · UN aviso por factura al día. El servidor no tiene antiduplicado. Se mira en
- *    dos sitios: el Inbox (lo que salió hoy a ese teléfono, venga de la pantalla o
- *    de Sabina) y el rastro de Sabina (cada propuesta de aviso de esa factura que
- *    se confirmó hoy: la que salió, la que falló sin saber si llegó, y la que se
- *    confirmó y todavía no tiene resultado —en curso, o se cortó a la mitad—).
- *    Un aviso de hoy que salió como plantilla no dice de qué nota era: se cuenta
- *    como de esta, porque lo que se evita es mandarle dos cobros el mismo día.
+ *  · UN aviso de cobro por teléfono cada 24 h, con la MISMA regla que el servidor
+ *    (ws1-t6, revisión ws1-t2 #12): cualquier aviso de cobro (`payment_notice` o la
+ *    nota `invoice_ready`) a ese teléfono en las últimas 24 h, sea de la factura que
+ *    sea, y el aviso AUTOMÁTICO de mensualidad (`PAYMENT_DUE`). Antes Sabina solo
+ *    miraba `payment_notice` de esta factura desde medianoche y podía prometer en la
+ *    tarjeta un aviso que la ruta rechaza con 409 al confirmar. Además se mira el
+ *    rastro de Sabina (cada propuesta de aviso de esa factura que se confirmó hoy: la
+ *    que salió, la que falló sin saber si llegó, y la que se confirmó y todavía no
+ *    tiene resultado —en curso, o se cortó a la mitad—).
  *  · La tarjeta enseña el texto EXACTO que recibe el paciente. Sale de
  *    `buildPaymentNotice` (el mismo que usa el handler) y de la misma decisión
  *    texto/plantilla que toma el envío (`decideSendMode`), con la ventana de 24 h
@@ -30,6 +32,7 @@ import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
 import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
 import { decideSendMode } from "@/lib/whatsapp/send-mode";
 import { SYSTEM_EXTERNAL_ID_PREFIX } from "@/lib/whatsapp/system-message";
+import { TIPOS_AVISO_DE_COBRO, avisoAutomaticoDeCobroReciente } from "@/lib/whatsapp/aviso-cobro-tope";
 import { parseWaTemplates, renderTemplateBody, specForKind } from "@/lib/whatsapp/template-config";
 import { definirAccion, type ManejadorRuta, type SabinaPreparacion } from "../engine-acciones";
 import { ENTIDAD_PROPUESTA, EVENTO } from "../engine-propuestas-core";
@@ -90,7 +93,7 @@ const esquemaDatos = z.object({
    ═══════════════════════════════════════════════════════════════════════ */
 
 export interface AvisosDeHoy {
-  /** Ya salió hoy uno de esta factura (o uno que no dice de cuál). */
+  /** Ya salió un cobro a ese teléfono en 24 h (cualquier nota, o el automático), o Sabina mandó hoy el de esta. */
   enviado: { hora: string; porSabina: boolean } | null;
   /** Un intento de Sabina de hoy que no se sabe si llegó: falló con 502/excepción, o sigue sin resultado. */
   dudoso: { hora: string; enCurso: boolean } | null;
@@ -99,17 +102,20 @@ export interface AvisosDeHoy {
 /** Lo que ya pasó hoy con el aviso de esta factura. `excluirIntento`: la propuesta que se está confirmando. */
 export async function avisosDeHoy(ctx: SabinaCtx, f: FacturaLeida, excluirIntento?: string): Promise<AvisosDeHoy> {
   const db = dbDineroDe(ctx);
+  const ahora = new Date();
   const hoy = inicioDeHoy(ctx.timezone);
+  // El tope de la ruta (`ultimoAvisoDeCobro`): 24 h corridas, no desde medianoche.
+  const desde = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
   const ruta = `/api/invoices/${f.id}/send-whatsapp`;
   const ultimos10 = digitsLast10(f.paciente.telefono);
 
-  const [enInbox, propuestas] = await Promise.all([
+  const [enInbox, automatico, propuestas] = await Promise.all([
     ultimos10.length === 10
       ? db.inboxMessage.findMany({
           where: {
             direction: "OUT",
-            sentAt: { gte: hoy },
-            externalId: { startsWith: `${SYSTEM_EXTERNAL_ID_PREFIX}payment_notice:` },
+            sentAt: { gte: desde },
+            OR: TIPOS_AVISO_DE_COBRO.map((k) => ({ externalId: { startsWith: `${SYSTEM_EXTERNAL_ID_PREFIX}${k}:` } })),
             // 🔴 clinicId de la sesión, por el hilo. El `contains` solo pre-filtra;
             // el teléfono se compara abajo por sus 10 dígitos, como el Inbox.
             thread: { clinicId: ctx.clinicId, channel: "WHATSAPP", externalId: { contains: ultimos10 } },
@@ -119,6 +125,8 @@ export async function avisosDeHoy(ctx: SabinaCtx, f: FacturaLeida, excluirIntent
           take: 20,
         })
       : Promise.resolve([]),
+    // El cobro AUTOMÁTICO de mensualidad (cola de recordatorios): nunca lanza.
+    avisoAutomaticoDeCobroReciente(ctx.clinicId, f.paciente.telefono ?? "", ahora, db as any),
     // Las propuestas de ESTE aviso de hoy (una propuesta vive 10 min: se mira desde un rato antes de medianoche).
     db.auditLog.findMany({
       where: {
@@ -134,15 +142,11 @@ export async function avisosDeHoy(ctx: SabinaCtx, f: FacturaLeida, excluirIntent
   ]);
 
   let enviado: AvisosDeHoy["enviado"] = null;
-  for (const m of enInbox) {
-    if (digitsLast10(m.thread?.externalId) !== ultimos10) continue;
-    const body = String(m.body ?? "");
-    // Texto libre: trae el folio. Plantilla: no trae ninguno y no se sabe de cuál era.
-    const otroFolio = /\bMF-\d+/.test(body) && !body.includes(f.folio);
-    if (otroFolio) continue;
-    enviado = { hora: horaDe(new Date(m.sentAt), ctx.timezone), porSabina: false };
-    break;
-  }
+  // Cualquier cobro a ese teléfono cuenta, sea de la nota que sea: la ruta tampoco distingue.
+  const delInbox = enInbox.find((m: any) => digitsLast10(m.thread?.externalId) === ultimos10);
+  const previo = [delInbox ? new Date(delInbox.sentAt) : null, automatico]
+    .reduce<Date | null>((mas, d) => (d && (!mas || d > mas) ? d : mas), null);
+  if (previo) enviado = { hora: horaDe(previo, ctx.timezone), porSabina: false };
 
   const ids = propuestas
     .filter((e: any) => e.changes?.datos?.facturaId === f.id && e.changes?.datos?.intento !== excluirIntento)
@@ -293,8 +297,10 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
     return {
       tipo: "no_se_puede",
       frase:
-        `Hoy a las ${hoy.enviado.hora} ya ${hoy.enviado.porSabina ? "le mandé" : "salió"} un aviso de saldo a ${f.paciente.nombre}. ` +
-        "Para no mandarle dos el mismo día, no preparo otro: mañana sí.",
+        (hoy.enviado.porSabina
+          ? `Hoy a las ${hoy.enviado.hora} ya le mandé un aviso de saldo a ${f.paciente.nombre}. `
+          : `Ya salió un aviso de cobro a ${f.paciente.nombre} en las últimas 24 h (${hoy.enviado.hora}). `) +
+        "Para no mandarle más de uno al día, no preparo otro hasta que pasen 24 h.",
     };
   }
 
@@ -336,7 +342,7 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
 
 export const accionAvisarSaldo = definirAccion<ParamsAviso, DatosAviso>({
   nombre: NOMBRE,
-  descripcion: "Prepara el aviso de saldo pendiente de una factura por WhatsApp al paciente. Uno por factura al día.",
+  descripcion: "Prepara el aviso de saldo pendiente de una factura por WhatsApp al paciente. Uno por paciente cada 24 h (cualquier aviso de cobro cuenta).",
   titulo: "Aviso de saldo por WhatsApp",
   boton: "Sí, mandar el aviso",
   queHace: "mandar avisos de saldo por WhatsApp",

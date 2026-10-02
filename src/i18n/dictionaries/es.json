@@ -10047,6 +10047,7 @@
     "envioCorreoPista": "Al correo registrado del paciente, al crear la factura.",
     "envioWhatsApp": "Por WhatsApp",
     "envioWhatsAppPista": "Le llega la nota con folio, monto y cómo pagarla, al crear la factura. Abajo ves el texto exacto.",
+    "envioWhatsAppPistaSinTexto": "Le llega la nota con folio, monto y cómo pagarla, al crear la factura.",
     "waNoSale": "Por WhatsApp no sale ahora:",
     "vistaLink": "[link de Mercado Pago al guardar]",
     "vistaFolio": "[folio al guardar]",

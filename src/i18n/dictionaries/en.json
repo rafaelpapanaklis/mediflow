@@ -10047,6 +10047,7 @@
     "envioCorreoPista": "To the patient's email on file, when the invoice is created.",
     "envioWhatsApp": "By WhatsApp",
     "envioWhatsAppPista": "They get the invoice with its number, amount and how to pay, when it is created. The exact text shows below.",
+    "envioWhatsAppPistaSinTexto": "They get the invoice with its number, amount and how to pay, when it is created.",
     "waNoSale": "It can't go out by WhatsApp right now:",
     "vistaLink": "[Mercado Pago link created on save]",
     "vistaFolio": "[number assigned on save]",
