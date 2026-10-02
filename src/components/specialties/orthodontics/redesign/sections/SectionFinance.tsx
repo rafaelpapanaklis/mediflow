@@ -222,6 +222,11 @@ export function SectionFinance(props: SectionFinanceProps) {
         <div style={{ padding: "0 18px" }}>
           <ExtrasPorCobrar treatmentPlanId={props.treatmentPlanId} onCambio={recargar} />
         </div>
+        {esPorControl && panel.precioDeControl ? (
+          <div style={{ padding: "0 18px" }}>
+            <PrecioPorControl datos={panel.precioDeControl} />
+          </div>
+        ) : null}
         {panel.controlesDelPlan ? (
           <div style={{ padding: "0 18px" }}>
             <ControlesDelPlan datos={panel.controlesDelPlan} porControl={esPorControl} />
@@ -616,6 +621,26 @@ function ControlesDelPlan({ datos, porControl }: { datos: NonNullable<PanelDeCob
         )
       ) : null}
       <ProgressBar value={p.pct ?? 0} color={p.excedido ? "amber" : "violet"} className="mt-[8px]" ariaLabel={textoControlesHechos(p)} />
+    </div>
+  );
+}
+
+/**
+ * ws1-t12 (6b) — «Precio por control del caso: $X» en «Pago por control»: lo que se cobra al firmar cada control.
+ * Sale del precio que el caso copió de su técnica; si no tiene, del catálogo (y la línea lo dice).
+ */
+function PrecioPorControl({ datos }: { datos: NonNullable<PanelDeCobro["precioDeControl"]> }) {
+  return (
+    <div className={orto.caja} style={{ margin: "12px 0" }} data-precio-por-control>
+      <div className={orto.datoEtiqueta}>Precio por control</div>
+      <div className="mt-[2px] text-[13.5px] font-semibold">
+        {datos.origen === "caso" ? "Precio por control del caso" : "Precio por control (del catálogo)"}: {fmtMoney(datos.precio)}
+      </div>
+      <div className="mt-[4px] text-[12px] text-[color:var(--pr-texto-3)]">
+        {datos.origen === "caso"
+          ? "Es lo que se cobra al firmar cada control de este caso."
+          : "Este caso no tiene precio propio: cada control se cobra con «Control de ortodoncia» del catálogo."}
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@
 // hoja de control ofrece en «Plantillas» (ws1-t5 · 10b). Son las mismas filas
 // que lee el selector de la hoja; aquí se ven, se copian, se editan y se apagan.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Copy, FileText, Pencil, Plus, Power, Search } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
@@ -63,22 +63,50 @@ export function PlantillasOrto({ filas, onChange }: Props) {
     toast.success(t(eraNueva ? "pages.plantillas.toastCreada" : "pages.plantillas.toastGuardada"));
   }
 
-  async function alternarActiva(p: PlantillaNotaDTO) {
+  // Siempre la lista más reciente: el «Deshacer» del aviso se pulsa segundos después y no debe pisar lo que
+  // cambió mientras tanto (otra plantilla guardada, copiada…).
+  const filasRef = useRef(filas);
+  filasRef.current = filas;
+
+  async function ponerActiva(id: string, activa: boolean, conDeshacer: boolean) {
     if (busyId) return;
-    setBusyId(p.id);
+    setBusyId(id);
     try {
-      const res = await fetch(`/api/orthodontics/note-templates/${p.id}`, {
+      const res = await fetch(`/api/orthodontics/note-templates/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activa: !p.activa }),
+        body: JSON.stringify({ activa }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.id) {
         toast.error(mensajeDeError(data));
         return;
       }
-      onChange(filas.map((f) => (f.id === p.id ? (data as PlantillaNotaDTO) : f)));
-      toast.success(t(data.activa ? "pages.plantillas.toastActivada" : "pages.plantillas.toastDesactivada"));
+      onChange(filasRef.current.map((f) => (f.id === id ? (data as PlantillaNotaDTO) : f)));
+      if (data.activa || !conDeshacer) {
+        toast.success(t(data.activa ? "pages.plantillas.toastActivada" : "pages.plantillas.toastDesactivada"));
+        return;
+      }
+      // «Desactivar» no pide confirmación (se apaga y se enciende en un clic), pero un clic en la fila
+      // equivocada no puede pasar inadvertido: el aviso se queda 8 s con «Deshacer».
+      toast(
+        (aviso) => (
+          <span>
+            {t("pages.plantillas.toastDesactivada")}{" "}
+            <button
+              type="button"
+              className={styles.toastDeshacer}
+              onClick={() => {
+                toast.dismiss(aviso.id);
+                void ponerActiva(id, true, false);
+              }}
+            >
+              {t("pages.plantillas.deshacer")}
+            </button>
+          </span>
+        ),
+        { duration: 8000 },
+      );
     } catch {
       toast.error(t("pages.plantillas.errores.generico"));
     } finally {
@@ -179,7 +207,7 @@ export function PlantillasOrto({ filas, onChange }: Props) {
                   type="button"
                   className={styles.iconBtn}
                   disabled={busyId === p.id}
-                  onClick={() => alternarActiva(p)}
+                  onClick={() => ponerActiva(p.id, !p.activa, p.activa)}
                   title={t(p.activa ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}
                   aria-label={`${t(p.activa ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}: ${p.name}`}
                 >

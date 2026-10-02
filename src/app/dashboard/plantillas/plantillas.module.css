@@ -555,3 +555,17 @@
 }
 .markerNota { margin-top: 8px; font-size: 12px; color: var(--text-3); line-height: 1.45; }
 .headAcciones { display: flex; gap: 8px; align-items: center; }
+
+/* «Deshacer» dentro del aviso de «Plantilla desactivada» (react-hot-toast): texto subrayado, sin fondo. */
+.toastDeshacer {
+  margin-left: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.toastDeshacer:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }

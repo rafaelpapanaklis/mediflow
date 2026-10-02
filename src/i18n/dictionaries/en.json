@@ -9388,6 +9388,7 @@
       "toastEliminada": "Template deleted",
       "toastActivada": "Template activated",
       "toastDesactivada": "Template deactivated",
+      "deshacer": "Undo",
       "confirmarEliminarTitulo": "Delete “{nombre}”?",
       "confirmarEliminarTexto": "It stops showing up as an option on the patient record. Documents already made with it do not change.",
       "errores": {

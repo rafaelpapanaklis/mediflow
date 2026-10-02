@@ -124,6 +124,13 @@ export interface PanelDeCobro {
     estimado: EstimadoPorControles | null;
   } | null;
   /**
+   * ws1-t12 (6b) — lo que cuesta CADA control de este caso, solo en «Pago por control»: su precio propio
+   * (`origen: "caso"`, copiado de su técnica) o, si no tiene, «Control de ortodoncia» del catálogo. Va aparte de
+   * `controlesDelPlan` porque se enseña aunque el plan no diga cuántos controles prevé. `null` = no hay de dónde
+   * sacarlo (o el caso no es de «Pago por control»).
+   */
+  precioDeControl: { precio: number; origen: "caso" | "catalogo" } | null;
+  /**
    * H5: una factura de ortodoncia recién creada que no quedó ligada al caso
    * (se cortó entre crearla y ligarla). Solo si el caso no tiene plan vigente.
    */
@@ -257,11 +264,14 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
   const previstos = planDetalle?.controlesPrevistos ?? null;
   const zonaDelCaso = clinica?.timezone || "America/Mexico_City";
   let controlesDelPlan: PanelDeCobro["controlesDelPlan"] = null;
+  // ws1-t12 (6b): el precio por control del caso (de su técnica); sin él, el del catálogo. Se lee aunque el plan no
+  // diga cuántos controles prevé: la línea «Precio por control del caso» no depende del estimado.
+  const precio =
+    billingMode === "PAGO_POR_CONTROL" ? await precioDeControlDelCaso(ctx.clinicId, treatmentPlanId).catch(() => null) : null;
+  const precioDeControl = precio ? { precio: precio.precio, origen: precio.origen } : null;
   if (previstos) {
-    const [progreso, precio] = await Promise.all([
-      cargarProgresoDeControles(ctx.clinicId, zonaDelCaso, [{ planId: treatmentPlanId, patientId: caso.patientId, inicio: caso.inicio }]),
-      // ws1-t12 (6b): el precio por control del caso (de su técnica); sin él, el del catálogo.
-      billingMode === "PAGO_POR_CONTROL" ? precioDeControlDelCaso(ctx.clinicId, treatmentPlanId).catch(() => null) : Promise.resolve(null),
+    const progreso = await cargarProgresoDeControles(ctx.clinicId, zonaDelCaso, [
+      { planId: treatmentPlanId, patientId: caso.patientId, inicio: caso.inicio },
     ]);
     const precioPorControl = precio?.precio ?? null;
     controlesDelPlan = {
@@ -287,6 +297,7 @@ export async function cargarPanelDeCobro(treatmentPlanId: string): Promise<Actio
     billingModeLabel: ORTHO_BILLING_MODE_LABELS[billingMode],
     borradorInicial: borradorInicialDelCaso({ ...caso, aparatologia }, billingMode === "PAGO_POR_CONTROL", precioColocacion),
     controlesDelPlan,
+    precioDeControl,
     procedimientosFaltantes,
   };
 

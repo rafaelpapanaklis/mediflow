@@ -9388,6 +9388,7 @@
       "toastEliminada": "Plantilla eliminada",
       "toastActivada": "Plantilla activada",
       "toastDesactivada": "Plantilla desactivada",
+      "deshacer": "Deshacer",
       "confirmarEliminarTitulo": "¿Eliminar «{nombre}»?",
       "confirmarEliminarTexto": "Deja de aparecer como opción en la ficha del paciente. Los documentos que ya se hicieron con ella no cambian.",
       "errores": {
