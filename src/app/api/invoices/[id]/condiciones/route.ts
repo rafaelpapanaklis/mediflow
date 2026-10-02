@@ -20,7 +20,9 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { normalizarCondiciones } from "@/lib/quotes/condiciones-pago";
-import { guardarCondicionesDeFactura } from "@/lib/invoices/condiciones-pago-db";
+import { guardarCondicionesDeFactura, leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { revisarCambioDePlan } from "@/lib/invoices/cambio-de-plan";
+import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +36,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId }, // scope multi-tenant
-    select: { id: true, total: true, patientId: true },
+    select: { id: true, total: true, paid: true, status: true, patientId: true },
   });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
@@ -49,6 +51,30 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   // El enganche se acota contra el total GUARDADO de la factura, no contra el
   // que diga el cliente.
   const condiciones = normalizarCondiciones(body?.condiciones, invoice.total);
+
+  // ws1-t11 (fallo 4 de la revisión final de ortodoncia): con algo cobrado, el
+  // trato ya no se reescribe a ciegas — una factura pagada no cambia de plan y
+  // una con pagos parciales solo reparte lo pendiente (lib/invoices/cambio-de-plan).
+  // Sin cobros no hace falta leer nada: crear una factura nueva sigue igual.
+  let antes: CondicionesPago | null = null;
+  if (Number(invoice.paid) > 0 || invoice.status === "PAID") {
+    const leidas = await leerCondicionesDeFacturas(prisma, { clinicId: ctx.clinicId, invoiceIds: [invoice.id] });
+    if (leidas.fallo) {
+      return NextResponse.json(
+        { error: "La forma de pago no se guardó: no se pudo comprobar el plan actual de la factura. Inténtalo de nuevo.", code: "CONDICIONES_FALLO" },
+        { status: 503 },
+      );
+    }
+    antes = leidas.porFactura.get(invoice.id) ?? null;
+    const veredicto = revisarCambioDePlan({
+      factura: { total: invoice.total, pagado: invoice.paid, status: invoice.status },
+      antes,
+      despues: condiciones,
+    });
+    if (!veredicto.ok) {
+      return NextResponse.json({ error: veredicto.error, code: veredicto.codigo }, { status: 409 });
+    }
+  }
 
   const guardado = await guardarCondicionesDeFactura(prisma, {
     invoiceId: invoice.id,
@@ -80,7 +106,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     entityType: "invoice",
     entityId: invoice.id,
     action: "update",
-    before: { condicionesPago: null },
+    before: { condicionesPago: antes },
     after: { condicionesPago: guardado.condiciones },
   });
 

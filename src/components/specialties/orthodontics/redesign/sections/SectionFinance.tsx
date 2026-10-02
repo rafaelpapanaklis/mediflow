@@ -566,6 +566,8 @@ export function SectionFinance(props: SectionFinanceProps) {
           treatmentPlanId={props.treatmentPlanId}
           invoiceId={panel.invoiceId}
           total={panel.invoice!.total}
+          pagado={panel.invoice!.paid}
+          status={panel.invoice!.status}
           condicionesActuales={panel.condiciones}
           onClose={() => setDrawer(null)}
           onGuardado={cerrarYRecargar}

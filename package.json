@@ -464,6 +464,7 @@
     "sabina:agendar-real": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/agendar-real.ts",
     "//seed:edu-demo": "Siembra UN instituto de DEMO (slug demo-volumen) con el volumen del cliente que viene: 3 sedes, 32 sillones, 120 estudiantes, ~600 pacientes y ~16 000 citas. Se niega a correr contra una base que no sea local salvo que se declare el host, y NO crea WhatsApp ni cuentas de Supabase. `-- --medir` recorre el panel con cronometro; `-- --sql-borrado` imprime el DELETE.",
     "seed:edu-demo": "tsx scripts/edu-seed-demo.ts",
+    "test:cambio-de-plan-pagada": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/cambio-de-plan-pagada.test.ts",
     "test:presupuesto-pagos": "tsx --test src/lib/quotes/__tests__/condiciones-pago.test.ts",
     "test:presupuesto-aceptacion": "tsx --test --experimental-test-module-mocks src/lib/quotes/__tests__/aceptacion.test.ts src/app/api/quotes/__tests__/aceptacion-parcial.test.ts src/lib/quotes/__tests__/tarjeta-y-vigencia.test.ts",
     "test:presupuesto-desde-plan": "tsx --test --experimental-test-module-mocks src/lib/quotes/__tests__/desde-plan.test.ts src/app/api/treatments/__tests__/presupuesto-desde-plan.test.ts",

@@ -60,7 +60,7 @@ export function parchearCondiciones(prev: CondicionesPago, cambio: Partial<Condi
 }
 
 export function FormaDePagoFactura({
-  cond, total, onChange, mercadoPago = false,
+  cond, total, onChange, mercadoPago = false, engancheFijo = false,
 }: {
   cond: CondicionesPago;
   /** El TOTAL en vivo del popup: el mismo número que se va a guardar. */
@@ -68,6 +68,11 @@ export function FormaDePagoFactura({
   onChange: (sig: CondicionesPago) => void;
   /** La clínica tiene Mercado Pago conectado (ws1-t1). Sin él, el método no sale. */
   mercadoPago?: boolean;
+  /**
+   * El enganche no se edita (ws1-t11): al cambiar el plan de una factura con
+   * pagos parciales, lo cobrado ES el enganche y solo se reparte lo pendiente.
+   */
+  engancheFijo?: boolean;
 }) {
   const t = useT();
   const parchear = (cambio: Partial<CondicionesPago>) => onChange(parchearCondiciones(cond, cambio));
@@ -148,7 +153,8 @@ export function FormaDePagoFactura({
               <input
                 type="number" min={0} step="0.01" placeholder="0.00"
                 value={cond.enganche || ""}
-                onChange={(e) => parchear({ enganche: Math.max(0, num(e.target.value)) })}
+                readOnly={engancheFijo}
+                onChange={(e) => { if (!engancheFijo) parchear({ enganche: Math.max(0, num(e.target.value)) }); }}
               />
             </label>
             <label className={c.campo}>

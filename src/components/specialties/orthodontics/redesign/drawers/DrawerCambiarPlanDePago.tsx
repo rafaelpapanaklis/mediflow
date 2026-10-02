@@ -11,6 +11,12 @@
 // solo se editan en borrador (regla del propio PATCH /api/invoices/[id]).
 // Cambiar el precio a mitad de tratamiento es una factura nueva/ajuste, no
 // esto.
+//
+// ws1-t11 (fallo 4 de la revisión final): lo COBRADO no se reescribe. Una
+// factura pagada completa no cambia de plan (el cajón lo dice y no ofrece
+// guardar) y, con pagos parciales sobre un plan a plazos, lo cobrado queda
+// fijo como enganche y solo se reparte lo pendiente. La regla es la del
+// servidor (lib/invoices/cambio-de-plan), que rechaza igual si algo se cuela.
 
 import { useState } from "react";
 import { Save, X } from "lucide-react";
@@ -19,6 +25,7 @@ import { fmtMoney } from "../atoms/format";
 import { FormaDePagoFactura } from "@/components/dashboard/factura-ficha-rediseno/forma-de-pago";
 import { guardarCondiciones } from "@/components/dashboard/factura-ficha-rediseno/extras";
 import { condicionesPorDefecto, type CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { cobradoDeLaFactura, facturaSaldada } from "@/lib/invoices/cambio-de-plan";
 import { auditarCambioDePlan } from "@/app/actions/orthodontics/cobro/auditarCambioDePlan";
 import { useCajon } from "../atoms/useCajon";
 import orto from "../orto.module.css";
@@ -27,6 +34,9 @@ export interface DrawerCambiarPlanDePagoProps {
   treatmentPlanId: string;
   invoiceId: string;
   total: number;
+  /** `Invoice.paid` y `Invoice.status` de la factura del plan. */
+  pagado: number;
+  status: string | null;
   condicionesActuales: CondicionesPago | null;
   onClose: () => void;
   onGuardado: () => void;
@@ -34,8 +44,19 @@ export interface DrawerCambiarPlanDePagoProps {
 
 export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
   const cajonRef = useCajon<HTMLElement>(props.onClose);
-  const original = props.condicionesActuales ?? condicionesPorDefecto();
-  const [cond, setCond] = useState<CondicionesPago>(original);
+  const factura = { total: props.total, pagado: props.pagado, status: props.status };
+  const saldada = facturaSaldada(factura);
+  const cobrado = cobradoDeLaFactura(factura);
+  const guardadas = props.condicionesActuales ?? condicionesPorDefecto();
+  // Con pagos parciales, lo cobrado ES el enganche: el plan nuevo solo reparte
+  // lo pendiente. (El servidor lo exige cuando ya había plan a plazos; aquí
+  // también cuando era de un pago, para no repartir lo cobrado entre cuotas.)
+  const engancheFijo = !saldada && cobrado > 0;
+  const fijar = (c: CondicionesPago): CondicionesPago =>
+    engancheFijo && c.modo === "plazos" ? { ...c, enganche: cobrado } : c;
+  const original = fijar(guardadas);
+  const [cond, setCondLibre] = useState<CondicionesPago>(original);
+  const setCond = (c: CondicionesPago) => setCondLibre(fijar(c));
   const [motivo, setMotivo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +64,7 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
   const sinCambios = JSON.stringify(cond) === JSON.stringify(original);
 
   async function guardar() {
-    if (sinCambios || guardando) return;
+    if (saldada || sinCambios || guardando) return;
     setGuardando(true);
     setError(null);
     try {
@@ -52,7 +73,7 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
       await auditarCambioDePlan({
         treatmentPlanId: props.treatmentPlanId,
         motivo: motivo.trim() || "Sin motivo anotado",
-        antes: original,
+        antes: guardadas,
         despues: cond,
       });
       props.onGuardado();
@@ -89,7 +110,23 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
             Precio total del tratamiento: <span className="tabular-nums font-semibold text-[color:var(--pr-texto)]">{fmtMoney(props.total)}</span> (no se edita aquí).
           </div>
 
-          <FormaDePagoFactura cond={cond} total={props.total} onChange={setCond} />
+          {saldada ? (
+            <div className={`${orto.aviso} ${orto.avisoAlerta}`} data-plan-pagado>
+              <span className={orto.avisoTexto}>
+                Esta factura ya está pagada completa ({fmtMoney(cobrado)}): su plan de pago no se puede cambiar. Lo que ya se cobró no se reescribe.
+              </span>
+            </div>
+          ) : (
+          <>
+          {engancheFijo ? (
+            <div className={`${orto.aviso} ${orto.avisoAlerta}`} data-plan-parcial>
+              <span className={orto.avisoTexto}>
+                Ya se cobraron <strong className="tabular-nums">{fmtMoney(cobrado)}</strong>: eso no se toca y queda como enganche. El plan nuevo solo reparte lo pendiente, <strong className="tabular-nums">{fmtMoney(Math.max(0, props.total - cobrado))}</strong>.
+              </span>
+            </div>
+          ) : null}
+
+          <FormaDePagoFactura cond={cond} total={props.total} onChange={setCond} engancheFijo={engancheFijo && cond.modo === "plazos"} />
 
           <div>
             <label className="block text-xs font-semibold text-[color:var(--pr-texto-2)] mb-1">Motivo del cambio (queda en la bitácora)</label>
@@ -101,6 +138,8 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
               className={`${orto.entrada} w-full`}
             />
           </div>
+          </>
+          )}
 
           {error ? (
             <div className="bg-[color:var(--pr-peligro-suave)] border border-[color:var(--orto-peligro-borde)] rounded-[10px] p-3 text-xs text-[color:var(--pr-peligro)]">{error}</div>
@@ -108,10 +147,12 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
         </div>
 
         <footer className={orto.cajonPie}>
-          <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
+          <Btn variant="ghost" size="md" onClick={props.onClose}>{saldada ? "Cerrar" : "Cancelar"}</Btn>
+          {saldada ? null : (
           <Btn variant="emerald" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={guardar} disabled={sinCambios || guardando}>
             {guardando ? "Guardando..." : "Guardar nuevo plan"}
           </Btn>
+          )}
         </footer>
       </aside>
     </>
