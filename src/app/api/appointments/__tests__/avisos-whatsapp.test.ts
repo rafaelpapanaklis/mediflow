@@ -170,6 +170,11 @@ const session = {
     },
   },
 });
+// invite.ts lleva `import "server-only"` (inexistente fuera del bundle de Next): se sustituye ENTERO por un doble que
+// solo anota la llamada, así la protección del módulo real sigue intacta y esta prueba no manda reseñas a nadie.
+(mock as any).module("@/lib/reviews/invite", {
+  namedExports: { sendReviewInvitation: async () => undefined },
+});
 (mock as any).module("@/lib/agenda/api-helpers", {
   namedExports: { loadClinicSession: async () => session, requireRole: () => null },
 });

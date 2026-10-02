@@ -204,9 +204,24 @@ export function roundAvg(n: number): number {
 }
 
 /** "2026-06-10T…" → "junio 2026" (es-MX) para mostrar fecha de reseña. */
+/** «Octubre de 2026»: solo la primera letra en mayúscula (el `capitalize` de CSS ponía «Octubre De 2026»). */
 export function formatReviewDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const t = d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  } catch {
+    return "";
+  }
+}
+
+/** «2 de octubre de 2026»: la lista de «Invitaciones enviadas» (últimos 30 días) necesita el día. */
+export function formatInvitationDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
   } catch {
     return "";
   }

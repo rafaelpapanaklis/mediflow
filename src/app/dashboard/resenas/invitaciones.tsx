@@ -2,7 +2,7 @@
 
 import { Mail, Send } from "lucide-react";
 import { useLocale } from "@/i18n/i18n-provider";
-import { formatReviewDate, type EstadoInvitacion, type InvitacionResenaDTO } from "@/lib/reviews/types";
+import { formatInvitationDate, type EstadoInvitacion, type InvitacionResenaDTO } from "@/lib/reviews/types";
 import { Etiqueta, estilos as s } from "@/components/dashboard/pequenas-rediseno/piezas";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
               <div className={s.tarjetaCabeza}>
                 <div className={s.tarjetaTextos}>
                   <h3 className={s.tarjetaTitulo}>{i.authorName}</h3>
-                  <p className={s.tarjetaSub} style={{ textTransform: "capitalize" }}>{formatReviewDate(i.createdAt)}</p>
+                  <p className={s.tarjetaSub}>{formatInvitationDate(i.createdAt)}</p>
                 </div>
                 <div className={s.tarjetaAcciones}>{chips}</div>
               </div>
@@ -132,7 +132,7 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <div>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{i.authorName}</h3>
-                  <p style={{ fontSize: 12, color: "var(--text-3)", textTransform: "capitalize" }}>{formatReviewDate(i.createdAt)}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-3)" }}>{formatInvitationDate(i.createdAt)}</p>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chips}</div>
               </div>

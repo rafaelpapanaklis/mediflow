@@ -29,6 +29,7 @@
     "test:agenda-ruta-vieja": "tsx --test src/lib/agenda/__tests__/ruta-agenda-vieja.test.ts",
     "test:walk-in-permisos": "tsx --test --experimental-test-module-mocks src/app/api/walk-in/__tests__/permisos.test.ts",
     "test:walk-in-acciones": "tsx --test --experimental-test-module-mocks src/app/api/walk-in/__tests__/acciones.test.ts",
+    "test:resenas-fechas-acceso": "tsx --test src/lib/reviews/__tests__/fechas-y-acceso.test.ts",
     "test:inventario-costo": "tsx --test src/lib/inventory/__tests__/costo-core.test.ts",
     "test:inventario-compras": "tsx --test src/lib/inventory/__tests__/compras.server.test.ts",
     "test:inventario-comprobante": "tsx --test src/lib/inventory/__tests__/comprobante.server.test.ts",

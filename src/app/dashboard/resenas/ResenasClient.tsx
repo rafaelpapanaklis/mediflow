@@ -32,6 +32,11 @@ export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {})
     setError("");
     try {
       const res = await fetch(`/api/reviews?page=${p}`, { cache: "no-store" });
+      if (res.status === 401 || res.status === 403) {
+        // /api/reviews es solo para dueño y administrador: sin permiso no es una falla, es «no tienes acceso».
+        setError("No tienes acceso a las reseñas de la clínica.");
+        return;
+      }
       if (!res.ok) throw new Error(String(res.status));
       setData(await res.json());
       setPage(p);
@@ -175,7 +180,7 @@ function ReviewRow({
               <span style={{ fontWeight: 600, color: "var(--text-1)", fontSize: 14 }}>{review.authorName}</span>
               {review.rating != null && <ReviewStars value={review.rating} size={14} />}
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-3)", textTransform: "capitalize", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: "var(--text-3)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
               {formatReviewDate(review.submittedAt ?? review.createdAt)}
             </div>
           </div>

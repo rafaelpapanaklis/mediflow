@@ -153,7 +153,7 @@ function TarjetaResena({
                 <h3 className={s.tarjetaTitulo}>{review.authorName}</h3>
                 {review.rating != null && <ReviewStars value={review.rating} size={14} />}
               </div>
-              <p className={s.tarjetaSub} style={{ textTransform: "capitalize" }}>
+              <p className={s.tarjetaSub}>
                 {formatReviewDate(review.submittedAt ?? review.createdAt)}
               </p>
             </div>
