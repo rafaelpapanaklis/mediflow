@@ -8,6 +8,9 @@ import { validateMagicNumber } from "@/lib/validate-upload";
 import { pareceScriptOMarcado } from "@/lib/uploads/validar-archivo";
 import { toPublicView } from "@/lib/quotes/serialize";
 import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
+import { aceptacionEncendida, leerAceptaciones } from "@/lib/quotes/aceptacion-db";
+import { aceptarPresupuesto, PresupuestoError } from "@/lib/quotes/cargos.server";
+import { resumirAceptacion } from "@/lib/quotes/aceptacion";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +59,29 @@ export async function GET(req: NextRequest, { params }: Params) {
     condicionesPago: (await leerCondiciones(prisma, quote.id)).condiciones,
   });
 
-  return NextResponse.json(view);
+  // Aceptación por concepto (ws1-t6): con el SQL aplicado el paciente marca
+  // qué conceptos acepta; ya aceptado, ve cuáles aceptó y por cuánto.
+  const porConcepto = await aceptacionEncendida();
+  let aceptacion: { aceptados: string[]; total: number; alcance: "total" | "parcial" } | null = null;
+  if (porConcepto && quote.status === "ACCEPTED") {
+    const g = (await leerAceptaciones(prisma, quote.clinicId, [quote.id])).porQuote.get(quote.id);
+    if (g) {
+      const r = resumirAceptacion(g.renglones, Number(quote.total) || 0);
+      aceptacion = {
+        aceptados: g.renglones.filter((x) => x.aceptado).map((x) => x.quoteItemId),
+        total: r.total,
+        alcance: r.alcance,
+      };
+    }
+  }
+
+  return NextResponse.json({
+    ...view,
+    porConcepto,
+    aceptacion,
+    // El id de cada concepto, solo para las casillas (orden = el de `items`).
+    itemIds: quote.items.map((it) => it.id),
+  });
 }
 
 /**
@@ -91,7 +116,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "El presupuesto no está disponible para aceptar" }, { status: 409 });
   }
 
-  let payload: { signatureDataUrl?: unknown };
+  let payload: { signatureDataUrl?: unknown; itemIds?: unknown };
   try {
     payload = await req.json();
   } catch {
@@ -160,10 +185,23 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "No se pudo guardar la firma. Intenta de nuevo." }, { status: 500 });
   }
 
-  await prisma.quote.update({
-    where: { id: quote.id },
-    data: { status: "ACCEPTED", acceptedAt: new Date(), signatureUrl: storedPath },
-  });
+  // Acepta SOLO los conceptos que marcó (ws1-t6); sin `itemIds`, todos, como
+  // siempre. Transacción con el presupuesto bloqueado: si el panel lo aceptó
+  // mientras el paciente firmaba, este segundo recibe 409 y no pisa nada.
+  try {
+    await aceptarPresupuesto({
+      quoteId: quote.id,
+      clinicId: quote.clinicId,
+      userId: null,
+      via: "liga",
+      itemIds: payload.itemIds,
+      signatureUrl: storedPath,
+      desde: ["PRESENTED"],
+    });
+  } catch (e) {
+    if (e instanceof PresupuestoError) return NextResponse.json({ error: e.message }, { status: e.http });
+    throw e;
+  }
 
   // NO audit-log aquí: el firmante es el paciente (no autenticado contra users)
   // y AuditLog tiene FK estricta a userId. El evento queda en quote.acceptedAt.

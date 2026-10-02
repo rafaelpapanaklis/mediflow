@@ -8,6 +8,8 @@
 // arranca con el costo vacío, como siempre.
 
 import { prisma } from "@/lib/prisma";
+import { leerAceptaciones } from "@/lib/quotes/aceptacion-db";
+import { resumirAceptacion } from "@/lib/quotes/aceptacion";
 import {
   importeDeOrtodonciaDelPresupuesto,
   type ImporteDelPresupuesto,
@@ -39,19 +41,26 @@ export async function getPresupuestoParaAlta(input: {
       status: true,
       subtotal: true,
       total: true,
-      items: { select: { name: true, lineTotal: true }, orderBy: { sortOrder: "asc" } },
+      items: { select: { id: true, name: true, lineTotal: true }, orderBy: { sortOrder: "asc" } },
     },
   });
   if (!quote) return ok(null);
+
+  // Aceptado en parte (ws1-t6): el importe sale SOLO de lo que el paciente
+  // aceptó, con su parte del descuento. Sin renglones guardados, todo.
+  const g = (await leerAceptaciones(prisma, ctx.clinicId, [quoteId])).porQuote.get(quoteId);
+  const si = g ? new Set(g.renglones.filter((r) => r.aceptado).map((r) => r.quoteItemId)) : null;
+  const items = si ? quote.items.filter((i) => si.has(i.id)) : quote.items;
+  const resumen = g ? resumirAceptacion(g.renglones, Number(quote.total)) : null;
 
   return ok(
     importeDeOrtodonciaDelPresupuesto({
       folio: quote.folio,
       title: quote.title,
       status: quote.status,
-      subtotal: Number(quote.subtotal),
-      total: Number(quote.total),
-      items: quote.items.map((i) => ({ name: i.name, lineTotal: Number(i.lineTotal) })),
+      subtotal: resumen ? resumen.subtotal : Number(quote.subtotal),
+      total: resumen ? resumen.total : Number(quote.total),
+      items: items.map((i) => ({ name: i.name, lineTotal: Number(i.lineTotal) })),
     }),
   );
 }

@@ -3,6 +3,7 @@
 // (ya serializado desde Decimal) para que el client component lo pinte directo.
 
 import type { CondicionesPago } from "./condiciones-pago";
+import type { CobroDePresupuesto } from "./aceptacion";
 
 export type QuoteStatus =
   | "DRAFT"
@@ -103,6 +104,16 @@ export interface QuoteDTO {
     /** Mixto: además ofrece «Crear plan general con el resto» (`?general=1`). */
     conPlanGeneral?: boolean;
   };
+  /**
+   * ws1-t6 · Aceptación por concepto y cargos. Solo los pone GET /api/quotes y
+   * solo con `sql/presupuesto-aceptacion-parcial.sql` aplicado; ausentes = la
+   * tarjeta de siempre («Marcar aceptado» todo, «Generar factura» por el total).
+   */
+  porConcepto?: boolean;
+  /** Lo aceptado, lo cargado y lo que queda (solo presupuestos ACEPTADOS). */
+  cobro?: CobroDePresupuesto;
+  /** Qué puede hacer la sesión aquí: aceptar = billing.edit, cargar = billing.create. */
+  permisos?: { aceptar: boolean; cargar: boolean };
 }
 
 /** Ítem de factura tal como se guarda en el JSON `Invoice.items`. */

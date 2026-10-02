@@ -9,6 +9,9 @@ import { guardarCondiciones, leerCondicionesDeVarios } from "@/lib/quotes/condic
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
+import { aceptacionEncendida, leerAceptaciones } from "@/lib/quotes/aceptacion-db";
+import { cobrosDePresupuestos } from "@/lib/quotes/cargos.server";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -66,13 +69,39 @@ export async function GET(req: NextRequest) {
   // Presupuestos de ortodoncia aceptados, en una sede con el módulo: ofrecen
   // abrir el caso de ortodoncia en vez de un plan general (ws1-t5). Todo con
   // la clínica y los permisos de la sesión; sin módulo, mapa vacío.
-  const casos = await casosDesdePresupuestos(ctx, quotes);
+  // Aceptación por concepto y cargos (ws1-t6). Sin el SQL: nada de esto y la
+  // tarjeta se pinta como siempre. Dos consultas para todos, no una por fila.
+  const porConcepto = await aceptacionEncendida();
+  const cobros = porConcepto ? await cobrosDePresupuestos(ctx.clinicId, quotes) : new Map();
+  // El caso de ortodoncia se decide con lo que el paciente ACEPTÓ: si de un
+  // presupuesto mixto solo aceptó la resina, no hay caso que abrir.
+  const aceptadas = porConcepto
+    ? (await leerAceptaciones(prisma, ctx.clinicId, quotes.filter((q) => q.status === "ACCEPTED").map((q) => q.id))).porQuote
+    : new Map();
+  const paraCasos = quotes.map((q) => {
+    const g = aceptadas.get(q.id);
+    if (!g) return q;
+    const si = new Set(g.renglones.filter((r: { aceptado: boolean }) => r.aceptado).map((r: { quoteItemId: string }) => r.quoteItemId));
+    return { ...q, items: q.items.filter((it) => si.has(it.id)) };
+  });
+  const casos = await casosDesdePresupuestos(ctx, paraCasos);
+  const userPerm = { role: ctx.role, permissionsOverride: ctx.permissionsOverride ?? [] };
+  const permisos = {
+    aceptar: hasPermission(userPerm, "billing.edit"),
+    cargar: hasPermission(userPerm, "billing.create"),
+  };
 
   return NextResponse.json(
     quotes.map((q) => {
       const dto = serializeQuote(q, porQuote.get(q.id) ?? null, fallo);
       const caso = casos.get(q.id);
-      return caso ? { ...dto, casoOrtodoncia: caso } : dto;
+      const cobro = cobros.get(q.id);
+      return {
+        ...dto,
+        ...(caso ? { casoOrtodoncia: caso } : {}),
+        ...(porConcepto ? { porConcepto: true, permisos } : {}),
+        ...(cobro ? { cobro } : {}),
+      };
     }),
   );
 }

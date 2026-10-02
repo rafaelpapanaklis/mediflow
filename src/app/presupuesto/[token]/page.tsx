@@ -5,8 +5,11 @@ import { useParams } from "next/navigation";
 import { CheckCircle, AlertCircle, Loader2, Clock, CalendarDays } from "lucide-react";
 import { planParaDocumento } from "@/lib/quotes/condiciones-pago";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
+import { armarAceptacion, resumirAceptacion } from "@/lib/quotes/aceptacion";
 
 interface PublicItem {
+  /** Solo con la aceptación por concepto encendida (viene de `itemIds`). */
+  id?: string;
   name: string;
   toothFdi: string | null;
   quantity: number;
@@ -34,6 +37,11 @@ interface PublicView {
   items: PublicItem[];
   /** Formas de pago propuestas. null = no hay (o falta el SQL): no se pinta. */
   condicionesPago: CondicionesPago | null;
+  /** ws1-t6: el paciente puede marcar qué conceptos acepta. */
+  porConcepto?: boolean;
+  itemIds?: string[];
+  /** Ya aceptado: qué aceptó. null = aceptó todo, o se aceptó antes de esta función. */
+  aceptacion?: { aceptados: string[]; total: number; alcance: "total" | "parcial" } | null;
 }
 
 function money(n: number): string {
@@ -66,6 +74,8 @@ export default function PresupuestoPublicPage() {
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  // Conceptos que el paciente acepta (ids). Arranca con todos marcados.
+  const [marcados, setMarcados] = useState<string[]>([]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
@@ -77,6 +87,11 @@ export default function PresupuestoPublicPage() {
       .then((d) => {
         if (d.error) setError(d.error);
         else {
+          const ids: string[] = Array.isArray(d.itemIds) ? d.itemIds : [];
+          if (Array.isArray(d.items)) {
+            d.items = d.items.map((it: PublicItem, i: number) => ({ ...it, id: ids[i] }));
+          }
+          setMarcados(ids);
           setData(d);
           if (d.status === "ACCEPTED") setAccepted(true);
         }
@@ -118,9 +133,34 @@ export default function PresupuestoPublicPage() {
     setHasSig(false);
   }
 
+  // Lo que suma lo marcado, con la MISMA regla que guarda el servidor
+  // (lib/quotes/aceptacion.ts): descuento global repartido en proporción.
+  const elegidos = data?.aceptacion ? data.aceptacion.aceptados : marcados;
+  const resumenElegido = data?.porConcepto && data.items.every((it) => it.id)
+    ? resumirAceptacion(
+        armarAceptacion(
+          {
+            discountAmount: data.discountAmount,
+            items: data.items.map((it) => ({ ...it, id: it.id as string })),
+          },
+          elegidos,
+        ),
+        data.total,
+      )
+    : null;
+  const parcial = !!resumenElegido && resumenElegido.alcance === "parcial";
+
+  function alternar(id: string) {
+    setMarcados((prev) => (prev.indexOf(id) === -1 ? [...prev, id] : prev.filter((x) => x !== id)));
+  }
+
   async function accept() {
     if (!agreed) { setError("Debes aceptar los términos para continuar"); return; }
     if (!hasSig) { setError("Por favor dibuja tu firma"); return; }
+    if (data?.porConcepto && marcados.length === 0) {
+      setError("Marca al menos un tratamiento para aceptar");
+      return;
+    }
     setAccepting(true);
     setError("");
     try {
@@ -128,7 +168,9 @@ export default function PresupuestoPublicPage() {
       const res = await fetch(`/api/presupuesto/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signatureDataUrl }),
+        body: JSON.stringify(
+          data?.porConcepto ? { signatureDataUrl, itemIds: marcados } : { signatureDataUrl },
+        ),
       });
       const out = await res.json();
       if (!res.ok) throw new Error(out.error ?? "Error al aceptar");
@@ -170,6 +212,12 @@ export default function PresupuestoPublicPage() {
             Gracias{data ? `, ${data.patientFirstName}` : ""}. Tu aceptación del presupuesto{" "}
             <strong>{data?.folio}</strong> quedó registrada. La clínica te contactará para continuar.
           </p>
+          {resumenElegido && resumenElegido.alcance === "parcial" && (
+            <p className="text-sm text-slate-600 mt-3">
+              Aceptaste {resumenElegido.aceptados} de {resumenElegido.conceptos} tratamientos, por{" "}
+              <strong>{money(resumenElegido.total)}</strong>. Lo que no marcaste no se te cobrará.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -178,6 +226,8 @@ export default function PresupuestoPublicPage() {
   const groups = data ? groupByPhase(data.items) : [];
   const showPhases = groups.length > 1 || (groups[0] && groups[0].phase != null);
   const canAccept = data && data.status === "PRESENTED" && !data.expired;
+  // Casillas por concepto: solo mientras se puede aceptar y con más de uno.
+  const conCasillas = !!(canAccept && data?.porConcepto && data.items.length > 1);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -209,6 +259,12 @@ export default function PresupuestoPublicPage() {
           </div>
         )}
 
+        {conCasillas && (
+          <p className="text-xs text-slate-600 px-1">
+            Desmarca los tratamientos que no quieras aceptar por ahora. Solo se te cobrará lo que dejes marcado.
+          </p>
+        )}
+
         {/* Detalle */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           {groups.map((g, gi) => (
@@ -221,7 +277,23 @@ export default function PresupuestoPublicPage() {
               <table className="w-full text-xs">
                 <tbody>
                   {g.items.map((it, idx) => (
-                    <tr key={idx} className="border-b border-slate-100 last:border-0">
+                    <tr
+                      key={idx}
+                      className={`border-b border-slate-100 last:border-0 ${
+                        conCasillas && it.id && marcados.indexOf(it.id) === -1 ? "opacity-50" : ""
+                      }`}
+                    >
+                      {conCasillas && it.id && (
+                        <td className="pl-4 py-2.5 align-top w-6">
+                          <input
+                            type="checkbox"
+                            checked={marcados.indexOf(it.id) !== -1}
+                            onChange={() => alternar(it.id as string)}
+                            aria-label={`Acepto: ${it.name}`}
+                            className="mt-0.5 w-4 h-4 accent-violet-600"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-2.5 align-top">
                         <div className="font-semibold text-slate-800">{it.name}</div>
                         <div className="text-slate-400 mt-0.5">
@@ -251,9 +323,15 @@ export default function PresupuestoPublicPage() {
                 <span>Descuento</span><span>-{money(data?.discountAmount ?? 0)}</span>
               </div>
             )}
-            <div className="flex justify-between text-base font-bold text-violet-700 pt-1">
-              <span>Total</span><span>{money(data?.total ?? 0)}</span>
+            <div className={`flex justify-between pt-1 ${parcial ? "text-xs text-slate-500" : "text-base font-bold text-violet-700"}`}>
+              <span>{parcial ? "Total del presupuesto" : "Total"}</span><span>{money(data?.total ?? 0)}</span>
             </div>
+            {parcial && resumenElegido && (
+              <div className="flex justify-between text-base font-bold text-violet-700 pt-1">
+                <span>{data?.status === "ACCEPTED" ? "Total aceptado" : "Total de lo que aceptas"}</span>
+                <span>{money(resumenElegido.total)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -263,6 +341,16 @@ export default function PresupuestoPublicPage() {
         {(() => {
           const plan = planParaDocumento(data?.total ?? 0, data?.condicionesPago);
           if (!plan) return null;
+          // El plan se calculó sobre el total: con una aceptación parcial ya no
+          // cuadra, y la clínica lo ajusta con el paciente.
+          if (parcial) {
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-600">
+                La forma de pago propuesta se calculó sobre el total del presupuesto. Como no aceptas todo, la clínica la
+                ajustará contigo a lo que aceptes.
+              </div>
+            );
+          }
           return (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200">
@@ -315,8 +403,9 @@ export default function PresupuestoPublicPage() {
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
                 className="mt-0.5 w-4 h-4 accent-violet-600" />
               <p className="text-xs text-slate-700 leading-relaxed">
-                He revisado este presupuesto y acepto el tratamiento y los costos indicados. Entiendo que es
-                informativo y está sujeto a valoración clínica.
+                {conCasillas
+                  ? "He revisado este presupuesto y acepto los tratamientos que dejé marcados, con sus costos. Entiendo que es informativo y está sujeto a valoración clínica."
+                  : "He revisado este presupuesto y acepto el tratamiento y los costos indicados. Entiendo que es informativo y está sujeto a valoración clínica."}
               </p>
             </label>
 
@@ -342,13 +431,17 @@ export default function PresupuestoPublicPage() {
               </div>
             )}
 
-            <button onClick={accept} disabled={accepting || !agreed || !hasSig}
+            <button onClick={accept} disabled={accepting || !agreed || !hasSig || (conCasillas && marcados.length === 0)}
               className={`w-full py-4 rounded-2xl text-base font-bold transition-colors ${
-                agreed && hasSig && !accepting
+                agreed && hasSig && !accepting && !(conCasillas && marcados.length === 0)
                   ? "bg-emerald-600 text-white"
                   : "bg-slate-200 text-slate-400 cursor-not-allowed"
               }`}>
-              {accepting ? "Procesando..." : "✅ Aceptar presupuesto"}
+              {accepting
+                ? "Procesando..."
+                : parcial && resumenElegido
+                  ? `✅ Aceptar ${resumenElegido.aceptados} de ${resumenElegido.conceptos} (${money(resumenElegido.total)})`
+                  : "✅ Aceptar presupuesto"}
             </button>
           </>
         )}

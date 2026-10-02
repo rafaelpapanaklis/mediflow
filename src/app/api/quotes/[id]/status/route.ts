@@ -8,6 +8,7 @@ import { presentQuote } from "@/lib/quotes/present";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { estadoDePresupuesto } from "@/lib/movimientos-paciente/textos";
+import { aceptarPresupuesto, fraseDeAceptacion, PresupuestoError } from "@/lib/quotes/cargos.server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,8 @@ type Action = "present" | "accept" | "reject";
  * - present: DRAFT/EXPIRED → PRESENTED. Genera acceptToken (liga pública) y
  *   asegura una vigencia futura (default +30 días si faltaba o ya venció).
  * - accept:  marca ACCEPTED manualmente desde el panel (sin firma del paciente).
+ *            Con `itemIds` (ws1-t6) acepta SOLO esos conceptos: lo demás queda
+ *            guardado como «no aceptado» y nunca se carga. Sin `itemIds`, todo.
  * - reject:  marca REJECTED.
  */
 export async function POST(req: NextRequest, { params }: Params) {
@@ -77,19 +80,55 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(serializeQuote(presented.quote, (await leerCondiciones(prisma, quote.id)).condiciones));
   }
 
+  if (action === "accept") {
+    // Aceptación por concepto (ws1-t6): transacción con el presupuesto
+    // bloqueado, copia del precio de cada concepto y si se aceptó o no. Sin
+    // el SQL acepta todo, como siempre, y rechaza una selección parcial.
+    let aceptado;
+    try {
+      aceptado = await aceptarPresupuesto({
+        quoteId: quote.id,
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        via: "panel",
+        itemIds: body.itemIds,
+        desde: ["DRAFT", "PRESENTED", "EXPIRED"],
+      });
+    } catch (e) {
+      if (e instanceof PresupuestoError) return NextResponse.json({ error: e.message }, { status: e.http });
+      throw e;
+    }
+    const leido = await prisma.quote.findFirst({
+      where: { id: quote.id, clinicId: ctx.clinicId },
+      include: {
+        items: { orderBy: { sortOrder: "asc" } },
+        createdBy: { select: { firstName: true, lastName: true } },
+        patient: { select: { firstName: true, lastName: true } },
+      },
+    });
+    if (!leido) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
+    await logAudit({
+      patientId: quote.patientId,
+      texto: fraseDeAceptacion(aceptado.renglones, Number(leido.total) || 0),
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      entityType: "quote",
+      entityId: quote.id,
+      action: "update",
+      changes: {
+        status: { before: aceptado.status, after: "ACCEPTED" },
+        ...(aceptado.renglones
+          ? { conceptosAceptados: { before: null, after: aceptado.renglones.filter((r) => r.aceptado).map((r) => r.nombre) } }
+          : {}),
+      },
+    });
+    return NextResponse.json(serializeQuote(leido, (await leerCondiciones(prisma, quote.id)).condiciones));
+  }
+
   const data: any = {};
   const now = new Date();
 
-  if (action === "accept") {
-    if (quote.status === "ACCEPTED") {
-      return NextResponse.json({ error: "El presupuesto ya fue aceptado" }, { status: 409 });
-    }
-    if (quote.status === "REJECTED") {
-      return NextResponse.json({ error: "El presupuesto fue rechazado" }, { status: 409 });
-    }
-    data.status = "ACCEPTED";
-    data.acceptedAt = now;
-  } else {
+  {
     // reject
     if (quote.status === "ACCEPTED") {
       return NextResponse.json({ error: "El presupuesto ya fue aceptado" }, { status: 409 });

@@ -6,6 +6,8 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { createInvoiceFromQuote, InvoiceFolioError } from "@/lib/quotes/create-invoice-from-quote";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { aceptacionEncendida } from "@/lib/quotes/aceptacion-db";
+import { cargarDesdePresupuesto, PresupuestoError } from "@/lib/quotes/cargos.server";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +54,34 @@ export async function POST(_req: NextRequest, { params }: Params) {
       { error: "Solo se factura un presupuesto aceptado" },
       { status: 409 },
     );
+  }
+
+  // Aceptación por concepto encendida (ws1-t6, sql/presupuesto-aceptacion-parcial.sql):
+  // «Generar factura» —y Sabina, que llama aquí— carga SOLO los conceptos
+  // aceptados que falten, nunca el total del presupuesto. Si ya no falta nada,
+  // sigue el camino idempotente de siempre (devuelve la factura que ya hay).
+  if (await aceptacionEncendida()) {
+    try {
+      const { invoice } = await cargarDesdePresupuesto({
+        quote,
+        clinicId: ctx.clinicId,
+        userId: ctx.userId,
+        todoLoPendiente: true,
+      });
+      revalidateAfter("invoices");
+      revalidatePath(`/dashboard/patients/${invoice.patientId}`);
+      return NextResponse.json(
+        { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, already: false, invoice },
+        { status: 201 },
+      );
+    } catch (e) {
+      if (e instanceof InvoiceFolioError) return NextResponse.json({ error: e.message }, { status: 500 });
+      if (!(e instanceof PresupuestoError)) throw e;
+      // Nada pendiente y ya facturado: el camino idempotente de abajo lo devuelve.
+      if (!quote.invoiceId || e.http !== 409) {
+        return NextResponse.json({ error: e.message }, { status: e.http });
+      }
+    }
   }
 
   try {

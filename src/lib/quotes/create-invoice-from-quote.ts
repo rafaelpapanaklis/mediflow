@@ -91,7 +91,7 @@ function iso(x: unknown): string {
   return isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
-function serializeInvoice(inv: any): BillingInvoiceLite {
+export function serializeInvoice(inv: any): BillingInvoiceLite {
   const items: BillingInvoiceItem[] = Array.isArray(inv.items)
     ? inv.items.map((it: any) => ({
         description: String(it?.description ?? ""),

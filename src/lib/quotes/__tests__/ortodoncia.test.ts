@@ -132,12 +132,14 @@ test("la lectura va acotada a la clínica y usa el módulo REAL", () => {
 
 test("la ruta de «Crear plan» ofrece el caso ANTES de crear el plan general", () => {
   const ruta = leer("app/api/quotes/[id]/treatment-plan/route.ts");
-  const ofrece = ruta.indexOf("casosDesdePresupuestos(ctx, [quote])");
+  // Con lo que el paciente ACEPTÓ (ws1-t6): `[{ ...quote, items: aceptados }]`.
+  const ofrece = ruta.indexOf("casosDesdePresupuestos(ctx, [");
   const crea = ruta.indexOf("prisma.treatmentPlan.create");
   assert.ok(ofrece > 0 && crea > 0 && ofrece < crea);
   assert.match(ruta, /status: 409/);
   // La lista manda el dato y las dos pantallas lo usan.
-  assert.match(leer("app/api/quotes/route.ts"), /casosDesdePresupuestos\(ctx, quotes\)/);
+  // `paraCasos` = los presupuestos con solo sus conceptos aceptados (ws1-t6).
+  assert.match(leer("app/api/quotes/route.ts"), /casosDesdePresupuestos\(ctx, paraCasos\)/);
   for (const pantalla of ["components/dashboard/presupuesto-nuevo/lista.tsx", "components/quotes/quotes-tab.tsx"]) {
     const texto = leer(pantalla);
     assert.match(texto, /quote\.casoOrtodoncia\?\.etiqueta \?\? t\("quotes\.card\.createPlan"\)/, pantalla);
@@ -166,5 +168,6 @@ test("solo ortodoncia: no queda nada para un plan general", () => {
 test("la ruta solo arma el plan con el resto si el caso lo marca como mixto y se pide general=1", () => {
   const ruta = readFileSync(join(__dirname, "../../../app/api/quotes/[id]/treatment-plan/route.ts"), "utf8");
   assert.match(ruta, /caso\?\.conPlanGeneral && req\.nextUrl\.searchParams\.get\("general"\) === "1"/);
-  assert.match(ruta, /conceptosGenerales\(quote\.items\)/);
+  // De lo aceptado (ws1-t6): sin aceptación por concepto, `aceptados` = todos.
+  assert.match(ruta, /conceptosGenerales\(aceptados\)/);
 });

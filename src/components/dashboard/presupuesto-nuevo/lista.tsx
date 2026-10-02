@@ -18,12 +18,13 @@ import {
   MessageCircle, Pencil, ReceiptText, Send, Trash2, XCircle,
 } from "lucide-react";
 import { dinero, fechaCorta, frasePlan, hayCondiciones } from "@/lib/quotes/condiciones-pago";
-import type { QuoteDTO, QuoteStatus } from "@/lib/quotes/types";
+import type { BillingInvoiceLite, QuoteDTO, QuoteStatus } from "@/lib/quotes/types";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import r from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
 import s from "./presupuesto.module.css";
+import { AceptarConceptos, CobrarPresupuesto, LineaDeCobro } from "./aceptacion-y-cobro";
 
 /** Mismas cinco palabras y mismos colores que la lista de siempre. */
 const ESTADO: Record<QuoteStatus, { clave: string; tono: string }> = {
@@ -35,7 +36,7 @@ const ESTADO: Record<QuoteStatus, { clave: string; tono: string }> = {
 };
 
 export function PresupuestoLista({
-  presupuestos, patientId, cargando, onNuevo, onEditar, onRecargar, onVerFactura, onVerPlan,
+  presupuestos, patientId, cargando, onNuevo, onEditar, onRecargar, onVerFactura, onVerPlan, onFacturaCreada,
 }: {
   presupuestos: QuoteDTO[];
   patientId: string;
@@ -45,6 +46,8 @@ export function PresupuestoLista({
   onRecargar: () => Promise<void> | void;
   onVerFactura?: (invoiceId: string) => void;
   onVerPlan?: (planId: string) => void;
+  /** La factura que nace de un cargo del presupuesto: el contenedor la mete en Facturación. */
+  onFacturaCreada?: (invoice: BillingInvoiceLite) => void;
 }) {
   const t = useT();
 
@@ -83,6 +86,7 @@ export function PresupuestoLista({
               onRecargar={onRecargar}
               onVerFactura={onVerFactura}
               onVerPlan={onVerPlan}
+              onFacturaCreada={onFacturaCreada}
             />
           ))}
         </div>
@@ -92,7 +96,7 @@ export function PresupuestoLista({
 }
 
 function Ficha({
-  quote, patientId, t, onEditar, onRecargar, onVerFactura, onVerPlan,
+  quote, patientId, t, onEditar, onRecargar, onVerFactura, onVerPlan, onFacturaCreada,
 }: {
   quote: QuoteDTO;
   patientId: string;
@@ -101,13 +105,21 @@ function Ficha({
   onRecargar: () => Promise<void> | void;
   onVerFactura?: (invoiceId: string) => void;
   onVerPlan?: (planId: string) => void;
+  onFacturaCreada?: (invoice: BillingInvoiceLite) => void;
 }) {
   const confirmar = useConfirm();
+  // ws1-t6: «¿Qué acepta el paciente?» y «Se cobrará hoy».
+  const [aceptando, setAceptando] = useState(false);
+  const [cobrando, setCobrando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [waEnviado, setWaEnviado] = useState(false);
   const estado = ESTADO[quote.status] ?? ESTADO.DRAFT;
+  const cobro = quote.cobro;
+  // Sin `permisos` (función apagada) se ofrece lo de siempre y decide el servidor.
+  const puedeAceptar = quote.permisos?.aceptar ?? true;
+  const puedeCargar = quote.permisos?.cargar ?? true;
 
   const post = useCallback(async (url: string) => {
     setOcupado(true);
@@ -215,8 +227,8 @@ function Ficha({
       <div className={s.fichaCuerpo}>
         <div className={s.fichaLinea1}>
           <span className={s.fichaFolio}>{quote.folio}</span>
-          <span className={`${r.etiqueta} ${(r as Record<string, string>)[estado.tono]}`}>
-            {t(estado.clave)}
+          <span className={`${r.etiqueta} ${(r as Record<string, string>)[cobro?.alcance === "parcial" ? "etiquetaAlerta" : estado.tono]}`}>
+            {cobro?.alcance === "parcial" ? t("presupuestoAceptacion.estadoParcial") : t(estado.clave)}
           </span>
           {quote.invoiceId && (
             <span className={`${r.etiqueta} ${r.etiquetaExito}`}>
@@ -235,6 +247,7 @@ function Ficha({
           {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fechaCorta(quote.validUntil) })}` : ""}
         </p>
         {plan && <p className={s.fichaPlan}>{plan}</p>}
+        {cobro && <LineaDeCobro cobro={cobro} total={quote.total} onVerFactura={onVerFactura} />}
       </div>
 
       <div className={s.fichaDinero}>
@@ -272,12 +285,25 @@ function Ficha({
               {copiado ? <Check size={13} /> : <Copy size={13} />}
               {copiado ? t("quotes.card.copied") : t("quotes.card.copyLink")}
             </Accion>
-            <Accion tono="exito" onClick={() => postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "accept" })}>
-              <CheckCircle2 size={13} /> {t("quotes.card.markAccepted")}
-            </Accion>
-            <Accion tono="peligro" onClick={() => postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "reject" })}>
-              <XCircle size={13} /> {t("quotes.card.markRejected")}
-            </Accion>
+            {puedeAceptar && (
+              <>
+                <Accion
+                  tono="exito"
+                  onClick={() =>
+                    // Con la aceptación por concepto y más de un concepto, se
+                    // pregunta QUÉ aceptó; si no, se acepta todo como siempre.
+                    quote.porConcepto && quote.items.length > 1
+                      ? setAceptando(true)
+                      : postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "accept" })
+                  }
+                >
+                  <CheckCircle2 size={13} /> {t("quotes.card.markAccepted")}
+                </Accion>
+                <Accion tono="peligro" onClick={() => postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "reject" })}>
+                  <XCircle size={13} /> {t("quotes.card.markRejected")}
+                </Accion>
+              </>
+            )}
           </>
         )}
 
@@ -302,17 +328,29 @@ function Ficha({
 
         {quote.status === "ACCEPTED" && (
           <>
-            <Accion
-              tono="exito"
-              onClick={async () => {
-                if (quote.invoiceId) { onVerFactura?.(quote.invoiceId); return; }
-                const salida = await post(`/api/quotes/${quote.id}/invoice`);
-                if (salida?.invoiceId) onVerFactura?.(salida.invoiceId);
-              }}
-            >
-              <ReceiptText size={13} />
-              {quote.invoiceId ? t("quotes.card.viewInvoice") : t("quotes.card.generateInvoice")}
-            </Accion>
+            {cobro ? (
+              // ws1-t6: se cobra por conceptos aceptados, con revisión previa.
+              // Las facturas que ya salieron se abren desde la línea de cobro.
+              cobro.porCargar > 0 && puedeCargar && (
+                <Accion tono="exito" onClick={() => setCobrando(true)}>
+                  <ReceiptText size={13} />
+                  {cobro.cargado > 0 ? t("presupuestoAceptacion.cargarMas") : t("presupuestoAceptacion.cobrarBoton")}
+                </Accion>
+              )
+            ) : (
+              <Accion
+                tono="exito"
+                onClick={async () => {
+                  if (quote.invoiceId) { onVerFactura?.(quote.invoiceId); return; }
+                  const salida = await post(`/api/quotes/${quote.id}/invoice`);
+                  if (salida?.invoice) onFacturaCreada?.(salida.invoice);
+                  if (salida?.invoiceId) onVerFactura?.(salida.invoiceId);
+                }}
+              >
+                <ReceiptText size={13} />
+                {quote.invoiceId ? t("quotes.card.viewInvoice") : t("quotes.card.generateInvoice")}
+              </Accion>
+            )}
             <Accion
               tono="principal"
               onClick={async () => {
@@ -361,6 +399,21 @@ function Ficha({
           </Accion>
         )}
       </div>
+
+      {aceptando && (
+        <AceptarConceptos quote={quote} onCerrar={() => setAceptando(false)} onAceptado={onRecargar} />
+      )}
+      {cobrando && (
+        <CobrarPresupuesto
+          quote={quote}
+          onCerrar={() => setCobrando(false)}
+          onVerFactura={onVerFactura}
+          onCargado={async (inv) => {
+            onFacturaCreada?.(inv);
+            await onRecargar();
+          }}
+        />
+      )}
 
       {mensaje && <p className={s.fichaMensaje}>{mensaje}</p>}
       {waEnviado && (

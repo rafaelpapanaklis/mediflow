@@ -1,0 +1,394 @@
+/* ═══════════════════════════════════════════════════════════════════
+   «¿Qué acepta el paciente?» y «Se cobrará hoy» (ws1-t6).
+
+   Los dos cuadros van en un portal con las clases de la raíz del
+   rediseño (CLASES_REDISENO), así heredan los tokens `--pr-*` igual
+   dentro de la ficha rediseñada que en la de siempre. Sin hex: todo
+   color es un token con su versión oscura en rediseno.module.css.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(16px, 7vh, 64px) 16px 16px;
+  background: color-mix(in srgb, var(--pr-texto) 45%, transparent);
+  overflow-y: auto;
+}
+
+.dialogo {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 600px;
+  max-height: calc(100vh - 32px);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  box-shadow: var(--pr-sombra-2);
+  color: var(--pr-texto);
+  overflow: hidden;
+}
+
+.cabeza {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 10px;
+}
+
+.cabezaTextos { flex: 1; min-width: 0; }
+
+.titulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+.cerrar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--pr-radio-s);
+  background: transparent;
+  color: var(--pr-texto-3);
+  cursor: pointer;
+}
+.cerrar:hover { background: var(--pr-hover); color: var(--pr-texto); }
+.cerrar:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.seccionTitulo {
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--pr-texto-3);
+}
+
+.atajos {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.atajo {
+  border: 0;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pr-activo);
+  cursor: pointer;
+}
+.atajo:hover { background: var(--pr-activo-suave); }
+.atajo:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  overflow: hidden;
+}
+
+.renglon {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  background: var(--pr-tarjeta);
+}
+.renglon:last-child { border-bottom: 0; }
+
+label.renglon { cursor: pointer; }
+label.renglon:hover { background: var(--pr-tarjeta-2); }
+
+.renglonApagado { background: var(--pr-tarjeta-2); }
+.renglonApagado .renglonNombre,
+.renglonApagado .renglonMonto { color: var(--pr-texto-3); }
+
+.casilla {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  accent-color: var(--pr-activo);
+  cursor: pointer;
+}
+
+.renglonTexto { flex: 1; min-width: 0; }
+
+.renglonNombre {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.renglonDetalle {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+.renglonMonto {
+  flex-shrink: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.renglonTachado {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+  text-decoration: line-through;
+}
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.etiquetaExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.etiquetaNeutra { background: var(--pr-hover); color: var(--pr-texto-3); }
+.etiquetaAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.etiquetaVioleta { background: var(--pr-activo-suave); color: var(--pr-activo); }
+
+button.etiqueta { border: 0; font-family: inherit; cursor: pointer; }
+button.etiqueta:hover { filter: brightness(0.97); text-decoration: underline; }
+button.etiqueta:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+/* Abono */
+.abono {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.campoDinero {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+}
+.campoDinero:focus-within { border-color: var(--pr-activo); box-shadow: var(--pr-foco); }
+.campoDinero span { color: var(--pr-texto-3); font-size: 13px; }
+.campoDinero input {
+  width: 110px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  padding-left: 4px;
+}
+
+.sugerencia {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sugerencia:hover { border-color: var(--pr-activo); color: var(--pr-activo); }
+.sugerencia:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.pista {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pr-texto-3);
+}
+
+/* «Se cobrará hoy» / totales */
+.resumen {
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  padding: 12px 14px;
+}
+
+.resumenTitulo {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.resumenLinea {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--pr-texto-2);
+  padding: 2px 0;
+}
+.resumenLinea span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.resumenTotal {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pr-borde);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pr-activo);
+}
+.resumenTotal span:last-child { font-variant-numeric: tabular-nums; }
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cifra {
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  padding: 8px 10px;
+  min-width: 0;
+}
+.cifraEtiqueta { display: block; font-size: 11px; color: var(--pr-texto-3); }
+.cifraValor {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.aviso {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+  color: var(--pr-texto-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.estado {
+  margin: 0;
+  padding: 18px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.pie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  border-top: 1px solid var(--pr-borde);
+  background: var(--pr-tarjeta);
+}
+
+/* La nota va en su propia fila: así los dos botones quedan juntos. */
+.pieNota {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+/* Tarjeta de la lista: la línea «Aceptado … · cargado … · por cargar …». */
+.lineaCobro {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--pr-texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.facturas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .velo { padding: 0; align-items: stretch; }
+  .dialogo {
+    max-width: none;
+    max-height: none;
+    min-height: 100%;
+    border-radius: 0;
+    border: 0;
+  }
+  .cifra { padding: 7px 8px; }
+  .cifraValor { font-size: 13px; }
+  .pie { position: sticky; bottom: 0; }
+  .pie > button { flex: 1 1 auto; }
+}

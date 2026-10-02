@@ -13,6 +13,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PresupuestoEditor } from "@/components/dashboard/presupuesto-nuevo/editor";
 import { PresupuestoLista } from "@/components/dashboard/presupuesto-nuevo/lista";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { AceptarConceptos, CobrarPresupuesto, LineaDeCobro } from "@/components/dashboard/presupuesto-nuevo/aceptacion-y-cobro";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -173,6 +174,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrir
         onRecargar={load}
         onVerFactura={onViewInvoice}
         onVerPlan={onViewPlan}
+        onFacturaCreada={onInvoiceCreated}
       />
     );
   }
@@ -224,7 +226,13 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [waSent, setWaSent] = useState(false);
-  const cfg = STATUS_CFG[quote.status] ?? STATUS_CFG.DRAFT;
+  // ws1-t6: «¿Qué acepta el paciente?» y «Se cobrará hoy» (con el SQL aplicado).
+  const [aceptando, setAceptando] = useState(false);
+  const [cobrando, setCobrando] = useState(false);
+  const cobro = quote.cobro;
+  const puedeAceptar = quote.permisos?.aceptar ?? true;
+  const puedeCargar = quote.permisos?.cargar ?? true;
+  const cfg = STATUS_CFG[cobro?.alcance === "parcial" ? "EXPIRED" : quote.status] ?? STATUS_CFG.DRAFT;
 
   const post = useCallback(async (url: string, body?: unknown) => {
     setBusy(true); setMsg(null);
@@ -311,7 +319,9 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs font-bold text-muted-foreground">{quote.folio}</span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>{t(cfg.labelKey)}</span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+              {cobro?.alcance === "parcial" ? t("presupuestoAceptacion.estadoParcial") : t(cfg.labelKey)}
+            </span>
             {quote.invoiceId && (
               <span className="text-[10px] font-semibold text-emerald-600 inline-flex items-center gap-1"><ReceiptText size={11} /> {t("quotes.card.invoiced")}</span>
             )}
@@ -324,6 +334,7 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
             {t("quotes.card.itemCount", { count: quote.items.length })}
             {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fmtDate(quote.validUntil) })}` : ""}
           </div>
+          {cobro && <LineaDeCobro cobro={cobro} total={quote.total} onVerFactura={onViewInvoice} />}
         </div>
         <div className="text-right flex-shrink-0">
           <div className="text-lg font-bold text-foreground">{money(quote.total)}</div>
@@ -359,12 +370,23 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
             <Btn onClick={copyLink} tone="primary">
               {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? t("quotes.card.copied") : t("quotes.card.copyLink")}
             </Btn>
-            <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "accept" })} tone="success">
-              <CheckCircle2 size={12} /> {t("quotes.card.markAccepted")}
-            </Btn>
-            <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "reject" })} tone="danger">
-              <XCircle size={12} /> {t("quotes.card.markRejected")}
-            </Btn>
+            {puedeAceptar && (
+              <>
+                <Btn
+                  onClick={() =>
+                    quote.porConcepto && quote.items.length > 1
+                      ? setAceptando(true)
+                      : post(`/api/quotes/${quote.id}/status`, { action: "accept" })
+                  }
+                  tone="success"
+                >
+                  <CheckCircle2 size={12} /> {t("quotes.card.markAccepted")}
+                </Btn>
+                <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "reject" })} tone="danger">
+                  <XCircle size={12} /> {t("quotes.card.markRejected")}
+                </Btn>
+              </>
+            )}
           </>
         )}
 
@@ -382,6 +404,14 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
 
         {quote.status === "ACCEPTED" && (
           <>
+            {cobro ? (
+              cobro.porCargar > 0 && puedeCargar && (
+                <Btn onClick={() => setCobrando(true)} tone="success">
+                  <ReceiptText size={12} />{" "}
+                  {cobro.cargado > 0 ? t("presupuestoAceptacion.cargarMas") : t("presupuestoAceptacion.cobrarBoton")}
+                </Btn>
+              )
+            ) : (
             <Btn
               onClick={async () => {
                 // Ya facturado → abre la factura (modal del expediente). Si no,
@@ -397,6 +427,7 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
             >
               <ReceiptText size={12} /> {quote.invoiceId ? t("quotes.card.viewInvoice") : t("quotes.card.generateInvoice")}
             </Btn>
+            )}
             <Btn
               onClick={async () => {
                 // Ya tiene plan → ábrelo (tab Tratamiento). Si no, créalo y ábrelo.
@@ -443,6 +474,21 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
           <Btn onClick={del} tone="danger"><Trash2 size={12} /> {t("quotes.card.delete")}</Btn>
         )}
       </div>
+
+      {aceptando && (
+        <AceptarConceptos quote={quote} onCerrar={() => setAceptando(false)} onAceptado={onChanged} />
+      )}
+      {cobrando && (
+        <CobrarPresupuesto
+          quote={quote}
+          onCerrar={() => setCobrando(false)}
+          onVerFactura={onViewInvoice}
+          onCargado={async (inv) => {
+            onInvoiceCreated?.(inv);
+            await onChanged();
+          }}
+        />
+      )}
 
       {msg && <p className="text-[11px] text-rose-600 mt-2">{msg}</p>}
       {waSent && (

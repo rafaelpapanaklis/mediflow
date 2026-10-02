@@ -7,6 +7,7 @@ import { distinctPhaseCount } from "@/lib/quotes/compute";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
 import { conceptosGenerales } from "@/lib/quotes/ortodoncia";
+import { conceptosAceptados } from "@/lib/quotes/cargos.server";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    include: { items: { select: { phase: true, name: true, lineTotal: true } } },
+    include: { items: { select: { id: true, phase: true, name: true, lineTotal: true } } },
   });
   if (!quote) return NextResponse.json({ error: "Presupuesto no encontrado" }, { status: 404 });
 
@@ -73,8 +74,13 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
   }
 
+  // Solo lo que el paciente ACEPTÓ (ws1-t6): de un presupuesto aceptado en
+  // parte, el plan lleva esos conceptos y su costo, no el presupuesto entero.
+  const aceptados = await conceptosAceptados(ctx.clinicId, quote.id, quote.items);
+  const parcial = aceptados.length < quote.items.length;
+
   // De ortodoncia y con el módulo: se ofrece el caso, no un plan general.
-  const caso = (await casosDesdePresupuestos(ctx, [quote])).get(quote.id);
+  const caso = (await casosDesdePresupuestos(ctx, [{ ...quote, items: aceptados }])).get(quote.id);
   const soloElResto = !!caso?.conPlanGeneral && req.nextUrl.searchParams.get("general") === "1";
   if (caso && !soloElResto) {
     // Sin el permiso del módulo tampoco se crea el plan general: se dice
@@ -85,7 +91,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const doctorId = quote.createdById ?? ctx.userId;
   // Mixto: el plan general solo lleva lo que no es de ortodoncia.
-  const items = soloElResto ? conceptosGenerales(quote.items) : quote.items;
+  const items = soloElResto ? conceptosGenerales(aceptados) : aceptados;
   const totalSessions = distinctPhaseCount(items.map((i) => ({ phase: i.phase == null ? null : Number(i.phase) })));
   const sessionIntervalDays = 30;
   const startDate = new Date();
@@ -101,7 +107,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       description: `Generado desde presupuesto ${quote.folio}`,
       totalSessions,
       sessionIntervalDays,
-      totalCost: soloElResto
+      totalCost: soloElResto || parcial
         ? Math.round(items.reduce((s, i) => s + (Number(i.lineTotal) || 0), 0) * 100) / 100
         : Number(quote.total) || 0,
       status: "ACTIVE",
