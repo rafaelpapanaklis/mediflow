@@ -4,6 +4,8 @@ import { useState } from "react";
 import { MessageSquare, Star, Flag, EyeOff } from "lucide-react";
 import { ReviewStars } from "@/components/reviews/ReviewStars";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 import {
   REVIEW_MAX_RESPONSE_CHARS,
   formatReviewDate,
@@ -111,6 +113,7 @@ function TarjetaResena({
   review: ClinicReviewDTO;
   onResponded: (r: ClinicReviewDTO) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -128,7 +131,7 @@ function TarjetaResena({
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErr(body.error ?? "No se pudo guardar.");
+        setErr(mensajeDeError(body, t, { estado: res.status, porDefecto: "No se pudo guardar." }));
         setSaving(false);
         return;
       }

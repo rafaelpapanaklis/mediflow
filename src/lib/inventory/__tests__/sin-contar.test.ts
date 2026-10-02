@@ -217,3 +217,32 @@ test("sin las columnas nuevas de la bitácora (SQL de ws1-t4 sin pegar) contar �
   assert.equal(db.history.length, 1, "se reintentó con las columnas de siempre");
   assert.equal((await idsSinContar("c1", db.items as any, fakePrisma as any)).has("a"), false);
 });
+
+// ── Sin «Editar inventario» no se ofrece lo que el servidor rechazaría (ws1-t2, fallo 10) ──
+// Recepción veía «Pulsa la cantidad de cada uno…», podía abrir el editor y recibía un 403.
+
+test("sin inventory.edit: la página lo calcula con el permiso real y el cliente no ofrece contar, comprar, dar de alta ni borrar", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const leer = (rel: string) => readFileSync(join(process.cwd(), "src", rel), "utf8");
+  const pagina = leer("app/dashboard/inventory/page.tsx");
+  assert.match(pagina, /puedeEditar=\{hasPermission\(user, "inventory\.edit"\)\}/);
+  const cliente = leer("app/dashboard/inventory/inventory-client.tsx");
+  // La guía de «Sin contar» no manda a pulsar la cantidad a quien no puede.
+  assert.match(cliente, /puedeEditar \? "procurement\.inventoryClient\.uncountedHint" : "procurement\.inventoryClient\.uncountedHintSoloLectura"/);
+  // El editor de cantidad solo se abre con permiso; sin él, la cantidad es texto.
+  assert.match(cliente, /const isEditing = puedeEditar && editQty\[item\.id\] !== undefined;/);
+  assert.match(cliente, /puedeEditar \? \(\s*<button\s+type="button"\s+onClick=\{\(\) => setEditQty/);
+  // Compra, alta, ±1, borrar, lotes y los campos de la fila.
+  assert.match(cliente, /\{puedeEditar && \(\s*<ButtonNew variant="secondary" onClick=\{\(\) => setShowCompra\(true\)\}/);
+  assert.match(cliente, /\{puedeEditar && \(\s*<ButtonNew variant="primary" icon=\{<Plus size=\{16\} strokeWidth=\{1\.75\} aria-hidden \/>\} onClick=\{\(\) => setShowAdd\(true\)\}/);
+  assert.match(cliente, /\{puedeEditar && \(\s*<div className=\{inv\.grupoAcciones\}>/);
+  assert.equal((cliente.match(/disabled=\{!puedeEditar\}/g) ?? []).length, 3, "mínimo, costo y proveedor");
+  // Con permiso (o sin la prop) todo sigue como siempre.
+  assert.match(cliente, /puedeEditar = true,/);
+  for (const lang of ["es", "en"]) {
+    const d = JSON.parse(leer(`i18n/dictionaries/${lang}.json`));
+    assert.ok(d.procurement.inventoryClient.uncountedHintSoloLectura, `falta uncountedHintSoloLectura en ${lang}`);
+    assert.ok(!/pulsa|click/i.test(d.procurement.inventoryClient.uncountedHintSoloLectura), `la guía de solo lectura no manda a pulsar (${lang})`);
+  }
+});

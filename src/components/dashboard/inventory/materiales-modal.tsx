@@ -12,6 +12,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import toast from "react-hot-toast";
 import { Loader2, Plus, Trash2, X } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de la lista. Antes los
 // bordes pedían `--border-1`, que no existe: las filas salían sin borde.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
@@ -44,6 +46,7 @@ export function MaterialesModal({
    */
   rediseno?: boolean;
 }) {
+  const t = useT();
   const redisenoDetectado = useRedisenoActivo();
   const ropa = ropaVentana(rediseno ?? redisenoDetectado);
   const [lineas, setLineas] = useState<Linea[] | null>(null);
@@ -85,7 +88,7 @@ export function MaterialesModal({
         body: JSON.stringify({ itemId: nuevo.itemId, quantity }),
       });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? "No se pudo guardar"); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { estado: res.status, porDefecto: "No se pudo guardar" })); return; }
       setLineas(data.lines);
       setNuevo({ itemId: "", quantity: "" });
     } catch {
@@ -99,7 +102,7 @@ export function MaterialesModal({
     try {
       const res = await fetch(`/api/procedures/${procedureId}/materials?itemId=${encodeURIComponent(itemId)}`, { method: "DELETE" });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? "No se pudo quitar"); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { estado: res.status, porDefecto: "No se pudo quitar" })); return; }
       setLineas(data.lines);
     } catch {
       toast.error("No se pudo quitar");

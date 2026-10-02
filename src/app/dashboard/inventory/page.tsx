@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { listarInventarioConConteo } from "@/lib/inventory/sin-contar.server";
@@ -174,6 +175,8 @@ export default async function InventoryPage() {
       initialItems={items as any}
       specialty={user.clinic.specialty}
       rediseno={rediseno}
+      // Sin «Editar inventario» la pantalla se ve pero no ofrece lo que el servidor rechazaría (403).
+      puedeEditar={hasPermission(user, "inventory.edit")}
       // ws1-t5 (arreglo): la zona de la clínica, para que «Registrar compra»
       // proponga su HOY y no el de UTC.
       timezone={user.clinic.timezone ?? null}

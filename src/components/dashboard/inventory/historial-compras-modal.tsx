@@ -10,6 +10,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import toast from "react-hot-toast";
 import { X, ChevronDown, ChevronRight, FileText, Image as ImageIcon, Upload, Loader2, ReceiptText } from "lucide-react";
 import { fmtMXN } from "@/lib/format";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de la lista.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
@@ -47,6 +49,7 @@ export function HistorialComprasModal({
   /** Zona horaria de la clínica: en ella se lee el día de cada compra. */
   timezone?: string | null;
 }) {
+  const t = useT();
   const ropa = ropaVentana(rediseno, "ancha");
   const [compras, setCompras] = useState<Compra[] | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -71,7 +74,7 @@ export function HistorialComprasModal({
       formData.append("file", file);
       const res = await fetch(`/api/inventory/purchases/${purchaseId}/comprobante`, { method: "POST", body: formData });
       const data = await res.json().catch(() => null);
-      if (!res.ok) { toast.error(data?.error ?? "No se pudo subir el comprobante."); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { estado: res.status, porDefecto: "No se pudo subir el comprobante." })); return; }
       setCompras((prev) => prev?.map((c) => c.id === purchaseId
         ? { ...c, receiptFileUrl: data.receiptFileUrl, receiptFileName: data.receiptFileName }
         : c) ?? null);

@@ -4749,6 +4749,7 @@
       "filterUncounted": "Not counted",
       "badgeUncounted": "Not counted",
       "uncountedHint": "These items have never been counted, so it isn't known whether anything is missing. Click each quantity and enter what you have (enter 0 if you have none) so Inventory and the Today alerts reflect what is really in stock.",
+      "uncountedHintSoloLectura": "These items have never been counted, so it isn't known whether anything is missing. Ask someone who can edit the inventory to enter what is in stock (0 if none) so Inventory and the Today alerts reflect what is really there.",
       "icon": "Icon",
       "nameRequired": "Name is required",
       "itemAdded": "Item added",

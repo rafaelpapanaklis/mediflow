@@ -14,6 +14,8 @@ import toast from "react-hot-toast";
 import { Info, Plus, Trash2, X } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN } from "@/lib/format";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de las líneas.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
 import { ropaVentana } from "@/components/dashboard/cobros-inventario-rediseno/ventana";
@@ -43,6 +45,7 @@ export function CompraModal({
   /** Zona horaria de la clínica: de ella sale la fecha que se propone. */
   timezone?: string | null;
 }) {
+  const t = useT();
   const ropa = ropaVentana(rediseno, "media");
   // Se genera UNA vez por apertura del modal y se reenvía tal cual en un
   // reintento (doble clic) — @@unique([clinicId, idempotencyKey]) en la base
@@ -120,7 +123,7 @@ export function CompraModal({
         }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) { toast.error(data?.error ?? "No se pudo registrar la compra."); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { estado: res.status, porDefecto: "No se pudo registrar la compra." })); return; }
       onRegistrada({ items: data.items, expenseId: data.expenseId, total: data.total });
       toast.success(data.yaExistia ? "Esa compra ya estaba registrada." : `Compra registrada — ${fmtMXN(data.total)}`);
       onClose();

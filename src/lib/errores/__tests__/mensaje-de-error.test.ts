@@ -14,6 +14,7 @@ import { join } from "node:path";
 import {
   CODIGOS_DE_ERROR,
   FRASES_EN_INGLES,
+  esFraseEnEspanol,
   mensajeDeError,
   mensajeDeRespuesta,
   pareceCodigo,
@@ -81,6 +82,51 @@ test("una frase que ya escribió una persona se respeta; las frases HTTP en ingl
   assert.equal(mensajeDeError(new TypeError("Failed to fetch"), tEs), tEs("errores.red"));
 });
 
+test("lo técnico del navegador o de una librería NUNCA se enseña: su frase, o la de la pantalla, o la genérica", () => {
+  // El servidor devolvió HTML (502, deploy) y `res.json()` lanzó: «algo salió mal de nuestro lado».
+  for (const m of [
+    "Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON",
+    "JSON.parse: unexpected character at line 1 column 1 of the JSON data",
+    "Unexpected end of JSON input",
+  ]) assert.equal(mensajeDeError(new SyntaxError(m), tEs), tEs("errores.interno"), m);
+  // Se cortó o se agotó la espera: sin conexión.
+  for (const m of ["The operation was aborted.", "timeout of 10000ms exceeded", "fetch failed", "Network request failed"]) {
+    assert.equal(mensajeDeError(new Error(m), tEs), tEs("errores.red"), m);
+  }
+  // Errores de código o de Prisma: lo de la pantalla; sin nada, lo genérico.
+  for (const m of [
+    "Request failed with status code 500",
+    "Cannot read properties of undefined (reading 'id')",
+    "HTTP 502",
+    "Invalid `prisma.patient.update()` invocation:\n\nUnique constraint failed on the fields: (`email`)",
+    "No connection to server",
+    "Something went wrong",
+  ]) {
+    assert.equal(mensajeDeError(new Error(m), tEs, { porDefecto: "No se pudo guardar." }), "No se pudo guardar.", m);
+    assert.equal(mensajeDeError(new Error(m), tEs), tEs("errores.generico"), m);
+  }
+  // Con el estado HTTP a la mano, el estado manda sobre lo genérico.
+  assert.equal(mensajeDeError(new Error("HTTP 502"), tEs, { estado: 502 }), tEs("errores.interno"));
+});
+
+test("una frase en español, con o sin tilde, se respeta; en inglés técnico no", () => {
+  for (const f of [
+    "Paciente no encontrado",
+    "El monto excede el saldo pendiente",
+    "Nombre y categoría son requeridos",
+    "Proveedor no encontrado en esta clínica",
+    "No tienes permiso para «Editar inventario». Pídeselo al administrador.",
+    "El CFDI de este pago SÍ se timbró (UUID 1234-ABCD), pero algo falló después. No lo vuelvas a timbrar.",
+    "El token de WhatsApp caducó: vuelve a conectarlo.",
+  ]) {
+    assert.ok(esFraseEnEspanol(f), f);
+    assert.equal(mensajeDeError(new Error(f), tEs), f);
+  }
+  for (const f of ["The operation was aborted.", "Request failed with status code 500", "HTTP 502", "No connection to server"]) {
+    assert.ok(!esFraseEnEspanol(f), f);
+  }
+});
+
 test("un código que no conocemos NUNCA se enseña: estado HTTP, luego lo de la pantalla, luego lo genérico", () => {
   assert.equal(mensajeDeError("algo_raro_nuevo", tEs, { estado: 500 }), tEs("errores.interno"));
   assert.equal(mensajeDeError("algo_raro_nuevo", tEs, { estado: 403 }), tEs("errores.permiso"));
@@ -132,6 +178,16 @@ const PANTALLAS = [
   "components/dashboard/nota-evolucion/nota-evolucion-panel.tsx",
   "components/dashboard/new-patient-modal.tsx",
   "components/dashboard/factura-un-popup/use-cobro.ts",
+  // Ronda de revisión (ws1-t2, fallos 1 y 9): Nueva cita y los modales que enseñaban `data.error` a pelo.
+  "components/dashboard/new-appointment/new-appointment-dialog.tsx",
+  "components/dashboard/inventory/lotes-modal.tsx",
+  "components/dashboard/inventory/materiales-modal.tsx",
+  "components/dashboard/pequenas-rediseno/resenas.tsx",
+  "components/dashboard/bot-aprende/valorar-respuesta.tsx",
+  "components/dashboard/billing/payment-cfdi-button.tsx",
+  "components/dashboard/inventory/compra-modal.tsx",
+  "components/dashboard/inventory/historial-compras-modal.tsx",
+  "app/dashboard/inventory/inventory-client.tsx",
 ];
 
 test("agenda, ficha, cobros y subidas: ningún toast.error pinta `err.message`/`x.error` a pelo — todos pasan por mensajeDeError", () => {
@@ -142,6 +198,21 @@ test("agenda, ficha, cobros y subidas: ningún toast.error pinta `err.message`/`
     assert.deepEqual(lineas, [], `${rel} enseña un error crudo:\n${lineas.join("\n")}`);
     assert.ok(texto.includes("mensajeDeError"), `${rel} no usa mensajeDeError`);
   }
+});
+
+test("esos mismos archivos tampoco pasan `x.error ?? \"…\"` a un toast ni a un aviso en pantalla", () => {
+  const CRUDO = /(?:toast\.error|setErr|setError|setBloqueado)\(\s*\w+\??\.error\s*\?\?/;
+  const NUEVOS = PANTALLAS.slice(-9);
+  for (const rel of NUEVOS) {
+    const texto = readFileSync(join(process.cwd(), "src", rel), "utf8");
+    const lineas = texto.split("\n").filter((l) => CRUDO.test(l));
+    assert.deepEqual(lineas, [], `${rel} enseña un error crudo:\n${lineas.join("\n")}`);
+  }
+  const cita = readFileSync(join(process.cwd(), "src", NUEVOS[0]), "utf8");
+  assert.match(cita, /mensajeDeError\(errBody, t, \{\s*estado: res\.status,/);
+  // La rama del doctor que no puede recibir citas (ws1-t10) y las reglas del servidor siguen mandando antes que el traductor.
+  assert.ok(cita.indexOf("bookingRuleMessage(errBody)") < cita.indexOf("mensajeDeError(errBody"));
+  assert.ok(cita.indexOf("FRASE_NO_RECIBE_CITAS") < cita.indexOf("mensajeDeError(errBody"));
 });
 
 test("el toast de adjuntar a la nota (el «upload_failed» del ticket) pasa por el traductor", () => {

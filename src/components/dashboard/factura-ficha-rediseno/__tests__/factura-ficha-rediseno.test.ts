@@ -112,7 +112,9 @@ test("mientras guarda el trato o envía, el popup no se cierra (solo diseño nue
 
 test("sin motivo del servidor no se afirma que NO se envió", () => {
   const ficha = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
-  assert.match(ficha, /r\.error \?\? t\("facturaFicha\.envioSinConfirmar"\)/);
+  // 12j: lo que dijo el servidor pasa por el traductor (un código nunca sale crudo) y, sin
+  // nada útil, el respaldo sigue siendo «no se sabe si salió».
+  assert.match(ficha, /mensajeDeError\(r, t, \{ porDefecto: t\("facturaFicha\.envioSinConfirmar"\) \}\)/);
   const modal = leer("components/billing/invoice-editor-modal.tsx");
   assert.match(modal, /r\.error \? `\$\{t\("facturaFicha\.creadaSinEnviar"\)\} \$\{r\.error\}` : t\("facturaFicha\.creadaEnvioSinConfirmar"\)/);
 });
@@ -202,7 +204,8 @@ test("enviar nunca falla en silencio", () => {
   assert.match(correo, /\(delivered \? enviados : fallos\)\.push\(d\)/);
   assert.match(correo, /if \(enviados\.length === 0\)[\s\S]*?status: 502/, "un correo que no salió no puede contestar ok");
   const ficha = leer("components/dashboard/factura-ficha-rediseno/fichas-factura.tsx");
-  assert.match(ficha, /disabled=\{enviando !== null \|\| sinTelefono \|\| esperando\}/, "WhatsApp sin teléfono no se deshabilita");
+  // Revisión ws1-t2 #6: también se apaga (con su motivo) si hoy no sale por WhatsApp.
+  assert.match(ficha, /disabled=\{enviando !== null \|\| sinTelefono \|\| waNoSale \|\| esperando\}/, "WhatsApp sin teléfono no se deshabilita");
   assert.match(ficha, /disabled=\{enviando !== null \|\| sinCorreo \|\| esperando\}/, "correo sin correo no se deshabilita");
   // El motivo va ESCRITO (un `title` no existe en un iPad).
   assert.match(ficha, /\{sinTelefono && <p className=\{s\.motivo\}>/, "falta el motivo de WhatsApp");

@@ -92,7 +92,8 @@ test("misma validación y mismos valores iniciales que la ventana de cobro", () 
     'setNotes("");',
     'toast.success(t("clinical.paymentModal.registerSuccess"));',
     'throw new Error(body.error ?? t("clinical.paymentModal.registerError"));',
-    'toast.error(err.message ?? t("clinical.paymentModal.registerErrorGeneric"));',
+    // 12j: el error del servidor pasa por el traductor (un código nunca sale crudo).
+    'toast.error(mensajeDeError(err, t, { porDefecto: t("clinical.paymentModal.registerErrorGeneric") }));',
   ]) {
     assert.ok(viejo.includes(linea), `la ventana de cobro ya no tiene: ${linea}`);
     assert.ok(nuevo.includes(linea), `el cobro en el detalle no tiene: ${linea}`);

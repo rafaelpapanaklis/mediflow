@@ -4749,6 +4749,7 @@
       "filterUncounted": "Sin contar",
       "badgeUncounted": "Sin contar",
       "uncountedHint": "Estos artículos nunca se han contado, por eso no se sabe si falta algo. Pulsa la cantidad de cada uno y escribe lo que tienes (si no tienes, escribe 0): así Inventario y los avisos de Hoy dicen lo que de verdad hay.",
+      "uncountedHintSoloLectura": "Estos artículos nunca se han contado, por eso no se sabe si falta algo. Pídele a quien pueda editar el inventario que escriba lo que hay (0 si no hay): así Inventario y los avisos de Hoy dicen lo que de verdad hay.",
       "icon": "Ícono",
       "nameRequired": "El nombre es requerido",
       "itemAdded": "Artículo agregado",

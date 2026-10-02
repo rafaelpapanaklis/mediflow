@@ -25,6 +25,7 @@ import type {
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
 import {
   ConfirmarBloqueo,
@@ -563,8 +564,12 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
             (errBody.error === "doctor_not_found"
               ? (typeof errBody.reason === "string" && errBody.reason) || FRASE_NO_RECIBE_CITAS
               : null) ??
-            errBody.error ??
-            t("appointments.newApptDialog.toastCreateFailed"),
+            // 12j: un código del servidor («internal_error», «forbidden»…) o un 401/404/429
+            // no se enseña crudo: pasa por el traductor, y lo de esta pantalla es el respaldo.
+            mensajeDeError(errBody, t, {
+              estado: res.status,
+              porDefecto: t("appointments.newApptDialog.toastCreateFailed"),
+            }),
         );
         setSubmitting(false);
         return;

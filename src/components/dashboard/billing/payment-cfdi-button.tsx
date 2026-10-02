@@ -114,7 +114,7 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
         // bloquea reintentar — un toast de 5s se perdería y un segundo click
         // pediría un segundo CFDI ante el SAT.
         if (data.code === "CFDI_TIMBRADO_SIN_GUARDAR" || data.code === "CFDI_TIMBRE_INCIERTO") {
-          setBloqueado(data.error ?? "El CFDI de este pago quedó en un estado incierto. No lo vuelvas a intentar.");
+          setBloqueado(mensajeDeError(data, t, { estado: res.status, porDefecto: "El CFDI de este pago quedó en un estado incierto. No lo vuelvas a intentar." }));
           return;
         }
         toast.error(mensajeDeError(data, t, { porDefecto: "No se pudo facturar este pago." }));

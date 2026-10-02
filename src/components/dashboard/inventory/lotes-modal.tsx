@@ -11,6 +11,8 @@ import toast from "react-hot-toast";
 import { Info, Loader2, Package, Plus, Trash2, X } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 // Diseño (ws1-t5): la ropa de la ventana y la maqueta de la lista. Antes los
 // bordes pedían `--border-1`, que no existe: las filas salían sin borde.
 import inv from "@/components/dashboard/cobros-inventario-rediseno/inventario.module.css";
@@ -54,6 +56,7 @@ export function LotesModal({
   /** ¿Diseño nuevo? Solo decide la ropa de la ventana. */
   rediseno?: boolean;
 }) {
+  const t = useT();
   const ropa = ropaVentana(rediseno, "media");
   const askConfirm = useConfirm();
   const [lotes, setLotes] = useState<Lote[] | null>(null);
@@ -100,7 +103,7 @@ export function LotesModal({
         }),
       });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? "No se pudo registrar el lote"); return; }
+      if (!res.ok) { toast.error(mensajeDeError(data, t, { estado: res.status, porDefecto: "No se pudo registrar el lote" })); return; }
       toast.success(`Lote registrado: +${quantity} ${unit}`);
       setForm({ lotNumber: "", expiresAt: "", quantity: "" });
       await cargar();
@@ -122,7 +125,7 @@ export function LotesModal({
     }))) return;
     try {
       const res = await fetch(`/api/inventory/${itemId}/lots/${loteId}/write-off`, { method: "POST" });
-      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? "No se pudo dar de baja"); return; }
+      if (!res.ok) { const d = await res.json(); toast.error(mensajeDeError(d, t, { estado: res.status, porDefecto: "No se pudo dar de baja" })); return; }
       toast.success("Lote dado de baja");
       await cargar();
     } catch {

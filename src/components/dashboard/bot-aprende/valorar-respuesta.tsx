@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useT } from "@/i18n/i18n-provider";
 import s from "./bot-aprende.module.css";
 
 export type ValorBot = "bien" | "mal";
@@ -29,6 +31,7 @@ export function ValorarRespuesta({
   puedeEditar: boolean;
   onGuardado?: (r: { valor: ValorBot; correccion: string | null }) => void;
 }) {
+  const t = useT();
   const [valor, setValor] = useState<ValorBot | null>(valorInicial);
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState(correccionInicial ?? "");
@@ -48,7 +51,7 @@ export function ValorarRespuesta({
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; aviso?: string | null; sugerencia?: string | null };
       if (!res.ok) {
-        setError(data.error ?? "No se pudo guardar.");
+        setError(mensajeDeError(data, t, { estado: res.status, porDefecto: "No se pudo guardar." }));
         return;
       }
       setValor(nuevo);

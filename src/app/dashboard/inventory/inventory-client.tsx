@@ -16,6 +16,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN }    from "@/lib/format";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import type { TFunction } from "@/i18n/t";
 // REDISEÑO DE INVENTARIO — la raíz que trae Instrument Sans y los tokens
 // `--inv-*`. Solo se monta con el interruptor `menu-dos-niveles` encendido
@@ -277,8 +278,15 @@ export function InventoryClient({
   initialItems,
   rediseno = false,
   timezone = null,
+  puedeEditar = true,
 }: {
   initialItems: Item[];
+  /**
+   * ¿Tiene «Editar inventario» (`inventory.edit`)? Sin él la pantalla se lee pero no
+   * ofrece contar, comprar, dar de alta, ajustar ni borrar: el servidor lo rechazaría
+   * con 403 y la persona se quedaba con un editor abierto que no iba a guardar.
+   */
+  puedeEditar?: boolean;
   specialty?: string;
   /**
    * La zona horaria de la clínica. Para que «Registrar compra» proponga el
@@ -473,7 +481,7 @@ export function InventoryClient({
       const r = await leerRespuesta(res);
       const cantidad = r.ok ? cantidadDe(r.datos) : null;
       if (!r.ok || cantidad === null) {
-        toast.error(r.error ?? t("common.genericError"));
+        toast.error(mensajeDeError(r.error, t, { porDefecto: t("common.genericError") }));
         return;
       }
       // 12f: guardar una cantidad (aun 0) es contar: deja de ser «Sin contar».
@@ -497,7 +505,7 @@ export function InventoryClient({
       const r = await leerRespuesta(res);
       const cantidad = r.ok ? cantidadDe(r.datos) : null;
       if (!r.ok || cantidad === null) {
-        toast.error(r.error ?? t("common.genericError"));
+        toast.error(mensajeDeError(r.error, t, { porDefecto: t("common.genericError") }));
         return;
       }
       setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: cantidad, sinContar: false } : i));
@@ -518,7 +526,7 @@ export function InventoryClient({
         body: JSON.stringify({ minQuantity: min }),
       });
       const r = await leerRespuesta(res);
-      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return false; }
+      if (!r.ok) { toast.error(mensajeDeError(r.error, t, { porDefecto: t("common.genericError") })); return false; }
       setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: min } : i));
       return true;
     } catch { toast.error(t("common.genericError")); return false; }
@@ -537,7 +545,7 @@ export function InventoryClient({
         body: JSON.stringify({ unitCost: cost }),
       });
       const r = await leerRespuesta(res);
-      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return false; }
+      if (!r.ok) { toast.error(mensajeDeError(r.error, t, { porDefecto: t("common.genericError") })); return false; }
       setItems(prev => prev.map(i => i.id === id ? { ...i, unitCost: cost } : i));
       return true;
     } catch { toast.error(t("common.genericError")); return false; }
@@ -582,7 +590,7 @@ export function InventoryClient({
       // creó, la ventana sigue abierta con lo escrito y dice por qué.
       const r = await leerRespuesta<Item>(res);
       if (!r.ok || !esArticulo(r.datos)) {
-        toast.error(r.error ?? t("common.genericError"));
+        toast.error(mensajeDeError(r.error, t, { porDefecto: t("common.genericError") }));
         return;
       }
       const created = r.datos as Item;
@@ -626,7 +634,7 @@ export function InventoryClient({
     try {
       const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
       const r = await leerRespuesta(res);
-      if (!r.ok) { toast.error(r.error ?? t("common.genericError")); return; }
+      if (!r.ok) { toast.error(mensajeDeError(r.error, t, { porDefecto: t("common.genericError") })); return; }
       setItems(prev => prev.filter(i => i.id !== id));
       toast.success(t("procurement.inventoryClient.deleted"));
     } catch { toast.error(t("common.genericError")); }
@@ -654,12 +662,16 @@ export function InventoryClient({
           <ButtonNew variant="ghost" onClick={() => setShowHistorial(true)}>
             Historial de compras
           </ButtonNew>
-          <ButtonNew variant="secondary" onClick={() => setShowCompra(true)}>
-            {t("procurement.inventoryClient.registerPurchase")}
-          </ButtonNew>
-          <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} aria-hidden />} onClick={() => setShowAdd(true)}>
-            {t("procurement.inventoryClient.newItem")}
-          </ButtonNew>
+          {puedeEditar && (
+            <ButtonNew variant="secondary" onClick={() => setShowCompra(true)}>
+              {t("procurement.inventoryClient.registerPurchase")}
+            </ButtonNew>
+          )}
+          {puedeEditar && (
+            <ButtonNew variant="primary" icon={<Plus size={16} strokeWidth={1.75} aria-hidden />} onClick={() => setShowAdd(true)}>
+              {t("procurement.inventoryClient.newItem")}
+            </ButtonNew>
+          )}
         </div>
       </div>
 
@@ -771,7 +783,9 @@ export function InventoryClient({
       </div>
 
       {tab === "sin_contar" && kpis.sinContarCount > 0 && (
-        <p className={inv.guiaConteo}>{t("procurement.inventoryClient.uncountedHint")}</p>
+        <p className={inv.guiaConteo}>
+          {t(puedeEditar ? "procurement.inventoryClient.uncountedHint" : "procurement.inventoryClient.uncountedHintSoloLectura")}
+        </p>
       )}
 
       {/* Lista */}
@@ -805,7 +819,7 @@ export function InventoryClient({
                   Ver todos
                 </ButtonNew>
               )}
-              {items.length === 0 && (
+              {items.length === 0 && puedeEditar && (
                 <ButtonNew variant="primary" size="sm" icon={<Plus size={16} strokeWidth={1.75} aria-hidden />} onClick={() => setShowAdd(true)}>
                   {t("procurement.inventoryClient.addFirstItem")}
                 </ButtonNew>
@@ -833,7 +847,7 @@ export function InventoryClient({
             <tbody>
               {filtered.map(item => {
                 const isLoad    = loadingIds.has(item.id);
-                const isEditing = editQty[item.id] !== undefined;
+                const isEditing = puedeEditar && editQty[item.id] !== undefined;
                 const status    = getStatus(item);
                 const iconId    = item.emoji && DENTAL_ICONS.find(i => i.id === item.emoji)
                   ? item.emoji
@@ -881,25 +895,36 @@ export function InventoryClient({
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantityTotal ?? item.quantity) }))}
-                          className={`${inv.cantidad} ${TONO_CANTIDAD[status] ?? ""}`}
-                          title={t("procurement.inventoryClient.clickToEdit")}
-                        >
-                          {item.quantity}
-                          <span className={inv.cantidadUnidad}>{item.unit}</span>
-                        </button>
+                        puedeEditar ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantityTotal ?? item.quantity) }))}
+                            className={`${inv.cantidad} ${TONO_CANTIDAD[status] ?? ""}`}
+                            title={t("procurement.inventoryClient.clickToEdit")}
+                          >
+                            {item.quantity}
+                            <span className={inv.cantidadUnidad}>{item.unit}</span>
+                          </button>
+                        ) : (
+                          <span className={`${inv.cantidad} ${TONO_CANTIDAD[status] ?? ""}`}>
+                            {item.quantity}
+                            <span className={inv.cantidadUnidad}>{item.unit}</span>
+                          </span>
+                        )
                       )}
                       {item.caducados ? (
-                        <button
-                          type="button"
-                          onClick={() => setLotesItem(item)}
-                          className={inv.caducadosLeyenda}
-                          title="Estas unidades no cuentan como existencias: abre los lotes para darlas de baja"
-                        >
-                          caducados: {item.caducados} · dar de baja
-                        </button>
+                        puedeEditar ? (
+                          <button
+                            type="button"
+                            onClick={() => setLotesItem(item)}
+                            className={inv.caducadosLeyenda}
+                            title="Estas unidades no cuentan como existencias: abre los lotes para darlas de baja"
+                          >
+                            caducados: {item.caducados} · dar de baja
+                          </button>
+                        ) : (
+                          <span className={inv.caducadosLeyenda}>caducados: {item.caducados}</span>
+                        )
                       ) : null}
                     </td>
                     <td className={`${inv.colMinimo} ${inv.num}`} data-rotulo={t("procurement.inventoryClient.colMinimum")}>
@@ -907,6 +932,7 @@ export function InventoryClient({
                         type="number" min={0}
                         className={`input-new ${inv.celda} ${inv.celdaCorta}`}
                         aria-label={`${t("procurement.inventoryClient.colMinimum")}: ${item.name}`}
+                        disabled={!puedeEditar}
                         defaultValue={item.minQuantity}
                         onBlur={e => {
                           const campo = e.currentTarget;
@@ -933,6 +959,7 @@ export function InventoryClient({
                         type="number" min={0} step="0.01"
                         className={`input-new ${inv.celda} ${inv.celdaMedia}`}
                         aria-label={`${t("procurement.inventoryClient.colUnitCost")}: ${item.name}`}
+                        disabled={!puedeEditar}
                         defaultValue={item.unitCost}
                         onBlur={e => {
                           const campo = e.currentTarget;
@@ -953,6 +980,7 @@ export function InventoryClient({
                         className={`input-new ${inv.celda} ${inv.celdaLarga}`}
                         aria-label={`${t("procurement.inventoryClient.fieldProvider")}: ${item.name}`}
                         value={item.providerId ?? ""}
+                        disabled={!puedeEditar}
                         onChange={e => updateProvider(item.id, e.target.value)}
                       >
                         <option value="">{t("procurement.inventoryClient.noProvider")}</option>
@@ -963,6 +991,7 @@ export function InventoryClient({
                     </td>
                     <td className={inv.colEstado}>{statusBadge(status, t)}</td>
                     <td className={inv.colAcciones}>
+                      {puedeEditar && (
                       <div className={inv.grupoAcciones}>
                         <button
                           type="button"
@@ -1005,6 +1034,7 @@ export function InventoryClient({
                           <Trash2 size={16} strokeWidth={1.75} aria-hidden />
                         </button>
                       </div>
+                      )}
                     </td>
                   </tr>
                 );
