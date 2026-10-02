@@ -5,10 +5,12 @@
  * src/app/api/appointments/__tests__/llega-hoy-cita-futura.test.ts.
  * Run: npm run test:cita-futura-llega-hoy
  */
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { debeAdelantarseAHoy, motivoDelSobreturno, planDeAdelanto, rangoAdelantado } from "../adelanto-a-hoy-regla";
 import { adelantoDeLaRespuesta, textoDelAdelanto } from "../adelanto-texto";
 import { iniciarConsultaArrancaLaCita, motivoParaNoIniciar } from "@/lib/patients/proxima-cita";
@@ -127,6 +129,40 @@ describe("la firma de la hoja ya no trata como futura una cita con el paciente p
       "src/app/dashboard/appointments/appointments-client.tsx",
     ]) {
       assert.match(readFileSync(join(process.cwd(), rel), "utf8"), /textoDelAdelanto\(adelanto\)/, rel);
+    }
+  });
+});
+
+describe("«Marcar llegada» de la Agenda nueva (patchAppointmentStatus) avisa del adelanto", () => {
+  // ws1-t10 (revisión final, fallo 2): el aviso solo salía en el PATCH con motivo (cancelación); «Marcar llegada»
+  // va por patchAppointmentStatus, que lo tiraba, y la cita desaparecía de su día sin explicación.
+  it("con `adelantada` en la respuesta saca el aviso; sin ella, no", async () => {
+    const avisos: string[] = [];
+    const tostada = Object.assign((m: string) => void avisos.push(m), {
+      success: (m: string) => void avisos.push(m),
+      error: (m: string) => void avisos.push(m),
+    });
+    // mutations.ts entra por el require de tsx, que resuelve el `dist/index.js` (CJS) del paquete: el doble va
+    // sobre ESA ruta; con el especificador pelado se dobla la versión ESM y el aviso real se pierde en silencio.
+    const rutaCjs = createRequire(__filename).resolve("react-hot-toast");
+    (mock as any).module(pathToFileURL(rutaCjs).href, { defaultExport: tostada });
+    const { patchAppointmentStatus } = await import("../mutations");
+    const fetchOriginal = globalThis.fetch;
+    let respuesta: unknown;
+    globalThis.fetch = (async () => new Response(JSON.stringify(respuesta), { status: 200 })) as typeof fetch;
+    try {
+      const de = MANANA_10.toISOString();
+      const a = "2026-10-02T21:20:00.000Z";
+      respuesta = { appointment: { id: "a1" }, adelantada: { de, a, sinSillon: false, seCruzaCon: null } };
+      const cita = await patchAppointmentStatus("a1", "CHECKED_IN");
+      assert.equal((cita as { id: string }).id, "a1");
+      assert.deepEqual(avisos, [textoDelAdelanto({ de, a, sinSillon: false, seCruzaCon: null })]);
+      avisos.length = 0;
+      respuesta = { appointment: { id: "a1" }, adelantada: null };
+      await patchAppointmentStatus("a1", "CHECKED_IN");
+      assert.deepEqual(avisos, []);
+    } finally {
+      globalThis.fetch = fetchOriginal;
     }
   });
 });

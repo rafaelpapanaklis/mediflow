@@ -9,7 +9,9 @@ import type {
   WaitlistPriority,
   WeekScheduleDTO,
 } from "./types";
+import toast from "react-hot-toast";
 import { avisarResultadoWhatsApp, type ResultadoAvisoWhatsApp } from "./aviso-whatsapp";
+import { adelantoDeLaRespuesta, textoDelAdelanto } from "./adelanto-texto";
 
 export interface ApiError {
   status: number;
@@ -61,6 +63,11 @@ export async function patchAppointmentStatus(
   // Si tocaba avisar al paciente (cancelación con el aviso encendido), se dice
   // si salió o por qué no.
   avisarResultadoWhatsApp(body.whatsapp);
+  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se
+  // trajo a hoy. Aquí y no en cada pantalla: «Marcar llegada» de la Agenda nueva
+  // pasa por esta función y la cita desaparecía de su día sin explicación.
+  const adelanto = adelantoDeLaRespuesta(body);
+  if (adelanto) toast(textoDelAdelanto(adelanto), { duration: 10000 });
   return body.appointment;
 }
 
