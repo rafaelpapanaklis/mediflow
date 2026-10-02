@@ -2330,7 +2330,20 @@
       "extraoral": "Extraoral photo",
       "progress": "Progress",
       "consent": "Consent",
-      "other": "Other"
+      "other": "Other",
+      "cbct": "CBCT scan",
+      "cephalometric": "Lateral cephalometric X-ray",
+      "photoFrontal": "Frontal photo",
+      "photoLateral": "Lateral photo",
+      "photoOcclusalUpper": "Upper occlusal photo",
+      "photoOcclusalLower": "Lower occlusal photo",
+      "photoPatient": "Patient photo",
+      "orthoT0": "Orthodontic photos · initial (T0)",
+      "orthoT1": "Orthodontic photos · T1",
+      "orthoT2": "Orthodontic photos · final (T2)",
+      "orthoControl": "Orthodontic photo · control",
+      "cephPdf": "Cephalometric analysis (PDF)",
+      "scanStl": "3D model (STL)"
     },
     "pediatrics": {
       "dentition": "Dentition",
@@ -2644,7 +2657,15 @@
       "recommendations": "Recommendations",
       "disclaimerLead": "Diagnostic support tool.",
       "disclaimerBody": "This analysis is AI-generated and does NOT replace the professional's clinical judgment.",
-      "tokens": "Tokens used: {used} · Remaining: {remaining} / {limit}"
+      "tokens": "Tokens used: {used} · Remaining: {remaining} / {limit}",
+      "tipo": {
+        "titulo": "What type of file is this?",
+        "etiqueta": "File type",
+        "elige": "Choose the type…",
+        "sugerido": "Suggested from the file name; change it if it is wrong.",
+        "sinPista": "The file name doesn't say what it is: choose the type so it counts where it should.",
+        "subir": "Upload"
+      }
     },
     "billing": {
       "title": "Billing",
@@ -4725,6 +4746,9 @@
       "badgeOut": "Out of stock",
       "badgeLow": "Low",
       "badgeOk": "OK",
+      "filterUncounted": "Not counted",
+      "badgeUncounted": "Not counted",
+      "uncountedHint": "These items have never been counted, so it isn't known whether anything is missing. Click each quantity and enter what you have (enter 0 if you have none) so Inventory and the Today alerts reflect what is really in stock.",
       "icon": "Icon",
       "nameRequired": "Name is required",
       "itemAdded": "Item added",

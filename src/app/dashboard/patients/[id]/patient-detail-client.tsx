@@ -77,6 +77,7 @@ import { PatientPhotosTab, RecentPhotosStrip } from "@/components/dashboard/pati
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
 import toast from "react-hot-toast";
+import { CLAVE_ETIQUETA_CATEGORIA, CATEGORIAS_SUBIDA_FICHA, categoriaSugeridaParaSubida } from "@/lib/uploads/categorias-archivo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,11 +235,7 @@ const SEV_STYLES: Record<string, { bg: string; text: string; labelKey: string }>
   informativo: { bg: "bg-[var(--success-soft)] border-[var(--border-soft)]",           text: "text-[var(--success-strong)]", labelKey: "patients.severity.informativo" },
 };
 
-const FILE_CAT_LABELS: Record<string, string> = {
-  XRAY_PERIAPICAL: "patients.fileCat.periapical", XRAY_PANORAMIC: "patients.fileCat.panoramic", XRAY_BITEWING: "patients.fileCat.bitewing",
-  XRAY_OCCLUSAL: "patients.fileCat.occlusal", PHOTO_INTRAORAL: "patients.fileCat.intraoral", PHOTO_EXTRAORAL: "patients.fileCat.extraoral",
-  PHOTO_PROGRESS: "patients.fileCat.progress", CONSENT_FORM: "patients.fileCat.consent", OTHER: "patients.fileCat.other",
-};
+const FILE_CAT_LABELS = CLAVE_ETIQUETA_CATEGORIA;
 
 interface Props {
   patient:      any;
@@ -978,6 +975,9 @@ export function PatientDetailClient({
   const [files, setFiles]             = useState<any[]>([]);
   const [filesLoaded, setFilesLoaded] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  // Archivo elegido que espera su tipo: se sube hasta que quien lo sube lo confirma.
+  const [archivoPorTipificar, setArchivoPorTipificar] = useState<File | null>(null);
+  const [tipoArchivo, setTipoArchivo] = useState<string>("");
   const [analyzing, setAnalyzing]     = useState<string | null>(null); // fileId being analyzed
   const [analyses, setAnalyses]       = useState<Record<string, any>>({}); // fileId -> analysis result
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
@@ -994,25 +994,33 @@ export function PatientDetailClient({
     setFilesLoaded(true);
   }
 
-  async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function elegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+    setTipoArchivo(categoriaSugeridaParaSubida(file.name) ?? "");
+    setArchivoPorTipificar(file);
+  }
+
+  async function uploadFile() {
+    const file = archivoPorTipificar;
+    if (!file || !tipoArchivo) return;
     setUploadingFile(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("patientId", patient.id);
-      formData.append("category", "XRAY_PERIAPICAL");
+      formData.append("category", tipoArchivo);
       const res = await fetch("/api/xrays", { method: "POST", body: formData });
       if (!res.ok) throw new Error((await res.json()).error);
       const newFile = await res.json();
       setFiles(prev => [newFile, ...prev]);
       toast.success(t("patients.uploadFile.success"));
+      setArchivoPorTipificar(null);
     } catch (err: any) {
       toast.error(err.message ?? t("patients.uploadFile.error"));
     } finally {
       setUploadingFile(false);
-      e.target.value = "";
     }
   }
 
@@ -2932,7 +2940,7 @@ export function PatientDetailClient({
                     <label className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg cursor-pointer hover:bg-[var(--violet-700)] transition-colors shadow-[var(--shadow-1)]">
                       <Plus className="w-4 h-4" strokeWidth={1.75} />
                       {uploadingFile ? t("patients.xrays.uploading") : t("patients.xrays.uploadFile")}
-                      <input type="file" className="hidden" accept="image/*,application/pdf" onChange={uploadFile} disabled={uploadingFile} />
+                      <input type="file" className="hidden" accept="image/*,application/pdf" onChange={elegirArchivo} disabled={uploadingFile} />
                     </label>
                   )}
                 </div>
@@ -3319,6 +3327,38 @@ export function PatientDetailClient({
       )}
 
       {/* Edit patient modal */}
+      <Dialog open={!!archivoPorTipificar} onOpenChange={(o) => { if (!o && !uploadingFile) setArchivoPorTipificar(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="text-foreground font-bold">{t("patients.xrays.tipo.titulo")}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground break-all">{archivoPorTipificar?.name}</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="tipo-archivo">{t("patients.xrays.tipo.etiqueta")}</Label>
+              <select
+                id="tipo-archivo"
+                className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                value={tipoArchivo}
+                onChange={(e) => setTipoArchivo(e.target.value)}
+              >
+                {!tipoArchivo && <option value="">{t("patients.xrays.tipo.elige")}</option>}
+                {CATEGORIAS_SUBIDA_FICHA.map((c) => (
+                  <option key={c} value={c}>{t(FILE_CAT_LABELS[c])}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {tipoArchivo ? t("patients.xrays.tipo.sugerido") : t("patients.xrays.tipo.sinPista")}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setArchivoPorTipificar(null)} disabled={uploadingFile}>{t("common.cancel")}</Button>
+            <Button onClick={uploadFile} disabled={!tipoArchivo || uploadingFile}>
+              {uploadingFile ? t("patients.xrays.uploading") : t("patients.xrays.tipo.subir")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="max-w-lg max-h-[90vh]">
           <DialogHeader><DialogTitle className="text-foreground font-bold">{t("patients.edit.title")}</DialogTitle></DialogHeader>

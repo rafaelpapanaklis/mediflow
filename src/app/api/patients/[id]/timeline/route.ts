@@ -1,3 +1,4 @@
+import { NOMBRE_CATEGORIA_ES } from "@/lib/uploads/categorias-archivo";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -297,12 +298,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     });
   }
 
-  const CAT_LABEL: Record<string, string> = {
-    XRAY_PERIAPICAL: "Periapical",
-    XRAY_PANORAMIC: "Panorámica",
-    XRAY_BITEWING: "Bitewing",
-    XRAY_OCCLUSAL: "Oclusal",
-  };
+  const CAT_LABEL = NOMBRE_CATEGORIA_ES;
   for (const x of xrayRows) {
     const aiSummary = x.xrayAnalysis?.summary?.trim();
     const fallback = `${CAT_LABEL[x.category] ?? "Radiografía"}${x.toothNumber ? ` · pieza #${x.toothNumber}` : ""} · ${x.name}`;

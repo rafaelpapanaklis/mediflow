@@ -29,6 +29,7 @@ const CATEGORY_LABEL: Record<FileCategoryValue, string> = {
   XRAY_BITEWING: "Radiografía de aleta (bitewing)",
   XRAY_OCCLUSAL: "Radiografía oclusal",
   XRAY_CBCT: "Tomografía CBCT",
+  XRAY_CEPHALOMETRIC: "Radiografía lateral de cráneo (cefalométrica)",
   PHOTO_FRONTAL: "Foto frontal",
   PHOTO_LATERAL: "Foto lateral",
   PHOTO_OCCLUSAL_UPPER: "Foto oclusal superior",

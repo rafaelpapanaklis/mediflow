@@ -2324,13 +2324,26 @@
     "fileCat": {
       "periapical": "Periapical",
       "panoramic": "Panorámica",
-      "bitewing": "Bitewing",
+      "bitewing": "Aleta de mordida (bitewing)",
       "occlusal": "Oclusal",
       "intraoral": "Foto intraoral",
       "extraoral": "Foto extraoral",
       "progress": "Progreso",
       "consent": "Consentimiento",
-      "other": "Otro"
+      "other": "Otro",
+      "cbct": "Tomografía (CBCT)",
+      "cephalometric": "Lateral de cráneo (cefalométrica)",
+      "photoFrontal": "Foto frontal",
+      "photoLateral": "Foto lateral",
+      "photoOcclusalUpper": "Foto oclusal superior",
+      "photoOcclusalLower": "Foto oclusal inferior",
+      "photoPatient": "Foto del paciente",
+      "orthoT0": "Fotos de ortodoncia · inicial (T0)",
+      "orthoT1": "Fotos de ortodoncia · T1",
+      "orthoT2": "Fotos de ortodoncia · final (T2)",
+      "orthoControl": "Foto de ortodoncia · control",
+      "cephPdf": "Análisis cefalométrico (PDF)",
+      "scanStl": "Modelo 3D (STL)"
     },
     "pediatrics": {
       "dentition": "Dentición",
@@ -2644,7 +2657,15 @@
       "recommendations": "Recomendaciones",
       "disclaimerLead": "Herramienta de apoyo diagnóstico.",
       "disclaimerBody": "Este análisis es generado por IA y NO sustituye el juicio clínico del profesional.",
-      "tokens": "Tokens usados: {used} · Restantes: {remaining} / {limit}"
+      "tokens": "Tokens usados: {used} · Restantes: {remaining} / {limit}",
+      "tipo": {
+        "titulo": "¿Qué tipo de archivo es?",
+        "etiqueta": "Tipo de archivo",
+        "elige": "Elige el tipo…",
+        "sugerido": "Lo sugerimos por el nombre del archivo; cámbialo si no es correcto.",
+        "sinPista": "El nombre del archivo no dice qué es: elige el tipo para que cuente donde corresponde.",
+        "subir": "Subir"
+      }
     },
     "billing": {
       "title": "Facturación",
@@ -4725,6 +4746,9 @@
       "badgeOut": "Agotado",
       "badgeLow": "Bajo",
       "badgeOk": "OK",
+      "filterUncounted": "Sin contar",
+      "badgeUncounted": "Sin contar",
+      "uncountedHint": "Estos artículos nunca se han contado, por eso no se sabe si falta algo. Pulsa la cantidad de cada uno y escribe lo que tienes (si no tienes, escribe 0): así Inventario y los avisos de Hoy dicen lo que de verdad hay.",
       "icon": "Ícono",
       "nameRequired": "El nombre es requerido",
       "itemAdded": "Artículo agregado",

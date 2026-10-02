@@ -84,6 +84,7 @@ export const BULK_FILE_ALLOWED_MIME = [
  */
 export const FILE_CATEGORIES = [
   "XRAY_PERIAPICAL", "XRAY_PANORAMIC", "XRAY_BITEWING", "XRAY_OCCLUSAL", "XRAY_CBCT",
+  "XRAY_CEPHALOMETRIC",
   "PHOTO_FRONTAL", "PHOTO_LATERAL", "PHOTO_OCCLUSAL_UPPER", "PHOTO_OCCLUSAL_LOWER",
   "PHOTO_INTRAORAL", "PHOTO_PATIENT", "CONSENT_FORM",
   "ORTHO_PHOTO_T0", "ORTHO_PHOTO_T1", "ORTHO_PHOTO_T2", "ORTHO_PHOTO_CONTROL",
@@ -108,10 +109,15 @@ export function guessFileCategory(fileName: string): FileCategoryValue {
   if (/panoram/.test(n)) return "XRAY_PANORAMIC";
   if (/bitewing|aleta/.test(n)) return "XRAY_BITEWING";
   if (/cbct|tomograf/.test(n)) return "XRAY_CBCT";
+  // La lateral de cráneo se revisa ANTES que «rx»/«radiograf»: «Rx lateral.jpg»
+  // es una cefalométrica, no una periapical. El PDF de trazado sigue siendo el
+  // análisis (otra categoría); la foto «lateral» a secas sigue siendo foto.
+  const esCefalo = /cefalo|ceph|teleradiograf|telerradiograf|\btele\b/.test(n)
+    || (/lateral/.test(n) && /(rx|radiograf|craneo)/.test(n));
+  if (esCefalo) return /pdf$/.test(n) ? "CEPH_ANALYSIS_PDF" : "XRAY_CEPHALOMETRIC";
   if (/oclusal/.test(n) && /(rx|radiograf)/.test(n)) return "XRAY_OCCLUSAL";
   if (/periapical|rx|radiograf/.test(n)) return "XRAY_PERIAPICAL";
   if (/consent/.test(n)) return "CONSENT_FORM";
-  if (/cefalo|ceph/.test(n) && /pdf$/.test(n)) return "CEPH_ANALYSIS_PDF";
   if (/frontal/.test(n)) return "PHOTO_FRONTAL";
   if (/lateral/.test(n)) return "PHOTO_LATERAL";
   if (/intraoral/.test(n)) return "PHOTO_INTRAORAL";
