@@ -1802,6 +1802,20 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
             >
               <Filter size={15} strokeWidth={2} aria-hidden />
             </button>
+            {/* El de la columna Carpetas vive en un cajón cuando el panel es
+                estrecho: este queda siempre a mano (el CSS lo muestra solo
+                entonces). Mismo permiso y misma acción que aquel. */}
+            {canSend && (
+              <button
+                type="button"
+                className={styles.composeHeaderBtn}
+                onClick={openCompose}
+                title={t("inbox.client.compose")}
+                aria-label={t("inbox.client.compose")}
+              >
+                <Plus size={16} strokeWidth={2.4} aria-hidden />
+              </button>
+            )}
           </div>
 
           {/* Banner del filtro por paciente: sin él, llegar desde una ficha deja

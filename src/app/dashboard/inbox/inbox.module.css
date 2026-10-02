@@ -1527,6 +1527,26 @@
   flex-shrink: 0;
   transition: background var(--dur-1) var(--ease);
 }
+/* «Componer» en el encabezado de la lista: solo existe mientras la columna de
+   Carpetas es un cajón cerrado (tablet y panel estrecho); en escritorio ancho el
+   de la columna izquierda ya está a la vista, y en móvil está el FAB. */
+.composeHeaderBtn {
+  display: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 9px;
+  background: var(--ib-brand);
+  color: #fff;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: var(--ib-shadow-compose);
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.composeHeaderBtn:hover { background: var(--ib-brand-hover); }
+.composeHeaderBtn:active { transform: scale(0.96); }
+.composeHeaderBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 .mobileMenuBtn:hover,
 .mobileBackBtn:hover { background: var(--ib-hover-2); }
 .mobileMenuBtn:focus-visible,
@@ -1575,12 +1595,18 @@
     width: min(280px, 78vw);
     z-index: 60;
     transform: translateX(-100%);
-    transition: transform var(--dur-2) var(--ease);
+    /* Cerrado = invisible, no solo desplazado: desplazado quedaba debajo del
+       menú lateral del panel (la franja de su sombra se asomaba) con «Componer»
+       y las carpetas enfocables por teclado pero imposibles de pulsar. La
+       visibilidad se retrasa lo que dura el deslizamiento para no cortarlo. */
+    visibility: hidden;
+    transition: transform var(--dur-2) var(--ease), visibility 0s linear var(--dur-2);
     box-shadow: var(--shadow-3);
   }
-  .page[data-mobile-sidebar-open="true"] .sidebar { transform: translateX(0); }
+  .page[data-mobile-sidebar-open="true"] .sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   .page[data-mobile-sidebar-open="true"] .mobileBackdrop { display: block; }
   .mobileMenuBtn { display: inline-flex; }
+  .composeHeaderBtn { display: grid; }
 }
 
 /* ── Panel estrecho: el mismo corte, pero midiendo el CONTENEDOR ──────────────
@@ -1624,15 +1650,17 @@
     width: min(280px, 78%);
     z-index: 60;
     transform: translateX(-100%);
-    transition: transform var(--dur-2) var(--ease);
+    visibility: hidden;
+    transition: transform var(--dur-2) var(--ease), visibility 0s linear var(--dur-2);
     box-shadow: var(--shadow-3);
   }
-  .page[data-narrow="true"][data-mobile-sidebar-open="true"] .sidebar { transform: translateX(0); }
+  .page[data-narrow="true"][data-mobile-sidebar-open="true"] .sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   .page[data-narrow="true"][data-mobile-sidebar-open="true"] .mobileBackdrop {
     display: block;
     position: absolute;
   }
   .page[data-narrow="true"] .mobileMenuBtn { display: inline-flex; }
+  .page[data-narrow="true"] .composeHeaderBtn { display: grid; }
 }
 
 /* ── Móvil (≤767): lista → detalle en una columna (patrón 1c/1d) ── */
@@ -1650,6 +1678,8 @@
   }
   .page[data-mobile-detail-open="true"] .detailCol { transform: translateX(0); }
   .mobileBackBtn { display: inline-flex; }
+  .composeHeaderBtn,
+  .page[data-narrow="true"] .composeHeaderBtn { display: none; }
   .page:not([data-mobile-detail-open="true"]) .fab { display: flex; }
 
   .listHeader { padding: 12px 16px 0; }
