@@ -10781,6 +10781,10 @@
     "lineaTotal": "Fully accepted: {aceptado}",
     "lineaParcial": "Accepted {n} of {de}: {aceptado} of {total}",
     "lineaCargado": "charged {cargado} · left {porCargar}",
-    "lineaTodoCargado": "fully charged"
+    "lineaTodoCargado": "fully charged",
+    "importeAceptado": "accepted",
+    "deCotizado": "of {total} quoted",
+    "yaCargadoEnOtro": "Already charged from {folio} on {factura}: make sure it is not charged twice",
+    "yaCargadoEnOtroSinNota": "Already charged from {folio}: make sure it is not charged twice"
   }
 }

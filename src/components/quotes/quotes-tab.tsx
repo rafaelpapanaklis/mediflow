@@ -14,15 +14,12 @@ import { PresupuestoEditor } from "@/components/dashboard/presupuesto-nuevo/edit
 import { PresupuestoLista } from "@/components/dashboard/presupuesto-nuevo/lista";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 import { AceptarConceptos, CobrarPresupuesto, LineaDeCobro } from "@/components/dashboard/presupuesto-nuevo/aceptacion-y-cobro";
+import { cargadosEnOtrosPresupuestos, importesDeTarjeta } from "@/lib/quotes/aceptacion";
+import { fechaDeVigencia } from "@/lib/quotes/vigencia";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
-}
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // labelKey se resuelve vía t() al renderizar (constante de módulo: sin hooks aquí).
@@ -207,7 +204,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrir
       ) : (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <QuoteCard key={q.id} quote={q} patientId={patientId} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} onInvoiceCreated={onInvoiceCreated} />
+            <QuoteCard key={q.id} quote={q} presupuestos={quotes} patientId={patientId} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} onInvoiceCreated={onInvoiceCreated} />
           ))}
         </div>
       )}
@@ -219,7 +216,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrir
 // Tarjeta de un presupuesto + acciones
 // ---------------------------------------------------------------------------
 
-function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewPlan, onInvoiceCreated }: { quote: QuoteDTO; patientId: string; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void; onInvoiceCreated?: (invoice: BillingInvoiceLite) => void }) {
+function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewInvoice, onViewPlan, onInvoiceCreated }: { quote: QuoteDTO; presupuestos: QuoteDTO[]; patientId: string; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void; onInvoiceCreated?: (invoice: BillingInvoiceLite) => void }) {
   const t = useT();
   const confirmDialog = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -332,12 +329,18 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
           <div className="font-bold text-sm mt-1 truncate">{quote.title}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {t("quotes.card.itemCount", { count: quote.items.length })}
-            {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fmtDate(quote.validUntil) })}` : ""}
+            {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fechaDeVigencia(quote) })}` : ""}
           </div>
           {cobro && <LineaDeCobro cobro={cobro} total={quote.total} onVerFactura={onViewInvoice} />}
         </div>
         <div className="text-right flex-shrink-0">
-          <div className="text-lg font-bold text-foreground">{money(quote.total)}</div>
+          {/* Aceptado en parte: grande lo aceptado (lo que se debe), chico el total cotizado. */}
+          <div className="text-lg font-bold text-foreground">{money(importesDeTarjeta(quote.total, cobro).principal)}</div>
+          {cobro?.alcance === "parcial" && (
+            <div className="text-[11px] text-muted-foreground">
+              {t("presupuestoAceptacion.importeAceptado")} · {t("presupuestoAceptacion.deCotizado", { total: money(quote.total) })}
+            </div>
+          )}
           {quote.discountAmount > 0 && (
             <div className="text-[11px] text-muted-foreground">{t("quotes.card.discountShort", { amount: money(quote.discountAmount) })}</div>
           )}
@@ -481,6 +484,7 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
       {cobrando && (
         <CobrarPresupuesto
           quote={quote}
+          cargadosEnOtros={cargadosEnOtrosPresupuestos(quote.id, presupuestos)}
           onCerrar={() => setCobrando(false)}
           onVerFactura={onViewInvoice}
           onCargado={async (inv) => {
@@ -556,6 +560,8 @@ function QuoteEditor({
     editing?.discountPct != null ? editing.discountPct : (editing?.discountAmount ?? 0),
   );
   const [validUntil, setValidUntil] = useState<string>(() => {
+    // El día que ya ve la tarjeta (zona de la clínica), no el de UTC.
+    if (editing?.validUntilDia) return editing.validUntilDia;
     const base = editing?.validUntil ? new Date(editing.validUntil) : new Date(Date.now() + 30 * 86400000);
     return isNaN(base.getTime()) ? "" : base.toISOString().slice(0, 10);
   });

@@ -28,10 +28,12 @@ import r from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
 import { dinero } from "@/lib/quotes/condiciones-pago";
 import {
   armarAceptacion,
+  claveDeConcepto,
   estadoDeCobro,
   netoDe,
   planearCargo,
   resumirAceptacion,
+  type CargadoEnOtro,
   type CargoVivo,
   type CobroDePresupuesto,
   type RenglonAceptado,
@@ -247,11 +249,13 @@ interface DatosDeCobro {
   conceptos: Array<{ id: string; name: string; toothFdi: string | null; quantity: number; unitPrice: number }>;
 }
 
-export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura }: {
+export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, cargadosEnOtros }: {
   quote: QuoteDTO;
   onCerrar: () => void;
   onCargado: (invoice: BillingInvoiceLite) => Promise<void> | void;
   onVerFactura?: (invoiceId: string) => void;
+  /** Conceptos ya cargados desde OTRO presupuesto del paciente (el duplicado): aviso, no bloqueo. */
+  cargadosEnOtros?: Map<string, CargadoEnOtro[]>;
 }) {
   const t = useT();
   const [datos, setDatos] = useState<DatosDeCobro | null>(null);
@@ -410,6 +414,7 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura }: 
                   );
                 }
                 const si = elegidos.indexOf(rg.quoteItemId) !== -1;
+                const enOtro = cargadosEnOtros?.get(claveDeConcepto(rg.nombre, rg.toothFdi))?.[0];
                 return (
                   <li key={rg.quoteItemId}>
                     <label className={s.renglon}>
@@ -417,6 +422,13 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura }: 
                       <span className={s.renglonTexto}>
                         <span className={s.renglonNombre}>{rg.nombre}</span>
                         <span className={s.renglonDetalle}>{detalle}</span>
+                        {enOtro && (
+                          <span className={`${s.etiqueta} ${s.etiquetaAlerta}`}>
+                            {enOtro.factura
+                              ? t("presupuestoAceptacion.yaCargadoEnOtro", { folio: enOtro.folio, factura: enOtro.factura })
+                              : t("presupuestoAceptacion.yaCargadoEnOtroSinNota", { folio: enOtro.folio })}
+                          </span>
+                        )}
                       </span>
                       <span className={s.renglonMonto}>{dinero(netoDe(rg))}</span>
                     </label>

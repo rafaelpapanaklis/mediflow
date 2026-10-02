@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
+import { fechaDeVigencia } from "@/lib/quotes/vigencia";
 import { CheckCircle, AlertCircle, Loader2, Clock, CalendarDays } from "lucide-react";
 import { planParaDocumento } from "@/lib/quotes/condiciones-pago";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
@@ -24,6 +25,8 @@ interface PublicView {
   title: string;
   status: string;
   validUntil: string | null;
+  /** "YYYY-MM-DD" en la zona de la clínica: el mismo día que la tarjeta del panel. */
+  validUntilDia?: string | null;
   expired: boolean;
   subtotal: number;
   discountAmount: number;
@@ -253,7 +256,7 @@ export default function PresupuestoPublicPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2">
             <Clock size={16} className="text-amber-600" />
             <p className="text-xs font-semibold text-amber-800">
-              Este presupuesto venció{data.validUntil ? ` el ${new Date(data.validUntil).toLocaleDateString("es-MX")}` : ""}.
+              Este presupuesto venció{data.validUntil ? ` el ${fechaDeVigencia(data)}` : ""}.
               Contacta a la clínica para una cotización actualizada.
             </p>
           </div>
@@ -393,7 +396,7 @@ export default function PresupuestoPublicPage() {
 
         <p className="text-[11px] text-slate-400 text-center">
           Presupuesto informativo, sujeto a valoración clínica. Precios en MXN.
-          {data?.validUntil && !data.expired ? ` Válido hasta ${new Date(data.validUntil).toLocaleDateString("es-MX")}.` : ""}
+          {data?.validUntil && !data.expired ? ` Válido hasta el ${fechaDeVigencia(data)}.` : ""}
         </p>
 
         {/* Aceptación */}

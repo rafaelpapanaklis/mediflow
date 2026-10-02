@@ -12,6 +12,7 @@ import { casosDesdePresupuestos } from "@/lib/quotes/ortodoncia.server";
 import { aceptacionEncendida, leerAceptaciones } from "@/lib/quotes/aceptacion-db";
 import { cobrosDePresupuestos } from "@/lib/quotes/cargos.server";
 import { hasPermission } from "@/lib/auth/permissions";
+import { diaDeVigencia } from "@/lib/quotes/vigencia";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,9 @@ export async function GET(req: NextRequest) {
     return { ...q, items: q.items.filter((it) => si.has(it.id)) };
   });
   const casos = await casosDesdePresupuestos(ctx, paraCasos);
+  // La vigencia se pinta como DÍA en la zona de la clínica, el mismo que ve el
+  // paciente en la liga (antes: UTC aquí, hora del navegador allá).
+  const zona = (await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }))?.timezone ?? null;
   const userPerm = { role: ctx.role, permissionsOverride: ctx.permissionsOverride ?? [] };
   const permisos = {
     aceptar: hasPermission(userPerm, "billing.edit"),
@@ -98,6 +102,7 @@ export async function GET(req: NextRequest) {
       const cobro = cobros.get(q.id);
       return {
         ...dto,
+        validUntilDia: diaDeVigencia(q.validUntil, zona),
         ...(caso ? { casoOrtodoncia: caso } : {}),
         ...(porConcepto ? { porConcepto: true, permisos } : {}),
         ...(cobro ? { cobro } : {}),

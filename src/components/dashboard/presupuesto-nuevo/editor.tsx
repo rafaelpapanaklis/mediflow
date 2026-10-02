@@ -149,6 +149,8 @@ export function PresupuestoEditor({
   );
 
   const [vigencia, setVigencia] = useState<string>(() => {
+    // El día que ya ve la tarjeta (zona de la clínica), no el de UTC.
+    if (editando?.validUntilDia) return editando.validUntilDia;
     const base = editando?.validUntil ? new Date(editando.validUntil) : new Date(Date.now() + 30 * 86400000);
     return isNaN(base.getTime()) ? "" : base.toISOString().slice(0, 10);
   });

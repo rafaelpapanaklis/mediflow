@@ -56,6 +56,8 @@ export interface QuoteDTO {
   title: string;
   status: QuoteStatus;
   validUntil: string | null;
+  /** "YYYY-MM-DD" de la vigencia en la zona de la clínica (solo GET /api/quotes). Ver lib/quotes/vigencia.ts. */
+  validUntilDia?: string | null;
   subtotal: number;
   discountPct: number | null;
   discountAmount: number;
@@ -166,6 +168,8 @@ export interface PublicQuoteView {
   title: string;
   status: QuoteStatus;
   validUntil: string | null;
+  /** "YYYY-MM-DD" de la vigencia en la zona de la clínica: el mismo día que ve el panel. */
+  validUntilDia: string | null;
   expired: boolean;
   subtotal: number;
   discountAmount: number;

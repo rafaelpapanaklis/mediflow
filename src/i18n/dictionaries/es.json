@@ -10781,6 +10781,10 @@
     "lineaTotal": "Aceptado completo: {aceptado}",
     "lineaParcial": "Aceptó {n} de {de}: {aceptado} de {total}",
     "lineaCargado": "cargado {cargado} · por cargar {porCargar}",
-    "lineaTodoCargado": "todo cargado"
+    "lineaTodoCargado": "todo cargado",
+    "importeAceptado": "aceptado",
+    "deCotizado": "de {total} cotizado",
+    "yaCargadoEnOtro": "Ya se cargó desde {folio} en {factura}: revisa que no se cobre dos veces",
+    "yaCargadoEnOtroSinNota": "Ya se cargó desde {folio}: revisa que no se cobre dos veces"
   }
 }

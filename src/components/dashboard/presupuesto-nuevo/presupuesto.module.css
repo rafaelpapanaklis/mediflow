@@ -691,6 +691,12 @@
   color: var(--pr-texto);
 }
 
+.fichaCotizado {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-texto-3);
+}
+
 .fichaDescuento {
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;

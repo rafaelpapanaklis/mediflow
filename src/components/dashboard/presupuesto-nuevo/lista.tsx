@@ -17,7 +17,9 @@ import {
   Check, CheckCircle2, ClipboardList, Copy, Download, FileText, Files,
   MessageCircle, Pencil, ReceiptText, Send, Trash2, XCircle,
 } from "lucide-react";
-import { dinero, fechaCorta, frasePlan, hayCondiciones } from "@/lib/quotes/condiciones-pago";
+import { dinero, frasePlan, hayCondiciones } from "@/lib/quotes/condiciones-pago";
+import { cargadosEnOtrosPresupuestos, importesDeTarjeta } from "@/lib/quotes/aceptacion";
+import { fechaDeVigencia } from "@/lib/quotes/vigencia";
 import type { BillingInvoiceLite, QuoteDTO, QuoteStatus } from "@/lib/quotes/types";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
@@ -80,6 +82,7 @@ export function PresupuestoLista({
             <Ficha
               key={q.id}
               quote={q}
+              presupuestos={presupuestos}
               patientId={patientId}
               t={t}
               onEditar={() => onEditar(q)}
@@ -96,9 +99,11 @@ export function PresupuestoLista({
 }
 
 function Ficha({
-  quote, patientId, t, onEditar, onRecargar, onVerFactura, onVerPlan, onFacturaCreada,
+  quote, presupuestos, patientId, t, onEditar, onRecargar, onVerFactura, onVerPlan, onFacturaCreada,
 }: {
   quote: QuoteDTO;
+  /** Todos los del paciente: para avisar si un concepto ya se cargó desde otro. */
+  presupuestos: QuoteDTO[];
   patientId: string;
   t: TFunction;
   onEditar: () => void;
@@ -217,6 +222,8 @@ function Ficha({
     </button>
   );
 
+  // Aceptado en parte: grande lo aceptado (lo que se debe), chico el total cotizado.
+  const importes = importesDeTarjeta(quote.total, cobro);
   const editable = quote.status === "DRAFT" || quote.status === "PRESENTED";
   const plan = hayCondiciones(quote.condicionesPago) && quote.condicionesPago?.modo === "plazos"
     ? frasePlan(quote.total, quote.condicionesPago)
@@ -244,14 +251,19 @@ function Ficha({
         <p className={s.fichaTitulo}>{quote.title}</p>
         <p className={s.fichaSub}>
           {t("quotes.card.itemCount", { count: quote.items.length })}
-          {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fechaCorta(quote.validUntil) })}` : ""}
+          {quote.validUntil ? ` · ${t("quotes.card.validUntil", { date: fechaDeVigencia(quote) })}` : ""}
         </p>
         {plan && <p className={s.fichaPlan}>{plan}</p>}
         {cobro && <LineaDeCobro cobro={cobro} total={quote.total} onVerFactura={onVerFactura} />}
       </div>
 
       <div className={s.fichaDinero}>
-        <p className={s.fichaTotal}>{dinero(quote.total)}</p>
+        <p className={s.fichaTotal}>{dinero(importes.principal)}</p>
+        {importes.cotizado != null && (
+          <p className={s.fichaCotizado}>
+            {t("presupuestoAceptacion.importeAceptado")} · {t("presupuestoAceptacion.deCotizado", { total: dinero(importes.cotizado) })}
+          </p>
+        )}
         {quote.discountAmount > 0 && (
           <p className={s.fichaDescuento}>
             −{dinero(quote.discountAmount)} {t("presupuestoNuevo.deDescuento")}
@@ -406,6 +418,7 @@ function Ficha({
       {cobrando && (
         <CobrarPresupuesto
           quote={quote}
+          cargadosEnOtros={cargadosEnOtrosPresupuestos(quote.id, presupuestos)}
           onCerrar={() => setCobrando(false)}
           onVerFactura={onVerFactura}
           onCargado={async (inv) => {

@@ -2,6 +2,7 @@
 // cruzar a cualquier client component (Decimal/Date no son serializables).
 
 import type { CondicionesPago } from "./condiciones-pago";
+import { diaDeVigencia } from "./vigencia";
 import type {
   QuoteDTO,
   QuoteItemDTO,
@@ -120,6 +121,8 @@ export function toPublicView(
     patientFirstName: string;
     signatureUrl: string | null;
     expired: boolean;
+    /** Zona de la clínica, para el día de vigencia. */
+    timezone?: string | null;
     /** Formas de pago propuestas; null si no hay o si falta el SQL. */
     condicionesPago?: CondicionesPago | null;
   },
@@ -146,6 +149,7 @@ export function toPublicView(
     title: q.title,
     status: (q.status as QuoteStatus) ?? "DRAFT",
     validUntil: iso(q.validUntil),
+    validUntilDia: diaDeVigencia(q.validUntil, opts.timezone),
     expired: opts.expired,
     subtotal: num(q.subtotal),
     discountAmount: num(q.discountAmount),

@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     where: { acceptToken: params.token },
     include: {
       items: { orderBy: { sortOrder: "asc" } },
-      clinic: { select: { name: true, logoUrl: true } },
+      clinic: { select: { name: true, logoUrl: true, timezone: true } },
       patient: { select: { firstName: true } },
     },
   });
@@ -53,6 +53,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     patientFirstName: quote.patient.firstName,
     signatureUrl: signatureUrl || null,
     expired,
+    // El día de vigencia con la zona de la clínica: el mismo que la tarjeta del panel.
+    timezone: quote.clinic.timezone,
     // El plan de pagos que se le propuso. Es justo lo que el paciente quiere
     // ver antes de firmar; sin el SQL aplicado llega null y la página no
     // pinta la sección, como antes.

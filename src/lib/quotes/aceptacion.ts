@@ -392,3 +392,69 @@ export interface CobroDePresupuesto {
   /** Nombre, importe neto y si se aceptó, por concepto (lo que firmó). */
   renglones: Array<{ quoteItemId: string; aceptado: boolean; nombre: string; neto: number }>;
 }
+
+/**
+ * El importe grande de la tarjeta. Aceptado en parte: lo ACEPTADO es lo que se
+ * debe, así que va grande, y el total cotizado pasa a la línea chica. Antes la
+ * tarjeta de «Aceptó 1 de 3: $1,500» seguía mostrando $10,000 en grande y se
+ * leía como si se debiera todo.
+ */
+export function importesDeTarjeta(
+  total: number,
+  cobro: Pick<CobroDePresupuesto, "alcance" | "totalAceptado"> | null | undefined,
+): { principal: number; cotizado: number | null } {
+  if (cobro?.alcance === "parcial") return { principal: cobro.totalAceptado, cotizado: total };
+  return { principal: total, cotizado: null };
+}
+
+/**
+ * Mismo concepto = mismo nombre (sin mayúsculas, acentos ni espacios de más)
+ * y misma pieza. «Resina» en el 11 y «Resina» en el 21 son dos conceptos.
+ */
+export function claveDeConcepto(nombre: string, toothFdi: string | null | undefined): string {
+  const n = (nombre ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${n}|${(toothFdi ?? "").trim()}`;
+}
+
+export interface CargadoEnOtro {
+  /** Folio del OTRO presupuesto (P-0012). */
+  folio: string;
+  /** Folio de la nota en que se cargó (MF-1098); null si fue la factura vieja del presupuesto. */
+  factura: string | null;
+}
+
+/**
+ * Conceptos que ya se cargaron (en una nota viva) desde OTRO presupuesto del
+ * mismo paciente, por `claveDeConcepto`. Es el aviso de «Se cobrará hoy» para
+ * el presupuesto duplicado: no bloquea — puede ser un segundo tratamiento de
+ * verdad —, solo evita cobrar dos veces sin darse cuenta.
+ */
+export function cargadosEnOtrosPresupuestos(
+  actualId: string,
+  presupuestos: Array<{
+    id: string;
+    folio: string;
+    items: Array<{ id: string; name: string; toothFdi: string | null }>;
+    cobro?: Pick<CobroDePresupuesto, "cargados" | "cargos"> | null;
+  }>,
+): Map<string, CargadoEnOtro[]> {
+  const salida = new Map<string, CargadoEnOtro[]>();
+  for (const q of presupuestos) {
+    if (q.id === actualId || !q.cobro) continue;
+    for (const itemId of q.cobro.cargados) {
+      const item = q.items.find((it) => it.id === itemId);
+      if (!item) continue;
+      const clave = claveDeConcepto(item.name, item.toothFdi);
+      const factura = q.cobro.cargos.find((c) => c.quoteItemId === itemId)?.invoiceNumber ?? null;
+      const lista = salida.get(clave) ?? [];
+      lista.push({ folio: q.folio, factura });
+      salida.set(clave, lista);
+    }
+  }
+  return salida;
+}
