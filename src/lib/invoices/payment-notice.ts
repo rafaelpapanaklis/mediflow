@@ -14,6 +14,8 @@
 // viaja (la ruta lo dice y la pantalla ofrece copiarlo).
 
 import { lineaLinkWhatsApp } from "@/lib/factura-mp/core";
+import type { EstadoDeCobro } from "@/lib/invoices/due-date";
+import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 
 function fmtMXN(n: number): string {
   const v = new Intl.NumberFormat("es-MX", {
@@ -57,6 +59,13 @@ export interface PaymentNoticeInput {
    * LIBRE; la plantilla de Meta conserva sus cuatro huecos.
    */
   aNombreDe?: string | null;
+  /**
+   * ws1-t4 (8c) — ¿la nota está vencida o solo por pagar? Sale de `estadoDeCobro` /
+   * `fechaDeVencimientoHumana` (lib/invoices/due-date: el mismo criterio que el filtro
+   * «Vencidas»). Sin él, el texto de siempre («saldo pendiente»). Con plazos
+   * (`pagoDelMes`) no se usa: la cuota ya dice lo de este mes.
+   */
+  cobro?: { estado: EstadoDeCobro; vence: string | null } | null;
 }
 
 export interface PaymentNotice {
@@ -67,6 +76,12 @@ export interface PaymentNotice {
   body: string;
   /** {{1}}…{{4}} de la plantilla `payment_notice`, en el orden del spec. */
   templateParams: string[];
+  /**
+   * ws1-t4 (8c) — la plantilla que dice lo mismo que el texto libre: `payment_due`
+   * («pago por realizar») o `payment_overdue` («saldo vencido»). Mismos cuatro datos que
+   * dc_aviso_saldo; mientras Meta no la apruebe, sendWhatsAppLogged usa dc_aviso_saldo.
+   */
+  plantillaPreferida: WhatsAppSendKind | null;
 }
 
 export function buildPaymentNotice(input: PaymentNoticeInput): PaymentNotice {
@@ -75,18 +90,23 @@ export function buildPaymentNotice(input: PaymentNoticeInput): PaymentNotice {
   const amount = fmtMXN(input.balance);
   const conceptos = summarizeItems(input.items);
   const pagoDelMes = input.pagoDelMes != null && input.pagoDelMes > 0 && input.pagoDelMes < input.balance - 0.005 ? input.pagoDelMes : null;
+  const cobro = pagoDelMes == null && input.cobro ? input.cobro : null;
+  const queEs = cobro?.estado === "vencido" ? "un saldo vencido" : cobro?.estado === "por_pagar" ? "un pago por realizar" : "un saldo pendiente";
   const cifras = pagoDelMes != null
     ? `${input.aNombreDe ? "El pago de este mes es" : "Tu pago de este mes es"} de ${fmtMXN(pagoDelMes)} (saldo total ${amount})`
-    : `${input.aNombreDe ? "Hay" : "Tienes"} un saldo pendiente de ${amount}`;
+    : `${input.aNombreDe ? "Hay" : "Tienes"} ${queEs} de ${amount}`;
+  const vence = cobro?.vence ? ` ${cobro.estado === "vencido" ? "Venció" : "Vence"} el ${cobro.vence}.` : "";
   const body =
     `Hola ${patientName}, te saludamos de ${input.clinicName}. ` +
     `${cifras} de ${input.aNombreDe ? `la nota ${input.invoiceNumber} de ${input.aNombreDe}` : `tu nota ${input.invoiceNumber}`}` +
-    `${conceptos ? ` (${conceptos})` : ""}. ` +
+    `${conceptos ? ` (${conceptos})` : ""}.${vence} ` +
     (input.linkPago
       // El link en su propia línea: pegado a un punto, WhatsApp lo corta mal.
       ? `\n\n${lineaLinkWhatsApp(input.linkPago.url, input.linkPago.monto)}\n\n` +
         `También puedes pagar en la clínica o llamarnos al ${input.clinicPhone}. ¡Gracias!`
       : `Puedes pagar en la clínica o llamarnos al ${input.clinicPhone} para coordinarlo. ¡Gracias!`);
   // Orden del spec dc_aviso_saldo: paciente, clínica, monto, teléfono.
-  return { patientName, amount, body, templateParams: [patientName, input.clinicName, amount, input.clinicPhone] };
+  const plantillaPreferida: WhatsAppSendKind | null =
+    cobro?.estado === "vencido" ? "payment_overdue" : cobro?.estado === "por_pagar" ? "payment_due" : null;
+  return { patientName, amount, body, templateParams: [patientName, input.clinicName, amount, input.clinicPhone], plantillaPreferida };
 }

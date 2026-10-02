@@ -120,3 +120,25 @@ export function decideSendMode(input: SendModeInput): SendModeDecision {
 
   return { mode: "template", template, params: params.map((p) => p.trim()) };
 }
+
+/**
+ * ws1-t4 (8c) — con la ventana CERRADA, ¿qué plantilla usa un envío que tiene una
+ * preferida (p. ej. el aviso de saldo: «pago por realizar» o «saldo vencido»)? La
+ * preferida SOLO si la clínica la tiene aprobada (sin estado = registrada a mano =
+ * aprobada, como en decideSendMode) y pide los mismos datos que la de siempre; si no,
+ * la de siempre (`kind`), tal cual hoy. Así una plantilla nueva en revisión de Meta
+ * nunca bloquea un aviso que ya salía.
+ */
+export function kindDePlantilla(
+  kind: WhatsAppSendKind,
+  preferida: WhatsAppSendKind | null | undefined,
+  templates: WaTemplateMap,
+): WhatsAppSendKind {
+  if (!preferida || preferida === kind) return kind;
+  const cfg = templates[preferida];
+  if (!cfg || cfg.status === "PENDING" || cfg.status === "REJECTED") return kind;
+  const a = specForKind(preferida);
+  const b = specForKind(kind);
+  if (!a || !b || a.variableKeys.length !== b.variableKeys.length) return kind;
+  return preferida;
+}

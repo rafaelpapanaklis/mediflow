@@ -5834,6 +5834,8 @@
       "tplKindManual": "Mensaje de la clínica",
       "tplKindReview": "Invitación a dejar reseña",
       "tplKindPaymentNotice": "Aviso de saldo pendiente",
+      "tplKindPaymentDue": "Aviso de pago por realizar",
+      "tplKindPaymentOverdue": "Aviso de saldo vencido",
       "tplKindQuoteReady": "Presupuesto listo",
       "tplKindConsent": "Consentimiento informado",
       "tplKindInvoiceReady": "Factura (nota) lista",

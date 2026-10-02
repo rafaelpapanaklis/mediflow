@@ -39,7 +39,7 @@ import { isWithin24hWindow } from "@/lib/inbox/send-core";
 // rompería su carga; así solo falla (y se atrapa) cuando de verdad se usa.
 import * as inboxLog from "@/lib/whatsapp/inbox-log";
 import { conEtiquetaDePaciente, debeEtiquetarPaciente } from "@/lib/whatsapp/atribucion-paciente";
-import { decideSendMode } from "@/lib/whatsapp/send-mode";
+import { decideSendMode, kindDePlantilla } from "@/lib/whatsapp/send-mode";
 import {
   parseWaTemplates,
   renderTemplateBody,
@@ -113,6 +113,13 @@ export interface SendWhatsAppLoggedArgs {
    */
   templateParams?: string[] | null;
   /**
+   * ws1-t4 (8c) — con la ventana cerrada, la plantilla a usar EN VEZ de la de `kind` si la
+   * clínica ya la tiene aprobada y pide los mismos datos (aviso de saldo: «pago por
+   * realizar» / «saldo vencido»). Si no, la de `kind`, como siempre. El envío se registra
+   * con `kind` igualmente (Inbox, tope de avisos de cobro).
+   */
+  plantillaPreferida?: WhatsAppSendKind | null;
+  /**
    * ws1-t3 — botones o lista que acompañan a `body` DENTRO de la ventana de
    * 24 h (fuera de ella sale la plantilla, que lleva los suyos si los tiene).
    * Si Meta rechaza el interactivo (o no cabe en sus límites), sale `body` como
@@ -150,10 +157,12 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
   const lastInbound = clinic?.id ? await lastInboundAtForPhone(clinic.id, args.to) : null;
   const windowOpen = isWithin24hWindow(lastInbound, new Date());
 
+  const plantillas = parseWaTemplates(clinic?.waTemplates ?? null);
+  const kindPlantilla = windowOpen ? args.kind : kindDePlantilla(args.kind, args.plantillaPreferida, plantillas);
   const decision = decideSendMode({
-    kind: args.kind,
+    kind: kindPlantilla,
     windowOpen,
-    templates: parseWaTemplates(clinic?.waTemplates ?? null),
+    templates: plantillas,
     params: args.templateParams,
   });
 
@@ -263,7 +272,7 @@ export async function sendWhatsAppLogged(args: SendWhatsAppLoggedArgs): Promise<
         // necesita ver la conversación de verdad.
         body:
           (decision.mode === "template"
-            ? renderTemplateBody(specForKind(args.kind), decision.params, args.body)
+            ? renderTemplateBody(specForKind(kindPlantilla), decision.params, args.body)
             : args.body) + (opcionesEnviadas ? `\n\n${opcionesEnviadas}` : ""),
         kind: args.kind,
         linkPatient: args.linkPatient ?? args.kind !== "system",

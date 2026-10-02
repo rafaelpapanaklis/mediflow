@@ -180,6 +180,48 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
     optional: false,
   },
   {
+    // ws1-t4 (8c, ticket 3 de BEVADENT) — el aviso de saldo de una nota SIN VENCER. Con
+    // dc_aviso_saldo («Tienes un saldo pendiente») una nota de hoy se leía como deuda.
+    // MISMOS cuatro datos y en el mismo orden que dc_aviso_saldo: mientras Meta no la
+    // aprueba, el envío cae a dc_aviso_saldo (send-mode: kindDePlantilla) y nada se rompe.
+    kind: "payment_due",
+    name: "dc_pago_por_realizar",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, te saludamos de {{2}}. Te recordamos que tienes un pago por realizar de {{3}}. " +
+      "Si tienes dudas, llámanos al {{4}} o responde este mensaje. ¡Gracias!",
+    labelKey: "inbox.whatsapp.tplKindPaymentDue",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarAmount",
+      "inbox.whatsapp.tplVarClinicPhone",
+    ],
+    sample: ["María", "Clínica Dental Sonrisa", "$1,200.00 MXN", "555 123 4567"],
+    optional: false,
+  },
+  {
+    // ws1-t4 (8c) — el aviso de saldo de una nota VENCIDA (isInvoiceOverdue). Mismos datos
+    // y mismo respaldo que dc_pago_por_realizar.
+    kind: "payment_overdue",
+    name: "dc_saldo_vencido",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, te saludamos de {{2}}. Tienes un saldo vencido de {{3}}. " +
+      "Llámanos al {{4}} o responde este mensaje para coordinar tu pago. ¡Gracias!",
+    labelKey: "inbox.whatsapp.tplKindPaymentOverdue",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarAmount",
+      "inbox.whatsapp.tplVarClinicPhone",
+    ],
+    sample: ["María", "Clínica Dental Sonrisa", "$1,200.00 MXN", "555 123 4567"],
+    optional: false,
+  },
+  {
     // ws1-t6 — la NOTA recién hecha («Enviar la factura al paciente» del popup y de
     // su ficha). Antes ese botón salía como dc_aviso_saldo («Tienes un saldo
     // pendiente de…»), sin folio ni link: para el paciente era un aviso de deuda.

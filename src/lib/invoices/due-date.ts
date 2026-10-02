@@ -65,3 +65,39 @@ export function isInvoiceOverdue(inv: OverdueCandidate, todayStart: Date | strin
   if (isNaN(due.getTime()) || isNaN(today.getTime())) return false;
   return due.getTime() < today.getTime();
 }
+
+/**
+ * ws1-t4 (ticket 3 de BEVADENT, 8c) — qué le decimos al paciente de esta factura:
+ *  - "vencido": `isInvoiceOverdue` (la MISMA regla del filtro «Vencidas»);
+ *  - "por_pagar": emitida, con saldo y sin vencer (o sin fecha: nunca vence);
+ *  - null: no hay nada que cobrar (borrador, cancelada o saldo 0).
+ * Lo usan los avisos de saldo por WhatsApp para no llamar «deuda» a una nota de hoy.
+ */
+export type EstadoDeCobro = "vencido" | "por_pagar";
+
+export function estadoDeCobro(inv: OverdueCandidate, todayStart: Date | string): EstadoDeCobro | null {
+  if (NON_OVERDUE_STATUSES.includes(inv.status)) return null;
+  if (!(Number(inv.balance ?? 0) > 0)) return null;
+  return isInvoiceOverdue(inv, todayStart) ? "vencido" : "por_pagar";
+}
+
+/**
+ * «15 de octubre» (o «15 de octubre de 2027» si no es de este año) del `dueDate` guardado,
+ * leído en la zona de la clínica: se guarda como 00:00 de ese día allí (parseInvoiceDueDate)
+ * y en UTC sería el día anterior. null si no hay fecha válida.
+ */
+export function fechaDeVencimientoHumana(
+  dueDate: Date | string | null | undefined,
+  timezone: string,
+  ahora: Date = new Date(),
+): string | null {
+  if (!dueDate) return null;
+  const d = dueDate instanceof Date ? dueDate : new Date(dueDate);
+  if (isNaN(d.getTime())) return null;
+  const timeZone = timezone || DEFAULT_INVOICE_TZ;
+  const anio = (x: Date) => new Intl.DateTimeFormat("es-MX", { timeZone, year: "numeric" }).format(x);
+  const mismoAnio = anio(d) === anio(ahora);
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone, day: "numeric", month: "long", ...(mismoAnio ? {} : { year: "numeric" }),
+  }).format(d);
+}

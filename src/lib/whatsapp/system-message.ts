@@ -21,6 +21,11 @@ export type WhatsAppSendKind =
   | "system"              // avisos de la plataforma (saldo IA, pagos…)
   | "manual_api"          // recordatorio disparado a mano desde el panel
   | "payment_notice"      // aviso de saldo pendiente de una factura
+  // ws1-t4 (8c) — PLANTILLAS del aviso de saldo según el estado de la nota: «pago por
+  // realizar» (sin vencer) y «saldo vencido». Solo eligen la plantilla: el envío se
+  // registra siempre como `payment_notice` (así lo cuenta el tope de un aviso al día).
+  | "payment_due"
+  | "payment_overdue"
   // ws1-t6 — «Enviar la factura» al crearla o desde su ficha: la NOTA (folio, monto y,
   // si se cobra por Mercado Pago, su link). Plantilla dc_factura_lista. Antes salía
   // como `payment_notice` y fuera de ventana el paciente recibía «Tienes un saldo pendiente».

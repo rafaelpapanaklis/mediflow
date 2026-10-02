@@ -30,7 +30,8 @@ import { CHARGEABLE_INVOICE_STATUSES } from "@/components/dashboard/billing/invo
 import { digitsLast10, isWithin24hWindow } from "@/lib/inbox/send-core";
 import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
 import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
-import { decideSendMode } from "@/lib/whatsapp/send-mode";
+import { decideSendMode, kindDePlantilla } from "@/lib/whatsapp/send-mode";
+import { estadoDeCobro, fechaDeVencimientoHumana, startOfTodayInTz } from "@/lib/invoices/due-date";
 import { SYSTEM_EXTERNAL_ID_PREFIX } from "@/lib/whatsapp/system-message";
 import { TIPOS_AVISO_DE_COBRO, avisoAutomaticoDeCobroReciente } from "@/lib/whatsapp/aviso-cobro-tope";
 import { parseWaTemplates, renderTemplateBody, specForKind } from "@/lib/whatsapp/template-config";
@@ -232,6 +233,9 @@ export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida): Promise<Mensaj
     return { tipo: "no", frase: "Falta el teléfono de la clínica (Configuración → Clínica): el aviso lo necesita para decir a dónde llamar." };
   }
 
+  // ws1-t4 (8c): mismo «pago por realizar / saldo vencido» que la ruta.
+  const zona = (clinica as { timezone?: string | null }).timezone ?? "";
+  const estado = estadoDeCobro({ status: f.status, balance: f.balance, dueDate: f.dueDate }, startOfTodayInTz(zona));
   const aviso = buildPaymentNotice({
     patient: { firstName: f.paciente.firstName, lastName: f.paciente.lastName },
     clinicName: clinica.name,
@@ -243,18 +247,18 @@ export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida): Promise<Mensaj
       clinicId: ctx.clinicId, invoiceId: f.id, total: f.total, paid: f.paid, zonaHoraria: (clinica as { timezone?: string | null }).timezone,
     }),
     items: f.items,
+    cobro: estado ? { estado, vence: fechaDeVencimientoHumana(f.dueDate, zona) } : null,
   });
   const { lastInboundAtForPhone } = await import("@/lib/whatsapp/inbox-log");
   const ultimoDelPaciente = await lastInboundAtForPhone(ctx.clinicId, f.paciente.telefono);
-  const decision = decideSendMode({
-    kind: "payment_notice",
-    windowOpen: isWithin24hWindow(ultimoDelPaciente, new Date()),
-    templates: parseWaTemplates(clinica.waTemplates ?? null),
-    params: aviso.templateParams,
-  });
+  // La MISMA elección de plantilla que sendWhatsAppLogged (kindDePlantilla).
+  const windowOpen = isWithin24hWindow(ultimoDelPaciente, new Date());
+  const plantillas = parseWaTemplates(clinica.waTemplates ?? null);
+  const kind = windowOpen ? "payment_notice" : kindDePlantilla("payment_notice", aviso.plantillaPreferida, plantillas);
+  const decision = decideSendMode({ kind, windowOpen, templates: plantillas, params: aviso.templateParams });
   if (decision.mode === "blocked") return { tipo: "no", frase: `No se puede mandar: ${decision.reason}` };
   if (decision.mode === "template") {
-    return { tipo: "ok", modo: "template", texto: renderTemplateBody(specForKind("payment_notice"), decision.params, aviso.body) };
+    return { tipo: "ok", modo: "template", texto: renderTemplateBody(specForKind(kind), decision.params, aviso.body) };
   }
   return { tipo: "ok", modo: "text", texto: aviso.body };
 }

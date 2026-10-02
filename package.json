@@ -273,6 +273,7 @@
     "test:plan-status": "tsx --test src/lib/__tests__/plan-status.test.ts src/lib/__tests__/plan-status-guard.test.ts src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts",
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
+    "test:aviso-por-pagar-vencido": "tsx --test src/lib/invoices/__tests__/aviso-por-pagar-vencido.test.ts",
     "test:plan-de-pagos": "tsx --test src/lib/invoices/__tests__/plan-de-pagos.test.ts",
     "test:orto-cfdi-responsable": "tsx --test src/lib/orthodontics/__tests__/receptor-responsable.test.ts",
     "test:orto-cobranza-extras": "tsx --test src/lib/orthodontics/__tests__/cobranza-extras.test.ts",

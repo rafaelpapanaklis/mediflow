@@ -41,6 +41,7 @@ import { buildMensajeFactura } from "@/lib/invoices/invoice-message";
 import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
 import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
 import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
+import { estadoDeCobro, fechaDeVencimientoHumana, startOfTodayInTz } from "@/lib/invoices/due-date";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId }, // scope multi-tenant
     select: {
-      id: true, invoiceNumber: true, status: true, balance: true, total: true, paid: true, items: true, patientId: true,
+      id: true, invoiceNumber: true, status: true, balance: true, total: true, paid: true, items: true, patientId: true, dueDate: true,
       patient: { select: { firstName: true, lastName: true, phone: true } },
       clinic: {
         select: {
@@ -165,6 +166,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
   });
 
+  // ws1-t4 (8c): «pago por realizar» (vence el …) o «saldo vencido», con el criterio único
+  // de lib/invoices/due-date (el del filtro «Vencidas»), en la zona de la clínica.
+  const estado = esFactura ? null : estadoDeCobro(invoice, startOfTodayInTz(clinic.timezone ?? ""));
+  const cobro = estado ? { estado, vence: fechaDeVencimientoHumana(invoice.dueDate, clinic.timezone ?? "") } : null;
+
   // Comprobante PDF — solo sale con la ventana abierta (en modo plantilla el
   // helper lo ignora). Best-effort: sin PDF el aviso sigue valiendo.
   let attachment: WhatsAppOutboundAttachment | null = null;
@@ -183,23 +189,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // Al responsable se le saluda a él y se dice de quién es la nota.
     const saludo = d.rol === "responsable" ? { firstName: d.nombre, lastName: "" } : invoice.patient;
     const aNombreDe = d.rol === "responsable" ? nombrePaciente : null;
-    const { body, templateParams } = esFactura
-      ? buildMensajeFactura({
-          saludo, aNombreDe, clinicName: clinic.name, clinicPhone,
-          invoiceNumber: invoice.invoiceNumber, total: invoice.total, balance: invoice.balance,
-          items: invoice.items, linkPago: link,
-        })
-      : buildPaymentNotice({
-          patient: saludo,
-          aNombreDe,
-          clinicName: clinic.name,
-          clinicPhone,
-          invoiceNumber: invoice.invoiceNumber,
-          balance: invoice.balance,
-          pagoDelMes,
-          items: invoice.items,
-          linkPago: link,
-        });
+    const aviso = esFactura ? null : buildPaymentNotice({
+      patient: saludo,
+      aNombreDe,
+      clinicName: clinic.name,
+      clinicPhone,
+      invoiceNumber: invoice.invoiceNumber,
+      balance: invoice.balance,
+      pagoDelMes,
+      items: invoice.items,
+      linkPago: link,
+      cobro,
+    });
+    const { body, templateParams } = esFactura ? buildMensajeFactura({
+      saludo, aNombreDe, clinicName: clinic.name, clinicPhone,
+      invoiceNumber: invoice.invoiceNumber, total: invoice.total, balance: invoice.balance,
+      items: invoice.items, linkPago: link,
+    }) : aviso!;
+    // ws1-t4 (8c): la plantilla de «por pagar» / «vencido» si Meta ya la aprobó.
+    const plantillaPreferida = aviso?.plantillaPreferida ?? null;
     try {
       await sendWhatsAppLogged({
         clinic: {
@@ -214,6 +222,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         kind: esFactura ? "invoice_ready" : "payment_notice",
         patientId: invoice.patientId ?? null,
         templateParams,
+        plantillaPreferida,
         attachment,
       });
       enviados.push(d);

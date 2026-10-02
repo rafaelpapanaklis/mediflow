@@ -571,13 +571,16 @@ test("🔴 aviso: la tarjeta enseña el texto EXACTO del handler (ventana abiert
   const esperado = buildPaymentNotice({
     patient: { firstName: "Juan", lastName: "Pérez" }, clinicName: "Clínica QA", clinicPhone: "55 5000 1000",
     invoiceNumber: "MF-0010", balance: 1200, items: [{ description: "Limpieza dental" }],
+    // ws1-t4 (8c): sin vencer → «pago por realizar», como en la ruta.
+    cobro: { estado: "por_pagar", vence: null },
   }).body;
   const mensaje = abierta.tarjeta.detalles.find((d: any) => d.etiqueta === "Mensaje que recibe").valor;
   assert.equal(mensaje, `«${esperado}»`);
-  assert.match(esperado, /^Hola Juan Pérez, te saludamos de Clínica QA\. Tienes un saldo pendiente de \$1,200\.00 MXN de tu nota MF-0010 \(Limpieza dental\)\./);
+  assert.match(esperado, /^Hola Juan Pérez, te saludamos de Clínica QA\. Tienes un pago por realizar de \$1,200\.00 MXN de tu nota MF-0010 \(Limpieza dental\)\./);
   assert.equal(abierta.datos.modo, "text");
   assert.ok(abierta.tarjeta.avisos.some((a: string) => /comprobante PDF adjunto/.test(a)));
 
+  // Ventana cerrada y dc_pago_por_realizar sin dar de alta: sale dc_aviso_saldo, como antes.
   ventana.ultimoMensajeDelPaciente = null;
   const cerrada = (await accionAvisarSaldo.preparar(recepcion(db), { factura: "MF-0010" })) as any;
   assert.equal(cerrada.datos.modo, "template");

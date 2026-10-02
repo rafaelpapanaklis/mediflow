@@ -5834,6 +5834,8 @@
       "tplKindManual": "Message from the clinic",
       "tplKindReview": "Review invitation",
       "tplKindPaymentNotice": "Outstanding balance notice",
+      "tplKindPaymentDue": "Upcoming payment notice",
+      "tplKindPaymentOverdue": "Overdue balance notice",
       "tplKindQuoteReady": "Quote ready",
       "tplKindConsent": "Informed consent",
       "tplKindInvoiceReady": "Invoice ready",
