@@ -10,6 +10,7 @@ import {
   type ClinicReviewDTO,
   type ClinicReviewsResponse,
 } from "@/lib/reviews/types";
+import { Invitaciones } from "./invitaciones";
 import { ResenasRediseno } from "@/components/dashboard/pequenas-rediseno/resenas";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +92,8 @@ export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {})
           </div>
         </div>
       )}
+
+      {!loading && !error && page === 1 && <Invitaciones items={data?.invitaciones} />}
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "40px 0", justifyContent: "center", color: "var(--text-3)" }}>

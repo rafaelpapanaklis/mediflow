@@ -341,6 +341,7 @@ export async function POST(req: NextRequest) {
         to: destinoWhatsApp,
         body: msg,
         kind: "booking",
+        patientId: resolved.patientId,
         // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor —
         // el orden de WA_TEMPLATE_SPECS. Meta sustituye por posición, no por
         // nombre.

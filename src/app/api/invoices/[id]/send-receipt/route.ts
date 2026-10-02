@@ -102,6 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         to: d.valor,
         body: texto,
         kind: "payment_receipt",
+        patientId: invoice.patientId ?? null,
         templateParams: [d.nombre, clinic.name, formatoPesos(invoice.paid), invoice.invoiceNumber],
         attachment,
       });

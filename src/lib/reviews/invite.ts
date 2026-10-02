@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
-import { buildAuthorName, REVIEW_STATUS, REVIEW_TOKEN_TTL_DAYS } from "./types";
+import { buildAuthorName, marcaDeWamid, REVIEW_STATUS, REVIEW_TOKEN_TTL_DAYS } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Invitación a reseña verificada. Al cerrarse una cita (COMPLETED) se crea una
@@ -116,7 +116,7 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
       appt.patient.phone
     ) {
       try {
-        await sendWhatsAppLogged({
+        const meta = await sendWhatsAppLogged({
           clinic: {
             id: appt.clinicId,
             waPhoneNumberId: appt.clinic.waPhoneNumberId,
@@ -127,6 +127,10 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
           to: appt.patient.phone,
           body: message,
           kind: "review",
+          // El paciente de ESTA cita, no el que adivine el teléfono: si lo
+          // comparten dos (hermanos, un paciente de prueba), el aviso se
+          // atribuye a quien toca (ws1-t4, 11.3).
+          patientId: appt.patientId,
           // {{1}} paciente, {{2}} clínica. La plantilla de reseñas es de
           // MARKETING y es OPCIONAL: si la clínica no la activó, `waTemplates`
           // no la trae y fuera de ventana el envío se bloquea con motivo —
@@ -134,6 +138,11 @@ export async function sendReviewInvitation(appointmentId: string): Promise<void>
           templateParams: [firstName || "paciente", clinicName],
         });
         channels.push("whatsapp");
+        // El id del mensaje de Meta: con él, Reseñas cruza con la entrega REAL
+        // (el rechazo llega después, por el webhook) en vez de fiarse de que la
+        // API lo aceptó (ws1-t4, 11.4).
+        const wamid = meta?.messages?.[0]?.id;
+        if (typeof wamid === "string" && wamid) channels.push(marcaDeWamid(wamid));
       } catch (e) {
         console.error("[reviews/invite] whatsapp", e);
       }

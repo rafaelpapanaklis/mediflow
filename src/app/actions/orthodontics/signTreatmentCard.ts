@@ -34,6 +34,7 @@ import { mensajeDeHuecos } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cambiosAlFirmarConArco } from "@/lib/orthodontics/secuencia-de-arcos";
 import { existeFacturaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita-db";
 import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
+import { sendReviewInvitation } from "@/lib/reviews/invite";
 
 /** Códigos Prisma de "columna inexistente" — mismo patrón que cobranza-db.ts. */
 function esColumnaAusente(e: unknown): boolean {
@@ -495,6 +496,9 @@ export async function signTreatmentCard(
         const cierre = datosDeCierreDeCita(plan, now);
         if (cierre) {
           await prisma.appointment.update({ where: { id: citaDeControl.id }, data: cierre });
+          // Cerrar la cita al firmar pide la reseña igual que «Terminar consulta»
+          // (ws1-t4, 11.2). Idempotente y nunca lanza.
+          await sendReviewInvitation(citaDeControl.id);
         } else {
           console.warn(`[ortho] signTreatmentCard: cita ${citaDeControl.id} (${citaDeControl.status}) no se puede pasar a COMPLETED — se firmó igual`);
         }

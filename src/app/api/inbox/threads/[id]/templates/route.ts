@@ -307,6 +307,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         to,
         body: preview,
         kind,
+        patientId: thread.patientId ?? null,
         templateParams: built.params,
         // Esta plantilla la mandó una PERSONA: el hilo la muestra con su nombre,
         // no con la etiqueta de envío automático.

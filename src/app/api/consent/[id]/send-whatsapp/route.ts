@@ -134,6 +134,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       to: patientPhone,
       body,
       kind: "consent",
+      patientId: form.patientId,
       // Orden del spec dc_consentimiento_listo: paciente, clínica,
       // procedimiento, liga. Meta sustituye por POSICIÓN, no por nombre.
       templateParams: [patientName, clinic.name, form.procedure, link],

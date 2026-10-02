@@ -11,10 +11,12 @@ import {
   ReviewError,
   buildAuthorName,
   clampRating,
+  wamidDeCanales,
   roundAvg,
   type AdminReviewDTO,
   type ClinicReviewDTO,
   type ClinicReviewsResponse,
+  type InvitacionResenaDTO,
   type PublicReviewDTO,
   type PublicReviewsResponse,
   type AdminReviewsResponse,
@@ -24,6 +26,8 @@ import {
   type ReviewStatus,
   type ReviewSummary,
 } from "./types";
+import { estadoDeInvitacion, type EntregaWhatsApp } from "./estado-invitacion";
+import { buildSystemExternalId } from "@/lib/whatsapp/system-message";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Capa de datos de reseñas. TODO acceso a prisma.clinicReview vive aquí; las
@@ -284,6 +288,50 @@ function toClinicDTO(r: {
     createdAt: r.createdAt.toISOString(),
     submittedAt: toIso(r.submittedAt),
   };
+}
+
+/**
+ * Invitaciones de reseña PENDIENTES de los últimos 30 días, con su entrega real.
+ * Cruza el id del mensaje de Meta (guardado en `invitedChannels`) con el
+ * `deliveryStatus` que escribe el webhook. Multi-tenant: la reseña y el hilo del
+ * mensaje se filtran por `clinicId` (de la sesión).
+ */
+export async function getInvitacionesRecientes(clinicId: string): Promise<InvitacionResenaDTO[]> {
+  if (!clinicId) return []; // clinicId undefined no filtra: cortar antes de consultar
+  const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.clinicReview.findMany({
+    where: { clinicId, status: REVIEW_STATUS.PENDING, createdAt: { gte: desde } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, authorName: true, createdAt: true, invitedChannels: true },
+  });
+  const wamids = rows.map((r) => wamidDeCanales(r.invitedChannels)).filter((w): w is string => !!w);
+  const entregas = new Map<string, EntregaWhatsApp>();
+  if (wamids.length > 0) {
+    const msgs = await prisma.inboxMessage.findMany({
+      where: {
+        externalId: { in: wamids.map((w) => buildSystemExternalId("review", w)) },
+        thread: { clinicId },
+      },
+      select: { externalId: true, deliveryStatus: true, errorCode: true },
+    });
+    for (const m of msgs) {
+      if (m.externalId) entregas.set(m.externalId, { deliveryStatus: m.deliveryStatus, errorCode: m.errorCode });
+    }
+  }
+  return rows.map((r) => {
+    const wamid = wamidDeCanales(r.invitedChannels);
+    const entrega = wamid ? entregas.get(buildSystemExternalId("review", wamid)) ?? null : null;
+    const e = estadoDeInvitacion({ canales: r.invitedChannels, entrega });
+    return {
+      id: r.id,
+      authorName: r.authorName,
+      createdAt: r.createdAt.toISOString(),
+      estado: e.estado,
+      motivo: e.motivo,
+      porCorreo: e.porCorreo,
+    };
+  });
 }
 
 /** Reseñas enviadas (published|hidden) de la clínica, paginadas, + resumen. */

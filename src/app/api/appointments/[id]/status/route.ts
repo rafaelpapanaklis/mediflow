@@ -19,6 +19,7 @@ import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/regis
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
+import { sendReviewInvitation } from "@/lib/reviews/invite";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -166,6 +167,12 @@ export async function PATCH(
       { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
       { status: 409 },
     );
+  }
+
+  // Invitación a reseña: cerrar la cita por la Agenda debe comportarse igual que
+  // «Terminar consulta» (ws1-t4, 11.2). Idempotente (una por cita) y nunca lanza.
+  if (body.status === "COMPLETED") {
+    await sendReviewInvitation(params.id);
   }
 
   // Google Calendar: cancelar o marcar no-asistió saca la cita del calendario

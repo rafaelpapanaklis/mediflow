@@ -177,6 +177,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     where: { id: params.id, clinicId: ctx.clinicId },
     select: {
       startsAt: true,
+      patientId: true,
       patient: { select: { firstName: true, lastName: true, phone: true } },
       clinic: { select: { name: true, timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true, waTemplates: true } },
     },
@@ -271,6 +272,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             to: phone,
             body: texto,
             kind: "deposit_request",
+            patientId: datos.patientId ?? null,
             attachment: pdfAttachment,
           });
           whatsapp = { enviado: true };

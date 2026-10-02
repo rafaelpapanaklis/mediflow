@@ -51,6 +51,8 @@ const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 type Prefix = (typeof PREFIXES)[number];
 
 interface PatientCtx {
+  /** Para atribuir el aviso al paciente correcto cuando el teléfono se comparte. */
+  id?: string | null;
   firstName: string;
   lastName: string;
   phone: string;
@@ -125,6 +127,7 @@ export async function processWhatsAppQueue(opts?: {
           startsAt: true,
           status: true,
           holdExpiresAt: true,
+          patientId: true,
           patient: {
             select: { firstName: true, lastName: true, phone: true, email: true },
           },
@@ -276,6 +279,7 @@ export async function processWhatsAppQueue(opts?: {
       let patientCtx: PatientCtx | null = null;
       if (r.appointment?.patient?.phone) {
         patientCtx = {
+          id: r.appointment.patientId,
           firstName: r.appointment.patient.firstName,
           lastName: r.appointment.patient.lastName,
           phone: r.appointment.patient.phone,
@@ -283,10 +287,11 @@ export async function processWhatsAppQueue(opts?: {
       } else if (r.patientPhone) {
         const found = await prisma.patient.findFirst({
           where: { clinicId: r.clinicId, phone: r.patientPhone, deletedAt: null },
-          select: { firstName: true, lastName: true, phone: true },
+          select: { id: true, firstName: true, lastName: true, phone: true },
         });
         if (found?.phone) {
           patientCtx = {
+            id: found.id,
             firstName: found.firstName,
             lastName: found.lastName,
             phone: found.phone,
@@ -365,6 +370,7 @@ export async function processWhatsAppQueue(opts?: {
         to: patientCtx.phone,
         body,
         kind: "reminder",
+        patientId: patientCtx.id ?? null,
         templateParams,
         // ws1-t3 — el recordatorio de una cita viva sale con botones
         // (Confirmar / Reagendar / Cancelar) dentro de la ventana de 24 h; el

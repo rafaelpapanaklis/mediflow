@@ -13,6 +13,21 @@ export const REVIEW_STATUS = {
 } as const;
 export type ReviewStatus = (typeof REVIEW_STATUS)[keyof typeof REVIEW_STATUS];
 
+/**
+ * `invitedChannels` es `String[]` ("whatsapp", "email"). Junto a "whatsapp" se
+ * guarda `wamid:<id>`, el id del mensaje de Meta, SIN columna nueva: es lo que
+ * deja cruzar la invitación con su entrega real (inbox_messages.deliveryStatus).
+ * Nadie más lee este arreglo; los canales siguen siendo los de siempre.
+ */
+const PREFIJO_WAMID = "wamid:";
+export function marcaDeWamid(wamid: string): string {
+  return `${PREFIJO_WAMID}${wamid}`;
+}
+export function wamidDeCanales(canales: readonly string[] | null | undefined): string | null {
+  const m = (canales ?? []).find((c) => c.startsWith(PREFIJO_WAMID));
+  return m ? m.slice(PREFIJO_WAMID.length) || null : null;
+}
+
 /** Reseñas por página en el perfil público y en los paneles. */
 export const REVIEW_PAGE_SIZE = 8;
 
@@ -86,8 +101,29 @@ export interface AdminReviewDTO extends ClinicReviewDTO {
   reportedAt: string | null;
 }
 
+/** Cómo va una invitación de reseña, según la entrega REAL (no según «la API la aceptó»). */
+export type EstadoInvitacion =
+  | "enviada" // la API la aceptó, Meta aún no reporta entrega (o fue por correo)
+  | "entregada"
+  | "vista"
+  | "fallo" // Meta la rechazó (p. ej. 131026: el número no tiene WhatsApp)
+  | "sin_enviar"; // ningún canal la aceptó (sin plantilla, sin conexión…)
+
+export interface InvitacionResenaDTO {
+  id: string;
+  authorName: string;
+  createdAt: string;
+  estado: EstadoInvitacion;
+  /** Clave del motivo del fallo (ver reminder-error.ts), o null. */
+  motivo: string | null;
+  /** También salió por correo: el fallo de WhatsApp no deja al paciente sin invitación. */
+  porCorreo: boolean;
+}
+
 export interface ClinicReviewsResponse {
   items: ClinicReviewDTO[];
+  /** Invitaciones pendientes recientes (solo en la página 1). */
+  invitaciones?: InvitacionResenaDTO[];
   page: number;
   pageSize: number;
   total: number;

@@ -93,6 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         to: rx.patient.phone,
         body: message,
         kind: "prescription",
+        patientId: rx.patientId,
         // {{1}} paciente, {{2}} clínica, {{3}} fecha de la consulta. La
         // plantilla no lleva el enlace: Meta no admite URLs variables en el
         // cuerpo sin darlas de alta como botón, así que fuera de ventana el

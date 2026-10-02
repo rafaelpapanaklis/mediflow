@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { deleteRoom } from "@/lib/daily";
 import { canCloseTeleconsulta } from "@/lib/agenda/transitions";
 import { logMutation } from "@/lib/audit";
+import { sendReviewInvitation } from "@/lib/reviews/invite";
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,6 +91,10 @@ export async function POST(req: NextRequest) {
         before: { status: appointment.status },
         after: { status: "COMPLETED", completedAt: now.toISOString(), via: "teleconsulta" },
       });
+
+      // Igual que «Terminar consulta» (ws1-t4, 11.2): una consulta que se cierra
+      // pide su reseña por cualquier camino. Idempotente y nunca lanza.
+      await sendReviewInvitation(appointmentId);
     } else {
       // No se cambia el status, pero queda rastro de que se colgó: si no, este
       // caso sería invisible en la bitácora.

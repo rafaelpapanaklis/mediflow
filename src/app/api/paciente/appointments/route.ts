@@ -481,6 +481,7 @@ export async function POST(req: NextRequest) {
           to: cleanPhone,
           body: msg,
           kind: "booking",
+          patientId: patientId,
           // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor.
           templateParams: [
             patient?.firstName || patientName || "paciente",

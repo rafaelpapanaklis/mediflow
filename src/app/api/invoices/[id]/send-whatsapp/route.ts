@@ -226,6 +226,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         to: d.valor,
         body,
         kind: "payment_notice",
+        patientId: invoice.patientId ?? null,
         templateParams,
         attachment,
       });

@@ -155,6 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       to: patientPhone,
       body,
       kind: "quote_ready",
+      patientId: quote.patientId ?? null,
       // Orden del spec dc_presupuesto_listo: paciente, clínica, liga.
       templateParams: [patientName, clinic.name, link],
       attachment,

@@ -164,6 +164,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const datos = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
     select: {
+      patientId: true,
       patient: { select: { firstName: true, lastName: true, phone: true } },
       appointment: { select: { startsAt: true } },
       clinic: { select: { name: true, timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true, waTemplates: true } },
@@ -258,6 +259,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             to: phone,
             body: texto,
             kind: "deposit_request",
+            patientId: datos.patientId ?? null,
             attachment: pdfAttachment,
           });
           whatsapp = { enviado: true };

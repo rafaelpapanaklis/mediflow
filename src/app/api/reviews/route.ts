@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
-import { getClinicReviews } from "@/lib/reviews/service";
+import { getClinicReviews, getInvitacionesRecientes } from "@/lib/reviews/service";
 
 // GET /api/reviews?page=<n> — reseñas de LA clínica de la sesión (multi-tenant).
 export const dynamic = "force-dynamic";
@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const data = await getClinicReviews(session.clinic.id, page);
-    return NextResponse.json(data);
+    // Las invitaciones van aparte y solo en la primera página; si fallan no
+    // tumban la lista de reseñas.
+    const invitaciones =
+      page === 1 ? await getInvitacionesRecientes(session.clinic.id).catch(() => []) : [];
+    return NextResponse.json({ ...data, invitaciones });
   } catch (err) {
     console.error("[reviews:list]", err);
     return NextResponse.json({ error: "Error al cargar reseñas" }, { status: 500 });

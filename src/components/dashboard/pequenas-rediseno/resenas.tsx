@@ -10,6 +10,7 @@ import {
   type ClinicReviewDTO,
   type ClinicReviewsResponse,
 } from "@/lib/reviews/types";
+import { Invitaciones } from "@/app/dashboard/resenas/invitaciones";
 import { RaizPequenas } from "./raiz";
 import { Aviso, Boton, Cabecera, Cargando, Etiqueta, Girando, Vacio, estilos as s } from "./piezas";
 
@@ -71,6 +72,8 @@ export function ResenasRediseno({
           </div>
         </div>
       )}
+
+      {!loading && !error && page === 1 && <Invitaciones items={data?.invitaciones} rediseno />}
 
       {loading ? (
         <Cargando texto="Cargando…" />

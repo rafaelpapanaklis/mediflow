@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
       to: appt.patient.phone,
       body,
       kind: "manual_api",
+      patientId: appt.patientId,
       // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora. El cuerpo libre
       // de arriba lo puede haber cambiado la clínica (waReminderMsg); la
       // plantilla NO, porque Meta la aprueba palabra por palabra. Estos van

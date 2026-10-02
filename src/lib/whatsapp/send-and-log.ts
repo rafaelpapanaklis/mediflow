@@ -34,6 +34,11 @@ import {
 } from "@/lib/whatsapp/inbox-log";
 import { buildSystemExternalId, type WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
+// Namespace a propósito: las pruebas que sustituyen inbox-log con unos pocos
+// exports no tienen `findPatientsByWhatsAppPhone`, y un import con nombre
+// rompería su carga; así solo falla (y se atrapa) cuando de verdad se usa.
+import * as inboxLog from "@/lib/whatsapp/inbox-log";
+import { conEtiquetaDePaciente, debeEtiquetarPaciente } from "@/lib/whatsapp/atribucion-paciente";
 import { decideSendMode } from "@/lib/whatsapp/send-mode";
 import {
   parseWaTemplates,
@@ -337,9 +342,23 @@ async function logOutboundToInbox(args: LogArgs): Promise<void> {
   const now = new Date();
   // El id explícito primero: si el caller ya sabe a quién le escribe, no hay
   // que adivinarlo por teléfono (ni arriesgarse a acertar el hermano que no es).
+  const explicito = args.linkPatient ? args.patientId ?? null : null;
   const patientId = args.linkPatient
-    ? args.patientId ?? (await findPatientByWhatsAppPhone(args.clinicId, args.to))?.id ?? null
+    ? explicito ?? (await findPatientByWhatsAppPhone(args.clinicId, args.to))?.id ?? null
     : null;
+
+  // Teléfono compartido (11.3): solo se mira cuando el caller dijo de quién es el
+  // aviso. Con dos pacientes en ese número el hilo NO se liga a ninguno (lo
+  // ligaría a quien le toque primero, que es el fallo original); la
+  // conversación sigue visible porque el Inbox la encuentra por teléfono.
+  let duenos = 0;
+  if (explicito) {
+    try {
+      duenos = (await inboxLog.findPatientsByWhatsAppPhone(args.clinicId, args.to)).length;
+    } catch (e) {
+      console.error("[whatsapp/send-and-log] no se pudo contar quién comparte el teléfono:", e);
+    }
+  }
 
   const thread = await upsertWhatsAppThread({
     clinicId: args.clinicId,
@@ -351,17 +370,30 @@ async function logOutboundToInbox(args: LogArgs): Promise<void> {
     // el status: si el paciente había escrito y el hilo está UNREAD, un
     // recordatorio automático no puede darlo por leído a nombre del equipo.
     createStatus: "READ",
-    patientId,
+    patientId: explicito && duenos > 1 ? null : patientId,
     matchByLast10: true,
     // Sin pauseBot: estos avisos NO son un humano tomando la conversación; el
     // bot debe seguir contestando (p.ej. el "CONFIRMAR" a un recordatorio).
   });
 
+  let cuerpo = args.body;
+  if (explicito && debeEtiquetarPaciente({
+    patientId: explicito,
+    hiloPatientId: thread.patientId,
+    pacientesConElTelefono: duenos,
+  })) {
+    // Tenant: el paciente se busca por id Y clínica.
+    const quien = await prisma.patient
+      .findFirst({ where: { id: explicito, clinicId: args.clinicId }, select: { firstName: true, lastName: true } })
+      .catch(() => null);
+    if (quien) cuerpo = conEtiquetaDePaciente(args.body, `${quien.firstName ?? ""} ${quien.lastName ?? ""}`);
+  }
+
   await prisma.inboxMessage.create({
     data: {
       threadId: thread.id,
       direction: "OUT",
-      body: args.body,
+      body: cuerpo,
       // null = automático (nadie lo escribió). Con id, el Inbox lo pinta como
       // mensaje del equipo y con el nombre de quien lo mandó.
       sentById: args.sentById ?? null,

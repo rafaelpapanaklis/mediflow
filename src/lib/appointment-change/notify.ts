@@ -119,6 +119,7 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
           to: patient.phone,
           body: message,
           kind: "appointment_change",
+          patientId: cr.patientId,
           // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor.
           // `fecha` y `hora` son ya las de la cita resultante (el resolve la
           // actualizó).
