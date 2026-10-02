@@ -50,6 +50,11 @@ export interface CitaDeControl {
    */
   treatmentPlanId?: string | null;
   /**
+   * Revisión final de ws1-t9 (fallo nuevo 4): control de HOY sin hoja ligada cuyo caso ya tiene la hoja de hoy
+   * firmada «sin cita» (al abrirla desde la cita se liga). El botón de la fila dice «Ver control».
+   */
+  hojaFirmadaSinCita?: boolean;
+  /**
    * ws1-t12 — «Control 6 de 18»: el número que llevará esta cita y los que prevé el plan de tratamiento del
    * caso. Solo en citas por atender de un caso cuyo plan dice cuántos controles prevé.
    */

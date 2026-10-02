@@ -28,6 +28,7 @@ interface AppointmentRow {
   status: string;
   startsAt: Date;
   endsAt: Date;
+  doctorId?: string | null;
 }
 
 let plans: PlanRow[] = [];
@@ -50,6 +51,23 @@ mock.module("@/lib/prisma", {
       },
       clinic: { findUnique: async () => ({ timezone: "America/Mexico_City" }) },
       appointment: {
+        // Revisión final de ws1-t9 (fallo nuevo 2): la acción trae TODAS las citas de hoy y elige con
+        // citaParaLigarLaHoja (la de la dirección, o la primera de control que la sesión puede mover).
+        findMany: async ({
+          where,
+        }: {
+          where: { clinicId: string; patientId: string; status: { notIn: string[] }; startsAt: { gte: Date; lt: Date } };
+        }) =>
+          appointments
+            .filter(
+              (a) =>
+                a.clinicId === where.clinicId &&
+                a.patientId === where.patientId &&
+                !where.status.notIn.includes(a.status) &&
+                a.startsAt >= where.startsAt.gte &&
+                a.startsAt < where.startsAt.lt,
+            )
+            .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
         findFirst: async ({
           where,
         }: {
@@ -106,6 +124,7 @@ test("con una cita de control de HOY, el contexto queda ligado a ella", async ()
     patientId: "p-1",
     type: TIPO_CITA_CONTROL_ORTO,
     status: "SCHEDULED",
+    doctorId: "user-1", // la sesión es DOCTOR: solo se liga a SUS citas
     startsAt: HOY_10AM_UTC,
     endsAt: new Date(HOY_10AM_UTC.getTime() + 30 * 60000),
   });

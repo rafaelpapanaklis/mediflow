@@ -63,7 +63,7 @@ export function RanuraCita({ dto, onModoDeCobro }: RanuraCitaProps) {
     const cargar = (reintentosRestantes: number) => {
       // H23 (QA ws1-t9): `resolverEstadoRanuraCita` tolera un `res` vacío o
       // mal formado; el `.catch` cubre el rechazo directo de la promesa.
-      getTreatmentPlanIdForAppointment(dto.patient.id)
+      getTreatmentPlanIdForAppointment(dto.patient.id, dto.id)
         .then((res) => {
           if (cancelled) return;
           // X8: un 502 deja la action en `undefined` sin rechazar: que lo tome
@@ -89,7 +89,7 @@ export function RanuraCita({ dto, onModoDeCobro }: RanuraCitaProps) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [esControl, dto.patient.id, intento]);
+  }, [esControl, dto.patient.id, dto.id, intento]);
 
   // Se avisa al panel cuando ya se sabe (con o sin caso, o si la consulta falló definitivamente).
   const aviso = onModoDeCobro;
@@ -119,7 +119,7 @@ export function RanuraCita({ dto, onModoDeCobro }: RanuraCitaProps) {
     <div className={`${RAIZ_ORTO} flex flex-col gap-[10px]`}>
       <ResumenCobranza treatmentPlanId={state.treatmentPlanId} />
       {state.canOpenClinicalCard ? (
-        <BotonHojaControl appointmentId={dto.id} treatmentPlanId={state.treatmentPlanId} />
+        <BotonHojaControl appointmentId={dto.id} treatmentPlanId={state.treatmentPlanId} firmada={state.hojaFirmada} />
       ) : null}
     </div>
   );

@@ -21,7 +21,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { FileText, Loader2 } from "lucide-react";
+import { ClipboardCheck, FileText, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Btn } from "../redesign/atoms/Btn";
 import {
@@ -50,6 +50,12 @@ export interface BotonHojaControlProps {
   treatmentPlanId: string;
   /** Para una fila de tabla/lista: botón chico y del ancho de su texto (no el de panel lateral). */
   compacto?: boolean;
+  /**
+   * Revisión final de ws1-t9 (fallo nuevo 4): el control de esta cita ya está firmado (ligado, o el de hoy «sin
+   * cita» que se liga al abrirlo). El botón abre lo mismo, pero dice «Ver control»: «Registrar control» en una
+   * fila «Completada» sugería que faltaba algo.
+   */
+  firmada?: boolean;
 }
 
 interface LoadedContext {
@@ -79,7 +85,7 @@ interface LoadedContext {
   };
 }
 
-export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = false }: BotonHojaControlProps) {
+export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = false, firmada = false }: BotonHojaControlProps) {
   const [loading, setLoading] = useState(false);
   const [ctx, setCtx] = useState<LoadedContext | null>(null);
   const [open, setOpen] = useState(false);
@@ -193,14 +199,14 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
   return (
     <>
       <Btn
-        variant="primary"
+        variant={firmada ? "secondary" : "primary"}
         size={compacto ? "sm" : "md"}
         className={compacto ? "" : "w-full"}
-        icon={loading ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" aria-hidden /> : <FileText size={15} strokeWidth={1.75} aria-hidden />}
+        icon={loading ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" aria-hidden /> : firmada ? <ClipboardCheck size={15} strokeWidth={1.75} aria-hidden /> : <FileText size={15} strokeWidth={1.75} aria-hidden />}
         onClick={abrir}
         disabled={loading}
       >
-        {loading ? "Abriendo…" : "Registrar control"}
+        {loading ? "Abriendo…" : firmada ? textosFirma.verControl : "Registrar control"}
       </Btn>
       {error ? (
         <div className={`${orto.aviso} ${orto.avisoPeligro}`} role="alert">

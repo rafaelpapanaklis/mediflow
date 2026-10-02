@@ -34,6 +34,8 @@ const es = {
   // Revisión de ws1-t9, fallo 2: la hoja de hoy se firmó «sin cita» y después apareció la cita de hoy.
   hojaFirmadaLigadaYCitaCerrada: "El control de hoy ya estaba firmado: quedó como el control de esta cita y la cita se marcó como atendida.",
   hojaFirmadaLigadaSinCerrar: "El control de hoy ya estaba firmado y quedó ligado a esta cita. La consulta tiene su propia nota: termínala para cerrar la cita.",
+  /** Botón de la fila (Hoy, panel de la cita, Tablero, Controles) cuando el control de esa cita ya está firmado. */
+  verControl: "Ver control",
 };
 
 const en: typeof es = {
@@ -49,6 +51,7 @@ const en: typeof es = {
   consultaTerminada: "Check-up signed and visit closed",
   hojaFirmadaLigadaYCitaCerrada: "Today's check-up was already signed: it is now this appointment's check-up and the appointment was marked as attended.",
   hojaFirmadaLigadaSinCerrar: "Today's check-up was already signed and is now linked to this appointment. The visit has its own note: finish it to close the appointment.",
+  verControl: "View check-up",
 };
 
 export type TextosFirmaControl = typeof es;

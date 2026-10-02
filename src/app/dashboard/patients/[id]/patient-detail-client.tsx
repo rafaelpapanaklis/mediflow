@@ -116,7 +116,7 @@ import type { CasoDelPaciente } from "@/lib/orthodontics/casos-del-paciente";
 import { SoloLectura } from "@/components/specialties/orthodontics/redesign/SoloLectura";
 import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
-import { esCitaDeHoy, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
+import { citaParaIniciarDesdeLaFicha, esCitaDeHoy, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
 import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarControlFirmadoDeHoy";
@@ -463,6 +463,8 @@ interface Props {
   agendaCitas?: AgendaDelExpediente;
   /** Zona de la clínica: «hoy» para elegir la próxima cita es el día de la clínica, no el del navegador. */
   zonaClinica?: string;
+  /** «agenda.edit» de la sesión: sin él «Iniciar consulta» no se ofrece (PATCH /status lo exige). */
+  puedeEditarAgenda?: boolean;
 }
 
 export function PatientDetailClient({
@@ -512,6 +514,7 @@ export function PatientDetailClient({
   rediseno = false,
   agendaCitas,
   zonaClinica = "America/Mexico_City",
+  puedeEditarAgenda = false,
 }: Props) {
   const t = useT();
   const textosConsulta = useTextosConsultaFicha();
@@ -1143,29 +1146,48 @@ export function PatientDetailClient({
   const color    = avatarColor(patient.id);
   // ws1-t8 (revisión de ws1-t9, fallo 1): la lista viene de la más lejana a la más vieja; antes esto tomaba la
   // futura MÁS LEJANA y nunca la de hoy. Ahora: la que se está atendiendo, la de hoy, o la futura más próxima.
-  const nextAppt = proximaCitaDeLaFicha(appointments, new Date(), zonaClinica) ?? undefined;
+  // Fallo nuevo 1 de la revisión final: proponía la cita de OTRO doctor y «Iniciar consulta» daba 403. Se
+  // propone la que la sesión puede arrancar; si el paciente solo tiene citas ajenas, la cabecera sigue
+  // diciendo cuál es la próxima, pero el botón queda apagado con el motivo (no se ofrece uno que va a fallar).
+  const paraIniciar = citaParaIniciarDesdeLaFicha(
+    appointments,
+    { id: currentUser.id, role: currentUser.role, puedeEditarAgenda },
+    new Date(),
+    zonaClinica,
+  );
+  const nextAppt = paraIniciar.cita ?? proximaCitaDeLaFicha(appointments, new Date(), zonaClinica) ?? undefined;
+  const motivoSinIniciar =
+    paraIniciar.motivo === "deOtroProfesional"
+      ? textosConsulta.citaDeOtroProfesional
+      : paraIniciar.motivo === "sinPermiso"
+        ? textosConsulta.sinPermisoParaIniciar
+        : null;
   // «Iniciar consulta» (cabecera y «Iniciar visita» de Ortodoncia). Con la cita de HOY hace lo mismo que
   // «Pasar a consulta» de la Agenda: la pasa a «En consulta» y la ficha abre la consulta, así la hoja que se
   // firme después se liga a esa cita y la cierra. Antes solo empujaba `?appointment=` y la cita seguía
   // «Agendada». Una cita de OTRO día no se arranca (sería darla por atendida antes de tiempo): solo se abre en
   // la dirección y, si se firma la hoja, el cajón avisa que esa cita no se toca (cerrar-cita-al-firmar.ts).
   const iniciarConsulta = async () => {
-    if (!nextAppt) return;
-    if (esCitaDeHoy(nextAppt.startsAt, new Date(), zonaClinica) && nextAppt.status !== "IN_PROGRESS") {
-      const res = await fetch(`/api/appointments/${nextAppt.id}/status`, {
+    const cita = paraIniciar.cita;
+    if (!cita) {
+      if (motivoSinIniciar) toast(motivoSinIniciar);
+      return;
+    }
+    if (esCitaDeHoy(cita.startsAt, new Date(), zonaClinica) && cita.status !== "IN_PROGRESS") {
+      const res = await fetch(`/api/appointments/${cita.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       }).catch(() => null);
       if (res?.ok) {
-        marcarEstadoDeCita(nextAppt.id, "IN_PROGRESS");
+        marcarEstadoDeCita(cita.id, "IN_PROGRESS");
         router.refresh();
       } else {
         const body = res ? await res.json().catch(() => ({})) : {};
         toast.error(body.reason ?? textosConsulta.noSeInicioLaConsulta);
       }
     }
-    router.push(`?appointment=${nextAppt.id}`);
+    router.push(`?appointment=${cita.id}`);
   };
   const lastAppt = appointments.find(a => new Date(a.date) < new Date() && a.status === "COMPLETED");
   // Derivamos totales del state local `invoices` para que el card "Finanzas"
@@ -1632,6 +1654,7 @@ export function PatientDetailClient({
           onGeneratePortal={generatePortalLink}
           onEdit={() => setShowEdit(true)}
           onStartConsult={() => void iniciarConsulta()}
+          motivoSinIniciar={motivoSinIniciar}
           onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
           puedeCobrar={permisosCobro?.cobrar !== false}

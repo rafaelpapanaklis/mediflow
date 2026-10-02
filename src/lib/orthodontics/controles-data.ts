@@ -18,6 +18,7 @@ import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { relatedPatientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import { cargarUltimasHojasPorPaciente } from "./hojas-por-paciente-db";
+import { casosConHojaDeHoyFirmadaSinCita } from "./hoja-firmada-de-la-cita-db";
 import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-hechos-db";
 import { loadOrthoCases } from "./tablero-data";
 import { computeActiveCasesCount } from "./specialty-kpis";
@@ -134,6 +135,17 @@ export async function loadOrthoControles(
   // Solo de hoy en adelante: una cita vieja que nadie cerró no es «el siguiente control».
   const numeros = numerarCitasPorAtender(citas.filter((c) => c.startsAt >= inicio), progresoPorPaciente, (c) => hojas.has(c.id));
 
+  // Revisión final de ws1-t9 (fallo nuevo 4): los controles de HOY sin hoja ligada cuyo caso ya firmó la de hoy
+  // «sin cita». Una consulta, y ninguna si no hay controles de hoy sin hoja.
+  const finDeHoy = calendarDayRangeUtc(hoy, zonaHoraria).endUtc;
+  const deHoySinHoja = enVentana.filter((c) => c.startsAt < finDeHoy && !hojas.has(c.id));
+  const firmadasSinCita = await casosConHojaDeHoyFirmadaSinCita(
+    clinicId,
+    deHoySinHoja.map((c) => planIdPorPaciente.get(c.patientId)).filter((id): id is string => !!id),
+    zonaHoraria,
+    ahora,
+  );
+
   const deLaVentana: CitaDeControl[] = enVentana.map((c) => ({
     appointmentId: c.id,
     patientId: c.patientId,
@@ -143,6 +155,8 @@ export async function loadOrthoControles(
     status: c.status,
     hoja: hojas.get(c.id) ?? null,
     treatmentPlanId: planIdPorPaciente.get(c.patientId) ?? null,
+    hojaFirmadaSinCita:
+      c.startsAt < finDeHoy && !hojas.has(c.id) && firmadasSinCita.has(planIdPorPaciente.get(c.patientId) ?? ""),
     ...(numeros.has(c) ? { progreso: numeros.get(c)! } : {}),
   }));
 

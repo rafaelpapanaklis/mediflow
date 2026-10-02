@@ -12,18 +12,22 @@ export interface RanuraCitaState {
   canOpenClinicalCard: boolean;
   /** Cómo se cobra ESTE caso (decisión 2 del gerente: se elige al abrirlo). `null` = sin caso o no se sabe. */
   billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null;
+  /** Revisión final de ws1-t9 (fallo nuevo 4): el control de ESTA cita ya está firmado → «Ver control». */
+  hojaFirmada: boolean;
 }
 
 export const ESTADO_VACIO_RANURA_CITA: RanuraCitaState = {
   treatmentPlanId: null,
   canOpenClinicalCard: false,
   billingMode: null,
+  hojaFirmada: false,
 };
 
 export type RanuraCitaResult = ActionResult<{
   treatmentPlanId: string | null;
   canOpenClinicalCard: boolean;
   billingMode?: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null;
+  hojaFirmada?: boolean;
 }>;
 
 /** Cualquier `res` vacío o mal formado cae al estado vacío, nunca revienta. */
@@ -35,6 +39,7 @@ export function resolverEstadoRanuraCita(
     treatmentPlanId: res.data.treatmentPlanId,
     canOpenClinicalCard: res.data.canOpenClinicalCard,
     billingMode: res.data.billingMode ?? null,
+    hojaFirmada: res.data.hojaFirmada === true,
   };
 }
 

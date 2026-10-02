@@ -142,7 +142,7 @@ test("se usa al abrir la hoja desde la cita (Hoy/Agenda/Controles), en «Ver el 
   assert.match(leer("components/specialties/orthodontics/agenda/BotonHojaControl.tsx"), /if \(res\.data\.hojaFirmadaLigada\)/);
   const cliente = leer("components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
   const i = cliente.indexOf("if (hojaDeHoyFirmada) {");
-  assert.ok(cliente.indexOf("ligarControlFirmadoDeHoy(t.treatmentPlanId, props.citaEnCursoId ?? null)", i) > i);
+  assert.ok(cliente.indexOf("ligarControlFirmadoDeHoy(t.treatmentPlanId, props.citaEnCursoId ?? props.citaDeLaDireccionId ?? null)", i) > i);
   const ficha = leer("app/dashboard/patients/[id]/patient-detail-client.tsx");
   const iLigar = ficha.indexOf("await ligarControlFirmadoDeHoy(planOrto, activeAppointment.id)");
   const iCompletar = ficha.indexOf("/api/appointments/${activeAppointment.id}/complete");

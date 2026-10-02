@@ -60,6 +60,7 @@ import { cargarValoracionesDelTablero } from "./valoraciones-tablero-db";
 import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-hechos-db";
 import { inicioDelCaso } from "./controles-hechos";
 import { cargarCasosIncompletos, type CasoIncompleto } from "./casos-incompletos-db";
+import { casosConHojaDeHoyFirmadaSinCita } from "./hoja-firmada-de-la-cita-db";
 
 function esRelacionAusente(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code;
@@ -431,6 +432,11 @@ export interface TodayControlEntry {
    * previas que ya armaban este DTO a mano antes de este campo.
    */
   hasCard?: boolean;
+  /**
+   * Revisión final de ws1-t9 (fallo nuevo 4): sin hoja ligada, pero el caso ya tiene la hoja de HOY firmada «sin
+   * cita» (al abrirla desde la cita se liga). El botón dice «Ver control», no «Registrar control».
+   */
+  hojaFirmadaSinCita?: boolean;
   /** ws1-t12 — «Control 6 de 18», del plan de tratamiento del caso. Solo si el plan dice cuántos controles prevé. */
   progreso?: { numero: number; previstos: number };
 }
@@ -510,6 +516,14 @@ export async function loadTodayControlsWithIndications(
     if (pr) progresoPorPaciente.set(patientId, pr);
   }
   const numeros = numerarCitasPorAtender(appointments, progresoPorPaciente, (a) => cardByAppointmentId.has(a.id));
+  // Fallo nuevo 4: los casos con la hoja de hoy firmada «sin cita» (una consulta, solo si hay citas sin hoja).
+  const sinHoja = appointments.filter((a) => !cardByAppointmentId.has(a.id));
+  const firmadasSinCita = await casosConHojaDeHoyFirmadaSinCita(
+    clinicId,
+    sinHoja.map((a) => planIdByPatientId.get(a.patientId)).filter((id): id is string => !!id),
+    zonaHoraria,
+    ahora,
+  );
 
   return appointments.map((a) => {
     const card = cardByAppointmentId.get(a.id);
@@ -521,6 +535,7 @@ export async function loadTodayControlsWithIndications(
       treatmentPlanId: card?.treatmentPlanId ?? planIdByPatientId.get(a.patientId) ?? null,
       indications: card?.indications ?? null,
       hasCard: Boolean(card),
+      hojaFirmadaSinCita: !card && firmadasSinCita.has(planIdByPatientId.get(a.patientId) ?? ""),
       ...(numeros.has(a) ? { progreso: numeros.get(a)! } : {}),
     };
   });

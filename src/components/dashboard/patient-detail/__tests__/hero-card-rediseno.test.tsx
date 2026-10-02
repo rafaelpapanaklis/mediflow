@@ -102,7 +102,8 @@ test("«Iniciar consulta» es UN solo botón, con el cableado de siempre", () =>
   const i = hero.indexOf("onClick={onStartConsult}");
   const boton = hero.slice(hero.lastIndexOf("<button", i), hero.indexOf("</button>", i));
   assert.ok(boton.includes("className={`${styles.btn} ${styles.btnPrimary}`}"), "cambió la clase del botón");
-  assert.ok(boton.includes("disabled={!hasNextAppt}"), "cambió cuándo se apaga");
+  // Revisión final de ws1-t9 (fallo nuevo 1): también se apaga cuando la próxima cita no la puede iniciar la sesión.
+  assert.ok(boton.includes("disabled={!hasNextAppt || !!motivoSinIniciar}"), "cambió cuándo se apaga");
   assert.ok(boton.includes('t("patients.heroCard.startConsultTitle")') && boton.includes('t("patients.heroCard.startConsultDisabledTitle")'), "cambió el title");
   assert.ok(boton.includes('t("patients.heroCard.startConsult")'), "cambió el texto");
   assert.ok(!/rediseno/.test(boton), "el botón no debe saber nada de la bandera");

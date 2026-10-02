@@ -81,6 +81,9 @@ export interface HeroCardProps {
    *  paciente" del menú; la API lo revalida con 403. */
   canEdit?: boolean;
   onStartConsult: () => void;
+  /** El paciente tiene próxima cita pero la sesión no puede iniciarla (de otro doctor, o sin permiso): el
+   *  botón «Iniciar consulta» se apaga y este texto dice por qué. null/ausente = se puede. */
+  motivoSinIniciar?: string | null;
   onReschedule: () => void;
   onCharge: () => void;
   /** H14: sin billing.charge no se pinta «Cobrar» (la ruta lo revalida). */
@@ -171,6 +174,7 @@ export function HeroCard({
   onEdit,
   canEdit = true,
   onStartConsult,
+  motivoSinIniciar = null,
   onReschedule,
   onCharge,
   puedeCobrar = true,
@@ -283,8 +287,8 @@ export function HeroCard({
         type="button"
         className={`${styles.btn} ${styles.btnPrimary}`}
         onClick={onStartConsult}
-        disabled={!hasNextAppt}
-        title={hasNextAppt ? t("patients.heroCard.startConsultTitle") : t("patients.heroCard.startConsultDisabledTitle")}
+        disabled={!hasNextAppt || !!motivoSinIniciar}
+        title={!hasNextAppt ? t("patients.heroCard.startConsultDisabledTitle") : motivoSinIniciar ?? t("patients.heroCard.startConsultTitle")}
       >
         <Play size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.startConsult")}
       </button>

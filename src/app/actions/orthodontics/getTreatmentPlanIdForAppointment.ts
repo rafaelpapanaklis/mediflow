@@ -38,10 +38,20 @@ import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
 import { resolveTreatmentPlanAccess } from "./_control-agenda-predicates";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { hojaFirmadaDeLaCita } from "@/lib/orthodontics/hoja-firmada-de-la-cita-db";
 
 export async function getTreatmentPlanIdForAppointment(
   patientId: string,
-): Promise<ActionResult<{ treatmentPlanId: string | null; canOpenClinicalCard: boolean; billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null }>> {
+  /** Revisión final de ws1-t9 (fallo nuevo 4): la cita de la fila, para saber si su control ya está firmado. */
+  appointmentId?: string | null,
+): Promise<
+  ActionResult<{
+    treatmentPlanId: string | null;
+    canOpenClinicalCard: boolean;
+    billingMode: "PRECIO_TOTAL" | "PAGO_POR_CONTROL" | null;
+    hojaFirmada: boolean;
+  }>
+> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
   if (ctx.clinicCategory !== "DENTAL") {
@@ -80,5 +90,18 @@ export async function getTreatmentPlanIdForAppointment(
   // «por control» para decidir si ofrece «Pedir anticipo». Sin caso, null.
   const billingMode = plan ? normalizarOrthoBillingMode(await cargarModoDeCobro(ctx.clinicId, plan.id).catch(() => null)) : null;
 
-  return ok({ treatmentPlanId: plan?.id ?? null, canOpenClinicalCard: access.canOpenClinicalCard, billingMode });
+  // Fallo nuevo 4: con la hoja de esa cita ya firmada, el botón dice «Ver control» en vez de «Registrar control».
+  // Solo cuando el botón se va a pintar (hay caso y la sesión abre la parte clínica).
+  let hojaFirmada = false;
+  if (plan && appointmentId && access.canOpenClinicalCard) {
+    const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
+    hojaFirmada = await hojaFirmadaDeLaCita({
+      clinicId: ctx.clinicId,
+      appointmentId,
+      planId: plan.id,
+      zona: clinic?.timezone ?? "America/Mexico_City",
+    }).catch(() => false);
+  }
+
+  return ok({ treatmentPlanId: plan?.id ?? null, canOpenClinicalCard: access.canOpenClinicalCard, billingMode, hojaFirmada });
 }

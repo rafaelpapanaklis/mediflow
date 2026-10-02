@@ -10,11 +10,17 @@ const es = {
   noSeInicioLaConsulta: "No se pudo pasar la cita a «En consulta». Inténtalo desde la Agenda.",
   /** Nueva consulta: lo escrito en «Dental general» viaja a la hoja de control al cambiar a Ortodoncia. */
   loEscritoPasaALaHoja: "Lo que escribiste en «Dental general» pasó a la hoja de control.",
+  /** «Iniciar consulta» apagado: la próxima cita del paciente es de otro profesional (fallo nuevo 1). */
+  citaDeOtroProfesional: "La próxima cita es con otro profesional: solo quien la atiende puede iniciarla.",
+  /** «Iniciar consulta» apagado: la sesión no puede pasar citas a «En consulta» (rol o permiso). */
+  sinPermisoParaIniciar: "Tu usuario no puede iniciar consultas: la inicia el doctor que atiende la cita.",
 };
 
 const en: typeof es = {
   noSeInicioLaConsulta: "The appointment could not be set to “In consultation”. Try from the Schedule.",
   loEscritoPasaALaHoja: "What you wrote in “General dentistry” was moved to the check-up sheet.",
+  citaDeOtroProfesional: "The next appointment is with another provider: only they can start it.",
+  sinPermisoParaIniciar: "Your user can't start consultations: the attending doctor starts it.",
 };
 
 export type TextosConsultaFicha = typeof es;

@@ -454,7 +454,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       setDrawer({ kind: "tcard", cardId: hojaDeHoyFirmada.id });
       // Fallo 2 de la revisión de ws1-t9: si se firmó «sin cita» y después apareció la cita de hoy (o se abrió la
       // consulta), la hoja se liga a esa cita y la cierra — una nota por visita. Sin cita de hoy no hace nada.
-      void ligarControlFirmadoDeHoy(t.treatmentPlanId, props.citaEnCursoId ?? null)
+      void ligarControlFirmadoDeHoy(t.treatmentPlanId, props.citaEnCursoId ?? props.citaDeLaDireccionId ?? null)
         .then((r) => {
           if (isFailure(r) || !r.data.cardId) return;
           toast.success(

@@ -688,6 +688,7 @@ export default async function PatientDetailPage({
           rediseno={rediseno}
           {...(agendaCitas ? { agendaCitas } : {})}
           zonaClinica={tz}
+          puedeEditarAgenda={hasPermission(permsUser, "agenda.edit")}
         />
       </ErrorBoundary>
     </div>

@@ -12,7 +12,11 @@
 //   3. La futura más próxima.
 // Nunca una atendida, cancelada o con inasistencia, ni una de un día pasado que quedó sin cerrar.
 
-const YA_NO_PENDIENTE = new Set(["COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW"]);
+import { canTransition, type UserRole } from "@/lib/agenda/transitions";
+import type { AppointmentStatus } from "@/lib/agenda/types";
+import { esCitaQuePuedeMover } from "@/lib/agenda/cita-del-usuario";
+
+const YA_NO_PENDIENTE =new Set(["COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW"]);
 const PACIENTE_PRESENTE = new Set(["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"]);
 
 function diaEnZona(d: Date, zona: string): string {
@@ -44,4 +48,56 @@ export function proximaCitaDeLaFicha<T extends { status: string; startsAt: strin
 export function esCitaDeHoy(startsAt: string | Date, ahora: Date, zona: string): boolean {
   const inicio = new Date(startsAt);
   return !isNaN(inicio.getTime()) && diaEnZona(inicio, zona) === diaEnZona(ahora, zona);
+}
+
+// ws1-t8 (revisión final de ws1-t9, fallo nuevo 1): la cabecera proponía la cita de OTRO doctor (P0147: 14:00
+// con la Dra. Cortés y 15:00 con el doctor en sesión) y «Iniciar consulta» moría con 403 `not_your_appointment`.
+// Ahora «Iniciar consulta» solo propone una cita que la sesión puede arrancar — las mismas reglas que
+// PATCH /status: sin «Editar/mover citas» nada; un doctor solo las suyas; y con la de HOY, que su rol pueda
+// pasarla a «En consulta» (recepción no puede). Si no hay ninguna, el botón no se ofrece.
+
+export interface QuienIniciaLaConsulta {
+  id: string;
+  role?: string | null;
+  /** Permiso «agenda.edit» (lo resuelve el servidor; la ruta lo vuelve a exigir). */
+  puedeEditarAgenda: boolean;
+}
+
+export type MotivoSinIniciar = "sinPermiso" | "deOtroProfesional";
+
+export function motivoParaNoIniciar(
+  cita: { status: string; startsAt: string | Date; doctorId?: string | null },
+  quien: QuienIniciaLaConsulta,
+  ahora: Date,
+  zona: string,
+): MotivoSinIniciar | null {
+  if (!quien.puedeEditarAgenda) return "sinPermiso";
+  if (!esCitaQuePuedeMover(cita, quien)) return "deOtroProfesional";
+  if (cita.status !== "IN_PROGRESS" && esCitaDeHoy(cita.startsAt, ahora, zona)) {
+    const inicio = new Date(cita.startsAt);
+    if (!canTransition(cita.status as AppointmentStatus, "IN_PROGRESS", (quien.role ?? "") as UserRole, ahora, inicio).ok) {
+      return "sinPermiso";
+    }
+  }
+  return null;
+}
+
+/**
+ * La cita que «Iniciar consulta» propone: la de `proximaCitaDeLaFicha` entre las que la sesión puede arrancar.
+ * `motivo` dice por qué no hay botón cuando el paciente SÍ tiene una próxima cita pero no es de quien mira.
+ */
+export function citaParaIniciarDesdeLaFicha<T extends { status: string; startsAt: string | Date; doctorId?: string | null }>(
+  citas: readonly T[],
+  quien: QuienIniciaLaConsulta,
+  ahora: Date,
+  zona: string,
+): { cita: T | null; motivo: MotivoSinIniciar | null } {
+  const propia = proximaCitaDeLaFicha(
+    citas.filter((c) => motivoParaNoIniciar(c, quien, ahora, zona) === null),
+    ahora,
+    zona,
+  );
+  if (propia) return { cita: propia, motivo: null };
+  const cualquiera = proximaCitaDeLaFicha(citas, ahora, zona);
+  return { cita: null, motivo: cualquiera ? motivoParaNoIniciar(cualquiera, quien, ahora, zona) : null };
 }

@@ -35,7 +35,7 @@ export function RegistrarControlEnFila({ appointmentId, patientId, reason }: Reg
       return;
     }
     let cancelled = false;
-    getTreatmentPlanIdForAppointment(patientId)
+    getTreatmentPlanIdForAppointment(patientId, appointmentId)
       .then((res) => {
         if (!cancelled) setState(resolverEstadoRanuraCita(res));
       })
@@ -45,9 +45,9 @@ export function RegistrarControlEnFila({ appointmentId, patientId, reason }: Reg
     return () => {
       cancelled = true;
     };
-  }, [esControl, patientId]);
+  }, [esControl, patientId, appointmentId]);
 
   if (!esControl || !state.treatmentPlanId || !state.canOpenClinicalCard) return null;
 
-  return <BotonHojaControl appointmentId={appointmentId} treatmentPlanId={state.treatmentPlanId} compacto />;
+  return <BotonHojaControl appointmentId={appointmentId} treatmentPlanId={state.treatmentPlanId} compacto firmada={state.hojaFirmada} />;
 }

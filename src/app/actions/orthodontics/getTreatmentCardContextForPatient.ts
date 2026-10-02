@@ -35,7 +35,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
-import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
+import { citaParaLigarLaHoja } from "@/lib/orthodontics/cita-para-ligar-hoja";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
 import { buildTreatmentCardContext, type TreatmentCardAgendaContext } from "@/lib/orthodontics/treatment-card-context";
@@ -101,8 +101,10 @@ export async function getTreatmentCardContextForPatient(
     }
   }
 
+  // Revisión final de ws1-t9 (fallo nuevo 2): con dos citas hoy, la de la dirección manda (antes tomaba la
+  // PRIMERA del día, de otra doctora) y nunca una que la sesión no pueda mover: cita-para-ligar-hoja.ts.
   const { startUtc, endUtc } = calendarDayRangeUtc(hoyEnZona(new Date(), timezone), timezone);
-  const citaDeHoy = await prisma.appointment.findFirst({
+  const citasDeHoy = await prisma.appointment.findMany({
     where: {
       clinicId: ctx.clinicId,
       patientId: plan.patientId,
@@ -110,12 +112,14 @@ export async function getTreatmentCardContextForPatient(
       startsAt: { gte: startUtc, lt: endUtc },
     },
     orderBy: { startsAt: "asc" },
-    select: { id: true, type: true, startsAt: true, endsAt: true, status: true },
+    select: { id: true, type: true, startsAt: true, endsAt: true, status: true, doctorId: true },
   });
-  const appt =
-    citaDeHoy && esCitaControlOrto(citaDeHoy.type)
-      ? { id: citaDeHoy.id, startsAt: citaDeHoy.startsAt, endsAt: citaDeHoy.endsAt, status: citaDeHoy.status }
-      : null;
+  // Una dirección de otro día ya se trató arriba: aquí solo cuenta si es una cita de HOY.
+  const pedidaDeHoy = citasDeHoy.some((c) => c.id === citaDeLaDireccionId) ? citaDeLaDireccionId : null;
+  const citaDeHoy = citaParaLigarLaHoja(citasDeHoy, pedidaDeHoy, { id: ctx.userId, role: String(ctx.role) }, { incluirAtendidas: true });
+  const appt = citaDeHoy
+    ? { id: citaDeHoy.id, startsAt: citaDeHoy.startsAt, endsAt: citaDeHoy.endsAt, status: citaDeHoy.status }
+    : null;
 
   const context = await buildTreatmentCardContext(plan, appt, timezone);
   return ok(context);
