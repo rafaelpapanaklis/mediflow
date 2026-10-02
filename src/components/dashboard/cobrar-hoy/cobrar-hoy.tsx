@@ -35,7 +35,7 @@ import {
   conceptoDeLaCita,
   cuerpoNotaCobroHoy,
   pagoTrasCrear,
-  resumenCobroHoy,
+  vistaCobroHoy,
   type ConceptoCobroHoy,
   type FaltaCobroHoy,
   type ProcedimientoDelCatalogo,
@@ -49,6 +49,11 @@ export interface CobrarHoyProps {
   /** Abierta desde una cita: la nota queda ligada a ella y el concepto nace de su motivo. */
   cita?: { id: string; motivo?: string | null } | null;
   clinicTaxMode?: string | null;
+  /**
+   * "billing.charge": sin él la hoja no ofrece el pago y solo crea el cargo (queda todo
+   * por cobrar). Falla cerrado: quien no lo pasa no cobra. El servidor lo exige igual.
+   */
+  puedeCobrar?: boolean;
   /** "whatsapp.send": sin él no se ofrece el comprobante por WhatsApp. */
   puedeEnviarComprobante?: boolean;
   /** Notas anteriores por cobrar: se enlazan («Cobrar esas»), no se mezclan con la de hoy. */
@@ -87,7 +92,7 @@ export function CobrarHoy(props: CobrarHoyProps) {
 }
 
 function CuerpoCobrarHoy({
-  onClose, patientId, patientName, cita, clinicTaxMode, puedeEnviarComprobante, pendientes, onCobrarPendientes, onListo, ocupado,
+  onClose, patientId, patientName, cita, clinicTaxMode, puedeCobrar = false, puedeEnviarComprobante, pendientes, onCobrarPendientes, onListo, ocupado,
 }: CobrarHoyProps & { ocupado: React.MutableRefObject<boolean> }) {
   const t = useT();
   const [lineas, setLineas] = useState<Linea[]>([]);
@@ -129,10 +134,10 @@ function CuerpoCobrarHoy({
   }, [cita?.motivo]);
 
   const conceptos: ConceptoCobroHoy[] = lineas.map((l) => ({ nombre: l.nombre, importe: l.texto === "" ? NaN : Number(l.texto), procedureId: l.procedureId }));
-  const resumen = resumenCobroHoy({ conceptos, pago: pagoTocado ? pago : undefined, clinicTaxMode });
   // Mientras no se toque, «paga hoy» sigue al total: lo normal es que pague todo.
-  const pagoEfectivo = pagoTocado ? resumen.pago : resumen.total;
-  const vista = pagoTocado ? resumen : resumenCobroHoy({ conceptos, pago: resumen.total, clinicTaxMode });
+  // Sin "billing.charge" el pago es 0: solo se crea el cargo (revisión ws1-t1, fallo 1).
+  const vista = vistaCobroHoy({ conceptos, puedeCobrar, pagoTocado, pago, clinicTaxMode });
+  const pagoEfectivo = vista.pago;
 
   const coincidencias = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -156,7 +161,7 @@ function CuerpoCobrarHoy({
         const res = await fetch("/api/invoices", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cuerpoNotaCobroHoy({ patientId, appointmentId: cita?.id ?? null, conceptos, clinicTaxMode })),
+          body: JSON.stringify(cuerpoNotaCobroHoy({ patientId, appointmentId: cita?.id ?? null, conceptos, clinicTaxMode, conPagoHoy: pagoEfectivo > 0 })),
         });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -357,7 +362,14 @@ function CuerpoCobrarHoy({
           )}
         </div>
 
-        {/* Pago recibido hoy */}
+        {/* Pago recibido hoy. Sin "billing.charge" (p. ej. un doctor) no se ofrece: se
+            crea el cargo y lo cobra quien tiene el permiso. */}
+        {!puedeCobrar ? (
+          <div className={c.bloque}>
+            <h3 className={c.bloqueTitulo}>{t("cobrarHoy.pagoTitulo")}</h3>
+            <p className={c.ayuda}>{t("cobrarHoy.sinPermisoCobro")}</p>
+          </div>
+        ) : (
         <div className={c.bloque}>
           <div className={`${c.bloqueCabeza} ${h.cabeza}`}>
             <h3 className={c.bloqueTitulo}>{t("cobrarHoy.pagoTitulo")}</h3>
@@ -378,7 +390,7 @@ function CuerpoCobrarHoy({
               inputMode="decimal"
               min={0}
               step="0.01"
-              value={pagoTocado ? pago : comoTexto(resumen.total)}
+              value={pagoTocado ? pago : comoTexto(vista.total)}
               onChange={(e) => { setPagoTocado(true); setPago(e.target.value); }}
               disabled={guardando}
             />
@@ -417,6 +429,7 @@ function CuerpoCobrarHoy({
             </label>
           )}
         </div>
+        )}
 
         {/* Lo que va a quedar, antes de guardar */}
         <div className={c.totales} aria-live="polite">

@@ -10,6 +10,7 @@ import { sumInvoiceItems, computeInvoiceTotal, round2, IVA_RATE_PCT } from "@/li
 import { relatedPatientVisibilityAnd, assertPatientVisible } from "@/lib/patient-visibility";
 import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { permisoExtraParaCrearNota } from "@/lib/invoices/cobrar-hoy";
 import {
   InvoiceNumberExhaustedError,
   nextInvoiceNumber,
@@ -126,6 +127,14 @@ export async function POST(req: NextRequest) {
   const { clinicId } = ctx;
   try {
     const body = await req.json();
+    // «Cobrar hoy» (revisión ws1-t1, fallo 1): la nota que se crea para cobrarla en el
+    // acto pide también "billing.charge", ANTES de crear nada. Sin esto un doctor creaba
+    // la nota y el pago le daba 403: quedaba una nota PENDIENTE huérfana.
+    const permisoExtra = permisoExtraParaCrearNota(body);
+    if (permisoExtra) {
+      const sinCobro = denyIfMissingPermission(ctx, permisoExtra);
+      if (sinCobro) return sinCobro;
+    }
     const data = invoiceSchema.parse(body);
 
     // Campos IVA/doctor de la OLA 1 — no viven en invoiceSchema: se leen del body crudo.

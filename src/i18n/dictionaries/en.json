@@ -33,6 +33,7 @@
     "faltaPagoMayor": "The payment can't exceed the total ({total}). If they leave extra money, record it as a deposit.",
     "boton": "Charge {monto}",
     "botonSinPago": "Create the charge without payment",
+    "sinPermisoCobro": "Your user can't record payments: the note is created with the full amount due, and someone with permission to collect payments charges it.",
     "guardando": "Saving…",
     "errorCrear": "The invoice could not be created.",
     "errorPago": "Invoice {folio} was created, but the payment was not recorded: {motivo} Press again to record it; no second invoice is created.",

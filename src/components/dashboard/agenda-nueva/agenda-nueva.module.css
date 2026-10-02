@@ -1679,7 +1679,20 @@ a.panelNombre:hover {
   display: flex;
   /* Arriba y no estirados: un paso con su línea de ayuda es más alto que sus vecinos. */
   align-items: flex-start;
+  /* Revisión ws1-t9 (fallo 4): con Editar, Cancelar, un paso, No asistió y Pedir anticipo
+     en 380 px los botones se encogían y «Pasar a consulta» se partía en dos renglones.
+     Ahora el que no cabe baja de renglón entero. */
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Revisión ws1-t9 (fallo 4): el botón flotante de Sabina (52 px, a 20 px de la derecha y
+   24 px del fondo; 48 px a 16 px en móvil, ver cajon-sabina.module.css y sabina/panel.tsx)
+   tapaba el último botón de la fila («Pedir anticipo») y el «Siguiente con…». La parte de
+   abajo del pie le deja esa esquina libre. */
+.panelPie .accionesSecundarias,
+.panelPie .siguienteEnUnidad {
+  margin-right: 56px;
 }
 
 /* 9a (ws1-t2): una línea que dice qué hace el paso, justo bajo su botón. */
@@ -1691,9 +1704,10 @@ a.panelNombre:hover {
   color: var(--ag-texto-2);
 }
 
-/* Un paso secundario con su ayuda: el botón y la línea, en el mismo hueco de la fila. */
+/* Un paso secundario con su ayuda: el botón y la línea en su propio renglón, a lo ancho,
+   para que la línea no se apriete bajo un botón estrecho (revisión ws1-t9, fallo 4). */
 .pasoConAyuda {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1702,6 +1716,14 @@ a.panelNombre:hover {
 
 .pasoConAyuda .accionSecundaria {
   flex: none;
+}
+
+/* En el pie del panel cada botón crece para llenar su renglón, pero no se encoge por
+   debajo de su texto: el texto no se parte (antes «Pasar a / consulta»). */
+.panelPie .accionesSecundarias > .accionSecundaria {
+  flex: 1 0 auto;
+  white-space: nowrap;
+  padding: 0 12px;
 }
 
 .accionSecundaria {

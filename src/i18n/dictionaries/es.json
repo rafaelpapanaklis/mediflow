@@ -33,6 +33,7 @@
     "faltaPagoMayor": "El pago no puede ser mayor que el total ({total}). Si deja dinero de más, regístralo como anticipo.",
     "boton": "Cobrar {monto}",
     "botonSinPago": "Crear el cargo sin pago",
+    "sinPermisoCobro": "Tu usuario no registra pagos: se crea la nota con todo por cobrar y la cobra quien tenga permiso de cobro.",
     "guardando": "Guardando…",
     "errorCrear": "No se pudo crear la nota.",
     "errorPago": "La nota {folio} quedó creada, pero el pago no se registró: {motivo} Vuelve a pulsar para registrarlo; no se crea otra nota.",

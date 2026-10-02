@@ -275,6 +275,7 @@
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
     "test:aviso-por-pagar-vencido": "tsx --test src/lib/invoices/__tests__/aviso-por-pagar-vencido.test.ts",
     "test:cobrar-hoy": "tsx --test src/lib/invoices/__tests__/cobrar-hoy.test.ts",
+    "test:planes-recien-creados": "tsx --test src/lib/patients/__tests__/planes-recien-creados.test.ts",
     "test:plan-de-pagos": "tsx --test src/lib/invoices/__tests__/plan-de-pagos.test.ts",
     "test:orto-cfdi-responsable": "tsx --test src/lib/orthodontics/__tests__/receptor-responsable.test.ts",
     "test:orto-cobranza-extras": "tsx --test src/lib/orthodontics/__tests__/cobranza-extras.test.ts",

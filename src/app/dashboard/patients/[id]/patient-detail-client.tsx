@@ -112,6 +112,12 @@ import {
   registrarCorreccion,
   type CorreccionesDeEstado,
 } from "@/lib/patients/correcciones-estado-cita";
+import {
+  agregarRecienCreado,
+  planesConRecienCreados,
+  purgarRecienCreados,
+  quitarRecienCreado,
+} from "@/lib/patients/planes-recien-creados";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
@@ -478,7 +484,7 @@ interface Props {
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments: citasDelServidor, invoices: initialInvoices,
-  doctors, currentUser, specialty, clinicCategory, treatments, portalUrl, clinicTaxMode,
+  doctors, currentUser, specialty, clinicCategory, treatments: planesDelServidor, portalUrl, clinicTaxMode,
   portalAccountStatus = "none",
   pediatricsData,
   pediatricsModuleActive = false,
@@ -554,6 +560,17 @@ export function PatientDetailClient({
     },
     [citasDelServidor],
   );
+  // Planes de tratamiento: el que se acaba de crear se pinta AL MOMENTO (revisión ws1-t1,
+  // fallo 4: la pestaña seguía en «Sin planes» hasta recargar). Cuando el servidor ya lo
+  // trae, la copia local sobra. Ver lib/patients/planes-recien-creados.
+  const [planesRecienCreados, setPlanesRecienCreados] = useState<any[]>([]);
+  const treatments = useMemo(
+    () => planesConRecienCreados(planesDelServidor, planesRecienCreados),
+    [planesDelServidor, planesRecienCreados],
+  );
+  useEffect(() => {
+    setPlanesRecienCreados((prev) => purgarRecienCreados(planesDelServidor, prev));
+  }, [planesDelServidor]);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -862,6 +879,7 @@ export function PatientDetailClient({
         throw new Error(data.error ?? t("patients.deleteTreatment.failed"));
       }
       toast.success(t("patients.deleteTreatment.success"));
+      setPlanesRecienCreados((prev) => quitarRecienCreado(prev, plan.id));
       router.refresh();
     } catch (err: any) {
       toast.error(mensajeDeError(err, t, { porDefecto: t("patients.toast.deleteError") }));
@@ -937,6 +955,8 @@ export function PatientDetailClient({
       if (!res.ok) throw new Error(data.error ?? t("patients.createTreatment.failed"));
       toast.success(t("patients.createTreatment.success"));
       setShowNewTreatment(false);
+      // El POST devuelve el plan con su doctor y sus sesiones: se ve ya, sin esperar al refresco.
+      setPlanesRecienCreados((prev) => agregarRecienCreado(prev, { sessions: [], ...data }));
       router.refresh();
     } catch (err: any) {
       toast.error(mensajeDeError(err, t, { porDefecto: t("patients.createTreatment.error") }));
@@ -3706,6 +3726,7 @@ export function PatientDetailClient({
         patientId={patient.id}
         patientName={fullName}
         clinicTaxMode={clinicTaxMode}
+        puedeCobrar={permisosCobro?.cobrar !== false}
         puedeEnviarComprobante={permisosCobro?.enviar === true}
         pendientes={pendientesPrevios(invoices)}
         onCobrarPendientes={() => { setCobrarHoyAbierto(false); openChargeShortcut(); }}

@@ -90,6 +90,8 @@ export function cuerpoNotaCobroHoy(input: {
   appointmentId?: string | null;
   conceptos: ConceptoCobroHoy[];
   clinicTaxMode?: string | null;
+  /** Hoy se registra un pago tras crearla: el servidor exige "billing.charge" ANTES de crear. */
+  conPagoHoy?: boolean;
 }) {
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(input.clinicTaxMode);
   return {
@@ -99,7 +101,39 @@ export function cuerpoNotaCobroHoy(input: {
     discount: 0,
     taxRate,
     taxIncluded,
+    ...(input.conPagoHoy ? { conPagoHoy: true as const } : {}),
   };
+}
+
+/**
+ * Permiso que POST /api/invoices pide ADEMÁS de "billing.create". Con `conPagoHoy` la
+ * nota se crea para cobrarla en el acto: quien no puede registrar el pago
+ * ("billing.charge", p. ej. un doctor) recibe el 403 antes de que nazca la nota, en vez
+ * de dejar una nota PENDIENTE huérfana y el 403 en el segundo paso (revisión ws1-t1, 1).
+ */
+export function permisoExtraParaCrearNota(body: unknown): "billing.charge" | null {
+  return body && typeof body === "object" && (body as { conPagoHoy?: unknown }).conPagoHoy === true
+    ? "billing.charge"
+    : null;
+}
+
+/**
+ * Lo que la hoja enseña y cobra. Sin "billing.charge" no hay pago: solo se crea el
+ * cargo (queda todo por cobrar, para quien sí cobra). Con él, mientras no se toque el
+ * monto, «paga hoy» sigue al total.
+ */
+export function vistaCobroHoy(input: {
+  conceptos: ConceptoCobroHoy[];
+  puedeCobrar: boolean;
+  pagoTocado: boolean;
+  pago: number | string | null | undefined;
+  clinicTaxMode?: string | null;
+}): ResumenCobroHoy {
+  const { conceptos, clinicTaxMode } = input;
+  if (!input.puedeCobrar) return resumenCobroHoy({ conceptos, pago: 0, clinicTaxMode });
+  if (input.pagoTocado) return resumenCobroHoy({ conceptos, pago: input.pago, clinicTaxMode });
+  const { total } = resumenCobroHoy({ conceptos, pago: 0, clinicTaxMode });
+  return resumenCobroHoy({ conceptos, pago: total, clinicTaxMode });
 }
 
 /**

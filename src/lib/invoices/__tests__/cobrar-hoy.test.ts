@@ -12,7 +12,9 @@ import {
   cuerpoNotaCobroHoy,
   pagoTrasCrear,
   pendientesPrevios,
+  permisoExtraParaCrearNota,
   resumenCobroHoy,
+  vistaCobroHoy,
 } from "@/lib/invoices/cobrar-hoy";
 import { invoiceSchema } from "@/lib/validations";
 import { computeInvoiceTotal, sumInvoiceItems } from "@/lib/invoice-totals";
@@ -108,7 +110,8 @@ test("la hoja usa las rutas de siempre, en orden, y no manda avisos de cobro", (
 
 test("cableado: la cita sin nota abre la hoja; la ficha la ofrece y ?charge=1 la usa", () => {
   const panel = leer("src/components/dashboard/agenda-nueva/panel-cita.tsx");
-  assert.match(panel, /if \(!esCitaOrtoConHoja\(dto\.reason \?\? null\)\) \{\s*setCobrarHoy\(\{ id: dto\.id, motivo: dto\.reason \?\? null \}\);/);
+  // (revisión ws1-t1, fallo 1: antes de abrirla, que pueda crear la nota)
+  assert.match(panel, /if \(!esCitaOrtoConHoja\(dto\.reason \?\? null\)\) \{[\s\S]{0,400}?setCobrarHoy\(\{ id: dto\.id, motivo: dto\.reason \?\? null \}\);/);
   assert.doesNotMatch(panel, /"Esta cita todavía no tiene factura\."/);
   assert.match(panel, /<CobrarHoy[\s\S]*?cita=\{cobrarHoy\}/);
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
@@ -126,4 +129,58 @@ test("textos es/en: las mismas llaves de cobrarHoy", () => {
   assert.deepEqual(Object.keys(es).sort(), Object.keys(en).sort());
   const hoja = leer("src/components/dashboard/cobrar-hoy/cobrar-hoy.tsx");
   for (const m of Array.from(hoja.matchAll(/"cobrarHoy\.([a-zA-Z]+)"/g))) assert.ok(es[m[1]] && en[m[1]], m[1]);
+});
+
+// Revisión ws1-t1 (fallo 1): un doctor (billing.create sí, billing.charge no) pulsaba «Cobrar»
+// en una cita terminada: la nota nacía (201) y el pago daba 403 → nota PENDIENTE huérfana.
+// Fallan con el código viejo: no existían ni la vista sin cobro ni el permiso previo.
+
+test("sin billing.charge la hoja no cobra: solo el cargo, todo queda por cobrar", () => {
+  const sinCobro = vistaCobroHoy({ conceptos: [limpieza], puedeCobrar: false, pagoTocado: false, pago: "" });
+  assert.deepEqual(sinCobro, { total: 700, pago: 0, saldoQueda: 700, falta: null });
+  // Aunque algo hubiera tecleado un monto, sin el permiso no hay pago.
+  assert.equal(vistaCobroHoy({ conceptos: [limpieza], puedeCobrar: false, pagoTocado: true, pago: 700 }).pago, 0);
+  // Con el permiso, como siempre: sin tocar paga todo; tocado, lo tecleado.
+  assert.equal(vistaCobroHoy({ conceptos: [limpieza], puedeCobrar: true, pagoTocado: false, pago: "" }).pago, 700);
+  assert.equal(vistaCobroHoy({ conceptos: [limpieza], puedeCobrar: true, pagoTocado: true, pago: 200 }).saldoQueda, 500);
+  assert.equal(vistaCobroHoy({ conceptos: [limpieza], puedeCobrar: true, pagoTocado: true, pago: 701 }).falta, "pago_mayor");
+});
+
+test("la nota que se cobra en el acto pide billing.charge ANTES de crearse", () => {
+  const conPago = cuerpoNotaCobroHoy({ patientId: "p1", appointmentId: "a1", conceptos: [limpieza], conPagoHoy: true });
+  assert.equal(permisoExtraParaCrearNota(conPago), "billing.charge");
+  // El cuerpo sigue siendo el de «Nueva factura» (la marca no rompe el contrato).
+  assert.equal(invoiceSchema.parse(conPago).appointmentId, "a1");
+  // Sin pago (el cargo solo) o desde «Nueva factura»: billing.create basta, como siempre.
+  const sinPago = cuerpoNotaCobroHoy({ patientId: "p1", conceptos: [limpieza] });
+  assert.ok(!("conPagoHoy" in sinPago));
+  assert.equal(permisoExtraParaCrearNota(sinPago), null);
+  assert.equal(permisoExtraParaCrearNota({ conPagoHoy: "true" }), null);
+  assert.equal(permisoExtraParaCrearNota(null), null);
+
+  const ruta = leer("src/app/api/invoices/route.ts");
+  const post = ruta.slice(ruta.indexOf("export async function POST"));
+  const extra = post.indexOf("permisoExtraParaCrearNota(body)");
+  assert.ok(extra > 0, "POST /api/invoices no mira el permiso de cobro");
+  assert.ok(extra < post.indexOf("invoiceSchema.parse(body)"), "el permiso va antes de validar y crear");
+  assert.ok(extra < post.indexOf("prisma."), "el permiso va antes de tocar la base");
+  assert.match(post.slice(extra, extra + 250), /denyIfMissingPermission\(ctx, permisoExtra\)/);
+});
+
+test("cableado: la hoja marca el cobro en el acto y la agenda pasa los permisos de facturación", () => {
+  const hoja = leer("src/components/dashboard/cobrar-hoy/cobrar-hoy.tsx");
+  assert.match(hoja, /puedeCobrar = false/, "falla cerrado");
+  assert.match(hoja, /conPagoHoy: pagoEfectivo > 0/);
+  assert.match(hoja, /\{!puedeCobrar \? \(/, "sin permiso no se pinta el bloque del pago");
+  const pagina = leer("src/app/dashboard/agenda/page.tsx");
+  assert.match(pagina, /canCreateInvoice: hasPermission\(user, "billing\.create"\)/);
+  assert.match(pagina, /canCharge: hasPermission\(user, "billing\.charge"\)/);
+  const panel = leer("src/components/dashboard/agenda-nueva/panel-cita.tsx");
+  assert.match(panel, /puedeCobrar=\{permissions\.canCharge === true\}/);
+  assert.match(panel, /if \(!permissions\.canCreateInvoice\) \{/);
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /<CobrarHoy[\s\S]*?puedeCobrar=\{permisosCobro\?\.cobrar !== false\}/);
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json")).cobrarHoy;
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json")).cobrarHoy;
+  assert.ok(es.sinPermisoCobro && en.sinPermisoCobro && es.sinPermisoCobro !== en.sinPermisoCobro);
 });

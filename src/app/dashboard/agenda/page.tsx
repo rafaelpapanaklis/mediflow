@@ -53,6 +53,10 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     // medida sin billing.deposit ya no lo ve, aunque no sea exactamente
     // READONLY.
     canDeposit: hasPermission(user, "billing.deposit"),
+    // «Cobrar» de una cita sin nota (revisión ws1-t1, fallo 1): crear la nota pide
+    // billing.create y registrar el pago billing.charge (un doctor tiene lo primero).
+    canCreateInvoice: hasPermission(user, "billing.create"),
+    canCharge: hasPermission(user, "billing.charge"),
   };
 
   // getCurrentUser ya hace include: { clinic: true } — leemos la config

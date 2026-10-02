@@ -70,6 +70,13 @@ export interface AgendaPermissions {
    * medida sin billing.deposit).
    */
   canDeposit?: boolean;
+  /**
+   * «Cobrar» de una cita terminada sin nota: "billing.create" (crear la nota) y
+   * "billing.charge" (registrar el pago). Opcionales y del lado seguro: quien no los
+   * pasa no crea la nota desde el panel ni ofrece el pago.
+   */
+  canCreateInvoice?: boolean;
+  canCharge?: boolean;
 }
 
 const ALL_ALLOWED: AgendaPermissions = { canCreate: true, canEdit: true, canCancel: true };

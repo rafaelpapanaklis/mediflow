@@ -63,3 +63,42 @@ test("ni colores a mano ni px de más: la línea usa tokens", () => {
   const bloqueViejo = vieja.slice(vieja.indexOf(".detailActionConAyuda {"), vieja.indexOf(".detailActionAyuda {") + 140);
   assert.doesNotMatch(bloqueViejo, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, "color a mano en la ayuda (agenda de siempre)");
 });
+
+// Revisión ws1-t9 (fallo 4), a 1440×900 con un doctor: «Pasar a consulta» se partía en dos
+// renglones con su ayuda al borde, y el botón flotante de Sabina tapaba «Pedir anticipo» y
+// «Siguiente con…». Fallan con el código viejo: la fila no bajaba de renglón y el pie no
+// dejaba la esquina libre.
+const reglaDe = (css: string, selector: string) => {
+  const i = css.indexOf(`${selector} {`);
+  return i < 0 ? "" : css.slice(i, css.indexOf("}", i));
+};
+
+test("pie del panel de la cita: los pasos bajan de renglón sin partir su texto", () => {
+  const css = leer("components/dashboard/agenda-nueva/agenda-nueva.module.css");
+  assert.match(reglaDe(css, ".accionesSecundarias"), /flex-wrap:\s*wrap/);
+  const boton = reglaDe(css, ".panelPie .accionesSecundarias > .accionSecundaria");
+  assert.match(boton, /white-space:\s*nowrap/);
+  assert.match(boton, /flex:\s*1 0 auto/, "crece, pero no se encoge por debajo de su texto");
+  // El paso con ayuda va en su propio renglón, a lo ancho.
+  assert.match(reglaDe(css, ".pasoConAyuda"), /flex:\s*1 1 100%/);
+  // Los diálogos que comparten `.accionSecundaria` no cambian.
+  assert.doesNotMatch(reglaDe(css, ".accionSecundaria"), /nowrap|1 0 auto/);
+});
+
+test("pie del panel de la cita: la esquina del botón de Sabina queda libre", () => {
+  const css = leer("components/dashboard/agenda-nueva/agenda-nueva.module.css");
+  const i = css.indexOf(".panelPie .accionesSecundarias,\n.panelPie .siguienteEnUnidad {");
+  assert.ok(i > 0, "falta la reserva de la esquina");
+  const reserva = Number(/margin-right:\s*(\d+)px/.exec(css.slice(i, css.indexOf("}", i)))?.[1]);
+  // El botón: 52 px a 20 px de la derecha (48 a 16 en móvil); el pie ya tiene 20 px de margen.
+  const sabina = readFileSync(join(SRC, "components/dashboard/layout-rediseno/cajon-sabina.module.css"), "utf8");
+  const fab = reglaDe(sabina, ".fab");
+  const ancho = Number(/width:\s*(\d+)px/.exec(fab)?.[1]);
+  const derecha = Number(/right:\s*(\d+)px/.exec(fab)?.[1]);
+  assert.ok(ancho > 0 && derecha > 0, "no se leyó el botón de Sabina");
+  assert.ok(reserva >= ancho + derecha - 20, `reserva ${reserva}px < ${ancho + derecha - 20}px`);
+  // Y el botón sigue en la esquina de abajo (si sube, esta reserva ya no sirve).
+  const panelSabina = readFileSync(join(SRC, "components/dashboard/sabina/panel.tsx"), "utf8");
+  assert.match(panelSabina, /const ALTURA_FAB = HIDE_SUPPLY_MODULES \? 24 : 92;/);
+  assert.match(readFileSync(join(SRC, "lib/hidden-modules.ts"), "utf8"), /export const HIDE_SUPPLY_MODULES = true;/);
+});

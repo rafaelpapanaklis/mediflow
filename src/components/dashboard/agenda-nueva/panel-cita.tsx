@@ -374,6 +374,11 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         // ws1-t4 (8d): sin nota y fuera de ortodoncia, «Cobrar hoy» (concepto del motivo,
         // pago y saldo en un paso, la nota ligada a ESTA cita) en vez de un callejón.
         if (!esCitaOrtoConHoja(dto.reason ?? null)) {
+          // Sin "billing.create" no hay nota que crear (el POST daría 403).
+          if (!permissions.canCreateInvoice) {
+            toast.error("Esta cita no tiene nota y tu usuario no puede crearla. Pídeselo a recepción.");
+            return;
+          }
           setCobrarHoy({ id: dto.id, motivo: dto.reason ?? null });
           return;
         }
@@ -391,7 +396,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
     } finally {
       setBuscandoFactura(false);
     }
-  }, [dto]);
+  }, [dto, permissions.canCreateInvoice]);
 
   if (!cita || !dto) return null;
 
@@ -812,6 +817,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           patientName={cita.nombrePaciente}
           cita={cobrarHoy}
           clinicTaxMode={clinicTaxMode}
+          // Sin "billing.charge" (un doctor) la hoja solo crea el cargo; el servidor
+          // rechaza el cobro antes de crear la nota si alguien lo intenta.
+          puedeCobrar={permissions.canCharge === true}
           onListo={() => {
             invalidateRangeCache();
             router.refresh();
