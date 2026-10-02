@@ -39,9 +39,9 @@ const estado = {
   /** Lo que devuelve «Así hablamos» (ws1-t11); "" = sin ejemplos o sin SQL. */
   tono: "",
   tonoPedidoPara: [] as string[],
-  /** Bloque de precios (ws1-t3); "" = interruptores sin datos o sin SQL. */
-  precios: "",
-  preciosPedidosPara: [] as Array<{ clinicId: string; puedeAgendar: boolean }>,
+  /** Precios del turno (ws1-t3); vacíos = nada con precio o sin SQL. */
+  precios: { reglas: "", coincidencias: "" },
+  preciosPedidosPara: [] as Array<{ clinicId: string; puedeAgendar: boolean; textoPaciente: string }>,
 };
 
 globalThis.fetch = (async (url: unknown, init?: { body?: string; signal?: AbortSignal }) => {
@@ -68,10 +68,10 @@ const dobles = new Map<string, unknown>([
     chargeUsage: async (args: Fila) => { estado.cobros.push(args); return null; },
   }],
   [path.join(RAIZ, "src/lib/ai-billing/interruptores.server.ts"), { funcionIaApagada: async () => false }],
-  // ws1-t3 — precios del panel: aquí solo se comprueba DÓNDE entra el bloque
-  // (sus reglas se prueban en precios-bot.test.ts).
+  // ws1-t3 — precios del panel: aquí solo se comprueba DÓNDE entra cada
+  // parte (sus reglas se prueban en precios-bot.test.ts).
   [path.join(RAIZ, "src/lib/whatsapp/bot/precios-bot.ts"), {
-    bloqueDePreciosDeLaClinica: async (clinicId: string, opciones: { puedeAgendar: boolean }) => {
+    preciosDeLaClinicaParaElTurno: async (clinicId: string, opciones: { puedeAgendar: boolean; textoPaciente: string }) => {
       estado.preciosPedidosPara.push({ clinicId, ...opciones });
       return estado.precios;
     },
@@ -115,7 +115,7 @@ beforeEach(() => {
   estado.modo = "ok";
   estado.tono = "";
   estado.tonoPedidoPara.length = 0;
-  estado.precios = "";
+  estado.precios = { reglas: "", coincidencias: "" };
   estado.preciosPedidosPara.length = 0;
   estado.texto = "Claro, abrimos a las 9.";
   estado.uso = { input_tokens: 300, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
@@ -249,12 +249,18 @@ test("si no se va a llamar a la IA (mensaje vacío), no se consultan los ejemplo
   assert.equal(estado.tonoPedidoPara.length, 0);
 });
 
-test("ws1-t3: el bloque de precios de la clínica del turno entra en la parte cacheada, después de las FAQs", async () => {
-  estado.precios = "PRECIOS Y TRATAMIENTOS DE LA CLÍNICA (salen del panel de la clínica):\nProcedimientos:\n- Limpieza: $650 MXN";
-  await ai.generateAiReply(INPUT, CONFIG, FAQS);
-  assert.deepEqual(estado.preciosPedidosPara, [{ clinicId: "clinica_prueba", puedeAgendar: true }]);
+test("ws1-t3: reglas de precios en la parte cacheada, los renglones del mensaje en la de cada turno", async () => {
+  estado.precios = {
+    reglas: "PRECIOS Y TRATAMIENTOS DE LA CLÍNICA (salen del panel de la clínica):\n- reglas",
+    coincidencias: "TRATAMIENTOS QUE COINCIDEN CON LO QUE ESCRIBE EL PACIENTE (del panel de la clínica):\nCon precio:\n- Limpieza: $650 MXN",
+  };
+  await ai.generateAiReply({ ...INPUT, history: [{ role: "patient", text: "quiero una limpieza" }] }, CONFIG, FAQS);
+  assert.deepEqual(estado.preciosPedidosPara, [
+    { clinicId: "clinica_prueba", puedeAgendar: true, textoPaciente: "quiero una limpieza\n¿abren el sábado?" },
+  ]);
   const [fijo, variable] = estado.cuerpos[0].system;
   assert.deepEqual(fijo.cache_control, { type: "ephemeral" });
-  assert.ok(fijo.text.indexOf("Limpieza: $650 MXN") > fijo.text.indexOf("De 9 a 18."));
-  assert.ok(!variable.text.includes("$650"));
+  assert.ok(fijo.text.indexOf("PRECIOS Y TRATAMIENTOS DE LA CLÍNICA") > fijo.text.indexOf("De 9 a 18."));
+  assert.ok(!fijo.text.includes("$650"));
+  assert.ok(variable.text.includes("- Limpieza: $650 MXN"));
 });

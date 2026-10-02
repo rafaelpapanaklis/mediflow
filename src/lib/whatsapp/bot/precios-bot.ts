@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { tecnicasActivas } from "@/lib/orthodontics/tecnicas-de-la-clinica";
-import { bloquePreciosDelBot } from "./precios-core";
+import { PRECIOS_VACIOS, preciosDelTurno, type PreciosDelTurno } from "./precios-core";
 import { AGENDA_SENTINEL, HANDOFF_SENTINEL } from "./ai-prompt";
 
 // ws1-t3 (2-oct-2026) — los dos interruptores de precios del bot y el bloque
@@ -144,16 +144,20 @@ async function tieneModuloDeOrtodoncia(clinicId: string): Promise<boolean> {
 }
 
 /**
- * El bloque de precios para el prompt del bot (parte FIJA, cacheada). "" si
- * no hay nada que decir o si algo falla: el bot contesta igual que antes.
- * Solo lee datos de `clinicId` (la clínica del hilo, que viene del número de
- * WhatsApp de la clínica, nunca del paciente).
+ * Los precios del prompt para ESTE turno: las reglas (parte FIJA, cacheada) y
+ * los renglones del catálogo que coinciden con lo que escribió el paciente
+ * (parte variable). Vacíos si no hay nada que decir o si algo falla: el bot
+ * contesta igual que antes. Solo lee datos de `clinicId` (la clínica del hilo,
+ * que viene del número de WhatsApp de la clínica, nunca del paciente).
+ *
+ * El catálogo se lee ENTERO (sin tope, decisión de Rafael): lo que se recorta
+ * es lo que entra al prompt, no lo que el bot sabe.
  */
-export async function bloqueDePreciosDeLaClinica(
+export async function preciosDeLaClinicaParaElTurno(
   clinicId: string | null | undefined,
-  opciones: { puedeAgendar: boolean },
-): Promise<string> {
-  if (!clinicId) return "";
+  opciones: { puedeAgendar: boolean; textoPaciente: string },
+): Promise<PreciosDelTurno> {
+  if (!clinicId) return { ...PRECIOS_VACIOS };
   try {
     const interruptores = await leerInterruptoresDePrecios(clinicId);
     const tieneOrtodoncia = await tieneModuloDeOrtodoncia(clinicId);
@@ -161,13 +165,11 @@ export async function bloqueDePreciosDeLaClinica(
       where: { clinicId, isActive: true },
       select: { name: true, category: true, basePrice: true },
       orderBy: { name: "asc" },
-      // Holgura sobre el tope del prompt (80 por grupo): los $0 se descartan después.
-      take: 400,
     });
     const tecnicas = tieneOrtodoncia
       ? tecnicasActivas((await leerTecnicasDeLaClinica(clinicId)).tecnicas).map((t) => ({ nombre: t.nombre, precio: t.precio }))
       : [];
-    return bloquePreciosDelBot(
+    return preciosDelTurno(
       {
         darPreciosProcedimientos: interruptores.canQuoteProcedurePrices,
         darPreciosOrtodoncia: interruptores.canQuoteOrthoPrices,
@@ -176,10 +178,11 @@ export async function bloqueDePreciosDeLaClinica(
         tecnicas,
         puedeAgendar: opciones.puedeAgendar,
       },
+      opciones.textoPaciente,
       { agenda: AGENDA_SENTINEL, handoff: HANDOFF_SENTINEL },
     );
   } catch (e) {
     console.error("[bot/precios] no se pudo armar el bloque de precios:", e);
-    return "";
+    return { ...PRECIOS_VACIOS };
   }
 }

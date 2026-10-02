@@ -5,7 +5,8 @@ import { BotIntent } from "./types";
 import type { GenerateAiReply } from "./types";
 import { buildMessages, buildSystemBlocks, clasificarRespuesta } from "./ai-prompt";
 import { bloqueDeTonoDeLaClinica } from "./aprende/tono-prompt";
-import { bloqueDePreciosDeLaClinica } from "./precios-bot";
+import { preciosDeLaClinicaParaElTurno } from "./precios-bot";
+import { textoParaBuscar } from "./precios-core";
 
 /**
  * T3 — Respuesta libre del bot de WhatsApp con Claude (Anthropic).
@@ -68,15 +69,17 @@ export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
     // "" si no hay, si su SQL no está pegado o si algo falla.
     const ejemplosTono = await bloqueDeTonoDeLaClinica(input.clinicId);
     // Precios del panel (ws1-t3): según los dos interruptores de «Configurar
-    // bot». Nunca lanza: "" si están apagados sin catálogo, si su SQL no está
-    // pegado o si algo falla. Solo la clínica del hilo.
-    const bloquePrecios = await bloqueDePreciosDeLaClinica(input.clinicId, {
+    // bot». Las reglas van a la parte fija (cacheada); solo los renglones del
+    // catálogo que coinciden con lo que escribió el paciente van a la parte de
+    // cada turno. Nunca lanza: vacíos si no hay nada, sin SQL o si algo falla.
+    const precios = await preciosDeLaClinicaParaElTurno(input.clinicId, {
       puedeAgendar: config.canBookAppointments === true,
+      textoPaciente: textoParaBuscar(incoming, input.history),
     });
 
     // La fecha se calcula aquí, en cada turno: nunca un texto fijo. En dos
     // bloques: lo fijo de la clínica con caché, la fecha al final sin caché.
-    const system = buildSystemBlocks(input, config, faqs, new Date(), ejemplosTono, bloquePrecios);
+    const system = buildSystemBlocks(input, config, faqs, new Date(), ejemplosTono, precios);
     const messages = buildMessages(input.history, incoming);
 
     const abort = new AbortController();
