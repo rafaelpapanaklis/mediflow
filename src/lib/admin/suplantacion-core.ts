@@ -14,24 +14,25 @@
  *   · dura DURACION_SUPLANTACION_MS (2 h): al vencer, getSession/getAuthContext
  *     la tratan como sin sesión en cada petición, aunque el navegador conserve
  *     las cookies de Supabase, y se revoca en Supabase;
- *   · sin nota escrita no se entra, y sin el registro guardado tampoco.
+ *   · sin el registro guardado no se entra. El motivo ya NO se pide (ws1-t11,
+ *     2-oct, pedido de Rafael: un clic): si no llega, se guarda NOTA_AUTOMATICA.
  *
  * Lo que NO cambia (pausa de Rafael del 1-oct): cómo aparecen en audit_logs /
  * Movimientos las acciones hechas durante la suplantación.
  */
 
 export const DURACION_SUPLANTACION_MS = 2 * 60 * 60 * 1000;
-export const NOTA_MIN = 10;
 export const NOTA_MAX = 500;
+/** El motivo que se registra cuando el admin no escribe ninguno (el caso normal). */
+export const NOTA_AUTOMATICA = "Entrada de soporte";
 
 export const SQL_SUPLANTACION = "sql/ws1-t4-suplantacion-admin.sql";
 
-/** La nota del admin: obligatoria, con texto de verdad. `null` = no vale. */
-export function limpiarNota(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
+/** La nota del admin, opcional: espacios colapsados y acotada; sin texto, NOTA_AUTOMATICA. */
+export function limpiarNota(raw: unknown): string {
+  if (typeof raw !== "string") return NOTA_AUTOMATICA;
   const t = raw.replace(/\s+/g, " ").trim();
-  if (t.length < NOTA_MIN) return null;
-  return t.slice(0, NOTA_MAX);
+  return t ? t.slice(0, NOTA_MAX) : NOTA_AUTOMATICA;
 }
 
 /**

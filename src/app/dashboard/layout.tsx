@@ -14,6 +14,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canUseCaja } from "@/lib/caja-pin";
 import { getResolvedPlan } from "@/lib/plans";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
+import { AvisoSuplantacion } from "@/components/dashboard/aviso-suplantacion";
 import { AvisoGoogleCaido } from "@/components/dashboard/aviso-google-caido";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -343,6 +344,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           columna se queda en el ancho disponible y cada pantalla se hace cargo de
           su propio ancho intrínseco (scroll dentro de su contenedor, o apilado). */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
+        {/* «Ver como clínica»: solo en el navegador del admin de plataforma. */}
+        <AvisoSuplantacion clinicName={clinic.name} />
         <GlobalAnnouncementBanner />
         {/* Google Calendar perdió la conexión: solo lo ve quien puede reconectar. */}
         <AvisoGoogleCaido esAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"} />

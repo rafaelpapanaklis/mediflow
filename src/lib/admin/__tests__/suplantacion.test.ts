@@ -7,8 +7,12 @@
  * Reproduce el fallo de partida: GET /api/admin/impersonate abría la sesión del dueño
  * (generateLink) sin nota y sin registro; ahora el GET no genera nada.
  * Fija:
- *   · POST: sin nota → 400 y no se genera el enlace; sin tablas → 503 y no se genera;
- *     si la nota de AdminClinicNote no se pudo escribir → 503 y no se genera.
+ *   · POST: sin tablas → 503 y no se genera el enlace.
+ *   · ws1-t11 (2-oct): un clic, sin motivo («Entrada de soporte»), y la nota de
+ *     AdminClinicNote ya NO bloquea — en producción fallaba SIEMPRE (authorId es
+ *     NOT NULL en la base y se insertaba null) y «Ver como clínica» daba 503.
+ *   · signOut siempre con scope "local" (el "global" echaría al dueño real), y
+ *     «Salir y volver a /admin» / «Cerrar sesión» cierran solo la suplantación.
  *   · La regla de vida de la sesión (2 h, cierre) y la lectura del session_id del token.
  *   · Una sesión vencida vale como «terminada» (getSession/getAuthContext la tratan como sin sesión).
  *   · El desvío: con suplantación activa, insertarFilaBitacora NO escribe en audit_logs y sí en
@@ -30,6 +34,8 @@ const sqlEjecutado: string[] = [];
 const auditLogCreates: unknown[] = [];
 let generateLinkLlamadas = 0;
 let tokenDeSesion: string | null = null;
+const signOuts: unknown[] = [];
+const notasCreadas: string[] = [];
 
 function jwt(claims: Record<string, unknown>): string {
   const b = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -49,7 +55,14 @@ const prismaFalso = {
   },
   $executeRaw: async (strings: TemplateStringsArray) => { sqlEjecutado.push(strings.join("?")); return 1; },
   auditLog: { create: async (a: unknown) => { auditLogCreates.push(a); return { id: "x" }; } },
-  adminClinicNote: { create: async () => { if (notaFalla) throw new Error("db caída"); return { id: "n" }; } },
+  adminClinicNote: {
+    create: async (a: { data: { content: string } }) => {
+      // Como en producción: admin_clinic_notes.authorId es NOT NULL y la ruta manda null.
+      if (notaFalla) throw new Error('Null constraint violation on the fields: (`authorId`)');
+      notasCreadas.push(a.data.content);
+      return { id: "n" };
+    },
+  },
   user: { findFirst: async () => ({ id: "u-dueno", supabaseId: "sb-dueno", email: "dueno@example.com", firstName: "D", lastName: "Ueño" }) },
 };
 
@@ -59,7 +72,7 @@ mock.module("@/lib/supabase/server", {
     createClient: () => ({
       auth: {
         getSession: async () => ({ data: { session: tokenDeSesion ? { access_token: tokenDeSesion } : null } }),
-        signOut: async () => ({ error: null }),
+        signOut: async (o?: unknown) => { signOuts.push(o ?? "global"); return { error: null }; },
         verifyOtp: async () => ({ data: { session: { access_token: jwt({ session_id: "ses-nueva" }) } }, error: null }),
       },
     }),
@@ -87,15 +100,16 @@ const fila = () => import("../../movimientos-paciente/fila");
 beforeEach(async () => {
   filaSuplantacion = null; tablasExisten = true; notaFalla = false; tokenDeSesion = null;
   sqlEjecutado.length = 0; auditLogCreates.length = 0; generateLinkLlamadas = 0;
+  signOuts.length = 0; notasCreadas.length = 0;
   consultasATabla.length = 0; preguntasPorTablas = 0;
   (await lib())._reiniciarCacheSuplantacion();
   process.env.SUPABASE_SERVICE_ROLE_KEY = "srk";
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.supabase.co";
 });
 
-function post(body: Record<string, string>) {
+function post(body: Record<string, string>, ruta = "/api/admin/impersonate") {
   const f = new URLSearchParams(body);
-  return new NextRequest("http://dev.local/api/admin/impersonate", {
+  return new NextRequest(`http://dev.local${ruta}`, {
     method: "POST", body: f.toString(),
     headers: { "content-type": "application/x-www-form-urlencoded", host: "dev.local", origin: "http://dev.local" },
   });
@@ -109,12 +123,12 @@ test("GET ya no abre la sesión del dueño (antes: magic link sin nota ni regist
   assert.equal(generateLinkLlamadas, 0);
 });
 
-test("POST sin motivo (o muy corto) → 400 y no se genera nada", async () => {
-  for (const nota of ["", "corta"]) {
-    const r = await (await ruta()).POST(post({ clinicId: "c1", nota }));
-    assert.equal(r.status, 400);
-  }
-  assert.equal(generateLinkLlamadas, 0);
+test("ws1-t11: un clic — sin motivo entra igual (303) y registra «Entrada de soporte»", async () => {
+  const r = await (await ruta()).POST(post({ clinicId: "c1" }));
+  assert.equal(r.status, 303);
+  const insert = sqlEjecutado.find((s) => s.includes('INSERT INTO "admin_impersonation_sessions"'));
+  assert.ok(insert, "la entrada queda en la bitácora de admin");
+  assert.match(notasCreadas[0] ?? "", /motivo: Entrada de soporte/);
 });
 
 test("POST sin las tablas (SQL sin pegar) → 503 y no se abre sesión", async () => {
@@ -125,11 +139,17 @@ test("POST sin las tablas (SQL sin pegar) → 503 y no se abre sesión", async (
   assert.equal(generateLinkLlamadas, 0);
 });
 
-test("POST: si la nota de auditoría no se escribe, no se entra", async () => {
+test("ws1-t11 (la causa): si admin_clinic_notes rechaza la nota (authorId NOT NULL), se entra igual", async () => {
   notaFalla = true;
-  const r = await (await ruta()).POST(post({ clinicId: "c1", nota: "el dueño pidió ayuda con la agenda" }));
-  assert.equal(r.status, 503);
-  assert.equal(generateLinkLlamadas, 0);
+  const r = await (await ruta()).POST(post({ clinicId: "c1" }));
+  assert.equal(r.status, 303, "antes: 503 «No se pudo registrar la entrada»");
+  assert.ok(sqlEjecutado.some((s) => s.includes('INSERT INTO "admin_impersonation_sessions"')));
+});
+
+test("ws1-t11: entrar nunca hace un signOut global (echaría al dueño real de sus dispositivos)", async () => {
+  await (await ruta()).POST(post({ clinicId: "c1" }));
+  assert.ok(signOuts.length > 0);
+  assert.deepEqual(signOuts.filter((o) => (o as { scope?: string })?.scope !== "local"), []);
 });
 
 test("POST completo: registra la sesión por su session_id (2 h) y redirige 303 conservando df_2fa_admin", async () => {
@@ -144,9 +164,10 @@ test("POST completo: registra la sesión por su session_id (2 h) y redirige 303 
 
 // ── la regla ──
 
-test("núcleo: nota obligatoria y acotada; session_id del token; vida de 2 h", async () => {
+test("núcleo: nota opcional y acotada; session_id del token; vida de 2 h", async () => {
   const c = await core();
-  assert.equal(c.limpiarNota("   "), null);
+  assert.equal(c.limpiarNota("   "), "Entrada de soporte");
+  assert.equal(c.limpiarNota(undefined), "Entrada de soporte");
   assert.equal(c.limpiarNota("  ayuda   con  agenda "), "ayuda con agenda");
   assert.equal(c.limpiarNota("x".repeat(900))!.length, c.NOTA_MAX);
   assert.equal(c.sessionIdDelToken(jwt({ session_id: "abc" })), "abc");
@@ -222,4 +243,42 @@ test("actores externos (paciente, bot) no se desvían aunque haya cookies de sup
   const { desviarSiSuplantacion } = await lib();
   assert.equal(await desviarSiSuplantacion({ clinicId: "c1", userId: null, entityType: "x", entityId: "y", action: "z", changes: null, actorType: "bot" }), false);
   assert.equal(await desviarSiSuplantacion({ clinicId: "c1", userId: "u", entityType: "x", entityId: "y", action: "z", changes: null, actorType: "admin" }), false);
+});
+
+// ── ws1-t11: salir ──
+
+const filaActiva = () => ({ id: "i3", adminUserId: "adm-1", adminEmail: "a", clinicId: "c1", targetUserId: "u", expiresAt: new Date(Date.now() + 3600_000), endedAt: null });
+
+test("«Salir y volver a /admin»: cierra la suplantación (local) y vuelve a la ficha de la clínica", async () => {
+  tokenDeSesion = jwt({ session_id: "ses-salir" });
+  filaSuplantacion = filaActiva();
+  const salir = await import("../../../app/api/admin/impersonate/salir/route");
+  const r = await salir.POST(post({}, "/api/admin/impersonate/salir"));
+  assert.equal(r.status, 303);
+  assert.match(r.headers.get("location") ?? "", /\/admin\/clinics\/c1$/);
+  assert.ok(sqlEjecutado.some((s) => s.includes('"endedReason" = ?')), "queda marcada cerrada");
+  assert.deepEqual(signOuts, [{ scope: "local" }]);
+});
+
+test("«Salir» con una sesión normal (no suplantación) no cierra nada", async () => {
+  tokenDeSesion = jwt({ session_id: "ses-normal-2" });
+  filaSuplantacion = null;
+  const salir = await import("../../../app/api/admin/impersonate/salir/route");
+  const r = await salir.POST(post({}, "/api/admin/impersonate/salir"));
+  assert.equal(r.status, 303);
+  assert.equal(signOuts.length, 0);
+});
+
+test("«Cerrar sesión» del panel durante la suplantación: solo local; fuera de ella, como siempre", async () => {
+  const logout = await import("../../../app/api/auth/logout/route");
+  tokenDeSesion = jwt({ session_id: "ses-logout" });
+  filaSuplantacion = filaActiva();
+  await logout.POST(new Request("http://dev.local/api/auth/logout", { method: "POST" }));
+  assert.deepEqual(signOuts, [{ scope: "local" }]);
+  signOuts.length = 0;
+  (await lib())._reiniciarCacheSuplantacion();
+  tokenDeSesion = jwt({ session_id: "ses-logout-normal" });
+  filaSuplantacion = null;
+  await logout.POST(new Request("http://dev.local/api/auth/logout", { method: "POST" }));
+  assert.deepEqual(signOuts, ["global"]);
 });

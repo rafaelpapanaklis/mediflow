@@ -468,8 +468,8 @@ export function AdminClinicDetailClient({
               Exportar
             </ButtonNew>
           </a>
-          {/* M5: POST con motivo obligatorio (antes un enlace GET). */}
-          <BotonVerComoClinica clinicId={clinic.id} etiqueta="Impersonar" />
+          {/* M5 + ws1-t11: POST de un clic (antes un enlace GET; luego con motivo). */}
+          <BotonVerComoClinica clinicId={clinic.id} />
         </div>
       </div>
 

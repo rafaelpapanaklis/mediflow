@@ -21,6 +21,7 @@ import { inflateRawSync, inflateSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 import { detectDangerousExecutable } from "@/lib/validate-upload";
 import { prisma } from "@/lib/prisma";
+import { desviarSiSuplantacion } from "@/lib/admin/suplantacion";
 import { rateLimitKey } from "@/lib/rate-limit";
 
 // ─────────────────────────── Perfiles de subida ───────────────────────────
@@ -581,6 +582,18 @@ export async function registrarSubidaRechazada(opts: {
   });
   if (!opts.clinicId || !opts.userId) return;
   try {
+    const cambios = {
+      _upload_rechazado: {
+        before: null,
+        after: { ruta: opts.ruta, motivo: opts.motivo, codigo: opts.codigo, nombre: opts.nombreOriginal },
+      },
+    };
+    // ws1-t11: con «Ver como clínica», a la bitácora de admin y no a la de la clínica.
+    if (await desviarSiSuplantacion({
+      clinicId: opts.clinicId, userId: opts.userId, entityType: "upload-rejected",
+      entityId: opts.patientId ?? "n/a", action: "reject", changes: cambios,
+      patientId: opts.patientId ?? null, ipAddress: opts.ipAddress ?? null, userAgent: opts.userAgent ?? null,
+    })) return;
     await prisma.auditLog.create({
       data: {
         clinicId: opts.clinicId,
@@ -588,17 +601,7 @@ export async function registrarSubidaRechazada(opts: {
         entityType: "upload-rejected",
         entityId: opts.patientId ?? "n/a",
         action: "reject",
-        changes: {
-          _upload_rechazado: {
-            before: null,
-            after: {
-              ruta: opts.ruta,
-              motivo: opts.motivo,
-              codigo: opts.codigo,
-              nombre: opts.nombreOriginal,
-            },
-          },
-        },
+        changes: cambios,
         ipAddress: opts.ipAddress ?? null,
         userAgent: opts.userAgent ?? null,
       },

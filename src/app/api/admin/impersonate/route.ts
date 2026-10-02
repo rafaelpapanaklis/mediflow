@@ -8,12 +8,16 @@ import { setVerComoCookie } from "@/lib/auth/two-factor-cookie";
 import { createClient as crearClienteDeSesion } from "@/lib/supabase/server";
 import {
   DURACION_SUPLANTACION_MS,
-  NOTA_MIN,
   SQL_SUPLANTACION,
   limpiarNota,
   sessionIdDelToken,
 } from "@/lib/admin/suplantacion-core";
-import { registrarSuplantacion, tablaDeSuplantacionLista } from "@/lib/admin/suplantacion";
+import {
+  cerrarSuplantacion,
+  estadoSuplantacionDe,
+  registrarSuplantacion,
+  tablaDeSuplantacionLista,
+} from "@/lib/admin/suplantacion";
 
 /**
  * «Ver como clínica» (auditoría 30-sep-2026, M5).
@@ -22,14 +26,21 @@ import { registrarSuplantacion, tablaDeSuplantacionLista } from "@/lib/admin/sup
  * de Supabase (30 días renovables), con la nota de auditoría «si se puede».
  * Ahora:
  *   · solo POST (el middleware exige Origin de esta web en /api/admin);
- *   · la NOTA del admin es obligatoria y se guarda ANTES de abrir nada — si no
- *     se pudo escribir, no se entra;
+ *   · un clic, sin motivo (ws1-t11, 2-oct, pedido de Rafael): si no llega nota
+ *     se registra «Entrada de soporte»;
  *   · la sesión de Supabase se crea aquí, en el servidor, y se registra por su
  *     session_id en admin_impersonation_sessions con vencimiento de 2 h
  *     (@/lib/admin/suplantacion): al vencer, el panel la trata como sin sesión;
  *   · sin la tabla (SQL sin pegar) contesta 503 y no abre sesión.
- * La bitácora de la clínica (audit_logs / Movimientos) queda como estaba:
- * pausa de Rafael del 1-oct, pendiente de que decida cómo se muestra.
+ * Lo que el admin haga dentro no va a la bitácora de la clínica (decisión A,
+ * desvío en @/lib/admin/suplantacion) ni cuenta como actividad (/api/track).
+ *
+ * ws1-t11 · POR QUÉ NO FUNCIONABA EN PRODUCCIÓN: antes de abrir la sesión se
+ * escribía una AdminClinicNote con `authorId: null` y, si fallaba, se cortaba con
+ * 503 «No se pudo registrar la entrada». En la base, admin_clinic_notes.authorId
+ * es NOT NULL (schema.prisma lo declara opcional), así que fallaba SIEMPRE. Ahora
+ * esa nota es un extra que se intenta DESPUÉS y nunca bloquea: el registro que
+ * manda es admin_impersonation_sessions.
  */
 
 function pagina(titulo: string, texto: string, clinicId: string | null, status: number): NextResponse {
@@ -47,7 +58,7 @@ function pagina(titulo: string, texto: string, clinicId: string | null, status: 
 export async function GET(req: NextRequest) {
   return pagina(
     "Usa el botón «Ver como clínica»",
-    "Entrar como una clínica ahora se hace desde su ficha en /admin, escribiendo el motivo.",
+    "Entrar como una clínica se hace con el botón «Ver como clínica» de su ficha en /admin.",
     req.nextUrl.searchParams.get("clinicId"),
     405,
   );
@@ -75,16 +86,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // 2. Clínica y nota (obligatoria).
+  // 2. Clínica; la nota es opcional («Entrada de soporte» si no llega).
   const campos = await leerCampos(req);
   const clinicId = campos.clinicId?.trim() || null;
   if (!clinicId) {
     return pagina("Falta la clínica", "No llegó el id de la clínica.", null, 400);
   }
   const nota = limpiarNota(campos.nota);
-  if (!nota) {
-    return pagina("Escribe el motivo", `Para entrar como la clínica hay que escribir el motivo (mínimo ${NOTA_MIN} caracteres).`, clinicId, 400);
-  }
 
   // 3. Service Role Key configurada
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -134,29 +142,13 @@ export async function POST(req: NextRequest) {
   });
 
   if (!user) {
-    return NextResponse.json({ error: "No se encontró el dueño de la clínica" }, { status: 404 });
+    return pagina("Clínica sin dueño", "Esta clínica no tiene un usuario dueño (SUPER_ADMIN) con el que entrar.", clinicId, 404);
   }
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const ua = req.headers.get("user-agent")?.slice(0, 200) ?? null;
 
-  // 6. La nota del admin, ANTES de abrir la sesión. Mismo registro de siempre
-  // (AdminClinicNote, que se ve en /admin), ahora con el motivo; si no se pudo
-  // escribir, no se entra.
-  try {
-    await prisma.adminClinicNote.create({
-      data: {
-        clinicId,
-        authorId: null,
-        content: `[IMPERSONATION] admin ${admin.user.email} accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip ?? "unknown"} · UA ${ua ?? "unknown"} · ${new Date().toISOString()} · motivo: ${nota}`,
-      },
-    });
-  } catch (logErr) {
-    console.error("[impersonate] audit log failed:", logErr);
-    return pagina("No se pudo registrar la entrada", "La nota de auditoría no se guardó, así que no se abre la sesión. Inténtalo de nuevo.", clinicId, 503);
-  }
-
-  // 7. Enlace de un solo uso del dueño, canjeado AQUÍ (no en el navegador del admin):
+  // 6. Enlace de un solo uso del dueño, canjeado AQUÍ (no en el navegador del admin):
   // la sesión nace en el servidor y conocemos su session_id para registrarla.
   const supabaseAdmin = clienteAdminSupabase(serviceRoleKey);
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
@@ -166,20 +158,25 @@ export async function POST(req: NextRequest) {
   });
   if (error || !data?.properties?.hashed_token) {
     console.error("Error generating magic link:", error);
-    return NextResponse.json({ error: "Error al generar acceso temporal" }, { status: 500 });
+    return pagina("No se pudo entrar", "Supabase no generó el acceso temporal. Inténtalo de nuevo.", clinicId, 500);
   }
 
+  // signOut SIEMPRE con scope "local": el de por defecto ("global") revoca TODAS
+  // las sesiones de esa persona —la del dueño real en su celular, si la que se
+  // cierra es una de suplantación—, y eso la clínica sí lo vería.
   const supabase = crearClienteDeSesion();
-  try { await supabase.auth.signOut(); } catch { /* sin sesión previa en este navegador */ }
+  const previa = await estadoSuplantacionDe(supabase);
+  if (previa.tipo === "activa") await cerrarSuplantacion(previa.fila.id, "reemplazada");
+  try { await supabase.auth.signOut({ scope: "local" }); } catch { /* sin sesión previa en este navegador */ }
   const canje = await supabase.auth.verifyOtp({ type: "email", token_hash: data.properties.hashed_token });
   const sessionId = sessionIdDelToken(canje.data?.session?.access_token);
   if (canje.error || !sessionId) {
     console.error("[impersonate] verifyOtp falló:", canje.error?.message);
-    try { await supabase.auth.signOut(); } catch { /* nada que cerrar */ }
-    return NextResponse.json({ error: "Error al abrir la sesión temporal" }, { status: 500 });
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* nada que cerrar */ }
+    return pagina("No se pudo entrar", "No se pudo abrir la sesión temporal. Inténtalo de nuevo.", clinicId, 500);
   }
 
-  // 8. Registro de la sesión. Si no queda escrito, se cierra lo abierto y no se entra.
+  // 7. Registro de la sesión. Si no queda escrito, se cierra lo abierto y no se entra.
   const expiresAt = new Date(Date.now() + DURACION_SUPLANTACION_MS);
   try {
     await registrarSuplantacion({
@@ -196,8 +193,21 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[impersonate] registro de la sesión falló:", e);
-    try { await supabase.auth.signOut(); } catch { /* best effort */ }
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* best effort */ }
     return pagina("No se pudo registrar la sesión", "No se abre la sesión sin su registro. Inténtalo de nuevo.", clinicId, 503);
+  }
+  // 8. Nota en la ficha de /admin (solo la ve el admin). Un extra: si no se
+  // escribe —hoy pasa siempre, authorId es NOT NULL en la base—, se sigue.
+  try {
+    await prisma.adminClinicNote.create({
+      data: {
+        clinicId,
+        authorId: null,
+        content: `[IMPERSONATION] admin ${admin.user.email} accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip ?? "unknown"} · UA ${ua ?? "unknown"} · ${new Date().toISOString()} · motivo: ${nota}`,
+      },
+    });
+  } catch (logErr) {
+    console.warn("[impersonate] nota en admin_clinic_notes no escrita (no bloquea):", logErr instanceof Error ? logErr.message : logErr);
   }
   console.warn("[impersonate]", JSON.stringify({ clinicId, admin: admin.user.email, targetUser: user.email, ip, expiresAt: expiresAt.toISOString() }));
 

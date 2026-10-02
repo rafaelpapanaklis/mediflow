@@ -439,8 +439,8 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
         <Link href={`/admin/clinics/${clinica.id}`}>
           <ButtonNew size="sm" variant="secondary" icon={<Eye size={13} />}>Ver detalle</ButtonNew>
         </Link>
-        {/* M5: POST con motivo obligatorio (antes un enlace GET). */}
-        <BotonVerComoClinica clinicId={clinica.id} etiqueta="Impersonar" size="sm" />
+        {/* M5 + ws1-t11: POST de un clic (antes un enlace GET; luego con motivo). */}
+        <BotonVerComoClinica clinicId={clinica.id} size="sm" />
       </div>
     </div>
   );

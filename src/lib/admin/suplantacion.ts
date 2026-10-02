@@ -162,6 +162,24 @@ async function cerrarVencida(sessionId: string, accessToken: string, fila: FilaS
   }
 }
 
+/**
+ * Cierra a mano una suplantación («Salir y volver a /admin», o una entrada nueva
+ * desde el mismo navegador). La sesión de Supabase la cierra quien llama, con
+ * scope "local". Nunca lanza.
+ */
+export async function cerrarSuplantacion(id: string, motivo: "salida" | "reemplazada"): Promise<void> {
+  try {
+    await prisma.$executeRaw`
+      UPDATE "admin_impersonation_sessions"
+      SET "endedAt" = now(), "endedReason" = ${motivo}
+      WHERE "id" = ${id} AND "endedAt" IS NULL
+    `;
+    cache.clear();
+  } catch (e) {
+    console.warn("[suplantacion] no se pudo marcar cerrada:", e instanceof Error ? e.message : e);
+  }
+}
+
 type ClienteConSesion = {
   auth: { getSession(): Promise<{ data: { session: { access_token?: string } | null } }> };
 };
