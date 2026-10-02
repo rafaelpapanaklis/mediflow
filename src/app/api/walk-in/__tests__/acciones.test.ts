@@ -72,12 +72,11 @@ test("asignar: sin profesional, o uno que no recibe citas / de otra clínica, no
   assert.equal(fila.assignedTo, null);
 });
 
-test("iniciar, terminar y cancelar mueven el estado y ponen su marca de tiempo", async () => {
+test("terminar y cancelar mueven el estado y ponen su marca de tiempo", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");
-  let j = await (await PATCH(req({ action: "start" }), idp)).json();
-  assert.equal(j.status, "IN_PROGRESS");
-  assert.ok(!Number.isNaN(Date.parse(j.startedAt)));
-  j = await (await PATCH(req({ action: "complete" }), idp)).json();
+  // «Iniciar» ya no es solo un cambio de estado: crea la cita del momento (iniciar-cita.test.ts).
+  fila.status = "IN_PROGRESS";
+  let j = await (await PATCH(req({ action: "complete" }), idp)).json();
   assert.equal(j.status, "COMPLETED");
   assert.ok(!Number.isNaN(Date.parse(j.completedAt)));
 

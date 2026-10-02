@@ -6,8 +6,7 @@ import {
   fetchAppointmentsForDay,
   fetchPendingValidation,
 } from "@/lib/agenda/server";
-import { todayInTz } from "@/lib/agenda/time-utils";
-import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
 import type {
   HomeActionItem,
   HomeReceptionistData,
@@ -37,19 +36,16 @@ export async function GET() {
         session.clinic.category,
         { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
       ),
-      prisma.waitlistEntry.findMany({
-        // Visibilidad por paciente: la waitlist devuelve nombres. Enmascara
-        // (excluye) entradas de pacientes restringidos que este usuario no puede
-        // ver, igual que fetchAppointmentsForDay ya hace con las citas. Admins → [].
+      // La tarjeta «Fila de espera» de Hoy es la FILA DE WALK-IN (lo que recepción agrega y atiende en
+      // /dashboard/walk-in), no la lista de espera de citas, que se queda en la Agenda (ws1-t4, decisión 7).
+      // Solo la de hoy y solo quien sigue esperando: lo que ya está en atención ya es una cita de hoy.
+      prisma.walkInQueue.findMany({
         where: {
           clinicId: session.clinic.id,
-          resolvedAt: null,
-          AND: relatedPatientVisibilityAnd({ userId: session.user.id, role: session.user.role, clinicId: session.clinic.id }),
+          status: { in: ["WAITING", "ASSIGNED"] },
+          joinedAt: { gte: calendarDayRangeUtc(dateISO, session.clinic.timezone).startUtc },
         },
-        include: {
-          patient: { select: { id: true, firstName: true, lastName: true } },
-        },
-        orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+        orderBy: [{ priority: "desc" }, { joinedAt: "asc" }],
         take: 10,
       }),
       countUnreadWhatsapp(session.clinic.id).catch(() => 0),
@@ -129,15 +125,9 @@ export async function GET() {
   // ─── Waitlist ─────────────────────────────────────────────────
   const waitlist: WaitlistEntryHome[] = waitlistRows.map((e) => ({
     id: e.id,
-    patient: {
-      id: e.patient.id,
-      name: [e.patient.firstName, e.patient.lastName]
-        .filter(Boolean)
-        .join(" ")
-        .trim(),
-    },
-    reason: e.reason ?? undefined,
-    since: e.createdAt.toISOString(),
+    patient: { id: e.patientId ?? "", name: e.patientName },
+    reason: e.service || undefined,
+    since: e.joinedAt.toISOString(),
   }));
 
   const data: HomeReceptionistData = {

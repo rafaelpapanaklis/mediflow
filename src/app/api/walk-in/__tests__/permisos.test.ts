@@ -56,7 +56,7 @@ test("dueño, recepción y doctor: ven, agregan, avanzan y cancelan", async () =
     ctx.role = role;
     assert.equal((await GET(req())).status, 200, `${role} GET`);
     assert.equal((await POST(req({ patientName: "Ana", service: "Limpieza" }))).status, 201, `${role} POST`);
-    assert.equal((await PATCH(req({ action: "start" }), idp)).status, 200, `${role} PATCH`);
+    assert.equal((await PATCH(req({ action: "cancel" }), idp)).status, 200, `${role} PATCH`);
     assert.equal((await DELETE(req(), idp)).status, 200, `${role} DELETE`);
   }
 });

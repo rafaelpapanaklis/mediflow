@@ -329,11 +329,11 @@
       "intlLocale": "es-MX"
     },
     "waitlist": {
-      "title": "Lista de espera",
-      "emptySubtitle": "Sin pacientes en espera",
+      "title": "Fila de espera",
+      "emptySubtitle": "Nadie en la fila",
       "subtitle": {
-        "one": "{count} paciente esperando un hueco",
-        "other": "{count} pacientes esperando un hueco"
+        "one": "{count} paciente en la fila",
+        "other": "{count} pacientes en la fila"
       }
     }
   },
@@ -8655,9 +8655,9 @@
       "treatmentsTitle": "Sin tratamientos en catálogo",
       "treatmentsDesc": "Agrega los tratamientos que ofreces para poder asignarlos a citas y facturas.",
       "treatmentsAddCta": "Agregar tratamiento",
-      "waitlistTitle": "Lista de espera vacía",
-      "waitlistDesc": "Agrega pacientes que quieran adelantar su cita si hay cancelaciones.",
-      "waitlistAddCta": "Agregar paciente a espera",
+      "waitlistTitle": "Fila de espera vacía",
+      "waitlistDesc": "Aquí aparecen los pacientes que llegan sin cita y esperan su turno.",
+      "waitlistAddCta": "Agregar paciente a la fila",
       "searchTitle": "Sin resultados para \"{query}\"",
       "searchDesc": "Prueba con otro nombre, teléfono o folio. La búsqueda ignora acentos.",
       "activityTitle": "Sin actividad reciente",
@@ -9722,6 +9722,7 @@
       "chooseProfessional": "Elige un profesional",
       "assignedTo": "Asignado a {name}",
       "noProfessionals": "No hay profesionales que reciban citas. Enciende «Aparece en la agenda» en Equipo.",
+      "chooseToStart": "Elige quién atenderá al paciente para iniciar la consulta.",
       "statusWaiting": "Esperando",
       "statusAssigned": "Asignado",
       "statusInProgress": "En atención",

@@ -74,6 +74,8 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   const [form, setForm] = useState({ patientName: "", service: "" });
   // Fila a la que se le está eligiendo profesional (el «Asignar» abre el selector en esa fila).
   const [asignandoId, setAsignandoId] = useState<string | null>(null);
+  // «Iniciar» sin profesional asignado abre el selector; al elegir, la misma elección inicia la consulta.
+  const [iniciarAlElegir, setIniciarAlElegir] = useState<string | null>(null);
   const nombreDe = (id: string | null) => (id ? profesionales.find(p => p.id === id)?.name ?? null : null);
 
   const statusLabel = (status: string) =>
@@ -130,6 +132,19 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   }
 
   async function handleAction(id: string, action: string, assignedTo?: string) {
+    // «Iniciar» crea la cita del momento y necesita profesional: si la fila no lo trae, se le pide elegir uno.
+    if (action === "start" && !assignedTo && !queue.find(q => q.id === id)?.assignedTo) {
+      if (profesionales.length === 0) { toast.error(t("pages.walkIn.noProfessionals")); return; }
+      setIniciarAlElegir(id);
+      setAsignandoId(id);
+      toast(t("pages.walkIn.chooseToStart"));
+      return;
+    }
+    // Elegido el profesional de una fila que se quería iniciar: ya no es «Asignar», es «Iniciar».
+    if (action === "assign" && assignedTo && iniciarAlElegir === id) {
+      setIniciarAlElegir(null);
+      action = "start";
+    }
     // «Asignar» sin profesional todavía: abre el selector de la fila; la petición sale al elegir.
     if (action === "assign" && !assignedTo) {
       if (profesionales.length === 0) { toast.error(t("pages.walkIn.noProfessionals")); return; }
@@ -155,6 +170,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
       const updated = await res.json();
       setQueue(prev => prev.map(q => q.id === id ? updated : q));
       setAsignandoId(null);
+      setIniciarAlElegir(null);
       toast.success(t("pages.walkIn.statusUpdatedToast", { status: statusLabel(updated.status) }));
     } catch {
       toast.error(t("pages.walkIn.updateError"));
@@ -184,7 +200,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
         handleAction={handleAction}
         profesionales={profesionales}
         asignandoId={asignandoId}
-        cancelarAsignar={() => setAsignandoId(null)}
+        cancelarAsignar={() => { setAsignandoId(null); setIniciarAlElegir(null); }}
         nombreDe={nombreDe}
         statusLabel={statusLabel}
         pintarEspera={(since) => <ElapsedTimer since={since} />}
@@ -249,7 +265,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
                   <option value="" disabled>{t("pages.walkIn.chooseProfessional")}</option>
                   {profesionales.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <Button size="sm" variant="outline" onClick={() => setAsignandoId(null)}>{t("common.cancel")}</Button>
+                <Button size="sm" variant="outline" onClick={() => { setAsignandoId(null); setIniciarAlElegir(null); }}>{t("common.cancel")}</Button>
               </div>
             )}
             {puedeEditar && <div className="flex gap-2">

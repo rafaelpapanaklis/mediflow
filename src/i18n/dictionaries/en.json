@@ -329,11 +329,11 @@
       "intlLocale": "en-US"
     },
     "waitlist": {
-      "title": "Waitlist",
-      "emptySubtitle": "No patients waiting",
+      "title": "Walk-in queue",
+      "emptySubtitle": "Nobody in the queue",
       "subtitle": {
-        "one": "{count} patient waiting for a slot",
-        "other": "{count} patients waiting for a slot"
+        "one": "{count} patient in the queue",
+        "other": "{count} patients in the queue"
       }
     }
   },
@@ -8655,9 +8655,9 @@
       "treatmentsTitle": "No treatments in catalog",
       "treatmentsDesc": "Add the treatments you offer so you can assign them to appointments and invoices.",
       "treatmentsAddCta": "Add treatment",
-      "waitlistTitle": "Waitlist is empty",
-      "waitlistDesc": "Add patients who want to move up their appointment if there are cancellations.",
-      "waitlistAddCta": "Add patient to waitlist",
+      "waitlistTitle": "Walk-in queue is empty",
+      "waitlistDesc": "Patients who arrive without an appointment and wait their turn show up here.",
+      "waitlistAddCta": "Add patient to the queue",
       "searchTitle": "No results for \"{query}\"",
       "searchDesc": "Try another name, phone, or reference number. Search ignores accents.",
       "activityTitle": "No recent activity",
@@ -9722,6 +9722,7 @@
       "chooseProfessional": "Choose a professional",
       "assignedTo": "Assigned to {name}",
       "noProfessionals": "No professionals can receive appointments. Turn on “Appears in the agenda” in Team.",
+      "chooseToStart": "Choose who will see the patient to start the consultation.",
       "statusWaiting": "Waiting",
       "statusAssigned": "Assigned",
       "statusInProgress": "In progress",

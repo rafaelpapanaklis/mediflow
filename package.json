@@ -30,6 +30,7 @@
     "test:xrays-tipo": "tsx --test --experimental-test-module-mocks src/app/api/xrays/__tests__/cambiar-tipo.test.ts",
     "test:walk-in-permisos": "tsx --test --experimental-test-module-mocks src/app/api/walk-in/__tests__/permisos.test.ts",
     "test:walk-in-acciones": "tsx --test --experimental-test-module-mocks src/app/api/walk-in/__tests__/acciones.test.ts",
+    "test:walk-in-iniciar-cita": "tsx --test --experimental-test-module-mocks src/app/api/walk-in/__tests__/iniciar-cita.test.ts",
     "test:resenas-fechas-acceso": "tsx --test src/lib/reviews/__tests__/fechas-y-acceso.test.ts",
     "test:inventario-costo": "tsx --test src/lib/inventory/__tests__/costo-core.test.ts",
     "test:inventario-compras": "tsx --test src/lib/inventory/__tests__/compras.server.test.ts",

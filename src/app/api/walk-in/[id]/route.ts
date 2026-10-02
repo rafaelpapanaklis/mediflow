@@ -3,7 +3,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { RECIBE_CITAS_WHERE, cuerpoDoctorNoRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { iniciarConsultaWalkIn } from "@/lib/walk-in/iniciar-consulta";
 
+// «Asignar» solo MARCA quién atenderá; «Iniciar» crea la cita (ver src/lib/walk-in/iniciar-consulta.ts).
 // Contrato de la fila: el cliente manda `{ action }` (y `assignedTo` al asignar). El servidor decide el estado
 // y las marcas de tiempo; antes solo leía status/assignedTo/startedAt/completedAt, así que «Asignar», «Iniciar» y
 // «Cancelar» contestaban 200 sin cambiar nada (ws1-t4).
@@ -33,6 +35,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   const regla = ACCIONES[action as keyof typeof ACCIONES];
 
+  // «Iniciar» crea la cita del momento (decisión 8, ws1-t4): vive en su propio módulo, con su transacción.
+  if (action === "start") {
+    if (!(regla.desde as readonly string[]).includes(entry.status)) {
+      return NextResponse.json({ error: "invalid_transition", status: entry.status }, { status: 409 });
+    }
+    const r = await iniciarConsultaWalkIn({
+      req,
+      actor: { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId },
+      entry,
+      assignedTo: typeof body?.assignedTo === "string" ? body.assignedTo : null,
+    });
+    if ("body" in r) {
+      return NextResponse.json(r.body.error === "invalid_transition" ? { ...r.body, status: entry.status } : r.body, { status: r.status });
+    }
+    return NextResponse.json(await prisma.walkInQueue.findFirst({ where: { id: params.id, clinicId: ctx.clinicId } }));
+  }
+
   const data: Record<string, unknown> = { status: regla.a };
   if (action === "assign") {
     const assignedTo = typeof body?.assignedTo === "string" ? body.assignedTo : "";
@@ -45,7 +64,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!profesional) return NextResponse.json(cuerpoDoctorNoRecibeCitas(), { status: 404 });
     data.assignedTo = profesional.id;
   }
-  if (action === "start") data.startedAt = new Date();
   if (action === "complete") data.completedAt = new Date();
 
   // La transición se valida en la misma escritura (status en el where): dos clics a la vez no la pisan.
