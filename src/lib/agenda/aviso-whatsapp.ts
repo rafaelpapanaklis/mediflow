@@ -3,7 +3,8 @@
 // POR QUÉ EXISTE: las rutas de citas devuelven `whatsapp` cuando tocaba avisar
 // (ver lib/whatsapp/avisos-cita.ts). Si la pantalla se lo calla, encender
 // «Aviso al cancelar» y que el mensaje no salga es otro botón que miente — y
-// fuera de la ventana de 24 h la cancelación NO sale (no hay plantilla).
+// fuera de la ventana de 24 h la cancelación solo sale con su plantilla aprobada
+// (dc_cancelacion_cita, ws1-t4): mientras Meta no la apruebe, NO sale.
 //
 // Vive junto a `mutations.ts` porque ahí pasan casi todos los cambios de la
 // agenda. Sin hooks (no hay `t` aquí): las frases van en español, que es el

@@ -5796,7 +5796,7 @@
       "eventRescheduleLabel": "Notice on reschedule",
       "eventRescheduleDesc": "When someone on the team changes the date or time of an appointment, the patient gets the new one — also uses up a template once the 24 h window has closed.",
       "eventCancelLabel": "Notice on cancellation",
-      "eventCancelDesc": "When the team cancels an appointment. It only reaches patients who wrote to the clinic in the last 24 h: there is no Meta-approved cancellation template yet, so outside that window nothing goes out.",
+      "eventCancelDesc": "When the team cancels an appointment, the patient gets a notice with the cancelled date and time. Outside the 24 h window it goes out with the Meta cancellation template (WhatsApp → Templates); until Meta approves it, it only reaches patients who wrote to the clinic in the last 24 h.",
       "eventOnToast": "Notice turned on",
       "eventOffToast": "Notice turned off",
       "summaryCreate": "On booking",

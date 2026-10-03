@@ -228,3 +228,12 @@ test("cada tipo de envío automático tiene su etiqueta en el Inbox", () => {
     }
   }
 });
+
+test("«Aviso al cancelar» ya no dice que no hay plantilla de cancelación", () => {
+  for (const lang of ["es", "en"]) {
+    const texto = leer(dic(lang), "inbox.whatsapp.eventCancelDesc");
+    assert.equal(typeof texto, "string");
+    assert.doesNotMatch(texto, /todavía no hay plantilla|there is no Meta-approved/);
+    assert.match(texto, /plantilla de cancelación|cancellation template/);
+  }
+});
