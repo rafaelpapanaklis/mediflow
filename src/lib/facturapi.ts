@@ -144,6 +144,21 @@ export interface CreateInvoiceParams {
    *     suelo a otro vertical sin que nadie lo pidiera.
    */
   exigirUuid?: boolean;
+  /**
+   * Tipo de comprobante (c_TipoDeComprobante). Por defecto "I" (ingreso), lo de
+   * siempre. "E" (egreso) es la nota de crédito (ws1-t3): devoluciones,
+   * descuentos y bonificaciones sobre un CFDI de ingreso ya timbrado.
+   */
+  tipo?: "I" | "E";
+  /**
+   * CFDI relacionados (nodo CfdiRelacionados). Forma de la API de Facturapi:
+   * `[{ relationship: "01", documents: ["<UUID>"] }]`.
+   *   01 = nota de crédito de los documentos relacionados (egreso);
+   *   04 = sustitución de los CFDI previos (el nuevo que reemplaza a uno que
+   *        se cancela con motivo 01).
+   * Sin este campo el payload es el de siempre.
+   */
+  relatedDocuments?: { relationship: string; documents: string[] }[];
 }
 
 export interface InvoiceResult {
@@ -185,7 +200,7 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
       // OJO: el payload de POST /invoices NO acepta "notes" — Facturapi lo
       // rechaza con 400 "El campo notes no está permitido".
       body: JSON.stringify({
-        type: "I", // Ingreso
+        type: params.tipo ?? "I", // Ingreso, salvo la nota de crédito (E)
         customer: params.customerId,
         use: params.usoCfdi,
         payment_form: params.paymentForm ?? "03", // Transferencia por defecto
@@ -194,6 +209,7 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
         // manda "PPD" — ver CreateInvoiceParams.paymentMethod.
         payment_method: params.paymentMethod ?? "PUE",
         items: params.items,
+        ...(params.relatedDocuments?.length ? { related_documents: params.relatedDocuments } : {}),
       }),
       signal: AbortSignal.timeout(TIMBRADO_TIMEOUT_MS),
     });
@@ -277,19 +293,135 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
   };
 }
 
-export async function cancelInvoice(orgApiKey: string, invoiceId: string, motive = "02"): Promise<void> {
-  const res = await fetch(`${FACTURAPI_BASE}/invoices/${invoiceId}`, {
-    method: "DELETE",
-    headers: {
-      "Authorization": `Bearer ${orgApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ motive }), // 01=comprobante emitido con errores con relación, 02=sin relación
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message ?? "Error cancelando CFDI");
+// ── Cancelación ante el SAT y estado de un CFDI (ws1-t3) ────────────────────────
+
+/**
+ * Lo que Facturapi dice de un CFDI, en lo que importa para cancelarlo y para
+ * tener `cfdi_records` al día.
+ *   status:             "valid" | "canceled" (y "pending"/"draft"/"failed", que
+ *                       aquí no deberían salir)
+ *   cancellationStatus: "none" | "verifying" | "pending" | "accepted" |
+ *                       "rejected" | "expired"
+ * Doc: https://docs.facturapi.io/en/docs/guides/invoices/cancelaciones/
+ */
+export interface FacturapiInvoiceState {
+  id:                 string;
+  uuid:               string | null;
+  status:             string;
+  cancellationStatus: string;
+  total:              number | null;
+  customerId:         string | null;
+  paymentForm:        string | null;
+  use:                string | null;
+}
+
+function aEstado(data: any): FacturapiInvoiceState {
+  return {
+    id:                 String(data?.id ?? ""),
+    uuid:               typeof data?.uuid === "string" ? data.uuid : null,
+    status:             String(data?.status ?? ""),
+    cancellationStatus: String(data?.cancellation_status ?? "none"),
+    total:              typeof data?.total === "number" ? data.total : null,
+    customerId:         typeof data?.customer?.id === "string" ? data.customer.id : null,
+    paymentForm:        typeof data?.payment_form === "string" ? data.payment_form : null,
+    use:                typeof data?.use === "string" ? data.use : null,
+  };
+}
+
+/**
+ * La URL del DELETE. Va aparte para poder fijarla en una prueba sin red.
+ *
+ * 🔴 El motivo y la sustitución van en la QUERY, no en el cuerpo: la versión
+ * anterior mandaba `{ motive }` en el cuerpo de un DELETE y Facturapi no lo lee
+ * ahí (hallazgo F-02 de la auditoría CFDI). Facturapi:
+ * `DELETE /v2/invoices/{id}?motive=02`; con motivo 01, además
+ * `&substitution=<UUID (o id de Facturapi) del CFDI que lo sustituye>`.
+ */
+export function urlCancelacion(invoiceId: string, motive: string, substitution?: string | null): string {
+  const q = new URLSearchParams({ motive });
+  if (substitution) q.set("substitution", substitution);
+  return `${FACTURAPI_BASE}/invoices/${encodeURIComponent(invoiceId)}?${q.toString()}`;
+}
+
+/**
+ * Pide la cancelación de un CFDI. Devuelve el estado que contestó Facturapi:
+ * `status: "canceled"` (aceptada de inmediato) o `status: "valid"` con
+ * `cancellationStatus` "pending" (espera la aceptación del receptor) o
+ * "verifying" (el SAT la está procesando).
+ *
+ * Errores, con la MISMA marca que el timbrado (`marcarTimbre`): sin respuesta,
+ * 5xx, 408 o 429 = «no se sabe si la cancelación llegó al SAT» (incierto); 4xx =
+ * rechazo claro. El instituto (edu/facturacion.ts) ya clasificaba así con
+ * `pudoHaberTimbrado`, y ahora lo hace con datos y no por el tipo de error.
+ */
+export async function cancelInvoice(
+  orgApiKey: string,
+  invoiceId: string,
+  motive = "02",
+  substitution?: string | null,
+): Promise<FacturapiInvoiceState> {
+  let res: Response;
+  try {
+    res = await fetch(urlCancelacion(invoiceId, motive, substitution), {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${orgApiKey}` },
+      signal: AbortSignal.timeout(TIMBRADO_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw marcarTimbre(
+      err instanceof Error ? err : new Error(`Error de red al cancelar: ${String(err)}`),
+      true,
+    );
   }
+  let data: any = null;
+  try { data = await res.json(); } catch { /* cuerpo vacío o ilegible */ }
+  if (!res.ok) {
+    const incierto = res.status >= 500 || res.status === 408 || res.status === 429;
+    const msg = typeof data?.message === "string" && data.message
+      ? data.message
+      : `Facturapi respondió ${res.status} al cancelar.`;
+    throw marcarTimbre(new Error(incierto ? `${msg} No se sabe si la cancelación llegó al SAT.` : msg), incierto);
+  }
+  return aEstado(data ?? { id: invoiceId });
+}
+
+/**
+ * Lee el estado actual de un CFDI en Facturapi (GET /v2/invoices/{id}).
+ * `null` si esa llave no lo ve (404): es de otro ambiente o de otra organización.
+ */
+export async function getInvoiceState(orgApiKey: string, invoiceId: string): Promise<FacturapiInvoiceState | null> {
+  const res = await fetch(`${FACTURAPI_BASE}/invoices/${encodeURIComponent(invoiceId)}`, {
+    headers: { "Authorization": `Bearer ${orgApiKey}` },
+    signal: AbortSignal.timeout(TIMBRADO_TIMEOUT_MS),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    let msg = `Facturapi respondió ${res.status} al consultar el CFDI.`;
+    try { const d = await res.json(); msg = d?.message ?? msg; } catch { /* sin cuerpo */ }
+    throw new Error(msg);
+  }
+  return aEstado(await res.json());
+}
+
+/**
+ * La llave que VE este CFDI. Un CFDI vive en el ambiente donde se timbró y
+ * `cfdi_records` no guarda cuál (F-14): en live se prueba primero la llave live
+ * y, si no lo ve, la de pruebas — el mismo criterio que
+ * `downloadInvoiceFileForOrg`. Cancelar con la llave equivocada daría 404.
+ */
+export async function llaveQueVeElCfdi(
+  orgId: string,
+  facturapiId: string,
+): Promise<{ key: string; estado: FacturapiInvoiceState; ambiente: "live" | "test" } | null> {
+  const env = facturapiEnv() === "live" ? "live" : "test";
+  const primary = await getOrgApiKey(orgId);
+  const estado = await getInvoiceState(primary, facturapiId);
+  if (estado) return { key: primary, estado, ambiente: env };
+  if (env !== "live") return null;
+  const testKey = await getTestOrgApiKey(orgId).catch(() => null);
+  if (!testKey) return null;
+  const enPruebas = await getInvoiceState(testKey, facturapiId);
+  return enPruebas ? { key: testKey, estado: enPruebas, ambiente: "test" } : null;
 }
 
 // ── Estado de la organización (¿puede timbrar en Live?) ─────────────────────────
