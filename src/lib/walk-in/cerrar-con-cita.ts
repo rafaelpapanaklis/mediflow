@@ -5,7 +5,8 @@
 // la podía cerrar desde ahí (la máquina de estados de citas no le deja pasar IN_PROGRESS → COMPLETED). Ahora la
 // fila y su cita se mueven en la MISMA transacción:
 //
-//   Completar → la cita abierta pasa a COMPLETED (completedAt) y sale la invitación a reseña, igual que al
+//   Completar → la cita abierta pasa a COMPLETED (completedAt), termina a la hora real (endsAt = ahora si era
+//               más tarde) y sale la invitación a reseña, igual que al
 //               cerrarla por la Agenda (decisión 11.2 de ws1-t4).
 //   Cancelar  → la cita abierta pasa a CANCELLED (cancelledAt + motivo). SIN WhatsApp de cancelación: el paciente
 //               está en la clínica. La cita de un walk-in no tiene recordatorios ni anticipo, pero se cancelan
@@ -97,6 +98,18 @@ export async function cerrarFilaConSuCita(args: {
 
       citaId = await citaDeLaFila(tx, { ...fila, clinicId });
       if (!citaId) return;
+      // Completar termina la cita A LA HORA REAL (vuelta 2, 2-oct-2026): si se cierra antes de su fin, `endsAt`
+      // pasa a ahora. La constraint de no-solape de la base (appt_doctor_no_overlap, la de toda la Agenda) cuenta
+      // también las COMPLETADAS; sin esto el resto de su hueco seguía apartado y «Iniciar» el siguiente walk-in
+      // del mismo doctor daba 409. La regla de la Agenda no se toca: solo se acorta la cita que la fila creó.
+      let finReal: Date | undefined;
+      if (accion === "complete") {
+        const horario = await tx.appointment.findFirst({
+          where: { id: citaId, clinicId },
+          select: { startsAt: true, endsAt: true },
+        });
+        if (horario && horario.endsAt > ahora && horario.startsAt < ahora) finReal = ahora;
+      }
       const r = await tx.appointment.updateMany({
         where: {
           id: citaId,
@@ -105,7 +118,7 @@ export async function cerrarFilaConSuCita(args: {
         },
         data:
           accion === "complete"
-            ? { status: "COMPLETED", completedAt: ahora }
+            ? { status: "COMPLETED", completedAt: ahora, ...(finReal ? { endsAt: finReal } : {}) }
             : { status: "CANCELLED", cancelledAt: ahora, cancelReason: MOTIVO_CANCELADA_DESDE_LA_FILA },
       });
       citaCerrada = r.count === 1;
