@@ -5167,7 +5167,7 @@
       "noCosts": "no costs",
       "editCosts": "Edit costs",
       "editCostsOf": "Edit costs for {name}",
-      "footerNote": "Revenue = what was collected on appointments attended in that chair during the month. Red margin = the chair lost money that month; consider raising prices, reassigning patients, or renegotiating rent.",
+      "footerNote": "Revenue = what was collected on invoices linked to appointments in that chair during the month. Red margin = the chair lost money that month; consider raising prices, reassigning patients, or renegotiating rent.",
       "costsSaved": "Costs saved",
       "saveError": "Error saving",
       "modalTitle": "Costs for {name}",

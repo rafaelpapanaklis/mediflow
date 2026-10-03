@@ -5167,7 +5167,7 @@
       "noCosts": "sin costos",
       "editCosts": "Editar costos",
       "editCostsOf": "Editar costos de {name}",
-      "footerNote": "Ingresos = lo cobrado en las citas atendidas en ese sillón durante el mes. Margen en rojo = el sillón perdió dinero ese mes; considera subir precios, reasignar pacientes o renegociar la renta.",
+      "footerNote": "Ingresos = lo cobrado de las facturas ligadas a citas de ese sillón durante el mes. Margen en rojo = el sillón perdió dinero ese mes; considera subir precios, reasignar pacientes o renegociar la renta.",
       "costsSaved": "Costos guardados",
       "saveError": "Error al guardar",
       "modalTitle": "Costos de {name}",
