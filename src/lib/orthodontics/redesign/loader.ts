@@ -27,7 +27,8 @@ import {
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import { cargarNombreDeTecnica } from "../tecnicas-de-la-clinica-db";
-import { leerArcosInferiores } from "../hoja-extras-db";
+import { leerArcosInferiores, leerLigasDeHojas, listarMecanicasDelCaso } from "../hoja-extras-db";
+import { mecanicasDeUnControl } from "../hoja-extras";
 import { cargarPlanDetalle, columnaDePlanDetalleExiste } from "../plan-detalle-db";
 import { datoDelPlanSinCapturar, planDetalleVacio, reevaluacionesPendientes, type PlanDeTratamientoVista } from "../plan-detalle";
 import { cargarModoDeCobro } from "../billing-mode-db";
@@ -447,14 +448,21 @@ export async function loadOrthoRedesignData(
 
   const treatmentStatus = deriveTreatmentStatus(legacy);
 
-  // ws1-t9 (M1): el arco nuevo inferior de cada hoja (columna aparte, por SQL crudo; sin el SQL de ws1-t9, ninguno).
-  const arcosInferiores = await leerArcosInferiores(input.clinicId, (treatmentCards as Array<{ id: string }>).map((c) => c.id));
+  // ws1-t9: el arco nuevo inferior, las ligas y las mecánicas de cada hoja (SQL crudo; sin el SQL de ws1-t9, nada).
+  const idsDeHojas = (treatmentCards as Array<{ id: string }>).map((c) => c.id);
+  const [arcosInferiores, ligasDeHojas, mecanicasDelCaso] = await Promise.all([
+    leerArcosInferiores(input.clinicId, idsDeHojas),
+    leerLigasDeHojas(input.clinicId, idsDeHojas),
+    planId ? listarMecanicasDelCaso(input.clinicId, planId) : Promise.resolve([]),
+  ]);
   const adapterInput: AdapterInput = {
     legacy,
     wireSteps: wireSteps as AdapterInput["wireSteps"],
     treatmentCards: (treatmentCards as Array<{ id: string }>).map((c) => ({
       ...c,
       wireToLowerId: arcosInferiores.get(c.id) ?? null,
+      ligas: ligasDeHojas.get(c.id) ?? [],
+      mecanicasDelControl: mecanicasDeUnControl(mecanicasDelCaso, c.id),
     })) as AdapterInput["treatmentCards"],
     tads: tads as AdapterInput["tads"],
     auxMechanics: auxMechanics as AdapterInput["auxMechanics"],

@@ -10,7 +10,8 @@ import { fmtDate, clinicalSeverityColor } from "./format";
 import { Pill } from "./Pill";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import { textoDelMes } from "@/lib/orthodontics/mes-de-tratamiento";
-import { textoDeArcoConArcada } from "@/lib/orthodontics/material-de-arco";
+import { lineasDeArcosActuales, textoDeArcoConArcada } from "@/lib/orthodontics/material-de-arco";
+import { arcosNuevosDeLaHoja, textoDeLiga } from "@/lib/orthodontics/hoja-extras";
 import orto from "../orto.module.css";
 
 export interface TimelineRowProps {
@@ -24,7 +25,14 @@ export interface TimelineRowProps {
 export function TimelineRow({ card, controlesPrevistos, onClick }: TimelineRowProps) {
   const textoControl = textoControlQueSigue(progresoDeControles(card.cardNumber - 1, controlesPrevistos ?? null));
   const wireFromLabel = card.wireFrom ? wireLabel(card.wireFrom) : "—";
-  const wireToLabel = card.wireTo ? wireLabel(card.wireTo) : null;
+  // ws1-t9 (vuelta 2): con otro arco nuevo abajo (`wireToLower`), el de cada arcada: «SS 16x22 · Superior / NiTi 016 · Inferior».
+  const wireToLabel = card.wireToLower
+    ? lineasDeArcosActuales(arcosNuevosDeLaHoja(card.wireTo, card.wireToLower)).join(" / ") || null
+    : card.wireTo
+      ? wireLabel(card.wireTo)
+      : null;
+  const ligas = card.ligas ?? [];
+  const mecanicas = card.mecanicasDelControl ?? { colocadas: [], retiradas: [] };
   const wireChange = wireToLabel != null && wireFromLabel !== wireToLabel;
 
   const elasticsSummary =
@@ -111,6 +119,17 @@ export function TimelineRow({ card, controlesPrevistos, onClick }: TimelineRowPr
               </span>
             ) : null}
           </Dato>
+          {ligas.length > 0 ? (
+            <Dato rotulo="Ligas">{ligas.map((l) => textoDeLiga(l)).join(" / ")}</Dato>
+          ) : null}
+          {mecanicas.colocadas.length > 0 || mecanicas.retiradas.length > 0 ? (
+            <Dato rotulo="Mecánicas">
+              {mecanicas.colocadas.length > 0 ? <span className="block">Colocó: {mecanicas.colocadas.join("; ")}</span> : null}
+              {mecanicas.retiradas.length > 0 ? (
+                <span className={`${orto.tonoApagado} block`}>Retiró: {mecanicas.retiradas.join("; ")}</span>
+              ) : null}
+            </Dato>
+          ) : null}
         </span>
         {card.soap.p ? (
           <span className={`${orto.tonoTexto2} block mt-[8px] text-xs line-clamp-2`}>

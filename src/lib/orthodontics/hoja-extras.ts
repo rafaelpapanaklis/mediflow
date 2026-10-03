@@ -203,6 +203,73 @@ export interface MecanicaDelCaso {
   /** La hoja de control en la que se colocó / se retiró (si fue desde una). */
   cardIdAlta: string | null;
   cardIdRetiro: string | null;
+  /**
+   * ws1-t9 (vuelta 2): viene del modelo viejo (`OrthoAuxMechanics`: un expansor y un distalizador por caso). Se lee y
+   * se muestra junto con las nuevas, sin migrar datos; no se retira desde aquí.
+   */
+  legado?: boolean;
+}
+
+/** Lo que el modelo viejo (`OrthoAuxMechanics`) guarda de un caso. */
+export interface AuxViejo {
+  expanderType: string | null;
+  expanderActivations: number | null;
+  expanderInstalledAt: Date | string | null;
+  expanderRemovedAt: Date | string | null;
+  distalizerType: string | null;
+  distalizerInstalledAt: Date | string | null;
+  distalizerRemovedAt: Date | string | null;
+  notes: string | null;
+  createdAt: Date | string;
+}
+
+const iso = (d: Date | string | null | undefined): string | null => (d ? new Date(d).toISOString() : null);
+
+/**
+ * El expansor y el distalizador del modelo viejo como mecánicas del caso (solo lectura, `legado: true`). Sin tipo, no
+ * hay nada. La fecha de colocación es la anotada o, si no hay, la del registro.
+ */
+export function mecanicasDelModeloViejo(
+  aux: AuxViejo | null | undefined,
+  etiquetas: { expansor: Record<string, string>; distalizador: Record<string, string> },
+): MecanicaDelCaso[] {
+  if (!aux) return [];
+  const out: MecanicaDelCaso[] = [];
+  const base = { arcada: null, ubicacion: null, cardIdAlta: null, cardIdRetiro: null, legado: true } as const;
+  if (aux.expanderType) {
+    const notas = [aux.expanderActivations != null ? `${aux.expanderActivations} activaciones` : null, aux.notes].filter(Boolean).join(" · ");
+    out.push({
+      ...base,
+      id: "legado-expansor",
+      tipo: `Expansor (${etiquetas.expansor[aux.expanderType] ?? aux.expanderType})`,
+      nota: notas || null,
+      colocadaEl: iso(aux.expanderInstalledAt) ?? iso(aux.createdAt)!,
+      retiradaEl: iso(aux.expanderRemovedAt),
+    });
+  }
+  if (aux.distalizerType) {
+    out.push({
+      ...base,
+      id: "legado-distalizador",
+      tipo: `Distalizador (${etiquetas.distalizador[aux.distalizerType] ?? aux.distalizerType})`,
+      nota: aux.expanderType ? null : aux.notes,
+      colocadaEl: iso(aux.distalizerInstalledAt) ?? iso(aux.createdAt)!,
+      retiradaEl: iso(aux.distalizerRemovedAt),
+    });
+  }
+  return out;
+}
+
+/** Lo que se colocó y se retiró en UNA hoja de control, en texto («Cadeneta · Inferior · 33-43»). */
+export function mecanicasDeUnControl(
+  mecanicas: readonly MecanicaDelCaso[],
+  cardId: string,
+  idioma: "es" | "en" = "es",
+): { colocadas: string[]; retiradas: string[] } {
+  return {
+    colocadas: mecanicas.filter((m) => m.cardIdAlta === cardId).map((m) => textoDeMecanica(m, idioma)),
+    retiradas: mecanicas.filter((m) => m.cardIdRetiro === cardId).map((m) => textoDeMecanica(m, idioma)),
+  };
 }
 
 export const UBICACION_MAXIMA = 60;

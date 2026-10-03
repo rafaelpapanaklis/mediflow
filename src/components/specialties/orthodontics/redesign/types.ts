@@ -283,6 +283,10 @@ export interface TreatmentCardDTO {
   wireTo: WireStepDTO | null;
   /** ws1-t9 (M1): el arco nuevo inferior cuando es otro que `wireTo` (columna `wireToLowerId`, SQL de ws1-t9). */
   wireToLower?: WireStepDTO | null;
+  /** ws1-t9 (vuelta 2): las ligas anotadas en esta hoja (SQL de ws1-t9; sin él, ausente). */
+  ligas?: Array<{ tipo: string; color: string | null; arcada: "SUPERIOR" | "INFERIOR" | "AMBAS"; cambiadasHoy: boolean }>;
+  /** ws1-t9 (vuelta 2): mecánicas auxiliares colocadas / retiradas en esta hoja, en texto. */
+  mecanicasDelControl?: { colocadas: string[]; retiradas: string[] };
   soap: SOAP;
   hygiene: HygieneDTO;
   hasProgressPhoto: boolean;

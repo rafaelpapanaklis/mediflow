@@ -21,7 +21,16 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizarCatalogos, catalogosEditados, type CatalogosDeHoja } from "./hoja-catalogos";
-import { esArcada, normalizarLigas, type AltaDeMecanica, type LigaDeHoja, type MecanicaDelCaso } from "./hoja-extras";
+import {
+  esArcada,
+  mecanicasDelModeloViejo,
+  normalizarLigas,
+  ordenarMecanicas,
+  type AltaDeMecanica,
+  type LigaDeHoja,
+  type MecanicaDelCaso,
+} from "./hoja-extras";
+import { DISTALIZER_LABELS, EXPANDER_LABELS } from "@/components/specialties/orthodontics/redesign/types";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -269,6 +278,40 @@ export async function listarMecanicasDelCaso(clinicId: string, planId: string, d
     console.warn("[ortodoncia:hoja-extras] no se pudieron leer las mecánicas:", e);
     return [];
   }
+}
+
+/**
+ * ws1-t9 (vuelta 2): las mecánicas del caso de las DOS fuentes — la tabla nueva (si ya está su SQL) y el expansor /
+ * distalizador del modelo viejo (`OrthoAuxMechanics`, siempre existe) — sin migrar nada. Las del modelo viejo salen con
+ * `legado: true` (solo lectura). Nunca lanza.
+ */
+export async function listarMecanicasConLegado(clinicId: string, planId: string, db: Db = prisma): Promise<MecanicaDelCaso[]> {
+  if (!clinicId || !planId) return [];
+  const [nuevas, viejo] = await Promise.all([
+    listarMecanicasDelCaso(clinicId, planId, db),
+    (async () => {
+      try {
+        return await db.orthoAuxMechanics.findFirst({
+          where: { treatmentPlanId: planId, clinicId },
+          select: {
+            expanderType: true,
+            expanderActivations: true,
+            expanderInstalledAt: true,
+            expanderRemovedAt: true,
+            distalizerType: true,
+            distalizerInstalledAt: true,
+            distalizerRemovedAt: true,
+            notes: true,
+            createdAt: true,
+          },
+        });
+      } catch (e) {
+        console.warn("[ortodoncia:hoja-extras] no se pudo leer el expansor/distalizador del caso:", e);
+        return null;
+      }
+    })(),
+  ]);
+  return ordenarMecanicas([...nuevas, ...mecanicasDelModeloViejo(viejo, { expansor: EXPANDER_LABELS, distalizador: DISTALIZER_LABELS })]);
 }
 
 export async function crearMecanica(args: {

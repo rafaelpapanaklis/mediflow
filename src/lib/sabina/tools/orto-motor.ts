@@ -59,6 +59,8 @@ import { cargarNombreDeTecnica, type LectorRaw } from "@/lib/orthodontics/tecnic
 import { cargarPlanDetalle, type LectorDelPlan } from "@/lib/orthodontics/plan-detalle-db";
 import { lineasDelPlan, type LineaDelPlan } from "@/lib/orthodontics/plan-detalle";
 import { buildHygieneTrend, detectHygieneWorsening } from "@/lib/orthodontics/redesign/hygiene-trend";
+import { leerArcosInferiores, leerLigasDeHojas, listarMecanicasConLegado } from "@/lib/orthodontics/hoja-extras-db";
+import { mecanicaActiva, textoDeLiga, textoDeMecanica, type LigaDeHoja, type MecanicaDelCaso } from "@/lib/orthodontics/hoja-extras";
 import { compareTrayToExpected, computeExpectedTray } from "@/lib/orthodontics/alineadores/expected-tray";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { computeActiveCasesCount, type OrthoCaseSummary } from "@/lib/orthodontics/specialty-kpis";
@@ -186,6 +188,10 @@ export interface CasoLeido {
     arco: OrthoRedesignViewModel["treatment"]["wireCurrent"];
     /** ws1-t12 (revisión en panel.108, fallo 4): el arco de cada arcada; tras cambiar solo uno son dos. */
     arcos?: OrthoRedesignViewModel["treatment"]["wiresCurrent"];
+    /** ws1-t9 (vuelta 2): las ligas anotadas en el último control FIRMADO que las tiene, en texto. Vacío = ninguna. */
+    ligas?: string[];
+    /** ws1-t9 (vuelta 2): mecánicas auxiliares activas del caso (tabla nueva + expansor/distalizador de antes). */
+    mecanicasActivas?: string[];
     /** El último control FIRMADO con higiene registrada. */
     higiene: { fecha: string; placaPct: number | null; gingivitis: string | null; manchasBlancas: boolean } | null;
     higieneEmpeora: string[];
@@ -277,12 +283,23 @@ export async function leerCaso(
       )
     : [];
 
+  // ws1-t9 (vuelta 2): el arco nuevo inferior, las ligas de cada hoja y las mecánicas del caso (SQL crudo con sonda;
+  // sin el SQL de ws1-t9 solo salen el expansor/distalizador de antes). Solo con el permiso clínico.
+  const idsDeHojas = (hojas as Array<{ id: string }>).map((h) => h.id);
+  const [inferiores, ligasDeHojas, mecanicas] = ver.clinico
+    ? await Promise.all([
+        leerArcosInferiores(clinicId, idsDeHojas, db as never),
+        leerLigasDeHojas(clinicId, idsDeHojas, db as never),
+        listarMecanicasConLegado(clinicId, plan.id, db as never),
+      ])
+    : [new Map<string, string>(), new Map<string, LigaDeHoja[]>(), [] as MecanicaDelCaso[]];
+
   // El adaptador de la ficha: de aquí salen la fase, el «mes N de M» y el arco
   // actual (`resolveCurrentWire`: el último anotado en un control firmado).
   const vm = adaptToOrthoRedesignViewModel({
     legacy,
     wireSteps: arcos as AdapterInput["wireSteps"],
-    treatmentCards: hojas as AdapterInput["treatmentCards"],
+    treatmentCards: (hojas as Array<{ id: string }>).map((h) => ({ ...h, wireToLowerId: inferiores.get(h.id) ?? null })) as AdapterInput["treatmentCards"],
     attendancePct: 0,
     elasticsCompliancePct: 0,
     realInvoiceTotal: legacy.invoiceTotal,
@@ -338,11 +355,16 @@ export async function leerCaso(
         ).filter((l) => l.clave !== "duracion" && l.clave !== "tads")
       : [];
 
+    const ultimaConLigas = [...(hojas as Array<{ id: string; status: string; visitDate: Date }>)]
+      .filter((h) => h.status === "SIGNED" && (ligasDeHojas.get(h.id)?.length ?? 0) > 0)
+      .sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0];
     clinico = {
       plan: planCompleto,
       fase: vm.treatment.phase,
       arco: vm.treatment.wireCurrent,
       arcos: vm.treatment.wiresCurrent,
+      ligas: ultimaConLigas ? (ligasDeHojas.get(ultimaConLigas.id) ?? []).map((l) => textoDeLiga(l)) : [],
+      mecanicasActivas: mecanicas.filter(mecanicaActiva).map((m) => textoDeMecanica(m)),
       higiene: ultima
         ? {
             // El día de la visita en la zona de la CLÍNICA: un control de las

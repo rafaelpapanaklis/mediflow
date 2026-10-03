@@ -75,6 +75,9 @@ export interface AdapterInput {
     wireToId: string | null;
     /** ws1-t9 (M1): el arco nuevo inferior (SQL crudo, lo pone el loader). */
     wireToLowerId?: string | null;
+    /** ws1-t9 (vuelta 2): ligas y mecánicas de la hoja (SQL crudo, lo pone el loader). */
+    ligas?: TreatmentCardDTO["ligas"];
+    mecanicasDelControl?: TreatmentCardDTO["mecanicasDelControl"];
     soapS: string;
     soapO: string;
     soapA: string;
@@ -349,6 +352,10 @@ function adaptCard(
     wireFrom: c.wireFromId ? wireById.get(c.wireFromId) ?? null : null,
     wireTo: c.wireToId ? wireById.get(c.wireToId) ?? null : null,
     wireToLower: c.wireToLowerId ? wireById.get(c.wireToLowerId) ?? null : null,
+    ...(c.ligas && c.ligas.length > 0 ? { ligas: c.ligas } : {}),
+    ...(c.mecanicasDelControl && (c.mecanicasDelControl.colocadas.length > 0 || c.mecanicasDelControl.retiradas.length > 0)
+      ? { mecanicasDelControl: c.mecanicasDelControl }
+      : {}),
     soap: { s: c.soapS, o: c.soapO, a: c.soapA, p: c.soapP },
     hygiene: {
       plaquePct: c.hygienePlaquePct,

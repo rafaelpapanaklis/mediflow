@@ -12,6 +12,8 @@ const estado = {
   consultas: [] as Consulta[],
   partes: { ligas: false, mecanicas: false, arcoInferior: false, catalogos: false },
   filas: [] as unknown[],
+  auxWhere: [] as Array<Record<string, unknown>>,
+  auxViejo: null as unknown,
 };
 
 function texto(q: unknown): Consulta {
@@ -36,6 +38,12 @@ const db = {
   },
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   orthoWireStep: { findFirst: async () => ({ id: "w1" }) },
+  orthoAuxMechanics: {
+    findFirst: async (q: { where: Record<string, unknown> }) => {
+      estado.auxWhere.push(q.where);
+      return estado.auxViejo;
+    },
+  },
   orthodonticsClinicSettings: { upsert: async () => ({}) },
 };
 
@@ -45,6 +53,7 @@ let m: typeof import("../hoja-extras-db");
 before(async () => {
   m = await import("../hoja-extras-db");
 });
+const m_ = () => m;
 
 afterEach(() => {
   estado.consultas = [];
@@ -74,6 +83,44 @@ describe("sin el SQL de ws1-t9", () => {
     assert.equal(await m.crearMecanica({ clinicId: "clinica-1", patientId: "p", planId: "plan-1", userId: "u", cardId: null, alta: { tipo: "Cadeneta", arcada: null, ubicacion: null, nota: null, colocadaEl: new Date() } }), null);
     assert.equal((await m.guardarCatalogosDeHoja("clinica-1", "u", normalizarCatalogos(null))).ok, false);
     assert.ok(!estado.consultas.some((c) => /INSERT|UPDATE|DELETE/.test(c.sql)));
+  });
+});
+
+describe("vuelta 2: el expansor/distalizador del modelo viejo se lee junto con la tabla nueva", () => {
+  const viejo = {
+    expanderType: "QUAD_HELIX",
+    expanderActivations: null,
+    expanderInstalledAt: new Date("2026-05-01T12:00:00Z"),
+    expanderRemovedAt: null,
+    distalizerType: null,
+    distalizerInstalledAt: null,
+    distalizerRemovedAt: null,
+    notes: null,
+    createdAt: new Date("2026-04-01T12:00:00Z"),
+  };
+  it("sin el SQL: sale el del modelo viejo, filtrado por caso y clínica, sin tocar la tabla nueva", async () => {
+    estado.partes = { ligas: false, mecanicas: false, arcoInferior: false, catalogos: false };
+    estado.auxViejo = viejo;
+    estado.auxWhere = [];
+    const m = await m_().listarMecanicasConLegado("clinica-1", "plan-1");
+    assert.deepEqual(m.map((x) => [x.tipo, x.legado]), [["Expansor (Quad-Helix)", true]]);
+    assert.deepEqual(estado.auxWhere, [{ treatmentPlanId: "plan-1", clinicId: "clinica-1" }]);
+    assert.ok(!estado.consultas.some((c) => /FROM "ortho_aux_devices"/.test(c.sql)));
+  });
+  it("con el SQL: las dos fuentes juntas, activas primero", async () => {
+    estado.partes = { ligas: true, mecanicas: true, arcoInferior: true, catalogos: true };
+    estado.auxViejo = viejo;
+    estado.filas = [
+      { id: "n1", tipo: "Cadeneta", arcada: "INFERIOR", ubicacion: "33-43", nota: null, colocadaEl: new Date("2026-09-01T12:00:00Z"), retiradaEl: new Date("2026-09-20T12:00:00Z"), cardIdAlta: null, cardIdRetiro: null },
+    ];
+    const m = await m_().listarMecanicasConLegado("clinica-1", "plan-1");
+    assert.deepEqual(m.map((x) => x.tipo), ["Expansor (Quad-Helix)", "Cadeneta"]);
+  });
+  it("si el modelo viejo falla, la lista nueva sale igual (nunca lanza)", async () => {
+    estado.partes = { ligas: true, mecanicas: true, arcoInferior: true, catalogos: true };
+    estado.auxViejo = Promise.reject(new Error("caída"));
+    estado.filas = [];
+    assert.deepEqual(await m_().listarMecanicasConLegado("clinica-1", "plan-1"), []);
   });
 });
 

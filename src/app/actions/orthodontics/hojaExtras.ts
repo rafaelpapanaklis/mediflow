@@ -19,7 +19,7 @@ import {
   leerArcosInferiores,
   leerCatalogosDeHoja,
   leerLigasDeHojas,
-  listarMecanicasDelCaso,
+  listarMecanicasConLegado,
   partesDeHojaExtras,
   retirarMecanica,
   type PartesDeHojaExtras,
@@ -105,7 +105,7 @@ export async function cargarExtrasDeHoja(input: unknown): Promise<ActionResult<E
   const [ligas, inferiores, mecanicas] = await Promise.all([
     leerLigasDeHojas(ctx.clinicId, idsDeLigas),
     hoja ? leerArcosInferiores(ctx.clinicId, [hoja.id]) : Promise.resolve(new Map<string, string>()),
-    listarMecanicasDelCaso(ctx.clinicId, plan.id),
+    listarMecanicasConLegado(ctx.clinicId, plan.id),
   ]);
 
   return ok({
@@ -246,6 +246,6 @@ export async function mecanicasDelCasoAction(input: unknown): Promise<ActionResu
   if (isFailure(caso)) return caso;
   const partes = await partesDeHojaExtras();
   if (!partes.mecanicas) return ok({ disponible: false, puedeEditar: false, mecanicas: [], catalogo: [] });
-  const [mecanicas, catalogos] = await Promise.all([listarMecanicasDelCaso(ctx.clinicId, caso.data.id), leerCatalogosDeHoja(ctx.clinicId)]);
+  const [mecanicas, catalogos] = await Promise.all([listarMecanicasConLegado(ctx.clinicId, caso.data.id), leerCatalogosDeHoja(ctx.clinicId)]);
   return ok({ disponible: true, puedeEditar: puedeClinico(ctx, "editar"), mecanicas, catalogo: catalogos.catalogos.mecanicas.filter((m) => m.activa).map((m) => m.nombre) });
 }

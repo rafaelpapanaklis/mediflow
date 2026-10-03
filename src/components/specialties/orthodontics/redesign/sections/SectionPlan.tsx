@@ -11,6 +11,7 @@
 //
 // El botón "Avanzar de fase" abre ModalAdvancePhase (hermano).
 
+import { useState } from "react";
 import { Layers, Pencil, Plus } from "lucide-react";
 import { Btn, Card } from "../atoms";
 import { Pill } from "../atoms/Pill";
@@ -326,7 +327,7 @@ function IPRMapBlock({ points }: { points: IPRPointDTO[] }) {
 
 function AuxMechanicsBlock({
   tads,
-  aux,
+  aux: auxDelCaso,
   onAddTad,
   onAddAux,
   treatmentPlanId,
@@ -338,6 +339,10 @@ function AuxMechanicsBlock({
   /** ws1-t9 (M3): con él, las mecánicas del caso (resorte, cadeneta, botón, expansor…) con alta y retiro. */
   treatmentPlanId?: string | null;
 }) {
+  // ws1-t9 (vuelta 2): con el SQL de ws1-t9 la lista de mecánicas ya trae el expansor/distalizador del modelo viejo
+  // (leído, no migrado); entonces aquí no se pinta otra vez.
+  const [listaNueva, setListaNueva] = useState(false);
+  const aux = listaNueva ? null : auxDelCaso;
   return (
     <div className="px-[18px] py-[16px]">
       <div className="flex items-center justify-between mb-3">
@@ -431,7 +436,7 @@ function AuxMechanicsBlock({
           </div>
         </div>
       )}
-      <MecanicasDelCaso treatmentPlanId={treatmentPlanId ?? null} />
+      <MecanicasDelCaso treatmentPlanId={treatmentPlanId ?? null} onCargado={() => setListaNueva(true)} />
     </div>
   );
 }

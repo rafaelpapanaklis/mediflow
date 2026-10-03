@@ -363,6 +363,11 @@ function FilaDeMecanica(props: {
           {t.retiradaEnEste}
         </Pill>
       ) : null}
+      {m.legado ? (
+        <Pill color="slate" size="xs">
+          {t.registradaAntes}
+        </Pill>
+      ) : null}
       {m.nota ? <span className={`${orto.tonoTexto2} basis-full text-xs whitespace-pre-wrap`}>{m.nota}</span> : null}
       {activa && props.onRetirar ? (
         // El margen va en un envoltorio: `.enlace` lleva su propio margen y le gana a `ml-auto`.
@@ -442,7 +447,8 @@ export function ListaDeMecanicas(props: {
               t={t}
               cardId={props.cardId}
               retirando={retirando === m.id}
-              onRetirar={editable ? () => void retirar(m) : undefined}
+              // Las del modelo viejo (expansor/distalizador de antes) solo se ven: no se retiran desde aquí.
+              onRetirar={editable && !m.legado ? () => void retirar(m) : undefined}
             />
           ))}
         </div>
@@ -501,14 +507,24 @@ export function BloqueMecanicas(props: {
 }
 
 /** La ficha: las mecánicas del caso, con alta y retiro (se cargan solas; sin el SQL no se pinta nada). */
-export function MecanicasDelCaso({ treatmentPlanId }: { treatmentPlanId: string | null }) {
+export function MecanicasDelCaso({
+  treatmentPlanId,
+  onCargado,
+}: {
+  treatmentPlanId: string | null;
+  /** Se llama cuando la lista ya se pinta (con el SQL de ws1-t9): la ficha deja de pintar aparte el expansor/distalizador viejo. */
+  onCargado?: () => void;
+}) {
   const [datos, setDatos] = useState<{ puedeEditar: boolean; mecanicas: MecanicaDelCaso[]; catalogo: string[] } | null>(null);
   const cargar = useCallback(() => {
     if (!treatmentPlanId) return;
     void mecanicasDelCasoAction({ treatmentPlanId }).then((r) => {
-      if (!isFailure(r) && r.data.disponible)
+      if (!isFailure(r) && r.data.disponible) {
         setDatos({ puedeEditar: r.data.puedeEditar, mecanicas: r.data.mecanicas, catalogo: r.data.catalogo });
+        onCargado?.();
+      }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [treatmentPlanId]);
   useEffect(cargar, [cargar]);
   if (!treatmentPlanId || !datos) return null;

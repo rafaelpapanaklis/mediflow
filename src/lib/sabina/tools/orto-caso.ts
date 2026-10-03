@@ -109,6 +109,10 @@ export interface DatosOrtoCaso {
     fase: string | null;
     /** "NiTi 0.014 (superior e inferior)". `null` = sin arco registrado. */
     arco: string | null;
+    /** ws1-t9 (vuelta 2): ligas del último control firmado que las anotó («Elástica gris · Ambas»). */
+    ligas: string[];
+    /** ws1-t9 (vuelta 2): mecánicas auxiliares activas («Cadeneta · Inferior · 33-43»). */
+    mecanicasActivas: string[];
     higiene: { fecha: string; placaPct: number | null; gingivitis: string | null; manchasBlancas: boolean } | null;
     /** Lo que empeoró en los últimos controles, con las palabras del panel. Vacío = sin aviso. */
     higieneEmpeora: string[];
@@ -277,6 +281,8 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
         ? {
             fase: leido.clinico.fase ? FASE[leido.clinico.fase] ?? leido.clinico.fase : null,
             arco: arcosLegibles(leido.clinico.arcos) ?? arcoLegible(leido.clinico.arco),
+            ligas: leido.clinico.ligas ?? [],
+            mecanicasActivas: leido.clinico.mecanicasActivas ?? [],
             higiene: leido.clinico.higiene,
             higieneEmpeora: leido.clinico.higieneEmpeora,
             plan: leido.clinico.plan.map((l) => ({ etiqueta: l.etiqueta, valor: l.valor })),
@@ -363,6 +369,8 @@ export const ortoCaso = definirHerramienta<ParamsOrtoCaso, DatosOrtoCaso>({
     if (d.clinico) {
       const c = d.clinico;
       partes.push(`Fase: ${c.fase ?? "sin fase en curso"}. Arco actual: ${c.arco ?? "sin arco registrado"}.`);
+      if ((c.ligas ?? []).length > 0) partes.push(`Ligas del último control: ${c.ligas.join("; ")}.`);
+      if ((c.mecanicasActivas ?? []).length > 0) partes.push(`Mecánicas auxiliares activas: ${c.mecanicasActivas.join("; ")}.`);
       if (c.higiene) {
         const h = c.higiene;
         const trozos = [
