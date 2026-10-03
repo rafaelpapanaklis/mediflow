@@ -20,6 +20,8 @@ import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import type { AppointmentEventSettings, CobranzaSettings } from "@/lib/reminders/config";
 import { REMINDER_VARS_HELP, previewReminderMessage } from "@/lib/reminders/preview";
 import { ConexionRediseno } from "@/components/dashboard/whatsapp-rediseno/conexion";
+import type { WaTemplateUiState } from "@/lib/whatsapp/templates-catalog";
+import { cuerpoNotaVentana24 } from "@/lib/whatsapp/ventana-24h";
 import s from "./whatsapp.module.css";
 
 // Dónde agrega la clínica su método de pago para las plantillas de Meta.
@@ -55,6 +57,8 @@ interface Props {
   recentRemindersFailed: boolean;
   /** Cumpleaños/recall/seguimientos bloqueados por la ventana de 24 h, 30 días (H-7). */
   sinPlantilla30d?:      number;
+  /** Estado de la plantilla de recordatorio (ws1-t4, F5): decide la nota de la ventana de 24 h. */
+  plantillaRecordatorio?: WaTemplateUiState;
   clinicName:    string;
   /** Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el
    *  menú de dos niveles. Apagado, esta pantalla se pinta tal cual. */
@@ -121,7 +125,7 @@ export function WhatsAppClient({
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h,
   remindersEnabled, reminderOffsets, reminderFromSettings, reminderMasterOn, eventos: initEventos,
   cobranza: initCobranza,
-  recentReminders, recentRemindersFailed, sinPlantilla30d = 0, clinicName,
+  recentReminders, recentRemindersFailed, sinPlantilla30d = 0, plantillaRecordatorio, clinicName,
   rediseno = false,
 }: Props) {
   const t = useT();
@@ -386,6 +390,10 @@ export function WhatsAppClient({
   // la clínica acaba de encender un toggle (aún sin guardar): en la duda, se
   // avisa. Es la promesa que hace esta tarjeta, y hoy solo se cumple a medias.
   const remindersOn = remindersEnabled || r24h || r1h;
+  // ws1-t4 (F5): y SOLO si la plantilla de recordatorio no está aprobada — con
+  // ella aprobada el recordatorio sí sale fuera de la ventana. Sin dato (prop
+  // ausente) se asume que falta: en la duda, se avisa.
+  const notaVentana24 = remindersOn ? cuerpoNotaVentana24(plantillaRecordatorio ?? "missing") : null;
 
   const steps = [
     { Icon: Facebook,     titleKey: "inbox.whatsapp.stepLoginTitle", descKey: "inbox.whatsapp.stepLoginDesc" },
@@ -424,7 +432,7 @@ export function WhatsAppClient({
             router.refresh();
           },
           refrescar: () => router.refresh(),
-          recentReminders, recentRemindersFailed, sinPlantilla30d,
+          recentReminders, recentRemindersFailed, sinPlantilla30d, notaVentana24,
         }}
       />
     );
@@ -713,12 +721,15 @@ export function WhatsAppClient({
               {/* Ventana de 24 h — hoy el recordatorio NO llega a quien no ha
                   escrito. Se dice aquí mismo, junto a los toggles que lo
                   prometen, en vez de dejar que el envío muera en silencio. */}
-              {remindersOn && (
+              {notaVentana24 && (
                 <div className={`${s.billing} ${s.windowNote}`}>
                   <Info size={16} className={s.billingIcon} />
                   <div>
                     <div className={s.billingLabel}>{t("inbox.whatsapp.window24Label")}</div>
-                    <p className={s.billingBody}>{t("inbox.whatsapp.window24Body")}</p>
+                    <p className={s.billingBody}>{t(notaVentana24)}</p>
+                    <Link className={s.billingCta} href="/dashboard/whatsapp/plantillas">
+                      {t("inbox.whatsapp.window24Cta")}
+                    </Link>
                   </div>
                 </div>
               )}

@@ -24,6 +24,7 @@ import { formatApptDateParts, getAppointmentEventSettings } from "@/lib/reminder
 import { describeReminderFailure, type ReminderErrorKey } from "@/lib/whatsapp/reminder-error";
 import { WhatsAppApiError, WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { pastToleranceMs } from "@/lib/agenda/booking-rules";
+import { kindDeAvisoCita, paramsDeAvisoCita } from "@/lib/whatsapp/avisos-cita-plantilla";
 
 export type AvisoCitaEvento = "agendada" | "reprogramada" | "cancelada";
 
@@ -156,19 +157,23 @@ export async function avisarCitaPorWhatsApp(args: AvisarCitaArgs): Promise<Aviso
         doctor: doctorName,
         contacto: clinic.phone ?? null,
       }),
-      kind: args.evento === "agendada" ? "booking" : "appointment_change",
+      kind: kindDeAvisoCita(args.evento),
       // El equipo eligió a ESTE paciente: el hilo nace ligado a él, no al
       // primero que comparta teléfono.
       patientId: patient.id,
       sentById: args.sentById ?? null,
-      // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor.
-      //
-      // OJO con la cancelación: la plantilla `appointment_change` dice que la
-      // cita «cambió al…». Mandarla para cancelar sería un mensaje que miente,
-      // así que NO lleva parámetros: fuera de la ventana de 24 h el aviso se
-      // bloquea con su motivo (mismo criterio que appointment-change/notify.ts).
-      templateParams:
-        args.evento === "cancelada" ? null : [paciente, clinic.name, fecha, hora, doctorName],
+      // Agendada / reprogramada: {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora,
+      // {{5}} doctor. Cancelada (ws1-t4): su PROPIA plantilla, dc_cancelacion_cita —
+      // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora de la cita cancelada.
+      // Antes iba sin datos (la de `appointment_change` dice «cambió al…» y habría
+      // mentido) y fuera de la ventana de 24 h no salía nunca.
+      templateParams: paramsDeAvisoCita(args.evento, {
+        paciente,
+        clinica: clinic.name,
+        fecha,
+        hora,
+        doctor: doctorName,
+      }),
     });
     return { enviado: true };
   } catch (e) {
@@ -178,8 +183,8 @@ export async function avisarCitaPorWhatsApp(args: AvisarCitaArgs): Promise<Aviso
       errorMsg: e instanceof Error ? e.message : null,
     });
     // Todo bloqueo previo al envío es «ventana de 24 h cerrada y sin plantilla
-    // que valga» (send-mode.ts). El de la cancelación —que a propósito no lleva
-    // parámetros— no tiene patrón propio: se cuenta como lo que es.
+    // que valga» (send-mode.ts). El que no tiene patrón propio (p. ej. la plantilla
+    // aún en revisión de Meta) se cuenta como lo que es.
     if (!motivo && e instanceof WhatsAppBlockedError) return { enviado: false, motivo: "outside24h" };
     return { enviado: false, motivo: motivo ?? "desconocido" };
   }

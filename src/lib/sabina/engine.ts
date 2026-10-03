@@ -20,6 +20,7 @@ import {
   mandaAConfirmarTarjeta,
   modeloPara,
   resultadoParaModelo,
+  sinNombresInternos,
   toolsParaModelo,
   validarLlamada,
   zodAJsonSchema,
@@ -601,7 +602,11 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const texto = garantizarAvisoPropuesta(
     garantizarAvisoSinPermisoAccion(
       garantizarAvisoSinPermiso(
-        garantizarAvisosObligatorios(honesta, avisosObligatorios),
+        garantizarAvisosObligatorios(
+          // ws1-t4 (F17): ni un nombre interno («avisar_saldo_whatsapp») llega al usuario.
+          sinNombresInternos(honesta, input.tools.map((t) => t.nombre)),
+          avisosObligatorios,
+        ),
         sinPermiso,
         (p) => causaSinPermiso(input.ctx, p),
       ),

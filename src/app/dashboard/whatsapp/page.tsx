@@ -10,6 +10,8 @@ import {
   getCobranzaSettings,
 } from "@/lib/reminders/config";
 import { getRecentReminders } from "@/lib/whatsapp/recent-reminders";
+import { parseWaTemplates } from "@/lib/whatsapp/template-config";
+import { templateUiState } from "@/lib/whatsapp/templates-catalog";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { WhatsAppClient } from "./whatsapp-client";
 
@@ -69,6 +71,9 @@ export default async function WhatsAppPage() {
       recentReminders={recent.rows}
       recentRemindersFailed={recent.failed}
       sinPlantilla30d={recent.sinPlantilla30d}
+      // ws1-t4 (F5): la nota de la ventana de 24 h solo sale si la plantilla de
+      // recordatorio NO está aprobada. Sale de la clínica ya leída (sin consulta).
+      plantillaRecordatorio={templateUiState(parseWaTemplates(user.clinic.waTemplates).reminder)}
       clinicName={user.clinic.name}
       rediseno={rediseno}
     />

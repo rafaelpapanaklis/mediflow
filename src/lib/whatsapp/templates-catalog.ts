@@ -54,7 +54,61 @@ export interface WaCatalogEntry {
 }
 
 /**
- * Las NUEVE de utilidad que se crean solas (más dos de utilidad opcionales) + la de marketing.
+ * 🔴 BANDERA — CUMPLEAÑOS y REACTIVACIÓN (recall) por plantilla. APAGADA hasta que
+ * Rafael lo decida (ws1-t4, auditoría BEVADENT F4/M7, 3-oct-2026).
+ *
+ * Las dos son de MARKETING: Meta las cobra más caras que las de utilidad y el
+ * paciente puede silenciar ese tipo de mensajes. Mientras esto valga `false`:
+ *   · NO están en `WA_TEMPLATE_CATALOG`, así que nadie las da de alta en Meta (ni
+ *     al conectar, ni el cron, ni el botón «Crear mis plantillas», ni «Activar»
+ *     de las opcionales), la pantalla de Plantillas no las enseña y
+ *     `parseWaTemplates` no las lee;
+ *   · la cola YA manda los cumpleaños y el recall con su tipo propio (`birthday`,
+ *     `recall`) y sus datos, pero sin plantilla en el catálogo `decideSendMode` los
+ *     bloquea fuera de la ventana de 24 h con el motivo de siempre — exactamente
+ *     lo que pasa hoy.
+ *
+ * Encenderla (`true`) las mete en el catálogo como OPCIONALES de marketing: salen
+ * en Plantillas junto a la de reseñas y se dan de alta cuando la clínica pulsa
+ * «Activar» (includeMarketing). Antes de encenderla, revisar el texto de ese
+ * bloque de la pantalla (hoy habla solo de reseñas) y el aviso de Reactivación
+ * (`avisoRecallSinPlantilla` en ventana-24h.ts).
+ */
+export const PLANTILLAS_MARKETING_AUTOMATICAS_ENCENDIDAS: boolean = false;
+
+/** Redacción ya lista de las dos de marketing en espera (ver la bandera de arriba). */
+export const WA_PLANTILLAS_MARKETING_EN_ESPERA: readonly WaCatalogEntry[] = [
+  {
+    kind: "birthday",
+    name: "dc_cumpleanos",
+    category: "MARKETING",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, en {{2}} te deseamos un muy feliz cumpleaños. " +
+      "¡Que tengas un gran día!",
+    labelKey: "inbox.whatsapp.tplKindBirthday",
+    variableKeys: ["inbox.whatsapp.tplVarPatient", "inbox.whatsapp.tplVarClinic"],
+    sample: ["María", "Clínica Sonrisa"],
+    optional: true,
+  },
+  {
+    kind: "recall",
+    name: "dc_reactivacion",
+    category: "MARKETING",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, en {{2}} notamos que ya pasó un tiempo desde tu última visita. " +
+      "¿Te gustaría agendar tu revisión? Responde este mensaje y te ayudamos.",
+    labelKey: "inbox.whatsapp.tplKindRecall",
+    variableKeys: ["inbox.whatsapp.tplVarPatient", "inbox.whatsapp.tplVarClinic"],
+    sample: ["María", "Clínica Sonrisa"],
+    optional: true,
+  },
+];
+
+/**
+ * Las TRECE de utilidad que se crean solas (más dos de utilidad opcionales) + la de marketing
+ * de reseñas (y, con la bandera de arriba encendida, cumpleaños y reactivación).
  *
  * Reglas de Meta que respeta cada cuerpo (las verifica `checkTemplateBody`, y
  * el test las comprueba sobre todo el catálogo para que nadie las rompa al
@@ -124,6 +178,54 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
       "inbox.whatsapp.tplVarDoctor",
     ],
     sample: ["María", "Clínica Sonrisa", "martes 12 de agosto", "16:30", "Dra. Ana Ruiz"],
+    optional: false,
+  },
+  {
+    // ws1-t4 (auditoría BEVADENT, F4/M7) — la CANCELACIÓN tiene plantilla propia.
+    // Antes el aviso usaba `appointment_change` («tu cita cambió al…») y, para no
+    // mentir, salía SIN datos: fuera de la ventana de 24 h se bloqueaba siempre.
+    // La usan el aviso del equipo al cancelar (avisos-cita.ts) y la resolución de
+    // una solicitud de cancelación del portal (appointment-change/notify.ts).
+    // {{3}} y {{4}} son la fecha y hora ORIGINALES (la cita cancelada las conserva).
+    kind: "appointment_cancelled",
+    name: "dc_cancelacion_cita",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, tu cita en {{2}} del {{3}} a las {{4}} fue cancelada. " +
+      "Si quieres agendar otra fecha, responde este mensaje.",
+    labelKey: "inbox.whatsapp.tplKindAppointmentCancelled",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarDate",
+      "inbox.whatsapp.tplVarTime",
+    ],
+    sample: ["María", "Clínica Sonrisa", "lunes 11 de agosto", "10:00"],
+    optional: false,
+  },
+  {
+    // ws1-t4 (F4/M7) — el SEGUIMIENTO post-cita («¿cómo te sentiste?») del cron
+    // post-appointment-followup. Antes la cola le armaba los datos de la plantilla
+    // de RECORDATORIO (la fila lleva appointmentId) y, fuera de ventana, el
+    // paciente habría recibido «te recordamos tu cita… el [fecha ya pasada]».
+    // Va atada a UNA visita concreta ({{3}}) y ofrece ayuda con molestias o dudas
+    // del tratamiento: es lo que la mantiene como UTILITY y no como encuesta de
+    // marketing (Meta puede recategorizarla; ver REPORTE-ws1-t4).
+    kind: "followup",
+    name: "dc_seguimiento_cita",
+    category: "UTILITY",
+    lang: WA_TEMPLATE_LANG,
+    body:
+      "Hola {{1}}, te escribimos de {{2}} por tu cita del {{3}}. ¿Cómo te sentiste con la atención? " +
+      "Si tienes alguna molestia o duda sobre tu tratamiento, responde este mensaje y te ayudamos.",
+    labelKey: "inbox.whatsapp.tplKindFollowup",
+    variableKeys: [
+      "inbox.whatsapp.tplVarPatient",
+      "inbox.whatsapp.tplVarClinic",
+      "inbox.whatsapp.tplVarVisitDate",
+    ],
+    sample: ["María", "Clínica Sonrisa", "lunes 11 de agosto"],
     optional: false,
   },
   {
@@ -360,6 +462,7 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
     sample: ["María", "Clínica Dental Sonrisa", "$1,200.00 MXN", "MF-1042"],
     optional: true,
   },
+  ...(PLANTILLAS_MARKETING_AUTOMATICAS_ENCENDIDAS ? WA_PLANTILLAS_MARKETING_EN_ESPERA : []),
 ];
 
 /** Los tipos que se crean solos al conectar (todo menos la de marketing). */

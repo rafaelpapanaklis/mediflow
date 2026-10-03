@@ -16,6 +16,7 @@ import {
   type RecallSettings,
   type ReminderChannel,
 } from "@/lib/reminders/config";
+import { avisoRecallSinPlantilla } from "@/lib/whatsapp/ventana-24h";
 import {
   Area, Aviso, Bloque, BotonGuardar, Burbuja, Campo, Chip, Chips, Enlace, FilaInterruptor, Seccion,
   Selector, SubtituloGrupo,
@@ -37,6 +38,9 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
   const includesWhatsApp = form.channel === "whatsapp" || form.channel === "both";
   const includesEmail = form.channel === "email" || form.channel === "both";
   const waConnected = Boolean(clinic?.waConnected);
+  // ws1-t4 (F4/M7): el recall no tiene plantilla de Meta (la de marketing está
+  // apagada), así que por WhatsApp solo llega a quien escribió en las últimas 24 h.
+  const avisoVentana = waConnected ? avisoRecallSinPlantilla(form.channel) : null;
 
   const preview = form.message
     .replaceAll("{nombre}", "María")
@@ -132,6 +136,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
               <a href="/dashboard/whatsapp">Conectar WhatsApp</a>
             </Aviso>
           )}
+          {avisoVentana && <Aviso tono="alerta">{avisoVentana}</Aviso>}
         </Campo>
 
         <Campo
@@ -239,6 +244,11 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
             <a href="/dashboard/whatsapp" className="font-semibold underline">
               Conectar WhatsApp
             </a>
+          </div>
+        )}
+        {avisoVentana && (
+          <div style={{ fontSize: 12, color: "var(--warning-strong)", background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", borderRadius: "var(--radius)", padding: 12 }}>
+            {avisoVentana}
           </div>
         )}
         {includesEmail && (

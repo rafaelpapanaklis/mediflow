@@ -22,6 +22,7 @@ import {
   modeloPara,
   resultadoParaModelo,
   sanearArgumentos,
+  sinNombresInternos,
   validarLlamada,
   zodAJsonSchema,
 } from "./engine-core";
@@ -497,4 +498,47 @@ test("la red de seguridad da por avisado «al expediente clínico» y no repite 
 test("el prompt le prohíbe al modelo escribir claves técnicas de permiso", () => {
   const prompt = construirSystemPrompt({ dificultad: "abierta", hoy: "10 de septiembre de 2026" });
   assert.match(prompt, /Nunca escribas al usuario una clave técnica de permiso/);
+});
+
+/* ── ws1-t4 (auditoría BEVADENT, F17): nunca un nombre interno ──────────── */
+
+const HERRAMIENTAS = ["avisar_saldo_whatsapp", "buscar_paciente", "caja", "reagendar_cita", "agendar_cita"];
+
+test("sinNombresInternos: «avisar_saldo_whatsapp» no llega al usuario, en ninguna envoltura", () => {
+  for (const crudo of [
+    "Eso es avisar_saldo_whatsapp y no aplica.",
+    "Eso es `avisar_saldo_whatsapp` y no aplica.",
+    "Eso es «avisar_saldo_whatsapp» y no aplica.",
+    'Eso es "avisar_saldo_whatsapp" y no aplica.',
+  ]) {
+    const limpio = sinNombresInternos(crudo, HERRAMIENTAS);
+    assert.doesNotMatch(limpio, /avisar_saldo_whatsapp|_/, crudo);
+    assert.equal(limpio, "Eso es el aviso de saldo por WhatsApp y no aplica.");
+  }
+});
+
+test("sinNombresInternos: sin traducción propia, los guiones bajos se vuelven espacios; los códigos también", () => {
+  assert.equal(
+    sinNombresInternos("Usé buscar_paciente y volvió sin_datos.", HERRAMIENTAS),
+    "Usé buscar paciente y volvió sin datos.",
+  );
+  // «reagendar_cita» entero, no «re» + lo de agendar_cita.
+  assert.equal(sinNombresInternos("con reagendar_cita", HERRAMIENTAS), "con el cambio de la cita");
+});
+
+test("sinNombresInternos: no toca enlaces, correos, palabras sueltas ni lo que no es una herramienta", () => {
+  const intactos = [
+    "Revisa https://dalecontrol.com/x/avisar_saldo_whatsapp/1 por favor.",
+    "Su correo es ana_avisar_saldo_whatsapp@mail.com.",
+    "En caja hay $1,200.00.",
+    "El archivo foto_paciente_01.jpg está guardado.",
+    "",
+  ];
+  for (const t of intactos) assert.equal(sinNombresInternos(t, HERRAMIENTAS), t);
+});
+
+test("el prompt prohíbe escribir nombres internos y ya no dicta «eso es avisar_saldo_whatsapp»", () => {
+  const prompt = construirSystemPrompt({ dificultad: "directa", hoy: "sábado 3 de octubre de 2026", acciones: ["avisar saldos"] });
+  assert.match(prompt, /nombre interno de una herramienta/);
+  assert.doesNotMatch(prompt, /eso es avisar_saldo_whatsapp/);
 });

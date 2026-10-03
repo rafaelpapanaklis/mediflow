@@ -417,7 +417,11 @@ test("por defecto, cancelar NO avisa (ni por DELETE ni por /status)", async () =
   assert.equal(envios.length, 0);
 });
 
-test("con «Aviso al cancelar» encendido avisa, y SIN plantilla: la de reagendado diría que la cita «cambió»", async () => {
+// ws1-t4 (auditoría BEVADENT): la cancelación tiene ahora SU plantilla
+// (dc_cancelacion_cita, tipo appointment_cancelled). Antes salía como
+// appointment_change SIN datos —la de reagendado diría que la cita «cambió»— y
+// fuera de la ventana de 24 h no llegaba nunca.
+test("con «Aviso al cancelar» encendido avisa, con SU plantilla de cancelación (nunca la de «cambió al…»)", async () => {
   clinicRow.reminderSettings = { eventos: { alCancelar: true } };
   citaExistente();
   const a = await del();
@@ -428,8 +432,9 @@ test("con «Aviso al cancelar» encendido avisa, y SIN plantilla: la de reagenda
 
   assert.equal(envios.length, 2);
   for (const e of envios) {
-    assert.equal(e.kind, "appointment_change");
-    assert.equal(e.templateParams, null, "cancelar con la plantilla «cambió al…» sería un mensaje que miente");
+    assert.equal(e.kind, "appointment_cancelled", "cancelar con la plantilla «cambió al…» sería un mensaje que miente");
+    // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora — sin doctor.
+    assert.equal(e.templateParams?.length, 4);
     assert.match(e.body, /fue cancelada/);
   }
 });

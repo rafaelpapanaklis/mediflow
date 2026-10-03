@@ -30,6 +30,7 @@ import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { sendEmail } from "@/lib/email";
 import { formatApptDateParts } from "@/lib/reminders/config";
 import { createPatientNotification } from "@/lib/patient-notifications/create";
+import { envioDeResolucion } from "@/lib/whatsapp/avisos-cita-plantilla";
 
 export async function notifyPatientChangeResolution(changeRequestId: string): Promise<void> {
   try {
@@ -118,20 +119,18 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
           },
           to: patient.phone,
           body: message,
-          kind: "appointment_change",
+          // Tipo y datos de la plantilla según la resolución (ws1-t4: la
+          // cancelación aprobada tiene la suya; el rechazo sigue sin plantilla).
+          // `fecha` y `hora` son las de la cita resultante: la nueva en un
+          // reagendado, la original en una cancelación.
+          ...envioDeResolucion(cr, {
+            paciente: patient.firstName || "paciente",
+            clinica: clinic.name,
+            fecha,
+            hora,
+            doctor: doctorName,
+          }),
           patientId: cr.patientId,
-          // {{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor.
-          // `fecha` y `hora` son ya las de la cita resultante (el resolve la
-          // actualizó).
-          //
-          // OJO: la plantilla de este tipo dice que la cita "cambió", así que
-          // solo se ofrece cuando de verdad hubo reagendado. En cancelación o
-          // rechazo NO se manda plantilla: fuera de ventana ese aviso se
-          // bloquea con motivo en vez de entregar un texto que miente.
-          templateParams:
-            cr.status === "APPROVED" && cr.type === "RESCHEDULE"
-              ? [patient.firstName || "paciente", clinic.name, fecha, hora, doctorName]
-              : null,
         });
       } catch (e) {
         console.error("[appointment-change notify]", e);

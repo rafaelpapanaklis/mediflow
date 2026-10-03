@@ -28,6 +28,7 @@ import {
 import { APPT_AUTO_TYPE } from "@/lib/reminders/config";
 import { isTokenRevoked, WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { motivoDeBloqueo } from "@/lib/whatsapp/sin-plantilla";
+import { plantillaDeFila } from "@/lib/whatsapp/plantilla-de-fila";
 import { botonesRecordatorio } from "@/lib/whatsapp/interactivo";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
@@ -330,34 +331,19 @@ export async function processWhatsAppQueue(opts?: {
       // Envía Y deja rastro en el Inbox (la clínica ve "recordatorio enviado").
       // El registro es best-effort dentro del helper: si falla, el envío ya
       // salió y la corrida del cron sigue igual que antes.
-      // Datos de la plantilla de recordatorio, EN EL ORDEN de WA_TEMPLATE_SPECS
-      // ({{1}} paciente, {{2}} clínica, {{3}} fecha, {{4}} hora, {{5}} doctor).
-      // Solo se pueden armar si el recordatorio cuelga de una cita: los de tipo
-      // RECALL o BIRTHDAY no tienen fecha que anunciar, así que fuera de la
-      // ventana de 24 h se bloquean con motivo en vez de salir y morir en Meta.
-      const templateParams = r.appointment?.startsAt
-        ? [
-            patientCtx.firstName || "paciente",
-            clinicCtx.name,
-            new Intl.DateTimeFormat("es-MX", {
-              timeZone: clinicCtx.timezone,
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            }).format(r.appointment.startsAt),
-            new Intl.DateTimeFormat("es-MX", {
-              timeZone: clinicCtx.timezone,
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            }).format(r.appointment.startsAt),
-            // Meta rechaza las variables vacías: sin doctor en la cita se manda
-            // una fórmula genérica en vez de dejar el hueco (y perder el envío).
-            r.appointment.doctor
-              ? `Dr/a. ${r.appointment.doctor.firstName} ${r.appointment.doctor.lastName}`.trim()
-              : "tu doctor(a)",
-          ]
-        : null;
+      //
+      // Tipo y datos de la plantilla SEGÚN EL TIPO DE FILA (ws1-t4): el
+      // seguimiento post-cita usa la suya y no la de recordatorio (que habría
+      // anunciado una cita ya pasada); cumpleaños y recall llevan su tipo propio,
+      // con la plantilla apagada por bandera. Ver plantilla-de-fila.ts.
+      const plantilla = plantillaDeFila({
+        type: r.type,
+        startsAt: r.appointment?.startsAt ?? null,
+        doctor: r.appointment?.doctor ?? null,
+        firstName: patientCtx.firstName,
+        clinicName: clinicCtx.name,
+        timezone: clinicCtx.timezone,
+      });
 
       const sent = await sendWhatsAppLogged({
         clinic: {
@@ -369,9 +355,9 @@ export async function processWhatsAppQueue(opts?: {
         },
         to: patientCtx.phone,
         body,
-        kind: "reminder",
+        kind: plantilla.kind,
         patientId: patientCtx.id ?? null,
-        templateParams,
+        templateParams: plantilla.params,
         // ws1-t3 — el recordatorio de una cita viva sale con botones
         // (Confirmar / Reagendar / Cancelar) dentro de la ventana de 24 h; el
         // webhook los convierte en la acción exacta. Solo el automático: uno

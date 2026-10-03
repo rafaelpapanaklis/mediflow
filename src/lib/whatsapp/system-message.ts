@@ -40,7 +40,16 @@ export type WhatsAppSendKind =
   // ws1-t3 fase 3 — «Enviar recibo»: confirma un pago YA recibido (cualquier
   // método, no solo anticipo). Plantilla dc_recibo_pago, también opcional.
   // Nunca automático: solo al pulsar el botón.
-  | "payment_receipt";
+  | "payment_receipt"
+  // ws1-t4 (auditoría BEVADENT, F4/M7) — cada uno con SU plantilla, para que fuera
+  // de la ventana de 24 h no se use la de otro tipo que diría algo falso:
+  | "appointment_cancelled" // la cita se canceló (dc_cancelacion_cita)
+  | "followup"              // seguimiento post-cita «¿cómo te sentiste?» (dc_seguimiento_cita)
+  // Cumpleaños y reactivación: tipo propio desde ya, pero su plantilla (MARKETING)
+  // está APAGADA (PLANTILLAS_MARKETING_AUTOMATICAS_ENCENDIDAS en templates-catalog.ts):
+  // fuera de ventana siguen bloqueándose como hoy.
+  | "birthday"
+  | "recall";
 
 export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "reminder",
@@ -56,6 +65,10 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "payment_receipt",
   "quote_ready",
   "consent",
+  "appointment_cancelled",
+  "followup",
+  "birthday",
+  "recall",
 ];
 
 /** Prefijo de `externalId` que marca un envío automático de la plataforma. */

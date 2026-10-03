@@ -117,6 +117,9 @@ export type ConexionVM = {
   recentRemindersFailed: boolean;
   /** Cumpleaños/recall/seguimientos bloqueados por la ventana de 24 h, 30 días (H-7). */
   sinPlantilla30d?: number;
+  /** ws1-t4 (F5): clave del cuerpo de la nota de la ventana de 24 h, o null si la
+   *  plantilla de recordatorio está aprobada (entonces no hay nota). */
+  notaVentana24: string | null;
 };
 
 /** Las plantillas de recordatorio se cobran por unidad: la clínica necesita un
@@ -136,7 +139,7 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
   const {
     t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
     msg, setMsg, defaultMsg, vistaPrevia, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
-    connect, disconnect, saveSettings, saveToggle, connChip, remindersOn, esAvailable,
+    connect, disconnect, saveSettings, saveToggle, connChip, notaVentana24, esAvailable,
     avisosEvento, avisosCobranza, cobranzaOn, resumenAvisos,
     onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed, sinPlantilla30d = 0,
   } = vm;
@@ -381,12 +384,16 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
                 ))}
               </div>
 
-              {/* Ventana de 24 h — hoy el recordatorio NO llega a quien no ha
-                  escrito. Se dice aquí mismo, junto a los interruptores que lo
-                  prometen, en vez de dejar que el envío muera en silencio. */}
-              {remindersOn && (
+              {/* Ventana de 24 h — sin la plantilla de recordatorio aprobada, el
+                  recordatorio NO llega a quien no ha escrito. Se dice aquí mismo,
+                  junto a los interruptores que lo prometen; con ella aprobada no
+                  hay nada que advertir (ws1-t4, F5). */}
+              {notaVentana24 && (
                 <Nota icono={<Info size={16} />} titulo={t("inbox.whatsapp.window24Label")} className={s.arribaMas}>
-                  <p className={s.notaCuerpo}>{t("inbox.whatsapp.window24Body")}</p>
+                  <p className={s.notaCuerpo}>{t(notaVentana24)}</p>
+                  <Link className={`${s.enlace} ${s.arriba}`} href="/dashboard/whatsapp/plantillas">
+                    {t("inbox.whatsapp.window24Cta")}
+                  </Link>
                 </Nota>
               )}
             </Tarjeta>

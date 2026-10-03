@@ -736,6 +736,67 @@ export function fechasParaPrompt(instante: Date, timezone: string): string {
  * chat» la regla podía leerse como si también valiera para la tarjeta. Los once
  * caracteres salen de «pesos mexicanos» → «pesos» (México ya va en la primera línea).
  */
+/* ═══════════════════════════════════════════════════════════════════════
+   NOMBRES INTERNOS — el usuario nunca ve «avisar_saldo_whatsapp»
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cómo se nombra en lenguaje de mostrador lo que el modelo más tiende a citar.
+ * Lo que no está aquí sale con los guiones bajos cambiados por espacios
+ * («buscar_paciente» → «buscar paciente»), que ya no parece un código.
+ */
+const NOMBRE_LEGIBLE: Readonly<Record<string, string>> = {
+  avisar_saldo_whatsapp: "el aviso de saldo por WhatsApp",
+  cobrar_factura: "el cobro de la factura",
+  crear_factura: "la creación de la factura",
+  facturas_de_paciente: "las facturas del paciente",
+  agendar_cita: "el agendado de la cita",
+  reagendar_cita: "el cambio de la cita",
+  cancelar_cita: "la cancelación de la cita",
+  registrar_paciente: "el registro del paciente",
+  procedimientos_y_precios: "el catálogo de procedimientos y precios",
+  equipo_clinica: "el equipo de la clínica",
+  ayuda_del_panel: "la ayuda del panel",
+  sin_permiso: "sin permiso",
+  sin_datos: "sin datos",
+  propuesta_sin_confirmar: "propuesta sin confirmar",
+};
+
+/** Los códigos de resultado que el motor le devuelve al modelo (ver `resultadoParaModelo`). */
+const CODIGOS_INTERNOS: readonly string[] = ["sin_permiso", "sin_datos", "propuesta_sin_confirmar"];
+
+/**
+ * ws1-t4 (auditoría BEVADENT, F17) — quita de la respuesta los NOMBRES INTERNOS
+ * de herramientas y códigos (todo lo que lleva guion bajo: «avisar_saldo_whatsapp»,
+ * «sin_permiso»). El prompt ya lo prohíbe; esto lo GARANTIZA, igual que
+ * `garantizarAvisoSinPermiso` con su frase.
+ *
+ * Solo toca nombres que conoce (los de `nombres` + los códigos) y nunca dentro de
+ * un enlace, un correo o una palabra más larga: «https://…/avisar_saldo_whatsapp/x»
+ * o «ana_avisar_saldo_whatsapp@…» quedan como están. Las comillas o acentos graves
+ * que lo envuelvan se van con él. Los nombres de una sola palabra («caja»,
+ * «gastos») son palabras normales y no se tocan.
+ */
+export function sinNombresInternos(texto: string, nombres: readonly string[]): string {
+  if (!texto) return texto;
+  const candidatos = Array.from(new Set([...nombres, ...CODIGOS_INTERNOS]))
+    .filter((n) => n.includes("_"))
+    // Los largos primero: «reagendar_cita» antes que un hipotético «agendar_cita».
+    .sort((a, b) => b.length - a.length);
+  let out = texto;
+  for (const nombre of candidatos) {
+    if (!out.includes(nombre)) continue;
+    const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patron = new RegExp(
+      `(?<![\\w@/.\\-])([\`«"']?)${esc}([\`»"']?)(?![\\w@/\\-]|\\.\\w)`,
+      "g",
+    );
+    const legible = NOMBRE_LEGIBLE[nombre] ?? nombre.replace(/_/g, " ");
+    out = out.replace(patron, legible);
+  }
+  return out;
+}
+
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
   hoy: string;
@@ -848,6 +909,7 @@ Si una herramienta vuelve con "sin_permiso", NO puedes omitir esa parte en silen
 Dilo con esas palabras, ANTES de cualquier conclusión, y sigue contestando lo que sí puedas. Si te faltó una pieza, avisa de que tu respuesta va sobre medio cuadro: un consejo sobre datos incompletos, dicho con seguridad, es peor que no contestar.
 Hay dos razones distintas y NO son intercambiables: que el usuario no tenga el permiso, o que el usuario sí lo tenga y el Super Admin no te deje usarlo en su nombre. Usa SIEMPRE la frase exacta que te da la herramienta; nunca le digas "no tienes acceso" a quien sí lo tiene.
 Nunca escribas al usuario una clave técnica de permiso (algo como «medicalRecord.view» o «billing.view», con punto): nombra el área en lenguaje de mostrador, «el expediente clínico», «facturación».
+Tampoco escribas NUNCA el nombre interno de una herramienta ni de un resultado (todo lo que lleva guion bajo, como «avisar_saldo_whatsapp», «buscar_paciente» o «sin_datos»): di lo que hace, «el aviso de saldo por WhatsApp», «la búsqueda de pacientes».
 
 PRIMERO EL HECHO, DESPUÉS LA OPINIÓN
 Separa siempre las dos cosas, y en este orden:
@@ -869,7 +931,7 @@ ${lineaDelSi}
 - Una propuesta a la vez. Si te piden dos cosas, propón la primera y avisa de que después sigues con la otra.
 - Si falta un dato, pregunta el dato ("¿con qué doctor?"), no la acción. Si hay dos pacientes con el mismo nombre, pregunta cuál; nunca elijas tú.
 - Si una acción vuelve con "sin_permiso", dilo con la frase que te da la herramienta.
-- De ortodoncia SÍ agendas las citas (control, valoración), con agendar_cita. Su dinero no lo tocas: ni cobro ni aviso de mensualidades, controles o extras de ortodoncia. Tampoco mandas por WhatsApp «su saldo de ortodoncia»: eso es avisar_saldo_whatsapp y no aplica; contesta con el saldo y el enlace. Si te lo piden, no pidas folio ni método: llama a orto_caso con el paciente y contesta con su dato y el enlace.
+- De ortodoncia SÍ agendas las citas (control, valoración), con agendar_cita. Su dinero no lo tocas: ni cobro ni aviso de mensualidades, controles o extras de ortodoncia. Tampoco mandas por WhatsApp «su saldo de ortodoncia»: el aviso de saldo por WhatsApp (avisar_saldo_whatsapp) no aplica a ortodoncia; contesta con el saldo y el enlace. Si te lo piden, no pidas folio ni método: llama a orto_caso con el paciente y contesta con su dato y el enlace.
 `
 }
 LO CLÍNICO: LÍMITES QUE NO SE NEGOCIAN
