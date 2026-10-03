@@ -3,6 +3,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { MIEMBRO_SELECT, camposPublicosDeMiembro } from "@/lib/team/member-fields";
+import { leerCambiosPropios, textosMiPerfil } from "@/lib/team/mis-datos-profesionales";
+import { logMutation } from "@/lib/audit";
 
 // Contexto vía el helper CENTRAL (getAuthContext): misma resolución
 // cookie→clínica que la copia local que había aquí (Supabase + prisma a
@@ -17,7 +19,17 @@ async function getDbUser() {
 export async function PATCH(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  // Solo los campos de «Mi perfil» (nombre, teléfono, especialidad y los datos NOM-024: cédula, especialidad
+  // oficial, cédula de especialidad), y siempre sobre la fila de la sesión. Rol, permisos, estado y correo no
+  // viajan por aquí (ws1-t1: un DOCTOR corrige su cédula sin poder tocar nada más).
+  const cambios = leerCambiosPropios(body);
+  if (!cambios.ok) {
+    return NextResponse.json(
+      { error: textosMiPerfil("es").errores[cambios.motivo], campo: cambios.campo },
+      { status: 400 },
+    );
+  }
   // La respuesta sale por la LISTA BLANCA de @/lib/team/member-fields, la misma
   // que cerró EQ-05 en /api/team/[id]. El `update` iba sin `select` y devolvía
   // la fila ENTERA: totpSecret en base32 EN CLARO, recoveryCodes, cajaPinHash,
@@ -30,9 +42,23 @@ export async function PATCH(req: NextRequest) {
   // para la bitácora).
   const updated = await prisma.user.update({
     where: { id: dbUser.id },
-    data: { firstName: body.firstName, lastName: body.lastName, phone: body.phone || undefined, specialty: body.specialty || undefined },
+    data: cambios.data,
     select: MIEMBRO_SELECT,
   });
+  // Bitácora: quién cambió sus propios datos profesionales y de qué a qué.
+  const antes: Record<string, unknown> = {};
+  for (const k of Object.keys(cambios.data)) antes[k] = (dbUser as Record<string, unknown>)[k] ?? null;
+  await logMutation({
+    req,
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    entityType: "user",
+    entityId: dbUser.id,
+    action: "update",
+    before: antes,
+    after: cambios.data,
+  });
   revalidateAfter("clinic");
+  revalidateAfter("team");
   return NextResponse.json(camposPublicosDeMiembro(updated));
 }

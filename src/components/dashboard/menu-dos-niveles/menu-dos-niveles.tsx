@@ -173,9 +173,11 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     [props.user.role, userParaPermiso],
   );
   const puedeCrearCita = puede("agenda.create");
-  // «Mi perfil» vive dentro de Configuración, que exige settings.view. A quien
-  // no lo tiene no se le enseña: le llevaría a un rebote.
-  const puedeVerPerfil = !isExpired && puede("settings.view");
+  // «Mi perfil» vive dentro de Configuración, que exige settings.view. Quien no
+  // lo tiene (un DOCTOR por defecto) va a /dashboard/mi-perfil, su página propia
+  // para corregir sus datos profesionales (ws1-t1).
+  const puedeVerPerfil = !isExpired;
+  const enlacePerfil = puede("settings.view") ? "/dashboard/settings?tab=perfil" : "/dashboard/mi-perfil";
 
   const etiqueta = useCallback((id: string) => t(`menuDosNiveles.nav.${id}`), [t]);
   /** Nombre de un submenú: el de la persona si lo renombró, si no el de fábrica. */
@@ -534,6 +536,7 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
       compacto={compacto}
       user={props.user}
       puedeVerPerfil={puedeVerPerfil}
+      enlacePerfil={enlacePerfil}
       puedePersonalizar={puedePersonalizar}
       alPersonalizar={() => {
         setCajonAbierto(false);
@@ -750,6 +753,7 @@ function TarjetaUsuario({
   compacto,
   user,
   puedeVerPerfil,
+  enlacePerfil,
   puedePersonalizar,
   alPersonalizar,
   alElegir,
@@ -757,6 +761,8 @@ function TarjetaUsuario({
   compacto: boolean;
   user: SidebarProps["user"];
   puedeVerPerfil: boolean;
+  /** Configuración → Perfil con settings.view; si no, /dashboard/mi-perfil. */
+  enlacePerfil: string;
   /** false mientras falte el SQL de «Personalizar» o la clínica esté suspendida. */
   puedePersonalizar: boolean;
   alPersonalizar: () => void;
@@ -808,12 +814,12 @@ function TarjetaUsuario({
               {/* Dentro de Configuración la pestaña solo se lee al montar la
                   pantalla: ahí se navega "de verdad" para que cambie. */}
               {enConfiguracion ? (
-                <a href="/dashboard/settings?tab=perfil">
+                <a href={enlacePerfil}>
                   <Icono nombre="person" />
                   {t("menuDosNiveles.miPerfil")}
                 </a>
               ) : (
-                <Link href="/dashboard/settings?tab=perfil" prefetch={false}>
+                <Link href={enlacePerfil} prefetch={false}>
                   <Icono nombre="person" />
                   {t("menuDosNiveles.miPerfil")}
                 </Link>

@@ -6,7 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Settings,
-  ChevronDown, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
+  ChevronDown, Moon, Sun, LogOut, PanelLeftClose, PanelLeft, UserRound,
   X, Plus, Lock,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
@@ -1459,6 +1459,29 @@ function SidebarFooter({
               fontFamily: "var(--font-sans, system-ui, sans-serif)",
             }}
           >
+            {/* «Mi perfil» (ws1-t1): sin settings.view, Configuración lo manda a /dashboard/mi-perfil (sus datos
+                profesionales: cédula…); con él, a su pestaña de siempre. */}
+            <DropdownMenu.Item asChild>
+              <Link
+                href="/dashboard/settings?tab=perfil"
+                prefetch={false}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 10px",
+                  fontSize: 13,
+                  color: "var(--text-1)",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  outline: "none",
+                  textDecoration: "none",
+                }}
+              >
+                <UserRound size={14} aria-hidden />
+                {t("menuDosNiveles.miPerfil")}
+              </Link>
+            </DropdownMenu.Item>
             <DropdownMenu.Item
               onSelect={logout}
               style={{

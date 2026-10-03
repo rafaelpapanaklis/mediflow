@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./settings-client";
@@ -24,6 +25,9 @@ interface Props {
 
 export default async function SettingsPage({ searchParams }: Props) {
   const user = await getCurrentUser();
+  // ws1-t1: «Mi perfil» sin settings.view (un DOCTOR por defecto) va a su página propia en vez de rebotar al
+  // inicio: ahí edita sus datos profesionales (cédula…) sin entrar a Configuración.
+  if (searchParams.tab === "perfil" && !hasPermission(user, "settings.view")) redirect("/dashboard/mi-perfil");
   requirePermissionOrRedirect(user, "settings.view");
   const { t } = await getServerT();
 
