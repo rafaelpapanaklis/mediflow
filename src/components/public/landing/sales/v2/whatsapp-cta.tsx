@@ -10,7 +10,7 @@ type GtagFn = (...args: unknown[]) => void;
  * planes y le queda una duda no tiene que buscar el chat.
  *
  * Es una sección DENTRO del flujo, no un botón flotante: la esquina inferior
- * derecha ya la ocupa el widget de Tawk.to (tawk-chat.tsx) y dos burbujas
+ * derecha ya la ocupa el widget de LiveChat (livechat.tsx) y dos burbujas
  * flotantes se pisarían.
  *
  * El componente es "use client" sólo por el evento de GA4 del click; el resto

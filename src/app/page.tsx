@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { inter } from "@/fonts/inter-400-800";
 import {
   Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta,
-  Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
+  Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, LiveChat,
   PanelVivoSection, WhatsappMpSection,
 } from "@/components/public/landing/sales/v2";
 import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
@@ -161,7 +161,7 @@ export default async function HomePage() {
       </main>
       <SalesFooter portada />
       <ScrollReveal />
-      <TawkChat />
+      <LiveChat />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
