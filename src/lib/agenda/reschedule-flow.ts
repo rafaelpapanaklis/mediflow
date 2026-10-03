@@ -151,6 +151,11 @@ export function reschedulePayload(
    * `agenda-bloqueos/core.ts` §7.
    */
   bloqueoConfirmado?: boolean,
+  /**
+   * ws1-t1 (F14) — `false` cuando la persona desmarcó «Avisar al paciente» al soltar. Solo viaja el `false`:
+   * marcada (o sin casilla) el cuerpo es el de siempre y el servidor decide con el ajuste de la clínica.
+   */
+  notifyPatient?: boolean,
 ): RescheduleAppointmentInput {
   const currentDoctorId = plan.original.doctor?.id ?? null;
   const currentResourceId = plan.original.resourceId;
@@ -161,6 +166,7 @@ export function reschedulePayload(
   if (plan.newDoctorId !== currentDoctorId && plan.newDoctorId) payload.doctorId = plan.newDoctorId;
   if (plan.newResourceId !== currentResourceId) payload.resourceId = plan.newResourceId;
   if (bloqueoConfirmado) payload.bloqueoConfirmado = true;
+  if (notifyPatient === false) payload.notifyPatient = false;
   return payload;
 }
 
@@ -198,6 +204,8 @@ export interface CommitRescheduleDeps {
    * soltar. Sin él, el cuerpo del PATCH es exactamente el de siempre.
    */
   bloqueoConfirmado?: boolean;
+  /** ws1-t1 (F14) — `false` = «Avisar al paciente» desmarcada. Ver `reschedulePayload`. */
+  notifyPatient?: boolean;
 }
 
 /**
@@ -223,7 +231,7 @@ export async function commitReschedule(
   try {
     const { appointment, scheduleWarning } = await reschedule(
       original.id,
-      reschedulePayload(plan, deps.bloqueoConfirmado),
+      reschedulePayload(plan, deps.bloqueoConfirmado, deps.notifyPatient),
     );
     deps.dispatch({ type: "REPLACE_APPOINTMENT", appointment });
     return { ok: true, appointment, scheduleWarning };

@@ -501,7 +501,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
     return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
   }, [pendingReschedule, bloqueosCargados]);
 
-  const handleConfirmReschedule = useCallback(async () => {
+  const handleConfirmReschedule = useCallback(async (aviso: { notifyPatient?: false } = {}) => {
     if (!pendingReschedule || rescheduling) return;
     const plan = pendingReschedule;
     setRescheduling(true);
@@ -514,6 +514,8 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
         // «Ya lo confirmé»: el aviso que la persona acaba de leer en la
         // ventana. Solo si de verdad hay un bloqueo en el destino.
         bloqueoConfirmado: bloqueoDelDestino !== null,
+        // ws1-t1 (F14): «Avisar al paciente» desmarcada en la ventana de confirmar.
+        ...aviso,
       });
       if (result.ok) {
         // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.

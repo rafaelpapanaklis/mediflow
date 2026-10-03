@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Calendar, Clock, AlertTriangle } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { useT } from "@/i18n/i18n-provider";
 import { usePuedoAgendarEncima } from "@/components/dashboard/bloqueos/usar-politica-bloqueos";
+import { cambiaLaHoraDeLaCita, campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
+import { CasillaAvisarPaciente, useAvisoAlReprogramar } from "./aviso-al-reprogramar";
 
 /** Lo mínimo del bloqueo del destino para avisar (WS1-T3). */
 export interface BloqueoDelDestino {
@@ -22,7 +25,8 @@ export interface RescheduleConfirmProps {
   newStartsAt: string;
   timezone: string;
   submitting: boolean;
-  onConfirm: () => void;
+  /** ws1-t1 (F14): `{ notifyPatient: false }` si se desmarcó «Avisar al paciente»; si no, `{}`. */
+  onConfirm: (aviso: { notifyPatient?: false }) => void;
   onCancel: () => void;
   /**
    * WS1-T3 — el bloqueo que tapa el destino, o `null`.
@@ -61,6 +65,13 @@ export function AgendaRescheduleConfirmModal({
   const puedo = usePuedoAgendarEncima(open && bloqueo !== null);
   const prohibido = bloqueo !== null && puedo === false;
   const esperando = bloqueo !== null && puedo === null;
+  // ws1-t1 (F14) — «Avisar al paciente»: marcada según «Al reprogramar»; solo si cambia la hora.
+  const avisoClinica = useAvisoAlReprogramar(open);
+  const [avisar, setAvisar] = useState(true);
+  useEffect(() => {
+    if (open) setAvisar(true);
+  }, [open, newStartsAt]);
+  const cambiaHora = cambiaLaHoraDeLaCita(originalStartsAt, newStartsAt);
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o && !submitting) onCancel(); }}>
@@ -143,11 +154,23 @@ export function AgendaRescheduleConfirmModal({
             )}
           </div>
 
+          {cambiaHora && (avisoClinica === "encendido" || avisoClinica === "apagado") && (
+            <div style={{ padding: "0 20px 14px" }}>
+              <CasillaAvisarPaciente
+                estado={avisoClinica}
+                cambiaHora={cambiaHora}
+                marcada={avisar}
+                onCambiar={setAvisar}
+                disabled={submitting}
+              />
+            </div>
+          )}
+
           <footer style={footerStyle}>
             <ButtonNew variant="ghost" onClick={onCancel} disabled={submitting}>
               {t("common.cancel")}
             </ButtonNew>
-            <ButtonNew variant="primary" onClick={onConfirm} disabled={submitting || prohibido || esperando}>
+            <ButtonNew variant="primary" onClick={() => onConfirm(campoDelAviso(avisoClinica, cambiaHora, avisar))} disabled={submitting || prohibido || esperando}>
               {submitting ? t("agenda.rescheduleConfirm.rescheduling") : t("agenda.rescheduleConfirm.reschedule")}
             </ButtonNew>
           </footer>

@@ -248,7 +248,7 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     setPendiente(null);
   }, [guardando]);
 
-  const confirmar = useCallback(async () => {
+  const confirmar = useCallback(async (aviso: { notifyPatient?: false } = {}) => {
     if (!pendiente || guardando) return;
     const plan = pendiente;
     setGuardando(true);
@@ -258,6 +258,8 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
       const r = await commitReschedule(plan, {
         dispatch,
         bloqueoConfirmado: bloqueoDelDestino !== null,
+        // ws1-t1 (F14): «Avisar al paciente» desmarcada en la ventana de confirmar.
+        ...aviso,
       });
       if (r.ok) {
         // Fuera de horario o en día cerrado el servidor guarda y AVISA (P1-13).

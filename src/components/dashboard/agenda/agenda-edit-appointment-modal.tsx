@@ -12,6 +12,8 @@ import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
 import type { AgendaAppointmentDTO, DoctorColumnDTO, ResourceDTO } from "@/lib/agenda/types";
 import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import { cambiaLaHoraDeLaCita, campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
+import { CasillaAvisarPaciente, useAvisoAlReprogramar } from "./aviso-al-reprogramar";
 import { useBloqueosDeDia } from "@/components/dashboard/bloqueos/usar-bloqueos-dia";
 import {
   ConfirmarBloqueo,
@@ -158,6 +160,12 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
    * Ver la cabecera de `usar-bloqueos-dia.ts`.
    */
   const bloqueosDelDia = useBloqueosDeDia(form?.date ?? null, state.timezone, isOpen);
+  /**
+   * ws1-t1 (F14) — «Avisar al paciente». Nace marcada cada vez que se abre; solo se pinta si la hora cambia y
+   * la clínica tiene encendido el aviso «Al reprogramar» (si lo tiene apagado se dice, sin casilla).
+   */
+  const avisoClinica = useAvisoAlReprogramar(isOpen);
+  const [avisar, setAvisar] = useState(true);
 
   // Hidratar el form cuando se abre con un appointment.
   useEffect(() => {
@@ -181,6 +189,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       overrideReason: "",
     });
     setConflict(null);
+    setAvisar(true);
   }, [isOpen, appt, state.timezone]);
 
   // Cerrar con Escape.
@@ -211,6 +220,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
     // Desde el expediente (`prestado`) no hay citas cargadas: sin aviso hasta que conteste el servidor.
     citas: prestado ? [] : agenda!.state.appointments,
   });
+
+  const cambiaHora = cambiaLaHoraDeLaCita(appt.startsAt, inicioIso);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -282,6 +293,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
         // Solo «ya lo confirmé»; el motivo lo escribe el servidor. NO va por
         // `overrideReason`, cuyo valor apaga el no-solape.
         ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
+        // ws1-t1 (F14): solo `notifyPatient: false`, y solo si la casilla se ofreció y la desmarcaron.
+        ...campoDelAviso(avisoClinica, cambiaLaHoraDeLaCita(appt.startsAt, startsAtIso), avisar),
       });
       if (prestado) prestado.onGuardada(updated);
       else agenda!.dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
@@ -466,6 +479,14 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
               style={ropa ? undefined : inputStyle}
             />
           </Field>
+
+          <CasillaAvisarPaciente
+            estado={avisoClinica}
+            cambiaHora={cambiaHora}
+            marcada={avisar}
+            onCambiar={setAvisar}
+            disabled={submitting}
+          />
 
           {conflict && (
             <div className={ropa?.conflicto} style={ropa ? undefined : {

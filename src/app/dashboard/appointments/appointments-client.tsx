@@ -35,6 +35,8 @@ import { teleconsultaDisponible } from "@/lib/agenda/teleconsulta-por-categoria"
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 // Sin «Dr.» delante: el título, si lo hay, ya viene en el nombre («Dr. Dr Juan», revisión de ws1-t10).
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
+import { campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
+import { CasillaAvisarPaciente, useAvisoAlReprogramar } from "@/components/dashboard/agenda/aviso-al-reprogramar";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -360,6 +362,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const [showNew,     setShowNew]     = useState(false);
   const [showDetail,  setShowDetail]  = useState<Appt | null>(null);
   const [showEdit,    setShowEdit]    = useState(false);
+  // ws1-t1 (F14) — «Avisar al paciente» al editar: marcada según «Al reprogramar»; solo si cambia la hora.
+  const avisoClinica = useAvisoAlReprogramar(showEdit);
+  const [avisar, setAvisar] = useState(true);
+  useEffect(() => { if (showEdit) setAvisar(true); }, [showEdit]);
   const [filterDoc,   setFilterDoc]   = useState<string>("all");
   const [loading,     setLoading]     = useState(false);
 
@@ -588,6 +594,9 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   }
 
   // Improvement 5: Edit existing appointment
+  /** ¿La edición mueve la cita de día u hora? Es lo único de lo que el servidor avisa al paciente. */
+  const editCambiaHora = !!showDetail && (form.date !== showDetail.date.split("T")[0] || form.startTime !== showDetail.startTime);
+
   async function saveEdit(bloqueoConfirmado: BloqueoParaConfirmar | null = null) {
     if (!showDetail) return;
     // Solo si la cita se MUEVE de verdad: corregirle las notas a una cita que
@@ -606,7 +615,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       const endTime = addTime(form.startTime, form.durationMins);
       const res = await fetch(`/api/appointments/${showDetail.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apptPayload(bloqueoConfirmado)),
+        body: JSON.stringify({ ...apptPayload(bloqueoConfirmado), ...campoDelAviso(avisoClinica, editCambiaHora, avisar) }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.saveError")));
@@ -1211,6 +1220,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <X size={14} />
               </button>
             </div>
+            {editCambiaHora && (avisoClinica === "encendido" || avisoClinica === "apagado") && (
+              <div style={{ padding: "12px 22px 0" }}>
+                <CasillaAvisarPaciente estado={avisoClinica} cambiaHora={editCambiaHora} marcada={avisar} onCambiar={setAvisar} disabled={loading} />
+              </div>
+            )}
             <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void saveEdit(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} clinicCategory={clinicCategory} />
           </div>
         </div>

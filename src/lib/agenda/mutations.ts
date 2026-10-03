@@ -113,6 +113,11 @@ export interface RescheduleAppointmentInput {
    * dos cosas — solo deja rastro en `AuditLog`. Ver `agenda-bloqueos/core.ts` §7.
    */
   bloqueoConfirmado?: boolean;
+  /**
+   * ws1-t1 (F14) — `false` = no mandar el WhatsApp de «cita reprogramada» por este movimiento (la casilla
+   * «Avisar al paciente» desmarcada). Sin él, el servidor decide como siempre con el ajuste de la clínica.
+   */
+  notifyPatient?: boolean;
 }
 
 /** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */

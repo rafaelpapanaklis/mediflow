@@ -17,9 +17,12 @@ export async function GET() {
     where: { id: session.clinic.id },
     select: { reminderSettings: true },
   });
-  const waConfirmOnCreate = getAppointmentEventSettings(row ?? {}).alAgendar;
+  const eventos = getAppointmentEventSettings(row ?? {});
+  const waConfirmOnCreate = eventos.alAgendar;
+  // ws1-t1 (F14): con esto Editar/Mover cita marcan «Avisar al paciente» igual que «Al reprogramar».
+  const waNotifyOnReschedule = eventos.alReprogramar;
 
-  return NextResponse.json({ clinic: { ...session.clinic, waConfirmOnCreate } }, {
+  return NextResponse.json({ clinic: { ...session.clinic, waConfirmOnCreate, waNotifyOnReschedule } }, {
     headers: { "Cache-Control": "no-store, must-revalidate" },
   });
 }

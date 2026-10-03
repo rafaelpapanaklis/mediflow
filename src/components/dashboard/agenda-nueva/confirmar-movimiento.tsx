@@ -14,13 +14,18 @@
  * versión oscura + los `--ag-*` de `.tokensAgenda`) y su letra.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, ArrowRight, Loader2, X } from "lucide-react";
 import { instrumentSans } from "@/fonts/menu";
 import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { usePuedoAgendarEncima } from "@/components/dashboard/bloqueos/usar-politica-bloqueos";
+import {
+  CasillaAvisarPaciente,
+  useAvisoAlReprogramar,
+} from "@/components/dashboard/agenda/aviso-al-reprogramar";
+import { cambiaLaHoraDeLaCita, campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
 import type { PlannedReschedule } from "@/lib/agenda/reschedule-flow";
 import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
@@ -39,7 +44,10 @@ export interface BloqueoDelDestino {
 export interface ConfirmarMovimientoProps {
   plan: PlannedReschedule;
   guardando: boolean;
-  onConfirmar: () => void;
+  /**
+   * ws1-t1 (F14): recibe `{ notifyPatient: false }` si la persona desmarcó «Avisar al paciente»; si no, `{}`.
+   */
+  onConfirmar: (aviso: { notifyPatient?: false }) => void;
   onCancelar: () => void;
   /**
    * WS1-T3 — el bloqueo que tapa el destino, o `null`. Con él, esta ventana
@@ -79,6 +87,10 @@ export function ConfirmarMovimiento({
   }, [bloqueo, puedo]);
   const tz = state.timezone;
   const { original } = plan;
+  // ws1-t1 (F14) — «Avisar al paciente»: marcada según el ajuste «Al reprogramar»; solo si cambia la hora.
+  const avisoClinica = useAvisoAlReprogramar(true);
+  const [avisar, setAvisar] = useState(true);
+  const cambiaHora = cambiaLaHoraDeLaCita(original.startsAt, plan.newStartsAt);
 
   const nombreDoctor = (id: string | null | undefined): string | null => {
     if (!id) return null;
@@ -191,6 +203,18 @@ export function ConfirmarMovimiento({
             </div>
           )}
 
+          {cambiaHora && (avisoClinica === "encendido" || avisoClinica === "apagado") && (
+          <div style={{ margin: "14px 20px 0" }}>
+            <CasillaAvisarPaciente
+              estado={avisoClinica}
+              cambiaHora={cambiaHora}
+              marcada={avisar}
+              onCambiar={setAvisar}
+              disabled={guardando}
+            />
+          </div>
+          )}
+
           <div className={s.modalPie}>
             <button
               type="button"
@@ -204,7 +228,7 @@ export function ConfirmarMovimiento({
               ref={moverRef}
               type="button"
               className={s.accionPrincipal}
-              onClick={onConfirmar}
+              onClick={() => onConfirmar(campoDelAviso(avisoClinica, cambiaHora, avisar))}
               disabled={guardando || prohibido || esperando}
               autoFocus
             >
