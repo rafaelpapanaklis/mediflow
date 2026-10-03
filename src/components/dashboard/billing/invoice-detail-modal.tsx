@@ -43,6 +43,8 @@ import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 // va lo que se está cobrando. Derivado; sin condiciones a plazos no pinta nada.
 import { BloquePlan } from "@/components/dashboard/plan-de-pagos/bloque-plan";
 import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-abono";
+// ws1-t6 (F1): qué pasa con el cobro automático con tarjeta si se cobra esto.
+import { AvisoCobroAutomaticoEnCobro } from "@/components/cobro-automatico/aviso-en-cobro";
 import { useCondicionesDeFactura } from "@/components/dashboard/plan-de-pagos/use-condiciones";
 import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-cfdi";
 import { PaymentCfdiButton } from "./payment-cfdi-button";
@@ -1112,6 +1114,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                       bloqueado={busy || cobro.saving}
                       alAplicar={(r) => { cobro.orto.recargar(); alUsarSaldo(r); }}
                     />
+                    <AvisoCobroAutomaticoEnCobro estado={cobro.cobroAuto} />
                   </>
                 }
                 descuento={admiteDescuento ? (

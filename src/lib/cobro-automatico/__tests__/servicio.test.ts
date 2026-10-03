@@ -51,6 +51,7 @@ class Mundo {
   facturas = new Map<string, DatosFactura>();
   /** Payments registrados: referencia → monto (por factura). */
   pagos: Array<{ invoiceId: string; referencia: string; monto: number }> = [];
+  aFavor: Array<{ referencia: string; monto: number }> = [];
   tablas: boolean | null = true;
   seq = 0;
 
@@ -82,6 +83,7 @@ class Mundo {
           id: `cob${++m.seq}`, clinicId: f.clinicId, invoiceId: f.invoiceId, patientId: f.patientId, treatmentPlanId: f.treatmentPlanId,
           mpPreapprovalId: null, mpCollectorId: f.mpCollectorId, status: "creating", amount: f.amount, payerEmail: f.payerEmail,
           initPoint: null, startDate: f.startDate, endDate: f.endDate, nextPaymentDate: null, cancelReason: null, lastSyncAt: null,
+          reanudarEl: null, pausaMotivo: null,
           createdById: f.createdById, createdAt: new Date(), updatedAt: new Date(),
         };
         m.cobros.push(fila);
@@ -98,15 +100,19 @@ class Mundo {
         if (f && f.clinicId !== i.clinicId) throw new Error("otra clínica");
         if (!f) {
           f = { id: `int${++m.seq}`, clinicId: i.clinicId, cobroId: i.cobroId, mpAuthorizedPaymentId: i.mpAuthorizedPaymentId, mpPaymentId: null,
-            status: null, paymentStatus: null, statusDetail: null, amount: null, paymentRowId: null, avisoRecepcion: false, revisadoAt: null, createdAt: new Date() };
+            status: null, paymentStatus: null, statusDetail: null, amount: null, paymentRowId: null, creditoId: null, debitDate: null,
+            avisoRecepcion: false, avisoMotivo: null, revisadoAt: null, createdAt: new Date() };
           m.intentos.push(f);
         }
         Object.assign(f, {
           mpPaymentId: i.mpPaymentId ?? f.mpPaymentId, status: i.status, paymentStatus: i.paymentStatus, statusDetail: i.statusDetail,
           amount: i.amount ?? f.amount, paymentRowId: f.paymentRowId ?? i.paymentRowId ?? null, avisoRecepcion: i.avisoRecepcion ?? false,
+          creditoId: f.creditoId ?? i.creditoId ?? null, debitDate: i.debitDate ?? f.debitDate, avisoMotivo: i.avisoMotivo ?? f.avisoMotivo,
         });
         return { ...f };
       },
+      async intentosDeCobro(c, cobroId) { return m.intentos.filter((x) => x.clinicId === c && x.cobroId === cobroId).map((x) => ({ ...x })); },
+      async listarParaCron() { return m.cobros.filter((x) => x.status === "authorized" || x.status === "paused").map((x) => ({ ...x })); },
       async porRevisar(c) {
         return m.intentos.filter((x) => x.clinicId === c && x.avisoRecepcion && !x.revisadoAt)
           .map((x) => ({ ...x, paciente: "Ana Prueba", invoiceNumber: "F-0101", invoiceId: "inv1" }));
@@ -163,6 +169,9 @@ let mundo: Mundo;
 let mp: MpSimulado;
 let efectos: { recibos: unknown[]; movimientos: Array<{ texto: string; userId: string | null }>; saldo: unknown[] };
 let d: DepsCobro;
+/** El reloj de la prueba (las 10:00 de la Ciudad de México del día que toque). */
+let reloj = new Date("2026-02-20T16:00:00Z");
+const elDia = (dia: string) => { reloj = new Date(`${dia}T16:00:00Z`); };
 
 function armar(): DepsCobro {
   return {
@@ -180,12 +189,18 @@ function armar(): DepsCobro {
       const f = mundo.facturas.get(`${a.clinicId}:${a.invoiceId}`)!;
       const pagadoAntes = f.paid;
       if (mundo.pagos.some((p) => p.invoiceId === a.invoiceId && p.referencia === a.referencia)) {
-        return { aplicado: false, paymentRowId: `pay-${a.referencia}`, pagadoAntes, anomalia: null };
+        return { aplicado: false, paymentRowId: `pay-${a.referencia}`, pagadoAntes, aFactura: 0, aFavor: 0, creditoId: null, anomalia: null };
       }
+      // Como registrarCobroEnFactura (F12): a la factura lo que falta, el resto a favor.
+      const aFactura = f.status === "CANCELLED" ? 0 : Math.max(0, Math.min(a.monto, f.total - f.paid));
+      const aFavor = Math.round((a.monto - aFactura) * 100) / 100;
       mundo.pagos.push({ invoiceId: a.invoiceId, referencia: a.referencia, monto: a.monto });
-      f.paid = Math.round((f.paid + a.monto) * 100) / 100;
+      if (aFavor > 0) mundo.aFavor.push({ referencia: a.referencia, monto: aFavor });
+      f.paid = Math.round((f.paid + aFactura) * 100) / 100;
       if (f.paid >= f.total) f.status = "PAID";
-      return { aplicado: true, paymentRowId: `pay-${a.referencia}`, pagadoAntes, anomalia: null };
+      return { aplicado: true, paymentRowId: aFactura > 0 ? `pay-${a.referencia}` : null, pagadoAntes, aFactura, aFavor,
+        creditoId: aFavor > 0 ? `cred-${a.referencia}` : null,
+        anomalia: aFavor > 0 ? `$${aFavor.toFixed(2)} del cobro automático quedaron a favor del paciente: la factura ya estaba pagada. Revisa si se deja a favor o se devuelve.` : null };
     },
     mp: mp.api(),
     efectos: {
@@ -197,11 +212,12 @@ function armar(): DepsCobro {
         await S.reconciliarFactura(a, d);
       },
     },
-    ahora: () => new Date("2026-02-20T16:00:00Z"),
+    ahora: () => reloj,
   };
 }
 
 beforeEach(() => {
+  reloj = new Date("2026-02-20T16:00:00Z");
   mundo = new Mundo();
   mp = new MpSimulado();
   efectos = { recibos: [], movimientos: [], saldo: [] };
@@ -513,4 +529,193 @@ test("apagar el interruptor NO cancela las vivas: siguen visibles para poder can
   assert.equal(e.visible, true);
   assert.equal(e.cobro?.estado, "authorized");
   assert.equal(e.puedeActivar, false);
+});
+
+/* ═══ F1 — el cobro doble, de punta a punta (MP simulado) ═══════════════
+ * Plan de 12 × $2,000 sin enganche, cargos los días 5 desde el 5-oct-2026. */
+
+const DOCE: CondicionesPago = { modo: "plazos", metodo: "credit", enganche: 0, numPagos: 12, frecuencia: "MONTHLY", primerPago: "2026-10-05", difiereConSuBanco: false };
+
+/** Activa el 1-oct (primer cargo 5-oct) y el paciente registra su tarjeta. */
+async function activoDoce(): Promise<void> {
+  elDia("2026-10-01");
+  mundo.factura({ total: 24000, paid: 0, status: "PENDING", condiciones: DOCE });
+  mundo.interruptor.set("c1", true);
+  const r = await S.activar({ clinicId: "c1", invoiceId: "inv1", userId: "u1", correo: null }, d);
+  assert.equal(r.ok, true, r.error ?? "");
+  assert.equal(mundo.cobros[0].startDate, "2026-10-05");
+  mp.suscripciones.get("PRE1")!.status = "authorized";
+  await S.procesarAvisoDeSuscripcion({ tipo: "subscription_preapproval", dataId: "PRE1", mpUserId: "999" }, d);
+  assert.equal(mundo.cobros[0].status, "authorized");
+}
+
+/** Lo que pasa cuando recepción cobra a mano: la factura cambia y el gancho reconcilia. */
+async function cobroEnCaja(monto: number): Promise<void> {
+  const f = mundo.facturas.get("c1:inv1")!;
+  f.paid += monto;
+  f.status = f.paid >= f.total ? "PAID" : "PARTIAL";
+  await S.reconciliarFactura({ clinicId: "c1", invoiceId: "inv1" }, d);
+}
+
+/** MP cobra (o rechaza) el cargo de un día, como llegaría por el webhook. */
+async function mpCobra(id: string, dia: string, estado: "approved" | "rejected", status = "processed"): Promise<void> {
+  mp.cobros.set(id, { id, preapprovalId: "PRE1", status, paymentId: `PAY-${id}`, paymentStatus: estado, paymentStatusDetail: estado === "approved" ? "accredited" : "cc_rejected_insufficient_amount",
+    transactionAmount: 2000, currencyId: "MXN", debitDate: `${dia}T10:00:00.000-06:00`, retryAttempt: 0 });
+  if (estado === "approved") {
+    mp.pagos.set(`PAY-${id}`, { id: `PAY-${id}`, status: "approved", externalReference: null, transactionAmount: 2000, currencyId: "MXN", transactionAmountRefunded: null,
+      statusDetail: "accredited", dateApproved: `${dia}T16:00:00Z`, collectorId: "999", payerEmail: "ana@prueba.test", paymentMethodId: "visa" } as MercadoPagoPayment);
+  }
+  await S.procesarAvisoDeSuscripcion({ tipo: "subscription_authorized_payment", dataId: id, mpUserId: "999" }, d);
+}
+
+/** ¿MP cobraría hoy? Solo si la suscripción está activa (authorized). */
+const mpCobraria = () => mp.suscripciones.get("PRE1")!.status === "authorized";
+const cargosAprobados = () => mundo.pagos.filter((p) => p.referencia.startsWith("PAY-")).length;
+
+test("F1 · 3-oct: $2,000 en caja → el aviso lo dice antes; MP se pausa; 5-oct no cobra; 6-oct el cron la reanuda con $2,000; un solo cobro de octubre", async () => {
+  await activoDoce();
+  elDia("2026-10-03");
+  const aviso = await S.avisoParaCobro({ clinicId: "c1", invoiceId: "inv1", monto: 2000 }, d);
+  assert.equal(aviso?.tipo, "pausa");
+  assert.equal(aviso?.texto, "Este paciente tiene cobro automático con tarjeta: el cargo del 5 de octubre se pausará (esa mensualidad quedará pagada con este cobro) y se reanuda solo para el cargo del 5 de noviembre, por $2,000.00.");
+
+  await cobroEnCaja(2000);
+  assert.deepEqual(mp.llamadas.filter((l) => l.op === "actualizar").at(-1)?.args, { id: "PRE1", status: "paused" });
+  assert.equal(mundo.cobros[0].status, "paused");
+  assert.equal(mundo.cobros[0].pausaMotivo, "ciclo");
+  assert.equal(mundo.cobros[0].reanudarEl, "2026-10-06");
+  assert.match(efectos.movimientos.at(-1)!.texto, /se pausó para el cargo del 5 de octubre.*Se reanuda solo el 6 de octubre, a tiempo para el cargo del 5 de noviembre/);
+
+  elDia("2026-10-05");
+  await S.correrCron(d);
+  assert.equal(mpCobraria(), false, "el 5-oct MP no cobra: está pausada");
+
+  elDia("2026-10-06");
+  const r = await S.correrCron(d);
+  assert.equal(r.reanudadas, 1);
+  assert.equal(mpCobraria(), true);
+  assert.equal(mundo.cobros[0].status, "authorized");
+  assert.equal(mundo.cobros[0].pausaMotivo, null);
+  assert.equal(mundo.cobros[0].reanudarEl, null);
+  assert.equal(mp.suscripciones.get("PRE1")!.transactionAmount, 2000, "el monto no cambió");
+  assert.equal(cargosAprobados(), 0, "octubre se pagó una sola vez (en caja)");
+
+  // El 5-nov MP cobra noviembre normalmente.
+  elDia("2026-11-05");
+  await mpCobra("NOV", "2026-11-05", "approved");
+  assert.equal(mundo.facturas.get("c1:inv1")!.paid, 4000);
+});
+
+test("F1 · 3-oct: abono parcial de $500 → no se pausa, el monto sigue en $2,000, y el aviso lo explica", async () => {
+  await activoDoce();
+  elDia("2026-10-03");
+  const aviso = await S.avisoParaCobro({ clinicId: "c1", invoiceId: "inv1", monto: 500 }, d);
+  assert.equal(aviso?.tipo, "sigue");
+  assert.match(aviso?.texto ?? "", /el 5 de octubre Mercado Pago cobrará \$2,000\.00/);
+  const antes = mp.llamadas.length;
+  await cobroEnCaja(500);
+  assert.equal(mp.llamadas.slice(antes).filter((l) => l.op === "actualizar").length, 0, "ni pausa ni cambio de monto");
+  assert.equal(mundo.cobros[0].status, "authorized");
+  assert.equal(mundo.cobros[0].amount, 2000);
+});
+
+test("F1 · caso inverso: MP cobró el 5-oct; el 6-oct cobrar $2,000 a mano se FRENA (409) salvo que se confirme el adelanto", async () => {
+  await activoDoce();
+  elDia("2026-10-05");
+  await mpCobra("OCT", "2026-10-05", "approved");
+  assert.equal(mundo.facturas.get("c1:inv1")!.paid, 2000);
+  elDia("2026-10-06");
+  const freno = await S.frenoCobroDoble({ clinicId: "c1", invoiceId: "inv1", monto: 2000, confirmado: false }, d);
+  assert.equal(freno.bloquear, true);
+  assert.match(freno.texto ?? "", /La mensualidad del 5 de octubre ya se cobró con tarjeta \(Mercado Pago, \$2,000\.00\).*el cargo del 5 de noviembre se pausaría/);
+  assert.deepEqual(await S.frenoCobroDoble({ clinicId: "c1", invoiceId: "inv1", monto: 2000, confirmado: true }, d), { bloquear: false, texto: null });
+  // Confirmado como adelanto: noviembre queda pagado → se pausa el cargo del 5-nov y vuelve el 6-nov.
+  await cobroEnCaja(2000);
+  assert.equal(mundo.cobros[0].status, "paused");
+  assert.equal(mundo.cobros[0].reanudarEl, "2026-11-06");
+});
+
+test("F1 · adelanto de 3 mensualidades ($6,000) el 3-oct → pausada hasta el 6-dic; el cron no la reanuda antes", async () => {
+  await activoDoce();
+  elDia("2026-10-03");
+  const aviso = await S.avisoParaCobro({ clinicId: "c1", invoiceId: "inv1", monto: 6000 }, d);
+  assert.match(aviso?.texto ?? "", /los cargos del 5 de octubre, 5 de noviembre y 5 de diciembre se pausarán .* para el cargo del 5 de enero/);
+  await cobroEnCaja(6000);
+  assert.equal(mundo.cobros[0].reanudarEl, "2026-12-06");
+  for (const dia of ["2026-10-06", "2026-11-05", "2026-12-05"]) {
+    elDia(dia);
+    await S.correrCron(d);
+    assert.equal(mpCobraria(), false, `el ${dia} sigue pausada`);
+  }
+  elDia("2026-12-06");
+  await S.correrCron(d);
+  assert.equal(mpCobraria(), true);
+});
+
+test("F1 · liquidar todo el caso en caja → el aviso lo dice y la suscripción se CANCELA en MP", async () => {
+  await activoDoce();
+  elDia("2026-10-03");
+  assert.equal((await S.avisoParaCobro({ clinicId: "c1", invoiceId: "inv1", monto: 24000 }, d))?.tipo, "liquida");
+  await cobroEnCaja(24000);
+  assert.equal(mp.suscripciones.get("PRE1")!.status, "cancelled");
+  assert.equal(mundo.cobros[0].status, "cancelled");
+});
+
+test("F1 · MP rechazó el 5-oct (reintentará); el 7-oct se cobra en caja → pausada hasta el 16-oct; el cron la reanuda ese día", async () => {
+  await activoDoce();
+  elDia("2026-10-05");
+  await mpCobra("OCT", "2026-10-05", "rejected", "recycling");
+  elDia("2026-10-07");
+  assert.equal((await S.avisoParaCobro({ clinicId: "c1", invoiceId: "inv1", monto: 2000 }, d))?.tipo, "reintento");
+  await cobroEnCaja(2000);
+  assert.equal(mundo.cobros[0].status, "paused");
+  assert.equal(mundo.cobros[0].reanudarEl, "2026-10-16");
+  elDia("2026-10-15");
+  await S.correrCron(d);
+  assert.equal(mpCobraria(), false);
+  elDia("2026-10-16");
+  await S.correrCron(d);
+  assert.equal(mpCobraria(), true);
+});
+
+test("F1 · una pausa MANUAL desde el caso no la reanuda el cron", async () => {
+  await activoDoce();
+  await S.cambiarEstado({ clinicId: "c1", invoiceId: "inv1", userId: "u1", accion: "pausar" }, d);
+  assert.equal(mundo.cobros[0].pausaMotivo, "manual");
+  elDia("2026-11-20");
+  await S.correrCron(d);
+  assert.equal(mundo.cobros[0].status, "paused");
+  assert.equal(mpCobraria(), false);
+});
+
+test("F1 · si la tarjeta se registra DESPUÉS de un cobro en caja, se pausa al activarse", async () => {
+  elDia("2026-10-01");
+  mundo.factura({ total: 24000, paid: 0, status: "PENDING", condiciones: DOCE });
+  mundo.interruptor.set("c1", true);
+  await S.activar({ clinicId: "c1", invoiceId: "inv1", userId: "u1", correo: null }, d);
+  elDia("2026-10-03");
+  await cobroEnCaja(2000); // aún pendiente: no hay nada que pausar en MP
+  assert.equal(mundo.cobros[0].status, "pending");
+  mp.suscripciones.get("PRE1")!.status = "authorized";
+  await S.procesarAvisoDeSuscripcion({ tipo: "subscription_preapproval", dataId: "PRE1", mpUserId: "999" }, d);
+  assert.equal(mundo.cobros[0].status, "paused");
+  assert.equal(mundo.cobros[0].reanudarEl, "2026-10-06");
+});
+
+/* ═══ F12 — dinero de MP que no cabe en la factura ═════════════════════ */
+
+test("F12 · un cobro automático de $2,000 sobre una factura ya pagada → $2,000 a favor, paid sin cambio, aviso en Caja", async () => {
+  await activoDoce();
+  mundo.factura({ total: 24000, paid: 24000, status: "PAID", condiciones: DOCE });
+  elDia("2026-10-05");
+  await mpCobra("OCT", "2026-10-05", "approved");
+  assert.equal(mundo.facturas.get("c1:inv1")!.paid, 24000);
+  assert.deepEqual(mundo.aFavor, [{ referencia: "PAY-OCT", monto: 2000 }]);
+  const avisos = await S.porRevisar("c1", d);
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0].motivo, /\$2000\.00 del cobro automático quedaron a favor del paciente/);
+  // Un segundo aviso del mismo cobro no apaga el aviso ni duplica nada.
+  await mpCobra("OCT", "2026-10-05", "approved");
+  assert.equal(mundo.aFavor.length, 1);
+  assert.equal((await S.porRevisar("c1", d)).length, 1);
 });

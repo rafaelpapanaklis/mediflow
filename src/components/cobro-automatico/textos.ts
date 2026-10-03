@@ -63,6 +63,11 @@ const es = {
   avisoTitulo: (n: number) => (n === 1 ? "1 cobro automático por revisar" : `${n} cobros automáticos por revisar`),
   revisado: "Revisado",
   verFactura: "Ver factura",
+  // Aviso dentro del modal de cobro (F1, cobro doble)
+  avisoCobroRotulo: "Cobro automático con tarjeta",
+  avisoCobroConfirmar: "Sí, es un adelanto: cobrar de todos modos",
+  estadoPausadoCiclo: "Pausado este ciclo",
+  pausadoCiclo: (reanuda: string) => `La mensualidad que tocaba ya se pagó a mano: Mercado Pago no la cobra. Vuelve solo el ${reanuda}, con el mismo monto.`,
 };
 
 type Textos = typeof es;
@@ -118,6 +123,10 @@ const en: Textos = {
   avisoTitulo: (n: number) => (n === 1 ? "1 automatic charge to review" : `${n} automatic charges to review`),
   revisado: "Reviewed",
   verFactura: "View invoice",
+  avisoCobroRotulo: "Automatic card charges",
+  avisoCobroConfirmar: "Yes, it's an advance payment: charge anyway",
+  estadoPausadoCiclo: "Paused this cycle",
+  pausadoCiclo: (reanuda: string) => `The installment due was already paid manually: Mercado Pago won't charge it. It resumes on its own on ${reanuda}, same amount.`,
 };
 
 /** Fuera del I18nProvider (`useLocale` lanza) se queda en español. */
@@ -146,4 +155,50 @@ export function fechaLarga(iso: string | null, locale: "es" | "en"): string {
 
 export function pesos(n: number, locale: "es" | "en"): string {
   return new Intl.NumberFormat(locale === "en" ? "en-US" : "es-MX", { style: "currency", currency: "MXN" }).format(n);
+}
+
+/** Fechas como «5 de octubre» / «October 5». */
+function diaCorto(dia: string, locale: "es" | "en"): string {
+  return new Date(`${dia}T12:00:00Z`).toLocaleDateString(locale === "en" ? "en-US" : "es-MX", { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+function lista(dias: string[], locale: "es" | "en"): string {
+  const t = dias.map((x) => diaCorto(x, locale));
+  const y = locale === "en" ? "and" : "y";
+  return t.length > 1 ? `${t.slice(0, -1).join(", ")} ${y} ${t[t.length - 1]}` : t[0] ?? "";
+}
+
+export interface AvisoDeCobroVista {
+  tipo: "liquida" | "ya_cobrado" | "pausa" | "reintento" | "sigue";
+  requiereConfirmar: boolean;
+  saltados: string[];
+  reanudaPara: string | null;
+  reintentoHasta: string | null;
+  cicloCobrado: string | null;
+  montoCargo: number;
+  /** La frase en español que arma el servidor (la misma del 409). */
+  texto: string;
+}
+
+/** En español, la frase del servidor; en inglés, la misma a partir de los datos. */
+export function textoAvisoDeCobro(a: AvisoDeCobroVista, locale: "es" | "en"): string {
+  if (locale !== "en") return a.texto;
+  const monto = pesos(a.montoCargo, "en");
+  switch (a.tipo) {
+    case "liquida":
+      return "This patient has automatic card charges: this payment settles the invoice, so automatic charges will be cancelled.";
+    case "ya_cobrado":
+      return `The ${diaCorto(a.cicloCobrado as string, "en")} installment was already charged to the card (Mercado Pago, ${monto}) and the plan is up to date. ` +
+        (a.saltados.length > 0
+          ? `This payment would be an advance: the ${lista(a.saltados, "en")} charge would be paused${a.reanudaPara ? ` and resume for the ${diaCorto(a.reanudaPara, "en")} one` : ""}. `
+          : "This payment would be an advance. ") +
+        "Confirm only if the patient wants to pay ahead.";
+    case "pausa":
+      return `This patient has automatic card charges: the ${lista(a.saltados, "en")} charge${a.saltados.length > 1 ? "s" : ""} will be paused (this payment covers that installment)` +
+        (a.reanudaPara ? ` and resumes on its own for the ${diaCorto(a.reanudaPara, "en")} charge, ${monto}.` : ".");
+    case "reintento":
+      return `Mercado Pago is retrying a declined charge for this installment: with this payment, automatic charges pause until ${diaCorto(a.reintentoHasta as string, "en")} so it isn't charged twice.`;
+    case "sigue":
+      return `This patient has automatic card charges: on ${diaCorto(a.reanudaPara as string, "en")} Mercado Pago will charge ${monto}. This payment doesn't cover that whole installment, so the charge still happens (any extra goes to the next one).`;
+  }
 }

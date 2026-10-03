@@ -165,7 +165,7 @@
     "test:active-clinic-modules": "tsx --test src/lib/clinical-shared/__tests__/get-active-clinic-modules.test.ts",
     "test:pediatrics-tab-state": "tsx --test src/lib/pediatrics/__tests__/tab-state.test.ts",
     "test:wa-booking": "tsx --test src/lib/whatsapp/bot/__tests__/booking.test.ts",
-    "test:cobro-automatico": "tsx --test src/lib/cobro-automatico/__tests__/core.test.ts src/lib/cobro-automatico/__tests__/servicio.test.ts src/lib/cobro-automatico/__tests__/mp-api-y-registro.test.ts src/lib/cobro-automatico/__tests__/webhook-suscripcion.test.ts src/lib/cobro-automatico/__tests__/gancho.test.ts",
+    "test:cobro-automatico": "tsx --test src/lib/cobro-automatico/__tests__/core.test.ts src/lib/cobro-automatico/__tests__/servicio.test.ts src/lib/cobro-automatico/__tests__/mp-api-y-registro.test.ts src/lib/cobro-automatico/__tests__/webhook-suscripcion.test.ts src/lib/cobro-automatico/__tests__/gancho.test.ts && tsx --test --experimental-test-module-mocks src/lib/cobro-automatico/__tests__/ruta-cobro-freno.test.ts",
     "test:factura-mp": "tsx --test src/lib/factura-mp/__tests__/factura-mp.test.ts src/lib/factura-mp/__tests__/webhook-factura.test.ts",
     "test:portal-mercadopago": "tsx --tsconfig tsconfig.test.json --test \"src/app/api/paciente/payments/__tests__/portal-mercadopago.test.tsx\"",
     "test:portal-menu-ortodoncia": "tsx --tsconfig tsconfig.test.json --test src/components/paciente/__tests__/portal-menu-ortodoncia.test.tsx",

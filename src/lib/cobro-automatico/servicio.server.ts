@@ -27,10 +27,13 @@ import { credencialDeCobro, plataformaAnticipos, urlBaseApp, type CredencialDeCo
 import { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
 import {
   ajusteNecesario,
+  avisoDeCobroManual,
   casoCerrado,
   correoValido,
   cuotaQueCubre,
   decidirCobro,
+  decisionDeCiclo,
+  hechoDeCobro,
   estaVivo,
   formatoPesos,
   frecuenciaMp,
@@ -39,7 +42,10 @@ import {
   normalizarEstado,
   planDeCobro,
   refDeCobro,
+  type AvisoCobro,
+  type CargoHecho,
   type CobroMp,
+  type DecisionCiclo,
   type EstadoCobro,
   type MotivoSinCobro,
   type PlanDeCobro,
@@ -192,6 +198,9 @@ export interface VistaCobro {
   fin: string | null;
   proximoCobro: string | null;
   motivoCancelacion: string | null;
+  /** Pausada «del ciclo» (la mensualidad ya se pagó a mano): se reanuda sola este día. */
+  reanudarEl: string | null;
+  pausaMotivo: "manual" | "ciclo" | null;
   creado: string;
 }
 
@@ -206,6 +215,8 @@ function vista(f: FilaCobro): VistaCobro {
     fin: f.endDate,
     proximoCobro: f.nextPaymentDate ? f.nextPaymentDate.toISOString() : null,
     motivoCancelacion: f.cancelReason,
+    reanudarEl: f.status === "paused" ? f.reanudarEl : null,
+    pausaMotivo: f.status === "paused" ? f.pausaMotivo ?? "manual" : null,
     creado: f.createdAt.toISOString(),
   };
 }
@@ -400,12 +411,14 @@ export async function cambiarEstado(
   const fila = await d.repo.vivoDeFactura(a.clinicId, a.invoiceId);
   if (!fila) return falla("Esta factura no tiene un cobro automático activo.");
   if (fila.status === "creating") return falla("El cobro automático se está creando; intenta en unos segundos.");
-  if (a.accion === "pausar" && fila.status !== "authorized") return falla("Solo se puede pausar un cobro automático activo.");
+  // Una pausa «del ciclo» se puede volver manual (que no se reanude sola).
+  const cicloPausado = fila.status === "paused" && fila.pausaMotivo === "ciclo";
+  if (a.accion === "pausar" && fila.status !== "authorized" && !cicloPausado) return falla("Solo se puede pausar un cobro automático activo.");
   if (a.accion === "reanudar" && fila.status !== "paused") return falla("Solo se puede reanudar un cobro automático pausado.");
 
   const destino = a.accion === "pausar" ? "paused" : a.accion === "reanudar" ? "authorized" : "cancelled";
   let estado: EstadoCobro = destino;
-  if (fila.mpPreapprovalId) {
+  if (fila.mpPreapprovalId && !(a.accion === "pausar" && cicloPausado)) {
     const cred = await d.credencial(a.clinicId);
     if (!cred) return falla(TEXTO_MOTIVO.sin_mp);
     try {
@@ -418,6 +431,8 @@ export async function cambiarEstado(
   }
   await d.repo.actualizar(a.clinicId, fila.id, {
     status: estado,
+    pausaMotivo: estado === "paused" ? "manual" : null,
+    reanudarEl: null,
     ...(estado === "cancelled" ? { cancelReason: "Cancelado desde el panel." } : {}),
   });
   const factura = await d.leerFactura(a.clinicId, a.invoiceId);
@@ -448,7 +463,7 @@ export async function cambiarEstado(
 export async function reconciliarFactura(
   a: { clinicId: string; invoiceId: string },
   over?: Partial<DepsCobro> | DepsCobro,
-): Promise<"nada" | "monto" | "cancelada" | "error"> {
+): Promise<"nada" | "monto" | "cancelada" | "pausada" | "reanudada" | "error"> {
   const d = deps(over);
   try {
     if (!a.clinicId || !a.invoiceId) return "nada";
@@ -461,7 +476,7 @@ export async function reconciliarFactura(
       ? planDeCobro({ condiciones: factura.condiciones, total: factura.total, pagado: factura.paid, estadoFactura: factura.status, hoy })
       : { plan: null, motivo: "cancelada" as const };
     const ajuste = ajusteNecesario({ estado: fila.status, montoActual: fila.amount, plan, casoCerrado: casoCerrado(factura?.caso?.status) });
-    if (ajuste.accion === "nada") return "nada";
+    if (ajuste.accion === "nada") return factura ? await ajustarCiclo(fila, factura, hoy, d) : "nada";
 
     const cred = fila.mpPreapprovalId ? await d.credencial(a.clinicId) : null;
     if (fila.mpPreapprovalId && !cred) {
@@ -475,10 +490,11 @@ export async function reconciliarFactura(
         clinicId: a.clinicId, patientId: fila.patientId, invoiceId: a.invoiceId, entityType: "invoice", entityId: a.invoiceId, userId: null,
         texto: `El cobro automático con tarjeta cambió de ${formatoPesos(fila.amount)} a ${formatoPesos(ajuste.monto)} porque cambió la factura.`,
       });
-      return "monto";
+      const ciclo = factura ? await ajustarCiclo({ ...fila, amount: ajuste.monto }, factura, hoy, d) : "nada";
+      return ciclo === "nada" ? "monto" : ciclo;
     }
     if (cred && fila.mpPreapprovalId) await d.mp.actualizar(cred.accessToken, fila.mpPreapprovalId, { status: "cancelled" });
-    await d.repo.actualizar(a.clinicId, fila.id, { status: "cancelled", cancelReason: ajuste.motivo });
+    await d.repo.actualizar(a.clinicId, fila.id, { status: "cancelled", cancelReason: ajuste.motivo, pausaMotivo: null, reanudarEl: null });
     await d.efectos.movimiento({
       clinicId: a.clinicId, patientId: fila.patientId, invoiceId: a.invoiceId, entityType: "invoice", entityId: a.invoiceId, userId: null,
       texto: `El cobro automático con tarjeta se canceló solo: ${ajuste.motivo}`,
@@ -488,6 +504,200 @@ export async function reconciliarFactura(
     console.error(`[cobro-automatico] no se pudo reconciliar la factura ${a.invoiceId}: ${(e as Error).message}`);
     return "error";
   }
+}
+
+/* ── 5b. El ciclo: que MP no cobre lo que ya se pagó a mano (F1) ────── */
+
+/** «5 de octubre». */
+export function diaLegible(dia: string): string {
+  return new Date(`${dia}T12:00:00Z`).toLocaleDateString("es-MX", { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+function listaDeDias(dias: string[]): string {
+  const t = dias.map(diaLegible);
+  return t.length > 1 ? `${t.slice(0, -1).join(", ")} y ${t[t.length - 1]}` : t[0] ?? "";
+}
+
+/** Lo que MP ya hizo, cargo por cargo, con la fecha en la zona de la clínica. */
+async function hechosDeMp(fila: FilaCobro, timezone: string, d: DepsCobro): Promise<CargoHecho[]> {
+  const intentos = await d.repo.intentosDeCobro(fila.clinicId, fila.id);
+  const salida: CargoHecho[] = [];
+  for (const i of intentos) {
+    if (i.mpAuthorizedPaymentId.startsWith(PREFIJO_CANCELADA)) continue;
+    const hecho = hechoDeCobro({ status: i.status, paymentStatus: i.paymentStatus });
+    if (!hecho) continue;
+    const cuando = i.debitDate ? new Date(i.debitDate) : i.createdAt;
+    if (isNaN(cuando.getTime())) continue;
+    salida.push({ fecha: hoyEnZona(cuando, timezone), hecho });
+  }
+  return salida;
+}
+
+function textoDePausa(dec: DecisionCiclo): string {
+  const partes: string[] = [];
+  if (dec.saltados.length > 0) {
+    partes.push(dec.saltados.length === 1
+      ? `El cobro automático con tarjeta se pausó para el cargo del ${listaDeDias(dec.saltados)}: esa mensualidad ya está pagada.`
+      : `El cobro automático con tarjeta se pausó para los cargos del ${listaDeDias(dec.saltados)}: esas mensualidades ya están pagadas.`);
+  }
+  if (dec.reintentoHasta) {
+    partes.push(`Mercado Pago estaba reintentando un cargo rechazado de una mensualidad que ya se pagó: se pausa hasta el ${diaLegible(dec.reintentoHasta)}.`);
+  }
+  partes.push(dec.proximoCargo
+    ? `Se reanuda solo el ${diaLegible(dec.reanudarEl as string)}, a tiempo para el cargo del ${diaLegible(dec.proximoCargo)}, con el mismo monto.`
+    : `Se reanuda solo el ${diaLegible(dec.reanudarEl as string)}.`);
+  return partes.join(" ");
+}
+
+/**
+ * Pausa la suscripción si el cargo que viene ya está pagado (o hay un reintento
+ * de MP sobre una mensualidad pagada), y la reanuda cuando ya pasó. Solo toca
+ * una suscripción que cobra o que pausó ESTE mecanismo: una pausa manual se
+ * respeta. El monto no cambia. Lanza en lo transitorio (reconciliar lo atrapa).
+ */
+async function ajustarCiclo(fila: FilaCobro, factura: DatosFactura, hoy: string, d: DepsCobro): Promise<"nada" | "pausada" | "reanudada"> {
+  if (!fila.mpPreapprovalId) return "nada";
+  const cicloPausado = fila.status === "paused" && fila.pausaMotivo === "ciclo";
+  if (fila.status !== "authorized" && !cicloPausado) return "nada";
+  const hechos = await hechosDeMp(fila, factura.clinica.timezone, d);
+  const dec = decisionDeCiclo({ condiciones: factura.condiciones, total: factura.total, pagado: factura.paid, hoy, inicio: fila.startDate, hechos });
+  const mov = (texto: string) => d.efectos.movimiento({
+    clinicId: fila.clinicId, patientId: fila.patientId, invoiceId: fila.invoiceId, entityType: "invoice", entityId: fila.invoiceId, userId: null, texto,
+  });
+
+  if (dec.estado === "paused") {
+    if (fila.status === "paused") {
+      if (fila.reanudarEl === dec.reanudarEl) return "nada";
+      await d.repo.actualizar(fila.clinicId, fila.id, { reanudarEl: dec.reanudarEl });
+      await mov(textoDePausa(dec));
+      return "pausada";
+    }
+    const cred = await d.credencial(fila.clinicId);
+    if (!cred) throw new Error("la clínica no tiene cuenta de Mercado Pago para pausar el cobro automático");
+    await d.mp.actualizar(cred.accessToken, fila.mpPreapprovalId, { status: "paused" });
+    await d.repo.actualizar(fila.clinicId, fila.id, { status: "paused", pausaMotivo: "ciclo", reanudarEl: dec.reanudarEl });
+    await mov(textoDePausa(dec));
+    return "pausada";
+  }
+  if (!cicloPausado) return "nada";
+  const cred = await d.credencial(fila.clinicId);
+  if (!cred) throw new Error("la clínica no tiene cuenta de Mercado Pago para reanudar el cobro automático");
+  await d.mp.actualizar(cred.accessToken, fila.mpPreapprovalId, { status: "authorized" });
+  await d.repo.actualizar(fila.clinicId, fila.id, { status: "authorized", pausaMotivo: null, reanudarEl: null });
+  await mov(dec.proximoCargo
+    ? `El cobro automático con tarjeta se reanudó solo: el siguiente cargo es el del ${diaLegible(dec.proximoCargo)}, por ${formatoPesos(fila.amount)}.`
+    : "El cobro automático con tarjeta se reanudó solo.");
+  return "reanudada";
+}
+
+/** Lo que el modal de cobro necesita para avisar ANTES de cobrar a mano. */
+export interface AvisoParaCobro extends AvisoCobro {
+  /** Lo mismo, en una frase en español (la del 409 del freno y la del reporte). */
+  texto: string;
+}
+
+export function textoDelAviso(a: AvisoCobro): string {
+  const monto = formatoPesos(a.montoCargo);
+  switch (a.tipo) {
+    case "liquida":
+      return "Este paciente tiene cobro automático con tarjeta: con este cobro la factura queda pagada y el cobro automático se cancela.";
+    case "ya_cobrado":
+      return `La mensualidad del ${diaLegible(a.cicloCobrado as string)} ya se cobró con tarjeta (Mercado Pago, ${monto}) y el plan va al corriente. ` +
+        (a.saltados.length > 0
+          ? `Este cobro sería un adelanto: el cargo del ${listaDeDias(a.saltados)} se pausaría${a.reanudaPara ? ` y se reanuda para el del ${diaLegible(a.reanudaPara)}` : ""}. `
+          : "Este cobro sería un adelanto. ") +
+        "Confirma solo si el paciente quiere adelantar.";
+    case "pausa":
+      return `Este paciente tiene cobro automático con tarjeta: ${a.saltados.length === 1 ? `el cargo del ${listaDeDias(a.saltados)} se pausará` : `los cargos del ${listaDeDias(a.saltados)} se pausarán`} (esa mensualidad quedará pagada con este cobro)` +
+        (a.reanudaPara ? ` y se reanuda solo para el cargo del ${diaLegible(a.reanudaPara)}, por ${monto}.` : ".");
+    case "reintento":
+      return `Mercado Pago está reintentando un cargo rechazado de esta mensualidad: con este cobro el cobro automático se pausa hasta el ${diaLegible(a.reintentoHasta as string)} para no cobrarla dos veces.`;
+    case "sigue":
+      return `Este paciente tiene cobro automático con tarjeta: el ${diaLegible(a.reanudaPara as string)} Mercado Pago cobrará ${monto}. Este cobro no cubre esa mensualidad completa, así que el cargo sigue (lo de más se abona a la siguiente).`;
+  }
+}
+
+/**
+ * Qué pasaría con el cobro automático si ahora se cobran `monto` pesos a mano
+ * en esta factura. null = la factura no tiene uno que cobre (o falta el SQL).
+ * Antes de decidir se pone al día con MP si hace falta: el cargo de hoy pudo
+ * entrar hace un rato.
+ */
+export async function avisoParaCobro(
+  a: { clinicId: string; invoiceId: string; monto: number },
+  over?: Partial<DepsCobro>,
+): Promise<AvisoParaCobro | null> {
+  const d = deps(over);
+  if (!a.clinicId || !a.invoiceId || !(a.monto > 0)) return null;
+  if ((await d.tablas()) !== true) return null;
+  let fila = await d.repo.vivoDeFactura(a.clinicId, a.invoiceId);
+  if (!fila || !(fila.status === "authorized" || fila.status === "paused")) return null;
+  if (!fila.lastSyncAt || d.ahora().getTime() - fila.lastSyncAt.getTime() > SINCRONIZAR_CADA_MS) {
+    try {
+      await sincronizar(fila, d);
+      fila = (await d.repo.porId(a.clinicId, fila.id)) ?? fila;
+    } catch (e) {
+      console.error(`[cobro-automatico] aviso de cobro: no se pudo poner al día ${fila.id}: ${(e as Error).message}`);
+    }
+  }
+  const factura = await d.leerFactura(a.clinicId, a.invoiceId);
+  if (!factura) return null;
+  const hoy = hoyEnZona(d.ahora(), factura.clinica.timezone);
+  const aviso = avisoDeCobroManual({
+    condiciones: factura.condiciones, total: factura.total, pagado: factura.paid, hoy, inicio: fila.startDate,
+    hechos: await hechosDeMp(fila, factura.clinica.timezone, d),
+    monto: a.monto, montoCargo: fila.amount, estado: fila.status, pausaManual: fila.status === "paused" && fila.pausaMotivo !== "ciclo",
+  });
+  return aviso ? { ...aviso, texto: textoDelAviso(aviso) } : null;
+}
+
+/** El código del 409 cuando se intenta cobrar a mano lo que MP ya cobró. */
+export const CODIGO_YA_COBRADO = "COBRO_AUTOMATICO_YA_COBRADO";
+
+/**
+ * El freno del cobro doble para POST /api/invoices/[id] (el caso inverso: MP ya
+ * cobró la mensualidad de este ciclo y el plan va al corriente). Sin confirmar
+ * que es un adelanto, no se cobra. Nunca lanza: si algo falla, no frena.
+ */
+export async function frenoCobroDoble(
+  a: { clinicId: string; invoiceId: string; monto: number; confirmado: boolean },
+  over?: Partial<DepsCobro>,
+): Promise<{ bloquear: boolean; texto: string | null }> {
+  if (a.confirmado) return { bloquear: false, texto: null };
+  try {
+    const aviso = await avisoParaCobro(a, over);
+    if (aviso?.requiereConfirmar) return { bloquear: true, texto: aviso.texto };
+  } catch (e) {
+    console.error(`[cobro-automatico] freno del cobro doble (${a.invoiceId}): ${(e as Error).message}`);
+  }
+  return { bloquear: false, texto: null };
+}
+
+/**
+ * El cron diario (06:00 de México, antes de que MP cobre): pone al día con MP y
+ * reconcilia cada suscripción que cobra o está pausada. Reanuda las pausas del
+ * ciclo que ya cumplieron y es la red de seguridad de cualquier camino que haya
+ * metido dinero a una factura sin pasar por el gancho. Una que falla no frena a
+ * las demás.
+ */
+export async function correrCron(over?: Partial<DepsCobro>, limite = 500): Promise<{ revisadas: number; pausadas: number; reanudadas: number; canceladas: number; errores: number }> {
+  const d = deps(over);
+  const r = { revisadas: 0, pausadas: 0, reanudadas: 0, canceladas: 0, errores: 0 };
+  if ((await d.tablas(true)) !== true) return r;
+  for (const fila of await d.repo.listarParaCron(limite)) {
+    r.revisadas++;
+    try {
+      if (!fila.lastSyncAt || d.ahora().getTime() - fila.lastSyncAt.getTime() > SINCRONIZAR_CADA_MS) await sincronizar(fila, d);
+    } catch (e) {
+      console.error(`[cobro-automatico] cron: no se pudo poner al día ${fila.id}: ${(e as Error).message}`);
+    }
+    const x = await reconciliarFactura({ clinicId: fila.clinicId, invoiceId: fila.invoiceId }, d);
+    if (x === "pausada") r.pausadas++;
+    else if (x === "reanudada") r.reanudadas++;
+    else if (x === "cancelada") r.canceladas++;
+    else if (x === "error") r.errores++;
+  }
+  return r;
 }
 
 /* ── 6. Avisos de Mercado Pago (webhook) y respaldo ──────────────────── */
@@ -509,6 +719,8 @@ async function ponerAlDiaEstado(fila: FilaCobro, sus: api.SuscripcionMp, d: Deps
   };
   if (sus.status && nuevo !== antes && antes !== "cancelled") {
     cambios.status = nuevo;
+    // Una pausa que no hicimos nosotros (desde el panel de MP) cuenta como manual.
+    if (nuevo !== "paused") { cambios.pausaMotivo = null; cambios.reanudarEl = null; }
     if (nuevo === "cancelled") cambios.cancelReason = "Mercado Pago: la suscripción se canceló por su lado (cobros rechazados o el paciente la dio de baja).";
   }
   await d.repo.actualizar(fila.clinicId, fila.id, cambios);
@@ -549,6 +761,7 @@ async function aplicarCobroMp(fila: FilaCobro, c: CobroMp, cred: CredencialDeCob
   const base = {
     clinicId: fila.clinicId, cobroId: fila.id, mpAuthorizedPaymentId: c.id, mpPaymentId: c.paymentId,
     status: c.status, paymentStatus: c.paymentStatus, statusDetail: c.paymentStatusDetail, amount: c.transactionAmount,
+    debitDate: c.debitDate,
   };
   if (dec.accion === "esperar") {
     // Sin dinero ni rechazo todavía: se anota sin apagar un aviso que ya hubiera.
@@ -590,7 +803,13 @@ async function aplicarCobroMp(fila: FilaCobro, c: CobroMp, cred: CredencialDeCob
     pagadoEl,
     nota: "Cobro automático con tarjeta (Mercado Pago)",
   });
-  await d.repo.guardarIntento({ ...base, mpPaymentId: pago.id, paymentRowId: r.paymentRowId, avisoRecepcion: false });
+  // F12: si algo quedó a favor del paciente (factura pagada o cancelada, o
+  // excedente), recepción lo ve en Caja. Un aviso repetido no apaga ese aviso.
+  await d.repo.guardarIntento({
+    ...base, mpPaymentId: pago.id, paymentRowId: r.paymentRowId, creditoId: r.creditoId,
+    avisoRecepcion: r.aplicado ? r.aFavor > 0 : previo?.avisoRecepcion ?? false,
+    avisoMotivo: r.aplicado && r.aFavor > 0 ? r.anomalia : null,
+  });
   if (!r.aplicado) return "nada";
 
   const factura = await d.leerFactura(fila.clinicId, fila.invoiceId);
@@ -601,7 +820,7 @@ async function aplicarCobroMp(fila: FilaCobro, c: CobroMp, cred: CredencialDeCob
   }
   await d.efectos.movimiento({
     clinicId: fila.clinicId, patientId: fila.patientId, invoiceId: fila.invoiceId, entityType: "payment", entityId: r.paymentRowId ?? fila.invoiceId, userId: null,
-    texto: `Cobro automático con tarjeta aprobado: ${formatoPesos(monto)}${cuota ? ` (${cuota})` : ""} de la factura ${factura?.invoiceNumber ?? ""}.${r.anomalia ? ` ⚠️ ${r.anomalia}.` : ""}`,
+    texto: `Cobro automático con tarjeta aprobado: ${formatoPesos(monto)}${cuota && r.aFactura > 0 ? ` (${cuota})` : ""} de la factura ${factura?.invoiceNumber ?? ""}.${r.anomalia ? ` ⚠️ ${r.anomalia}` : ""}`,
   });
   await d.efectos.recibo({ clinicId: fila.clinicId, invoiceId: fila.invoiceId, patientId: fila.patientId, monto, folio: factura?.invoiceNumber ?? "", cuota });
   // Cierra links de pago por el saldo viejo y, por el gancho, reconcilia el monto.
@@ -657,6 +876,8 @@ export async function procesarAvisoDeSuscripcion(
     const sus = await d.mp.consultar(cred.accessToken, a.dataId);
     if (!sus) return "MP no encuentra la suscripción";
     await ponerAlDiaEstado(fila, sus, d);
+    // La tarjeta pudo registrarse después de un cobro a mano: que no cobre lo pagado.
+    await reconciliarFactura({ clinicId: fila.clinicId, invoiceId: fila.invoiceId }, d);
     return "estado al día";
   }
 
@@ -713,7 +934,7 @@ export async function porRevisar(clinicId: string, over?: Partial<DepsCobro>): P
     invoiceId: f.invoiceId,
     folio: f.invoiceNumber,
     monto: f.amount,
-    motivo: motivoRechazo(f.statusDetail, f.status === "cancelled" && f.mpAuthorizedPaymentId.startsWith(PREFIJO_CANCELADA) ? "cancelled" : null),
+    motivo: f.avisoMotivo ?? motivoRechazo(f.statusDetail, f.status === "cancelled" && f.mpAuthorizedPaymentId.startsWith(PREFIJO_CANCELADA) ? "cancelled" : null),
     creado: f.createdAt.toISOString(),
   }));
 }

@@ -69,78 +69,138 @@ export async function leerFactura(db: Db, clinicId: string, invoiceId: string): 
 
 export interface ResultadoRegistro {
   aplicado: boolean;
+  /** El Payment de la factura (null si todo quedó a favor). */
   paymentRowId: string | null;
   /** Lo pagado de la factura ANTES de este cobro (para decir qué mensualidad cubrió). */
   pagadoAntes: number;
-  /** null = normal. Texto = el Payment quedó marcado para revisar/devolver. */
+  /** Lo que entró a la factura. */
+  aFactura: number;
+  /** Lo que no cabía en la factura y quedó como saldo a favor del paciente (F12). */
+  aFavor: number;
+  creditoId: string | null;
+  /** null = normal. Texto = algo que recepción debe revisar (dinero a favor, factura cancelada…). */
   anomalia: string | null;
 }
 
+/** source de la fila positiva de patient_credits que deja un cobro automático que no cabía en la factura. */
+export const FUENTE_COBRO_AUTOMATICO = "cobro_automatico_mercadopago";
+
+/** La descripción de esa fila: lleva el id del pago de MP (con ella se evita crearla dos veces). */
+export function descripcionDelCredito(pagoMp: string, folio: string, porque: string): string {
+  return `Cobro automático con tarjeta (pago MP ${pagoMp}) de la factura ${folio}: ${porque}. Queda a favor del paciente.`;
+}
+
 /**
- * Registra UN cobro aprobado como Payment `mercadopago` de la factura. Mismo
- * criterio que `aplicarPagoDeFactura`: sobre una factura cancelada o ya saldada
- * el dinero se registra pero la factura no cambia y queda marcado; si pagó de
- * más, entra tal cual y se marca.
+ * Registra UN cobro aprobado. Idempotente por el id del pago de MP, bajo el
+ * `FOR UPDATE` de la factura (el mismo candado del cobro en caja, mark-paid y el
+ * portal).
+ *
+ * F12 (auditoría de dinero, 3-oct-2026): lo que NO cabe en la factura ya no se
+ * queda «⚠️ revisar/devolver» con `paid > total`:
+ *   · factura cancelada o ya pagada → TODO el cobro pasa a saldo a favor del
+ *     paciente (patient_credits) y la factura no se toca;
+ *   · cobro mayor que lo que falta → a la factura lo que falta (la deja PAID) y
+ *     el resto a saldo a favor.
+ * Recepción lo ve en Caja («cobros automáticos por revisar»): ahí decide si lo
+ * deja a favor o lo devuelve. Sin paciente en la factura (no debería pasar) se
+ * registra como antes, marcado.
  */
 export async function registrarCobroEnFactura(
   db: Db,
   a: { clinicId: string; invoiceId: string; monto: number; referencia: string; pagadoEl: Date; nota: string },
 ): Promise<ResultadoRegistro> {
-  if (!a.clinicId || !a.invoiceId || !a.referencia) return { aplicado: false, paymentRowId: null, pagadoAntes: 0, anomalia: null };
+  const nada = (pagadoAntes = 0, paymentRowId: string | null = null): ResultadoRegistro =>
+    ({ aplicado: false, paymentRowId, pagadoAntes, aFactura: 0, aFavor: 0, creditoId: null, anomalia: null });
+  if (!a.clinicId || !a.invoiceId || !a.referencia) return nada();
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${a.invoiceId} FOR UPDATE`;
+
+    const inv = await tx.invoice.findFirst({
+      where: { id: a.invoiceId, clinicId: a.clinicId },
+      select: { id: true, total: true, paid: true, status: true, patientId: true, invoiceNumber: true },
+    });
+    if (!inv) return nada();
+    const pagadoAntes = Number(inv.paid) || 0;
 
     const ya = await tx.payment.findFirst({
       where: { invoiceId: a.invoiceId, method: METODO_MERCADO_PAGO, reference: a.referencia },
       select: { id: true },
     });
-    const inv = await tx.invoice.findFirst({
-      where: { id: a.invoiceId, clinicId: a.clinicId },
-      select: { id: true, total: true, paid: true, status: true },
-    });
-    if (!inv) return { aplicado: false, paymentRowId: null, pagadoAntes: 0, anomalia: null };
-    const pagadoAntes = Number(inv.paid) || 0;
-    if (ya) return { aplicado: false, paymentRowId: ya.id, pagadoAntes, anomalia: null };
+    if (ya) return nada(pagadoAntes, ya.id);
 
-    const monto = aPesos(aCentavos(a.monto));
-    const pendiente = aPesos(Math.max(0, aCentavos(inv.total) - aCentavos(pagadoAntes)));
-    const raro = inv.status === "CANCELLED" ? "factura cancelada" : pendiente <= 0 ? "factura ya saldada" : null;
+    const montoC = aCentavos(a.monto);
+    const pendienteC = Math.max(0, aCentavos(inv.total) - aCentavos(pagadoAntes));
+    const cancelada = inv.status === "CANCELLED";
+    const aFacturaC = cancelada ? 0 : Math.min(montoC, pendienteC);
+    const aFavorC = montoC - aFacturaC;
+    const porque = cancelada ? "la factura está cancelada" : pendienteC <= 0 ? "la factura ya estaba pagada" : `excedía lo que faltaba ($${aPesos(pendienteC).toFixed(2)})`;
 
-    if (raro) {
-      const anomalia = `Cobro automático de Mercado Pago recibido sobre ${raro} — revisar/devolver`;
+    if (aFavorC > 0 && !inv.patientId) {
+      // Sin paciente no hay a quién dejarle el saldo: se registra marcado, como antes.
+      const anomalia = `Cobro automático de Mercado Pago recibido y ${porque} — revisar/devolver`;
       const p = await tx.payment.create({
-        data: { invoiceId: inv.id, amount: monto, method: METODO_MERCADO_PAGO, reference: a.referencia, paidAt: a.pagadoEl, notes: `⚠️ ${anomalia}` },
+        data: { invoiceId: inv.id, amount: aPesos(montoC), method: METODO_MERCADO_PAGO, reference: a.referencia, paidAt: a.pagadoEl, notes: `⚠️ ${anomalia}` },
         select: { id: true },
       });
-      return { aplicado: true, paymentRowId: p.id, pagadoAntes, anomalia };
+      return { aplicado: true, paymentRowId: p.id, pagadoAntes, aFactura: 0, aFavor: 0, creditoId: null, anomalia };
     }
 
-    const nuevoPagado = aPesos(aCentavos(pagadoAntes) + aCentavos(monto));
-    const nuevoSaldo = aPesos(Math.max(0, aCentavos(inv.total) - aCentavos(nuevoPagado)));
-    const saldada = nuevoSaldo <= 0;
-    const excedente = aPesos(aCentavos(nuevoPagado) - aCentavos(inv.total));
-    const anomalia = excedente > 0 ? `Cobro automático de Mercado Pago con excedente de $${excedente.toFixed(2)} sobre el saldo — revisar/devolver` : null;
-    const p = await tx.payment.create({
-      data: {
-        invoiceId: inv.id,
-        amount: monto,
-        method: METODO_MERCADO_PAGO,
-        reference: a.referencia,
-        paidAt: a.pagadoEl,
-        notes: anomalia ? `⚠️ ${anomalia}` : a.nota,
-      },
-      select: { id: true },
-    });
-    await tx.invoice.updateMany({
-      where: { id: inv.id, clinicId: a.clinicId },
-      data: {
-        paid: nuevoPagado,
-        balance: nuevoSaldo,
-        status: saldada ? "PAID" : "PARTIAL",
-        paymentMethod: METODO_MERCADO_PAGO,
-        ...(saldada ? { paidAt: a.pagadoEl } : {}),
-      },
-    });
-    return { aplicado: true, paymentRowId: p.id, pagadoAntes, anomalia };
+    const descripcion = descripcionDelCredito(a.referencia, inv.invoiceNumber, porque);
+    if (aFavorC > 0) {
+      // Todo a favor y ya registrado (un reintento del aviso): no se crea otra fila.
+      const credito = await tx.patientCredit.findFirst({
+        where: { clinicId: a.clinicId, patientId: inv.patientId as string, source: FUENTE_COBRO_AUTOMATICO, description: descripcion },
+        select: { id: true },
+      });
+      if (credito) return { ...nada(pagadoAntes), creditoId: credito.id };
+    }
+
+    let paymentRowId: string | null = null;
+    if (aFacturaC > 0) {
+      const nuevoPagadoC = aCentavos(pagadoAntes) + aFacturaC;
+      const saldada = nuevoPagadoC >= aCentavos(inv.total);
+      const p = await tx.payment.create({
+        data: {
+          invoiceId: inv.id,
+          amount: aPesos(aFacturaC),
+          method: METODO_MERCADO_PAGO,
+          reference: a.referencia,
+          paidAt: a.pagadoEl,
+          notes: aFavorC > 0 ? `${a.nota} · $${aPesos(aFavorC).toFixed(2)} de este cobro quedaron a favor del paciente` : a.nota,
+        },
+        select: { id: true },
+      });
+      paymentRowId = p.id;
+      await tx.invoice.updateMany({
+        where: { id: inv.id, clinicId: a.clinicId },
+        data: {
+          paid: aPesos(nuevoPagadoC),
+          balance: aPesos(Math.max(0, aCentavos(inv.total) - nuevoPagadoC)),
+          status: saldada ? "PAID" : "PARTIAL",
+          paymentMethod: METODO_MERCADO_PAGO,
+          ...(saldada ? { paidAt: a.pagadoEl } : {}),
+        },
+      });
+    }
+
+    let creditoId: string | null = null;
+    if (aFavorC > 0) {
+      const c = await tx.patientCredit.create({
+        data: {
+          clinicId: a.clinicId,
+          patientId: inv.patientId as string,
+          amount: aPesos(aFavorC),
+          source: FUENTE_COBRO_AUTOMATICO,
+          creditDate: a.pagadoEl,
+          description: descripcion,
+        },
+        select: { id: true },
+      });
+      creditoId = c.id;
+    }
+    const anomalia = aFavorC > 0
+      ? `$${aPesos(aFavorC).toFixed(2)} del cobro automático quedaron a favor del paciente: ${porque}. Revisa si se deja a favor o se devuelve.`
+      : null;
+    return { aplicado: true, paymentRowId, pagadoAntes, aFactura: aPesos(aFacturaC), aFavor: aPesos(aFavorC), creditoId, anomalia };
   });
 }

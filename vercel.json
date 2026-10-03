@@ -98,6 +98,10 @@
     {
       "path": "/api/cron/anticipos",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/cobro-automatico",
+      "schedule": "0 12 * * *"
     }
   ]
 }

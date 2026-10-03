@@ -14,6 +14,8 @@ import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-c
 // ws1-t4: en un caso de ortodoncia, pagar de más es un adelanto (la MISMA pieza que la ventana de cobro).
 import { useSaldoOrto, registrarCobroConAdelanto } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+// ws1-t6 (F1): el aviso del cobro automático con tarjeta (la MISMA pieza que «Registrar pago»).
+import { useAvisoCobroAutomatico } from "@/components/cobro-automatico/aviso-en-cobro";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -76,6 +78,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
 
   const id = factura?.id ?? null;
   const orto = useSaldoOrto(id, abierta);
+  const cobroAuto = useAvisoCobroAutomatico(id, Number(amount) || 0, abierta && method !== "mercadopago");
   const balance = factura?.balance ?? 0;
 
   // Mismos valores iniciales que la ventana de cobro al abrirse.
@@ -101,6 +104,8 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   async function submit(sinAviso?: unknown) {
     const invoice = factura;
     if (isInvalid || saving || !invoice) return;
+    // MP ya cobró este ciclo: sin confirmar que es un adelanto, no se cobra.
+    if (cobroAuto.bloquea) return;
     setSaving(true);
     alOcupar(true);
     try {
@@ -144,6 +149,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
           paidAt: paidAtInstant(paidAt)?.toISOString(),
           reference: reference.trim() || undefined,
           notes: notes.trim() || undefined,
+          confirmarCobroAutomatico: cobroAuto.confirmado || undefined,
         }),
       });
       if (!res.ok) {
@@ -166,7 +172,8 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
     paidAt, setPaidAt,
     reference, setReference,
     notes, setNotes,
-    saving, amountNum, isOverpay, isInvalid, balance, adelanto, orto,
+    // `isInvalid` también se apaga mientras falte confirmar el adelanto del cobro automático.
+    saving, amountNum, isOverpay, isInvalid: isInvalid || cobroAuto.bloquea, balance, adelanto, orto, cobroAuto,
     submit,
     avisoCaja: freno.visible,
   };

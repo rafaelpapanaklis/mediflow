@@ -7,6 +7,7 @@ import { aplicarPagoDeFactura } from "@/lib/factura-mp/servicio.server";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { verificarFirmaMp } from "@/lib/mercadopago-firma";
 import { esAvisoDeSuscripcion, procesarAvisoDeSuscripcion } from "@/lib/cobro-automatico/servicio.server";
+import { avisarPagoDeFactura } from "@/lib/cobro-automatico/gancho";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -151,6 +152,9 @@ export async function POST(req: NextRequest) {
           } catch {
             // Refrescar la caché de Caja no puede tumbar un pago ya registrado.
           }
+          // ws1-t6 (F1): pagó con el link la mensualidad que el cobro automático
+          // iba a cobrar → ese cargo se pausa. Nunca lanza.
+          if (r.invoiceId) await avisarPagoDeFactura(r.invoiceId);
         }
       }
       return NextResponse.json({ received: true });

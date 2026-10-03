@@ -1,0 +1,42 @@
+/* Aviso del cobro automático dentro de los modales de cobro (ws1-t6, F1).
+   Misma ropa que «A qué cuota va el abono» (plan-de-pagos/plan.module.css):
+   solo tokens del menú de dos niveles (--m2-*), que monta CLASES_MENU. */
+.aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--m2-borde);
+  border-left: 3px solid var(--m2-activo);
+  border-radius: 8px;
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.alerta { border-left-color: var(--danger); }
+
+.rotulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.texto { margin: 0; color: var(--m2-texto); }
+
+.confirmar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--m2-texto);
+  cursor: pointer;
+}
+
+.confirmar input { margin-top: 2px; flex: none; }

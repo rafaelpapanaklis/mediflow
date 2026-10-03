@@ -50,12 +50,17 @@ CREATE TABLE IF NOT EXISTS "mp_cobros_automaticos" (
   "nextPaymentDate" timestamptz,
   "cancelReason"    text,
   "lastSyncAt"      timestamptz,
+  -- Pausa «del ciclo» (F1, cobro doble): la mensualidad que MP iba a cobrar ya se
+  -- pagó a mano; se reanuda sola este día (cron diario). "manual" = la pausó alguien.
+  "reanudarEl"      date,
+  "pausaMotivo"     text,
   "createdById"     text          REFERENCES "users" ("id") ON DELETE SET NULL,
   "createdAt"       timestamptz   NOT NULL DEFAULT now(),
   "updatedAt"       timestamptz   NOT NULL DEFAULT now(),
   CONSTRAINT "mp_cobros_automaticos_status_chk"
     CHECK ("status" IN ('creating','pending','authorized','paused','cancelled')),
-  CONSTRAINT "mp_cobros_automaticos_amount_chk" CHECK ("amount" > 0)
+  CONSTRAINT "mp_cobros_automaticos_amount_chk" CHECK ("amount" > 0),
+  CONSTRAINT "mp_cobros_automaticos_pausa_chk" CHECK ("pausaMotivo" IS NULL OR "pausaMotivo" IN ('manual','ciclo'))
 );
 
 -- UNA suscripción viva por factura: dos «Activar» a la vez no crean dos cobros.
@@ -81,12 +86,30 @@ CREATE TABLE IF NOT EXISTS "mp_cobros_automaticos_intentos" (
   -- El Payment de la factura que creó este cobro (sin FK: un reembolso o borrado
   -- de la factura no debe tumbar el rastro).
   "paymentRowId"          text,
+  -- F12: si el dinero (o parte) quedó como saldo a favor, la fila de patient_credits.
+  "creditoId"             text,
+  -- Fecha del cobro según MP (debit_date): a qué cargo del plan pertenece.
+  "debitDate"             timestamptz,
   "avisoRecepcion"        boolean       NOT NULL DEFAULT false,
+  -- Motivo del aviso cuando no es un rechazo (p. ej. «quedó a favor»).
+  "avisoMotivo"           text,
   "revisadoAt"            timestamptz,
   "revisadoById"          text          REFERENCES "users" ("id") ON DELETE SET NULL,
   "createdAt"             timestamptz   NOT NULL DEFAULT now(),
   "updatedAt"             timestamptz   NOT NULL DEFAULT now()
 );
+
+-- Si se llegó a pegar una versión anterior de este archivo: las columnas que faltan.
+ALTER TABLE "mp_cobros_automaticos" ADD COLUMN IF NOT EXISTS "reanudarEl" date;
+ALTER TABLE "mp_cobros_automaticos" ADD COLUMN IF NOT EXISTS "pausaMotivo" text;
+ALTER TABLE "mp_cobros_automaticos_intentos" ADD COLUMN IF NOT EXISTS "creditoId" text;
+ALTER TABLE "mp_cobros_automaticos_intentos" ADD COLUMN IF NOT EXISTS "debitDate" timestamptz;
+ALTER TABLE "mp_cobros_automaticos_intentos" ADD COLUMN IF NOT EXISTS "avisoMotivo" text;
+
+-- El cron diario: las pausas del ciclo por fecha de reanudación.
+CREATE INDEX IF NOT EXISTS "mp_cobros_automaticos_reanudar_idx"
+  ON "mp_cobros_automaticos" ("reanudarEl")
+  WHERE "status" = 'paused' AND "pausaMotivo" = 'ciclo';
 
 -- El aviso de Caja: rechazados sin revisar de una clínica.
 CREATE INDEX IF NOT EXISTS "mp_cobros_automaticos_intentos_aviso_idx"

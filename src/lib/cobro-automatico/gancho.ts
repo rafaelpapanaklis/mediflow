@@ -30,6 +30,21 @@ export async function avisarCambioDeFactura(
   }
 }
 
+/**
+ * Un pago entró a una factura por un camino que no sabe de qué clínica es (el
+ * webhook del link de pago de MP): la clínica se lee de la factura. Sin el SQL no
+ * consulta nada. NUNCA lanza.
+ */
+export async function avisarPagoDeFactura(invoiceId: string, db: Db & Pick<typeof prisma, "invoice"> = prisma): Promise<void> {
+  try {
+    if (!invoiceId || (await tablasListas(db)) !== true) return;
+    const inv = await db.invoice.findUnique({ where: { id: invoiceId }, select: { clinicId: true } });
+    if (inv?.clinicId) await avisarCambioDeFactura({ clinicId: inv.clinicId, invoiceId }, db);
+  } catch (e) {
+    console.error(`[cobro-automatico] gancho del pago de la factura ${invoiceId}: ${(e as Error).message}`);
+  }
+}
+
 /** El caso de ortodoncia cambió de estado: si se cerró, que deje de cobrar solo. */
 export async function avisarCambioDeCaso(a: { clinicId: string; invoiceId: string | null | undefined }): Promise<void> {
   if (!a.invoiceId) return;

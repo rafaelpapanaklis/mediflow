@@ -72,6 +72,10 @@ export interface FilaCobro {
   nextPaymentDate: Date | null;
   cancelReason: string | null;
   lastSyncAt: Date | null;
+  /** Día en que una pausa «del ciclo» se reanuda sola ("YYYY-MM-DD"). */
+  reanudarEl: string | null;
+  /** "manual" (la pausó alguien desde el caso) · "ciclo" (la mensualidad ya se pagó a mano) · null. */
+  pausaMotivo: "manual" | "ciclo" | null;
   createdById: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -88,7 +92,13 @@ export interface FilaIntento {
   statusDetail: string | null;
   amount: number | null;
   paymentRowId: string | null;
+  /** Fila de patient_credits si el dinero (o parte) quedó a favor del paciente (F12). */
+  creditoId: string | null;
+  /** Fecha del cobro según MP (debit_date). */
+  debitDate: string | null;
   avisoRecepcion: boolean;
+  /** Por qué se avisa a recepción cuando no es un rechazo (p. ej. dinero que quedó a favor). */
+  avisoMotivo: string | null;
   revisadoAt: Date | null;
   createdAt: Date;
 }
@@ -128,6 +138,8 @@ function aCobro(f: Record<string, unknown>): FilaCobro {
     nextPaymentDate: fecha(f.nextPaymentDate),
     cancelReason: (f.cancelReason as string) ?? null,
     lastSyncAt: fecha(f.lastSyncAt),
+    reanudarEl: dia(f.reanudarEl),
+    pausaMotivo: f.pausaMotivo === "manual" || f.pausaMotivo === "ciclo" ? f.pausaMotivo : null,
     createdById: (f.createdById as string) ?? null,
     createdAt: fecha(f.createdAt) ?? new Date(0),
     updatedAt: fecha(f.updatedAt) ?? new Date(0),
@@ -146,7 +158,10 @@ function aIntento(f: Record<string, unknown>): FilaIntento {
     statusDetail: (f.statusDetail as string) ?? null,
     amount: f.amount == null ? null : num(f.amount),
     paymentRowId: (f.paymentRowId as string) ?? null,
+    creditoId: (f.creditoId as string) ?? null,
+    debitDate: f.debitDate ? (f.debitDate instanceof Date ? f.debitDate.toISOString() : String(f.debitDate)) : null,
     avisoRecepcion: f.avisoRecepcion === true,
+    avisoMotivo: (f.avisoMotivo as string) ?? null,
     revisadoAt: fecha(f.revisadoAt),
     createdAt: fecha(f.createdAt) ?? new Date(0),
   };
@@ -170,7 +185,7 @@ export interface RepoCobros {
     mpCollectorId: string; amount: number; payerEmail: string; startDate: string; endDate: string; createdById: string | null;
   }): Promise<FilaCobro | null>;
   actualizar(clinicId: string, id: string, c: Partial<Pick<FilaCobro,
-    "mpPreapprovalId" | "status" | "amount" | "initPoint" | "nextPaymentDate" | "cancelReason" | "lastSyncAt">>): Promise<void>;
+    "mpPreapprovalId" | "status" | "amount" | "initPoint" | "nextPaymentDate" | "cancelReason" | "lastSyncAt" | "reanudarEl" | "pausaMotivo">>): Promise<void>;
   /** Solo una fila `creating` cuyo alta en MP falló. */
   borrarCreando(clinicId: string, id: string): Promise<void>;
   intentoPorMp(clinicId: string, mpAuthorizedPaymentId: string): Promise<FilaIntento | null>;
@@ -178,7 +193,12 @@ export interface RepoCobros {
     clinicId: string; cobroId: string; mpAuthorizedPaymentId: string; mpPaymentId: string | null;
     status: string | null; paymentStatus: string | null; statusDetail: string | null; amount: number | null;
     paymentRowId?: string | null; avisoRecepcion?: boolean;
+    debitDate?: string | null; creditoId?: string | null; avisoMotivo?: string | null;
   }): Promise<FilaIntento>;
+  /** Los cobros de MP de una suscripción (para saber qué cargos ya hizo). */
+  intentosDeCobro(clinicId: string, cobroId: string): Promise<FilaIntento[]>;
+  /** El cron: las suscripciones que cobran o están pausadas, de TODAS las clínicas (después se trabaja con el clinicId de cada fila). */
+  listarParaCron(limite: number): Promise<FilaCobro[]>;
   porRevisar(clinicId: string): Promise<Array<FilaIntento & { paciente: string; invoiceNumber: string | null; invoiceId: string }>>;
   marcarRevisado(clinicId: string, intentoId: string, userId: string): Promise<boolean>;
 }
@@ -265,6 +285,10 @@ export function repoSql(db: Db): RepoCobros {
         await db.$executeRaw`UPDATE "mp_cobros_automaticos" SET "cancelReason" = ${c.cancelReason}, "updatedAt" = now() WHERE "clinicId" = ${clinicId} AND "id" = ${id}`;
       if (c.lastSyncAt !== undefined)
         await db.$executeRaw`UPDATE "mp_cobros_automaticos" SET "lastSyncAt" = ${c.lastSyncAt} WHERE "clinicId" = ${clinicId} AND "id" = ${id}`;
+      if (c.reanudarEl !== undefined)
+        await db.$executeRaw`UPDATE "mp_cobros_automaticos" SET "reanudarEl" = ${c.reanudarEl}::date, "updatedAt" = now() WHERE "clinicId" = ${clinicId} AND "id" = ${id}`;
+      if (c.pausaMotivo !== undefined)
+        await db.$executeRaw`UPDATE "mp_cobros_automaticos" SET "pausaMotivo" = ${c.pausaMotivo}, "updatedAt" = now() WHERE "clinicId" = ${clinicId} AND "id" = ${id}`;
     },
     async borrarCreando(clinicId, id) {
       if (!clinicId || !id) return;
@@ -282,9 +306,10 @@ export function repoSql(db: Db): RepoCobros {
       const f = await db.$queryRaw<Record<string, unknown>[]>`
         INSERT INTO "mp_cobros_automaticos_intentos"
           ("id","clinicId","cobroId","mpAuthorizedPaymentId","mpPaymentId","status","paymentStatus","statusDetail",
-           "amount","paymentRowId","avisoRecepcion","createdAt","updatedAt")
+           "amount","paymentRowId","creditoId","debitDate","avisoRecepcion","avisoMotivo","createdAt","updatedAt")
         VALUES (${id}, ${i.clinicId}, ${i.cobroId}, ${i.mpAuthorizedPaymentId}, ${i.mpPaymentId}, ${i.status},
-                ${i.paymentStatus}, ${i.statusDetail}, ${i.amount}, ${i.paymentRowId ?? null}, ${i.avisoRecepcion ?? false}, now(), now())
+                ${i.paymentStatus}, ${i.statusDetail}, ${i.amount}, ${i.paymentRowId ?? null}, ${i.creditoId ?? null},
+                ${i.debitDate ?? null}::timestamptz, ${i.avisoRecepcion ?? false}, ${i.avisoMotivo ?? null}, now(), now())
         ON CONFLICT ("mpAuthorizedPaymentId") DO UPDATE SET
           "mpPaymentId" = COALESCE(EXCLUDED."mpPaymentId", "mp_cobros_automaticos_intentos"."mpPaymentId"),
           "status" = EXCLUDED."status",
@@ -292,6 +317,9 @@ export function repoSql(db: Db): RepoCobros {
           "statusDetail" = EXCLUDED."statusDetail",
           "amount" = COALESCE(EXCLUDED."amount", "mp_cobros_automaticos_intentos"."amount"),
           "paymentRowId" = COALESCE("mp_cobros_automaticos_intentos"."paymentRowId", EXCLUDED."paymentRowId"),
+          "creditoId" = COALESCE("mp_cobros_automaticos_intentos"."creditoId", EXCLUDED."creditoId"),
+          "debitDate" = COALESCE(EXCLUDED."debitDate", "mp_cobros_automaticos_intentos"."debitDate"),
+          "avisoMotivo" = COALESCE(EXCLUDED."avisoMotivo", "mp_cobros_automaticos_intentos"."avisoMotivo"),
           -- El aviso se ENCIENDE con un rechazo y se APAGA solo si el cobro termina aprobado.
           "avisoRecepcion" = EXCLUDED."avisoRecepcion",
           "updatedAt" = now()
@@ -299,6 +327,22 @@ export function repoSql(db: Db): RepoCobros {
         RETURNING *`;
       if (!f?.[0]) throw new Error("el intento pertenece a otra clínica");
       return aIntento(f[0]);
+    },
+    async intentosDeCobro(clinicId, cobroId) {
+      if (!clinicId || !cobroId) return [];
+      const f = await db.$queryRaw<Record<string, unknown>[]>`
+        SELECT * FROM "mp_cobros_automaticos_intentos"
+         WHERE "clinicId" = ${clinicId} AND "cobroId" = ${cobroId}
+         ORDER BY "createdAt" ASC LIMIT 200`;
+      return (f ?? []).map(aIntento);
+    },
+    async listarParaCron(limite) {
+      const f = await db.$queryRaw<Record<string, unknown>[]>`
+        SELECT * FROM "mp_cobros_automaticos"
+         WHERE "status" IN ('authorized','paused')
+         ORDER BY "reanudarEl" ASC NULLS LAST, "updatedAt" ASC
+         LIMIT ${Math.max(1, Math.min(2000, Math.floor(limite)))}`;
+      return (f ?? []).map(aCobro);
     },
     async porRevisar(clinicId) {
       if (!clinicId) return [];

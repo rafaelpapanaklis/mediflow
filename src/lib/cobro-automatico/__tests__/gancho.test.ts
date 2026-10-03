@@ -28,7 +28,7 @@ M._load = function (req, parent, isMain) {
   return cargaOriginal.call(this, req, parent, isMain);
 };
 
-const { avisarCambioDeFactura } = require("../gancho") as typeof import("../gancho");
+const { avisarCambioDeFactura, avisarPagoDeFactura } = require("../gancho") as typeof import("../gancho");
 const { _olvidarTablas } = require("../db") as typeof import("../db");
 
 function base(existen: boolean | "lanza", filas: Record<string, unknown>[] = []) {
@@ -84,4 +84,18 @@ test("sin clínica o sin factura no pregunta nada (un clinicId vacío no filtrar
   const b = base(true);
   await avisarCambioDeFactura({ clinicId: "", invoiceId: "f1" }, b.db, reconciliar);
   assert.equal(b.sql.length, 0);
+});
+
+test("pago por el link de MP (webhook de factura): sin SQL no lee ni la factura; con SQL toma la clínica de la factura", async () => {
+  let lecturas = 0;
+  const sinSql = base(false);
+  const conFactura = (b: ReturnType<typeof base>) =>
+    ({ ...(b.db as object), invoice: { findUnique: async () => { lecturas++; return { clinicId: "c1" }; } } }) as never;
+  await avisarPagoDeFactura("f1", conFactura(sinSql));
+  assert.equal(lecturas, 0);
+  _olvidarTablas();
+  const conSql = base(true, []);
+  await avisarPagoDeFactura("f1", conFactura(conSql));
+  assert.equal(lecturas, 1);
+  assert.match(conSql.sql.at(-1) ?? "", /"clinicId" = \? AND "invoiceId" = \?/);
 });

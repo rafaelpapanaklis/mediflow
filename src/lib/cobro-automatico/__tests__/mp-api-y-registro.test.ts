@@ -128,6 +128,8 @@ test("transitorio LANZA (5xx, 429, 401/403); un 404 en consulta es null; un 400 
 
 function base(paid = 9000, status = "PARTIAL") {
   const b = new DobleBase();
+  // El libro de saldo a favor (F12): el doble crea el modelo con cualquier tabla nueva.
+  b.tablas.patientCredit = [];
   b.tablas.invoice.push({ id: "inv1", clinicId: "c1", total: 24000, paid, balance: 24000 - paid, status, invoiceNumber: "F-1", patientId: "p1" });
   return b;
 }
@@ -152,20 +154,63 @@ test("control: sin el candado, el cobro doble SÍ entraría dos veces (la prueba
   assert.equal(b.tablas.payment.length, 2);
 });
 
-test("registrar: saldarla la deja PAID; de otra clínica no toca nada; sobre una saldada se marca para devolver", async () => {
+test("registrar: saldarla la deja PAID; de otra clínica no toca nada", async () => {
   const b = base(21000);
-  assert.equal((await registrarCobroEnFactura(b.db(), cobro)).aplicado, true);
+  const r = await registrarCobroEnFactura(b.db(), cobro);
+  assert.equal(r.aplicado, true);
+  assert.equal(r.aFactura, 3000);
+  assert.equal(r.aFavor, 0);
   assert.equal(b.tablas.invoice[0].status, "PAID");
   assert.equal(b.tablas.invoice[0].balance, 0);
 
   const otra = base();
   assert.equal((await registrarCobroEnFactura(otra.db(), { ...cobro, clinicId: "c2" })).aplicado, false);
   assert.equal(otra.tablas.payment.length, 0);
+  assert.equal(otra.tablas.patientCredit.length, 0);
+});
 
-  const saldada = base(24000, "PAID");
-  const r = await registrarCobroEnFactura(saldada.db(), cobro);
+/* ── F12: lo que no cabe en la factura pasa a saldo a favor ─────────── */
+
+test("F12 · $2,000 sobre una factura YA PAGADA → $2,000 a favor del paciente, paid y Payments sin cambio; el reintento no duplica", async () => {
+  const b = base(24000, "PAID");
+  const r = await registrarCobroEnFactura(b.db(), { ...cobro, monto: 2000 });
   assert.equal(r.aplicado, true);
-  assert.match(r.anomalia ?? "", /ya saldada/);
-  assert.equal(saldada.tablas.invoice[0].paid, 24000, "la factura no cambia");
-  assert.match(saldada.tablas.payment[0].notes, /^⚠️/);
+  assert.equal(r.aFactura, 0);
+  assert.equal(r.aFavor, 2000);
+  assert.equal(b.tablas.invoice[0].paid, 24000, "paid no cambia");
+  assert.equal(b.tablas.payment.length, 0, "a la factura no entra nada");
+  assert.equal(b.tablas.patientCredit.length, 1);
+  assert.equal(b.tablas.patientCredit[0].amount, 2000);
+  assert.equal(b.tablas.patientCredit[0].patientId, "p1");
+  assert.equal(b.tablas.patientCredit[0].source, "cobro_automatico_mercadopago");
+  assert.match(r.anomalia ?? "", /^\$2000\.00 del cobro automático quedaron a favor del paciente: la factura ya estaba pagada/);
+  // MP avisa otra vez el mismo pago: no se crea otra fila.
+  const r2 = await registrarCobroEnFactura(b.db(), { ...cobro, monto: 2000 });
+  assert.equal(r2.aplicado, false);
+  assert.equal(b.tablas.patientCredit.length, 1);
+});
+
+test("F12 · sobre una factura CANCELADA → todo a favor; la factura no se toca", async () => {
+  const b = base(9000, "CANCELLED");
+  const r = await registrarCobroEnFactura(b.db(), cobro);
+  assert.equal(r.aFavor, 3000);
+  assert.equal(b.tablas.invoice[0].paid, 9000);
+  assert.equal(b.tablas.invoice[0].status, "CANCELLED");
+  assert.match(r.anomalia ?? "", /la factura está cancelada/);
+});
+
+test("F12 · excedente: faltan $1,000 y MP cobra $3,000 → $1,000 a la factura (PAID, paid = total) y $2,000 a favor", async () => {
+  const b = base(23000);
+  const r = await registrarCobroEnFactura(b.db(), cobro);
+  assert.equal(r.aFactura, 1000);
+  assert.equal(r.aFavor, 2000);
+  assert.equal(b.tablas.invoice[0].paid, 24000, "nunca paid > total");
+  assert.equal(b.tablas.invoice[0].status, "PAID");
+  assert.equal(b.tablas.payment.length, 1);
+  assert.equal(b.tablas.payment[0].amount, 1000);
+  assert.equal(b.tablas.patientCredit[0].amount, 2000);
+  // El mismo cobro otra vez: ni otro Payment ni otro saldo.
+  await registrarCobroEnFactura(b.db(), cobro);
+  assert.equal(b.tablas.payment.length, 1);
+  assert.equal(b.tablas.patientCredit.length, 1);
 });

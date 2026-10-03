@@ -14,6 +14,7 @@ import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vige
 import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
+import { CODIGO_YA_COBRADO, frenoCobroDoble } from "@/lib/cobro-automatico/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const denied = await assertPatientVisible(pre.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
     if (denied) return denied;
   }
-  const { amount: rawAmount, method, reference, notes, paidAt } = await req.json();
+  const { amount: rawAmount, method, reference, notes, paidAt, confirmarCobroAutomatico } = await req.json();
   // Un pago de Mercado Pago lo registra SOLO el webhook, con la referencia del
   // pago de MP (lib/factura-mp): tecleado a mano aquí, el webhook lo sumaría otra
   // vez al acreditarse. Mismo candado en mark-paid.
@@ -135,6 +136,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (validPaidAt && validPaidAt.getTime() > Date.now() + 60_000) {
     return NextResponse.json({ error: "La fecha de pago no puede ser futura" }, { status: 400 });
   }
+  // ws1-t6 (F1, cobro doble): si Mercado Pago YA cobró con tarjeta la mensualidad
+  // de este ciclo y el plan va al corriente, cobrar a mano sería cobrarla dos
+  // veces: no se registra sin confirmar que es un adelanto. Nunca lanza.
+  const frenoMp = await frenoCobroDoble({ clinicId, invoiceId: params.id, monto: amount, confirmado: confirmarCobroAutomatico === true });
+  if (frenoMp.bloquear) return NextResponse.json({ error: frenoMp.texto, code: CODIGO_YA_COBRADO }, { status: 409 });
   // Efectivo fuera del turno de caja: se calcula ANTES de la transacción (es una
   // lectura, no tiene por qué alargar el lock) y viaja a la nota del Payment.
   const cashWarning = await cashOutsideRegisterWarning(clinicId, method);

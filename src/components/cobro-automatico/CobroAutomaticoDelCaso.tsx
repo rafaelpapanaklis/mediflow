@@ -98,7 +98,9 @@ export function CobroAutomaticoDelCaso(props: {
           {t.titulo}
         </h4>
         {cobro ? (
-          <span className={`${orto.etiqueta} ${ETIQUETA[cobro.estado] ?? orto.etiquetaNeutra}`}>{t.estado[cobro.estado] ?? cobro.estado}</span>
+          <span className={`${orto.etiqueta} ${ETIQUETA[cobro.estado] ?? orto.etiquetaNeutra}`}>
+            {cobro.pausaMotivo === "ciclo" ? t.estadoPausadoCiclo : t.estado[cobro.estado] ?? cobro.estado}
+          </span>
         ) : null}
       </div>
 
@@ -112,6 +114,10 @@ export function CobroAutomaticoDelCaso(props: {
               <span className={orto.tonoTexto2}>{t.desde(fechaLarga(vivo.inicio, t.locale))}</span>
             ) : null}
           </div>
+
+          {vivo.pausaMotivo === "ciclo" && vivo.reanudarEl ? (
+            <p className={`text-[12.5px] ${orto.tonoTexto2}`} data-pausado-ciclo>{t.pausadoCiclo(fechaLarga(vivo.reanudarEl, t.locale))}</p>
+          ) : null}
 
           {vivo.link ? (
             <div className={`${orto.aviso} ${orto.avisoAlerta}`} style={{ display: "grid", gap: 8 }}>
@@ -149,7 +155,7 @@ export function CobroAutomaticoDelCaso(props: {
                   {t.pausar}
                 </Btn>
               ) : null}
-              {vivo.estado === "paused" ? (
+              {vivo.estado === "paused" && vivo.pausaMotivo !== "ciclo" ? (
                 <Btn variant="ghost" size="sm" disabled={ocupado} icon={<Play size={14} strokeWidth={1.75} aria-hidden />} onClick={() => accion({ accion: "reanudar" })}>
                   {t.reanudar}
                 </Btn>

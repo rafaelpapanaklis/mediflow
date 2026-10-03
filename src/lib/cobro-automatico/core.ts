@@ -215,6 +215,227 @@ export function casoCerrado(status: string | null | undefined): boolean {
   return status === "COMPLETED" || status === "DROPPED_OUT";
 }
 
+/* ── El ciclo: no cobrar dos veces lo que ya se pagó a mano (F1) ─────── */
+//
+// Mercado Pago cobra en las fechas del plan y NO deja mover la fecha del
+// siguiente cargo (el PUT solo cambia monto y estado). Si recepción cobra a mano
+// (caja, link, saldo a favor) la mensualidad que MP iba a cobrar, MP la cobraría
+// igual: el paciente pagaría dos veces ese mes. Decisión de Rafael (3-oct-2026):
+// PAUSAR la suscripción solo para ese cargo y reanudarla sola para el siguiente,
+// sin cambiar el monto.
+//
+// La cuenta es la de siempre: la cascada de `estadoDelPlan` reparte lo pagado de
+// la cuota más vieja a la más nueva. Un cargo de MP está «cubierto» cuando su
+// mensualidad (la del calendario con esa fecha) ya no debe nada.
+
+/** "YYYY-MM-DD" + n días, en calendario (sin zona). */
+export function sumarDias(dia: string, n: number): string {
+  const [a, m, d] = dia.split("-").map(Number);
+  const x = new Date(Date.UTC(a, m - 1, d) + n * 86400000);
+  return `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Días que MP puede seguir reintentando un cargo rechazado (doc: ventana de 10 días) + 1 de margen. */
+export const DIAS_DE_REINTENTO = 11;
+
+/**
+ * Lo que MP ya hizo con el cargo de una fecha, según sus cobros (authorized payments):
+ *   · "aprobado"   — cobró;
+ *   · "en_proceso" — está cobrando (esperando al banco);
+ *   · "reintenta"  — lo rechazó y lo volverá a intentar (`recycling`);
+ *   · "rechazado"  — lo rechazó y se rindió.
+ * Un cobro `scheduled` (programado, aún sin intentar) NO cuenta como hecho: MP
+ * todavía lo va a cobrar.
+ */
+export type HechoDeCargo = "aprobado" | "en_proceso" | "reintenta" | "rechazado";
+
+export function hechoDeCobro(c: { status: string | null; paymentStatus: string | null }): HechoDeCargo | null {
+  if (c.paymentStatus === "approved") return "aprobado";
+  if (c.paymentStatus === "rejected") return c.status === "recycling" ? "reintenta" : "rechazado";
+  if (c.paymentStatus === "in_process" || c.paymentStatus === "pending" || c.paymentStatus === "authorized") return "en_proceso";
+  return null;
+}
+
+export interface CargoHecho {
+  /** Fecha del cobro de MP ("YYYY-MM-DD" o ISO; se toma el día). */
+  fecha: string;
+  hecho: HechoDeCargo;
+}
+
+export interface EntradaCiclo {
+  condiciones: CondicionesPago | null;
+  total: number;
+  pagado: number;
+  /** "YYYY-MM-DD" en la zona de la clínica. */
+  hoy: string;
+  /** Primer cargo de la suscripción (`startDate`). null = desde el principio del plan. */
+  inicio: string | null;
+  /** Lo que MP ya hizo, cargo por cargo. */
+  hechos: CargoHecho[];
+}
+
+export interface DecisionCiclo {
+  /** Lo que la suscripción debería estar HOY. */
+  estado: "authorized" | "paused";
+  /** Cargos que MP cobraría de más (su mensualidad ya está pagada): se saltan. */
+  saltados: string[];
+  /** Hasta cuándo un reintento de MP cobraría una mensualidad ya pagada. */
+  reintentoHasta: string | null;
+  /** Día en que se reanuda sola (null = no se pausa). */
+  reanudarEl: string | null;
+  /** El siguiente cargo que MP SÍ debe hacer (el primero cuya mensualidad debe algo). */
+  proximoCargo: string | null;
+  /** El cargo de MP más reciente (≤ hoy) que ya se cobró, con el plan al corriente: el ciclo de hoy está pagado. */
+  cicloCobrado: string | null;
+}
+
+interface CargoDelPlan {
+  fecha: string;
+  numero: number;
+  importe: number;
+  falta: number;
+}
+
+function cargosDelPlan(e: Pick<EntradaCiclo, "condiciones" | "total" | "pagado" | "hoy" | "inicio">): {
+  cargos: CargoDelPlan[];
+  alCorriente: boolean;
+} {
+  const cuotas = calendarioDeCuotas(e.condiciones, e.total);
+  const estado = estadoDelPlan(cuotas, [{ importe: e.pagado }], e.hoy);
+  const cargos = estado.cuotas
+    .filter((q) => !q.esEnganche && q.vencimiento && (!e.inicio || (q.vencimiento as string) >= e.inicio))
+    .map((q) => ({ fecha: q.vencimiento as string, numero: q.numero, importe: q.importe, falta: q.falta }))
+    .sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+  return { cargos, alCorriente: aCentavos(estado.importeVencido) === 0 };
+}
+
+/** A qué cargo del plan pertenece un cobro de MP: el último con fecha ≤ la del cobro (los reintentos caen días después). */
+function cargoDeUnCobro(cargos: CargoDelPlan[], fecha: string): string | null {
+  const dia = fecha.slice(0, 10);
+  let suyo: string | null = null;
+  for (const c of cargos) if (c.fecha <= dia) suyo = c.fecha;
+  return suyo;
+}
+
+/**
+ * ¿Cómo debe estar la suscripción hoy para no cobrar dos veces?
+ *
+ *   · Los cargos que siguen (el de hoy cuenta si MP aún no lo hizo), en orden:
+ *     mientras su mensualidad ya esté pagada, MP no debe cobrarlos → se saltan.
+ *     Se reanuda el día siguiente al último saltado, a tiempo para el primero que
+ *     sí debe algo (que se cobra con el monto de siempre).
+ *   · Un cargo ya rechazado que MP sigue reintentando, cuya mensualidad se pagó
+ *     a mano después: un reintento la cobraría otra vez → pausa hasta que se
+ *     cierre la ventana de reintento, sin pasar del siguiente cargo debido.
+ *   · Un pago parcial no salta nada: la mensualidad sigue debiendo algo y MP la
+ *     cobra con su monto (lo de más se abona a la siguiente).
+ */
+export function decisionDeCiclo(e: EntradaCiclo): DecisionCiclo {
+  const { cargos, alCorriente } = cargosDelPlan(e);
+  const hechoPorCargo = new Map<string, HechoDeCargo>();
+  for (const h of e.hechos) {
+    const c = cargoDeUnCobro(cargos, h.fecha);
+    if (!c) continue;
+    const previo = hechoPorCargo.get(c);
+    // Aprobado gana a todo; un rechazo final no pisa un reintento posterior que entró.
+    if (previo === "aprobado") continue;
+    hechoPorCargo.set(c, h.hecho);
+  }
+  const falta = new Map(cargos.map((c) => [c.fecha, aCentavos(c.falta)]));
+
+  // Lo que MP todavía va a cobrar: de hoy en adelante y sin cobro suyo (un cargo
+  // que ya hizo, aunque fuera antes de su fecha, no se vuelve a «saltar»).
+  const pendientes = cargos.filter((c) => c.fecha >= e.hoy && !hechoPorCargo.has(c.fecha));
+  const saltados: string[] = [];
+  for (const c of pendientes) {
+    if ((falta.get(c.fecha) ?? 0) > 0) break;
+    saltados.push(c.fecha);
+  }
+  const proximoCargo = pendientes[saltados.length]?.fecha ?? null;
+
+  let reintentoHasta: string | null = null;
+  for (const c of cargos) {
+    if (c.fecha > e.hoy || hechoPorCargo.get(c.fecha) !== "reintenta" || (falta.get(c.fecha) ?? 0) > 0) continue;
+    const hasta = sumarDias(c.fecha, DIAS_DE_REINTENTO);
+    if (hasta > e.hoy && (!reintentoHasta || hasta > reintentoHasta)) reintentoHasta = hasta;
+  }
+
+  let reanudarEl: string | null = null;
+  if (saltados.length > 0) reanudarEl = sumarDias(saltados[saltados.length - 1], 1);
+  if (reintentoHasta && (!reanudarEl || reintentoHasta > reanudarEl)) reanudarEl = reintentoHasta;
+  // Nunca pausado el día de un cargo que sí se debe: ese día se reanuda.
+  if (reanudarEl && proximoCargo && reanudarEl > proximoCargo) reanudarEl = proximoCargo;
+
+  const pasados = cargos.filter((c) => c.fecha <= e.hoy);
+  const ultimo = pasados[pasados.length - 1];
+  const cicloCobrado =
+    ultimo && hechoPorCargo.get(ultimo.fecha) === "aprobado" && (falta.get(ultimo.fecha) ?? 0) === 0 && alCorriente ? ultimo.fecha : null;
+
+  return { estado: reanudarEl ? "paused" : "authorized", saltados, reintentoHasta, reanudarEl, proximoCargo, cicloCobrado };
+}
+
+/**
+ * Lo que se le dice a recepción ANTES de cobrar `monto` a mano en una factura
+ * con cobro automático vivo, y si hace falta confirmar.
+ *
+ *   · "liquida"    — con este cobro la factura queda pagada: se cancela.
+ *   · "ya_cobrado" — MP ya cobró la mensualidad de este ciclo y el plan va al
+ *                    corriente: lo de ahora sería un ADELANTO. No se deja sin
+ *                    confirmar (el caso inverso del cobro doble).
+ *   · "pausa"      — este cobro paga la mensualidad que MP iba a cobrar: esos
+ *                    cargos se pausan y se reanuda para `reanudaPara`.
+ *   · "reintento"  — MP está reintentando un cargo rechazado de una mensualidad
+ *                    que este cobro paga: se pausa hasta `reintentoHasta`.
+ *   · "sigue"      — este cobro no cubre la mensualidad del siguiente cargo: MP
+ *                    cobra igual ese día (lo de más pasa a la siguiente).
+ */
+export type TipoAvisoCobro = "liquida" | "ya_cobrado" | "pausa" | "reintento" | "sigue";
+
+export interface AvisoCobro {
+  tipo: TipoAvisoCobro;
+  requiereConfirmar: boolean;
+  /** Cargos que se pausarían con este cobro. */
+  saltados: string[];
+  /** El siguiente cargo que MP sí haría después del cobro. */
+  reanudaPara: string | null;
+  reintentoHasta: string | null;
+  /** El ciclo que MP ya cobró (solo en "ya_cobrado"). */
+  cicloCobrado: string | null;
+  /** Lo que MP cobra por cargo. */
+  montoCargo: number;
+}
+
+export function avisoDeCobroManual(e: Omit<EntradaCiclo, "pagado"> & {
+  pagado: number;
+  monto: number;
+  montoCargo: number;
+  /** Solo una suscripción que cobra (authorized) o pausada por el ciclo avisa. */
+  estado: EstadoCobro;
+  pausaManual: boolean;
+}): AvisoCobro | null {
+  if (!(e.monto > 0)) return null;
+  if (!(e.estado === "authorized" || (e.estado === "paused" && !e.pausaManual))) return null;
+  const base = { saltados: [] as string[], reanudaPara: null, reintentoHasta: null, cicloCobrado: null, montoCargo: e.montoCargo };
+  const despuesC = aCentavos(e.pagado) + aCentavos(e.monto);
+  if (despuesC >= aCentavos(e.total)) return { ...base, tipo: "liquida", requiereConfirmar: false };
+
+  const antes = decisionDeCiclo(e);
+  const despues = decisionDeCiclo({ ...e, pagado: aPesos(despuesC) });
+  const nuevosSaltados = despues.saltados.length > antes.saltados.length;
+  const comun = {
+    saltados: despues.saltados,
+    reanudaPara: despues.proximoCargo,
+    reintentoHasta: despues.reintentoHasta,
+    cicloCobrado: antes.cicloCobrado,
+    montoCargo: e.montoCargo,
+  };
+  if (antes.cicloCobrado) return { ...comun, tipo: "ya_cobrado", requiereConfirmar: true };
+  if (nuevosSaltados) return { ...comun, tipo: "pausa", requiereConfirmar: false };
+  if (despues.reintentoHasta && despues.reintentoHasta !== antes.reintentoHasta) return { ...comun, tipo: "reintento", requiereConfirmar: false };
+  if (despues.proximoCargo) return { ...comun, tipo: "sigue", requiereConfirmar: false };
+  return null;
+}
+
 /* ── Un cobro de MP (authorized payment) ─────────────────────────────── */
 
 /** Lo que nos importa de `GET /authorized_payments/{id}` (InvoiceResponse del SDK). */

@@ -6,6 +6,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  avisoDeCobroManual,
+  decisionDeCiclo,
+  hechoDeCobro,
+  sumarDias,
+  type CargoHecho,
   ajusteNecesario,
   cobroDeRef,
   correoValido,
@@ -132,4 +137,103 @@ test("ref, link y correo", () => {
   assert.equal(linkSeguro(null), null);
   assert.equal(correoValido("  Ana@Correo.MX "), "ana@correo.mx");
   assert.equal(correoValido("ana@"), null);
+});
+
+/* ═══ F1 — el cobro doble (auditoría de dinero, 3-oct-2026) ═══════════════
+ * Plan de 12 × $2,000 sin enganche, cargo de Mercado Pago los días 5,
+ * del 5-oct-2026 al 5-sep-2027. */
+
+const DOCE: CondicionesPago = { modo: "plazos", metodo: "credit", enganche: 0, numPagos: 12, frecuencia: "MONTHLY", primerPago: "2026-10-05", difiereConSuBanco: false };
+const ciclo = (pagado: number, hoy: string, hechos: CargoHecho[] = []) =>
+  decisionDeCiclo({ condiciones: DOCE, total: 24000, pagado, hoy, inicio: "2026-10-05", hechos });
+const aviso = (pagado: number, monto: number, hoy: string, hechos: CargoHecho[] = []) =>
+  avisoDeCobroManual({ condiciones: DOCE, total: 24000, pagado, monto, hoy, inicio: "2026-10-05", hechos, montoCargo: 2000, estado: "authorized", pausaManual: false });
+
+test("F1 · el 3-oct se cobran $2,000 en caja → se pausa el cargo del 5-oct y vuelve el 6-oct para el del 5-nov", () => {
+  assert.deepEqual(ciclo(0, "2026-10-03"), { estado: "authorized", saltados: [], reintentoHasta: null, reanudarEl: null, proximoCargo: "2026-10-05", cicloCobrado: null });
+  assert.deepEqual(ciclo(2000, "2026-10-03"), { estado: "paused", saltados: ["2026-10-05"], reintentoHasta: null, reanudarEl: "2026-10-06", proximoCargo: "2026-11-05", cicloCobrado: null });
+  // El 5-oct (MP no cobró: estaba pausada) sigue pausada; el 6-oct ya no hay nada que saltar.
+  assert.equal(ciclo(2000, "2026-10-05").estado, "paused");
+  assert.deepEqual(ciclo(2000, "2026-10-06"), { estado: "authorized", saltados: [], reintentoHasta: null, reanudarEl: null, proximoCargo: "2026-11-05", cicloCobrado: null });
+  const a = aviso(0, 2000, "2026-10-03");
+  assert.equal(a?.tipo, "pausa");
+  assert.deepEqual(a?.saltados, ["2026-10-05"]);
+  assert.equal(a?.reanudaPara, "2026-11-05");
+  assert.equal(a?.requiereConfirmar, false);
+});
+
+test("F1 · abono parcial de $500 el 3-oct → NO se pausa: MP cobra sus $2,000 el 5-oct (lo de más va a noviembre)", () => {
+  assert.equal(ciclo(500, "2026-10-03").estado, "authorized");
+  const a = aviso(0, 500, "2026-10-03");
+  assert.equal(a?.tipo, "sigue");
+  assert.equal(a?.reanudaPara, "2026-10-05");
+  assert.equal(a?.montoCargo, 2000, "el monto del cargo no cambia");
+});
+
+test("F1 · adelanto de 3 mensualidades ($6,000) el 3-oct → se saltan oct, nov y dic; vuelve el 6-dic para el 5-ene", () => {
+  const d = ciclo(6000, "2026-10-03");
+  assert.deepEqual(d.saltados, ["2026-10-05", "2026-11-05", "2026-12-05"]);
+  assert.equal(d.reanudarEl, "2026-12-06");
+  assert.equal(d.proximoCargo, "2027-01-05");
+  assert.equal(aviso(0, 6000, "2026-10-03")?.tipo, "pausa");
+});
+
+test("F1 · liquidar todo ($24,000) → aviso «liquida» (el cobro automático se cancela)", () => {
+  assert.deepEqual(aviso(0, 24000, "2026-10-03")?.tipo, "liquida");
+  assert.deepEqual(aviso(4000, 20000, "2026-11-20", [{ fecha: "2026-10-05", hecho: "aprobado" }])?.tipo, "liquida");
+});
+
+test("F1 · caso inverso: MP cobró el 5-oct; el 6-oct recepción intenta cobrar $2,000 → hay que confirmar (sería un adelanto)", () => {
+  const hechos: CargoHecho[] = [{ fecha: "2026-10-05T10:00:00.000-06:00", hecho: "aprobado" }];
+  assert.equal(ciclo(2000, "2026-10-06", hechos).cicloCobrado, "2026-10-05");
+  const a = aviso(2000, 2000, "2026-10-06", hechos);
+  assert.equal(a?.tipo, "ya_cobrado");
+  assert.equal(a?.requiereConfirmar, true);
+  assert.deepEqual(a?.saltados, ["2026-11-05"], "si se confirma, se salta el de noviembre (ya pagado)");
+  assert.equal(a?.reanudaPara, "2026-12-05");
+  // Sin pagar nada de más, un cobro manual el 6-oct NO pausa nada: MP ya cobró octubre y noviembre aún debe.
+  assert.equal(ciclo(2000, "2026-10-06", hechos).estado, "authorized");
+});
+
+test("F1 · el mismo día del cargo, si MP ya cobró, ese cargo no se vuelve a «saltar»", () => {
+  const hechos: CargoHecho[] = [{ fecha: "2026-10-05", hecho: "aprobado" }];
+  // Pagó en caja octubre a las 12:00 y MP ya había cobrado a las 10:00: lo de caja paga noviembre.
+  const d = ciclo(4000, "2026-10-05", hechos);
+  assert.deepEqual(d.saltados, ["2026-11-05"]);
+  assert.equal(d.reanudarEl, "2026-11-06");
+});
+
+test("F1 · si el paciente va atrasado, lo cobrado en caja paga lo vencido y el cargo del día 5 sigue", () => {
+  // Plan que empezó el 5-sep; septiembre sin pagar; el 3-oct paga $2,000 → cubre septiembre.
+  const SEP = { ...DOCE, primerPago: "2026-09-05" };
+  const d = decisionDeCiclo({ condiciones: SEP, total: 24000, pagado: 2000, hoy: "2026-10-03", inicio: "2026-10-05", hechos: [] });
+  assert.equal(d.estado, "authorized");
+  assert.equal(d.proximoCargo, "2026-10-05");
+  // Y el aviso no pide confirmar (no es un cobro doble).
+  const a = avisoDeCobroManual({ condiciones: SEP, total: 24000, pagado: 0, monto: 2000, hoy: "2026-10-03", inicio: "2026-10-05", hechos: [], montoCargo: 2000, estado: "authorized", pausaManual: false });
+  assert.equal(a?.tipo, "sigue");
+  assert.equal(a?.requiereConfirmar, false);
+});
+
+test("F1 · MP rechazó el 5-oct y lo reintenta; el 7-oct se cobra en caja → pausa hasta que cierre la ventana (16-oct)", () => {
+  const hechos: CargoHecho[] = [{ fecha: "2026-10-05", hecho: "reintenta" }];
+  const d = ciclo(2000, "2026-10-07", hechos);
+  assert.equal(d.reintentoHasta, "2026-10-16");
+  assert.equal(d.reanudarEl, "2026-10-16");
+  assert.equal(d.estado, "paused");
+  assert.equal(aviso(0, 2000, "2026-10-07", hechos)?.tipo, "reintento");
+  // El 16-oct ya no: se reanuda para el 5-nov.
+  assert.equal(ciclo(2000, "2026-10-16", hechos).estado, "authorized");
+  // Un rechazo final (MP ya no reintenta) no pausa nada.
+  assert.equal(ciclo(2000, "2026-10-07", [{ fecha: "2026-10-05", hecho: "rechazado" }]).estado, "authorized");
+});
+
+test("F1 · una pausa manual o una suscripción pendiente no avisan; los hechos de MP se leen bien", () => {
+  assert.equal(avisoDeCobroManual({ condiciones: DOCE, total: 24000, pagado: 0, monto: 2000, hoy: "2026-10-03", inicio: "2026-10-05", hechos: [], montoCargo: 2000, estado: "paused", pausaManual: true }), null);
+  assert.equal(avisoDeCobroManual({ condiciones: DOCE, total: 24000, pagado: 0, monto: 2000, hoy: "2026-10-03", inicio: "2026-10-05", hechos: [], montoCargo: 2000, estado: "pending", pausaManual: false }), null);
+  assert.equal(hechoDeCobro({ status: "scheduled", paymentStatus: null }), null, "programado no es hecho: MP aún lo cobrará");
+  assert.equal(hechoDeCobro({ status: "processed", paymentStatus: "approved" }), "aprobado");
+  assert.equal(hechoDeCobro({ status: "recycling", paymentStatus: "rejected" }), "reintenta");
+  assert.equal(hechoDeCobro({ status: "processed", paymentStatus: "rejected" }), "rechazado");
+  assert.equal(sumarDias("2026-12-31", 1), "2027-01-01");
 });

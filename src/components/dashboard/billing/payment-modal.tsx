@@ -28,6 +28,8 @@ import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
 import { useSaldoOrto, registrarCobroConAdelanto, SaldoOrtoEnCobro } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
 import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+// ws1-t6 (F1): el aviso del cobro automático con tarjeta, antes de cobrar.
+import { AvisoCobroAutomaticoEnCobro, useAvisoCobroAutomatico } from "@/components/cobro-automatico/aviso-en-cobro";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 /**
@@ -99,6 +101,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   const freno = useFrenoCajaCerrada(open, method === "cash");
   const esMercadoPago = method === "mercadopago";
   const orto = useSaldoOrto(invoice?.id ?? null, open);
+  const cobroAuto = useAvisoCobroAutomatico(invoice?.id ?? null, Number(amount) || 0, open && method !== "mercadopago");
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
   // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
   // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
@@ -128,6 +131,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
 
   async function submit(sinAviso = false) {
     if (isInvalid || saving || !invoice) return;
+    // MP ya cobró este ciclo: sin confirmar que es un adelanto, no se cobra.
+    if (cobroAuto.bloquea) return;
     if (!sinAviso) {
       setSaving(true);
       const parar = await freno.frenar();
@@ -154,6 +159,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
           paidAt: paidAtInstant(paidAt)?.toISOString(),
           reference: reference.trim() || undefined,
           notes: notes.trim() || undefined,
+          confirmarCobroAutomatico: cobroAuto.confirmado || undefined,
         }),
       });
       if (!res.ok) {
@@ -235,6 +241,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
               bloqueado={saving}
               alAplicar={(r) => { orto.recargar(); alUsarSaldo?.(r); }}
             />
+            {/* ws1-t6 (F1): qué pasa con el cargo de Mercado Pago si se cobra esto (fuera del cobro automático, nada). */}
+            <AvisoCobroAutomaticoEnCobro estado={cobroAuto} />
           </div>
           )}
 
@@ -316,7 +324,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>
           {/* Con Mercado Pago no se registra nada aquí: el webhook lo registra al acreditarse. */}
           {!esMercadoPago && (
-          <ButtonNew variant="primary" onClick={() => submit()} disabled={isInvalid || saving}>
+          <ButtonNew variant="primary" onClick={() => submit()} disabled={isInvalid || saving || cobroAuto.bloquea}>
             {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + fmtMXNdec(amountNum) : "" })}
           </ButtonNew>
           )}
