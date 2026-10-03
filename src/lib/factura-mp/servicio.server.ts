@@ -28,6 +28,7 @@ import { aCentavos, redondear2 } from "@/lib/anticipos/core";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import { avisarCambioDeFactura } from "@/lib/cobro-automatico/gancho";
 import {
   ESTADOS_DE_REVERSO,
   METODO_MERCADO_PAGO,
@@ -347,6 +348,9 @@ export async function cerrarLinksDeFactura(
   const d = deps(over);
   const { clinicId, invoiceId } = args;
   if (!clinicId || !invoiceId) return 0;
+  // ws1-t6: el mismo cambio de saldo le toca al cobro automático con tarjeta (si
+  // la factura tiene uno vivo): ajusta el monto o lo cancela. Nunca lanza.
+  await avisarCambioDeFactura({ clinicId, invoiceId }, d.db);
   try {
     // El MISMO candado que `obtenerLinkDeFactura`: si justo ahora se está creando
     // un link con el saldo de antes del cobro, esto espera a que termine y lo

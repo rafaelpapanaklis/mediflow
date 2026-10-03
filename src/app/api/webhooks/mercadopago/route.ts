@@ -6,6 +6,7 @@ import { aplicarPagoDeAnticipo } from "@/lib/anticipos/servicio.server";
 import { aplicarPagoDeFactura } from "@/lib/factura-mp/servicio.server";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { verificarFirmaMp } from "@/lib/mercadopago-firma";
+import { esAvisoDeSuscripcion, procesarAvisoDeSuscripcion } from "@/lib/cobro-automatico/servicio.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +78,25 @@ export async function POST(req: NextRequest) {
     texto(url.searchParams.get("topic")) ??
     texto((body as { type?: unknown }).type) ??
     texto((body as { topic?: unknown }).topic);
+  // ── Cobro automático con tarjeta (ws1-t6): suscripciones (`/preapproval`). No
+  // llevan `?ref=` (MP no admite notification_url por suscripción: llegan por la
+  // URL de «Tus integraciones»). El id que se procesa es el FIRMADO; el
+  // `user_id` del cuerpo solo dice con el token de qué clínica preguntarle a MP.
+  if (esAvisoDeSuscripcion(tipo)) {
+    try {
+      const mpUserId = (body as { user_id?: unknown }).user_id;
+      await procesarAvisoDeSuscripcion({
+        tipo,
+        dataId: firma.paymentId,
+        mpUserId: typeof mpUserId === "string" || typeof mpUserId === "number" ? String(mpUserId) : null,
+      });
+    } catch (err) {
+      console.error("MercadoPago webhook (suscripción) error (transitorio, MP reintentará):", err);
+      return NextResponse.json({ error: "transient failure" }, { status: 500 });
+    }
+    return NextResponse.json({ received: true });
+  }
+
   if (tipo && tipo !== "payment") {
     return NextResponse.json({ received: true });
   }

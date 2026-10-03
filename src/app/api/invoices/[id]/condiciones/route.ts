@@ -22,6 +22,7 @@ import { logMutation } from "@/lib/audit";
 import { normalizarCondiciones } from "@/lib/quotes/condiciones-pago";
 import { guardarCondicionesDeFactura, leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { revisarCambioDePlan } from "@/lib/invoices/cambio-de-plan";
+import { avisarCambioDeFactura } from "@/lib/cobro-automatico/gancho";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 
 export const dynamic = "force-dynamic";
@@ -110,5 +111,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     after: { condicionesPago: guardado.condiciones },
   });
 
+  // ws1-t6: con otro plan cambian la mensualidad y las fechas del cobro automático (si lo hay). Nunca lanza.
+  await avisarCambioDeFactura({ clinicId: ctx.clinicId, invoiceId: params.id });
   return NextResponse.json({ condiciones: guardado.condiciones });
 }

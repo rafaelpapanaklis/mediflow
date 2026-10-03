@@ -19,8 +19,8 @@
 // (abrir el plan) reusan el editor de facturas y el modal de cobro de
 // SIEMPRE (`InvoiceEditorModal` y, para cobrar, la ventana completa de la
 // factura — ws1-t4; antes la de cobro suelta, `PaymentModal`) — nunca se toca
-// `src/app/api/invoices/**`. F6 (CFDI de mensualidades) y F13 (cobro
-// automático con tarjeta) quedan pendientes de Rafael — ver el hueco abajo.
+// `src/app/api/invoices/**`. F6 (CFDI de mensualidades) queda pendiente de Rafael; F13 (cobro
+// automático con tarjeta) es `CobroAutomaticoDelCaso` (ws1-t6), opcional.
 
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Banknote, CalendarClock, Download, Percent, Plus, Printer, Settings2, Wallet } from "lucide-react";
@@ -39,6 +39,7 @@ import { DrawerConfigCobro } from "../drawers/DrawerConfigCobro";
 import { DrawerElegirDescuento } from "../drawers/DrawerElegirDescuento";
 import { DrawerLigarFactura } from "../drawers/DrawerLigarFactura";
 import { DrawerPromesaDePago } from "../drawers/DrawerPromesaDePago";
+import { CobroAutomaticoDelCaso } from "@/components/cobro-automatico/CobroAutomaticoDelCaso";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 import { resolverPromesaDePago } from "@/app/actions/orthodontics/cobro/resolverPromesaDePago";
 import { abrirPlanDePago } from "@/app/actions/orthodontics/cobro/abrirPlanDePago";
@@ -364,6 +365,11 @@ export function SectionFinance(props: SectionFinanceProps) {
                   Descargar convenio
                 </Btn>
               </div>
+            ) : null}
+
+            {/* ws1-t6 (F13): cobro automático con tarjeta (Mercado Pago). Se calla solo si la clínica no lo usa. */}
+            {aPlazos && panel.invoiceId ? (
+              <CobroAutomaticoDelCaso invoiceId={panel.invoiceId} treatmentPlanId={props.treatmentPlanId} puedeCobrar={panel.puedeCobrar} />
             ) : null}
 
             {panel.recargoSugerido > 0 ? (

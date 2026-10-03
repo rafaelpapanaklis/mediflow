@@ -19,6 +19,7 @@ import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
 import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
+import { AvisoCobrosAutomaticos } from "@/components/cobro-automatico/AvisoCobrosAutomaticos";
 import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
 
 interface BillingProps {
@@ -463,6 +464,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
           sola si no hay ninguna. */}
       <div style={{ padding: rediseno ? undefined : "clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0", display: "flex", flexDirection: "column", gap: 12 }}>
         <AvisoAnticiposPorRevisar />
+        {/* ws1-t6 — cobros automáticos con tarjeta rechazados por Mercado Pago. Se calla sola. */}
+        <AvisoCobrosAutomaticos />
         <ListaMensualidades />
       </div>
       {rediseno ? (

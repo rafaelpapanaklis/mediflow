@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { updateTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { aplicarEfectosDeEstado } from "@/lib/orthodontics/efectos-estado-caso";
+import { avisarCambioDeCaso } from "@/lib/cobro-automatico/gancho";
 import { isMissingColumnError } from "@/lib/orthodontics/alta-caso-tolerance";
 import { auditOrtho, getOrthoPlanActionContext } from "./_helpers";
 import { validarPersonasDelCaso } from "@/lib/orthodontics/validar-personas-del-caso-db";
@@ -164,6 +165,8 @@ export async function updateTreatmentPlan(
       } catch (e) {
         console.error("[ortho] updateTreatmentPlan: efectos del estado no aplicados:", e);
       }
+      // ws1-t6: caso terminado o dado de baja → el cobro automático con tarjeta deja de cobrar. Nunca lanza.
+      await avisarCambioDeCaso({ clinicId: ctx.clinicId, invoiceId: (updated as { invoiceId?: string | null }).invoiceId });
     }
 
     const action =

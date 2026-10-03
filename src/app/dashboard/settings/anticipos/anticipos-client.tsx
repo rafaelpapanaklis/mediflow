@@ -26,6 +26,7 @@ import {
 import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import { SeccionCobroAutomatico } from "@/components/cobro-automatico/SeccionCobroAutomatico";
 import type { AnticipoReciente, PantallaAnticipos } from "@/lib/anticipos/pantalla.server";
 import {
   ANTICIPO_MINIMO_MXN,
@@ -412,6 +413,9 @@ export function AnticiposClient({
             />
           </Seccion>
         )}
+
+        {/* ── 2b. Cobro automático con tarjeta (ws1-t6): apagado de fábrica, solo con cuenta. ── */}
+        <SeccionCobroAutomatico cuentaConectada={puedeCobrar} />
 
         {/* ── 3. El anticipo ── */}
         <Seccion
