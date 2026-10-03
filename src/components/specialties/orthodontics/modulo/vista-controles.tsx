@@ -37,7 +37,8 @@ import {
 } from "@/lib/orthodontics/controles-modulo";
 import { AgendarControlBoton } from "./agendar-control";
 import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/BotonHojaControl";
-import { horaEnZona } from "./fechas";
+import { fechaEnZona, horaEnZona } from "./fechas";
+import { textoSinControlEnControles } from "@/lib/orthodontics/cuenta-de-alertas";
 import { Pantalla, Tarjeta, Vacio, type Tono } from "./piezas";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import s from "./modulo.module.css";
@@ -82,6 +83,8 @@ export function VistaControles({
   puedeAgendar: boolean;
 }) {
   const { semana, sinControl, hoy } = data;
+  // ws1-t8 (F16): Alertas no lista a quien vino hoy ni lo pospuesto; aquí se dice para que las cifras cuadren.
+  const notaSinControl = textoSinControlEnControles(sinControl.length, data.sinControlFuera);
   const deHoy = semana.hoy.filter((c) => c.status !== "CANCELLED").length;
 
   const resumen: { id: string; valor: number; etiqueta: string; icono: LucideIcon; tono: Tono }[] = [
@@ -243,6 +246,9 @@ export function VistaControles({
                   <div className={c.urgente || c.faltoAlUltimo ? `${s.detalle} ${s.detallePeligro}` : s.detalle}>
                     {fraseSinControl(c)}
                   </div>
+                  {c.pospuestoHasta ? (
+                    <div className={s.detalle}>Pospuesto en Alertas hasta el {fechaEnZona(c.pospuestoHasta, zonaHoraria)}</div>
+                  ) : null}
                   {c.treatingDoctorName && <div className={s.detalle}>{c.treatingDoctorName}</div>}
                 </div>
                 {puedeAgendar && (
@@ -254,6 +260,7 @@ export function VistaControles({
             ))}
           </ul>
         )}
+        {notaSinControl ? <p className={`${s.nota} ${s.notaDeSeccion}`}>{notaSinControl}</p> : null}
       </Tarjeta>
     </Pantalla>
   );

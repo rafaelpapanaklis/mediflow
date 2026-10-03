@@ -51,6 +51,8 @@ import { cargarAlertasDeOrtodoncia } from "@/app/actions/orthodontics/modulo/car
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useRouter } from "next/navigation";
 import { DIAS_DE_POSPOSICION } from "@/lib/orthodontics/alertas-pospuestas";
+import { avisosEnTotal, pacientesConAlerta, textoDeCuentaDeAlertas, textoSinControlEnAlertas } from "@/lib/orthodontics/cuenta-de-alertas";
+import { RUTA_COMPLETAR_EN_BLOQUE } from "@/lib/orthodontics/casos-incompletos-ruta";
 import { fechaEnZona } from "./fechas";
 import { Pantalla, Tarjeta, type Tono } from "./piezas";
 import s from "./modulo.module.css";
@@ -97,15 +99,20 @@ export function VistaAlertas({
   const fotos: FotosPorRevisarEntry[] = alerts.patientPhotos ?? [];
   const reevaluaciones: ReevaluacionRadiograficaEntry[] = alerts.reevaluacionRadiografica ?? [];
   const incompletos = alerts.incompletos ?? [];
-  const totalAlerts =
-    fotos.length +
-    incompletos.length +
-    reevaluaciones.length +
-    alerts.overduePayments.length +
-    alerts.missingNextControl.length +
-    alerts.noShows.length +
-    alerts.finishingSoon.length +
-    alerts.pastDue.length;
+  // ws1-t8 (F16 de BEVADENT): el subtítulo cuenta PACIENTES distintos, no la suma de avisos («77 casos» con 45 activos).
+  const listas = [
+    fotos,
+    incompletos,
+    reevaluaciones,
+    alerts.overduePayments,
+    alerts.missingNextControl,
+    alerts.noShows,
+    alerts.finishingSoon,
+    alerts.pastDue,
+  ];
+  const totalAlerts = avisosEnTotal(listas);
+  const pacientesQueRevisar = pacientesConAlerta(listas);
+  const notaSinControl = textoSinControlEnAlertas(alerts.missingNextControl.length, alerts.sinControlFuera);
   const pospuestas = alerts.pospuestas ?? 0;
 
   const resumen: { id: string; etiqueta: string; cuenta: number; icono: LucideIcon; tono: Tono }[] = [
@@ -124,9 +131,7 @@ export function VistaAlertas({
     <Pantalla
       titulo="Alertas"
       sub={
-        (totalAlerts === 0
-          ? "Sin alertas pendientes."
-          : `${totalAlerts} caso${totalAlerts === 1 ? "" : "s"} que revisar.`) +
+        textoDeCuentaDeAlertas(pacientesQueRevisar, totalAlerts) +
         (pospuestas > 0
           ? ` ${pospuestas} pospuesta${pospuestas === 1 ? "" : "s"}: vuelve${pospuestas === 1 ? "" : "n"} sola${pospuestas === 1 ? "" : "s"} a los ${DIAS_DE_POSPOSICION} días.`
           : "")
@@ -182,6 +187,7 @@ export function VistaAlertas({
         title="Sin próximo control"
         sub="Casos activos que no tienen ningún control agendado."
         empty="Todos los casos activos tienen su próximo control agendado."
+        nota={notaSinControl}
       >
         {alerts.missingNextControl.map((p: MissingNextControlEntry) => (
           <PatientRow
@@ -265,6 +271,15 @@ export function VistaAlertas({
         title="Casos con diagnóstico o plan incompleto"
         sub="Sobre todo los migrados de Dentalink, que entran casi vacíos. Cada uno lleva al paso que falta."
         empty="Todos los casos activos tienen su diagnóstico y su plan completos."
+        // M8: varios casos a la vez, en una tabla.
+        arriba={
+          puedeEditarCasos && incompletos.length > 1 ? (
+            <Link href={RUTA_COMPLETAR_EN_BLOQUE} className={`${s.boton} ${s.botonPeq}`}>
+              <ClipboardCheck size={14} strokeWidth={1.9} aria-hidden />
+              Completar varios a la vez
+            </Link>
+          ) : null
+        }
       >
         {incompletos.map((c) => (
           <FilaDeCasoIncompleto key={c.planId} caso={c} puedeEditar={puedeEditarCasos} />
@@ -325,6 +340,8 @@ function AlertSection({
   title,
   sub,
   empty,
+  nota,
+  arriba,
   children,
 }: {
   id: string;
@@ -333,6 +350,10 @@ function AlertSection({
   title: string;
   sub: string;
   empty: string;
+  /** Una aclaración que se lee aunque la sección esté vacía (F16: por qué Controles da otra cifra). */
+  nota?: string | null;
+  /** Una acción encima de la lista (M8: «Completar varios a la vez»). */
+  arriba?: ReactNode;
   children: ReactNode[];
 }) {
   const hasItems = children.length > 0;
@@ -354,6 +375,7 @@ function AlertSection({
         ) : undefined
       }
     >
+      {hasItems && arriba ? <div className={s.accionDeSeccion}>{arriba}</div> : null}
       {hasItems ? (
         <ul className={s.tarjetaLista}>{children}</ul>
       ) : (
@@ -362,6 +384,7 @@ function AlertSection({
           {empty}
         </p>
       )}
+      {nota ? <p className={`${s.nota} ${s.notaDeSeccion}`}>{nota}</p> : null}
     </Tarjeta>
   );
 }

@@ -39,6 +39,7 @@ import { EnviarIndicacionesButton } from "@/components/specialties/orthodontics/
 import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/BotonHojaControl";
 import { horaEnZona } from "./fechas";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
+import { RUTA_COMPLETAR_EN_BLOQUE } from "@/lib/orthodontics/casos-incompletos-ruta";
 import { FilaDeCasoIncompleto } from "./casos-incompletos";
 import { Pantalla, Tarjeta, Vacio } from "./piezas";
 import s from "./modulo.module.css";
@@ -225,7 +226,13 @@ export function VistaTablero({
             titulo="Casos con diagnóstico o plan incompleto"
             sub="Sobre todo los migrados de Dentalink. Cada uno lleva al paso que falta."
             accion={
-              data.incompletos.length > 5 ? (
+              // ws1-t8 (M8): con permiso, a la tabla para completar varios a la vez; sin él, a la lista de Alertas.
+              puedeEditarCasos && data.incompletos.length > 1 ? (
+                <Link href={RUTA_COMPLETAR_EN_BLOQUE} className={s.enlace}>
+                  Completar varios a la vez
+                  <ChevronRight size={14} aria-hidden />
+                </Link>
+              ) : data.incompletos.length > 5 ? (
                 <Link href="/dashboard/orthodontics/alertas#casos-incompletos" className={s.enlace}>
                   Ver los {data.incompletos.length}
                   <ChevronRight size={14} aria-hidden />

@@ -37,6 +37,7 @@ import { cargarRadiografiasTipificadas } from "./plan-radiografias-db";
 import { cargarCasosIncompletos, type CasoIncompleto } from "./casos-incompletos-db";
 import { reevaluacionesPendientes, textoDeReevaluacion, type ReevaluacionPendiente } from "./plan-detalle";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
+import type { SinControlFuera } from "./cuenta-de-alertas";
 
 export interface NoShowEntry {
   patientId: string;
@@ -90,6 +91,11 @@ export interface OrthoAlertsData {
   pospuestas?: number;
   /** H14: las pospuestas vigentes, para verlas y deshacerlas. */
   pospuestasLista?: PospuestaVisible[];
+  /**
+   * ws1-t8 (F16 de BEVADENT): los de «Sin próximo control» que esta pantalla NO lista y Controles / agenda sí —
+   * vinieron hoy o están pospuestos—, para decir en pantalla por qué las dos cifras no coinciden.
+   */
+  sinControlFuera?: SinControlFuera;
 }
 
 const NO_SHOW_WINDOW_DAYS = 30;
@@ -153,7 +159,9 @@ export async function loadOrthoAlerts(
   // «Vino hoy · falta agendar el siguiente»): la recepción lo agenda al despedirlo.
   const hoy = diaEnZona(ahora, zonaHoraria);
   const vinoHoyElPaciente = (patientId: string) => vinoHoy(historial, patientId, hoy, zonaHoraria);
-  const sinControlCrudo = listMissingNextControl(cases, historial.conControlFuturo).filter((c) => !vinoHoyElPaciente(c.patientId));
+  // Misma lista que Controles / agenda (mismo criterio); aquí no salen quien vino hoy ni lo pospuesto (F16: se dice).
+  const sinControlTodos = listMissingNextControl(cases, historial.conControlFuturo);
+  const sinControlCrudo = sinControlTodos.filter((c) => !vinoHoyElPaciente(c.patientId));
 
   const sinControl = quitarPospuestas(sinControlCrudo, "sin-proximo-control", activas);
   const faltas = quitarPospuestas(noShows, "no-asistio", activas);
@@ -179,6 +187,7 @@ export async function loadOrthoAlerts(
     reevaluacionRadiografica: reevaluacion.quedan,
     pospuestas: sinControl.pospuestas + faltas.pospuestas + porTerminar.pospuestas + pasados.pospuestas + reevaluacion.pospuestas,
     pospuestasLista: listaDePospuestas(posposiciones, ahora, nombres),
+    sinControlFuera: { vinieronHoy: sinControlTodos.length - sinControlCrudo.length, pospuestos: sinControl.pospuestas },
   };
 }
 

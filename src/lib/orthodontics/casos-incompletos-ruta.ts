@@ -14,3 +14,6 @@ export function enlaceParaCompletar(patientId: string, paso: PasoDelCaso): strin
 export function pasoPedido(valor: string | null | undefined): PasoDelCaso | null {
   return valor === "diagnostico" || valor === "plan" ? valor : null;
 }
+
+/** ws1-t8 (M8 de BEVADENT): la tabla para completar varios casos incompletos a la vez. */
+export const RUTA_COMPLETAR_EN_BLOQUE = "/dashboard/orthodontics/completar";

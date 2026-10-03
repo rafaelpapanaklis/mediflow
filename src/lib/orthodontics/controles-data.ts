@@ -10,7 +10,7 @@
 // `clinicId` y `zonaHoraria` SIEMPRE de la sesión, nunca del cliente. Todas
 // las consultas filtran por clínica Y por visibilidad de paciente
 // (`relatedPatientVisibilityAnd`): un doctor con pacientes restringidos no ve
-// aquí los controles de los demás. Cuatro consultas en total, en fila.
+// aquí los controles de los demás. Cinco consultas en total, en fila (la quinta, las posposiciones de Alertas).
 
 import { prisma } from "@/lib/prisma";
 import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
@@ -22,6 +22,8 @@ import { casosConHojaDeHoyFirmadaSinCita } from "./hoja-firmada-de-la-cita-db";
 import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-hechos-db";
 import { loadOrthoCases } from "./tablero-data";
 import { computeActiveCasesCount } from "./specialty-kpis";
+import { cargarPosposiciones } from "./alertas-pospuestas-db";
+import { marcarPospuestosSinControl, type SinControlFuera } from "./cuenta-de-alertas";
 import {
   DIAS_DE_LA_SEMANA,
   casosSinControl,
@@ -45,6 +47,11 @@ export interface OrthoControlesData {
   sinControl: CasoSinControl[];
   /** Casos activos: el total contra el que se lee «N sin control». */
   casosActivos: number;
+  /**
+   * ws1-t8 (F16 de BEVADENT): de `sinControl`, cuántos NO salen en Alertas (vinieron hoy, o alguien los pospuso 7
+   * días): la pantalla dice por qué las dos cifras no coinciden. Opcional para quien arma la vista a mano.
+   */
+  sinControlFuera?: SinControlFuera;
 }
 
 function esRelacionAusente(e: unknown): boolean {
@@ -168,10 +175,17 @@ export async function loadOrthoControles(
 
   const historial = historialDeControles(citas, ahora, hojasPorPaciente, zonaHoraria);
 
+  // ws1-t8 (F16): la MISMA lista que «Sin próximo control» de Alertas; allá no salen quien vino hoy ni lo pospuesto.
+  // Aquí se listan todos, con lo pospuesto marcado. `cargarPosposiciones` nunca lanza (sin tabla, nada pospuesto).
+  const todos = casosSinControl(cases, historial, hoy, zonaHoraria);
+  const pospuestas = todos.length > 0 ? await cargarPosposiciones(clinicId, ahora) : [];
+  const { filas: sinControl, fuera } = marcarPospuestosSinControl(todos, pospuestas, ahora);
+
   return {
     hoy,
     semana: controlesDeLaSemana(deLaVentana, hoy, zonaHoraria),
-    sinControl: casosSinControl(cases, historial, hoy, zonaHoraria),
+    sinControl,
     casosActivos: computeActiveCasesCount(cases),
+    sinControlFuera: fuera,
   };
 }

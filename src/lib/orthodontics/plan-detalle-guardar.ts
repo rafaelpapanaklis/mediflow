@@ -108,8 +108,16 @@ export async function aplicarPlanDetalle(args: AplicarPlanArgs): Promise<Resulta
     treatmentPlanId,
     // Con seguimiento, el total vive allá: aquí no se duplica.
     // Y si esta misma llamada trae la duración, ese dato acaba de capturarse: su marca «sin capturar» se cae.
-    () => {
-      const guardado = { ...plan, alineadoresTotales: aligner ? null : plan.alineadoresTotales };
+    // ws1-t8 (M8): la marca «migrado, sin datos de diagnóstico» es del servidor: se conserva la que ya tenía el caso,
+    // venga lo que venga del cliente (solo «Completar varios a la vez» la pone o la quita).
+    (actual) => {
+      const { migradoSinDiagnostico: _delCliente, ...delPlan } = plan;
+      void _delCliente;
+      const guardado: PlanDetalle = {
+        ...delPlan,
+        alineadoresTotales: aligner ? null : plan.alineadoresTotales,
+        ...(actual.migradoSinDiagnostico ? { migradoSinDiagnostico: true as const } : {}),
+      };
       return args.duracionMeses !== undefined ? conDatoCapturado(guardado, "duracion") : guardado;
     },
     async (tx) => {

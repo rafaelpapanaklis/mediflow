@@ -323,6 +323,13 @@ export interface PlanDetalle {
    * Sin esta marca, un «Moderado» sin detalle por arcada es el relleno de arranque y no se dice como dato.
    */
   anclajeGeneralElegido?: true;
+  /**
+   * ws1-t8 (M8 de BEVADENT): caso MIGRADO de otro sistema que llegó sin datos de diagnóstico y la clínica decidió
+   * marcarlo así en vez de capturarlo ahora. Solo saca el diagnóstico de «Casos con diagnóstico o plan incompleto»:
+   * no inventa ningún dato (los valores neutros siguen diciéndose «sin capturar»). Es del servidor: «Editar plan» la
+   * conserva (`aplicarPlanDetalle`) y solo «Completar varios a la vez» la pone o la quita, con Movimientos.
+   */
+  migradoSinDiagnostico?: true;
 }
 
 export function planDetalleVacio(): PlanDetalle {
@@ -466,6 +473,7 @@ export function normalizarPlanDetalle(raw: unknown): PlanDetalle {
     : [];
   if (faltan.length > 0) plan.sinCapturar = [...faltan];
   if (o.anclajeGeneralElegido === true) plan.anclajeGeneralElegido = true;
+  if (o.migradoSinDiagnostico === true) plan.migradoSinDiagnostico = true;
   return plan;
 }
 
@@ -476,15 +484,16 @@ export function datoDelPlanSinCapturar(detalle: Pick<PlanDetalle, "sinCapturar">
 
 /** Las marcas no son datos del plan: un plan con solo marcas sigue «vacío». */
 function sinMarcas(p: PlanDetalle): PlanDetalle {
-  const { sinCapturar: _a, anclajeGeneralElegido: _b, ...resto } = p;
+  const { sinCapturar: _a, anclajeGeneralElegido: _b, migradoSinDiagnostico: _c, ...resto } = p;
   void _a;
   void _b;
+  void _c;
   return resto as PlanDetalle;
 }
 
 /** ¿Lleva alguna marca («sin capturar», anclaje general elegido)? Un plan sin datos pero con marcas SÍ se guarda. */
 export function tieneMarcasDelPlan(p: PlanDetalle | null | undefined): boolean {
-  return Boolean(p && ((p.sinCapturar?.length ?? 0) > 0 || p.anclajeGeneralElegido));
+  return Boolean(p && ((p.sinCapturar?.length ?? 0) > 0 || p.anclajeGeneralElegido || p.migradoSinDiagnostico));
 }
 
 /** El mismo plan sin la marca de un dato: ese dato acaba de capturarse. */
@@ -925,6 +934,14 @@ export interface PiezaFaltante {
 export function piezasQueFaltan(c: {
   /** El diagnóstico lleva la marca de migración (valores neutros, no mediciones). */
   diagnosticoMigrado: boolean;
+  /**
+   * ws1-t8 (F11 de BEVADENT): el CASO vino de otro sistema (`esCasoMigrado`), aunque su diagnóstico ya se haya
+   * completado aquí. Con `colocado`, en «Pago por control» no se pide «factura de colocación»: la colocación se cobró
+   * en el sistema anterior.
+   */
+  casoMigrado?: boolean;
+  /** ws1-t8 (F11): la colocación ya está registrada (fecha de colocación, o el caso ya no está «Por colocar»). */
+  colocado?: boolean;
   /** `sinCapturar` del detalle del diagnóstico: lo que se guardó como relleno y no es un dato real. */
   sinCapturar?: readonly string[];
   doctorId: string | null | undefined;
@@ -935,16 +952,23 @@ export function piezasQueFaltan(c: {
   const out: PiezaFaltante[] = [];
   const d = c.detalle ?? planDetalleVacio();
   const sin = c.sinCapturar ?? [];
-  if (c.diagnosticoMigrado) out.push({ paso: "diagnostico", clave: "diagnostico-migrado", texto: "diagnóstico (valores de migración)" });
-  else {
-    if (sin.includes("angleClassRight") || sin.includes("angleClassLeft")) out.push({ paso: "diagnostico", clave: "angle", texto: "clase de Angle" });
-    if (sin.includes("overjetMm") || sin.includes("overbiteMm")) out.push({ paso: "diagnostico", clave: "overjet-overbite", texto: "overjet y overbite" });
+  // M8: «migrado, sin datos de diagnóstico» saca el diagnóstico de la lista; no inventa nada.
+  if (!d.migradoSinDiagnostico) {
+    if (c.diagnosticoMigrado) out.push({ paso: "diagnostico", clave: "diagnostico-migrado", texto: "diagnóstico (valores de migración)" });
+    else {
+      if (sin.includes("angleClassRight") || sin.includes("angleClassLeft")) out.push({ paso: "diagnostico", clave: "angle", texto: "clase de Angle" });
+      if (sin.includes("overjetMm") || sin.includes("overbiteMm")) out.push({ paso: "diagnostico", clave: "overjet-overbite", texto: "overjet y overbite" });
+    }
   }
   if (!c.doctorId) out.push({ paso: "plan", clave: "doctor", texto: "doctor tratante" });
   if (datoDelPlanSinCapturar(d, "duracion")) out.push({ paso: "plan", clave: "duracion", texto: "tiempo de tratamiento" });
   if (datoDelPlanSinCapturar(d, "objetivos")) out.push({ paso: "plan", clave: "objetivos", texto: "objetivos del tratamiento" });
   if (!d.controlesPrevistos) out.push({ paso: "plan", clave: "controles", texto: "controles previstos" });
-  if (!c.tieneFactura) out.push({ paso: "plan", clave: "cobro", texto: c.billingMode === "PAGO_POR_CONTROL" ? "factura de colocación" : "plan de pago" });
+  // F11: un caso migrado ya colocado en «Pago por control» pagó su colocación en el sistema anterior.
+  const colocacionCobradaAntes = c.billingMode === "PAGO_POR_CONTROL" && c.casoMigrado === true && c.colocado === true;
+  if (!c.tieneFactura && !colocacionCobradaAntes) {
+    out.push({ paso: "plan", clave: "cobro", texto: c.billingMode === "PAGO_POR_CONTROL" ? "factura de colocación" : "plan de pago" });
+  }
   return out;
 }
 

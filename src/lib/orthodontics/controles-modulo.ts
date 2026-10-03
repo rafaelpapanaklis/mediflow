@@ -205,6 +205,8 @@ export interface CasoSinControl {
   /** Faltó a su último control (y no se le ha dado otra cita). */
   faltoAlUltimo: boolean;
   urgente: boolean;
+  /** ws1-t8 (F16): alguien lo pospuso 7 días desde Alertas (allá no sale hasta esta fecha; aquí sí). */
+  pospuestoHasta?: Date | null;
 }
 
 export interface HistorialDeControles {

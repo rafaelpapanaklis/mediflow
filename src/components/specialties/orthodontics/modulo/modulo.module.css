@@ -769,6 +769,20 @@
   color: var(--pr-texto-3);
 }
 
+/* ws1-t8 (F16/M8): la aclaración al pie de una sección de Alertas y la acción encima de su lista. */
+.notaDeSeccion {
+  margin: 0;
+  padding: 10px 18px 14px;
+}
+
+.accionDeSeccion {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 18px 10px;
+}
+
 .notaExito {
   display: inline-flex;
   align-items: center;
@@ -2144,4 +2158,91 @@
   border-color: var(--pr-activo);
   background: var(--pr-activo-suave);
   color: var(--pr-activo);
+}
+
+/* ── «Completar varios a la vez» (ws1-t8, M8 de BEVADENT) ─────────────── */
+
+/* Las filas se editan en el sitio: no son un enlace a la ficha. */
+.tablaEditable tbody tr {
+  cursor: default;
+}
+
+.tablaEditable td {
+  vertical-align: top;
+}
+
+.filaCambiada td {
+  background: var(--pr-activo-suave);
+}
+
+.celdaElegir {
+  width: 1%;
+}
+
+.campoEnTabla {
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+select.campoEnTabla {
+  min-width: 150px;
+}
+
+.campoNumero {
+  width: 88px;
+  font-variant-numeric: tabular-nums;
+}
+
+.celdaDiagnostico {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.casilla {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--pr-texto);
+  cursor: pointer;
+}
+
+.casilla input {
+  margin-top: 2px;
+  accent-color: var(--pr-activo);
+}
+
+.tablaEditable input[type="checkbox"] {
+  accent-color: var(--pr-activo);
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A la IZQUIERDA a propósito (mismo motivo que `.barraGuardar`): abajo a la derecha vive Sabina. */
+.barraGuardarBloque {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  background: var(--pr-fondo);
+}
+
+@container orto (max-width: 640px) {
+  .tablaEditable td.celdaElegir {
+    grid-column: auto;
+  }
+
+  .campoNumero {
+    width: 100%;
+  }
 }
