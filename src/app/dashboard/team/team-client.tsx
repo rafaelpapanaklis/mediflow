@@ -31,6 +31,7 @@ import {
   type DatosEditablesDeMiembro,
 } from "@/lib/team/parche-miembro";
 import { SelectorDeRol } from "./selector-de-rol";
+import { especialidadParaElSelector, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 // labelKey -> resolved via t() at render time (never call t() at module scope).
@@ -60,6 +61,8 @@ const ROLES = [
 // equipo. Si el SaaS expande a multi-specialty, restaurar la lista
 // general aquí.
 // id = código estable; nameKey -> resolved via t() at render time.
+// Los ids son los de `ESPECIALIDADES_EQUIPO` (src/lib/team/especialidad-equipo.ts), que además lee los valores
+// viejos de la base («dental» → Odontología General) para que nunca salgan como «Sin especialidad».
 const SPECIALTIES: { id: string; nameKey: string }[] = [
   { id: "Odontología General",  nameKey: "settings.team.specGeneral" },
   { id: "Ortodoncia",           nameKey: "settings.team.specOrtho" },
@@ -331,6 +334,8 @@ function MemberForm({
               onChange={e => set("specialty", e.target.value)}>
               <option value="">{t("settings.team.noSpecialty")}</option>
               {SPECIALTIES.map(s => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
+              {/* Una especialidad guardada que no es de la lista se ve y se conserva tal cual (ws1-t1). */}
+              {opcionFueraDeLista(form.specialty) && <option value={form.specialty}>{form.specialty}</option>}
             </select>
           </div>
         )}
@@ -741,6 +746,12 @@ interface Props {
 
 export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false, cupo, subida }: Props) {
   const t = useT();
+  // «dental» → «Odontología general» en la lista, como en el selector; lo desconocido, tal cual.
+  const nombreDeEspecialidad = (guardada: string) => {
+    const id = especialidadParaElSelector(guardada);
+    const s = SPECIALTIES.find(x => x.id === id);
+    return s ? t(s.nameKey) : id;
+  };
   const x = useTextosEquipo();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -1201,7 +1212,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   </div>
                   <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 2, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.email}</div>
                   {m.specialty && (
-                    <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 2, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.specialty}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 2, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nombreDeEspecialidad(m.specialty)}</div>
                   )}
                   <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
                     <BadgeNew tone={roleCfg.tone} dot={roleCfg.tone !== "neutral"}>{t(roleCfg.labelKey)}</BadgeNew>

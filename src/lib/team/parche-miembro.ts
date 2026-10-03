@@ -16,6 +16,8 @@
    Puro (sin React ni red) para poder probarlo.
    ============================================================ */
 
+import { especialidadParaElSelector } from "@/lib/team/especialidad-equipo";
+
 /** Los campos del formulario de Equipo que viajan en el PATCH de /api/team/[id]. */
 export const CAMPOS_DEL_PARCHE = [
   "firstName", "lastName", "email", "role", "specialty", "color", "phone", "services",
@@ -64,7 +66,9 @@ export function formDeMiembro(m: MiembroGuardado, colorPorDefecto = ""): DatosEd
     lastName: m.lastName,
     email: m.email,
     role: m.role,
-    specialty: m.specialty ?? "",
+    // Los valores viejos («dental», «orthodontics»…) se leen como su opción de la lista; lo desconocido, tal cual
+    // (ws1-t1). Así el selector no pinta «Sin especialidad» sobre una especialidad guardada.
+    specialty: especialidadParaElSelector(m.specialty),
     color: m.color ?? colorPorDefecto,
     phone: m.phone ?? "",
     services: [...(m.services ?? [])],
