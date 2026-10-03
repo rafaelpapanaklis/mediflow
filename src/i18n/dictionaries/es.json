@@ -3149,11 +3149,12 @@
       "noNextAppointment": "Sin próxima cita.",
       "schedule": "Agendar",
       "accountStatement": "Estado de cuenta",
-      "treatmentTotal": "Total tratamiento",
+      "treatmentTotal": "Total facturado",
+      "activePlans": "Plan de tratamiento activo",
       "paid": "Pagado",
       "pendingBalance": "Saldo pendiente",
       "creditBalance": "Saldo a favor",
-      "pctCovered": "{pct}% cubierto",
+      "pctCovered": "{pct}% de lo facturado está pagado",
       "chargeNow": "Cobrar ahora",
       "autoRules": "Reglas automáticas",
       "reminderOnWhatsapp": "{name} recibirá un recordatorio por WhatsApp {when} antes de su próxima cita.",
@@ -3566,8 +3567,8 @@
     }
   },
   "presupuestosEnFacturacion": {
-    "avisoTitulo": "Los cobros nuevos ahora se hacen desde Facturación. ",
-    "avisoTexto": "Ahí ya puedes elegir un pago o a plazos, con qué paga el paciente y enviárselo por correo o WhatsApp. Los presupuestos que ya tenías siguen aquí, completos.",
+    "avisoTitulo": "Aquí el paciente acepta y firma el presupuesto; el cobro se hace en Facturación. ",
+    "avisoTexto": "Un plan de tratamiento llega aquí con «Convertir en presupuesto» (en el plan). Para cobrar —un pago o a plazos, con qué paga el paciente y enviárselo por correo o WhatsApp— ve a Facturación. Los presupuestos que ya tenías siguen aquí, completos.",
     "irAFacturacion": "Ir a Facturación",
     "guardados": {
       "one": "{count} presupuesto guardado",
@@ -10085,7 +10086,7 @@
       "estadoCuenta": "Estado de cuenta",
       "saldoPendiente": "Saldo pendiente",
       "sinSaldo": "Sin saldo pendiente",
-      "pagadoDeTotal": "{pagado} de {total}",
+      "pagadoDeTotal": "{pagado} pagado de {total} facturado",
       "saldoAFavor": "Saldo a favor",
       "cobrarAhora": "Cobrar {amount}",
       "verFacturacion": "Ver facturación",
@@ -10455,8 +10456,14 @@
       "usarCosto": "Usar {total} (suma de los procedimientos)",
       "alternativa": "Alternativa ofrecida al paciente",
       "alternativaEjemplo": "Ej: Puente fijo en lugar de implante; el paciente eligió implante",
-      "firmaPista": "La aceptación firmada por el paciente se recoge hoy en Presupuestos; el plan clínico queda guardado en la descripción del plan, que el paciente no ve.",
-      "crear": "Crear plan de tratamiento"
+      "firmaPista": "La aceptación firmada del paciente se recoge en un presupuesto: crea el plan, ábrelo y usa «Convertir en presupuesto»; el cobro se hace después en Facturación. El plan clínico queda en la descripción del plan, que el paciente no ve.",
+      "crear": "Crear plan de tratamiento",
+      "sugerencias": "Del tarifario",
+      "sinTarifario": "No está en el tarifario: escribe su precio o elige una sugerencia.",
+      "sinCostoTitulo": "¿Crear el plan en $0?",
+      "sinCostoTexto": "El costo total del plan va en $0: ningún procedimiento trae precio. Si no es a propósito, vuelve y elige el procedimiento del tarifario o escribe el precio.",
+      "sinCostoCrear": "Crear en $0",
+      "sinCostoVolver": "Volver al plan"
     },
     "fase": {
       "urgencia": "Urgencia",

@@ -7,6 +7,7 @@ import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
+import { CODIGO_PLAN_SIN_COSTO, faltaConfirmarSinCosto } from "@/lib/treatments/plan-sin-costo";
 
 // GET /api/treatments — list all treatment plans for clinic (role-filtered)
 export async function GET(req: NextRequest) {
@@ -107,6 +108,19 @@ export async function POST(req: NextRequest) {
       const { reason, motivo } = await cuerpoDoctorNoRecibeCitasDe(ctx.clinicId, doctorId);
       return NextResponse.json({ error: reason, code: "doctor_not_found", motivo }, { status: 404 });
     }
+  }
+
+  // ws1-t2 (F15): un plan en $0 no se crea sin confirmarlo (la pantalla pregunta antes y manda
+  // `confirmarSinCosto: true`). Va DESPUÉS de validar paciente y doctor: el aviso solo sale cuando
+  // lo demás ya está bien, y no dice nada de un paciente ajeno.
+  if (faltaConfirmarSinCosto(body)) {
+    return NextResponse.json(
+      {
+        error: "El plan va en $0: ningún procedimiento trae precio. Escribe el costo o confirma que va sin costo.",
+        code: CODIGO_PLAN_SIN_COSTO,
+      },
+      { status: 409 },
+    );
   }
 
   const sessions = Number(totalSessions ?? 1);

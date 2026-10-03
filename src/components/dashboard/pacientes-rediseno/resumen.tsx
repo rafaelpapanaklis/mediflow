@@ -47,7 +47,8 @@ export interface ResumenProps {
     emergencyContactRelation?: string | null;
     source?: string | null;
   };
-  finanzas: { total: number; pagado: number; saldo: number; credito: number };
+  /** `total` = lo facturado; `plan` (ws1-t2, F3) = costo de los planes de tratamiento ACTIVOS, aparte. */
+  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number };
   citas: any[];
   facturas: any[];
   tratamientos: any[];
@@ -382,6 +383,12 @@ export function Resumen({
                 </span>
                 <span className={s.importe}>{pct}%</span>
               </div>
+              {(finanzas.plan ?? 0) > 0 && (
+                <div className={s.pie} style={{ marginTop: 6 }}>
+                  <span>{t("patients.sideCards.activePlans")}</span>
+                  <span className={s.importe}>{formatCurrency(finanzas.plan ?? 0)}</span>
+                </div>
+              )}
               {finanzas.credito > 0 && (
                 <div className={s.pie} style={{ marginTop: 6 }}>
                   <span>{t("pacientesRediseno.resumen.saldoAFavor")}</span>

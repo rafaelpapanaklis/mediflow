@@ -3149,11 +3149,12 @@
       "noNextAppointment": "No upcoming appointment.",
       "schedule": "Schedule",
       "accountStatement": "Account statement",
-      "treatmentTotal": "Treatment total",
+      "treatmentTotal": "Total invoiced",
+      "activePlans": "Active treatment plan",
       "paid": "Paid",
       "pendingBalance": "Pending balance",
       "creditBalance": "Credit balance",
-      "pctCovered": "{pct}% covered",
+      "pctCovered": "{pct}% of what was invoiced is paid",
       "chargeNow": "Charge now",
       "autoRules": "Automatic rules",
       "reminderOnWhatsapp": "{name} will get a WhatsApp reminder {when} before their next appointment.",
@@ -3566,8 +3567,8 @@
     }
   },
   "presupuestosEnFacturacion": {
-    "avisoTitulo": "New charges are now created from Billing. ",
-    "avisoTexto": "There you can already choose one payment or installments, how the patient pays, and send it by email or WhatsApp. The quotes you already had are still here, complete.",
+    "avisoTitulo": "Here the patient accepts and signs the quote; charging happens in Billing. ",
+    "avisoTexto": "A treatment plan arrives here with «Convert to quote» (on the plan). To charge —one payment or installments, how the patient pays, and sending it by email or WhatsApp— go to Billing. The quotes you already had are still here, complete.",
     "irAFacturacion": "Go to Billing",
     "guardados": {
       "one": "{count} saved quote",
@@ -10085,7 +10086,7 @@
       "estadoCuenta": "Account balance",
       "saldoPendiente": "Outstanding balance",
       "sinSaldo": "Nothing outstanding",
-      "pagadoDeTotal": "{pagado} of {total}",
+      "pagadoDeTotal": "{pagado} paid of {total} invoiced",
       "saldoAFavor": "Credit balance",
       "cobrarAhora": "Charge {amount}",
       "verFacturacion": "View billing",
@@ -10455,8 +10456,14 @@
       "usarCosto": "Use {total} (sum of the procedures)",
       "alternativa": "Alternative offered to the patient",
       "alternativaEjemplo": "E.g. Fixed bridge instead of implant; patient chose implant",
-      "firmaPista": "The patient's signed acceptance is collected today in Quotes; the clinical plan is saved in the plan description, which the patient never sees.",
-      "crear": "Create treatment plan"
+      "firmaPista": "The patient's signed acceptance is collected on a quote: create the plan, open it and use «Convert to quote»; charging happens afterwards in Billing. The clinical plan stays in the plan description, which the patient never sees.",
+      "crear": "Create treatment plan",
+      "sugerencias": "From the price list",
+      "sinTarifario": "Not in the price list: type its price or pick a suggestion.",
+      "sinCostoTitulo": "Create the plan at $0?",
+      "sinCostoTexto": "The plan total is $0: no procedure has a price. If that is not on purpose, go back and pick the procedure from the price list or type the price.",
+      "sinCostoCrear": "Create at $0",
+      "sinCostoVolver": "Back to the plan"
     },
     "fase": {
       "urgencia": "Urgent care",

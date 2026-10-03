@@ -19,7 +19,11 @@ export interface StampedInvoiceSummary {
 }
 
 interface SideCardsProps {
-  finance: { total: number; paid: number; balance: number; credit?: number; pct: number };
+  /**
+   * `total` = lo FACTURADO (suma de facturas no canceladas). `plan` (ws1-t2, F3) = costo de los planes de
+   * tratamiento ACTIVOS: se enseña aparte para que «Estado de cuenta» no haga pasar lo facturado por el plan.
+   */
+  finance: { total: number; paid: number; balance: number; credit?: number; pct: number; plan?: number };
   patientId: string;
   patientName: string;
   patientPhone: string | null;
@@ -192,6 +196,12 @@ export function SideCards({
               {t("patients.sideCards.viewBilling")} →
             </button>
           </header>
+          {(finance.plan ?? 0) > 0 && (
+            <div className={styles.financeRow}>
+              <span>{t("patients.sideCards.activePlans")}</span>
+              <strong>{formatCurrency(finance.plan ?? 0)}</strong>
+            </div>
+          )}
           <div className={styles.financeRow}>
             <span>{t("patients.sideCards.treatmentTotal")}</span>
             <strong>{formatCurrency(finance.total)}</strong>

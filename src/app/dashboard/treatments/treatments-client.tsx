@@ -15,6 +15,8 @@ import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 import { Tratamientos } from "@/components/dashboard/piezas-rediseno/tratamientos";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
 const STATUS_TONE: Record<string, { tone: StatusTone; labelKey: string }> = {
@@ -67,6 +69,7 @@ interface Props {
 export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug, canEdit = false, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
+  const confirmar = useConfirm();
   const searchParams = useSearchParams();
   const [treatments, setTreatments] = useState<Treatment[]>(initial);
   const [filter,     setFilter]     = useState<string>("ALL");
@@ -133,6 +136,15 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
   async function createPlan() {
     if (!form.patientId) { toast.error(t("pages.treatments.selectPatientError")); return; }
     if (!form.name.trim()) { toast.error(t("pages.treatments.enterNameError")); return; }
+    // ws1-t2 (F15): un plan en $0 se confirma antes de crearlo (POST /api/treatments también lo pide).
+    const sinCosto = planSinCosto(form.totalCost);
+    if (sinCosto && !(await confirmar({
+      title: t("planTratamiento.nuevo.sinCostoTitulo"),
+      description: t("planTratamiento.nuevo.sinCostoTexto"),
+      confirmText: t("planTratamiento.nuevo.sinCostoCrear"),
+      cancelText: t("planTratamiento.nuevo.sinCostoVolver"),
+      variant: "warning",
+    }))) return;
     setSaving(true);
     try {
       const res = await fetch("/api/treatments", {
@@ -145,6 +157,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           totalSessions:      Number(form.totalSessions),
           sessionIntervalDays:Number(form.sessionIntervalDays),
           totalCost:          Number(form.totalCost) || 0,
+          ...(sinCosto ? { confirmarSinCosto: true } : {}),
         }),
       });
       const data = await res.json();

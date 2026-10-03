@@ -64,6 +64,8 @@ import { Citas as CitasRediseno } from "@/components/dashboard/expediente-redise
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -570,6 +572,7 @@ export function PatientDetailClient({
   // fallo 4: la pestaña seguía en «Sin planes» hasta recargar). Cuando el servidor ya lo
   // trae, la copia local sobra. Ver lib/patients/planes-recien-creados.
   const [planesRecienCreados, setPlanesRecienCreados] = useState<any[]>([]);
+  const confirmar = useConfirm();
   const treatments = useMemo(
     () => planesConRecienCreados(planesDelServidor, planesRecienCreados),
     [planesDelServidor, planesRecienCreados],
@@ -944,6 +947,15 @@ export function PatientDetailClient({
       toast.error(t("patients.createTreatment.doctorRequired"));
       return;
     }
+    // ws1-t2 (F15): un plan en $0 se confirma antes de crearlo (POST /api/treatments también lo pide).
+    const sinCosto = planSinCosto(treatmentForm.totalCost);
+    if (sinCosto && !(await confirmar({
+      title: t("planTratamiento.nuevo.sinCostoTitulo"),
+      description: t("planTratamiento.nuevo.sinCostoTexto"),
+      confirmText: t("planTratamiento.nuevo.sinCostoCrear"),
+      cancelText: t("planTratamiento.nuevo.sinCostoVolver"),
+      variant: "warning",
+    }))) return;
     setSavingTreatment(true);
     try {
       const res = await fetch("/api/treatments", {
@@ -957,6 +969,7 @@ export function PatientDetailClient({
           totalSessions: Math.max(1, Number(treatmentForm.totalSessions) || 1),
           sessionIntervalDays: Math.max(1, Number(treatmentForm.sessionIntervalDays) || 30),
           totalCost: Math.max(0, Number(treatmentForm.totalCost) || 0),
+          ...(sinCosto ? { confirmarSinCosto: true } : {}),
         }),
       });
       const data = await res.json();
@@ -1324,6 +1337,15 @@ export function PatientDetailClient({
       );
   }, [invoices]);
   const pctPaid  = totalPlan > 0 ? Math.round((totalPaid / totalPlan) * 100) : 0;
+  // ws1-t2 (F3 de la auditoría BEVADENT: «Total tratamiento $700 · 100% cubierto» con un plan de
+  // $900): lo de arriba suma FACTURAS. El costo de los planes ACTIVOS va aparte, para que el
+  // «Estado de cuenta» enseñe plan y facturado sin mezclarlos.
+  const totalPlanesActivos = useMemo(
+    () => (treatments as any[])
+      .filter((p) => p?.status === "ACTIVE")
+      .reduce((suma, p) => suma + (Number(p?.totalCost) || 0), 0),
+    [treatments],
+  );
   // Cobros ya timbrados ante el SAT — el card "Estado de cuenta" los marca con
   // ✓ "Facturado". Las canceladas quedan fuera (igual que en los totales): su
   // CFDI, si existe, corresponde a una factura anulada.
@@ -2023,6 +2045,7 @@ export function PatientDetailClient({
                 pagado: totalPaid,
                 saldo: totalBalance,
                 credito: creditBalance,
+                plan: totalPlanesActivos,
               }}
               citas={appointments}
               facturas={invoices}

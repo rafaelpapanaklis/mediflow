@@ -15,6 +15,7 @@ import {
 import s from "./plan.module.css";
 import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
 
 /**
  * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
@@ -78,6 +79,9 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   const [tarifario, setTarifario] = useState<Procedimiento[]>([]);
   const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
   const [selectorAbierto, setSelectorAbierto] = useState<string | null>(null);
+  // ws1-t2 (F15): el renglón cuyo buscador del tarifario está abierto y la sugerencia marcada.
+  const [buscando, setBuscando] = useState<string | null>(null);
+  const [marcada, setMarcada] = useState(0);
   // Mientras nadie los teclee, sesiones y costo siguen a los procedimientos.
   const [sesionesAMano, setSesionesAMano] = useState(false);
   const [costoAMano, setCostoAMano] = useState(false);
@@ -151,10 +155,9 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     if (selectorAbierto === id) setSelectorAbierto(null);
   };
 
-  // Al escribir un nombre que está en el tarifario, trae su precio y su tiempo.
-  const cambiarProcedimiento = (r: Renglon, nombre: string) => {
-    const hit = tarifario.find((p) => p.name.toLowerCase() === nombre.trim().toLowerCase());
-    if (!hit) { cambiar(r.id, { procedimiento: nombre, procedimientoId: null }); return; }
+  // Elegir del tarifario trae su nombre, su precio y su tiempo (el precio solo si el renglón no
+  // tenía uno tecleado a mano).
+  const elegirDelTarifario = (r: Renglon, hit: Procedimiento, nombre = hit.name) => {
     const ponerPrecio = r.precio.trim() === "" || r.precioDelTarifario;
     cambiar(r.id, {
       procedimiento: nombre,
@@ -162,6 +165,29 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
       minutos: hit.duration ?? 0,
       ...(ponerPrecio ? { precio: String(hit.basePrice), precioDelTarifario: true } : {}),
     });
+  };
+
+  // Al escribir: si el nombre es uno del tarifario (sin contar mayúsculas ni acentos) se toma
+  // solo; si no, el renglón queda libre y abajo salen las sugerencias por PARTE del nombre.
+  const cambiarProcedimiento = (r: Renglon, nombre: string) => {
+    setBuscando(r.id);
+    setMarcada(0);
+    const hit = exactoEnTarifario(tarifario, nombre);
+    if (!hit) {
+      cambiar(r.id, {
+        procedimiento: nombre,
+        procedimientoId: null,
+        // El precio que puso el tarifario ya no es de este nombre.
+        ...(r.precioDelTarifario ? { precio: "", precioDelTarifario: false, minutos: 0 } : {}),
+      });
+      return;
+    }
+    elegirDelTarifario(r, hit, nombre);
+  };
+
+  const elegirSugerencia = (r: Renglon, hit: Procedimiento) => {
+    elegirDelTarifario(r, hit);
+    setBuscando(null);
   };
 
   const nombreHallazgo = (h: Hallazgo) => COND_BY_ID[h.conditionId]?.es ?? h.conditionId;
@@ -316,6 +342,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                 {plan.renglones.map((r) => {
                   const leidos = leerDientes(r.dientes);
                   const centro = letraCentro(leidos.dientes);
+                  // Sugerencias visibles mientras se escribe (no una lista del navegador, que hay navegadores que no enseñan).
+                  const sugerencias = buscando === r.id && !r.procedimientoId ? buscarEnTarifario(tarifario, r.procedimiento) : [];
+                  const abiertas = sugerencias.length > 0;
+                  const fueraDelTarifario = !abiertas && buscando !== r.id && r.procedimiento.trim() !== "" && !r.procedimientoId && r.precio.trim() === "";
                   return (
                     <div key={r.id} className={s.renglonCaja}>
                       <div className={s.renglon}>
@@ -330,11 +360,25 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                         <input
                           id={`plan-proc-${r.id}`}
                           className={s.entrada}
-                          list="plan-tarifario"
+                          role="combobox"
+                          aria-autocomplete="list"
+                          aria-expanded={abiertas}
+                          aria-controls={`plan-sug-${r.id}`}
+                          aria-activedescendant={abiertas ? `plan-sug-${r.id}-${Math.min(marcada, sugerencias.length - 1)}` : undefined}
+                          autoComplete="off"
                           aria-label={t("planTratamiento.nuevo.colProcedimiento")}
                           placeholder={r.motivo ? t("planTratamiento.nuevo.procedimientoPara", { motivo: r.motivo }) : t("planTratamiento.nuevo.procedimientoEjemplo")}
                           value={r.procedimiento}
                           onChange={(e) => cambiarProcedimiento(r, e.target.value)}
+                          onFocus={() => { setBuscando(r.id); setMarcada(0); }}
+                          onBlur={() => setBuscando((b) => (b === r.id ? null : b))}
+                          onKeyDown={(e) => {
+                            if (!abiertas) return;
+                            if (e.key === "ArrowDown") { e.preventDefault(); setMarcada((m) => (m + 1) % sugerencias.length); }
+                            else if (e.key === "ArrowUp") { e.preventDefault(); setMarcada((m) => (m - 1 + sugerencias.length) % sugerencias.length); }
+                            else if (e.key === "Enter") { e.preventDefault(); elegirSugerencia(r, sugerencias[Math.min(marcada, sugerencias.length - 1)]); }
+                            else if (e.key === "Escape") { e.stopPropagation(); setBuscando(null); }
+                          }}
                         />
                         <div className={s.dientesCelda}>
                           <input
@@ -403,6 +447,33 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                           <Trash2 size={14} strokeWidth={1.75} aria-hidden />
                         </button>
                       </div>
+                      {abiertas && (
+                        <div className={s.tarifarioSug}>
+                          <span className={s.tarifarioSugTitulo}>{t("planTratamiento.nuevo.sugerencias")}</span>
+                          <ul id={`plan-sug-${r.id}`} role="listbox" aria-label={t("planTratamiento.nuevo.sugerencias")} className={s.tarifarioSugLista}>
+                            {sugerencias.map((p, i) => (
+                              <li
+                                key={p.id}
+                                id={`plan-sug-${r.id}-${i}`}
+                                role="option"
+                                aria-selected={i === marcada}
+                                className={`${s.tarifarioSugItem} ${i === marcada ? s.tarifarioSugMarcada : ""}`}
+                                // mousedown y no click: el clic llega antes de que el campo pierda el foco.
+                                onMouseDown={(e) => { e.preventDefault(); elegirSugerencia(r, p); }}
+                                onMouseEnter={() => setMarcada(i)}
+                              >
+                                <span className={s.tarifarioSugNombre}>{p.name}</span>
+                                <span className={`${s.tarifarioSugPrecio} ${s.num}`}>{formatCurrency(p.basePrice)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {fueraDelTarifario && (
+                        <div className={s.avisoRenglon}>
+                          <AlertTriangle size={12} strokeWidth={1.75} aria-hidden /> {t("planTratamiento.nuevo.sinTarifario")}
+                        </div>
+                      )}
                       {leidos.invalidos.length > 0 && (
                         <div className={s.error}>{t("planTratamiento.nuevo.dienteInvalido", { dientes: leidos.invalidos.join(", ") })}</div>
                       )}
@@ -433,10 +504,6 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                 })}
               </div>
             )}
-
-            <datalist id="plan-tarifario">
-              {tarifario.map((p) => <option key={p.id} value={p.name}>{formatCurrency(p.basePrice)}</option>)}
-            </datalist>
 
             <div className={s.bajoRenglones}>
               <button type="button" className={s.boton} onClick={() => agregar()}>
