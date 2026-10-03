@@ -46,6 +46,7 @@ import { genderShortLabel, type PatientGender } from "@/lib/patients/patient-sea
 import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
+import { alCrearsePaciente } from "@/lib/new-patient/evento-paciente-creado";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { DateField } from "@/components/ui/date-field";
 import { patientQuotaLevel, type PatientQuota } from "@/lib/patient-quota-shared";
@@ -468,6 +469,8 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
   }, []);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+  // ws1-t1 (E1): un alta desde el «Nuevo paciente» general (barra superior, paleta, atajo N) también recarga.
+  useEffect(() => alCrearsePaciente(() => reload()), [reload]);
 
   // Toggle VIP con update OPTIMISTA: la lista es client-fetched, así que
   // reflejamos el cambio en `data` al instante y revertimos si el PATCH falla.

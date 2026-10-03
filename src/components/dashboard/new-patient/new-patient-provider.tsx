@@ -7,6 +7,7 @@ import type {
   OpenNewPatientParams,
 } from "@/lib/new-patient/types";
 import { NewPatientModal, type AparienciaNuevoPaciente } from "@/components/dashboard/new-patient-modal";
+import { avisarPacienteCreado } from "@/lib/new-patient/evento-paciente-creado";
 
 /**
  * Single source of truth para el modal "Nuevo paciente".
@@ -62,6 +63,11 @@ export function NewPatientProvider({
     // contadores, context bar) tras crear un paciente, aunque el opener no
     // pase onCreated. Síntoma #1: registrar paciente sin recargar.
     router.refresh();
+    // ws1-t1 (E1): la lista de Pacientes pide sus filas desde el navegador y `router.refresh()` no la toca: se
+    // le avisa para que se recargue. Y la ventana se cierra, como la copia que monta la propia lista (antes
+    // se quedaba abierta y vacía, invitando a crear el paciente dos veces).
+    avisarPacienteCreado({ id: patient.id });
+    setState((s) => ({ ...s, isOpen: false }));
   }, [state, router]);
 
   return (
