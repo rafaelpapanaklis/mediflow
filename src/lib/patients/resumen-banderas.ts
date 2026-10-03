@@ -40,14 +40,21 @@ export const PREGUNTA_DE_CADA_BANDERA: Record<string, string> = {
 };
 
 const PREGUNTAS_CON_BANDERA = new Set(Object.values(PREGUNTA_DE_CADA_BANDERA));
-const TODAS: QDef[] = [...PADECIMIENTOS, ...ALERGIAS];
+
+/** La pregunta como se lee en el cuestionario; las de alergias, con «Alergia:» delante. */
+function textoDePregunta(clave: string): string {
+  const padecimiento = PADECIMIENTOS.find((q) => q.key === clave);
+  if (padecimiento) return padecimiento.label;
+  const alergia = ALERGIAS.find((q) => q.key === clave);
+  return alergia ? `Alergia: ${alergia.label}` : clave;
+}
 
 /** «Toma anticoagulantes» → «Anticoagulantes», en el orden de `computeRiskFlags`. */
 export function preguntasQueLevantanBandera(): Array<{ bandera: string; etiqueta: string; pregunta: string }> {
   return Object.entries(PREGUNTA_DE_CADA_BANDERA).map(([bandera, clave]) => ({
     bandera,
     etiqueta: RISK_FLAG_LABELS[bandera] ?? bandera,
-    pregunta: TODAS.find((q) => q.key === clave)?.label ?? clave,
+    pregunta: textoDePregunta(clave),
   }));
 }
 

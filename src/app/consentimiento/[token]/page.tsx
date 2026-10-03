@@ -287,7 +287,7 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
               <section className="rounded-xl border border-amber-300 bg-amber-50 p-4" role="status">
                 <div className="flex items-center gap-2">
                   <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                  <h2 className="text-sm font-bold text-amber-900">Esta carta tiene datos sin llenar</h2>
+                  <h2 className="text-sm font-bold text-amber-900">Esta carta no está completa</h2>
                 </div>
                 <p className="mt-1.5 text-xs text-amber-900 leading-relaxed">
                   {avisoDeCarta(revision)} Antes de firmar puedes pedirle a {form.clinic?.name ?? "la clínica"} que
@@ -302,7 +302,7 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
                     className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer accent-amber-600"
                   />
                   <span className="text-xs font-semibold text-amber-900 leading-relaxed">
-                    Vi que la carta tiene espacios sin llenar y quiero firmarla así.
+                    Vi lo que le falta a la carta y quiero firmarla así.
                   </span>
                 </label>
               </section>

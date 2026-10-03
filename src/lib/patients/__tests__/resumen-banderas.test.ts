@@ -27,6 +27,7 @@ describe("qué respuestas levantan bandera", () => {
     const lista = preguntasQueLevantanBandera();
     assert.equal(lista.length, 10);
     assert.deepEqual(lista[0], { bandera: "ANTICOAGULANTES", etiqueta: "Anticoagulantes", pregunta: "Toma anticoagulantes" });
+    assert.deepEqual(lista[3], { bandera: "ALERGIA_ANESTESIA", etiqueta: "Alergia a anestesia", pregunta: "Alergia: Anestésicos locales" });
   });
 });
 
