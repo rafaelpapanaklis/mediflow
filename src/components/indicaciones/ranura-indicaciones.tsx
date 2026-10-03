@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ClipboardList, FileBadge } from "lucide-react";
-import { admiteConstancia, admiteIndicaciones } from "@/lib/indicaciones/envio";
+import { admiteConstancia, admiteIndicaciones, seAcabaDeTerminar } from "@/lib/indicaciones/envio";
 import { conValores, useTextosIndicaciones } from "@/lib/indicaciones/textos";
 import type { ContextoCita } from "@/lib/indicaciones/tipos";
 import ag from "@/components/dashboard/agenda-nueva/agenda-nueva.module.css";
@@ -45,11 +45,6 @@ function bibliotecaDisponible(): Promise<boolean> {
       });
   }
   return disponiblePromesa;
-}
-
-/** ¿Este cambio de estado es «se acaba de terminar la consulta aquí»? */
-export function seAcabaDeTerminar(antes: string | null, ahora: string): boolean {
-  return ahora === "COMPLETED" && (antes === "IN_PROGRESS" || antes === "IN_CHAIR");
 }
 
 export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props) {

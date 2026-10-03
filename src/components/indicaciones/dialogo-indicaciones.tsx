@@ -107,7 +107,7 @@ export function DialogoIndicaciones({ appointmentId, open, onClose, inicial = nu
         }
         if (out.code === "YA_ENVIADAS") {
           const hora = out.en
-            ? new Date(out.en).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+            ? new Date(out.en).toLocaleTimeString(tx.localeIntl, { hour: "2-digit", minute: "2-digit" })
             : "";
           const ok = await confirmar({
             title: tx.yaEnviadasTitulo,
@@ -194,6 +194,19 @@ export function DialogoIndicaciones({ appointmentId, open, onClose, inicial = nu
             </p>
           ) : (
             <>
+              {/* Arriba, antes de elegir: por qué no hay «Enviar por WhatsApp» (o qué saldrá). */}
+              {waBloqueado && motivo && (
+                <p className={`${a.nota} ${a.notaAlerta}`} role="status">
+                  <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
+                  <span>{tx.noWhatsapp[motivo]}</span>
+                </p>
+              )}
+              {ctx.whatsapp.modo === "template" && (
+                <p className={`${a.nota} ${a.notaInfo}`}>
+                  <Info size={16} strokeWidth={1.75} aria-hidden />
+                  <span>{tx.avisoPlantilla}</span>
+                </p>
+              )}
               <div className={s.grupo}>
                 <p className={s.grupoTitulo}>{tx.propuestas}</p>
                 {propuestas.length > 0 ? (
@@ -227,18 +240,6 @@ export function DialogoIndicaciones({ appointmentId, open, onClose, inicial = nu
                 </div>
               )}
 
-              {waBloqueado && motivo && (
-                <p className={`${a.nota} ${a.notaAlerta}`} role="status">
-                  <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
-                  <span>{tx.noWhatsapp[motivo]}</span>
-                </p>
-              )}
-              {ctx.whatsapp.modo === "template" && (
-                <p className={`${a.nota} ${a.notaInfo}`}>
-                  <Info size={16} strokeWidth={1.75} aria-hidden />
-                  <span>{tx.avisoPlantilla}</span>
-                </p>
-              )}
               {avisoEnvio && (
                 <p className={`${a.nota} ${a.notaAlerta}`} role="alert">
                   <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />

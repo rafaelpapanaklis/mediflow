@@ -13,6 +13,8 @@ import type { CodigoHoja } from "./tipos";
 import type { MotivoSinWhatsApp } from "./envio";
 
 const es = {
+  /** Para formatear horas en pantalla (Intl). */
+  localeIntl: "es-MX",
   // Administración → Plantillas
   tabIndicaciones: "Indicaciones",
   tabConstancia: "Constancia de asistencia",
@@ -148,6 +150,7 @@ const es = {
 type Textos = typeof es;
 
 const en: Textos = {
+  localeIntl: "en-US",
   tabIndicaciones: "Aftercare",
   tabConstancia: "Attendance certificate",
   ayudaIndicaciones:

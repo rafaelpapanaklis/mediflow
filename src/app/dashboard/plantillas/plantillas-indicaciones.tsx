@@ -216,6 +216,9 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
 
       {modal && (
         <PlantillaIndicacionesModal
+          // Una ventana por modo y hoja: «Copiar y editar» desde «Ver» tiene que volver a sembrar
+          // el nombre («… (copia)») y el texto; con la misma instancia se quedaba el nombre original.
+          key={modal.modo === "nueva" ? `nueva-${modal.tipo}` : `${modal.modo}-${modal.hoja.id}`}
           modal={modal}
           procedimientos={procedimientos}
           nombreSugeridoDeCopia={(origen) =>

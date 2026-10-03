@@ -19,7 +19,7 @@
   font-size: 13px;
 }
 
-.para { margin: -8px 0 0; color: var(--in-texto-3); font-size: 12.5px; }
+.para { margin: 0; color: var(--in-texto-3); font-size: 12.5px; }
 
 .grupo { display: flex; flex-direction: column; gap: 6px; }
 .grupoTitulo {

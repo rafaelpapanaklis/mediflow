@@ -37,6 +37,15 @@ export function admiteConstancia(status: string | null | undefined): boolean {
   return (ESTADOS_CON_CONSTANCIA as readonly string[]).includes(String(status ?? ""));
 }
 
+/**
+ * ¿Este cambio de estado (visto con el panel de la cita abierto) es «se acaba de
+ * terminar la consulta aquí»? Solo entonces se ofrecen las indicaciones: abrir una
+ * cita que YA estaba completada no ofrece nada.
+ */
+export function seAcabaDeTerminar(antes: string | null, ahora: string): boolean {
+  return ahora === "COMPLETED" && (antes === "IN_PROGRESS" || antes === "IN_CHAIR");
+}
+
 export interface CitaParaHoja {
   status: string;
   motivo: string | null;

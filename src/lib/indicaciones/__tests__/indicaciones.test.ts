@@ -41,6 +41,7 @@ import {
   admiteConstancia,
   admiteIndicaciones,
   datosDePlantilla,
+  seAcabaDeTerminar,
   horarioQueConsta,
   mensajeDeIndicaciones,
   textoDeProcedimientos,
@@ -329,6 +330,14 @@ test("cita: qué estados admiten indicaciones y constancia", () => {
   assert.ok(!admiteConstancia("CONFIRMED") && !admiteConstancia("NO_SHOW") && !admiteConstancia("CANCELLED"));
 });
 
+test("cita: la oferta sale solo al terminar la consulta con el panel abierto", () => {
+  assert.ok(seAcabaDeTerminar("IN_PROGRESS", "COMPLETED"));
+  assert.ok(seAcabaDeTerminar("IN_CHAIR", "COMPLETED"));
+  assert.ok(!seAcabaDeTerminar(null, "COMPLETED"), "abrir una cita ya completada no ofrece nada");
+  assert.ok(!seAcabaDeTerminar("COMPLETED", "COMPLETED"));
+  assert.ok(!seAcabaDeTerminar("COMPLETED", "CHECKED_OUT"));
+});
+
 const TZ = "America/Mexico_City";
 const cita = (p: Partial<Parameters<typeof horarioQueConsta>[0]> = {}) => ({
   status: "COMPLETED",
@@ -455,6 +464,12 @@ test("integración: el panel de la cita monta la ranura con el permiso de agenda
   }
   const plantillas = leer("src/app/api/indicaciones/plantillas/route.ts") + leer("src/app/api/indicaciones/plantillas/[id]/route.ts");
   assert.equal((plantillas.match(/denyIfMissingPermission\(ctx, TEMPLATES_WRITE_PERMISSION\)/g) ?? []).length, 2);
+});
+
+test("integración: «Copiar y editar» desde «Ver» abre otra ventana (nombre «… (copia)»), no la misma", () => {
+  // Con la misma instancia, el nombre se quedaba el de la original y guardar chocaba (NOMBRE_OCUPADO). Lo cazó la QA.
+  const lista = leer("src/app/dashboard/plantillas/plantillas-indicaciones.tsx");
+  assert.match(lista, /<PlantillaIndicacionesModal\s+\/\/[^\n]*\n(?:\s+\/\/[^\n]*\n)*\s+key=\{modal\.modo === "nueva" \? `nueva-\$\{modal\.tipo\}` : `\$\{modal\.modo\}-\$\{modal\.hoja\.id\}`\}/);
 });
 
 test("integración: sin colores a mano en las hojas de estilo nuevas", () => {
