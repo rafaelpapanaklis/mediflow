@@ -37,6 +37,7 @@
     "test:walk-in-nombre-apellidos": "tsx --test src/lib/walk-in/__tests__/nombre-del-paciente-nuevo.test.ts",
     "test:equipo-especialidad": "tsx --test src/lib/team/__tests__/especialidad-equipo.test.ts",
     "test:mi-perfil": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/mis-datos-profesionales.test.ts",
+    "test:implants-reminders": "tsx --test --experimental-test-module-mocks src/lib/clinical-shared/reminders/__tests__/implants-worker.test.ts",
     "test:resenas-fechas-acceso": "tsx --test src/lib/reviews/__tests__/fechas-y-acceso.test.ts",
     "test:inventario-costo": "tsx --test src/lib/inventory/__tests__/costo-core.test.ts",
     "test:inventario-compras": "tsx --test src/lib/inventory/__tests__/compras.server.test.ts",

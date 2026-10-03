@@ -40,6 +40,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/implants-reminders",
+      "schedule": "15 12 * * *"
+    },
+    {
       "path": "/api/cron/no-show-tasks",
       "schedule": "0 13 * * *"
     },
