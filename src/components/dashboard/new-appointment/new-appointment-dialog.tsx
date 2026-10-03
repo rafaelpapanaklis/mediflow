@@ -59,6 +59,7 @@ import {
   type AparienciaNuevaCita,
 } from "./apariencia";
 import nc from "./nueva-cita.module.css";
+import { llevarAlPrimerError } from "@/lib/formularios/primer-campo-con-error";
 
 const REASON_PRESET_KEYS = [
   "appointments.newApptDialog.presetGeneralConsult",
@@ -68,6 +69,9 @@ const REASON_PRESET_KEYS = [
   "appointments.newApptDialog.presetPain",
   "appointments.newApptDialog.presetUrgency",
 ];
+
+/** ws1-t1 (F8): los campos en el orden en que salen — al fallar se lleva la vista y el foco al primero. */
+export const ORDEN_CAMPOS_NUEVA_CITA = ["patient", "doctorId", "resourceId", "reason", "slot"] as const;
 
 interface Props {
   isOpen: boolean;
@@ -124,6 +128,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
    */
   const [bloqueoPendiente, setBloqueoPendiente] = useState<BloqueoParaConfirmar | null>(null);
   const [errors, setErrors] = useState<{ patient?: boolean; doctorId?: boolean; resourceId?: boolean; reason?: boolean; slot?: boolean }>({});
+  const cuerpoRef = useRef<HTMLDivElement>(null);
   // Pediatrics — context derivado del paciente seleccionado. Se hidrata
   // tras seleccionar paciente vía /api/pediatrics/context. Cuando no
   // aplica el módulo (gating), el endpoint devuelve { pediatric: false }
@@ -484,6 +489,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     if (!slotIso) newErrors.slot = true;
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      // ws1-t1 (F8): tras pintarse el borde rojo, la vista y el foco van al primer campo que falta.
+      requestAnimationFrame(() => llevarAlPrimerError(cuerpoRef.current, ORDEN_CAMPOS_NUEVA_CITA, newErrors));
       toast.error(t("appointments.newApptDialog.toastFillRequired"));
       return;
     }
@@ -662,14 +669,14 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
             </Dialog.Close>
           </header>
 
-          <div {...(nueva ? { className: nc.cuerpo } : { style: bodyStyle })}>
+          <div ref={cuerpoRef} {...(nueva ? { className: nc.cuerpo } : { style: bodyStyle })}>
             {bootLoading || !boot ? (
               <div {...(nueva ? { className: nc.cargando } : { style: { padding: 48, textAlign: "center", color: "var(--text-3)" } })}>
                 <Loader2 size={22} className="animate-spin" style={{ display: "inline-block" }} />
               </div>
             ) : (
               <>
-                <Field label={t("appointments.newApptDialog.fieldPatient")}>
+                <Field label={t("appointments.newApptDialog.fieldPatient")} campo="patient">
                   <PatientSearchField
                     value={patient}
                     onChange={(p) => { setPatient(p); if (errors.patient) setErrors((er) => ({ ...er, patient: undefined })); }}
@@ -678,7 +685,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                 </Field>
 
                 <div {...(nueva ? { className: nc.dosColumnas } : { style: gridTwo })}>
-                  <Field label={t("appointments.newApptDialog.fieldProfessional")}>
+                  <Field label={t("appointments.newApptDialog.fieldProfessional")} campo="doctorId">
                     <select
                       className={nueva ? `${nc.control} ${errors.doctorId ? nc.controlError : ""}` : "input-new"}
                       value={doctorId}
@@ -696,7 +703,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                     </select>
                   </Field>
                   {boot.resources.length > 0 && (
-                    <Field label={t("appointments.newApptDialog.fieldRoom")}>
+                    <Field label={t("appointments.newApptDialog.fieldRoom")} campo="resourceId">
                       <select
                         className={nueva ? `${nc.control} ${errors.resourceId ? nc.controlError : ""}` : "input-new"}
                         value={resourceId}
@@ -760,7 +767,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                   </div>
                 ) : null}
 
-                <Field label={t("appointments.newApptDialog.fieldReason")}>
+                <Field label={t("appointments.newApptDialog.fieldReason")} campo="reason">
                   <MotivoField
                     value={reason}
                     onChange={(v) => { setReason(v); if (errors.reason) setErrors((er) => ({ ...er, reason: undefined })); }}
@@ -803,7 +810,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                 </div>
 
                 {config && doctorId && (
-                  <Field label={t("appointments.newApptDialog.fieldAvailableTime")}>
+                  <Field label={t("appointments.newApptDialog.fieldAvailableTime")} campo="slot">
                     <SlotGridPicker
                       dateISO={dateISO}
                       doctorId={doctorId}
@@ -894,10 +901,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, campo }: { label: string; children: React.ReactNode; campo?: string }) {
   const vestir = useVestir();
   return (
-    <div {...vestir({ display: "flex", flexDirection: "column", gap: 6 }, nc.campo)}>
+    <div {...vestir({ display: "flex", flexDirection: "column", gap: 6 }, nc.campo)} data-campo={campo}>
       <span
         {...vestir(
           {

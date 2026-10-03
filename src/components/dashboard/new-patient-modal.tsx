@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, UserPlus, X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -10,6 +10,7 @@ import { PatientVisibilityPicker } from "@/components/dashboard/patient-visibili
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { llevarAlPrimerError } from "@/lib/formularios/primer-campo-con-error";
 
 /**
  * La ROPA de la ventana: la de siempre o la del diseño nuevo (ws1-t5,
@@ -56,6 +57,11 @@ const SOURCE_OPTIONS = [
   "Otro",
 ];
 
+/** ws1-t1 (F8): los campos en el orden en que salen en la ventana — al fallar se lleva la vista al primero. */
+export const ORDEN_CAMPOS_NUEVO_PACIENTE = [
+  "firstName", "lastName", "dob", "gender", "curp", "passportNo", "phone", "allergies",
+] as const;
+
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
 function splitName(full: string): { firstName: string; lastName: string } {
@@ -73,6 +79,12 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  /** ws1-t1 (F8): marca los errores y lleva la vista y el foco al primero (tras pintarse el borde rojo). */
+  const marcarErrores = (nuevos: Record<string, boolean>) => {
+    setErrors(nuevos);
+    requestAnimationFrame(() => llevarAlPrimerError(formRef.current, ORDEN_CAMPOS_NUEVO_PACIENTE, nuevos));
+  };
   const [noAllergies, setNoAllergies] = useState(false);
   /**
    * Cupo de pacientes agotado (402 PLAN_LIMIT_PATIENTS del POST). Vive DENTRO
@@ -124,15 +136,16 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (!form.allergies.trim()) newErrors.allergies = true;
     if (!form.gender) newErrors.gender = true;
     if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+      marcarErrores(newErrors);
       toast.error(t("shell.newPatient.errRequiredFields"));
       return;
     }
     if (form.curpStatus === "COMPLETE") {
-      if (!form.curp) { toast.error(t("shell.newPatient.errCurpRequired")); return; }
-      if (!CURP_RE.test(form.curp.toUpperCase())) { toast.error(t("shell.newPatient.errCurpFormat")); return; }
+      if (!form.curp) { marcarErrores({ curp: true }); toast.error(t("shell.newPatient.errCurpRequired")); return; }
+      if (!CURP_RE.test(form.curp.toUpperCase())) { marcarErrores({ curp: true }); toast.error(t("shell.newPatient.errCurpFormat")); return; }
     }
     if (form.curpStatus === "FOREIGN" && !form.passportNo) {
+      marcarErrores({ passportNo: true });
       toast.error(t("shell.newPatient.errPassportRequired"));
       return;
     }
@@ -258,7 +271,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </Dialog.Close>
           </div>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <form ref={formRef} onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
           <div className="modal__body" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {/* Sección: Identidad */}
             <div style={{ marginBottom: 22 }}>
@@ -267,19 +280,19 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 <span className="form-section__rule" />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
-                <div className="field-new">
+                <div className="field-new" data-campo="firstName">
                   <label className="field-new__label">{t("shell.newPatient.firstName")} <span className="req">*</span></label>
                   <input className="input-new" placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} style={{ borderColor: errors.firstName ? '#ef4444' : undefined }} />
                 </div>
-                <div className="field-new">
+                <div className="field-new" data-campo="lastName">
                   <label className="field-new__label">{t("shell.newPatient.lastName")} <span className="req">*</span></label>
                   <input className="input-new" placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} style={{ borderColor: errors.lastName ? '#ef4444' : undefined }} />
                 </div>
-                <div className="field-new">
+                <div className="field-new" data-campo="dob">
                   <label className="field-new__label">{t("shell.newPatient.dob")} <span className="req">*</span></label>
                   <DateField className="input-new" value={form.dob} max={todayISO} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
                 </div>
-                <div className="field-new">
+                <div className="field-new" data-campo="gender">
                   <label className="field-new__label">{t("shell.newPatient.gender")} <span className="req">*</span></label>
                   <select className="input-new" value={form.gender} onChange={e => set("gender", e.target.value)} style={{ borderColor: errors.gender ? '#ef4444' : undefined }}>
                     <option value="">{t("shell.newPatient.selectOption")}</option>
@@ -315,7 +328,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 ))}
               </div>
               {form.curpStatus === "COMPLETE" && (
-                <div className="field-new">
+                <div className="field-new" data-campo="curp">
                   <label className="field-new__label">
                     CURP <span className="req">*</span>
                   </label>
@@ -334,7 +347,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 </div>
               )}
               {form.curpStatus === "FOREIGN" && (
-                <div className="field-new">
+                <div className="field-new" data-campo="passportNo">
                   <label className="field-new__label">{t("shell.newPatient.passport")} <span className="req">*</span></label>
                   <input
                     className="input-new"
@@ -363,7 +376,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                   <label className="field-new__label">{t("shell.newPatient.email")}</label>
                   <input className="input-new" type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} />
                 </div>
-                <div className="field-new">
+                <div className="field-new" data-campo="phone">
                   <label className="field-new__label">{t("shell.newPatient.phone")} <span className="req">*</span></label>
                   <input className="input-new" placeholder="+52 55…" value={form.phone} onChange={e => set("phone", e.target.value)} style={{ borderColor: errors.phone ? '#ef4444' : undefined }} />
                 </div>
@@ -451,6 +464,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 </div>
                 <input
                   className="input-new"
+                  // ws1-t1 (F8): la marca va en el campo de texto y no en la envoltura — el primer enfocable de
+                  // ésta es la casilla «Sin alergias», y el foco tiene que caer donde se escribe.
+                  data-campo="allergies"
                   placeholder={t("shell.newPatient.allergiesPlaceholder")}
                   value={form.allergies}
                   onChange={e => set("allergies", e.target.value)}
