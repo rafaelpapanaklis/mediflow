@@ -5647,7 +5647,8 @@
         "appointment_cancelled": "Appointment cancelled notice",
         "followup": "Post-visit follow-up",
         "birthday": "Birthday greeting",
-        "recall": "Recall"
+        "recall": "Recall",
+        "post_op_instructions": "Aftercare instructions"
       },
       "internalNote": "Internal note",
       "internalNoteFoot": "Only visible to the team — the patient can't see it",
@@ -5943,6 +5944,7 @@
       "tplKindInvoiceReady": "Invoice ready",
       "tplKindAppointmentCancelled": "Appointment cancelled",
       "tplKindFollowup": "Post-visit follow-up",
+      "tplKindPostOp": "Aftercare instructions",
       "tplKindBirthday": "Birthday greeting",
       "tplKindRecall": "Recall (time for your check-up)",
       "tplKindDepositRequest": "Deposit request",

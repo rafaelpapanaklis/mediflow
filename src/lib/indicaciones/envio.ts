@@ -2,6 +2,7 @@
 // a partir de los datos de UNA cita. PURO: sin Prisma, sin red, sin Meta.
 
 import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
+import { PLANTILLA_INDICACIONES_ENCENDIDA } from "@/lib/whatsapp/templates-catalog";
 import { decideSendMode } from "@/lib/whatsapp/send-mode";
 import { parseWaTemplates } from "@/lib/whatsapp/template-config";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
@@ -11,19 +12,19 @@ import { rellenarHoja, type ValoresHoja } from "./marcadores";
 /**
  * Con qué TIPO de mensaje sale el WhatsApp de indicaciones.
  *
- * Hoy "system": el único sin plantilla, como los documentos del paciente
- * (`/api/patient-documents/[id]/whatsapp`). Dentro de la ventana de 24 h sale el
- * texto; fuera de ella `sendWhatsAppLogged` lo BLOQUEA antes de llamar a Meta (no
- * se gasta nada) y la pantalla ofrece imprimir o el PDF.
+ * Con la plantilla APAGADA (`PLANTILLA_INDICACIONES_ENCENDIDA` en templates-catalog.ts,
+ * hoy así hasta que Rafael apruebe el texto) es "system": el único sin plantilla, como
+ * los documentos del paciente (`/api/patient-documents/[id]/whatsapp`). Dentro de la
+ * ventana de 24 h sale el texto; fuera de ella `sendWhatsAppLogged` lo BLOQUEA antes de
+ * llamar a Meta (no se gasta nada) y la pantalla ofrece imprimir o el PDF.
  *
- * Cuando el catálogo tenga la plantilla UTILITY `dc_indicaciones_cuidado` (la
- * define el REPORTE de ws1-t10; la integra ws1-t4 o el gerente, que son quienes
- * tocan templates-catalog.ts y system-message.ts), este valor pasa a
- * "post_op_instructions" y fuera de ventana saldrá la plantilla con los tres
- * datos de `datosDePlantilla` (ya se preparan y se mandan hoy; con "system" se
- * ignoran).
+ * Con la bandera encendida pasa solo a "post_op_instructions": fuera de ventana, y con
+ * la plantilla `dc_indicaciones_cuidado` aprobada en la clínica, sale esa plantilla con
+ * los tres datos de `datosDePlantilla` (que se mandan siempre; con "system" se ignoran).
  */
-export const KIND_ENVIO_INDICACIONES: WhatsAppSendKind = "system";
+export const KIND_ENVIO_INDICACIONES: WhatsAppSendKind = PLANTILLA_INDICACIONES_ENCENDIDA
+  ? "post_op_instructions"
+  : "system";
 
 /** Estados en que la cita ya se atendió (o se está atendiendo): hay indicaciones que dar. */
 export const ESTADOS_CON_INDICACIONES = ["IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT"] as const;

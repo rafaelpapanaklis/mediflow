@@ -49,7 +49,12 @@ export type WhatsAppSendKind =
   // está APAGADA (PLANTILLAS_MARKETING_AUTOMATICAS_ENCENDIDAS en templates-catalog.ts):
   // fuera de ventana siguen bloqueándose como hoy.
   | "birthday"
-  | "recall";
+  | "recall"
+  // ws1-t10 (auditoría BEVADENT, mejora 12) — «Enviar indicaciones» tras la consulta.
+  // Su plantilla (dc_indicaciones_cuidado) está APAGADA tras la bandera
+  // PLANTILLA_INDICACIONES_ENCENDIDA de templates-catalog.ts: mientras valga false
+  // el envío sigue saliendo como `system` (ver KIND_ENVIO_INDICACIONES).
+  | "post_op_instructions";
 
 export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "reminder",
@@ -69,6 +74,7 @@ export const WHATSAPP_SEND_KINDS: readonly WhatsAppSendKind[] = [
   "followup",
   "birthday",
   "recall",
+  "post_op_instructions",
 ];
 
 /** Prefijo de `externalId` que marca un envío automático de la plataforma. */

@@ -5647,7 +5647,8 @@
         "appointment_cancelled": "Aviso de cita cancelada",
         "followup": "Seguimiento después de la cita",
         "birthday": "Felicitación de cumpleaños",
-        "recall": "Reactivación"
+        "recall": "Reactivación",
+        "post_op_instructions": "Indicaciones de cuidado"
       },
       "internalNote": "Nota interna",
       "internalNoteFoot": "Solo visible para el equipo — el paciente no la ve",
@@ -5943,6 +5944,7 @@
       "tplKindInvoiceReady": "Factura (nota) lista",
       "tplKindAppointmentCancelled": "Cita cancelada",
       "tplKindFollowup": "Seguimiento después de la cita",
+      "tplKindPostOp": "Indicaciones de cuidado",
       "tplKindBirthday": "Felicitación de cumpleaños",
       "tplKindRecall": "Reactivación (te toca tu revisión)",
       "tplKindDepositRequest": "Solicitud de anticipo",

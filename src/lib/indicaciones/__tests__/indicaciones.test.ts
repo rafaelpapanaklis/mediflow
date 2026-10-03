@@ -49,6 +49,17 @@ import {
   vistaWhatsAppIndicaciones,
 } from "../envio";
 import { textosIndicaciones } from "../textos";
+import {
+  DEFAULT_CATALOG_KINDS,
+  PLANTILLA_INDICACIONES_ENCENDIDA,
+  WA_PLANTILLA_INDICACIONES_EN_ESPERA,
+  WA_TEMPLATE_CATALOG,
+  catalogEntryFor,
+  checkCatalogEntry,
+} from "@/lib/whatsapp/templates-catalog";
+import { parseWaTemplates, renderTemplateBody } from "@/lib/whatsapp/template-config";
+import { decideSendMode } from "@/lib/whatsapp/send-mode";
+import { WHATSAPP_SEND_KINDS } from "@/lib/whatsapp/system-message";
 import type { HojaDTO, ProcedimientoLigable } from "../tipos";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
@@ -393,6 +404,7 @@ const CONECTADA = { waConnected: true, waPhoneNumberId: "123", conToken: true, w
 const AHORA = new Date("2026-10-03T18:00:00Z");
 
 test("whatsapp: dentro de la ventana sale el texto; fuera y sin plantilla, NO sale (y se sabe antes)", () => {
+  assert.equal(PLANTILLA_INDICACIONES_ENCENDIDA, false, "la plantilla espera la aprobación del texto por Rafael");
   assert.equal(KIND_ENVIO_INDICACIONES, "system", "sin plantilla de indicaciones en el catálogo, el tipo es el de los documentos");
   const dentro = vistaWhatsAppIndicaciones({ clinica: CONECTADA, telefono: "9991234567", ultimoEntrante: new Date("2026-10-03T10:00:00Z"), ahora: AHORA });
   assert.deepEqual(dentro, { modo: "text", motivo: null });
@@ -487,4 +499,64 @@ test("integración: el SQL es idempotente, con RLS, sin DROP ni UPDATE", () => {
   assert.ok(!/(^|;)\s*(DROP|UPDATE|DELETE|TRUNCATE)\b/i.test(sql), "el SQL borra o reescribe filas");
   assert.ok(!/\bSET\s+(SESSION|LOCAL)?\s*\w/i.test(sql.replace(/SET\s+DEFAULT/gi, "")), "el SQL cambia la sesión");
   assert.equal((sql.match(/CREATE (UNIQUE )?INDEX(?! IF NOT EXISTS)/g) ?? []).length, 0, "un índice sin IF NOT EXISTS");
+});
+
+// ─── Plantilla de Meta «dc_indicaciones_cuidado»: redactada y APAGADA ────────
+
+test("plantilla de indicaciones: redactada y válida para Meta, pero fuera del catálogo mientras la bandera esté apagada", () => {
+  const e = WA_PLANTILLA_INDICACIONES_EN_ESPERA;
+  assert.equal(e.kind, "post_op_instructions");
+  assert.equal(e.name, "dc_indicaciones_cuidado");
+  assert.equal(e.category, "UTILITY");
+  assert.equal(checkCatalogEntry(e), null, "la redacción en espera también debe pasar las reglas de Meta");
+  assert.ok(WHATSAPP_SEND_KINDS.includes("post_op_instructions"));
+  // Apagada = nadie la da de alta en Meta, la pantalla no la enseña y waTemplates no la lee.
+  assert.equal(PLANTILLA_INDICACIONES_ENCENDIDA, false);
+  assert.equal(catalogEntryFor("post_op_instructions"), null);
+  assert.ok(!WA_TEMPLATE_CATALOG.some((c) => c.name === e.name));
+  assert.ok(!DEFAULT_CATALOG_KINDS.includes("post_op_instructions"));
+  assert.deepEqual(parseWaTemplates({ post_op_instructions: { name: e.name, lang: "es_MX", status: "APPROVED" } }), {});
+});
+
+test("plantilla de indicaciones: sus tres variables son las que prepara datosDePlantilla, en ese orden", () => {
+  const e = WA_PLANTILLA_INDICACIONES_EN_ESPERA;
+  const datos = datosDePlantilla("Ana", "Clínica Sonrisa", "Extracción simple");
+  assert.equal(e.variableKeys.length, datos.length);
+  assert.equal(e.sample.length, datos.length);
+  const texto = renderTemplateBody(e, datos, "");
+  assert.equal(
+    texto,
+    "Hola Ana, Clínica Sonrisa tiene listas tus indicaciones de cuidado después de tu Extracción simple. " +
+      "Responde a este mensaje para recibirlas por aquí, o pídelas impresas en la clínica.",
+  );
+  assert.ok(!/\{\{\d+\}\}/.test(texto), "quedó una variable sin sustituir");
+  // El aviso no lleva indicaciones clínicas: solo dice que están listas.
+  assert.ok(!/\d+\s?(mg|ml)|ibuprofeno|paracetamol/i.test(e.body));
+});
+
+test("plantilla de indicaciones apagada: todo funciona como hoy — dentro de 24 h texto, fuera NO sale (y el PDF queda)", () => {
+  // Aunque la clínica tuviera guardada una entrada, no se lee: sale bloqueado.
+  const templates = parseWaTemplates({ post_op_instructions: { name: "dc_indicaciones_cuidado", lang: "es_MX", status: "APPROVED" } });
+  assert.equal(decideSendMode({ kind: "post_op_instructions", windowOpen: true, templates }).mode, "text");
+  assert.equal(decideSendMode({ kind: "post_op_instructions", windowOpen: false, templates }).mode, "blocked");
+  assert.equal(decideSendMode({ kind: KIND_ENVIO_INDICACIONES, windowOpen: false, templates }).mode, "blocked");
+});
+
+test("plantilla de indicaciones: con la bandera encendida el catálogo la trae como utilidad no opcional (contrato del código)", () => {
+  const origen = leer("src/lib/whatsapp/templates-catalog.ts");
+  assert.match(origen, /PLANTILLA_INDICACIONES_ENCENDIDA \? \[WA_PLANTILLA_INDICACIONES_EN_ESPERA\] : \[\]/);
+  assert.equal(WA_PLANTILLA_INDICACIONES_EN_ESPERA.optional, false, "UTILITY: la crea sola el cron como las demás al encenderla");
+  const envio = leer("src/lib/indicaciones/envio.ts");
+  assert.match(envio, /PLANTILLA_INDICACIONES_ENCENDIDA\s*\?\s*"post_op_instructions"\s*:\s*"system"/);
+});
+
+test("plantilla de indicaciones: nombre y variables traducidos, y etiqueta del Inbox para su tipo (es/en)", () => {
+  const e = WA_PLANTILLA_INDICACIONES_EN_ESPERA;
+  const leerClave = (d: any, clave: string) => clave.split(".").reduce((o: any, k: string) => (o ? o[k] : undefined), d);
+  for (const lang of ["es", "en"]) {
+    const d = JSON.parse(leer(`src/i18n/dictionaries/${lang}.json`));
+    for (const clave of [e.labelKey, ...e.variableKeys, "inbox.client.autoLabel.post_op_instructions"]) {
+      assert.equal(typeof leerClave(d, clave), "string", `${lang}: «${clave}» se vería sin traducir`);
+    }
+  }
 });

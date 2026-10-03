@@ -107,6 +107,48 @@ export const WA_PLANTILLAS_MARKETING_EN_ESPERA: readonly WaCatalogEntry[] = [
 ];
 
 /**
+ * 🔴 BANDERA — INDICACIONES DE CUIDADO por plantilla (`dc_indicaciones_cuidado`).
+ * APAGADA hasta que Rafael apruebe el texto (ws1-t10, auditoría BEVADENT, mejora 12).
+ *
+ * Es UTILITY (la crea sola el cron como las demás), pero el cuerpo se le manda al
+ * PACIENTE, así que no se registra en Meta sin que Rafael lo revise. Mientras esto
+ * valga `false`:
+ *   · NO está en `WA_TEMPLATE_CATALOG`: nadie la da de alta en Meta (ni al conectar,
+ *     ni el cron, ni «Crear mis plantillas»), Plantillas no la enseña y
+ *     `parseWaTemplates` no la lee;
+ *   · «Enviar indicaciones» sale como `system` (`KIND_ENVIO_INDICACIONES`): dentro de
+ *     la ventana de 24 h, el texto; fuera de ella no sale y la pantalla ofrece el PDF
+ *     o imprimir — exactamente lo que pasa hoy.
+ *
+ * Al encenderla (`true`) entra al catálogo como no opcional y `KIND_ENVIO_INDICACIONES`
+ * pasa solo a `post_op_instructions`. Antes de encenderla: aprobar el texto de abajo
+ * y revisar en el Inbox (`template-offer.ts`) que no necesita un caso propio.
+ */
+export const PLANTILLA_INDICACIONES_ENCENDIDA: boolean = false;
+
+/** Redacción ya lista de la plantilla de indicaciones en espera (ver la bandera de arriba). */
+export const WA_PLANTILLA_INDICACIONES_EN_ESPERA: WaCatalogEntry = {
+  // {{1}} nombre del paciente, {{2}} clínica, {{3}} procedimiento — ESE orden es
+  // contrato con `datosDePlantilla` (lib/indicaciones/envio.ts). El texto no lleva
+  // indicaciones clínicas: solo avisa que están listas y cómo recibirlas.
+  kind: "post_op_instructions",
+  name: "dc_indicaciones_cuidado",
+  category: "UTILITY",
+  lang: WA_TEMPLATE_LANG,
+  body:
+    "Hola {{1}}, {{2}} tiene listas tus indicaciones de cuidado después de tu {{3}}. " +
+    "Responde a este mensaje para recibirlas por aquí, o pídelas impresas en la clínica.",
+  labelKey: "inbox.whatsapp.tplKindPostOp",
+  variableKeys: [
+    "inbox.whatsapp.tplVarPatient",
+    "inbox.whatsapp.tplVarClinic",
+    "inbox.whatsapp.tplVarProcedure",
+  ],
+  sample: ["María", "Clínica Sonrisa", "extracción"],
+  optional: false,
+};
+
+/**
  * Las TRECE de utilidad que se crean solas (más dos de utilidad opcionales) + la de marketing
  * de reseñas (y, con la bandera de arriba encendida, cumpleaños y reactivación).
  *
@@ -463,6 +505,7 @@ export const WA_TEMPLATE_CATALOG: readonly WaCatalogEntry[] = [
     optional: true,
   },
   ...(PLANTILLAS_MARKETING_AUTOMATICAS_ENCENDIDAS ? WA_PLANTILLAS_MARKETING_EN_ESPERA : []),
+  ...(PLANTILLA_INDICACIONES_ENCENDIDA ? [WA_PLANTILLA_INDICACIONES_EN_ESPERA] : []),
 ];
 
 /** Los tipos que se crean solos al conectar (todo menos la de marketing). */
