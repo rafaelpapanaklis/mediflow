@@ -145,6 +145,7 @@
     "test:patient-update": "tsx --test src/lib/patients/__tests__/patient-update-core.test.ts",
     "test:pacientes-buscador": "tsx --test src/lib/patients/__tests__/patient-search-core.test.ts",
     "test:aviso-reprogramar": "tsx --test src/lib/agenda/__tests__/aviso-al-reprogramar.test.ts",
+    "test:reagendar-proxima": "tsx --test src/lib/patients/__tests__/reagendar-proxima.test.ts",
     "test:buscador-paleta": "tsx --test src/lib/command-palette/__tests__/buscador-paleta.test.ts",
     "test:patient-secrets": "tsx --test src/lib/__tests__/patient-secrets.test.ts",
     "test:private-records": "tsx --test src/lib/__tests__/private-records-scope.test.ts",

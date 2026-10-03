@@ -15,6 +15,13 @@ export interface OpenNewAppointmentParams {
   initialSlot?: NewAppointmentInitialSlot;
   initialPatient?: NewAppointmentInitialPatient;
   initialDoctorId?: string;
+  /**
+   * ws1-t1 (F7) — más candidatos a doctor, en orden, después de `initialDoctorId` («Reagendar próxima»: el de
+   * su última cita y luego el tratante). Se queda el primero que pueda recibir citas.
+   */
+  initialDoctorIds?: string[];
+  /** ws1-t1 (F7) — consultorio con el que abre (sin `initialSlot`). Solo si existe en la clínica. */
+  initialResourceId?: string;
   /** Día «AAAA-MM-DD» con el que abre (sin `initialSlot`). Por defecto, el de la agenda que se ve, o hoy. */
   initialDateISO?: string;
   initialReason?: string;

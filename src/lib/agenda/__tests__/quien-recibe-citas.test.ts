@@ -200,7 +200,11 @@ test("el padrón de la Agenda (columnas y Nueva cita) son los roles que atienden
 
   const dialogo = leer("src/components/dashboard/new-appointment/new-appointment-dialog.tsx");
   assert.match(dialogo, /doctors: padron\.filter\(\(d\) => d\.activeInAgenda !== false\)/);
-  assert.match(dialogo, /doctorQueRecibeCitas\(\[initialSlot\?\.doctorId, params\?\.initialDoctorId\], boot\.doctors\.map\(\(d\) => d\.id\)\)/);
+  // ws1-t1 (F7): después de `initialDoctorId` caben más candidatos («Reagendar próxima»: última cita, tratante).
+  assert.match(
+    dialogo,
+    /doctorQueRecibeCitas\(\s*\[initialSlot\?\.doctorId, params\?\.initialDoctorId, \.\.\.\(params\?\.initialDoctorIds \?\? \[\]\)\],\s*boot\.doctors\.map\(\(d\) => d\.id\),?\s*\)/,
+  );
   assert.doesNotMatch(dialogo, /setDoctorId\(params\.initialDoctorId\)/, "el id de fuera ya no se acepta a ciegas");
 });
 

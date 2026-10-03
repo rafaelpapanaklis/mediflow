@@ -62,6 +62,8 @@ import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-t
 import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-a-presupuesto/convertir-en-presupuesto";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
+import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
+import { citaParaReagendar, doctorParaNuevoPlan, dtoParaMoverCita, prellenadoDeNuevaCita } from "@/lib/patients/reagendar-proxima";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -548,6 +550,8 @@ export function PatientDetailClient({
   const { open: openNewAppointment } = useNewAppointmentDialog();
   // La cita abierta en «Editar cita» desde la pestaña Citas (solo rediseño).
   const [citaAbiertaId, setCitaAbiertaId] = useState<string | null>(null);
+  // ws1-t1 (F7): la cita que «Reagendar próxima» abre para mover en la ficha de siempre (sin rediseño).
+  const [citaMoverId, setCitaMoverId] = useState<string | null>(null);
   // Citas: lo que el servidor ya confirmó (cancelar, cambiar de estado) se pinta
   // AL MOMENTO encima de las filas del servidor; `router.refresh()` re-arma la
   // ficha entera y tarda segundos. Todo lo que se deriva de `appointments`
@@ -912,7 +916,12 @@ export function PatientDetailClient({
   useEffect(() => {
     if (showNewTreatment) {
       setTreatmentForm({
-        doctorId: doctors?.[0]?.id ?? "",
+        // ws1-t1 (F7): el doctor de su última cita, o quien está en sesión si atiende; antes, doctors[0].
+        doctorId: doctorParaNuevoPlan(appointments, {
+          ahora: new Date(),
+          usuarioId: currentUser.id,
+          doctorIds: (doctors ?? []).map((d) => d.id),
+        }),
         name: "",
         description: "",
         totalSessions: "6",
@@ -920,6 +929,8 @@ export function PatientDetailClient({
         totalCost: "",
       });
     }
+    // Solo al abrir: las citas que llegan después no le cambian el doctor a un formulario a medias.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showNewTreatment, doctors]);
   const etiquetasDoctoresPlan = useMemo(() => etiquetasDeProfesionales(doctors ?? []), [doctors]);
 
@@ -1396,6 +1407,46 @@ export function PatientDetailClient({
     });
   }, [openNewAppointment, patient.id, patient.firstName, patient.lastName, router]);
 
+  // ws1-t1 (F7): «Reagendar próxima» abre la próxima cita para MOVERLA (la misma ventana de la agenda). Antes
+  // abría «Nueva cita» en blanco y recepción acababa con dos citas. Sin cita por delante —o sin permiso para
+  // moverla— abre «Nueva cita» prellenada con el doctor, el consultorio y el motivo de su última cita.
+  const tratanteId: string | null = orthoData?.plan?.treatingDoctorId ?? patient.primaryDoctorId ?? null;
+  const reagendarProxima = useCallback(() => {
+    const ahora = new Date();
+    const cita = citaParaReagendar(appointments, ahora, zonaClinica);
+    if (cita && agendaCitas && citaAbrible(cita.status, agendaCitas.permisos)) {
+      if (rediseno) setCitaAbiertaId(cita.id);
+      else setCitaMoverId(cita.id);
+      return;
+    }
+    openNewAppointment({
+      initialPatient: { id: patient.id, name: `${patient.firstName} ${patient.lastName}`.trim() },
+      ...prellenadoDeNuevaCita(appointments, { ahora, tratanteId }),
+      openAgendaAfter: false,
+      onCreated: () => router.refresh(),
+    });
+  }, [appointments, zonaClinica, agendaCitas, rediseno, openNewAppointment, patient.id, patient.firstName, patient.lastName, tratanteId, router]);
+  const prestadoParaMover = useMemo(
+    () =>
+      agendaCitas
+        ? {
+            timezone: agendaCitas.timezone,
+            doctors: agendaCitas.doctors,
+            resources: agendaCitas.resources,
+            onGuardada: () => router.refresh(),
+          }
+        : null,
+    [agendaCitas, router],
+  );
+  const citaParaMover = useMemo(
+    () =>
+      dtoParaMoverCita(
+        citaMoverId ? appointments.find((a: any) => a.id === citaMoverId) ?? null : null,
+        { id: patient.id, nombre: `${patient.firstName} ${patient.lastName}`.trim() },
+      ),
+    [citaMoverId, appointments, patient.id, patient.firstName, patient.lastName],
+  );
+
   const fullName = `${patient.firstName} ${patient.lastName}`;
   const ageNum = ageFromDob(patient.dob);
   const genderLabel = patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro";
@@ -1816,7 +1867,7 @@ export function PatientDetailClient({
           onStartConsult={() => void iniciarConsulta()}
           motivoSinIniciar={motivoSinIniciar}
           iniciandoConsulta={iniciandoCitaId !== null}
-          onReschedule={openNewAppointmentForPatient}
+          onReschedule={reagendarProxima}
           onCharge={openChargeShortcut}
           puedeCobrar={permisosCobro?.cobrar !== false}
           canEdit={canEditPatient}
@@ -3110,6 +3161,16 @@ export function PatientDetailClient({
               }}
               onClose={() => setCitaAbiertaId(null)}
               onEstadoCambiado={marcarEstadoDeCita}
+            />
+          )}
+
+          {/* ws1-t1 (F7): «Reagendar próxima» en la ficha de siempre — la ventana de mover de la agenda de siempre. */}
+          {!rediseno && prestadoParaMover && (
+            <AgendaEditAppointmentModal
+              appt={citaParaMover}
+              isOpen={citaParaMover !== null}
+              onClose={() => setCitaMoverId(null)}
+              prestado={prestadoParaMover}
             />
           )}
 

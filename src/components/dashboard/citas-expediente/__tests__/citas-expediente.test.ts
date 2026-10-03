@@ -135,9 +135,11 @@ test("eliminar pide confirmación y dice qué cita y qué le pasa", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 🔴 Con la bandera apagada, nada de esto existe
 // ═══════════════════════════════════════════════════════════════════════════
-test("la página solo carga y pasa lo de la agenda con la bandera encendida", () => {
-  assert.match(PAGINA, /const agendaCitas = rediseno\s*\?[\s\S]*?: null;/);
-  assert.match(PAGINA, /\{\.\.\.\(agendaCitas \? \{ agendaCitas \} : \{\}\)\}/, "sin bandera ni siquiera viaja la prop");
+test("la página carga lo de la agenda (ws1-t1: también sin bandera, para «Reagendar próxima»)", () => {
+  // ws1-t1 (F7): antes solo con la bandera; ahora siempre, porque la cabecera de la ficha de siempre abre la
+  // ventana de mover sobre la próxima cita. La pestaña Citas sin rediseño sigue sin abrir nada (ver ficha).
+  assert.match(PAGINA, /const agendaCitas = await Promise\.all\(\[/);
+  assert.match(PAGINA, /\{\.\.\.\(agendaCitas \? \{ agendaCitas \} : \{\}\)\}/);
   // Los mismos permisos y los mismos cargadores que /dashboard/agenda.
   const agenda = leer("app/dashboard/agenda/page.tsx");
   for (const pieza of ['hasPermission(permsUser, "agenda.edit")', 'hasPermission(permsUser, "agenda.delete")']) {

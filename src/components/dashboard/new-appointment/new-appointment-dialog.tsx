@@ -331,10 +331,18 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     // se aceptaba cualquiera: el <select> enseñaba al primero de la lista y la
     // cita se mandaba con el otro → doctor_not_found.
     setDoctorId(
-      doctorQueRecibeCitas([initialSlot?.doctorId, params?.initialDoctorId], boot.doctors.map((d) => d.id)),
+      doctorQueRecibeCitas(
+        [initialSlot?.doctorId, params?.initialDoctorId, ...(params?.initialDoctorIds ?? [])],
+        boot.doctors.map((d) => d.id),
+      ),
     );
 
-    setResourceId(initialSlot?.resourceId ?? "");
+    // ws1-t1 (F7): «Reagendar próxima» sin cita por delante trae el consultorio de su última cita.
+    const unidadPedida = params?.initialResourceId;
+    setResourceId(
+      initialSlot?.resourceId ??
+        (unidadPedida && boot.resources.some((r) => r.id === unidadPedida) ? unidadPedida : ""),
+    );
   }, [isOpen, boot, params]);
 
   // Pediatrics — al cambiar paciente, consulta el endpoint para saber si

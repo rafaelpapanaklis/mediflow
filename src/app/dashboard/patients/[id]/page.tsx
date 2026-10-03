@@ -254,22 +254,23 @@ export default async function PatientDetailPage({
   // pestaña Citas abre «Editar cita», la MISMA ventana de la agenda, y esa
   // ventana necesita lo que en /dashboard/agenda baja el servidor: doctores,
   // unidades, zona horaria y los mismos dos permisos. Se cargan con las mismas
-  // funciones que usa la agenda. Con la bandera apagada no hay ni consulta ni
-  // prop: la página queda como estaba.
-  const agendaCitas = rediseno
-    ? await Promise.all([
-        fetchActiveDoctors(user.clinicId, user.clinic.category),
-        fetchResources(user.clinicId),
-      ]).then(([agendaDoctors, agendaResources]) => ({
-        timezone: tz,
-        doctors: agendaDoctors,
-        resources: agendaResources,
-        permisos: {
-          canEdit: hasPermission(permsUser, "agenda.edit"),
-          canCancel: hasPermission(permsUser, "agenda.delete"),
-        },
-      }))
-    : null;
+  // funciones que usa la agenda.
+  // ws1-t1 (F7): también con la bandera apagada — «Reagendar próxima» de la
+  // cabecera abre la ventana de mover cita (la de la agenda de siempre) sobre
+  // la próxima cita, y esa ventana necesita lo mismo. Son dos consultas en
+  // paralelo; la pestaña Citas sin rediseño sigue sin abrir nada.
+  const agendaCitas = await Promise.all([
+    fetchActiveDoctors(user.clinicId, user.clinic.category),
+    fetchResources(user.clinicId),
+  ]).then(([agendaDoctors, agendaResources]) => ({
+    timezone: tz,
+    doctors: agendaDoctors,
+    resources: agendaResources,
+    permisos: {
+      canEdit: hasPermission(permsUser, "agenda.edit"),
+      canCancel: hasPermission(permsUser, "agenda.delete"),
+    },
+  }));
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
   const linkedPortalAccount = portalAccountLink?.account ?? null;
