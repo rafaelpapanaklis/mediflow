@@ -6,7 +6,8 @@
 // WhatsApp. Sin profesional asignado no se inicia: se pide elegir uno (`assignedTo_required`).
 //
 // Si la fila no trae paciente (el formulario de «Agregar a espera» solo recoge nombre y servicio) se da de alta
-// uno con ese nombre. Si el profesional ya tiene otra cita encima, la restricción de no-solape de la base la
+// uno con el nombre y los apellidos que la pantalla pidió confirmar POR SEPARADO (ws1-t1, 3-oct-2026: antes se
+// partía en «primera palabra / el resto»; ver nombre-del-paciente-nuevo.ts). Sin ellos no se inicia. Si el profesional ya tiene otra cita encima, la restricción de no-solape de la base la
 // rechaza y se contesta 409 SIN tocar la fila (la transacción se deshace): se elige otro profesional.
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -17,6 +18,7 @@ import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { assertPatientVisible, ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { nextPatientNumber, withPatientNumberRetry, PatientNumberExhaustedError } from "@/lib/patients/next-patient-number";
 import { logMutation } from "@/lib/audit";
+import { nombreCompleto, sugerirNombreYApellidos, textosPacienteNuevo, type NombreYApellidos } from "@/lib/walk-in/nombre-del-paciente-nuevo";
 
 export const MINUTOS_POR_DEFECTO = 30;
 
@@ -29,17 +31,13 @@ export type ResultadoIniciar =
 
 class FilaYaMovida extends Error {}
 
-/** «Ana María López Ruiz» → nombre «Ana», apellido «María López Ruiz» (la fila solo guarda un texto libre). */
-export function partirNombre(completo: string): { firstName: string; lastName: string } {
-  const partes = completo.trim().split(/\s+/).filter(Boolean);
-  return { firstName: partes[0] ?? "", lastName: partes.slice(1).join(" ") };
-}
-
 export async function iniciarConsultaWalkIn(args: {
   req: NextRequest;
   actor: Actor;
   entry: EntradaFila;
   assignedTo?: string | null;
+  /** Nombre y apellidos confirmados en la pantalla; obligatorios solo si la fila no trae paciente. */
+  nombre?: NombreYApellidos | null;
 }): Promise<ResultadoIniciar> {
   const { req, actor, entry } = args;
   const clinicId = actor.clinicId;
@@ -59,6 +57,19 @@ export async function iniciarConsultaWalkIn(args: {
   });
   // Con el MOTIVO concreto (recepción, cuenta inactiva, casilla apagada…), como Citas y la lista de espera.
   if (!profesional) return { ok: false, status: 404, body: await cuerpoDoctorNoRecibeCitasDe(clinicId, doctorId) };
+
+  // Paciente nuevo: nada de adivinar dónde acaba el nombre. La pantalla lo pide confirmado; aquí se exige.
+  if (!entry.patientId && !args.nombre) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: "nombre_y_apellidos_requeridos",
+        reason: textosPacienteNuevo("es").motivoServidor,
+        sugerido: sugerirNombreYApellidos(entry.patientName),
+      },
+    };
+  }
 
   if (entry.patientId) {
     const denegado = await assertPatientVisible(entry.patientId, actor);
@@ -89,7 +100,7 @@ export async function iniciarConsultaWalkIn(args: {
 
         if (!pacienteId) {
           await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
-          const { firstName, lastName } = partirNombre(entry.patientName);
+          const { firstName, lastName } = args.nombre as NombreYApellidos;
           const nuevo = await tx.patient.create({
             data: {
               clinicId,
@@ -101,7 +112,10 @@ export async function iniciarConsultaWalkIn(args: {
             select: { id: true },
           });
           pacienteId = nuevo.id;
-          await tx.walkInQueue.updateMany({ where: { id: entry.id, clinicId }, data: { patientId: nuevo.id } });
+          await tx.walkInQueue.updateMany({
+            where: { id: entry.id, clinicId },
+            data: { patientId: nuevo.id, patientName: nombreCompleto({ firstName, lastName }) },
+          });
         }
 
         const cita = await tx.appointment.create({

@@ -6,6 +6,7 @@ import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { iniciarConsultaWalkIn } from "@/lib/walk-in/iniciar-consulta";
 import { cerrarFilaConSuCita } from "@/lib/walk-in/cerrar-con-cita";
+import { leerNombreYApellidos } from "@/lib/walk-in/nombre-del-paciente-nuevo";
 
 // «Asignar» solo MARCA quién atenderá; «Iniciar» crea la cita (ver src/lib/walk-in/iniciar-consulta.ts).
 // Contrato de la fila: el cliente manda `{ action }` (y `assignedTo` al asignar). El servidor decide el estado
@@ -47,6 +48,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       actor: { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId },
       entry,
       assignedTo: typeof body?.assignedTo === "string" ? body.assignedTo : null,
+      // Paciente nuevo: nombre y apellidos por separado, confirmados en la pantalla (ws1-t1).
+      nombre: leerNombreYApellidos(body),
     });
     if ("body" in r) {
       return NextResponse.json(r.body.error === "invalid_transition" ? { ...r.body, status: entry.status } : r.body, { status: r.status });

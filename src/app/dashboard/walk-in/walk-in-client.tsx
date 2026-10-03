@@ -10,9 +10,13 @@ import { FilaEspera, horaLlegada } from "@/components/dashboard/piezas-rediseno/
 import {
   MAX_SUGERENCIAS, MIN_LETRAS_BUSQUEDA, cuerpoAlAgregar, decidirAlAgregar, type PacienteEncontrado,
 } from "@/lib/walk-in/paciente-de-la-fila";
+import { sugerirNombreYApellidos, type NombreYApellidos } from "@/lib/walk-in/nombre-del-paciente-nuevo";
+import { ConfirmarPacienteNuevo } from "./confirmar-paciente-nuevo";
 
 interface QueueItem {
   id: string;
+  /** El paciente del expediente; null = «Iniciar» dará de alta uno nuevo (con nombre y apellidos confirmados). */
+  patientId?: string | null;
   patientName: string;
   service: string;
   priority: number;
@@ -84,6 +88,9 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   const [asignandoId, setAsignandoId] = useState<string | null>(null);
   // «Iniciar» sin profesional asignado abre el selector; al elegir, la misma elección inicia la consulta.
   const [iniciarAlElegir, setIniciarAlElegir] = useState<string | null>(null);
+  // «Iniciar» una fila sin paciente del expediente: antes de darlo de alta se confirman nombre y apellidos.
+  const [pacienteNuevo, setPacienteNuevo] = useState<{ id: string; assignedTo?: string; inicial: NombreYApellidos } | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const nombreDe = (id: string | null) => (id ? profesionales.find(p => p.id === id)?.name ?? null : null);
 
   const statusLabel = (status: string) =>
@@ -203,7 +210,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
     agregarComoNuevo: () => handleAdd({ comoNuevo: true }),
   };
 
-  async function handleAction(id: string, action: string, assignedTo?: string) {
+  async function handleAction(id: string, action: string, assignedTo?: string, nombre?: NombreYApellidos) {
     // «Iniciar» crea la cita del momento y necesita profesional: si la fila no lo trae, se le pide elegir uno.
     if (action === "start" && !assignedTo && !queue.find(q => q.id === id)?.assignedTo) {
       if (profesionales.length === 0) { toast.error(t("pages.walkIn.noProfessionals")); return; }
@@ -223,14 +230,26 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
       setAsignandoId(id);
       return;
     }
+    // Paciente nuevo: nombre y apellidos por separado antes de darlo de alta (ws1-t1). Ya no se adivina.
+    const fila = queue.find(q => q.id === id);
+    if (action === "start" && fila && !fila.patientId && !nombre) {
+      setPacienteNuevo({ id, assignedTo, inicial: sugerirNombreYApellidos(fila.patientName) });
+      return;
+    }
+    setEnviando(true);
     try {
       const res = await fetch(`/api/walk-in/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...(assignedTo ? { assignedTo } : {}) }),
+        body: JSON.stringify({ action, ...(assignedTo ? { assignedTo } : {}), ...(nombre ?? {}) }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => null);
+        // Otra pantalla le quitó el paciente a la fila (o es una versión vieja de esta): se pide confirmar.
+        if (err?.error === "nombre_y_apellidos_requeridos" && err.sugerido) {
+          setPacienteNuevo({ id, assignedTo, inicial: err.sugerido });
+          return;
+        }
         toast.error(typeof err?.reason === "string" ? err.reason : t("pages.walkIn.updateError"));
         if (res.status === 409) {
           // Otra pantalla ya movió el turno: se trae la fila al día en vez de dejarla con el estado viejo.
@@ -243,11 +262,25 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
       setQueue(prev => prev.map(q => q.id === id ? updated : q));
       setAsignandoId(null);
       setIniciarAlElegir(null);
+      setPacienteNuevo(null);
       toast.success(t("pages.walkIn.statusUpdatedToast", { status: statusLabel(updated.status) }));
     } catch {
       toast.error(t("pages.walkIn.updateError"));
+    } finally {
+      setEnviando(false);
     }
   }
+
+  const ventanaPacienteNuevo = pacienteNuevo && (
+    <ConfirmarPacienteNuevo
+      key={pacienteNuevo.id}
+      inicial={pacienteNuevo.inicial}
+      rediseno={rediseno}
+      enviando={enviando}
+      onConfirmar={(n) => void handleAction(pacienteNuevo.id, "start", pacienteNuevo.assignedTo, n)}
+      onCancelar={() => { setPacienteNuevo(null); setAsignandoId(null); setIniciarAlElegir(null); }}
+    />
+  );
 
   const activeQueue = queue.filter(q => q.status !== "COMPLETED" && q.status !== "CANCELLED");
   // «Atendidos hoy» = solo los completados; los cancelados van aparte y «en atención» no es «en espera».
@@ -260,6 +293,7 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
   // Con la bandera apagada no se llega aquí y lo de abajo se pinta como hoy.
   if (rediseno) {
     return (
+      <>
       <FilaEspera
         activeQueue={activeQueue}
         doneQueue={doneQueue}
@@ -280,6 +314,8 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
         puedeAgregar={puedeAgregar}
         puedeEditar={puedeEditar}
       />
+      {ventanaPacienteNuevo}
+      </>
     );
   }
 
@@ -404,6 +440,8 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
           </div>
         </div>
       )}
+
+      {ventanaPacienteNuevo}
 
       {/* Add Modal */}
       {showAdd && puedeAgregar && (

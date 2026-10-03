@@ -86,6 +86,8 @@ const tx: any = {
 });
 
 const req = (body?: any) => ({ json: async () => body }) as any;
+// ws1-t1: el paciente nuevo llega con nombre y apellidos confirmados por separado.
+const NOMBRE = { firstName: "Ana María", lastName: "López" };
 const idp = { params: { id: "w1" } };
 
 test("sin profesional asignado: no inicia, pide elegir uno y no crea nada", async () => {
@@ -111,7 +113,7 @@ test("«Iniciar» con profesional asignado: cita de hoy, ahora, en consulta, con
   fila.status = "ASSIGNED";
   fila.assignedTo = "doc1";
   const antes = Date.now();
-  const r = await PATCH(req({ action: "start" }), idp);
+  const r = await PATCH(req({ action: "start", ...NOMBRE }), idp);
   assert.equal(r.status, 200);
   const j = await r.json();
   assert.equal(j.status, "IN_PROGRESS");
@@ -131,14 +133,27 @@ test("«Iniciar» con profesional asignado: cita de hoy, ahora, en consulta, con
   assert.equal(c.patientId, "p-nuevo");
 });
 
-test("la fila sin paciente da de alta uno con ese nombre; con paciente, lo reutiliza", async () => {
+test("la fila sin paciente da de alta uno con el nombre y los apellidos confirmados; con paciente, lo reutiliza", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");
-  const r = await PATCH(req({ action: "start", assignedTo: "doc1" }), idp);
+  // ws1-t1: sin nombre y apellidos por separado no se adivina («Ana» / «María López» era el error): 400 y nada se escribe.
+  const sin = await PATCH(req({ action: "start", assignedTo: "doc1" }), idp);
+  assert.equal(sin.status, 400);
+  const j = await sin.json();
+  assert.equal(j.error, "nombre_y_apellidos_requeridos");
+  assert.deepEqual(j.sugerido, { firstName: "Ana", lastName: "María López" }, "la propuesta para prellenar (tres palabras: un nombre y dos apellidos)");
+  assert.equal(pacientes.length, 0);
+  assert.equal(citas.length, 0);
+  assert.equal(fila.status, "WAITING");
+  // A medias (solo nombre) tampoco.
+  assert.equal((await PATCH(req({ action: "start", assignedTo: "doc1", firstName: "Ana María" }), idp)).status, 400);
+
+  const r = await PATCH(req({ action: "start", assignedTo: "doc1", firstName: "  Ana   María ", lastName: "López" }), idp);
   assert.equal(r.status, 200);
   assert.equal(pacientes.length, 1);
-  assert.equal(pacientes[0].firstName, "Ana");
-  assert.equal(pacientes[0].lastName, "María López");
+  assert.equal(pacientes[0].firstName, "Ana María");
+  assert.equal(pacientes[0].lastName, "López");
   assert.equal(pacientes[0].clinicId, "c1");
+  assert.equal(fila.patientName, "Ana María López", "la fila queda con el nombre con que se dio de alta");
 
   fila.status = "WAITING"; fila.patientId = "p-viejo"; citas = []; pacientes = [];
   assert.equal((await PATCH(req({ action: "start", assignedTo: "doc1" }), idp)).status, 200);
@@ -159,7 +174,7 @@ test("el profesional elegido al iniciar manda sobre el asignado antes; ajeno o q
 test("el profesional ya tiene una cita encima: 409 con motivo, la fila sigue esperando y no queda cita ni paciente a medias", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");
   errorAlCrearCita = Object.assign(new Error('exclusion constraint "appointments_no_overlap"'), { code: "23P01" });
-  const r = await PATCH(req({ action: "start", assignedTo: "doc1" }), idp);
+  const r = await PATCH(req({ action: "start", assignedTo: "doc1", ...NOMBRE }), idp);
   assert.equal(r.status, 409);
   const j = await r.json();
   assert.equal(j.error, "appointment_overlap");
@@ -172,8 +187,8 @@ test("el profesional ya tiene una cita encima: 409 con motivo, la fila sigue esp
 
 test("dos «Iniciar» a la vez o repetido: una sola cita", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");
-  assert.equal((await PATCH(req({ action: "start", assignedTo: "doc1" }), idp)).status, 200);
-  assert.equal((await PATCH(req({ action: "start", assignedTo: "doc1" }), idp)).status, 409);
+  assert.equal((await PATCH(req({ action: "start", assignedTo: "doc1", ...NOMBRE }), idp)).status, 200);
+  assert.equal((await PATCH(req({ action: "start", assignedTo: "doc1", ...NOMBRE }), idp)).status, 409);
   assert.equal(citas.length, 1);
 });
 
