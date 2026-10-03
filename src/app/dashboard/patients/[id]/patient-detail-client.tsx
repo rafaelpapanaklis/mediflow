@@ -3551,6 +3551,7 @@ export function PatientDetailClient({
               balance: totalBalance,
               credit: creditBalance,
               pct: pctPaid,
+              plan: totalPlanesActivos,
             }}
             patientId={patient.id}
             patientName={fullName}
