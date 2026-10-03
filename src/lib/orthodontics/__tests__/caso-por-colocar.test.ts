@@ -91,13 +91,15 @@ describe("las pantallas que abren la hoja le dicen si el caso está «Por coloca
     }
   });
 
-  it("la ficha lo pasa a sus cuatro cajones y «Registrar la colocación primero» abre «Datos del caso»", () => {
+  // ws1-t8 (F12/M5 de BEVADENT, 3-oct): «Registrar la colocación primero» abre el cajón de la colocación (fecha,
+  // técnica y controles previstos), ya no «Datos del caso».
+  it("la ficha lo pasa a sus cuatro cajones y «Registrar la colocación primero» abre el cajón de la colocación", () => {
     const ficha = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
     const cajones = ficha.split("<DrawerTreatmentCard").length - 1;
     assert.equal(cajones, 4);
     assert.equal(ficha.split("onRegistrarColocacion={registrarColocacion}").length - 1, cajones);
     assert.equal(ficha.split("casoPorColocar={t.casoPorColocar === true || nuevoControlCtx?.casoPorColocar === true}").length - 1, cajones);
-    assert.match(ficha, /const registrarColocacion = props\.onUpdateCaseSettings\s*\?\s*\(\) => \{\s*setDrawer\(\{ kind: "case-settings" \}\)/);
+    assert.match(ficha, /const registrarColocacion = props\.onUpdateCaseSettings\s*\?\s*\(\) => \{\s*setDrawer\(\{ kind: "colocacion" \}\)/);
   });
 
   it("la vista del caso marca «Por colocar»", () => {

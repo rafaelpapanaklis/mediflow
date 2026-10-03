@@ -1,6 +1,7 @@
 "use client";
 // Módulo de Ortodoncia — lo que se hace con un caso desde la sección «Casos»
-// (ws1-t8): editar sus datos y eliminarlo si se abrió por error.
+// (ws1-t8): editar sus datos, eliminarlo si se abrió por error y, si sigue
+// «Por colocar», registrar la colocación (F12/M5 de BEVADENT).
 //
 // Los dos se pintan en un portal, fuera de la raíz del módulo: esa raíz es un
 // contenedor (`container-type`) y dentro de uno lo «fijo» se ancla al
@@ -22,6 +23,7 @@ import {
   DrawerCaseSettings,
   type DrawerCaseSettingsPayload,
 } from "@/components/specialties/orthodontics/redesign/drawers/DrawerCaseSettings";
+import { DrawerColocacion } from "@/components/specialties/orthodontics/redesign/drawers/DrawerColocacion";
 import { updateTreatmentPlan } from "@/app/actions/orthodontics/updateTreatmentPlan";
 import { moverControlesFuturosAlDoctor } from "@/app/actions/orthodontics/moverControlesFuturosAlDoctor";
 import { eliminarCaso } from "@/app/actions/orthodontics/modulo/eliminarCaso";
@@ -92,6 +94,41 @@ export function EditarDatosDelCaso({
     <EnElBody
       clases={RAIZ_ORTO}
       hijos={<DrawerCaseSettings patientId={patientId} treatmentPlanId={planId} onClose={alCerrar} onConfirm={guardar} />}
+    />
+  );
+}
+
+// ── Registrar colocación ───────────────────────────────────────────────────
+
+/**
+ * ws1-t8 (F12/M5 de BEVADENT): el cajón de la colocación desde la fila de un caso «Por colocar». El mismo que abre la
+ * cabecera del caso en la ficha. Al registrarla, la tabla se vuelve a pedir (el caso pasa a «En curso») y el cajón
+ * se queda abierto con el calendario propuesto.
+ */
+export function RegistrarColocacionDelCaso({
+  patientId,
+  planId,
+  alCerrar,
+}: {
+  patientId: string;
+  planId: string;
+  alCerrar: () => void;
+}) {
+  const router = useRouter();
+  return (
+    <EnElBody
+      clases={RAIZ_ORTO}
+      hijos={
+        <DrawerColocacion
+          patientId={patientId}
+          treatmentPlanId={planId}
+          onClose={alCerrar}
+          onColocado={() => {
+            toast.success("Colocación registrada: el caso pasó a «En curso».");
+            router.refresh();
+          }}
+        />
+      }
     />
   );
 }

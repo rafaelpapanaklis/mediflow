@@ -24,11 +24,14 @@
 //    terminó o abandonó.
 //  - Un caso sin plan de pago dice «Sin plan de pago», no «Al día».
 // Las filas y los filtros los decide `pacientes-modulo.ts` (puro, con tests).
+//
+// ws1-t8 (F12/M5 de la auditoría de BEVADENT): un caso «Por colocar» ofrece
+// «Registrar colocación» en su fila (el mismo cajón que la cabecera del caso).
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Search, SearchX, Trash2, Users } from "lucide-react";
+import { Pencil, Search, SearchX, Trash2, Users, Wrench } from "lucide-react";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -38,6 +41,7 @@ import { AbrirCasoBoton } from "@/components/specialties/orthodontics/modulo/abr
 import {
   EditarDatosDelCaso,
   EliminarCasoDialogo,
+  RegistrarColocacionDelCaso,
 } from "@/components/specialties/orthodontics/modulo/acciones-de-caso";
 import { destinoDelCaso } from "@/lib/orthodontics/casos-del-paciente";
 import { TEXTO_CON_HISTORIAL } from "@/lib/orthodontics/eliminar-caso";
@@ -98,6 +102,7 @@ export function OrthoPacientesTable({
   const [ver, setVer] = useState<FiltroVer | null>(verInicial);
   const [editando, setEditando] = useState<FilaDeCaso | null>(null);
   const [eliminando, setEliminando] = useState<FilaDeCaso | null>(null);
+  const [colocando, setColocando] = useState<FilaDeCaso | null>(null);
 
   const cuentas = useMemo(() => contarPorEstado(rows), [rows]);
   const doctores = useMemo(() => doctoresDeLaLista(rows), [rows]);
@@ -276,6 +281,19 @@ export function OrthoPacientesTable({
                       )}
                     </td>
                     <td role="cell" className={s.accionesCaso} onClick={(e) => e.stopPropagation()}>
+                      {/* ws1-t8 (F12/M5 de BEVADENT): la colocación, a la vista en un caso «Por colocar». */}
+                      {puedeAbrirCaso && r.estado === "planeado" && (
+                        <button
+                          type="button"
+                          className={`${s.boton} ${s.botonPeq} ${s.botonPrincipal}`}
+                          aria-label={`Registrar la colocación del caso de ${r.patientName}`}
+                          aria-haspopup="dialog"
+                          onClick={() => setColocando(r)}
+                        >
+                          <Wrench size={13} strokeWidth={1.9} aria-hidden />
+                          Registrar colocación
+                        </button>
+                      )}
                       <Link href={href} className={`${s.boton} ${s.botonPeq}`} aria-label={`Ver caso de ${r.patientName}`}>
                         Ver caso
                       </Link>
@@ -320,6 +338,9 @@ export function OrthoPacientesTable({
       )}
       {editando && (
         <EditarDatosDelCaso patientId={editando.patientId} planId={editando.planId} alCerrar={() => setEditando(null)} />
+      )}
+      {colocando && (
+        <RegistrarColocacionDelCaso patientId={colocando.patientId} planId={colocando.planId} alCerrar={() => setColocando(null)} />
       )}
       {eliminando && (
         <EliminarCasoDialogo

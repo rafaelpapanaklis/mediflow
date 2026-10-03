@@ -15,7 +15,7 @@
 //  - El expediente de ortodoncia es el «caso», con su estado en palabras.
 //  - El botón que abre la aparatología se llama así, no «Editar plan».
 
-import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Settings } from "lucide-react";
+import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Settings, Wrench } from "lucide-react";
 import { Btn, Card, StatChip, fmtDayLong, fmtPct } from "../atoms";
 import { Pill } from "../atoms/Pill";
 import { BotonAbrirCaso } from "../BotonAbrirCaso";
@@ -43,6 +43,11 @@ export interface SectionHeroProps {
   /** Ola 1 (ws1-t6) — A5/A6/A7/A11: doctor tratante, responsable del pago,
    *  fecha de colocación y estado del caso. */
   onOpenCaseSettings?: () => void;
+  /**
+   * ws1-t8 (F12/M5 de BEVADENT): el caso sigue «Por colocar» y quien mira puede editarlo: «Colocar aparatos hoy» abre
+   * el cajón de la colocación. Antes solo se registraba escribiendo la fecha dentro de «Datos del caso».
+   */
+  onRegistrarColocacion?: () => void;
   /** La prescripción tal como la dice el plan: si existe, es la que se ve (una sola fuente). */
   prescripcionDelPlan?: string | null;
   onStartControl?: () => void;
@@ -126,6 +131,16 @@ export function SectionHero(props: SectionHeroProps) {
       eyebrow={t.caseStatusLabel ? `Caso de ortodoncia · ${t.caseStatusLabel}` : "Caso de ortodoncia"}
       action={
         <>
+          {props.onRegistrarColocacion ? (
+            <Btn
+              variant="primary"
+              size="sm"
+              icon={<Wrench size={14} strokeWidth={1.75} aria-hidden />}
+              onClick={props.onRegistrarColocacion}
+            >
+              Colocar aparatos hoy
+            </Btn>
+          ) : null}
           {props.onOpenCaseSettings ? (
             <Btn
               variant="secondary"

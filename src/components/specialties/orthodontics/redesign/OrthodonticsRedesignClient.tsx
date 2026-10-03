@@ -8,6 +8,7 @@
 import { Shield, Sparkles, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 // ws1-t4: «Cobrar» de la cabecera → ventana completa de la factura del caso.
@@ -74,6 +75,7 @@ import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireS
 import { DrawerAddTad, type DrawerAddTadSubmit } from "./drawers/DrawerAddTad";
 import { DrawerNewCase, type DrawerEditarPlanSubmit, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { DrawerCaseSettings, type DrawerCaseSettingsPayload } from "./drawers/DrawerCaseSettings";
+import { DrawerColocacion } from "./drawers/DrawerColocacion";
 import { tratamientoConCasoGuardado, type CasoGuardado } from "@/lib/orthodontics/redesign/caso-guardado";
 import { ModalCompare } from "./drawers/ModalCompare";
 import {
@@ -123,6 +125,7 @@ type DrawerState =
   | { kind: "wa-chat" }
   | { kind: "new-case" }
   | { kind: "case-settings" }
+  | { kind: "colocacion" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -411,6 +414,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     casoGuardado && casoGuardado.base === vm.treatment
       ? tratamientoConCasoGuardado(vm.treatment, casoGuardado.guardado)
       : vm.treatment;
+  const router = useRouter();
 
   // «Agregar arco»: la fila recién creada se pinta al instante; el refresh de la
   // página tarda segundos en traerla. Ligada al paciente para no arrastrarla a
@@ -459,10 +463,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   );
   const pacienteParaAgendar = { id: vm.patient.id, nombre: vm.patient.fullName, doctorId: null };
   // ws1-t8 (decisión 13): «Registrar la colocación primero» desde la hoja de un caso «Por colocar». La hoja ya se
-  // guardó como borrador; se abre «Datos del caso» (fecha de colocación). Sin ese permiso el aviso solo deja firmar.
+  // guardó como borrador; se abre el cajón de la colocación (F12 de BEVADENT: fecha, técnica y controles; antes
+  // «Datos del caso»). Sin permiso para editar el caso el aviso solo deja firmar.
   const registrarColocacion = props.onUpdateCaseSettings
     ? () => {
-        setDrawer({ kind: "case-settings" });
+        setDrawer({ kind: "colocacion" });
         toast(textosFirma.porColocarBorradorGuardado, { duration: 10000 });
       }
     : undefined;
@@ -764,6 +769,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             }
             onOpenCaseSettings={
               props.onUpdateCaseSettings ? () => setDrawer({ kind: "case-settings" }) : undefined
+            }
+            // ws1-t8 (F12/M5 de BEVADENT): «Colocar aparatos hoy», a la vista, en un caso «Por colocar». Mismo permiso
+            // que «Datos del caso» (editar el expediente).
+            onRegistrarColocacion={
+              t.casoPorColocar && t.treatmentPlanId && props.onUpdateCaseSettings ? () => setDrawer({ kind: "colocacion" }) : undefined
             }
             // Con la cabecera del paciente montada, «Registrar control» vive
             // ahí (arriba, siempre a la vista); aquí solo si no hay cabecera.
@@ -1328,6 +1338,19 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           onConfirm={async (payload) => {
             await props.onCreateCase?.(payload);
             closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* ws1-t8 (F12/M5 de BEVADENT): registrar la colocación (fecha, técnica, controles previstos y calendario). */}
+      {drawer?.kind === "colocacion" && t.treatmentPlanId ? (
+        <DrawerColocacion
+          patientId={vm.patient.id}
+          treatmentPlanId={t.treatmentPlanId}
+          onClose={closeDrawer}
+          onColocado={(guardado) => {
+            setCasoGuardado({ base: vm.treatment, guardado });
+            router.refresh();
           }}
         />
       ) : null}
