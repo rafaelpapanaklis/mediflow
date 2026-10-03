@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 // Fecha de publicación (texto aprobado por el abogado; se publica con la integración de la ola del 26-sep).
-const LAST_UPDATED = "30 de septiembre de 2026";
+const LAST_UPDATED = "2 de octubre de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
 const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
