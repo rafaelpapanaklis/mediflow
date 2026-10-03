@@ -21,6 +21,7 @@ import { cargarDoctoresTratantes } from "@/lib/orthodontics/doctores-tratantes-d
 import { etiquetaDeDoctor, propuestaDeDoctorParaElAlta, type MotivoDeLaPropuesta } from "@/lib/orthodontics/doctores-tratantes";
 import { responsablePropuestoParaElAlta, type ModoResponsable } from "@/lib/orthodontics/alta-caso-formulario";
 import { isMinor } from "@/lib/consent/signers";
+import { whereConsentimientoDeOrtodoncia } from "@/lib/consent/consentimiento-ortodoncia";
 import { getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { oclusionDeLaConsulta, type OclusionDeConsulta } from "@/lib/orthodontics/oclusion-de-consulta";
 import { leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
@@ -206,16 +207,18 @@ export async function getCaseIntakeOptions(
     }),
   ]);
 
-  // Consentimiento GENERAL de la clínica (ConsentForm, procedureKey
-  // "ortodoncia") — no el sistema propio de ortodoncia (OrthodonticConsent),
-  // que el alcance manda ocultar (S11). best-effort: no bloquea el alta.
+  // Consentimiento GENERAL de la clínica (ConsentForm de ortodoncia) — no el
+  // sistema propio de ortodoncia (OrthodonticConsent), que el alcance manda
+  // ocultar (S11). best-effort: no bloquea el alta.
+  // ws1-t3 (BEVADENT F1): cuenta también la carta hecha desde una plantilla de
+  // la clínica (antes procedureKey null) si su título dice «ortodoncia».
   let generalConsentSigned: boolean | null = null;
   try {
     const consent = await prisma.consentForm.findFirst({
       where: {
         clinicId: ctx.clinicId,
         patientId,
-        procedureKey: "ortodoncia",
+        ...whereConsentimientoDeOrtodoncia(),
         signedAt: { not: null },
         // H62: un consentimiento revocado no cuenta como firmado.
         revokedAt: null,

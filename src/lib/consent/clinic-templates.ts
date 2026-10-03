@@ -15,6 +15,7 @@
 import { prisma } from "@/lib/prisma";
 import { CONSENT_TEMPLATES, buildConsentTemplateText, findConsentTemplate } from "./templates";
 import { consentHtmlToText } from "./template-html";
+import { claveDePlantillaPorNombre } from "./consentimiento-ortodoncia";
 import { CONSENT_TEMPLATE_KIND, ensureConsentTemplates, type ConsentSeedDb } from "./seed-templates";
 
 interface TemplateWhere {
@@ -89,7 +90,11 @@ export interface ResolvedConsentTemplate {
   name: string;
   /** Texto plano de la carta, todavía con sus marcadores `[…]`. */
   text: string;
-  /** Clave del catálogo si es una de respaldo; null si es de la clínica. */
+  /**
+   * Clave del catálogo: la de respaldo, o la que se deduce del nombre de la
+   * plantilla de la clínica (ws1-t3: antes siempre null y Ortodoncia no
+   * reconocía su carta firmada). null = no se sabe de qué procedimiento es.
+   */
   procedureKey: string | null;
 }
 
@@ -117,7 +122,9 @@ export async function resolveClinicConsentTemplate(
       where: { id: templateId, clinicId, kind: CONSENT_TEMPLATE_KIND, isActive: true, deletedAt: null },
       select: { name: true, body: true },
     });
-    return row ? { name: row.name, text: consentHtmlToText(row.body), procedureKey: null } : null;
+    return row
+      ? { name: row.name, text: consentHtmlToText(row.body), procedureKey: claveDePlantillaPorNombre(row.name) }
+      : null;
   } catch (err) {
     // Tabla sin crear o consulta caída: para quien llama es "no existe" (404
     // legible), no una excepción sin capturar.

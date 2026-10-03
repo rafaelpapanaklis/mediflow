@@ -49,6 +49,7 @@ import type {
 } from "@/components/specialties/orthodontics/redesign/sections/SectionPhotos";
 import { cargarExtrasDeJuegos } from "@/lib/orthodontics/fotos-del-juego-db";
 import { esVistaEnExtras, type FotoExtra } from "@/lib/orthodontics/fotos-del-juego";
+import { whereConsentimientoDeOrtodoncia } from "@/lib/consent/consentimiento-ortodoncia";
 import type {
   ConsentRow,
   LabOrderRow,
@@ -276,7 +277,8 @@ export async function loadOrthoRedesignData(
           clinicId: input.clinicId,
           patientId: input.patientId,
           // H64: además del consentimiento de ortodoncia, el asentimiento del menor.
-          OR: [{ procedureKey: "ortodoncia" }, { procedure: { startsWith: "Asentimiento del menor" } }],
+          // ws1-t3: el de ortodoncia es el mismo filtro que el aviso del alta.
+          OR: [...whereConsentimientoDeOrtodoncia().OR, { procedure: { startsWith: "Asentimiento del menor" } }],
           deletedAt: null,
         },
         orderBy: { createdAt: "desc" },

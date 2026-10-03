@@ -20,6 +20,7 @@ import type { TreatmentCardAgendaContext } from "@/app/actions/orthodontics/getT
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarControlFirmadoDeHoy";
 import { useTextosFirmaControl } from "./textos-firma-control";
+import { useTextosConsentimientoOrto } from "./textos-consentimiento-orto";
 import { borrarBorradorDental, leerNotaDelBorradorDental, unirNotaDeLaConsulta, type NotaSOAP } from "@/lib/patients/borrador-dental";
 import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { useAbrirAltaAlLlegar } from "./useAbrirAltaAlLlegar";
@@ -1357,17 +1358,18 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
  * la vista de un tab ya montado a "Consentimientos".
  */
 function ConsentMissingBanner({ patientId }: { patientId: string }) {
+  // ws1-t3: dice QUÉ carta busca (la del catálogo o cualquiera que diga «ortodoncia»).
+  const tx = useTextosConsentimientoOrto();
   return (
     <div className={`${orto.aviso} ${orto.avisoAlerta}`} role="status">
       <span className={orto.avisoTexto}>
-        <strong>Falta el consentimiento informado firmado.</strong> El caso no tiene un
-        consentimiento general de ortodoncia firmado en «Consentimientos».
+        <strong>{tx.titulo}</strong> {tx.cuerpo}
       </span>
       <a
         href={`/dashboard/patients/${patientId}?tab=consentimientos`}
         className={`${orto.boton} ${orto.botonChico}`}
       >
-        Ir a Consentimientos
+        {tx.ir}
       </a>
     </div>
   );
