@@ -182,7 +182,9 @@ test("Nuevo paciente: sin la ropa, la caja es `.modal` con sus style de siempre"
     assert.ok(modal.includes(`newErrors.${clave} = true`), `${clave} dejó de ser obligatorio`);
   }
   assert.match(modal, /fetch\("\/api\/patients", \{\s*method: "POST"/);
-  assert.match(modal, /window\.confirm\(\s*t\("shell\.newPatient\.confirmDuplicate"/, "el aviso de duplicado sigue igual");
+  // ws1-t1 (E2): el aviso de duplicado ya no es un `window.confirm`: es una ventana propia que deja abrir la ficha.
+  assert.ok(modal.includes("leerDuplicado(data)"), "el aviso de duplicado lee el 409 del servidor");
+  assert.ok(!modal.includes("window.confirm("), "y ya no pregunta con el confirm del navegador");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

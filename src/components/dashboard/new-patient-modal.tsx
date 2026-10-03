@@ -8,9 +8,11 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
 import { PatientVisibilityPicker } from "@/components/dashboard/patient-visibility-picker";
 import toast from "react-hot-toast";
-import { useT } from "@/i18n/i18n-provider";
+import { useRouter } from "next/navigation";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { llevarAlPrimerError } from "@/lib/formularios/primer-campo-con-error";
+import { leerDuplicado, textosDuplicado, type Duplicado } from "@/lib/new-patient/paciente-duplicado";
 
 /**
  * La ROPA de la ventana: la de siempre o la del diseño nuevo (ws1-t5,
@@ -80,6 +82,21 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+  let locale = "es";
+  try {
+    locale = useLocale();
+  } catch {
+    // sin I18nProvider: español
+  }
+  const textosDup = textosDuplicado(locale);
+  /** ws1-t1 (E2): el 409 DUPLICATE_PATIENT que se está preguntando, o null. */
+  const [duplicado, setDuplicado] = useState<Duplicado | null>(null);
+  const abrirFichaExistente = (id: string) => {
+    setDuplicado(null);
+    onClose();
+    router.push(`/dashboard/patients/${id}`);
+  };
   /** ws1-t1 (F8): marca los errores y lleva la vista y el foco al primero (tras pintarse el borde rojo). */
   const marcarErrores = (nuevos: Record<string, boolean>) => {
     setErrors(nuevos);
@@ -124,6 +141,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     setVisibleUserIds([]);
     setErrors({});
     setLimitInfo(null);
+    setDuplicado(null);
   }, [open, initialName, initialPhone, initialEmail]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -149,6 +167,11 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
       toast.error(t("shell.newPatient.errPassportRequired"));
       return;
     }
+    await enviar(false);
+  }
+
+  /** El POST del alta. `allowDuplicate` = «Crear igual» desde el aviso de duplicado. */
+  async function enviar(allowDuplicate: boolean) {
     setLoading(true);
     try {
       // AVISO DE DUPLICADO (hallazgo 37). Antes se preguntaba aquí al GET de
@@ -181,19 +204,20 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
         }),
       });
 
-      let res = await crear(false);
+      const res = await crear(allowDuplicate);
       // Un solo json(): leerlo dos veces (uno para el error, otro para el
       // paciente) consume el body y perdía `code`/`limit` del 402.
-      let data = await res.json().catch(() => ({} as any));
+      const data = await res.json().catch(() => ({} as any));
 
-      if (!res.ok && data?.code === "DUPLICATE_PATIENT") {
-        const confirmed = window.confirm(
-          t("shell.newPatient.confirmDuplicate", { name: `${form.firstName} ${form.lastName}` }),
-        );
-        if (!confirmed) { setLoading(false); return; }
-        res = await crear(true);
-        data = await res.json().catch(() => ({} as any));
+      // ws1-t1 (E2): el `window.confirm` del navegador («Aceptar/Cancelar», sin decir quién) pasa a una ventana
+      // propia que nombra al gemelo y deja ABRIR SU FICHA, que es casi siempre lo que se quiere.
+      const duplicadoLeido = !res.ok && !allowDuplicate ? leerDuplicado(data) : null;
+      if (duplicadoLeido) {
+        setDuplicado(duplicadoLeido);
+        return;
       }
+      // Cualquier otra respuesta (creado, cupo agotado, error) cierra el aviso: lo que pase se ve en el alta.
+      setDuplicado(null);
 
       if (!res.ok) {
         if (data?.code === "PLAN_LIMIT_PATIENTS") {
@@ -222,6 +246,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
   }
 
   return (
+    <>
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay
@@ -556,5 +581,69 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+      {/* ws1-t1 (E2) — «Ya existe … ¿Abrir su ficha o crear igual?». Una ventana encima del alta: lo capturado
+          no se pierde y «Cancelar» vuelve al formulario tal cual. */}
+      <Dialog.Root open={duplicado !== null} onOpenChange={(o) => { if (!o && !loading) setDuplicado(null); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay style={{ position: "fixed", inset: 0, background: "color-mix(in srgb, var(--text-1) 35%, transparent)", zIndex: 120 }} />
+          <Dialog.Content
+            data-aviso-duplicado
+            aria-describedby="aviso-duplicado-cuerpo"
+            onEscapeKeyDown={(e) => { if (loading) e.preventDefault(); }}
+            style={{
+              position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 121,
+              width: "min(440px, calc(100vw - 32px))", maxHeight: "86vh", overflowY: "auto",
+              background: "var(--bg-elev)", color: "var(--text-1)", border: "1px solid var(--border-soft)",
+              borderRadius: 14, boxShadow: "var(--shadow-3)", padding: 20,
+              display: "flex", flexDirection: "column", gap: 14,
+            }}
+          >
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <AlertTriangle size={20} strokeWidth={2} style={{ color: "var(--warning)", flex: "none", marginTop: 1 }} aria-hidden />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                <Dialog.Title style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{textosDup.titulo}</Dialog.Title>
+                <p id="aviso-duplicado-cuerpo" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: "var(--text-2)" }}>
+                  {duplicado && duplicado.gemelos.length > 0
+                    ? textosDup.cuerpoVisible(`${form.firstName} ${form.lastName}`.trim(), duplicado.gemelos.length)
+                    : textosDup.cuerpoOculto}
+                </p>
+              </div>
+            </div>
+            {duplicado && duplicado.gemelos.length > 0 && (
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                {duplicado.gemelos.map((g) => (
+                  <li
+                    key={g.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                      padding: "10px 12px", border: "1px solid var(--border-soft)", borderRadius: 10,
+                      background: "var(--bg-elev-2)",
+                    }}
+                  >
+                    <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere" }}>{g.fullName}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+                        {[g.patientNumber, g.phone].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                    <ButtonNew variant="primary" type="button" onClick={() => abrirFichaExistente(g.id)} disabled={loading}>
+                      {textosDup.abrirFicha}
+                    </ButtonNew>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <ButtonNew variant="ghost" type="button" onClick={() => setDuplicado(null)} disabled={loading}>
+                {textosDup.cancelar}
+              </ButtonNew>
+              <ButtonNew variant="secondary" type="button" onClick={() => { void enviar(true); }} disabled={loading}>
+                {loading ? textosDup.creando : textosDup.crearIgual}
+              </ButtonNew>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   );
 }

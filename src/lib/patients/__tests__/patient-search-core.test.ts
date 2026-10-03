@@ -269,8 +269,10 @@ test("37 · REGRESIÓN: la guarda vive en el servidor y el modal la respeta", ()
     !modal.includes("/api/patients?search="),
     "la comprobación previa caía en el handler legacy y devolvía siempre cero",
   );
-  assert.ok(modal.includes('data?.code === "DUPLICATE_PATIENT"'), "el modal debe atender el 409");
-  assert.ok(modal.includes("shell.newPatient.confirmDuplicate"), "y seguir preguntando lo mismo");
+  // ws1-t1 (E2): el 409 lo lee `leerDuplicado` y se pregunta en una ventana propia («Abrir su ficha / Crear igual»).
+  assert.ok(modal.includes("leerDuplicado(data)"), "el modal debe atender el 409");
+  assert.ok(leer("src/lib/new-patient/paciente-duplicado.ts").includes('c.code !== "DUPLICATE_PATIENT"'), "por su código");
+  assert.ok(modal.includes("enviar(true)"), "y seguir dejando crear igual a quien confirma");
 });
 
 /* ══════════════════════════════════════════════════════════════════════
