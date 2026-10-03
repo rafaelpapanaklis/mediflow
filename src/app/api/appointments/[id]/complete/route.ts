@@ -21,6 +21,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { canTransition } from "@/lib/agenda/transitions";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
 
 export const dynamic = "force-dynamic";
 
@@ -187,6 +188,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     return appt;
   });
+
+  // ws1-t1: si era la cita de un walk-in, su fila deja de estar «En atención».
+  await cerrarFilaDeLaCita({ clinicId: session.clinic.id, appointmentId: params.id, estado: "COMPLETED", ahora: completedAt });
 
   // NOM-004 / NOM-024 AUDITORIA (brecha #9): el cierre de la cita y la FIRMA del
   // expediente — evento legalmente decisivo — ahora dejan rastro. Antes la firma

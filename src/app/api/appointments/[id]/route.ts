@@ -56,6 +56,7 @@ import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
@@ -611,6 +612,9 @@ export async function DELETE(
       { status: 409 },
     );
   }
+
+  // ws1-t1: cancelar la cita de un walk-in cancela también su fila (antes seguía «En atención»).
+  await cerrarFilaDeLaCita({ clinicId: session.clinic.id, appointmentId: params.id, estado: "CANCELLED", ahora: now });
 
   await logMutation({
     req,

@@ -26,6 +26,7 @@ import {
   prepararAdelantoAHoy,
 } from "@/lib/agenda/adelantar-cita-a-hoy";
 import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
+import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -206,6 +207,11 @@ export async function PATCH(
       { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
       { status: 409 },
     );
+  }
+
+  // ws1-t1: la cita de un walk-in cerrada aquí cierra también su fila (antes seguía «En atención»).
+  if (body.status === "COMPLETED" || closesAppointment) {
+    await cerrarFilaDeLaCita({ clinicId: session.clinic.id, appointmentId: params.id, estado: body.status, ahora: now });
   }
 
   // Invitación a reseña: cerrar la cita por la Agenda debe comportarse igual que
