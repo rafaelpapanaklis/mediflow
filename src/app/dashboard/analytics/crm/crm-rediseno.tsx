@@ -6,6 +6,8 @@ import { Indicador, Panel, Tabla, Th, Td, Filas, Fila, FiltroPeriodo, Etiqueta, 
 import { GraficaLineas } from "@/components/dashboard/analitica-rediseno/graficas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
 import { money, dateShort, waLink, type ValueResp, type ChurnResp, type CohortResp, type ValueRow, type SortKey } from "./crm-client";
+import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 
 /**
  * CRM con el diseño nuevo. Los textos van en español a mano igual que en
@@ -32,6 +34,8 @@ export function CrmRediseno({
   chartData: Array<Record<string, number | string | null>>;
   milestones: number[];
 }) {
+  const t = useT();
+  const qc = useQueCuenta();
   return (
     <MarcoAnalitica title="CRM" subtitle="Valor de pacientes, riesgo de abandono y retención por cohorte">
       {loading ? (
@@ -42,20 +46,20 @@ export function CrmRediseno({
             <Indicador
               label="LTV promedio"
               value={money(value?.totals.avgLtv ?? 0)}
-              hint="cobrado por paciente"
+              hint={qc("crmLtv")}
               icon={<TrendingUp size={16} strokeWidth={1.75} aria-hidden />}
             />
             <Indicador
               label="Ingresos cobrados"
               value={money(value?.totals.paid ?? 0)}
-              hint={`${value?.totals.payingPatients ?? 0} pacientes con pagos`}
+              hint={`${t("queCuenta.crmPacientesConPagos", { count: value?.totals.payingPatients ?? 0 })} · ${qc("crmCobrado")}`}
               icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
               tone="exito"
             />
             <Indicador
               label="Saldo por cobrar"
               value={money(value?.totals.balance ?? 0)}
-              hint={`${value?.totals.patients ?? 0} pacientes`}
+              hint={`${t("queCuenta.crmPacientesQueDeben", { count: value?.totals.owingPatients ?? 0 })} · ${qc("crmSaldo")}`}
               icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
               tone={value && value.totals.balance > 0 ? "alerta" : "neutro"}
             />

@@ -19,6 +19,12 @@ import { getCurrentUser } from "@/lib/auth";
  *
  * Multi-tenant: clinicId SIEMPRE desde getCurrentUser y filtrado en cada CTE.
  * Admin only.
+ *
+ * ws1-t2 (F9 de la auditoría BEVADENT: «Saldo por cobrar $626,054 · 295 pacientes» en el CRM
+ * contra «Con deuda $626,054 · 53 pacientes» en Reportes): el número bajo el saldo era el total
+ * de pacientes no archivados, no los que deben. Ahora va `owingPatients` (pacientes con saldo).
+ * Y el saldo deja fuera los BORRADORES, como «Por cobrar» de Finanzas (receivableInvoiceWhere):
+ * un borrador no se le ha cobrado a nadie.
  */
 
 const REVALIDATE_SECONDS = 300;
@@ -43,6 +49,8 @@ interface ValueResp {
     balance: number;
     patients: number;
     payingPatients: number;
+    /** Pacientes (no archivados) con saldo por cobrar: lo que acompaña a «Saldo por cobrar». */
+    owingPatients: number;
     avgLtv: number;
   };
   top: ValueRow[];
@@ -65,6 +73,7 @@ interface RawRow {
   t_balance: number;
   t_patients: number;
   t_paying: number;
+  t_owing: number;
 }
 
 function getPatientsValue(clinicId: string): Promise<ValueResp> {
@@ -80,7 +89,7 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
           SELECT "patientId",
                  COALESCE(SUM("total"), 0)   AS invoiced,
                  COALESCE(SUM("paid"), 0)    AS paid,
-                 COALESCE(SUM("balance"), 0) AS balance
+                 COALESCE(SUM("balance") FILTER (WHERE "status" <> 'DRAFT'), 0) AS balance
           FROM "invoices"
           -- Las CANCELADAS quedan fuera: cancelar solo cambia el status y DEJA
           -- el balance intacto, así que sin esto una factura anulada inflaba
@@ -117,7 +126,8 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
                SUM(pp.paid)     OVER ()                                 AS t_paid,
                SUM(pp.balance)  OVER ()                                 AS t_balance,
                CAST(COUNT(*) OVER () AS int)                            AS t_patients,
-               CAST(COUNT(*) FILTER (WHERE pp.paid > 0) OVER () AS int) AS t_paying
+               CAST(COUNT(*) FILTER (WHERE pp.paid > 0) OVER () AS int) AS t_paying,
+               CAST(COUNT(*) FILTER (WHERE pp.balance > 0.005) OVER () AS int) AS t_owing
         FROM per_patient pp
         ORDER BY pp.paid DESC, pp."id" ASC
         LIMIT 50
@@ -145,12 +155,14 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
         balance: first ? Number(first.t_balance) : 0,
         patients: first ? Number(first.t_patients) : 0,
         payingPatients: paying,
+        owingPatients: first ? Number(first.t_owing) : 0,
         avgLtv: paying > 0 ? Math.round(totalPaid / paying) : 0,
       };
 
       return { totals, top };
     },
-    ["analytics-patients-value", clinicId],
+    // v2 (ws1-t2): la respuesta trae `owingPatients`; la llave nueva no sirve la forma vieja de caché.
+    ["analytics-patients-value-v2", clinicId],
     { revalidate: REVALIDATE_SECONDS, tags: [`analytics-${clinicId}`] },
   )();
 }

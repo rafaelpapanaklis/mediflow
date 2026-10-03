@@ -332,6 +332,8 @@
     "test:nota-cabecera": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/pdf/__tests__/nota-clinica-cabecera.test.tsx",
     "test:botones-prometidos": "tsx --test src/app/dashboard/__tests__/botones-prometidos.test.ts",
     "test:caja-dinero": "tsx --test src/lib/__tests__/caja-dinero.test.ts",
+    "test:que-cuenta": "tsx --test --experimental-test-module-mocks src/lib/__tests__/que-cuenta-f9.test.ts",
+    "test:vencido-saldos-orto": "tsx --test --experimental-test-module-mocks src/lib/__tests__/vencido-saldos-vs-ortodoncia.test.ts",
     "test:finanzas-periodo": "tsx --test src/lib/__tests__/finanzas-periodo.test.ts",
     "test:equipo-rediseno": "tsx --test src/components/dashboard/equipo-rediseno/__tests__/equipo-rediseno.test.ts",
     "test:sin-permiso-rediseno": "tsx --test src/components/dashboard/sin-permiso-rediseno/__tests__/sin-permiso-rediseno.test.ts",

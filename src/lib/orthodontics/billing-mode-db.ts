@@ -38,6 +38,11 @@ async function columnaExiste(): Promise<boolean> {
   }
 }
 
+/** ¿Ya se pegó sql/ortodoncia-modo-cobro.sql? Para quien lee `billingMode` con su propio SQL (Caja, ws1-t2). */
+export function columnaModoCobroExiste(): Promise<boolean> {
+  return columnaExiste();
+}
+
 /** Solo para pruebas: olvida lo que se sabía de la columna. */
 export function _olvidarColumnaModoCobro(): void {
   columna = null;

@@ -2,6 +2,7 @@
 
 import { Pencil, Sparkles, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { MarcoAnalitica } from "@/components/dashboard/analitica-rediseno/marco";
 import { Indicador, Panel, Tabla, Th, Td, Boton, Aviso, Vacio, Cargando, Nota, unir } from "@/components/dashboard/analitica-rediseno/piezas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
@@ -27,6 +28,7 @@ export function CostsRediseno({
   onEdit: (r: ResourceRow) => void;
 }) {
   const t = useT();
+  const qc = useQueCuenta();
   return (
     <MarcoAnalitica
       title={t("analytics.costs.title")}
@@ -59,6 +61,7 @@ export function CostsRediseno({
             <Indicador
               label={t("analytics.costs.revenue")}
               value={fmtMXN(data.totals.revenue)}
+              hint={qc("costosIngresos")}
               tone="marca"
               valorConTono
               icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
@@ -66,6 +69,7 @@ export function CostsRediseno({
             <Indicador
               label={t("analytics.costs.costs")}
               value={fmtMXN(data.totals.cost)}
+              hint={qc("costosCostos")}
               tone="alerta"
               valorConTono
               icon={<TrendingDown size={16} strokeWidth={1.75} aria-hidden />}
@@ -73,6 +77,7 @@ export function CostsRediseno({
             <Indicador
               label={t("analytics.costs.margin")}
               value={fmtMXN(data.totals.margin)}
+              hint={qc("costosMargen")}
               tone={data.totals.margin >= 0 ? "exito" : "peligro"}
               valorConTono
               icon={<TrendingUp size={16} strokeWidth={1.75} aria-hidden />}

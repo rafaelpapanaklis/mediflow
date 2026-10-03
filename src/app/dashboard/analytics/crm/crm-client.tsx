@@ -21,6 +21,8 @@ import {
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { CrmRediseno } from "./crm-rediseno";
+import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 
 /* ─── Tipos ─── */
 export interface ValueRow {
@@ -36,7 +38,8 @@ export interface ValueRow {
   nextAppointment: string | null;
 }
 export interface ValueResp {
-  totals: { invoiced: number; paid: number; balance: number; patients: number; payingPatients: number; avgLtv: number };
+  /** `owingPatients` (ws1-t2): los que deben. Opcional por la caché vieja de la API. */
+  totals: { invoiced: number; paid: number; balance: number; patients: number; payingPatients: number; owingPatients?: number; avgLtv: number };
   top: ValueRow[];
 }
 interface ChurnRow {
@@ -82,6 +85,8 @@ export function CrmClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const [cohorts, setCohorts] = useState<CohortResp | null>(null);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("paid");
+  const t = useT();
+  const qc = useQueCuenta();
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -146,20 +151,20 @@ export function CrmClient({ rediseno = false }: { rediseno?: boolean } = {}) {
             <AnalyticsCard
               label="LTV promedio"
               value={money(value?.totals.avgLtv ?? 0)}
-              hint="cobrado por paciente"
+              hint={qc("crmLtv")}
               icon={<TrendingUp size={16} strokeWidth={1.75} aria-hidden />}
             />
             <AnalyticsCard
               label="Ingresos cobrados"
               value={money(value?.totals.paid ?? 0)}
-              hint={`${value?.totals.payingPatients ?? 0} pacientes con pagos`}
+              hint={`${t("queCuenta.crmPacientesConPagos", { count: value?.totals.payingPatients ?? 0 })} · ${qc("crmCobrado")}`}
               icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
               tone="success"
             />
             <AnalyticsCard
               label="Saldo por cobrar"
               value={money(value?.totals.balance ?? 0)}
-              hint={`${value?.totals.patients ?? 0} pacientes`}
+              hint={`${t("queCuenta.crmPacientesQueDeben", { count: value?.totals.owingPatients ?? 0 })} · ${qc("crmSaldo")}`}
               icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />}
               tone={value && value.totals.balance > 0 ? "warning" : "neutral"}
             />

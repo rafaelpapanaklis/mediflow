@@ -10851,5 +10851,30 @@
     "deCotizado": "of {total} quoted",
     "yaCargadoEnOtro": "Already charged from {folio} on {factura}: make sure it is not charged twice",
     "yaCargadoEnOtroSinNota": "Already charged from {folio}: make sure it is not charged twice"
+  },
+  "queCuenta": {
+    "titulo": "What it counts",
+    "ingresosPeriodo": "Payments recorded in the period, minus refunds. Excludes payments migrated from another system.",
+    "ingresosPeriodoConReembolsos": "Payments recorded in the period, with {reembolsos} of refunds already subtracted. Excludes payments migrated from another system.",
+    "gastosPeriodo": "The expenses you recorded here, dated within the period.",
+    "utilidad": "Income − expenses for the same period.",
+    "utilidadConMargen": "Income − expenses for the same period · you keep {pct} %.",
+    "efectivo": "Cash payments in the period, refunds not subtracted. Excludes migrated payments.",
+    "porDoctor": "What was INVOICED in the period (not collected), by each invoice's doctor; no drafts or cancelled invoices. Includes migrated invoices dated in the period.",
+    "porCobrar": "Balance of every issued invoice, from any date, migrated ones included. Does not depend on the period.",
+    "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created). An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
+    "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes migrated payments.",
+    "ortoVencido": "Orthodontics only: installments, placement and check-ups past their date. Already included in the Balances «Overdue».",
+    "reportesIngresos": "Payments recorded in the last 6 months, no refunds or cancelled invoices. Excludes migrated payments.",
+    "reportesTicket": "Income for the 6 months ÷ appointments for the 6 months.",
+    "reportesConDeuda": "Balance of pending or partially paid invoices, from any date, migrated ones included. Counts patients with at least one.",
+    "crmLtv": "Everything collected ÷ patients with any payment. No period; includes migrated amounts.",
+    "crmCobrado": "What was paid on every non-cancelled invoice, from any date, for non-archived patients. Includes migrated amounts.",
+    "crmSaldo": "Balance of issued invoices (no drafts or cancelled), from any date, for non-archived patients. Includes migrated amounts.",
+    "crmPacientesConPagos": "{count} patients with payments",
+    "crmPacientesQueDeben": "{count} patients owe",
+    "costosIngresos": "What was paid on invoices linked to this month's appointments that have a chair. Invoices with no appointment or chair don't count (nor migrated ones).",
+    "costosCostos": "Rent and operating costs for the month you entered for each chair.",
+    "costosMargen": "Income − costs for the month, chair by chair."
   }
 }

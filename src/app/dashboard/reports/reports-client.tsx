@@ -10,6 +10,7 @@ import { RaizRediseno } from "@/components/dashboard/reportes-rediseno/raiz";
 import { Vacio } from "@/components/dashboard/reportes-rediseno/piezas";
 import { fmtMXN } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { nombreDeEstado, nombreDeTipoDeRecurso, tasaDeAtendidas } from "./estados-de-cita";
 
 interface Props {
@@ -64,6 +65,7 @@ const AXIS_TICK = { fontSize: 11, fill: "var(--text-3)" } as any;
 
 export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats, rediseno = false, enAnalitica = false }: Props) {
   const t = useT();
+  const qc = useQueCuenta();
   const totalRevenue  = monthlyData.reduce((s, d) => s + d.revenue, 0);
   const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
   const totalAppts    = monthlyData.reduce((s, d) => s + d.appointments, 0);
@@ -125,6 +127,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
             label={t("analytics.reports.kpiWithDebt")}
             value={fmtMXN(patientStats.withDebtAmount)}
             icon={AlertCircle}
+            hint={qc("reportesConDeuda")}
             delta={{ value: t("analytics.reports.kpiWithDebtDelta", { count: patientStats.withDebt }), direction: "down", sub: "" }}
           />
           <KpiCard
@@ -173,13 +176,14 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard hero label={t("analytics.reports.kpiTotalRevenue")} value={fmtMXN(totalRevenue)}  icon={DollarSign} />
+        <KpiCard hero label={t("analytics.reports.kpiTotalRevenue")} value={fmtMXN(totalRevenue)}  icon={DollarSign} hint={qc("reportesIngresos")} />
         <KpiCard label={t("analytics.reports.kpiNewPatients")} value={String(totalPatients)} icon={Users} />
         <KpiCard label={t("analytics.reports.kpiTotalAppts")}  value={String(totalAppts)}    icon={CalendarIcon} />
         <KpiCard
           label={t("analytics.reports.kpiAvgTicket")}
           value={fmtMXN(avgTicket)}
           icon={Percent}
+          hint={qc("reportesTicket")}
           delta={{ value: t("analytics.reports.kpiAvgTicketDelta", { pct: completionRate }), direction: "up", sub: "" }}
         />
       </div>

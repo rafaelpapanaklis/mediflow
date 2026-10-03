@@ -20,6 +20,7 @@ import { ArrowRight, Smile } from "lucide-react";
 import { fmtMXN } from "@/lib/format";
 import type { BloqueOrtodonciaFinanzas } from "@/lib/orthodontics/finanzas-ortodoncia";
 import s from "./bloque-ortodoncia.module.css";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 
 const fmtMXNSigned = (n: number) => (n < 0 ? "−" : "") + fmtMXN(Math.abs(n ?? 0));
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
@@ -116,6 +117,7 @@ function Cuerpo({ datos }: { datos: BloqueOrtodonciaFinanzas }) {
                 ? `${fmtMXN(periodo.cobrado)} cobrados, menos ${fmtMXN(periodo.reembolsado)} de reembolsos`
                 : "Mensualidades, enganches, controles y extras"}
             </p>
+            <p className={s.cifraPista}><QueCuenta clave="ortoCobrado" /></p>
           </div>
           <div className={s.cifra}>
             <div className={s.cifraEtiqueta}>Casos abiertos</div>
@@ -141,6 +143,7 @@ function Cuerpo({ datos }: { datos: BloqueOrtodonciaFinanzas }) {
               {cartera.vencido > 0 ? `${plural(cartera.casosConAtraso, "caso con atraso", "casos con atraso")} · ` : ""}
               de {fmtMXN(cartera.porCobrar)} por cobrar
             </p>
+            <p className={s.cifraPista}><QueCuenta clave="ortoVencido" /></p>
           </div>
         </div>
 

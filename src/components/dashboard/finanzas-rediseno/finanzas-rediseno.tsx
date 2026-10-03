@@ -31,6 +31,7 @@ import {
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
 import { CATEGORIAS, PERIODOS, useFinanzas, type Gasto, type PeriodKey } from "./usar-finanzas";
 import { BloqueOrtodoncia } from "./bloque-ortodoncia";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 import s from "./finanzas.module.css";
 
 // recharts pesa ~95 kB: fuera del bundle inicial, como en «Hoy».
@@ -300,15 +301,15 @@ export function FinanzasRediseno() {
               valor={fmtMXN(data.ingresos)}
               icono={TrendingUp}
               pista={reembolsos > 0
-                ? `Lo cobrado, ya restados ${fmtMXN(reembolsos)} de reembolsos`
-                : "Lo cobrado en el periodo, menos reembolsos"}
+                ? <QueCuenta clave="ingresosPeriodoConReembolsos" vars={{ reembolsos: fmtMXN(reembolsos) }} />
+                : <QueCuenta clave="ingresosPeriodo" />}
             />
             <Kpi
               etiqueta="Gastos"
               valor={fmtMXN(data.gastos)}
               icono={TrendingDown}
               tono="peligro"
-              pista="Los gastos que registraste aquí"
+              pista={<QueCuenta clave="gastosPeriodo" />}
             />
             <Kpi
               etiqueta="Utilidad"
@@ -318,8 +319,8 @@ export function FinanzasRediseno() {
               tonoValor={f.utilidadPos ? "exito" : "peligro"}
               hero
               pista={data.ingresos > 0
-                ? `Ingresos − gastos · te queda el ${porcentaje(data.utilidad, data.ingresos)} %`
-                : "Ingresos − gastos"}
+                ? <QueCuenta clave="utilidadConMargen" vars={{ pct: porcentaje(data.utilidad, data.ingresos) }} />
+                : <QueCuenta clave="utilidad" />}
             />
             <Kpi
               etiqueta="Ventas"
@@ -338,7 +339,7 @@ export function FinanzasRediseno() {
               valor={fmtMXN(data.efectivo)}
               icono={Banknote}
               tono="exito"
-              pista="Cobros en efectivo, sin restar reembolsos"
+              pista={<QueCuenta clave="efectivo" />}
             />
           </div>
 
@@ -461,6 +462,7 @@ export function FinanzasRediseno() {
                 titulo="Por doctor"
                 sub="Lo facturado en el periodo, no lo cobrado: por eso no suma lo mismo que Ingresos."
               >
+                <p className={s.kpiPista}><QueCuenta clave="porDoctor" /></p>
                 {(data.porDoctor ?? []).length === 0 ? (
                   <Vacio icono={Users} titulo="Sin facturas con doctor asignado en este periodo" />
                 ) : (
@@ -503,7 +505,7 @@ export function FinanzasRediseno() {
                       </span>
                     </div>
                     <div className={s.kpiValor}>{fmtMXN(data.saldos?.porCobrar ?? 0)}</div>
-                    <p className={s.kpiPista}>Saldo de todas las facturas abiertas</p>
+                    <p className={s.kpiPista}><QueCuenta clave="porCobrar" /></p>
                   </Link>
                   <Link href="/dashboard/caja?tab=facturas" className={`${s.saldo} ${s.saldoEnlace}`}>
                     <div className={s.kpiArriba}>
@@ -514,7 +516,7 @@ export function FinanzasRediseno() {
                     </div>
                     {/* En rojo solo si hay algo vencido: un $0 en rojo asusta sin motivo. */}
                     <div className={`${s.kpiValor} ${vencido > 0 ? s.kpiValorPeligro : ""}`}>{fmtMXN(vencido)}</div>
-                    <p className={s.kpiPista}>De eso, lo que ya pasó su fecha de pago</p>
+                    <p className={s.kpiPista}><QueCuenta clave="vencido" /></p>
                   </Link>
                 </div>
                 <Link href="/dashboard/caja?tab=facturas" className={s.enlaceInterno}>

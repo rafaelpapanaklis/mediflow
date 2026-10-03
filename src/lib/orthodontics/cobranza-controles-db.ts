@@ -25,6 +25,7 @@ import { Prisma } from "@prisma/client";
 import { TIPO_CITA_CONTROL_ORTO } from "./agenda-constants";
 import type { CargoDeControl } from "./cobranza-caso";
 import { normalizarOrthoBillingMode } from "./billing-mode";
+import { columnaModoCobroExiste } from "./billing-mode-db";
 
 let columna: { existe: boolean; at: number } | null = null;
 const TTL_MS = 60_000;
@@ -184,10 +185,17 @@ export async function cargarCargosDeControlDelCaso(
  * pagar cuente como vencido desde el mismo día que en Cobranza de ortodoncia.
  * Sin la columna, o si la consulta falla, mapa vacío: Caja se queda con su
  * criterio de siempre (`dueDate`).
+ *
+ * ws1-t2 (F9 de la auditoría BEVADENT: «Finanzas › Saldos: Vencido $0» contra «Finanzas ›
+ * Ortodoncia: Vencido $5,000» el mismo día): también la COLOCACIÓN de un caso en «Pago por
+ * control» (`orthodontic_treatment_plans.invoiceId`). Ortodoncia la da por vencida desde el día
+ * en que se creó si no tiene `dueDate` (`vencimientoDeFacturaPrincipal`); Caja, sin `dueDate`,
+ * no la contaba nunca. Si es a plazos, Caja sigue mirando sus cuotas (igual que Ortodoncia).
  */
 export async function cargarVencimientosDeCargosDeControl(clinicId: string): Promise<Map<string, string>> {
   const salida = new Map<string, string>();
   if (!clinicId) return salida;
+  for (const [id, dia] of await vencimientosDeColocaciones(clinicId)) salida.set(id, dia);
   if (!(await columnaExiste())) return salida;
   try {
     const filas = await prisma.$queryRaw<{ invoiceId: string; dueDate: Date | null; createdAt: Date; zona: string | null }[]>`
@@ -206,5 +214,35 @@ export async function cargarVencimientosDeCargosDeControl(clinicId: string): Pro
   } catch (e) {
     console.warn("[ortodoncia:cargos-control] no se pudieron leer los vencimientos:", e);
     return new Map();
+  }
+}
+
+/**
+ * La factura de COLOCACIÓN de cada caso vivo en «Pago por control», por cobrar, con el día en
+ * que vence según Ortodoncia. Sin sql/ortodoncia-modo-cobro.sql (no hay casos en ese modo) o
+ * si la consulta falla: vacío, y Caja se queda con su `dueDate`.
+ */
+async function vencimientosDeColocaciones(clinicId: string): Promise<Map<string, string>> {
+  const salida = new Map<string, string>();
+  if (!(await columnaModoCobroExiste())) return salida;
+  try {
+    const filas = await prisma.$queryRaw<{ invoiceId: string; dueDate: Date | null; createdAt: Date; zona: string | null }[]>`
+      SELECT i."id" AS "invoiceId", i."dueDate", i."createdAt", c."timezone" AS "zona"
+        FROM "orthodontic_treatment_plans" p
+        JOIN "invoices" i ON i."id" = p."invoiceId" AND i."clinicId" = p."clinicId"
+        JOIN "clinics" c ON c."id" = i."clinicId"
+       WHERE p."clinicId" = ${clinicId}
+         AND p."deletedAt" IS NULL
+         AND p."billingMode" = 'PAGO_POR_CONTROL'
+         AND i."balance" > 0
+         AND i."status" NOT IN ('DRAFT', 'CANCELLED')`;
+    for (const f of filas) {
+      const dia = vencimientoDeFacturaPrincipal("PAGO_POR_CONTROL", f.dueDate, f.createdAt, f.zona);
+      if (dia) salida.set(f.invoiceId, dia);
+    }
+    return salida;
+  } catch (e) {
+    console.warn("[ortodoncia:colocaciones] no se pudieron leer los vencimientos:", e);
+    return salida;
   }
 }

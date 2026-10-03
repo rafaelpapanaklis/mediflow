@@ -5,6 +5,7 @@ import { Pencil, Sparkles, X, Save, DollarSign, TrendingUp, TrendingDown } from 
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { CostsRediseno } from "./costs-rediseno";
 
 export interface ResourceRow {
@@ -37,6 +38,7 @@ function currentMonth(): string {
 
 export function CostsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
+  const qc = useQueCuenta();
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,13 +184,14 @@ export function CostsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
 
           {/* Totales */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 14 }}>
-            <TotalCard label={t("analytics.costs.revenue")} value={fmtMXN(data.totals.revenue)} tone="brand" icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />} />
-            <TotalCard label={t("analytics.costs.costs")} value={fmtMXN(data.totals.cost)} tone="warning" icon={<TrendingDown size={16} strokeWidth={1.75} aria-hidden />} />
+            <TotalCard label={t("analytics.costs.revenue")} value={fmtMXN(data.totals.revenue)} tone="brand" icon={<DollarSign size={16} strokeWidth={1.75} aria-hidden />} hint={qc("costosIngresos")} />
+            <TotalCard label={t("analytics.costs.costs")} value={fmtMXN(data.totals.cost)} tone="warning" icon={<TrendingDown size={16} strokeWidth={1.75} aria-hidden />} hint={qc("costosCostos")} />
             <TotalCard
               label={t("analytics.costs.margin")}
               value={fmtMXN(data.totals.margin)}
               tone={data.totals.margin >= 0 ? "success" : "danger"}
               icon={<TrendingUp size={16} strokeWidth={1.75} aria-hidden />}
+              hint={qc("costosMargen")}
             />
           </div>
 
@@ -400,7 +403,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function TotalCard({ label, value, tone, icon }: { label: string; value: string; tone: "brand" | "success" | "warning" | "danger"; icon: React.ReactNode }) {
+function TotalCard({ label, value, tone, icon, hint }: { label: string; value: string; tone: "brand" | "success" | "warning" | "danger"; icon: React.ReactNode; hint?: string }) {
   const colors = {
     brand:   { bg: "var(--brand-soft)",   border: "var(--border-brand)", fg: "var(--brand)" },
     success: { bg: "var(--success-soft)", border: "transparent",         fg: "var(--success-strong)" },
@@ -438,6 +441,7 @@ function TotalCard({ label, value, tone, icon }: { label: string; value: string;
       }}>
         {value}
       </div>
+      {hint && <div style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.35 }}>{hint}</div>}
     </div>
   );
 }

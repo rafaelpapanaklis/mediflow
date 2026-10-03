@@ -10851,5 +10851,30 @@
     "deCotizado": "de {total} cotizado",
     "yaCargadoEnOtro": "Ya se cargó desde {folio} en {factura}: revisa que no se cobre dos veces",
     "yaCargadoEnOtroSinNota": "Ya se cargó desde {folio}: revisa que no se cobre dos veces"
+  },
+  "queCuenta": {
+    "titulo": "Qué cuenta",
+    "ingresosPeriodo": "Pagos registrados en el periodo, menos reembolsos. Sin los pagos migrados de otro sistema.",
+    "ingresosPeriodoConReembolsos": "Pagos registrados en el periodo, ya restados {reembolsos} de reembolsos. Sin los pagos migrados de otro sistema.",
+    "gastosPeriodo": "Los gastos que registraste aquí, con fecha dentro del periodo.",
+    "utilidad": "Ingresos − gastos del mismo periodo.",
+    "utilidadConMargen": "Ingresos − gastos del mismo periodo · te queda el {pct} %.",
+    "efectivo": "Pagos en efectivo del periodo, sin restar reembolsos. Sin pagos migrados.",
+    "porDoctor": "Lo FACTURADO en el periodo (no lo cobrado), por el doctor de cada factura; sin borradores ni canceladas. Incluye facturas migradas con fecha en el periodo.",
+    "porCobrar": "Saldo de todas las facturas emitidas, de cualquier fecha e incluidas las migradas. No depende del periodo.",
+    "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos y cargos de ortodoncia (colocación y controles, desde el día en que se crearon). Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
+    "ortoCobrado": "Pagos del periodo a facturas de casos de ortodoncia, menos reembolsos. Sin pagos migrados.",
+    "ortoVencido": "Solo ortodoncia: cuotas, colocación y controles pasados de fecha. Ya está sumado en el «Vencido» de Saldos.",
+    "reportesIngresos": "Pagos registrados en los últimos 6 meses, sin reembolsos ni facturas canceladas. Sin los pagos migrados.",
+    "reportesTicket": "Ingresos de los 6 meses ÷ citas de los 6 meses.",
+    "reportesConDeuda": "Saldo de las facturas pendientes o con abono, de cualquier fecha e incluidas las migradas. Cuenta pacientes con al menos una.",
+    "crmLtv": "Todo lo cobrado ÷ pacientes con algún pago. Sin periodo; incluye lo migrado.",
+    "crmCobrado": "Lo pagado de todas las facturas no canceladas, de cualquier fecha, de pacientes no archivados. Incluye lo migrado.",
+    "crmSaldo": "Saldo de las facturas emitidas (sin borradores ni canceladas), de cualquier fecha, de pacientes no archivados. Incluye lo migrado.",
+    "crmPacientesConPagos": "{count} pacientes con pagos",
+    "crmPacientesQueDeben": "{count} pacientes deben",
+    "costosIngresos": "Lo pagado de las facturas ligadas a citas del mes que tienen sillón. No cuentan las facturas sin cita o sin sillón (lo migrado tampoco).",
+    "costosCostos": "Renta y gastos operativos del mes que capturaste para cada sillón.",
+    "costosMargen": "Ingresos − costos del mes, sillón por sillón."
   }
 }

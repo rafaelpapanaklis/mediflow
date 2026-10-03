@@ -15,6 +15,7 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
 import { BloqueOrtodoncia } from "@/components/dashboard/finanzas-rediseno/bloque-ortodoncia";
+import { QueCuenta, type ClaveQueCuenta } from "@/components/dashboard/que-cuenta";
 
 // ── Contrato de datos (no renombrar claves) ────────────────────────
 interface SeriePoint { fecha: string; ingresos: number; gastos: number }
@@ -26,6 +27,8 @@ interface FinanzasResumen {
   ventas:   number;
   citas:    number;
   efectivo: number;
+  /** Lo devuelto en el periodo, ya restado de `ingresos` (clave aditiva de la API). */
+  reembolsos?: number;
   serie:     SeriePoint[];
   porDoctor: DoctorRow[];
   saldos:    { porCobrar: number; vencido: number; incompleto?: boolean };
@@ -80,7 +83,7 @@ const TONE_CHIP: Record<Tone, { bg: string; fg: string } | null> = {
   danger:  { bg: "var(--danger-soft)",  fg: "var(--danger)" },
 };
 
-function Kpi({ label, value, icon: Icon, tone, valueTone, hero, big }: {
+function Kpi({ label, value, icon: Icon, tone, valueTone, hero, big, queCuenta }: {
   label: string;
   value: string;
   icon: LucideIcon;
@@ -88,6 +91,8 @@ function Kpi({ label, value, icon: Icon, tone, valueTone, hero, big }: {
   valueTone?: Tone;
   hero?: boolean;
   big?: boolean;
+  /** ws1-t2 (F9): la línea «Qué cuenta» bajo la cifra. */
+  queCuenta?: { clave: ClaveQueCuenta; vars?: Record<string, string | number> };
 }) {
   const chip = TONE_CHIP[tone];
   const ring = tone === "danger" ? "rgba(220,38,38,0.28)" : tone === "success" ? "rgba(5,150,105,0.28)" : "rgba(124,58,237,0.28)";
@@ -108,6 +113,11 @@ function Kpi({ label, value, icon: Icon, tone, valueTone, hero, big }: {
       >
         {value}
       </div>
+      {queCuenta && (
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6, lineHeight: 1.35 }}>
+          <QueCuenta clave={queCuenta.clave} vars={queCuenta.vars} />
+        </div>
+      )}
     </div>
   );
 }
@@ -358,8 +368,13 @@ export function FinanzasClient() {
       {!loading && !error && data && tab === "resumen" && (
         <div style={{ marginTop: 16 }}>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-            <Kpi label="Ingresos" value={fmtMXN(data.ingresos)} icon={TrendingUp} tone="brand" />
-            <Kpi label="Gastos" value={fmtMXN(data.gastos)} icon={TrendingDown} tone="danger" />
+            <Kpi
+              label="Ingresos" value={fmtMXN(data.ingresos)} icon={TrendingUp} tone="brand"
+              queCuenta={(data.reembolsos ?? 0) > 0
+                ? { clave: "ingresosPeriodoConReembolsos", vars: { reembolsos: fmtMXN(data.reembolsos ?? 0) } }
+                : { clave: "ingresosPeriodo" }}
+            />
+            <Kpi label="Gastos" value={fmtMXN(data.gastos)} icon={TrendingDown} tone="danger" queCuenta={{ clave: "gastosPeriodo" }} />
             <Kpi
               label="Utilidad"
               value={fmtMXNSigned(data.utilidad)}
@@ -367,10 +382,11 @@ export function FinanzasClient() {
               tone={utilidadPos ? "success" : "danger"}
               valueTone={utilidadPos ? "success" : "danger"}
               hero
+              queCuenta={{ clave: "utilidad" }}
             />
             <Kpi label="Ventas" value={(data.ventas ?? 0).toLocaleString("es-MX")} icon={Receipt} tone="brand" />
             <Kpi label="Citas" value={(data.citas ?? 0).toLocaleString("es-MX")} icon={CalendarCheck} tone="brand" />
-            <Kpi label="Efectivo recibido" value={fmtMXN(data.efectivo)} icon={Banknote} tone="success" />
+            <Kpi label="Efectivo recibido" value={fmtMXN(data.efectivo)} icon={Banknote} tone="success" queCuenta={{ clave: "efectivo" }} />
           </div>
 
           <div style={{ marginTop: 16 }}>
@@ -552,6 +568,9 @@ export function FinanzasClient() {
                 <span>Doctor</span>
                 <span>Ingresos generados</span>
               </div>
+              <div style={{ padding: "8px 16px", fontSize: 11, color: "var(--text-3)", borderBottom: "1px solid var(--border-soft)" }}>
+                <QueCuenta clave="porDoctor" />
+              </div>
               {data.porDoctor.map((d, i) => (
                 <div
                   key={d.doctorId}
@@ -586,8 +605,8 @@ export function FinanzasClient() {
       {!loading && !error && data && tab === "saldos" && (
         <div style={{ marginTop: 16 }}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-            <Kpi label="Por cobrar" value={fmtMXN(data.saldos?.porCobrar ?? 0)} icon={Wallet} tone="brand" big />
-            <Kpi label="Vencido" value={fmtMXN(data.saldos?.vencido ?? 0)} icon={AlertTriangle} tone="danger" big />
+            <Kpi label="Por cobrar" value={fmtMXN(data.saldos?.porCobrar ?? 0)} icon={Wallet} tone="brand" big queCuenta={{ clave: "porCobrar" }} />
+            <Kpi label="Vencido" value={fmtMXN(data.saldos?.vencido ?? 0)} icon={AlertTriangle} tone="danger" big queCuenta={{ clave: "vencido" }} />
           </div>
           {data.saldos?.incompleto && (
             <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-3)" }}>
