@@ -17,6 +17,7 @@ import { InvoiceNumberExhaustedError, nextInvoiceNumber, withInvoiceNumberRetry 
 import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
 import { facturaOcupaLaCita } from "./cita-factura-cancelada";
 import { soltarFacturaCanceladaDeCita } from "./cita-factura-cancelada.server";
+import { doctorDeFacturaNueva } from "./doctor-de-factura.server";
 
 export interface LineItemFactura {
   code?: string;
@@ -41,6 +42,14 @@ export interface CrearFacturaDesdeCitaArgs {
   notes?: string | null;
   /** Quién la crea, para el rastro de `aplicarSaldoAFavor`. null = automático. */
   userId?: string | null;
+  /**
+   * Doctor de la factura ya validado por quien llama. Omitido (lo normal) = se hereda de la
+   * cita (ws1-t2, F10: antes nacía siempre sin doctor); sin cita, de las citas de hoy o del
+   * plan (doctor-de-factura.ts).
+   */
+  doctorId?: string | null;
+  /** Zona de la clínica, para «las citas de hoy» cuando no hay cita. */
+  timezone?: string | null;
 }
 
 export interface FacturaCreada {
@@ -125,6 +134,9 @@ export async function crearFacturaDesdeCita(
   const clinicTax = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } });
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
   const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
+  const { doctorId } = await doctorDeFacturaNueva({
+    clinicId, patientId, appointmentId, pedido: args.doctorId, timezone: args.timezone ?? null,
+  });
 
   try {
     const invoice = await withInvoiceNumberRetry(async () =>
@@ -143,6 +155,7 @@ export async function crearFacturaDesdeCita(
           notes: args.notes ?? null,
           taxRate,
           taxIncluded,
+          doctorId,
         },
         select: {
           id: true, invoiceNumber: true, subtotal: true, discount: true, total: true, balance: true,

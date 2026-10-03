@@ -37,6 +37,7 @@ import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-red
 import { conceptosParaEditar, cuerpoDeEdicion } from "./editar-factura";
 import { avisoDePlan, CODIGO_PLAN_SE_RECALCULA } from "@/lib/invoices/editar-factura-core";
 import { notasVisibles } from "@/lib/invoices/marcas-internas";
+import type { OrigenDoctorFactura } from "@/lib/invoices/doctor-de-factura";
 
 /**
  * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
@@ -247,6 +248,12 @@ function InvoiceEditorBody({
   // Doctor atribuido (Invoice.doctorId) — opcional, alimenta los reportes por médico de Caja.
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [doctorId, setDoctorId] = useState(inicial?.doctorId ?? "");
+  // ws1-t2 (F10): sin tocar el selector, el doctor se PRESELECCIONA con la misma regla con la que
+  // el servidor lo heredaría (citas de hoy del paciente, si no su plan activo) y se dice de dónde
+  // salió. Elegir «Sin asignar» a mano viaja como `null` y el servidor ya no hereda.
+  const [doctorTocado, setDoctorTocado] = useState(Boolean(inicial?.doctorId));
+  const doctorTocadoRef = useRef(doctorTocado);
+  const [origenDoctor, setOrigenDoctor] = useState<OrigenDoctorFactura | null>(null);
 
   // Impuestos (Invoice.taxRate / taxIncluded). Nacen según la preferencia fiscal
   // de la clínica: exenta (odontología, lo común) = 0% sin desglose; iva16 = 16%
@@ -315,6 +322,23 @@ function InvoiceEditorBody({
       })
       .catch(() => setDoctors([]));
   }, []);
+
+  useEffect(() => {
+    if (editando || doctorTocado || !effectivePatientId) return;
+    let vivo = true;
+    fetch(`/api/invoices/doctor-sugerido?patientId=${encodeURIComponent(effectivePatientId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { doctorId?: string | null; origen?: OrigenDoctorFactura } | null) => {
+        if (!vivo || !d) return;
+        // Solo si el usuario no eligió mientras tanto.
+        if (doctorTocadoRef.current) return;
+        setDoctorId(d.doctorId ?? "");
+        setOrigenDoctor(d.doctorId ? (d.origen ?? null) : null);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectivePatientId]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -513,6 +537,7 @@ function InvoiceEditorBody({
       taxIncluded,
     };
     if (doctorId) payload.doctorId = doctorId;
+    else if (doctorTocado) payload.doctorId = null; // «Sin asignar» elegido a mano: no heredar.
     if (notes.trim()) payload.notes = notes.trim();
     if (dueDate) payload.dueDate = dueDate;
     try {
@@ -757,12 +782,17 @@ function InvoiceEditorBody({
             {!editando && (
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.doctor")}</label>
-              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={selectCls}>
+              <select value={doctorId} onChange={(e) => { doctorTocadoRef.current = true; setDoctorTocado(true); setOrigenDoctor(null); setDoctorId(e.target.value); }} className={selectCls}>
                 <option value="">{t("billing.invoiceEditor.doctorUnassigned")}</option>
                 {doctors.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
+              {origenDoctor && doctorId && (origenDoctor === "cita_de_hoy" || origenDoctor === "plan") && (
+                <p className={cx("mt-1 text-[11px] text-muted-foreground", c.ayuda)}>
+                  {t(origenDoctor === "plan" ? "billing.invoiceEditor.doctorDelPlan" : "billing.invoiceEditor.doctorDeLaCitaDeHoy")}
+                </p>
+              )}
             </div>
             )}
             <div className={rediseno ? c.campo : undefined}>

@@ -27,6 +27,7 @@ import {
   type NotaLigadaALaCita,
 } from "@/lib/clinical/borrador-de-la-cita";
 import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
+import { doctorDeFacturaNueva } from "@/lib/invoices/doctor-de-factura.server";
 import {
   nextInvoiceNumber,
   withInvoiceNumberRetry,
@@ -323,6 +324,15 @@ async function finishCreate(
         const subtotal = sumInvoiceItems(items);
         const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults((dbUser as any).clinic?.cfdiTaxMode);
         const { total } = computeInvoiceTotal(subtotal, 0, taxRate, taxIncluded);
+        // El doctor (ws1-t2, F10): el de la cita de la nota y, sin cita, quien firma la nota.
+        const { doctorId } = await doctorDeFacturaNueva({
+          clinicId: dbUser.clinicId,
+          patientId: data.patientId,
+          // La cita ligada vive en specialtyData (ver finalSpec en POST).
+          appointmentId: typeof record?.specialtyData?.appointmentId === "string" ? record.specialtyData.appointmentId : null,
+          autorDeNota: record?.doctorId ?? null,
+          timezone: (dbUser as any).clinic?.timezone ?? null,
+        });
 
         // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El
         // generador anterior parseaba TODOS los dígitos del último folio por
@@ -343,6 +353,7 @@ async function finishCreate(
               status: "DRAFT",
               taxRate,
               taxIncluded,
+              doctorId,
               notes: `Auto-generada desde expediente clínico del ${new Date().toLocaleDateString("es-MX")}`,
             },
           }),

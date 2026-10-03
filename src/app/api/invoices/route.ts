@@ -22,6 +22,8 @@ import { computeReceivables, whereFacturasVencidas } from "@/lib/caja";
 import { soltarFacturaCanceladaDeCita } from "@/lib/invoices/cita-factura-cancelada.server";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { doctorPedido } from "@/lib/invoices/doctor-de-factura";
+import { doctorDeFacturaNueva } from "@/lib/invoices/doctor-de-factura.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -161,14 +163,15 @@ export async function POST(req: NextRequest) {
     // Doctor atribuido (opcional). Se valida que sea de ESTA clínica (aislamiento) y con la misma regla que la
     // lista de la pantalla (GET /api/agenda/doctors, ws1-t10): quien atiende y está activo, con o sin «Aparece
     // en la agenda» (esa casilla solo controla la agenda).
-    let doctorId: string | null = null;
-    if (typeof body.doctorId === "string" && body.doctorId.trim()) {
+    // Sin doctor en el cuerpo (ws1-t2, F10) se HEREDA de la cita, de las citas de hoy o del plan
+    // (doctor-de-factura.ts); `doctorId: null` explícito = «Sin asignar» elegido a propósito.
+    const pedido = doctorPedido(body.doctorId);
+    if (typeof pedido === "string") {
       const doc = await prisma.user.findFirst({
-        where: { id: body.doctorId.trim(), clinicId, ...ATIENDE_WHERE },
+        where: { id: pedido, clinicId, ...ATIENDE_WHERE },
         select: { id: true },
       });
       if (!doc) return NextResponse.json({ error: "Doctor inválido para esta clínica" }, { status: 400 });
-      doctorId = doc.id;
     }
 
     // Misma aritmética canónica que el timbrado y el PATCH (invoice-totals):
@@ -236,6 +239,11 @@ export async function POST(req: NextRequest) {
       await soltarFacturaCanceladaDeCita({ clinicId, appointmentId: data.appointmentId, userId: ctx.userId });
     }
 
+    // Después de validar paciente y cita: la herencia solo lee lo de ESTE paciente en ESTA clínica.
+    const { doctorId, origen: doctorOrigen } = await doctorDeFacturaNueva({
+      clinicId, patientId: data.patientId, appointmentId: data.appointmentId ?? null, pedido, timezone: ctx.timezone,
+    });
+
     // Folio por MÁXIMO emitido con reintento ante carrera (P0-2): el folio se
     // recalcula DENTRO de cada intento para que el perdedor de la carrera vea
     // el máximo nuevo. El count+1 anterior, con cualquier hueco (DRAFT borrado),
@@ -267,6 +275,7 @@ export async function POST(req: NextRequest) {
       action: "create",
       after: {
         invoiceNumber: invoice.invoiceNumber, patientId: invoice.patientId, total: invoice.total,
+        ...(doctorId ? { doctorId, doctorOrigen } : {}),
         ...(saldo.aplicado > 0 ? { anticipoAplicado: saldo.aplicado, saldoAFavorRestante: saldo.restanteAFavor } : {}),
       },
     });
