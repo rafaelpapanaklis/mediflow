@@ -3,14 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { clienteAdminSupabase } from "@/lib/admin/supabase-admin";
 import { prisma } from "@/lib/prisma";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
+import { ACTIVE_CLINIC_COOKIE, unpackClinicCookie } from "@/lib/active-clinic-core";
 import { getAdminSession } from "@/lib/admin-auth";
 import { setVerComoCookie } from "@/lib/auth/two-factor-cookie";
 import { createClient as crearClienteDeSesion } from "@/lib/supabase/server";
 import {
+  COOKIE_PESTANA_VER_COMO,
+  COOKIE_SESION_PREVIA,
   DURACION_SUPLANTACION_MS,
+  RUTA_COOKIE_SESION_PREVIA,
   SQL_SUPLANTACION,
+  VIDA_SESION_PREVIA_S,
+  empacarSesionPrevia,
   limpiarNota,
+  queHacerConLaPrevia,
   sessionIdDelToken,
+  subDelToken,
+  type SesionPrevia,
 } from "@/lib/admin/suplantacion-core";
 import {
   cerrarSuplantacion,
@@ -41,6 +50,13 @@ import {
  * es NOT NULL (schema.prisma lo declara opcional), así que fallaba SIEMPRE. Ahora
  * esa nota es un extra que se intenta DESPUÉS y nunca bloquea: el registro que
  * manda es admin_impersonation_sessions.
+ *
+ * ws1-t11 · REVISIÓN DEL 2-OCT: la sesión del panel que ya hubiera en este
+ * navegador (la del propio admin en su clínica) se cerraba y se revocaba al
+ * entrar, y al salir el navegador quedaba sin sesión (/dashboard → /login).
+ * Ahora NO se revoca: se guarda en COOKIE_SESION_PREVIA y la salida
+ * (@/lib/admin/suplantacion-salida) vuelve a ella. Además se pone la marca
+ * COOKIE_PESTANA_VER_COMO para que las pestañas pintadas antes noten el cambio.
  */
 
 function pagina(titulo: string, texto: string, clinicId: string | null, status: number): NextResponse {
@@ -166,20 +182,42 @@ export async function POST(req: NextRequest) {
   // cierra es una de suplantación—, y eso la clínica sí lo vería.
   const supabase = crearClienteDeSesion();
   const previa = await estadoSuplantacionDe(supabase);
+  // La sesión que ya había: si es normal, se GUARDA y no se toca (un signOut,
+  // aunque sea "local", la revocaría en Supabase y al salir no habría a dónde
+  // volver); verifyOtp pisa sus cookies. Si es otra suplantación, se cierra.
+  const sesionActual = (await supabase.auth.getSession()).data.session as
+    | { access_token?: string; refresh_token?: string }
+    | null;
+  const subActual = subDelToken(sesionActual?.access_token);
+  const queHacer = queHacerConLaPrevia(previa.tipo, !!(sesionActual?.refresh_token && subActual));
+  const guardada: SesionPrevia | null = queHacer === "guardar"
+    ? { rt: sesionActual!.refresh_token!, sub: subActual!, clinica: unpackClinicCookie(req.cookies.get(ACTIVE_CLINIC_COOKIE)?.value) }
+    : null;
   if (previa.tipo === "activa") await cerrarSuplantacion(previa.fila.id, "reemplazada");
-  try { await supabase.auth.signOut({ scope: "local" }); } catch { /* sin sesión previa en este navegador */ }
+  if (previa.tipo !== "normal") {
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* ya cerrada */ }
+  }
+  /** Deshace un intento a medias: cierra lo abierto aquí y devuelve la sesión de antes. */
+  const deshacer = async () => {
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* nada que cerrar */ }
+    if (guardada) {
+      try { await supabase.auth.refreshSession({ refresh_token: guardada.rt }); } catch { /* queda sin sesión */ }
+    }
+  };
   const canje = await supabase.auth.verifyOtp({ type: "email", token_hash: data.properties.hashed_token });
   const sessionId = sessionIdDelToken(canje.data?.session?.access_token);
   if (canje.error || !sessionId) {
     console.error("[impersonate] verifyOtp falló:", canje.error?.message);
-    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* nada que cerrar */ }
+    // Sin canje las cookies siguen siendo las de antes: solo se cierra si algo se abrió.
+    if (canje.data?.session) await deshacer();
     return pagina("No se pudo entrar", "No se pudo abrir la sesión temporal. Inténtalo de nuevo.", clinicId, 500);
   }
 
   // 7. Registro de la sesión. Si no queda escrito, se cierra lo abierto y no se entra.
   const expiresAt = new Date(Date.now() + DURACION_SUPLANTACION_MS);
+  let registroId: string;
   try {
-    await registrarSuplantacion({
+    registroId = await registrarSuplantacion({
       adminUserId: admin.user.id,
       adminEmail: admin.user.email,
       clinicId,
@@ -193,7 +231,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[impersonate] registro de la sesión falló:", e);
-    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* best effort */ }
+    await deshacer();
     return pagina("No se pudo registrar la sesión", "No se abre la sesión sin su registro. Inténtalo de nuevo.", clinicId, 503);
   }
   // 8. Nota en la ficha de /admin (solo la ve el admin). Un extra: si no se
@@ -226,5 +264,25 @@ export async function POST(req: NextRequest) {
   // df_2fa_admin para ESTA persona y ESTA clínica (12 h). Un login normal la
   // borra (applyTwoFactorLoginCookies) y cerrar sesión también.
   setVerComoCookie(response, user.supabaseId, clinicId);
+  // ws1-t11: la sesión de antes, para volver a ella al salir (solo viaja a /api).
+  if (guardada) {
+    response.cookies.set(COOKIE_SESION_PREVIA, empacarSesionPrevia(guardada), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: RUTA_COOKIE_SESION_PREVIA,
+      maxAge: VIDA_SESION_PREVIA_S,
+    });
+  } else if (queHacer === "borrar") {
+    response.cookies.set(COOKIE_SESION_PREVIA, "", { path: RUTA_COOKIE_SESION_PREVIA, maxAge: 0 });
+  }
+  // La marca que leen las pestañas del panel (no da acceso a nada; vence con la sesión).
+  response.cookies.set(COOKIE_PESTANA_VER_COMO, registroId, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: Math.floor(DURACION_SUPLANTACION_MS / 1000),
+  });
   return response;
 }

@@ -75,3 +75,93 @@ export function estadoDe(fila: FilaSuplantacion | null, ahora: number = Date.now
   if (new Date(fila.expiresAt).getTime() <= ahora) return { tipo: "terminada", fila };
   return { tipo: "activa", fila };
 }
+
+// ─────────────── ws1-t11 (revisión del 2-oct): volver a la sesión de antes ───────────────
+//
+// El fallo: Rafael es admin de plataforma Y dueño de su propia clínica en el mismo
+// navegador. «Ver como clínica» hacía signOut de la sesión que hubiera (la suya
+// de dueño, revocándola en Supabase) y abría la de suplantación; al salir, otro
+// signOut → el navegador se quedaba SIN sesión del panel y /dashboard mandaba a
+// /login. Ahora, al entrar, la sesión previa NO se revoca: su refresh token se
+// guarda en COOKIE_SESION_PREVIA (httpOnly, solo viaja a /api) y al salir se
+// canjea para dejar el navegador como estaba, con su clínica activa.
+
+/** Copia de la sesión del panel que había antes de entrar. httpOnly, Path=/api. */
+export const COOKIE_SESION_PREVIA = "df_sesion_previa";
+export const RUTA_COOKIE_SESION_PREVIA = "/api";
+/** Vive más que la suplantación (2 h) para poder volver aunque ésta haya vencido sola. */
+export const VIDA_SESION_PREVIA_S = 12 * 60 * 60;
+
+/**
+ * Marca VISIBLE para el navegador (no httpOnly) con el id de la suplantación
+ * activa. No da acceso a nada: solo deja que cada pestaña del panel note que la
+ * sesión del navegador cambió desde que se pintó (ver pestanaDesfasada). La
+ * verdad sigue en admin_impersonation_sessions.
+ */
+export const COOKIE_PESTANA_VER_COMO = "df_ver_como";
+
+export interface SesionPrevia {
+  /** refresh token de Supabase de la sesión previa. */
+  rt: string;
+  /** Su usuario de Supabase (`sub`): al canjear, si no coincide no se usa. */
+  sub: string;
+  /** Su clínica activa (ya verificada por HMAC), o null. */
+  clinica: string | null;
+}
+
+export function empacarSesionPrevia(s: SesionPrevia): string {
+  return Buffer.from(JSON.stringify({ rt: s.rt, sub: s.sub, clinica: s.clinica }), "utf8").toString("base64url");
+}
+
+export function desempacarSesionPrevia(raw: string | null | undefined): SesionPrevia | null {
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const o = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Record<string, unknown>;
+    if (typeof o.rt !== "string" || !o.rt || typeof o.sub !== "string" || !o.sub) return null;
+    return { rt: o.rt, sub: o.sub, clinica: typeof o.clinica === "string" && o.clinica ? o.clinica : null };
+  } catch {
+    return null;
+  }
+}
+
+/** `sub` (usuario de Supabase) del access token. Solo decodifica, como sessionIdDelToken. */
+export function subDelToken(accessToken: string | null | undefined): string | null {
+  if (!accessToken || typeof accessToken !== "string") return null;
+  const partes = accessToken.split(".");
+  if (partes.length !== 3) return null;
+  try {
+    const json = Buffer.from(partes[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const claims = JSON.parse(json) as { sub?: unknown };
+    return typeof claims.sub === "string" && claims.sub ? claims.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Al entrar, ¿qué pasa con la sesión que ya había en el navegador?
+ *   · "guardar": era una sesión normal (la del propio admin en su clínica, p. ej.):
+ *     NO se cierra ni se revoca; se guarda para volver a ella al salir.
+ *   · "conservar": era otra suplantación (se cierra): la copia guardada sigue
+ *     siendo la de antes de la PRIMERA entrada.
+ *   · "borrar": no había sesión: al salir no hay a dónde volver.
+ */
+export function queHacerConLaPrevia(
+  tipoPrevia: EstadoSuplantacion["tipo"],
+  haySesion: boolean,
+): "guardar" | "conservar" | "borrar" {
+  if (tipoPrevia !== "normal") return "conservar";
+  return haySesion ? "guardar" : "borrar";
+}
+
+/**
+ * ws1-t11, punto 2. La sesión de Supabase vive en una cookie del navegador: la
+ * comparten TODAS sus pestañas. Una pestaña del panel pintada antes de entrar a
+ * «Ver como» (o antes de salir) sigue mostrando la clínica de entonces, pero lo
+ * que guarde ya va a la sesión nueva. `claveDeLaPestana` es el id de la
+ * suplantación con que se pintó ("" si ninguna); `marcaActual`, la de
+ * COOKIE_PESTANA_VER_COMO ahora. Si difieren, la pestaña está desfasada.
+ */
+export function pestanaDesfasada(claveDeLaPestana: string, marcaActual: string | null | undefined): boolean {
+  return (claveDeLaPestana || "") !== (marcaActual || "");
+}

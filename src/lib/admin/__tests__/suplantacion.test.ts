@@ -36,6 +36,11 @@ let generateLinkLlamadas = 0;
 let tokenDeSesion: string | null = null;
 const signOuts: unknown[] = [];
 const notasCreadas: string[] = [];
+// ws1-t11 (revisión 2-oct): la sesión previa del navegador y su canje al salir.
+let refreshDeSesion: string | null = null;
+let usuarioDelCanje: string | null = "sb-rafael";
+const canjes: string[] = [];
+const revocadasPorAdmin: string[] = [];
 
 function jwt(claims: Record<string, unknown>): string {
   const b = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -63,6 +68,7 @@ const prismaFalso = {
       return { id: "n" };
     },
   },
+  clinic: { findUnique: async () => ({ name: "Clínica QA" }) },
   user: { findFirst: async () => ({ id: "u-dueno", supabaseId: "sb-dueno", email: "dueno@example.com", firstName: "D", lastName: "Ueño" }) },
 };
 
@@ -71,8 +77,15 @@ mock.module("@/lib/supabase/server", {
   namedExports: {
     createClient: () => ({
       auth: {
-        getSession: async () => ({ data: { session: tokenDeSesion ? { access_token: tokenDeSesion } : null } }),
+        getSession: async () => ({ data: { session: tokenDeSesion ? { access_token: tokenDeSesion, refresh_token: refreshDeSesion ?? undefined } : null } }),
+        getUser: async () => ({ data: { user: tokenDeSesion ? { id: "sb-x" } : null } }),
         signOut: async (o?: unknown) => { signOuts.push(o ?? "global"); return { error: null }; },
+        refreshSession: async (s: { refresh_token: string }) => {
+          canjes.push(s.refresh_token);
+          return usuarioDelCanje
+            ? { data: { user: { id: usuarioDelCanje }, session: {} }, error: null }
+            : { data: { user: null, session: null }, error: new Error("refresh token revocado") };
+        },
         verifyOtp: async () => ({ data: { session: { access_token: jwt({ session_id: "ses-nueva" }) } }, error: null }),
       },
     }),
@@ -83,7 +96,7 @@ mock.module("@/lib/admin/supabase-admin", {
     clienteAdminSupabase: () => ({
       auth: { admin: {
         generateLink: async () => { generateLinkLlamadas++; return { data: { properties: { hashed_token: "h" } }, error: null }; },
-        signOut: async () => ({ error: null }),
+        signOut: async (t: string) => { revocadasPorAdmin.push(t); return { error: null }; },
       } },
     }),
   },
@@ -101,17 +114,21 @@ beforeEach(async () => {
   filaSuplantacion = null; tablasExisten = true; notaFalla = false; tokenDeSesion = null;
   sqlEjecutado.length = 0; auditLogCreates.length = 0; generateLinkLlamadas = 0;
   signOuts.length = 0; notasCreadas.length = 0;
+  refreshDeSesion = null; usuarioDelCanje = "sb-rafael"; canjes.length = 0; revocadasPorAdmin.length = 0;
   consultasATabla.length = 0; preguntasPorTablas = 0;
   (await lib())._reiniciarCacheSuplantacion();
   process.env.SUPABASE_SERVICE_ROLE_KEY = "srk";
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.supabase.co";
 });
 
-function post(body: Record<string, string>, ruta = "/api/admin/impersonate") {
+function post(body: Record<string, string>, ruta = "/api/admin/impersonate", cookie?: string) {
   const f = new URLSearchParams(body);
   return new NextRequest(`http://dev.local${ruta}`, {
     method: "POST", body: f.toString(),
-    headers: { "content-type": "application/x-www-form-urlencoded", host: "dev.local", origin: "http://dev.local" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded", host: "dev.local", origin: "http://dev.local",
+      ...(cookie ? { cookie } : {}),
+    },
   });
 }
 
@@ -147,9 +164,10 @@ test("ws1-t11 (la causa): si admin_clinic_notes rechaza la nota (authorId NOT NU
 });
 
 test("ws1-t11: entrar nunca hace un signOut global (echaría al dueño real de sus dispositivos)", async () => {
+  tokenDeSesion = jwt({ session_id: "ses-otra-supl" });
+  filaSuplantacion = { id: "i0", adminUserId: "adm-1", adminEmail: "a", clinicId: "c0", targetUserId: "u", expiresAt: new Date(Date.now() + 3600_000), endedAt: null };
   await (await ruta()).POST(post({ clinicId: "c1" }));
-  assert.ok(signOuts.length > 0);
-  assert.deepEqual(signOuts.filter((o) => (o as { scope?: string })?.scope !== "local"), []);
+  assert.deepEqual(signOuts, [{ scope: "local" }], "la suplantación anterior se cierra, solo ella");
 });
 
 test("POST completo: registra la sesión por su session_id (2 h) y redirige 303 conservando df_2fa_admin", async () => {
@@ -281,4 +299,159 @@ test("«Cerrar sesión» del panel durante la suplantación: solo local; fuera d
   filaSuplantacion = null;
   await logout.POST(new Request("http://dev.local/api/auth/logout", { method: "POST" }));
   assert.deepEqual(signOuts, ["global"]);
+});
+
+// ── ws1-t11, revisión del 2-oct ──
+//
+// Punto 1: Rafael es admin Y dueño de su clínica en el mismo navegador. Entrar hacía
+// signOut de SU sesión (revocándola) y salir dejaba el navegador sin sesión:
+// /dashboard/settings → /login. Punto 2: las pestañas pintadas antes notan el cambio.
+// Punto 3: el botón también en la lista de /admin/clinics.
+
+const cookiesDe = (r: Response) => r.headers.getSetCookie?.() ?? [(r.headers.get("set-cookie") ?? "")];
+const cookie = (r: Response, nombre: string) => cookiesDe(r).find((c) => c.startsWith(`${nombre}=`)) ?? null;
+
+test("punto 1: entrar con la sesión propia del admin NO la cierra y la guarda para volver", async () => {
+  const c = await core();
+  tokenDeSesion = jwt({ session_id: "ses-de-rafael", sub: "sb-rafael" });
+  refreshDeSesion = "rt-de-rafael";
+  const { packClinicCookie } = await import("../../active-clinic-core");
+  const r = await (await ruta()).POST(post({ clinicId: "c1" }, "/api/admin/impersonate", `activeClinicId=${packClinicCookie("clinica-de-rafael")}`));
+  assert.equal(r.status, 303);
+  assert.deepEqual(signOuts, [], "antes: signOut local, que revocaba la sesión de Rafael en Supabase");
+  const guardada = cookie(r, c.COOKIE_SESION_PREVIA);
+  assert.ok(guardada, "queda la copia de la sesión previa");
+  assert.match(guardada!, /HttpOnly/i);
+  assert.match(guardada!, /Path=\/api/);
+  const valor = guardada!.split(";")[0].slice(c.COOKIE_SESION_PREVIA.length + 1);
+  assert.deepEqual(c.desempacarSesionPrevia(valor), { rt: "rt-de-rafael", sub: "sb-rafael", clinica: "clinica-de-rafael" });
+  const marca = cookie(r, c.COOKIE_PESTANA_VER_COMO);
+  assert.match(marca ?? "", /^df_ver_como=[0-9a-f-]{36};/, "marca de pestaña con el id del registro");
+  assert.doesNotMatch(marca!, /HttpOnly/i, "la marca la lee el vigía del navegador");
+});
+
+test("punto 1: entrar desde otra suplantación conserva la copia de antes (no guarda la de soporte)", async () => {
+  const c = await core();
+  tokenDeSesion = jwt({ session_id: "ses-supl-a", sub: "sb-dueno" });
+  refreshDeSesion = "rt-de-soporte";
+  filaSuplantacion = { id: "iA", adminUserId: "adm-1", adminEmail: "a", clinicId: "cA", targetUserId: "u", expiresAt: new Date(Date.now() + 3600_000), endedAt: null };
+  const r = await (await ruta()).POST(post({ clinicId: "c1" }));
+  assert.equal(r.status, 303);
+  assert.equal(cookie(r, c.COOKIE_SESION_PREVIA), null, "ni se pisa ni se borra la copia que ya había");
+});
+
+test("punto 1: «Salir y volver a /admin» devuelve el navegador a la sesión de antes, con su clínica", async () => {
+  const c = await core();
+  tokenDeSesion = jwt({ session_id: "ses-salir-2" });
+  filaSuplantacion = filaActiva();
+  const previa = c.empacarSesionPrevia({ rt: "rt-de-rafael", sub: "sb-rafael", clinica: "clinica-de-rafael" });
+  const salir = await import("../../../app/api/admin/impersonate/salir/route");
+  const r = await salir.POST(post({}, "/api/admin/impersonate/salir", `${c.COOKIE_SESION_PREVIA}=${previa}`));
+  assert.equal(r.status, 303);
+  assert.match(r.headers.get("location") ?? "", /\/admin\/clinics\/c1$/);
+  assert.deepEqual(canjes, ["rt-de-rafael"], "antes: nada se canjeaba y /dashboard mandaba a /login");
+  assert.equal(revocadasPorAdmin.length, 1, "la de suplantación se revoca sola (local)");
+  assert.deepEqual(signOuts, [], "sin signOut que borre las cookies recién canjeadas");
+  assert.match(cookie(r, "activeClinicId") ?? "", /^activeClinicId=clinica-de-rafael\./, "vuelve su clínica activa");
+  assert.match(cookie(r, c.COOKIE_SESION_PREVIA) ?? "", /Max-Age=0/);
+  assert.match(cookie(r, c.COOKIE_PESTANA_VER_COMO) ?? "", /Max-Age=0/);
+  assert.match(cookie(r, "df_2fa_admin") ?? "", /Max-Age=0/);
+});
+
+test("punto 1: si la sesión previa ya no sirve (o es de otra persona), se sale sin sesión como antes", async () => {
+  const c = await core();
+  const salir = await import("../../../app/api/admin/impersonate/salir/route");
+  for (const caso of [null, "sb-otra-persona"]) {
+    (await lib())._reiniciarCacheSuplantacion();
+    signOuts.length = 0;
+    usuarioDelCanje = caso;
+    tokenDeSesion = jwt({ session_id: `ses-falla-${caso}` });
+    filaSuplantacion = filaActiva();
+    const previa = c.empacarSesionPrevia({ rt: "rt-viejo", sub: "sb-rafael", clinica: "x" });
+    const r = await salir.POST(post({}, "/api/admin/impersonate/salir", `${c.COOKIE_SESION_PREVIA}=${previa}`));
+    assert.equal(r.status, 303);
+    assert.deepEqual(signOuts, [{ scope: "local" }], `caso ${caso}: queda sin sesión, nunca con la de otro`);
+    assert.match(cookie(r, "activeClinicId") ?? "", /Max-Age=0/);
+  }
+});
+
+test("punto 1: «Cerrar sesión» del panel en la suplantación también vuelve a la sesión de antes", async () => {
+  const c = await core();
+  tokenDeSesion = jwt({ session_id: "ses-logout-previa" });
+  filaSuplantacion = filaActiva();
+  const previa = c.empacarSesionPrevia({ rt: "rt-de-rafael", sub: "sb-rafael", clinica: null });
+  const logout = await import("../../../app/api/auth/logout/route");
+  const r = await logout.POST(new Request("http://dev.local/api/auth/logout", {
+    method: "POST", headers: { cookie: `otra=1; ${c.COOKIE_SESION_PREVIA}=${previa}` },
+  }));
+  assert.equal(r.status, 303);
+  assert.match(r.headers.get("location") ?? "", /\/admin\/clinics\/c1$/);
+  assert.deepEqual(canjes, ["rt-de-rafael"]);
+  assert.deepEqual(signOuts, []);
+  assert.equal(cookie(r, "df_2fa"), null, "no toca la prueba de 2FA de la sesión propia");
+  // Y el navegador no hace después un signOut global que revocaría la sesión devuelta.
+  const { volvioDeVerComo } = await import("../../auth/cerrar-sesion-panel");
+  assert.equal(volvioDeVerComo({ redirected: true, url: "http://dev.local/admin/clinics/c1" }), true);
+  assert.equal(volvioDeVerComo({ redirected: true, url: "http://dev.local/login" }), false);
+  assert.equal(volvioDeVerComo(null), false);
+  const pie = readFileSync(join(__dirname, "..", "..", "..", "components", "dashboard", "sidebar.tsx"), "utf8");
+  assert.match(pie, /return cerrarSesionDelPanel\("Sidebar"\)/);
+});
+
+test("punto 1, núcleo: copia de la sesión previa, sub del token y qué hacer al entrar", async () => {
+  const c = await core();
+  const s = { rt: "r", sub: "u", clinica: null };
+  assert.deepEqual(c.desempacarSesionPrevia(c.empacarSesionPrevia(s)), s);
+  assert.equal(c.desempacarSesionPrevia("basura"), null);
+  assert.equal(c.desempacarSesionPrevia(Buffer.from(JSON.stringify({ rt: "", sub: "u" })).toString("base64url")), null);
+  assert.equal(c.desempacarSesionPrevia(undefined), null);
+  assert.equal(c.subDelToken(jwt({ sub: "abc" })), "abc");
+  assert.equal(c.subDelToken("x.y"), null);
+  assert.equal(c.queHacerConLaPrevia("normal", true), "guardar");
+  assert.equal(c.queHacerConLaPrevia("normal", false), "borrar");
+  assert.equal(c.queHacerConLaPrevia("activa", true), "conservar");
+  assert.equal(c.queHacerConLaPrevia("terminada", true), "conservar");
+});
+
+test("punto 2: una pestaña pintada con otra sesión queda desfasada", async () => {
+  const c = await core();
+  assert.equal(c.pestanaDesfasada("", null), false, "usuario normal: nunca");
+  assert.equal(c.pestanaDesfasada("", "id-1"), true, "pintada antes de entrar");
+  assert.equal(c.pestanaDesfasada("id-1", ""), true, "pintada antes de salir (o venció)");
+  assert.equal(c.pestanaDesfasada("id-1", "id-2"), true, "entró a otra clínica en otra pestaña");
+  assert.equal(c.pestanaDesfasada("id-1", "id-1"), false);
+  const t = await import("../ver-como-pestana-textos");
+  assert.match(t.textosPestanaVerComo("es").tituloAhora("Clínica QA"), /viendo como «Clínica QA»/);
+  assert.match(t.textosPestanaVerComo("en-US").recargar, /Reload/);
+});
+
+test("punto 2: GET /api/admin/impersonate/estado dice la verdad del servidor", async () => {
+  const estado = await import("../../../app/api/admin/impersonate/estado/route");
+  tokenDeSesion = null;
+  assert.deepEqual(await (await estado.GET()).json(), { activa: false });
+  tokenDeSesion = jwt({ session_id: "ses-normal-estado" });
+  filaSuplantacion = null;
+  assert.deepEqual(await (await estado.GET()).json(), { activa: false });
+  (await lib())._reiniciarCacheSuplantacion();
+  tokenDeSesion = jwt({ session_id: "ses-activa-estado" });
+  filaSuplantacion = filaActiva();
+  const j = await (await estado.GET()).json();
+  assert.equal(j.activa, true);
+  assert.equal(j.id, "i3");
+  assert.equal(j.clinica, "Clínica QA");
+});
+
+test("punto 2: el vigía va en TODA pestaña del panel, con o sin suplantación (cableado)", () => {
+  const aviso = readFileSync(join(__dirname, "..", "..", "..", "components", "dashboard", "aviso-suplantacion.tsx"), "utf8");
+  assert.match(aviso, /if \(!s\) return <VigiaVerComo clave="" \/>;/);
+  assert.match(aviso, /<VigiaVerComo clave=\{s\.id\} \/>/);
+  const vigia = readFileSync(join(__dirname, "..", "..", "..", "components", "dashboard", "vigia-ver-como.tsx"), "utf8");
+  assert.match(vigia, /^"use client";/);
+  assert.match(vigia, /visibilitychange/);
+  assert.match(vigia, /\/api\/admin\/impersonate\/estado/);
+});
+
+test("punto 3: «Ver como clínica» también en la lista de /admin/clinics", () => {
+  const lista = readFileSync(join(__dirname, "..", "..", "..", "app", "admin", "clinics", "clinics-client.tsx"), "utf8");
+  assert.match(lista, /<BotonVerComoClinica clinicId=\{clinic\.id\} size="sm" \/>/);
 });

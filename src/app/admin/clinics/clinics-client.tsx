@@ -21,6 +21,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
+import { BotonVerComoClinica } from "@/components/admin/boton-ver-como-clinica";
 import { includedBranchesHint, mrrBreakdownHint, type AdminMrr } from "@/lib/admin/mrr-core";
 import { conservedMonthlyPrice } from "@/lib/billing/plan-overrides";
 import {
@@ -751,6 +752,8 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                     <td data-col="Acciones" className="dcp-der">
                       {/* Los tres botones que YA cambiaban cosas: mismo texto, mismo comportamiento. */}
                       <div className={css.acciones}>
+                        {/* ws1-t11: también aquí, no solo en el detalle (abre pestaña nueva). */}
+                        <BotonVerComoClinica clinicId={clinic.id} size="sm" />
                         <ButtonNew size="sm" variant="secondary" onClick={() => extendTrial(clinic.id, 30)} disabled={isLoading}>
                           +30 días
                         </ButtonNew>

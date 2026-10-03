@@ -2,20 +2,30 @@ import { urlPublicaDe } from "@/lib/url-publica";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { TWO_FA_COOKIE, TWO_FA_PENDING_COOKIE, TWO_FA_ADMIN_COOKIE } from "@/lib/auth/two-factor-constants";
-import { cerrarSuplantacion, estadoSuplantacionDe } from "@/lib/admin/suplantacion";
+import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
+import { COOKIE_SESION_PREVIA } from "@/lib/admin/suplantacion-core";
+import { cookiesDeSalida, salirDeSuplantacion } from "@/lib/admin/suplantacion-salida";
 
 export async function POST(request: Request) {
   const supabase = createClient();
   // ws1-t11: «Cerrar sesión» dentro de «Ver como clínica» cierra SOLO la sesión
   // de suplantación (scope "local"). El signOut de siempre es "global" y echaría
-  // al dueño real de todos sus dispositivos: la clínica lo notaría.
+  // al dueño real de todos sus dispositivos: la clínica lo notaría. Y es lo
+  // mismo que «Salir y volver a /admin»: el navegador vuelve a la sesión que
+  // tenía antes de entrar (revisión del 2-oct), sin tocar sus cookies de 2FA.
   const suplantacion = await estadoSuplantacionDe(supabase);
-  if (suplantacion.tipo === "normal") {
-    await supabase.auth.signOut();
-  } else {
-    if (suplantacion.tipo === "activa") await cerrarSuplantacion(suplantacion.fila.id, "salida");
-    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* ya cerrada */ }
+  if (suplantacion.tipo !== "normal") {
+    const cookiePrevia = request.headers.get("cookie")?.split(/;\s*/)
+      .find((c) => c.startsWith(`${COOKIE_SESION_PREVIA}=`))?.slice(COOKIE_SESION_PREVIA.length + 1);
+    const salida = await salirDeSuplantacion(supabase, suplantacion, cookiePrevia);
+    const res = NextResponse.redirect(
+      urlPublicaDe(request, `/admin/clinics/${encodeURIComponent(suplantacion.fila.clinicId)}`),
+      303,
+    );
+    cookiesDeSalida(res, salida);
+    return res;
   }
+  await supabase.auth.signOut();
 
   const res = NextResponse.redirect(urlPublicaDe(request, "/login"));
   // Limpiar cookies custom del dashboard para evitar que sobrevivan a la sesión.

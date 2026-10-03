@@ -19,6 +19,7 @@ import { setSidebarSectionCollapsed } from "@/app/actions/sidebar";
 import { useT } from "@/i18n/i18n-provider";
 import { NewBranchDialog } from "@/components/dashboard/new-branch-dialog";
 import type { SidebarBranchInfo } from "@/lib/branches-shared";
+import { cerrarSesionPanel as cerrarSesionDelPanel } from "@/lib/auth/cerrar-sesion-panel";
 
 import {
   NAV_ITEMS,
@@ -1253,21 +1254,8 @@ function CollapsibleSection({
 // ═══════════════════════════════════════════════════════════════════
 
 /** Cierre de sesión del panel. Lo comparten este pie y el menú de dos niveles. */
-export async function cerrarSesionPanel() {
-  try {
-    // POST al endpoint server: borra cookies httpOnly que el cliente no puede
-    // tocar (activeClinicId, df_2fa, df_2fa_pending) y hace signOut server-side.
-    // Sin esto, df_2fa podría sobrevivir al logout y saltarse el reto en el
-    // siguiente login dentro de su ventana de 12 h.
-    try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    await supabase.auth.signOut();
-  } catch (err) {
-    console.error("[Sidebar] logout failed", err);
-  } finally {
-    window.location.href = "/login";
-  }
+export function cerrarSesionPanel() {
+  return cerrarSesionDelPanel("Sidebar");
 }
 
 function SidebarFooter({
