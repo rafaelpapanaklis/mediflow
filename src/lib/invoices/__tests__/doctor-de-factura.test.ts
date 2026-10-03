@@ -52,16 +52,19 @@ const prismaStub: any = {
   treatmentPlan: {
     findMany: async ({ where }: any) => {
       assert.ok(where?.clinicId);
-      return db.planes.filter((p) => p.clinicId === where.clinicId && p.patientId === where.patientId && p.status === where.status)
-        .map((p) => ({ doctorId: p.doctorId }));
+      // En la base real `status` es TEXT y Prisma lo compara como enum (error 42883): no se filtra en SQL.
+      assert.equal(where.status, undefined, "treatment_plans.status no va en el where");
+      return db.planes.filter((p) => p.clinicId === where.clinicId && p.patientId === where.patientId)
+        .map((p) => ({ doctorId: p.doctorId, status: p.status }));
     },
   },
   orthodonticTreatmentPlan: {
     findMany: async ({ where }: any) => {
       assert.ok(where?.clinicId);
+      assert.equal(where.status, undefined, "el estado del caso se filtra en JS");
       return db.casos.filter((c) => c.clinicId === where.clinicId && c.patientId === where.patientId && c.deletedAt === null
-        && where.status.in.includes(c.status) && c.treatingDoctorId !== null)
-        .map((c) => ({ treatingDoctorId: c.treatingDoctorId }));
+        && c.treatingDoctorId !== null)
+        .map((c) => ({ treatingDoctorId: c.treatingDoctorId, status: c.status }));
     },
   },
   user: {
@@ -190,6 +193,20 @@ test("POST /api/invoices: «Sin asignar» elegido (null) no hereda; un doctor el
   assert.equal(db.creadas[1].doctorId, "docB");
   const malo = await POST(req(cuerpo({ doctorId: "docOtra" })));
   assert.equal(malo.status, 400, "un doctor de otra clínica sigue rechazado");
+});
+
+test("POST /api/invoices: un plan pausado o un caso terminado no cuentan como «plan activo»", async () => {
+  const { POST } = await import("@/app/api/invoices/route");
+  reiniciar();
+  db.planes.push({ clinicId: "c1", patientId: "p1", doctorId: "docA", status: "PAUSED" });
+  db.casos.push({ clinicId: "c1", patientId: "p1", treatingDoctorId: "docB", status: "COMPLETED", deletedAt: null });
+  await POST(req(cuerpo()));
+  assert.equal(db.creadas[0].doctorId, null);
+  reiniciar();
+  db.planes.push({ clinicId: "c1", patientId: "p1", doctorId: "docA", status: "PAUSED" });
+  db.planes.push({ clinicId: "c1", patientId: "p1", doctorId: "docB", status: "ACTIVE" });
+  await POST(req(cuerpo()));
+  assert.equal(db.creadas[0].doctorId, "docB", "solo el ACTIVO decide");
 });
 
 test("POST /api/invoices: no hereda a quien ya no atiende (baja) ni a otra clínica", async () => {

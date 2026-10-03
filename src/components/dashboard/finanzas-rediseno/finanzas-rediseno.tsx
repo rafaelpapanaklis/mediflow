@@ -462,7 +462,7 @@ export function FinanzasRediseno() {
                 titulo="Por doctor"
                 sub="Lo facturado en el periodo, no lo cobrado: por eso no suma lo mismo que Ingresos."
               >
-                <p className={s.kpiPista}><QueCuenta clave="porDoctor" /></p>
+                <p className={s.kpiPista} style={{ marginBottom: 12 }}><QueCuenta clave="porDoctor" /></p>
                 {(data.porDoctor ?? []).length === 0 ? (
                   <Vacio icono={Users} titulo="Sin facturas con doctor asignado en este periodo" />
                 ) : (

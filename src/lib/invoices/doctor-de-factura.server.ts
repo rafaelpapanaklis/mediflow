@@ -74,20 +74,28 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeF
       // Hoy lo vieron dos doctores distintos: no se adivina con el plan.
       propuesta = { doctorId: null, origen: "ninguno" };
     } else {
+      // El estado se filtra AQUÍ y no en el `where`: en la base real `treatment_plans.status` es
+      // TEXT y Prisma lo compara como su enum (`text = "TreatmentStatus"`, error 42883). Lo cazó la
+      // QA de ws1-t2 contra la clínica de prueba; leer el valor sí funciona.
       const [planes, casos] = await Promise.all([
         prisma.treatmentPlan.findMany({
-          where: { clinicId, patientId, status: "ACTIVE" },
-          select: { doctorId: true },
-          take: 20,
+          where: { clinicId, patientId },
+          select: { doctorId: true, status: true },
+          orderBy: { startDate: "desc" },
+          take: 50,
         }),
         prisma.orthodonticTreatmentPlan.findMany({
-          where: { clinicId, patientId, deletedAt: null, status: { in: [...CASO_VIVO] }, treatingDoctorId: { not: null } },
-          select: { treatingDoctorId: true },
+          where: { clinicId, patientId, deletedAt: null, treatingDoctorId: { not: null } },
+          select: { treatingDoctorId: true, status: true },
           take: 20,
         }),
       ]);
+      const vivos = new Set<string>(CASO_VIVO);
       propuesta = elegirDoctorDeFactura(undefined, {
-        planes: [...planes.map((p) => p.doctorId), ...casos.map((c) => c.treatingDoctorId)],
+        planes: [
+          ...planes.filter((p) => String(p.status) === "ACTIVE").map((p) => p.doctorId),
+          ...casos.filter((c) => vivos.has(String(c.status))).map((c) => c.treatingDoctorId),
+        ],
       });
     }
   }
