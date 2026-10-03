@@ -45,6 +45,8 @@ import {
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { useConfirm, useConfirmWithReason } from "@/components/ui/confirm-dialog";
+import { CODIGO_CARTA_CON_HUECOS, type RevisionDeCarta } from "@/lib/consent/huecos-carta";
+import { useTextosHuecosCarta } from "./textos-huecos-carta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -142,6 +144,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
   const t = useT();
   const confirm = useConfirm();
   const confirmWithReason = useConfirmWithReason();
+  const txHuecos = useTextosHuecosCarta();
 
   const [list, setList] = useState<ConsentDTO[]>(initialConsents);
   const [busy, setBusy] = useState<string | null>(null);
@@ -243,15 +246,30 @@ export function ConsentsTab(props: ConsentsTabProps) {
     }
   }
 
-  async function post(c: ConsentDTO, path: string, key: string, body?: unknown) {
+  async function post(
+    c: ConsentDTO,
+    path: string,
+    key: string,
+    body?: Record<string, unknown>,
+    // ws1-t3 (BEVADENT F2): si el servidor responde que la carta tiene espacios
+    // sin llenar, se pregunta aquí y, con un sí, se repite confirmándolo.
+    preguntarHuecos?: (r: RevisionDeCarta) => Promise<boolean>,
+  ) {
     setBusy(`${c.id}:${key}`);
     try {
-      const res = await fetch(`/api/consent/${c.id}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const out = await res.json().catch(() => ({}));
+      const enviar = (cuerpo?: Record<string, unknown>) =>
+        fetch(`/api/consent/${c.id}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+        });
+      let res = await enviar(body);
+      let out = await res.json().catch(() => ({}));
+      if (res.status === 409 && out.code === CODIGO_CARTA_CON_HUECOS && out.revision && preguntarHuecos) {
+        if (!(await preguntarHuecos(out.revision as RevisionDeCarta))) return null;
+        res = await enviar({ ...(body ?? {}), confirmarHuecos: true });
+        out = await res.json().catch(() => ({}));
+      }
       if (!res.ok) throw new Error(out.error ?? t("patients.consents.genericError"));
       await load();
       return out;
@@ -264,7 +282,15 @@ export function ConsentsTab(props: ConsentsTabProps) {
   }
 
   async function sendWhatsApp(c: ConsentDTO) {
-    const out = await post(c, "/send-whatsapp", "wa");
+    const out = await post(c, "/send-whatsapp", "wa", undefined, (r) =>
+      confirm({
+        title: txHuecos.titulo,
+        description: txHuecos.mandar(r),
+        variant: "warning",
+        confirmText: txHuecos.mandarSi,
+        cancelText: txHuecos.revisar,
+      }),
+    );
     if (out) toast.success(t("patients.consents.sentWhatsApp"));
   }
 
@@ -800,7 +826,12 @@ function CreatedDialog({
     if (!created) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/consent/${created.id}/send-whatsapp`, { method: "POST" });
+      // Recién creada en el editor, que ya preguntó por los espacios sin llenar.
+      const res = await fetch(`/api/consent/${created.id}/send-whatsapp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmarHuecos: true }),
+      });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? t("patients.consents.genericError"));
       toast.success(t("patients.consents.sentWhatsApp"));
@@ -947,6 +978,8 @@ function CountersignModal({
   onDone: () => Promise<void> | void;
 }) {
   const t = useT();
+  const confirm = useConfirm();
+  const txHuecos = useTextosHuecosCarta();
   const [signature, setSignature] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -956,12 +989,27 @@ function CountersignModal({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/consent/${consent.id}/countersign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signatureDataUrl: signature }),
-      });
-      const out = await res.json().catch(() => ({}));
+      const firmar = (confirmarHuecos: boolean) =>
+        fetch(`/api/consent/${consent.id}/countersign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signatureDataUrl: signature, ...(confirmarHuecos ? { confirmarHuecos } : {}) }),
+        });
+      let res = await firmar(false);
+      let out = await res.json().catch(() => ({}));
+      // ws1-t3 (BEVADENT F2): con espacios sin llenar, el doctor firma solo si lo confirma.
+      if (res.status === 409 && out.code === CODIGO_CARTA_CON_HUECOS && out.revision) {
+        const si = await confirm({
+          title: txHuecos.titulo,
+          description: txHuecos.contrafirmar(out.revision as RevisionDeCarta),
+          variant: "warning",
+          confirmText: txHuecos.contrafirmarSi,
+          cancelText: txHuecos.revisar,
+        });
+        if (!si) return;
+        res = await firmar(true);
+        out = await res.json().catch(() => ({}));
+      }
       if (!res.ok) throw new Error(out.error ?? t("patients.consents.genericError"));
       toast.success(t("patients.consents.countersigned"));
       await onDone();

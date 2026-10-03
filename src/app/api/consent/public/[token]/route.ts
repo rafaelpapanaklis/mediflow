@@ -21,6 +21,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { signMaybeUrl } from "@/lib/storage";
 import { signaturePath, uploadSignature, validateSignatureDataUrl } from "@/lib/consent/signature";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { conPendientesDeCarta, faltaConfirmarCarta } from "@/lib/consent/huecos-carta";
 
 /** Lo que ve el paciente. Nunca salen ids internos ni el resto del expediente. */
 const PUBLIC_SELECT = {
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   const form = await prisma.consentForm.findUnique({
     where: { token: params.token },
-    select: { id: true, clinicId: true, patientId: true, expiresAt: true, signedAt: true, revokedAt: true, deletedAt: true },
+    select: { id: true, clinicId: true, patientId: true, expiresAt: true, signedAt: true, revokedAt: true, deletedAt: true, content: true },
   });
 
   if (!form || form.deletedAt) {
@@ -123,6 +124,10 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   }
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
+  // ws1-t3 (BEVADENT F2): con espacios sin llenar o instrucciones internas, quien
+  // firma tiene que haberlo visto y confirmado en la página (segunda casilla).
+  const sinConfirmar = faltaConfirmarCarta(form.content, body.confirmarHuecos);
+  if (sinConfirmar) return NextResponse.json(sinConfirmar, { status: 409 });
   const check = await validateSignatureDataUrl(body.signatureDataUrl);
   if (check.error) {
     return NextResponse.json(
@@ -174,7 +179,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     entityType: "consent",
     entityId: form.id,
     action: "update",
-    texto: "Firmó un consentimiento desde el enlace",
+    texto: conPendientesDeCarta("Firmó un consentimiento desde el enlace", form.content),
     req,
   });
   return NextResponse.json({ success: true, signedAt: now.toISOString() });

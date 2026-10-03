@@ -32,6 +32,8 @@ import type { ConsentDocumentoDTO, ConsentFirmaDTO } from "@/lib/consent/documen
 import type { ConsentDTO } from "@/lib/consent/types";
 import s from "./consent-documento.module.css";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { cartaConPendientes } from "@/lib/consent/huecos-carta";
+import { useTextosHuecosCarta } from "./textos-huecos-carta";
 
 /** A dónde pega cada acción de la barra. Sin permiso, ese botón ni se pinta. */
 export function rutasDeConsentimiento(
@@ -135,17 +137,28 @@ function TiraDeFirmas({
   onCountersign: () => void;
 }) {
   const t = useT();
+  const txHuecos = useTextosHuecosCarta();
   const quien = doc.representante ? t("consentDoc.strip.representative") : t("consentDoc.strip.patient");
   const filas: Array<[string, boolean]> = [
     [quien, doc.firmaPaciente],
     [t("consentDoc.strip.doctor"), doc.firmaDoctor],
   ];
+  // ws1-t3 (BEVADENT F2): «completa» no es «tiene las dos firmas». Con espacios
+  // sin llenar o instrucciones internas en el texto, la tira lo dice y nunca
+  // dice «La carta está completa».
+  const revision = doc.revision ?? { huecos: 0, instrucciones: [] };
+  const conPendientes = cartaConPendientes(revision);
   const pista =
     doc.status === "REVOKED" ? t("consentDoc.strip.hintRevoked")
     : doc.status === "EXPIRED" ? t("consentDoc.strip.hintExpired")
     : doc.status === "PENDING" ? t("consentDoc.strip.hintPending")
     : !doc.firmaDoctor ? t("consentDoc.strip.hintDoctor")
+    : conPendientes ? null
     : t("consentDoc.strip.hintComplete");
+  const aviso =
+    !conPendientes || doc.status === "REVOKED" ? null
+    : doc.status === "SIGNED" && doc.firmaDoctor ? txHuecos.tiraFirmada(revision)
+    : txHuecos.tiraPendiente(revision);
 
   return (
     <div className={s.tira}>
@@ -162,7 +175,8 @@ function TiraDeFirmas({
           </li>
         ) : null}
       </ul>
-      <p className={s.tiraPista}>{pista}</p>
+      {pista ? <p className={s.tiraPista}>{pista}</p> : null}
+      {aviso ? <p className={s.tiraAviso} role="status">{aviso}</p> : null}
       <div className={s.tiraAcciones}>
         {doc.status === "PENDING" ? (
           <a

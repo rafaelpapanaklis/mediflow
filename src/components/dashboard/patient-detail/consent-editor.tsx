@@ -22,7 +22,7 @@
 // <textarea> sin barra de formato: una negrita que no llega al papel sería
 // enseñarle al doctor algo distinto de lo que firma el paciente.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { ArrowLeft, Check, Eye, Loader2, Pencil } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
@@ -42,6 +42,8 @@ import { ConsentMissingNotice } from "./consent-missing-notice";
 import s from "./consent-documento.module.css";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { cartaConPendientes, revisarCarta } from "@/lib/consent/huecos-carta";
+import { useTextosHuecosCarta } from "./textos-huecos-carta";
 
 /** Lo que devuelve GET /api/consent/preview. */
 export interface PreviewCarta {
@@ -109,6 +111,7 @@ export function ConsentEditor({
 }) {
   const t = useT();
   const confirm = useConfirm();
+  const txHuecos = useTextosHuecosCarta();
 
   const [encabezado, setEncabezado] = useState(hoja.encabezado);
   const [missing, setMissing] = useState<ConsentMissingItem[]>(hoja.missing);
@@ -277,6 +280,22 @@ export function ConsentEditor({
       setError(t("patients.consents.errorRepresentative"));
       return;
     }
+    // ws1-t3 (BEVADENT F2): con espacios «____» sin llenar o instrucciones
+    // internas, se crea solo si se confirma (el aviso ya estaba a la vista).
+    if (cartaConPendientes(revision)) {
+      const seguir = await confirm({
+        title: txHuecos.titulo,
+        description: txHuecos.crear(revision),
+        variant: "warning",
+        confirmText: txHuecos.crearSi,
+        cancelText: txHuecos.revisar,
+      });
+      if (!seguir) {
+        setViendo(false);
+        requestAnimationFrame(() => caja.current?.focus());
+        return;
+      }
+    }
     setGuardando(true);
     try {
       const out = await pedir<{ id: string; signUrl: string }>("/api/consent", {
@@ -304,6 +323,7 @@ export function ConsentEditor({
   }
 
   const quieto = guardando || trayendo;
+  const revision = useMemo(() => revisarCarta(texto), [texto]);
 
   return (
     <DocumentoRaiz className="space-y-3">
@@ -467,6 +487,11 @@ export function ConsentEditor({
               className={`${clasesDocumento.cuerpo} ${clasesDocumento.cuerpoEditable} ${s.textoCarta}`}
             />
           )}
+          {cartaConPendientes(revision) ? (
+            <p className={`${clasesDocumento.estado} ${clasesDocumento.estadoAviso}`} role="status">
+              {txHuecos.editor(revision)}
+            </p>
+          ) : null}
           {plantillas !== null && plantillas.length === 0 ? (
             <p className={clasesDocumento.pista}>{t("patients.consents.editor.templatesEmpty")}</p>
           ) : null}

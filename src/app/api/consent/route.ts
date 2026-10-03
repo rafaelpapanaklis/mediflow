@@ -23,6 +23,7 @@ import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildConsentContent, fillConsentTemplate, findConsentTemplate } from "@/lib/consent/templates";
 import { resolveClinicConsentTemplate } from "@/lib/consent/clinic-templates";
+import { pendientesParaBitacora } from "@/lib/consent/huecos-carta";
 // Mismo helper de edad que el preview: la carta creada no puede decir una edad
 // distinta de la que el doctor acaba de revisar en el modal.
 import { calculateAge } from "@/lib/pediatrics/age";
@@ -233,6 +234,9 @@ export async function POST(req: NextRequest) {
       doctorId: form.doctorId,
       signerName: form.signerName,
       contentHash,
+      // ws1-t3: si se creó con espacios sin llenar o instrucciones internas (el
+      // editor lo confirmó antes), queda dicho en Movimientos.
+      ...(pendientesParaBitacora(content) ?? {}),
     },
   });
 

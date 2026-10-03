@@ -27,6 +27,7 @@ import { formatConsentDate, formatConsentDateTime } from "./dates";
 import { parseConsentText } from "./render";
 import { consentTextToBodyHtml } from "./template-html";
 import { consentStatus, type ConsentStatus } from "./types";
+import { revisarCarta, type RevisionDeCarta } from "./huecos-carta";
 
 /** Lo que se lee de la base para pintar la carta. Todo puede faltar menos el texto. */
 export interface ConsentDocumentSource {
@@ -97,6 +98,11 @@ export interface ConsentDocumentoDTO {
   revocado: { fecha: string; motivo: string | null } | null;
   evidencia: { huella: string | null; firmadoEl: string | null; ip: string | null };
   faltantes: DatoFaltante[];
+  /**
+   * ws1-t3 (BEVADENT F2): espacios «____» sin llenar e instrucciones internas en
+   * el TEXTO. Con algo aquí la pantalla no dice «completa» aunque estén las firmas.
+   */
+  revision: RevisionDeCarta;
 }
 
 /** Calle y ciudad en un renglón, o `null` si no hay calle (la ciudad sola no es una dirección). */
@@ -187,5 +193,6 @@ export function buildConsentDocumento(
       // Sin doctor en la carta no hay a quién capturarle la cédula en Equipo: ese
       // aviso mandaría a recepción a corregir algo que desde ahí no se corrige.
     }).filter((f) => !(sinDoctor && f.fixIn === "team")),
+    revision: revisarCarta(src.content),
   };
 }

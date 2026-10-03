@@ -34,6 +34,7 @@ import {
 import { SignaturePad } from "@/components/ui/signature-pad";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import { formatConsentDateTime } from "@/lib/consent/dates";
+import { avisoDeCarta, cartaConPendientes, revisarCarta } from "@/lib/consent/huecos-carta";
 
 interface ConsentPublicData {
   procedure: string;
@@ -63,6 +64,8 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
   const [agreed, setAgreed] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // ws1-t3 (BEVADENT F2): la carta tiene espacios sin llenar y quien firma lo vio.
+  const [confirmoHuecos, setConfirmoHuecos] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -87,13 +90,18 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
   async function sign() {
     if (!signature) { setMsg("Dibuja tu firma en el recuadro."); return; }
     if (!agreed) { setMsg("Marca la casilla de aceptación antes de firmar."); return; }
+    const pendientes = form ? cartaConPendientes(revisarCarta(form.content)) : false;
+    if (pendientes && !confirmoHuecos) {
+      setMsg("Marca la casilla de los espacios sin llenar antes de firmar.");
+      return;
+    }
     setSigning(true);
     setMsg(null);
     try {
       const res = await fetch(`/api/consent/public/${params.token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signatureDataUrl: signature }),
+        body: JSON.stringify({ signatureDataUrl: signature, ...(pendientes ? { confirmarHuecos: true } : {}) }),
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? "No se pudo registrar la firma.");
@@ -140,6 +148,9 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
   const signerLabel = isRepresented ? form.signerName : patientName;
   const isSigned = Boolean(form.signedAt);
   const isRevoked = Boolean(form.revokedAt);
+  const revision = revisarCarta(form.content);
+  const conPendientes = cartaConPendientes(revision);
+  const listo = agreed && Boolean(signature) && (!conPendientes || confirmoHuecos);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -272,6 +283,31 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
               </span>
             </label>
 
+            {conPendientes ? (
+              <section className="rounded-xl border border-amber-300 bg-amber-50 p-4" role="status">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                  <h2 className="text-sm font-bold text-amber-900">Esta carta tiene datos sin llenar</h2>
+                </div>
+                <p className="mt-1.5 text-xs text-amber-900 leading-relaxed">
+                  {avisoDeCarta(revision)} Antes de firmar puedes pedirle a {form.clinic?.name ?? "la clínica"} que
+                  la complete{form.clinic?.phone ? ` (${form.clinic.phone})` : ""}. Si decides firmarla así, marca la casilla.
+                </p>
+                <label htmlFor="huecos" className="mt-3 flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="huecos"
+                    checked={confirmoHuecos}
+                    onChange={(e) => setConfirmoHuecos(e.target.checked)}
+                    className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer accent-amber-600"
+                  />
+                  <span className="text-xs font-semibold text-amber-900 leading-relaxed">
+                    Vi que la carta tiene espacios sin llenar y quiero firmarla así.
+                  </span>
+                </label>
+              </section>
+            ) : null}
+
             {msg ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2">
                 <AlertCircle size={15} className="text-red-500 shrink-0 mt-0.5" />
@@ -282,9 +318,9 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
             <button
               type="button"
               onClick={sign}
-              disabled={signing || !agreed || !signature}
+              disabled={signing || !listo}
               className={`w-full rounded-2xl py-4 text-base font-bold transition-colors flex items-center justify-center gap-2 ${
-                agreed && signature && !signing
+                listo && !signing
                   ? "bg-violet-600 text-white hover:bg-violet-700"
                   : "bg-slate-200 text-slate-400 cursor-not-allowed"
               }`}

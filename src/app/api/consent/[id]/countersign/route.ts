@@ -17,6 +17,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { signaturePath, uploadSignature, validateSignatureDataUrl } from "@/lib/consent/signature";
+import { faltaConfirmarCarta, pendientesParaBitacora } from "@/lib/consent/huecos-carta";
 
 /** Quién puede estampar la firma del profesional responsable. */
 const COUNTERSIGN_ROLES = ["DOCTOR", "ADMIN", "SUPER_ADMIN"];
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const form = await prisma.consentForm.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId, deletedAt: null },
     select: {
-      id: true, patientId: true, procedure: true,
+      id: true, patientId: true, procedure: true, content: true,
       signedAt: true, revokedAt: true, doctorId: true, doctorSignedAt: true,
     },
   });
@@ -73,6 +74,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
+  // ws1-t3 (BEVADENT F2): con espacios sin llenar o instrucciones internas en el
+  // texto, el doctor firma solo si lo confirma. Antes de subir nada.
+  const sinConfirmar = faltaConfirmarCarta(form.content, body.confirmarHuecos);
+  if (sinConfirmar) return NextResponse.json(sinConfirmar, { status: 409 });
   const check = await validateSignatureDataUrl(body.signatureDataUrl);
   if (check.error) {
     return NextResponse.json(
@@ -123,7 +128,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     entityId: form.id,
     action: "update",
     before: { doctorSignedAt: null },
-    after: { doctorSignedAt: now.toISOString(), doctorId: form.doctorId ?? ctx.userId },
+    after: {
+      doctorSignedAt: now.toISOString(),
+      doctorId: form.doctorId ?? ctx.userId,
+      // Si se firmó con pendientes, queda dicho en Movimientos.
+      ...(pendientesParaBitacora(form.content) ?? {}),
+    },
   });
 
   return NextResponse.json({ ok: true, doctorSignedAt: now.toISOString() });

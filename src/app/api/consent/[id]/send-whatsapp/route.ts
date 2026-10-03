@@ -27,6 +27,7 @@ import { consentPublicUrl, ensureConsentLinkFresh } from "@/lib/consent/link";
 import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { enmascararTelefono } from "@/lib/patient-documents/envio";
+import { faltaConfirmarCarta } from "@/lib/consent/huecos-carta";
 
 export const runtime = "nodejs"; // genera el PDF con el stack de consent-pdf
 export const dynamic = "force-dynamic";
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const form = await prisma.consentForm.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId, deletedAt: null },
     select: {
-      id: true, patientId: true, procedure: true, token: true,
+      id: true, patientId: true, procedure: true, token: true, content: true,
       expiresAt: true, signedAt: true, revokedAt: true,
       patient: { select: { firstName: true, lastName: true, phone: true } },
       clinic: {
@@ -71,6 +72,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       { error: "Este consentimiento está revocado: no hay nada que enviarle al paciente." },
       { status: 409 },
     );
+  }
+
+  // ws1-t3 (BEVADENT F2): mandar A FIRMAR una carta con espacios sin llenar o
+  // instrucciones internas pide confirmación. La copia de una ya firmada no.
+  if (!form.signedAt) {
+    const entrada = (await req.json().catch(() => null)) as { confirmarHuecos?: unknown } | null;
+    const sinConfirmar = faltaConfirmarCarta(form.content, entrada?.confirmarHuecos);
+    if (sinConfirmar) return NextResponse.json(sinConfirmar, { status: 409 });
   }
 
   const patientPhone = form.patient?.phone?.trim();

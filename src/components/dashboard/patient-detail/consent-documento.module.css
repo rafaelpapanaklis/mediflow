@@ -46,6 +46,18 @@
   line-height: 1.45;
   color: var(--doc-tinta-3);
 }
+/* ws1-t3: la carta tiene espacios sin llenar o instrucciones internas. */
+.tiraAviso {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--warning-strong, var(--warning));
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 .tiraAcciones {
   display: flex;
   flex-wrap: wrap;
