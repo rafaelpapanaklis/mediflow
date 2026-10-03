@@ -159,6 +159,8 @@ export function BotonHojaControl({ appointmentId, treatmentPlanId, compacto = fa
       activationsNote: payload.activationsNote,
       indications: payload.indications,
       procedimientos: payload.procedimientos,
+      // ws1-t9 (M1/M2): arco nuevo inferior y ligas.
+      extras: payload.extras,
       // ws1-t12: las extracciones del plan que se hicieron hoy se marcan al firmar (el borrador no las toca).
       ...(firmar && payload.extraccionesRealizadas ? { extraccionesRealizadas: payload.extraccionesRealizadas } : {}),
     };

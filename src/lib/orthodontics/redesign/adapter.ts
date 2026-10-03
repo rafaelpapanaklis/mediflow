@@ -73,6 +73,8 @@ export interface AdapterInput {
     monthAt: { toString(): string }; // Decimal
     wireFromId: string | null;
     wireToId: string | null;
+    /** ws1-t9 (M1): el arco nuevo inferior (SQL crudo, lo pone el loader). */
+    wireToLowerId?: string | null;
     soapS: string;
     soapO: string;
     soapA: string;
@@ -346,6 +348,7 @@ function adaptCard(
     monthAt: parseFloat(c.monthAt.toString()),
     wireFrom: c.wireFromId ? wireById.get(c.wireFromId) ?? null : null,
     wireTo: c.wireToId ? wireById.get(c.wireToId) ?? null : null,
+    wireToLower: c.wireToLowerId ? wireById.get(c.wireToLowerId) ?? null : null,
     soap: { s: c.soapS, o: c.soapO, a: c.soapA, p: c.soapP },
     hygiene: {
       plaquePct: c.hygienePlaquePct,

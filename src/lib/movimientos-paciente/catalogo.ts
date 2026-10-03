@@ -468,6 +468,8 @@ const TEXTO_POR_ACCION: Record<string, string> = {
   "ortho.wireStep.added": "Agregó un paso de arco",
   "ortho.wireStep.updated": "Actualizó un paso de arco",
   "ortho.tad.created": "Registró un microtornillo (TAD)",
+  "ortho.auxDevice.added": "Colocó una mecánica auxiliar de ortodoncia",
+  "ortho.auxDevice.removed": "Retiró una mecánica auxiliar de ortodoncia",
   "ortho.card.draftSaved": "Guardó un borrador de la hoja de control",
   "ortho.card.signed": "Firmó la hoja de control",
   "ortho.quoteScenario.selected": "Eligió o actualizó un escenario de presupuesto de ortodoncia",

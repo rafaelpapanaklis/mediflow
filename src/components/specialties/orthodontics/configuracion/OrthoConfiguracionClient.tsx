@@ -35,6 +35,8 @@ import { TecnicasYPrecios } from "./TecnicasYPrecios";
 import { OpcionesDelPlanDeTratamiento } from "./OpcionesDelPlanDeTratamiento";
 import type { OpcionesDeLaClinica } from "@/lib/orthodontics/plan-detalle-db";
 import { CondicionesDelConvenio } from "./CondicionesDelConvenio";
+import { CatalogosDeLaHoja } from "./CatalogosDeLaHoja";
+import type { CatalogosDeLaClinica } from "@/lib/orthodontics/hoja-extras-db";
 import type { TecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 
 export interface OrthoConfiguracionClientProps {
@@ -57,6 +59,8 @@ export interface OrthoConfiguracionClientProps {
   puedeEditar?: boolean;
   /** ws1-t12: false = falta sql/ws1-t12-precio-control-por-caso.sql (los controles se cobran con el catálogo). */
   columnaPrecioDelCaso?: boolean;
+  /** ws1-t9 (M4): los catálogos de la hoja de control (arcos, ligas, mecánicas) de la clínica. */
+  catalogosDeHoja?: CatalogosDeLaClinica;
 }
 
 const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
@@ -69,7 +73,7 @@ const EXPLICACION_MODO: Record<OrthoBillingMode, string> = {
 // plantillas-mensaje.ts (ws1-t5, ronda 6): la pantalla, el guardado y los dos
 // envíos leen de ahí, para que lo que aquí se promete sea lo que se manda.
 
-export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, opcionesDelPlan, suscripcion, puedeEditar = true, columnaPrecioDelCaso = true }: OrthoConfiguracionClientProps) {
+export function OrthoConfiguracionClient({ settings, procedimientos: procedimientosIniciales, tecnicasDeLaClinica, opcionesDelPlan, suscripcion, puedeEditar = true, columnaPrecioDelCaso = true, catalogosDeHoja }: OrthoConfiguracionClientProps) {
   const [appointmentTypes, setAppointmentTypes] = useState<OrthoAppointmentTypeOption[]>(
     settings.appointmentTypes,
   );
@@ -298,6 +302,8 @@ export function OrthoConfiguracionClient({ settings, procedimientos: procedimien
           />
 
           <OpcionesDelPlanDeTratamiento iniciales={opcionesDelPlan} />
+
+          <CatalogosDeLaHoja iniciales={catalogosDeHoja} puedeEditar={puedeEditar} />
 
           <Tarjeta
             icono={CalendarClock}

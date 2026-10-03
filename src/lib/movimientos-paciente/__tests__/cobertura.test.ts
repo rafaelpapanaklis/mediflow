@@ -77,6 +77,8 @@ describe("ortodoncia: cada acción con paciente lleva patientId", () => {
     "guardarPreciosPorTecnica.ts",
     "guardarTecnicasDeLaClinica.ts",
     "guardarOpcionesDelPlan.ts",
+    // ws1-t9 (M4): catálogos de la hoja de control: ajuste de la clínica, sin paciente.
+    "guardarCatalogosDeHoja.ts",
     "recalculatePaymentStatus.ts",
     "updateOrthoClinicSettings.ts",
   ];
@@ -190,6 +192,8 @@ describe("ortodoncia: toda escritura deja movimiento del paciente", () => {
     "guardarPreciosPorTecnica.ts",
     "guardarTecnicasDeLaClinica.ts",
     "guardarOpcionesDelPlan.ts",
+    // ws1-t9 (M4): catálogos de la hoja de control: ajuste de la clínica, sin paciente.
+    "guardarCatalogosDeHoja.ts",
     "recalculatePaymentStatus.ts",
     "updateOrthoClinicSettings.ts",
   ];

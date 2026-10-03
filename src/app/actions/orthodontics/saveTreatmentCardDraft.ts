@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import type { Pedido } from "@/lib/orthodontics/procedimientos-de-visita";
 import { buscarNotaDeHoja, escribirNotaDeHoja, validarPedidos } from "@/lib/orthodontics/procedimientos-de-hoja-db";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
+import { extrasDeHojaSchema, guardarExtrasDeLaHoja } from "@/lib/orthodontics/hoja-extras-guardar";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -109,6 +110,8 @@ const inputSchema = z.object({
   procedimientos: z
     .array(z.object({ procedureId: z.string().min(1), quantity: z.number().int().min(1).max(20) }))
     .optional(),
+  /** ws1-t9 (M1/M2): el arco nuevo inferior y las ligas (SQL crudo; sin el SQL de ws1-t9 no se guardan). */
+  extras: extrasDeHojaSchema,
 });
 
 export type SaveTreatmentCardDraftInput = z.input<typeof inputSchema>;
@@ -312,6 +315,9 @@ export async function saveTreatmentCardDraft(
         }
       }
     }
+
+    // ws1-t9 (M1/M2): arco inferior y ligas, aparte (tolerante a que falte su SQL).
+    await guardarExtrasDeLaHoja({ clinicId: plan.clinicId, patientId: plan.patientId, planId: plan.id, cardId, extras: data.extras });
 
     // Los procedimientos viajan con la hoja: en borrador quedan en la nota-borrador del
     // expediente. Solo se crea esa nota si hay algo que guardar (o ya existía).

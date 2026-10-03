@@ -32,6 +32,7 @@ import {
   type WireStepDTO,
 } from "../types";
 import { arcadaDeArco } from "@/lib/orthodontics/material-de-arco";
+import { HistorialDeLigas, MecanicasDelCaso } from "../drawers/HojaExtras";
 import orto from "../orto.module.css";
 
 export interface SectionPlanProps {
@@ -70,7 +71,10 @@ export function SectionPlan(props: SectionPlanProps) {
         aux={props.auxMechanics}
         onAddTad={props.onAddTad}
         onAddAux={props.onAddAuxMechanics}
+        treatmentPlanId={t.treatmentPlanId}
       />
+      {/* ws1-t9 (M2): qué ligas se anotaron en cada control (sin el SQL de ws1-t9 no se pinta). */}
+      <HistorialDeLigas treatmentPlanId={t.treatmentPlanId} />
     </Card>
   );
 }
@@ -325,11 +329,14 @@ function AuxMechanicsBlock({
   aux,
   onAddTad,
   onAddAux,
+  treatmentPlanId,
 }: {
   tads: TADDTO[];
   aux: AuxMechanicsDTO | null;
   onAddTad?: () => void;
   onAddAux?: () => void;
+  /** ws1-t9 (M3): con él, las mecánicas del caso (resorte, cadeneta, botón, expansor…) con alta y retiro. */
+  treatmentPlanId?: string | null;
 }) {
   return (
     <div className="px-[18px] py-[16px]">
@@ -348,7 +355,7 @@ function AuxMechanicsBlock({
       </div>
 
       {tads.length === 0 && !aux?.expanderType && !aux?.distalizerType ? (
-        <div className={orto.vacioLinea}>Sin TADs ni mecánicas auxiliares activas.</div>
+        <div className={orto.vacioLinea}>Sin TADs registrados.</div>
       ) : (
         <div className="space-y-3">
           {tads.length > 0 ? (
@@ -424,6 +431,7 @@ function AuxMechanicsBlock({
           </div>
         </div>
       )}
+      <MecanicasDelCaso treatmentPlanId={treatmentPlanId ?? null} />
     </div>
   );
 }

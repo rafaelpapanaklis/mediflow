@@ -26,6 +26,7 @@ import {
 import { citaAlFirmar } from "@/lib/orthodontics/cerrar-cita-al-firmar";
 import { esCasoPorColocar } from "@/lib/orthodontics/caso-por-colocar";
 import { arcosActuales } from "@/lib/orthodontics/arcos-actuales";
+import { leerArcosInferiores } from "@/lib/orthodontics/hoja-extras-db";
 import type { OrthoPaymentStatus, OrthoTechnique } from "@prisma/client";
 import type {
   OrthoElasticClass,
@@ -168,6 +169,8 @@ export async function buildTreatmentCardContext(
 
   const wireDTOs = wireSteps.map(adaptWire);
   const wireById = new Map(wireDTOs.map((w) => [w.id, w]));
+  // ws1-t9 (M1): el arco nuevo inferior de cada hoja (sin el SQL de ws1-t9, ninguno).
+  const arcosInferiores = plan.clinicId ? await leerArcosInferiores(plan.clinicId, cards.map((c) => c.id)) : new Map<string, string>();
 
   // ¿Esta cita ya tiene una hoja ligada? Columna `appointmentId` puede no
   // existir aún — si `cards` vino vacío por P2021/P2022, esto simplemente
@@ -183,7 +186,7 @@ export async function buildTreatmentCardContext(
   const visitaHoy = appt?.status ? citaAlFirmar({ status: appt.status, startsAt: appt.startsAt }, new Date(), clinicTimezone).visitaHoy : false;
   const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone, appt && !visitaHoy ? appt.startsAt : new Date());
   const raw = linkedToAppt ?? deHoy;
-  const existingCard = raw ? adaptCard(raw, wireById) : null;
+  const existingCard = raw ? adaptCard(raw, wireById, arcosInferiores.get(raw.id) ?? null) : null;
 
   const maxCardNumber = cards.reduce((m, c) => Math.max(m, c.cardNumber), 0);
   const lastSignedCard = [...cards].reverse().find((c) => c.status === "SIGNED") ?? null;
@@ -211,6 +214,7 @@ export async function buildTreatmentCardContext(
       visitDate: c.visitDate,
       wireFrom: c.wireFromId ? (wireById.get(c.wireFromId) ?? null) : null,
       wireTo: c.wireToId ? (wireById.get(c.wireToId) ?? null) : null,
+      wireToLower: wireById.get(arcosInferiores.get(c.id) ?? "") ?? null,
     })),
   );
   const durationMin = appt
@@ -333,7 +337,7 @@ function adaptWire(w: {
   };
 }
 
-function adaptCard(c: RawCard, wireById: Map<string, WireStepDTO>): TreatmentCardDTO {
+function adaptCard(c: RawCard, wireById: Map<string, WireStepDTO>, wireToLowerId: string | null = null): TreatmentCardDTO {
   return {
     id: c.id,
     cardNumber: c.cardNumber,
@@ -343,6 +347,7 @@ function adaptCard(c: RawCard, wireById: Map<string, WireStepDTO>): TreatmentCar
     monthAt: parseFloat(c.monthAt.toString()),
     wireFrom: c.wireFromId ? (wireById.get(c.wireFromId) ?? null) : null,
     wireTo: c.wireToId ? (wireById.get(c.wireToId) ?? null) : null,
+    wireToLower: wireToLowerId ? (wireById.get(wireToLowerId) ?? null) : null,
     soap: { s: c.soapS, o: c.soapO, a: c.soapA, p: c.soapP },
     hygiene: {
       plaquePct: c.hygienePlaquePct,

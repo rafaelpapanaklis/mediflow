@@ -281,6 +281,8 @@ export interface TreatmentCardDTO {
   monthAt: number;
   wireFrom: WireStepDTO | null;
   wireTo: WireStepDTO | null;
+  /** ws1-t9 (M1): el arco nuevo inferior cuando es otro que `wireTo` (columna `wireToLowerId`, SQL de ws1-t9). */
+  wireToLower?: WireStepDTO | null;
   soap: SOAP;
   hygiene: HygieneDTO;
   hasProgressPhoto: boolean;

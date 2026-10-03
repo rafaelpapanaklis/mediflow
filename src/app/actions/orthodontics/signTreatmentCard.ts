@@ -32,7 +32,8 @@ import { vincularExtraAlCaso } from "@/lib/orthodontics/cobro/extras-db";
 import { consumirReposicionIncluida } from "@/lib/orthodontics/cobro/caso-db";
 import { notaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita";
 import { mensajeDeHuecos, rellenarHuecosOpcionales } from "@/lib/orthodontics/hoja-de-control-reglas";
-import { cambiosAlFirmarConArco } from "@/lib/orthodontics/secuencia-de-arcos";
+import { cambiosAlFirmarConDosArcos } from "@/lib/orthodontics/hoja-extras";
+import { extrasDeHojaSchema, guardarExtrasDeLaHoja } from "@/lib/orthodontics/hoja-extras-guardar";
 import { existeFacturaDeControlSinCita } from "@/lib/orthodontics/cobro/control-sin-cita-db";
 import { avisoDeReposiciones } from "@/lib/orthodontics/cobro/reposiciones";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
@@ -133,6 +134,8 @@ const inputSchema = z.object({
    * como realizadas en el plan; solo cuentan las que el plan tiene como indicadas.
    */
   extraccionesRealizadas: z.array(z.number().int()).max(32).optional(),
+  /** ws1-t9 (M1/M2): el arco nuevo inferior y las ligas (SQL crudo; sin el SQL de ws1-t9 no se guardan). */
+  extras: extrasDeHojaSchema,
 });
 
 export type SignTreatmentCardInput = z.input<typeof inputSchema>;
@@ -358,6 +361,9 @@ export async function signTreatmentCard(
     // ws1-t10: el arco de «Arco nuevo» pasa a «Actual» en la Secuencia de arcos (con la fecha de la visita como inicio)
     // y el que estaba en uso se cierra. Secundario: la firma ya quedó; si falla, se avisa en el log y la secuencia se
     // corrige a mano desde «Agregar arco». Solo si esta es la hoja firmada más reciente y no se firmó antes.
+    // ws1-t9 (M1): con dos selectores puede haber otro arco nuevo abajo (`extras.wireToLowerId`): se aplica después
+    // del de `wireToId`, sobre lo que quedó.
+    const wireToLowerId = data.extras?.wireToLowerId ?? null;
     if (data.wireToId && !yaEstabaFirmada) {
       try {
         const [posteriores, pasos] = await Promise.all([
@@ -370,9 +376,10 @@ export async function signTreatmentCard(
           }),
         ]);
         if (posteriores === 0) {
-          const cambios = cambiosAlFirmarConArco({
+          const cambios = cambiosAlFirmarConDosArcos({
             pasos,
-            arcoNuevoId: data.wireToId,
+            wireToId: data.wireToId,
+            wireToLowerId,
             arcoAnteriorId: data.wireFromId ?? null,
             fecha: visitDate,
           });
@@ -386,6 +393,12 @@ export async function signTreatmentCard(
       } catch (e) {
         console.warn("[ortho] signTreatmentCard: no se pudo actualizar la secuencia de arcos (no revierte la firma):", e);
       }
+    }
+
+    // ws1-t9 (M1/M2): arco inferior y ligas, aparte (tolerante a que falte su SQL). Una hoja que ya estaba firmada
+    // no se reescribe.
+    if (!yaEstabaFirmada) {
+      await guardarExtrasDeLaHoja({ clinicId: plan.clinicId, patientId: plan.patientId, planId: plan.id, cardId, extras: data.extras });
     }
 
     // Columnas nuevas (Ola 1), en su PROPIA transacción — separada a
@@ -603,6 +616,8 @@ export async function signTreatmentCard(
         cardNumber: data.cardNumber,
         phaseKey: data.phaseKey,
         signedById: ctx.userId,
+        ...(wireToLowerId ? { wireToLowerId } : {}),
+        ...(data.extras?.ligas ? { ligas: data.extras.ligas } : {}),
       },
     });
 

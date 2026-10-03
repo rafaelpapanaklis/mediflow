@@ -27,6 +27,9 @@ export const ORTHO_AUDIT_ACTIONS = {
   WIRE_STEP_ADDED: "ortho.wireStep.added",
   WIRE_STEP_UPDATED: "ortho.wireStep.updated",
   TAD_CREATED: "ortho.tad.created",
+  // ws1-t9 (auditoría BEVADENT, M3): mecánicas auxiliares del caso (resorte, cadeneta, botón…).
+  AUX_DEVICE_ADDED: "ortho.auxDevice.added",
+  AUX_DEVICE_REMOVED: "ortho.auxDevice.removed",
   CARD_DRAFT_SAVED: "ortho.card.draftSaved",
   CARD_SIGNED: "ortho.card.signed",
   QUOTE_SCENARIO_SELECTED: "ortho.quoteScenario.selected",

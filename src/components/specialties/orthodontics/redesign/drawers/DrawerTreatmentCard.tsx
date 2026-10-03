@@ -68,6 +68,18 @@ import {
 import { ProcedimientosDeVisita, type SeleccionDeProcedimiento } from "./ProcedimientosDeVisita";
 import orto from "../orto.module.css";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { BloqueLigas, BloqueMecanicas, useExtrasDeHoja } from "./HojaExtras";
+import { useTextosHojaExtras } from "../textos-hoja-extras";
+import { opcionesDeArco } from "@/lib/orthodontics/hoja-catalogos";
+import {
+  arcoCubre,
+  arcosNuevosDeLaHoja,
+  columnasDeArcosNuevos,
+  elegirArco,
+  ligasHeredadas,
+  type LigaDeHoja,
+  type MecanicaDelCaso,
+} from "@/lib/orthodontics/hoja-extras";
 
 export type DrawerCardSubmit = {
   cardId: string | null;
@@ -94,6 +106,11 @@ export type DrawerCardSubmit = {
   activationsNote: string | null;
   /** C3: indicaciones para el paciente de ESTA visita (texto libre). */
   indications: string | null;
+  /**
+   * ws1-t9 (auditoría BEVADENT, M1/M2): el arco nuevo inferior (con los dos selectores) y las ligas. Solo viaja lo que
+   * la hoja enseñó (sin el SQL de ws1-t9 no viaja nada y la hoja es la de antes).
+   */
+  extras?: { wireToLowerId?: string | null; ligas?: LigaDeHoja[]; mecanicas?: { altas: string[]; retiros: string[] } };
   /**
    * M6 (ws1-t8, Ronda 6): la cita de Agenda que originó esta hoja, tomada de
    * `props.appointmentId` — "una sola forma de registrar el control" incluye
@@ -318,8 +335,78 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
   const [otroArco, setOtroArco] = useState(false);
   const [arcosNuevos, setArcosNuevos] = useState<WireStepDTO[]>([]);
   const todosLosArcos = [...props.availableWires, ...arcosNuevos];
-  const wireToCurrent = todosLosArcos.find((w) => w.id === state.wireToId) ?? null;
+
+  // ws1-t9 (auditoría BEVADENT, M1-M3): lo nuevo de la hoja se carga al abrir. Sin su SQL, `extras.partes` viene
+  // apagado y la hoja es la de antes (un selector «Nuevo», sin «Ligas» ni «Mecánicas»).
+  const tx = useTextosHojaExtras();
+  const extras = useExtrasDeHoja(props.treatmentPlanId, props.card?.id ?? null);
+  const dosArcos = Boolean(extras?.partes.arcoInferior);
+  // M1: lo elegido en «Nuevo superior» / «Nuevo inferior» (null = aún no se cargó).
+  const [arcos, setArcos] = useState<{ sup: string | null; inf: string | null } | null>(null);
+  const [arcosTocados, setArcosTocados] = useState(false);
+  const [otroArcoDe, setOtroArcoDe] = useState<"superior" | "inferior" | null>(null);
+  // M2: las ligas de esta hoja (null = aún no se cargó o sin SQL); `ligasDelAnterior` = heredadas y sin tocar.
+  const [ligas, setLigas] = useState<LigaDeHoja[] | null>(null);
+  const [ligasDelAnterior, setLigasDelAnterior] = useState(false);
+  // M3: las mecánicas del caso tras dar de alta o retirar desde esta hoja.
+  const [mecanicas, setMecanicas] = useState<MecanicaDelCaso[] | null>(null);
+  const [extrasIniciados, setExtrasIniciados] = useState(false);
+  useEffect(() => {
+    if (!extras || extrasIniciados) return;
+    setExtrasIniciados(true);
+    if (extras.partes.arcoInferior) {
+      if (props.card) {
+        const inferior = props.card.wireToLower ?? todosLosArcos.find((w) => w.id === extras.wireToLowerId) ?? null;
+        const n = arcosNuevosDeLaHoja(props.card.wireTo, inferior);
+        setArcos({ sup: n.superior?.id ?? null, inf: n.inferior?.id ?? null });
+      } else {
+        // Hoja nueva: los arcos con los que llega, uno por arcada (como antes el selector único, «del control anterior»).
+        // Si ya se eligió algo en el selector único mientras cargaba, se respeta.
+        const elegido = state.delAnterior.arco ? null : arcoPorId(state.wireToId);
+        const llegada = elegido
+          ? arcosNuevosDeLaHoja(elegido, null)
+          : (props.defaultsForNew?.arcosActuales ?? arcosNuevosDeLaHoja(props.defaultsForNew?.wireFrom ?? null, null));
+        setArcos({ sup: llegada.superior?.id ?? null, inf: llegada.inferior?.id ?? null });
+        setArcosTocados(Boolean(elegido));
+      }
+    }
+    if (extras.partes.ligas) {
+      if (props.card) {
+        setLigas(extras.ligasDeLaHoja ?? []);
+      } else {
+        // «Copiar del control anterior»: las ligas de la última hoja firmada, sin «se cambiaron hoy».
+        const heredadas = ligasHeredadas(extras.ligasDelAnterior);
+        setLigas(heredadas);
+        setLigasDelAnterior(heredadas.length > 0);
+      }
+    }
+    // Solo al llegar los extras: lo demás ya está en el estado inicial.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extras]);
+  const arcoPorId = (id: string | null | undefined) => (id ? (todosLosArcos.find((w) => w.id === id) ?? null) : null);
+  const usarDosArcos = dosArcos && arcos !== null;
+  // Lo que la hoja manda como «Arco nuevo»: con dos selectores, las dos columnas (columnasDeArcosNuevos).
+  const columnasArcos = usarDosArcos ? columnasDeArcosNuevos(arcos!.sup, arcos!.inf) : null;
+  const wireToCurrent = arcoPorId(columnasArcos ? columnasArcos.wireToId : state.wireToId);
   const wireToLabel = wireText(wireToCurrent);
+  const lineasArcoNuevo = usarDosArcos
+    ? lineasDeArcosActuales({ superior: arcoPorId(arcos!.sup), inferior: arcoPorId(arcos!.inf) })
+    : [wireToLabel];
+  const elegirArcoEn = (arcada: "superior" | "inferior", id: string | null, arco: WireStepDTO | null = arcoPorId(id)) => {
+    setArcosTocados(true);
+    setAvisoArco(null);
+    setArcos((a) => elegirArco(a ?? { sup: null, inf: null }, arcada, id, arco));
+  };
+  const catalogoArco = extras ? opcionesDeArco(extras.catalogos) : null;
+  // M3: lo colocado / retirado desde esta hoja mientras no tenía id; al guardarla el servidor lo liga a ella.
+  const mecanicasDeEstaHoja = (() => {
+    if (!extras || mecanicas === null || state.learnedCardId) return null;
+    const antes = new Map(extras.mecanicas.map((m) => [m.id, m]));
+    const altas = mecanicas.filter((m) => !antes.has(m.id) && !m.cardIdAlta).map((m) => m.id);
+    const retiros = mecanicas.filter((m) => m.retiradaEl && !antes.get(m.id)?.retiradaEl && !m.cardIdRetiro).map((m) => m.id);
+    return altas.length || retiros.length ? { altas, retiros } : null;
+  })();
+  const fechaDeLaHoja = fechaCorta(props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null);
 
   // Plantillas de nota (Rafael, 28-sep-2026): las seis de ortodoncia que ya
   // existían y nadie usaba (Cementado de brackets, Activación de arco, Control
@@ -338,7 +425,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       duracionMeses: props.defaultsForNew?.monthTotal ?? null,
       fase: clave ? ((PHASE_LABELS as Record<string, string>)[clave] ?? clave) : null,
       arcoActual: arcoDe || arcosDeLlegada.length > 0 ? wireFromLineas.join(" / ") : null,
-      arcoNuevo: wireToCurrent ? wireText(wireToCurrent) : null,
+      arcoNuevo: wireToCurrent ? lineasArcoNuevo.join(" / ") : null,
     });
     (["s", "o", "a", "p"] as const).forEach((campo) => {
       if (nota[campo] !== state.soap[campo]) dispatch({ kind: "set-soap", field: campo, value: nota[campo] });
@@ -393,7 +480,7 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     })),
     hasProgressPhoto: state.hasProgressPhoto,
     photoSetId: state.photoSetId,
-    wireToId: state.wireToId,
+    wireToId: columnasArcos ? columnasArcos.wireToId : state.wireToId,
     nextDate: state.nextDate,
     nextDurationMin: state.nextDurationMin,
     activationsNote: state.activationsNote.trim() ? state.activationsNote : null,
@@ -412,6 +499,15 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
       : {}),
     ...(procSel !== undefined ? { procedimientos: procSel } : {}),
     ...(extraccionesHoy.length > 0 ? { extraccionesRealizadas: extraccionesHoy } : {}),
+    ...(columnasArcos || ligas !== null || mecanicasDeEstaHoja
+      ? {
+          extras: {
+            ...(columnasArcos ? { wireToLowerId: columnasArcos.wireToLowerId } : {}),
+            ...(ligas !== null ? { ligas } : {}),
+            ...(mecanicasDeEstaHoja ? { mecanicas: mecanicasDeEstaHoja } : {}),
+          },
+        }
+      : {}),
   });
 
   // Fila 12 (c): solo el Plan es obligatorio (S/O/A opcionales); un Plan
@@ -567,10 +663,10 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             <div className={orto.bloqueCabeza}>
               <h4 className={orto.bloqueTitulo}>Arco</h4>
             </div>
-            <div className="flex items-end gap-3">
+            <div className={usarDosArcos ? "flex flex-col gap-3" : "flex items-end gap-3"}>
               <div className="flex-1 min-w-0">
                 <div className={orto.campoEtiqueta}>Actual</div>
-                <div className="flex items-center h-[38px] text-[13.5px] font-semibold">
+                <div className={`flex items-center ${usarDosArcos ? "min-h-[24px]" : "h-[38px]"} text-[13.5px] font-semibold`}>
                   <span className="flex flex-col">
                     {wireFromLineas.map((l) => (
                       <span key={l}>{l}</span>
@@ -578,74 +674,145 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
                   </span>
                 </div>
               </div>
-              <ChevronRight
-                size={16}
-                strokeWidth={1.75}
-                className={`${orto.tonoApagado} mb-[11px] flex-none`}
-                aria-hidden
-              />
-              <div className="flex-1 min-w-0">
-                <div className={`${orto.campoEtiqueta} mb-[5px]`}>
-                Nuevo
-                {!isReadOnly && state.delAnterior.arco ? (
-                  <DelAnterior className="ml-[6px]" />
-                ) : null}
-              </div>
-                {isReadOnly ? (
-                  <div className={`${orto.tonoVioleta} flex items-center h-[38px] text-[13.5px] font-semibold`}>
-                    {wireToLabel}
+              {usarDosArcos ? (
+                // ws1-t9 (M1): un selector por arcada. Un arco de las dos arcadas se pone en las dos.
+                isReadOnly ? (
+                  <div className="min-w-0">
+                    <div className={orto.campoEtiqueta}>Nuevo</div>
+                    <div className={`${orto.tonoVioleta} flex flex-col text-[13.5px] font-semibold`} data-arcos-nuevos>
+                      {lineasArcoNuevo.length > 0 ? lineasArcoNuevo.map((l) => <span key={l}>{l}</span>) : <span>—</span>}
+                    </div>
                   </div>
                 ) : (
-                  <select
-                    value={state.wireToId ?? ""}
-                    onChange={(e) => {
-                      if (e.target.value === "__otro__") {
-                        setOtroArco(true);
-                        return;
-                      }
-                      setOtroArco(false);
-                      setAvisoArco(null);
-                      dispatch({ kind: "set-wire-to", value: e.target.value || null });
-                    }}
-                    className={orto.entrada}
-                    aria-label="Arco nuevo"
-                  >
-                    <option value="">Sin cambio</option>
-                    {todosLosArcos.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {textoDeArcoConArcada(w)}
-                      </option>
-                    ))}
-                    {props.treatmentPlanId ? <option value="__otro__">Otro arco…</option> : null}
-                  </select>
-                )}
-                {!isReadOnly && avisoSinArcosPlanificados(todosLosArcos.length, Boolean(props.treatmentPlanId)) ? (
-                  <p className={`${orto.bloqueNota} mt-[6px]`} data-sin-arcos>
-                    {avisoSinArcosPlanificados(todosLosArcos.length, Boolean(props.treatmentPlanId))}
-                  </p>
-                ) : null}
-                {otroArco && props.treatmentPlanId ? (
-                  <OtroArcoForm
-                    treatmentPlanId={props.treatmentPlanId}
-                    phaseKey={todosLosArcos[todosLosArcos.length - 1]?.phaseKey ?? "ALIGNMENT"}
-                    nextOrder={todosLosArcos.length + 1}
-                    onCreated={(w, aviso) => {
-                      setAvisoArco(aviso);
-                      setArcosNuevos((prev) => [...prev, w]);
-                      dispatch({ kind: "set-wire-to", value: w.id });
-                      setOtroArco(false);
-                    }}
-                    onCancel={() => setOtroArco(false)}
+                  <div className={orto.rejilla2} data-arcos-por-arcada>
+                    {(["superior", "inferior"] as const).map((arcada) => {
+                      const valor = arcada === "superior" ? arcos!.sup : arcos!.inf;
+                      const opciones = todosLosArcos.filter((w) => arcoCubre(w, arcada) || w.id === valor);
+                      return (
+                        <div key={arcada} className="min-w-0">
+                          <div className={`${orto.campoEtiqueta} mb-[5px] flex flex-wrap items-center gap-[6px]`}>
+                            <span>{arcada === "superior" ? tx.nuevoSuperior : tx.nuevoInferior}</span>
+                            {!arcosTocados && isNew && valor ? <DelAnterior /> : null}
+                          </div>
+                          <select
+                            value={valor ?? ""}
+                            onChange={(e) => {
+                              if (e.target.value === "__otro__") {
+                                setOtroArcoDe(arcada);
+                                return;
+                              }
+                              setOtroArcoDe(null);
+                              elegirArcoEn(arcada, e.target.value || null);
+                            }}
+                            className={orto.entrada}
+                            aria-label={arcada === "superior" ? tx.arcoNuevoSuperiorAria : tx.arcoNuevoInferiorAria}
+                          >
+                            <option value="">{tx.sinCambio}</option>
+                            {opciones.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {textoDeArcoConArcada(w)}
+                              </option>
+                            ))}
+                            {props.treatmentPlanId ? <option value="__otro__">{tx.otroArco}</option> : null}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                <>
+                  <ChevronRight
+                    size={16}
+                    strokeWidth={1.75}
+                    className={`${orto.tonoApagado} mb-[11px] flex-none`}
+                    aria-hidden
                   />
-                ) : null}
-                {!isReadOnly && avisoArco ? (
-                  <p className={`${orto.bloqueNota} mt-[6px]`} role="status" data-aviso-material>
-                    {avisoArco}
-                  </p>
-                ) : null}
-              </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={`${orto.campoEtiqueta} mb-[5px]`}>
+                      Nuevo
+                      {!isReadOnly && state.delAnterior.arco ? <DelAnterior className="ml-[6px]" /> : null}
+                    </div>
+                    {isReadOnly ? (
+                      <div className={`${orto.tonoVioleta} flex items-center h-[38px] text-[13.5px] font-semibold`}>
+                        {wireToLabel}
+                      </div>
+                    ) : (
+                      <select
+                        value={state.wireToId ?? ""}
+                        onChange={(e) => {
+                          if (e.target.value === "__otro__") {
+                            setOtroArco(true);
+                            return;
+                          }
+                          setOtroArco(false);
+                          setAvisoArco(null);
+                          dispatch({ kind: "set-wire-to", value: e.target.value || null });
+                        }}
+                        className={orto.entrada}
+                        aria-label="Arco nuevo"
+                      >
+                        <option value="">Sin cambio</option>
+                        {todosLosArcos.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {textoDeArcoConArcada(w)}
+                          </option>
+                        ))}
+                        {props.treatmentPlanId ? <option value="__otro__">Otro arco…</option> : null}
+                      </select>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
+            {!isReadOnly && avisoSinArcosPlanificados(todosLosArcos.length, Boolean(props.treatmentPlanId)) ? (
+              <p className={`${orto.bloqueNota} mt-[6px]`} data-sin-arcos>
+                {avisoSinArcosPlanificados(todosLosArcos.length, Boolean(props.treatmentPlanId))}
+              </p>
+            ) : null}
+            {!isReadOnly && props.treatmentPlanId && (usarDosArcos ? otroArcoDe : otroArco) ? (
+              <OtroArcoForm
+                key={usarDosArcos ? otroArcoDe ?? "" : "uno"}
+                treatmentPlanId={props.treatmentPlanId}
+                phaseKey={todosLosArcos[todosLosArcos.length - 1]?.phaseKey ?? "ALIGNMENT"}
+                nextOrder={todosLosArcos.length + 1}
+                arcada={usarDosArcos ? otroArcoDe : null}
+                opciones={catalogoArco}
+                onCreated={(w, aviso) => {
+                  setAvisoArco(aviso);
+                  setArcosNuevos((prev) => [...prev, w]);
+                  if (usarDosArcos && otroArcoDe) {
+                    elegirArcoEn(otroArcoDe, w.id, w);
+                    setAvisoArco(aviso);
+                    setOtroArcoDe(null);
+                  } else {
+                    dispatch({ kind: "set-wire-to", value: w.id });
+                    setOtroArco(false);
+                  }
+                }}
+                onCancel={() => (usarDosArcos ? setOtroArcoDe(null) : setOtroArco(false))}
+              />
+            ) : null}
+            {!isReadOnly && avisoArco ? (
+              <p className={`${orto.bloqueNota} mt-[6px]`} role="status" data-aviso-material>
+                {avisoArco}
+              </p>
+            ) : null}
           </section>
+
+          {/* LIGAS (ws1-t9, M2): heredadas del control anterior en una hoja nueva. */}
+          {extras?.partes.ligas && ligas !== null ? (
+            <BloqueLigas
+              ligas={ligas}
+              heredadas={ligasDelAnterior}
+              catalogos={extras.catalogos}
+              soloLectura={isReadOnly}
+              onCambio={(l) => {
+                setLigas(l);
+                setLigasDelAnterior(false);
+              }}
+            />
+          ) : null}
 
           {/* ELÁSTICOS */}
           <ElasticsBlock
@@ -656,6 +823,20 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
             onUpdate={(id, patch) => dispatch({ kind: "update-elastic", id, patch })}
             onRemove={(id) => dispatch({ kind: "remove-elastic", id })}
           />
+
+          {/* MECÁNICAS AUXILIARES (ws1-t9, M3): viven en el caso; aquí se colocan o se retiran. */}
+          {extras?.partes.mecanicas && props.treatmentPlanId ? (
+            <BloqueMecanicas
+              treatmentPlanId={props.treatmentPlanId}
+              cardId={state.learnedCardId ?? props.card?.id ?? null}
+              mecanicas={mecanicas ?? extras.mecanicas}
+              catalogo={extras.catalogos.mecanicas.filter((m) => m.activa).map((m) => m.nombre)}
+              puedeEditar={extras.puedeEditar}
+              soloLectura={isReadOnly}
+              fecha={fechaDeLaHoja}
+              onCambio={setMecanicas}
+            />
+          ) : null}
 
           {/* IPR */}
           <IprBlock
@@ -1525,14 +1706,20 @@ function OtroArcoForm(props: {
   treatmentPlanId: string;
   phaseKey: WireStepDTO["phaseKey"];
   nextOrder: number;
+  /** ws1-t9 (M1): abierto desde «Nuevo superior» o «Nuevo inferior»: nace con esa arcada marcada. */
+  arcada?: "superior" | "inferior" | null;
+  /** ws1-t9 (M4): materiales y calibres del catálogo de la clínica (sin él, los de siempre). */
+  opciones?: { materiales: Array<{ key: string; label: string }>; calibres: Array<{ key: string; label: string }> } | null;
   onCreated: (w: WireStepDTO, aviso: string | null) => void;
   onCancel: () => void;
 }) {
-  const [material, setMaterial] = useState("NITI_SUPER");
-  const [gauge, setGauge] = useState("014");
+  const materiales = props.opciones?.materiales.length ? props.opciones.materiales : WIRE_MATERIAL_OPTIONS;
+  const calibres = props.opciones?.calibres.length ? props.opciones.calibres : [...WIRE_GAUGE_ROUND, ...WIRE_GAUGE_RECT];
+  const [material, setMaterial] = useState(materiales.some((m) => m.key === "NITI_SUPER") ? "NITI_SUPER" : materiales[0].key);
+  const [gauge, setGauge] = useState<string>(calibres.some((g) => g.key === "014") ? "014" : calibres[0].key);
   // ws1-t12 (punto 4c): la arcada se elige, como en «Agregar arco». Antes era siempre de las dos.
-  const [archUpper, setArchUpper] = useState(true);
-  const [archLower, setArchLower] = useState(true);
+  const [archUpper, setArchUpper] = useState(props.arcada !== "inferior");
+  const [archLower, setArchLower] = useState(props.arcada !== "superior");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const shape = gauge.includes("x") ? "RECT" : "ROUND";
@@ -1569,14 +1756,14 @@ function OtroArcoForm(props: {
   return (
     <div className="mt-2 flex flex-col gap-[6px]">
       <select value={material} onChange={(e) => setMaterial(e.target.value)} className={orto.entrada} aria-label="Material del arco">
-        {WIRE_MATERIAL_OPTIONS.map((m) => (
+        {materiales.map((m) => (
           <option key={m.key} value={m.key}>
             {m.label}
           </option>
         ))}
       </select>
       <select value={gauge} onChange={(e) => setGauge(e.target.value)} className={orto.entrada} aria-label="Calibre del arco">
-        {[...WIRE_GAUGE_ROUND, ...WIRE_GAUGE_RECT].map((g) => (
+        {calibres.map((g) => (
           <option key={g.key} value={g.key}>
             {g.label}
           </option>
@@ -1609,6 +1796,16 @@ function OtroArcoForm(props: {
 function wireText(wire: { gauge: string; material: string; archUpper?: boolean; archLower?: boolean } | null): string {
   if (!wire) return "—";
   return textoDeArcoConArcada(wire);
+}
+
+/** ws1-t9 (M3): el día de la visita en el calendario del navegador (YYYY-MM-DD), nunca después de hoy. */
+function fechaCorta(iso: string | null): string {
+  const hoy = hoyISO();
+  if (!iso) return hoy;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return hoy;
+  const dia = hoyISO(d);
+  return dia > hoy ? hoy : dia;
 }
 
 /** C5: "próximo control en N semanas" — parte de la fecha de ESTA visita, no de hoy. */

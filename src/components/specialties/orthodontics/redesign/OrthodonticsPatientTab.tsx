@@ -955,6 +955,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               procedimientos: payload.procedimientos,
               // ws1-t12: las extracciones del plan que se hicieron hoy se marcan al firmar.
               extraccionesRealizadas: payload.extraccionesRealizadas,
+              // ws1-t9 (M1/M2): arco nuevo inferior y ligas.
+              extras: payload.extras,
               // M6 (ws1-t8, Ronda 6 — hallazgo 6): antes esta llamada nunca
               // mandaba appointmentId — "Registrar control" desde la ficha
               // nunca quedaba ligado a la cita del día, aunque hubiera una.
@@ -1033,6 +1035,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
               activationsNote: payload.activationsNote,
               indications: payload.indications,
               procedimientos: payload.procedimientos,
+              // ws1-t9 (M1/M2): arco nuevo inferior y ligas.
+              extras: payload.extras,
               appointmentId: payload.appointmentId,
             });
             if (isFailure(res)) {

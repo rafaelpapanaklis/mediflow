@@ -1,0 +1,188 @@
+// Ortodoncia — textos de lo nuevo de la hoja de control (ws1-t9, auditoría BEVADENT, M1-M4): arco por arcada, ligas,
+// mecánicas auxiliares y sus catálogos en Configuración. Viven aquí y no en los diccionarios a propósito (mismo motivo
+// que textos-firma-control.ts): los diccionarios los tocan a la vez otras pantallas.
+
+import { useLocale } from "@/i18n/i18n-provider";
+
+const es = {
+  idioma: "es" as "es" | "en",
+  // ── Arco ──
+  nuevoSuperior: "Nuevo superior",
+  nuevoInferior: "Nuevo inferior",
+  arcoNuevoSuperiorAria: "Arco nuevo superior",
+  arcoNuevoInferiorAria: "Arco nuevo inferior",
+  sinCambio: "Sin cambio",
+  otroArco: "Otro arco…",
+  superior: "Superior",
+  inferior: "Inferior",
+  // ── Ligas ──
+  ligas: "Ligas",
+  sinLigas: "Sin ligas anotadas en este control.",
+  agregarLiga: (tipo: string) => `Agregar ${tipo.toLowerCase()}`,
+  tipoDeLiga: "Tipo de liga",
+  colorDeLiga: "Color de liga",
+  color: "Color…",
+  arcada: "Arcada",
+  cambiadasHoy: "Se cambiaron hoy",
+  quitarLiga: "Quitar liga",
+  siguenLasDeAntes: "siguen las de antes",
+  delAnterior: "Del control anterior",
+  // ── Mecánicas ──
+  mecanicas: "Mecánicas auxiliares",
+  sinMecanicas: "Sin mecánicas auxiliares activas.",
+  agregarMecanica: "Agregar mecánica",
+  queMecanica: "¿Qué se colocó?",
+  arcadaOpcional: "Arcada (opcional)",
+  sinArcada: "—",
+  dienteOZona: "Diente o zona",
+  phDienteOZona: "13-16, 23, sector posterior…",
+  nota: "Nota (opcional)",
+  phNota: "Calibre, longitud, activación…",
+  colocadaEl: "Colocada el",
+  colocar: "Colocar",
+  colocando: "Guardando…",
+  cancelar: "Cancelar",
+  retirar: "Retirar",
+  retirando: "Retirando…",
+  retirarAria: (t: string) => `Retirar ${t}`,
+  desde: (f: string) => `desde ${f}`,
+  retiradaEl: (f: string) => `retirada el ${f}`,
+  activa: "Activa",
+  retirada: "Retirada",
+  colocadaEnEste: "Colocada en este control",
+  retiradaEnEste: "Retirada en este control",
+  verRetiradas: (n: number) => `Ver retiradas (${n})`,
+  ocultarRetiradas: "Ocultar retiradas",
+  mecanicaColocada: "Mecánica registrada.",
+  mecanicaRetirada: "Mecánica retirada.",
+  // ── Historial de ligas (ficha) ──
+  historialLigas: "Historial de ligas",
+  sinHistorialLigas: "Aún no hay ligas anotadas en las hojas de control.",
+  controlN: (n: number) => `Control ${n}`,
+  borrador: "borrador",
+  verTodo: (n: number) => `Ver todo (${n})`,
+  verMenos: "Ver menos",
+  // ── Configuración ──
+  cfgTitulo: "Hoja de control",
+  cfgSub:
+    "Lo que se ofrece al llenar la hoja de control: materiales y calibres de arco, tipos y colores de liga, y tipos de mecánica auxiliar. Vienen con los valores de fábrica; agrega los tuyos o quita los que no uses. Quitar uno solo deja de ofrecerlo: lo ya anotado en hojas y casos conserva su texto.",
+  cfgFaltaSql:
+    "Falta aplicar sql/ws1-t9-hoja-ligas-mecanicas-catalogos.sql para guardar tus catálogos. Mientras, la hoja usa los de fábrica.",
+  cfgDeFabrica: "Usas los valores de fábrica.",
+  cfgMaterialesAyuda: "Enciende solo los materiales que usa tu clínica.",
+  cfgCalibresAyuda: "Redondos como «014» y rectangulares como «16x22».",
+  cfgNinguna: "No ofreces ninguna opción en esta lista.",
+  cfgAgregar: "Agregar",
+  cfgCopiarFabrica: "Copiar los de fábrica",
+  cfgCopiados: "Los valores de fábrica volvieron a la lista. Guarda para aplicarlo.",
+  cfgQuitar: "Quitar",
+  cfgNo: "No",
+  cfgQuitarAria: (n: string) => `Quitar ${n || "la opción"}`,
+  cfgQuitadas: "Quitadas (no se ofrecen en hojas nuevas)",
+  cfgVolver: "Volver a ofrecer",
+  cfgSinNombre: "Sin nombre",
+  cfgNombre: "Nombre",
+  cfgGuardar: "Guardar catálogos",
+  cfgGuardando: "Guardando…",
+  cfgGuardados: "Catálogos de la hoja de control guardados.",
+  cfgSoloLectura: "Solo quien puede cambiar la configuración de la clínica edita estos catálogos.",
+  cfgMaximo: (n: number) => `Máximo ${n} opciones por lista.`,
+};
+
+export type TextosHojaExtras = typeof es;
+
+const en: TextosHojaExtras = {
+  idioma: "en",
+  nuevoSuperior: "New upper",
+  nuevoInferior: "New lower",
+  arcoNuevoSuperiorAria: "New upper archwire",
+  arcoNuevoInferiorAria: "New lower archwire",
+  sinCambio: "No change",
+  otroArco: "Other archwire…",
+  superior: "Upper",
+  inferior: "Lower",
+  ligas: "Ligatures",
+  sinLigas: "No ligatures noted in this check-up.",
+  agregarLiga: (tipo) => `Add ${tipo.toLowerCase()}`,
+  tipoDeLiga: "Ligature type",
+  colorDeLiga: "Ligature color",
+  color: "Color…",
+  arcada: "Arch",
+  cambiadasHoy: "Changed today",
+  quitarLiga: "Remove ligature",
+  siguenLasDeAntes: "same as before",
+  delAnterior: "From the previous check-up",
+  mecanicas: "Auxiliary mechanics",
+  sinMecanicas: "No active auxiliary mechanics.",
+  agregarMecanica: "Add mechanic",
+  queMecanica: "What was placed?",
+  arcadaOpcional: "Arch (optional)",
+  sinArcada: "—",
+  dienteOZona: "Tooth or area",
+  phDienteOZona: "13-16, 23, posterior segment…",
+  nota: "Note (optional)",
+  phNota: "Size, length, activation…",
+  colocadaEl: "Placed on",
+  colocar: "Place",
+  colocando: "Saving…",
+  cancelar: "Cancel",
+  retirar: "Remove",
+  retirando: "Removing…",
+  retirarAria: (t) => `Remove ${t}`,
+  desde: (f) => `since ${f}`,
+  retiradaEl: (f) => `removed on ${f}`,
+  activa: "Active",
+  retirada: "Removed",
+  colocadaEnEste: "Placed in this check-up",
+  retiradaEnEste: "Removed in this check-up",
+  verRetiradas: (n) => `Show removed (${n})`,
+  ocultarRetiradas: "Hide removed",
+  mecanicaColocada: "Mechanic recorded.",
+  mecanicaRetirada: "Mechanic removed.",
+  historialLigas: "Ligature history",
+  sinHistorialLigas: "No ligatures noted in the check-up sheets yet.",
+  controlN: (n) => `Check-up ${n}`,
+  borrador: "draft",
+  verTodo: (n) => `Show all (${n})`,
+  verMenos: "Show less",
+  cfgTitulo: "Check-up sheet",
+  cfgSub:
+    "What the check-up sheet offers: archwire materials and sizes, ligature types and colors, and auxiliary mechanic types. They come with the factory values; add yours or remove the ones you don't use. Removing one only stops offering it: what was already noted in sheets and cases keeps its text.",
+  cfgFaltaSql: "sql/ws1-t9-hoja-ligas-mecanicas-catalogos.sql is not applied yet, so your catalogs can't be saved. Meanwhile the sheet uses the factory ones.",
+  cfgDeFabrica: "You're using the factory values.",
+  cfgMaterialesAyuda: "Turn on only the materials your clinic uses.",
+  cfgCalibresAyuda: "Round like “014” and rectangular like “16x22”.",
+  cfgNinguna: "You don't offer any option in this list.",
+  cfgAgregar: "Add",
+  cfgCopiarFabrica: "Copy the factory values",
+  cfgCopiados: "The factory values are back in the list. Save to apply.",
+  cfgQuitar: "Remove",
+  cfgNo: "No",
+  cfgQuitarAria: (n) => `Remove ${n || "the option"}`,
+  cfgQuitadas: "Removed (not offered on new sheets)",
+  cfgVolver: "Offer again",
+  cfgSinNombre: "No name",
+  cfgNombre: "Name",
+  cfgGuardar: "Save catalogs",
+  cfgGuardando: "Saving…",
+  cfgGuardados: "Check-up sheet catalogs saved.",
+  cfgSoloLectura: "Only someone who can change the clinic's settings edits these catalogs.",
+  cfgMaximo: (n) => `Up to ${n} options per list.`,
+};
+
+export function textosHojaExtras(locale: string | null | undefined): TextosHojaExtras {
+  return locale === "en" ? en : es;
+}
+
+/** Fuera del I18nProvider (`useLocale` lanza) se queda en español: el cajón también se monta en portales. */
+export function useTextosHojaExtras(): TextosHojaExtras {
+  let locale = "es";
+  try {
+    // Se llama siempre y en el mismo orden: el try solo atrapa el error de «sin provider».
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    locale = useLocale();
+  } catch {
+    // sin provider: español
+  }
+  return textosHojaExtras(locale);
+}

@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { columnaPrecioControlExiste } from "@/lib/orthodontics/precio-control-del-caso-db";
 import { leerOpcionesDelPlan } from "@/lib/orthodontics/plan-detalle-db";
+import { leerCatalogosDeHoja } from "@/lib/orthodontics/hoja-extras-db";
 import { prisma } from "@/lib/prisma";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { canPurchaseModules, canRequestModuleCancellation } from "@/lib/marketplace/module-purchase-core";
@@ -66,6 +67,8 @@ export default async function OrthodonticsConfiguracionPage() {
       </Pantalla>
     );
   }
+  // ws1-t9 (M4): aparte del Promise.all (ya lleva 6 consultas; el pooler se satura por encima de 7).
+  const catalogosDeHoja = await leerCatalogosDeHoja(user.clinicId);
   const cancelacion = canRequestModuleCancellation(clinicModule);
   return (
     <OrthoConfiguracionClient
@@ -76,6 +79,7 @@ export default async function OrthodonticsConfiguracionPage() {
       // ws1-t12: guardar técnicas y precios pide settings.edit en el servidor; la pantalla lo refleja.
       puedeEditar={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride }, "settings.edit")}
       columnaPrecioDelCaso={columnaPrecioDelCaso}
+      catalogosDeHoja={catalogosDeHoja}
       suscripcion={
         canPurchaseModules(user.role) && cancelacion.ok
           ? { currentPeriodEnd: clinicModule?.currentPeriodEnd.toISOString() ?? null }

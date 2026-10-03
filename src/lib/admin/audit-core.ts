@@ -250,6 +250,8 @@ const ORTHO_ACTION_META: Record<string, { label: string; tone: AuditTone }> = {
   "ortho.wireStep.added": { label: "Arco agregado al caso", tone: "success" },
   "ortho.wireStep.updated": { label: "Arco del caso editado", tone: "info" },
   "ortho.tad.created": { label: "Microimplante registrado", tone: "success" },
+  "ortho.auxDevice.added": { label: "Mecánica auxiliar colocada", tone: "success" },
+  "ortho.auxDevice.removed": { label: "Mecánica auxiliar retirada", tone: "info" },
   "ortho.photoSet.created": { label: "Juego de fotos creado", tone: "success" },
   "ortho.photoSet.photoUploaded": { label: "Foto de ortodoncia subida", tone: "success" },
   // Las tres siguientes se registraban (fotosDelJuego.ts) sin nombre: se leían en crudo.

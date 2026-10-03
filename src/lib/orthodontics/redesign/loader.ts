@@ -27,6 +27,7 @@ import {
 import type { VisibilityViewer } from "@/lib/patient-visibility";
 import { signMaybeUrls } from "@/lib/storage";
 import { cargarNombreDeTecnica } from "../tecnicas-de-la-clinica-db";
+import { leerArcosInferiores } from "../hoja-extras-db";
 import { cargarPlanDetalle, columnaDePlanDetalleExiste } from "../plan-detalle-db";
 import { datoDelPlanSinCapturar, planDetalleVacio, reevaluacionesPendientes, type PlanDeTratamientoVista } from "../plan-detalle";
 import { cargarModoDeCobro } from "../billing-mode-db";
@@ -446,10 +447,15 @@ export async function loadOrthoRedesignData(
 
   const treatmentStatus = deriveTreatmentStatus(legacy);
 
+  // ws1-t9 (M1): el arco nuevo inferior de cada hoja (columna aparte, por SQL crudo; sin el SQL de ws1-t9, ninguno).
+  const arcosInferiores = await leerArcosInferiores(input.clinicId, (treatmentCards as Array<{ id: string }>).map((c) => c.id));
   const adapterInput: AdapterInput = {
     legacy,
     wireSteps: wireSteps as AdapterInput["wireSteps"],
-    treatmentCards: treatmentCards as AdapterInput["treatmentCards"],
+    treatmentCards: (treatmentCards as Array<{ id: string }>).map((c) => ({
+      ...c,
+      wireToLowerId: arcosInferiores.get(c.id) ?? null,
+    })) as AdapterInput["treatmentCards"],
     tads: tads as AdapterInput["tads"],
     auxMechanics: auxMechanics as AdapterInput["auxMechanics"],
     phaseTransitions: phaseTransitions as AdapterInput["phaseTransitions"],
