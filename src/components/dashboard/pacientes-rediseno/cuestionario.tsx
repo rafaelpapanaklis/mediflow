@@ -23,7 +23,6 @@ import {
   HABITOS,
   PADECIMIENTOS,
   RISK_FLAG_LABELS,
-  computeRiskFlags,
   grupoValores,
   normalizeAnswers,
   ponerEnGrupo,
@@ -35,6 +34,8 @@ import { useT } from "@/i18n/i18n-provider";
 import { fechaLarga } from "./fechas";
 import s from "./rediseno.module.css";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { preguntasQueLevantanBandera, resumenDeBanderas } from "@/lib/patients/resumen-banderas";
+import { useTextosBanderas } from "./textos-banderas";
 
 /**
  * Cuestionario de salud, rediseñado.
@@ -312,7 +313,12 @@ export function Cuestionario({ patientId, onSaved }: Props) {
   const setEnGrupo = (group: QGroup) => (key: string, value: any) =>
     setAnswers((a) => ponerEnGrupo(a, group, key, value));
 
-  const banderas = useMemo(() => computeRiskFlags(answers), [answers]);
+  // ws1-t3 (BEVADENT F6): además de las banderas, lo marcado que no levanta
+  // ninguna — la tarjeta ya no dice «ninguna» a secas con un asma marcado.
+  const resumen = useMemo(() => resumenDeBanderas(answers), [answers]);
+  const banderas = resumen.banderas;
+  const otrosMarcados = resumen.padecimientos.length + resumen.alergias.length > 0;
+  const txBanderas = useTextosBanderas();
 
   async function guardar() {
     setGuardando(true);
@@ -380,10 +386,14 @@ export function Cuestionario({ patientId, onSaved }: Props) {
       <section className={s.tarjeta}>
         <header className={s.tarjetaCabeza}>
           <span
-            className={`${s.tarjetaIcono} ${banderas.length > 0 ? s.tarjetaIconoPeligro : s.tarjetaIconoExito}`}
+            className={`${s.tarjetaIcono} ${
+              banderas.length > 0 ? s.tarjetaIconoPeligro : otrosMarcados ? s.tarjetaIconoAlerta : s.tarjetaIconoExito
+            }`}
           >
             {banderas.length > 0 ? (
               <ShieldAlert size={15} strokeWidth={1.75} aria-hidden />
+            ) : otrosMarcados ? (
+              <AlertTriangle size={15} strokeWidth={1.75} aria-hidden />
             ) : (
               <Check size={15} strokeWidth={1.75} aria-hidden />
             )}
@@ -401,15 +411,38 @@ export function Cuestionario({ patientId, onSaved }: Props) {
                   </span>
                 ))}
               </div>
+              {otrosMarcados ? (
+                <p className={s.pantallaSub} style={{ marginTop: 10, fontSize: 12.5 }}>
+                  {txBanderas.tambienMarcado(resumen)}
+                </p>
+              ) : null}
               <p className={s.pantallaSub} style={{ marginTop: 10, fontSize: 12 }}>
                 {t("pacientesRediseno.cuestionario.banderasPie")}
               </p>
             </>
+          ) : otrosMarcados ? (
+            <p className={s.pantallaSub} style={{ margin: 0 }}>
+              {txBanderas.sinBanderasCon(resumen)}
+            </p>
           ) : (
             <p className={s.pantallaSub} style={{ margin: 0 }}>
               {t("pacientesRediseno.cuestionario.sinBanderas")}
             </p>
           )}
+          {/* Qué respuestas levantan bandera: la lista la decide computeRiskFlags, aquí solo se enseña. */}
+          <details style={{ marginTop: 10 }}>
+            <summary className={s.pantallaSub} style={{ cursor: "pointer", fontSize: 12 }}>
+              {txBanderas.queLevanta}
+            </summary>
+            <ul className={s.pantallaSub} style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+              {preguntasQueLevantanBandera().map((p) => (
+                <li key={p.bandera}>
+                  {p.pregunta} → <b>{p.etiqueta}</b>
+                </li>
+              ))}
+            </ul>
+            <p className={s.pantallaSub} style={{ margin: "6px 0 0", fontSize: 12 }}>{txBanderas.queLevantaPie}</p>
+          </details>
         </div>
       </section>
 
