@@ -65,15 +65,17 @@ export function textoSinControlEnControles(total: number, fuera: SinControlFuera
 }
 
 /**
- * La lista de «Sin próximo control» de Controles, con lo que Alertas no muestra: quien vino hoy (`diasSinControl` 0,
- * la misma regla que `vinoHoy`) y lo pospuesto 7 días (la posposición vigente de «sin-proximo-control»). Mismo orden
- * que Alertas: primero se aparta quien vino hoy, luego lo pospuesto. Devuelve las filas (las pospuestas, con su
- * `pospuestoHasta`) y las cuentas.
+ * La lista de «Sin próximo control» de Controles, con lo que Alertas no muestra: quien vino hoy (`vinoHoyElPaciente`:
+ * pásale la MISMA regla que usa Alertas, `vinoHoy` de controles-modulo; `diasSinControl` 0 no sirve, porque también
+ * sale 0 con un control de un día futuro firmado por adelantado) y lo pospuesto 7 días (la posposición vigente de
+ * «sin-proximo-control»). Mismo orden que Alertas: primero se aparta quien vino hoy, luego lo pospuesto. Devuelve las
+ * filas (las pospuestas, con su `pospuestoHasta`) y las cuentas.
  */
-export function marcarPospuestosSinControl<T extends { patientId: string; diasSinControl: number | null; pospuestoHasta?: Date | null }>(
+export function marcarPospuestosSinControl<T extends { patientId: string; pospuestoHasta?: Date | null }>(
   filas: readonly T[],
   pospuestas: ReadonlyArray<{ patientId: string; tipo: string; hasta: Date }>,
   ahora: Date,
+  vinoHoyElPaciente: (patientId: string) => boolean,
 ): { filas: T[]; fuera: SinControlFuera } {
   const hasta = new Map<string, Date>();
   for (const p of pospuestas) {
@@ -84,7 +86,7 @@ export function marcarPospuestosSinControl<T extends { patientId: string; diasSi
   let vinieronHoy = 0;
   let pospuestos = 0;
   const salida = filas.map((f) => {
-    if (f.diasSinControl === 0) {
+    if (vinoHoyElPaciente(f.patientId)) {
       vinieronHoy += 1;
       return f;
     }

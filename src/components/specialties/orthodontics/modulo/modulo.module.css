@@ -2237,9 +2237,21 @@ select.campoEnTabla {
   background: var(--pr-fondo);
 }
 
+/* En estrecho cada caso es una tarjeta: la casilla de elegir va arriba a la derecha y el paciente ocupa el ancho. */
 @container orto (max-width: 640px) {
+  .tablaEditable tbody tr {
+    position: relative;
+  }
+
   .tablaEditable td.celdaElegir {
-    grid-column: auto;
+    position: absolute;
+    top: 11px;
+    right: 12px;
+  }
+
+  .tablaEditable td.celdaElegir + td {
+    grid-column: 1 / -1;
+    padding-right: 28px;
   }
 
   .campoNumero {

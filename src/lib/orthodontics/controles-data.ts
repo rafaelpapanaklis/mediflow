@@ -30,6 +30,7 @@ import {
   controlesDeLaSemana,
   historialDeControles,
   sumarDias,
+  vinoHoy,
   type CasoSinControl,
   type CitaDeControl,
   type ControlesDeLaSemana,
@@ -179,7 +180,8 @@ export async function loadOrthoControles(
   // Aquí se listan todos, con lo pospuesto marcado. `cargarPosposiciones` nunca lanza (sin tabla, nada pospuesto).
   const todos = casosSinControl(cases, historial, hoy, zonaHoraria);
   const pospuestas = todos.length > 0 ? await cargarPosposiciones(clinicId, ahora) : [];
-  const { filas: sinControl, fuera } = marcarPospuestosSinControl(todos, pospuestas, ahora);
+  // «Vino hoy» con la MISMA regla que Alertas (`vinoHoy`), no con `diasSinControl` 0.
+  const { filas: sinControl, fuera } = marcarPospuestosSinControl(todos, pospuestas, ahora, (pid) => vinoHoy(historial, pid, hoy, zonaHoraria));
 
   return {
     hoy,

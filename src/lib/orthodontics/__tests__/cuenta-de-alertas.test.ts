@@ -65,9 +65,14 @@ test("«Sin próximo control»: Controles lista a todos; lo que Alertas no muest
     { patientId: "otro-tipo", tipo: "no-asistio", hasta: new Date("2026-10-08T00:00:00Z") }, // otra alerta
     { patientId: "hoy", tipo: "sin-proximo-control", hasta: new Date("2026-10-08T00:00:00Z") }, // vino hoy manda
   ];
-  const r = marcarPospuestosSinControl(filas, pospuestas, ahora);
-  assert.equal(r.filas.length, 5, "Controles no quita a nadie");
-  assert.deepEqual(r.fuera, { vinieronHoy: 1, pospuestos: 1 });
+  // «Vino hoy» lo decide la regla de Alertas (`vinoHoy`), no `diasSinControl` 0: «futuro-firmado» tiene 0 días porque
+  // su control de un día FUTURO ya está atendido, pero Alertas no lo da por «vino hoy» (y sí por pospuesto).
+  filas.push({ patientId: "futuro-firmado", diasSinControl: 0 });
+  pospuestas.push({ patientId: "futuro-firmado", tipo: "sin-proximo-control", hasta: new Date("2026-10-08T00:00:00Z") });
+  const r = marcarPospuestosSinControl(filas, pospuestas, ahora, (pid) => pid === "hoy");
+  assert.equal(r.filas.length, 6, "Controles no quita a nadie");
+  assert.deepEqual(r.fuera, { vinieronHoy: 1, pospuestos: 2 });
+  assert.ok(r.filas.find((f) => f.patientId === "futuro-firmado")?.pospuestoHasta);
   assert.equal(r.filas.find((f) => f.patientId === "pospuesto")?.pospuestoHasta?.toISOString(), "2026-10-08T00:00:00.000Z");
   assert.equal(r.filas.find((f) => f.patientId === "vencida")?.pospuestoHasta, undefined);
   assert.equal(r.filas.find((f) => f.patientId === "hoy")?.pospuestoHasta, undefined);
@@ -95,7 +100,7 @@ test("cableado: Alertas cuenta pacientes y explica la diferencia; Controles marc
   // La MISMA lista en las dos pantallas: Alertas parte de listMissingNextControl con el mismo historial.
   assert.match(datos, /listMissingNextControl\(cases, historial\.conControlFuturo\)/);
   const controles = sinComentarios(leer("lib/orthodontics/controles-data.ts"));
-  assert.match(controles, /marcarPospuestosSinControl\(todos, pospuestas, ahora\)/);
+  assert.match(controles, /marcarPospuestosSinControl\(todos, pospuestas, ahora, \(pid\) => vinoHoy\(historial, pid, hoy, zonaHoraria\)\)/);
   const vistaControles = sinComentarios(leer("components/specialties/orthodontics/modulo/vista-controles.tsx"));
   assert.match(vistaControles, /textoSinControlEnControles\(sinControl\.length, data\.sinControlFuera\)/);
   assert.match(vistaControles, /Pospuesto en Alertas hasta el/);
