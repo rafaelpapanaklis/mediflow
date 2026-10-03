@@ -7,6 +7,9 @@ import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { ORTHO_DEFAULT_TEMPLATES, ensureOrthoDefaults } from "@/lib/clinical-shared/evolution-templates/seed-orthodontics";
 import { listarPlantillasNota, type PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
+import { catalogoLigable, repoHojas, tablaHojasExiste } from "@/lib/indicaciones/db";
+import { listarHojas } from "@/lib/indicaciones/servicio";
+import type { HojaDTO, ProcedimientoLigable } from "@/lib/indicaciones/tipos";
 import { PlantillasClient } from "./plantillas-client";
 import { esPrecargada } from "./tarjeta";
 
@@ -37,10 +40,26 @@ export default async function PlantillasPage() {
     orto = null;
   }
 
+  // Indicaciones y constancia (ws1-t10): solo con la tabla creada
+  // (sql/ws1-t10-indicaciones-y-constancia.sql). Sin ella, las dos pestañas no salen.
+  let hojas: HojaDTO[] | null = null;
+  let procedimientos: ProcedimientoLigable[] = [];
+  try {
+    if (await tablaHojasExiste()) {
+      procedimientos = await catalogoLigable(user.clinicId);
+      hojas = await listarHojas(repoHojas, user.clinicId, async () => procedimientos);
+    }
+  } catch (err) {
+    console.error("[plantillas] indicaciones y constancia:", err);
+    hojas = null;
+  }
+
   return (
     <PlantillasClient
       key={user.clinicId}
       initialOrto={orto}
+      initialHojas={hojas}
+      procedimientos={procedimientos}
       initialTemplates={templates.map((t) => ({
         id: t.id,
         kind: t.kind,

@@ -52,6 +52,8 @@ import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-a
 import { CobrarHoy } from "@/components/dashboard/cobrar-hoy/cobrar-hoy";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
+// ws1-t10: indicaciones de cuidado y constancia de asistencia de la cita.
+import { RanuraIndicaciones } from "@/components/indicaciones/ranura-indicaciones";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
@@ -617,6 +619,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               autocalifica sola (dto.reason === TIPO_CITA_CONTROL_ORTO) y hoy
               no pinta nada — ver MAPA DE PARTES en REPORTE-ws1-t1.md. */}
           <RanuraCita dto={dto} onModoDeCobro={setModoCobroOrto} />
+
+          {/* ws1-t10 (mejora 12): «Después de la consulta» — indicaciones y constancia. */}
+          <RanuraIndicaciones appointmentId={dto.id} estado={cita.estado} puedeEmitir={permissions.canEdit === true} />
         </div>
 
         {/* ── Pie ── */}

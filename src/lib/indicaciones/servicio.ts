@@ -1,0 +1,309 @@
+// La biblioteca de hojas de la clínica (indicaciones y constancia): reglas sin
+// base de datos. `repo` es cualquier cosa con la forma de `RepoHojas` (en
+// producción, `repoHojas` de ./db.ts; en las pruebas, uno en memoria).
+//
+// Leyes:
+//  · `clinicId` sale SIEMPRE de la sesión; el repo corta si falta.
+//  · Las de fábrica no se editan (texto ni nombre): se copian. Sí se les cambia
+//    a qué procedimientos se ligan y si están en uso.
+//  · Nada se borra: se apaga («en uso» / «inactiva»).
+//  · Los procedimientos ligados se filtran contra el catálogo de ESTA clínica:
+//    un id ajeno o inventado se descarta en silencio.
+
+import { TEXTOS_DE_FABRICA, coincideConFabrica, normalizar, textoDeFabrica, type TipoHoja } from "./fabrica";
+import {
+  MAX_CUERPO_HOJA,
+  MAX_NOMBRE_HOJA,
+  MAX_PROCEDIMIENTOS_HOJA,
+  STATUS_HOJA,
+  esTipoHoja,
+  type CodigoHoja,
+  type HojaDTO,
+  type ProcedimientoLigable,
+  type ResultadoHoja,
+} from "./tipos";
+
+export interface FilaHoja {
+  id: string;
+  clinicId: string;
+  tipo: TipoHoja;
+  nombre: string;
+  cuerpo: string;
+  procedureIds: string[];
+  factoryKey: string | null;
+  basadaEn: string | null;
+  activa: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FilaNueva {
+  clinicId: string;
+  tipo: TipoHoja;
+  nombre: string;
+  cuerpo: string;
+  procedureIds: string[];
+  factoryKey: string | null;
+  basadaEn: string | null;
+  createdById: string | null;
+}
+
+export interface CambiosFila {
+  nombre?: string;
+  cuerpo?: string;
+  procedureIds?: string[];
+  activa?: boolean;
+}
+
+export interface RepoHojas {
+  tablaExiste(): Promise<boolean>;
+  listar(clinicId: string, tipo?: TipoHoja): Promise<FilaHoja[]>;
+  obtener(clinicId: string, id: string): Promise<FilaHoja | null>;
+  insertar(f: FilaNueva): Promise<FilaHoja | "NOMBRE_OCUPADO">;
+  sembrar(filas: FilaNueva[]): Promise<void>;
+  actualizar(clinicId: string, id: string, c: CambiosFila): Promise<FilaHoja | "NOMBRE_OCUPADO" | null>;
+}
+
+const falla = (codigo: CodigoHoja): ResultadoHoja => ({ ok: false, codigo, status: STATUS_HOJA[codigo] });
+
+export function aDTO(f: FilaHoja): HojaDTO {
+  return {
+    id: f.id,
+    tipo: f.tipo,
+    nombre: f.nombre,
+    cuerpo: f.cuerpo,
+    procedureIds: [...f.procedureIds],
+    deFabrica: !!f.factoryKey,
+    basadaEn: f.factoryKey ?? f.basadaEn,
+    activa: f.activa,
+    createdAt: f.createdAt.toISOString(),
+    updatedAt: f.updatedAt.toISOString(),
+  };
+}
+
+/** Los procedimientos del catálogo que un texto de fábrica liga solo (por su nombre). */
+export function ligaDeFabrica(clave: string, catalogo: readonly ProcedimientoLigable[]): string[] {
+  const f = textoDeFabrica(clave);
+  if (!f || f.tipo !== "INDICACIONES") return [];
+  return catalogo.filter((p) => p.isActive && coincideConFabrica(f, p.name)).map((p) => p.id);
+}
+
+/**
+ * La lista de la clínica. Si le falta alguna de fábrica (primera vez, o
+ * DaleControl agregó una nueva), la siembra antes de devolver: ligada a los
+ * procedimientos del catálogo que la nombran.
+ *
+ * `null` = la tabla todavía no existe (falta pegar el SQL): la función se oculta.
+ */
+export async function listarHojas(
+  repo: RepoHojas,
+  clinicId: string,
+  catalogo: () => Promise<readonly ProcedimientoLigable[]>,
+): Promise<HojaDTO[] | null> {
+  if (!(await repo.tablaExiste())) return null;
+  let filas = await repo.listar(clinicId);
+  const tiene = new Set(filas.map((f) => f.factoryKey).filter(Boolean));
+  const faltan = TEXTOS_DE_FABRICA.filter((t) => !tiene.has(t.clave));
+  if (faltan.length > 0) {
+    const cat = await catalogo();
+    await repo.sembrar(
+      faltan.map((t) => ({
+        clinicId,
+        tipo: t.tipo,
+        nombre: t.nombre,
+        cuerpo: t.cuerpo,
+        procedureIds: ligaDeFabrica(t.clave, cat),
+        factoryKey: t.clave,
+        basadaEn: null,
+        createdById: null,
+      })),
+    );
+    filas = await repo.listar(clinicId);
+  }
+  return filas.map(aDTO);
+}
+
+function limpiarNombre(v: unknown): { nombre: string } | { codigo: CodigoHoja } {
+  const nombre = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+  if (!nombre) return { codigo: "NOMBRE_REQUERIDO" };
+  if (nombre.length > MAX_NOMBRE_HOJA) return { codigo: "NOMBRE_LARGO" };
+  return { nombre };
+}
+
+function limpiarCuerpo(v: unknown): { cuerpo: string } | { codigo: CodigoHoja } {
+  if (typeof v !== "string" || v.trim() === "") return { codigo: "CUERPO_REQUERIDO" };
+  // Sin etiquetas: es texto plano (sale en WhatsApp y en el PDF tal cual).
+  const cuerpo = v.replace(/\r\n?/g, "\n").replace(/<[^>]*>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  if (!cuerpo) return { codigo: "CUERPO_REQUERIDO" };
+  if (cuerpo.length > MAX_CUERPO_HOJA) return { codigo: "CUERPO_LARGO" };
+  return { cuerpo };
+}
+
+/** Solo ids del catálogo de ESTA clínica, sin repetir. */
+export function limpiarProcedimientos(v: unknown, catalogo: readonly ProcedimientoLigable[]): string[] {
+  if (!Array.isArray(v)) return [];
+  const validos = new Set(catalogo.map((p) => p.id));
+  const out: string[] = [];
+  for (const id of v) {
+    if (typeof id === "string" && validos.has(id) && !out.includes(id)) out.push(id);
+    if (out.length >= MAX_PROCEDIMIENTOS_HOJA) break;
+  }
+  return out;
+}
+
+async function nombreOcupado(repo: RepoHojas, clinicId: string, tipo: TipoHoja, nombre: string, exceptoId?: string) {
+  const buscado = nombre.toLocaleLowerCase("es");
+  return (await repo.listar(clinicId, tipo)).some((f) => f.id !== exceptoId && f.nombre.toLocaleLowerCase("es") === buscado);
+}
+
+export interface EntradaNueva {
+  tipo?: unknown;
+  nombre?: unknown;
+  cuerpo?: unknown;
+  procedureIds?: unknown;
+  /** Id de la hoja de la que es copia («Copiar y editar»). */
+  copiaDe?: unknown;
+}
+
+export async function crearHoja(
+  repo: RepoHojas,
+  clinicId: string,
+  userId: string | null,
+  e: EntradaNueva,
+  catalogo: readonly ProcedimientoLigable[],
+): Promise<ResultadoHoja> {
+  if (!(await repo.tablaExiste())) return falla("SIN_TABLA");
+  const origen = typeof e.copiaDe === "string" && e.copiaDe ? await repo.obtener(clinicId, e.copiaDe) : null;
+  if (typeof e.copiaDe === "string" && e.copiaDe && !origen) return falla("NO_ENCONTRADA");
+  const tipo = origen ? origen.tipo : e.tipo;
+  if (!esTipoHoja(tipo)) return falla("TIPO_INVALIDO");
+  const n = limpiarNombre(e.nombre);
+  if ("codigo" in n) return falla(n.codigo);
+  const c = limpiarCuerpo(e.cuerpo);
+  if ("codigo" in c) return falla(c.codigo);
+  if (await nombreOcupado(repo, clinicId, tipo, n.nombre)) return falla("NOMBRE_OCUPADO");
+
+  // La copia hereda la liga de su original si no se manda otra.
+  const procedureIds =
+    tipo !== "INDICACIONES"
+      ? []
+      : e.procedureIds === undefined && origen
+        ? limpiarProcedimientos(origen.procedureIds, catalogo)
+        : limpiarProcedimientos(e.procedureIds, catalogo);
+
+  const r = await repo.insertar({
+    clinicId,
+    tipo,
+    nombre: n.nombre,
+    cuerpo: c.cuerpo,
+    procedureIds,
+    factoryKey: null,
+    basadaEn: origen ? (origen.factoryKey ?? origen.basadaEn) : null,
+    createdById: userId,
+  });
+  if (r === "NOMBRE_OCUPADO") return falla("NOMBRE_OCUPADO");
+  return { ok: true, hoja: aDTO(r) };
+}
+
+export interface EntradaEdicion {
+  nombre?: unknown;
+  cuerpo?: unknown;
+  procedureIds?: unknown;
+  activa?: unknown;
+}
+
+export async function editarHoja(
+  repo: RepoHojas,
+  clinicId: string,
+  id: string,
+  e: EntradaEdicion,
+  catalogo: readonly ProcedimientoLigable[],
+): Promise<ResultadoHoja & { antes?: HojaDTO }> {
+  if (!(await repo.tablaExiste())) return falla("SIN_TABLA");
+  const actual = await repo.obtener(clinicId, id);
+  if (!actual) return falla("NO_ENCONTRADA");
+
+  const cambios: CambiosFila = {};
+  if (e.nombre !== undefined || e.cuerpo !== undefined) {
+    const n = e.nombre !== undefined ? limpiarNombre(e.nombre) : { nombre: actual.nombre };
+    if ("codigo" in n) return falla(n.codigo);
+    const c = e.cuerpo !== undefined ? limpiarCuerpo(e.cuerpo) : { cuerpo: actual.cuerpo };
+    if ("codigo" in c) return falla(c.codigo);
+    const cambiaTexto = n.nombre !== actual.nombre || c.cuerpo !== actual.cuerpo;
+    // El texto de fábrica es el mismo para todas las clínicas: se copia, no se reescribe.
+    if (cambiaTexto && actual.factoryKey) return falla("FABRICA_NO_SE_EDITA");
+    if (n.nombre !== actual.nombre) {
+      if (await nombreOcupado(repo, clinicId, actual.tipo, n.nombre, actual.id)) return falla("NOMBRE_OCUPADO");
+      cambios.nombre = n.nombre;
+    }
+    if (c.cuerpo !== actual.cuerpo) cambios.cuerpo = c.cuerpo;
+  }
+  if (e.procedureIds !== undefined && actual.tipo === "INDICACIONES") {
+    cambios.procedureIds = limpiarProcedimientos(e.procedureIds, catalogo);
+  }
+  if (typeof e.activa === "boolean") cambios.activa = e.activa;
+
+  if (Object.keys(cambios).length === 0) return { ok: true, hoja: aDTO(actual), antes: aDTO(actual) };
+  const r = await repo.actualizar(clinicId, actual.id, cambios);
+  if (r === "NOMBRE_OCUPADO") return falla("NOMBRE_OCUPADO");
+  if (!r) return falla("NO_ENCONTRADA");
+  return { ok: true, hoja: aDTO(r), antes: aDTO(actual) };
+}
+
+/** «Después de una extracción (copia)», «… (copia 2)»… sin chocar con los nombres que ya hay. */
+export function nombreDeCopiaHoja(original: string, existentes: readonly string[], sufijo = "copia"): string {
+  const usados = new Set(existentes.map((n) => n.toLocaleLowerCase("es")));
+  const base = original.replace(/\s*\((?:copia|copy)(?: \d+)?\)\s*$/i, "").trim();
+  for (let i = 1; i < 100; i++) {
+    const candidato = `${base} (${sufijo}${i === 1 ? "" : ` ${i}`})`.slice(0, MAX_NOMBRE_HOJA);
+    if (!usados.has(candidato.toLocaleLowerCase("es"))) return candidato;
+  }
+  return `${base} (${sufijo} ${Date.now()})`.slice(0, MAX_NOMBRE_HOJA);
+}
+
+// ─── La cita ────────────────────────────────────────────────────────────────
+
+/**
+ * Los procedimientos del catálogo que se hicieron (o se iban a hacer) en la cita.
+ * La cita no guarda ids de procedimiento: se reconocen por NOMBRE (sin acentos ni
+ * mayúsculas) en el motivo de la cita y en los conceptos de su nota de cobro —el
+ * mismo criterio de «Cobrar hoy», que nunca adivina por parecido—.
+ */
+export function procedimientosDeLaCita(
+  textos: ReadonlyArray<string | null | undefined>,
+  catalogo: readonly ProcedimientoLigable[],
+): ProcedimientoLigable[] {
+  const buscados = new Set(textos.map((t) => normalizar(t)).filter(Boolean));
+  return catalogo.filter((p) => buscados.has(normalizar(p.name)));
+}
+
+/**
+ * Qué hojas de indicaciones proponer para la cita (en uso). Primero las ligadas a
+ * sus procedimientos; si ninguna, las de fábrica (o copias de una de fábrica)
+ * cuyas palabras aparecen en el motivo o en los conceptos. Solo PROPONE: quien
+ * está en la cita elige.
+ */
+export function hojasSugeridas(
+  hojas: readonly HojaDTO[],
+  procedimientos: readonly ProcedimientoLigable[],
+  textos: ReadonlyArray<string | null | undefined>,
+): string[] {
+  const enUso = hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa);
+  const ids = new Set(procedimientos.map((p) => p.id));
+  const porLiga = enUso.filter((h) => h.procedureIds.some((id) => ids.has(id)));
+  if (porLiga.length > 0) return porLiga.map((h) => h.id);
+  const porPalabras = enUso.filter((h) => {
+    const f = textoDeFabrica(h.basadaEn);
+    return !!f && textos.some((t) => coincideConFabrica(f, t));
+  });
+  // Si una copia de la clínica y su original de fábrica coinciden, va la de la clínica.
+  const propias = new Set(porPalabras.filter((h) => !h.deFabrica).map((h) => h.basadaEn));
+  return porPalabras.filter((h) => !(h.deFabrica && propias.has(h.basadaEn))).map((h) => h.id);
+}
+
+/** La constancia que se usa si no se elige: la de la clínica más reciente en uso; si no, la de fábrica. */
+export function constanciaPorDefecto(hojas: readonly HojaDTO[]): HojaDTO | null {
+  const enUso = hojas.filter((h) => h.tipo === "CONSTANCIA" && h.activa);
+  const propias = enUso.filter((h) => !h.deFabrica).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return propias[0] ?? enUso[0] ?? null;
+}

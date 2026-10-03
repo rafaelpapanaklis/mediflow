@@ -1,0 +1,76 @@
+/* ═══════════════════════════════════════════════════════════════
+   Administración → Plantillas → «Indicaciones» y «Constancia de
+   asistencia» (ws1-t10). Lo propio de estas pestañas; el resto (tarjetas,
+   botones, ventana) es de plantillas.module.css. Solo tokens de globals.css.
+   ═══════════════════════════════════════════════════════════════ */
+
+.liga {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.textoLargo { min-height: 260px; }
+
+.campoCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ayudaCampo { font-size: 12px; color: var(--text-3); line-height: 1.45; }
+
+/* ─── Procedimientos ligados ─── */
+.proc {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+.procBuscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-3);
+}
+.procBuscar input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+.procLista {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.procItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.procItem:hover { background: var(--bg-hover); }
+.procItem input { accent-color: var(--brand); width: 15px; height: 15px; flex-shrink: 0; }
+.procInactivo { color: var(--text-3); font-size: 12px; }
+.procVacio { padding: 10px 12px; font-size: 13px; color: var(--text-3); }
+.procElegidos { padding: 6px 10px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--text-3); }
+
+@media (max-width: 640px) {
+  .textoLargo { min-height: 200px; }
+}

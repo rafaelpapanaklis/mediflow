@@ -12,6 +12,9 @@ import {
 import type { PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
 import { PlantillaModal } from "./plantilla-modal";
 import { PlantillasOrto } from "./plantillas-orto";
+import { PlantillasIndicaciones } from "./plantillas-indicaciones";
+import { useTextosIndicaciones } from "@/lib/indicaciones/textos";
+import type { HojaDTO, ProcedimientoLigable } from "@/lib/indicaciones/tipos";
 import { fueEditada, ordenarPlantillas } from "./tarjeta";
 import styles from "./plantillas.module.css";
 
@@ -29,12 +32,19 @@ export interface PlantillaFila {
 
 /** La pestaña de las notas de la hoja de control de Ortodoncia (otra tabla; ver plantillas-orto.tsx). */
 const TAB_ORTO = "ORTO" as const;
-type Pestana = DocumentTemplateKindValue | typeof TAB_ORTO;
+/** Indicaciones postoperatorias y constancia de asistencia (otra tabla; ver plantillas-indicaciones.tsx). */
+const TAB_INDICACIONES = "HOJA_INDICACIONES" as const;
+const TAB_CONSTANCIA = "HOJA_CONSTANCIA" as const;
+type Pestana = DocumentTemplateKindValue | typeof TAB_ORTO | typeof TAB_INDICACIONES | typeof TAB_CONSTANCIA;
 
 interface Props {
   initialTemplates: PlantillaFila[];
   /** Las notas de ortodoncia de la clínica; `null` = sin el módulo (la pestaña no sale) o no se pudieron leer. */
   initialOrto?: PlantillaNotaDTO[] | null;
+  /** Indicaciones y constancia de la clínica; `null` = la tabla aún no existe (las pestañas no salen). */
+  initialHojas?: HojaDTO[] | null;
+  /** El catálogo de la clínica, para ligar indicaciones a procedimientos. */
+  procedimientos?: ProcedimientoLigable[];
 }
 
 // Pestañas y no dos listas: en la ficha del paciente cada sitio enseña SOLO las
@@ -49,15 +59,19 @@ const VACIO_KEY: Record<DocumentTemplateKindValue, string> = {
   CONSENTIMIENTO: "pages.plantillas.vacioConsentimiento",
 };
 
-export function PlantillasClient({ initialTemplates, initialOrto = null }: Props) {
+export function PlantillasClient({ initialTemplates, initialOrto = null, initialHojas = null, procedimientos = [] }: Props) {
   const t = useT();
   const locale = useLocale();
   const askConfirm = useConfirm();
   const [templates, setTemplates] = useState<PlantillaFila[]>(initialTemplates);
   const [pestana, setPestana] = useState<Pestana>("NOTA_EVOLUCION");
   const [orto, setOrto] = useState<PlantillaNotaDTO[] | null>(initialOrto);
-  // En la pestaña de ortodoncia no hay un tipo de documento: «Nueva plantilla» de la cabecera no aplica (la pestaña trae la suya).
-  const kind: DocumentTemplateKindValue = pestana === TAB_ORTO ? "NOTA_EVOLUCION" : pestana;
+  const [hojas, setHojas] = useState<HojaDTO[] | null>(initialHojas);
+  const tx = useTextosIndicaciones();
+  // En las pestañas de ortodoncia, indicaciones y constancia no hay un tipo de documento: «Nueva plantilla» de la
+  // cabecera no aplica (cada pestaña trae la suya).
+  const pestanaPropia = pestana === TAB_ORTO || pestana === TAB_INDICACIONES || pestana === TAB_CONSTANCIA;
+  const kind: DocumentTemplateKindValue = pestanaPropia ? "NOTA_EVOLUCION" : pestana;
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<{ editing: PlantillaFila | null } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -154,7 +168,7 @@ export function PlantillasClient({ initialTemplates, initialOrto = null }: Props
           <h1 className={styles.title}>{t("pages.plantillas.title")}</h1>
           <p className={styles.subtitle}>{t("pages.plantillas.subtitle")}</p>
         </div>
-        {pestana !== TAB_ORTO && (
+        {!pestanaPropia && (
           <button type="button" className={styles.btnPrimary} onClick={() => setModal({ editing: null })}>
             <Plus size={16} aria-hidden />
             {t("pages.plantillas.nueva")}
@@ -198,11 +212,40 @@ export function PlantillasClient({ initialTemplates, initialOrto = null }: Props
             <span className={styles.tabCount}>{orto.length}</span>
           </button>
         )}
+        {hojas &&
+          ([
+            [TAB_INDICACIONES, tx.tabIndicaciones, "INDICACIONES"],
+            [TAB_CONSTANCIA, tx.tabConstancia, "CONSTANCIA"],
+          ] as const).map(([tab, etiqueta, tipo]) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              id={`plantillas-tab-${tab}`}
+              aria-selected={pestana === tab}
+              aria-controls="plantillas-panel"
+              className={`${styles.tab} ${pestana === tab ? styles.tabActive : ""}`}
+              onClick={() => {
+                setPestana(tab);
+                setSearch("");
+              }}
+            >
+              {etiqueta}
+              <span className={styles.tabCount}>{hojas.filter((h) => h.tipo === tipo).length}</span>
+            </button>
+          ))}
       </div>
 
       <section id="plantillas-panel" role="tabpanel" aria-labelledby={`plantillas-tab-${pestana}`} className={styles.panel}>
         {pestana === TAB_ORTO && orto ? (
           <PlantillasOrto filas={orto} onChange={setOrto} />
+        ) : (pestana === TAB_INDICACIONES || pestana === TAB_CONSTANCIA) && hojas ? (
+          <PlantillasIndicaciones
+            tipo={pestana === TAB_CONSTANCIA ? "CONSTANCIA" : "INDICACIONES"}
+            hojas={hojas}
+            procedimientos={procedimientos}
+            onChange={setHojas}
+          />
         ) : (
           <>
         {delTipo.length > 0 && (

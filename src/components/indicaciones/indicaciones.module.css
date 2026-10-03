@@ -1,0 +1,78 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   «Indicaciones de cuidado» de la cita (ws1-t10). La ventana lleva la ropa
+   de la familia de la factura (factura-rediseno: tokens --m2-* del menú);
+   aquí solo lo propio: la lista para elegir hojas y la vista previa.
+   Sin colores a mano: cada valor pide un token del menú y, si no está, el
+   global de globals.css (que tiene versión clara y oscura).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  --in-texto: var(--m2-texto, var(--text-1));
+  --in-texto-2: var(--m2-texto-2, var(--text-2));
+  --in-texto-3: var(--m2-texto-3, var(--text-3));
+  --in-tarjeta: var(--m2-tarjeta, var(--bg-elev));
+  --in-fondo: var(--m2-n1-fondo, var(--bg-elev-2));
+  --in-borde: var(--m2-tarjeta-borde, var(--border-soft));
+  --in-activo: var(--m2-activo, var(--brand));
+  --in-foco: var(--m2-foco, var(--ring));
+  color: var(--in-texto);
+  font-size: 13px;
+}
+
+.para { margin: -8px 0 0; color: var(--in-texto-3); font-size: 12.5px; }
+
+.grupo { display: flex; flex-direction: column; gap: 6px; }
+.grupoTitulo {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--in-texto-3);
+}
+
+.lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--in-borde);
+  border-radius: 10px;
+  background: var(--in-tarjeta);
+  cursor: pointer;
+}
+.opcion:has(input:checked) { border-color: var(--in-activo); }
+.opcion:focus-within { box-shadow: var(--in-foco); }
+.opcion input { accent-color: var(--in-activo); width: 16px; height: 16px; flex: none; }
+.opcionNombre { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.opcionEtiqueta { flex: none; font-size: 11.5px; color: var(--in-texto-3); }
+
+.previa {
+  margin: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--in-borde);
+  border-radius: 10px;
+  background: var(--in-fondo);
+  color: var(--in-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.previaTitulo { display: block; margin-bottom: 4px; font-weight: 600; color: var(--in-texto); }
+.previa + .previa { margin-top: 0; }
+
+/* ── La ranura del panel de la cita ── */
+.ranuraBotones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ranuraOferta { display: flex; flex-direction: column; gap: 8px; }
+.ranuraOfertaBotones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 640px) {
+  .previa { max-height: 200px; }
+}

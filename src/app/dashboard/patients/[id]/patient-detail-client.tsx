@@ -137,6 +137,8 @@ import { ligarControlFirmadoDeHoy } from "@/app/actions/orthodontics/ligarContro
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useTextosFirmaControl } from "@/components/specialties/orthodontics/redesign/textos-firma-control";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
+// ws1-t10: al terminar la consulta, ofrecer las indicaciones de cuidado.
+import { OfertaIndicacionesFicha } from "@/components/indicaciones/oferta-indicaciones-ficha";
 import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
@@ -1004,6 +1006,8 @@ export function PatientDetailClient({
     appointmentId: string;
     treatments: SuggestedTreatment[];
   }>({ open: false, appointmentId: "", treatments: [] });
+  // ws1-t10: la cita que se acaba de terminar aquí (para ofrecer sus indicaciones de cuidado).
+  const [citaTerminada, setCitaTerminada] = useState<string | null>(null);
   const [records, setRecords] = useState(initialRecords);
   // Sincroniza con props frescas tras router.refresh()/navegación (mismo patrón
   // que `invoices` arriba). Sin esto el historial de Consultas queda en un
@@ -1639,6 +1643,7 @@ export function PatientDetailClient({
       // ws1-t8 (revisión final de ortodoncia, fallo 5): la cabecera («Próxima cita … · Iniciar consulta») seguía con
       // la cita recién completada hasta recargar. El servidor ya la cerró: se pinta al momento, como al cancelar.
       marcarEstadoDeCita(activeAppointment.id, "COMPLETED");
+      setCitaTerminada(activeAppointment.id);
       // Si el server detectó tratamientos, abrir el modal de facturación.
       const suggested: SuggestedTreatment[] = data.suggestedTreatments ?? [];
       if (suggested.length > 0) {
@@ -3538,6 +3543,9 @@ export function PatientDetailClient({
           />
         )}
       </div>
+
+      {/* ws1-t10: «Consulta terminada · Ver indicaciones» (un aviso, no otra ventana). */}
+      <OfertaIndicacionesFicha citaTerminada={citaTerminada} />
 
       {/* Treatments detected modal — post-firmar consulta */}
       <TreatmentsModal
