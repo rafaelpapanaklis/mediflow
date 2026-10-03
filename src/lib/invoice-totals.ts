@@ -14,6 +14,7 @@
  */
 
 import { round2 } from "@/lib/quotes/compute";
+import { METODO_A_FORMA_SAT, formaDePagoSat, formaDeMetodo } from "@/lib/invoices/cfdi-reglas";
 
 export { round2 };
 
@@ -398,39 +399,38 @@ export function spreadInvoiceDiscount(items: any[], discountTotal: number): numb
   return out;
 }
 
-/** Método de pago interno → forma de pago SAT (c_FormaPago). */
-export const METHOD_TO_SAT_FORM: Record<string, string> = {
-  cash: "01",     // Efectivo
-  check: "02",    // Cheque nominativo
-  transfer: "03", // Transferencia electrónica de fondos
-  credit: "04",   // Tarjeta de crédito
-  debit: "28",    // Tarjeta de débito
-  online: "04",   // Pago en línea del portal (tarjeta vía Stripe)
-};
+/**
+ * Método de pago interno → forma de pago SAT (c_FormaPago). Solo los que el
+ * panel SABE (ws1-t4, tanda 0): Mercado Pago, «tarjeta» sin más, el pago en
+ * línea del portal y «otro» no están, porque el panel no sabe si fue crédito,
+ * débito u OXXO. La tabla completa (con esos en null) vive en
+ * lib/invoices/cfdi-reglas.ts.
+ */
+export const METHOD_TO_SAT_FORM: Record<string, string> = Object.fromEntries(
+  Object.entries(METODO_A_FORMA_SAT).filter((e): e is [string, string] => typeof e[1] === "string"),
+);
 
 /**
- * Forma de pago SAT derivada de los pagos REALES de la factura: el método del
- * último pago (excluyendo reembolsos) manda — también en pagos mixtos. Sin
- * pagos mapeables cae a `invoice.paymentMethod` y al final a "03".
+ * Forma de pago SAT que se PROPONE para el CFDI (ws1-t4, tanda 0): la del pago
+ * de MAYOR importe, sumando por forma (Anexo 20, Guía de llenado), no la del
+ * último pago. `null` = no se sabe (Mercado Pago, tarjeta sin tipo, un saldo a
+ * favor de origen desconocido…) y el formulario obliga a escoger; antes caía
+ * en «03 transferencia», que era inventar.
+ *
+ * `formaDeAnticipo`: la forma del dinero que formó el saldo a favor, para los
+ * pagos «anticipo» (la calcula el servidor: GET /api/cfdi/forma-pago).
+ * Sin pagos, la forma del método guardado en la factura (si se sabe).
  */
 export function derivePaymentForm(
   payments: any[] | null | undefined,
   invoicePaymentMethod?: string | null,
-): string {
-  if (Array.isArray(payments) && payments.length > 0) {
-    const sorted = [...payments].sort((a, b) => {
-      const ta = a?.paidAt ? new Date(a.paidAt).getTime() : 0;
-      const tb = b?.paidAt ? new Date(b.paidAt).getTime() : 0;
-      return ta - tb;
-    });
-    for (let i = sorted.length - 1; i >= 0; i--) {
-      const m = sorted[i]?.method;
-      if (m === "refund") continue;
-      if (m && METHOD_TO_SAT_FORM[m]) return METHOD_TO_SAT_FORM[m];
-    }
+  formaDeAnticipo?: string | null,
+): string | null {
+  const reales = Array.isArray(payments)
+    ? payments.filter((p) => p && p.method !== "refund" && Number(p.amount) > 0)
+    : [];
+  if (reales.length > 0) {
+    return formaDePagoSat(reales.map((p) => ({ method: p.method, amount: Number(p.amount) })), formaDeAnticipo);
   }
-  if (invoicePaymentMethod && METHOD_TO_SAT_FORM[invoicePaymentMethod]) {
-    return METHOD_TO_SAT_FORM[invoicePaymentMethod];
-  }
-  return "03";
+  return formaDeMetodo(invoicePaymentMethod ?? null, formaDeAnticipo);
 }

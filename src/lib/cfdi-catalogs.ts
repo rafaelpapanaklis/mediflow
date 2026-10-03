@@ -55,7 +55,8 @@ export const USOS_CFDI = [
   { clave: "D04", descripcion: "Donativos" },
   { clave: "D07", descripcion: "Primas por seguros de gastos médicos" },
   { clave: "S01", descripcion: "Sin efectos fiscales" },
-  { clave: "CP01", descripcion: "Pagos" },
+  // CP01 «Pagos» NO va aquí (ws1-t4, tanda 0): solo vale en un complemento de
+  // pago (tipo P), y estos selectores timbran CFDI de ingreso.
 ];
 
 // Formas de pago SAT (c_FormaPago) que puede cobrar una clínica. Fuente única

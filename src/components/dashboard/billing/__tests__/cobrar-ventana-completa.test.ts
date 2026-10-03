@@ -144,7 +144,10 @@ for (const c of CAMINOS_ENVOLTORIO) {
 
 test("Sección F del caso: «Cobrar» (lo vencido o la cuota) y «Cobrar» de cada control", () => {
   const src = leer("src/components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
-  assert.equal((src.match(/<CobrarEnFactura\b/g) ?? []).length, 2);
+  // ws1-t4 (tanda 0): la tercera es «Facturar pagos (CFDI)», que abre la misma
+  // factura SIN el cobro, para «Facturar este pago».
+  assert.equal((src.match(/<CobrarEnFactura\b/g) ?? []).length, 3);
+  assert.match(src, /invoiceId=\{panel\.invoiceId\}[\s\S]*?abrirCobro=\{false\}/);
   assert.match(src, /invoiceId=\{controlACobrar\.invoiceId\}[\s\S]*?montoSugerido=\{controlACobrar\.balance\}/);
   assert.match(src, /invoiceId=\{idFacturaACobrar\}[\s\S]*?montoSugerido=\{montoCobrarSugerido\}/);
 });

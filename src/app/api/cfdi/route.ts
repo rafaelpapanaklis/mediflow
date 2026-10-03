@@ -3,7 +3,7 @@ import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitKey } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey,
@@ -29,17 +29,22 @@ import {
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { esPlanAPlazos } from "@/lib/invoices/plan-de-pagos";
 import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
+import { USOS_CFDI } from "@/lib/cfdi-catalogs";
+import {
+  bloqueoPorRetencion, bloqueoPorSaldo, usoCfdiPorRegimen, errorFormaDePagoRequerida,
+  LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS, llaveLimiteTimbrado, errorLimiteTimbrado,
+} from "@/lib/invoices/cfdi-reglas";
+import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server";
 
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 5, 60 * 60 * 1000);
-  if (rl) return rl;
-
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
   if (err) return err;
 
   const body = await req.json();
-  const { invoiceId, receptor, usoCfdi, paymentForm, taxMode: taxModeIn, confirmUnpaidPue } = body;
+  // `confirmUnpaidPue` (el «timbrar PUE con saldo de todos modos») ya no existe
+  // (ws1-t4, tanda 0): si un cliente viejo lo manda, se ignora.
+  const { invoiceId, receptor, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
 
   // ── QUÉ factura se timbra ─────────────────────────────────────────────────
   // El `invoiceId` NO se validaba y con `undefined` Prisma DESCARTA la clave del
@@ -68,6 +73,7 @@ export async function POST(req: NextRequest) {
     select: {
       facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true,
       plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true, locale: true,
+      regimenFiscal: true,
     },
   });
 
@@ -76,6 +82,30 @@ export async function POST(req: NextRequest) {
       error: "Configura tu RFC y certificados en Configuración → Facturación antes de timbrar"
     }, { status: 400 });
   }
+
+  // ── Límite por CLÍNICA (ws1-t4, tanda 0) ───────────────────────────────────
+  // Antes eran 5 por hora por IP: la sexta factura de la tarde de una recepción
+  // recibía 429. El cupo mensual y el apartado de la factura ya frenan abusos.
+  if (!rateLimitKey(llaveLimiteTimbrado(ctx!.clinicId), LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS)) {
+    return NextResponse.json(errorLimiteTimbrado(clinic.locale), { status: 429 });
+  }
+
+  // ── Candado de retenciones (ws1-t4, tanda 0, F-01a) ────────────────────────
+  // Emisor 612/626 + receptor persona moral: la empresa retiene ISR y el CFDI
+  // tendría que decirlo. Mientras no haya retenciones, no se timbra.
+  const retencion = bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
+  if (retencion) return NextResponse.json(retencion, { status: 409 });
+
+  // Uso del CFDI: el que manda el formulario (si existe en el catálogo) o el
+  // que corresponde al régimen del receptor — antes era D01 para todos, que
+  // no vale para un RESICO ni para una empresa.
+  if (usoCfdi !== undefined && usoCfdi !== null && usoCfdi !== ""
+      && !USOS_CFDI.some((u) => u.clave === usoCfdi)) {
+    return NextResponse.json({ error: `Uso de CFDI inválido: ${String(usoCfdi)}.` }, { status: 400 });
+  }
+  const uso: string = typeof usoCfdi === "string" && usoCfdi
+    ? usoCfdi
+    : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
 
   // En PRUEBAS todo sigue permitido como hasta hoy (Facturapi timbra con sus
   // propios certificados de prueba y nada llega al SAT).
@@ -169,9 +199,8 @@ export async function POST(req: NextRequest) {
   //   1. Si YA hay algún pago de esta factura con CFDI vigente, timbrar la
   //      factura completa la duplicaría (el mismo dinero, dos veces ante el
   //      SAT) — se bloquea siempre, sin importar si está saldada.
-  //   2. Si la factura ES a plazos y todavía tiene saldo, el override
-  //      `confirmUnpaidPue` NO aplica aquí: no hay "confirmar y timbrar
-  //      igual", hay que facturar pago por pago.
+  //   2. Si todavía tiene saldo, no se timbra (abajo): a plazos, se factura
+  //      pago por pago.
   //
   // Sin sql/cfdi-pagos-a-plazos.sql aplicado, ambas consultas contestan
   // "no hay" (columna ausente) y esta factura sigue su camino de siempre.
@@ -186,30 +215,25 @@ export async function POST(req: NextRequest) {
   const condicionesDeEstaFactura = condicionesPorFactura.get(invoiceId) ?? null;
   const esAPlazos = esPlanAPlazos(condicionesDeEstaFactura);
 
-  // ── PUE con saldo pendiente ───────────────────────────────────────────────
-  // El CFDI sale como PUE (pago en una sola exhibición); si la factura no está
-  // totalmente pagada, se exige confirmación explícita y queda en el audit log
-  // — salvo que sea a plazos, donde no hay override posible (ver arriba).
-  const fullyPaid = invoice.paid + 0.01 >= invoice.total;
-  if (!fullyPaid && esAPlazos) {
-    return NextResponse.json({
-      error: `Esta factura es a plazos y todavía tiene saldo ($${invoice.balance.toFixed(2)}). No se puede timbrar entera como PUE: factura cada pago por separado con el botón "Facturar este pago".`,
-      code: "CFDI_A_PLAZOS_CON_SALDO",
-    }, { status: 409 });
-  }
-  if (!fullyPaid && confirmUnpaidPue !== true) {
-    return NextResponse.json({
-      error: `La factura tiene saldo pendiente ($${invoice.balance.toFixed(2)}) y el CFDI se emitiría como PUE (pago en una sola exhibición). Confirma explícitamente para timbrar de todos modos.`,
-      code: "CFDI_UNPAID_PUE",
-    }, { status: 409 });
-  }
+  // ── PUE con saldo pendiente (ws1-t4, tanda 0, F-04) ─────────────────────
+  // El CFDI de la factura completa sale PUE («pagado en una sola exhibición»).
+  // Con saldo NO se timbra: ya no hay «confirmar y timbrar igual». Si es a
+  // plazos, el aviso manda a «Facturar este pago» (cada pago ya cobrado, su
+  // propio CFDI PUE por lo cobrado).
+  const saldo = bloqueoPorSaldo({ total: invoice.total, paid: invoice.paid, esAPlazos, locale: clinic.locale });
+  if (saldo) return NextResponse.json(saldo, { status: 409 });
 
   // ── Forma de pago SAT ─────────────────────────────────────────────────────
-  // La manda el modal (selector editable); si no viene, se deriva del método
-  // de los pagos registrados (último pago manda; sin pagos → "03").
-  const payForm: string = typeof paymentForm === "string" && paymentForm.trim()
+  // La manda el modal (selector editable); si no viene, la del pago de MAYOR
+  // importe (Anexo 20). Si el panel no la sabe (Mercado Pago, tarjeta sin
+  // tipo…), no se inventa: hay que escogerla.
+  const formaDeAnticipo = invoice.payments.some((p: any) => p.method === "anticipo")
+    ? await formaDeAnticipoDelPaciente(prisma, { clinicId: ctx!.clinicId, patientId: invoice.patientId })
+    : null;
+  const payForm: string | null = typeof paymentForm === "string" && paymentForm.trim()
     ? paymentForm.trim()
-    : derivePaymentForm(invoice.payments, invoice.paymentMethod);
+    : derivePaymentForm(invoice.payments, invoice.paymentMethod, formaDeAnticipo);
+  if (!payForm) return NextResponse.json(errorFormaDePagoRequerida(clinic.locale), { status: 400 });
   if (!FORMAS_PAGO_SAT.some((f) => f.clave === payForm)) {
     return NextResponse.json({ error: `Forma de pago SAT inválida: ${payForm}` }, { status: 400 });
   }
@@ -295,7 +319,7 @@ export async function POST(req: NextRequest) {
     const result = await createInvoice({
       orgApiKey,
       customerId,
-      usoCfdi:     usoCfdi ?? "D01",
+      usoCfdi:     uso,
       paymentForm: payForm,
       items,
       // Un 200 sin UUID se trata como «no se sabe» y no como un timbre bueno:
@@ -386,8 +410,8 @@ export async function POST(req: NextRequest) {
     const plan = await getResolvedPlan(clinic.plan);
     const q = cfdiOverage(usage.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
 
-    // Rastro en el audit log (antes el timbrado no se registraba). Incluye si
-    // se confirmó explícitamente timbrar PUE con saldo pendiente.
+    // Rastro en el audit log (antes el timbrado no se registraba), con la forma
+    // de pago y el uso que se mandaron.
     await logMutation({
       texto: "Timbró el CFDI de una factura",
       req,
@@ -400,7 +424,7 @@ export async function POST(req: NextRequest) {
       after:  {
         cfdiUuid: result.uuid,
         cfdi: {
-          total: result.total, paymentForm: payForm, taxMode, unpaidPueConfirmed: !fullyPaid,
+          total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode,
           ...(stampedRecord ? { totalMismatch: stampedRecord } : {}),
         },
       },

@@ -218,7 +218,7 @@ const entorno = { live: true };
 (mock as any).module("@/lib/plans", {
   namedExports: { getResolvedPlan: async () => ({ cfdiMonthly: 100, cfdiOverageCents: 0 }) },
 });
-(mock as any).module("@/lib/rate-limit", { namedExports: { rateLimit: () => null } });
+(mock as any).module("@/lib/rate-limit", { namedExports: { rateLimit: () => null, rateLimitKey: () => true } });
 
 // ── Sesión, visibilidad, caché y auditoría ─────────────────────────────────
 const authCtx: any = {
@@ -257,8 +257,16 @@ const TIMBRAR = {
   usoCfdi: "S01",
   paymentForm: "03",
   taxMode: "exento",
-  confirmUnpaidPue: true,
 };
+
+/**
+ * ws1-t4, tanda 0: con saldo ya NO se timbra la factura completa (no hay
+ * «confirmar y timbrar PUE igual»), así que las pruebas del candado timbran una
+ * factura PAGADA. Las de cancelar/anular siguen con la factura sin pagar.
+ */
+function pagada() {
+  Object.assign(db.invoice, { status: "PAID", paid: db.invoice.total, balance: 0 });
+}
 
 /** Factura de $1,000 exenta con un concepto. */
 function setInvoice(inv: Record<string, any> = {}) {
@@ -309,6 +317,7 @@ beforeEach(() => {
 
 test("N2 · dos pestañas timbran a la vez la misma factura: timbra UNA y la otra se rechaza", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
 
   const [a, b] = await quieto(() => Promise.all([POST(req(TIMBRAR)), POST(req(TIMBRAR))]));
   const r = [await leer(a), await leer(b)].sort((x, y) => x.status - y.status);
@@ -325,6 +334,7 @@ test("N2 · dos pestañas timbran a la vez la misma factura: timbra UNA y la otr
 
 test("N2 · la escritura falla DESPUÉS de timbrar: el UUID queda guardado y el reintento no timbra otro", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   db.txFalla = true;
 
   const primero = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -340,6 +350,7 @@ test("N2 · la escritura falla DESPUÉS de timbrar: el UUID queda guardado y el 
 
 test("N2 · si la base se cae mientras Facturapi timbra, el reintento tampoco timbra otro", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.alTimbrar = () => { db.caida = true; };
 
   const primero = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -362,6 +373,7 @@ test("N2 · si la base se cae mientras Facturapi timbra, el reintento tampoco ti
 
 test("H-8 · la respuesta se pierde DESPUÉS de timbrar: el reintento NO vuelve a timbrar", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.respuestaPerdida = true;
 
   const primero = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -390,6 +402,7 @@ test("H-8 · si la red falla ANTES de pedir el timbre, la factura NO se bloquea"
   // se pidió ningún timbre. Bloquear la factura ahí sería un susto gratis y
   // trabajo para soporte.
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   fallaCliente = true;
 
   const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -405,6 +418,7 @@ test("H-8 · si la red falla ANTES de pedir el timbre, la factura NO se bloquea"
 
 test("H-8 · Facturapi acepta pero no manda UUID: tampoco se vuelve a timbrar", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.sinUuid = true;
 
   const primero = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -424,6 +438,7 @@ test("H-8 · manda la MARCA del error, no lo que parezca su mensaje", async () =
   // marcó como incierto porque un 5xx no dice nada sobre el comprobante. Si la
   // ruta se guiara por el texto en vez de por la marca, soltaría el apartado.
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.rechazoMarcadoIncierto = "El RFC del receptor no está en la lista de RFC inscritos";
 
   const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -433,6 +448,7 @@ test("H-8 · manda la MARCA del error, no lo que parezca su mensaje", async () =
 
 test("H-8 · el mensaje le dice a la clínica que NO lo vuelva a timbrar", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.respuestaPerdida = true;
 
   const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -445,6 +461,7 @@ test("H-8 · el mensaje le dice a la clínica que NO lo vuelva a timbrar", async
 
 test("N2 · el precio cambió entre la lectura y el timbrado: no se timbra el importe viejo", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   // Justo después de que el timbrado lee la factura, otra pestaña le baja el
   // precio a $500 (edit-price). Timbrar ahora emitiría un CFDI de $1,000.
   db.trasLeer = () => { db.invoice.total = 500; db.invoice.discount = 500; db.invoice.balance = 500; };
@@ -457,6 +474,7 @@ test("N2 · el precio cambió entre la lectura y el timbrado: no se timbra el im
 
 test("N2 · la factura se canceló entre la lectura y el timbrado: no se timbra", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   db.trasLeer = () => { db.invoice.status = "CANCELLED"; };
 
   const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -467,6 +485,7 @@ test("N2 · la factura se canceló entre la lectura y el timbrado: no se timbra"
 
 test("N2 · Facturapi rechaza (RFC mal): la factura queda libre para corregir y reintentar", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.rechazo = "El RFC del receptor no está en la lista de RFC inscritos";
 
   const malo = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -483,6 +502,7 @@ test("N2 · Facturapi rechaza (RFC mal): la factura queda libre para corregir y 
 
 test("N2 · RFC en la lista negra del SAT: no timbra y no deja la factura apartada", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   pac.efos = true;
 
   const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
@@ -493,9 +513,10 @@ test("N2 · RFC en la lista negra del SAT: no timbra y no deja la factura aparta
 
 test("N2 · el timbrado normal sigue igual: UUID, CfdiRecord, contador y respuesta", async () => {
   const { POST } = await import("@/app/api/cfdi/route");
+  pagada();
   setInvoice({ status: "PAID", paid: 1000, balance: 0 });
 
-  const r = await quieto(async () => leer(await POST(req({ ...TIMBRAR, confirmUnpaidPue: undefined }))));
+  const r = await quieto(async () => leer(await POST(req(TIMBRAR))));
   assert.equal(r.status, 200);
   assert.equal(r.body.uuid, "UUID-1");
   assert.equal(r.body.cfdiId, "cfdi1");
@@ -593,27 +614,30 @@ test("N3 · en PRUEBAS (FACTURAPI_ENV no es live) un CFDI de prueba no bloquea: 
   assert.equal(db.invoice.status, "CANCELLED");
 });
 
-test("N3 · alguien timbra mientras otro cancela: la cancelación no pisa el CFDI", async () => {
+test("N3 · alguien intenta timbrar mientras otro cancela: con saldo no se timbra y la cancelación sigue", async () => {
+  // ws1-t4, tanda 0: cancelar exige una factura SIN pagos y timbrar la factura
+  // completa exige que esté PAGADA, así que ya no pueden coincidir sobre la
+  // misma factura. Lo que se fija: el timbrado se rechaza ANTES de apartarla y
+  // de hablar con Facturapi, y la cancelación termina sin tropezar con nada.
   const cancel = (await import("@/app/api/invoices/[id]/cancel/route")).POST;
   const timbrar = (await import("@/app/api/cfdi/route")).POST;
 
-  // La cancelación lee la factura (sin CFDI) y se queda esperando la
-  // comprobación de visibilidad del paciente…
   let soltar!: () => void;
   vis.espera = new Promise<void>((r) => { soltar = r; });
   const cancelando = cancel(req({ reason: "ya no" }), P);
   await new Promise((r) => setTimeout(r, 5));
 
-  // …mientras tanto el administrador timbra la misma factura.
   vis.espera = null;
   const t = await quieto(async () => leer(await timbrar(req(TIMBRAR))));
-  assert.equal(t.status, 200);
-  assert.equal(db.invoice.cfdiUuid, "UUID-1");
+  assert.equal(t.status, 409, `con saldo no se timbra (${JSON.stringify(t.body)})`);
+  assert.equal(t.body.code, "CFDI_CON_SALDO");
+  assert.equal(pac.timbres, 0, "ni se le pidió el timbre a Facturapi");
+  assert.equal(db.invoice.cfdiUuid, null, "ni se apartó la factura");
 
   soltar();
   const c = await leer(await cancelando);
-  assert.equal(c.status, 409, `la cancelación ya no puede seguir (${JSON.stringify(c.body)})`);
-  assert.equal(db.invoice.status, "PENDING", "la factura timbrada no queda cancelada");
+  assert.equal(c.status, 200, `la cancelación sigue (${JSON.stringify(c.body)})`);
+  assert.equal(db.invoice.status, "CANCELLED");
 });
 
 test("N3 · alguien timbra mientras otro reembolsa: el reembolso no deja el CFDI vigente por el total", async () => {

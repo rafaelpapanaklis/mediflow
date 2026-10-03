@@ -16,9 +16,10 @@ import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detai
 import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-badge";
 import { invoiceStatusBadge, isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { usoCfdiPorRegimen, avisoDeSaldo } from "@/lib/invoices/cfdi-reglas";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { receptorInicial } from "@/lib/orthodontics/receptor-responsable";
@@ -78,6 +79,7 @@ function patientNameOf(inv: any): string {
 
 export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false, puedeEditarFacturas = false }: Props) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
   const [search, setSearch]     = useState("");
@@ -173,12 +175,18 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // CFDI form
   const [cfdiLoading, setCfdiLoading] = useState(false);
   const [cfdiForm, setCfdiForm] = useState({
-    rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "D01", formaPago: "03",
+    rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "S01", usoManual: false, formaPago: "" as string,
     impuestos: (clinic.cfdiTaxMode === "iva16" ? "iva16" : "exento") as CfdiTaxMode,
   });
-  const setCfdiF = (k: string, v: string) => setCfdiForm(f => ({ ...f, [k]: v }));
-  // Saldo pendiente → confirmación explícita PUE; mismatch → aviso con CTA.
-  const [cfdiPueOk, setCfdiPueOk] = useState(false);
+  // ws1-t4, tanda 0: el uso sigue al régimen y al RFC hasta que alguien lo
+  // escoja a mano (antes nacía en D01 para todos).
+  const setCfdiF = (k: string, v: string) => setCfdiForm(f => {
+    const n: any = { ...f, [k]: v };
+    if (k === "usoCfdi") n.usoManual = true;
+    else if ((k === "regimenFiscal" || k === "rfc") && !f.usoManual) n.usoCfdi = usoCfdiPorRegimen(n.regimenFiscal, n.rfc);
+    return n;
+  });
+  // Mismatch (y los bloqueos que dicen qué hacer) → aviso con CTA.
   const [cfdiMismatch, setCfdiMismatch] = useState<string | null>(null);
   const [cfdiBlockCode, setCfdiBlockCode] = useState<string | null>(null);
 
@@ -187,16 +195,29 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   // modelo de la factura y la preferencia de la clínica (exento por default —
   // servicios médicos). Todo sigue siendo editable factura por factura.
   function openCfdiModal(inv: any) {
+    const regimenInicial = inv.patient?.regimenFiscalPac || "616";
+    const formaInicial = derivePaymentForm(inv.payments, inv.paymentMethod);
     setCfdiForm({
       rfc:           inv.patient?.rfcPaciente ?? "",
       nombre:        inv.patient?.razonSocialPac ?? "",
-      regimenFiscal: inv.patient?.regimenFiscalPac || "616",
+      regimenFiscal: regimenInicial,
       cp:            inv.patient?.cpPaciente ?? "",
-      usoCfdi:       "D01",
-      formaPago:     derivePaymentForm(inv.payments, inv.paymentMethod),
+      usoCfdi:       usoCfdiPorRegimen(regimenInicial, inv.patient?.rfcPaciente),
+      usoManual:     false,
+      formaPago:     formaInicial ?? "",
       impuestos:     resolveTaxMode(inv, clinic.cfdiTaxMode),
     });
-    setCfdiPueOk(false);
+    // Un «anticipo» (saldo a favor) hereda la forma del dinero original: eso lo
+    // sabe el servidor. Solo llena el campo si sigue vacío y es esta factura.
+    if (!formaInicial) {
+      fetch(`/api/cfdi/forma-pago?invoiceId=${encodeURIComponent(inv.id)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d?.forma || cfdiAbiertoParaRef.current !== inv.id) return;
+          setCfdiForm((f) => (f.formaPago ? f : { ...f, formaPago: d.forma }));
+        })
+        .catch(() => {});
+    }
     setCfdiMismatch(null);
     setCfdiBlockCode(null);
     setCfdiFor(inv);
@@ -211,7 +232,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       if (!responsable || cfdiAbiertoParaRef.current !== inv.id) return;
       const { datos } = receptorInicial(null, responsable);
       setCfdiForm((f) => (f.rfc === precargado.rfc && f.nombre === precargado.nombre && f.cp === precargado.cp
-        ? { ...f, rfc: datos.rfc, nombre: datos.nombre, regimenFiscal: datos.regimen, cp: datos.cp }
+        ? { ...f, rfc: datos.rfc, nombre: datos.nombre, regimenFiscal: datos.regimen, cp: datos.cp, usoCfdi: f.usoManual ? f.usoCfdi : usoCfdiPorRegimen(datos.regimen, datos.rfc) }
         : f));
     });
   }
@@ -270,7 +291,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           usoCfdi: cfdiForm.usoCfdi,
           paymentForm: cfdiForm.formaPago,
           taxMode: cfdiForm.impuestos,
-          confirmUnpaidPue: cfdiPueOk === true ? true : undefined,
         }),
       });
       const data = await res.json();
@@ -679,7 +699,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                   </div>
                   <div className="field-new">
                     <label className="field-new__label">Forma de pago</label>
-                    <select className="input-new" value={cfdiForm.formaPago} onChange={e => setCfdiF("formaPago", e.target.value)}>
+                    <select className="input-new" value={cfdiForm.formaPago} onChange={e => setCfdiF("formaPago", e.target.value)}
+                      aria-invalid={!cfdiForm.formaPago || undefined} data-cfdi-forma-pago>
+                      {!cfdiForm.formaPago && <option value="" disabled>{locale.startsWith("en") ? "Choose how the patient paid…" : "Elige con qué pagó el paciente…"}</option>}
                       {FORMAS_PAGO_SAT.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.descripcion}</option>)}
                     </select>
                   </div>
@@ -708,20 +730,26 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
               )}
 
               {cfdiFor.balance > 0 && (
-                <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, fontSize: 12, background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }}>
-                  <p style={{ margin: 0 }}>{t("billing.billingClient.cfdiBalanceWarning")}</p>
-                  {/* Bloqueo suave: sin esta confirmación el server rechaza el
-                      timbrado de facturas con saldo (409 CFDI_UNPAID_PUE). */}
-                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, cursor: "pointer", fontWeight: 600 }}>
-                    <input type="checkbox" style={{ marginTop: 2 }} checked={cfdiPueOk} onChange={e => setCfdiPueOk(e.target.checked)} />
-                    <span>{t("billing.billingClient.cfdiUnpaidConfirm")}</span>
-                  </label>
+                <div data-cfdi-con-saldo style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, fontSize: 12, background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }}>
+                  {/* ws1-t4, tanda 0: con saldo NO se timbra la factura completa
+                      (ya no hay «timbrar de todos modos»). La lista no sabe si es
+                      a plazos: el aviso dice los dos caminos y abre la factura,
+                      donde está «Facturar este pago». */}
+                  <p style={{ margin: 0 }}>{avisoDeSaldo(null, locale)}</p>
+                  <button
+                    type="button"
+                    className="btn-new btn-new--ghost btn-new--sm"
+                    style={{ marginTop: 8 }}
+                    onClick={() => { const inv = invoices.find(i => i.id === cfdiFor.id) ?? cfdiFor; setCfdiFor(null); setCobroMontoSugerido(null); setDetailInvoice(inv); }}
+                  >
+                    {locale.startsWith("en") ? "Open the invoice" : "Abrir la factura"}
+                  </button>
                 </div>
               )}
             </div>
             <div className="modal__footer">
               <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>{t("common.cancel")}</ButtonNew>
-              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading || cfdiImpideReintento(cfdiBlockCode) || (cfdiFor.balance > 0 && !cfdiPueOk)}>
+              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading || cfdiImpideReintento(cfdiBlockCode) || cfdiFor.balance > 0 || !cfdiForm.formaPago}>
                 {cfdiLoading ? t("billing.billingClient.stampingEllipsis") : t("billing.billingClient.stampAtSat")}
               </ButtonNew>
             </div>

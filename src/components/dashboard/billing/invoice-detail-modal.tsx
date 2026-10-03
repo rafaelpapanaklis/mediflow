@@ -19,7 +19,8 @@ import { formatDate } from "@/lib/utils";
 // mismo formateador que ya usa la LISTA de facturas y el PDF, así que los
 // tres sitios a un clic de distancia dicen por fin el mismo número.
 import { fmtMXNdec } from "@/lib/format";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
+import { usoCfdiPorRegimen, avisoDeSaldo } from "@/lib/invoices/cfdi-reglas";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { esPlanAPlazos, montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { abrirCobroClasicoAlAbrir, montoDelCobroAlAbrir } from "./cobrar-en-factura-core";
@@ -185,6 +186,7 @@ type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi"
 
 export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false, abrirCobro = false, montoSugerido: montoSugeridoDeQuienAbre, onCobrado, onEditar }: InvoiceDetailModalProps) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const confirmDialog = useConfirm();
   // ws1-t1 (M2): «Registrar anticipo recibido» cambia `paid`/`balance`/status
@@ -230,7 +232,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   const [cancelReason, setCancelReason] = useState("");
 
   // CFDI — formulario fiscal del receptor + estado de timbrado optimista.
-  const [fiscal, setFiscal] = useState({ rfc: "", nombre: "", regimen: "612", cp: "", uso: "D01", email: "", formaPago: "03", impuestos: "exento" as CfdiTaxMode });
+  // ws1-t4, tanda 0: el uso sigue al régimen (y al RFC) hasta que alguien lo
+  // escoja a mano; la forma de pago puede nacer vacía («Elige…») cuando el
+  // panel no sabe con qué pagó el paciente (Mercado Pago, tarjeta sin tipo).
+  const [fiscal, setFiscal] = useState({ rfc: "", nombre: "", regimen: "612", cp: "", uso: usoCfdiPorRegimen("612"), usoManual: false, email: "", formaPago: "" as string, impuestos: "exento" as CfdiTaxMode });
   const [stampedUuid, setStampedUuid] = useState<string | null>(null);
   const [cfdiId, setCfdiId] = useState<string | null>(null);
   // Consumo CFDI del mes (contador discreto en el sub-form + aviso de excedente).
@@ -242,8 +247,6 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // se cerró o se abrió el de otra factura, se descarta en vez de pintar cifras
   // de una apertura anterior.
   const cfdiInvoiceRef = useRef<string | null>(null);
-  // Saldo pendiente → el CFDI sale como PUE; exige confirmación explícita.
-  const [pueOk, setPueOk] = useState(false);
   // Error de integridad total↔conceptos (409 del server) → aviso con CTA.
   const [cfdiMismatch, setCfdiMismatch] = useState<string | null>(null);
   // Qué bloqueó el timbrado: cambia solo la acción del aviso (corregir la factura
@@ -252,7 +255,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
 
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
-  useEffect(() => { setStampedUuid(null); setCfdiId(null); setPueOk(false); setCfdiMismatch(null); setCfdiBlockCode(null); }, [invoice?.id]);
+  useEffect(() => { setStampedUuid(null); setCfdiId(null); setCfdiMismatch(null); setCfdiBlockCode(null); }, [invoice?.id]);
   // La pregunta del diseño nuevo no sobrevive ni a un cambio de factura ni a
   // un cierre del modal desde fuera: si no, la siguiente apertura saldría con
   // «¿Marcar pagada?» ya abierto sobre otra factura. Con el interruptor apagado
@@ -498,9 +501,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       nombre:  inicial.datos.nombre,
       regimen: inicial.datos.regimen,
       cp:      inicial.datos.cp,
-      uso:     "D01",
+      uso:     usoCfdiPorRegimen(inicial.datos.regimen, inicial.datos.rfc),
+      usoManual: false,
       email:   "",
-      formaPago: derivePaymentForm(invoice?.payments, invoice?.paymentMethod),
+      formaPago: derivePaymentForm(invoice?.payments, invoice?.paymentMethod) ?? "",
       // resolveTaxMode respeta la factura por encima de la clínica: si
       // internamente ya se le agregó IVA al paciente, sale iva16 pase lo que
       // pase. El `?? null` es cinturón y tirantes: si la prop faltara en runtime
@@ -525,7 +529,18 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         if (typeof d.live === "boolean") setCfdiLive(d.live);
       })
       .catch(() => {});
-    setPueOk(false);
+    // La forma de pago de un «anticipo» (saldo a favor) la sabe el servidor: si
+    // aquí no se pudo proponer, se le pregunta y, si la sabe, se llena — salvo
+    // que alguien ya haya escogido una mientras tanto.
+    if (invoice?.id && !derivePaymentForm(invoice?.payments, invoice?.paymentMethod)) {
+      fetch(`/api/cfdi/forma-pago?invoiceId=${encodeURIComponent(invoice.id)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d?.forma || cfdiInvoiceRef.current !== openedFor) return;
+          setFiscal((f) => (f.formaPago ? f : { ...f, formaPago: d.forma }));
+        })
+        .catch(() => {});
+    }
     setCfdiMismatch(null);
     setCfdiBlockCode(null);
     setSub("cfdi");
@@ -571,7 +586,6 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           usoCfdi:     fiscal.uso,
           paymentForm: fiscal.formaPago,
           taxMode:     fiscal.impuestos,
-          confirmUnpaidPue: pueOk === true ? true : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1075,6 +1089,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                         {admiteCfdiPorPago && (
                           <PaymentCfdiButton
                             paymentId={p.id}
+                            invoiceId={invoice.id}
                             amount={p.amount}
                             method={p.method}
                             clinicTaxMode={clinicTaxMode}
@@ -1430,14 +1445,17 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   border: "1px solid var(--warning-border-strong)",
                   color: "var(--warning-strong)",
                 }}
+                data-cfdi-con-saldo
               >
-                <p>{t("clinical.invoiceDetail.cfdiBalanceWarning")}</p>
-                {/* Bloqueo suave: sin esta confirmación explícita el server
-                    rechaza el timbrado de facturas con saldo (409 CFDI_UNPAID_PUE). */}
-                <label className={cx("flex items-start gap-2 cursor-pointer font-medium", c.casilla)}>
-                  <input type="checkbox" className={rediseno ? undefined : "mt-0.5"} checked={pueOk} onChange={(e) => setPueOk(e.target.checked)} />
-                  <span>{t("clinical.invoiceDetail.cfdiUnpaidConfirm")}</span>
-                </label>
+                {/* ws1-t4, tanda 0: con saldo NO se timbra la factura completa
+                    (PUE = pagado en una sola exhibición); ya no hay «timbrar de
+                    todos modos». A plazos, se factura cada pago cobrado. */}
+                <p>{avisoDeSaldo(esPlanAPlazos(condicionesPago), locale)}</p>
+                {esPlanAPlazos(condicionesPago) && (
+                  <ButtonNew variant="secondary" size="sm" onClick={() => setSub(null)} data-cfdi-ir-a-pagos>
+                    {locale.startsWith("en") ? "Go to the payments" : "Ir a los pagos"}
+                  </ButtonNew>
+                )}
               </div>
             )}
             {fiscalOrigen === "responsable" && responsableDePago && (
@@ -1448,7 +1466,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             )}
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalRfc")}</Label>
-              <Input value={fiscal.rfc} onChange={(e) => setFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase() }))}
+              <Input value={fiscal.rfc} onChange={(e) => setFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase(), uso: f.usoManual ? f.uso : usoCfdiPorRegimen(f.regimen, e.target.value) }))}
                 className={cx("font-mono uppercase", "uppercase")} maxLength={13} autoFocus />
             </div>
             <div className={cx("space-y-1.5", c.campo)}>
@@ -1459,7 +1477,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.fiscalRegimen")}</Label>
                 <select className="input-new"
-                  value={fiscal.regimen} onChange={(e) => setFiscal(f => ({ ...f, regimen: e.target.value }))}>
+                  value={fiscal.regimen} onChange={(e) => setFiscal(f => ({ ...f, regimen: e.target.value, uso: f.usoManual ? f.uso : usoCfdiPorRegimen(e.target.value, f.rfc) }))}>
                   {REGIMENES_FISCALES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.descripcion}</option>)}
                 </select>
               </div>
@@ -1472,7 +1490,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalUso")}</Label>
               <select className="input-new"
-                value={fiscal.uso} onChange={(e) => setFiscal(f => ({ ...f, uso: e.target.value }))}>
+                value={fiscal.uso} onChange={(e) => setFiscal(f => ({ ...f, uso: e.target.value, usoManual: true }))}>
                 {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
               </select>
             </div>
@@ -1480,7 +1498,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.cfdiPaymentFormLabel")}</Label>
                 <select className="input-new"
-                  value={fiscal.formaPago} onChange={(e) => setFiscal(f => ({ ...f, formaPago: e.target.value }))}>
+                  value={fiscal.formaPago} onChange={(e) => setFiscal(f => ({ ...f, formaPago: e.target.value }))}
+                  aria-invalid={!fiscal.formaPago || undefined} data-cfdi-forma-pago>
+                  {!fiscal.formaPago && <option value="" disabled>{locale.startsWith("en") ? "Choose how the patient paid…" : "Elige con qué pagó el paciente…"}</option>}
                   {FORMAS_PAGO_SAT.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.descripcion}</option>)}
                 </select>
               </div>
@@ -1501,7 +1521,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || (invoice.balance > 0 && !pueOk)}>
+            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || invoice.balance > 0 || !fiscal.formaPago}>
               {busy ? t("clinical.invoiceDetail.stamping") : t("clinical.invoiceDetail.stampCfdiBtn")}
             </ButtonNew>
           </DialogFooter>

@@ -71,6 +71,7 @@ type DrawerKind =
   | { kind: "ligar-factura" }
   | { kind: "cobrar-control"; invoiceId: string }
   | { kind: "cobrar" }
+  | { kind: "facturar-pagos" }
   | { kind: "extra" }
   | { kind: "cambiar-plan" }
   | { kind: "descuento" }
@@ -483,9 +484,22 @@ export function SectionFinance(props: SectionFinanceProps) {
                   (Facturación / ficha del paciente → esta factura →
                   "Facturar este pago", junto a cada pago). El cobro
                   automático con tarjeta sigue sin estar disponible aquí. */}
-              El CFDI de cada mensualidad se factura desde la factura del tratamiento: ábrela en
-              Facturación o en la ficha del paciente y usa «Facturar este pago» junto al pago que
-              quieras timbrar. El cobro automático con tarjeta todavía no está disponible aquí.
+              {/* ws1-t4, tanda 0: el CFDI de la factura completa ya no se puede
+                  timbrar con saldo; lo que sí se puede (y se tiene que poder
+                  encontrar) es facturar cada pago cobrado. El botón abre la
+                  factura del tratamiento SIN el cobro, con los pagos a la vista. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span>
+                  El CFDI de cada pago ya cobrado se factura por separado, con «Facturar este pago» junto
+                  a cada pago de la factura del tratamiento.
+                </span>
+                {panel.invoiceId ? (
+                  <Btn variant="secondary" size="sm" onClick={() => setDrawer({ kind: "facturar-pagos" })} data-orto-facturar-pagos>
+                    Facturar pagos (CFDI)
+                  </Btn>
+                ) : null}
+              </div>
+              <div className="mt-1">El cobro automático con tarjeta todavía no está disponible aquí.</div>
             </div>
             ) : null}
           </>
@@ -534,6 +548,18 @@ export function SectionFinance(props: SectionFinanceProps) {
           montoSugerido={controlACobrar.balance}
           rediseno={panel.redisenoFacturas}
           clinicTaxMode={panel.clinicTaxMode}
+          onClose={() => setDrawer(null)}
+          onRefrescar={recargar}
+        />
+      ) : null}
+
+      {drawer?.kind === "facturar-pagos" && panel.invoiceId ? (
+        <CobrarEnFactura
+          invoiceId={panel.invoiceId}
+          patientName={props.patientName}
+          rediseno={panel.redisenoFacturas}
+          clinicTaxMode={panel.clinicTaxMode}
+          abrirCobro={false}
           onClose={() => setDrawer(null)}
           onRefrescar={recargar}
         />

@@ -220,8 +220,9 @@ test("lo que no se toca no se tocó: editar precio, eliminar borrador, imprimir 
     'fetch("/api/cfdi", {',
     "onClick={openCfdiForm} disabled={busy}>",
     // H-9 (ws1-t6): el botón además se apaga cuando el CFDI YA se timbró pero
-    // no se pudo guardar; las dos condiciones de siempre siguen ahí.
-    "onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || (invoice.balance > 0 && !pueOk)}>",
+    // no se pudo guardar. ws1-t4 (tanda 0): con saldo se apaga SIEMPRE (ya no
+    // hay «timbrar PUE de todos modos») y sin forma de pago escogida, también.
+    "onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || invoice.balance > 0 || !fiscal.formaPago}>",
   ]) {
     assert.ok(d.includes(pieza), `se perdió: ${pieza}`);
   }

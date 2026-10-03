@@ -172,7 +172,7 @@ const prismaStub: any = {
 (mock as any).module("@/lib/plans", {
   namedExports: { getResolvedPlan: async () => ({ cfdiMonthly: 100, cfdiOverageCents: 0 }) },
 });
-(mock as any).module("@/lib/rate-limit", { namedExports: { rateLimit: () => null } });
+(mock as any).module("@/lib/rate-limit", { namedExports: { rateLimit: () => null, rateLimitKey: () => true } });
 (mock as any).module("@/lib/auth-context", {
   namedExports: {
     getAuthContext: async () => ({ clinicId: "c1", userId: "u1", role: "ADMIN", isAdmin: true }),

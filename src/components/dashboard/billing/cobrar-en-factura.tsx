@@ -29,6 +29,12 @@ export interface CobrarEnFacturaProps {
   montoSugerido?: number;
   /** Interruptor `menu-dos-niveles`, el que ya tenía quien abría la ventana suelta. */
   rediseno: boolean;
+  /**
+   * false = abre la factura SIN el panel de cobro (ws1-t4, tanda 0: «Facturar
+   * pagos (CFDI)» del caso de ortodoncia, que va a los pagos y no a cobrar).
+   * Por defecto true, como siempre.
+   */
+  abrirCobro?: boolean;
   /** Clinic.cfdiTaxMode leído en el servidor. Obligatorio por lo mismo que en `InvoiceDetailModal`. */
   clinicTaxMode: string | null;
   /** Se cerró la ventana (con o sin pago). */
@@ -47,7 +53,7 @@ export interface CobrarEnFacturaProps {
   onLista?: () => void;
 }
 
-export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, rediseno, clinicTaxMode, onClose, onRefrescar, onCobrado, onLista }: CobrarEnFacturaProps) {
+export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, rediseno, abrirCobro = true, clinicTaxMode, onClose, onRefrescar, onCobrado, onLista }: CobrarEnFacturaProps) {
   const t = useT();
   const [factura, setFactura] = useState<any | null>(null);
 
@@ -81,7 +87,7 @@ export function CobrarEnFactura({ invoiceId, patientName, montoSugerido, redisen
       onMutated={() => {}}
       clinicTaxMode={clinicTaxMode}
       rediseno={rediseno}
-      abrirCobro
+      abrirCobro={abrirCobro}
       montoSugerido={montoSugerido}
       onCobrado={onCobrado ? () => { onRefrescar(); onCobrado(); } : undefined}
     />

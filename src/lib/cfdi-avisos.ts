@@ -14,6 +14,12 @@ export const CFDI_AVISOS_PERSISTENTES: readonly string[] = [
   "CFDI_TOTAL_MISMATCH",
   "CFDI_LIVE_NOT_READY",
   CFDI_TIMBRADO_SIN_GUARDAR,
+  // ws1-t4, tanda 0: dicen QUÉ hacer (emitirla por fuera, facturar pago por
+  // pago, escoger la forma): un toast de 5 s no alcanza para leerlo.
+  "CFDI_RETENCION_PENDIENTE",
+  "CFDI_CON_SALDO",
+  "CFDI_CON_SALDO_A_PLAZOS",
+  "CFDI_FORMA_PAGO_REQUERIDA",
 ];
 
 /** ¿Este código de error va en el aviso que no desaparece solo? */

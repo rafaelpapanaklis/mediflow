@@ -3,7 +3,7 @@ import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitKey } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey,
@@ -21,6 +21,12 @@ import { derivePaymentForm, resolveTaxMode, round2, type CfdiTaxMode } from "@/l
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { facturaAdmiteCfdiPorPago, conceptoDePago, excedeElTotalDelCaso } from "@/lib/invoices/cfdi-pago-concepto";
 import { FUENTE_EXCEDENTE } from "@/lib/patient-credit-core";
+import { USOS_CFDI } from "@/lib/cfdi-catalogs";
+import {
+  bloqueoPorRetencion, usoCfdiPorRegimen, errorFormaDePagoRequerida,
+  LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS, llaveLimiteTimbrado, errorLimiteTimbrado,
+} from "@/lib/invoices/cfdi-reglas";
+import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -50,9 +56,6 @@ import {
 // sabe si timbró" nunca suelta el apartado, cuadre de totales) pero por PAGO
 // en vez de por FACTURA — ver lib/invoices/cfdi-pago-db.ts.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const rl = rateLimit(req, 5, 60 * 60 * 1000);
-  if (rl) return rl;
-
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
   if (err) return err;
@@ -75,6 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     select: {
       facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true,
       plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true, locale: true,
+      regimenFiscal: true,
     },
   });
   if (!clinic?.facturApiEnabled || !clinic.facturApiOrgId) {
@@ -82,6 +86,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       error: "Configura tu RFC y certificados en Configuración → Facturación antes de timbrar",
     }, { status: 400 });
   }
+  // ws1-t4, tanda 0: límite por CLÍNICA (el mismo cupo que la factura
+  // completa), candado de retenciones y uso del CFDI según el régimen.
+  if (!rateLimitKey(llaveLimiteTimbrado(ctx!.clinicId), LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS)) {
+    return NextResponse.json(errorLimiteTimbrado(clinic.locale), { status: 429 });
+  }
+  const retencion = bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
+  if (retencion) return NextResponse.json(retencion, { status: 409 });
+  if (usoCfdi !== undefined && usoCfdi !== null && usoCfdi !== ""
+      && !USOS_CFDI.some((u) => u.clave === usoCfdi)) {
+    return NextResponse.json({ error: `Uso de CFDI inválido: ${String(usoCfdi)}.` }, { status: 400 });
+  }
+  const uso: string = typeof usoCfdi === "string" && usoCfdi
+    ? usoCfdi
+    : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
   if (isFacturapiLive()) {
     const blocked = await liveReadinessBlock(clinic.facturApiOrgId, clinic.csdUploaded);
     if (blocked) return blocked;
@@ -208,9 +226,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     : resolveTaxMode(invoice, clinic.cfdiTaxMode);
   const taxIncludedCfdi = taxMode === "exento" ? false : invoice.taxIncluded !== false;
 
-  const payForm: string = typeof paymentForm === "string" && paymentForm.trim()
+  // La forma de ESTE pago; un «anticipo» hereda la del dinero que formó el
+  // saldo a favor. Si no se sabe (Mercado Pago…), hay que escogerla.
+  const formaDeAnticipo = payment.method === "anticipo"
+    ? await formaDeAnticipoDelPaciente(prisma, { clinicId: ctx!.clinicId, patientId: invoice.patientId })
+    : null;
+  const payForm: string | null = typeof paymentForm === "string" && paymentForm.trim()
     ? paymentForm.trim()
-    : derivePaymentForm([payment], payment.method);
+    : derivePaymentForm([payment], null, formaDeAnticipo);
+  if (!payForm) return NextResponse.json(errorFormaDePagoRequerida(clinic.locale), { status: 400 });
   if (!FORMAS_PAGO_SAT.some((f) => f.clave === payForm)) {
     return NextResponse.json({ error: `Forma de pago SAT inválida: ${payForm}` }, { status: 400 });
   }
@@ -277,7 +301,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const result = await createInvoice({
       orgApiKey,
       customerId,
-      usoCfdi:     usoCfdi ?? "D01",
+      usoCfdi:     uso,
       paymentForm: payForm,
       items,
       exigirUuid: true,
@@ -312,7 +336,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // FACTURA, igual que el timbrado completo, con el paymentId adentro.
       entityType: "invoice", entityId: invoice.id, action: "update",
       before: { cfdiUuid: null },
-      after:  { paymentId, cfdiUuid: result.uuid, cfdi: { total: result.total, paymentForm: payForm, taxMode, concepto: concepto.descripcion } },
+      after:  { paymentId, cfdiUuid: result.uuid, cfdi: { total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode, concepto: concepto.descripcion } },
     });
 
     return NextResponse.json({

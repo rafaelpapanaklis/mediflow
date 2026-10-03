@@ -212,7 +212,8 @@ test("las acciones que tocan dinero y SAT siguen cableadas igual", () => {
     'callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, mensajeCancelada)',
     'fetch(`/api/invoices/${invoice.id}/confirm`, { method: "POST" })',
     'fetch("/api/cfdi", {',
-    "confirmUnpaidPue: pueOk === true ? true : undefined,",
+    // ws1-t4 (tanda 0): `confirmUnpaidPue` ya no viaja — con saldo no se timbra.
+    "paymentForm: fiscal.formaPago,",
     "taxMode:     fiscal.impuestos,",
   ]) {
     assert.ok(detalle.includes(llamada), `se perdió: ${llamada}`);
