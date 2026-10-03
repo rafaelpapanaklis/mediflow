@@ -10,7 +10,7 @@ import { RaizRediseno } from "@/components/dashboard/reportes-rediseno/raiz";
 import { Vacio } from "@/components/dashboard/reportes-rediseno/piezas";
 import { fmtMXN } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
-import { nombreDeEstado, tasaDeAtendidas } from "./estados-de-cita";
+import { nombreDeEstado, nombreDeTipoDeRecurso, tasaDeAtendidas } from "./estados-de-cita";
 
 interface Props {
   monthlyData: { label: string; revenue: number; patients: number; appointments: number }[];
@@ -355,7 +355,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                       <span style={{ color: "var(--text-1)", fontWeight: 500 }}>
                         {r.name}
                         <span style={{ color: "var(--text-3)", fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
-                          {r.kind}
+                          {nombreDeTipoDeRecurso(r.kind, t)}
                         </span>
                       </span>
                       <span

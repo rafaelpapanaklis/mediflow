@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, AlertTriangle, Clock } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
 import { JourneyRediseno } from "./journey-rediseno";
+import { traducirRecorrido } from "./textos-journey";
 
 interface FunnelStep { id: string; label: string; count: number }
 interface Stage {
@@ -39,7 +40,8 @@ export const PRESETS = [
 export function JourneyClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [preset, setPreset] = useState("30d");
-  const [data, setData] = useState<ApiResponse | null>(null);
+  const [crudo, setData] = useState<ApiResponse | null>(null);
+  const data = useMemo(() => (crudo ? traducirRecorrido(crudo, t) : null), [crudo, t]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

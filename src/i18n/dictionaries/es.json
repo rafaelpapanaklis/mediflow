@@ -3535,6 +3535,8 @@
       "discount": "Descuento",
       "doctor": "Doctor",
       "doctorUnassigned": "Sin asignar",
+      "doctorDeLaCitaDeHoy": "Lo tomamos de la cita de hoy del paciente. Puedes cambiarlo.",
+      "doctorDelPlan": "Lo tomamos de su plan de tratamiento activo. Puedes cambiarlo.",
       "globalDiscount": "Descuento global",
       "discountNone": "Sin descuento",
       "discountPct": "Porcentaje %",
@@ -5165,7 +5167,7 @@
       "noCosts": "sin costos",
       "editCosts": "Editar costos",
       "editCostsOf": "Editar costos de {name}",
-      "footerNote": "Ingresos = SUM(invoice.paid) donde invoice.appointment.resourceId coincide y appointment.startsAt cae en el mes. Margen rojo = pérdida ese mes; considera subir precios, reasignar pacientes o renegociar renta.",
+      "footerNote": "Ingresos = lo cobrado en las citas atendidas en ese sillón durante el mes. Margen en rojo = el sillón perdió dinero ese mes; considera subir precios, reasignar pacientes o renegociar la renta.",
       "costsSaved": "Costos guardados",
       "saveError": "Error al guardar",
       "modalTitle": "Costos de {name}",
@@ -5202,7 +5204,12 @@
         "other": "{count} min"
       },
       "footerNote": "Nota: Ingresos = lo cobrado de las facturas ligadas a las citas del doctor, más lo cobrado en el periodo (menos reembolsos) de los casos de ortodoncia que llevaba el día del pago. Satisfacción = promedio de las encuestas (1 a 5). Tiempo promedio = duración de la consulta registrada en la cita. «Nómina» descarga un PDF con estos mismos datos.",
-      "includesOrtho": "incluye {amount} de ortodoncia"
+      "includesOrtho": "incluye {amount} de ortodoncia",
+      "roleOwner": "Dueño/a",
+      "roleAdmin": "Administrador/a",
+      "roleDoctor": "Doctor/a",
+      "roleReceptionist": "Recepción",
+      "roleReadonly": "Solo lectura"
     },
     "doctorsPage": {
       "adminOnly": "Solo admin."
@@ -5213,19 +5220,40 @@
     "journeyClient": {
       "preset30d": "30 días",
       "preset90d": "90 días",
-      "title": "Patient Journey",
-      "subtitle": "Flujo de citas etapa por etapa, drop-offs y cuello de botella",
+      "title": "Recorrido del paciente",
+      "subtitle": "Cómo avanzan las citas etapa por etapa, dónde se pierden pacientes y dónde se atora el flujo",
       "loadingFlow": "Cargando flujo…",
       "noAppointments": "Sin citas en el rango seleccionado.",
       "bottleneckLabel": "Cuello de botella: {label}",
       "avgMinSuffix": "{avgMin} min promedio",
-      "bottleneckMeasured": "Medido entre \"{from}\" → \"{to}\" en {sample} citas.",
-      "appointmentsFunnel": "Funnel de citas",
+      "bottleneckMeasured": "Medido entre «{from}» y «{to}» en {sample} citas.",
+      "appointmentsFunnel": "Embudo de citas",
       "avgTimePerStage": "Tiempo promedio por etapa",
-      "timingNote": "Los tiempos se calculan de AppointmentTimeline (timestamps capturados en cada transición de status). Etapas con sample=0 indican que esa transición no se está registrando en las citas del rango — confirma que el flujo CHECKED_IN → IN_CHAIR → IN_PROGRESS → COMPLETED → CHECKED_OUT se use en el día a día.",
+      "timingNote": "Los tiempos salen de las horas que se registran cuando cambias el estado de la cita (llegada, en sillón, en consulta, terminada, salida). Una etapa con n=0 quiere decir que ese paso no se está marcando en las citas del periodo: revisa que en el día a día se marque cada uno.",
       "cancelled": "Canceladas",
-      "noShow": "No-show",
-      "pctOfTotal": "{pct}% del total"
+      "noShow": "No asistieron",
+      "pctOfTotal": "{pct}% del total",
+      "stage": {
+        "wait": "Espera",
+        "in-chair": "En sillón",
+        "consult": "Consulta",
+        "checkout": "Salida"
+      },
+      "milestone": {
+        "arrived": "Llegada",
+        "inChair": "Pasa al sillón",
+        "consultStart": "Inicio de consulta",
+        "consultEnd": "Fin de consulta",
+        "checkout": "Salida del paciente"
+      },
+      "funnel": {
+        "scheduled": "Programadas",
+        "arrived": "Llegaron",
+        "in-chair": "En sillón",
+        "consult": "En consulta",
+        "completed": "Completadas",
+        "checkout": "Salieron"
+      }
     },
     "noShows": {
       "title": "No-shows",
@@ -5298,7 +5326,7 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "notEnoughDataWait": "Sin datos suficientes (CHECKED_IN → IN_CHAIR)",
+      "notEnoughDataWait": "Aún no hay datos suficientes: marca «Llegó» y «En sillón» en las citas",
       "monthAverage": "promedio del mes",
       "apptsToday": "Citas hoy",
       "scheduledNotCancelled": "agendadas (no canceladas)",
@@ -5317,32 +5345,32 @@
     },
     "procedures": {
       "title": "Procedimientos",
-      "subtitle": "Tiempos promedio, benchmark y comparativa entre doctores",
+      "subtitle": "Tiempos promedio, referencia y comparativa entre doctores",
       "analyzing": "Analizando…",
       "analyzeWithAi": "Analizar con IA",
       "aiInsightError": "No se pudo generar el insight IA",
       "collectingData": "Recolectando datos",
       "collectingDataDetail": {
-        "one": "Llevas {count} cita con tiempo de consulta registrado. Necesitamos al menos 5 citas con check-in y completed (que disparen el AppointmentTimeline) para mostrar tiempos promedio.",
-        "other": "Llevas {count} citas con tiempo de consulta registrado. Necesitamos al menos 5 citas con check-in y completed (que disparen el AppointmentTimeline) para mostrar tiempos promedio."
+        "one": "Llevas {count} cita con tiempo de consulta registrado. Se necesitan al menos 5 citas terminadas en las que se haya marcado la llegada del paciente para mostrar tiempos promedio.",
+        "other": "Llevas {count} citas con tiempo de consulta registrado. Se necesitan al menos 5 citas terminadas en las que se haya marcado la llegada del paciente para mostrar tiempos promedio."
       },
       "colProcedure": "Procedimiento",
       "colPerformed": "Realizadas",
       "colAvgTime": "Tiempo prom.",
-      "colBenchmark": "Benchmark",
-      "colVariance": "Variance",
+      "colBenchmark": "Referencia",
+      "colVariance": "Diferencia",
       "colFastest": "Más rápido",
       "colSlowest": "Más lento",
       "footerNote": {
-        "one": "Calculado sobre {count} cita con timeline completo (CHECKED_IN → IN_PROGRESS → COMPLETED).",
-        "other": "Calculado sobre {count} citas con timeline completo (CHECKED_IN → IN_PROGRESS → COMPLETED)."
+        "one": "Calculado sobre {count} cita con todos sus tiempos registrados (llegada, inicio y fin de consulta).",
+        "other": "Calculado sobre {count} citas con todos sus tiempos registrados (llegada, inicio y fin de consulta)."
       }
     },
     "waitingRoom": {
       "title": "Sala de espera",
       "subtitle": "Tiempos de espera por hora del día + alertas en tiempo real",
       "emptyTitle": "Sin datos de espera todavía",
-      "emptyHint": "Para que aparezcan tiempos de espera, marca check-in del paciente al llegar (status = CHECKED_IN) y luego \"En sillón\" (IN_CHAIR) cuando lo pasen. El tiempo entre ambos es la espera.",
+      "emptyHint": "Para que aparezcan los tiempos de espera, marca «Llegó» cuando el paciente llegue y «En sillón» cuando lo pasen. El tiempo entre las dos marcas es la espera.",
       "alertBanner": {
         "one": "{count} paciente esperando >{threshold} min",
         "other": "{count} pacientes esperando >{threshold} min"
@@ -5374,7 +5402,7 @@
       "statusCompleted": "Completada",
       "statusCancelled": "Cancelada",
       "statusNoShow": "No asistió",
-      "statusInProgress": "En curso",
+      "statusInProgress": "En consulta",
       "pageTitle": "Reportes y estadísticas",
       "pageSubtitle": "Últimos 6 meses · Métricas de ingresos, pacientes y citas",
       "currentSummary": "Resumen actual",
@@ -5440,7 +5468,16 @@
       "resourceApptCount": {
         "one": "{count} cita",
         "other": "{count} citas"
-      }
+      },
+      "kindChair": "Sillón",
+      "kindRoom": "Sala",
+      "kindEquipment": "Equipo",
+      "kindDentalOffice": "Consultorio dental",
+      "kindGeneralOffice": "Consultorio general",
+      "kindWaitingRoom": "Sala de espera",
+      "kindXray": "Radiografía",
+      "kindLab": "Laboratorio",
+      "kindOther": "Otro"
     },
     "heatmap": {
       "occupancyLegend": "Ocupación:",
@@ -5459,7 +5496,7 @@
       "tabNoShows": "No-shows",
       "tabWaiting": "Sala de espera",
       "tabCosts": "Costos & Margen",
-      "tabJourney": "Patient Journey",
+      "tabJourney": "Recorrido del paciente",
       "tabReports": "Reportes",
       "heading": "Analytics",
       "sectionsAria": "Secciones de Analytics"
@@ -5601,7 +5638,15 @@
         "system": "Aviso del sistema",
         "manual_api": "Recordatorio manual",
         "payment_notice": "Aviso de saldo",
-        "quote_ready": "Presupuesto enviado"
+        "quote_ready": "Presupuesto enviado",
+        "consent": "Consentimiento enviado",
+        "invoice_ready": "Nota enviada",
+        "deposit_request": "Solicitud de anticipo",
+        "payment_receipt": "Recibo de pago",
+        "appointment_cancelled": "Aviso de cita cancelada",
+        "followup": "Seguimiento después de la cita",
+        "birthday": "Felicitación de cumpleaños",
+        "recall": "Reactivación"
       },
       "internalNote": "Nota interna",
       "internalNoteFoot": "Solo visible para el equipo — el paciente no la ve",
@@ -5807,8 +5852,11 @@
       "howSentBodyBefore": "Los recordatorios se envían automáticamente cuando agendas una cita. También puedes enviar uno manualmente desde la",
       "howSentAgenda": "Agenda",
       "howSentBodyAfter": "haciendo clic en el ícono de WhatsApp junto a cada cita.",
-      "window24Label": "Los recordatorios solo salen dentro de la ventana de 24 h",
-      "window24Body": "Hoy el recordatorio llega únicamente a pacientes que le escribieron a la clínica en las últimas 24 horas. Es una regla de WhatsApp: para escribirle a alguien fuera de esa ventana hace falta una plantilla aprobada por Meta, que todavía no está disponible en DaleControl (estamos trabajando en ello). Abajo puedes ver, envío por envío, cuáles salieron y cuáles no.",
+      "window24Label": "Fuera de la ventana de 24 h, los recordatorios todavía no salen",
+      "window24BodyMissing": "Tu clínica todavía no tiene la plantilla de recordatorio. Mientras no exista, el recordatorio solo le llega a pacientes que le escribieron a la clínica en las últimas 24 horas: es una regla de WhatsApp. Créala en Plantillas: la damos de alta en tu cuenta de WhatsApp y, en cuanto Meta la apruebe, los recordatorios salen a todos. Abajo puedes ver, envío por envío, cuáles salieron y cuáles no.",
+      "window24BodyPending": "Meta está revisando tu plantilla de recordatorio (suele tardar minutos, a veces horas). Mientras tanto, el recordatorio solo le llega a pacientes que le escribieron a la clínica en las últimas 24 horas. En cuanto la apruebe, los recordatorios salen a todos sin que tengas que hacer nada.",
+      "window24BodyRejected": "Meta rechazó tu plantilla de recordatorio, así que el recordatorio solo le llega a pacientes que le escribieron a la clínica en las últimas 24 horas. En Plantillas verás el motivo y podrás volver a intentarlo.",
+      "window24Cta": "Ir a Plantillas",
       "recentTitle": "Últimos recordatorios",
       "recentSub": "Los 20 más recientes. «Enviado» significa que WhatsApp lo aceptó; si después rechaza la entrega, la fila pasa a «No llegó» con el motivo.",
       "recentRefresh": "Actualizar",
@@ -5892,6 +5940,12 @@
       "tplKindQuoteReady": "Presupuesto listo",
       "tplKindConsent": "Consentimiento informado",
       "tplKindInvoiceReady": "Factura (nota) lista",
+      "tplKindAppointmentCancelled": "Cita cancelada",
+      "tplKindFollowup": "Seguimiento después de la cita",
+      "tplKindBirthday": "Felicitación de cumpleaños",
+      "tplKindRecall": "Reactivación (te toca tu revisión)",
+      "tplKindDepositRequest": "Solicitud de anticipo",
+      "tplKindPaymentReceipt": "Recibo de pago",
       "tplVarPatient": "Nombre del paciente",
       "tplVarClinic": "Nombre de la clínica",
       "tplVarDate": "Fecha de la cita",
@@ -5906,6 +5960,8 @@
       "tplVarInvoiceNumber": "Folio de la nota",
       "tplVarInvoiceAmount": "Monto de la nota",
       "tplVarHowToPay": "Cómo pagar (link de pago o teléfono)",
+      "tplVarVisitDate": "Fecha de la visita",
+      "tplVarDepositLink": "Liga para pagar el anticipo",
       "tplBillingTitle": "Quién paga las plantillas",
       "tplBillingBody": "Meta le cobra cada plantilla a la cuenta de WhatsApp de tu clínica, no a DaleControl. Son unos centavos por mensaje, y sin un método de pago dado de alta Meta las rechaza.",
       "tplBillingOk": "Con método de pago",

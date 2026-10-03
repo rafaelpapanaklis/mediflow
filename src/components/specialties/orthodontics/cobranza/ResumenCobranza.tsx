@@ -18,7 +18,7 @@ import { AlertTriangle, Banknote } from "lucide-react";
 import { cargarPanelDeCobro, type PanelDeCobro } from "@/app/actions/orthodontics/cobro/cargarPanelDeCobro";
 // ws1-t4: «Cobrar» abre la ventana completa de la factura, no la de cobro suelta.
 import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
-import { fmtDay } from "../redesign/atoms/format";
+import { fmtDayLong } from "../redesign/atoms/format";
 import { resumenDeVencidas, tituloDeVencido } from "@/lib/orthodontics/cobro/linea-de-vencido";
 import { cobroPrincipalDelCaso } from "@/lib/orthodontics/cobro/cobro-principal";
 import { esPlanAPlazos } from "@/lib/invoices/plan-de-pagos";
@@ -104,15 +104,15 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
           </div>
           <div className="text-xs text-[color:var(--pr-texto-3)]">
             {vencidas.cuantas > 0 && vencidas.masAntigua
-              ? `${vencidas.cuantas > 1 ? "La más antigua venció" : "Venció"} el ${fmtDay(vencidas.masAntigua)} · `
+              ? `${vencidas.cuantas > 1 ? "La más antigua venció" : "Venció"} el ${fmtDayLong(vencidas.masAntigua)} · `
               : cuota?.vencimiento
-                ? `${vencida ? "Venció" : "Vence"} el ${fmtDay(cuota.vencimiento)} · `
+                ? `${vencida ? "Venció" : "Vence"} el ${fmtDayLong(cuota.vencimiento)} · `
                 : ""}
             {/* Lo que debe el caso: la misma cifra de Cobranza, Casos y la cabecera (deudaDelCaso). */}
             Saldo total {fmt.format(panel.deuda.porCobrar)}
             {panel.deuda.extras > 0 ? ` (incluye ${fmt.format(panel.deuda.extras)} en extras)` : ""}
             {panel.cobranza.proximoVencimiento && panel.cobranza.proximoVencimiento !== cuota?.vencimiento
-              ? ` · próximo vencimiento ${fmtDay(panel.cobranza.proximoVencimiento)}`
+              ? ` · próximo vencimiento ${fmtDayLong(panel.cobranza.proximoVencimiento)}`
               : ""}
             {/* ws1-t4: el saldo a favor del paciente (su resumen dice lo mismo). */}
             {panel.saldoAFavor > 0 ? (

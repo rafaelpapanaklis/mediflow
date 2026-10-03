@@ -26,7 +26,7 @@ import { ArrowRight } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import av from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
-import { fmtMoney, fmtDay } from "../redesign/atoms/format";
+import { fmtMoney, fmtDayLong } from "../redesign/atoms/format";
 // ws1-t5 (arreglo): el botón y la lista de hermanos dicen a cuántos, con test.
 import { listaDeNombres, rotuloCobrar, rotuloProgreso } from "@/lib/orthodontics/rotulo-cobro";
 import {
@@ -179,7 +179,7 @@ export function ListaMensualidades({
                 )}
               </div>
               <span className={av.vence}>
-                <span className={av.venceRotulo}>Vence</span> {fmtDay(g.items[0].vencimiento)}
+                <span className={av.venceRotulo}>Vence</span> {fmtDayLong(g.items[0].vencimiento)}
               </span>
               <span className={av.montoFila}>{fmtMoney(subtotal)}</span>
               {puedeCobrar && (

@@ -28,7 +28,7 @@ import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
 import { ProgressBar } from "../atoms/ProgressBar";
-import { fmtDateShort, fmtDay, fmtMoney } from "../atoms/format";
+import { fmtDateShort, fmtDayLong, fmtMoney } from "../atoms/format";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 // ws1-t4: «Cobrar» abre la ventana completa de la factura, no la de cobro suelta.
 import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
@@ -184,7 +184,7 @@ export function SectionFinance(props: SectionFinanceProps) {
         {controlesPorCobrar.map((c) => (
           <li key={c.invoiceId} className="flex items-center justify-between gap-3 text-[13px]">
             <span>
-              {c.invoiceNumber ?? "Control"} · {fmtDay(c.vencimiento)}
+              {c.invoiceNumber ?? "Control"} · {fmtDayLong(c.vencimiento)}
               {c.paid > 0 ? <span className="text-[color:var(--pr-texto-3)]"> · abonado {fmtMoney(c.paid)}</span> : null}
             </span>
             <span className="flex items-center gap-3">
@@ -308,7 +308,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                     <div className={orto.datoSub}>Incluye {fmtMoney(deuda.extras)} en extras</div>
                   ) : null}
                   {panel.cobranza?.proximoVencimiento ? (
-                    <div className={orto.datoSub}>Próximo vencimiento: {fmtDay(panel.cobranza.proximoVencimiento)}</div>
+                    <div className={orto.datoSub}>Próximo vencimiento: {fmtDayLong(panel.cobranza.proximoVencimiento)}</div>
                   ) : null}
                   {/* ws1-t4: el del paciente (su resumen dice lo mismo); se usa al cobrar. */}
                   {panel.saldoAFavor > 0 ? (
@@ -407,7 +407,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                         {q.abonado > 0 && q.abonado < q.importe ? (
                           <div className="text-[10px] mt-[1px] font-semibold whitespace-nowrap">Abonado {fmtMoney(q.abonado)}</div>
                         ) : null}
-                        <div className="text-[11px] mt-[1px] opacity-80 whitespace-nowrap">{fmtDay(q.vencimiento)}</div>
+                        <div className="text-[11px] mt-[1px] opacity-80 whitespace-nowrap">{fmtDayLong(q.vencimiento)}</div>
                       </div>
                     ))}
                   </div>
@@ -428,7 +428,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                 <ul className="flex flex-col gap-[6px]">
                   {panel.promesas.filter((p) => !p.fulfilledAt && !p.cancelledAt).map((p) => (
                     <li key={p.id} className={`${orto.caja} flex items-center justify-between gap-x-3 gap-y-1 flex-wrap text-[13px]`}>
-                      <span className="min-w-0 [overflow-wrap:anywhere]"><strong className="tabular-nums">{fmtMoney(p.amount)}</strong> · promete pagar el {fmtDay(p.promisedDate)}{p.note ? ` · ${p.note}` : ""}</span>
+                      <span className="min-w-0 [overflow-wrap:anywhere]"><strong className="tabular-nums">{fmtMoney(p.amount)}</strong> · promete pagar el {fmtDayLong(p.promisedDate)}{p.note ? ` · ${p.note}` : ""}</span>
                       <span className="flex gap-3">
                         <button type="button" className={`${orto.enlace} ${orto.tonoExito}`} onClick={() => resolverPromesaDePago({ treatmentPlanId: props.treatmentPlanId, promiseId: p.id, resultado: "cumplida" }).then(recargar)}>
                           Cumplida

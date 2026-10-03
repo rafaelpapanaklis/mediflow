@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
 import { DoctorsRediseno } from "./doctors-rediseno";
+import { rolLegible } from "./rol-legible";
 
 interface DoctorRow {
   id: string;
@@ -191,7 +192,7 @@ export function DoctorsClient({ rediseno = false }: { rediseno?: boolean } = {})
                         }}
                       />
                       <strong style={{ color: "var(--text-1)" }}>{d.name}</strong>
-                      <span style={{ fontSize: 10, color: "var(--text-3)" }}>{d.role}</span>
+                      <span style={{ fontSize: 10, color: "var(--text-3)" }}>{rolLegible(d.role, t)}</span>
                     </div>
                   </Td>
                   <Td align="right" mono>{d.apptsTotal}</Td>

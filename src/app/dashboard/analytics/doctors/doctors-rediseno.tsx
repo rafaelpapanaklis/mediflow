@@ -6,6 +6,7 @@ import { MarcoAnalitica } from "@/components/dashboard/analitica-rediseno/marco"
 import { Panel, Tabla, Th, Td, FiltroPeriodo, Boton, Vacio, Cargando, Nota } from "@/components/dashboard/analitica-rediseno/piezas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
 import { PRESETS, type ApiResponse } from "./doctors-client";
+import { rolLegible } from "./rol-legible";
 
 export function DoctorsRediseno({
   preset,
@@ -67,7 +68,7 @@ export function DoctorsRediseno({
                     <div className={s.celdaNombre}>
                       <span aria-hidden className={s.puntoColor} style={{ background: d.color }} />
                       <strong className={s.fuerte}>{d.name}</strong>
-                      <span className={`${s.pequeno} ${s.apagado}`}>{d.role}</span>
+                      <span className={`${s.pequeno} ${s.apagado}`}>{rolLegible(d.role, t)}</span>
                     </div>
                   </Td>
                   <Td align="right" cifra>{d.apptsTotal}</Td>

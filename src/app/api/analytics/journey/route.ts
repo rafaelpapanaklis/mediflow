@@ -96,8 +96,8 @@ export async function GET(req: NextRequest) {
     {
       id: "wait",
       label: "Espera",
-      from: "Llegada (CHECKED_IN)",
-      to: "En sillón (IN_CHAIR)",
+      from: "Llegada",
+      to: "En sillón",
       ...avgMinBetween(
         timelines.map((t) => ({ a: t.arrivedAt, b: t.inChairAt })),
         "a", "b",
@@ -106,8 +106,8 @@ export async function GET(req: NextRequest) {
     {
       id: "in-chair",
       label: "En sillón",
-      from: "En sillón (IN_CHAIR)",
-      to: "Inicio consulta (IN_PROGRESS)",
+      from: "En sillón",
+      to: "Inicio de consulta",
       ...avgMinBetween(
         timelines.map((t) => ({ a: t.inChairAt, b: t.consultStartAt })),
         "a", "b",
@@ -116,8 +116,8 @@ export async function GET(req: NextRequest) {
     {
       id: "consult",
       label: "Consulta",
-      from: "Inicio (IN_PROGRESS)",
-      to: "Fin (COMPLETED)",
+      from: "Inicio de consulta",
+      to: "Fin de consulta",
       ...avgMinBetween(
         timelines.map((t) => ({ a: t.consultStartAt, b: t.consultEndAt })),
         "a", "b",
@@ -125,9 +125,9 @@ export async function GET(req: NextRequest) {
     },
     {
       id: "checkout",
-      label: "Checkout",
-      from: "Fin consulta",
-      to: "Salida (CHECKED_OUT)",
+      label: "Salida",
+      from: "Fin de consulta",
+      to: "Salida del paciente",
       ...avgMinBetween(
         timelines.map((t) => ({ a: t.consultEndAt, b: t.checkoutAt })),
         "a", "b",
@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
       { id: "in-chair",   label: "En sillón",     count: statusCounts.inChair },
       { id: "consult",    label: "En consulta",   count: statusCounts.inProgress },
       { id: "completed",  label: "Completadas",   count: statusCounts.completed },
-      { id: "checkout",   label: "Checked-out",   count: statusCounts.checkedOut },
+      { id: "checkout",   label: "Salieron",   count: statusCounts.checkedOut },
     ],
     dropOffs: {
       cancelled: statusCounts.cancelled,

@@ -43,3 +43,21 @@ export function tasaDeAtendidas(porEstado: ReadonlyArray<{ status: string; _coun
   const atendidas = porEstado.filter((b) => ESTADOS_ATENDIDOS.includes(b.status)).reduce((s, b) => s + b._count.id, 0);
   return Math.round((atendidas / total) * 100);
 }
+
+/** Tipo de recurso (sillón, sala…) → llave del diccionario. */
+export const KIND_LABEL_KEYS: Record<string, string> = {
+  CHAIR: "analytics.reports.kindChair",
+  SILLA_DENTAL: "analytics.reports.kindChair",
+  ROOM: "analytics.reports.kindRoom",
+  EQUIPMENT: "analytics.reports.kindEquipment",
+  CONSULTORIO_DENTAL: "analytics.reports.kindDentalOffice",
+  CONSULTORIO_GENERAL: "analytics.reports.kindGeneralOffice",
+  SALA_DE_ESPERA: "analytics.reports.kindWaitingRoom",
+  RADIOGRAFIA: "analytics.reports.kindXray",
+  LABORATORIO: "analytics.reports.kindLab",
+};
+
+/** «Sillón» en vez de `SILLA_DENTAL`: un tipo sin etiqueta sale como «Otro», nunca como el código. */
+export function nombreDeTipoDeRecurso(kind: string, t: (key: string) => string): string {
+  return t(KIND_LABEL_KEYS[kind] ?? "analytics.reports.kindOther");
+}

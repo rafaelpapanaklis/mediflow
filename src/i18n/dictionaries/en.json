@@ -3535,6 +3535,8 @@
       "discount": "Discount",
       "doctor": "Doctor",
       "doctorUnassigned": "Unassigned",
+      "doctorDeLaCitaDeHoy": "Taken from the patient's appointment today. You can change it.",
+      "doctorDelPlan": "Taken from their active treatment plan. You can change it.",
       "globalDiscount": "Overall discount",
       "discountNone": "No discount",
       "discountPct": "Percentage %",
@@ -5165,7 +5167,7 @@
       "noCosts": "no costs",
       "editCosts": "Edit costs",
       "editCostsOf": "Edit costs for {name}",
-      "footerNote": "Revenue = SUM(invoice.paid) where invoice.appointment.resourceId matches and appointment.startsAt falls within the month. Red margin = loss that month; consider raising prices, reassigning patients, or renegotiating rent.",
+      "footerNote": "Revenue = what was collected on appointments attended in that chair during the month. Red margin = the chair lost money that month; consider raising prices, reassigning patients, or renegotiating rent.",
       "costsSaved": "Costs saved",
       "saveError": "Error saving",
       "modalTitle": "Costs for {name}",
@@ -5202,7 +5204,12 @@
         "other": "{count} min"
       },
       "footerNote": "Note: Revenue = amount collected on invoices linked to the doctor's appointments, plus what was collected in the period (minus refunds) on the orthodontic cases they were treating on the payment date. Satisfaction = average survey score (1 to 5). Average time = consultation length recorded on the appointment. “Payroll” downloads a PDF with this same data.",
-      "includesOrtho": "includes {amount} from orthodontics"
+      "includesOrtho": "includes {amount} from orthodontics",
+      "roleOwner": "Owner",
+      "roleAdmin": "Administrator",
+      "roleDoctor": "Doctor",
+      "roleReceptionist": "Reception",
+      "roleReadonly": "Read-only"
     },
     "doctorsPage": {
       "adminOnly": "Admins only."
@@ -5213,7 +5220,7 @@
     "journeyClient": {
       "preset30d": "30 days",
       "preset90d": "90 days",
-      "title": "Patient Journey",
+      "title": "Patient journey",
       "subtitle": "Appointment flow stage by stage, drop-offs and bottleneck",
       "loadingFlow": "Loading flow…",
       "noAppointments": "No appointments in the selected range.",
@@ -5222,10 +5229,31 @@
       "bottleneckMeasured": "Measured between \"{from}\" → \"{to}\" across {sample} appointments.",
       "appointmentsFunnel": "Appointments funnel",
       "avgTimePerStage": "Average time per stage",
-      "timingNote": "Times are calculated from AppointmentTimeline (timestamps captured at each status transition). Stages with sample=0 indicate that transition is not being recorded for appointments in the range — confirm the CHECKED_IN → IN_CHAIR → IN_PROGRESS → COMPLETED → CHECKED_OUT flow is used day to day.",
+      "timingNote": "Times come from the moments recorded each time you change an appointment's status (arrival, in chair, in consultation, finished, checkout). A stage with n=0 means that step isn't being marked on the period's appointments: make sure each one is marked day to day.",
       "cancelled": "Cancelled",
       "noShow": "No-show",
-      "pctOfTotal": "{pct}% of total"
+      "pctOfTotal": "{pct}% of total",
+      "stage": {
+        "wait": "Waiting",
+        "in-chair": "In chair",
+        "consult": "Consultation",
+        "checkout": "Checkout"
+      },
+      "milestone": {
+        "arrived": "Arrival",
+        "inChair": "Moves to chair",
+        "consultStart": "Consultation start",
+        "consultEnd": "Consultation end",
+        "checkout": "Patient leaves"
+      },
+      "funnel": {
+        "scheduled": "Scheduled",
+        "arrived": "Arrived",
+        "in-chair": "In chair",
+        "consult": "In consultation",
+        "completed": "Completed",
+        "checkout": "Left"
+      }
     },
     "noShows": {
       "title": "No-shows",
@@ -5298,7 +5326,7 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "notEnoughDataWait": "Not enough data (CHECKED_IN → IN_CHAIR)",
+      "notEnoughDataWait": "Not enough data yet: mark \"Arrived\" and \"In chair\" on appointments",
       "monthAverage": "month average",
       "apptsToday": "Appointments today",
       "scheduledNotCancelled": "scheduled (not cancelled)",
@@ -5323,26 +5351,26 @@
       "aiInsightError": "Could not generate the AI insight",
       "collectingData": "Collecting data",
       "collectingDataDetail": {
-        "one": "You have {count} appointment with consultation time recorded. We need at least 5 appointments with check-in and completed (that trigger the AppointmentTimeline) to show average times.",
-        "other": "You have {count} appointments with consultation time recorded. We need at least 5 appointments with check-in and completed (that trigger the AppointmentTimeline) to show average times."
+        "one": "You have {count} appointment with consultation time recorded. At least 5 finished appointments with the patient's arrival marked are needed to show average times.",
+        "other": "You have {count} appointments with consultation time recorded. At least 5 finished appointments with the patient's arrival marked are needed to show average times."
       },
       "colProcedure": "Procedure",
       "colPerformed": "Performed",
       "colAvgTime": "Avg. time",
-      "colBenchmark": "Benchmark",
-      "colVariance": "Variance",
+      "colBenchmark": "Reference",
+      "colVariance": "Difference",
       "colFastest": "Fastest",
       "colSlowest": "Slowest",
       "footerNote": {
-        "one": "Calculated over {count} appointment with a complete timeline (CHECKED_IN → IN_PROGRESS → COMPLETED).",
-        "other": "Calculated over {count} appointments with a complete timeline (CHECKED_IN → IN_PROGRESS → COMPLETED)."
+        "one": "Calculated over {count} appointment with all its times recorded (arrival, consultation start and end).",
+        "other": "Calculated over {count} appointments with all their times recorded (arrival, consultation start and end)."
       }
     },
     "waitingRoom": {
       "title": "Waiting room",
       "subtitle": "Wait times by hour of day + real-time alerts",
       "emptyTitle": "No wait data yet",
-      "emptyHint": "For wait times to appear, check the patient in on arrival (status = CHECKED_IN) and then mark \"In chair\" (IN_CHAIR) when they are taken back. The time between the two is the wait.",
+      "emptyHint": "For wait times to appear, mark \"Arrived\" when the patient arrives and \"In chair\" when they are taken back. The time between the two marks is the wait.",
       "alertBanner": {
         "one": "{count} patient waiting >{threshold} min",
         "other": "{count} patients waiting >{threshold} min"
@@ -5374,7 +5402,7 @@
       "statusCompleted": "Completed",
       "statusCancelled": "Cancelled",
       "statusNoShow": "No-show",
-      "statusInProgress": "In progress",
+      "statusInProgress": "In consultation",
       "pageTitle": "Reports and statistics",
       "pageSubtitle": "Last 6 months · Revenue, patient, and appointment metrics",
       "currentSummary": "Current summary",
@@ -5440,7 +5468,16 @@
       "resourceApptCount": {
         "one": "{count} appointment",
         "other": "{count} appointments"
-      }
+      },
+      "kindChair": "Chair",
+      "kindRoom": "Room",
+      "kindEquipment": "Equipment",
+      "kindDentalOffice": "Dental office",
+      "kindGeneralOffice": "General office",
+      "kindWaitingRoom": "Waiting room",
+      "kindXray": "X-ray",
+      "kindLab": "Laboratory",
+      "kindOther": "Other"
     },
     "heatmap": {
       "occupancyLegend": "Occupancy:",
@@ -5459,7 +5496,7 @@
       "tabNoShows": "No-shows",
       "tabWaiting": "Waiting room",
       "tabCosts": "Costs & Margin",
-      "tabJourney": "Patient Journey",
+      "tabJourney": "Patient journey",
       "tabReports": "Reports",
       "heading": "Analytics",
       "sectionsAria": "Analytics sections"
@@ -5601,7 +5638,15 @@
         "system": "System notice",
         "manual_api": "Manual reminder",
         "payment_notice": "Balance notice",
-        "quote_ready": "Quote sent"
+        "quote_ready": "Quote sent",
+        "consent": "Consent sent",
+        "invoice_ready": "Invoice sent",
+        "deposit_request": "Deposit request",
+        "payment_receipt": "Payment receipt",
+        "appointment_cancelled": "Appointment cancelled notice",
+        "followup": "Post-visit follow-up",
+        "birthday": "Birthday greeting",
+        "recall": "Recall"
       },
       "internalNote": "Internal note",
       "internalNoteFoot": "Only visible to the team — the patient can't see it",
@@ -5807,8 +5852,11 @@
       "howSentBodyBefore": "Reminders are sent automatically when you schedule an appointment. You can also send one manually from the",
       "howSentAgenda": "Schedule",
       "howSentBodyAfter": "by clicking the WhatsApp icon next to each appointment.",
-      "window24Label": "Reminders only go out within the 24 h window",
-      "window24Body": "Right now a reminder only reaches patients who messaged the clinic in the last 24 hours. It is a WhatsApp rule: writing to someone outside that window requires a Meta-approved template, which is not available in DaleControl yet (we are working on it). Below you can see, send by send, which ones went out and which ones did not.",
+      "window24Label": "Outside the 24 h window, reminders don't go out yet",
+      "window24BodyMissing": "Your clinic doesn't have the reminder template yet. Until it does, a reminder only reaches patients who messaged the clinic in the last 24 hours: it is a WhatsApp rule. Create it in Templates: we register it in your WhatsApp account and, as soon as Meta approves it, reminders reach everyone. Below you can see, send by send, which ones went out and which ones did not.",
+      "window24BodyPending": "Meta is reviewing your reminder template (it usually takes minutes, sometimes hours). Meanwhile, a reminder only reaches patients who messaged the clinic in the last 24 hours. As soon as Meta approves it, reminders reach everyone with nothing else to do.",
+      "window24BodyRejected": "Meta rejected your reminder template, so a reminder only reaches patients who messaged the clinic in the last 24 hours. In Templates you will see the reason and can try again.",
+      "window24Cta": "Go to Templates",
       "recentTitle": "Latest reminders",
       "recentSub": "The 20 most recent. \"Sent\" means WhatsApp accepted it; if it later rejects delivery, the row turns into \"Did not arrive\" with the reason.",
       "recentRefresh": "Refresh",
@@ -5892,6 +5940,12 @@
       "tplKindQuoteReady": "Quote ready",
       "tplKindConsent": "Informed consent",
       "tplKindInvoiceReady": "Invoice ready",
+      "tplKindAppointmentCancelled": "Appointment cancelled",
+      "tplKindFollowup": "Post-visit follow-up",
+      "tplKindBirthday": "Birthday greeting",
+      "tplKindRecall": "Recall (time for your check-up)",
+      "tplKindDepositRequest": "Deposit request",
+      "tplKindPaymentReceipt": "Payment receipt",
       "tplVarPatient": "Patient's first name",
       "tplVarClinic": "Clinic name",
       "tplVarDate": "Appointment date",
@@ -5906,6 +5960,8 @@
       "tplVarInvoiceNumber": "Invoice number",
       "tplVarInvoiceAmount": "Invoice amount",
       "tplVarHowToPay": "How to pay (payment link or phone)",
+      "tplVarVisitDate": "Visit date",
+      "tplVarDepositLink": "Deposit payment link",
       "tplBillingTitle": "Who pays for templates",
       "tplBillingBody": "Meta charges every template to your clinic's WhatsApp account, not to DaleControl. It's a few cents per message, and without a payment method on file Meta rejects them.",
       "tplBillingOk": "Payment method on file",
