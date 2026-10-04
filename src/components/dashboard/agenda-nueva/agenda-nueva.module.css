@@ -181,6 +181,18 @@
   font-feature-settings: normal;
 }
 
+/* ws1-t1 (C-90, auditoría de uso): en escritorio la agenda mide lo que queda de la ventana bajo la barra del
+   panel (56 px de barra, 24 arriba y 22 abajo de margen). Antes `height: 100%` no tenía de dónde agarrarse (el <main> no tiene alto), la
+   página entera crecía a ~1 600 px con la rejilla y el pie del panel de la cita —Confirmar, Editar, Cancelar,
+   Llegada, No asistió, Anticipo— quedaba a 1 450 px: «parece que no hay acciones». Ahora la rejilla hace scroll
+   por dentro y el panel cabe entero, con su pie a la vista. En celular se queda como estaba. */
+@media (min-width: 1024px) {
+  .raiz {
+    height: calc(100dvh - 102px);
+    min-height: 520px;
+  }
+}
+
 .raiz *,
 .raiz *::before,
 .raiz *::after {

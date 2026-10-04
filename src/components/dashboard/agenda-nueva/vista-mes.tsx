@@ -51,6 +51,9 @@ import { ABREVIATURAS_SEMANA, filasDelMes, type CeldaMes } from "@/lib/agenda-nu
 import { todayInTz } from "@/lib/agenda/time-utils";
 import css from "./vista-semana-mes.module.css";
 
+/** ws1-t1 (C-90): alto mínimo de una fila del mes (número, barra de ocupación y su texto). */
+const ALTO_MINIMO_FILA_MES = 96;
+
 export interface PropsVistaMes {
   /** El reloj. Se inyecta para poder probar qué celda es «hoy». */
   ahora?: Date;
@@ -159,7 +162,9 @@ export function VistaMes(props: PropsVistaMes) {
 
       <div
         className={css.rejilla}
-        style={{ gridTemplateRows: `repeat(${filas.length}, minmax(0, 1fr))` }}
+        // ws1-t1 (C-90): con la agenda a la medida de la ventana, una fila no baja de lo que mide su contenido
+        // (número, barra y «N % ocupado»); si no caben, el mes se desplaza por dentro.
+        style={{ gridTemplateRows: `repeat(${filas.length}, minmax(${ALTO_MINIMO_FILA_MES}px, 1fr))` }}
         role="grid"
         aria-label="Cuadrícula del mes"
       >

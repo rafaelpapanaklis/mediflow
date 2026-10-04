@@ -16,6 +16,7 @@ import {
   leerHorariosDeDoctores,
 } from "@/lib/horario-doctor/consulta.server";
 import { calendarRangeUtc } from "@/lib/agenda/date-ranges";
+import { primeroElPropio } from "@/lib/agenda/primero-el-propio";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
@@ -156,7 +157,8 @@ export async function GET(req: Request) {
     dayStart: session.timeConfig.dayStart,
     dayEnd: session.timeConfig.dayEnd,
     appointments,
-    doctors,
+    // ws1-t1 (C-91, C-96): al doctor, su columna primero — el mismo orden que la SSR.
+    doctors: primeroElPropio(doctors, session.user.id, session.user.role),
     resources,
     pendingValidation: [],
     waitlistCount,

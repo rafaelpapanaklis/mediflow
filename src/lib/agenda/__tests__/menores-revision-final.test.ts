@@ -32,11 +32,13 @@ const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace
 test("1 · con pocas columnas no se fuerza ancho (el suelo de 720 px de las pantallas estrechas sigue mandando)", () => {
   assert.equal(anchoMinimoColumnaDia(1), undefined);
   assert.equal(anchoMinimoColumnaDia(3), undefined);
-  assert.equal(anchoMinimoColumnaDia(7), undefined); // 64 + 7 × 88 = 680
+  // ws1-t1 (C-96): el mínimo subió a 128 px (la tarjeta no cabía en 88): 64 + 5 × 128 = 704.
+  assert.equal(anchoMinimoColumnaDia(5), undefined);
 });
 
-test("1 · con 22 columnas cada una mide al menos 88 px (antes ~45 px a 1280: nombre de 0 px)", () => {
-  assert.equal(anchoMinimoColumnaDia(8), ANCHO_MINIMO_COLUMNA_DIA); // 64 + 8 × 88 = 768
+test("1 · con 22 columnas cada una mide al menos 128 px (antes ~45 px a 1280: nombre de 0 px; ws1-t1 C-96: 88 → 128)", () => {
+  assert.equal(ANCHO_MINIMO_COLUMNA_DIA, 128);
+  assert.equal(anchoMinimoColumnaDia(6), ANCHO_MINIMO_COLUMNA_DIA); // 64 + 6 × 128 = 832
   assert.equal(anchoMinimoColumnaDia(22), ANCHO_MINIMO_COLUMNA_DIA);
   assert.ok(ANCHO_EJE + 22 * ANCHO_MINIMO_COLUMNA_DIA > 1280, "a 1280 con 22 columnas la rejilla se desplaza");
 });

@@ -130,6 +130,8 @@
   min-height: 0;
   flex-direction: column;
   padding: 16px 24px 24px;
+  /* ws1-t1 (C-90): la agenda ya mide lo que la ventana; el mes se desplaza por dentro si sus filas no caben. */
+  overflow-y: auto;
 }
 
 /* Fila de ayuda + leyenda. La leyenda enseña SOLO los responsables

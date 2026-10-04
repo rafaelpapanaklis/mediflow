@@ -124,8 +124,12 @@ export const ALTO_ENCABEZADO_DIA = 60;
  * una medía ~45 px: el nombre corto quedaba en 0 px y solo se veían las iniciales, repetidas. Por debajo de
  * esto la cabecera ya es la compacta (sin círculo, nombre en dos renglones) y la rejilla se desplaza en
  * horizontal, como Semana.
+ *
+ * ws1-t1 (C-96, auditoría de uso): 88 seguía siendo poco para la TARJETA: con 13–21 profesionales la cita decía
+ * «11:00–1 · Contr…» y el nombre del paciente no cabía. Con 128 entran la hora completa y el nombre corto; la
+ * rejilla se desplaza en horizontal antes (desde 6 columnas en vez de 8).
  */
-export const ANCHO_MINIMO_COLUMNA_DIA = 88;
+export const ANCHO_MINIMO_COLUMNA_DIA = 128;
 
 /**
  * Lo que Día le pasa a la cuadrícula como `anchoMinimoColumna`. Solo cuando las columnas ya no caben en el

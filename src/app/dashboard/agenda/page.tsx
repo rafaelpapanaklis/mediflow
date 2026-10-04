@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { primeroElPropio } from "@/lib/agenda/primero-el-propio";
 import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -176,7 +177,8 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     // al navegar sin volver al servidor. NUNCA la fila Clinic entera.
     schedules,
     appointments,
-    doctors,
+    // ws1-t1 (C-91, C-96): al doctor, su columna primero (solo ve sus citas; la suya quedaba fuera de pantalla).
+    doctors: primeroElPropio(doctors, user.id, user.role),
     resources,
     pendingValidation,
     waitlistCount,
