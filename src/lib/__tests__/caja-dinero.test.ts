@@ -171,10 +171,14 @@ test("18c · el efectivo sugerido para abrir excluye las facturas CANCELADAS", (
 
   assert.equal(w.method, "cash", "solo efectivo: lo demás no está en el cajón");
   assert.equal(w.invoice.clinicId, "clinic-1", "aislado por tenant, siempre");
+  // C-01 (auditoría de uso, 4-oct-2026): una factura anulada SIN movimiento de
+  // dinero no deja billetes en el cajón; la cancelada cuyo efectivo pasó a
+  // saldo a favor sí (el dinero sigue ahí), y si se devolvió en efectivo el
+  // reembolso lo resta.
   assert.deepEqual(
-    w.invoice.status,
-    { notIn: ["CANCELLED"] },
-    "una factura anulada no deja billetes en el cajón",
+    w.invoice.OR,
+    [{ status: { notIn: ["CANCELLED"] } }, { status: "CANCELLED", payments: { some: { method: "refund" } } }],
+    "una factura anulada sin «refund» no deja billetes en el cajón",
   );
   assert.equal(w.paidAt.gte, from);
   assert.equal(w.paidAt.lte, to);

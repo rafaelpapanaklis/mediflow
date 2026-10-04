@@ -99,7 +99,36 @@ export function revenuePaymentWhere(
     // contaba en el mes equivocado, y el saldo migrado de otro sistema
     // entraba como ingreso nuevo. CONFIRMAR CON CONTADOR (reporte ws1-t5).
     method:  { notIn: [REFUND_METHOD, APPLIED_CREDIT_METHOD] },
-    invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+    invoice: facturaConDineroQueCuentaWhere(clinicId),
+  };
+}
+
+/**
+ * De qué facturas cuenta el DINERO (cobros y reembolsos). Auditoría de uso
+ * C-01 (4-oct-2026): las no canceladas, y TAMBIÉN las canceladas cuyo dinero
+ * salió por un «refund» — devuelto al paciente o pasado a su saldo a favor.
+ *
+ * Antes se descartaba toda factura CANCELADA, y eso borraba dinero que sí
+ * entró: el anticipo de $500 de una cita que se canceló con «Dejarlo como saldo
+ * a favor» (la factura se cancela, el cobro deja de contar y la aplicación
+ * posterior —«anticipo»— tampoco cuenta) no era ingreso en ningún lado, y
+ * además desaparecía RETROACTIVAMENTE del día en que se cobró. Ahora:
+ *   · el cobro cuenta el día que entró, se cancele lo que se cancele después;
+ *   · el traspaso a saldo a favor no resta (refundPaymentWhere lo excluye) y la
+ *     aplicación tampoco suma: el dinero cuenta UNA vez;
+ *   · un reembolso real de una factura cancelada resta el día que se devolvió
+ *     (antes salía junto con el cobro y re-expresaba el mes del cobro).
+ * Una factura cancelada SIN ningún «refund» se queda fuera como siempre: con
+ * los flujos de hoy no puede tener cobros (/cancel exige reembolsar antes) y
+ * así no se reinterpreta ninguna fila vieja de la que no se sabe qué pasó.
+ */
+export function facturaConDineroQueCuentaWhere(clinicId: string): Prisma.InvoiceWhereInput {
+  return {
+    clinicId,
+    OR: [
+      { status: { notIn: ["CANCELLED"] } },
+      { status: "CANCELLED", payments: { some: { method: REFUND_METHOD } } },
+    ],
   };
 }
 
@@ -130,12 +159,9 @@ export function anticipoCobradoCreditWhere(
  * reembolsada, sus pagos —el cobro original Y el reembolso— salen de las DOS
  * consultas a la vez.
  *
- * ⚠️ Eso se conserva DENTRO de una misma ventana. Entre periodos no: hoy
- * /api/invoices/[id]/cancel exige reembolsar primero, así que una factura
- * cobrada en enero, reembolsada y cancelada en febrero desaparece de enero al
- * volver a consultarlo (comportamiento de revenuePaymentWhere que ya existía,
- * no lo introduce este filtro) y su salida no aparece en febrero. Cerrarlo
- * pide decidir si un mes ya cerrado se re-expresa; ver el reporte de WS1-T6.
+ * Entre periodos (C-01, 4-oct-2026): una factura cobrada en enero, reembolsada
+ * y cancelada en febrero ya NO desaparece de enero — su cobro cuenta en enero y
+ * su reembolso resta en febrero (facturaConDineroQueCuentaWhere).
  */
 export function refundPaymentWhere(
   clinicId: string,
@@ -148,7 +174,8 @@ export function refundPaymentWhere(
     // anticipo al saldo a favor también es un «refund» (baja `paid`), pero no
     // sale dinero: no es reembolso. Los viejos (NULL) siguen contando.
     OR: [{ refundMethod: null }, { refundMethod: { not: REEMBOLSO_A_SALDO_A_FAVOR } }],
-    invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+    // C-01: el mismo conjunto de facturas que los cobros (espejo exacto).
+    invoice: facturaConDineroQueCuentaWhere(clinicId),
   };
 }
 
@@ -386,7 +413,9 @@ export async function deriveWindow(
     : { paidAt: { gte: from, lte: to } };
   const [payments, courtesyAgg, clinic] = await Promise.all([
     db.payment.findMany({
-      where: { ...enVentana, invoice: { clinicId, status: { notIn: ["CANCELLED"] } } },
+      // C-01: también las canceladas cuyo dinero se devolvió o pasó a saldo a
+      // favor (el anticipo cobrado sigue en el turno en que entró).
+      where: { ...enVentana, invoice: facturaConDineroQueCuentaWhere(clinicId) },
       include: {
         invoice: {
           select: {
