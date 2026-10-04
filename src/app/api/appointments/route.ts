@@ -1,4 +1,5 @@
 import { hasPermission } from "@/lib/auth/permissions";
+import { horarioDelDia as horarioDelDiaDeAjustes } from "@/lib/agenda-nueva/ocupacion";
 import { modoDeLaCita } from "@/lib/agenda/teleconsulta-por-categoria";
 import { NextResponse, type NextRequest } from "next/server";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
@@ -198,6 +199,8 @@ export async function GET(req: NextRequest) {
     waitlistCount,
     bloqueos,
     horariosDoctores,
+    // ws1-t1 (N-38): el horario de la clínica de ESTE día, para avisar antes de guardar.
+    horarioDelDia: horarioDelDiaDeAjustes(dateISO, session.clinic.schedules, session.clinic.timezone),
   };
 
   return NextResponse.json(response, {

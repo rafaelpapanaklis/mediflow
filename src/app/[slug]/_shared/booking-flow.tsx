@@ -21,6 +21,7 @@
    de `theme` (landingThemeColor) con tint/shade/alpha. Ninguna plantilla
    necesita tocar este archivo para verse suya.
    ============================================================ */
+import { precioDeServicio, textosAvisoReserva } from "@/lib/reserva-web/datos-reserva";
 import { cabeElServicio, fechaLargaReserva, lineaDePrecio, nombreDoctorReserva, textoNoCabe } from "@/lib/reserva-web/textos-reserva";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -81,6 +82,13 @@ export interface BookingFlowClinic {
   doctors: BookingFlowDoctor[];
   schedules: BookingFlowSchedule[];
   services: BookingFlowService[];
+  /**
+   * ws1-t1 (N-40): precios del catálogo de procedimientos por nombre normalizado. Un servicio ligado (mismo nombre)
+   * enseña el del catálogo; los demás, el que escribió la clínica. Ver lib/reserva-web/datos-reserva.ts.
+   */
+  preciosCatalogo?: Record<string, string>;
+  /** ws1-t1 (N-39): true solo si la clínica tiene WhatsApp conectado. Sin eso no se promete ningún WhatsApp. */
+  avisosWhatsApp?: boolean;
 }
 
 /**
@@ -210,7 +218,13 @@ export function BookingFlow({
 }: BookingFlowProps) {
   const P = paleta(surface);
   const doctors = clinic.doctors ?? [];
-  const services = clinic.services ?? [];
+  // ws1-t1 (N-40): el precio del catálogo cuando el servicio está ligado; si no, el escrito a mano.
+  const services = useMemo(
+    () => (clinic.services ?? []).map((sv) => ({ ...sv, price: precioDeServicio(sv, clinic.preciosCatalogo) })),
+    [clinic.services, clinic.preciosCatalogo],
+  );
+  // ws1-t1 (N-39): lo que se le promete al paciente depende de que la clínica tenga WhatsApp.
+  const avisos = textosAvisoReserva(clinic.avisosWhatsApp, clinic.name);
   const unSoloDoctor = doctors.length === 1;
 
   /* ---- qué pasos existen en ESTA reserva ---- */
@@ -456,7 +470,7 @@ export function BookingFlow({
     const wa = soloDigitos(form.whatsapp);
     setIntentado(true);
     if (nombre.length < 3 || !form.dob || wa.length < 10) {
-      setError("Completa tu nombre, fecha de nacimiento y WhatsApp de 10 dígitos.");
+      setError(`Completa tu nombre, fecha de nacimiento y ${clinic.avisosWhatsApp ? "WhatsApp" : "teléfono"} de 10 dígitos.`);
       return;
     }
     setError(""); setAviso(""); setEnviando(true);
@@ -771,8 +785,7 @@ export function BookingFlow({
             <div className="space-y-3">
               <div className="rounded-2xl p-3.5 text-xs leading-relaxed"
                 style={{ background: P.cardAlt, color: P.inkSoft, border: `1px solid ${P.border}` }}>
-                Vas a <strong style={{ color: P.ink }}>pedir</strong> este horario. La clínica lo revisa y te
-                confirma por WhatsApp — todavía no es una cita agendada.
+                Vas a <strong style={{ color: P.ink }}>pedir</strong> este horario. {avisos.solicitudPide}
               </div>
 
               <Campo label="Nombre completo *" P={P} theme={theme} intentado={intentado}
@@ -785,7 +798,7 @@ export function BookingFlow({
                 value={form.dob} onChange={v => setForm(f => ({ ...f, dob: v }))}
                 autoComplete="bday" />
 
-              <Campo label="WhatsApp * (10 dígitos)" P={P} theme={theme} intentado={intentado}
+              <Campo label={avisos.campoTelefono} P={P} theme={theme} intentado={intentado}
                 invalido={soloDigitos(form.whatsapp).length < 10} type="tel" inputMode="numeric"
                 value={form.whatsapp} onChange={v => setForm(f => ({ ...f, whatsapp: v }))}
                 placeholder="999 123 4567" autoComplete="tel" />
@@ -1025,6 +1038,8 @@ function FinalScreen({
   doctor: BookingFlowDoctor | null; fecha: string; hora: string;
   onClose?: () => void;
 }) {
+  // ws1-t1 (N-39): sin WhatsApp conectado no se promete un WhatsApp.
+  const avisos = textosAvisoReserva(clinic.avisosWhatsApp, clinic.name);
   const esCita = tipo === "cita";
   return (
     <div className="text-center py-4">
@@ -1048,8 +1063,10 @@ function FinalScreen({
       <div className="rounded-2xl p-5 text-sm text-left space-y-3 mb-6" style={{ background: P.cardAlt }}>
         {esCita ? (
           <>
-            <div className="flex items-center gap-3" style={{ color: P.inkSoft }}><span className="text-xl">📱</span>Recibirás un WhatsApp con los detalles</div>
-            <div className="flex items-center gap-3" style={{ color: P.inkSoft }}><span className="text-xl">⏰</span>Recordatorio 24 horas antes</div>
+            <div className="flex items-center gap-3" style={{ color: P.inkSoft }}><span className="text-xl">📱</span>{avisos.citaDetalles}</div>
+            {avisos.citaRecordatorio && (
+              <div className="flex items-center gap-3" style={{ color: P.inkSoft }}><span className="text-xl">⏰</span>{avisos.citaRecordatorio}</div>
+            )}
           </>
         ) : (
           <>
@@ -1057,11 +1074,11 @@ function FinalScreen({
                 problema se lo come la clínica. */}
             <div className="flex items-start gap-3" style={{ color: P.inkSoft }}>
               <span className="text-xl shrink-0">📱</span>
-              <span><strong style={{ color: P.ink }}>{clinic.name}</strong> revisará tu solicitud y te confirmará por WhatsApp.</span>
+              <span>{avisos.solicitudConfirma}</span>
             </div>
             <div className="flex items-start gap-3" style={{ color: P.inkSoft }}>
               <span className="text-xl shrink-0">⚠️</span>
-              <span>Ese horario <strong style={{ color: P.ink }}>aún no está apartado</strong>: tu cita queda en firme cuando la clínica te escriba.</span>
+              <span>Ese horario <strong style={{ color: P.ink }}>aún no está apartado</strong>: tu cita queda en firme cuando la clínica te la confirme.</span>
             </div>
           </>
         )}

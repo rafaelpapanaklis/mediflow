@@ -45,6 +45,9 @@ export function toBookingClinic(
     })),
     schedules: clinic.schedules,
     services: conControlDeOrtodoncia(conValoracion, casoActivo),
+    // ws1-t1 (N-39, N-40): precios del catálogo y si hay WhatsApp (los carga clinic-landing-server).
+    preciosCatalogo: clinic.preciosCatalogo,
+    avisosWhatsApp: clinic.avisosWhatsApp,
   };
 }
 

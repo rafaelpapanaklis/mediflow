@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { orthoValoracionParaLanding } from "@/lib/orthodontics/whatsapp-bot-booking";
+import { datosExtraDeReserva } from "@/lib/reserva-web/datos-reserva.server";
 import { LivePreviewBridge } from "./_shared/live-preview";
 import { ClinicLandingClient } from "./landing-client";
 import { TemplateFuturista } from "./templates/template-futurista";
@@ -113,6 +114,8 @@ export async function ClinicLandingServer({
   // página se ve exactamente igual que hoy. No lanza: una clínica no dental,
   // o sin el módulo, no debe poder tumbar su propia landing pública por esto.
   c.orthoValoracion = await orthoValoracionParaLanding(clinic.id).catch(() => null);
+  // ws1-t1 (N-39, N-40): precios del catálogo y si hay WhatsApp, para la reserva. No lanza.
+  Object.assign(c, await datosExtraDeReserva(clinic.id));
 
   /* Sin publicar, el visitante ve el cartel de "pronto".
      En el EDITOR no: la clínica que todavía no publica es justamente la que

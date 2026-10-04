@@ -249,7 +249,7 @@ export function scheduleViolation(
     if (!day || !day.enabled) {
       return {
         reason: "closed_day",
-        message: "Ojo: la clínica está cerrada ese día según el horario de Ajustes. La cita se guardó de todas formas.",
+        message: "Ojo: la clínica está cerrada ese día según su horario (Configuración → Horarios y bloqueos). La cita se guardó de todas formas.",
         openTime: null,
         closeTime: null,
       };

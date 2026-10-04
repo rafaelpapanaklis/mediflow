@@ -217,9 +217,9 @@ function CeldaDelMes(props: {
   // adivinar si «63% ocupado» es sobre 30 citas inventadas o sobre el horario
   // de su clínica.
   const explicacion = ocupacion.cerrado
-    ? "La clínica no abre este día según el horario de Ajustes."
+    ? "La clínica no abre este día según su horario (Configuración → Horarios y bloqueos)."
     : ocupacion.horarioDesconocido
-    ? "Sin horario configurado en Ajustes no se puede calcular la ocupación."
+    ? "Sin horario configurado (Configuración → Horarios y bloqueos) no se puede calcular la ocupación."
     : ocupacion.porcentaje === null
     ? "Sin responsables visibles no se puede calcular la ocupación."
     : `${horas(ocupacion.minutosOcupados)} ocupadas de ${horas(ocupacion.minutosDisponibles)} disponibles`;

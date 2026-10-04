@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { orthoValoracionParaLanding } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { BookingClient } from "./booking-client";
+import { datosExtraDeReserva } from "@/lib/reserva-web/datos-reserva.server";
 import { ReservaCerrada } from "./reserva-cerrada";
 import { reservaWebAbierta } from "@/lib/reserva-web/db";
 
@@ -96,7 +97,7 @@ export default async function ReservarPage({ params, searchParams }: Props) {
 
   return (
     <BookingClient
-      clinic={{ ...(clinic as any), orthoValoracion }}
+      clinic={{ ...(clinic as any), orthoValoracion, ...(await datosExtraDeReserva(clinic.id)) }}
       preselectedService={searchParams.service ?? null}
       categoryServices={categoryServices}
     />

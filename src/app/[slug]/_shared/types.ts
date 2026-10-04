@@ -30,6 +30,10 @@ export interface LandingClinic {
    * (ese es JSON que edita la clínica a mano; esto no se guarda ahí).
    */
   orthoValoracion?: { name: string; durationMin: number } | null;
+  /** ws1-t1 (N-40): precios del catálogo por nombre normalizado, para la reserva (lib/reserva-web). */
+  preciosCatalogo?: Record<string, string>;
+  /** ws1-t1 (N-39): la clínica tiene WhatsApp conectado (si no, la reserva no promete avisos por WhatsApp). */
+  avisosWhatsApp?: boolean;
   users:LandingDoctor[]; schedules:LandingSchedule[];
 }
 export interface TemplateProps { clinic:LandingClinic; highlights?:string[]; }

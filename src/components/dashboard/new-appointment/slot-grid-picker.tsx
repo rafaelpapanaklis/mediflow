@@ -15,6 +15,7 @@ import {
   type ClinicTimeConfig,
 } from "@/lib/agenda/time-utils";
 import { buildOpenSlotSet } from "@/lib/agenda/resource-schedule";
+import { avisoHorarioAlAgendar, huecoFueraDeHorario, type HorarioDelDia } from "@/lib/agenda/aviso-horario-alta";
 import type {
   AgendaAppointmentDTO,
   DoctorColumnDTO,
@@ -53,6 +54,8 @@ interface Props {
 interface FetchedDay {
   appointments: AgendaAppointmentDTO[];
   loaded: boolean;
+  /** ws1-t1 (N-38): horario de la clínica ese día (`horarioDelDia` del GET). null = sin horario. */
+  horario?: HorarioDelDia | null;
 }
 
 export function SlotGridPicker({
@@ -92,7 +95,7 @@ export function SlotGridPicker({
         // cerrado por mantenimiento suele venir justamente sin ninguna.
         onBloqueos?.(body?.bloqueos);
         if (body && Array.isArray(body.appointments)) {
-          setDay({ appointments: body.appointments, loaded: true });
+          setDay({ appointments: body.appointments, loaded: true, horario: body.horarioDelDia ?? null });
         } else {
           setDay({ appointments: [], loaded: true });
         }
@@ -182,13 +185,25 @@ export function SlotGridPicker({
     selectedRef.current?.scrollIntoView({ block: "nearest" });
   }, [valueIdx, day.loaded]);
 
+  // ws1-t1 (N-38): minuto local del hueco (de su etiqueta HH:MM, en la zona de la clínica) y si cae fuera del
+  // horario de ese día. Fuera de horario se puede agendar (el alta avisa, no bloquea), pero se pinta apagado.
+  const minutoDe = (idx: number): number => {
+    const label = formatSlotTime(slotIndexToUtc(idx, dateISO, config).toISOString(), config.timezone);
+    return parseInt(label.slice(0, 2), 10) * 60 + parseInt(label.slice(3, 5), 10);
+  };
+  const fueraDeHorario = (idx: number): boolean => huecoFueraDeHorario(day.horario, minutoDe(idx), durationMin);
+
   const firstFreeIdx = useMemo(() => {
+    // Primero un hueco en horario; si no hay ninguno, el primero libre.
+    for (let i = 0; i < total; i++) {
+      if (isSlotFree(i) && !fueraDeHorario(i)) return i;
+    }
     for (let i = 0; i < total; i++) {
       if (isSlotFree(i)) return i;
     }
     return -1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total, occupiedDoctor, occupiedResource, resourceOpenSlots, slotsNeeded]);
+  }, [total, occupiedDoctor, occupiedResource, resourceOpenSlots, slotsNeeded, day.horario, durationMin]);
 
   const jumpToFirstFree = () => {
     if (firstFreeIdx < 0) return;
@@ -216,6 +231,8 @@ export function SlotGridPicker({
     const selected = idx === valueIdx;
     const slotUtc = slotIndexToUtc(idx, dateISO, config);
     const label = formatSlotTime(slotUtc.toISOString(), config.timezone);
+    const fuera = free && fueraDeHorario(idx);
+    const tituloFuera = fuera ? "Fuera del horario de la clínica" : undefined;
 
     if (nueva) {
       // El mismo botón —mismo cálculo de libre/ocupado, mismo onChange—; el
@@ -232,6 +249,9 @@ export function SlotGridPicker({
           onClick={() => onChange(slotUtc.toISOString())}
           className={nc.hueco}
           data-seleccionado={selected ? "" : undefined}
+          data-fuera-de-horario={fuera ? "" : undefined}
+          title={tituloFuera}
+          style={fuera && !selected ? { opacity: 0.5, borderStyle: "dashed" } : undefined}
         >
           {label}
         </button>
@@ -248,6 +268,8 @@ export function SlotGridPicker({
         aria-disabled={occupied}
         disabled={occupied}
         onClick={() => onChange(slotUtc.toISOString())}
+        title={tituloFuera}
+        data-fuera-de-horario={fuera ? "" : undefined}
         style={{
           ...slotBtnStyle,
           background: selected
@@ -262,7 +284,8 @@ export function SlotGridPicker({
             ? "var(--text-4)"
             : "var(--text-1)",
           cursor: occupied ? "not-allowed" : "pointer",
-          opacity: occupied ? 0.55 : 1,
+          opacity: occupied ? 0.55 : fuera && !selected ? 0.5 : 1,
+          borderStyle: fuera ? "dashed" : undefined,
           boxShadow: selected ? "0 0 0 1px var(--border-brand) inset" : "none",
         }}
         onMouseEnter={(e) => {
@@ -307,6 +330,21 @@ export function SlotGridPicker({
     </div>
   );
 
+  // ws1-t1 (N-38): día cerrado u hora fuera de horario, dicho ANTES de guardar (no bloquea).
+  const avisoHorario = day.loaded
+    ? avisoHorarioAlAgendar(day.horario, valueIdx >= 0 ? { inicioMin: minutoDe(valueIdx), duracionMin: durationMin } : null)
+    : null;
+  const headerConAviso = (
+    <>
+      {header}
+      {avisoHorario && (
+        <div role="note" data-aviso-horario style={{ fontSize: 12, lineHeight: 1.4, color: "var(--warning, var(--text-2))", margin: "4px 0 6px" }}>
+          {avisoHorario}
+        </div>
+      )}
+    </>
+  );
+
   if (grouped) {
     const manana: number[] = [];
     const tarde: number[] = [];
@@ -324,7 +362,7 @@ export function SlotGridPicker({
     ];
     return (
       <div>
-        {header}
+        {headerConAviso}
         <div {...(nueva ? { className: nc.huecosCaja } : { style: groupedContainerStyle })}>
           {groups.map((g) =>
             g.idxs.length === 0 ? null : (
@@ -351,7 +389,7 @@ export function SlotGridPicker({
 
   return (
     <div>
-      {header}
+      {headerConAviso}
       <div {...(nueva ? { className: nc.huecosRejillaPlana } : { style: gridStyle })} role="grid" aria-label={t("appointments.slotGrid.slotsAvailableAria")}>
         {Array.from({ length: total }, (_, idx) => renderSlot(idx))}
       </div>

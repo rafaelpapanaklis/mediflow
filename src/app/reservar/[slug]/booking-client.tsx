@@ -36,6 +36,9 @@ interface Clinic {
   landingThemeColor?: string | null;
   /** ws1-t1 (Ortodoncia conectada a la reserva web) — null si el módulo no está activo en esta sede. */
   orthoValoracion?: { name: string; durationMin: number } | null;
+  /** ws1-t1 (N-39, N-40): lo carga page.tsx con datosExtraDeReserva. */
+  preciosCatalogo?: Record<string, string>;
+  avisosWhatsApp?: boolean;
   schedules: { dayOfWeek: number; enabled: boolean; openTime: string; closeTime: string }[];
   users: Doctor[];
 }
@@ -115,6 +118,8 @@ export function BookingClient({
             doctors: clinic.users,
             schedules: clinic.schedules,
             services,
+            preciosCatalogo: clinic.preciosCatalogo,
+            avisosWhatsApp: clinic.avisosWhatsApp,
           }}
           theme={theme}
           surface="dark"
