@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
+import { fechaLargaEnZona, fechaYHoraEnZona } from "@/lib/dinero/fechas-de-reporte";
 
 /**
  * PayrollDocument — PDF de nómina para /dashboard/analytics/doctors.
@@ -25,12 +26,16 @@ export interface PayrollRow {
   avgSatisfaction: number | null;
   satisfactionCount: number;
   revenueGenerated: number;
+  /** ws1-t2 (C-10): la fila «Sin doctor» — cobros sin doctor en la factura ni en la cita. Cuenta en el total, no como doctor. */
+  sinDoctor?: boolean;
 }
 
 export interface PayrollDocumentProps {
   clinicName: string;
   periodLabel: string;        // ej. "Abril 2026" o "30 días al 28-abr"
   generatedAt: string;        // ISO date
+  /** Zona de la clínica: las fechas del PDF no van en la del servidor (C-10). */
+  timezone?: string;
   rows: PayrollRow[];
 }
 
@@ -174,7 +179,8 @@ function fmtMXN(n: number): string {
   }).format(n);
 }
 
-export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: PayrollDocumentProps) {
+export function PayrollDocument({ clinicName, periodLabel, generatedAt, timezone, rows }: PayrollDocumentProps) {
+  const doctores = rows.filter((r) => !r.sinDoctor).length;
   const totals = rows.reduce(
     (acc, r) => ({
       revenue: acc.revenue + r.revenueGenerated,
@@ -197,7 +203,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
             <Text style={styles.metaValue}>{clinicName}</Text>
             <Text style={[styles.meta, { marginTop: 6 }]}>Generado</Text>
             <Text style={styles.metaValue}>
-              {new Date(generatedAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+              {fechaLargaEnZona(generatedAt, timezone)}
             </Text>
           </View>
         </View>
@@ -206,6 +212,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
         <Text style={styles.subtitle}>
           Citas, ingresos generados, satisfacción de pacientes y tiempos promedio por doctor.
           Ingresos = lo cobrado en el período (por fecha de cobro), menos reembolsos, al doctor de cada factura; sin historia migrada.
+          El total es el ingreso del período: «Sin doctor» son cobros cuya factura y cita no tienen doctor.
         </Text>
 
         <View style={styles.tableHeader} fixed>
@@ -221,12 +228,12 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
 
         {rows.map((r, i) => (
           <View key={i} style={styles.tableRow} wrap={false}>
-            <Text style={[styles.td, styles.cellName, styles.tdBold]}>{r.name}</Text>
-            <Text style={[styles.tdMono, styles.cellAppts]}>{r.apptsTotal}</Text>
-            <Text style={[styles.tdMono, styles.cellCompl, styles.tdBold]}>{r.apptsCompleted}</Text>
-            <Text style={[styles.tdMono, styles.cellPerDay, styles.tdMuted]}>{r.apptsPerDay}</Text>
+            <Text style={[styles.td, styles.cellName, r.sinDoctor ? styles.tdMuted : styles.tdBold]}>{r.name}</Text>
+            <Text style={[styles.tdMono, styles.cellAppts]}>{r.sinDoctor ? "—" : r.apptsTotal}</Text>
+            <Text style={[styles.tdMono, styles.cellCompl, styles.tdBold]}>{r.sinDoctor ? "—" : r.apptsCompleted}</Text>
+            <Text style={[styles.tdMono, styles.cellPerDay, styles.tdMuted]}>{r.sinDoctor ? "—" : r.apptsPerDay}</Text>
             <Text style={[styles.tdMono, styles.cellNoShow, r.noShowRate > 10 ? styles.tdRed : styles.tdMuted]}>
-              {r.apptsNoShow} ({r.noShowRate}%)
+              {r.sinDoctor ? "—" : `${r.apptsNoShow} (${r.noShowRate}%)`}
             </Text>
             <Text style={[styles.tdMono, styles.cellTime, styles.tdMuted]}>
               {r.avgConsultMin != null ? `${r.avgConsultMin}m` : "—"}
@@ -255,7 +262,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
             <View style={{ alignItems: "flex-end" }}>
               <Text style={styles.totalLabel}>{totals.apptsTotal} citas · {totals.apptsCompleted} completadas</Text>
               <Text style={[styles.brandSub, { marginTop: 2 }]}>
-                {rows.length} doctor{rows.length === 1 ? "" : "es"} en el reporte
+                {doctores} doctor{doctores === 1 ? "" : "es"} en el reporte
               </Text>
             </View>
           </View>
@@ -263,7 +270,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
 
         <Text style={styles.footer} fixed>
           DaleControl · Reporte interno de nómina · Sin valor fiscal · Generado el{" "}
-          {new Date(generatedAt).toLocaleString("es-MX")}
+          {fechaYHoraEnZona(generatedAt, timezone)}
         </Text>
       </Page>
     </Document>

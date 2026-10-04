@@ -7,8 +7,9 @@ import {
 } from "@/lib/agenda/api-helpers";
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
 import { computeReceivables } from "@/lib/caja";
-import { ingresoNetoDelPeriodo, movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { ingresoNetoDelPeriodo, ingresosPorDoctorDelPeriodo, movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
 import { netoDelPeriodo } from "@/lib/dinero/ingresos";
+import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import { avisosDeExistencias, contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
 import { idsSinContar } from "@/lib/inventory/sin-contar.server";
@@ -373,12 +374,21 @@ async function buildAlerts(
 }
 
 /**
- * Team performance: revenueMXN por doctor degradado a 0 — Invoice no tiene
- * doctorId en el schema. Citas y completionPct sí se calculan correctamente.
+ * Team performance: citas, % completadas e INGRESOS por doctor.
+ *
+ * Ingresos (ws1-t2, auditoría de uso C-09): antes iban fijos en $0 con la
+ * nota «Invoice no tiene doctorId», que dejó de ser cierto. Ahora son lo
+ * COBRADO neto del periodo por doctor con la definición única
+ * (`ingresosPorDoctorDelPeriodo`, la de «Por doctor» de Finanzas, la
+ * Analítica y la nómina). Quien cobró sin estar en la lista (doctor dado de
+ * baja, una factura a nombre de alguien con otro rol) sale también, y lo que
+ * no es de nadie va en la fila «Sin doctor»: la columna suma los ingresos del
+ * periodo, la misma cifra de la tarjeta.
  *
  * Antes: N+1 — un loop sobre doctores hacía 2 count() por cada uno (5
- * doctores → 10 queries serie). Ahora: 2 queries fijas (doctors + groupBy
- * de appointments por doctorId+status), independiente del N.
+ * doctores → 10 queries serie). Ahora: 3 queries fijas (doctors + groupBy
+ * de appointments por doctorId+status + cobros del periodo), independiente
+ * del N, y una cuarta solo si alguien cobró sin estar en la lista.
  */
 async function buildTeamPerformance(
   period: AdminPeriod,
@@ -388,7 +398,7 @@ async function buildTeamPerformance(
 ): Promise<HomeAdminTeamRow[]> {
   const { from, to } = periodRangeUtc(period, timezone);
 
-  const [doctors, grouped] = await Promise.all([
+  const [activos, grouped, cobrado] = await Promise.all([
     prisma.user.findMany({
       where: { clinicId, role: "DOCTOR", isActive: true },
       select: { id: true, firstName: true, lastName: true },
@@ -402,7 +412,22 @@ async function buildTeamPerformance(
       },
       _count: { _all: true },
     }),
+    ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lt: to }).catch((err) => {
+      console.error("[home admin] team revenue query failed:", err);
+      return new Map<string | null, { total: number; orto: number }>();
+    }),
   ]);
+
+  const fuera = idsConIngresoFueraDeLista(activos.map((d) => d.id), cobrado);
+  const doctors = fuera.length > 0
+    ? [
+        ...activos,
+        ...(await prisma.user.findMany({
+          where: { clinicId, id: { in: fuera } }, // solo usuarios de ESTA clínica
+          select: { id: true, firstName: true, lastName: true },
+        })),
+      ]
+    : activos;
 
   // Agregamos por doctorId: total appts + completed appts.
   const totals = new Map<string, { appts: number; completed: number }>();
@@ -420,11 +445,23 @@ async function buildTeamPerformance(
       doctorName: shortName(d, category),
       appointments: t.appts,
       completionPct: t.appts > 0 ? Math.round((t.completed / t.appts) * 100) : 0,
-      revenueMXN: 0,
+      revenueMXN: cobrado.get(d.id)?.total ?? 0,
     };
   });
 
-  return rows.sort((a, b) => b.appointments - a.appointments);
+  const sinDoctor = ingresoSinDoctor(cobrado);
+  if (sinDoctor) {
+    rows.push({
+      userId: ID_SIN_DOCTOR,
+      doctorName: NOMBRE_SIN_DOCTOR,
+      appointments: 0,
+      completionPct: 0,
+      revenueMXN: sinDoctor.total,
+      sinDoctor: true,
+    });
+  }
+
+  return rows.sort((a, b) => b.appointments - a.appointments || b.revenueMXN - a.revenueMXN);
 }
 
 const NON_MEDICAL = [

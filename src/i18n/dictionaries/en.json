@@ -165,7 +165,7 @@
       "kpiGroupAria": "Key indicators",
       "revenueSparkAria": "Revenue over the last 6 months",
       "teamPerformanceTitle": "Team performance",
-      "teamPerformanceSubtitle": "Appointments, completed visits and revenue generated",
+      "teamPerformanceSubtitle": "Appointments, % completed and revenue collected per doctor (the same figure as Finance «By doctor»)",
       "viewFullReport": "View full report",
       "noTeamActivity": "No team activity in this period.",
       "kpiRevenue": "Monthly revenue",
@@ -279,7 +279,9 @@
       "colDoctor": "Doctor",
       "colAppointments": "Appointments",
       "colCompletedPct": "% Completed",
-      "colRevenue": "Revenue"
+      "colRevenue": "Revenue",
+      "sinDoctor": "No doctor",
+      "sinDoctorHint": "Payments whose invoice and appointment have no doctor. They are here so the column adds up to the period revenue."
     },
     "apptRow": {
       "statusScheduled": "Scheduled",
@@ -5205,13 +5207,15 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "footerNote": "Note: Revenue = what was COLLECTED in the period (by payment date, minus refunds) for each invoice's doctor; if the invoice has no doctor, the appointment's, and for orthodontic cases without an appointment, whoever had the case that day. This is the commission base and the same figure as Finance «By doctor»; without data migrated from another system. Satisfaction = average survey score (1 to 5). Average time = consultation length recorded on the appointment. “Payroll” downloads a PDF with this same data.",
+      "footerNote": "Note: Revenue = what was COLLECTED in the period (by payment date, minus refunds) for each invoice's doctor; if the invoice has no doctor, the appointment's, and for orthodontic cases without an appointment, whoever had the case that day. This is the commission base and the same figure as Finance «By doctor»; without data migrated from another system. Anyone no longer active also appears if they collected in the period, plus the «No doctor» row (payments with no doctor on the invoice or appointment): the column adds up to Revenue. Satisfaction = average survey score (1 to 5). Average time = consultation length recorded on the appointment. “Payroll” downloads a PDF with this same data.",
       "includesOrtho": "includes {amount} from orthodontics",
       "roleOwner": "Owner",
       "roleAdmin": "Administrator",
       "roleDoctor": "Doctor",
       "roleReceptionist": "Reception",
-      "roleReadonly": "Read-only"
+      "roleReadonly": "Read-only",
+      "sinDoctor": "No doctor",
+      "sinDoctorHint": "payments with no doctor on the invoice or appointment"
     },
     "doctorsPage": {
       "adminOnly": "Admins only."

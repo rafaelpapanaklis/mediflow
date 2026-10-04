@@ -165,7 +165,7 @@
       "kpiGroupAria": "Indicadores clave",
       "revenueSparkAria": "Ingresos de los últimos 6 meses",
       "teamPerformanceTitle": "Performance del equipo",
-      "teamPerformanceSubtitle": "Citas, completadas e ingresos generados",
+      "teamPerformanceSubtitle": "Citas, % completadas e ingresos cobrados por doctor (la misma cifra que «Por doctor» de Finanzas)",
       "viewFullReport": "Ver reporte completo",
       "noTeamActivity": "Sin actividad de equipo en este período.",
       "kpiRevenue": "Ingresos del mes",
@@ -279,7 +279,9 @@
       "colDoctor": "Doctor",
       "colAppointments": "Citas",
       "colCompletedPct": "% Completadas",
-      "colRevenue": "Ingresos"
+      "colRevenue": "Ingresos",
+      "sinDoctor": "Sin doctor",
+      "sinDoctorHint": "Cobros cuya factura y cita no tienen doctor. Están aquí para que la columna sume los ingresos del periodo."
     },
     "apptRow": {
       "statusScheduled": "Programada",
@@ -5205,13 +5207,15 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "footerNote": "Nota: Ingresos = lo COBRADO en el periodo (por fecha de cobro, menos reembolsos) al doctor de cada factura; si la factura no tiene doctor, al de su cita, y en casos de ortodoncia sin cita, a quien llevaba el caso ese día. Es la base de comisiones y la misma cifra que «Por doctor» de Finanzas; sin lo migrado de otro sistema. Satisfacción = promedio de las encuestas (1 a 5). Tiempo promedio = duración de la consulta registrada en la cita. «Nómina» descarga un PDF con estos mismos datos.",
+      "footerNote": "Nota: Ingresos = lo COBRADO en el periodo (por fecha de cobro, menos reembolsos) al doctor de cada factura; si la factura no tiene doctor, al de su cita, y en casos de ortodoncia sin cita, a quien llevaba el caso ese día. Es la base de comisiones y la misma cifra que «Por doctor» de Finanzas; sin lo migrado de otro sistema. También sale quien ya no está activo si cobró en el periodo, y la fila «Sin doctor» (cobros sin doctor en la factura ni en la cita): la columna suma lo mismo que Ingresos. Satisfacción = promedio de las encuestas (1 a 5). Tiempo promedio = duración de la consulta registrada en la cita. «Nómina» descarga un PDF con estos mismos datos.",
       "includesOrtho": "incluye {amount} de ortodoncia",
       "roleOwner": "Dueño/a",
       "roleAdmin": "Administrador/a",
       "roleDoctor": "Doctor/a",
       "roleReceptionist": "Recepción",
-      "roleReadonly": "Solo lectura"
+      "roleReadonly": "Solo lectura",
+      "sinDoctor": "Sin doctor",
+      "sinDoctorHint": "cobros sin doctor en la factura ni en la cita"
     },
     "doctorsPage": {
       "adminOnly": "Solo admin."

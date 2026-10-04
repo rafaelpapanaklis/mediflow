@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { ingresosPorDoctorDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,12 @@ export const dynamic = "force-dynamic";
  *  - avgConsultMin (de AppointmentTimeline)
  *
  * Si doctorId presente: solo ese doctor con detalle por mes.
+ *
+ * ws1-t2 (auditoría de uso C-10): sin `doctorId`, la lista trae TODO el
+ * ingreso del rango, como «Por doctor» de Finanzas: además de los activos,
+ * quien cobró sin estar en la lista (dado de baja, otro rol) y la fila «Sin
+ * doctor» (`id: "sin-doctor"`, sin citas). Antes se omitían y la columna no
+ * cuadraba con Ingresos aunque la nota decía «la misma cifra».
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -40,7 +47,7 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getFullYear(), to.getMonth(), 1);
 
-  const doctors = await prisma.user.findMany({
+  const activos = await prisma.user.findMany({
     where: {
       clinicId,
       isActive: true,
@@ -53,6 +60,19 @@ export async function GET(req: NextRequest) {
   // Lo cobrado neto del rango por doctor (ws1-t2): la misma función que la
   // nómina y el «Por doctor» de Finanzas. `to` es inclusivo aquí.
   const cobradoPorDoctor = await ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lte: to });
+
+  // C-10: quien cobró en el rango sin estar en la lista también sale (solo
+  // usuarios de esta clínica). Con `doctorId` se pide UN doctor: no se añade nadie.
+  const fuera = doctorIdFilter ? [] : idsConIngresoFueraDeLista(activos.map((d) => d.id), cobradoPorDoctor);
+  const doctors = fuera.length > 0
+    ? [
+        ...activos,
+        ...(await prisma.user.findMany({
+          where: { clinicId, id: { in: fuera } },
+          select: { id: true, firstName: true, lastName: true, color: true, role: true },
+        })),
+      ]
+    : activos;
 
   const rows = await Promise.all(
     doctors.map(async (doc) => {
@@ -116,9 +136,34 @@ export async function GET(req: NextRequest) {
     }),
   );
 
+  // `role` como texto: la fila «Sin doctor» no tiene rol.
+  const salida: Array<Omit<(typeof rows)[number], "role"> & { role: string }> = rows
+    .sort((a, b) => b.revenueGenerated - a.revenueGenerated);
+
+  // C-10: lo que no es de nadie, al final (no tiene citas ni encuestas).
+  const sinDoctor = doctorIdFilter ? null : ingresoSinDoctor(cobradoPorDoctor);
+  if (sinDoctor) {
+    salida.push({
+      id: ID_SIN_DOCTOR,
+      name: NOMBRE_SIN_DOCTOR,
+      color: "",
+      role: "",
+      apptsTotal: 0,
+      apptsCompleted: 0,
+      apptsNoShow: 0,
+      noShowRate: 0,
+      apptsPerDay: 0,
+      revenueGenerated: sinDoctor.total,
+      revenueOrtho: sinDoctor.orto,
+      avgSatisfaction: null,
+      satisfactionCount: 0,
+      avgConsultMin: null,
+    });
+  }
+
   return NextResponse.json({
     from: from.toISOString(),
     to: to.toISOString(),
-    doctors: rows.sort((a, b) => b.revenueGenerated - a.revenueGenerated),
+    doctors: salida,
   });
 }

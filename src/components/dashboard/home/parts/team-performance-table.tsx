@@ -88,9 +88,14 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
           {sorted.map((r) => (
             <tr key={r.userId}>
               <td>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <AvatarNew name={r.doctorName} size="sm" />
-                  <span style={{ fontWeight: 500 }}>{r.doctorName}</span>
+                {/* ws1-t2 (C-09): la fila «Sin doctor» no es una persona ni tiene citas;
+                    está para que la columna de ingresos sume lo mismo que la tarjeta. */}
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: 10 }}
+                  title={r.sinDoctor ? t("home.teamPerf.sinDoctorHint") : undefined}
+                >
+                  {!r.sinDoctor && <AvatarNew name={r.doctorName} size="sm" />}
+                  <span style={{ fontWeight: 500 }}>{r.sinDoctor ? t("home.teamPerf.sinDoctor") : r.doctorName}</span>
                 </div>
               </td>
               <td
@@ -100,10 +105,10 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {r.appointments}
+                {r.sinDoctor ? "—" : r.appointments}
               </td>
               <td style={{ textAlign: "right" }}>
-                <CompletionCell pct={r.completionPct} />
+                {r.sinDoctor ? "—" : <CompletionCell pct={r.completionPct} />}
               </td>
               <td
                 style={{

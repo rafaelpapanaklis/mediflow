@@ -5,7 +5,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { MarcoAnalitica } from "@/components/dashboard/analitica-rediseno/marco";
 import { Panel, Tabla, Th, Td, FiltroPeriodo, Boton, Vacio, Cargando, Nota } from "@/components/dashboard/analitica-rediseno/piezas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
-import { PRESETS, type ApiResponse } from "./doctors-client";
+import { PRESETS, esSinDoctor, type ApiResponse } from "./doctors-client";
 import { rolLegible } from "./rol-legible";
 
 export function DoctorsRediseno({
@@ -62,7 +62,27 @@ export function DoctorsRediseno({
               </tr>
             </thead>
             <tbody>
-              {data.doctors.map((d) => (
+              {data.doctors.map((d) => esSinDoctor(d) ? (
+                /* ws1-t2 (C-10): lo cobrado sin doctor en la factura ni en la cita. Sin esta
+                   fila la columna no sumaba los ingresos de Finanzas. No tiene citas. */
+                <tr key={d.id}>
+                  <Td>
+                    <div className={s.celdaNombre}>
+                      <strong className={s.fuerte}>{t("analytics.doctors.sinDoctor")}</strong>
+                      <span className={`${s.pequeno} ${s.apagado}`}>{t("analytics.doctors.sinDoctorHint")}</span>
+                    </div>
+                  </Td>
+                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra>
+                    <strong>${d.revenueGenerated.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</strong>
+                  </Td>
+                </tr>
+              ) : (
                 <tr key={d.id}>
                   <Td>
                     <div className={s.celdaNombre}>

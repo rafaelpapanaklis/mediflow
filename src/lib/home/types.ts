@@ -97,6 +97,8 @@ export interface HomeAdminTeamRow {
   appointments: number;
   completionPct: number;
   revenueMXN: number;
+  /** ws1-t2 (C-09): la fila «Sin doctor» — cobros sin doctor en la factura ni en la cita. No tiene citas. */
+  sinDoctor?: boolean;
 }
 
 export interface HomeAdminData {

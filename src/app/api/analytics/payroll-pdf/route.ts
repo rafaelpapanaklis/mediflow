@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { ingresosPorDoctorDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
+import { diaEnZona, etiquetaDePeriodo } from "@/lib/dinero/fechas-de-reporte";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { PayrollDocument, type PayrollRow } from "@/lib/pdf/payroll-document";
 import { createElement } from "react";
@@ -21,6 +23,11 @@ export const dynamic = "force-dynamic";
  *   satisfactions, todas con clinicId directo o vía relation.
  *
  * Rol: solo SUPER_ADMIN/ADMIN.
+ *
+ * ws1-t2 (auditoría de uso C-10): el total del PDF es el ingreso del periodo,
+ * la misma cifra que Finanzas: lleva a quien cobró sin estar en la lista
+ * (dado de baja, otro rol) y la fila «Sin doctor». Las fechas (periodo y
+ * «Generado») van en la zona de la CLÍNICA, no en la del servidor.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -37,8 +44,8 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getFullYear(), to.getMonth(), 1);
 
-  const [clinic, doctors] = await Promise.all([
-    prisma.clinic.findUnique({ where: { id: clinicId }, select: { name: true } }),
+  const [clinic, activos] = await Promise.all([
+    prisma.clinic.findUnique({ where: { id: clinicId }, select: { name: true, timezone: true } }),
     prisma.user.findMany({
       where: {
         clinicId,
@@ -56,6 +63,16 @@ export async function GET(req: NextRequest) {
   // «Por doctor» de Finanzas (lib/dinero). Incluye lo de casos de ortodoncia
   // sin cita, para quien llevaba el caso ese día.
   const cobradoPorDoctor = await ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lte: to });
+  const fuera = idsConIngresoFueraDeLista(activos.map((d) => d.id), cobradoPorDoctor);
+  const doctors = fuera.length > 0
+    ? [
+        ...activos,
+        ...(await prisma.user.findMany({
+          where: { clinicId, id: { in: fuera } }, // solo usuarios de ESTA clínica
+          select: { id: true, firstName: true, lastName: true },
+        })),
+      ]
+    : activos;
 
   const rows: PayrollRow[] = await Promise.all(
     doctors.map(async (doc) => {
@@ -108,7 +125,26 @@ export async function GET(req: NextRequest) {
 
   rows.sort((a, b) => b.revenueGenerated - a.revenueGenerated);
 
-  const periodLabel = formatPeriod(from, to);
+  // Lo que no es de nadie, al final: sin esta fila el total no daba Ingresos.
+  const sinDoctor = ingresoSinDoctor(cobradoPorDoctor);
+  if (sinDoctor) {
+    rows.push({
+      name: NOMBRE_SIN_DOCTOR,
+      apptsTotal: 0,
+      apptsCompleted: 0,
+      apptsPerDay: 0,
+      apptsNoShow: 0,
+      noShowRate: 0,
+      avgConsultMin: null,
+      avgSatisfaction: null,
+      satisfactionCount: 0,
+      revenueGenerated: sinDoctor.total,
+      sinDoctor: true,
+    });
+  }
+
+  const timezone = clinic.timezone || "America/Mexico_City";
+  const periodLabel = etiquetaDePeriodo(from, to, timezone);
 
   // renderToBuffer espera un ReactElement<DocumentProps>. PayrollDocument
   // sí retorna <Document>, pero el type system no lo infiere desde el
@@ -118,6 +154,7 @@ export async function GET(req: NextRequest) {
     clinicName: clinic.name,
     periodLabel,
     generatedAt: new Date().toISOString(),
+    timezone,
     rows,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,19 +164,8 @@ export async function GET(req: NextRequest) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="nomina-${from.toISOString().slice(0, 10)}.pdf"`,
+      "Content-Disposition": `attachment; filename="nomina-${diaEnZona(from, timezone)}.pdf"`,
       "Cache-Control": "private, no-cache, no-store, must-revalidate",
     },
   });
-}
-
-function formatPeriod(from: Date, to: Date): string {
-  const sameMonth =
-    from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth() && from.getDate() === 1;
-  if (sameMonth) {
-    return from.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-  }
-  const fromStr = from.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
-  const toStr = to.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
-  return `${fromStr} al ${toStr}`;
 }
