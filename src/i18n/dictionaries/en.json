@@ -10894,7 +10894,7 @@
     "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created). An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
     "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes migrated payments. Without applied credit balance: that money counted on the day it was collected.",
     "ortoVencido": "Orthodontics only: installments, placement and check-ups past their date. Already included in the Balances «Overdue».",
-    "reportesIngresos": "Payments recorded in each of the last 6 months, minus refunds, by payment date; no cancelled invoices. Excludes migrated payments.",
+    "reportesIngresos": "Payments recorded in each of the last 6 months, minus refunds, by payment date. A payment counts in the month it came in even if its invoice is later cancelled; a refund subtracts in the month it was given back. Excludes migrated payments.",
     "reportesTicket": "Income for the 6 months ÷ appointments for the 6 months.",
     "reportesConDeuda": "Balance of issued invoices (no drafts or cancelled ones), from any date, migrated ones included. Counts patients with at least one.",
     "crmLtv": "Everything collected ÷ patients with any payment. No period; includes migrated amounts.",

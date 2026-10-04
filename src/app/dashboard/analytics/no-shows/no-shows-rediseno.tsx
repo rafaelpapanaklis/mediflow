@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, Sparkles, RefreshCw } from "lucide-react";
+import { horaLegible } from "@/lib/analytics/mes-legible";
 import { useT } from "@/i18n/i18n-provider";
 import { MarcoAnalitica } from "@/components/dashboard/analitica-rediseno/marco";
 import { Indicador, Panel, Filas, Fila, Boton, Aviso, Vacio, Cargando, unir } from "@/components/dashboard/analitica-rediseno/piezas";
@@ -68,7 +69,7 @@ export function NoShowsRediseno({
             />
             <Indicador
               label={t("analytics.noShows.worstHourLabel")}
-              value={peorHora && peorHora.total > 0 ? `${peorHora.hour}:00` : "—"}
+              value={peorHora && peorHora.total > 0 ? horaLegible(peorHora.hour) : "—"}
               hint={peorHora ? t("analytics.noShows.worstHint", { rate: peorHora.rate, count: peorHora.count }) : ""}
             />
           </div>

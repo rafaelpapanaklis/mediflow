@@ -5,6 +5,7 @@ import { AlertCircle, Sparkles, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
+import { horaLegible } from "@/lib/analytics/mes-legible";
 import { useT } from "@/i18n/i18n-provider";
 import { NoShowsRediseno } from "./no-shows-rediseno";
 
@@ -195,7 +196,7 @@ export function NoShowsClient({ rediseno = false }: { rediseno?: boolean } = {})
               label={t("analytics.noShows.worstHourLabel")}
               value={(() => {
                 const worst = [...data.byHour].sort((a, b) => b.rate - a.rate)[0];
-                return worst && worst.total > 0 ? `${worst.hour}:00` : "—";
+                return worst && worst.total > 0 ? horaLegible(worst.hour) : "—";
               })()}
               hint={(() => {
                 const worst = [...data.byHour].sort((a, b) => b.rate - a.rate)[0];

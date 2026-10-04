@@ -5433,7 +5433,7 @@
         "one": "{count} paciente",
         "other": "{count} pacientes"
       },
-      "kpiUpcomingAppts": "Proximas citas",
+      "kpiUpcomingAppts": "Próximas citas",
       "kpiUpcomingApptsDelta": "Hoy / Esta semana",
       "kpiActiveDoctors": "Doctores activos",
       "kpiActiveResources": "Recursos activos",
@@ -10894,7 +10894,7 @@
     "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos y cargos de ortodoncia (colocación y controles, desde el día en que se crearon). Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
     "ortoCobrado": "Pagos del periodo a facturas de casos de ortodoncia, menos reembolsos. Sin pagos migrados. Sin el saldo a favor aplicado: ese dinero contó el día que se cobró.",
     "ortoVencido": "Solo ortodoncia: cuotas, colocación y controles pasados de fecha. Ya está sumado en el «Vencido» de Saldos.",
-    "reportesIngresos": "Pagos registrados en cada uno de los últimos 6 meses, menos reembolsos, por fecha de cobro; sin facturas canceladas. Sin los pagos migrados.",
+    "reportesIngresos": "Pagos registrados en cada uno de los últimos 6 meses, menos reembolsos, por fecha de cobro. Un cobro cuenta el mes en que entró aunque después se cancele su factura; un reembolso resta el mes en que se devolvió. Sin los pagos migrados.",
     "reportesTicket": "Ingresos de los 6 meses ÷ citas de los 6 meses.",
     "reportesConDeuda": "Saldo de las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. Cuenta pacientes con al menos una.",
     "crmLtv": "Todo lo cobrado ÷ pacientes con algún pago. Sin periodo; incluye lo migrado.",

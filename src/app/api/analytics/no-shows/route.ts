@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
+import { horaYDiaEnZona } from "@/lib/analytics/mes-legible";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,11 @@ export const dynamic = "force-dynamic";
  * Multi-tenant: clinicId siempre desde getCurrentUser, todas las queries
  * filtran por él directamente (appointments) o vía relation
  * (no_show_predictions → appointment → clinicId).
+ *
+ * ws1-t2 (auditoría de uso N-20): la hora y el día salen en la zona de la
+ * CLÍNICA (antes, la del servidor: «Hora más problemática 1:00» para lo que
+ * era otra hora), y el total son las citas sin canceladas (la definición
+ * única de citas del periodo, la misma del «No-shows» del Resumen).
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -25,6 +32,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const clinicId = user.clinicId;
+  if (!clinicId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const url = new URL(req.url);
   const fromParam = url.searchParams.get("from");
@@ -34,9 +42,10 @@ export async function GET(req: NextRequest) {
     ? new Date(fromParam)
     : new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-  const [appts, upcomingPredictions] = await Promise.all([
+  const [clinic, appts, upcomingPredictions] = await Promise.all([
+    prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }),
     prisma.appointment.findMany({
-      where: { clinicId, startsAt: { gte: from, lte: to } },
+      where: citasDelPeriodoWhere(clinicId, from, new Date(to.getTime() + 1)),
       select: {
         id: true,
         status: true,
@@ -70,6 +79,7 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
+  const zona = clinic?.timezone || "America/Mexico_City";
   const total = appts.length;
   const noShows = appts.filter((a) => a.status === "NO_SHOW");
   const rate = total > 0 ? Math.round((noShows.length / total) * 1000) / 10 : 0;
@@ -78,7 +88,7 @@ export async function GET(req: NextRequest) {
   const byDayCount = Array(7).fill(0);
   const byDayTotal = Array(7).fill(0);
   for (const a of appts) {
-    const dow = (new Date(a.startsAt).getDay() + 6) % 7;
+    const dow = horaYDiaEnZona(new Date(a.startsAt), zona).dia;
     byDayTotal[dow] += 1;
     if (a.status === "NO_SHOW") byDayCount[dow] += 1;
   }
@@ -92,7 +102,7 @@ export async function GET(req: NextRequest) {
   // By hour.
   const byHourMap = new Map<number, { count: number; total: number }>();
   for (const a of appts) {
-    const h = new Date(a.startsAt).getHours();
+    const h = horaYDiaEnZona(new Date(a.startsAt), zona).hora;
     const entry = byHourMap.get(h) ?? { count: 0, total: 0 };
     entry.total += 1;
     if (a.status === "NO_SHOW") entry.count += 1;
