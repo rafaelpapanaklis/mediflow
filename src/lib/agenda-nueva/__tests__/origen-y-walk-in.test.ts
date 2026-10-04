@@ -37,7 +37,7 @@ test("sin la columna de la liga, la fila y su cita se emparejan por paciente + i
 test("🔴→🟢 la agenda marca isWalkIn con la fila, en los dos cargadores, sin una consulta por tarjeta", () => {
   const server = leer("lib/agenda/server.ts");
   assert.equal((server.match(/citasDeWalkIn\(filter\.clinicId, rows\)/g) ?? []).length, 2);
-  assert.equal((server.match(/return conWalkIn\(/g) ?? []).length, 2);
+  assert.equal((server.match(/conWalkIn\(conMensualidadVencida/g) ?? []).length, 2);
   const lib = leer("lib/walk-in/citas-de-walk-in.ts");
   assert.match(lib, /WHERE "clinicId" = \$\{clinicId\} AND "appointmentId" = ANY/);
   assert.match(lib, /g\.__walkInSinLiga = true/, "sin la columna, una sola vez por proceso");
