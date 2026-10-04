@@ -21,6 +21,7 @@
    de `theme` (landingThemeColor) con tint/shade/alpha. Ninguna plantilla
    necesita tocar este archivo para verse suya.
    ============================================================ */
+import { cabeElServicio, fechaLargaReserva, lineaDePrecio, nombreDoctorReserva, textoNoCabe } from "@/lib/reserva-web/textos-reserva";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight, Calendar, Check, ChevronLeft, ChevronRight, Clock,
@@ -161,8 +162,9 @@ function parseYMD(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+/** ws1-t1 (C-100): «Lunes, 5 de octubre» (antes la clase `capitalize` daba «5 De Octubre»). */
 function formatLargo(ymd: string) {
-  return parseYMD(ymd).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+  return fechaLargaReserva(ymd);
 }
 function iniciales(d: BookingFlowDoctor) {
   return `${(d.firstName?.[0] ?? "").toUpperCase()}${(d.lastName?.[0] ?? "").toUpperCase()}`;
@@ -237,6 +239,9 @@ export function BookingFlow({
 
   /* ---- disponibilidad ---- */
   const [slots, setSlots] = useState<string[]>([]);
+  // ws1-t1 (C-100): con «cualquier doctor», quién está libre en cada hueco — para saber si un procedimiento largo
+  // cabe con UN mismo doctor.
+  const [doctoresPorHueco, setDoctoresPorHueco] = useState<Record<string, string[]> | null>(null);
   const [slotsReason, setSlotsReason] = useState("");
   const [cargandoSlots, setCargandoSlots] = useState(false);
 
@@ -315,16 +320,17 @@ export function BookingFlow({
   useEffect(() => {
     if (!selDate || !doctorId) return;
     const ctrl = new AbortController();
-    setSlots([]); setSelSlot(""); setSlotsReason(""); setCargandoSlots(true);
+    setSlots([]); setDoctoresPorHueco(null); setSelSlot(""); setSlotsReason(""); setCargandoSlots(true);
     const qs = new URLSearchParams({ slug: clinic.slug, date: selDate });
     // Sin doctorId el endpoint devuelve los horarios en los que queda LIBRE
     // al menos un doctor (no los que están libres para todos).
     if (doctorId !== ANY_DOCTOR) qs.set("doctorId", doctorId);
     fetch(`/api/public/availability?${qs.toString()}`, { signal: ctrl.signal })
       .then(r => r.json())
-      .then((d: { slots?: string[]; reason?: string }) => {
+      .then((d: { slots?: string[]; reason?: string; slotDoctors?: Record<string, string[]> }) => {
         const lista = d.slots ?? [];
         setSlots(lista);
+        setDoctoresPorHueco(d.slotDoctors ?? null);
         setSlotsReason(lista.length === 0 ? (d.reason ?? "Sin horarios — elige otra fecha") : "");
         const pend = restoreRef.current;
         const outcome = pendingSlotOutcome(pend, doctorId, selDate, lista);
@@ -584,7 +590,7 @@ export function BookingFlow({
                 </span>
               )}
               <span className="flex-1 min-w-0">
-                <span className="block font-bold truncate" style={{ color: P.ink }}>Dr/a. {doc.firstName} {doc.lastName}</span>
+                <span className="block font-bold truncate" style={{ color: P.ink }}>{nombreDoctorReserva(doc)}</span>
                 {doc.specialty && <span className="block text-xs mt-0.5 font-semibold truncate" style={{ color: theme }}>{doc.specialty}</span>}
                 {!!doc.services?.length && (
                   <span className="block text-[11px] mt-1 truncate" style={{ color: P.inkFaint }}>{doc.services.slice(0, 3).join(" · ")}</span>
@@ -659,7 +665,7 @@ export function BookingFlow({
       {paso === "time" && (
         <div>
           <ResumenDoctor doctor={doctorElegido} theme={theme} P={P} />
-          <div className="text-xs font-semibold mb-3 capitalize flex items-center gap-1.5" style={{ color: P.inkSoft }}>
+          <div className="text-xs font-semibold mb-3 flex items-center gap-1.5" style={{ color: P.inkSoft }}>
             <Calendar size={13} /> {selDate ? formatLargo(selDate) : ""}
           </div>
 
@@ -673,14 +679,21 @@ export function BookingFlow({
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-5">
               {slots.map(s => {
                 const sel = selSlot === s;
+                // ws1-t1 (C-100): con el procedimiento ya elegido (de la URL o del portal), la hora en la que no
+                // cabe no se ofrece como elegible.
+                const noCabe = !!servicioElegido?.durationMin &&
+                  !cabeElServicio(s, servicioElegido.durationMin, slots, doctorId === ANY_DOCTOR ? doctoresPorHueco : null);
                 return (
-                  <button key={s} type="button" onClick={() => { setSelSlot(s); setAviso(""); }}
+                  <button key={s} type="button" disabled={noCabe} onClick={() => { setSelSlot(s); setAviso(""); }}
                     aria-pressed={sel}
+                    title={noCabe ? textoNoCabe(s, servicioElegido!.durationMin!) : undefined}
                     className="py-2.5 rounded-xl text-sm font-bold border-2 transition-all tabular-nums"
                     style={{
                       background: sel ? theme : P.card,
                       color: sel ? "#fff" : P.ink,
                       borderColor: sel ? theme : P.border,
+                      opacity: noCabe ? 0.4 : 1,
+                      textDecoration: noCabe ? "line-through" : undefined,
                     }}>
                     {s}
                   </button>
@@ -703,19 +716,22 @@ export function BookingFlow({
           <p className="text-sm mb-4" style={{ color: P.inkSoft }}>Elige el procedimiento de tu cita</p>
           {services.map(s => {
             const sel = servicio === s.name;
+            // ws1-t1 (C-100): la hora se eligió antes; un procedimiento que no cabe en ese hueco no se elige.
+            const noCabe = !!selSlot && !!s.durationMin && !cabeElServicio(selSlot, s.durationMin, slots, doctorId === ANY_DOCTOR ? doctoresPorHueco : null);
+            const linea = noCabe ? textoNoCabe(selSlot, s.durationMin!) : lineaDePrecio(s, services.some(x => !!x.price));
             return (
-              <button key={s.name} type="button" onClick={() => { setServicio(s.name); avanzar(); }}
+              <button key={s.name} type="button" disabled={noCabe} onClick={() => { setServicio(s.name); avanzar(); }}
                 className="w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all"
-                style={{ ...tarjeta, borderColor: sel ? theme : P.border }}>
+                style={{ ...tarjeta, borderColor: sel ? theme : P.border, opacity: noCabe ? 0.55 : 1, cursor: noCabe ? "not-allowed" : undefined }}>
                 <span className="w-10 h-10 rounded-xl grid place-items-center shrink-0 text-lg"
                   style={{ background: alpha(theme, 0.1), color: theme }}>
                   {s.icon || "🦷"}
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-bold truncate" style={{ color: P.ink }}>{s.name}</span>
-                  {(s.price || s.durationMin) && (
+                  {linea && (
                     <span className="block text-xs mt-0.5 font-mono" style={{ color: P.inkSoft }}>
-                      {[s.price, s.durationMin ? `${s.durationMin} min` : null].filter(Boolean).join(" · ")}
+                      {linea}
                     </span>
                   )}
                 </span>
@@ -740,7 +756,7 @@ export function BookingFlow({
               {selDate ? formatLargo(selDate) : ""} · <span className="font-mono">{selSlot}</span>
               <br />
               <span className="font-normal">
-                {doctorElegido ? `Dr/a. ${doctorElegido.firstName} ${doctorElegido.lastName}` : "Cualquier doctor disponible"}
+                {doctorElegido ? nombreDoctorReserva(doctorElegido) : "Cualquier doctor disponible"}
                 {servicio ? ` · ${servicio}` : ""}
               </span>
             </span>
@@ -933,7 +949,7 @@ function ResumenDoctor({ doctor, theme, P }: { doctor: BookingFlowDoctor | null;
         </span>
       )}
       <span className="text-sm font-semibold truncate" style={{ color: P.ink }}>
-        {doctor ? `Dr/a. ${doctor.firstName} ${doctor.lastName}` : "Cualquier doctor disponible"}
+        {doctor ? nombreDoctorReserva(doctor) : "Cualquier doctor disponible"}
       </span>
     </div>
   );
@@ -1023,7 +1039,7 @@ function FinalScreen({
       </h3>
 
       <p className="text-sm mb-1" style={{ color: P.inkSoft }}>
-        {doctor ? `Dr/a. ${doctor.firstName} ${doctor.lastName}` : "Cualquier doctor disponible"}
+        {doctor ? nombreDoctorReserva(doctor) : "Cualquier doctor disponible"}
       </p>
       <p className="font-bold text-base mb-6 font-mono" style={{ color: theme }}>
         {fecha ? formatLargo(fecha) : ""} · {hora}
