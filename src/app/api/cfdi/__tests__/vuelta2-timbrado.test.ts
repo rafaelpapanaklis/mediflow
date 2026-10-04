@@ -30,6 +30,8 @@ const db = {
   cfdiRecords: [] as any[],
   /** ¿Está pegado sql/ws1-t4-cfdi-ambiente.sql? */
   columnaAmbiente: true,
+  /** null = falta sql/ws1-t4-cfdi-retenciones.sql; true/false = el ajuste de la clínica (F-01). */
+  retenciones: null as boolean | null,
   /** Catálogo de procedimientos con su clave SAT e IVA (F-11 / F-08). */
   catalogo: [] as { id: string; name: string; category: string; claveSat: string | null; ivaCfdi: string | null }[],
 };
@@ -86,6 +88,8 @@ const prismaStub: any = {
   $queryRaw: async (strings: TemplateStringsArray, ...vals: any[]) => {
     const q = sqlDe(strings);
     if (q.includes("information_schema.columns") && q.includes("procedure_catalog")) return [{ column_name: "claveSat" }, { column_name: "ivaCfdi" }];
+    if (q.includes("information_schema.columns") && q.includes("cfdiRetenciones")) return db.retenciones === null ? [] : [{ n: 1 }];
+    if (q.includes('SELECT "cfdiRetenciones"')) return [{ v: db.retenciones === true }];
     if (q.includes('SELECT "id", "claveSat", "ivaCfdi"')) return db.catalogo.map((c) => ({ id: c.id, claveSat: c.claveSat, ivaCfdi: c.ivaCfdi }));
     if (q.includes("information_schema.columns")) return db.columnaAmbiente ? [{ n: 1 }] : [];
     if (q.includes('SELECT "environment"')) {
@@ -155,11 +159,16 @@ const prismaStub: any = {
       const ya = args.idempotencyKey ? pac.porLlave.get(args.idempotencyKey) : null;
       if (ya) return ya; // misma llave: Facturapi devuelve el que ya emitió
       // Como Facturapi: con tax_included el precio ya trae el IVA; sin él, se le suma.
-      const total = Math.round(args.items.reduce((a: number, it: any) => {
-        const base = it.product.price * it.quantity - (it.discount ?? 0);
-        const iva = (it.product.taxes ?? []).some((t: any) => t.type === "IVA" && t.rate === 0.16 && !t.withholding);
-        return a + (iva && !it.product.tax_included ? base * 1.16 : base);
-      }, 0) * 100) / 100;
+      const r2 = (x: number) => Math.round(x * 100) / 100;
+      const total = r2(args.items.reduce((a: number, it: any) => {
+        const bruto = it.product.price * it.quantity - (it.discount ?? 0);
+        const taxes = it.product.taxes ?? [];
+        const iva = taxes.some((t: any) => t.type === "IVA" && t.rate === 0.16 && !t.withholding);
+        if (it.product.tax_included) return a + bruto; // (solo sin retenciones)
+        const base = r2(bruto);
+        const ret = taxes.filter((t: any) => t.withholding).reduce((x: number, t: any) => x + r2(base * t.rate), 0);
+        return a + base + (iva ? r2(base * 0.16) : 0) - ret;
+      }, 0));
       pac.emitidos += 1;
       const r = { id: `fapi_${pac.emitidos}`, uuid: `UUID-${pac.emitidos}`, total: pac.totalForzado ?? total };
       if (args.idempotencyKey) pac.porLlave.set(args.idempotencyKey, r);
@@ -242,10 +251,12 @@ beforeEach(async () => {
   pac.totalForzado = null;
   db.columnaAmbiente = true;
   db.catalogo = [];
+  db.retenciones = null;
   entornoLive.live = false;
   // Import dinámico: así carga DESPUÉS de los dobles (facturapi-env, prisma).
   (await import("@/lib/invoices/cfdi-ambiente.server"))._olvidarColumnaAmbiente();
   (await import("@/lib/cfdi/fiscal-concepto.server"))._olvidarColumnasFiscales();
+  (await import("@/lib/cfdi/retenciones.server"))._olvidarColumnaRetenciones();
 });
 
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
@@ -537,4 +548,74 @@ test("F-08 · «Facturar este pago» de una factura con IVA mezclado no se timbr
   const r = await timbrarPago("eng", { receptor: PF_612 });
   assert.equal(r.status, 409);
   assert.equal(r.body.code, "CFDI_IVA_MIXTO_POR_PAGO");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-01 · retenciones (ajuste por clínica, APAGADO por defecto)
+// ═══════════════════════════════════════════════════════════════════════════
+const TRATAMIENTO_10K = { total: 10000, paid: 10000, subtotal: 10000, items: [{ description: "Rehabilitación con coronas", quantity: 1, unitPrice: 10000, total: 10000 }] };
+
+test("F-01 · sin el SQL (o apagado), RESICO → empresa sigue bloqueado como en la Tanda 0", async () => {
+  setInvoice(TRATAMIENTO_10K);
+  let r = await timbrar({ receptor: EMPRESA, paymentForm: "03" });
+  assert.equal(r.body.code, "CFDI_RETENCION_PENDIENTE");
+  db.retenciones = false;
+  (await import("@/lib/cfdi/retenciones.server"))._olvidarColumnaRetenciones();
+  r = await timbrar({ receptor: EMPRESA, paymentForm: "03" });
+  assert.equal(r.body.code, "CFDI_RETENCION_PENDIENTE");
+  assert.equal(pac.timbres.length, 0);
+});
+
+test("F-01 · ENCENDIDO: RESICO → empresa, exento $10,000, la empresa pagó $9,875 → CFDI con ISR retenido $125 (neto $9,875.00)", async () => {
+  db.retenciones = true;
+  setInvoice({ ...TRATAMIENTO_10K, paid: 9875, balance: 125, status: "PARTIAL" });
+  const r = await timbrar({ receptor: EMPRESA, paymentForm: "03" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const it = pac.timbres[0].items[0];
+  assert.equal(it.product.price, 10000);
+  assert.equal(it.product.tax_included, false);
+  assert.deepEqual(it.product.taxes, [{ type: "IVA", factor: "Exento", rate: 0 }, { type: "ISR", rate: 0.0125, withholding: true }]);
+  assert.equal(db.cfdiRecords[0].total, 9875);
+  assert.equal(r.body.retencion.neto, 9875);
+  assert.equal(r.body.retencion.isrRetenido, 125);
+  assert.equal(r.body.warning, undefined, "lo timbrado cuadra con el neto");
+});
+
+test("F-01 · ENCENDIDO: si la empresa todavía no paga el neto ($9,000 de $9,875), no se timbra PUE", async () => {
+  db.retenciones = true;
+  setInvoice({ ...TRATAMIENTO_10K, paid: 9000, balance: 1000, status: "PARTIAL" });
+  const r = await timbrar({ receptor: EMPRESA, paymentForm: "03" });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "CFDI_CON_SALDO");
+  assert.match(r.body.error, /\$875\.00/);
+});
+
+test("F-01 · ENCENDIDO: 612 → empresa con servicio GRAVADO (IVA agregado) → IVA $1,600, ISR $1,000, IVA retenido $1,066.67, neto $9,533.33", async () => {
+  db.retenciones = true;
+  setClinic({ regimenFiscal: "612" });
+  setInvoice({ total: 11600, paid: 9533.33, balance: 2066.67, status: "PARTIAL", subtotal: 10000, taxRate: 16, taxIncluded: false,
+    items: [{ description: "Blanqueamiento estético", quantity: 1, unitPrice: 10000, total: 10000 }] });
+  const r = await timbrar({ receptor: EMPRESA, paymentForm: "03", taxMode: "iva16" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(pac.timbres[0].items[0].product.taxes, [{ type: "IVA", rate: 0.16 }, { type: "ISR", rate: 0.10, withholding: true }, { type: "IVA", rate: 0.106667, withholding: true }]);
+  assert.equal(db.cfdiRecords[0].total, 9533.33);
+});
+
+test("F-01 · ENCENDIDO: a una persona física no se le retiene nada", async () => {
+  db.retenciones = true;
+  setInvoice(TRATAMIENTO_10K);
+  const r = await timbrar({ receptor: PF_612, paymentForm: "03" });
+  assert.equal(r.status, 200);
+  assert.equal(pac.timbres[0].items[0].product.taxes.some((t: any) => t.withholding), false);
+  assert.equal(r.body.retencion, undefined);
+});
+
+test("F-01 · ENCENDIDO: el CFDI de un pago suelto con retención todavía no existe (lo dice)", async () => {
+  db.retenciones = true;
+  db.condiciones = PLAZOS_IVA;
+  setInvoice({ total: 26000, paid: 2000, balance: 24000, status: "PARTIAL" },
+    [{ id: "eng", invoiceId: "inv1", method: "transfer", amount: 2000, paidAt: new Date("2026-10-01T12:00:00Z") }]);
+  const r = await timbrarPago("eng", { receptor: EMPRESA });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "CFDI_RETENCION_POR_PAGO");
 });

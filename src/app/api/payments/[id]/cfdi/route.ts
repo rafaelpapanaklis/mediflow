@@ -34,6 +34,8 @@ import { llaveIdempotencia } from "@/lib/invoices/cfdi-identidad";
 import { marcarAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
 import { resolverConcepto, hayIvaMixto, errorIvaMixtoPorPago, CFDI_IVA_MIXTO_POR_PAGO } from "@/lib/cfdi/fiscal-concepto";
 import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
+import { tasasDeRetencion, errorRetencionPorPago, CFDI_RETENCION_POR_PAGO } from "@/lib/cfdi/retenciones";
+import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -103,7 +105,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json(errorLimiteTimbrado(clinic.locale), { status: 429 });
   }
   const retencion = bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
-  if (retencion) return NextResponse.json(retencion, { status: 409 });
+  if (retencion) {
+    // F-01 (ws1-t4, vuelta 2): con «Facturar a empresas con retención»
+    // encendido la factura COMPLETA sí lleva la retención; el CFDI de un pago
+    // suelto con retención todavía no existe.
+    const encendidas = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc })
+      && await retencionesEncendidas(prisma, ctx!.clinicId);
+    if (encendidas) return NextResponse.json({ error: errorRetencionPorPago(clinic.locale), code: CFDI_RETENCION_POR_PAGO }, { status: 409 });
+    return NextResponse.json(retencion, { status: 409 });
+  }
   if (usoCfdi !== undefined && usoCfdi !== null && usoCfdi !== ""
       && !USOS_CFDI.some((u) => u.clave === usoCfdi)) {
     return NextResponse.json({ error: `Uso de CFDI inválido: ${String(usoCfdi)}.` }, { status: 400 });

@@ -43,6 +43,8 @@ import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
 import { resolverConcepto, hayIvaMixto, errorIvaMixtoAgregado, CFDI_IVA_MIXTO_AGREGADO } from "@/lib/cfdi/fiscal-concepto";
 import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
+import { tasasDeRetencion, conceptoConRetenciones, totalesConRetenciones, avisoDeRetencion } from "@/lib/cfdi/retenciones";
+import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
 import { ambienteDeCfdi, marcarAmbiente, retirarCfdiDePrueba } from "@/lib/invoices/cfdi-ambiente.server";
 
 export async function POST(req: NextRequest) {
@@ -113,7 +115,12 @@ export async function POST(req: NextRequest) {
   // ── Candado de retenciones (ws1-t4, tanda 0, F-01a) ────────────────────────
   // Emisor 612/626 + receptor persona moral: la empresa retiene ISR y el CFDI
   // tendría que decirlo. Mientras no haya retenciones, no se timbra.
-  const retencion = bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
+  // ws1-t4, vuelta 2 (F-01): con el ajuste «Facturar a empresas con
+  // retención» ENCENDIDO, el CFDI lleva la retención en vez de bloquearse.
+  // Apagado (por defecto, o sin su SQL), el candado de la Tanda 0 sigue igual.
+  const tasasRet = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc });
+  const conRetenciones = tasasRet ? await retencionesEncendidas(prisma, ctx!.clinicId) : false;
+  const retencion = conRetenciones ? null : bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
   if (retencion) return NextResponse.json(retencion, { status: 409 });
 
   // Uso del CFDI: el que manda el formulario (si existe en el catálogo) o el
@@ -302,7 +309,20 @@ export async function POST(req: NextRequest) {
   // Con saldo NO se timbra: ya no hay «confirmar y timbrar igual». Si es a
   // plazos, el aviso manda a «Facturar este pago» (cada pago ya cobrado, su
   // propio CFDI PUE por lo cobrado).
-  const saldo = bloqueoPorSaldo({ total: invoice.total, paid: invoice.paid, esAPlazos, locale: clinic.locale });
+  // Descuento de factura prorrateado por concepto (también lo usan las retenciones).
+  const extraDiscounts = spreadInvoiceDiscount(invoiceItems, discount);
+  // F-01: con retenciones, la empresa paga el NETO (bruto − ISR − IVA retenido):
+  // la factura está pagada cuando entró el neto.
+  const totalesRet = conRetenciones && tasasRet
+    ? totalesConRetenciones(invoiceItems.map((item: any, i: number) => ({
+        precio: itemUnitPrice(item),
+        cantidad: itemQuantity(item),
+        descuento: round2(itemDiscount(item) + (extraDiscounts[i] ?? 0)),
+        ivaModo: conceptosFiscales[i].ivaModo,
+        ivaIncluido: taxIncludedInv,
+      })), tasasRet)
+    : null;
+  const saldo = bloqueoPorSaldo({ total: totalesRet ? totalesRet.neto : invoice.total, paid: invoice.paid, esAPlazos, locale: clinic.locale });
   if (saldo) return NextResponse.json(saldo, { status: 409 });
 
   // ── Forma de pago SAT ─────────────────────────────────────────────────────
@@ -346,13 +366,32 @@ export async function POST(req: NextRequest) {
 
     // Descuento a nivel factura → prorrateado como descuento por concepto
     // (antes se ignoraba y el CFDI salía por el subtotal completo).
-    const extraDiscounts = spreadInvoiceDiscount(invoiceItems, discount);
 
     const items = invoiceItems.map((item: any, i: number) => {
       // Clave e IVA ya resueltos por concepto (F-11 / F-08). Una clave del
       // renglón solo cuenta si es de 8 dígitos (`resolverConcepto`).
       const fiscalDelConcepto = conceptosFiscales[i];
       const exento = fiscalDelConcepto.ivaModo === "exento";
+      const descuento = round2(itemDiscount(item) + (extraDiscounts[i] ?? 0));
+      if (conRetenciones && tasasRet) {
+        // F-01: precio y descuento SIN IVA, con el traslado y las retenciones.
+        const k = conceptoConRetenciones({
+          precio: itemUnitPrice(item), cantidad: itemQuantity(item), descuento,
+          ivaModo: fiscalDelConcepto.ivaModo, ivaIncluido: taxIncludedInv,
+        }, tasasRet);
+        return {
+          quantity: itemQuantity(item),
+          product: {
+            description: item.description ?? "Servicio médico",
+            product_key: fiscalDelConcepto.claveSat,
+            unit_key:    UNIDAD_SAT,
+            price:       k.price,
+            tax_included: false,
+            taxes:        k.taxes,
+          },
+          discount: k.discount,
+        };
+      }
       return {
         quantity: itemQuantity(item),
         product: {
@@ -364,7 +403,7 @@ export async function POST(req: NextRequest) {
           tax_included: exento ? false : taxIncludedInv,
           taxes:        exento ? [{ type: "IVA", factor: "Exento", rate: 0 }] : [{ type: "IVA", rate: 0.16 }],
         },
-        discount: round2(itemDiscount(item) + (extraDiscounts[i] ?? 0)),
+        discount: descuento,
       };
     });
 
@@ -438,7 +477,10 @@ export async function POST(req: NextRequest) {
     //     humano tiene que MIRAR antes de entregar el comprobante: a quien está
     //     en el mostrador con un paciente enfrente, un centavo de redondeo no le
     //     sirve de nada y le enseñaría un error técnico que no puede resolver.
-    const stamped = cfdiStampedCheck(result.total, invoice.total, tolerance);
+    // Con retenciones, lo esperado es el NETO (1¢ por concepto de redondeo).
+    const stamped = totalesRet
+      ? cfdiStampedCheck(result.total, totalesRet.neto, tolerance + 0.01 * invoiceItems.length)
+      : cfdiStampedCheck(result.total, invoice.total, tolerance);
     const stampedTotal = stamped.stampedTotal;
     const stampedRecord = stamped.level === "match"
       ? null
@@ -523,6 +565,7 @@ export async function POST(req: NextRequest) {
           // F-08 / F-11: el IVA y la clave SAT que llevó cada concepto.
           taxMode: ivaMixto ? "mixto" : taxModeCuadre,
           conceptos: conceptosFiscales.map((c: { claveSat: string; ivaModo: string }) => ({ claveSat: c.claveSat, iva: c.ivaModo })),
+          ...(totalesRet ? { retenciones: { isr: totalesRet.isrRetenido, iva: totalesRet.ivaRetenido, neto: totalesRet.neto, bruto: totalesRet.bruto } } : {}),
           ...(stampedRecord ? { totalMismatch: stampedRecord } : {}),
         },
       },
@@ -540,6 +583,8 @@ export async function POST(req: NextRequest) {
         overagePriceCents: q.overageCents,
       },
       ...(totalWarning ? { warning: totalWarning } : {}),
+      // F-01: cuánto retiene la empresa (para avisarlo al timbrar).
+      ...(totalesRet ? { retencion: { ...totalesRet, mensaje: avisoDeRetencion(totalesRet, clinic.locale) } } : {}),
     });
 
   } catch (err: any) {

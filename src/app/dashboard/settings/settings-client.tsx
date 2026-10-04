@@ -7,6 +7,8 @@ import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
+// ws1-t4, vuelta 2 (F-01): «Facturar a empresas con retención», apagado por defecto.
+import { AjusteRetencionesCfdi } from "@/components/dashboard/settings/ajuste-retenciones-cfdi";
 import { AvisoExentoPersonaMoral } from "@/components/dashboard/settings/cfdi-avisos-emisor";
 import { CobradoSinCfdiCard } from "@/components/dashboard/settings/cobrado-sin-cfdi-card";
 import { Button } from "@/components/ui/button";
@@ -1134,6 +1136,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
                 {/* Checklist real de Facturapi, entre la captura fiscal y el CSD. */}
                 <CfdiReadinessCard refreshKey={cfdiStatusKey} />
+                <AjusteRetencionesCfdi />
 
                 <Seccion
                   titulo={t("settings.client.csdTitle")}
@@ -2007,6 +2010,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               pending_steps). Va entre la captura fiscal y la subida del CSD: dice
               qué falta justo antes de la card que resuelve el paso más común. */}
           <CfdiReadinessCard refreshKey={cfdiStatusKey} />
+          <AjusteRetencionesCfdi />
 
           {/* ── CERTIFICADOS CSD ── */}
           <div className="card">

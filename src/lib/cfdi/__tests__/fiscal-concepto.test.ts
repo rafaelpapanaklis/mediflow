@@ -73,3 +73,44 @@ test("F-11 / F-08 · lo que manda el formulario de Procedimientos", () => {
   assert.equal(leerFiscalDeEntrada({ claveSat: "8512200" }).ok, false);
   assert.equal(leerFiscalDeEntrada({ ivaCfdi: "exempt" }).ok, false);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-01 · retenciones (CONFIRMAR CON CONTADOR)
+// ═══════════════════════════════════════════════════════════════════════════
+import { tasasDeRetencion, totalesConRetenciones, conceptoConRetenciones, avisoDeRetencion } from "../retenciones";
+
+test("F-01 · quién retiene: 626 → empresa 1.25%; 612 → empresa 10%; a personas físicas y genéricos, nada", () => {
+  assert.deepEqual(tasasDeRetencion({ regimenEmisor: "626", rfcReceptor: "ABC010101AB1" }), { isr: 0.0125, ivaRetenido: 0.106667 });
+  assert.deepEqual(tasasDeRetencion({ regimenEmisor: "612", rfcReceptor: "ABC010101AB1" }), { isr: 0.10, ivaRetenido: 0.106667 });
+  assert.equal(tasasDeRetencion({ regimenEmisor: "626", rfcReceptor: "GOMA800101AB1" }), null);
+  assert.equal(tasasDeRetencion({ regimenEmisor: "626", rfcReceptor: "XAXX010101000" }), null);
+  assert.equal(tasasDeRetencion({ regimenEmisor: "601", rfcReceptor: "ABC010101AB1" }), null);
+});
+
+test("F-01 · 626 → empresa, tratamiento exento de $10,000: retiene $125.00 de ISR y paga $9,875.00", () => {
+  const t = totalesConRetenciones([{ precio: 10000, cantidad: 1, descuento: 0, ivaModo: "exento", ivaIncluido: true }], { isr: 0.0125, ivaRetenido: 0.106667 });
+  assert.deepEqual(t, { base: 10000, iva: 0, isrRetenido: 125, ivaRetenido: 0, bruto: 10000, neto: 9875 });
+});
+
+test("F-01 · 612 → empresa, exento de $10,000: ISR $1,000.00 → paga $9,000.00", () => {
+  const t = totalesConRetenciones([{ precio: 10000, cantidad: 1, descuento: 0, ivaModo: "exento", ivaIncluido: true }], { isr: 0.10, ivaRetenido: 0.106667 });
+  assert.equal(t.isrRetenido, 1000);
+  assert.equal(t.neto, 9000);
+});
+
+test("F-01 · 612 → empresa, GRAVADO base $10,000: IVA $1,600.00, IVA retenido $1,066.67, ISR $1,000.00 → $9,533.33", () => {
+  const tasas = { isr: 0.10, ivaRetenido: 0.106667 };
+  const agregado = totalesConRetenciones([{ precio: 10000, cantidad: 1, descuento: 0, ivaModo: "iva16", ivaIncluido: false }], tasas);
+  assert.deepEqual(agregado, { base: 10000, iva: 1600, isrRetenido: 1000, ivaRetenido: 1066.67, bruto: 11600, neto: 9533.33 });
+  // El mismo servicio con el IVA incluido en el precio ($11,600) da lo mismo.
+  const incluido = totalesConRetenciones([{ precio: 11600, cantidad: 1, descuento: 0, ivaModo: "iva16", ivaIncluido: true }], tasas);
+  assert.deepEqual(incluido, agregado);
+  const k = conceptoConRetenciones({ precio: 11600, cantidad: 1, descuento: 0, ivaModo: "iva16", ivaIncluido: true }, tasas);
+  assert.equal(k.price, 10000);
+  assert.deepEqual(k.taxes, [{ type: "IVA", rate: 0.16 }, { type: "ISR", rate: 0.10, withholding: true }, { type: "IVA", rate: 0.106667, withholding: true }]);
+});
+
+test("F-01 · el aviso dice cuánto retiene y cuánto paga", () => {
+  const t = totalesConRetenciones([{ precio: 10000, cantidad: 1, descuento: 0, ivaModo: "exento", ivaIncluido: true }], { isr: 0.0125, ivaRetenido: 0.106667 });
+  assert.equal(avisoDeRetencion(t), "La empresa retiene $125.00 (ISR $125.00) y paga $9,875.00.");
+});

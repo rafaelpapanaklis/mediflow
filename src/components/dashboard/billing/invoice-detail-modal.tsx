@@ -652,6 +652,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       if (data.cfdiId) void envioCfdi.trasTimbrar(data.cfdiId, fiscal.email);
       setSub(null);
       toast.success(t("clinical.invoiceDetail.cfdiStampedToast"));
+      // F-01 (ws1-t4, vuelta 2): con retención, cuánto retiene la empresa y cuánto paga.
+      if (typeof data.retencion?.mensaje === "string") toast(data.retencion.mensaje, { duration: 12000 });
       // El SAT timbró por un importe distinto al de la factura. El CFDI ya está
       // emitido y no se deshace, así que no se puede bloquear nada: se avisa a
       // quien timbró, con tiempo suficiente para leerlo, antes de que entregue el
