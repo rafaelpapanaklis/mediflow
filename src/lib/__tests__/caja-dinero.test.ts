@@ -107,6 +107,8 @@ function derivadoFalso(over: Partial<Awaited<ReturnType<typeof deriveWindow>>> =
   const base: Awaited<ReturnType<typeof deriveWindow>> = {
     cashIncome: 0, cardDebitIncome: 0, cardCreditIncome: 0, otherIncome: 0,
     totalIncome: 0, refunds: 0, cashRefunds: 0, discounts: 0, tax: 0, list: [],
+    // ws1-t5: traspasos a saldo a favor, saldo aplicado y reembolsos sin método.
+    refundsUnknownMethod: 0, toCredit: 0, appliedCredit: 0,
   };
   return { ...base, ...over };
 }

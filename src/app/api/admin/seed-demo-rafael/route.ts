@@ -862,7 +862,7 @@ export async function POST(req: NextRequest) {
                   data: {
                     invoiceId: invoice.id,
                     amount,
-                    method: pick(["cash", "debit_card", "credit_card", "transfer", "check"]),
+                    method: pick(["cash", "debit", "credit", "transfer", "check"]),
                     paidAt: new Date(a.endsAt.getTime() + (p + 1) * 3600000),
                   },
                 });
@@ -1014,7 +1014,7 @@ export async function POST(req: NextRequest) {
                     data: {
                       invoiceId: inv.id,
                       amount: paidAmt,
-                      method: pick(["cash", "debit_card", "credit_card", "transfer"]),
+                      method: pick(["cash", "debit", "credit", "transfer"]),
                       paidAt: sessionDate,
                     },
                   });

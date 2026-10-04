@@ -21,6 +21,8 @@ import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist
 import { AiQuotaBanner } from "@/components/dashboard/ai-quota-banner";
 import { StorageQuotaBanner } from "@/components/dashboard/storage-quota-banner";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
+import { AvisoCajaAbierta } from "@/components/dashboard/aviso-caja-abierta";
+import { localeFromClinic } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,8 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     "";
   const homeUser = { displayName, role: user.role };
   const homeClinic = { name: clinic.name, timezone: clinic.timezone };
+  // ws1-t5 (F7): la caja lleva más de un día abierta sin corte. Se calla sola.
+  const avisoCaja = <AvisoCajaAbierta clinicId={clinic.id} locale={localeFromClinic(clinic)} user={user} />;
 
   const role = user.role;
   // walk-in: la API /api/walk-in exige agenda.create para agregar a la fila.
@@ -76,12 +80,14 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     if (rediseno) {
       return (
         <RaizHoy>
+          {avisoCaja}
           <HoyRecepcion key={clinic.id} user={homeUser} clinic={homeClinic} data={data} puedeAgregarEspera={puedeAgregarEspera} />
         </RaizHoy>
       );
     }
     return (
       <HomeShell>
+        {avisoCaja}
         <HomeReceptionist key={clinic.id} user={homeUser} clinic={homeClinic} data={data} puedeAgregarEspera={puedeAgregarEspera} />
       </HomeShell>
     );
@@ -131,6 +137,7 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
         {/* Aviso de almacenamiento — solo desde el 80 % del tope del plan; se
             descarta por sesión y por nivel. */}
         <StorageQuotaBanner rediseno={rediseno} />
+        {avisoCaja}
         {/* Checklist de primeros pasos — solo admins; se auto-oculta al 100%
             o si el usuario lo descartó (localStorage por clinicId). */}
         <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} rediseno={rediseno} />
@@ -170,12 +177,14 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
   if (rediseno) {
     return (
       <RaizHoy>
+        {avisoCaja}
         <HoyAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
       </RaizHoy>
     );
   }
   return (
     <HomeShell>
+      {avisoCaja}
       <HomeAdmin key={clinic.id} user={homeUser} clinic={homeClinic} data={adminData} period={period} />
     </HomeShell>
   );

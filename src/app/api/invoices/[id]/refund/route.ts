@@ -12,6 +12,7 @@ import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
+import { esMetodoDeDevolucion, METODOS_DE_DEVOLUCION } from "@/lib/dinero/reembolsos";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -22,7 +23,11 @@ async function getCtx() {
   return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
 }
 
-// POST /api/invoices/[id]/refund — body { amount: number; reason?: string }
+// POST /api/invoices/[id]/refund — body { amount: number; refundMethod: string; reason?: string }
+//
+// ws1-t5 (F5): `refundMethod` es OBLIGATORIO — por dónde salió el dinero
+// (METODOS_DE_DEVOLUCION). El corte de caja resta del efectivo esperado solo
+// lo que salió en efectivo; sin el dato no podía restar nada.
 //
 // El schema actual no tiene un modelo Refund dedicado. Para evitar una
 // migración en este sprint, modelamos el reembolso como una row de Payment
@@ -48,6 +53,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (!isFinite(amountRaw) || amountRaw <= 0) {
     return NextResponse.json({ error: "Monto inválido" }, { status: 400 });
+  }
+  const refundMethod = body?.refundMethod;
+  if (!esMetodoDeDevolucion(refundMethod)) {
+    return NextResponse.json({
+      error: `Di cómo le devolviste el dinero (${METODOS_DE_DEVOLUCION.join(", ")}): el corte de caja solo resta lo que salió en efectivo.`,
+      code: "REFUND_METHOD_REQUIRED",
+    }, { status: 400 });
   }
 
   const invoicePeek = await prisma.invoice.findFirst({
@@ -117,6 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         invoiceId: params.id,
         amount: amountRaw,
         method: "refund",
+        refundMethod,
         notes: reason || undefined,
       },
     });
@@ -143,7 +156,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { paid: invoice.paid, balance: invoice.balance, status: invoice.status },
-    after:  { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, refund: { amount: amountRaw, reason: reason || undefined } },
+    after:  { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, refund: { amount: amountRaw, refundMethod, reason: reason || undefined } },
   });
 
   // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden

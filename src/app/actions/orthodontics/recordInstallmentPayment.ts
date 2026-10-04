@@ -1,111 +1,27 @@
 "use server";
-// Orthodontics — action 7/15: recordInstallmentPayment con backdating ±60d. SPEC §1.12 + §5.2.
+// Orthodontics — action 7/15: recordInstallmentPayment. RETIRADA (ws1-t5).
+//
+// F13 de la auditoría del dinero (3-oct-2026): marcaba la mensualidad como
+// PAGADA en `ortho_installments` SIN crear un Payment, así que ese dinero no
+// entraba a Caja, ni al corte, ni a Finanzas, ni a la cobranza. Solo la llamaba
+// el cajón viejo de ortodoncia (RecordPaymentDrawer, cuando el caso no tiene la
+// vista nueva). Ya no escribe nada: las mensualidades se cobran con el cobro
+// normal («Cobro del tratamiento» del caso o Caja), que crea el Payment de la
+// factura del caso. Producción tenía 0 cuotas pagadas por aquí.
 
-import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { recordInstallmentPaymentSchema } from "@/lib/validation/orthodontics";
-import { auditOrtho, getOrthoBillingActionContext } from "./_helpers";
-import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
-import { fail, isFailure, ok, type ActionResult } from "./result";
+import { getOrthoBillingActionContext } from "./_helpers";
+import { fail, isFailure, type ActionResult } from "./result";
 
-const SIXTY_DAYS_MS = 60 * 86_400_000;
+/** El mensaje del camino retirado (lo ve quien abra el cajón viejo). */
+const COBRO_VIEJO_RETIRADO =
+  "Este registro ya no se usa: cobra la mensualidad desde «Cobro del tratamiento» del caso (o desde Caja) para que el dinero entre al corte de caja y a los reportes.";
 
 export async function recordInstallmentPayment(
-  input: unknown,
+  _input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  // Revisión cruzada (Ola 1): cobrar una mensualidad exigía medicalRecord.edit
-  // (getOrthoActionContext) en vez de la key de dinero — recepción no podía
-  // registrar el pago aunque sea justo su trabajo. Migrado a billing.charge.
+  // Misma puerta de siempre (billing.charge): sin sesión o sin permiso, el
+  // mismo error que antes; con permiso, el aviso de dónde se cobra ahora.
   const auth = await getOrthoBillingActionContext("billing.charge");
   if (isFailure(auth)) return auth;
-  const { ctx } = auth.data;
-
-  const parsed = recordInstallmentPaymentSchema.safeParse(input);
-  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
-
-  const installment = await prisma.orthoInstallment.findFirst({
-    where: { id: parsed.data.installmentId, clinicId: ctx.clinicId },
-    include: {
-      paymentPlan: {
-        select: { id: true, patientId: true, treatmentPlanId: true, installmentAmount: true },
-      },
-    },
-  });
-  if (!installment) return fail("Mensualidad no encontrada");
-  if (installment.status === "PAID") return fail("La mensualidad ya está pagada");
-  if (installment.status === "WAIVED") return fail("La mensualidad fue perdonada");
-
-  const paidAt = new Date(parsed.data.paidAt);
-  const now = new Date();
-
-  // Validar rango paidAt en [dueDate - 60d, now()]. SPEC §1.12.
-  const minPaidAt = new Date(installment.dueDate.getTime() - SIXTY_DAYS_MS);
-  const isOutOfRange = paidAt < minPaidAt || paidAt > now;
-  if (isOutOfRange) {
-    if (
-      !parsed.data.backdatingJustification ||
-      parsed.data.backdatingJustification.trim().length < 20
-    ) {
-      return fail(
-        "paidAt fuera del rango [dueDate - 60d, ahora]. Requiere backdatingJustification ≥20 caracteres.",
-      );
-    }
-  }
-
-  // Validar amountPaid ±5% del installmentAmount esperado (sin justificación dedicada
-  // en este MVP — toleramos diferencia chica por descuento por pronto pago).
-  const expected = Number(installment.amount);
-  const lowerBound = expected * 0.95;
-  const upperBound = expected * 1.05;
-  if (parsed.data.amountPaid < lowerBound || parsed.data.amountPaid > upperBound) {
-    return fail(
-      `amountPaid fuera de ±5% del monto esperado (${expected}). Use waiver si quieres perdonar diferencia.`,
-    );
-  }
-
-  try {
-    const updated = await prisma.orthoInstallment.update({
-      where: { id: installment.id },
-      data: {
-        status: "PAID",
-        paidAt,
-        amountPaid: parsed.data.amountPaid,
-        paymentMethod: parsed.data.paymentMethod,
-        receiptFileId: parsed.data.receiptFileId ?? null,
-        recordedById: ctx.userId,
-        backdatingJustification: isOutOfRange
-          ? parsed.data.backdatingJustification ?? null
-          : null,
-      },
-    });
-
-    await auditOrtho({
-      ctx,
-      action: ORTHO_AUDIT_ACTIONS.INSTALLMENT_PAID,
-      entityType: "OrthoInstallment",
-      entityId: updated.id,
-      patientId: installment.paymentPlan.patientId,
-      after: {
-        installmentNumber: updated.installmentNumber,
-        amountPaid: updated.amountPaid?.toString() ?? null,
-        paymentMethod: updated.paymentMethod,
-        backdatingJustification: updated.backdatingJustification,
-        outOfRange: isOutOfRange,
-      },
-    });
-
-    // El trigger SQL recalc_payment_plan_status ya recalcula el plan. Sin embargo
-    // notificamos al cliente con revalidatePath. La defensa adicional (action
-    // recalculatePaymentStatus) está disponible como botón manual.
-    revalidatePath(`/dashboard/patients/${installment.paymentPlan.patientId}/orthodontics`);
-    revalidatePath(
-      `/dashboard/specialties/orthodontics/${installment.paymentPlan.patientId}`,
-    );
-    revalidatePath(`/dashboard/specialties/orthodontics`);
-
-    return ok({ id: updated.id });
-  } catch (e) {
-    console.error("[ortho] recordInstallmentPayment failed:", e);
-    return fail("No se pudo registrar el pago");
-  }
+  return fail(COBRO_VIEJO_RETIRADO);
 }

@@ -16,6 +16,7 @@ import { logAudit } from "@/lib/audit";
 import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 import { anticipoDeLaFactura, partesDeDevolucion } from "@/lib/patient-credit-aplicar";
 import { FUENTE_DEVUELTO, claveCandadoSaldo } from "@/lib/patient-credit-core";
+import { REEMBOLSO_A_SALDO_A_FAVOR, type MetodoDeDevolucion } from "@/lib/dinero/reembolsos";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "./panel.server";
 import {
@@ -182,6 +183,8 @@ export async function decidirDineroDeCitaCancelada(args: {
     await tx.payment.create({
       data: {
         invoiceId, amount: monto, method: "refund", paidAt: ahora,
+        // ws1-t5 (F3): traspaso, no reembolso — no resta ingresos.
+        refundMethod: REEMBOLSO_A_SALDO_A_FAVOR,
         notes: `Pasa al saldo a favor del paciente: se canceló la cita (${args.quien}).`,
       },
     });
@@ -220,6 +223,8 @@ export async function registrarDevolucionYCancelar(args: {
   invoiceId: string;
   userId: string;
   quien: string;
+  /** ws1-t5 (F5): por dónde salió el dinero. El corte de caja resta solo el efectivo. */
+  refundMethod: MetodoDeDevolucion;
 }): Promise<ResultadoDecision> {
   const { clinicId, invoiceId } = args;
   const ahora = new Date();
@@ -244,7 +249,7 @@ export async function registrarDevolucionYCancelar(args: {
     const fecha = ahora.toISOString().slice(0, 16).replace("T", " ");
     await tx.payment.create({
       data: {
-        invoiceId, amount: monto, method: "refund", paidAt: ahora,
+        invoiceId, amount: monto, method: "refund", refundMethod: args.refundMethod, paidAt: ahora,
         notes: `Devuelto al paciente fuera de DaleControl: se canceló su cita (${args.quien}).`,
       },
     });

@@ -7,6 +7,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { getOpenRegister, deriveWindow, buildCloseSummary, money } from "@/lib/caja";
 import { canUseCaja, verifyCajaPin } from "@/lib/caja-pin";
+import { cobrosAsignados } from "@/lib/dinero/ajustes.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,9 @@ export async function POST(req: NextRequest) {
     if (!reg) return NextResponse.json({ error: "No hay caja abierta." }, { status: 400 });
 
     const now = new Date();
-    const derived = await deriveWindow(clinicId, reg.openedAt, now);
+    // ws1-t5 (F7): los cobros fuera de corte que se pasaron a esta caja también se cierran con ella.
+    const asignados = await cobrosAsignados(clinicId, { cashRegisterId: reg.id });
+    const derived = await deriveWindow(clinicId, reg.openedAt, now, { asignados });
     const withdrawalsTotal = reg.withdrawals.reduce((s, w) => s + (w.amount ?? 0), 0);
     // UN solo resumen para las tres salidas: el snapshot que se congela, el
     // audit log y el papel que imprime el cliente. La fórmula del efectivo
@@ -61,8 +64,10 @@ export async function POST(req: NextRequest) {
     const expectedCash = summary.expectedCash;
     const variance = summary.variance;
 
-    await prisma.cashRegister.update({
-      where: { id: reg.id },
+    // ws1-t5 (F7): solo si SIGUE abierta. Dos cierres a la vez (o el cierre
+    // automático de medianoche) ya no pisan la foto del corte: el segundo da 409.
+    const cerrada = await prisma.cashRegister.updateMany({
+      where: { id: reg.id, clinicId, status: "OPEN" },
       data: {
         status: "CLOSED",
         closedAt: now,
@@ -77,6 +82,9 @@ export async function POST(req: NextRequest) {
         snapshotVariance:     money(variance),
       },
     });
+    if (cerrada.count === 0) {
+      return NextResponse.json({ error: "Esta caja ya se cerró (otro cierre se adelantó). Recarga la pantalla.", code: "CAJA_YA_CERRADA" }, { status: 409 });
+    }
 
     await logMutation({
       req, clinicId, userId,

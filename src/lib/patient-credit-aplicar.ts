@@ -42,6 +42,7 @@ import {
   repartoAlCancelar,
   type OrigenAplicacion,
 } from "./patient-credit-core";
+import { REEMBOLSO_A_SALDO_A_FAVOR } from "@/lib/dinero/reembolsos";
 
 type Tx = Prisma.TransactionClient;
 type Db = Pick<typeof prisma, "$transaction">;
@@ -327,6 +328,8 @@ export async function devolverAnticipoAlCancelar(
       invoiceId: invoice.id,
       amount: devolver,
       method: "refund",
+      // ws1-t5 (F3): traspaso, no reembolso — no resta ingresos.
+      refundMethod: REEMBOLSO_A_SALDO_A_FAVOR,
       notes: "Anticipo devuelto al saldo a favor del paciente (factura cancelada)",
       paidAt: ahora,
     },

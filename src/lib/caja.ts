@@ -26,6 +26,14 @@ import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { cargarVencimientosDeCargosDeControl } from "@/lib/orthodontics/cobranza-controles-db";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
+import {
+  FUENTES_CREDITO_QUE_SON_INGRESO,
+  REEMBOLSO_A_SALDO_A_FAVOR,
+  esReembolsoEnEfectivo,
+  esTraspasoASaldoAFavor,
+} from "@/lib/dinero/reembolsos";
+import { cobrosAsignados } from "@/lib/dinero/ajustes.server";
+import { cobrosFueraDeCorte, diasAbierta, medianocheAnterior } from "@/lib/dinero/caja-core";
 
 /**
  * Lo único que Caja LEE de la base, y nada más.
@@ -43,6 +51,12 @@ export type CajaDb = {
   invoice:      Pick<typeof prisma.invoice, "aggregate" | "findMany">;
   clinic:       Pick<typeof prisma.clinic, "findUnique">;
   user:         Pick<typeof prisma.user, "findMany">;
+  /**
+   * ws1-t5: el anticipo cobrado por Mercado Pago SIN factura vive solo en el
+   * libro del saldo a favor (no hay Payment). Opcional para no obligar a los
+   * dobles de prueba que ya existían: sin él, esas filas no se leen.
+   */
+  patientCredit?: Pick<typeof prisma.patientCredit, "findMany">;
 };
 
 // Métodos de pago (PaymentMethod en payment-modal.tsx):
@@ -55,6 +69,13 @@ export const DEBIT_METHOD  = "debit";
 export const CREDIT_METHOD = "credit";
 /** Reembolso. Se guarda con monto POSITIVO: es un movimiento, no un ingreso. */
 export const REFUND_METHOD = "refund";
+/**
+ * Saldo a favor (anticipo) APLICADO a una factura. No es ingreso (ws1-t5, F2):
+ * el dinero contó el día que se cobró —como Payment de su factura o como fila
+ * de `patient_credits` (anticipoCobradoCreditWhere)— o es historia migrada.
+ * Mismo valor que METODO_ANTICIPO de patient-credit-core.
+ */
+export const APPLIED_CREDIT_METHOD = "anticipo";
 
 /**
  * `where` de Payment para sumar INGRESOS reales. Es el MISMO criterio que ya
@@ -71,8 +92,33 @@ export function revenuePaymentWhere(
 ): Prisma.PaymentWhereInput {
   return {
     paidAt,
-    method:  { not: REFUND_METHOD },
+    // ws1-t5 (F2): tampoco el saldo a favor APLICADO («anticipo»). El ingreso
+    // de un anticipo se acumula el día que se COBRA, no el día que se usa
+    // (LISR art. 102: «aun cuando correspondan a anticipos»; art. 113-E,
+    // RESICO: ingresos efectivamente cobrados). Contarlo al aplicarlo lo
+    // contaba en el mes equivocado, y el saldo migrado de otro sistema
+    // entraba como ingreso nuevo. CONFIRMAR CON CONTADOR (reporte ws1-t5).
+    method:  { notIn: [REFUND_METHOD, APPLIED_CREDIT_METHOD] },
     invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+  };
+}
+
+/**
+ * `where` de `patient_credits` del dinero que ENTRÓ sin pasar por una factura
+ * (no tiene Payment): el anticipo pagado por Mercado Pago sin factura y el
+ * excedente de un cobro automático. Es ingreso el día de `creditDate` (ws1-t5,
+ * F2). Quien sume ingresos de un periodo suma revenuePaymentWhere − reembolsos
+ * + estas filas; la aplicación posterior («anticipo») ya no cuenta.
+ */
+export function anticipoCobradoCreditWhere(
+  clinicId: string,
+  creditDate: Prisma.DateTimeFilter,
+): Prisma.PatientCreditWhereInput {
+  return {
+    clinicId,
+    creditDate,
+    source: { in: [...FUENTES_CREDITO_QUE_SON_INGRESO] },
+    amount: { gt: 0 },
   };
 }
 
@@ -98,6 +144,10 @@ export function refundPaymentWhere(
   return {
     paidAt,
     method:  REFUND_METHOD,
+    // ws1-t5 (F3): el traspaso de un excedente, de una cita cancelada o de un
+    // anticipo al saldo a favor también es un «refund» (baja `paid`), pero no
+    // sale dinero: no es reembolso. Los viejos (NULL) siguen contando.
+    OR: [{ refundMethod: null }, { refundMethod: { not: REEMBOLSO_A_SALDO_A_FAVOR } }],
     invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
   };
 }
@@ -135,17 +185,9 @@ export function overdueInvoiceWhere(clinicId: string, todayStart: Date): Prisma.
   };
 }
 
-/** Offset fijo de México (America/Mexico_City = UTC-6, sin horario de verano
- *  desde 2023), igual que analytics/query.ts. Ancla "hoy" al día natural de la
- *  clínica y no al de UTC. */
-const MX_OFFSET_MS = 6 * 60 * 60 * 1000;
-
-/** Inicio del día natural de México para `now`, expresado como instante UTC. */
-function startOfTodayMx(now: Date): Date {
-  const mx = new Date(now.getTime() - MX_OFFSET_MS);
-  const midnight = Date.UTC(mx.getUTCFullYear(), mx.getUTCMonth(), mx.getUTCDate());
-  return new Date(midnight + MX_OFFSET_MS);
-}
+// «Hoy» de la Caja: `medianocheAnterior(now, zona de la clínica)` (lib/dinero/caja-core,
+// ws1-t5 F16). Antes era UTC−6 fijo y una clínica de Tijuana o Cancún veía el
+// día corrido una o dos horas.
 
 export interface CajaListRow {
   paymentId:   string;
@@ -154,6 +196,8 @@ export interface CajaListRow {
   concept:     string; // descripciones de invoice.items unidas
   amount:      number;
   method:      string;
+  /** ws1-t5: solo en reembolsos — "saldo_a_favor" si fue un traspaso, o por dónde salió el dinero. */
+  refundMethod?: string | null;
   discount:    number; // parte del descuento de la factura que le toca a ESTE movimiento (negativa si es reembolso)
   doctorName:  string; // vía invoice.appointment.doctor → Invoice.doctorId → "—"
 }
@@ -164,8 +208,16 @@ export interface CajaTotals {
   cardDebitIncome:  number; // ingresos con tarjeta de débito ("debit")
   cardCreditIncome: number; // ingresos con tarjeta de crédito ("credit")
   otherIncome:      number; // transfer / check / other (NO tarjeta)
-  totalIncome:      number; // cash + débito + crédito + other (SIN reembolsos)
-  refunds:          number; // Σ reembolsos del turno (method "refund"); se muestran en NEGATIVO, nunca suman
+  totalIncome:      number; // cash + débito + crédito + other (SIN reembolsos ni saldo a favor aplicado)
+  refunds:          number; // Σ reembolsos REALES del turno (dinero que salió); se muestran en NEGATIVO, nunca suman
+  /** ws1-t5: de `refunds`, lo que salió del cajón en efectivo (lo único que baja el esperado). */
+  cashRefunds?:     number;
+  /** ws1-t5: reembolsos viejos sin método registrado (no se sabe si salieron del cajón). */
+  refundsUnknownMethod?: number;
+  /** ws1-t5: saldo a favor APLICADO a facturas en el turno. No es ingreso: no entra dinero. */
+  appliedCredit?:   number;
+  /** ws1-t5: dinero que pasó de una factura al saldo a favor (excedente, cita cancelada). No sale dinero. */
+  toCredit?:        number;
   discounts:        number; // descuento PRORRATEADO de lo cobrado en la ventana (misma población que los ingresos)
   tax:              number; // IVA realmente contenido en lo cobrado del turno (0 si exenta)
   withdrawals:      number; // SUM retiros de la caja
@@ -208,6 +260,8 @@ export interface CajaState {
   receivableTotal?:  number;                 // POR COBRAR: todo lo que falta por cobrar
   overdueByInvoice?: Record<string, number>; // lo vencido de cada factura con algo vencido
   receivablesIncompleto?: boolean;           // true = se tocó el techo de lectura: las dos cifras son un mínimo
+  /** ws1-t5 (F7): cobros en efectivo que ningún corte recoge (últimos 90 días). */
+  fueraDeCorte?: CobroFueraDeCorte[];
 }
 
 function fullName(u?: { firstName?: string | null; lastName?: string | null } | null): string {
@@ -314,12 +368,25 @@ export async function deriveWindow(
   clinicId: string,
   from: Date,
   to: Date,
-  opts: { db?: CajaDb; viewer?: VisibilityViewer } = {},
+  opts: {
+    db?: CajaDb;
+    viewer?: VisibilityViewer;
+    /**
+     * ws1-t5 (F7): cobros en efectivo fuera de todo corte que alguien pasó a
+     * ESTA caja (caja_cobros_asignados). Entran al turno aunque su `paidAt`
+     * quede fuera de la ventana.
+     */
+    asignados?: ReadonlySet<string>;
+  } = {},
 ) {
   const db = opts.db ?? prisma;
+  const idsAsignados = Array.from(opts.asignados ?? []);
+  const enVentana: Prisma.PaymentWhereInput = idsAsignados.length > 0
+    ? { OR: [{ paidAt: { gte: from, lte: to } }, { id: { in: idsAsignados } }] }
+    : { paidAt: { gte: from, lte: to } };
   const [payments, courtesyAgg, clinic] = await Promise.all([
     db.payment.findMany({
-      where: { paidAt: { gte: from, lte: to }, invoice: { clinicId, status: { notIn: ["CANCELLED"] } } },
+      where: { ...enVentana, invoice: { clinicId, status: { notIn: ["CANCELLED"] } } },
       include: {
         invoice: {
           select: {
@@ -368,6 +435,7 @@ export async function deriveWindow(
     db.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } }),
   ]);
   const clinicTaxMode = clinic?.cfdiTaxMode ?? null;
+  const anticiposCobrados = await leerAnticiposCobrados(clinicId, from, to, db);
 
   // Nombres de los doctores atribuidos a mano (facturas creadas desde Caja, que
   // no nacen de una cita y por tanto no tienen invoice.appointment.doctor).
@@ -390,7 +458,11 @@ export async function deriveWindow(
   let cardDebitIncome = 0;
   let cardCreditIncome = 0;
   let otherIncome = 0; // todo lo no-efectivo (incluye tarjeta)
-  let refunds = 0;     // reembolsos del turno: se muestran, NO suman
+  let refunds = 0;     // reembolsos REALES del turno: se muestran, NO suman
+  let cashRefunds = 0; // de ellos, los que salieron del cajón
+  let refundsUnknownMethod = 0; // de ellos, los viejos sin método (NULL)
+  let toCredit = 0;    // traspasos a saldo a favor: ni ingreso ni reembolso
+  let appliedCredit = 0; // saldo a favor aplicado: no entra dinero
   let tax = 0;         // IVA contenido en lo cobrado, sumado pago por pago
   let discounts = 0;   // descuento prorrateado de lo cobrado, sumado pago por pago (los reembolsos lo revierten)
   const list: CajaListRow[] = payments.map((p) => {
@@ -412,7 +484,20 @@ export async function deriveWindow(
     const discountPortion = paymentDiscountPortion(p.method, amount, p.invoice);
     discounts += discountPortion;
     if (p.method === REFUND_METHOD) {
-      refunds += amount;
+      // ws1-t5 (F3/F5): el traspaso a saldo a favor no es salida de dinero, y
+      // solo el reembolso EN EFECTIVO sale del cajón.
+      const mov = { method: p.method, refundMethod: (p as { refundMethod?: string | null }).refundMethod ?? null };
+      if (esTraspasoASaldoAFavor(mov)) {
+        toCredit += amount;
+      } else {
+        refunds += amount;
+        if (esReembolsoEnEfectivo(mov)) cashRefunds += amount;
+        else if (mov.refundMethod == null) refundsUnknownMethod += amount;
+      }
+    } else if (p.method === APPLIED_CREDIT_METHOD) {
+      // ws1-t5 (F2): aplicar saldo a favor no mete dinero al turno; su IVA y
+      // su ingreso contaron el día que se cobró el anticipo.
+      appliedCredit += amount;
     } else {
       tax += invoiceTaxPortion(amount, p.invoice, clinicTaxMode);
       if (p.method === CASH_METHOD) {
@@ -434,6 +519,7 @@ export async function deriveWindow(
       concept:     conceptoConCuota(conceptOf(p.invoice?.items), cuotaDelPago.get(p.id) ?? null),
       amount,
       method:      p.method,
+      ...(p.method === REFUND_METHOD ? { refundMethod: (p as { refundMethod?: string | null }).refundMethod ?? null } : {}),
       discount:    money(discountPortion),
       // La cita manda (es el dato clínico); si la factura se creó suelta desde
       // Caja, se cae al doctor que el usuario eligió en el editor.
@@ -441,19 +527,58 @@ export async function deriveWindow(
     };
   });
 
-  const totalIncome = cashIncome + otherIncome;
+  // ws1-t5 (F2): el anticipo cobrado por Mercado Pago sin factura entra al
+  // turno el día que se cobró (no es efectivo: va con «otros»). Lleva su fila
+  // en la lista para que el corte diga de dónde salió el número.
+  for (const c of anticiposCobrados) {
+    otherIncome += c.amount;
+    tax += invoiceTaxPortion(c.amount, { taxRate: null, taxIncluded: null }, clinicTaxMode);
+    list.push({
+      paymentId:   `credito:${c.id}`,
+      at:          c.creditDate.toISOString(),
+      patientName: opts.viewer && c.patient && !canSeePatient(opts.viewer, c.patient.visibleUserIds)
+        ? "Paciente privado"
+        : fullName(c.patient),
+      concept:     "Anticipo (queda como saldo a favor)",
+      amount:      c.amount,
+      method:      "mercadopago",
+      discount:    0,
+      doctorName:  "—",
+    });
+  }
+  if (anticiposCobrados.length > 0) list.sort((a, b) => a.at.localeCompare(b.at));
 
-  // Reembolsos que SABEMOS que salieron en EFECTIVO del cajón. Hoy siempre 0:
-  // el reembolso no guarda con qué método salió el dinero (ver expectedCashOf y
-  // sql/payment-refund-method.sql). Es el ÚNICO punto a cambiar cuando exista
-  // la columna; ni la pantalla ni el cierre repiten la fórmula.
-  const cashRefunds = 0;
+  const totalIncome = cashIncome + otherIncome;
 
   // Descuentos del turno = los prorrateados de lo cobrado + los de las cortesías
   // emitidas en la ventana (que no pueden cobrarse nunca, ver arriba).
   const discountsTotal = discounts + (courtesyAgg._sum.discount ?? 0);
 
-  return { cashIncome, cardDebitIncome, cardCreditIncome, otherIncome, totalIncome, refunds: money(refunds), cashRefunds, discounts: money(discountsTotal), tax: money(tax), list };
+  return {
+    cashIncome, cardDebitIncome, cardCreditIncome, otherIncome, totalIncome,
+    refunds: money(refunds), cashRefunds: money(cashRefunds), refundsUnknownMethod: money(refundsUnknownMethod),
+    toCredit: money(toCredit), appliedCredit: money(appliedCredit),
+    discounts: money(discountsTotal), tax: money(tax), list,
+  };
+}
+
+/** Anticipos cobrados sin factura en la ventana (anticipoCobradoCreditWhere). Tolerante: sin el libro, nada. */
+async function leerAnticiposCobrados(clinicId: string, from: Date, to: Date, db: CajaDb) {
+  if (!clinicId || !db.patientCredit) return [];
+  try {
+    const filas = await db.patientCredit.findMany({
+      where:   anticipoCobradoCreditWhere(clinicId, { gte: from, lte: to }),
+      select:  {
+        id: true, amount: true, creditDate: true,
+        patient: { select: { firstName: true, lastName: true, visibleUserIds: true } },
+      },
+      orderBy: { creditDate: "asc" },
+    });
+    return filas as Array<{ id: string; amount: number; creditDate: Date; patient: { firstName: string | null; lastName: string | null; visibleUserIds: string[] } | null }>;
+  } catch (e) {
+    console.warn("[caja] no se pudieron leer los anticipos cobrados:", (e as Error)?.message);
+    return [];
+  }
 }
 
 /** Redondea a 2 decimales para evitar ruido de punto flotante en dinero. */
@@ -519,12 +644,10 @@ export function invoiceDiscountPortion(
  * (getCajaState) y el cierre (/api/caja/close) la comparten para que el papel
  * del arqueo no pueda contradecir a la fila guardada.
  *
- * ⚠️ `cashRefunds` es HOY siempre 0 y no por descuido: /api/invoices/[id]/refund
- * guarda el reembolso como un Payment con method "refund" y NO registra con qué
- * método salió el dinero, así que un reembolso en efectivo es indistinguible de
- * uno a tarjeta. Restar TODOS los reembolsos cambiaría el faltante fantasma por
- * un sobrante fantasma. El dato falta en la base: ver sql/payment-refund-method.sql.
- * Cuando exista, se alimenta este parámetro y NO hay que tocar dos fórmulas.
+ * `cashRefunds` (ws1-t5, F5): los reembolsos con `refundMethod = "cash"`. El
+ * modal de reembolso pide siempre por dónde salió el dinero; los viejos (NULL)
+ * no se restan: restar TODOS cambiaría el faltante fantasma por un sobrante
+ * fantasma en las clínicas que devuelven a la tarjeta.
  */
 export function expectedCashOf(args: {
   openingBalance: number;
@@ -593,18 +716,22 @@ export function netRevenueSeries(
  *
  * El filtro de canceladas es el mismo que usa deriveWindow y no es cosmético:
  * sin él, el efectivo de una factura anulada prefijaba un saldo de apertura que
- * no está en el cajón. Lo que este número TODAVÍA no puede descontar es un
- * reembolso pagado en efectivo, por la misma razón que expectedCashOf: el
- * reembolso no guarda su método (sql/payment-refund-method.sql) — ahí la
- * sugerencia sale ALTA. Y en el camino contrario (reembolso a la tarjeta y luego
+ * no está en el cajón. Desde ws1-t5 se resta también lo reembolsado EN
+ * EFECTIVO hoy (`refundMethod = "cash"`); un reembolso viejo sin método no se
+ * resta (no se sabe si salió del cajón). Y en el camino contrario (reembolso a la tarjeta y luego
  * factura cancelada) el efectivo sigue en el cajón y la sugerencia sale BAJA.
  * Por eso el campo del modal de apertura es editable y sigue siéndolo: es una
  * sugerencia, no un arqueo, y quien abre la caja cuenta el dinero.
  */
-async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma): Promise<number> {
-  const [cashPayments, closedToday] = await Promise.all([
+export async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma): Promise<number> {
+  const [cashPayments, cashRefundRows, closedToday] = await Promise.all([
     db.payment.findMany({
       where:  cashOnHandPaymentWhere(clinicId, todayStart, now),
+      select: { amount: true, paidAt: true },
+    }),
+    // ws1-t5 (F5): lo reembolsado EN EFECTIVO hoy salió del cajón.
+    db.payment.findMany({
+      where:  { ...refundPaymentWhere(clinicId, { gte: todayStart, lte: now }), refundMethod: CASH_METHOD },
       select: { amount: true, paidAt: true },
     }),
     db.cashRegister.findMany({
@@ -616,7 +743,9 @@ async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: 
   const isCounted = (at: Date) =>
     closedToday.some((r) => r.closedAt != null && at >= r.openedAt && at <= r.closedAt);
 
-  return cashPayments.reduce((sum, p) => (isCounted(p.paidAt) ? sum : sum + (p.amount ?? 0)), 0);
+  const entra = cashPayments.reduce((sum, p) => (isCounted(p.paidAt) ? sum : sum + (p.amount ?? 0)), 0);
+  const sale = cashRefundRows.reduce((sum, p) => (isCounted(p.paidAt) ? sum : sum + (p.amount ?? 0)), 0);
+  return Math.max(0, entra - sale);
 }
 
 /** Una factura A PLAZOS, con lo que hace falta para saber cuánto de ella está
@@ -899,14 +1028,20 @@ export type CajaShift = Pick<CajaState, "register" | "totals" | "withdrawals" | 
  * Si no hay caja abierta → register/totals null (list vacía), pero el resumen
  * del día (suggestedOpening + facturación) SIEMPRE se calcula y devuelve.
  */
-export async function getCajaState(clinicId: string): Promise<CajaState> {
+export async function getCajaState(clinicId: string, opts: { timezone?: string | null } = {}): Promise<CajaState> {
   const now = new Date();
-  const todayStart = startOfTodayMx(now);
+  // ws1-t5 (F16): «hoy» es el día de la CLÍNICA (Tijuana, Cancún…), no UTC−6
+  // fijo. Quien llama suele tenerla ya (la página la trae en la sesión).
+  const timezone = opts.timezone
+    || (await prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }).catch(() => null))?.timezone
+    || DEFAULT_INVOICE_TZ;
+  const todayStart = medianocheAnterior(now, timezone);
 
-  const [reg, suggestedOpening, dayBilling] = await Promise.all([
+  const [reg, suggestedOpening, dayBilling, fueraDeCorte] = await Promise.all([
     getOpenRegister(clinicId),
     computeSuggestedOpening(clinicId, todayStart, now),
     computeDayBilling(clinicId, todayStart, now),
+    computeCobrosFueraDeCorte(clinicId, now),
   ]);
 
   const day = {
@@ -919,7 +1054,79 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
     receivablesIncompleto: dayBilling.receivablesIncompleto,
   };
 
-  return { ...(await shiftOf(clinicId, reg, now, {})), ...day };
+  const asignados = reg ? await cobrosAsignados(clinicId, { cashRegisterId: reg.id }) : new Set<string>();
+  return { ...(await shiftOf(clinicId, reg, now, { asignados })), ...day, fueraDeCorte };
+}
+
+/** Cuántos días atrás se buscan cobros en efectivo fuera de corte. */
+export const DIAS_FUERA_DE_CORTE = 90;
+
+export interface CobroFueraDeCorte {
+  paymentId:   string;
+  at:          string;
+  patientName: string;
+  concept:     string;
+  amount:      number;
+}
+
+/**
+ * ws1-t5 (F7): cobros en EFECTIVO de los últimos 90 días que ningún corte
+ * recoge (ver `cobrosFueraDeCorte`). Tolerante: si algo falla, lista vacía y
+ * la Caja se pinta como siempre.
+ */
+export async function computeCobrosFueraDeCorte(
+  clinicId: string,
+  now: Date,
+  db: CajaDb = prisma,
+  asignadosDe: (clinicId: string) => Promise<ReadonlySet<string>> = (c) => cobrosAsignados(c),
+): Promise<CobroFueraDeCorte[]> {
+  if (!clinicId) return [];
+  try {
+    const desde = new Date(now.getTime() - DIAS_FUERA_DE_CORTE * 86_400_000);
+    const [primera, cajas, cobros, asignados] = await Promise.all([
+      db.cashRegister.findFirst({ where: { clinicId }, orderBy: { openedAt: "asc" }, select: { openedAt: true } }),
+      db.cashRegister.findMany({
+        where:  { clinicId, OR: [{ status: "OPEN" }, { closedAt: { gte: desde } }] },
+        select: { id: true, openedAt: true, closedAt: true },
+      }),
+      db.payment.findMany({
+        where:   cashOnHandPaymentWhere(clinicId, desde, now),
+        select:  {
+          id: true, amount: true, paidAt: true,
+          invoice: { select: { items: true, patient: { select: { firstName: true, lastName: true } } } },
+        },
+        orderBy: { paidAt: "desc" },
+        take:    500,
+      }),
+      asignadosDe(clinicId),
+    ]);
+    const fuera = cobrosFueraDeCorte(
+      cobros as Array<{ id: string; paidAt: Date; amount: number | null; invoice: { items: unknown; patient: { firstName: string | null; lastName: string | null } | null } | null }>,
+      cajas,
+      asignados,
+      now,
+      primera?.openedAt ?? null,
+    );
+    return fuera.map((c) => ({
+      paymentId:   c.id,
+      at:          c.paidAt.toISOString(),
+      patientName: fullName(c.invoice?.patient),
+      concept:     conceptOf(c.invoice?.items),
+      amount:      money(c.amount ?? 0),
+    }));
+  } catch (e) {
+    console.warn("[caja] no se pudieron leer los cobros fuera de corte:", (e as Error)?.message);
+    return [];
+  }
+}
+
+/** ws1-t5: días completos que lleva abierta la caja abierta (0 = menos de 24 h o ninguna). */
+export async function diasDeCajaAbierta(clinicId: string, now: Date = new Date(), db: CajaDb = prisma): Promise<number> {
+  if (!clinicId) return 0;
+  const reg = await db.cashRegister.findFirst({
+    where: { clinicId, status: "OPEN" }, orderBy: { openedAt: "asc" }, select: { openedAt: true },
+  });
+  return reg ? diasAbierta(reg.openedAt, now) : 0;
 }
 
 /**
@@ -936,14 +1143,17 @@ export async function getCajaShift(
 ): Promise<CajaShift> {
   const db = opts.db ?? prisma;
   const reg = await getOpenRegister(clinicId, db);
-  return shiftOf(clinicId, reg, opts.now ?? new Date(), { db, viewer: opts.viewer });
+  // Los cobros pasados a mano a esta caja se leen con SQL crudo: solo con la
+  // base real (un doble de pruebas no los tiene).
+  const asignados = reg && db === prisma ? await cobrosAsignados(clinicId, { cashRegisterId: reg.id }) : new Set<string>();
+  return shiftOf(clinicId, reg, opts.now ?? new Date(), { db, viewer: opts.viewer, asignados });
 }
 
 async function shiftOf(
   clinicId: string,
   reg: Awaited<ReturnType<typeof getOpenRegister>>,
   now: Date,
-  opts: { db?: CajaDb; viewer?: VisibilityViewer },
+  opts: { db?: CajaDb; viewer?: VisibilityViewer; asignados?: ReadonlySet<string> },
 ): Promise<CajaShift> {
   if (!reg) return { register: null, totals: null, withdrawals: [], list: [] };
 
@@ -975,6 +1185,10 @@ async function shiftOf(
     otherIncome:      money(derived.otherIncome - derived.cardDebitIncome - derived.cardCreditIncome),
     totalIncome:      money(derived.totalIncome),
     refunds:          money(derived.refunds),
+    cashRefunds:      money(derived.cashRefunds),
+    refundsUnknownMethod: money(derived.refundsUnknownMethod),
+    appliedCredit:    money(derived.appliedCredit),
+    toCredit:         money(derived.toCredit),
     discounts:        money(derived.discounts),
     tax:              money(derived.tax),
     withdrawals:      money(withdrawalsTotal),
@@ -1021,6 +1235,10 @@ export interface CajaCloseSummary {
   otherIncome:      number;
   totalIncome:      number;
   refunds:          number;
+  /** ws1-t5: lo reembolsado EN EFECTIVO (ya restado del esperado). */
+  cashRefunds?:     number;
+  appliedCredit?:   number;
+  toCredit?:        number;
   discounts:        number;
   tax:              number;
   withdrawals:      number;
@@ -1036,7 +1254,9 @@ export function buildCloseSummary(args: {
   openingBalance: number;
   withdrawals:    number;
   counted:        number;
-  derived:        Awaited<ReturnType<typeof deriveWindow>>;
+  // Los tres de ws1-t5 son opcionales: quien arma el resumen a mano sin ellos sigue valiendo.
+  derived:        Omit<Awaited<ReturnType<typeof deriveWindow>>, "refundsUnknownMethod" | "toCredit" | "appliedCredit">
+                  & Partial<Pick<Awaited<ReturnType<typeof deriveWindow>>, "refundsUnknownMethod" | "toCredit" | "appliedCredit">>;
 }): CajaCloseSummary {
   const { derived } = args;
   const expectedCash = expectedCashOf({
@@ -1057,6 +1277,9 @@ export function buildCloseSummary(args: {
     otherIncome:      money(derived.otherIncome - derived.cardDebitIncome - derived.cardCreditIncome),
     totalIncome:      money(derived.totalIncome),
     refunds:          money(derived.refunds),
+    cashRefunds:      money(derived.cashRefunds),
+    appliedCredit:    money(derived.appliedCredit ?? 0),
+    toCredit:         money(derived.toCredit ?? 0),
     discounts:        money(derived.discounts),
     tax:              money(derived.tax),
     withdrawals:      money(args.withdrawals),

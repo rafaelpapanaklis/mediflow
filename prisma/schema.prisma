@@ -2525,6 +2525,11 @@ model Payment {
   invoiceId String
   amount    Float
   method    String
+  /// Solo en reembolsos (method "refund"): por dónde salió el dinero
+  /// ("cash" | "transfer" | …), o "saldo_a_favor" si no salió (traspaso).
+  /// NULL = reembolso viejo, no se sabe. Ver src/lib/dinero/reembolsos.ts.
+  /// La columna ya existe en producción (sql/payment-refund-method.sql).
+  refundMethod String?
   reference String?
   notes     String?
   paidAt    DateTime @default(now())

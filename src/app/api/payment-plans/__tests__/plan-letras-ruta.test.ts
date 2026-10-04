@@ -164,53 +164,26 @@ test("POST: 2.5 letras → 400 (antes: Array.from con length fraccionario)", asy
   assert.equal(db.plans.length, 0);
 });
 
-test("PATCH: una letra ya pagada no se vuelve a cobrar", async () => {
+test("PATCH retirado (ws1-t5, F13): marcar una letra como cobrada sin Payment → 410 y no escribe nada", async () => {
   reset();
   const { POST } = await import("@/app/api/payment-plans/route");
   const { PATCH } = await import("@/app/api/payment-plans/[id]/route");
   const creado = await leer(await POST(req({ ...base, totalAmount: 300, installments: 3 })));
-  const planId = creado.body.id;
   const primera = db.letras[0];
-  const P = { params: { id: planId } };
-
-  const uno = await leer(await PATCH(req({ installmentId: primera.id, method: "cash" }), P));
-  assert.equal(uno.status, 200, uno.body?.error);
-  const cobradaEl = primera.paidAt;
-  assert.ok(cobradaEl instanceof Date);
-
-  const dos = await leer(await PATCH(req({ installmentId: primera.id, method: "transfer" }), P));
-  assert.equal(dos.status, 409);
-  assert.equal(primera.paidAt, cobradaEl, "la fecha del cobro real no se pisa");
-  assert.equal(primera.method, "cash", "ni el método");
-
-  const nada = await leer(await PATCH(req({ installmentId: "no-existe" }), P));
-  assert.equal(nada.status, 404);
-});
-
-test("PATCH: al pagar la última letra el plan queda COMPLETED; uno cancelado no cobra", async () => {
-  reset();
-  const { POST } = await import("@/app/api/payment-plans/route");
-  const { PATCH, DELETE } = await import("@/app/api/payment-plans/[id]/route");
-  const creado = await leer(await POST(req({ ...base, totalAmount: 200, installments: 2 })));
-  const P = { params: { id: creado.body.id } };
-  for (const l of [...db.letras]) {
-    const r = await leer(await PATCH(req({ installmentId: l.id }), P));
-    assert.equal(r.status, 200, r.body?.error);
-  }
-  assert.equal(db.plans[0].status, "COMPLETED");
-
-  const otro = await leer(await POST(req({ ...base, totalAmount: 200, installments: 2 })));
-  const P2 = { params: { id: otro.body.id } };
-  await DELETE(req({}), P2);
-  const letra = db.letras.find((l) => l.planId === otro.body.id);
-  const r = await leer(await PATCH(req({ installmentId: letra.id }), P2));
-  assert.equal(r.status, 400);
-  assert.equal(letra.paidAt, null);
+  const auditAntes = db.auditRows.length;
+  const r = await leer(await PATCH(req({ installmentId: primera.id, method: "cash" }), { params: { id: creado.body.id } }));
+  assert.equal(r.status, 410, "antes: 200 y la cuota «cobrada» sin que el dinero entrara a Caja");
+  assert.equal(r.body.code, "COBRO_VIEJO_RETIRADO");
+  assert.equal(primera.paidAt, null, "la letra no se marca pagada");
+  assert.equal(db.plans[0].status, "ACTIVE");
+  assert.equal(db.auditRows.length, auditAntes);
+  const ajeno = await leer(await PATCH(req({ installmentId: primera.id }), { params: { id: "no-existe" } }));
+  assert.equal(ajeno.status, 404);
 });
 
 // ── P4 (ws1-t3, ajuste): bitácora, sin tocar las respuestas ──────────────
 
-test("POST/PATCH/DELETE dejan fila en AuditLog — mismas respuestas de siempre", async () => {
+test("POST y DELETE dejan fila en AuditLog — mismas respuestas de siempre (el PATCH ya no escribe)", async () => {
   reset();
   const { POST } = await import("@/app/api/payment-plans/route");
   const { PATCH, DELETE } = await import("@/app/api/payment-plans/[id]/route");
@@ -225,17 +198,16 @@ test("POST/PATCH/DELETE dejan fila en AuditLog — mismas respuestas de siempre"
   assert.equal(db.auditRows[0].userId, "u1");
 
   const P = { params: { id: creado.body.id } };
+  // ws1-t5 (F13): el PATCH ya no cobra (410) y por eso no deja fila.
   const letra = db.letras[0];
   const cobrado = await leer(await PATCH(req({ installmentId: letra.id, method: "cash" }), P));
-  assert.equal(cobrado.status, 200, cobrado.body?.error);
-  assert.equal(db.auditRows.length, 2, "PATCH audita el cobro de la cuota");
-  assert.equal(db.auditRows[1].entityType, "payment-plan");
-  assert.equal(db.auditRows[1].action, "update");
+  assert.equal(cobrado.status, 410);
+  assert.equal(db.auditRows.length, 1);
 
   const cancelado = await leer(await DELETE(req({}), P));
   assert.equal(cancelado.status, 200);
   assert.deepEqual(cancelado.body, { success: true }, "la respuesta de DELETE no cambió");
-  assert.equal(db.auditRows.length, 3, "DELETE audita la cancelación");
-  assert.equal(db.auditRows[2].action, "void");
-  assert.equal(db.auditRows[2].entityId, creado.body.id);
+  assert.equal(db.auditRows.length, 2, "DELETE audita la cancelación");
+  assert.equal(db.auditRows[1].action, "void");
+  assert.equal(db.auditRows[1].entityId, creado.body.id);
 });

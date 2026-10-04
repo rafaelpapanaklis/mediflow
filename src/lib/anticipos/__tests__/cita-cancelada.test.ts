@@ -109,7 +109,9 @@ test("con la marca de cita cancelada, la factura no ofrece cobrar más", () => {
 
 test("«Ya lo devolví» registra el reembolso y cancela la factura en UNA operación del servidor", () => {
   const aviso = leer("src/components/dashboard/billing/aviso-dinero-cita-cancelada.tsx");
-  assert.match(aviso, /body: JSON\.stringify\(\{ decision: "devuelto" \}\)/);
+  // ws1-t5 (F5): además dice por dónde salió el dinero (obligatorio).
+  assert.match(aviso, /body: JSON\.stringify\(\{ decision: "devuelto", refundMethod: metodo \}\)/);
+  assert.match(aviso, /<MetodoDevolucion /);
   assert.doesNotMatch(aviso, /\/refund`|\/cancel`/, "ya no son dos llamadas");
   assert.match(aviso, /No se registró nada: la factura sigue igual\./, "el fallo dice qué pasó");
   assert.match(aviso, /Sí, registrar reembolso/, "pide confirmación");
@@ -117,7 +119,7 @@ test("«Ya lo devolví» registra el reembolso y cancela la factura en UNA opera
   const src = leer("src/lib/anticipos/cita-cancelada.server.ts");
   const fn = src.slice(src.indexOf("export async function registrarDevolucionYCancelar"), src.indexOf("export async function marcarPendienteEnTx"));
   assert.match(fn, /prisma\.\$transaction\(async \(tx\) => \{\s*await tx\.\$queryRaw`SELECT id FROM invoices WHERE id = \$\{invoiceId\} AND "clinicId" = \$\{clinicId\} FOR UPDATE`/);
-  assert.match(fn, /tx\.payment\.create\(\{[\s\S]{0,120}method: "refund"/);
+  assert.match(fn, /tx\.payment\.create\(\{[\s\S]{0,120}method: "refund", refundMethod: args\.refundMethod/);
   assert.match(fn, /status: "CANCELLED", paid: 0, balance: round2\(inv\.total\), paidAt: null/);
   assert.match(fn, /if \(ultimaMarca\(inv\.notes\) !== "reembolso"\)/, "solo sobre una marcada por reembolsar");
   assert.match(fn, /Cancela primero el CFDI ante el SAT/, "timbrada: no toca nada y dice qué hacer");

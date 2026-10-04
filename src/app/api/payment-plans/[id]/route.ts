@@ -6,94 +6,32 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 
-// PATCH /api/payment-plans/[id] — register a payment on an installment
+// PATCH /api/payment-plans/[id] — RETIRADO (ws1-t5, F13 de la auditoría del dinero).
+//
+// Marcaba una cuota como cobrada en `plan_payments` (paidAt, método) SIN crear
+// un Payment: ese dinero no entraba a Caja, ni al corte, ni a Finanzas. Ninguna
+// pantalla lo llamaba. Ahora contesta 410 sin escribir nada; los cobros van por
+// el cobro normal de la factura (POST /api/invoices/[id]). Se conservan la
+// sesión, el permiso, la clínica y la visibilidad: nadie de fuera aprende nada.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // Permiso granular: esto marca una cuota como COBRADA (paidAt, método) y, si
-  // era la última, cierra el plan. Registrar un pago exige "billing.charge" en
-  // POST /api/invoices/[id] y en /api/invoices/[id]/mark-paid — por esta puerta
-  // no pedía nada, así que un READONLY daba por cobrada la cuota de un paciente.
   const deniedPerm = denyIfMissingPermission(ctx, "billing.charge");
   if (deniedPerm) return deniedPerm;
 
   const plan = await prisma.paymentPlan.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
-    include: { payments: true },
+    select: { patientId: true },
   });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
-
-  // Visibilidad por paciente: no permitir registrar pagos (ni recibir el plan
-  // con nombre del paciente) a quien no puede ver a ese paciente.
   if (plan.patientId) {
     const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
     if (denied) return denied;
   }
-
-  const body = await req.json();
-  const { installmentId, method, notes } = body;
-
-  if (!installmentId) return NextResponse.json({ error: "installmentId requerido" }, { status: 400 });
-  if (plan.status === PLAN_STATUS.CANCELLED) {
-    return NextResponse.json({ error: "El plan está cancelado" }, { status: 400 });
-  }
-
-  // Mark installment as paid — scoped to THIS plan (ya verificado por clínica)
-  // para evitar IDOR cross-tenant: sin planId, un usuario podría marcar pagada
-  // la cuota de OTRA clínica pasando su installmentId.
-  // `paidAt: null` en el where: una cuota ya cobrada no se vuelve a «cobrar».
-  // Antes un segundo clic le pisaba la fecha y el método del cobro real.
-  const res = await prisma.planPayment.updateMany({
-    where: { id: installmentId, planId: params.id, paidAt: null },
-    data:  { paidAt: new Date(), method: method ?? null, notes: notes ?? null },
-  });
-  if (res.count === 0) {
-    const existe = plan.payments.some((p) => p.id === installmentId);
-    return existe
-      ? NextResponse.json({ error: "Esta cuota ya está pagada" }, { status: 409 })
-      : NextResponse.json({ error: "Cuota no encontrada" }, { status: 404 });
-  }
-
-  // Check if all installments are paid → complete the plan
-  const updated = await prisma.planPayment.findMany({ where: { planId: params.id } });
-  const allPaid = updated.every(p => p.paidAt !== null);
-
-  if (allPaid) {
-    await prisma.paymentPlan.update({
-      where: { id: params.id },
-      data:  { status: PLAN_STATUS.COMPLETED },
-    });
-  }
-
-  const result = await prisma.paymentPlan.findUnique({
-    where:   { id: params.id },
-    include: { payments: { orderBy: { installment: "asc" } }, patient: { select: { firstName: true, lastName: true } } },
-  });
-
-  // P4 — bitácora: quién cobró qué cuota, cuándo y con qué método (hallazgo
-  // REPORTE-ws1-t8.md). No se toca la respuesta ni el status code.
-  const cobrada = updated.find((p) => p.id === installmentId);
-  await logMutation({
-      patientId: plan.patientId,
-      texto: "Registró el pago de una letra del plan de pagos",
-    req,
-    clinicId: ctx.clinicId,
-    userId: ctx.userId,
-    entityType: "payment-plan",
-    entityId: params.id,
-    action: "update",
-    before: { installmentId, paidAt: null, method: null, planStatus: plan.status },
-    after: {
-      installmentId,
-      paidAt: cobrada?.paidAt ?? null,
-      method: method ?? null,
-      notes: notes ?? null,
-      planStatus: allPaid ? PLAN_STATUS.COMPLETED : plan.status,
-    },
-  });
-
-  return NextResponse.json(result);
+  return NextResponse.json({
+    error: "Este registro de pagos ya no se usa: cobra con el cobro normal de la factura (Caja o la ficha del paciente) para que el dinero entre al corte y a los reportes.",
+    code: "COBRO_VIEJO_RETIRADO",
+  }, { status: 410 });
 }
 
 // DELETE /api/payment-plans/[id]

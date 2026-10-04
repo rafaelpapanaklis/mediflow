@@ -13,6 +13,7 @@ import {
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
+import { denegarDescuentoSobreTope } from "@/lib/dinero/descuento.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -147,20 +148,38 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     newTotal = computeInvoiceTotal(newItems, newDiscount, taxRate, taxIncluded).total;
   }
 
+  // ws1-t5 (punto 7): bajar el precio ES un descuento. Por encima del tope de
+  // la clínica (20 % de fábrica) solo lo aplica el dueño.
+  const descuentoDenegado = await denegarDescuentoSobreTope({
+    clinicId, role: ctx.role, items: newItems, discount: newDiscount,
+    antes: { items: rawItems, discount: invoice.discount },
+  });
+  if (descuentoDenegado) return descuentoDenegado;
+
   const newBalance = round2(newTotal - invoice.paid);
+  // ws1-t5 (F14b): una factura que queda en $0 (cortesía) no tiene nada que
+  // cobrar: queda PAGADA. Antes se quedaba PENDIENTE con saldo 0 para siempre.
+  const quedaEnCero = newTotal <= 0;
 
   // `cfdiUuid` igual al leído: si alguien la timbró desde la lectura, el precio no cambia.
+  // ws1-t5 (F14a): y `paid` igual al leído: si entró un cobro entre la lectura
+  // y esta escritura, el saldo se calcularía sin restarlo. Mismo criterio que el PATCH.
   const { count } = await prisma.invoice.updateMany({
-    where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid },
+    where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid, paid: invoice.paid },
     data: {
       items:    newItems,
       subtotal: newSubtotal,
       discount: newDiscount,
       total:    newTotal,
       balance:  Math.max(0, newBalance),
+      ...(quedaEnCero ? { status: "PAID" as const, paidAt: new Date() } : {}),
     },
   });
-  if (count === 0) return cfdiVigenteResponse(null, "cambiar el precio de");
+  if (count === 0) {
+    const ahora = await prisma.invoice.findFirst({ where: { id: params.id, clinicId }, select: { cfdiUuid: true } });
+    if (ahora && ahora.cfdiUuid !== invoice.cfdiUuid) return cfdiVigenteResponse(null, "cambiar el precio de");
+    return NextResponse.json({ error: "La factura cambió mientras tanto (entró un pago). Vuelve a abrirla.", code: "FACTURA_CAMBIO" }, { status: 409 });
+  }
 
   await logMutation({
       patientId: invoice.patientId,
@@ -168,7 +187,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { subtotal: invoice.subtotal, discount: invoice.discount, total: invoice.total, balance: invoice.balance },
-    after:  { subtotal: newSubtotal, discount: newDiscount, total: newTotal, balance: Math.max(0, newBalance) },
+    after:  { subtotal: newSubtotal, discount: newDiscount, total: newTotal, balance: Math.max(0, newBalance), ...(quedaEnCero ? { status: "PAID" } : {}) },
   });
 
   // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden

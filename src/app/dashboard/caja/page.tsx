@@ -15,6 +15,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { puedeAutorizarDescuentos } from "@/lib/dinero/descuento-autorizacion";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -43,7 +44,8 @@ export default async function CajaPage() {
   }
 
   const [caja, history, invoices, patients, clinic, creditTotal] = await Promise.all([
-    getCajaState(user.clinicId),
+    // ws1-t5 (F16): «hoy» en la zona de la clínica.
+    getCajaState(user.clinicId, { timezone: user.clinic?.timezone }),
     getCajaHistory(user.clinicId, 30),
     prisma.invoice.findMany({
       where:   { clinicId: user.clinicId },
@@ -115,6 +117,8 @@ export default async function CajaPage() {
       timezone={clinic?.timezone ?? "America/Mexico_City"}
       hasPin={!!user.cajaPinHash}
       rediseno={rediseno}
+      puedeAjustarCierre={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "settings.edit")}
+      esDueno={puedeAutorizarDescuentos(user.role)}
       billing={{
         invoices: visibleInvoices as any,
         patients,

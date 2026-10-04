@@ -13,7 +13,10 @@ import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { avisoDeDinero, ultimaMarca } from "@/lib/anticipos/cita-cancelada-core";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { MetodoDevolucion } from "./metodo-devolucion";
+import type { MetodoDeDevolucion } from "@/lib/dinero/reembolsos";
+import { textosDinero } from "@/lib/dinero/textos";
 
 export function AvisoDineroCitaCancelada({
   invoiceId,
@@ -33,6 +36,9 @@ export function AvisoDineroCitaCancelada({
   const t = useT();
   const [enviando, setEnviando] = useState<"a_favor" | "reembolso" | "devuelto" | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  // ws1-t5 (F5): por dónde salió el dinero; obligatorio para registrar.
+  const [metodo, setMetodo] = useState<MetodoDeDevolucion | "">("");
+  const txDevolucion = textosDinero(useLocale()).devolucion;
   const marca = ultimaMarca(notas);
   if (!marca || marca === "a_favor" || estado === "CANCELLED" || !(pagado > 0)) return null;
 
@@ -63,12 +69,13 @@ export function AvisoDineroCitaCancelada({
   // hacer y la factura queda tal cual.
   async function registrarDevuelto() {
     if (enviando) return;
+    if (!metodo) { toast.error(txDevolucion.obligatorio); return; }
     setEnviando("devuelto");
     try {
       const res = await fetch(`/api/invoices/${invoiceId}/dinero-cita`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: "devuelto" }),
+        body: JSON.stringify({ decision: "devuelto", refundMethod: metodo }),
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -96,7 +103,10 @@ export function AvisoDineroCitaCancelada({
             (confirmando ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span>¿Ya se lo devolviste al paciente?</span>
-                <ButtonNew variant="danger" size="sm" disabled={enviando !== null} onClick={registrarDevuelto}>
+                <div className="w-full sm:w-64">
+                  <MetodoDevolucion id={`metodo-devolucion-${invoiceId}`} valor={metodo} onCambio={setMetodo} disabled={enviando !== null} />
+                </div>
+                <ButtonNew variant="danger" size="sm" disabled={enviando !== null || !metodo} onClick={registrarDevuelto}>
                   {enviando === "devuelto" ? "Registrando…" : "Sí, registrar reembolso"}
                 </ButtonNew>
                 <ButtonNew variant="ghost" size="sm" disabled={enviando !== null} onClick={() => setConfirmando(false)}>

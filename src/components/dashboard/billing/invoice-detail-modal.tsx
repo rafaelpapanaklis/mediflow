@@ -65,6 +65,10 @@ import ant from "@/components/dashboard/cobros-inventario-rediseno/anticipo.modu
 import { ModalRegistrarAnticipo } from "./modal-registrar-anticipo";
 import { AnularAnticipo } from "./anular-anticipo";
 import { AvisoDineroCitaCancelada } from "./aviso-dinero-cita-cancelada";
+import { MetodoDevolucion } from "./metodo-devolucion";
+import type { MetodoDeDevolucion } from "@/lib/dinero/reembolsos";
+import { textosDinero } from "@/lib/dinero/textos";
+import { useLocale as useLocaleDinero } from "@/i18n/i18n-provider";
 import { ultimaMarca } from "@/lib/anticipos/cita-cancelada-core";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
@@ -229,6 +233,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Sub-form state — se resetea al abrir cada sub-modal.
   const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
+  // ws1-t5 (F5): por dónde salió el dinero; obligatorio (el corte resta solo el efectivo).
+  const [refundMethod, setRefundMethod] = useState<MetodoDeDevolucion | "">("");
+  const txDevolucion = textosDinero(useLocaleDinero()).devolucion;
   const [editTotal,    setEditTotal]    = useState("");
   const [discountAmt,  setDiscountAmt]  = useState("");
   const [cancelReason, setCancelReason] = useState("");
@@ -486,6 +493,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   function openSub(which: Exclude<SubAction, null>) {
     setRefundAmount(String(invoice?.paid ?? 0));
     setRefundReason("");
+    setRefundMethod("");
     setEditTotal(String(invoice?.total ?? 0));
     setDiscountAmt(String(invoice?.discount ?? 0));
     setCancelReason("");
@@ -775,7 +783,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     const amount = Number(refundAmount);
     if (!amount || amount <= 0) { toast.error(t("clinical.invoiceDetail.invalidAmount")); return; }
     if (amount > invoice!.paid) { toast.error(t("clinical.invoiceDetail.exceedsPaid")); return; }
-    await callApi("/refund", "POST", { amount, reason: refundReason.trim() || undefined }, t("clinical.invoiceDetail.refundSuccess"));
+    if (!refundMethod) { toast.error(txDevolucion.obligatorio); return; }
+    await callApi("/refund", "POST", { amount, refundMethod, reason: refundReason.trim() || undefined }, t("clinical.invoiceDetail.refundSuccess"));
   }
 
   async function handleEditPrice() {
@@ -1326,6 +1335,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <Input type="number" step="0.01" min={0} value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} autoFocus />
             </div>
             <div className={cx("space-y-1.5", c.campo)}>
+              <MetodoDevolucion valor={refundMethod} onCambio={setRefundMethod} disabled={busy} />
+            </div>
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.reason")}</Label>
               <textarea
                 className="input-new"
@@ -1337,7 +1349,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="danger" onClick={handleRefund} disabled={busy}>
+            <ButtonNew variant="danger" onClick={handleRefund} disabled={busy || !refundMethod}>
               {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: fmtMXNdec(Number(refundAmount) || 0) })}
             </ButtonNew>
           </DialogFooter>

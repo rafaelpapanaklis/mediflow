@@ -253,6 +253,15 @@ export interface LineaDeCargo {
   unitPrice: number;
   /** Descuento total de la línea: el suyo + su parte del global + lo ya abonado. */
   discount: number;
+  /**
+   * ws1-t5 (F10): de `discount`, lo que es el ABONO ya cobrado (anticipo
+   * aplicado), no un descuento comercial. No cuenta como descuento ni para el
+   * tope del dueño. En el CFDI es el esquema de «remanente» del Apéndice 6 de
+   * la Guía de llenado (anticipo en Descuento + relación 07): ws1-t3.
+   */
+  anticipoAplicado?: number;
+  /** ws1-t5 (F10): la línea de ABONO es un anticipo del tratamiento, no una venta aparte. */
+  esAnticipo?: boolean;
   /** Lo que suma a la factura. */
   monto: number;
 }
@@ -328,6 +337,7 @@ export function planearCargo(
       quantity: r.cantidad,
       unitPrice: r.precio,
       discount,
+      ...(extras[i] > 0 ? { anticipoAplicado: pesos(extras[i]) } : {}),
       monto: round2(bruto - discount),
     };
   });
@@ -340,6 +350,7 @@ export function planearCargo(
       quantity: 1,
       unitPrice: pesos(abonoC),
       discount: 0,
+      esAnticipo: true,
       monto: pesos(abonoC),
     });
   }
@@ -385,6 +396,8 @@ export function conceptosParaFactura(plan: PlanDeCargo) {
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       discount: l.discount,
+      ...(l.anticipoAplicado ? { anticipoAplicado: l.anticipoAplicado } : {}),
+      ...(l.esAnticipo ? { esAnticipo: true } : {}),
     })),
   };
 }

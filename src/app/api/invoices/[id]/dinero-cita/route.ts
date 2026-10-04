@@ -14,6 +14,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { decidirDineroDeCitaCancelada, registrarDevolucionYCancelar } from "@/lib/anticipos/cita-cancelada.server";
+import { esMetodoDeDevolucion } from "@/lib/dinero/reembolsos";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const denied = denyIfMissingPermission(ctx, decision === "devuelto" ? "billing.refund" : "billing.charge");
   if (denied) return denied;
+  // ws1-t5 (F5): «ya lo devolví» dice por dónde salió el dinero, como /refund.
+  const refundMethod = body?.refundMethod;
+  if (decision === "devuelto" && !esMetodoDeDevolucion(refundMethod)) {
+    return NextResponse.json({ error: "Di cómo le devolviste el dinero: el corte de caja solo resta lo que salió en efectivo.", code: "REFUND_METHOD_REQUIRED" }, { status: 400 });
+  }
 
   const inv = await prisma.invoice.findFirst({ where: { id: params.id, clinicId: ctx.clinicId }, select: { patientId: true } });
   if (!inv) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
@@ -43,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const quien = usuario ? `${usuario.firstName ?? ""} ${usuario.lastName ?? ""}`.trim() || usuario.email : ctx.userId;
 
   const r = decision === "devuelto"
-    ? await registrarDevolucionYCancelar({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, quien })
+    ? await registrarDevolucionYCancelar({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, quien, refundMethod })
     : await decidirDineroDeCitaCancelada({ clinicId: ctx.clinicId, invoiceId: params.id, decision, userId: ctx.userId, quien });
   if (!r.ok) return NextResponse.json({ error: r.motivo ?? "No se pudo." }, { status: 409 });
   revalidateAfter("invoices");

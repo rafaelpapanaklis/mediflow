@@ -31,7 +31,8 @@ import {
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXNdec } from "@/lib/format";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { clasesCaja } from "./raiz";
 import s from "./caja-nueva.module.css";
@@ -58,7 +59,7 @@ export interface CajaNuevaProps {
   fmtDateTime: (iso: string) => string;
   fmtDayShort: (iso: string) => string;
   fmtDayLong:  (iso: string) => string;
-  methodLabel: (m: string) => string;
+  methodLabel: (m: string, refundMethod?: string | null) => string;
   isRefundRow: (r: { method: string }) => boolean;
   signedAmount: (r: { method: string; amount: number }) => string;
   varianceTone: (v: number) => "success" | "info" | "danger";
@@ -72,6 +73,7 @@ export interface CajaNuevaProps {
 
 export function CajaNueva(p: CajaNuevaProps) {
   const t = useT();
+  const txDinero = textosDinero(useLocale());
   const { caja, history, tab } = p;
   const reg    = caja.register;
   const totals = caja.totals;
@@ -197,6 +199,9 @@ export function CajaNueva(p: CajaNuevaProps) {
                     ))}
                     {/* Los reembolsos en efectivo también restan del esperado
                         (expectedCashOf, en el servidor); la cifra viene hecha. */}
+                    {(totals.cashRefunds ?? 0) > 0 && (
+                      <Linea etiqueta={`${t("cashRegister.kpiRefunds")} · ${t("cashRegister.methodCash")}`} valor={fmtMXNdec(totals.cashRefunds ?? 0)} signo="−" negativo />
+                    )}
                     <Linea etiqueta={t("cashRegister.kpiExpectedCash")} valor={fmtMXNdec(totals.expectedCash)} signo="=" total />
                   </div>
 
@@ -214,7 +219,17 @@ export function CajaNueva(p: CajaNuevaProps) {
                     {totals.refunds > 0 && (
                       <Linea etiqueta={t("cashRegister.kpiRefunds")} valor={`−${fmtMXNdec(totals.refunds)}`} negativo />
                     )}
+                    {(totals.refundsUnknownMethod ?? 0) > 0 && (
+                      <Linea etiqueta={txDinero.caja.reembolsosSinMetodo} valor={fmtMXNdec(totals.refundsUnknownMethod ?? 0)} />
+                    )}
                     <Linea etiqueta={t("cashRegister.kpiIncome")} valor={fmtMXNdec(totals.totalIncome)} signo="=" total />
+                    {/* ws1-t5: movimientos que NO son ingreso ni salida de dinero. */}
+                    {(totals.appliedCredit ?? 0) > 0 && (
+                      <Linea etiqueta={txDinero.caja.aplicadoSaldo} valor={fmtMXNdec(totals.appliedCredit ?? 0)} />
+                    )}
+                    {(totals.toCredit ?? 0) > 0 && (
+                      <Linea etiqueta={txDinero.caja.aSaldoFavor} valor={fmtMXNdec(totals.toCredit ?? 0)} />
+                    )}
                     <Linea etiqueta={t("cashRegister.kpiDiscounts")} valor={fmtMXNdec(totals.discounts)} />
                     <Linea etiqueta={t("cashRegister.kpiTax")}       valor={fmtMXNdec(totals.tax)} />
                   </div>
@@ -388,7 +403,7 @@ function FilaVenta({ r, multiDay, p }: { r: Fila; multiDay: boolean; p: CajaNuev
       </td>
       <td className={s.tablaPaciente}>{r.patientName}</td>
       <td className={s.tablaTexto}>{r.concept}</td>
-      <td><BadgeNew tone={reembolso ? "danger" : r.method === "cash" ? "success" : "info"}>{p.methodLabel(r.method)}</BadgeNew></td>
+      <td><BadgeNew tone={reembolso ? "danger" : r.method === "cash" ? "success" : "info"}>{p.methodLabel(r.method, r.refundMethod)}</BadgeNew></td>
       <td className={`${s.tablaImporte} ${reembolso ? s.tablaImporteNegativo : ""}`}>{p.signedAmount(r)}</td>
       <td className={`${s.tablaDescuento} ${r.discount > 0 ? s.tablaDescuentoActivo : ""}`}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
       <td className={s.tablaTexto}>{r.doctorName}</td>

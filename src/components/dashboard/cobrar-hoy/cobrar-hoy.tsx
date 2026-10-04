@@ -31,6 +31,7 @@ import h from "./cobrar-hoy.module.css";
 import { METHODS, type PaymentMethod } from "@/components/dashboard/billing/payment-modal";
 import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada";
 import { AvisoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada.component";
+import { AvisoPresupuestoPorCargar } from "./aviso-presupuesto-por-cargar";
 import {
   conceptoDeLaCita,
   cuerpoNotaCobroHoy,
@@ -275,6 +276,8 @@ function CuerpoCobrarHoy({
 
       <div className={c.cuerpo}>
         <p className={c.ayuda}>{t("cobrarHoy.intro")}</p>
+        {/* ws1-t5 (F10): presupuesto aceptado con conceptos sin cargar → no cobrarlo dos veces. */}
+        {nota === null && <AvisoPresupuestoPorCargar patientId={patientId} />}
 
         {/* Qué se cobra */}
         <div className={c.bloque}>

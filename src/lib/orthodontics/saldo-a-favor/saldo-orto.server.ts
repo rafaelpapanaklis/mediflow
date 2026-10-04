@@ -40,6 +40,7 @@ import { round2 } from "@/lib/invoice-totals";
 import { getPatientCreditBalance } from "@/lib/patient-credit";
 import { aplicarSaldoAFavor, type ResultadoAplicacion } from "@/lib/patient-credit-aplicar";
 import { FUENTE_EXCEDENTE, motivoParaNoAplicar } from "@/lib/patient-credit-core";
+import { REEMBOLSO_A_SALDO_A_FAVOR } from "@/lib/dinero/reembolsos";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { cobranzaDelCasoUnificada } from "../cobranza-caso";
@@ -382,6 +383,8 @@ async function ejecutarEnTx(tx: Tx, args: ArgsCobroConAdelanto): Promise<Resulta
         invoiceId: cobrada.id,
         amount: reparto.aFavor,
         method: "refund",
+        // ws1-t5 (F3): traspaso, no reembolso — no resta ingresos.
+        refundMethod: REEMBOLSO_A_SALDO_A_FAVOR,
         notes: `Excedente del cobro: pasa al saldo a favor del paciente (no sale dinero de caja).`,
         paidAt: args.paidAt,
       },

@@ -77,16 +77,42 @@ function keyFromMx(mx: Date, unit: BucketUnit): string {
   return `${y}-${m}`;
 }
 
-/** Clave de bucket para un instante UTC real (lo pasa a hora de México). */
-export function bucketKeyOf(d: Date, unit: BucketUnit): string {
-  return keyFromMx(new Date(d.getTime() - MX_OFFSET_MS), unit);
+/**
+ * ws1-t5 (F16): `d` en la HORA DE PARED de `timezone`, como un Date cuyos
+ * componentes UTC son la hora local (el mismo «espacio México» de keyFromMx).
+ * Sin zona, o con la de México, es el desfase fijo de siempre (UTC−6): ni una
+ * cifra cambia para las clínicas de hoy. Con otra zona (Tijuana, Cancún…) usa
+ * Intl, que conoce sus horarios de verano. Una zona inválida cae a México.
+ */
+const MX_TZ = "America/Mexico_City";
+const formatosPorZona = new Map<string, Intl.DateTimeFormat>();
+function aHoraDePared(d: Date, timezone?: string | null): Date {
+  if (!timezone || timezone === MX_TZ) return new Date(d.getTime() - MX_OFFSET_MS);
+  try {
+    let f = formatosPorZona.get(timezone);
+    if (!f) {
+      f = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+      });
+      formatosPorZona.set(timezone, f);
+    }
+    const p = Object.fromEntries(f.formatToParts(d).map((x) => [x.type, x.value]));
+    return new Date(Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour));
+  } catch {
+    return new Date(d.getTime() - MX_OFFSET_MS);
+  }
 }
 
-/** Todas las claves de bucket entre from..to (hora de México), para rellenar huecos con 0. */
-export function eachBucket(from: Date, to: Date, unit: BucketUnit): string[] {
+/** Clave de bucket para un instante UTC real (lo pasa a hora de México, o a la de `timezone` si se da). */
+export function bucketKeyOf(d: Date, unit: BucketUnit, timezone?: string | null): string {
+  return keyFromMx(aHoraDePared(d, timezone), unit);
+}
+
+/** Todas las claves de bucket entre from..to (hora de México, o de `timezone`), para rellenar huecos con 0. */
+export function eachBucket(from: Date, to: Date, unit: BucketUnit, timezone?: string | null): string[] {
   const out: string[] = [];
-  const fromMx = new Date(from.getTime() - MX_OFFSET_MS);
-  const toMx = new Date(to.getTime() - MX_OFFSET_MS);
+  const fromMx = aHoraDePared(from, timezone);
+  const toMx = aHoraDePared(to, timezone);
   let cur: Date;
   if (unit === "hour") {
     cur = new Date(Date.UTC(fromMx.getUTCFullYear(), fromMx.getUTCMonth(), fromMx.getUTCDate(), fromMx.getUTCHours()));

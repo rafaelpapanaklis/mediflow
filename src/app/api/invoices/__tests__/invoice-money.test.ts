@@ -291,7 +291,9 @@ test("H10 · el descuento se compara contra el subtotal que muestra el modal", a
 
   // El modal enseña "Subtotal actual: $3,500"; teclear 3,200 daba un 400 porque
   // el servidor comparaba contra la suma SIN el ajuste (3,000).
-  const res = await readJson(await POST(req({ discount: 3200 }), P));
+  // ws1-t5: un 91 % de descuento pasa del tope de la clínica: lo aplica el dueño.
+  authCtx.role = "SUPER_ADMIN";
+  const res = await readJson(await POST(req({ discount: 3200 }), P)).finally(() => { authCtx.role = "ADMIN"; });
   assert.equal(res.status, 200, `un descuento ≤ subtotal no se rechaza (${res.body?.error})`);
   assert.equal(db.invoice.total, 300);
 });
@@ -445,7 +447,7 @@ test("H11 · el reembolso deja paid y balance en centavos exactos", async () => 
   const { POST } = await import("@/app/api/invoices/[id]/refund/route");
   setInvoice({ total: 1000.01, paid: 1000.01, balance: 0, status: "PAID", paidAt: new Date() });
 
-  const res = await readJson(await POST(req({ amount: 333.34, reason: "cancelación" }), P));
+  const res = await readJson(await POST(req({ refundMethod: "cash", amount: 333.34, reason: "cancelación" }), P));
   assert.equal(res.status, 200);
   assert.equal(db.invoice.paid, 666.67, "sin 666.6700000000001");
   assert.equal(db.invoice.balance, 333.34, "sin 333.33999999999992");
@@ -460,7 +462,7 @@ test("H11 · el reembolso total de una factura con paid fantasma no se rechaza",
     status: "PARTIAL",
   });
 
-  const res = await readJson(await POST(req({ amount: 1000.01, reason: "devolución" }), P));
+  const res = await readJson(await POST(req({ refundMethod: "cash", amount: 1000.01, reason: "devolución" }), P));
   assert.equal(res.status, 200, `el reembolso completo se rechazó: ${res.body?.error}`);
   assert.equal(db.invoice.paid, 0, "paid en 0 exacto, sin −0 ni 1e-13");
   assert.ok(!Object.is(db.invoice.paid, -0), "nada de −$0.00 en pantalla");
@@ -693,8 +695,8 @@ test("N1 · dos reembolsos simultáneos por el total: pasa uno y el otro se rech
   setInvoice({ total: 1000, paid: 1000, balance: 0, status: "PAID", paidAt: new Date() });
 
   const [a, b] = await enElPeorOrden(
-    () => POST(req({ amount: 1000, reason: "devolución" }), P),
-    () => POST(req({ amount: 1000, reason: "devolución" }), P),
+    () => POST(req({ refundMethod: "cash", amount: 1000, reason: "devolución" }), P),
+    () => POST(req({ refundMethod: "cash", amount: 1000, reason: "devolución" }), P),
   );
 
   const reembolsos = db.payments.filter((p) => p.method === "refund");
@@ -717,7 +719,7 @@ test("N1 · un reembolso que cruza con un cobro no lo borra", async () => {
   db.payments.push({ id: "pay0", amount: 500, method: "transfer", paidAt: new Date() });
 
   const [r, c] = await enElPeorOrden(
-    () => reembolsar(req({ amount: 200, reason: "ajuste" }), P),
+    () => reembolsar(req({ refundMethod: "cash", amount: 200, reason: "ajuste" }), P),
     () => cobrar(req({ amount: 500, method: "transfer" }), P),
   );
   assert.equal(r.status, 200, "el reembolso es legítimo");
@@ -737,27 +739,27 @@ test("N1 · un reembolso solo sigue rechazando lo mismo que antes", async () => 
   const { POST } = await import("@/app/api/invoices/[id]/refund/route");
 
   setInvoice({ total: 1000, paid: 400, balance: 600, status: "PARTIAL" });
-  const excede = await readJson(await POST(req({ amount: 400.01 }), P));
+  const excede = await readJson(await POST(req({ refundMethod: "cash", amount: 400.01 }), P));
   assert.equal(excede.status, 400);
   assert.equal(excede.body.error, "El reembolso excede lo pagado");
 
   setInvoice({ total: 1000, paid: 0, balance: 1000, status: "PENDING" });
-  const sinPagos = await readJson(await POST(req({ amount: 100 }), P));
+  const sinPagos = await readJson(await POST(req({ refundMethod: "cash", amount: 100 }), P));
   assert.equal(sinPagos.status, 400);
   assert.equal(sinPagos.body.error, "Esta factura no tiene pagos para reembolsar");
 
   setInvoice({ total: 1000, paid: 1000, balance: 0, status: "CANCELLED" });
-  const cancelada = await readJson(await POST(req({ amount: 100 }), P));
+  const cancelada = await readJson(await POST(req({ refundMethod: "cash", amount: 100 }), P));
   assert.equal(cancelada.status, 400);
   assert.equal(cancelada.body.error, "La factura está cancelada");
 
   setInvoice({ total: 1000, paid: 1000, balance: 0, status: "PAID" });
-  const invalido = await readJson(await POST(req({ amount: 0 }), P));
+  const invalido = await readJson(await POST(req({ refundMethod: "cash", amount: 0 }), P));
   assert.equal(invalido.status, 400);
   assert.equal(invalido.body.error, "Monto inválido");
 
   setInvoice({ clinicId: "c2", total: 1000, paid: 1000, balance: 0, status: "PAID" });
-  const otraClinica = await readJson(await POST(req({ amount: 100 }), P));
+  const otraClinica = await readJson(await POST(req({ refundMethod: "cash", amount: 100 }), P));
   assert.equal(otraClinica.status, 404, "la sesión es de c1: esa factura no existe para ella");
 
   assert.equal(db.payments.length, 0, "ningún rechazo escribe un movimiento");
@@ -815,4 +817,68 @@ test("método · mark-paid con \"refund\" se rechaza; sin método sigue siendo e
   assert.equal(bueno.status, 200, bueno.body?.error);
   assert.equal(db.payments[0].method, "cash");
   assert.equal(db.invoice.status, "PAID");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ws1-t5 · F5 — el reembolso dice SIEMPRE por dónde salió el dinero
+// ═══════════════════════════════════════════════════════════════════════════
+test("F5 · reembolso sin «cómo se devolvió» → 400 y no escribe nada (antes: 200 y refundMethod nulo)", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ total: 3000, paid: 3000, balance: 0, status: "PAID", paidAt: new Date() });
+  const res = await readJson(await POST(req({ amount: 500, reason: "no quiso el tratamiento" }), P));
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "REFUND_METHOD_REQUIRED");
+  assert.equal(db.payments.length, 0);
+  assert.equal(db.invoice.paid, 3000);
+
+  const raro = await readJson(await POST(req({ amount: 500, refundMethod: "saldo_a_favor" }), P));
+  assert.equal(raro.status, 400, "el traspaso a saldo a favor no se teclea en /refund");
+});
+
+test("F5 · reembolso de $500 en efectivo: se guarda refundMethod «cash»", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ total: 3000, paid: 3000, balance: 0, status: "PAID", paidAt: new Date() });
+  const res = await readJson(await POST(req({ amount: 500, refundMethod: "cash" }), P));
+  assert.equal(res.status, 200);
+  const r = db.payments.find((p) => p.method === "refund");
+  assert.equal(r?.amount, 500);
+  assert.equal(r?.refundMethod, "cash");
+  assert.equal(db.invoice.paid, 2500);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ws1-t5 · punto 7 — descuento por encima del tope (20 % de fábrica): solo el dueño
+// ═══════════════════════════════════════════════════════════════════════════
+test("descuento · un ADMIN que pone $750 de descuento a $3,000 (25 %) → 403 y la factura no cambia; $600 (20 %) sí", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/edit-price/route");
+  setInvoice({ items: [{ description: "Corona", quantity: 1, unitPrice: 3000, total: 3000 }], subtotal: 3000, total: 3000, balance: 3000 });
+  const r = await readJson(await POST(req({ discount: 750 }), P));
+  assert.equal(r.status, 403);
+  assert.equal(r.body.code, "DESCUENTO_REQUIERE_DUENO");
+  assert.equal(db.invoice.total, 3000);
+  const ok = await readJson(await POST(req({ discount: 600 }), P));
+  assert.equal(ok.status, 200);
+  assert.equal(db.invoice.total, 2400);
+  // «Editar precio» a $1,000 es un descuento del 67 %: también lo frena.
+  const precio = await readJson(await POST(req({ total: 1000 }), P));
+  assert.equal(precio.status, 403);
+});
+
+test("F14 · editar el precio a $0 deja la factura PAGADA (antes: PENDIENTE con saldo 0 para siempre)", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/edit-price/route");
+  setInvoice({ items: [{ description: "Garantía", quantity: 1, unitPrice: 800, total: 800 }], subtotal: 800, total: 800, balance: 800 });
+  authCtx.role = "SUPER_ADMIN";
+  try {
+    const r = await readJson(await POST(req({ total: 0 }), P));
+    assert.equal(r.status, 200);
+  } finally { authCtx.role = "ADMIN"; }
+  assert.equal(db.invoice.total, 0);
+  assert.equal(db.invoice.status, "PAID");
+});
+
+test("F14 · el precio no se escribe si `paid` cambió entre la lectura y la escritura (WHERE con paid)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../[id]/edit-price/route.ts", import.meta.url), "utf8");
+  assert.match(src, /updateMany\(\{\s*where: \{ id: params\.id, clinicId, cfdiUuid: invoice\.cfdiUuid, paid: invoice\.paid \}/);
+  assert.match(src, /FACTURA_CAMBIO[\s\S]{0,40}status: 409/);
 });

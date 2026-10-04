@@ -15,6 +15,10 @@ export interface QuoteItemForInvoice {
   quantity: unknown;
   unitPrice: unknown;
   discount?: unknown;
+  /** ws1-t5 (F10): parte del descuento que es un abono ya cobrado (anticipo aplicado). */
+  anticipoAplicado?: unknown;
+  /** ws1-t5 (F10): la línea es un abono/anticipo. */
+  esAnticipo?: boolean;
 }
 
 export interface QuoteForInvoice {
@@ -25,6 +29,10 @@ export interface QuoteForInvoice {
 /** Concepto tal como se guarda en Invoice.items (JSON). El descuento de línea solo si > 0. */
 export interface InvoiceItemFromQuote extends BillingInvoiceItem {
   discount?: number;
+  /** ws1-t5 (F10): parte de `discount` que es anticipo aplicado, no descuento comercial. */
+  anticipoAplicado?: number;
+  /** ws1-t5 (F10): concepto de abono (anticipo). */
+  esAnticipo?: boolean;
 }
 
 export interface InvoiceFieldsFromQuote {
@@ -54,11 +62,14 @@ export function invoiceFieldsFromQuote(quote: QuoteForInvoice): InvoiceFieldsFro
     // El descuento POR LÍNEA viaja con el concepto (la guarda del CFDI calcula
     // qty × unitPrice − discount), acotado al importe de línea (regla SAT).
     const discount = Math.min(round2(num(it.discount)), round2(unitPrice * quantity));
+    const anticipoAplicado = Math.min(round2(num(it.anticipoAplicado)), discount);
     return {
       description: it.toothFdi ? `${it.name} (${it.toothFdi})` : it.name,
       quantity,
       unitPrice,
       ...(discount > 0 ? { discount } : {}),
+      ...(anticipoAplicado > 0 ? { anticipoAplicado } : {}),
+      ...(it.esAnticipo ? { esAnticipo: true } : {}),
       // El importe de línea se DERIVA de los campos normalizados, no se copia
       // el lineTotal del presupuesto.
       total: itemLineTotal({ quantity, unitPrice, discount }),
