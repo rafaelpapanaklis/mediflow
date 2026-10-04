@@ -227,6 +227,9 @@ export interface CajaListRow {
   refundMethod?: string | null;
   discount:    number; // parte del descuento de la factura que le toca a ESTE movimiento (negativa si es reembolso)
   doctorName:  string; // vía invoice.appointment.doctor → Invoice.doctorId → "—"
+  /** C-17: la factura del movimiento y su descuento COMPLETO (la tabla lo enseña una vez por factura). */
+  invoiceId?:      string;
+  invoiceDiscount?: number;
 }
 
 export interface CajaTotals {
@@ -237,6 +240,13 @@ export interface CajaTotals {
   otherIncome:      number; // transfer / check / other (NO tarjeta)
   totalIncome:      number; // cash + débito + crédito + other (SIN reembolsos ni saldo a favor aplicado)
   refunds:          number; // Σ reembolsos REALES del turno (dinero que salió); se muestran en NEGATIVO, nunca suman
+  /**
+   * Auditoría de uso C-05 (4-oct-2026): «Ingresos del turno» = lo cobrado
+   * MENOS los reembolsos reales del turno (la misma cuenta que «Cobrado hoy» y
+   * que Finanzas). Antes la pantalla listaba «Reembolsos −$1,000» y debajo un
+   * total que no los restaba. Opcional en el tipo para quien arma uno a mano.
+   */
+  netIncome?:       number;
   /** ws1-t5: de `refunds`, lo que salió del cajón en efectivo (lo único que baja el esperado). */
   cashRefunds?:     number;
   /** ws1-t5: reembolsos viejos sin método registrado (no se sabe si salieron del cajón). */
@@ -550,6 +560,8 @@ export async function deriveWindow(
       method:      p.method,
       ...(p.method === REFUND_METHOD ? { refundMethod: (p as { refundMethod?: string | null }).refundMethod ?? null } : {}),
       discount:    money(discountPortion),
+      invoiceId:       p.invoiceId,
+      invoiceDiscount: money(Number(p.invoice?.discount ?? 0)),
       // La cita manda (es el dato clínico); si la factura se creó suelta desde
       // Caja, se cae al doctor que el usuario eligió en el editor.
       doctorName:  fullName(p.invoice?.appointment?.doctor ?? attributedById.get((p.invoice as any)?.doctorId ?? "")),
@@ -1214,6 +1226,7 @@ async function shiftOf(
     otherIncome:      money(derived.otherIncome - derived.cardDebitIncome - derived.cardCreditIncome),
     totalIncome:      money(derived.totalIncome),
     refunds:          money(derived.refunds),
+    netIncome:        money(derived.totalIncome - derived.refunds),
     cashRefunds:      money(derived.cashRefunds),
     refundsUnknownMethod: money(derived.refundsUnknownMethod),
     appliedCredit:    money(derived.appliedCredit),
@@ -1264,6 +1277,8 @@ export interface CajaCloseSummary {
   otherIncome:      number;
   totalIncome:      number;
   refunds:          number;
+  /** C-05: lo cobrado menos los reembolsos reales («Ingresos del turno»). */
+  netIncome?:       number;
   /** ws1-t5: lo reembolsado EN EFECTIVO (ya restado del esperado). */
   cashRefunds?:     number;
   appliedCredit?:   number;
@@ -1306,6 +1321,7 @@ export function buildCloseSummary(args: {
     otherIncome:      money(derived.otherIncome - derived.cardDebitIncome - derived.cardCreditIncome),
     totalIncome:      money(derived.totalIncome),
     refunds:          money(derived.refunds),
+    netIncome:        money(derived.totalIncome - derived.refunds),
     cashRefunds:      money(derived.cashRefunds),
     appliedCredit:    money(derived.appliedCredit ?? 0),
     toCredit:         money(derived.toCredit ?? 0),

@@ -71,3 +71,40 @@ export function cobrosFueraDeCorte<T extends CobroEnEfectivo>(
     (c) => c.paidAt.getTime() >= primeraApertura.getTime() && !asignados.has(c.id) && !dentro(c.paidAt),
   );
 }
+
+/**
+ * Auditoría de uso C-06 (4-oct-2026): ¿cambió el efectivo esperado desde que
+ * se abrió el diálogo de cierre? Si alguien cobró (o reembolsó) en efectivo
+ * mientras se contaba, cerrar con el esperado viejo guardaba un faltante (o un
+ * sobrante) que no existe: −$4,000 en la clínica de prueba. El servidor compara
+ * el esperado que la pantalla enseñó con el de ese instante y, si difieren, no
+ * cierra: la pantalla se refresca y pide volver a contar. `null` = sin cambio
+ * (o una pantalla vieja que no mandó lo que vio).
+ */
+export function cambioDelEsperado(visto: number | null | undefined, ahora: number): { diferencia: number } | null {
+  if (visto == null || !Number.isFinite(Number(visto))) return null;
+  const dif = Math.round((ahora - Number(visto)) * 100) / 100;
+  return Math.abs(dif) >= 0.01 ? { diferencia: dif } : null;
+}
+
+/**
+ * Auditoría de uso C-17: el descuento que enseña la tabla del turno, UNA vez
+ * por factura (en su primer cobro de la lista) y COMPLETO, no prorrateado: un
+ * cobro de $300 de una factura de $800 con $160 de descuento salía «Descuento
+ * −$75» y el siguiente «−$25», cifras que no dicen nada. Los reembolsos y el
+ * saldo a favor aplicado no llevan descuento.
+ */
+export function descuentoUnaVezPorFactura(
+  filas: ReadonlyArray<{ paymentId: string; invoiceId?: string; invoiceDiscount?: number; method: string }>,
+): Map<string, number> {
+  const vistas = new Set<string>();
+  const out = new Map<string, number>();
+  for (const f of filas) {
+    if (!f.invoiceId || f.method === "refund" || f.method === "anticipo") continue;
+    if (vistas.has(f.invoiceId)) continue;
+    vistas.add(f.invoiceId);
+    const d = Math.round((Number(f.invoiceDiscount) || 0) * 100) / 100;
+    if (d > 0) out.set(f.paymentId, d);
+  }
+  return out;
+}

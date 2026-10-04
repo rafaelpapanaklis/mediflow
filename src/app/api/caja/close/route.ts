@@ -8,6 +8,8 @@ import { logMutation } from "@/lib/audit";
 import { getOpenRegister, deriveWindow, buildCloseSummary, money } from "@/lib/caja";
 import { canUseCaja, verifyCajaPin } from "@/lib/caja-pin";
 import { cobrosAsignados } from "@/lib/dinero/ajustes.server";
+import { cambioDelEsperado } from "@/lib/dinero/caja-core";
+import { fmtMXNdec } from "@/lib/format";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,8 @@ export const dynamic = "force-dynamic";
 const closeSchema = z.object({
   countedClosingBalance: z.number().min(0),
   closingNotes: z.string().trim().max(1000).optional(),
+  // C-06: el efectivo esperado que enseñaba el diálogo al confirmar.
+  esperadoVisto: z.number().optional(),
 });
 
 // Cierra la caja abierta: congela el snapshot y marca CLOSED. 400 si no hay abierta.
@@ -40,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { countedClosingBalance, closingNotes } = closeSchema.parse(raw);
+    const { countedClosingBalance, closingNotes, esperadoVisto } = closeSchema.parse(raw);
 
     const reg = await getOpenRegister(clinicId);
     if (!reg) return NextResponse.json({ error: "No hay caja abierta." }, { status: 400 });
@@ -63,6 +67,21 @@ export async function POST(req: NextRequest) {
     });
     const expectedCash = summary.expectedCash;
     const variance = summary.variance;
+
+    // Auditoría de uso C-06: si entró (o salió) efectivo desde que se abrió el
+    // diálogo, no se cierra con un esperado viejo: se pide volver a contar.
+    const cambio = cambioDelEsperado(esperadoVisto, expectedCash);
+    if (cambio) {
+      const que = cambio.diferencia > 0
+        ? `Entraron ${fmtMXNdec(cambio.diferencia)} en efectivo`
+        : `Salieron ${fmtMXNdec(-cambio.diferencia)} en efectivo`;
+      return NextResponse.json({
+        error: `${que} desde que abriste esta ventana: el efectivo esperado ahora es ${fmtMXNdec(expectedCash)}. Vuelve a contar y confirma; la caja sigue abierta.`,
+        code: "CAJA_ESPERADO_CAMBIO",
+        expectedCash: money(expectedCash),
+        diferencia: cambio.diferencia,
+      }, { status: 409 });
+    }
 
     // ws1-t5 (F7): solo si SIGUE abierta. Dos cierres a la vez (o el cierre
     // automático de medianoche) ya no pisan la foto del corte: el segundo da 409.

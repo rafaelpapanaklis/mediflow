@@ -33,6 +33,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXNdec } from "@/lib/format";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDinero } from "@/lib/dinero/textos";
+import { descuentoUnaVezPorFactura } from "@/lib/dinero/caja-core";
 import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { clasesCaja } from "./raiz";
 import s from "./caja-nueva.module.css";
@@ -75,6 +76,8 @@ export function CajaNueva(p: CajaNuevaProps) {
   const t = useT();
   const txDinero = textosDinero(useLocale());
   const { caja, history, tab } = p;
+  // C-17: el descuento de cada factura, una vez, en su primer cobro de la lista.
+  const descuentoPorFila = descuentoUnaVezPorFactura(caja.list);
   const reg    = caja.register;
   const totals = caja.totals;
   const abierta = !!(reg && totals);
@@ -222,7 +225,9 @@ export function CajaNueva(p: CajaNuevaProps) {
                     {(totals.refundsUnknownMethod ?? 0) > 0 && (
                       <Linea etiqueta={txDinero.caja.reembolsosSinMetodo} valor={fmtMXNdec(totals.refundsUnknownMethod ?? 0)} />
                     )}
-                    <Linea etiqueta={t("cashRegister.kpiIncome")} valor={fmtMXNdec(totals.totalIncome)} signo="=" total />
+                    {/* C-05 (auditoría de uso): el total RESTA los reembolsos que tiene
+                        listados encima (antes no: tres cifras para el mismo día). */}
+                    <Linea etiqueta={t("cashRegister.kpiIncome")} valor={fmtMXNdec(totals.netIncome ?? totals.totalIncome - totals.refunds)} signo="=" total />
                     {/* ws1-t5: movimientos que NO son ingreso ni salida de dinero. */}
                     {(totals.appliedCredit ?? 0) > 0 && (
                       <Linea etiqueta={txDinero.caja.aplicadoSaldo} valor={fmtMXNdec(totals.appliedCredit ?? 0)} />
@@ -261,8 +266,8 @@ export function CajaNueva(p: CajaNuevaProps) {
                           <th>{t("cashRegister.thPatient")}</th>
                           <th>{t("cashRegister.thConcept")}</th>
                           <th>{t("cashRegister.thMethod")}</th>
-                          <th style={{ textAlign: "right" }}>{t("cashRegister.thAmount")}</th>
-                          <th style={{ textAlign: "right" }}>{t("cashRegister.nueva.descuento")}</th>
+                          <th style={{ textAlign: "right" }}>{txDinero.caja.thCobrado}</th>
+                          <th style={{ textAlign: "right" }}>{txDinero.caja.thDescuentoFactura}</th>
                           <th>{t("cashRegister.thDoctor")}</th>
                         </tr>
                       </thead>
@@ -287,12 +292,13 @@ export function CajaNueva(p: CajaNuevaProps) {
                                   </td>
                                 </tr>
                               )}
-                              <FilaVenta r={r} multiDay={p.listMultiDay} p={p} />
+                              <FilaVenta r={r} multiDay={p.listMultiDay} p={p} descuento={descuentoPorFila.get(r.paymentId) ?? 0} />
                             </React.Fragment>
                           );
                         })}
                       </tbody>
                     </table>
+                    {descuentoPorFila.size > 0 && <p className={s.tarjetaSub}>{txDinero.caja.notaDescuento}</p>}
                   </div>
                 )}
               </section>
@@ -393,7 +399,7 @@ function Linea({ etiqueta, valor, signo, total, negativo }: {
 }
 
 /** Una venta del turno. Misma información y mismo orden que la tabla de hoy. */
-function FilaVenta({ r, multiDay, p }: { r: Fila; multiDay: boolean; p: CajaNuevaProps }) {
+function FilaVenta({ r, multiDay, p, descuento }: { r: Fila; multiDay: boolean; p: CajaNuevaProps; descuento: number }) {
   const reembolso = p.isRefundRow(r);
   return (
     <tr>
@@ -405,7 +411,8 @@ function FilaVenta({ r, multiDay, p }: { r: Fila; multiDay: boolean; p: CajaNuev
       <td className={s.tablaTexto}>{r.concept}</td>
       <td><BadgeNew tone={reembolso ? "danger" : r.method === "cash" ? "success" : "info"}>{p.methodLabel(r.method, r.refundMethod)}</BadgeNew></td>
       <td className={`${s.tablaImporte} ${reembolso ? s.tablaImporteNegativo : ""}`}>{p.signedAmount(r)}</td>
-      <td className={`${s.tablaDescuento} ${r.discount > 0 ? s.tablaDescuentoActivo : ""}`}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
+      {/* C-17: el descuento COMPLETO de la factura, una vez (no el prorrateo). */}
+      <td className={`${s.tablaDescuento} ${descuento > 0 ? s.tablaDescuentoActivo : ""}`}>{descuento > 0 ? `−${fmtMXNdec(descuento)}` : "—"}</td>
       <td className={s.tablaTexto}>{r.doctorName}</td>
     </tr>
   );
