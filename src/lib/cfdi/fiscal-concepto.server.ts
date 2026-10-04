@@ -11,6 +11,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aceptacionEncendida } from "@/lib/quotes/aceptacion-db";
+import { itemLineTotal } from "@/lib/invoice-totals";
 import {
   esClaveSat, esIvaConcepto, normalizarNombre, resolverConcepto,
   type ConceptoResuelto, type IvaConcepto, type ProcedimientoFiscal,
@@ -107,38 +108,84 @@ export async function catalogoFiscal(db: Db, clinicId: string): Promise<Procedim
  * (`quote_charges`, si existe). Clave: la descripción normalizada. Nunca lanza.
  */
 export async function procedimientosDeLaFactura(db: Db, clinicId: string, invoiceId: string): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  if (!clinicId || !invoiceId) return out;
-  const poner = (r: { name: string; toothFdi: string | null; procedureId: string | null }) => {
+  return (await procedimientosDeFacturas(db, clinicId, [invoiceId])).get(invoiceId) ?? new Map();
+}
+
+/** Lo mismo para varias facturas de una vez (el reporte de la global, N-23): 2 consultas, no 2 por nota. */
+export async function procedimientosDeFacturas(db: Db, clinicId: string, invoiceIds: readonly string[]): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  const ids = Array.from(new Set(invoiceIds.filter(Boolean)));
+  if (!clinicId || ids.length === 0) return out;
+  const poner = (invoiceId: string, r: { name: string; toothFdi: string | null; procedureId: string | null }) => {
     if (!r.procedureId) return;
+    const m = out.get(invoiceId) ?? new Map<string, string>();
     const k = normalizarNombre(r.toothFdi ? `${r.name} (${r.toothFdi})` : r.name);
     // El mismo concepto con dos procedimientos distintos: no se adivina.
-    if (out.has(k) && out.get(k) !== r.procedureId) out.set(k, "");
-    else out.set(k, r.procedureId);
+    if (m.has(k) && m.get(k) !== r.procedureId) m.set(k, "");
+    else m.set(k, r.procedureId);
+    out.set(invoiceId, m);
   };
   try {
     const quotes = await db.quote.findMany({
-      where: { clinicId, invoiceId },
-      select: { items: { select: { name: true, toothFdi: true, procedureId: true } } },
-      take: 5,
+      where: { clinicId, invoiceId: { in: ids } },
+      select: { invoiceId: true, items: { select: { name: true, toothFdi: true, procedureId: true } } },
+      take: 5000,
     });
-    for (const q of quotes) for (const it of q.items) poner(it);
+    for (const q of quotes) for (const it of q.items) if (q.invoiceId) poner(q.invoiceId, it);
   } catch (e) {
     console.warn("[cfdi:conceptos] no se pudo leer el presupuesto de la factura:", e);
   }
   try {
     if (!(await aceptacionEncendida(db as any))) throw new Error("sin quote_charges");
-    const filas = await db.$queryRaw<{ name: string; toothFdi: string | null; procedureId: string | null }[]>`
-      SELECT qi."name", qi."toothFdi", qi."procedureId"
+    const filas = await db.$queryRaw<{ invoiceId: string; name: string; toothFdi: string | null; procedureId: string | null }[]>`
+      SELECT c."invoiceId", qi."name", qi."toothFdi", qi."procedureId"
         FROM "quote_charges" c
         JOIN "quote_items" qi ON qi."id" = c."quoteItemId"
         JOIN "quotes" q ON q."id" = qi."quoteId" AND q."clinicId" = ${clinicId}
-       WHERE c."clinicId" = ${clinicId} AND c."invoiceId" = ${invoiceId}`;
-    for (const f of filas) poner(f);
+       WHERE c."clinicId" = ${clinicId} AND c."invoiceId" = ANY(${ids}::text[])`;
+    for (const f of filas) poner(f.invoiceId, f);
   } catch {
     // Sin la tabla de cargos parciales (sql/presupuesto-aceptacion-parcial.sql): solo el presupuesto.
   }
-  for (const [k, v] of Array.from(out)) if (!v) out.delete(k);
+  for (const m of Array.from(out.values())) for (const [k, v] of Array.from(m)) if (!v) m.delete(k);
+  return out;
+}
+
+/**
+ * N-23 (segunda auditoría de uso): qué parte de cada nota va gravada al 16% según sus conceptos,
+ * con la MISMA resolución que el timbrado (procedimiento por id, por presupuesto o por nombre; si
+ * no, el IVA de la nota). invoiceId → 0..1. Nunca lanza: sin datos, la nota no aparece en el mapa.
+ */
+export async function proporcionesIva16(
+  db: Db,
+  clinicId: string,
+  facturas: readonly { id: string; items: unknown; ivaDeLaFactura: IvaConcepto }[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!clinicId || facturas.length === 0) return out;
+  try {
+    const [catalogo, delPresupuesto] = await Promise.all([
+      catalogoFiscal(db, clinicId),
+      procedimientosDeFacturas(db, clinicId, facturas.map((f) => f.id)),
+    ]);
+    for (const f of facturas) {
+      const items = Array.isArray(f.items) ? (f.items as any[]) : [];
+      const mapa = delPresupuesto.get(f.id);
+      let total = 0;
+      let gravado = 0;
+      for (const it of items) {
+        const t = Math.max(0, itemLineTotal(it));
+        const r = resolverConcepto(it ?? {}, catalogo, f.ivaDeLaFactura, mapa?.get(normalizarNombre(it?.description)) ?? null);
+        total += t;
+        if (r.ivaModo === "iva16") gravado += t;
+      }
+      if (total > 0) out.set(f.id, gravado / total);
+      else if (items.length === 0) continue;
+      else out.set(f.id, f.ivaDeLaFactura === "iva16" ? 1 : 0);
+    }
+  } catch (e) {
+    console.warn("[cfdi:conceptos] no se pudo calcular el IVA por concepto:", e);
+  }
   return out;
 }
 

@@ -9,7 +9,9 @@ import { useLocale } from "@/i18n/i18n-provider";
 
 interface Fila { descripcion: string; claveSat: string; ivaModo: "exento" | "iva16"; origenIva: string; ambiguo: boolean }
 
-export function ConceptosAlTimbrar({ invoiceId, taxMode, className, style }: {
+export function ConceptosAlTimbrar({ invoiceId, taxMode, className, style, titulo }: {
+  /** Encabezado de la lista (p. ej. en «Facturar este pago»). */
+  titulo?: string;
   invoiceId: string | null | undefined;
   /** El «Impuestos» elegido en el formulario: es el IVA de los conceptos sin procedimiento. */
   taxMode: string | null | undefined;
@@ -37,7 +39,7 @@ export function ConceptosAlTimbrar({ invoiceId, taxMode, className, style }: {
   return (
     <div data-cfdi-conceptos>
       <p className="text-[11px]" style={{ color: "var(--text-3)", margin: 0 }}>
-        {en ? "How each item goes on the CFDI:" : "Así sale cada concepto en el CFDI:"}
+        {titulo ?? (en ? "How each item goes on the CFDI:" : "Así sale cada concepto en el CFDI:")}
       </p>
       <ul className="text-[11px]" style={{ color: "var(--text-2)", margin: "2px 0 0", paddingLeft: 16 }}>
         {datos.conceptos.slice(0, 8).map((c, i) => (

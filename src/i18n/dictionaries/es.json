@@ -4125,7 +4125,7 @@
       "rfcPlaceholder": "13 caracteres (persona física) o 12 (moral)",
       "regimenPlaceholder": "Elige tu régimen fiscal…",
       "cfdiPoweredByTitle": "Facturación con Facturapi",
-      "cfdiPoweredByBody": " — Tu RFC es el emisor. Timbras cada factura desde su detalle cuando ya está pagada (no se timbra sola). El paciente puede descargar XML y PDF.",
+      "cfdiPoweredByBody": " — Tu RFC es el emisor. Timbras cada factura desde su detalle cuando ya está pagada, o cada cobro con «Facturar este pago» (nada se timbra solo). El paciente puede descargar XML y PDF.",
       "rfcLabel": "RFC del emisor *",
       "rfcHelp": "RFC de la clínica o del médico según facture",
       "razonSocialLabel": "Razón social *",

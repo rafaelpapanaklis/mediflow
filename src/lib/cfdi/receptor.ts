@@ -14,7 +14,7 @@
 // PURO (client-safe): lo usan los dos timbrados y los formularios.
 
 import { PERSONA_DEL_REGIMEN } from "@/lib/cfdi/emisor";
-import { REGIMENES_CON_D01, RFC_EXTRANJERO, RFC_PUBLICO_EN_GENERAL, normalizarRfc, tipoDePersona } from "@/lib/invoices/cfdi-reglas";
+import { REGIMENES_CON_D01, RFC_EXTRANJERO, RFC_PUBLICO_EN_GENERAL, normalizarRfc, tipoDePersona, usoCfdiPorRegimen } from "@/lib/invoices/cfdi-reglas";
 
 export const NOMBRE_PUBLICO_EN_GENERAL = "PUBLICO EN GENERAL";
 export const REGIMEN_PUBLICO_EN_GENERAL = "616";
@@ -85,4 +85,58 @@ export function errorDeReceptor(r: { rfc: unknown; regimenFiscal: unknown }, uso
       : `El uso ${u} (deducciones personales) solo es para personas físicas de los regímenes ${REGIMENES_CON_D01.join(", ")}. Usa G03.`;
   }
   return null;
+}
+
+// ── En el FORMULARIO (segunda auditoría de uso, resto de C-47) ────────────────────────────────
+// La pantalla enseñaba otra cosa que lo que iba al CFDI: con XAXX dejaba 612 y el nombre vacío;
+// con el RFC de una empresa dejaba 612 y el botón encendido. Mismas reglas que el servidor.
+
+export interface ReceptorEnPantalla {
+  rfc: string;
+  nombre: string;
+  regimen: string;
+  cp: string;
+  uso: string;
+  usoManual: boolean;
+}
+
+/**
+ * Lo que queda en el formulario al teclear el RFC: XAXX → «PUBLICO EN GENERAL», 616, S01 y el CP
+ * del emisor (lo que de verdad sale); al dejar XAXX se vacían; un régimen que no aplica al tipo de
+ * persona del RFC (612 con un RFC de empresa) pasa a «Elige»; el uso sigue al régimen salvo que
+ * alguien lo haya escogido a mano.
+ */
+export function receptorAlTeclearRfc<T extends ReceptorEnPantalla>(f: T, rfcTecleado: string, cpEmisor?: string | null): T {
+  const rfc = String(rfcTecleado ?? "").toUpperCase();
+  let n: T = { ...f, rfc };
+  if (esPublicoEnGeneral(rfc)) {
+    n = { ...n, nombre: NOMBRE_PUBLICO_EN_GENERAL, regimen: REGIMEN_PUBLICO_EN_GENERAL, cp: cpEmisor && /^\d{5}$/.test(cpEmisor) ? cpEmisor : n.cp, uso: USO_PUBLICO_EN_GENERAL, usoManual: false };
+    return n;
+  }
+  if (esPublicoEnGeneral(f.rfc)) n = { ...n, nombre: f.nombre === NOMBRE_PUBLICO_EN_GENERAL ? "" : f.nombre, regimen: "", cp: "" };
+  const persona = tipoDePersona(rfc);
+  const aplica = PERSONA_DEL_REGIMEN[n.regimen];
+  if (aplica && ((persona === "moral" && !aplica.includes("moral")) || (persona === "fisica" && !aplica.includes("fisica")))) n = { ...n, regimen: "" };
+  if (!n.usoManual) n = { ...n, uso: usoCfdiPorRegimen(n.regimen, rfc) };
+  return n;
+}
+
+/** Al elegir el régimen: el uso lo sigue (salvo a mano). */
+export function receptorAlElegirRegimen<T extends ReceptorEnPantalla>(f: T, regimen: string): T {
+  return { ...f, regimen, uso: f.usoManual ? f.uso : usoCfdiPorRegimen(regimen, f.rfc) };
+}
+
+/**
+ * Por qué todavía no se puede timbrar con estos datos (null = se puede). Lo que diría el servidor,
+ * dicho ANTES, junto al botón apagado (B4 de la segunda auditoría: «encendido con RFC vacío»).
+ */
+export function faltaEnReceptor(f: { rfc: string; nombre: string; regimen: string; cp: string; uso: string }, locale?: string | null): string | null {
+  const ing = en(locale);
+  const rfc = normalizarRfc(f.rfc);
+  if (!rfc) return ing ? "Enter the patient's RFC." : "Escribe el RFC del paciente.";
+  if (!/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc)) return ing ? "The RFC has 12 (company) or 13 (individual) characters." : "El RFC tiene 12 caracteres (empresa) o 13 (persona física).";
+  if (!String(f.nombre ?? "").trim()) return ing ? "Enter the name exactly as on the tax certificate." : "Escribe el nombre como viene en su constancia de situación fiscal.";
+  if (!String(f.regimen ?? "").trim()) return ing ? "Choose the patient's tax regime (it's on their tax certificate)." : "Elige el régimen fiscal del paciente (viene en su constancia).";
+  if (!/^\d{5}$/.test(String(f.cp ?? "").trim())) return ing ? "The ZIP code has 5 digits." : "El código postal son 5 dígitos.";
+  return errorDeReceptor({ rfc, regimenFiscal: f.regimen }, f.uso, locale);
 }

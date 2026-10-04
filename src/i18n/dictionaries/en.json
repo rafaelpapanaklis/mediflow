@@ -4125,7 +4125,7 @@
       "rfcPlaceholder": "13 characters (individual) or 12 (company)",
       "regimenPlaceholder": "Choose your tax regime…",
       "cfdiPoweredByTitle": "Invoicing with Facturapi",
-      "cfdiPoweredByBody": " — Your RFC is the issuer. You stamp each invoice from its detail once it is paid (it isn't stamped automatically). The patient can download XML and PDF.",
+      "cfdiPoweredByBody": " — Your RFC is the issuer. You stamp each invoice from its detail once it is paid, or each payment with «Invoice this payment» (nothing is stamped automatically). The patient can download XML and PDF.",
       "rfcLabel": "Issuer RFC *",
       "rfcHelp": "RFC of the clinic or the doctor, depending on who invoices",
       "razonSocialLabel": "Legal name *",

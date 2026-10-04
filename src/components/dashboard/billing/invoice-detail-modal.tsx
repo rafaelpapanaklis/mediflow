@@ -61,6 +61,9 @@ import { AvisosEmisorAlTimbrar } from "./cfdi-avisos-emisor-timbrado";
 // factura global del mes anterior (C-49).
 import { ConceptosAlTimbrar } from "./cfdi-conceptos-al-timbrar";
 import { pideConfirmarGlobal } from "./aviso-mes-cobro-cfdi";
+// Segunda auditoría (resto de C-47): el receptor que se ve es el que va al CFDI, y el porqué del botón apagado.
+import { faltaEnReceptor, receptorAlElegirRegimen, receptorAlTeclearRfc } from "@/lib/cfdi/receptor";
+import { useCpEmisor } from "./uso-cfdi-cliente";
 // ws1-t3: los CFDI de la factura ante el SAT (consultar, cancelar, sustituir, nota de crédito).
 import { CfdiAnteElSat } from "./cfdi-ante-el-sat";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
@@ -277,7 +280,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // ws1-t4, tanda 0: el uso sigue al régimen (y al RFC) hasta que alguien lo
   // escoja a mano; la forma de pago puede nacer vacía («Elige…») cuando el
   // panel no sabe con qué pagó el paciente (Mercado Pago, tarjeta sin tipo).
-  const [fiscal, setFiscal] = useState({ rfc: "", nombre: "", regimen: "612", cp: "", uso: usoCfdiPorRegimen("612"), usoManual: false, email: "", formaPago: "" as string, impuestos: "exento" as CfdiTaxMode });
+  // C-47 (segunda auditoría): sin régimen capturado, «Elige» (antes 612 para todos; la mayoría son 605).
+  const [fiscal, setFiscal] = useState({ rfc: "", nombre: "", regimen: "", cp: "", uso: usoCfdiPorRegimen(""), usoManual: false, email: "", formaPago: "" as string, impuestos: "exento" as CfdiTaxMode });
+  const cpEmisorCfdi = useCpEmisor();
   const [stampedUuid, setStampedUuid] = useState<string | null>(null);
   // ws1-t3: el formulario de timbrado en modo «sustituye a este CFDI» (motivo 01),
   // y el contador que hace recargar el bloque «CFDI ante el SAT».
@@ -1635,6 +1640,13 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 }}
               >
                 <p>{cfdiMismatch}</p>
+                {/* N-22: la nota se pagó con saldo a favor que entró en otro mes; el servidor pide confirmar la global. */}
+                {cfdiBlockCode === "CFDI_CONFIRMAR_GLOBAL" && (
+                  <label className="flex items-start gap-1.5" data-cfdi-confirmar-global-servidor>
+                    <input type="checkbox" checked={fueraDeGlobal} onChange={(e) => setFueraDeGlobal(e.target.checked)} />
+                    <span>{locale.startsWith("en") ? "Yes: I confirm it was NOT included in that global invoice." : "Sí: confirmo que NO entró en esa factura global."}</span>
+                  </label>
+                )}
                 <ButtonNew variant="secondary" size="sm" onClick={() => { setCfdiMismatch(null); setCfdiBlockCode(null); setSub(null); }}>
                   {cfdiBlockCode === "CFDI_LIVE_NOT_READY" || cfdiImpideReintento(cfdiBlockCode)
                     ? t("clinical.invoiceDetail.cfdiNotReadyDismiss")
@@ -1689,33 +1701,34 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             {/* C-52: con «Paciente extranjero» no se pintan RFC, régimen, CP y uso (los fija el SAT). */}
             {!extranjero.activo && (
             <div className={cx("space-y-1.5", c.campo)}>
-              <Label>{t("clinical.invoiceDetail.fiscalRfc")}</Label>
-              <Input value={fiscal.rfc} onChange={(e) => setFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase(), uso: f.usoManual ? f.uso : usoCfdiPorRegimen(f.regimen, e.target.value) }))}
+              <Label htmlFor="cfdi-rfc">{t("clinical.invoiceDetail.fiscalRfc")}</Label>
+              <Input id="cfdi-rfc" value={fiscal.rfc} onChange={(e) => setFiscal(f => receptorAlTeclearRfc(f, e.target.value, cpEmisorCfdi))}
                 className={cx("font-mono uppercase", "uppercase")} maxLength={13} autoFocus />
             </div>
             )}
             <div className={cx("space-y-1.5", c.campo)}>
-              <Label>{t("clinical.invoiceDetail.fiscalName")}</Label>
-              <Input value={fiscal.nombre} onChange={(e) => setFiscal(f => ({ ...f, nombre: e.target.value }))} />
+              <Label htmlFor="cfdi-nombre">{t("clinical.invoiceDetail.fiscalName")}</Label>
+              <Input id="cfdi-nombre" value={fiscal.nombre} onChange={(e) => setFiscal(f => ({ ...f, nombre: e.target.value }))} />
             </div>
             {!extranjero.activo && (<>
             <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
               <div className={cx("space-y-1.5", c.campo)}>
-                <Label>{t("clinical.invoiceDetail.fiscalRegimen")}</Label>
-                <select className="input-new"
-                  value={fiscal.regimen} onChange={(e) => setFiscal(f => ({ ...f, regimen: e.target.value, uso: f.usoManual ? f.uso : usoCfdiPorRegimen(e.target.value, f.rfc) }))}>
+                <Label htmlFor="cfdi-regimen">{t("clinical.invoiceDetail.fiscalRegimen")}</Label>
+                <select id="cfdi-regimen" className="input-new"
+                  value={fiscal.regimen} onChange={(e) => setFiscal(f => receptorAlElegirRegimen(f, e.target.value))}>
+                  {!fiscal.regimen && <option value="" disabled>{locale.startsWith("en") ? "Choose (it's on their tax certificate)…" : "Elige (viene en su constancia)…"}</option>}
                   {REGIMENES_FISCALES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.descripcion}</option>)}
                 </select>
               </div>
               <div className={cx("space-y-1.5", c.campo)}>
-                <Label>{t("clinical.invoiceDetail.fiscalCp")}</Label>
-                <Input value={fiscal.cp} onChange={(e) => setFiscal(f => ({ ...f, cp: e.target.value.replace(/\D/g, "") }))}
+                <Label htmlFor="cfdi-cp">{t("clinical.invoiceDetail.fiscalCp")}</Label>
+                <Input id="cfdi-cp" value={fiscal.cp} onChange={(e) => setFiscal(f => ({ ...f, cp: e.target.value.replace(/\D/g, "") }))}
                   className={rediseno ? undefined : "font-mono"} maxLength={5} />
               </div>
             </div>
             <div className={cx("space-y-1.5", c.campo)}>
-              <Label>{t("clinical.invoiceDetail.fiscalUso")}</Label>
-              <select className="input-new"
+              <Label htmlFor="cfdi-uso">{t("clinical.invoiceDetail.fiscalUso")}</Label>
+              <select id="cfdi-uso" className="input-new"
                 value={fiscal.uso} onChange={(e) => setFiscal(f => ({ ...f, uso: e.target.value, usoManual: true }))}>
                 {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
               </select>
@@ -1746,10 +1759,18 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <Input type="email" value={fiscal.email} onChange={(e) => setFiscal(f => ({ ...f, email: e.target.value }))} />
             </div>
             <OpcionesEnvioAlTimbrar valor={envioCfdi.alTimbrar} onChange={envioCfdi.setAlTimbrar} hayCorreo={!!fiscal.email.trim()} rediseno={rediseno} />
+            {/* N-26 (segunda auditoría): por qué el botón de timbrar está apagado, a la vista. */}
+            {(() => {
+              const porQue = !puedeTimbrar
+                ? (locale.startsWith("en") ? "Only the owner or an administrator can stamp." : "Timbrar lo hace solo el dueño o un administrador.")
+                : invoice.balance > 0 ? null
+                : extranjero.activo ? extranjero.error(fiscal.nombre.trim()) : faltaEnReceptor(fiscal, locale);
+              return porQue ? <p className={cx("text-[11px] text-muted-foreground", c.texto)} data-cfdi-porque>{porQue}</p> : null;
+            })()}
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || invoice.balance > 0 || !fiscal.formaPago || emisorIncompleto || !puedeTimbrar || (!sustituyeCfdiId && !fueraDeGlobal && pideConfirmarGlobal(invoice.payments))}>
+            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || invoice.balance > 0 || !fiscal.formaPago || emisorIncompleto || !puedeTimbrar || (!sustituyeCfdiId && !fueraDeGlobal && (pideConfirmarGlobal(invoice.payments) || cfdiBlockCode === "CFDI_CONFIRMAR_GLOBAL")) || (extranjero.activo ? !!extranjero.error(fiscal.nombre.trim()) : !!faltaEnReceptor(fiscal, locale))}>
               {busy ? t("clinical.invoiceDetail.stamping") : t("clinical.invoiceDetail.stampCfdiBtn")}
             </ButtonNew>
           </DialogFooter>

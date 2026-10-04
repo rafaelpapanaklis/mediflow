@@ -30,14 +30,14 @@ test("con responsable SIN fiscales: al menos su nombre y NUNCA el RFC del niño"
   assert.equal(r.datos.rfc, "");
   assert.equal(r.datos.cp, "");
   assert.equal(r.datos.nombre, "María Ruiz");
-  assert.equal(r.datos.regimen, "612");
+  assert.equal(r.datos.regimen, "", "sin régimen capturado: «Elige» (antes 612 para todos)");
 });
 
-test("sin responsable: los del paciente, como siempre (régimen 612 por defecto)", () => {
+test("sin responsable: los del paciente, como siempre (sin régimen capturado: «Elige», no 612)", () => {
   const r = receptorInicial({ rfc: "abc010101xx1", nombre: "Ana", regimen: "", cp: "01000" }, null);
   assert.equal(r.origen, "paciente");
   assert.equal(r.datos.rfc, "ABC010101XX1");
-  assert.equal(r.datos.regimen, "612");
+  assert.equal(r.datos.regimen, "");
   assert.equal(receptorInicial(null, null).datos.rfc, "");
 });
 

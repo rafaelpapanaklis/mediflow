@@ -16,6 +16,9 @@ import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { columnaPagoListaParaCfdi } from "@/lib/invoices/cfdi-pago-db";
 import { anticipoCobradoCreditWhere } from "@/lib/caja";
 import { ingresoPaymentWhere, reembolsoPaymentWhere } from "@/lib/dinero/ingresos.server";
+import { resolveTaxMode } from "@/lib/invoice-totals";
+import { proporcionesIva16 } from "./fiscal-concepto.server";
+import { cubiertosEnOtroCfdi } from "./anticipos-timbrados.server";
 import { armarReporte, type AnticipoSinNota, type PagoDelMes, type ReporteCobradoSinCfdi } from "./cobrado-sin-cfdi";
 
 const TZ_DEFECTO = "America/Mexico_City";
@@ -53,7 +56,7 @@ export async function reporteCobradoSinCfdi(clinicId: string, mes: string): Prom
       where: { paidAt, invoice: { clinicId } },
       select: {
         id: true, paidAt: true, amount: true, method: true, refundMethod: true,
-        invoice: { select: { id: true, invoiceNumber: true, status: true, balance: true, cfdiUuid: true, taxRate: true, taxIncluded: true } },
+        invoice: { select: { id: true, invoiceNumber: true, status: true, balance: true, cfdiUuid: true, taxRate: true, taxIncluded: true, items: true } },
       },
       orderBy: { paidAt: "asc" },
       take: 5000,
@@ -63,6 +66,13 @@ export async function reporteCobradoSinCfdi(clinicId: string, mes: string): Prom
     prisma.payment.findMany({ where: reembolsoPaymentWhere(clinicId, paidAt), select: { id: true }, take: 5000 }),
     anticiposSinNotaDelMes(clinicId, paidAt),
   ]);
+  // N-22: lo que ya ampara el CFDI de otra nota (saldo a favor aplicado a una nota timbrada).
+  const cubiertos = await cubiertosEnOtroCfdi(clinicId);
+  // N-23: el IVA de cada nota por sus conceptos, como el timbrado.
+  const notas = new Map(pagos.map((p) => [p.invoice.id, p.invoice]));
+  const proporciones = await proporcionesIva16(prisma, clinicId, Array.from(notas.values()).map((i) => ({
+    id: i.id, items: i.items, ivaDeLaFactura: resolveTaxMode(i, clinic?.cfdiTaxMode),
+  })));
   const enDefinicion = new Set([...ingresos, ...reembolsos].map((p) => p.id));
 
   const invoiceIds = Array.from(new Set(pagos.map((p) => p.invoice.id)));
@@ -94,9 +104,14 @@ export async function reporteCobradoSinCfdi(clinicId: string, mes: string): Prom
     pagos: pagos.map((p): PagoDelMes => ({
       ...p,
       enDefinicionUnica: enDefinicion.has(p.id),
-      invoice: { ...p.invoice, invoiceNumber: p.invoice.invoiceNumber ?? null },
+      invoice: {
+        id: p.invoice.id, invoiceNumber: p.invoice.invoiceNumber ?? null, status: p.invoice.status, balance: p.invoice.balance,
+        cfdiUuid: p.invoice.cfdiUuid, taxRate: p.invoice.taxRate, taxIncluded: p.invoice.taxIncluded,
+        proporcionIva16: proporciones.get(p.invoice.id),
+      },
     })),
     anticiposSinNota,
+    cubiertosEnOtroCfdi: cubiertos,
     cfdi: { porFactura, porPago },
     modoClinica: clinic?.cfdiTaxMode,
     fechaLocal: fechaLocalEn(tz),

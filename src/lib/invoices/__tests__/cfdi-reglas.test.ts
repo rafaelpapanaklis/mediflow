@@ -97,7 +97,9 @@ test("pue-saldo · a plazos (ortodoncia en 12) el aviso SEÑALA «Facturar este 
   assert.equal(b?.code, "CFDI_CON_SALDO_A_PLAZOS");
   assert.equal(b?.error, "Esta factura tiene saldo ($22,000.00): factura cada pago cobrado con «Facturar este pago», junto a cada pago en «Movimientos».");
   assert.match(avisoDeSaldo(true), /^Esta factura tiene saldo: factura cada pago cobrado con «Facturar este pago»/);
-  assert.match(avisoDeSaldo(null), /Si es a plazos, abre la factura y usa «Facturar este pago»/);
+  assert.match(avisoDeSaldo(null), /Abre la factura y usa «Facturar este pago»/);
+  // N-24 (segunda auditoría): sin plan también se dice la salida del abono (antes «registra primero el cobro que falta»).
+  assert.match(avisoDeSaldo(false), /cada cobro ya recibido se factura con «Facturar este pago»/);
   assert.match(avisoDeSaldo(true, "en"), /"Invoice this payment"/);
 });
 
@@ -239,4 +241,32 @@ test("C-47 · XAXX010101000 → «PUBLICO EN GENERAL», 616 y el CP del emisor; 
   const pf = { rfc: "GOMA800101AB1", nombre: "ANA", regimenFiscal: "612", cp: "97000" };
   assert.equal(receptorDePublicoEnGeneral(pf, "06600"), pf, "a los demás no se les toca nada");
   assert.match(errorDeReceptor({ rfc: "XEXX010101000", regimenFiscal: "616" }, "S01")!, /marca «Paciente extranjero»/);
+});
+
+// ── Segunda auditoría de uso (resto de C-47): lo que se ve es lo que va al CFDI ─────────────
+import { faltaEnReceptor, receptorAlTeclearRfc } from "@/lib/cfdi/receptor";
+
+const VACIO = { rfc: "", nombre: "", regimen: "", cp: "", uso: "G03", usoManual: false };
+
+test("C-47 · en pantalla: XAXX rellena «PUBLICO EN GENERAL», 616, S01 y el CP de la clínica; al quitarlo se vacía", () => {
+  const x = receptorAlTeclearRfc({ ...VACIO, regimen: "612" }, "xaxx010101000", "06600");
+  assert.deepEqual(x, { rfc: "XAXX010101000", nombre: "PUBLICO EN GENERAL", regimen: "616", cp: "06600", uso: "S01", usoManual: false });
+  const y = receptorAlTeclearRfc(x, "GOMA800101AB", "06600");
+  assert.equal(y.nombre, "");
+  assert.equal(y.regimen, "");
+});
+
+test("C-47 · en pantalla: RFC de empresa con 612 → el régimen pasa a «Elige» y el botón dice por qué", () => {
+  const f = receptorAlTeclearRfc({ ...VACIO, nombre: "EMPRESA SA DE CV", regimen: "612", cp: "06600" }, "ABC010101AB1");
+  assert.equal(f.regimen, "", "antes se quedaba en 612 y el servidor lo rechazaba al final");
+  assert.equal(f.uso, "G03");
+  assert.match(faltaEnReceptor(f)!, /Elige el régimen/);
+  assert.equal(faltaEnReceptor({ ...f, regimen: "601" }), null);
+});
+
+test("C-47 / N-26 · el botón no se enciende con RFC o nombre vacíos, ni con CP incompleto", () => {
+  assert.match(faltaEnReceptor(VACIO)!, /Escribe el RFC/);
+  assert.match(faltaEnReceptor({ ...VACIO, rfc: "GOMA800101AB1" })!, /Escribe el nombre/);
+  assert.match(faltaEnReceptor({ ...VACIO, rfc: "GOMA800101AB1", nombre: "ANA", regimen: "605", cp: "060", uso: "D01" })!, /5 dígitos/);
+  assert.equal(faltaEnReceptor({ rfc: "GOMA800101AB1", nombre: "ANA", regimen: "605", cp: "06000", uso: "D01" }), null);
 });

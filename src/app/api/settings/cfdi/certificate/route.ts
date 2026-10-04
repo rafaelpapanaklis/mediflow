@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { uploadCertificate } from "@/lib/facturapi";
 import { logMutation } from "@/lib/audit";
 import { avisosDelEmisor } from "@/lib/cfdi/emisor";
+import { textoFacturacionNoDisponible } from "@/lib/cfdi/mensajes";
 import { leerCertificadoCsd } from "@/lib/cfdi/csd-certificado.server";
 import { rfcDeLaOrganizacion } from "@/lib/cfdi/facturapi-extra.server";
 
@@ -27,7 +28,9 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   if (!process.env.FACTURAPI_USER_KEY) {
-    return NextResponse.json({ error: "Facturapi no está configurado. Agrega FACTURAPI_USER_KEY en las variables de entorno." }, { status: 500 });
+    // C-57: la variable que falta va al log; a la clínica, qué hacer.
+    console.error("[settings/cfdi/certificate] falta FACTURAPI_USER_KEY en el entorno");
+    return NextResponse.json({ error: textoFacturacionNoDisponible() }, { status: 500 });
   }
 
   const { cerBase64, keyBase64, password } = await req.json().catch(() => ({}));

@@ -7,6 +7,7 @@ import { esRfcValido, MENSAJE_RFC_INVALIDO } from "@/lib/clinic-fields";
 import { createOrganization, updateOrgLegal, getOrganizationStatus } from "@/lib/facturapi";
 import { errorDeEmisor, avisosDelEmisor, datosFiscalesParaBitacora } from "@/lib/cfdi/emisor";
 import { rfcDeLaOrganizacion } from "@/lib/cfdi/facturapi-extra.server";
+import { textoFacturacionNoDisponible } from "@/lib/cfdi/mensajes";
 
 // POST /api/settings/cfdi — configure clinic's RFC for invoicing
 export async function POST(req: NextRequest) {
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!process.env.FACTURAPI_USER_KEY) {
     // C-57: el detalle técnico va al log, no a la pantalla de la clínica.
     console.error("[settings/cfdi] falta FACTURAPI_USER_KEY en el entorno");
-    return NextResponse.json({ error:"La facturación electrónica no está disponible en este momento. Escríbenos a soporte y lo revisamos." }, { status:500 });
+    return NextResponse.json({ error: textoFacturacionNoDisponible() }, { status:500 });
   }
 
   const clinic = await prisma.clinic.findUnique({

@@ -58,7 +58,27 @@ export interface PagoDelMes {
     cfdiUuid: string | null;
     taxRate: number | null;
     taxIncluded: boolean | null;
+    /**
+     * N-23 (segunda auditoría de uso): qué parte de la nota va GRAVADA al 16% según sus conceptos
+     * (la misma resolución por procedimiento que el timbrado, lib/cfdi/fiscal-concepto). 0 = todo
+     * exento, 1 = todo gravado. undefined = no se sabe: el modo de la nota, como antes.
+     */
+    proporcionIva16?: number | null;
   };
+}
+
+/**
+ * N-22 (segunda auditoría de uso): dinero que entró en este mes y que, ya como saldo a favor, se
+ * aplicó a una nota que SÍ tiene su CFDI. Ese ingreso ya está ante el SAT en ese CFDI: no va en la
+ * global (un mismo ingreso nunca en dos CFDI). Lo arma el servidor (anticipos-timbrados.server).
+ */
+export interface CubiertoEnOtroCfdi {
+  /** De dónde salió el dinero: los cobros de una nota (cita cancelada), un cobro (excedente) o un anticipo sin nota. */
+  tipo: "factura" | "pago" | "credito";
+  ref: string;
+  monto: number;
+  /** Folio de la nota timbrada donde se usó. */
+  folioDestino: string;
 }
 
 /** Estados de los CFDI de la factura completa (registros sin pago) y de cada pago. */
@@ -137,6 +157,10 @@ export interface FilaReporte {
   conIva: boolean;
   notaConSaldo: boolean;
   motivo: Motivo;
+  /** Para ligar la fila con su origen (N-22). No sale en el CSV. */
+  ref?: { invoiceId?: string; pagoId?: string; creditoId?: string };
+  /** N-22: en «ya va en otro CFDI», el folio de la nota timbrada donde se usó. */
+  folioDestino?: string;
 }
 
 export interface ReporteCobradoSinCfdi {
@@ -154,6 +178,8 @@ export interface ReporteCobradoSinCfdi {
     enRevision: FilaReporte[];
     /** C-38: lo que pasó a saldo a favor en el mes. Informativo: no resta (el cobro de origen ya cuenta). */
     traspasos: FilaReporte[];
+    /** N-22: lo que entró este mes y ya está en el CFDI de otra nota (se usó como saldo a favor): fuera de la global. */
+    enOtroCfdi: FilaReporte[];
   };
   /** C-39: cuánto de `total` es dinero que entró sin nota (anticipos por Mercado Pago…). */
   anticiposSinNota: number;
@@ -163,8 +189,13 @@ export interface ReporteCobradoSinCfdi {
 /** El importe se toma como lo cobrado (IVA incluido si lo lleva): base = importe / 1.16. */
 function fila(p: PagoDelMes, motivo: Motivo, fecha: string, modoClinica: string | null | undefined): FilaReporte {
   const importe = r2(p.amount);
-  const conIva = llevaIva(p.invoice, modoClinica);
-  const base = conIva ? r2(importe / 1.16) : importe;
+  // N-23: con la proporción gravada de sus conceptos, el IVA es el de esa parte (IVA incluido en lo
+  // cobrado: IVA = importe × proporción × 16/116). Sin ella, el modo de la nota.
+  const prop = p.invoice.proporcionIva16;
+  const conIva = typeof prop === "number" ? prop > 0 : llevaIva(p.invoice, modoClinica);
+  const base = typeof prop === "number"
+    ? r2(importe - r2(importe * Math.min(1, Math.max(0, prop)) * 16 / 116))
+    : conIva ? r2(importe / 1.16) : importe;
   return {
     fecha,
     folio: p.invoice.invoiceNumber ?? "",
@@ -176,8 +207,10 @@ function fila(p: PagoDelMes, motivo: Motivo, fecha: string, modoClinica: string 
     base,
     iva: r2(importe - base),
     conIva,
-    notaConSaldo: p.invoice.balance > 0.005,
+    // N-27: una nota cancelada guarda su saldo, pero no «sigue debiendo».
+    notaConSaldo: p.invoice.status !== "CANCELLED" && p.invoice.balance > 0.005,
     motivo,
+    ref: { invoiceId: p.invoice.id, pagoId: p.id },
   };
 }
 
@@ -191,7 +224,37 @@ function filaDeAnticipo(a: AnticipoSinNota, fecha: string, modoClinica: string |
     // Mercado Pago: el panel no sabe si fue crédito o débito (formas 30/31: CONFIRMAR CON CONTADOR).
     formaSat: null,
     importe, base, iva: r2(importe - base), conIva, notaConSaldo: false, motivo: "incluido",
+    ref: { creditoId: a.id },
   };
+}
+
+/**
+ * N-22: saca de la global lo que ya ampara el CFDI de otra nota. Recorta las filas de su origen
+ * (en orden de fecha) y deja lo recortado en `enOtroCfdi`, con el folio destino. Base e IVA se
+ * recortan en la misma proporción. Puro.
+ */
+export function sacarLoCubierto(filas: FilaReporte[], cubiertos: readonly CubiertoEnOtroCfdi[]): FilaReporte[] {
+  const fuera: FilaReporte[] = [];
+  for (const c of cubiertos) {
+    let falta = r2(c.monto);
+    for (const f of filas) {
+      if (falta <= 0.005) break;
+      const r = f.ref ?? {};
+      const es = c.tipo === "factura" ? r.invoiceId === c.ref && !!r.pagoId
+        : c.tipo === "pago" ? r.pagoId === c.ref
+        : r.creditoId === c.ref;
+      if (!es || f.importe <= 0.005) continue;
+      const corte = r2(Math.min(falta, f.importe));
+      const factor = f.importe > 0 ? corte / f.importe : 0;
+      const baseCorte = r2(f.base * factor);
+      fuera.push({ ...f, importe: corte, base: baseCorte, iva: r2(corte - baseCorte), folioDestino: c.folioDestino });
+      f.importe = r2(f.importe - corte);
+      f.base = r2(f.base - baseCorte);
+      f.iva = r2(f.importe - f.base);
+      falta = r2(falta - corte);
+    }
+  }
+  return fuera;
 }
 
 export function armarReporte(args: {
@@ -199,6 +262,8 @@ export function armarReporte(args: {
   pagos: readonly PagoDelMes[];
   /** C-39: dinero que entró sin nota en el mes (Finanzas lo cuenta como ingreso ese día). */
   anticiposSinNota?: readonly AnticipoSinNota[];
+  /** N-22: lo de este mes que ya está en el CFDI de otra nota. */
+  cubiertosEnOtroCfdi?: readonly CubiertoEnOtroCfdi[];
   cfdi: CfdiConocidos;
   modoClinica: string | null | undefined;
   /** Fecha local (YYYY-MM-DD) de un instante, en la zona de la clínica. */
@@ -237,6 +302,8 @@ export function armarReporte(args: {
   }
   movs.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
   for (const m of movs) m.f();
+  const enOtroCfdi = sacarLoCubierto(filas, args.cubiertosEnOtroCfdi ?? []);
+  for (let i = filas.length - 1; i >= 0; i--) if (filas[i].importe <= 0.005) filas.splice(i, 1);
   const suma = (xs: FilaReporte[], k: "importe" | "base" | "iva") => r2(xs.reduce((s, x) => s + x[k], 0));
   const formas = new Map<string | null, number>();
   for (const f of filas) formas.set(f.formaSat, r2((formas.get(f.formaSat) ?? 0) + f.importe));
@@ -251,7 +318,7 @@ export function armarReporte(args: {
     porForma,
     notas: new Set(filas.filter((f) => f.origen === "cobro").map((f) => f.folio)).size,
     conSaldo: filas.filter((f) => f.notaConSaldo).length,
-    apartados: { anticipos, reembolsos, enRevision, traspasos },
+    apartados: { anticipos, reembolsos, enRevision, traspasos, enOtroCfdi },
     anticiposSinNota: suma(filas.filter((f) => f.origen === "anticipoSinNota"), "importe"),
     excluidos,
   };
@@ -277,16 +344,19 @@ export function csvDelReporte(r: ReporteCobradoSinCfdi): string {
   const enc = ["Fecha de cobro", "Folio de la nota", "Método en el panel", "Forma de pago SAT", "Importe cobrado", "Base", "IVA", "Impuesto", "Nota con saldo", "Sección"];
   const forma = (f: FilaReporte) => f.formaSat
     ?? (f.metodo === "refund" ? "No aplica (devolución)" : "Por definir (el panel no sabe con qué pagó)");
-  const linea = (f: FilaReporte, seccion: string): (string | number | null)[] => [
-    f.fecha, f.folio || "Sin nota", METODO_ES[f.metodo] ?? f.metodo, forma(f),
+  const linea = (f: FilaReporte, seccion: string, metodo?: string, formaTexto?: string): (string | number | null)[] => [
+    f.fecha, f.folio || "Sin nota", metodo ?? METODO_ES[f.metodo] ?? f.metodo, formaTexto ?? forma(f),
     f.importe, f.base, f.iva, f.conIva ? "IVA 16%" : "Exento", f.notaConSaldo ? "Sí: si va en la global, no la timbres después" : "No", seccion,
   ];
   const filas: (string | number | null)[][] = [enc];
   for (const f of r.filas) filas.push(linea(f, "Para la factura global"));
   filas.push(["", "", "", "TOTAL para la global", r.total, r.base, r.iva, "", "", ""]);
-  for (const f of r.apartados.anticipos) filas.push(linea(f, "Aparte: pagado con saldo a favor (revisar con el contador)"));
+  for (const f of r.apartados.anticipos) filas.push(linea(f, "Aparte: pagado con saldo a favor (el dinero contó el mes en que entró)"));
   for (const f of r.apartados.reembolsos) filas.push(linea({ ...f, importe: -f.importe, base: -f.base, iva: -f.iva }, "Aparte: reembolso"));
   for (const f of r.apartados.enRevision) filas.push(linea(f, "Aparte: timbre en duda (revisar en Facturapi)"));
-  for (const f of r.apartados.traspasos ?? []) filas.push(linea(f, "Informativo: pasó a saldo a favor (no es reembolso, no resta)"));
+  // N-25: un traspaso no es un reembolso: ni «Reembolso» ni «devolución» en sus columnas.
+  for (const f of r.apartados.traspasos ?? []) filas.push(linea(f, "Informativo: pasó a saldo a favor (no es reembolso, no resta)", "Traspaso a saldo a favor", "No aplica (no salió dinero)"));
+  // N-22: ya ampara este ingreso el CFDI de otra nota (se usó como saldo a favor).
+  for (const f of r.apartados.enOtroCfdi ?? []) filas.push(linea(f, `Fuera de la global: ya va en el CFDI de ${f.folioDestino ?? "otra nota"}`));
   return armarCsvExcel(filas);
 }

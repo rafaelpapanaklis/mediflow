@@ -246,3 +246,69 @@ test("C-38 · el reembolso real de una nota que después se canceló también se
   assert.equal(r.total, 790);
   assert.deepEqual(r.apartados.reembolsos.map((f) => f.importe), [790], "antes se perdía: global $790, neto de Finanzas $0");
 });
+
+// ── Segunda auditoría de uso (ws1-t4, 4-oct-2026): N-22, N-23, N-25 y N-27 ─────────────────────
+import { asignarFifo } from "@/lib/cfdi/anticipos-timbrados";
+
+test("N-22 · MF-1124 → MF-1126: el anticipo de $500 que se usó en una nota TIMBRADA sale de la global (un ingreso, un CFDI)", () => {
+  n = 0;
+  const cobro = pago({ amount: 500, method: "transfer", enDefinicionUnica: true }, { id: "inv_1124", invoiceNumber: "MF-1124", status: "CANCELLED", balance: 4000 });
+  const otro = pago({ amount: 300, enDefinicionUnica: true }, { id: "inv_x" });
+  // El libro: entró $500 por la cita cancelada de MF-1124 y se aplicó al abono «anticipo» de MF-1126.
+  const tramos = asignarFifo(
+    [{ id: "cr1", fecha: new Date("2026-10-03T18:00:00Z"), monto: 500, fuente: "cita_cancelada", invoiceId: "inv_1124", paymentId: null }],
+    [{ id: "ap1", fecha: new Date("2026-10-03T20:00:00Z"), monto: 500, paymentId: "pay_ant_1126" }],
+  );
+  assert.deepEqual(tramos, [{ entradaId: "cr1", aplicacionPaymentId: "pay_ant_1126", monto: 500 }]);
+  const r = armarReporte({
+    mes: "2026-10", pagos: [cobro, otro], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc,
+    cubiertosEnOtroCfdi: [{ tipo: "factura", ref: "inv_1124", monto: 500, folioDestino: "MF-1126" }],
+  });
+  assert.equal(r.total, 300, "antes: $800 (el $500 iba en la global Y en el CFDI de MF-1126)");
+  assert.deepEqual(r.apartados.enOtroCfdi.map((f) => [f.folio, f.importe, f.folioDestino]), [["MF-1124", 500, "MF-1126"]]);
+  assert.match(csvDelReporte(r), /Fuera de la global: ya va en el CFDI de MF-1126/);
+  // Sin nota timbrada en el destino, el anticipo sigue en la global del mes en que entró (C-01).
+  assert.equal(armarReporte({ mes: "2026-10", pagos: [cobro, otro], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc }).total, 800);
+});
+
+test("N-22 · FIFO: dos entradas y dos aplicaciones; solo se cubre lo que ya había entrado", () => {
+  const t = asignarFifo(
+    [
+      { id: "a", fecha: new Date("2026-09-01"), monto: 300, fuente: "cita_cancelada", invoiceId: "i1", paymentId: null },
+      { id: "b", fecha: new Date("2026-10-01"), monto: 200, fuente: "anticipo_mercadopago", invoiceId: null, paymentId: null },
+    ],
+    [
+      { id: "x", fecha: new Date("2026-09-15"), monto: 250, paymentId: "p1" },
+      { id: "y", fecha: new Date("2026-10-02"), monto: 250, paymentId: "p2" },
+    ],
+  );
+  assert.deepEqual(t, [
+    { entradaId: "a", aplicacionPaymentId: "p1", monto: 250 },
+    { entradaId: "a", aplicacionPaymentId: "p2", monto: 50 },
+    { entradaId: "b", aplicacionPaymentId: "p2", monto: 200 },
+  ]);
+});
+
+test("N-23 · MF-1149: blanqueamiento con IVA 16% ($2,000) + limpieza exenta ($800) → IVA $275.86, no $0", () => {
+  n = 0;
+  const p = pago({ amount: 2800, enDefinicionUnica: true }, { taxRate: 0, taxIncluded: true, proporcionIva16: 2000 / 2800 });
+  const r = armarReporte({ mes: "2026-10", pagos: [p], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  assert.equal(r.iva, 275.86);
+  assert.equal(r.base, 2524.14);
+  assert.equal(r.filas[0].conIva, true);
+  // Todo exento por sus conceptos aunque la clínica sea iva16: sin IVA.
+  const ex = armarReporte({ mes: "2026-10", pagos: [pago({ amount: 1000, enDefinicionUnica: true }, { proporcionIva16: 0 })], cfdi: SIN, modoClinica: "iva16", fechaLocal: fechaUtc });
+  assert.equal(ex.iva, 0);
+});
+
+test("N-25 / N-27 · CSV: el traspaso no dice «Reembolso» ni «devolución»; una nota cancelada no «tiene saldo»", () => {
+  n = 0;
+  const cobro = pago({ amount: 500, enDefinicionUnica: true }, { id: "inv_c", status: "CANCELLED", balance: 4000 });
+  const tr = pago({ amount: 500, method: "refund", refundMethod: "saldo_a_favor", enDefinicionUnica: false }, { id: "inv_c", status: "CANCELLED", balance: 4000 });
+  const r = armarReporte({ mes: "2026-10", pagos: [cobro, tr], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  assert.equal(r.conSaldo, 0, "antes contaba la nota cancelada como «con saldo»");
+  assert.equal(r.filas[0].notaConSaldo, false);
+  const linea = csvDelReporte(r).split("\r\n").find((l) => l.includes("pasó a saldo a favor"))!;
+  assert.match(linea, /"Traspaso a saldo a favor","No aplica \(no salió dinero\)"/);
+  assert.doesNotMatch(linea, /Reembolso|devolución/);
+});

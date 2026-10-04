@@ -35,3 +35,17 @@ export function textoCorreoNoEnviado(detalle: string | null | undefined, locale?
     : "No se pudo mandar el correo. Revisa que la dirección esté bien escrita y vuelve a intentarlo.";
   return d ? `${base} (${d})` : base;
 }
+
+/** Falta la llave de Facturapi del servidor (el detalle va al log). */
+export function textoFacturacionNoDisponible(locale?: string | null): string {
+  return en(locale)
+    ? "Electronic invoicing isn't available right now. Write to support and we'll look into it."
+    : "La facturación electrónica no está disponible en este momento. Escríbenos a soporte y lo revisamos.";
+}
+
+/** 403 de «Cobrado sin CFDI» para quien no es dueño ni administrador. */
+export function textoSoloDuenoReporte(locale?: string | null): string {
+  return en(locale)
+    ? "The «Collected without CFDI» report is only for the clinic owner or an administrator."
+    : "El reporte «Cobrado sin CFDI» es solo para el dueño o un administrador de la clínica.";
+}

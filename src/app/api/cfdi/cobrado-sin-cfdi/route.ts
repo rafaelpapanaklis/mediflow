@@ -10,6 +10,7 @@ import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { esMesValido, csvDelReporte } from "@/lib/cfdi/cobrado-sin-cfdi";
+import { textoSoloDuenoReporte } from "@/lib/cfdi/mensajes";
 import { reporteCobradoSinCfdi, mesActual } from "@/lib/cfdi/cobrado-sin-cfdi.server";
 
 export const runtime = "nodejs";
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
   if (rl) return rl;
   const ctx = await getAuthContext();
   const denied = requireAdmin(ctx);
-  if (denied) return denied;
+  // C-57: sin «Solo administradores».
+  if (denied) return ctx ? NextResponse.json({ error: textoSoloDuenoReporte(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : denied;
 
   let mes = req.nextUrl.searchParams.get("mes");
   if (!mes) {

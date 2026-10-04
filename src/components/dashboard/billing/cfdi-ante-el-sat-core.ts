@@ -33,6 +33,8 @@ export interface RespuestaCfdisFactura {
   puedeCancelar: boolean;
   /** C-42: lo cobrado neto de la factura (sin él, no se ofrece el motivo 03). */
   cobrado?: number;
+  /** N-26: lo que la factura todavía debe (tope de una nota de crédito sin devolución). */
+  saldo?: number;
 }
 
 export type EstadoPintado =

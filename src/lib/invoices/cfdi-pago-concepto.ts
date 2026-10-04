@@ -94,3 +94,16 @@ export function excedeElTotalDelCaso(args: { yaTimbrado: number; montoDelPago: n
   const suma = round2(args.yaTimbrado + args.montoDelPago);
   return suma > round2(args.totalFactura) + 0.01;
 }
+
+/**
+ * Cuánto de ESTE cobro se puede facturar (segunda auditoría de uso, N-21). Un reembolso o un
+ * traspaso a saldo a favor baja `paid` de la nota: el CFDI de un pago no puede amparar dinero que
+ * ya se devolvió (MF-1128: cobro $3,000, reembolso $1,000 → $2,000), ni pasar del total de la nota
+ * (MF-1140: total $800 → $800), ni de lo que falta por timbrar de la nota. 0 = nada que facturar.
+ */
+export function montoTimbrableDePago(args: { montoDelPago: number; pagadoNeto: number; totalFactura: number; yaTimbrado: number }): number {
+  const c = (x: number) => Math.round((Number(x) || 0) * 100);
+  const libreCobrado = c(args.pagadoNeto) - c(args.yaTimbrado);
+  const libreTotal = c(args.totalFactura) - c(args.yaTimbrado);
+  return Math.max(0, Math.min(c(args.montoDelPago), libreCobrado, libreTotal)) / 100;
+}

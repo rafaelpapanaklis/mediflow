@@ -19,7 +19,7 @@ import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import { derivePaymentForm, resolveTaxMode, round2, cfdiStampedCheck, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
-import { facturaAdmiteCfdiPorPago, conceptoDePago, excedeElTotalDelCaso } from "@/lib/invoices/cfdi-pago-concepto";
+import { facturaAdmiteCfdiPorPago, conceptoDePago, montoTimbrableDePago } from "@/lib/invoices/cfdi-pago-concepto";
 import { FUENTE_EXCEDENTE } from "@/lib/patient-credit-core";
 import { USOS_CFDI } from "@/lib/cfdi-catalogs";
 import {
@@ -38,6 +38,7 @@ import { conceptosFiscalesDeFactura } from "@/lib/cfdi/fiscal-concepto.server";
 import { tasasDeRetencion, errorRetencionPorPago, CFDI_RETENCION_POR_PAGO } from "@/lib/cfdi/retenciones";
 import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
 import { avisoMesDeCobro, bloqueoPorGlobal, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
+import { fechasDeOrigenDeAnticipos } from "@/lib/cfdi/anticipos-timbrados.server";
 import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
 import { textoCfdiPorPagoNoDisponible, textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 
@@ -243,7 +244,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const idx = pagosOrdenados.findIndex((p) => p.id === payment.id);
   const pagosAnteriores = idx >= 0 ? pagosOrdenados.slice(0, idx) : [];
   const concepto = !esAPlazos
-    ? { descripcion: round2(payment.amount) + 0.005 < round2(invoice.total) ? `${descripcionBase} — abono` : descripcionBase, cuotas: [] as number[] }
+    ? { descripcion: round2(payment.amount) + 0.005 < round2(invoice.total) || round2(invoice.paid) + 0.005 < round2(invoice.total) ? `${descripcionBase} — abono` : descripcionBase, cuotas: [] as number[] }
     : conceptoDePago({
       condiciones,
       totalFactura: invoice.total,
@@ -254,17 +255,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // ── Candado: la suma de los CFDI nunca pasa del total del caso ─────────────
   const yaTimbrado = await sumaCfdiValidaDeFactura(prisma, { clinicId: ctx!.clinicId, invoiceId: invoice.id });
-  if (excedeElTotalDelCaso({ yaTimbrado, montoDelPago: payment.amount, totalFactura: invoice.total })) {
+  // N-21 (segunda auditoría de uso): se factura lo NETO del cobro — sin lo que se devolvió o pasó
+  // a saldo a favor, sin pasar del total de la nota ni de lo que falta por timbrar de ella.
+  const monto = montoTimbrableDePago({ montoDelPago: payment.amount, pagadoNeto: invoice.paid, totalFactura: invoice.total, yaTimbrado });
+  if (!(monto > 0)) {
     return NextResponse.json({
-      error: `Facturar este pago ($${payment.amount.toFixed(2)}) dejaría timbrado más de lo que vale el caso ($${invoice.total.toFixed(2)}); ya hay $${yaTimbrado.toFixed(2)} timbrado en otros CFDI de esta factura. Revisa los CFDI existentes antes de seguir.`,
+      error: yaTimbrado > 0.005
+        ? `Este cobro ya está amparado: la nota tiene $${yaTimbrado.toFixed(2)} timbrados en otros CFDI y lo cobrado neto (sin reembolsos) es $${round2(invoice.paid).toFixed(2)}. No queda nada de este pago por facturar.`
+        : "Este cobro se devolvió (o pasó a saldo a favor): no queda nada de él por facturar.",
       code: "CFDI_POR_PAGO_EXCEDE_TOTAL",
     }, { status: 409 });
   }
-  if (!(round2(payment.amount) > 0)) {
-    return NextResponse.json({ error: "El monto a timbrar debe ser mayor a $0." }, { status: 400 });
-  }
   // C-49 (auditoría de uso): un cobro de un mes anterior pudo ir ya en la factura global.
-  const global = bloqueoPorGlobal({ pagos: [payment], ahora: new Date(), timeZone: clinic.timezone, confirmado: body?.confirmaFueraDeGlobal, locale: clinic.locale });
+  // N-22: un abono «anticipo» entró cuando se cobró su origen (saldo a favor), no hoy.
+  const pagosParaGlobal = payment.method === "anticipo"
+    ? await fechasDeOrigenDeAnticipos(ctx!.clinicId, invoice.patientId, [payment.id])
+    : [payment];
+  const global = bloqueoPorGlobal({ pagos: pagosParaGlobal, ahora: new Date(), timeZone: clinic.timezone, confirmado: body?.confirmaFueraDeGlobal, locale: clinic.locale });
   if (global) return NextResponse.json(global, { status: 409 });
 
   // ── Impuestos: mismo criterio que la factura completa (exento o IVA 16%) ───
@@ -321,15 +328,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // este pago consiga la fila, igual que el UPDATE … WHERE "cfdiUuid" IS NULL
     // de la factura completa. Detalle en lib/invoices/cfdi-pago-db.ts.
     const apartado = await apartarCfdiDePago(prisma, {
-      clinicId: ctx!.clinicId, invoiceId: invoice.id, paymentId, claim, monto: payment.amount,
+      clinicId: ctx!.clinicId, invoiceId: invoice.id, paymentId, claim, monto,
     });
     if (apartado.ok && apartado.id) {
       apartadaId = apartado.id;
     } else {
       const sinColumna = apartado.motivo === "sinColumna";
       return NextResponse.json({
+        // C-57 (segunda auditoría): el nombre del archivo SQL va al log, no a la pantalla.
         error: sinColumna
-          ? "Falta aplicar sql/cfdi-pagos-a-plazos.sql antes de poder facturar pagos individuales."
+          ? textoCfdiPorPagoNoDisponible(clinic.locale)
           : "Este pago ya se está timbrando, o ya tiene CFDI. Cierra y vuelve a abrir la factura en unos segundos.",
         code: sinColumna ? "CFDI_POR_PAGO_SIN_SQL" : "CFDI_PAGO_EN_CURSO",
       }, { status: sinColumna ? 503 : 409 });
@@ -358,7 +366,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         description:  concepto.descripcion,
         product_key:  fiscalesFactura[0].claveSat,
         unit_key:     UNIDAD_SAT,
-        price:        round2(payment.amount),
+        price:        round2(monto),
         tax_included: taxIncludedCfdi,
         taxes:        itemTaxes,
       },
@@ -384,10 +392,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // existe: esto nunca corta, deja constancia y avisa si no es redondeo
     // (mismo criterio que la factura completa). 1¢ de tolerancia: con el IVA
     // dentro, Facturapi saca la base dividiendo entre 1.16 y redondea.
-    const stamped = cfdiStampedCheck(result.total, payment.amount, 0.01);
+    const stamped = cfdiStampedCheck(result.total, monto, 0.01);
     const totalMismatch = stamped.level === "match" || stamped.level === "unknown"
       ? null
-      : { paymentAmount: round2(payment.amount), stampedTotal: stamped.stampedTotal, diff: stamped.diff, level: stamped.level };
+      : { paymentAmount: round2(monto), stampedTotal: stamped.stampedTotal, diff: stamped.diff, level: stamped.level };
     if (totalMismatch) {
       (stamped.level === "material" ? console.error : console.warn)("CFDI por pago: el total timbrado difiere del pago:", { paymentId, uuid: result.uuid, ...totalMismatch });
     }

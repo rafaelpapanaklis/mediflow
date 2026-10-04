@@ -164,6 +164,7 @@ export function CfdiAnteElSat({
         <DialogoNota
           cfdi={nota}
           disponible={disponibleParaNota(nota.total, notasDe(datos.cfdis, nota).map((n) => n.total))}
+          saldo={datos.saldo}
           rediseno={rediseno}
           onClose={() => setNota(null)}
           onHecho={async () => { setNota(null); await cargar(); await onMutated?.(); }}
@@ -224,8 +225,8 @@ function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno,
             {sin03 && (
               <p className={cx("text-[11px] text-muted-foreground", c.texto)} data-sin-motivo-03>
                 {en
-                  ? "Reason 03 (the operation didn't take place) isn't offered: this invoice has money collected. If you returned it, record the refund or issue a credit note first."
-                  : "No se ofrece el motivo 03 (no se llevó a cabo la operación): esta factura tiene dinero cobrado. Si lo devolviste, registra primero el reembolso o emite una nota de crédito."}
+                  ? "Reason 03 (the operation didn't take place) isn't offered: this invoice has money collected. If you returned it, issue a credit note with the refund (with a valid CFDI the refund can't be recorded directly)."
+                  : "No se ofrece el motivo 03 (no se llevó a cabo la operación): esta factura tiene dinero cobrado. Si lo devolviste, emite una nota de crédito con la devolución (con un CFDI vigente el reembolso no se registra directo)."}
               </p>
             )}
             {motivo === "01" && sustituto && (
@@ -253,8 +254,10 @@ function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno,
   );
 }
 
-function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho }: {
+function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo }: {
   cfdi: CfdiVista; disponible: number; rediseno: boolean;
+  /** N-26: lo que la nota todavía debe (una bonificación sin devolución no puede pasar de ahí). */
+  saldo?: number;
   onClose: () => void; onHecho: () => void | Promise<void>;
 }) {
   const locale = useLocale();
@@ -266,7 +269,19 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho }: {
   const [forma, setForma] = useState("");
   const [enviando, setEnviando] = useState(false);
   const montoNum = Number(monto);
-  const valido = isFinite(montoNum) && montoNum > 0 && montoNum <= disponible + 0.001 && razon.trim().length >= 5 && !!forma;
+  // N-26 (segunda auditoría): sin devolver dinero, la nota de crédito solo baja lo que se debe.
+  const tope = !devolver && typeof saldo === "number" ? Math.min(disponible, Math.max(0, saldo)) : disponible;
+  const valido = isFinite(montoNum) && montoNum > 0 && montoNum <= tope + 0.001 && razon.trim().length >= 5 && !!forma;
+  const en = (locale ?? "").startsWith("en");
+  const f$ = (x: number) => fmtMXNdec(x);
+  // El porqué del botón apagado, a la vista (antes se apagaba sin decir nada).
+  const porQue = enviando ? null
+    : !(isFinite(montoNum) && montoNum > 0) ? (en ? "Enter the amount." : "Escribe el monto.")
+    : montoNum > disponible + 0.001 ? (en ? `It can't exceed ${f$(disponible)} available on this CFDI.` : `No puede pasar de ${f$(disponible)} disponibles en este CFDI.`)
+    : montoNum > tope + 0.001 ? (en ? `Without returning money it only lowers what is owed (${f$(tope)}). If you return money, tick «the money is returned».` : `Sin devolver dinero solo baja lo que se debe (${f$(tope)}). Si devuelves dinero, marca «se le devuelve el dinero».`)
+    : razon.trim().length < 5 ? (en ? "Write the reason (at least 5 letters)." : "Escribe el motivo (al menos 5 letras).")
+    : !forma ? (en ? "Choose the payment form." : "Elige la forma de pago.")
+    : null;
 
   async function timbrar() {
     setEnviando(true);
@@ -314,6 +329,7 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho }: {
         </div>
         <DialogFooter className={rediseno ? c.pie : undefined}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={enviando}>{tx.cancelarBtn}</ButtonNew>
+          {porQue && <p className="text-[11px] text-muted-foreground mr-auto" data-nota-porque>{porQue}</p>}
           <ButtonNew variant="primary" onClick={timbrar} disabled={enviando || !valido}>
             {enviando ? tx.nTimbrando : tx.nBoton}
           </ButtonNew>

@@ -165,17 +165,18 @@ export function avisoDeSaldo(esAPlazos: boolean | null, locale?: string | null):
   const loc = idioma(locale);
   if (esAPlazos === null) {
     return loc === "en"
-      ? 'This invoice still has a balance, so the whole invoice can\'t be stamped yet. If it is paid in installments, open the invoice and use "Invoice this payment" next to each payment already collected; otherwise, stamp it once it is fully paid.'
-      : "Esta factura tiene saldo, así que todavía no se puede timbrar completa. Si es a plazos, abre la factura y usa «Facturar este pago» junto a cada pago cobrado; si no, se timbra cuando quede pagada.";
+      ? 'This invoice still has a balance, so the whole invoice can\'t be stamped yet. Open the invoice and use "Invoice this payment" next to each payment already collected, or stamp it once it is fully paid.'
+      : "Esta factura tiene saldo, así que todavía no se puede timbrar completa. Abre la factura y usa «Facturar este pago» junto a cada pago cobrado, o tímbrala cuando quede pagada.";
   }
   if (esAPlazos) {
     return loc === "en"
       ? 'This invoice still has a balance: invoice each payment already collected with "Invoice this payment", next to each payment under Payments. The whole invoice can be stamped only once it is fully paid.'
       : "Esta factura tiene saldo: factura cada pago cobrado con «Facturar este pago», junto a cada pago en «Movimientos». La factura completa solo se timbra cuando quede pagada.";
   }
+  // N-24 (segunda auditoría): desde C-48 cada cobro ya recibido se factura por su lado.
   return loc === "en"
-    ? "This invoice still has a balance. The CFDI is issued once it is fully paid: record the missing payment first."
-    : "Esta factura tiene saldo. El CFDI se emite cuando quede pagada: registra primero el cobro que falta.";
+    ? 'This invoice still has a balance. The CFDI for the whole invoice is issued once it is fully paid; meanwhile, each payment already collected can be invoiced with "Invoice this payment", next to it under Payments.'
+    : "Esta factura tiene saldo. El CFDI de la factura completa se emite cuando quede pagada; mientras, cada cobro ya recibido se factura con «Facturar este pago», junto al pago en «Movimientos».";
 }
 
 // ── F-10 · Uso del CFDI según el régimen del receptor ───────────────────────

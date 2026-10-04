@@ -20,7 +20,9 @@ export interface ResponsableParaCfdi {
   fiscales: DatosFiscales;
 }
 
-export const REGIMEN_POR_DEFECTO = "612";
+// Segunda auditoría de uso (resto de C-47): sin régimen capturado no se propone ninguno (antes 612
+// para todos; la mayoría de los pacientes asalariados son 605). El formulario pide «Elige».
+export const REGIMEN_POR_DEFECTO = "";
 
 /** RFC en mayúsculas, sin espacios; CP de cinco dígitos; el resto, recortado. */
 export function normalizarFiscales(d: Partial<DatosFiscales>): DatosFiscales {

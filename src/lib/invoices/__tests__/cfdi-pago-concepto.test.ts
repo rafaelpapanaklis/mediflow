@@ -123,3 +123,16 @@ test("excedeElTotalDelCaso: dentro de la tolerancia de 1¢", () => {
 test("excedeElTotalDelCaso: rebasa el total del caso", () => {
   assert.equal(excedeElTotalDelCaso({ yaTimbrado: 600, montoDelPago: 400.02, totalFactura: 1000 }), true);
 });
+
+// ── N-21 (segunda auditoría de uso, 4-oct-2026): se factura lo NETO del cobro ─────────────────
+import { montoTimbrableDePago } from "../cfdi-pago-concepto";
+
+test("N-21 · MF-1128 cobro $3,000 con reembolso de $1,000 → $2,000; MF-1144 $350 − $50 → $300; MF-1140 total $800 → $800", () => {
+  assert.equal(montoTimbrableDePago({ montoDelPago: 3000, pagadoNeto: 2000, totalFactura: 3000, yaTimbrado: 0 }), 2000);
+  assert.equal(montoTimbrableDePago({ montoDelPago: 350, pagadoNeto: 300, totalFactura: 350, yaTimbrado: 0 }), 300);
+  assert.equal(montoTimbrableDePago({ montoDelPago: 1000, pagadoNeto: 800, totalFactura: 800, yaTimbrado: 0 }), 800);
+  // Después: el paciente paga los $1,000 que faltan de MF-1128 y ya hay $2,000 timbrados → $1,000.
+  assert.equal(montoTimbrableDePago({ montoDelPago: 1000, pagadoNeto: 3000, totalFactura: 3000, yaTimbrado: 2000 }), 1000);
+  // Todo devuelto: nada que facturar.
+  assert.equal(montoTimbrableDePago({ montoDelPago: 500, pagadoNeto: 0, totalFactura: 500, yaTimbrado: 0 }), 0);
+});

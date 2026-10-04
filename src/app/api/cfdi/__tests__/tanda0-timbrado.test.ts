@@ -98,7 +98,9 @@ const prismaStub: any = {
   },
   patientCredit: {
     findFirst: async () => null,
-    findMany: async ({ where }: any) => db.credits.filter((c) => c.clinicId === where.clinicId && c.patientId === where.patientId && c.amount > 0),
+    findMany: async ({ where }: any) => db.credits.filter((c) => c.clinicId === where.clinicId
+      && (where.patientId?.in ? where.patientId.in.includes(c.patientId) : c.patientId === where.patientId)
+      && (where.amount?.gt === undefined || c.amount > where.amount.gt)),
   },
   cfdiRecord: { create: async ({ data }: any) => ({ id: "cfdi1", ...data }) },
   cfdiUsage: { upsert: async () => ({ stamped: 1 }) },
@@ -449,4 +451,59 @@ test("C-46/C-57 · quien no es dueño ni admin recibe qué hacer, no «Solo admi
   } finally {
     authCtx.isAdmin = true;
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Segunda auditoría de uso (ws1-t4, 4-oct-2026): N-21 y N-22
+// ═══════════════════════════════════════════════════════════════════════════
+test("N-21 · MF-1128: cobro $3,000 con reembolso de $1,000 → «Facturar este pago» timbra $2,000, no $3,000", async () => {
+  db.condiciones = null;
+  setInvoice({ total: 3000, paid: 2000, balance: 1000, status: "PARTIAL", items: [{ description: "Endodoncia", quantity: 1, unitPrice: 3000, total: 3000 }] }, [
+    { id: "cobro", invoiceId: "inv1", method: "cash", amount: 3000, paidAt: new Date() },
+    { id: "dev", invoiceId: "inv1", method: "refund", refundMethod: "cash", amount: 1000, paidAt: new Date() },
+  ]);
+  const r = await timbrarPago("cobro", { receptor: PF_612, paymentForm: "01" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(pac.timbres[0].items[0].product.price, 2000);
+});
+
+test("N-21 · MF-1140: total $800 tras el reembolso, cobro $1,000 → $800 (antes 409 hablando de «el caso»); todo devuelto → 409 claro", async () => {
+  db.condiciones = null;
+  setInvoice({ total: 800, paid: 800, balance: 0, status: "PAID", items: [{ description: "Resina", quantity: 1, unitPrice: 1000, total: 1000 }], discount: 200 }, [
+    { id: "cobro", invoiceId: "inv1", method: "cash", amount: 1000, paidAt: new Date() },
+    { id: "dev", invoiceId: "inv1", method: "refund", refundMethod: "cash", amount: 200, paidAt: new Date() },
+  ]);
+  const r = await timbrarPago("cobro", { receptor: PF_612, paymentForm: "01" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(pac.timbres[0].items[0].product.price, 800);
+
+  pac.timbres = [];
+  setInvoice({ total: 500, paid: 0, balance: 500, status: "PENDING" }, [
+    { id: "cobro", invoiceId: "inv1", method: "cash", amount: 500, paidAt: new Date() },
+    { id: "dev", invoiceId: "inv1", method: "refund", refundMethod: "cash", amount: 500, paidAt: new Date() },
+  ]);
+  const nada = await timbrarPago("cobro", { receptor: PF_612, paymentForm: "01" });
+  assert.equal(nada.status, 409);
+  assert.match(nada.body.error, /se devolvió/);
+  assert.doesNotMatch(nada.body.error, /caso/);
+  assert.equal(pac.timbres.length, 0);
+});
+
+test("N-22 · nota pagada con saldo a favor que ENTRÓ en septiembre: pide confirmar la global de septiembre antes de timbrarla", async () => {
+  const sep = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 10, 18));
+  setInvoice({ total: 4000, paid: 4000, balance: 0, items: [{ description: "Corona", quantity: 1, unitPrice: 4000, total: 4000 }] }, [
+    { id: "ant", invoiceId: "inv1", method: "anticipo", amount: 500, paidAt: new Date() },
+    { id: "tr", invoiceId: "inv1", method: "transfer", amount: 3500, paidAt: new Date() },
+  ]);
+  db.otrosPagos = [{ id: "o1", invoiceId: "inv_ori", method: "transfer", amount: 500, paidAt: sep }];
+  db.credits = [
+    { id: "cr1", clinicId: "c1", patientId: "p1", amount: 500, source: "cita_cancelada", invoiceId: "inv_ori", paymentId: null, creditDate: sep },
+    { id: "ap1", clinicId: "c1", patientId: "p1", amount: -500, source: "aplicado_a_factura", invoiceId: "inv1", paymentId: "ant", creditDate: new Date() },
+  ];
+  const sin = await timbrar({ receptor: PF_612, paymentForm: "03" });
+  assert.equal(sin.status, 409, "antes timbraba los $4,000 sin aviso, con el $500 ya en la global de septiembre");
+  assert.equal(sin.body.code, "CFDI_CONFIRMAR_GLOBAL");
+  assert.equal(pac.timbres.length, 0);
+  const con = await timbrar({ receptor: PF_612, paymentForm: "03", confirmaFueraDeGlobal: true });
+  assert.equal(con.status, 200, JSON.stringify(con.body));
 });

@@ -37,7 +37,7 @@ export function useReceptorExtranjero(invoiceId: string | null | undefined, habi
   return { habilitado, activo, estado, setEstado, receptor, error, usoForzado: activo ? USO_EXTRANJERO : null };
 }
 
-export function CamposReceptorExtranjero({ ext }: { ext: ReturnType<typeof useReceptorExtranjero> }) {
+export function CamposReceptorExtranjero({ ext, idBase = "cfdi-ext" }: { ext: ReturnType<typeof useReceptorExtranjero>; idBase?: string }) {
   const locale = useLocale();
   const en = (locale ?? "").startsWith("en");
   if (!ext.habilitado) return null;
@@ -58,8 +58,8 @@ export function CamposReceptorExtranjero({ ext }: { ext: ReturnType<typeof useRe
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="cfdi-ext-pais">{en ? "Country of tax residence" : "País de residencia fiscal"}</Label>
-              <select id="cfdi-ext-pais" className="input-new" value={conocido ? estado.pais : "OTRO"}
+              <Label htmlFor={`${idBase}-pais`}>{en ? "Country of tax residence" : "País de residencia fiscal"}</Label>
+              <select id={`${idBase}-pais`} className="input-new" value={conocido ? estado.pais : "OTRO"}
                 onChange={(e) => setEstado({ ...estado, pais: e.target.value === "OTRO" ? "" : e.target.value })}>
                 {PAISES_FRECUENTES.map((p) => <option key={p.clave} value={p.clave}>{en ? p.en : p.es} ({p.clave})</option>)}
                 <option value="OTRO">{en ? "Other (ISO code)" : "Otro (clave ISO)"}</option>
@@ -70,13 +70,13 @@ export function CamposReceptorExtranjero({ ext }: { ext: ReturnType<typeof useRe
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cfdi-ext-zip">{en ? "ZIP / postal code" : "Código postal de su país"}</Label>
-              <Input id="cfdi-ext-zip" maxLength={12} value={estado.zip} onChange={(e) => setEstado({ ...estado, zip: e.target.value })} />
+              <Label htmlFor={`${idBase}-zip`}>{en ? "ZIP / postal code" : "Código postal de su país"}</Label>
+              <Input id={`${idBase}-zip`} maxLength={12} value={estado.zip} onChange={(e) => setEstado({ ...estado, zip: e.target.value })} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cfdi-ext-id">{en ? "Tax ID in their country (SSN/ITIN, SIN, NIF…)" : "Identificación fiscal en su país (SSN/ITIN, SIN, NIF…)"}</Label>
-            <Input id="cfdi-ext-id" maxLength={40} value={estado.numRegIdTrib} onChange={(e) => setEstado({ ...estado, numRegIdTrib: e.target.value })} />
+            <Label htmlFor={`${idBase}-id`}>{en ? "Tax ID in their country (SSN/ITIN, SIN, NIF…)" : "Identificación fiscal en su país (SSN/ITIN, SIN, NIF…)"}</Label>
+            <Input id={`${idBase}-id`} maxLength={40} value={estado.numRegIdTrib} onChange={(e) => setEstado({ ...estado, numRegIdTrib: e.target.value })} />
           </div>
         </>
       )}

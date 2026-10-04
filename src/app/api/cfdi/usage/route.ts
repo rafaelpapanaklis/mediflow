@@ -108,6 +108,8 @@ export async function GET(_req: NextRequest) {
     faltaEmisor: faltantesDelEmisor({ ...clinic, live: isFacturapiLive() }),
     textoFaltaEmisor: textoDeFaltantes(faltantesDelEmisor({ ...clinic, live: isFacturapiLive() }), clinic.locale),
     retencion,
+    // Segunda auditoría (C-47 en pantalla): el CP del emisor, el que va al receptor XAXX.
+    cpEmisor: clinic.cpEmisor ?? null,
     // Solo el booleano: el token nunca sale del servidor.
     waConectado: !!(clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken),
     avisosEmisor: avisosDelEmisor({

@@ -28,7 +28,8 @@ const T = {
     porForma: "Por forma de pago SAT",
     sinForma: "Por definir (Mercado Pago o tarjeta sin tipo)",
     conSaldo: (n: number) => `${n} ${n === 1 ? "cobro es" : "cobros son"} de notas con saldo: si van en la global, esas notas ya no se timbran solas después.`,
-    anticipos: (n: number, m: string) => `Aparte: ${n} ${n === 1 ? "cobro pagado" : "cobros pagados"} con saldo a favor (${m}). El dinero entró cuando se dio el anticipo; revísalo con tu contador para no contarlo dos veces.`,
+    anticipos: (n: number, m: string) => `Aparte: ${n} ${n === 1 ? "cobro pagado" : "cobros pagados"} con saldo a favor (${m}). No es dinero nuevo: contó el mes en que entró.`,
+    enOtroCfdi: (n: number, m: string, folios: string) => `Fuera de la global: ${m} que entraron este mes y ya van en el CFDI de ${folios} (se usaron como saldo a favor). Un mismo ingreso no va en dos CFDI.`,
     reembolsos: (n: number, m: string) => `Aparte: ${n} ${n === 1 ? "reembolso" : "reembolsos"} de notas sin CFDI (${m}).`,
     revision: (n: number) => `${n} ${n === 1 ? "cobro tiene" : "cobros tienen"} un timbre en duda: revisa en Facturapi si el CFDI salió antes de incluirlos.`,
     excluidos: (n: number) => `${n} ${n === 1 ? "cobro ya tiene" : "cobros ya tienen"} CFDI y no se cuentan.`,
@@ -51,7 +52,8 @@ const T = {
     porForma: "By SAT payment form",
     sinForma: "To be defined (Mercado Pago or untyped card)",
     conSaldo: (n: number) => `${n} ${n === 1 ? "payment belongs" : "payments belong"} to receipts with a balance: if they go in the global invoice, those receipts must not be stamped on their own later.`,
-    anticipos: (n: number, m: string) => `Separate: ${n} ${n === 1 ? "payment" : "payments"} made with credit balance (${m}). The money came in with the deposit; check with your accountant so it isn't counted twice.`,
+    anticipos: (n: number, m: string) => `Separate: ${n} ${n === 1 ? "payment" : "payments"} made with credit balance (${m}). It isn't new money: it counted in the month it came in.`,
+    enOtroCfdi: (n: number, m: string, folios: string) => `Left out of the global invoice: ${m} that came in this month and are already in the CFDI of ${folios} (used as credit balance). The same income never goes in two CFDI.`,
     reembolsos: (n: number, m: string) => `Separate: ${n} ${n === 1 ? "refund" : "refunds"} of receipts without CFDI (${m}).`,
     revision: (n: number) => `${n} ${n === 1 ? "payment has" : "payments have"} a stamp in doubt: check in Facturapi whether the CFDI was issued before including them.`,
     excluidos: (n: number) => `${n} ${n === 1 ? "payment already has" : "payments already have"} a CFDI and are not counted.`,
@@ -139,6 +141,7 @@ export function CobradoSinCfdiCard() {
               {rep.apartados.anticipos.length > 0 && <li>{tx.anticipos(rep.apartados.anticipos.length, pesos(suma(rep.apartados.anticipos)))}</li>}
               {rep.apartados.reembolsos.length > 0 && <li>{tx.reembolsos(rep.apartados.reembolsos.length, pesos(suma(rep.apartados.reembolsos)))}</li>}
               {(rep.anticiposSinNota ?? 0) > 0 && <li>{tx.sinNota(pesos(rep.anticiposSinNota))}</li>}
+              {(rep.apartados.enOtroCfdi?.length ?? 0) > 0 && <li data-en-otro-cfdi>{tx.enOtroCfdi(rep.apartados.enOtroCfdi.length, pesos(suma(rep.apartados.enOtroCfdi)), Array.from(new Set(rep.apartados.enOtroCfdi.map((f) => f.folioDestino ?? ""))).filter(Boolean).join(", "))}</li>}
               {(rep.apartados.traspasos?.length ?? 0) > 0 && <li>{tx.traspasos(rep.apartados.traspasos.length, pesos(suma(rep.apartados.traspasos)))}</li>}
               {excluidos > 0 && <li>{tx.excluidos(excluidos)}</li>}
             </ul>

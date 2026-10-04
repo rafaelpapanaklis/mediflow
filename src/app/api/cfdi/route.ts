@@ -47,6 +47,7 @@ import { conceptosFiscalesDeFactura } from "@/lib/cfdi/fiscal-concepto.server";
 import { tasasDeRetencion, conceptoConRetenciones, totalesConRetenciones, avisoDeRetencion } from "@/lib/cfdi/retenciones";
 import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
 import { avisoMesDeCobro, bloqueoPorGlobal, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
+import { fechasDeOrigenDeAnticipos } from "@/lib/cfdi/anticipos-timbrados.server";
 import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
 import { textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 import { ambienteDeCfdi, marcarAmbiente, retirarCfdiDePrueba } from "@/lib/invoices/cfdi-ambiente.server";
@@ -351,7 +352,12 @@ export async function POST(req: NextRequest) {
   // de ese mes (si entraron, timbrar la nota los duplica ante el SAT). Un
   // sustituto (01) no: su dinero ya estaba amparado por el CFDI que reemplaza.
   if (!sustituyeCfdiId) {
-    const global = bloqueoPorGlobal({ pagos: invoice.payments, ahora: new Date(), timeZone: clinic.timezone, confirmado: body?.confirmaFueraDeGlobal, locale: clinic.locale });
+    // N-22 (segunda auditoría): un abono «anticipo» (saldo a favor) no entró hoy: entró cuando se
+    // cobró su origen, y ese mes pudo ir ya en la global. Se revisa con la fecha de origen.
+    const anticipoIds = invoice.payments.filter((p: any) => p.method === "anticipo").map((p: any) => p.id as string);
+    const origenes = anticipoIds.length > 0 ? await fechasDeOrigenDeAnticipos(ctx!.clinicId, invoice.patientId, anticipoIds) : [];
+    const pagosParaGlobal = [...invoice.payments.filter((p: any) => p.method !== "anticipo"), ...origenes];
+    const global = bloqueoPorGlobal({ pagos: pagosParaGlobal, ahora: new Date(), timeZone: clinic.timezone, confirmado: body?.confirmaFueraDeGlobal, locale: clinic.locale });
     if (global) return NextResponse.json(global, { status: 409 });
   }
 
