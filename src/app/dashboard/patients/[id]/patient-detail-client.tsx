@@ -1741,7 +1741,8 @@ export function PatientDetailClient({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "complete_failed");
+        // F-2 (tercera auditoría): el motivo real («reason»), no el código genérico de estado.
+        throw new Error(body.reason ?? body.error ?? "complete_failed");
       }
       const data = await res.json().catch(() => ({}));
       toast.success(t("patients.consult.completedSigned"));

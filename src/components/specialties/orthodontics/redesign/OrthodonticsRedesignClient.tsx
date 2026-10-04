@@ -5,7 +5,8 @@
 // monta dentro del shell del patient-detail (que provee la sidebar
 // contextual a la izquierda).
 
-import { Shield, Sparkles, Star } from "lucide-react";
+import { Camera, FileText, Layers, Shield, Smile, Sparkles, Star } from "lucide-react";
+import { useEsCelular } from "./useEsCelular";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -598,6 +599,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   // ResumenCobranza pedían `cargarPanelDeCobro` cada una, dos veces el
   // mismo caso) — se carga UNA vez aquí y se reparte hacia abajo.
   const [panelDeCobro, setPanelDeCobro] = useState<PanelDeCobro | null | "cargando" | "error">("cargando");
+  const esCelular = useEsCelular();
   const recargarPanelDeCobro = useCallback(() => {
     if (!t.treatmentPlanId) {
       setPanelDeCobro(null);
@@ -823,6 +825,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           {/* Ola 1 (ws1-t4, Control y agenda) — C8 */}
           <HygieneTrendCard treatmentCards={vm.treatmentCards} />
 
+          {/* F-4: en el celular el diagnóstico ya capturado y la aparatología se abren con «Ver». */}
+          <SeccionPlegada
+            plegada={esCelular && Boolean(vm.diagnosis)}
+            id="diagnosis"
+            icon={<Smile size={15} strokeWidth={1.75} />}
+            title="Diagnóstico"
+            cuando="Toca «Ver» para abrirlo"
+          >
           <SectionDiagnosis
             diagnosis={vm.diagnosis}
             digitalRecords={props.digitalRecords ?? []}
@@ -840,6 +850,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             treatmentPlanId={t.treatmentPlanId}
             patientId={t.patientId}
           />
+          </SeccionPlegada>
 
           {props.planDeTratamiento ? (
             <SectionPlanDeTratamiento
@@ -848,6 +859,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             />
           ) : null}
 
+          <SeccionPlegada
+            plegada={esCelular}
+            id="plan"
+            icon={<Layers size={15} strokeWidth={1.75} />}
+            title="Aparatología y arcos"
+            cuando="Toca «Ver» para abrirla"
+          >
           <SectionPlan
             treatment={t}
             prescripcionDelPlan={prescripcionDelPlanVista}
@@ -875,11 +893,20 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 : undefined
             }
           />
+          </SeccionPlegada>
 
           {/* «Comparar» (S12) vuelve: el loader ya trae la URL firmada de
               cada vista (`slots`), así que ModalCompare pinta las fotos de
               verdad. El botón solo sale con fotos en el inicial y en al
               menos una etapa posterior (fotos-del-caso.ts). */}
+          {/* F-4 (tercera auditoría): en el celular el caso medía ~10,500 px; Fotos y Documentos se abren con «Ver». */}
+          <SeccionPlegada
+            plegada={esCelular}
+            id="photos"
+            icon={<Camera size={15} strokeWidth={1.75} />}
+            title="Fotos clínicas"
+            cuando="Toca «Ver» para abrirlas"
+          >
           <SectionPhotos
             monthCurrent={t.monthCurrent}
             monthTotal={t.monthTotal}
@@ -894,6 +921,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onElegirExistente={props.onElegirFotoExistente}
             onScheduleG15={props.onScheduleG15Action ?? props.onScheduleG15}
           />
+          </SeccionPlegada>
 
           {/* Ortodoncia — Ola 1 (ws1-t1 · Cobro): Sección F reescrita contra
               la factura a plazos del tratamiento (decisión 1), ya no contra
@@ -969,6 +997,13 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             />
           </SeccionPlegada>
 
+          <SeccionPlegada
+            plegada={esCelular}
+            id="docs"
+            icon={<FileText size={15} strokeWidth={1.75} />}
+            title="Documentos y comunicación"
+            cuando="Toca «Ver» para abrirlos"
+          >
           <SectionDocs
             labOrders={props.labOrders ?? []}
             consents={props.consents ?? []}
@@ -987,6 +1022,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               hayReporteDeAvance(juegosDeFotos) ? null : MOTIVO_SIN_REPORTE_DE_AVANCE
             }
           />
+          </SeccionPlegada>
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
 

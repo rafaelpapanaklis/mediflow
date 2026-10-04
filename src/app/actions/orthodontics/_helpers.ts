@@ -12,6 +12,7 @@ import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { MENSAJE_SIN_ACCESO_ORTODONCIA, tieneAccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
 import { fail, type ActionResult } from "./result";
+import { memoDePeticion } from "@/lib/orthodontics/memo-de-peticion";
 
 /**
  * Auth + categoría DENTAL + módulo orthodontics activo. Una sola llamada
@@ -20,7 +21,8 @@ import { fail, type ActionResult } from "./result";
 export async function getOrthoActionContext(
   opts?: { write?: boolean },
 ): Promise<ActionResult<{ ctx: AuthContext }>> {
-  const ctx = await getAuthContext();
+  // N-31: dentro de la precarga de la pestaña, la sesión y el módulo se leen UNA vez (memo-de-peticion).
+  const ctx = await memoDePeticion("auth", getAuthContext);
   if (!ctx) return fail("No autenticado");
 
   if (ctx.clinicCategory !== "DENTAL") {
@@ -32,7 +34,7 @@ export async function getOrthoActionContext(
   // CUALQUIER clínica dental — el mismo bug que A1 ya cerró en el sidebar,
   // el layout del dashboard, la pestaña del paciente y las páginas del
   // módulo. Afectaba a las ~48 server actions que dependen de este archivo.
-  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  const active = await memoDePeticion(`modulo-orto:${ctx.clinicId}`, () => hasActiveOrthodonticsModule(ctx.clinicId));
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
@@ -72,14 +74,15 @@ export async function getOrthoActionContext(
 export async function getOrthoBillingActionContext(
   permiso: PermissionKey = "billing.charge",
 ): Promise<ActionResult<{ ctx: AuthContext }>> {
-  const ctx = await getAuthContext();
+  // N-31: dentro de la precarga de la pestaña, la sesión y el módulo se leen UNA vez (memo-de-peticion).
+  const ctx = await memoDePeticion("auth", getAuthContext);
   if (!ctx) return fail("No autenticado");
 
   if (ctx.clinicCategory !== "DENTAL") {
     return fail("La clínica no soporta el módulo de Ortodoncia");
   }
 
-  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  const active = await memoDePeticion(`modulo-orto:${ctx.clinicId}`, () => hasActiveOrthodonticsModule(ctx.clinicId));
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
@@ -105,14 +108,15 @@ export async function getOrthoBillingActionContext(
 export async function getOrthoConfigActionContext(
   opts?: { write?: boolean },
 ): Promise<ActionResult<{ ctx: AuthContext }>> {
-  const ctx = await getAuthContext();
+  // N-31: dentro de la precarga de la pestaña, la sesión y el módulo se leen UNA vez (memo-de-peticion).
+  const ctx = await memoDePeticion("auth", getAuthContext);
   if (!ctx) return fail("No autenticado");
 
   if (ctx.clinicCategory !== "DENTAL") {
     return fail("La clínica no soporta el módulo de Ortodoncia");
   }
 
-  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  const active = await memoDePeticion(`modulo-orto:${ctx.clinicId}`, () => hasActiveOrthodonticsModule(ctx.clinicId));
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
@@ -157,14 +161,15 @@ export async function getOrthoPlanActionContext(
   rawInput: unknown,
   opts?: { write?: boolean },
 ): Promise<ActionResult<{ ctx: AuthContext }>> {
-  const ctx = await getAuthContext();
+  // N-31: dentro de la precarga de la pestaña, la sesión y el módulo se leen UNA vez (memo-de-peticion).
+  const ctx = await memoDePeticion("auth", getAuthContext);
   if (!ctx) return fail("No autenticado");
 
   if (ctx.clinicCategory !== "DENTAL") {
     return fail("La clínica no soporta el módulo de Ortodoncia");
   }
 
-  const active = await hasActiveOrthodonticsModule(ctx.clinicId);
+  const active = await memoDePeticion(`modulo-orto:${ctx.clinicId}`, () => hasActiveOrthodonticsModule(ctx.clinicId));
   if (!active) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
   }
@@ -199,18 +204,20 @@ export async function loadPatientForOrtho(args: {
 }): Promise<
   ActionResult<{ id: string; clinicId: string; firstName: string; lastName: string; dob: Date | null }>
 > {
-  const patient = await prisma.patient.findUnique({
-    where: { id: args.patientId },
-    select: {
-      id: true,
-      clinicId: true,
-      deletedAt: true,
-      firstName: true,
-      lastName: true,
-      dob: true,
-      visibleUserIds: true,
-    },
-  });
+  const patient = await memoDePeticion(`paciente-orto:${args.patientId}`, () =>
+    prisma.patient.findUnique({
+      where: { id: args.patientId },
+      select: {
+        id: true,
+        clinicId: true,
+        deletedAt: true,
+        firstName: true,
+        lastName: true,
+        dob: true,
+        visibleUserIds: true,
+      },
+    }),
+  );
   if (!patient || patient.deletedAt) return fail("Paciente no encontrado");
   if (patient.clinicId !== args.ctx.clinicId) return fail("Sin acceso a este paciente");
   // Visibilidad por paciente: espeja loadPatientForImplant — un paciente

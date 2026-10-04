@@ -49,7 +49,6 @@ import {
   createDiagnosis,
   createTreatmentPlan,
   updateTreatmentPlan,
-  getCaseIntakeOptions,
 } from "@/app/actions/orthodontics";
 import { moverControlesFuturosAlDoctor } from "@/app/actions/orthodontics/moverControlesFuturosAlDoctor";
 import { isFailure, type ActionResult } from "@/app/actions/orthodontics/result";
@@ -74,6 +73,7 @@ import { Btn } from "./atoms/Btn";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
 import { conPrecarga, iniciarPrecarga } from "./precarga";
+import { consentimientoOrtoDelPaciente } from "@/app/actions/orthodontics/consentimientoOrtoDelPaciente";
 
 // Fallback de carga de los módulos lazy — idéntico al de
 // patient-detail-client.tsx (componente cliente para poder traducir con
@@ -273,7 +273,8 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
 
   const refetchGeneralConsentSigned = useCallback(async () => {
     if (!diagnosisId) return;
-    const res = await getCaseIntakeOptions({ patientId: patient.id });
+    // N-31 (tercera auditoría): la lectura ligera, no todas las opciones del alta.
+    const res = await consentimientoOrtoDelPaciente(patient.id);
     if (!isFailure(res)) setGeneralConsentSigned(res.data.generalConsentSigned);
   }, [patient.id, diagnosisId]);
 
@@ -283,7 +284,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       return;
     }
     let cancelled = false;
-    conPrecarga("getCaseIntakeOptions", patient.id, () => getCaseIntakeOptions({ patientId: patient.id })).then((res) => {
+    conPrecarga("consentimientoOrto", patient.id, () => consentimientoOrtoDelPaciente(patient.id)).then((res) => {
       if (!cancelled && !isFailure(res)) setGeneralConsentSigned(res.data.generalConsentSigned);
     });
     return () => {

@@ -118,7 +118,7 @@ export function VistaAlertas({
   const pospuestas = cuantasPospuestas(alerts);
 
   const resumen: { id: string; etiqueta: string; cuenta: number; icono: LucideIcon; tono: Tono }[] = [
-    { id: "mensualidad-vencida", etiqueta: "Mensualidad vencida", cuenta: alerts.overduePayments.length, icono: AlertTriangle, tono: "peligro" },
+    { id: "mensualidad-vencida", etiqueta: "Pago vencido", cuenta: alerts.overduePayments.length, icono: AlertTriangle, tono: "peligro" },
     { id: "falta-de-control", etiqueta: "Sin próximo control", cuenta: alerts.missingNextControl.length, icono: Clock, tono: "alerta" },
     { id: "no-se-presento", etiqueta: "No asistió", cuenta: alerts.noShows.length, icono: UserX, tono: "alerta" },
     { id: "proximo-a-terminar", etiqueta: "Próximo a terminar", cuenta: alerts.finishingSoon.length, icono: Hourglass, tono: "violeta" },

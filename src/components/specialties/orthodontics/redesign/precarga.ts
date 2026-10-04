@@ -7,10 +7,16 @@ import { precargarPestanaOrto } from "@/app/actions/orthodontics/precargarPestan
 
 const VIGENCIA_MS = 30_000;
 
+/** Lo que viaja en la PRIMERA acción (tercera auditoría): el saldo y el aviso del consentimiento, antes que lo demás. */
+const PRIMERO = new Set(["consentimientoOrto", "cargarPanelDeCobro"]);
+
 interface Entrada {
   clave: string;
   at: number;
+  /** Primera parte (cobro y consentimiento). */
   datos: Promise<Record<string, unknown> | null>;
+  /** Segunda parte (lo demás): Next la corre en cuanto termina la primera. */
+  resto: Promise<Record<string, unknown> | null>;
   /**
    * Cuándo llegó la precarga. Sus datos sirven hasta 5 s DESPUÉS de llegar (lo que tardan en montar las secciones,
    * dos veces en desarrollo por el modo estricto de React); una recarga posterior —tras cobrar, firmar…— va fresca.
@@ -31,8 +37,9 @@ export function iniciarPrecarga(a: { patientId: string; treatmentPlanId?: string
   if (typeof window === "undefined" || !a.patientId) return;
   const clave = claveDe(a);
   if (actual && actual.clave === clave && Date.now() - actual.at < VIGENCIA_MS) return;
-  const entrada: Entrada = { clave, at: Date.now(), datos: Promise.resolve(null), llegoEn: null };
-  entrada.datos = precargarPestanaOrto(a)
+  const entrada: Entrada = { clave, at: Date.now(), datos: Promise.resolve(null), resto: Promise.resolve(null), llegoEn: null };
+  entrada.datos = precargarPestanaOrto({ ...a, parte: "cobro" }).catch(() => null);
+  entrada.resto = precargarPestanaOrto({ ...a, parte: "resto" })
     .catch(() => null)
     .then((d) => {
       entrada.llegoEn = Date.now();
@@ -49,5 +56,5 @@ export function conPrecarga<T>(nombre: string, id: string | null | undefined, ll
   const e = actual;
   if (!e || !id || Date.now() - e.at >= VIGENCIA_MS || !e.clave.split("|").includes(id)) return llamar();
   if (e.llegoEn !== null && Date.now() - e.llegoEn > USO_TRAS_LLEGAR_MS) return llamar();
-  return e.datos.then((d) => (d && nombre in d ? (d[nombre] as T) : llamar()));
+  return (PRIMERO.has(nombre) ? e.datos : e.resto).then((d) => (d && nombre in d ? (d[nombre] as T) : llamar()));
 }

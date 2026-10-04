@@ -108,3 +108,23 @@ test("tercera ronda · N-31: la pestaña pide sus lecturas en UN viaje (precarga
     assert.ok(leer(archivo).includes(`conPrecarga("${nombre}"`), `${archivo} no usa la precarga`);
   }
 });
+
+test("ronda final · F-3: la tarjeta y la sección de Alertas dicen «Pago vencido»", () => {
+  const a = leer("src/components/specialties/orthodontics/modulo/vista-alertas.tsx");
+  assert.ok(!a.includes('etiqueta: "Mensualidad vencida"'));
+  assert.match(a, /etiqueta: "Pago vencido"/);
+});
+
+test("ronda final · F-4: en el celular Fotos, Documentos, Diagnóstico y Aparatología se abren con «Ver»", () => {
+  const c = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  for (const id of ["photos", "docs", "diagnosis", "plan"]) assert.match(c, new RegExp(`id="${id}"`));
+  assert.match(c, /plegada=\{esCelular\}/);
+});
+
+test("ronda final · N-31: la precarga lee la sesión una vez, el consentimiento ligero y el saldo primero", () => {
+  assert.match(leer("src/app/actions/orthodontics/_helpers.ts"), /memoDePeticion\("auth", getAuthContext\)/);
+  const p = leer("src/app/actions/orthodontics/precargarPestana.ts");
+  assert.match(p, /conMemoDePeticion\(/);
+  assert.ok(!p.includes("getCaseIntakeOptions({ patientId })"), "la precarga sigue leyendo todas las opciones del alta");
+  assert.match(leer("src/components/specialties/orthodontics/redesign/precarga.ts"), /parte: "cobro"/);
+});

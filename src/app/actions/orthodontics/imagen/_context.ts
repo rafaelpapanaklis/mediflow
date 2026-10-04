@@ -10,6 +10,7 @@ import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
 import { getOrthoActionContext } from "../_helpers";
 import { fail, isFailure, type ActionResult } from "../result";
+import { memoDePeticion } from "@/lib/orthodontics/memo-de-peticion";
 
 export interface OrthoImagingContext {
   ctx: AuthContext;
@@ -35,16 +36,19 @@ export async function getOrthoImagingContext(
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
-  const plan = await prisma.orthodonticTreatmentPlan.findUnique({
-    where: { id: treatmentPlanId },
-    select: {
-      id: true,
-      clinicId: true,
-      patientId: true,
-      deletedAt: true,
-      patient: { select: { visibleUserIds: true } },
-    },
-  });
+  // N-31: en la precarga, el caso se lee una vez para las tres lecturas de imagen/alineadores.
+  const plan = await memoDePeticion(`plan-imagen:${treatmentPlanId}`, () =>
+    prisma.orthodonticTreatmentPlan.findUnique({
+      where: { id: treatmentPlanId },
+      select: {
+        id: true,
+        clinicId: true,
+        patientId: true,
+        deletedAt: true,
+        patient: { select: { visibleUserIds: true } },
+      },
+    }),
+  );
   if (!plan || plan.deletedAt) return fail("Caso de ortodoncia no encontrado");
   if (plan.clinicId !== ctx.clinicId) return fail("Sin acceso a este caso");
 

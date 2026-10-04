@@ -13,6 +13,7 @@ import {
   type OpcionesDelPlan,
   type PlanDetalle,
 } from "./plan-detalle";
+import { memoDePeticion } from "@/lib/orthodontics/memo-de-peticion";
 
 // Ortodoncia — el «Plan de tratamiento» completo del caso y las listas de la clínica (ws1-t12). Dos columnas
 // nuevas (sql/ortodoncia-plan-de-tratamiento.sql), NINGUNA declarada en schema.prisma a propósito: con una
@@ -118,7 +119,10 @@ export async function cargarPlanesDetalle(clinicId: string, planIds: string[], d
 
 /** Mismo lector, para UN caso. `null` = el caso no tiene plan completo (o falta la columna). */
 export async function cargarPlanDetalle(clinicId: string, planId: string, db?: LectorDelPlan): Promise<PlanDetalle | null> {
-  return (await cargarPlanesDetalle(clinicId, [planId], db)).get(planId) ?? null;
+  // N-31 (tercera auditoría): en la precarga de la pestaña lo leían el cobro y las versiones; ahí, una sola lectura
+  // (fuera de la precarga, o con un cliente propio como una transacción, se lee como siempre).
+  if (db) return (await cargarPlanesDetalle(clinicId, [planId], db)).get(planId) ?? null;
+  return memoDePeticion(`plan-detalle:${clinicId}:${planId}`, async () => (await cargarPlanesDetalle(clinicId, [planId])).get(planId) ?? null);
 }
 
 /** Un motivo que se le dice a quien edita (y que deshace lo que se estaba guardando). */

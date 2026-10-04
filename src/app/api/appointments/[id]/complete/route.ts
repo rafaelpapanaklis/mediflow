@@ -19,6 +19,7 @@ import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-valid
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { canTransition } from "@/lib/agenda/transitions";
+import { inicioParaCompletar } from "@/lib/clinical/inicio-para-completar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
@@ -63,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, doctorId: true, patientId: true, startsAt: true },
+    select: { id: true, status: true, doctorId: true, patientId: true, startsAt: true, startedAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -110,7 +111,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     "COMPLETED",
     session.user.role,
     new Date(),
-    existing.startsAt,
+    // F-2 (tercera auditoría): una consulta ya iniciada hoy, antes de la hora de su cita de hoy, se cierra (la regla
+    // de «cita que todavía no empieza» se mide contra el inicio real). Una cita de otro día sigue rechazándose.
+    inicioParaCompletar(existing, new Date(), await zonaDeClinica(session.clinic.id)),
   );
   if (!check.ok) {
     // Mismo contrato de códigos que PATCH /status: rol = 403, estado = 409.

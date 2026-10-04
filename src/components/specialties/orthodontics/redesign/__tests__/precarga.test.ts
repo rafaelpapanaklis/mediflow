@@ -8,9 +8,9 @@ test("conPrecarga usa el dato precargado del MISMO caso y si no, llama a la acci
   const llamadas: string[] = [];
   mock.module("@/app/actions/orthodontics/precargarPestana", {
     namedExports: {
-      precargarPestanaOrto: async () => {
-        llamadas.push("precarga");
-        return { cargarPanelDeCobro: { ok: true, data: "del-lote" } };
+      precargarPestanaOrto: async (a: { parte?: string }) => {
+        llamadas.push(`precarga:${a.parte}`);
+        return a.parte === "cobro" ? { cargarPanelDeCobro: { ok: true, data: "del-lote" } } : { leerVersionesDelCaso: { ok: true, data: "resto" } };
       },
     },
   });
@@ -23,7 +23,10 @@ test("conPrecarga usa el dato precargado del MISMO caso y si no, llama a la acci
   assert.deepEqual(await conPrecarga("cargarPanelDeCobro", "plan1", propia), { ok: true, data: "del-lote" });
   // Otro caso: no se mezcla.
   assert.deepEqual(await conPrecarga("cargarPanelDeCobro", "plan2", propia), { ok: true, data: "propia" });
+  // La segunda parte (lo demás) también se reutiliza.
+  assert.deepEqual(await conPrecarga("leerVersionesDelCaso", "plan1", propia), { ok: true, data: "resto" });
   // Un dato que la precarga no trae: la acción de siempre.
-  assert.deepEqual(await conPrecarga("leerVersionesDelCaso", "plan1", propia), { ok: true, data: "propia" });
-  assert.deepEqual(llamadas, ["precarga"]);
+  assert.deepEqual(await conPrecarga("historialDeLigas", "plan1", propia), { ok: true, data: "propia" });
+  // Dos viajes: primero el cobro (saldo de la cabecera), después lo demás.
+  assert.deepEqual(llamadas, ["precarga:cobro", "precarga:resto"]);
 });
