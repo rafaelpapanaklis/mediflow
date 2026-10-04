@@ -157,6 +157,9 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
         return;
       }
       toast.success(`CFDI del pago timbrado: ${data.descripcion ?? ""}`.trim());
+      // F-07: el SAT timbró otro importe que el del pago. Ya está emitido: se avisa
+      // con tiempo para leerlo antes de entregarlo.
+      if (data.warning?.message) toast.error(data.warning.message, { duration: 12000 });
       setOpen(false);
       props.onStamped();
     } catch (e: any) {

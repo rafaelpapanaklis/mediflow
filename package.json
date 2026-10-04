@@ -380,6 +380,8 @@
     "test:cfdi-candado": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/timbrado-y-sat.test.ts",
     "test:cfdi-tanda0": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/tanda0-timbrado.test.ts",
     "test:cfdi-reglas": "tsx --test src/lib/invoices/__tests__/cfdi-reglas.test.ts",
+    "test:cfdi-vuelta2": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/vuelta2-timbrado.test.ts",
+    "test:facturapi-cliente": "tsx --test src/lib/__tests__/facturapi-cliente.test.ts",
     "test:orto-cajon-tablero": "tsx --test src/components/specialties/orthodontics/redesign/__tests__/cajon-tablero-y-elasticos.test.ts",
     "test:factura-destinatarios": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/invoices/__tests__/destinatarios.test.ts",
     "test:cobro-panel-rapido": "tsx --test src/lib/__tests__/limitar-concurrencia.test.ts",

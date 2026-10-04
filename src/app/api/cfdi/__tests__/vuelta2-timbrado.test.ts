@@ -1,0 +1,351 @@
+/**
+ * Núcleo del timbrado, vuelta 2 (ws1-t4, 3-oct-2026). HANDLERS REALES de
+ *   · POST /api/cfdi                (factura completa)
+ *   · POST /api/payments/[id]/cfdi  («Facturar este pago»)
+ * con Facturapi y la base simulados: aquí no se timbra NADA de verdad.
+ *
+ * Run: npm run test:cfdi-vuelta2
+ *
+ *   · F-05 receptor   — el cliente sale del receptor NORMALIZADO; extranjero con su país y S01.
+ *   · F-07 IVA/pago   — un pago de $1,160 con IVA agregado timbraba $1,345.60.
+ *   · F-12 llave      — misma idempotency_key para el mismo apartado; «Reintentar»
+ *                       tras un «no se sabe» trae el CFDI que ya salió, no otro.
+ *   · F-19 identidad  — serie/folio de la factura y external_id.
+ */
+import { test, mock, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
+import { marcarTimbre } from "@/lib/invoices/cfdi-timbre-incierto";
+
+// ── Estado ──────────────────────────────────────────────────────────────────
+const db = {
+  clinic: null as any,
+  invoice: null as any,
+  payments: [] as any[],
+  credits: [] as any[],
+  /** Pagos de otras facturas (origen de un saldo a favor). */
+  otrosPagos: [] as any[],
+  condiciones: null as any,
+  cfdiPorPago: [] as any[],
+  cfdiRecords: [] as any[],
+};
+const pac = {
+  /** Cada petición de timbre que llegó a Facturapi (con sus argumentos). */
+  timbres: [] as any[],
+  /** CFDI emitidos de verdad, por idempotency_key: el doble de Facturapi respeta la llave. */
+  porLlave: new Map<string, any>(),
+  emitidos: 0,
+  clientes: [] as any[],
+  validaciones: 0,
+  /** El timbre SALE y la respuesta se pierde (corte de red). */
+  perderRespuesta: false,
+  /** Total que «timbra» el SAT (si no, el del cálculo de Facturapi). */
+  totalForzado: null as number | null,
+};
+const authCtx: any = { clinicId: "c1", userId: "u1", role: "ADMIN", isAdmin: true };
+
+function setClinic(over: Record<string, any> = {}) {
+  db.clinic = {
+    facturApiOrgId: "org_1", facturApiEnabled: true, name: "Clínica", rfcEmisor: "ROAB800101AB1",
+    plan: "pro", timezone: "America/Mexico_City", cfdiTaxMode: "exempt", csdUploaded: true,
+    locale: "es", regimenFiscal: "626", ...over,
+  };
+}
+/** Factura de $1,600 exenta, pagada con débito. */
+function setInvoice(over: Record<string, any> = {}, pagos?: any[]) {
+  db.invoice = {
+    id: "inv1", clinicId: "c1", patientId: "p1", invoiceNumber: "F-0002",
+    status: "PAID", items: [{ description: "Control de ortodoncia", quantity: 1, unitPrice: 1600, total: 1600 }],
+    subtotal: 1600, discount: 0, total: 1600, paid: 1600, balance: 0,
+    taxRate: 0, taxIncluded: true, paymentMethod: null, cfdiUuid: null, ...over,
+  };
+  db.payments = pagos ?? [{ id: "pay1", invoiceId: "inv1", method: "debit", amount: 1600, paidAt: new Date("2026-10-02T12:00:00Z") }];
+}
+
+function cumple(row: any, where: any): boolean {
+  if (!row) return false;
+  for (const [k, v] of Object.entries(where ?? {})) {
+    if (v === undefined) continue;
+    if (v !== null && typeof v === "object" && !(v instanceof Date)) {
+      const c = v as any;
+      if (c.notIn !== undefined && c.notIn.includes(row[k])) return false;
+      continue;
+    }
+    if (row[k] !== v) return false;
+  }
+  return true;
+}
+
+const prismaStub: any = {
+  $transaction: async (arg: any) => (typeof arg === "function" ? arg(prismaStub) : Promise.all(arg)),
+  clinic: { findUnique: async () => ({ ...db.clinic }) },
+  invoice: {
+    findFirst: async ({ where }: any) => {
+      if (!cumple(db.invoice, { id: where?.id, clinicId: where?.clinicId })) return null;
+      return { ...db.invoice, patient: { firstName: "Ana", lastName: "Pérez", email: null }, payments: [...db.payments] };
+    },
+    updateMany: async ({ where, data }: any) => {
+      if (!cumple(db.invoice, where)) return { count: 0 };
+      Object.assign(db.invoice, data);
+      return { count: 1 };
+    },
+    update: async ({ data }: any) => { Object.assign(db.invoice, data); return { ...db.invoice }; },
+  },
+  payment: {
+    findFirst: async ({ where }: any) => {
+      const p = db.payments.find((x) => x.id === where?.id);
+      if (!p || where?.invoice?.clinicId !== db.invoice.clinicId) return null;
+      return { ...p, invoice: { ...db.invoice, patient: { firstName: "Ana", lastName: "Pérez", email: null }, payments: [...db.payments] } };
+    },
+    findMany: async ({ where }: any) => {
+      const todos = [...db.payments, ...db.otrosPagos];
+      const ids = new Set<string>();
+      const facturas = new Set<string>();
+      for (const o of where?.OR ?? []) {
+        for (const id of o.id?.in ?? []) ids.add(id);
+        for (const id of o.invoiceId?.in ?? []) facturas.add(id);
+      }
+      return todos.filter((p) => ids.has(p.id) || facturas.has(p.invoiceId));
+    },
+  },
+  patientCredit: {
+    findFirst: async () => null,
+    findMany: async ({ where }: any) => db.credits.filter((c) => c.clinicId === where.clinicId && c.patientId === where.patientId && c.amount > 0),
+  },
+  cfdiRecord: {
+    create: async ({ data }: any) => { db.cfdiRecords.push(data); return { id: "cfdi1", ...data }; },
+    findFirst: async ({ where }: any) => db.cfdiRecords.find((r) => r.invoiceId === where?.invoiceId && r.status === where?.status && (r.tipoComprobante ?? "I") === where?.tipoComprobante) ?? null,
+  },
+  cfdiUsage: { upsert: async () => ({ stamped: 1 }) },
+};
+
+(mock as any).module("@/lib/prisma", { namedExports: { prisma: prismaStub } });
+(mock as any).module("@/lib/facturapi", {
+  namedExports: {
+    getOrgApiKey: async () => "sk_test",
+    validateRfc: async () => { pac.validaciones += 1; return { ok: true }; },
+    createOrUpdateCustomer: async (_k: string, cliente: any) => { pac.clientes.push(cliente); return "cus_1"; },
+    createInvoice: async (args: any) => {
+      pac.timbres.push(args);
+      const ya = args.idempotencyKey ? pac.porLlave.get(args.idempotencyKey) : null;
+      if (ya) return ya; // misma llave: Facturapi devuelve el que ya emitió
+      // Como Facturapi: con tax_included el precio ya trae el IVA; sin él, se le suma.
+      const total = Math.round(args.items.reduce((a: number, it: any) => {
+        const base = it.product.price * it.quantity - (it.discount ?? 0);
+        const iva = (it.product.taxes ?? []).some((t: any) => t.type === "IVA" && t.rate === 0.16 && !t.withholding);
+        return a + (iva && !it.product.tax_included ? base * 1.16 : base);
+      }, 0) * 100) / 100;
+      pac.emitidos += 1;
+      const r = { id: `fapi_${pac.emitidos}`, uuid: `UUID-${pac.emitidos}`, total: pac.totalForzado ?? total };
+      if (args.idempotencyKey) pac.porLlave.set(args.idempotencyKey, r);
+      if (pac.perderRespuesta) { pac.perderRespuesta = false; throw marcarTimbre(new TypeError("fetch failed"), true); }
+      return r;
+    },
+    CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
+  },
+});
+(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => false } });
+(mock as any).module("@/lib/plans", { namedExports: { getResolvedPlan: async () => ({ cfdiMonthly: 100, cfdiOverageCents: 0 }) } });
+(mock as any).module("@/lib/auth-context", {
+  namedExports: {
+    getAuthContext: async () => authCtx,
+    requireAdmin: (ctx: any) => (ctx?.isAdmin ? null : new Response(null, { status: 403 })),
+  },
+});
+(mock as any).module("@/lib/patient-visibility", { namedExports: { assertPatientVisible: async () => null } });
+(mock as any).module("@/lib/audit", { namedExports: { logMutation: async () => {} } });
+(mock as any).module("@/lib/invoices/condiciones-pago-db", {
+  namedExports: {
+    leerCondicionesDeFacturas: async () => ({ porFactura: new Map(db.condiciones ? [["inv1", db.condiciones]] : []) }),
+  },
+});
+(mock as any).module("@/lib/invoices/cfdi-pago-db", {
+  namedExports: {
+    algunPagoTieneCfdiVigente: async () => false,
+    columnaPagoListaParaCfdi: async () => true,
+    buscarCfdiDePago: async () => null,
+    sumaCfdiValidaDeFactura: async () => 0,
+    claimDePago: (id: string) => `timbrando:${id}`,
+    apartarCfdiDePago: async () => ({ ok: true, id: "fila1" }),
+    confirmarCfdiDePago: async (_db: any, a: any) => { db.cfdiPorPago.push(a); return { id: "cfdiPago1" }; },
+    soltarCfdiDePago: async () => {},
+  },
+});
+
+// ── Utilidades ──────────────────────────────────────────────────────────────
+function req(body: any): any {
+  return { json: async () => body, headers: new Headers({ "x-forwarded-for": "10.0.0.1" }), nextUrl: new URL("http://localhost/api/cfdi"), url: "http://localhost/api/cfdi" };
+}
+async function leer(res: any) { return { status: res.status, body: await res.json() }; }
+async function quieto<T>(fn: () => Promise<T>): Promise<T> {
+  const [e, w] = [console.error, console.warn];
+  console.error = () => {}; console.warn = () => {};
+  try { return await fn(); } finally { console.error = e; console.warn = w; }
+}
+
+const PF_612 = { rfc: "GOMA800101AB1", nombre: "ANA GOMEZ", regimenFiscal: "612", cp: "06600" };
+const EMPRESA = { rfc: "ABC010101AB1", nombre: "EMPRESA SA DE CV", regimenFiscal: "601", cp: "06600" };
+const PUBLICO = { rfc: "XAXX010101000", nombre: "PUBLICO EN GENERAL", regimenFiscal: "616", cp: "06600" };
+const PLAZOS = { modo: "plazos", metodo: null, enganche: 2000, numPagos: 12, frecuencia: "MONTHLY", primerPago: "2026-10-01", difiereConSuBanco: false };
+
+async function timbrar(body: Record<string, any>) {
+  const { POST } = await import("@/app/api/cfdi/route");
+  return quieto(async () => leer(await POST(req({ invoiceId: "inv1", taxMode: "exento", ...body }))));
+}
+async function timbrarPago(paymentId: string, body: Record<string, any>) {
+  const { POST } = await import("@/app/api/payments/[id]/cfdi/route");
+  return quieto(async () => leer(await POST(req({ taxMode: "exento", ...body }), { params: { id: paymentId } })));
+}
+
+beforeEach(() => {
+  authCtx.clinicId = "c1";
+  setClinic();
+  setInvoice();
+  db.credits = [];
+  db.otrosPagos = [];
+  db.condiciones = null;
+  db.cfdiPorPago = [];
+  db.cfdiRecords = [];
+  pac.timbres = [];
+  pac.porLlave = new Map();
+  pac.emitidos = 0;
+  pac.clientes = [];
+  pac.validaciones = 0;
+  pac.perderRespuesta = false;
+  pac.totalForzado = null;
+});
+
+import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-05 · receptor
+// ═══════════════════════════════════════════════════════════════════════════
+test("F-05 · el cliente de Facturapi sale del receptor normalizado (RFC en mayúsculas y sin espacios)", async () => {
+  const r = await timbrar({ receptor: { rfc: " goma 800101ab1 ", nombre: " ANA GOMEZ ", regimenFiscal: "612", cp: " 03100 ", email: "ana@correo.test" }, paymentForm: "28" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(pac.clientes[0], { legal_name: "ANA GOMEZ", tax_id: "GOMA800101AB1", tax_system: "612", email: "ana@correo.test", address: { zip: "03100" } });
+});
+
+test("F-05 · extranjero (ws1-t8): su ID fiscal y su país, uso S01 siempre y sin la lista EFOS", async () => {
+  const receptor = { rfc: "XEXX010101000", nombre: "JOHN DOE", regimenFiscal: "616", cp: "92101", extranjero: { pais: "usa", numRegIdTrib: "123-45-6789" } };
+  const r = await timbrar({ receptor, usoCfdi: "D01", paymentForm: "28" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(pac.clientes[0], { legal_name: "JOHN DOE", tax_id: "123-45-6789", address: { zip: "92101", country: "USA" } });
+  assert.equal(pac.timbres[0].usoCfdi, "S01", "un extranjero va con S01 aunque el formulario mande D01");
+  assert.equal(pac.validaciones, 0, "la lista negra EFOS es de RFC mexicanos");
+});
+
+test("F-05 · extranjero sin país (o con MEX) no se timbra", async () => {
+  const r = await timbrar({ receptor: { rfc: "XEXX010101000", nombre: "JOHN", regimenFiscal: "616", cp: "92101", extranjero: { pais: "MEX", numRegIdTrib: "1" } }, paymentForm: "28" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, "CFDI_RECEPTOR_EXTRANJERO");
+  assert.equal(pac.timbres.length, 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-07 · CFDI por pago con IVA
+// ═══════════════════════════════════════════════════════════════════════════
+const PLAZOS_IVA = { modo: "plazos", metodo: null, enganche: 1160, numPagos: 3, frecuencia: "MONTHLY", primerPago: "2026-10-01", difiereConSuBanco: false };
+
+test("F-07 · pago de $1,160 de una factura con IVA AGREGADO → CFDI de $1,160.00 (antes $1,345.60)", async () => {
+  db.condiciones = PLAZOS_IVA;
+  setInvoice({ total: 4640, paid: 1160, balance: 3480, status: "PARTIAL", taxRate: 16, taxIncluded: false,
+    items: [{ description: "Blanqueamiento", quantity: 1, unitPrice: 4000, total: 4000 }] },
+    [{ id: "eng", invoiceId: "inv1", method: "transfer", amount: 1160, paidAt: new Date("2026-10-01T12:00:00Z") }]);
+  const r = await timbrarPago("eng", { receptor: PF_612, taxMode: "iva16" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const item = pac.timbres[0].items[0];
+  assert.equal(item.product.price, 1160);
+  assert.equal(item.product.tax_included, true, "el pago ya trae el IVA dentro");
+  assert.equal(db.cfdiPorPago[0].total, 1160);
+  assert.equal(r.body.warning, undefined);
+});
+
+test("F-07 · si el SAT timbra otro importe que el del pago, avisa y deja constancia (el CFDI ya está emitido)", async () => {
+  db.condiciones = PLAZOS_IVA;
+  setInvoice({ total: 4640, paid: 1160, balance: 3480, status: "PARTIAL", taxRate: 16, taxIncluded: false,
+    items: [{ description: "Blanqueamiento", quantity: 1, unitPrice: 4000, total: 4000 }] },
+    [{ id: "eng", invoiceId: "inv1", method: "transfer", amount: 1160, paidAt: new Date("2026-10-01T12:00:00Z") }]);
+  pac.totalForzado = 1345.6;
+  const r = await timbrarPago("eng", { receptor: PF_612, taxMode: "iva16" });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.warning?.code, "CFDI_STAMPED_TOTAL_DIFFERS");
+  assert.match(r.body.warning.message, /\$1345\.60 y el pago fue de \$1160\.00/);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-12 · idempotency_key
+// ═══════════════════════════════════════════════════════════════════════════
+test("F-12 · la llave sale del apartado de la factura (el que queda en cfdiUuid mientras se timbra)", async () => {
+  let apartadoAlTimbrar: string | null = null;
+  const orig = prismaStub.invoice.updateMany;
+  prismaStub.invoice.updateMany = async (a: any) => { const r = await orig(a); if (String(a.data?.cfdiUuid ?? "").startsWith("timbrando:")) apartadoAlTimbrar = a.data.cfdiUuid; return r; };
+  try {
+    const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+    assert.equal(r.status, 200);
+  } finally { prismaStub.invoice.updateMany = orig; }
+  assert.ok(apartadoAlTimbrar);
+  assert.equal(pac.timbres[0].idempotencyKey, llaveIdempotencia(apartadoAlTimbrar!));
+  assert.match(pac.timbres[0].idempotencyKey, /^dc[0-9a-f]{48}$/);
+});
+
+test("F-12 · se corta la red DESPUÉS de timbrar: «Reintentar sin duplicar» trae ESE CFDI y no timbra otro", async () => {
+  pac.perderRespuesta = true;
+  const primero = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(primero.status, 503);
+  assert.equal(primero.body.code, "CFDI_TIMBRE_INCIERTO");
+  assert.equal(pac.emitidos, 1, "el CFDI SÍ salió ante el SAT");
+  const apartado = db.invoice.cfdiUuid;
+  assert.match(String(apartado), /^timbrando:inv1:/, "la factura se queda apartada");
+
+  // Volver a timbrar «normal» sigue bloqueado…
+  const normal = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(normal.status, 409);
+  assert.equal(normal.body.code, "CFDI_EN_CURSO");
+
+  // …y el reintento usa la MISMA llave: Facturapi devuelve el que ya emitió.
+  const re = await timbrar({ receptor: PF_612, paymentForm: "28", reintentarIncierto: true });
+  assert.equal(re.status, 200, JSON.stringify(re.body));
+  assert.equal(re.body.uuid, "UUID-1");
+  assert.equal(pac.emitidos, 1, "no se emitió un segundo CFDI");
+  assert.equal(pac.timbres[1].idempotencyKey, pac.timbres[0].idempotencyKey);
+  assert.equal(db.invoice.cfdiUuid, "UUID-1");
+});
+
+test("F-12 · el reintento no aplica si el apartado era la sustitución de un CFDI vigente", async () => {
+  db.invoice.cfdiUuid = "timbrando:inv1:abc";
+  db.cfdiRecords.push({ invoiceId: "inv1", status: "valid", tipoComprobante: "I", uuid: "UUID-VIEJO" });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28", reintentarIncierto: true });
+  assert.equal(r.status, 409);
+  assert.equal(pac.timbres.length, 0);
+});
+
+test("F-12 · «Facturar este pago» también manda la llave de su apartado", async () => {
+  db.condiciones = PLAZOS_IVA;
+  setInvoice({ total: 4640, paid: 1160, balance: 3480, status: "PARTIAL", taxRate: 16, taxIncluded: false,
+    items: [{ description: "Blanqueamiento", quantity: 1, unitPrice: 4000, total: 4000 }] },
+    [{ id: "eng", invoiceId: "inv1", method: "transfer", amount: 1160, paidAt: new Date("2026-10-01T12:00:00Z") }]);
+  const r = await timbrarPago("eng", { receptor: PF_612, taxMode: "iva16" });
+  assert.equal(r.status, 200);
+  assert.equal(pac.timbres[0].idempotencyKey, llaveIdempotencia("timbrando:eng"));
+  assert.equal(pac.timbres[0].externalId, "eng");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-19 · serie, folio y external_id
+// ═══════════════════════════════════════════════════════════════════════════
+test("F-19 · el CFDI lleva la serie y el folio de la factura (F-0002 → F, 2) y external_id = la factura", async () => {
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 200);
+  assert.equal(pac.timbres[0].series, "F");
+  assert.equal(pac.timbres[0].folioNumber, 2);
+  assert.equal(pac.timbres[0].externalId, "inv1");
+});
+
+test("F-19 · serieYFolio", () => {
+  assert.deepEqual(serieYFolio("F-000155"), { series: "F", folioNumber: 155 });
+  assert.deepEqual(serieYFolio("MF-0042"), { series: "MF", folioNumber: 42 });
+  assert.deepEqual(serieYFolio("0042"), { folioNumber: 42 });
+  assert.deepEqual(serieYFolio("SIN-NUMERO"), {});
+  assert.deepEqual(serieYFolio(null), {});
+});

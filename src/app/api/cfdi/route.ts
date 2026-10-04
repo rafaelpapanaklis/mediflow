@@ -37,6 +37,10 @@ import {
   LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS, llaveLimiteTimbrado, errorLimiteTimbrado,
 } from "@/lib/invoices/cfdi-reglas";
 import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server";
+// ws1-t4 (F-05) + ws1-t8 (F-22): el cliente de Facturapi sale del receptor, nacional o extranjero.
+import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
+import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
+import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -47,9 +51,17 @@ export async function POST(req: NextRequest) {
   // ws1-t3: con `sustituyeCfdiId` este timbrado SUSTITUYE al CFDI vigente de la
   // factura (motivo 01): lleva relación 04 y después se cancela el viejo.
   const sustituyeCfdiId = body?.sustituyeCfdiId;
+  // ws1-t4, vuelta 2 (F-12): «Reintentar» tras un «no se sabe si se timbró».
+  // Reusa el MISMO apartado → la MISMA idempotency_key → Facturapi devuelve el
+  // CFDI que ya emitió (si lo emitió) en vez de timbrar otro.
+  const reintentarIncierto = body?.reintentarIncierto === true;
   // `confirmUnpaidPue` (el «timbrar PUE con saldo de todos modos») ya no existe
   // (ws1-t4, tanda 0): si un cliente viejo lo manda, se ignora.
-  const { invoiceId, receptor, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
+  const { invoiceId, receptor: receptorCrudo, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
+  // El RFC como lo lee el SAT (mayúsculas, sin espacios) y nombre/CP sin espacios de más (ws1-t4, F-05).
+  const receptor = receptorCrudo && typeof receptorCrudo === "object"
+    ? { ...receptorCrudo, rfc: normalizarRfc(receptorCrudo.rfc), nombre: typeof receptorCrudo.nombre === "string" ? receptorCrudo.nombre.trim() : receptorCrudo.nombre, cp: typeof receptorCrudo.cp === "string" ? receptorCrudo.cp.trim() : receptorCrudo.cp }
+    : receptorCrudo;
 
   // ── QUÉ factura se timbra ─────────────────────────────────────────────────
   // El `invoiceId` NO se validaba y con `undefined` Prisma DESCARTA la clave del
@@ -108,9 +120,18 @@ export async function POST(req: NextRequest) {
       && !USOS_CFDI.some((u) => u.clave === usoCfdi)) {
     return NextResponse.json({ error: `Uso de CFDI inválido: ${String(usoCfdi)}.` }, { status: 400 });
   }
-  const uso: string = typeof usoCfdi === "string" && usoCfdi
-    ? usoCfdi
-    : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
+  // Extranjero (XEXX010101000 + país + NumRegIdTrib, ws1-t8): se valida aquí y
+  // va SIEMPRE con S01 (Anexo 20), diga lo que diga el formulario.
+  const extranjero = esReceptorExtranjero(receptor);
+  if (extranjero) {
+    const e = errorDeReceptorExtranjero(receptor, clinic.locale);
+    if (e) return NextResponse.json({ error: e, code: "CFDI_RECEPTOR_EXTRANJERO" }, { status: 400 });
+  }
+  const uso: string = extranjero
+    ? USO_EXTRANJERO
+    : typeof usoCfdi === "string" && usoCfdi
+      ? usoCfdi
+      : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
 
   // En PRUEBAS todo sigue permitido como hasta hoy (Facturapi timbra con sus
   // propios certificados de prueba y nada llega al SAT).
@@ -127,8 +148,26 @@ export async function POST(req: NextRequest) {
     },
   });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  // Apartado de un intento anterior que no se sabe cómo terminó. Solo se
+  // retoma si lo piden a propósito y si es un timbrado normal: el de una
+  // sustitución (hay un ingreso vigente en la factura) se revisa a mano, porque
+  // al soltarlo habría que volver al CFDI viejo y el apartado no lo dice.
+  let reintento: string | null = null;
   if (isCfdiClaim(invoice.cfdiUuid)) {
-    return NextResponse.json({ error: CFDI_EN_CURSO_ERROR, code: "CFDI_EN_CURSO" }, { status: 409 });
+    if (!reintentarIncierto || sustituyeCfdiId || !String(invoice.cfdiUuid).startsWith(`timbrando:${invoiceId}:`)) {
+      return NextResponse.json({ error: CFDI_EN_CURSO_ERROR, code: "CFDI_EN_CURSO" }, { status: 409 });
+    }
+    const ingresoVigente = await prisma.cfdiRecord.findFirst({
+      where: { clinicId: ctx!.clinicId, invoiceId, tipoComprobante: "I", status: "valid" },
+      select: { id: true },
+    });
+    if (ingresoVigente) {
+      return NextResponse.json({
+        error: "Este timbrado pendiente era la sustitución de un CFDI vigente: no se reintenta solo. Revisa en «CFDI ante el SAT» o escríbenos a soporte con el folio.",
+        code: "CFDI_EN_CURSO",
+      }, { status: 409 });
+    }
+    reintento = invoice.cfdiUuid as string;
   }
   // ── Sustitución (motivo 01, ws1-t3) ─────────────────────────────────────
   // Solo se puede timbrar sobre una factura que YA tiene CFDI si se pide
@@ -140,7 +179,7 @@ export async function POST(req: NextRequest) {
     : null;
   if (sust && !sust.ok) return NextResponse.json({ error: sust.error, code: sust.code }, { status: sust.status });
   const cfdiPrevio: string | null = sust && sust.ok ? sust.viejo.uuid : null;
-  if (invoice.cfdiUuid && invoice.cfdiUuid !== cfdiPrevio) return NextResponse.json({ error: "Esta factura ya tiene CFDI timbrado" }, { status: 400 });
+  if (invoice.cfdiUuid && invoice.cfdiUuid !== cfdiPrevio && invoice.cfdiUuid !== reintento) return NextResponse.json({ error: "Esta factura ya tiene CFDI timbrado" }, { status: 400 });
   if (invoice.status === "DRAFT") {
     return NextResponse.json({ error: "La factura está en borrador; confírmala antes de timbrar." }, { status: 400 });
   }
@@ -253,7 +292,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Forma de pago SAT inválida: ${payForm}` }, { status: 400 });
   }
 
-  const claim = cfdiClaimFor(invoiceId);
+  const claim = reintento ?? cfdiClaimFor(invoiceId);
   let apartada = false;
   let timbrado: InvoiceResult | null = null;
 
@@ -262,18 +301,15 @@ export async function POST(req: NextRequest) {
 
     // Chequeo lista negra EFOS del SAT (fail-open: solo bloquea si el SAT lo
     // marca explícito; un RFC inexistente lo rechaza el propio timbrado).
-    const rfcValidation = await validateRfc(orgApiKey, receptor.rfc);
+    // La lista negra EFOS es de RFC mexicanos: no aplica al genérico de extranjero.
+    const rfcValidation = extranjero ? { ok: true } : await validateRfc(orgApiKey, receptor.rfc);
     if (!rfcValidation.ok) {
       return NextResponse.json({ error: `El RFC ${receptor.rfc} aparece en la lista negra del SAT (EFOS, art. 69-B); no es posible facturarle.` }, { status: 400 });
     }
 
-    const customerId = await createOrUpdateCustomer(orgApiKey, {
-      legal_name: receptor.nombre,
-      tax_id:     receptor.rfc,
-      tax_system: receptor.regimenFiscal,
-      email:      receptor.email ?? invoice.patient.email ?? undefined,
-      address:    { zip: receptor.cp },
-    });
+    // F-05: el cliente se busca por su tax_id exacto (codificado) y se ACTUALIZA con
+    // los datos de este timbrado; para un extranjero, con su país (ws1-t8).
+    const customerId = await createOrUpdateCustomer(orgApiKey, clienteFacturapiDelReceptor(receptor, invoice.patient.email));
 
     // Impuestos por concepto (shapes de la referencia oficial de Facturapi):
     //   exento → taxes [{IVA, factor Exento, rate 0}] + tax_included:false
@@ -316,9 +352,11 @@ export async function POST(req: NextRequest) {
     // depende de ningún índice. Va aquí y no antes para que una función cortada
     // en las llamadas previas a Facturapi no deje la factura apartada sin timbre.
     // Detalle en lib/invoices/cfdi-vigente.ts.
+    // En un reintento el apartado YA es este (se comprueba con el mismo UPDATE:
+    // si alguien lo soltó o lo cambió entre medias, no se sigue).
     const { count } = await prisma.invoice.updateMany({
       where: {
-        id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: cfdiPrevio,
+        id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: reintento ?? cfdiPrevio,
         status: { notIn: ["DRAFT", "CANCELLED"] }, total: invoice.total,
       },
       data: { cfdiUuid: claim },
@@ -346,6 +384,11 @@ export async function POST(req: NextRequest) {
       // CfdiRecord de un comprobante que ya existe ante el SAT (lo vigila
       // src/lib/__tests__/cfdi-timbrado-alerta.test.ts).
       exigirUuid: true,
+      // F-12: misma llave para el mismo apartado (el reintento la repite).
+      idempotencyKey: llaveIdempotencia(claim),
+      // F-19: para encontrarlo en Facturapi con el número que ve la clínica.
+      externalId: invoiceId,
+      ...serieYFolio(invoice.invoiceNumber),
     });
     timbrado = result;
 
@@ -505,7 +548,8 @@ export async function POST(req: NextRequest) {
 
       // Facturapi contestó y NO timbró: aquí no hay CFDI que proteger, así que
       // se suelta el apartado —solo si sigue siendo el de esta petición— para
-      // que la factura se pueda corregir y reintentar.
+      // que la factura se pueda corregir y reintentar. (En un reintento, un
+      // rechazo claro con la misma llave = el intento original tampoco timbró.)
       if (apartada) {
         await prisma.invoice.updateMany({
           where: { id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: claim },

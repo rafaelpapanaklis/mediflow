@@ -65,25 +65,82 @@ export async function updateOrgLegal(orgId: string, legalData: {
 
 // ── Customer (receptor) management ────────────────────────────────────────────
 
-export async function createOrUpdateCustomer(orgApiKey: string, customer: {
-  legal_name: string; tax_id: string; tax_system: string; email?: string;
-  address: { zip: string }
-}): Promise<string> {
-  // Try to find existing
-  const searchRes = await fetch(`${FACTURAPI_BASE}/customers?q=${customer.tax_id}`, {
-    headers: { "Authorization": `Bearer ${orgApiKey}` },
-  });
-  const searchData = await searchRes.json();
-  if (searchData.data?.length > 0) return searchData.data[0].id;
+/**
+ * El receptor tal como lo da de alta Facturapi (POST/PUT /customers). Para un
+ * extranjero `tax_id` es su identificación fiscal y va `address.country`; el RFC
+ * genérico XEXX lo pone Facturapi (lib/cfdi/extranjero.ts, ws1-t8).
+ */
+export interface ClienteFacturapi {
+  legal_name: string;
+  tax_id: string;
+  tax_system?: string;
+  email?: string;
+  address: { zip: string; country?: string };
+}
 
-  // Create new
+/**
+ * URL de la búsqueda del cliente (ws1-t4, F-05). El `tax_id` va CODIFICADO: un
+ * RFC de persona moral puede llevar «&» (permitido por el SAT) y sin codificar
+ * cortaba la búsqueda — `q` buscaba solo «A», y la primera coincidencia era el
+ * cliente de OTRA persona.
+ */
+export function urlBusquedaCliente(taxId: string): string {
+  return `${FACTURAPI_BASE}/customers?q=${encodeURIComponent(taxId)}`;
+}
+
+/**
+ * De lo que devuelve la búsqueda, el cliente con ESE `tax_id` exacto (sin
+ * distinguir mayúsculas ni espacios). `q` es texto libre sobre `legal_name` y
+ * `tax_id` (referencia de la API): «el primero que salga» podía ser otro.
+ */
+export function clienteExacto(lista: unknown, taxId: string): string | null {
+  const t = String(taxId ?? "").replace(/\s+/g, "").toUpperCase();
+  if (!t || !Array.isArray(lista)) return null;
+  const hit = lista.find((c: any) =>
+    typeof c?.id === "string" && typeof c?.tax_id === "string" && c.tax_id.replace(/\s+/g, "").toUpperCase() === t);
+  return hit ? (hit as any).id : null;
+}
+
+/**
+ * Da de alta o ACTUALIZA al receptor y devuelve su id de Facturapi.
+ *
+ * ws1-t4 (F-05): antes devolvía el primer resultado de la búsqueda SIN
+ * actualizarlo. Si el paciente corregía su CP, régimen o razón social, el CFDI
+ * salía con los datos viejos que guardaba Facturapi y el PAC lo rechazaba (en
+ * CFDI 4.0 se validan contra la lista del SAT): ese paciente ya no podía recibir
+ * factura de la clínica. Ahora el existente se actualiza con PUT /customers/{id}
+ * con los datos de ESTE timbrado (Facturapi los valida contra el SAT y contesta
+ * 4xx con el motivo si no coinciden).
+ *
+ * Se conserva el cliente (y su id) en vez de mandar el receptor dentro de la
+ * factura porque la nota de crédito (ws1-t3) reutiliza el `customer.id` del CFDI.
+ */
+export async function createOrUpdateCustomer(orgApiKey: string, customer: ClienteFacturapi): Promise<string> {
+  const headers = { "Authorization": `Bearer ${orgApiKey}`, "Content-Type": "application/json" };
+  const searchRes = await fetch(urlBusquedaCliente(customer.tax_id), { headers: { "Authorization": `Bearer ${orgApiKey}` } });
+  const searchData: any = await searchRes.json().catch(() => null);
+  const existente = searchRes.ok ? clienteExacto(searchData?.data, customer.tax_id) : null;
+
+  if (existente) {
+    const res = await fetch(`${FACTURAPI_BASE}/customers/${encodeURIComponent(existente)}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(customer),
+    });
+    if (!res.ok) {
+      const d: any = await res.json().catch(() => null);
+      throw new Error(d?.message ?? "Facturapi no aceptó los datos fiscales del receptor. Revisa RFC, nombre, régimen y código postal contra su constancia.");
+    }
+    return existente;
+  }
+
   const res = await fetch(`${FACTURAPI_BASE}/customers`, {
     method: "POST",
-    headers: { "Authorization": `Bearer ${orgApiKey}`, "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(customer),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Error creando cliente fiscal");
+  const data: any = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.message ?? "Error creando cliente fiscal");
   return data.id;
 }
 
@@ -159,6 +216,19 @@ export interface CreateInvoiceParams {
    * Sin este campo el payload es el de siempre.
    */
   relatedDocuments?: { relationship: string; documents: string[] }[];
+  /**
+   * ws1-t4, vuelta 2 (F-12): `idempotency_key` de Facturapi — «cadena única para
+   * evitar duplicados al reintentar una petición». Con la MISMA llave, un
+   * reintento devuelve el CFDI que ya se emitió en vez de timbrar otro. Con
+   * llave, un 409 de Facturapi (la petición original sigue en curso) cuenta
+   * como «no se sabe» y no como rechazo.
+   */
+  idempotencyKey?: string;
+  /** F-19: nuestro id (factura o pago) para encontrarlo en el panel de Facturapi. */
+  externalId?: string;
+  /** F-19: serie y folio del CFDI = los de la factura interna (F-000155 → «F», 155). */
+  series?: string;
+  folioNumber?: number;
 }
 
 export interface InvoiceResult {
@@ -210,6 +280,10 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
         payment_method: params.paymentMethod ?? "PUE",
         items: params.items,
         ...(params.relatedDocuments?.length ? { related_documents: params.relatedDocuments } : {}),
+        ...(params.idempotencyKey ? { idempotency_key: params.idempotencyKey } : {}),
+        ...(params.externalId ? { external_id: params.externalId } : {}),
+        ...(params.series ? { series: params.series } : {}),
+        ...(params.folioNumber !== undefined ? { folio_number: params.folioNumber } : {}),
       }),
       signal: AbortSignal.timeout(TIMBRADO_TIMEOUT_MS),
     });
@@ -249,7 +323,9 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
     //     siempre por un problema de configuración que se repite en cada intento.
     //   · 5xx / 408 / 429 = la infraestructura diciendo «no sé». Aquí sí pudo
     //     salir, y por eso la factura se queda apartada.
-    const incierto = res.status >= 500 || res.status === 408 || res.status === 429;
+    const incierto = res.status >= 500 || res.status === 408 || res.status === 429
+      // Con idempotency_key, 409 = esa misma llave sigue procesándose: pudo salir.
+      || (!!params.idempotencyKey && res.status === 409);
     const deFacturapi = typeof data?.message === "string" && data.message.length > 0
       ? data.message
       : `Facturapi respondió ${res.status} sin un motivo legible.`;

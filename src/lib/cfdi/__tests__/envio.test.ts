@@ -152,6 +152,6 @@ test("extranjero: sin país, con MEX, sin ID o ID de más de 40 → error; compl
   assert.equal(errorDeReceptorExtranjero({ ...base, extranjero: { pais: "CAN", numRegIdTrib: "123456789" } }), null);
 });
 
-test("extranjero: apagado mientras el timbrado (route.ts de ws1-t4) no use clienteFacturapiDelReceptor", () => {
-  assert.equal(RECEPTOR_EXTRANJERO_HABILITADO, false);
+test("extranjero: encendido — los dos timbrados (ws1-t4, vuelta 2) arman el cliente con clienteFacturapiDelReceptor", () => {
+  assert.equal(RECEPTOR_EXTRANJERO_HABILITADO, true);
 });

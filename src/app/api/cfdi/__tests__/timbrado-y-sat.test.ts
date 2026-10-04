@@ -563,7 +563,7 @@ test("N3 · reembolsar una factura timbrada se bloquea", async () => {
   const { POST } = await import("@/app/api/invoices/[id]/refund/route");
   setInvoice({ cfdiUuid: "UUID-X", status: "PAID", paid: 1000, balance: 0 });
 
-  assertBloqueoCfdi(await leer(await POST(req({ amount: 1000, reason: "no se hizo" }), P)));
+  assertBloqueoCfdi(await leer(await POST(req({ amount: 1000, refundMethod: "cash", reason: "no se hizo" }), P)));
   assert.equal(db.invoice.paid, 1000, "lo pagado no cambia");
   assert.equal(db.invoice.status, "PAID");
   assert.equal(db.payments.length, 0, "no se registra el reembolso");
@@ -594,7 +594,7 @@ test("N3 · sin CFDI, cancelar, anular, reembolsar y editar precio siguen funcio
   assert.equal(db.invoice.status, "CANCELLED");
 
   setInvoice({ status: "PAID", paid: 1000, balance: 0 });
-  assert.equal((await refund(req({ amount: 400 }), P)).status, 200);
+  assert.equal((await refund(req({ amount: 400, refundMethod: "cash" }), P)).status, 200);
   assert.equal(db.invoice.paid, 600);
 
   setInvoice();
@@ -649,7 +649,7 @@ test("N3 · alguien timbra mientras otro reembolsa: el reembolso no deja el CFDI
   // comprobación de visibilidad del paciente, antes de su transacción…
   let soltar!: () => void;
   vis.espera = new Promise<void>((r) => { soltar = r; });
-  const reembolsando = refund(req({ amount: 1000, reason: "no se hizo" }), P);
+  const reembolsando = refund(req({ amount: 1000, refundMethod: "cash", reason: "no se hizo" }), P);
   await new Promise((r) => setTimeout(r, 5));
 
   // …mientras tanto el administrador timbra la misma factura.

@@ -13,10 +13,9 @@
 // `tax_id` = su identificación fiscal extranjera y `address.country` (alfa-3) ≠ "MEX" + `zip`;
 // «No necesitas usar el RFC genérico para extranjeros del SAT. Nosotros lo pondremos por ti».
 //
-// ⚠️ El timbrado (src/app/api/cfdi/route.ts, de ws1-t4) todavía arma el cliente con
-// `tax_id: receptor.rfc` y `address: { zip }`: con eso un extranjero NO se puede timbrar. Hasta que
-// esa ruta use `clienteFacturapiDelReceptor` (descrito en REPORTE-ws1-t8.md), la opción no se
-// enseña: RECEPTOR_EXTRANJERO_HABILITADO = false.
+// Los dos timbrados (POST /api/cfdi y POST /api/payments/[id]/cfdi) arman el cliente con
+// `clienteFacturapiDelReceptor`, validan con `errorDeReceptorExtranjero` y fuerzan S01 (ws1-t4,
+// vuelta 2): la opción está ENCENDIDA.
 //
 // PURO: sin Prisma ni red.
 
@@ -24,8 +23,8 @@ export const RFC_EXTRANJERO = "XEXX010101000";
 export const REGIMEN_EXTRANJERO = "616";
 export const USO_EXTRANJERO = "S01";
 
-/** Se enciende cuando POST /api/cfdi arme el cliente con `clienteFacturapiDelReceptor`. */
-export const RECEPTOR_EXTRANJERO_HABILITADO = false;
+/** Encendida: los timbrados ya arman el cliente con `clienteFacturapiDelReceptor` (ws1-t4, vuelta 2). */
+export const RECEPTOR_EXTRANJERO_HABILITADO = true;
 
 /** Los países de donde más llegan pacientes; «Otro» deja escribir la clave alfa-3. */
 export const PAISES_FRECUENTES: ReadonlyArray<{ clave: string; es: string; en: string }> = [

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
+import { cfdiAvisoPersistente, cfdiReintentable, cfdiImpideReintento } from "@/lib/cfdi-avisos";
 import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet, HandCoins, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -571,7 +571,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
 
   // Timbra el CFDI: (a) guarda los fiscales en el paciente para reusarlos y
   // (b) llama a POST /api/cfdi. Optimista: no cierra el modal, muestra descargas.
-  async function handleStampCfdi() {
+  // «Timbrar ante SAT» (sin argumentos: el onClick no le pasa el evento).
+  function handleStampCfdi() { return timbrarCfdi(); }
+
+  async function timbrarCfdi(opciones?: { reintentar?: boolean }) {
     if (!invoice) return;
     const rfc    = fiscal.rfc.trim().toUpperCase();
     const nombre = fiscal.nombre.trim();
@@ -584,26 +587,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     }
     setBusy(true);
     try {
-      // (a) Persistir fiscales en el paciente (best-effort, no bloquea el timbrado).
-      // Con responsable de pago los fiscales son SUYOS: guardarlos en el niño
-      // le pondría el RFC del tutor a su ficha.
-      if (extranjero.activo) {
-        // Sin RFC mexicano: no se le guarda XEXX010101000 en la ficha.
-      } else if (fiscalOrigen === "responsable") {
-        fetch(`/api/invoices/${invoice.id}/receptor-responsable`, {
-          method:  "PUT",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ rfc, nombre, regimen: fiscal.regimen, cp }),
-        }).catch(() => {});
-      } else if (invoice.patientId) {
-        fetch(`/api/patients/${invoice.patientId}`, {
-          method:  "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ rfcPaciente: rfc, razonSocialPac: nombre, regimenFiscalPac: fiscal.regimen, cpPaciente: cp }),
-        }).catch(() => {});
-      }
-
-      // (b) Timbrar.
+      // (a) Timbrar. Los datos fiscales se guardan en la ficha DESPUÉS, y solo si
+      // el SAT los aceptó (ws1-t4, F-20): antes se guardaban aquí, aunque el
+      // timbrado fallara, y un RFC mal tecleado quedaba en la ficha del paciente.
       const res = await fetch("/api/cfdi", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -614,6 +600,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           paymentForm: fiscal.formaPago,
           taxMode:     fiscal.impuestos,
           ...(sustituyeCfdiId ? { sustituyeCfdiId } : {}),
+          // ws1-t4, vuelta 2 (F-12): retoma el intento que quedó en duda con la
+          // MISMA llave de Facturapi; si ya se había timbrado, trae ese CFDI.
+          ...(opciones?.reintentar ? { reintentarIncierto: true } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -636,6 +625,25 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       }
 
       setStampedUuid(data.uuid ?? null);
+      // (b) Ya timbrado (el SAT aceptó RFC, nombre, régimen y CP): se guardan para
+      // la próxima vez (best-effort, no cambia nada del CFDI). Con responsable de
+      // pago los fiscales son SUYOS: guardarlos en el niño le pondría el RFC del
+      // tutor a su ficha. Un extranjero no lleva RFC mexicano: no se guarda XEXX.
+      if (extranjero.activo) {
+        // nada
+      } else if (fiscalOrigen === "responsable") {
+        fetch(`/api/invoices/${invoice.id}/receptor-responsable`, {
+          method:  "PUT",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ rfc, nombre, regimen: fiscal.regimen, cp }),
+        }).catch(() => {});
+      } else if (invoice.patientId) {
+        fetch(`/api/patients/${invoice.patientId}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ rfcPaciente: rfc, razonSocialPac: nombre, regimenFiscalPac: fiscal.regimen, cpPaciente: cp }),
+        }).catch(() => {});
+      }
       // ws1-t3: con sustitución, el viejo queda «sustituido» y falta cancelarlo (motivo 01) en el bloque del SAT.
       setSustituyeCfdiId(null);
       setCfdiSatTick((n) => n + 1);
@@ -1490,6 +1498,11 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     ? t("clinical.invoiceDetail.cfdiNotReadyDismiss")
                     : t("clinical.invoiceDetail.cfdiMismatchReview")}
                 </ButtonNew>
+                {cfdiReintentable(cfdiBlockCode) && (
+                  <ButtonNew variant="primary" size="sm" disabled={busy} onClick={() => timbrarCfdi({ reintentar: true })} data-cfdi-reintentar>
+                    {locale.startsWith("en") ? "Retry without duplicating" : "Reintentar sin duplicar"}
+                  </ButtonNew>
+                )}
               </div>
             )}
             {invoice.balance > 0 && (

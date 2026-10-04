@@ -20,7 +20,21 @@ export const CFDI_AVISOS_PERSISTENTES: readonly string[] = [
   "CFDI_CON_SALDO",
   "CFDI_CON_SALDO_A_PLAZOS",
   "CFDI_FORMA_PAGO_REQUERIDA",
+  // ws1-t4, vuelta 2 (F-12): «no se sabe si se timbró» se queda en pantalla con
+  // «Reintentar sin duplicar» (misma idempotency_key de Facturapi).
+  "CFDI_TIMBRE_INCIERTO",
+  "CFDI_EN_CURSO",
+  "CFDI_RECEPTOR_EXTRANJERO",
 ];
+
+/**
+ * ¿Este aviso ofrece «Reintentar sin duplicar»? El reintento reusa el apartado
+ * de la factura y la misma llave de idempotencia: si el CFDI ya salió, Facturapi
+ * devuelve ESE y no timbra otro.
+ */
+export function cfdiReintentable(code: unknown): boolean {
+  return code === "CFDI_TIMBRE_INCIERTO" || code === "CFDI_EN_CURSO";
+}
 
 /** ¿Este código de error va en el aviso que no desaparece solo? */
 export function cfdiAvisoPersistente(code: unknown): boolean {

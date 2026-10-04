@@ -17,7 +17,7 @@ import { isFacturapiLive } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
-import { derivePaymentForm, resolveTaxMode, round2, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { derivePaymentForm, resolveTaxMode, round2, cfdiStampedCheck, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { facturaAdmiteCfdiPorPago, conceptoDePago, excedeElTotalDelCaso } from "@/lib/invoices/cfdi-pago-concepto";
 import { FUENTE_EXCEDENTE } from "@/lib/patient-credit-core";
@@ -27,6 +27,10 @@ import {
   LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS, llaveLimiteTimbrado, errorLimiteTimbrado,
 } from "@/lib/invoices/cfdi-reglas";
 import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server";
+// ws1-t4 (F-05) + ws1-t8 (F-22): el cliente de Facturapi sale del receptor, nacional o extranjero.
+import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
+import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
+import { llaveIdempotencia } from "@/lib/invoices/cfdi-identidad";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -66,7 +70,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const body = await req.json().catch(() => ({}));
-  const { receptor, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
+  const { receptor: receptorCrudo, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
+  // El RFC como lo lee el SAT (mayúsculas, sin espacios) y nombre/CP sin espacios de más (ws1-t4, F-05).
+  const receptor = receptorCrudo && typeof receptorCrudo === "object"
+    ? { ...receptorCrudo, rfc: normalizarRfc(receptorCrudo.rfc), nombre: typeof receptorCrudo.nombre === "string" ? receptorCrudo.nombre.trim() : receptorCrudo.nombre, cp: typeof receptorCrudo.cp === "string" ? receptorCrudo.cp.trim() : receptorCrudo.cp }
+    : receptorCrudo;
   if (!receptor?.rfc || !receptor?.nombre || !receptor?.regimenFiscal || !receptor?.cp) {
     return NextResponse.json({
       error: "Datos del receptor incompletos. Se requiere RFC, nombre, régimen fiscal y código postal.",
@@ -97,9 +105,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       && !USOS_CFDI.some((u) => u.clave === usoCfdi)) {
     return NextResponse.json({ error: `Uso de CFDI inválido: ${String(usoCfdi)}.` }, { status: 400 });
   }
-  const uso: string = typeof usoCfdi === "string" && usoCfdi
-    ? usoCfdi
-    : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
+  // Extranjero (XEXX010101000 + país + NumRegIdTrib, ws1-t8): se valida aquí y
+  // va SIEMPRE con S01 (Anexo 20), diga lo que diga el formulario.
+  const extranjero = esReceptorExtranjero(receptor);
+  if (extranjero) {
+    const e = errorDeReceptorExtranjero(receptor, clinic.locale);
+    if (e) return NextResponse.json({ error: e, code: "CFDI_RECEPTOR_EXTRANJERO" }, { status: 400 });
+  }
+  const uso: string = extranjero
+    ? USO_EXTRANJERO
+    : typeof usoCfdi === "string" && usoCfdi
+      ? usoCfdi
+      : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
   if (isFacturapiLive()) {
     const blocked = await liveReadinessBlock(clinic.facturApiOrgId, clinic.csdUploaded);
     if (blocked) return blocked;
@@ -224,7 +241,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const taxMode: CfdiTaxMode = taxModeIn === "iva16" || taxModeIn === "exento"
     ? taxModeIn
     : resolveTaxMode(invoice, clinic.cfdiTaxMode);
-  const taxIncludedCfdi = taxMode === "exento" ? false : invoice.taxIncluded !== false;
+  // ws1-t4, vuelta 2 (F-07): un PAGO es dinero ya recibido, con el IVA DENTRO.
+  // Antes se copiaba `invoice.taxIncluded`: con una factura de «IVA agregado» el
+  // CFDI sumaba el 16% ENCIMA del pago (pago de $1,160 → CFDI de $1,345.60).
+  const taxIncludedCfdi = taxMode !== "exento";
 
   // La forma de ESTE pago; un «anticipo» hereda la del dinero que formó el
   // saldo a favor. Si no se sabe (Mercado Pago…), hay que escogerla.
@@ -266,20 +286,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const orgApiKey = await getOrgApiKey(clinic.facturApiOrgId);
 
-    const rfcValidation = await validateRfc(orgApiKey, receptor.rfc);
+    // La lista negra EFOS es de RFC mexicanos: no aplica al genérico de extranjero.
+    const rfcValidation = extranjero ? { ok: true } : await validateRfc(orgApiKey, receptor.rfc);
     if (!rfcValidation.ok) {
       await soltarCfdiDePago(prisma, { id: apartadaId, claim });
       apartadaId = null;
       return NextResponse.json({ error: `El RFC ${receptor.rfc} aparece en la lista negra del SAT (EFOS, art. 69-B); no es posible facturarle.` }, { status: 400 });
     }
 
-    const customerId = await createOrUpdateCustomer(orgApiKey, {
-      legal_name: receptor.nombre,
-      tax_id:     receptor.rfc,
-      tax_system: receptor.regimenFiscal,
-      email:      receptor.email ?? invoice.patient.email ?? undefined,
-      address:    { zip: receptor.cp },
-    });
+    // F-05: el cliente se busca por su tax_id exacto (codificado) y se ACTUALIZA con
+    // los datos de este timbrado; para un extranjero, con su país (ws1-t8).
+    const customerId = await createOrUpdateCustomer(orgApiKey, clienteFacturapiDelReceptor(receptor, invoice.patient.email));
 
     const itemTaxes = taxMode === "exento"
       ? [{ type: "IVA", factor: "Exento", rate: 0 }]
@@ -305,8 +322,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       paymentForm: payForm,
       items,
       exigirUuid: true,
+      // F-12 / F-19 (ws1-t4, vuelta 2): la llave sale del apartado del pago y el
+      // external_id es el pago (la serie y el folio se quedan en los de Facturapi:
+      // todos los pagos de una factura repetirían el mismo folio).
+      idempotencyKey: llaveIdempotencia(claim),
+      externalId: paymentId,
     });
     timbrado = result;
+
+    // F-07: lo que el SAT timbró DE VERDAD contra lo que se cobró. El CFDI ya
+    // existe: esto nunca corta, deja constancia y avisa si no es redondeo
+    // (mismo criterio que la factura completa). 1¢ de tolerancia: con el IVA
+    // dentro, Facturapi saca la base dividiendo entre 1.16 y redondea.
+    const stamped = cfdiStampedCheck(result.total, payment.amount, 0.01);
+    const totalMismatch = stamped.level === "match" || stamped.level === "unknown"
+      ? null
+      : { paymentAmount: round2(payment.amount), stampedTotal: stamped.stampedTotal, diff: stamped.diff, level: stamped.level };
+    if (totalMismatch) {
+      (stamped.level === "material" ? console.error : console.warn)("CFDI por pago: el total timbrado difiere del pago:", { paymentId, uuid: result.uuid, ...totalMismatch });
+    }
 
     const guardado = await confirmarCfdiDePago(prisma, {
       id: apartadaId, claim, uuid: result.uuid, facturapiId: result.id,
@@ -336,7 +370,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // FACTURA, igual que el timbrado completo, con el paymentId adentro.
       entityType: "invoice", entityId: invoice.id, action: "update",
       before: { cfdiUuid: null },
-      after:  { paymentId, cfdiUuid: result.uuid, cfdi: { total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode, concepto: concepto.descripcion } },
+      after:  { paymentId, cfdiUuid: result.uuid, cfdi: { total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode, concepto: concepto.descripcion, ...(totalMismatch ? { totalMismatch } : {}) } },
     });
 
     return NextResponse.json({
@@ -346,6 +380,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       xmlUrl:      result.xml_url,
       descripcion: concepto.descripcion,
       quota: { used: q.used, included: q.included, overage: q.overage, overagePriceCents: q.overageCents },
+      ...(totalMismatch?.level === "material" && totalMismatch.stampedTotal !== null ? {
+        warning: {
+          code: "CFDI_STAMPED_TOTAL_DIFFERS",
+          paymentAmount: totalMismatch.paymentAmount,
+          stampedTotal: totalMismatch.stampedTotal,
+          message: `El CFDI de este pago se timbró por $${totalMismatch.stampedTotal.toFixed(2)} y el pago fue de $${totalMismatch.paymentAmount.toFixed(2)}. El comprobante YA está emitido: revísalo antes de entregarlo.`,
+        },
+      } : {}),
     });
 
   } catch (err: any) {
