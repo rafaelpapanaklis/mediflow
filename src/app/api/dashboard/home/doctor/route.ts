@@ -183,7 +183,7 @@ async function fetchRecentPatients(clinicId: string, doctorId: string, viewer: V
     },
     select: {
       startsAt: true,
-      patient: { select: { id: true, firstName: true, lastName: true } },
+      patient: { select: { id: true, firstName: true, lastName: true, patientNumber: true } },
     },
     orderBy: { startsAt: "desc" },
     take: 30,
@@ -200,6 +200,7 @@ async function fetchRecentPatients(clinicId: string, doctorId: string, viewer: V
         .filter(Boolean)
         .join(" ")
         .trim(),
+      patientNumber: r.patient.patientNumber ?? null,
       lastVisitAt: r.startsAt.toISOString(),
     });
     if (out.length >= 10) break;

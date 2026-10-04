@@ -2,7 +2,7 @@
 "use client";
 import Link from "next/link";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
-import { formatRelative } from "@/lib/home/greet";
+import { formatRelative, lineaDePacienteReciente } from "@/lib/home/greet";
 import { useT } from "@/i18n/i18n-provider";
 import type { HomeDoctorData } from "@/lib/home/types";
 
@@ -82,7 +82,8 @@ export function RecentPatientsCarousel({ patients }: { patients: Patient[] }) {
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {formatRelative(p.lastVisitAt)}
+            {/* ws1-t1 (C-99): con el folio, dos pacientes que se llaman igual se distinguen. */}
+            {lineaDePacienteReciente(p.patientNumber, formatRelative(p.lastVisitAt))}
           </div>
         </Link>
       ))}

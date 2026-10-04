@@ -122,3 +122,11 @@ export function diasHastaEnZona(iso: string, now: Date = new Date(), timeZone?: 
 export function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? fullName;
 }
+
+/**
+ * ws1-t1 (C-99): la línea bajo el nombre en «Pacientes recientes»: el folio y cuándo vino («P0175 · ayer»).
+ * Sin folio, solo cuándo vino (como antes). Dos pacientes que se llaman igual ya no salen idénticos.
+ */
+export function lineaDePacienteReciente(folio: string | null | undefined, cuando: string): string {
+  return folio ? `${folio} · ${cuando}` : cuando;
+}

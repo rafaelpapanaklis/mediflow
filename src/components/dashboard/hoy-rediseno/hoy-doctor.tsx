@@ -21,7 +21,7 @@ import {
 import { AlergiesPopover } from "@/components/dashboard/alergies-popover";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useT } from "@/i18n/i18n-provider";
-import { formatRelative, formatShortTime, formatTimeUntil } from "@/lib/home/greet";
+import { formatRelative, formatShortTime, formatTimeUntil, lineaDePacienteReciente } from "@/lib/home/greet";
 import type { HomeDoctorData } from "@/lib/home/types";
 import { AccionesRapidas, BarraAtajos, Iniciales, Saludo, Tarjeta, Vacio } from "./piezas";
 import { FilaCita } from "./fila-cita";
@@ -139,7 +139,8 @@ export function HoyDoctor({ user, clinic, data }: Props) {
               <Link key={p.id} role="listitem" href={`/dashboard/patients/${p.id}`} className={s.carruselItem}>
                 <Iniciales nombre={p.name} />
                 <span className={s.carruselNombre}>{p.name}</span>
-                <span className={s.derecha}>{formatRelative(p.lastVisitAt)}</span>
+                {/* ws1-t1 (C-99): con el folio, dos pacientes que se llaman igual ya no salen como tarjetas idénticas. */}
+                <span className={s.derecha}>{lineaDePacienteReciente(p.patientNumber, formatRelative(p.lastVisitAt))}</span>
               </Link>
             ))}
           </div>

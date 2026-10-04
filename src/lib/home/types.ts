@@ -69,6 +69,8 @@ export interface HomeDoctorData {
   recentPatients: Array<{
     id: string;
     name: string;
+    /** ws1-t1 (C-99): el folio, para distinguir a dos pacientes que se llaman igual. */
+    patientNumber?: string | null;
     lastVisitAt: string;
     avatarSeed?: string;
   }>;
