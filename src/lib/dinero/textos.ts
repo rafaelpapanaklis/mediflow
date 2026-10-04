@@ -37,6 +37,9 @@ const es = {
     cierreAutoNota: "Corte automático a medianoche (sin conteo).",
     guardado: "Guardado.",
     guardar: "Guardar",
+    ajustesSinSql: "Falta pegar sql/ws1-t5-dinero-caja.sql para poder guardar estos ajustes (mientras, valen los de fábrica).",
+    verTodos: (n: number) => `Ver los ${n}`,
+    verMenos: "Ver menos",
   },
   descuento: {
     requiereDueno: (pct: number, limite: number) =>
@@ -83,6 +86,9 @@ const en: Textos = {
     cierreAutoNota: "Automatic close at midnight (not counted).",
     guardado: "Saved.",
     guardar: "Save",
+    ajustesSinSql: "sql/ws1-t5-dinero-caja.sql must be applied before these settings can be saved (until then, the defaults apply).",
+    verTodos: (n: number) => `See all ${n}`,
+    verMenos: "See less",
   },
   descuento: {
     requiereDueno: (pct: number, limite: number) =>

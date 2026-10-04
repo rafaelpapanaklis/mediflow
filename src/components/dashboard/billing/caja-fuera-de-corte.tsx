@@ -33,6 +33,8 @@ export function CobrosFueraDeCorte({
   const tx = textosDinero(useLocale()).caja;
   const router = useRouter();
   const [enviando, setEnviando] = useState<string | null>(null);
+  // Cinco a la vista; el resto con un clic (una lista larga empujaba la Caja hacia abajo).
+  const [todos, setTodos] = useState(false);
   if (!cobros || cobros.length === 0) return null;
 
   const fecha = (iso: string) => {
@@ -75,7 +77,7 @@ export function CobrosFueraDeCorte({
       </div>
       <p className={s.sub} style={{ margin: "4px 0 8px" }}>{tx.fueraTexto} {cajaAbierta ? "" : tx.fueraSinCaja}</p>
       <ul className={s.renglones}>
-        {cobros.slice(0, 20).map((c) => (
+        {cobros.slice(0, todos ? 50 : 5).map((c) => (
           <li key={c.paymentId} className={s.renglon} style={{ flexWrap: "wrap", gap: 8 }}>
             <span className={s.renglonTextos}>
               <span className={s.renglonNombre}>{c.patientName}</span>
@@ -90,7 +92,12 @@ export function CobrosFueraDeCorte({
           </li>
         ))}
       </ul>
-      {cobros.length > 20 && <p className={s.resto}>+{cobros.length - 20}</p>}
+      {cobros.length > 5 && (
+        <button type="button" className={s.resto} style={{ background: "none", border: 0, cursor: "pointer", padding: 0, color: "var(--brand)" }} onClick={() => setTodos((v) => !v)}>
+          {todos ? tx.verMenos : tx.verTodos(cobros.length)}
+        </button>
+      )}
+      {todos && cobros.length > 50 && <p className={s.resto}>+{cobros.length - 50}</p>}
     </div>
   );
 }
@@ -135,7 +142,7 @@ export function AjustesDineroCaja({ puedeCierre, esDueno }: { puedeCierre: boole
         <span className={s.titulo}>{tx.caja.cierreAutoTitulo} · {tx.descuento.limiteTitulo}</span>
       </summary>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 10 }}>
-        {!aj.disponible && <p className={s.sub}>{tx.caja.fueraSinSql}</p>}
+        {!aj.disponible && <p className={s.sub}>{tx.caja.ajustesSinSql}</p>}
         {puedeCierre && (
           <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "var(--text-1)" }}>
             <input
