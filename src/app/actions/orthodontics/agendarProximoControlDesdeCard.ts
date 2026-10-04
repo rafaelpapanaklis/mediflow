@@ -29,7 +29,10 @@ import { fraseTratanteNoRecibeCitas } from "@/lib/agenda/roles-que-atienden-db";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { fechaHoraParaTexto } from "@/lib/movimientos-paciente/textos";
+import { diaDeLaSemana, diasCerradosDelHorario } from "@/lib/orthodontics/colocacion";
 import { fail, ok, type ActionResult } from "./result";
+
+const NOMBRE_DEL_DIA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 export interface AgendarProximoControlInput {
   cardId: string;
@@ -96,6 +99,18 @@ export async function agendarProximoControlDesdeCard(
   // createBotAppointment (arma el UTC otra vez con tzLocalToUtc).
   const dateISO = card.nextDate.toLocaleDateString("en-CA", { timeZone: clinic.timezone }); // YYYY-MM-DD
   const time = card.nextDate.toLocaleTimeString("en-GB", { timeZone: clinic.timezone, hour: "2-digit", minute: "2-digit" }); // HH:MM
+
+  // C-69 (auditoría de uso): un control en día que la clínica no abre (domingo sin horario capturado, o los días
+  // apagados en su horario) no se crea solo: se pide elegir otro día. Antes nacía la cita en domingo sin aviso.
+  const filasHorario = await prisma.clinicSchedule
+    .findMany({ where: { clinicId: ctx.clinicId }, select: { dayOfWeek: true, enabled: true } })
+    .catch(() => null);
+  if (diasCerradosDelHorario(filasHorario).includes(diaDeLaSemana(dateISO))) {
+    return fail(
+      `El próximo control cae en ${NOMBRE_DEL_DIA[diaDeLaSemana(dateISO)]} ${dateISO.split("-").reverse().join("/")}, día en que la clínica no abre. ` +
+        "Cambia la fecha del próximo control en la hoja o agéndalo a mano desde la Agenda.",
+    );
+  }
 
   const res = await createBotAppointment({
     clinicId: ctx.clinicId,

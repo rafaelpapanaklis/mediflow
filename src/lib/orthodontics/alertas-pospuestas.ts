@@ -98,3 +98,11 @@ export function listaDePospuestas(
     }))
     .sort((a, b) => a.patientName.localeCompare(b.patientName, "es") || a.etiqueta.localeCompare(b.etiqueta, "es"));
 }
+
+/**
+ * C-80 (auditoría de uso): cuántas alertas pospuestas se anuncian. La lista «ver y deshacer» manda (son las
+ * posposiciones vigentes que se pueden deshacer); sin lista, la cuenta de siempre.
+ */
+export function cuantasPospuestas(a: { pospuestas?: number | null; pospuestasLista?: readonly unknown[] | null }): number {
+  return Array.isArray(a.pospuestasLista) ? a.pospuestasLista.length : Math.max(0, a.pospuestas ?? 0);
+}

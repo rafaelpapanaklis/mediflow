@@ -24,6 +24,7 @@ import {
   consultLandingTab,
 } from "@/components/dashboard/patient-detail/consult-landing";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
+import { useTextosConsultaFirmada } from "@/components/dashboard/patient-detail/textos-consulta-firmada";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
@@ -1382,12 +1383,15 @@ export function PatientDetailClient({
     // de la cita (mismo id): se reemplaza en la lista en vez de duplicarlo, y si quedó firmado, «Completar
     // consulta» ya no le manda encima el SOAP vacío de la barra.
     setRecords(prev => [record, ...prev.filter((r: any) => r.id !== record?.id)]);
-    if (record?.id && record?.specialtyData?.status === "SIGNED") notaFirmadaDeLaConsultaRef.current = record.id;
+    if (record?.id && record?.specialtyData?.status === "SIGNED") {
+      notaFirmadaDeLaConsultaRef.current = record.id;
+      setNotaDeLaConsultaFirmada(true);
+    }
     if (record?.draftInvoice) {
       setInvoices(prev => [{ ...record.draftInvoice, payments: [] }, ...prev]);
       router.refresh();
     }
-    toast.success(t("patients.record.saved"));
+    // C-78 (auditoría de uso): el formulario ya avisó («Expediente dental guardado»…); aquí no se repite.
     setTab("resumen");
   }
 
@@ -1518,6 +1522,10 @@ export function PatientDetailClient({
 
   const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
   const notaFirmadaDeLaConsultaRef = useRef<string | null>(null);
+  // C-65 (auditoría de uso): con la nota de la consulta ya firmada no se enseña el SOAP vacío para «firmar» otra vez.
+  const [notaDeLaConsultaFirmada, setNotaDeLaConsultaFirmada] = useState(false);
+  const txConsultaFirmada = useTextosConsultaFirmada();
+  const [completandoConsulta, setCompletandoConsulta] = useState(false);
   const [soapDraft, setSoapDraft] = useState<SoapDraft>({
     subjective: "",
     objective: "",
@@ -1877,6 +1885,7 @@ export function PatientDetailClient({
           onEdit={() => setShowEdit(true)}
           onStartConsult={() => void iniciarConsulta()}
           motivoSinIniciar={motivoSinIniciar}
+          consultaEnCurso={isConsultActive && !!activeAppointment}
           iniciandoConsulta={iniciandoCitaId !== null}
           onReschedule={reagendarProxima}
           onCharge={openChargeShortcut}
@@ -2031,6 +2040,28 @@ export function PatientDetailClient({
               {/* ws1-t8 (3b): lo mismo en Ortodoncia cuando la cita se atiende con la hoja de control: la hoja ES
                   la nota de la visita (al firmarla adopta este borrador y cierra la consulta). */}
               <div style={{ display: tab === CONSULT_FORM_TAB || (tab === TAB_ORTODONCIA && consultaConHoja) ? "none" : undefined }}>
+                {notaDeLaConsultaFirmada ? (
+                  <div className={patientDetailStyles.notaConsultaFirmada} role="status" data-nota-consulta-firmada>
+                    <span>
+                      <strong>{txConsultaFirmada.titulo}</strong> {txConsultaFirmada.texto}
+                    </span>
+                    <button
+                      type="button"
+                      className={patientDetailStyles.notaConsultaFirmadaBoton}
+                      disabled={completandoConsulta}
+                      onClick={async () => {
+                        setCompletandoConsulta(true);
+                        try {
+                          await handleEndConsult();
+                        } finally {
+                          setCompletandoConsulta(false);
+                        }
+                      }}
+                    >
+                      {completandoConsulta ? txConsultaFirmada.completando : txConsultaFirmada.completar}
+                    </button>
+                  </div>
+                ) : (
                 <SoapEditorInline
                   appointment={{
                     id: activeAppointment.id,
@@ -2045,6 +2076,7 @@ export function PatientDetailClient({
                   }}
                   onAttach={handleAttach}
                 />
+                )}
               </div>
             </>
           )}
@@ -2417,6 +2449,7 @@ export function PatientDetailClient({
               orthoData={orthoData}
               soloLectura={orthoSoloLectura}
               questionnaireStatus={questionnaireStatus}
+              riskFlags={questionnaireRiskFlags}
               orthoRedesignVM={orthoRedesignVM}
               orthoRedesignBundle={orthoRedesignBundle}
               // H12: «Agendar próxima» abre directamente el alta de cita, con el

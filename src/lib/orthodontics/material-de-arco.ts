@@ -49,9 +49,22 @@ export function etiquetaDeMaterial(material: string): string {
   return (ETIQUETA_DE_MATERIAL as Record<string, string>)[material] ?? material;
 }
 
-/** «NiTi 014»: el material y el calibre como los pinta la ficha. */
+/**
+ * C-68 (auditoría de uso): el calibre se escribe en pulgadas con su punto, como en el catálogo y en la caja del
+ * arco: «016» → «.016», «016x022» → «.016×.022». Lo que ya trae punto («0.016», «.016») o no tiene esa forma se
+ * deja tal cual.
+ */
+export function calibreLegible(gauge: string): string {
+  const g = (gauge ?? "").trim();
+  if (!g) return g;
+  return g
+    .replace(/(^|[^\d.])0(\d{2})(?!\d)/g, "$1.0$2")
+    .replace(/(\.\d{3})\s*[xX×]\s*(\.\d{3})/g, "$1×$2");
+}
+
+/** «NiTi .014»: el material y el calibre como los pinta la ficha. */
 export function textoDeArco(arco: { material: string; gauge: string }): string {
-  return `${etiquetaDeMaterial(arco.material)} ${arco.gauge}`;
+  return `${etiquetaDeMaterial(arco.material)} ${calibreLegible(arco.gauge)}`;
 }
 
 // ws1-t12 (revisión en panel.108, fallo 4): todo lugar que muestra un arco dice de qué arcada es. Tras cambiar solo el

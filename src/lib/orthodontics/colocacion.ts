@@ -103,15 +103,71 @@ export interface CalendarioPropuesto {
   total: number | null;
 }
 
+/** 0 = domingo … 6 = sábado, del día "YYYY-MM-DD" (sin zonas: es un día del calendario). */
+export function diaDeLaSemana(fecha: string): number {
+  const [a, m, d] = fecha.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(a, m - 1, d)).getUTCDay();
+}
+
+/**
+ * C-69 (auditoría de uso): el día hábil más cercano EN O DESPUÉS de `fecha`. `diasCerrados` son los días de la
+ * semana en que la clínica no abre (Configuración → Horario); sin horario conocido, solo el domingo. Si la clínica
+ * no abre ningún día (dato roto), la fecha se queda como está.
+ */
+export function siguienteDiaHabil(fecha: string, diasCerrados: readonly number[] = [0]): string {
+  const cerrados = new Set(diasCerrados.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6));
+  if (cerrados.size >= 7) return fecha;
+  let f = fecha;
+  for (let i = 0; i < 7 && cerrados.has(diaDeLaSemana(f)); i++) f = sumarDiasACalendario(f, 1);
+  return f;
+}
+
 /**
  * El calendario de controles que se propone al colocar: uno cada `frecuenciaDias` desde la colocación (la frecuencia
  * de control de la clínica, Configuración → Plan de tratamiento). Sin «controles previstos» se enseñan las primeras
  * fechas sin decir cuántas son en total. Solo es una propuesta: nada se agenda solo.
+ *
+ * C-69: una fecha que cae en día cerrado (domingo, o los que diga el horario de la clínica) se corre al siguiente
+ * día hábil; el siguiente control se sigue contando desde la colocación, no desde el día corrido.
  */
-export function calendarioDeControles(fecha: string, frecuenciaDias: number, controlesPrevistos: number | null): CalendarioPropuesto {
+export function calendarioDeControles(
+  fecha: string,
+  frecuenciaDias: number,
+  controlesPrevistos: number | null,
+  diasCerrados: readonly number[] = [0],
+): CalendarioPropuesto {
   const paso = Number.isInteger(frecuenciaDias) && frecuenciaDias >= 7 && frecuenciaDias <= 120 ? frecuenciaDias : 30;
   const total = controlesPrevistos && controlesPrevistos > 0 ? Math.min(controlesPrevistos, CONTROLES_MAXIMOS) : null;
   const cuantas = total === null ? FECHAS_A_MOSTRAR : Math.min(total, FECHAS_A_MOSTRAR);
-  const fechas = Array.from({ length: cuantas }, (_, i) => sumarDiasACalendario(fecha, paso * (i + 1)));
+  const fechas = Array.from({ length: cuantas }, (_, i) => siguienteDiaHabil(sumarDiasACalendario(fecha, paso * (i + 1)), diasCerrados));
   return { fechas, masAdelante: total === null ? 0 : total - fechas.length, total };
+}
+
+/** Los días de la semana en que la clínica NO abre, de sus filas de `clinic_schedules`. Sin filas: solo el domingo. */
+export function diasCerradosDelHorario(filas: ReadonlyArray<{ dayOfWeek: number; enabled: boolean }> | null | undefined): number[] {
+  if (!filas || filas.length === 0) return [0];
+  const abiertos = new Set(filas.filter((f) => f.enabled).map((f) => f.dayOfWeek));
+  return [0, 1, 2, 3, 4, 5, 6].filter((d) => !abiertos.has(d));
+}
+
+/**
+ * C-62 (auditoría de uso; decisión de Rafael 5): sin el consentimiento de ortodoncia firmado NO se registra la
+ * colocación. `null` = no se pudo comprobar: tampoco se deja pasar (un aparato puesto sin papel no se deshace).
+ */
+export function motivoSinConsentimiento(firmado: boolean | null): string | null {
+  if (firmado === true) return null;
+  if (firmado === null) return "No se pudo comprobar el consentimiento de ortodoncia. Intenta de nuevo antes de registrar la colocación.";
+  return "Falta el consentimiento de ortodoncia firmado: no se puede registrar la colocación. Créalo y fírmalo en «Consentimientos».";
+}
+
+/**
+ * C-66 (auditoría de uso): con qué estado nace un caso. «Fecha de colocación» en el alta puede ser una colocación
+ * PROGRAMADA (futura; tiene su recordatorio de WhatsApp 24 h antes): el caso nacía «En curso · Mes 0 · Inicio
+ * 14-oct» con la fecha aún por llegar. Solo una colocación de hoy o anterior lo pone «En curso»; una futura lo
+ * deja «Por colocar» con su fecha guardada. El cajón manda el DÍA como medianoche UTC (`new Date("YYYY-MM-DD")`),
+ * así que se compara el día UTC de `instante` con `hoy` ("YYYY-MM-DD" en la zona de la clínica).
+ */
+export function colocadoAlAbrir(instante: Date | null, hoy: string): boolean {
+  if (instante === null || Number.isNaN(instante.getTime())) return false;
+  return instante.toISOString().slice(0, 10) <= hoy;
 }

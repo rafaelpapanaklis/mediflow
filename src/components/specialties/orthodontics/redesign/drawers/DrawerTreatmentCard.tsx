@@ -658,6 +658,19 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
         </header>
 
         <div className={orto.cajonCuerpo}>
+          {/* C-82 (auditoría de uso): «Copiar del control anterior» no estaba a la vista. La hoja nueva ya se llena
+              sola con la última hoja firmada; ahora lo dice (o dice que no había nada que copiar). */}
+          {!isReadOnly && !props.card ? (
+            <p className={`${orto.tonoApagado} text-[12px] -mt-1 mb-1`} role="status" data-copia-del-anterior>
+              {state.delAnterior.arco ||
+              state.delAnterior.elasticos.length > 0 ||
+              state.delAnterior.brackets.length > 0 ||
+              state.delAnterior.indicaciones ||
+              ligasDelAnterior
+                ? "Copiada del control anterior: lo marcado «Del control anterior» viene de la última hoja firmada. Cámbialo si hoy fue distinto."
+                : "No hay un control anterior firmado que copiar: la hoja empieza en blanco."}
+            </p>
+          ) : null}
           {/* ARCO */}
           <section className={orto.bloque}>
             <div className={orto.bloqueCabeza}>
@@ -1306,7 +1319,9 @@ function ElasticsBlock(props: {
     props.onAdd({
       id,
       elasticClass: cls,
-      config: '1/4" 6oz',
+      // C-68 (auditoría de uso): sin medida ni fuerza de fábrica. Antes nacía con «1/4" 6oz» y la hoja firmada
+      // guardaba «Clase II 1/4" 6oz» aunque solo se hubiera marcado «Clase II»: en un registro firmado va lo marcado.
+      config: "",
       zone: "INTERMAXILAR",
     });
   };
@@ -1333,7 +1348,7 @@ function ElasticsBlock(props: {
             props.readOnly ? (
               <div key={e.id} className={`${orto.caja} flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]`}>
                 <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">
-                  {ELASTIC_CLASS_LABELS[e.elasticClass]} {e.config}
+                  {ELASTIC_CLASS_LABELS[e.elasticClass]}{e.config ? ` ${e.config}` : ""}
                 </span>
                 <span className={`${orto.tonoApagado} ml-auto text-xs`}>
                   {ELASTIC_ZONE_LABELS[e.zone]}
@@ -1350,6 +1365,7 @@ function ElasticsBlock(props: {
                   value={e.config}
                   onChange={(ev) => props.onUpdate(e.id, { config: ev.target.value })}
                   className={`${orto.entrada} min-w-[120px] flex-1 basis-[120px]`}
+                  placeholder={'Medida y fuerza (p. ej. 1/4" 6 oz)'}
                   aria-label="Descripción del elástico (medida y onzas)"
                 />
                 <select

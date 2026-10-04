@@ -72,7 +72,8 @@ const inputSchema = z.object({
     .array(
       z.object({
         elasticClass: elasticClassEnum,
-        config: z.string().min(1),
+        // C-68: la medida y la fuerza son opcionales (se guarda lo que se marcó, no un valor de fábrica).
+        config: z.string().trim().max(120).default(""),
         zone: elasticZoneEnum,
       }),
     )

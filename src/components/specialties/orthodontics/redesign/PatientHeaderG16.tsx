@@ -15,6 +15,7 @@ import { fmtDate, fmtDateShort, fmtMoney, fmtTime } from "./atoms/format";
 import { subDelSaldo } from "@/lib/orthodontics/saldo-cabecera";
 import { saludPendiente, type EstadoSalud } from "@/lib/patients/salud-capturada";
 import { useTextosSaludCapturada } from "@/lib/patients/textos-salud-capturada";
+import type { AlertasDeCabeceraOrto } from "@/lib/orthodontics/alertas-cabecera";
 import { FLOW_STATUS_LABELS, type NextAppointmentDTO, type PatientFlowDTO } from "./types";
 import orto from "./orto.module.css";
 
@@ -31,8 +32,14 @@ export interface PatientHeaderProps {
     bloodType: string | null;
     /** Tutor — nombre + relación (ej. "María Ruiz (madre)"). */
     guardianLabel: string | null;
-    /** Alergias críticas (texto corto, ej. "Penicilina"). */
+    /** Alergias críticas (texto corto, ej. "Penicilina"). Solo si no llegan `alertas`. */
     criticalAllergies: string | null;
+    /**
+     * C-58 (auditoría de uso): las MISMAS alertas que la cabecera de la ficha — banderas del cuestionario
+     * (anticoagulantes, embarazo, diabetes…), alergias, padecimientos y medicación —, de `alertasDeCabeceraOrto`.
+     * Con ellas, `criticalAllergies` ya no se pinta (sería repetir la alergia).
+     */
+    alertas?: AlertasDeCabeceraOrto;
     /** ws1-t2 (12h): salud del paciente; «sin_capturar» y «vencida» pintan el aviso ámbar. Ausente = no se avisa. */
     estadoSalud?: EstadoSalud;
   };
@@ -93,6 +100,10 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
         : textosSalud.sinCapturar
       : null;
 
+  const alertasVisibles = p.alertas
+    ? p.alertas.riesgo.length + p.alertas.otras.length > 0
+    : Boolean(p.criticalAllergies);
+
   const sexLabel = p.sex === "F" ? "F" : p.sex === "M" ? "M" : p.sex === "X" ? "—" : null;
   const ageLabel = p.age != null ? `${p.age} años` : "edad —";
   const meta: React.ReactNode[] = [ageLabel];
@@ -129,9 +140,23 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
               </span>
             ))}
           </div>
-          {p.criticalAllergies || flow || avisoSalud ? (
+          {alertasVisibles || flow || avisoSalud ? (
             <div className={orto.cabeceraAvisos}>
-              {p.criticalAllergies ? (
+              {p.alertas ? (
+                <>
+                  {p.alertas.riesgo.map((c) => (
+                    <Pill key={c.clave} color="rose">
+                      {c.texto}
+                    </Pill>
+                  ))}
+                  {p.alertas.otras.map((c) => (
+                    <Pill key={c.clave} color={c.tono === "violeta" ? "violet" : "amber"}>
+                      {c.texto}
+                    </Pill>
+                  ))}
+                  {p.alertas.ocultas > 0 ? <Pill color="slate">+{p.alertas.ocultas}</Pill> : null}
+                </>
+              ) : p.criticalAllergies ? (
                 <Pill color="rose">Alergia: {p.criticalAllergies}</Pill>
               ) : null}
               {avisoSalud ? <Pill color="amber">{avisoSalud}</Pill> : null}

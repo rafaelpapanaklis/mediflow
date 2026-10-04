@@ -90,6 +90,8 @@ export interface HeroCardProps {
   motivoSinIniciar?: string | null;
   /** ws1-t8 (fallo 3): «Iniciar consulta» ya se pulsó y la ficha está abriendo la consulta. */
   iniciandoConsulta?: boolean;
+  /** C-77 (auditoría de uso): hay una consulta abierta en la ficha; el botón dice «Consulta en curso», apagado. */
+  consultaEnCurso?: boolean;
   onReschedule: () => void;
   onCharge: () => void;
   /** H14: sin billing.charge no se pinta «Cobrar» (la ruta lo revalida). */
@@ -192,6 +194,7 @@ export function HeroCard({
   onStartConsult,
   motivoSinIniciar = null,
   iniciandoConsulta = false,
+  consultaEnCurso = false,
   onReschedule,
   onCharge,
   puedeCobrar = true,
@@ -303,8 +306,20 @@ export function HeroCard({
 
   // Los botones. Una sola definición para los dos caminos: «Iniciar consulta»
   // hace lo mismo con la bandera que sin ella porque ES el mismo botón.
+  // C-77 (auditoría de uso): apagado, el motivo se LEE debajo (el tooltip no existe en el celular); durante la
+  // consulta el botón deja de ser el principal y dice «Consulta en curso».
+  const motivoVisible = consultaEnCurso || iniciandoConsulta
+    ? null
+    : !hasNextAppt
+      ? textosConsulta.sinCitaParaIniciar
+      : motivoSinIniciar ?? null;
   const acciones = (
     <div className={styles.heroActions}>
+      {consultaEnCurso ? (
+        <button type="button" className={styles.btn} disabled aria-disabled="true" data-consulta-en-curso>
+          <Play size={13} strokeWidth={1.75} aria-hidden /> {textosConsulta.consultaEnCurso}
+        </button>
+      ) : (
       <button
         type="button"
         className={`${styles.btn} ${styles.btnPrimary}`}
@@ -323,6 +338,7 @@ export function HeroCard({
           </>
         )}
       </button>
+      )}
       <button
         type="button"
         className={styles.btn}
@@ -507,6 +523,11 @@ export function HeroCard({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
+      {motivoVisible ? (
+        <p className={styles.heroMotivoSinIniciar} data-motivo-sin-iniciar>
+          {motivoVisible}
+        </p>
+      ) : null}
     </div>
   );
 

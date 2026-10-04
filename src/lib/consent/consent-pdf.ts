@@ -7,6 +7,7 @@ import { consentTimeZone } from "@/lib/consent/dates";
 import { buildSignatureBlocks } from "@/lib/consent/signers";
 import { buildConsentDocumento, type ConsentDocumentoDTO } from "@/lib/consent/documento";
 import { fetchClinicLogo } from "@/lib/pdf/clinic-letterhead";
+import { ciudadParaCarta, especialidadParaCarta } from "@/lib/consent/clinica-y-doctor-en-carta";
 
 /**
  * buildConsentPdf — query + logo + firmas + render del PDF de un consentimiento.
@@ -83,7 +84,7 @@ async function loadConsent(id: string, clinicId: string) {
         // módulo del panel y NO va en la carta.
         select: {
           firstName: true, lastName: true,
-          cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+          cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true, specialty: true,
         },
       })
     : null;
@@ -146,7 +147,7 @@ export async function loadConsentDocumento(
       timeZone: consentTimeZone(form.clinic.timezone),
       clinicName: form.clinic.name,
       clinicAddress: form.clinic.address ?? null,
-      clinicCity: form.clinic.city ?? null,
+      clinicCity: ciudadParaCarta(form.clinic),
       clinicPhone: form.clinic.phone ?? null,
       clinicLogoUrl: form.clinic.logoUrl ?? null,
       patientName,
@@ -158,7 +159,7 @@ export async function loadConsentDocumento(
       doctorName,
       doctorLicense: doctor?.cedulaProfesional ?? null,
       doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
-      doctorSpecialty: doctor?.especialidad ?? null,
+      doctorSpecialty: especialidadParaCarta(doctor),
       signedAt: form.signedAt ?? null,
       doctorSignedAt: form.doctorSignedAt ?? null,
       revokedAt: form.revokedAt ?? null,
@@ -187,14 +188,14 @@ export async function buildConsentPdf(
   const element = createElement(ConsentDocument, {
     clinicName: form.clinic.name,
     clinicAddress: form.clinic.address ?? null,
-    clinicCity: form.clinic.city ?? null,
+    clinicCity: ciudadParaCarta(form.clinic),
     clinicPhone: form.clinic.phone ?? null,
     clinicEmail: form.clinic.email ?? null,
     logoDataUrl: logo?.dataUrl ?? null,
     logoAspect: logo?.aspect ?? null,
 
     procedure: form.procedure,
-    place: form.clinic.city ?? null,
+    place: ciudadParaCarta(form.clinic),
     issuedAt: form.createdAt.toISOString(),
     timeZone: consentTimeZone(form.clinic.timezone),
 
@@ -206,7 +207,7 @@ export async function buildConsentPdf(
     doctorName: doctorName || null,
     doctorLicense: doctor?.cedulaProfesional ?? null,
     doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
-    doctorSpecialty: doctor?.especialidad ?? null,
+    doctorSpecialty: especialidadParaCarta(doctor),
 
     content: form.content,
     signatures,

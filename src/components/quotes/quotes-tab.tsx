@@ -10,6 +10,7 @@ import { computeTotals } from "@/lib/quotes/compute";
 import type { QuoteDTO, QuoteStatus, QuoteItemInput, BillingInvoiceLite } from "@/lib/quotes/types";
 import { useT } from "@/i18n/i18n-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { conceptosDelPresupuestoSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
 import { PresupuestoEditor } from "@/components/dashboard/presupuesto-nuevo/editor";
 import { PresupuestoLista } from "@/components/dashboard/presupuesto-nuevo/lista";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
@@ -234,6 +235,9 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
   const puedeAceptar = quote.permisos?.aceptar ?? true;
   const puedeCargar = quote.permisos?.cargar ?? true;
   const cfg = STATUS_CFG[cobro?.alcance === "parcial" ? "EXPIRED" : quote.status] ?? STATUS_CFG.DRAFT;
+  // C-63 (auditoría de uso): presentar con conceptos en $0 pregunta antes.
+  const txSinPrecio = useTextosSinPrecio();
+  const conceptosEnCero = conceptosDelPresupuestoSinPrecio(quote.items);
 
   const post = useCallback(async (url: string, body?: unknown) => {
     setBusy(true); setMsg(null);
@@ -369,7 +373,21 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
         )}
 
         {quote.status === "DRAFT" && (
-          <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "present" })} tone="primary">
+          <Btn
+            onClick={async () => {
+              if (conceptosEnCero > 0) {
+                const ok = await confirmDialog({
+                  title: txSinPrecio.presentarTitulo(conceptosEnCero),
+                  description: txSinPrecio.presentarTexto,
+                  confirmText: txSinPrecio.presentarSeguir,
+                  cancelText: txSinPrecio.volver,
+                });
+                if (!ok) return;
+              }
+              await post(`/api/quotes/${quote.id}/status`, { action: "present" });
+            }}
+            tone="primary"
+          >
             <Send size={12} /> {t("quotes.card.present")}
           </Btn>
         )}
@@ -406,7 +424,21 @@ function QuoteCard({ quote, presupuestos, patientId, onChanged, onEdit, onViewIn
         )}
 
         {quote.status === "EXPIRED" && (
-          <Btn onClick={() => post(`/api/quotes/${quote.id}/status`, { action: "present" })} tone="primary">
+          <Btn
+            onClick={async () => {
+              if (conceptosEnCero > 0) {
+                const ok = await confirmDialog({
+                  title: txSinPrecio.presentarTitulo(conceptosEnCero),
+                  description: txSinPrecio.presentarTexto,
+                  confirmText: txSinPrecio.presentarSeguir,
+                  cancelText: txSinPrecio.volver,
+                });
+                if (!ok) return;
+              }
+              await post(`/api/quotes/${quote.id}/status`, { action: "present" });
+            }}
+            tone="primary"
+          >
             <Send size={12} /> {t("quotes.card.presentAgain")}
           </Btn>
         )}

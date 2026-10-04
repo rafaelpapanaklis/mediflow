@@ -16,6 +16,7 @@ import s from "./plan.module.css";
 import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
+import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
 
 /**
  * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
@@ -119,6 +120,18 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   const fases = subtotalesPorFase(plan.renglones);
   const avisos = avisosDeOrden(plan.renglones);
   const hayRenglones = fases.length > 0;
+  // C-63 (auditoría de uso): un procedimiento sin precio ya no se guarda callado; se pregunta antes de crear.
+  const txSinPrecio = useTextosSinPrecio();
+  const sinPrecio = renglonesDelPlanSinPrecio(plan.renglones);
+  const [confirmarSinPrecio, setConfirmarSinPrecio] = useState(false);
+  const crear = () => {
+    if (sinPrecio > 0 && !confirmarSinPrecio) {
+      setConfirmarSinPrecio(true);
+      return;
+    }
+    setConfirmarSinPrecio(false);
+    onCrear();
+  };
 
   // Lo clínico baja al formulario del padre, que es quien guarda.
   const descripcion = componerDescripcion(plan, rotulos);
@@ -638,6 +651,17 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
           </section>
         </div>
 
+        {confirmarSinPrecio && sinPrecio > 0 && (
+          <div className={s.aviso} role="alert" data-plan-sin-precio style={{ margin: "0 20px 10px", flex: "none" }}>
+            <AlertTriangle size={14} strokeWidth={2} aria-hidden />
+            <span>
+              <strong>{txSinPrecio.planTitulo(sinPrecio)}.</strong> {txSinPrecio.planTexto}
+            </span>
+            <button type="button" className={s.enlace} onClick={() => setConfirmarSinPrecio(false)}>
+              {txSinPrecio.volver}
+            </button>
+          </div>
+        )}
         <footer className={s.pie}>
           {hayRenglones && (
             <div className={s.pieResumen}>
@@ -648,8 +672,12 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
           <button type="button" className={s.boton} onClick={onCerrar} disabled={guardando}>
             {t("common.cancel")}
           </button>
-          <button type="button" className={`${s.boton} ${s.botonPrincipal}`} onClick={onCrear} disabled={guardando}>
-            {guardando ? t("patients.treatment.creating") : t("planTratamiento.nuevo.crear")}
+          <button type="button" className={`${s.boton} ${s.botonPrincipal}`} onClick={crear} disabled={guardando}>
+            {guardando
+              ? t("patients.treatment.creating")
+              : confirmarSinPrecio && sinPrecio > 0
+                ? txSinPrecio.planSeguir
+                : t("planTratamiento.nuevo.crear")}
           </button>
         </footer>
       </div>

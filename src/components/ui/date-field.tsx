@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { interpretarTecleo } from "./date-field-mascara";
 
 /* ------------------------------------------------------------------ */
 /* Helpers puros                                                       */
@@ -34,48 +35,6 @@ function parseISO(value?: string): { y: number; m0: number; d: number } | null {
   const y = +m[1], mo = +m[2], d = +m[3];
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
   return { y, m0: mo - 1, d };
-}
-
-/**
- * Máscara tolerante de tecleo dd/mm/aaaa (día primero): acepta 1 o 2 dígitos
- * por segmento, autoinserta "/" y respeta los "/" que teclee el usuario.
- */
-function maskDMY(raw: string): { text: string; d: string; m: string; y: string } {
-  const maxes = [2, 2, 4];
-  const seg = ["", "", ""];
-  let i = 0;
-  for (const ch of raw) {
-    if (ch === "/") {
-      if (i < 2 && seg[i].length > 0) i++;
-      continue;
-    }
-    if (ch < "0" || ch > "9") continue;
-    if (seg[i].length >= maxes[i]) {
-      if (i < 2) i++;
-      else break;
-    }
-    seg[i] += ch;
-  }
-  const [d, m, y] = seg;
-  let text = d;
-  if (d.length === 2 || m.length > 0 || y.length > 0) {
-    text += "/" + m;
-    if (m.length === 2 || y.length > 0) text += "/" + y;
-  }
-  return { text, d, m, y };
-}
-
-/** Segmentos d/m/y → ISO si forman una fecha válida dentro de [min,max]. */
-function segmentsToISO(d: string, m: string, y: string, min?: string, max?: string): string | null {
-  if (!d || !m || y.length !== 4) return null;
-  const dd = +d, mm = +m, yy = +y;
-  if (mm < 1 || mm > 12) return null;
-  const dim = new Date(yy, mm, 0).getDate(); // último día del mes mm (1-based)
-  if (dd < 1 || dd > dim) return null;
-  const iso = `${y}-${pad2(mm)}-${pad2(dd)}`;
-  if (min && iso < min) return null;
-  if (max && iso > max) return null;
-  return iso;
 }
 
 /* ------------------------------------------------------------------ */
@@ -164,6 +123,10 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   const [mounted, setMounted] = useState(false);
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState(() => toDMY(isoValue));
+  // C-70 (auditoría de uso): «2026-11-05» tecleado quedaba como «20/26/1105» sin error y el formulario seguía
+  // con la fecha anterior. Una fecha COMPLETA que no existe (o fuera de rango) deja el campo vacío y en rojo:
+  // nadie guarda sin darse cuenta otra fecha que la que ve.
+  const [invalida, setInvalida] = useState(false);
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
@@ -208,6 +171,9 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     return () => list.removeEventListener("wheel", onWheel, { capture: true } as EventListenerOptions);
   }, [picker]);
 
+  // Una fecha buena (tecleada o del calendario) quita el rojo.
+  useEffect(() => { if (isoValue) setInvalida(false); }, [isoValue]);
+
   // Sincroniza el texto visible con el value externo cuando NO se está editando.
   useEffect(() => { if (!focused) setText(toDMY(isoValue)); }, [isoValue, focused]);
 
@@ -226,12 +192,12 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
     } as unknown as React.ChangeEvent<HTMLInputElement>);
   }
 
+  // C-70: ver `interpretarTecleo`.
   function handleType(e: React.ChangeEvent<HTMLInputElement>) {
-    const { text: t, d, m, y } = maskDMY(e.target.value);
-    setText(t);
-    if (!d && !m && !y) { emit(""); return; }
-    const iso = segmentsToISO(d, m, y, minISO, maxISO);
-    if (iso) emit(iso);
+    const r = interpretarTecleo(e.target.value, minISO, maxISO);
+    setText(r.text);
+    setInvalida(r.invalida);
+    if (r.iso !== null) emit(r.iso);
   }
 
   /* --- rango de años / vista --- */
@@ -564,6 +530,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
         justifyContent: "space-between",
         cursor: disabled ? "default" : "text",
         ...style,
+        ...(invalida ? { boxShadow: "0 0 0 2px var(--danger)" } : {}),
       }}
     >
       <input
@@ -578,6 +545,8 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
         placeholder={placeholder}
         aria-label="Fecha (dd/mm/aaaa)"
         {...rest}
+        aria-invalid={invalida || rest["aria-invalid"] || undefined}
+        title={invalida ? "Esa fecha no existe: escríbela como dd/mm/aaaa" : rest.title}
         value={text}
         onChange={handleType}
         onFocus={(e) => { setFocused(true); onFocus?.(e); }}

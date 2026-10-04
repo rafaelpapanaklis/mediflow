@@ -17,6 +17,7 @@ import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { fechaCorta, fechaConAno, diasHasta } from "./fechas";
 import { etiquetaDeCobro } from "./cobros";
 import s from "./rediseno.module.css";
+import { resumenDePlanesActivos, useTextosPlanesActivos } from "./planes-activos";
 
 /**
  * La portada de la ficha, rediseñada.
@@ -221,6 +222,9 @@ export function Resumen({
       costo: typeof activo.totalCost === "number" ? activo.totalCost : null,
     };
   }, [tratamientos]);
+  // C-75 (auditoría de uso): con dos planes activos la tarjeta lo dice y da el total, como el estado de cuenta.
+  const planesActivos = useMemo(() => resumenDePlanesActivos(tratamientos), [tratamientos]);
+  const txPlanes = useTextosPlanesActivos();
 
   // El caso de ortodoncia cuenta como tratamiento del paciente mientras esté
   // ABIERTO (por colocar, en curso, pausado o en retención). Terminado o
@@ -445,6 +449,14 @@ export function Resumen({
                   <div className={s.fila}>
                     <span className={s.filaEtiqueta}>{t("pacientesRediseno.resumen.costoPlan")}</span>
                     <span className={`${s.filaValor} ${s.importe}`}>{formatCurrency(plan.costo)}</span>
+                  </div>
+                )}
+                {planesActivos.otros > 0 && (
+                  <div className={s.fila} data-planes-activos>
+                    <span className={s.filaEtiqueta}>
+                      {txPlanes.masPlanes(planesActivos.otros)} · {txPlanes.totalActivos}
+                    </span>
+                    <span className={`${s.filaValor} ${s.importe}`}>{formatCurrency(planesActivos.totalCosto)}</span>
                   </div>
                 )}
                 {/* Plan general Y caso de ortodoncia: el plan manda, como

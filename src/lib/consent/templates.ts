@@ -40,6 +40,7 @@ import {
   doctorCredentialLines,
   patientIdentityLines,
 } from "./document-data";
+import { direccionYaDiceLaCiudad } from "@/lib/clinica/lugar-de-la-clinica";
 
 /** Clave de la carta genérica de atención odontológica. */
 export const GENERAL_CONSENT_KEY = "atencion-general";
@@ -307,7 +308,8 @@ export function buildConsentContent(
   const clinicLines = full
     ? `Establecimiento: ${clinicName}\n` +
       `Dirección: [DIRECCION_CLINICA]${
-        consentValue(vars.clinicAddress) && clinicCity ? `, ${clinicCity}` : ""
+        // C-61: no se pega una ciudad que la dirección ya trae (ni una que la contradice: la corrige `ciudadParaCarta`).
+        consentValue(vars.clinicAddress) && clinicCity && !direccionYaDiceLaCiudad(vars.clinicAddress, clinicCity) ? `, ${clinicCity}` : ""
       }`
     : `Establecimiento: ${legacyClinicLine || "[NOMBRE_CLINICA]"}`;
 

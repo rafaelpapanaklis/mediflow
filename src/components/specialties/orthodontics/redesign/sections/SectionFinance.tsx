@@ -48,6 +48,13 @@ import { isFailure } from "@/app/actions/orthodontics/result";
 import { esPlanAPlazos, type CuotaConEstado } from "@/lib/invoices/plan-de-pagos";
 import { cobroPrincipalDelCaso, montoDelCobroPrincipal } from "@/lib/orthodontics/cobro/cobro-principal";
 import { progresoDeControles, textoControlQueSigue, textoControlesHechos, textoDelEstimado } from "@/lib/orthodontics/plan-detalle";
+import {
+  desglosePorControl,
+  estimadoDelCasoPorControl,
+  textoDelEstimadoDelCaso,
+  tituloPagosDeColocacion,
+  type DesglosePorControl,
+} from "@/lib/orthodontics/cobro/desglose-por-control";
 import orto from "../orto.module.css";
 
 export interface SectionFinanceProps {
@@ -172,6 +179,8 @@ export function SectionFinance(props: SectionFinanceProps) {
   const aPlazos = esPlanAPlazos(panel.condiciones);
   const deuda = panel.deuda;
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
+  // C-59 (auditoría de uso): en «Pago por control», qué parte es colocación y qué parte controles ya facturados.
+  const desglose = esPorControl && panel.cobranza ? desglosePorControl(calendarioCompleto(panel.cobranza), panel.invoiceId) : null;
 
   // ronda 3 (ws1-t2, H6): lo que se sugiere cobrar con «Cobrar» — TODO lo
   // vencido (si hay), si no la cuota de hoy; en «pago por control», el saldo
@@ -231,7 +240,7 @@ export function SectionFinance(props: SectionFinanceProps) {
         ) : null}
         {panel.controlesDelPlan ? (
           <div style={{ padding: "0 18px" }}>
-            <ControlesDelPlan datos={panel.controlesDelPlan} porControl={esPorControl} />
+            <ControlesDelPlan datos={panel.controlesDelPlan} porControl={esPorControl} desglose={panel.invoiceId ? desglose : null} />
           </div>
         ) : null}
         {!panel.invoiceId ? (
@@ -298,6 +307,11 @@ export function SectionFinance(props: SectionFinanceProps) {
                 <div className={orto.dato}>
                   <div className={orto.datoEtiqueta}>{esPorControl ? "Colocación y controles" : "Total del tratamiento"}</div>
                   <div className={`${orto.datoValor} ${orto.datoValorGrande}`}>{fmtMoney(deuda.facturado)}</div>
+                  {desglose && desglose.controlesFacturados > 0 ? (
+                    <div className={orto.datoSub} data-desglose-por-control>
+                      Colocación {fmtMoney(desglose.colocacion)} + {desglose.controlesFacturados === 1 ? "1 control" : `${desglose.controlesFacturados} controles`} {fmtMoney(desglose.controles)}
+                    </div>
+                  ) : null}
                 </div>
                 <div className={orto.dato}>
                   <div className={orto.datoEtiqueta}>Pagado</div>
@@ -391,13 +405,21 @@ export function SectionFinance(props: SectionFinanceProps) {
             {panel.cobranza && aPlazos ? (
               <div className="px-[18px] py-[16px] border-b border-[color:var(--pr-borde-suave)]">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <h4 className={orto.bloqueTitulo}>Calendario de mensualidades</h4>
+                  {/* C-59: en «Pago por control» estas cuotas son los pagos de la COLOCACIÓN, no mensualidades del tratamiento. */}
+                  <h4 className={orto.bloqueTitulo}>
+                    {esPorControl ? tituloPagosDeColocacion(calendarioCompleto(panel.cobranza).filter((q) => !q.invoiceId).length) : "Calendario de mensualidades"}
+                  </h4>
                   <div className="flex items-center gap-[6px] flex-wrap">
                     <Pill color="emerald" size="xs">Pagada</Pill>
                     <Pill color="rose" size="xs">Vencida</Pill>
                     <Pill color="slate" size="xs">Por vencer</Pill>
                   </div>
                 </div>
+                {esPorControl ? (
+                  <p className="text-[12px] text-[color:var(--pr-texto-3)] mb-2">
+                    Es el plan de pagos de la colocación. Los controles se cobran aparte, cada uno con su factura.
+                  </p>
+                ) : null}
                 {calendarioCompleto(panel.cobranza).filter((q) => !q.invoiceId).length === 0 ? (
                   <p className={orto.vacioLinea}>Sin calendario de mensualidades.</p>
                 ) : (
@@ -407,7 +429,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                     {/* Solo las cuotas de la factura a plazos: los controles (con su propia factura) van en «Controles por cobrar». */}
                     {calendarioCompleto(panel.cobranza).filter((q) => !q.invoiceId).map((q) => (
                       <div key={`${q.esEnganche ? "e" : "p"}-${q.numero}`} className={`${orto.caja} text-center ${ESTILO_CUOTA[q.estado]}`} style={{ padding: "8px 6px" }}>
-                        <div className="text-[11px] font-semibold opacity-80">{q.esEnganche ? "Enganche" : `Mes ${q.numero}`}</div>
+                        <div className="text-[11px] font-semibold opacity-80">{q.esEnganche ? "Enganche" : esPorControl ? `Pago ${q.numero}` : `Mes ${q.numero}`}</div>
                         <div className="text-[13px] tabular-nums font-bold mt-[1px] whitespace-nowrap">{fmtMoney(q.importe)}</div>
                         {/* ronda 3 (ws1-t2, H21c): abonada a medias no se distinguía de una
                             sin tocar — mismo color, mismo texto. */}
@@ -483,7 +505,8 @@ export function SectionFinance(props: SectionFinanceProps) {
                   NO como PPD. El botón vive en el detalle de la factura
                   (Facturación / ficha del paciente → esta factura →
                   "Facturar este pago", junto a cada pago). El cobro
-                  automático con tarjeta sigue sin estar disponible aquí. */}
+                  automático con tarjeta es `CobroAutomaticoDelCaso`, arriba
+                  (C-104: la frase «todavía no está disponible» lo contradecía). */}
               {/* ws1-t4, tanda 0: el CFDI de la factura completa ya no se puede
                   timbrar con saldo; lo que sí se puede (y se tiene que poder
                   encontrar) es facturar cada pago cobrado. El botón abre la
@@ -499,7 +522,6 @@ export function SectionFinance(props: SectionFinanceProps) {
                   </Btn>
                 ) : null}
               </div>
-              <div className="mt-1">El cobro automático con tarjeta todavía no está disponible aquí.</div>
             </div>
             ) : null}
           </>
@@ -636,17 +658,34 @@ export function SectionFinance(props: SectionFinanceProps) {
  * ws1-t12 — «Control X de N» y, en «Pago por control», controles previstos × precio del control = total
  * ESTIMADO. Solo informa: nada se cobra solo; cada control se cobra al atenderlo, con su factura.
  */
-function ControlesDelPlan({ datos, porControl }: { datos: NonNullable<PanelDeCobro["controlesDelPlan"]>; porControl: boolean }) {
+function ControlesDelPlan({
+  datos,
+  porControl,
+  desglose,
+}: {
+  datos: NonNullable<PanelDeCobro["controlesDelPlan"]>;
+  porControl: boolean;
+  /** C-59: con la factura del caso, el estimado suma la colocación y lo ya facturado (no solo previstos × precio). */
+  desglose?: DesglosePorControl | null;
+}) {
   const p = progresoDeControles(datos.hechos, datos.previstos);
+  const estimadoDelCaso = porControl && desglose
+    ? estimadoDelCasoPorControl({ desglose, previstos: datos.previstos, hechos: datos.hechos, precioPorControl: datos.precioPorControl })
+    : null;
   return (
     <div className={orto.caja} style={{ margin: "12px 0" }} data-controles-del-plan>
       <div className={orto.datoEtiqueta}>Controles del plan</div>
       <div className="mt-[2px] text-[13.5px] font-semibold">
-        {textoControlQueSigue(p)}
+        {/* C-59: con los previstos completos no se anuncia «Control 5 (previstos: 4)» como si tocara. */}
+        {p.completo ? (p.excedido ? `Ya pasó de los ${p.previstos} controles previstos` : "Controles previstos completos") : textoControlQueSigue(p)}
         <span className="font-normal text-[color:var(--pr-texto-3)]"> · van {textoControlesHechos(p)}</span>
       </div>
       {porControl ? (
-        datos.estimado ? (
+        estimadoDelCaso ? (
+          <div className="mt-[4px] text-[12.5px] text-[color:var(--pr-texto-2)]" data-estimado-del-caso>
+            Estimado del caso: {textoDelEstimadoDelCaso(estimadoDelCaso)}. Cada control se cobra al atenderlo.
+          </div>
+        ) : datos.estimado ? (
           <div className="mt-[4px] text-[12.5px] text-[color:var(--pr-texto-2)]">Estimado: {textoDelEstimado(datos.estimado)}</div>
         ) : (
           <div className="mt-[4px] text-[12px] text-[color:var(--pr-texto-3)]">

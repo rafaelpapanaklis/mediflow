@@ -27,12 +27,15 @@ import { oclusionDeLaConsulta, type OclusionDeConsulta } from "@/lib/orthodontic
 import { leerTecnicasDeLaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica-db";
 import { tecnicasActivas, type TecnicaClinica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
 
 export interface CaseIntakeOptions {
   doctors: Array<{ id: string; fullName: string }>;
   guardians: Array<{ id: string; fullName: string; parentesco: string; phone: string }>;
   referringDoctors: Array<{ id: string; fullName: string; clinicName: string | null }>;
   generalConsentSigned: boolean | null;
+  /** C-64 (auditoría de uso): «hoy» en la zona de la CLÍNICA ("YYYY-MM-DD"), no la del navegador. */
+  hoyClinica?: string;
   /**
    * «Responsable del pago» con el que arranca el alta: «El paciente», salvo que sea menor de edad y ya
    * tenga un tutor registrado (entonces ese tutor, que el doctor puede cambiar).
@@ -231,6 +234,15 @@ export async function getCaseIntakeOptions(
     console.error("[ortho] getCaseIntakeOptions: ConsentForm no disponible:", e);
   }
 
+  // C-64: las fechas que el alta propone (primer pago) salen del día de la clínica, no del navegador.
+  let hoyClinica = hoyEnZona(new Date(), "America/Mexico_City");
+  try {
+    const c = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
+    if (c?.timezone) hoyClinica = hoyEnZona(new Date(), c.timezone);
+  } catch {
+    // sin zona: la de México
+  }
+
   // El modo de cobro de la clínica. best-effort: si no se puede leer, el modo
   // de siempre (precio total) — el alta no se cae por esto.
   let billingMode: OrthoBillingMode = ORTHO_BILLING_MODE_DEFAULT;
@@ -295,6 +307,7 @@ export async function getCaseIntakeOptions(
       clinicName: r.clinicName,
     })),
     generalConsentSigned,
+    hoyClinica,
     // Sin la columna de responsable (alta-caso.sql) no se puede guardar un tutor: siempre «El paciente».
     responsablePropuesto: columnsExist.responsibleGuardianId
       ? responsablePropuestoParaElAlta({ esMenor: isMinor(patient.data.dob), tutores: guardiansRaw })

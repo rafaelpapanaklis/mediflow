@@ -32,6 +32,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import s from "./plan.module.css";
+import { selloDelPlan, useTextosSello } from "./sello-del-plan";
 
 /** "2026-03-03" → "3 mar 2026". En UTC: una fecha sin hora no tiene huso. */
 export function fechaDeCuota(fecha: string | null, locale: string): string | null {
@@ -70,6 +71,7 @@ export function BloquePlan({
 }) {
   const t = useT();
   const locale = useLocale();
+  const txSello = useTextosSello();
   const hoy = todayLocalISO();
   const plan = useMemo(() => {
     const cuotas = calendarioDeCuotas(condiciones, total);
@@ -86,6 +88,7 @@ export function BloquePlan({
   const { estado, cuadre } = plan;
   const actual = estado.cuotaActual;
   const saldado = actual === null;
+  const sello = selloDelPlan(estado);
 
   return (
     <section
@@ -116,6 +119,13 @@ export function BloquePlan({
             <AlertTriangle size={14} strokeWidth={2.4} aria-hidden />
             {t("planDePagos.vencidas", { count: estado.vencidas })}
             {" · "}{fmtMXNdec(estado.importeVencido)}
+          </span>
+        ) : sello === "enganchePendiente" && actual ? (
+          // C-73: con el enganche pendiente (sin vencer) no se dice «Al corriente» junto a «Falta el enganche».
+          <span className={`${s.sello} ${s.selloNeutro}`} role="status">
+            <Circle size={14} strokeWidth={2.4} aria-hidden />
+            {txSello.enganchePendiente}
+            {fechaDeCuota(actual.vencimiento, locale) ? ` · ${txSello.vence(fechaDeCuota(actual.vencimiento, locale)!)}` : ""}
           </span>
         ) : !saldado && !estado.conFechas ? (
           // Sin fechas nada vence: no se presume de «al corriente» sin saberlo.

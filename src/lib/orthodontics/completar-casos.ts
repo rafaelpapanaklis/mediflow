@@ -75,6 +75,23 @@ export function propuestaDeControles(duracionMeses: number | null, frecuenciaDia
   return duracionMeses ? controlesSugeridos(duracionMeses, frecuenciaDias) : null;
 }
 
+/**
+ * C-84 (auditoría de uso): lo que dice «Proponer controles previstos». Antes, con casos sin tiempo de tratamiento,
+ * no proponía nada y solo decía «Ninguno de los elegidos…»; ahora dice cuántos no tienen tiempo y qué hacer.
+ */
+export function mensajeDePropuesta(c: { propuestos: number; sinTiempo: number; yaTenian: number }): { tipo: "exito" | "aviso"; texto: string } {
+  const casos = (n: number) => `${n} caso${n === 1 ? "" : "s"}`;
+  const partes: string[] = [];
+  if (c.sinTiempo > 0) {
+    partes.push(`${casos(c.sinTiempo)} sin tiempo de tratamiento: escríbelo en su columna «Tiempo de tratamiento» y vuelve a proponer`);
+  }
+  if (c.yaTenian > 0) partes.push(`${casos(c.yaTenian)} ya tenía${c.yaTenian === 1 ? "" : "n"} controles previstos`);
+  if (c.propuestos > 0) {
+    return { tipo: "exito", texto: [`Propuestos en ${casos(c.propuestos)}. Revisa y guarda.`, ...partes.map((p) => `${p}.`)].join(" ") };
+  }
+  return { tipo: "aviso", texto: partes.length > 0 ? `No se propuso nada: ${partes.join("; ")}.` : "No se propuso nada: elige al menos un caso." };
+}
+
 /** Lo que llega del cliente para UN caso. Cada campo ausente = no tocarlo. */
 export interface CambioDeUnCaso {
   planId: string;

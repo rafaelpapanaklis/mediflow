@@ -113,7 +113,10 @@ const es = {
   reintentar: "Reintentar",
   propuestas: "Propuestas por los procedimientos de la cita",
   otras: "Otras de tu biblioteca",
-  sinPropuestas: "Ningún procedimiento de esta cita está ligado a una hoja. Elige a mano.",
+  // C-72 (auditoría de uso): DaleControl no trae hojas de ortodoncia (textos clínicos: los decide la clínica);
+  // se dice cómo hacer que salgan propuestas en vez de solo «elige a mano».
+  sinPropuestas:
+    "Ningún procedimiento de esta cita está ligado a una hoja. Elige a mano, o crea la tuya en Administración → Plantillas → Indicaciones y lígala al procedimiento (por ejemplo «Control de ortodoncia») para que aquí salga propuesta.",
   sinHojas: "No hay hojas de indicaciones en uso. Créalas en Administración → Plantillas → Indicaciones.",
   vistaPrevia: "Lo que recibe el paciente",
   eligeUna: "Elige al menos una hoja.",
@@ -144,7 +147,13 @@ const es = {
   errorEstado: "Esta cita todavía no se atiende: las indicaciones se dan durante o después de la consulta.",
   constanciaElegir: "Plantilla de la constancia",
   constanciaAbrir: "Abrir constancia",
-  constanciaAyuda: "Se abre en PDF para imprimir o guardar. Lleva la hora real de llegada y salida si se registraron.",
+  constanciaAyuda: "Se abre en PDF para imprimir o guardar. Lleva la hora de la cita en la agenda.",
+  // C-60: sin cédula, se avisa ANTES de imprimir (no se descubre en el papel).
+  sinCedulaTitulo: "{doctor} no tiene cédula profesional en «Mi perfil».",
+  sinCedulaTexto: "La constancia saldrá con la línea de la cédula en blanco para llenarla a mano.",
+  sinCedulaPoner: "Poner la cédula",
+  sinCedulaImprimir: "Abrir así",
+  sinCedulaCancelar: "Cancelar",
 };
 
 type Textos = typeof es;
@@ -245,7 +254,8 @@ const en: Textos = {
   reintentar: "Retry",
   propuestas: "Suggested by the appointment's procedures",
   otras: "More from your library",
-  sinPropuestas: "No procedure in this appointment is linked to a sheet. Pick one by hand.",
+  sinPropuestas:
+    "No procedure in this appointment is linked to a sheet. Pick one by hand, or create yours in Administration → Templates → Aftercare and link it to the procedure (e.g. «Control de ortodoncia») so it is suggested here.",
   sinHojas: "There are no active aftercare sheets. Create them in Administration → Templates → Aftercare.",
   vistaPrevia: "What the patient receives",
   eligeUna: "Pick at least one sheet.",
@@ -276,7 +286,12 @@ const en: Textos = {
   errorEstado: "This appointment hasn't been seen yet: instructions are given during or after the visit.",
   constanciaElegir: "Certificate template",
   constanciaAbrir: "Open certificate",
-  constanciaAyuda: "Opens as a PDF to print or save. Uses the actual arrival and departure times when they were recorded.",
+  constanciaAyuda: "Opens as a PDF to print or save. Uses the appointment time from the schedule.",
+  sinCedulaTitulo: "{doctor} has no professional license number in «My profile».",
+  sinCedulaTexto: "The certificate will have the license line blank, to fill in by hand.",
+  sinCedulaPoner: "Add the license number",
+  sinCedulaImprimir: "Open anyway",
+  sinCedulaCancelar: "Cancel",
 };
 
 export type TextosIndicaciones = Textos;

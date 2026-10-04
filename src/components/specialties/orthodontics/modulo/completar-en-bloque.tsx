@@ -20,6 +20,7 @@ import {
   CASOS_POR_GUARDADO,
   DURACION_MAXIMA_MESES,
   DURACION_MINIMA_MESES,
+  mensajeDePropuesta,
   propuestaDeControles,
   type CambioDeUnCaso,
   type FilaParaCompletar,
@@ -102,17 +103,28 @@ export function CompletarEnBloque({
   /** «Proponer controles previstos»: en los elegidos que no tienen, con su duración. */
   const proponerEnElegidos = () => {
     let n = 0;
+    let sinTiempo = 0;
+    let yaTenian = 0;
     const nuevas: Record<string, Edicion> = {};
     for (const f of pendientes) {
-      if (!elegidos.has(f.planId) || !vacio(controlesDe(f))) continue;
+      if (!elegidos.has(f.planId)) continue;
+      if (!vacio(controlesDe(f))) {
+        yaTenian += 1;
+        continue;
+      }
       const p = propuestaDe(f);
-      if (p === null) continue;
+      if (p === null) {
+        sinTiempo += 1;
+        continue;
+      }
       nuevas[f.planId] = { ...ediciones[f.planId], controles: String(p) };
       n += 1;
     }
     setEdiciones((prev) => ({ ...prev, ...nuevas }));
-    if (n === 0) toast("Ninguno de los elegidos está sin controles previstos y con tiempo de tratamiento.");
-    else toast.success(`Propuestos en ${n} caso${n === 1 ? "" : "s"}. Revisa y guarda.`);
+    // C-84: dice por qué no propuso (casos sin tiempo de tratamiento) en vez de callarlo.
+    const m = mensajeDePropuesta({ propuestos: n, sinTiempo, yaTenian });
+    if (m.tipo === "exito") toast.success(m.texto, { duration: 8000 });
+    else toast(m.texto, { duration: 8000 });
   };
 
   /** «Marcar como migrados sin diagnóstico»: en los elegidos que vinieron de otro sistema y no tienen diagnóstico. */

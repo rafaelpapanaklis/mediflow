@@ -603,6 +603,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       .catch(() => setPanelDeCobro("error"));
   }, [t.treatmentPlanId]);
   useEffect(() => { recargarPanelDeCobro(); }, [recargarPanelDeCobro]);
+  // C-71 (auditoría de uso): firmar un control en «Pago por control» crea su cargo; el cobro del caso (y el saldo de
+  // la cabecera) decía «Saldo $0, Liquidado» hasta recargar mientras el panel de la cita ya pedía los $300.
+  const onCardSignedConCobro = useMemo(() => {
+    const firmar = props.onCardSigned;
+    if (!firmar) return undefined;
+    return async (payload: DrawerCardSubmit) => {
+      const r = await firmar(payload);
+      if (r) recargarPanelDeCobro();
+      return r;
+    };
+  }, [props.onCardSigned, recargarPanelDeCobro]);
 
   // Saldo real: null mientras carga o si el caso no tiene factura todavía
   // — nunca el precio de referencia disfrazado de "pendiente" (§5).
@@ -1033,7 +1044,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           tecnica={t.appliance.technique ?? null}
           onClose={closeDrawer}
           onSave={props.onCardDraftSaved}
-          onSign={props.onCardSigned}
+          onSign={onCardSignedConCobro}
         />
       ) : null}
 
@@ -1062,7 +1073,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
           onSave={conNotaDeLaConsulta(props.onCardDraftSaved)}
-          onSign={conNotaDeLaConsulta(props.onCardSigned)}
+          onSign={conNotaDeLaConsulta(onCardSignedConCobro)}
         />
       ) : drawer?.kind === "tcard-new" && nuevoControlCtx ? (
         <DrawerTreatmentCard
@@ -1098,7 +1109,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           availablePhotoSets={nuevoControlCtx.availablePhotoSets}
           onClose={closeDrawer}
           onSave={conNotaDeLaConsulta(props.onCardDraftSaved)}
-          onSign={conNotaDeLaConsulta(props.onCardSigned)}
+          onSign={conNotaDeLaConsulta(onCardSignedConCobro)}
         />
       ) : drawer?.kind === "tcard-new" && !nuevoControlCtx && newCardDefaults ? (
         <DrawerTreatmentCard
@@ -1124,7 +1135,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           treatmentPlanId={t.treatmentPlanId || undefined}
           onClose={closeDrawer}
           onSave={conNotaDeLaConsulta(props.onCardDraftSaved)}
-          onSign={conNotaDeLaConsulta(props.onCardSigned)}
+          onSign={conNotaDeLaConsulta(onCardSignedConCobro)}
         />
       ) : null}
 

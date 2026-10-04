@@ -28,6 +28,7 @@ import r from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
 import s from "./presupuesto.module.css";
 import { AceptarConceptos, CobrarPresupuesto, LineaDeCobro } from "./aceptacion-y-cobro";
 import { ElegirDoctorDelPlan, pedidoDeDoctor, type PedidoDeDoctor } from "@/components/quotes/elegir-doctor-del-plan";
+import { conceptosDelPresupuestoSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
 
 /** Mismas cinco palabras y mismos colores que la lista de siempre. */
 const ESTADO: Record<QuoteStatus, { clave: string; tono: string }> = {
@@ -118,6 +119,9 @@ function Ficha({
   const [aceptando, setAceptando] = useState(false);
   const [cobrando, setCobrando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  // C-76 (auditoría de uso): «Presentar» y «Aceptar» tardan 8–9 s; el botón pulsado dice que está trabajando.
+  const [accionEnCurso, setAccionEnCurso] = useState<string | null>(null);
+  const txSinPrecio = useTextosSinPrecio();
   const [mensaje, setMensaje] = useState<string | null>(null);
   // «Crear plan» sin doctor que atienda: el servidor pide elegirlo.
   const [elegirDoctor, setElegirDoctor] = useState<PedidoDeDoctor | null>(null);
@@ -153,6 +157,7 @@ function Ficha({
 
   const postConCuerpo = useCallback(async (url: string, cuerpo: unknown) => {
     setOcupado(true);
+    setAccionEnCurso(typeof cuerpo === "object" && cuerpo && "action" in cuerpo ? String((cuerpo as { action: unknown }).action) : url);
     setMensaje(null);
     try {
       const res = await fetch(url, {
@@ -169,8 +174,24 @@ function Ficha({
       return null;
     } finally {
       setOcupado(false);
+      setAccionEnCurso(null);
     }
   }, [onRecargar, t]);
+
+  // C-63 (auditoría de uso): presentar con conceptos en $0 pregunta antes (el plan ya lo hace al crearse).
+  const conceptosEnCero = conceptosDelPresupuestoSinPrecio(quote.items);
+  async function presentar() {
+    if (conceptosEnCero > 0) {
+      const ok = await confirmar({
+        title: txSinPrecio.presentarTitulo(conceptosEnCero),
+        description: txSinPrecio.presentarTexto,
+        confirmText: txSinPrecio.presentarSeguir,
+        cancelText: txSinPrecio.volver,
+      });
+      if (!ok) return;
+    }
+    await postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "present" });
+  }
 
   async function borrar() {
     const ok = await confirmar({
@@ -215,6 +236,7 @@ function Ficha({
     <button
       type="button"
       disabled={ocupado}
+      aria-busy={ocupado || undefined}
       onClick={onClick}
       className={[
         s.accion,
@@ -291,8 +313,8 @@ function Ficha({
         )}
 
         {quote.status === "DRAFT" && (
-          <Accion tono="principal" onClick={() => postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "present" })}>
-            <Send size={13} /> {t("quotes.card.present")}
+          <Accion tono="principal" onClick={presentar}>
+            <Send size={13} /> {accionEnCurso === "present" ? txSinPrecio.procesando : t("quotes.card.present")}
           </Accion>
         )}
 
@@ -314,10 +336,10 @@ function Ficha({
                       : postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "accept" })
                   }
                 >
-                  <CheckCircle2 size={13} /> {t("quotes.card.markAccepted")}
+                  <CheckCircle2 size={13} /> {accionEnCurso === "accept" ? txSinPrecio.procesando : t("quotes.card.markAccepted")}
                 </Accion>
                 <Accion tono="peligro" onClick={() => postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "reject" })}>
-                  <XCircle size={13} /> {t("quotes.card.markRejected")}
+                  <XCircle size={13} /> {accionEnCurso === "reject" ? txSinPrecio.procesando : t("quotes.card.markRejected")}
                 </Accion>
               </>
             )}
@@ -325,8 +347,8 @@ function Ficha({
         )}
 
         {quote.status === "EXPIRED" && (
-          <Accion tono="principal" onClick={() => postConCuerpo(`/api/quotes/${quote.id}/status`, { action: "present" })}>
-            <Send size={13} /> {t("quotes.card.presentAgain")}
+          <Accion tono="principal" onClick={presentar}>
+            <Send size={13} /> {accionEnCurso === "present" ? txSinPrecio.procesando : t("quotes.card.presentAgain")}
           </Accion>
         )}
 

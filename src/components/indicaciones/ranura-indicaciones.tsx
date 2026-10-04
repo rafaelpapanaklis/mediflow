@@ -53,6 +53,9 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
   const [oferta, setOferta] = useState<ContextoCita | null>(null);
   const [disponible, setDisponible] = useState(false);
   const previo = useRef<{ id: string; estado: string } | null>(null);
+  // C-60: ¿al doctor de la cita le falta la cédula? Se pregunta al abrir la cita, para avisar ANTES de imprimir.
+  const [sinCedula, setSinCedula] = useState<{ id: string; doctor: string } | null>(null);
+  const [preguntarCedula, setPreguntarCedula] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -83,7 +86,27 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
   useEffect(() => {
     setOferta((o) => (o ? null : o));
     setAbierto(false);
+    setPreguntarCedula(false);
   }, [appointmentId]);
+
+  const puedeConstancia = puedeEmitir && admiteConstancia(estado);
+  useEffect(() => {
+    if (!puedeConstancia) return;
+    let vivo = true;
+    fetch(`/api/indicaciones/cita/${encodeURIComponent(appointmentId)}`)
+      .then((r) => (r.ok ? (r.json() as Promise<ContextoCita>) : null))
+      .then((d) => {
+        if (vivo) setSinCedula(d && d.doctorSinCedula ? { id: appointmentId, doctor: d.doctor || "El doctor de la cita" } : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [appointmentId, puedeConstancia]);
+
+  // Dentro del clic: si no, el bloqueador de ventanas lo frena.
+  const abrirConstancia = () =>
+    window.open(`/api/indicaciones/cita/${encodeURIComponent(appointmentId)}/constancia`, "_blank", "noopener");
 
   const conIndicaciones = disponible && admiteIndicaciones(estado);
   const conConstancia = admiteConstancia(estado);
@@ -134,16 +157,44 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
             type="button"
             className={ag.accionSecundaria}
             title={tx.constanciaAyuda}
-            onClick={() =>
-              // Dentro del clic: si no, el bloqueador de ventanas lo frena.
-              window.open(`/api/indicaciones/cita/${encodeURIComponent(appointmentId)}/constancia`, "_blank", "noopener")
-            }
+            onClick={() => (sinCedula?.id === appointmentId ? setPreguntarCedula(true) : abrirConstancia())}
           >
             <FileBadge size={18} strokeWidth={2} />
             {tx.botonConstancia}
           </button>
         )}
       </div>
+
+      {preguntarCedula && sinCedula?.id === appointmentId && (
+        <div className={ag.nota} style={{ marginTop: 10 }} role="alert" data-constancia-sin-cedula>
+          <span className={ag.notaIcono}>
+            <FileBadge size={18} strokeWidth={2} />
+          </span>
+          <div className={s.ranuraOferta}>
+            <span>
+              <b>{conValores(tx.sinCedulaTitulo, { doctor: sinCedula.doctor })}</b> {tx.sinCedulaTexto}
+            </span>
+            <div className={s.ranuraOfertaBotones}>
+              <a className={ag.accionSecundaria} href="/dashboard/mi-perfil">
+                {tx.sinCedulaPoner}
+              </a>
+              <button
+                type="button"
+                className={ag.accionSecundaria}
+                onClick={() => {
+                  setPreguntarCedula(false);
+                  abrirConstancia();
+                }}
+              >
+                {tx.sinCedulaImprimir}
+              </button>
+              <button type="button" className={ag.accionSecundaria} onClick={() => setPreguntarCedula(false)}>
+                {tx.sinCedulaCancelar}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {abierto && (
         <DialogoIndicaciones

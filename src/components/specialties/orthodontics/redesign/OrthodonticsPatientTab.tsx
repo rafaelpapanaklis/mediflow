@@ -56,6 +56,7 @@ import { isFailure, type ActionResult } from "@/app/actions/orthodontics/result"
 import { vistaDePestanaOrto } from "@/lib/orthodontics/pestana-ficha";
 import { RUTA_CONTRATAR_ORTODONCIA } from "@/lib/orthodontics/contratar";
 import { alergiasReales } from "@/lib/alergias-reales";
+import { alertasDeCabeceraOrto } from "@/lib/orthodontics/alertas-cabecera";
 import { estadoSalud, saludPendiente, type EstadoCuestionario } from "@/lib/patients/salud-capturada";
 import { textoAsentimientoMenor } from "@/lib/orthodontics/asentimiento-menor";
 import { elegirSetParaFoto } from "@/lib/orthodontics/redesign/set-de-foto-por-visita";
@@ -162,6 +163,9 @@ export interface OrthodonticsPatientTabPatient {
   email: string | null;
   bloodType: string | null;
   allergies: unknown;
+  /** C-58: padecimientos y medicación del paciente (los mismos que pinta la cabecera de la ficha). */
+  chronicConditions?: unknown;
+  currentMedications?: unknown;
 }
 
 export interface OrthodonticsPatientTabProps {
@@ -186,6 +190,8 @@ export interface OrthodonticsPatientTabProps {
   soloLectura?: boolean;
   /** ws1-t2 (12h): frescura del cuestionario de salud; sin él (o vencido) la cabecera avisa «Salud sin capturar». */
   questionnaireStatus?: EstadoCuestionario | null;
+  /** C-58: banderas del último cuestionario de salud — las mismas de la cabecera de la ficha. */
+  riskFlags?: string[] | null;
   orthoRedesignVM: OrthoRedesignViewModel | null | undefined;
   orthoRedesignBundle: OrthoRedesignBundle | null | undefined;
   /** Antes `() => setTab("agenda")` en patient-detail-client.tsx. */
@@ -229,6 +235,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     orthoData,
     soloLectura = false,
     questionnaireStatus = null,
+    riskFlags = null,
     orthoRedesignVM,
     orthoRedesignBundle,
     onScheduleNext,
@@ -650,6 +657,13 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
                 : null,
               criticalAllergies:
                 alergiasReales(patient.allergies).join(", ") || null,
+              // C-58: banderas, alergias, padecimientos y medicación, como la ficha.
+              alertas: alertasDeCabeceraOrto({
+                riskFlags,
+                allergies: patient.allergies,
+                chronicConditions: patient.chronicConditions,
+                currentMedications: patient.currentMedications,
+              }),
               estadoSalud: estadoSalud(questionnaireStatus),
             },
             // outstandingAmount ya no se calcula aquí (hallazgo ws1-t4 §5):

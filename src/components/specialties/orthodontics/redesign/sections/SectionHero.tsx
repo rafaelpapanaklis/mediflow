@@ -15,6 +15,7 @@
 //  - El expediente de ortodoncia es el «caso», con su estado en palabras.
 //  - El botón que abre la aparatología se llama así, no «Editar plan».
 
+import { rotuloDeTiempo, subtituloDeAsistencia } from "@/lib/orthodontics/textos-avance-del-caso";
 import { Activity, ChevronRight, ClipboardCheck, Layers, Pencil, Settings, Wrench } from "lucide-react";
 import { Btn, Card, StatChip, fmtDayLong, fmtPct } from "../atoms";
 import { Pill } from "../atoms/Pill";
@@ -75,13 +76,9 @@ export function SectionHero(props: SectionHeroProps) {
   // (quien arma el objeto a mano), los dos números de siempre.
   const asistencia = t.attendance ? t.attendance.pct : t.attendancePct;
   const elasticos = t.elastics ? t.elastics.pct : t.elasticsCompliancePct;
-  const asistenciaSub = !t.attendance
-    ? "últimos 6 meses"
-    : t.attendance.pct === null
-      ? "sin controles registrados"
-      : t.attendance.falto === 0
-        ? `${t.attendance.asistio} de ${t.attendance.asistio} controles · 6 meses`
-        : `faltó a ${t.attendance.falto} de ${t.attendance.asistio + t.attendance.falto} · 6 meses`;
+  // C-67: «6 meses» es la ventana de la asistencia, no la duración del caso — se dice «últimos 6 meses».
+  const asistenciaSub = subtituloDeAsistencia(t.attendance);
+  const tiempo = rotuloDeTiempo(t.monthCurrent, t.monthTotal);
   const elasticosSub = !t.elastics
     ? t.wireCurrent
       ? "uso 22 h/día"
@@ -225,8 +222,9 @@ export function SectionHero(props: SectionHeroProps) {
         {t.monthTotal > 0 ? (
         <div className="mt-[18px]">
           <div className="flex items-baseline justify-between gap-3 mb-[7px]">
-            <span className={orto.ceja}>Avance del tratamiento</span>
-            <span className="text-[13px] font-semibold">{progressPct}%</span>
+            {/* C-67: es el TIEMPO transcurrido (mes de la duración), no los controles: «4 de 4 controles» y 75 % no chocan. */}
+            <span className={orto.ceja}>{tiempo.titulo}</span>
+            <span className="text-[13px] font-semibold">{tiempo.cifra}</span>
           </div>
           <ProgressBar
             value={progressPct}

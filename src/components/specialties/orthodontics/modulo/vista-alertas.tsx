@@ -50,7 +50,7 @@ import { RefrescarAlertasContext } from "./refrescar-alertas";
 import { cargarAlertasDeOrtodoncia } from "@/app/actions/orthodontics/modulo/cargarAlertas";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { useRouter } from "next/navigation";
-import { DIAS_DE_POSPOSICION } from "@/lib/orthodontics/alertas-pospuestas";
+import { DIAS_DE_POSPOSICION, cuantasPospuestas } from "@/lib/orthodontics/alertas-pospuestas";
 import { avisosEnTotal, pacientesConAlerta, textoDeCuentaDeAlertas, textoSinControlEnAlertas } from "@/lib/orthodontics/cuenta-de-alertas";
 import { RUTA_COMPLETAR_EN_BLOQUE } from "@/lib/orthodontics/casos-incompletos-ruta";
 import { fechaEnZona } from "./fechas";
@@ -113,7 +113,9 @@ export function VistaAlertas({
   const totalAlerts = avisosEnTotal(listas);
   const pacientesQueRevisar = pacientesConAlerta(listas);
   const notaSinControl = textoSinControlEnAlertas(alerts.missingNextControl.length, alerts.sinControlFuera);
-  const pospuestas = alerts.pospuestas ?? 0;
+  // C-80 (auditoría de uso): arriba decía «1 pospuesta» y el enlace «2 alertas pospuestas». La cifra de arriba contaba
+  // solo las que hoy estarían alertando; el enlace, todas las posposiciones vigentes. Las dos dicen ahora la del enlace.
+  const pospuestas = cuantasPospuestas(alerts);
 
   const resumen: { id: string; etiqueta: string; cuenta: number; icono: LucideIcon; tono: Tono }[] = [
     { id: "mensualidad-vencida", etiqueta: "Mensualidad vencida", cuenta: alerts.overduePayments.length, icono: AlertTriangle, tono: "peligro" },

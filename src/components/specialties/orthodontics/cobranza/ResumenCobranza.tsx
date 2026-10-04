@@ -60,6 +60,9 @@ export function ResumenCobranza(props: ResumenCobranzaProps) {
 
   if (panel === "cargando" || panel === "error") return null;
   if (!panel.cobranza || (!panel.invoice && panel.deuda.porCobrar <= 0)) return null;
+  // C-81 (auditoría de uso): sin nada que cobrar ni vencido no se pinta una franja que solo dice «Sin mensualidades
+  // pendientes · Saldo total $0.00» (salía como aviso suelto al firmar un control). El saldo sigue en la cabecera.
+  if (panel.deuda.porCobrar <= 0 && panel.cobranza.vencidas.length === 0 && !panel.cobranza.cuotaDeHoy) return null;
 
   // ws1-t4 (revisión final, fallo 11): «mensualidad» solo si la factura del caso
   // es a plazos. La colocación de «Pago por control» y el pago único de «Precio

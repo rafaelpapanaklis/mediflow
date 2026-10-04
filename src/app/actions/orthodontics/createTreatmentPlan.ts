@@ -28,6 +28,9 @@ import { existeColumnaDoctorTratante } from "@/lib/orthodontics/doctores-tratant
 import { motivoFaltaDoctor } from "@/lib/orthodontics/doctores-tratantes";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { conMovimientosSoloDeBitacora, conUnSoloMovimiento, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
+import { colocadoAlAbrir, motivoSinConsentimiento } from "@/lib/orthodontics/colocacion";
+import { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
+import { consentimientoDeOrtodonciaFirmado } from "@/lib/orthodontics/consentimiento-firmado-db";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
 type ResultadoDelPlan = ActionResult<{ id: string; altaCasoFieldsSaved: boolean; avisoPlanDetalle?: string; avisoCosto?: string }>;
@@ -97,6 +100,18 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
   if (personaAjena) return fail(personaAjena);
 
   const installedAt = parsed.data.installedAt ? new Date(parsed.data.installedAt) : null;
+  // C-66: una colocación programada (futura) no pone el caso «En curso»; solo la de hoy o antes.
+  const zonaClinica = installedAt
+    ? (await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }))?.timezone || "America/Mexico_City"
+    : "America/Mexico_City";
+  const colocado = colocadoAlAbrir(installedAt, hoyEnZona(new Date(), zonaClinica));
+  // C-62 (decisión 5): abrir el caso YA colocado es registrar la colocación: sin consentimiento firmado, no.
+  if (colocado) {
+    const sinConsentimiento = motivoSinConsentimiento(await consentimientoDeOrtodonciaFirmado(ctx.clinicId, parsed.data.patientId));
+    if (sinConsentimiento) {
+      return fail(`${sinConsentimiento} Para abrir el caso ahora, deja vacía la fecha de colocación (queda «Por colocar»).`);
+    }
+  }
   // ws1-t10 — lo que se guarda en `totalCostMxn`: lo escrito, salvo que «Pago por control» no traiga costo (abajo).
   let costoDelCaso = parsed.data.totalCostMxn;
   let avisoCosto: string | undefined;
@@ -169,7 +184,7 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
           treatmentObjectives: parsed.data.treatmentObjectives,
           patientGoals: parsed.data.patientGoals ?? null,
           retentionPlanText: parsed.data.retentionPlanText,
-          status: installedAt ? "IN_PROGRESS" : "PLANNED",
+          status: colocado ? "IN_PROGRESS" : "PLANNED",
           signedTreatmentConsentFileId: parsed.data.signedTreatmentConsentFileId ?? null,
           ...(includeAltaCasoFields
             ? {
@@ -190,8 +205,8 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
             clinicId: ctx.clinicId,
             phaseKey,
             orderIndex: i,
-            status: isFirst && installedAt ? "IN_PROGRESS" : "NOT_STARTED",
-            startedAt: isFirst && installedAt ? installedAt : null,
+            status: isFirst && colocado ? "IN_PROGRESS" : "NOT_STARTED",
+            startedAt: isFirst && colocado ? installedAt : null,
           },
         });
       }
@@ -303,7 +318,7 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
         technique: created.technique,
         durationMonths: created.estimatedDurationMonths,
         totalCostMxn: created.totalCostMxn.toString(),
-        installed: Boolean(installedAt),
+        installed: colocado,
         ...(precioControlDelCaso.cambio ? { precioPorControl: precioControlDelCaso.despues } : {}),
       },
     });

@@ -39,7 +39,7 @@ export function TimelineRow({ card, controlesPrevistos, onClick }: TimelineRowPr
     card.elastics.length === 0
       ? "—"
       : card.elastics
-          .map((e) => `${ELASTIC_CLASS_LABELS[e.elasticClass]} ${e.config}`)
+          .map((e) => `${ELASTIC_CLASS_LABELS[e.elasticClass]}${e.config ? ` ${e.config}` : ""}`)
           .join(" · ");
 
   const iprDone = card.iprPoints.filter((p) => p.done).length;

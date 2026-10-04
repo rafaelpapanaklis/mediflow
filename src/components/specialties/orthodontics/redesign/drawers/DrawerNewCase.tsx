@@ -334,6 +334,7 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
   /** Mientras nadie edite «Número de pagos», sigue a la duración estimada. */
   const [pagosTocados, setPagosTocados] = useState(false);
   const [primerPago, setPrimerPago] = useState(() => hoyISO());
+  const [hoyDeLaClinica, setHoyDeLaClinica] = useState<string | null>(null);
   const [treatingDoctorId, setTreatingDoctorId] = useState(caso?.doctorId ?? "");
   /** El doctor con el que arrancó el alta (quien abre, o el único de la sede) y de dónde salió. */
   const [doctorPropuesto, setDoctorPropuesto] = useState("");
@@ -488,6 +489,13 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
       setReferringDoctors(res.data.referringDoctors);
       setColumnsExist(res.data.columnsExist);
       setModoDeLaClinica(res.data.billingMode);
+      // C-64 (auditoría de uso): el primer pago propuesto es «hoy» de la CLÍNICA; con el navegador en otra zona (o de
+      // noche) proponía el día siguiente. Solo si nadie lo cambió todavía.
+      if (res.data.hoyClinica) {
+        const hoyClinica = res.data.hoyClinica;
+        setHoyDeLaClinica(hoyClinica);
+        if (!editar) setPrimerPago((p) => (p === hoyISO() ? hoyClinica : p));
+      }
       // Un caso abierto conserva el modo con el que nació: no se cambia.
       if (!editar) setBillingMode(res.data.billingMode);
       setPuedeCobrar(res.data.puedeCobrar);
@@ -1280,6 +1288,14 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                       </Field>
                       <Field label="Fecha de colocación (opcional)">
                         <DateField value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} max={hoyMasAniosISO(5)} className={inputCls} aria-label="Fecha de colocación" />
+                        {/* C-66 / C-62 (auditoría de uso): qué pasa con esa fecha, antes de guardar. */}
+                        {installedAt ? (
+                          <p className="mt-1 text-[11px] text-[color:var(--pr-texto-3)]" data-colocacion-al-abrir>
+                            {soloFecha(installedAt) > (hoyDeLaClinica ?? hoyISO())
+                              ? "Colocación programada: el caso queda «Por colocar» hasta ese día."
+                              : "El caso se abre «En curso». Necesita el consentimiento de ortodoncia firmado; si aún no lo tiene, deja la fecha vacía."}
+                          </p>
+                        ) : null}
                       </Field>
                     </div>
                     {doctorPropuesto && treatingDoctorId === doctorPropuesto && textoDeLaPropuesta(motivoPropuesta) ? (

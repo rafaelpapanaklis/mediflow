@@ -27,8 +27,8 @@ describe("wireLabel", () => {
     assert.equal(wireLabel({ material: "BETA_TITANIUM", gauge: "19x25" }), "β-Ti 19x25");
   });
   it("Cr-Co y Multi-stranded con su nombre (ws1-t12; antes se guardaban como SS)", () => {
-    assert.equal(wireLabel({ material: "CR_CO", gauge: "016" }), "Cr-Co 016");
-    assert.equal(wireLabel({ material: "MULTISTRANDED", gauge: "016" }), "Multi-stranded 016");
+    assert.equal(wireLabel({ material: "CR_CO", gauge: "016" }), "Cr-Co .016");
+    assert.equal(wireLabel({ material: "MULTISTRANDED", gauge: "016" }), "Multi-stranded .016");
   });
   it("null devuelve guion", () => {
     assert.equal(wireLabel(null), "—");

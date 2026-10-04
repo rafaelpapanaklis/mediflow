@@ -89,4 +89,7 @@ export interface ContextoCita {
   };
   /** Si las indicaciones ya salieron por WhatsApp hace menos de 10 min (ISO). */
   ultimoEnvio: string | null;
+  /** C-60: el doctor de la cita, y si le falta la cédula (la constancia avisa antes de imprimirse en blanco). */
+  doctor?: string;
+  doctorSinCedula?: boolean;
 }

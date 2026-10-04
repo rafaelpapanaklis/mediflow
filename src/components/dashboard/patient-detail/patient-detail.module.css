@@ -2449,3 +2449,42 @@
   line-height: 1.25;
 }
 .botonQueCabe:global(.btn-new) > svg { flex: none; }
+
+/* C-65 (auditoría de uso): la nota de la consulta ya está firmada — en vez del SOAP vacío, esto y «Completar». */
+.notaConsultaFirmada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.notaConsultaFirmada strong { color: var(--text-1); }
+.notaConsultaFirmadaBoton {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--brand);
+  color: var(--bg-elev);
+  font-weight: 600;
+  cursor: pointer;
+}
+.notaConsultaFirmadaBoton:disabled { opacity: 0.6; cursor: default; }
+
+/* C-77 (auditoría de uso): por qué «Iniciar consulta» está apagado, a la vista (en el celular no hay tooltip). */
+.heroMotivoSinIniciar {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+}

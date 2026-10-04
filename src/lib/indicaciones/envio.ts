@@ -8,6 +8,7 @@ import { parseWaTemplates } from "@/lib/whatsapp/template-config";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { hojaATextoWhatsApp } from "./cuerpo";
 import { rellenarHoja, type ValoresHoja } from "./marcadores";
+import { lugarDeLaClinica } from "@/lib/clinica/lugar-de-la-clinica";
 
 /**
  * Con qué TIPO de mensaje sale el WhatsApp de indicaciones.
@@ -66,6 +67,8 @@ export interface DatosParaHoja {
     telefono: string | null;
     ciudad: string | null;
     estado: string | null;
+    /** C-60: la dirección completa, para no imprimir una ciudad que la contradice. */
+    direccion?: string | null;
     timezone: string | null;
   };
   /** Nombres de los procedimientos reconocidos (o vacío). */
@@ -92,22 +95,17 @@ export function horaCorta(d: Date, tz: string | null | undefined): string {
   }).format(d);
 }
 
-const mismoDia = (a: Date, b: Date, tz: string | null | undefined) => fechaLarga(a, tz) === fechaLarga(b, tz);
-
 /**
- * La hora que consta: la REAL cuando el sistema la tiene (llegada y fin de la
- * consulta) y, si no, la agendada. Un cierre en otro día (la cita se terminó
- * tarde en el sistema) no cuenta como hora de salida.
+ * La hora que consta: la de la AGENDA (auditoría de uso, C-60).
+ *
+ * Antes constaba la hora «real» (llegada y fin registrados en el sistema): una cita de 11:00 a 11:30 a la que
+ * recepción le dio llegada a las 14:08 salía «de las 14:08 a las 14:38». La llegada que se marca en el sistema
+ * es cuando alguien pulsó el botón, no cuando entró el paciente; lo que la clínica ve y puede sostener es la
+ * cita de su agenda. Si la cita se movió, la agenda ya dice la hora nueva.
  */
-export function horarioQueConsta(c: CitaParaHoja, tz: string | null | undefined): { inicio: Date; fin: Date } {
-  const inicio = c.checkedInAt ?? c.startedAt ?? c.startsAt;
-  const finReal = c.completedAt && c.completedAt > inicio && mismoDia(c.completedAt, inicio, tz) ? c.completedAt : null;
-  if (finReal) return { inicio, fin: finReal };
-  // Sin fin real: el agendado; si el paciente llegó cuando la cita ya debía haber
-  // terminado, su duración agendada contada desde que llegó.
-  const duracion = Math.max(0, c.endsAt.getTime() - c.startsAt.getTime());
-  const fin = c.endsAt > inicio ? c.endsAt : new Date(inicio.getTime() + duracion);
-  return { inicio, fin };
+export function horarioQueConsta(c: CitaParaHoja, _tz?: string | null): { inicio: Date; fin: Date } {
+  const fin = c.endsAt > c.startsAt ? c.endsAt : new Date(c.startsAt.getTime() + 30 * 60 * 1000);
+  return { inicio: c.startsAt, fin };
 }
 
 /** «Extracción simple y Endodoncia», o el motivo de la cita si ningún procedimiento se reconoció. */
@@ -121,7 +119,8 @@ export function textoDeProcedimientos(procedimientos: readonly string[], motivo:
 export function valoresDeLaCita(d: DatosParaHoja, ahora: Date): ValoresHoja {
   const tz = d.clinica.timezone;
   const { inicio, fin } = horarioQueConsta(d.cita, tz);
-  const lugar = [d.clinica.ciudad, d.clinica.estado].map((x) => (x ?? "").trim()).filter(Boolean).join(", ");
+  // C-60: la ciudad sale de la dirección cuando el campo ciudad la contradice («en Mérida» con dirección de CDMX).
+  const lugar = lugarDeLaClinica({ ciudad: d.clinica.ciudad, estado: d.clinica.estado, direccion: d.clinica.direccion }).lugar;
   return {
     nombrePaciente: d.paciente.nombre,
     nombreClinica: d.clinica.nombre,

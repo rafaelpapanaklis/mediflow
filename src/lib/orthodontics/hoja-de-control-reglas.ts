@@ -99,12 +99,16 @@ const ULTIMA_HORA = 19;
  * las 10:26 p. m. proponía las 10:26 p. m. y «Agendar este control» fallaba con «cae fuera
  * del horario de la clínica». Si la visita tiene hora de CITA (`horaDeCita`), se respeta;
  * si no, se conserva la hora de la visita solo cuando cae entre las 8:00 y las 19:59 (a la
- * media hora) y, si no, se propone las 10:00. El día sí sale de la visita + N semanas.
+ * media hora) y, si no, se propone las 10:00. El día sí sale de la visita + N semanas, y si cae en domingo,
+ * el lunes siguiente (C-69).
  */
 export function proximaFechaDeControl(args: { desde: string | null; semanas: number; horaDeCita?: boolean }): string {
   const base = args.desde ? new Date(args.desde) : new Date();
   const d = new Date(base.getTime());
   d.setDate(d.getDate() + args.semanas * 7);
+  // C-69 (auditoría de uso): «4 semanas» desde un domingo (o desde una visita fechada en UTC pasadas las 18:00)
+  // proponía un control en DOMINGO, y «Agendar este control» lo creaba sin avisar. Se corre al lunes.
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
   if (!args.horaDeCita) {
     const h = d.getHours();
     if (h < PRIMERA_HORA || h > ULTIMA_HORA) {

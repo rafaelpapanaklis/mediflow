@@ -88,8 +88,9 @@ export function DrawerColocacion(props: DrawerColocacionProps) {
   const controlesNum = controles.trim() === "" ? null : Number(controles);
   const controlesValidos = controlesNum === null || (Number.isInteger(controlesNum) && controlesNum >= 1 && controlesNum <= CONTROLES_MAXIMOS);
   // La vista previa del calendario, antes de guardar (la misma cuenta que hará el servidor).
-  const vistaPrevia = datos && fecha ? calendarioDeControles(fecha, datos.frecuenciaDias, controlesNum) : null;
-  const puedeGuardar = Boolean(datos?.porColocar && fecha && controlesValidos && !guardando);
+  const vistaPrevia = datos && fecha ? calendarioDeControles(fecha, datos.frecuenciaDias, controlesNum, datos.diasCerrados) : null;
+  // C-62: sin consentimiento de ortodoncia firmado no se registra (el servidor lo vuelve a exigir).
+  const puedeGuardar = Boolean(datos?.porColocar && !datos?.sinConsentimiento && fecha && controlesValidos && !guardando);
 
   const guardar = async () => {
     if (!puedeGuardar) return;
@@ -169,6 +170,14 @@ export function DrawerColocacion(props: DrawerColocacionProps) {
                 <p role="alert" className="text-xs text-[color:var(--pr-alerta)]">
                   {datos.motivo}
                 </p>
+              ) : null}
+              {datos.porColocar && datos.sinConsentimiento ? (
+                <div role="alert" className={`${orto.aviso} ${orto.avisoAlerta}`} data-colocacion-sin-consentimiento>
+                  <span className={orto.avisoTexto}>{datos.sinConsentimiento}</span>
+                  <a className={orto.enlace} href={`/dashboard/patients/${props.patientId}?tab=consentimientos`}>
+                    Ir a Consentimientos
+                  </a>
+                </div>
               ) : null}
               <Campo etiqueta="Fecha de colocación" ayuda="Hoy, si los colocas ahora. Puede ser un día anterior; no uno que aún no llega.">
                 <DateField

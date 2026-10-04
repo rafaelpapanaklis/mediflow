@@ -26,6 +26,8 @@ function textos(locale: Locale) {
       contrafirmar: (r: RevisionDeCarta) => `${aviso(r)} Your signature will go on the letter exactly as it is. Sign anyway?`,
       contrafirmarSi: "Sign anyway",
       revisar: "Review the letter",
+      // C-79 (auditoría de uso): la firma del doctor tarda; el botón dice qué está pasando.
+      guardandoFirma: "Saving your signature…",
     };
   }
   return {
@@ -42,6 +44,8 @@ function textos(locale: Locale) {
     contrafirmar: (r: RevisionDeCarta) => `${aviso(r)} Tu firma quedará sobre la carta tal como está. ¿Firmar así?`,
     contrafirmarSi: "Firmar así",
     revisar: "Revisar la carta",
+    // C-79 (auditoría de uso): la firma del doctor tarda; el botón dice qué está pasando.
+    guardandoFirma: "Guardando tu firma…",
   };
 }
 

@@ -145,9 +145,9 @@ test("4d: sin el SQL, Cr-Co y Multi-stranded NO se guardan como acero; los NiTi 
 
 test("4d: cada valor guardado tiene nombre legible (la ficha nunca pinta «CR_CO»)", () => {
   for (const m of MATERIALES_DE_ARCO) assert.ok(ETIQUETA_DE_MATERIAL[m] && !ETIQUETA_DE_MATERIAL[m].includes("_"), m);
-  assert.equal(textoDeArco({ material: "CR_CO", gauge: "016" }), "Cr-Co 016");
-  assert.equal(textoDeArco({ material: "NITI", gauge: "014" }), "NiTi 014");
-  assert.equal(textoDeArco({ material: "OTRO", gauge: "014" }), "OTRO 014");
+  assert.equal(textoDeArco({ material: "CR_CO", gauge: "016" }), "Cr-Co .016");
+  assert.equal(textoDeArco({ material: "NITI", gauge: "014" }), "NiTi .014");
+  assert.equal(textoDeArco({ material: "OTRO", gauge: "014" }), "OTRO .014");
 });
 
 test("4d: el schema declara los mismos valores que el código", () => {
@@ -260,23 +260,23 @@ test("fallo 4: tras cambiar solo el superior, cada arcada tiene su arco (la cabe
   const arcos = arcosActuales([n014, n016sup], [firmada]);
   assert.equal(arcos.superior?.id, "w16");
   assert.equal(arcos.inferior?.id, "w14");
-  assert.deepEqual(lineasDeArcosActuales(arcos), ["NiTi 016 · Superior", "NiTi 014 · Inferior"]);
+  assert.deepEqual(lineasDeArcosActuales(arcos), ["NiTi .016 · Superior", "NiTi .014 · Inferior"]);
   // Sin hojas firmadas: los dos pasos «actual» de la secuencia, cada uno en su arcada.
-  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014, n016sup], [])), ["NiTi 016 · Superior", "NiTi 014 · Inferior"]);
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014, n016sup], [])), ["NiTi .016 · Superior", "NiTi .014 · Inferior"]);
   // Un borrador no cuenta.
   const borrador = { ...firmada, status: "DRAFT" };
-  assert.deepEqual(lineasDeArcosActuales(arcosActuales([{ ...n014 }], [borrador])), ["NiTi 014 · Ambas"]);
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([{ ...n014 }], [borrador])), ["NiTi .014 · Ambas"]);
 });
 
 test("fallo 4: el mismo arco arriba y abajo es una sola línea «· Ambas»; después cambiar el inferior lo separa", () => {
   const h1 = { status: "SIGNED", visitDate: "2026-09-01T16:00:00Z", wireFrom: null, wireTo: n014 };
-  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014], [h1])), ["NiTi 014 · Ambas"]);
+  assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014], [h1])), ["NiTi .014 · Ambas"]);
   const n018inf = arcoDePrueba("w18", "018", false, true, "ACTIVE", 3);
   const h2 = { status: "SIGNED", visitDate: "2026-09-20T16:00:00Z", wireFrom: n014, wireTo: n016sup };
   // h3 llegó con el «Actual» que precarga la hoja (uno solo: el 016 superior) y cambió el inferior.
   const h3 = { status: "SIGNED", visitDate: "2026-10-02T16:00:00Z", wireFrom: n016sup, wireTo: n018inf };
   const arcos = arcosActuales([n014, n016sup, n018inf], [h1, h2, h3]);
-  assert.deepEqual(lineasDeArcosActuales(arcos), ["NiTi 016 · Superior", "NiTi 018 · Inferior"]);
+  assert.deepEqual(lineasDeArcosActuales(arcos), ["NiTi .016 · Superior", "NiTi .018 · Inferior"]);
   // El orden de llegada de las hojas no importa: manda la fecha de la visita.
   assert.deepEqual(lineasDeArcosActuales(arcosActuales([n014, n016sup, n018inf], [h3, h1, h2])), lineasDeArcosActuales(arcos));
   assert.deepEqual(lineasDeArcosActuales({ superior: null, inferior: null }), []);
@@ -287,16 +287,16 @@ test("fallo 4: cada arco se rotula Superior / Inferior / Ambas (sin dato = Ambas
   assert.equal(arcadaDeArco({ archUpper: false, archLower: true }), "Inferior");
   assert.equal(arcadaDeArco({ archUpper: true, archLower: true }), "Ambas");
   assert.equal(arcadaDeArco({}), "Ambas");
-  assert.equal(textoDeArcoConArcada({ material: "CR_CO", gauge: "016", archUpper: true, archLower: false }), "Cr-Co 016 · Superior");
+  assert.equal(textoDeArcoConArcada({ material: "CR_CO", gauge: "016", archUpper: true, archLower: false }), "Cr-Co .016 · Superior");
 });
 
 test("fallo 4: Sabina (orto_caso) también dice los dos arcos con su arcada", () => {
   assert.equal(
     arcosLegibles({ superior: n016sup, inferior: n014 }),
-    "NiTi 016 (superior) y NiTi 014 (inferior)",
+    "NiTi .016 (superior) y NiTi .014 (inferior)",
   );
-  assert.equal(arcosLegibles({ superior: n014, inferior: n014 }), "NiTi 014 (superior e inferior)");
-  assert.equal(arcosLegibles({ superior: n016sup, inferior: null }), "NiTi 016 (superior)");
+  assert.equal(arcosLegibles({ superior: n014, inferior: n014 }), "NiTi .014 (superior e inferior)");
+  assert.equal(arcosLegibles({ superior: n016sup, inferior: null }), "NiTi .016 (superior)");
   assert.equal(arcosLegibles({ superior: null, inferior: null }), null);
 });
 

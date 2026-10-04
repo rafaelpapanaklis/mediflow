@@ -28,11 +28,14 @@ import { aplicarPlanDetalle } from "@/lib/orthodontics/plan-detalle-guardar";
 import { controlesSugeridos, datoDelPlanSinCapturar, planDetalleVacio } from "@/lib/orthodontics/plan-detalle";
 import {
   calendarioDeControles,
+  diasCerradosDelHorario,
   instanteDeColocacion,
   motivoParaNoColocar,
+  motivoSinConsentimiento,
   validarColocacion,
   type CalendarioPropuesto,
 } from "@/lib/orthodontics/colocacion";
+import { consentimientoDeOrtodonciaFirmado } from "@/lib/orthodontics/consentimiento-firmado-db";
 import type { CasoGuardado } from "@/lib/orthodontics/redesign/caso-guardado";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -43,6 +46,16 @@ const ZONA_POR_OMISION = "America/Mexico_City";
 async function zonaDeLaClinica(clinicId: string): Promise<string> {
   const c = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } });
   return c?.timezone || ZONA_POR_OMISION;
+}
+
+/** C-69: los días que la clínica no abre (su horario); sin horario o si falla la lectura, solo el domingo. */
+async function diasCerradosDeLaClinica(clinicId: string): Promise<number[]> {
+  try {
+    const filas = await prisma.clinicSchedule.findMany({ where: { clinicId }, select: { dayOfWeek: true, enabled: true } });
+    return diasCerradosDelHorario(filas);
+  } catch {
+    return [0];
+  }
 }
 
 export interface DatosParaColocar {
@@ -62,6 +75,10 @@ export interface DatosParaColocar {
   treatingDoctorId: string | null;
   /** Existe la columna del plan: sin ella los controles previstos no se guardan. */
   planGuardable: boolean;
+  /** C-62: sin el consentimiento de ortodoncia firmado (o sin poder comprobarlo) no se deja registrar; el motivo. */
+  sinConsentimiento: string | null;
+  /** C-69: días de la semana en que la clínica no abre (el calendario propuesto los salta). */
+  diasCerrados: number[];
 }
 
 export async function datosParaColocar(input: unknown): Promise<ActionResult<DatosParaColocar>> {
@@ -82,10 +99,12 @@ export async function datosParaColocar(input: unknown): Promise<ActionResult<Dat
   if (isFailure(paciente)) return paciente;
 
   const zona = await zonaDeLaClinica(ctx.clinicId);
-  const [label, opciones, planGuardable] = await Promise.all([
+  const [label, opciones, planGuardable, firmado, diasCerrados] = await Promise.all([
     cargarNombreDeTecnica(ctx.clinicId, plan.id),
     leerOpcionesDelPlan(ctx.clinicId),
     columnaDePlanDetalleExiste(),
+    consentimientoDeOrtodonciaFirmado(ctx.clinicId, plan.patientId),
+    diasCerradosDeLaClinica(ctx.clinicId),
   ]);
   const detalle = planGuardable ? await cargarPlanDetalle(ctx.clinicId, plan.id) : null;
   let doctor: string | null = null;
@@ -108,6 +127,8 @@ export async function datosParaColocar(input: unknown): Promise<ActionResult<Dat
     frecuenciaDias: opciones.frecuenciaControlDias,
     treatingDoctorId: doctor,
     planGuardable,
+    sinConsentimiento: motivoSinConsentimiento(firmado),
+    diasCerrados,
   });
 }
 
@@ -138,6 +159,10 @@ export async function registrarColocacion(input: unknown): Promise<ActionResult<
   if (isFailure(paciente)) return paciente;
   const motivo = motivoParaNoColocar(String(antes.status));
   if (motivo) return fail(motivo);
+  // C-62 (decisión 5): sin consentimiento de ortodoncia firmado no se coloca — el servidor lo exige aunque el
+  // cajón ya lo diga (otra pestaña, una revocación a medio camino, un cliente viejo).
+  const sinConsentimiento = motivoSinConsentimiento(await consentimientoDeOrtodonciaFirmado(ctx.clinicId, antes.patientId));
+  if (sinConsentimiento) return fail(sinConsentimiento);
 
   // La técnica elegida: solo una ACTIVA de la lista de la clínica (o la que el caso ya tiene).
   const labelAntes = await cargarNombreDeTecnica(ctx.clinicId, antes.id);
@@ -235,10 +260,10 @@ export async function registrarColocacion(input: unknown): Promise<ActionResult<
   revalidatePath("/dashboard/orthodontics/tablero");
   revalidatePath("/dashboard/orthodontics/alertas");
 
-  const { frecuenciaControlDias } = await leerOpcionesDelPlan(ctx.clinicId);
+  const [{ frecuenciaControlDias }, diasCerrados] = await Promise.all([leerOpcionesDelPlan(ctx.clinicId), diasCerradosDeLaClinica(ctx.clinicId)]);
   return ok({
     casoGuardado: { status: "IN_PROGRESS", installedAt: instante.toISOString() },
-    calendario: calendarioDeControles(d.fecha, frecuenciaControlDias, previstos),
+    calendario: calendarioDeControles(d.fecha, frecuenciaControlDias, previstos, diasCerrados),
     ...(aviso ? { aviso } : {}),
   });
 }

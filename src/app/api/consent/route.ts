@@ -30,6 +30,7 @@ import { calculateAge } from "@/lib/pediatrics/age";
 import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { consentLinkExpiry, consentPublicUrl, newConsentToken } from "@/lib/consent/link";
 import { minorSignerError } from "@/lib/consent/signers";
+import { ciudadParaCarta, especialidadParaCarta } from "@/lib/consent/clinica-y-doctor-en-carta";
 
 // GET /api/consent?patientId=xxx — lista del tab del expediente.
 export async function GET(req: NextRequest) {
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
       // `especialidad` = la de Equipo. `specialty` es el módulo del panel: no va.
       select: {
         id: true, firstName: true, lastName: true,
-        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true, specialty: true,
       },
     }),
   ]);
@@ -173,7 +174,8 @@ export async function POST(req: NextRequest) {
     fullIdentification: true,
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
-    clinicCity: clinic?.city ?? null,
+    // C-61: la ciudad que no contradice la dirección.
+    clinicCity: ciudadParaCarta(clinic),
     timezone: clinic?.timezone ?? null,
     patientName,
     patientAge: patient.dob ? calculateAge(patient.dob).years : null,
@@ -182,7 +184,7 @@ export async function POST(req: NextRequest) {
     doctorName,
     doctorLicense: doctor?.cedulaProfesional ?? null,
     doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
-    doctorSpecialty: doctor?.especialidad ?? null,
+    doctorSpecialty: especialidadParaCarta(doctor),
     signerName: signerName || null,
     signerRelation: signerRelation || null,
   };

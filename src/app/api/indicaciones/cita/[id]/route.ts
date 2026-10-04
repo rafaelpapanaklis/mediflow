@@ -67,6 +67,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       constanciaPorDefecto: porDefecto?.id ?? null,
       whatsapp,
       ultimoEnvio: (await ultimoEnvioReciente(ctx.clinicId, c.appointmentId))?.toISOString() ?? null,
+      doctor: c.datos.doctor.nombre,
+      doctorSinCedula: !c.datos.doctor.cedula,
     });
   } catch (err) {
     console.error("Indicaciones de la cita:", err);

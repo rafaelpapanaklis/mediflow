@@ -4,6 +4,7 @@
 // resto (404). Tres consultas a la vez, no más (el pooler).
 
 import "server-only";
+import { lugarDeLaClinica } from "@/lib/clinica/lugar-de-la-clinica";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, type AuthContext } from "@/lib/auth-context";
@@ -132,7 +133,8 @@ export async function cargarCita(ctx: AuthContext, appointmentId: string): Promi
       letterhead: {
         name: clinica.name,
         address: clinica.address,
-        city: clinica.city,
+        // C-60: el membrete no dice «Mérida» bajo una dirección de CDMX.
+        city: lugarDeLaClinica({ ciudad: clinica.city, direccion: clinica.address }).ciudad || clinica.city,
         state: clinica.state,
         phone: clinica.phone,
         email: clinica.email,
@@ -163,6 +165,7 @@ export async function cargarCita(ctx: AuthContext, appointmentId: string): Promi
         telefono: clinica.phone,
         ciudad: clinica.city,
         estado: clinica.state,
+        direccion: clinica.address,
         timezone: clinica.timezone,
       },
       procedimientos: procedimientos.map((p) => p.name),

@@ -35,6 +35,7 @@ import { SignaturePad } from "@/components/ui/signature-pad";
 import { parseConsentText, splitConsentBody } from "@/lib/consent/render";
 import { formatConsentDateTime } from "@/lib/consent/dates";
 import { avisoDeCarta, cartaConPendientes, revisarCarta } from "@/lib/consent/huecos-carta";
+import { conPuntoFinal, queFaltaParaFirmar } from "@/lib/consent/falta-para-firmar";
 
 interface ConsentPublicData {
   procedure: string;
@@ -199,8 +200,11 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
               <h2 className="text-sm font-bold text-emerald-800">Consentimiento firmado</h2>
             </div>
             <p className="mt-1.5 text-xs text-emerald-800 leading-relaxed">
-              Firmado por <strong>{signerLabel}</strong> el {formatConsentDateTime(form.signedAt, form.clinic?.timezone)}
-              {isRepresented ? ", como representante legal del paciente" : ""}.
+              {/* C-79: la hora ya termina en «p.m.»; sin representante no se le pega otro punto. */}
+              Firmado por <strong>{signerLabel}</strong> el{" "}
+              {conPuntoFinal(
+                `${formatConsentDateTime(form.signedAt, form.clinic?.timezone)}${isRepresented ? ", como representante legal del paciente" : ""}`,
+              )}
             </p>
             <a
               href={`/api/consent/public/${params.token}/pdf`}
@@ -328,6 +332,12 @@ export default function ConsentPage({ params }: { params: { token: string } }) {
               {signing ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
               {signing ? "Firmando…" : "Firmar consentimiento"}
             </button>
+            {/* C-79: con el botón apagado, qué falta (antes solo se veía gris). */}
+            {!listo && !signing ? (
+              <p className="text-xs font-semibold text-slate-500 text-center" role="status" data-falta-para-firmar>
+                {queFaltaParaFirmar({ aceptado: agreed, conFirma: Boolean(signature), conHuecos: Boolean(conPendientes), huecosConfirmados: confirmoHuecos })}
+              </p>
+            ) : null}
 
             <p className="flex items-start gap-1.5 text-[11px] text-slate-400 leading-relaxed">
               <ShieldCheck size={13} className="shrink-0 mt-0.5" />

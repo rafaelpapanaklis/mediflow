@@ -1050,7 +1050,7 @@ function CountersignModal({
               ? <Loader2 size={13} className="animate-spin" aria-hidden />
               : <Check size={13} aria-hidden />}
           >
-            {t("patients.consents.countersignCta")}
+            {busy ? txHuecos.guardandoFirma : t("patients.consents.countersignCta")}
           </ButtonNew>
         </DialogFooter>
       </DialogContent>

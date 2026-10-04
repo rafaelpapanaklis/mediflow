@@ -29,6 +29,7 @@ import { calculateAge } from "@/lib/pediatrics/age";
 import { missingConsentData } from "@/lib/consent/document-data";
 import { consentTimeZone } from "@/lib/consent/dates";
 import { encabezadoDeCarta } from "@/lib/consent/documento";
+import { ciudadParaCarta, especialidadParaCarta } from "@/lib/consent/clinica-y-doctor-en-carta";
 
 export async function GET(req: NextRequest) {
   const limited = rateLimit(req, 60);
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
       // `especialidad` = la de Equipo. `specialty` es el módulo del panel: no va.
       select: {
         firstName: true, lastName: true,
-        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true,
+        cedulaProfesional: true, cedulaEspecialidad: true, especialidad: true, specialty: true,
       },
     }),
   ]);
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest) {
     fullIdentification: true,
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
-    clinicCity: clinic?.city ?? null,
+    clinicCity: ciudadParaCarta(clinic),
     timezone: clinic?.timezone ?? null,
     patientName: `${patient.firstName} ${patient.lastName}`.trim(),
     patientAge: patient.dob ? calculateAge(patient.dob).years : null,
@@ -112,7 +113,7 @@ export async function GET(req: NextRequest) {
     doctorName: doctor ? `${doctor.firstName ?? ""} ${doctor.lastName ?? ""}`.trim() : "",
     doctorLicense: doctor?.cedulaProfesional ?? null,
     doctorSpecialtyLicense: doctor?.cedulaEspecialidad ?? null,
-    doctorSpecialty: doctor?.especialidad ?? null,
+    doctorSpecialty: especialidadParaCarta(doctor),
     signerName: signerName || null,
     signerRelation: signerRelation || null,
   };
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest) {
     clinicAddress: clinic?.address ?? null,
     clinicLogoUrl: clinic?.logoUrl ?? null,
     doctorLicense: doctor?.cedulaProfesional ?? null,
-    doctorSpecialty: doctor?.especialidad ?? null,
+    doctorSpecialty: especialidadParaCarta(doctor),
     patientCurp: patient.curp ?? null,
     patientCurpStatus: patient.curpStatus ?? null,
   });
@@ -140,7 +141,7 @@ export async function GET(req: NextRequest) {
     timeZone: consentTimeZone(clinic?.timezone),
     clinicName: clinic?.name ?? "",
     clinicAddress: clinic?.address ?? null,
-    clinicCity: clinic?.city ?? null,
+    clinicCity: ciudadParaCarta(clinic),
     clinicPhone: clinic?.phone ?? null,
     clinicLogoUrl: clinic?.logoUrl ?? null,
     patientName: vars.patientName,

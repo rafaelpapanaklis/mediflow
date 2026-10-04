@@ -18,6 +18,10 @@ const es = {
   iniciandoConsulta: "Iniciando consulta…",
   /** La hoja de control no abrió en 30 s (bloqueante 9b): el botón se suelta; si la respuesta llega, abre sola. */
   laHojaTardaEnAbrir: "La hoja de control está tardando en abrir. Si no aparece, vuelve a pulsar «Registrar control».",
+  /** C-77: con la consulta abierta, el botón de la cabecera ya no invita a «Iniciar» otra vez. */
+  consultaEnCurso: "Consulta en curso",
+  /** C-77: «Iniciar consulta» apagado sin cita de hoy; el motivo va a la vista (el tooltip no se ve en el celular). */
+  sinCitaParaIniciar: "Para iniciar la consulta, primero agenda la cita del paciente.",
 };
 
 const en: typeof es = {
@@ -27,6 +31,8 @@ const en: typeof es = {
   sinPermisoParaIniciar: "Your user can't start consultations: the attending doctor starts it.",
   iniciandoConsulta: "Starting consultation…",
   laHojaTardaEnAbrir: "The check-up sheet is taking long to open. If it doesn't show up, press “Record check-up” again.",
+  consultaEnCurso: "Consultation in progress",
+  sinCitaParaIniciar: "To start the consultation, first book the patient's appointment.",
 };
 
 export type TextosConsultaFicha = typeof es;

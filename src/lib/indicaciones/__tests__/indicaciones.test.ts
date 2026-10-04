@@ -361,18 +361,20 @@ const cita = (p: Partial<Parameters<typeof horarioQueConsta>[0]> = {}) => ({
   ...p,
 });
 
-test("constancia: consta la hora REAL (llegada y fin) cuando existe; si no, la agendada", () => {
-  const real = horarioQueConsta(cita({ checkedInAt: new Date("2026-10-03T15:55:00Z"), completedAt: new Date("2026-10-03T16:40:00Z") }), TZ);
-  assert.equal(real.inicio.toISOString(), "2026-10-03T15:55:00.000Z");
-  assert.equal(real.fin.toISOString(), "2026-10-03T16:40:00.000Z");
-  const agendada = horarioQueConsta(cita(), TZ);
-  assert.equal(agendada.fin.toISOString(), "2026-10-03T16:30:00.000Z");
-  // Terminada en el sistema al día siguiente: esa no es la hora de salida.
-  const tarde = horarioQueConsta(cita({ completedAt: new Date("2026-10-04T18:00:00Z") }), TZ);
-  assert.equal(tarde.fin.toISOString(), "2026-10-03T16:30:00.000Z");
-  // Llegó cuando la cita ya debía haber terminado: su duración desde que llegó, nunca «de 11:10 a 10:30».
-  const retraso = horarioQueConsta(cita({ checkedInAt: new Date("2026-10-03T17:10:00Z") }), TZ);
-  assert.ok(retraso.fin > retraso.inicio);
+test("constancia (C-60): consta la hora de la AGENDA, no la llegada que alguien marcó tarde en el sistema", () => {
+  // La cita del 2-oct de 11:00 a 11:30 con «llegada» marcada a las 14:08: antes decía «de las 14:08 a las 14:38».
+  const marcadaTarde = horarioQueConsta(
+    cita({ startsAt: new Date("2026-10-02T17:00:00Z"), endsAt: new Date("2026-10-02T17:30:00Z"), checkedInAt: new Date("2026-10-02T20:08:00Z") }),
+    TZ,
+  );
+  assert.equal(marcadaTarde.inicio.toISOString(), "2026-10-02T17:00:00.000Z");
+  assert.equal(marcadaTarde.fin.toISOString(), "2026-10-02T17:30:00.000Z");
+  const conFinReal = horarioQueConsta(cita({ checkedInAt: new Date("2026-10-03T15:55:00Z"), completedAt: new Date("2026-10-03T16:40:00Z") }), TZ);
+  assert.equal(conFinReal.inicio.toISOString(), "2026-10-03T16:00:00.000Z");
+  assert.equal(conFinReal.fin.toISOString(), "2026-10-03T16:30:00.000Z");
+  // Una cita sin duración no sale «de 10:00 a 10:00».
+  const sinDuracion = horarioQueConsta(cita({ endsAt: new Date("2026-10-03T16:00:00Z") }), TZ);
+  assert.ok(sinDuracion.fin > sinDuracion.inicio);
 });
 
 test("constancia: los valores salen en la zona de la clínica y la cédula que falta, como raya", () => {
@@ -387,10 +389,25 @@ test("constancia: los valores salen en la zona de la clínica y la cédula que f
     new Date("2026-10-04T02:00:00Z"), // 3 de octubre, 20:00 en CDMX
   );
   assert.equal(v.fechaCita, "3 de octubre de 2026");
-  assert.equal(v.horaInicio, "09:55");
-  assert.equal(v.horaFin, "10:40");
+  assert.equal(v.horaInicio, "10:00");
+  assert.equal(v.horaFin, "10:30");
   assert.equal(v.fecha, "3 de octubre de 2026");
   assert.equal(v.lugar, "Mérida, Yucatán");
+  // C-60: con una dirección de CDMX el campo ciudad «Mérida» ya no se imprime.
+  const cdmx = valoresDeLaCita(
+    {
+      cita: cita(),
+      paciente: { nombre: "Ana López" },
+      doctor: { nombre: "Luis Pérez", cedula: "1234567" },
+      clinica: {
+        nombre: "Clínica QA", telefono: null, ciudad: "Mérida", estado: null, timezone: TZ,
+        direccion: "Av. Insurgentes Sur 1234, Col. Del Valle, Benito Juárez, 03100 Ciudad de México, CDMX",
+      },
+      procedimientos: [],
+    },
+    new Date("2026-10-04T02:00:00Z"),
+  );
+  assert.equal(cdmx.lugar, "Ciudad de México");
   assert.equal(v.procedimiento, "Extracción simple", "sin procedimiento reconocido, el motivo");
   const texto = rellenarHoja(textoDeFabrica("constancia")!.cuerpo, v);
   assert.ok(texto.includes("Ana López") && texto.includes("Luis Pérez") && texto.includes(`cédula profesional ${RAYA}`));
