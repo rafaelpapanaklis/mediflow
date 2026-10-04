@@ -99,6 +99,13 @@ export interface PlanDeCobro {
   totalCuotas: number;
   /** Lo que falta del plan entero, en pesos. */
   pendiente: number;
+  /**
+   * ws1-t1 (N-50): lo que FALTA de la cuota con la que arranca. Si ya tenía un abono (p. ej. $400 de $2,050),
+   * es menor que `monto`: MP cobra el importe fijo (decisión F1 del 3-oct: un abono parcial no cambia el monto)
+   * y lo de más se abona a la siguiente; el último cargo se ajusta solo a lo que falte, así que el total nunca
+   * pasa de `pendiente`. La pantalla lo dice con esto.
+   */
+  faltaInicial: number;
 }
 
 export interface EntradaPlan {
@@ -148,6 +155,7 @@ export function planDeCobro(e: EntradaPlan): { plan: PlanDeCobro | null; motivo:
       cuotaInicial: siguiente.numero,
       totalCuotas: regulares.length,
       pendiente: aPesos(pendienteC),
+      faltaInicial: aPesos(Math.min(aCentavos(siguiente.falta), pendienteC)),
     },
     motivo: null,
   };

@@ -50,6 +50,7 @@ test("plan: la siguiente mensualidad DESPUÉS de hoy, por su importe, hasta la �
     cuotaInicial: 2,
     totalCuotas: 6,
     pendiente: 15000,
+    faltaInicial: 3000,
   });
 });
 
@@ -236,4 +237,33 @@ test("F1 · una pausa manual o una suscripción pendiente no avisan; los hechos 
   assert.equal(hechoDeCobro({ status: "recycling", paymentStatus: "rejected" }), "reintenta");
   assert.equal(hechoDeCobro({ status: "processed", paymentStatus: "rejected" }), "rechazado");
   assert.equal(sumarDias("2026-12-31", 1), "2027-01-01");
+});
+
+// ws1-t1 (N-50, tercera ronda): caso «QA Orto R4 Plazos» — enganche $4,000 + 10 × $2,050, pagado $8,500 ($400 ya
+// abonados a la mensualidad 3). La pantalla de cobro dice «Cobrar · $1,650» y el cobro automático decía «Se
+// cobrarían $2,050.00 en cada fecha» sin explicar. Decisión F1 (3-oct): un abono parcial NO cambia el monto; lo
+// que no puede pasar es cobrar en total más de lo pendiente.
+test("🔴→🟢 N-50: el plan dice cuánto le falta a la cuota de arranque, y el total nunca pasa de lo pendiente", () => {
+  const plazos: CondicionesPago = {
+    modo: "plazos", metodo: "credit", enganche: 4000, numPagos: 10, frecuencia: "MONTHLY",
+    primerPago: "2026-09-20", difiereConSuBanco: false,
+  };
+  const r = planDeCobro({ condiciones: plazos, total: 24500, pagado: 8500, estadoFactura: "PARTIAL", hoy: "2026-10-04" });
+  assert.equal(r.plan?.monto, 2050);
+  assert.equal(r.plan?.pendiente, 16000);
+  assert.equal(r.plan?.cuotaInicial, 3);
+  assert.equal(r.plan?.faltaInicial, 1650, "a la mensualidad 3 le faltan $1,650 (lo que dice «Cobrar»)");
+  // Simular los cargos de MP con el ajuste de siempre (el monto baja cuando lo pendiente es menor): nunca de más.
+  let pagado = 8500;
+  let cobrado = 0;
+  let dia = "2026-10-04";
+  for (let i = 0; i < 20; i++) {
+    const p = planDeCobro({ condiciones: plazos, total: 24500, pagado, estadoFactura: "PARTIAL", hoy: dia });
+    if (!p.plan) break;
+    pagado += p.plan.monto;
+    cobrado += p.plan.monto;
+    const [a, m, d] = p.plan.inicio.split("-").map(Number);
+    dia = new Date(Date.UTC(a, m - 1, d + 1)).toISOString().slice(0, 10);
+  }
+  assert.equal(cobrado, 16000, "en total, exactamente lo pendiente");
 });

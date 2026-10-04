@@ -178,6 +178,11 @@ export function CobroAutomaticoDelCaso(props: {
               <p className={`text-[13px] ${orto.tonoTexto2}`}>
                 {t.resumenPlan(pesos(estado.plan.monto, t.locale), fechaLarga(estado.plan.inicio, t.locale), estado.plan.cuotaInicial, estado.plan.totalCuotas)}
               </p>
+              {estado.plan.faltaInicial != null && estado.plan.faltaInicial < estado.plan.monto ? (
+                <p className={`text-[12px] ${orto.tonoApagado}`} data-aviso-abono>
+                  {t.resumenAbono(estado.plan.cuotaInicial, pesos(estado.plan.faltaInicial, t.locale), pesos(estado.plan.monto, t.locale), pesos(estado.plan.pendiente, t.locale))}
+                </p>
+              ) : null}
               <label className={orto.campo}>
                 <span className={orto.campoEtiqueta}>{t.correo}</span>
                 <input

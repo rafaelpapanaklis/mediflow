@@ -33,6 +33,9 @@ const es = {
   correoPista: "Mercado Pago lo pide: con ese correo el paciente entra a registrar su tarjeta.",
   resumenPlan: (monto: string, desde: string, cuota: number, de: number) =>
     `Se cobrarían ${monto} en cada fecha del plan, empezando el ${desde} (mensualidad ${cuota} de ${de}). Lo vencido no se cobra solo.`,
+  // ws1-t1 (N-50): la cuota de arranque ya tenía un abono; el total nunca pasa de lo pendiente.
+  resumenAbono: (cuota: number, falta: string, monto: string, pendiente: string) =>
+    `La mensualidad ${cuota} ya tiene un abono: le faltan ${falta}. Mercado Pago cobra siempre ${monto}; lo que sobre se abona a la siguiente mensualidad y el último cargo se ajusta solo, así que en total no se cobra más de ${pendiente}.`,
   confirmar:
     "Se creará en Mercado Pago el cobro automático y te daremos el link para que el paciente registre su tarjeta. ¿Continuar?",
   estado: {
@@ -95,6 +98,8 @@ const en: Textos = {
   correoPista: "Mercado Pago requires it: the patient signs in with it to register the card.",
   resumenPlan: (monto: string, desde: string, cuota: number, de: number) =>
     `${monto} would be charged on each plan date, starting ${desde} (installment ${cuota} of ${de}). Overdue amounts are not charged automatically.`,
+  resumenAbono: (cuota: number, falta: string, monto: string, pendiente: string) =>
+    `Installment ${cuota} already has a partial payment: ${falta} left. Mercado Pago always charges ${monto}; any extra goes to the next installment and the last charge adjusts itself, so in total no more than ${pendiente} is charged.`,
   confirmar: "Automatic charges will be created in Mercado Pago and you'll get the link for the patient to register the card. Continue?",
   estado: {
     creating: "Creating…",
@@ -154,7 +159,14 @@ export function fechaLarga(iso: string | null, locale: "es" | "en"): string {
 }
 
 export function pesos(n: number, locale: "es" | "en"): string {
-  return new Intl.NumberFormat(locale === "en" ? "en-US" : "es-MX", { style: "currency", currency: "MXN" }).format(n);
+  // ws1-t1 (N-50): sin «.00» en cantidades enteras («$2,050», como el resto del panel); con centavos si los hay.
+  const enteros = Number.isInteger(Math.round(n * 100) / 100);
+  return new Intl.NumberFormat(locale === "en" ? "en-US" : "es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: enteros ? 0 : 2,
+    maximumFractionDigits: enteros ? 0 : 2,
+  }).format(n);
 }
 
 /** Fechas como «5 de octubre» / «October 5». */
