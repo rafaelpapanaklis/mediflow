@@ -18,3 +18,18 @@ export function responsablesConCarril<T extends { id: string }>(
   if (responsables.length <= umbral) return [...responsables];
   return responsables.filter((r) => idsConCitasEseDia.has(r.id));
 }
+
+/**
+ * Las iniciales del responsable para la tarjeta de la Semana (ws1-t1, ronda final — N-B). Con varios doctores,
+ * los carriles de un día van sin rótulo y solo el borde de color decía de quién era cada cita: la tarjeta lleva
+ * ahora «AB · 10:00 · Limpieza». Sin títulos («Dr.», «Dra.», «Dr/a.»); una sola palabra → sus dos primeras letras.
+ */
+export function inicialesDelResponsable(nombre: string | null | undefined): string {
+  const palabras = (nombre ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p && !/^(dr|dra|dr\/a|lic|mtro|mtra)\.?$/i.test(p));
+  if (palabras.length === 0) return "";
+  if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase();
+  return (palabras[0][0] + palabras[1][0]).toUpperCase();
+}

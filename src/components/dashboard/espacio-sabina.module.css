@@ -1,0 +1,13 @@
+/* ws1-t1 (ronda final, N-E): en el teléfono el botón flotante de Sabina (52 px, a 24 px del borde) tapaba la
+   insignia de la última fila de la Fila de espera y de Hoy. Al final de esas listas va este hueco: solo en
+   pantallas angostas, que es donde el botón cae encima del contenido. */
+.espacio {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .espacio {
+    display: block;
+    height: 88px;
+  }
+}

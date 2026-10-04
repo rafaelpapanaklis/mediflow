@@ -15,7 +15,7 @@ import {
   type ClinicTimeConfig,
 } from "@/lib/agenda/time-utils";
 import { buildOpenSlotSet } from "@/lib/agenda/resource-schedule";
-import { avisoHorarioAlAgendar, huecoFueraDeHorario, type HorarioDelDia } from "@/lib/agenda/aviso-horario-alta";
+import { avisoHorarioAlAgendar, huecoFueraDeHorario, pintarFueraDeHorario, type HorarioDelDia } from "@/lib/agenda/aviso-horario-alta";
 import type {
   AgendaAppointmentDTO,
   DoctorColumnDTO,
@@ -231,7 +231,12 @@ export function SlotGridPicker({
     const selected = idx === valueIdx;
     const slotUtc = slotIndexToUtc(idx, dateISO, config);
     const label = formatSlotTime(slotUtc.toISOString(), config.timezone);
-    const fuera = free && fueraDeHorario(idx);
+    // ws1-t1 (N-A): el último hueco del día no cabe (se sale de la rejilla) y antes no se apagaba como los demás.
+    const fuera = pintarFueraDeHorario({
+      libre: free,
+      seSaleDelDia: idx + slotsNeeded > total && slotUtc.getTime() > nowMs,
+      fueraDeHorario: fueraDeHorario(idx),
+    });
     const tituloFuera = fuera ? "Fuera del horario de la clínica" : undefined;
 
     if (nueva) {

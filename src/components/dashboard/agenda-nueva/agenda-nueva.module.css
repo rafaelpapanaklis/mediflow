@@ -1346,6 +1346,13 @@
   container-type: inline-size;
 }
 
+/* ws1-t1 (ronda final, N-B): las iniciales del doctor en la tarjeta de la Semana. */
+.tarjetaResponsable {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--ag-tinta);
+}
+
 .tarjetaHoraEstrecha {
   display: none;
 }

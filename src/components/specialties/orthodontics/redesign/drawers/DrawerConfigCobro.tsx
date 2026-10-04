@@ -171,7 +171,7 @@ export function DrawerConfigCobro(props: DrawerConfigCobroProps) {
 
         <footer className={orto.cajonPie}>
           <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
-          <Btn variant="emerald" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={guardar} disabled={guardando}>
+          <Btn variant="primary" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={guardar} disabled={guardando}>
             {guardando ? "Guardando..." : "Guardar política"}
           </Btn>
         </footer>

@@ -22,6 +22,7 @@
    necesita tocar este archivo para verse suya.
    ============================================================ */
 import { precioDeServicio, textosAvisoReserva } from "@/lib/reserva-web/datos-reserva";
+import { interpretarTecleo } from "@/components/ui/date-field-mascara";
 import { cabeElServicio, fechaLargaReserva, lineaDePrecio, nombreDoctorReserva, textoNoCabe } from "@/lib/reserva-web/textos-reserva";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -272,7 +273,7 @@ export function BookingFlow({
   const [form, setForm] = useState({
     firstName: "", lastName: "", phone: "", email: "", notes: "",
     // vía sin cuenta
-    nombreCompleto: "", dob: "", whatsapp: "",
+    nombreCompleto: "", dob: "", dobTexto: "", whatsapp: "",
     // campo trampa: si un bot lo llena, el servidor lo descarta
     website: "",
   });
@@ -744,7 +745,7 @@ export function BookingFlow({
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-bold truncate" style={{ color: P.ink }}>{s.name}</span>
                   {linea && (
-                    <span className="block text-xs mt-0.5 font-mono" style={{ color: P.inkSoft }}>
+                    <span className="block text-xs mt-0.5 tabular-nums" style={{ color: P.inkSoft }}>
                       {linea}
                     </span>
                   )}
@@ -767,7 +768,7 @@ export function BookingFlow({
             style={{ background: alpha(theme, 0.1), color: surface === "dark" ? P.ink : shade(theme, 0.35) }}>
             <Calendar size={15} className="mt-0.5 shrink-0" />
             <span>
-              {selDate ? formatLargo(selDate) : ""} · <span className="font-mono">{selSlot}</span>
+              {selDate ? formatLargo(selDate) : ""} · <span className="tabular-nums">{selSlot}</span>
               <br />
               <span className="font-normal">
                 {doctorElegido ? nombreDoctorReserva(doctorElegido) : "Cualquier doctor disponible"}
@@ -793,10 +794,16 @@ export function BookingFlow({
                 value={form.nombreCompleto} onChange={v => setForm(f => ({ ...f, nombreCompleto: v }))}
                 placeholder="Ana María Gómez López" autoComplete="name" />
 
-              <Campo label="Fecha de nacimiento *" P={P} theme={theme} intentado={intentado}
-                invalido={!form.dob} type="date"
-                value={form.dob} onChange={v => setForm(f => ({ ...f, dob: v }))}
-                autoComplete="bday" />
+              {/* ws1-t1 (ronda final, N-D): dd/mm/aaaa siempre, como el alta del panel. Con type="date" el
+                  navegador en inglés pedía mm/dd/yyyy y el 03/04 se leía al revés. */}
+              <Campo label="Fecha de nacimiento * (dd/mm/aaaa)" P={P} theme={theme} intentado={intentado}
+                invalido={!form.dob} inputMode="numeric"
+                value={form.dobTexto}
+                onChange={v => setForm(f => {
+                  const r = interpretarTecleo(v, "1900-01-01", new Date().toISOString().slice(0, 10));
+                  return { ...f, dobTexto: r.text, dob: r.iso ?? "" }; // a medio teclear = todavía sin fecha
+                })}
+                placeholder="dd/mm/aaaa" autoComplete="bday" />
 
               <Campo label={avisos.campoTelefono} P={P} theme={theme} intentado={intentado}
                 invalido={soloDigitos(form.whatsapp).length < 10} type="tel" inputMode="numeric"
@@ -1056,7 +1063,7 @@ function FinalScreen({
       <p className="text-sm mb-1" style={{ color: P.inkSoft }}>
         {doctor ? nombreDoctorReserva(doctor) : "Cualquier doctor disponible"}
       </p>
-      <p className="font-bold text-base mb-6 font-mono" style={{ color: theme }}>
+      <p className="font-bold text-base mb-6 tabular-nums" style={{ color: theme }}>
         {fecha ? formatLargo(fecha) : ""} · {hora}
       </p>
 

@@ -425,6 +425,7 @@ function ColumnaDeDia(props: {
           seleccionada={cita.id === props.citaAbiertaId}
           onAbrir={props.onAbrirCita}
           arrastrable={citaArrastrable(cita.dto, props.puedeEditar)}
+          conResponsable={carriles.length > 1}
         />
       ))}
     </>

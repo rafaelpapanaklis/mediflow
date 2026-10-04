@@ -4,6 +4,7 @@ import { useRef, type Dispatch, type ReactNode, type SetStateAction, type Keyboa
 import { Clock, UserPlus } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { RaizRediseno } from "./raiz";
+import { EspacioSabina } from "@/components/dashboard/espacio-sabina";
 import { Boton, Cabecera, Campo, Etiqueta, Tarjeta, Vacio, clases as s, type Tono } from "./piezas";
 import type { PacienteEncontrado } from "@/lib/walk-in/paciente-de-la-fila";
 
@@ -294,6 +295,8 @@ export function FilaEspera({
           </Tarjeta>
         )}
       </div>
+      {/* ws1-t1 (N-E): que Sabina no tape la última fila en el teléfono. */}
+      <EspacioSabina />
     </RaizRediseno>
   );
 }

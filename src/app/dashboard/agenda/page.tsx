@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { primeroElPropio } from "@/lib/agenda/primero-el-propio";
 import { getCurrentUser } from "@/lib/auth";
@@ -28,6 +29,10 @@ import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
 import { ctxDeUsuario } from "@/lib/agenda-bloqueos/core-ctx";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import { AgendaPageClient } from "./agenda-page-client";
+
+// ws1-t1 (ronda final, N-55): sin esto la pestaña decía «DaleControl — Software para clínicas en México» (el título
+// de la portada). El «| DaleControl» lo pone la plantilla de app/layout.tsx.
+export const metadata: Metadata = { title: "Agenda" };
 
 export const dynamic = "force-dynamic";
 

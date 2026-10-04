@@ -90,7 +90,7 @@ export function DrawerElegirDescuento(props: DrawerElegirDescuentoProps) {
         </div>
         <footer className={orto.cajonPie}>
           <Btn variant="ghost" size="md" onClick={props.onClose}>Cancelar</Btn>
-          <Btn variant="emerald" size="md" onClick={guardar} disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</Btn>
+          <Btn variant="primary" size="md" onClick={guardar} disabled={guardando}>{guardando ? "Guardando..." : "Guardar"}</Btn>
         </footer>
       </aside>
     </>

@@ -149,7 +149,7 @@ export function DrawerCambiarPlanDePago(props: DrawerCambiarPlanDePagoProps) {
         <footer className={orto.cajonPie}>
           <Btn variant="ghost" size="md" onClick={props.onClose}>{saldada ? "Cerrar" : "Cancelar"}</Btn>
           {saldada ? null : (
-          <Btn variant="emerald" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={guardar} disabled={sinCambios || guardando}>
+          <Btn variant="primary" size="md" icon={<Save className="w-3.5 h-3.5" aria-hidden />} onClick={guardar} disabled={sinCambios || guardando}>
             {guardando ? "Guardando..." : "Guardar nuevo plan"}
           </Btn>
           )}

@@ -13,6 +13,7 @@
  * home de siempre). Hallazgo 2 de la auditoría del rediseño (ws1-t8).
  */
 
+import { EspacioSabina } from "@/components/dashboard/espacio-sabina";
 import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -210,6 +211,8 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
       </Tarjeta>
 
       <BarraAtajos />
+      {/* ws1-t1 (N-E): que Sabina no tape la última fila en el teléfono. */}
+      <EspacioSabina />
     </>
   );
 }

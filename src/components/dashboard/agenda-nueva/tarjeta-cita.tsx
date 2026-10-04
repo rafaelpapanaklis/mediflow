@@ -17,6 +17,7 @@
  * barra izquierda de 3 px es el color del responsable. Ni un hex aquí dentro.
  */
 
+import { inicialesDelResponsable } from "@/lib/agenda-nueva/carriles-semana";
 import { Armchair, Ban, Check, Circle, Clock, DollarSign, UserX, Wallet } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
@@ -55,6 +56,8 @@ export interface TarjetaCitaProps {
    * mover). En `false` la tarjeta no escucha el arrastre: un clic la abre y ya.
    */
   arrastrable?: boolean;
+  /** ws1-t1 (N-B): en la Semana con varios carriles, las iniciales del doctor al frente de la segunda línea. */
+  conResponsable?: boolean;
 }
 
 export function TarjetaCita({
@@ -64,6 +67,7 @@ export function TarjetaCita({
   seleccionada = false,
   onAbrir,
   arrastrable = false,
+  conResponsable = false,
 }: TarjetaCitaProps) {
   const { pinta } = cita;
 
@@ -136,7 +140,8 @@ export function TarjetaCita({
         (arrastrable
           ? `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip} · Arrastra para moverla`
           : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`) +
-        (cita.avisoMensualidadVencida ? " · Mensualidad de ortodoncia vencida" : "")
+        (cita.avisoMensualidadVencida ? " · Mensualidad de ortodoncia vencida" : "") +
+        (conResponsable ? ` · ${cita.responsableNombre}` : "")
       }
       style={{
         top: geometria.top,
@@ -182,6 +187,11 @@ export function TarjetaCita({
         {cita.notaAnticipo && <Wallet size={11} strokeWidth={2} className={s.tarjetaNotaIcono} aria-hidden />}
         {/* ws1-t1 (C-96): en tarjeta angosta la hora baja aquí (CSS: `.tarjetaHoraEstrecha`). */}
         {variante === "dia" && !cita.notaAnticipo && <span className={s.tarjetaHoraEstrecha}>{cita.horaInicio} · </span>}
+        {variante === "semana" && conResponsable && inicialesDelResponsable(cita.responsableNombre) && (
+          <abbr className={s.tarjetaResponsable} title={cita.responsableNombre}>
+            {inicialesDelResponsable(cita.responsableNombre)} ·{" "}
+          </abbr>
+        )}
         {variante === "semana" ? (cita.notaAnticipo ?? `${cita.horaInicio} · ${cita.tratamiento}`) : segundaLinea}
       </span>
     </button>

@@ -24,6 +24,16 @@ export function huecoFueraDeHorario(horario: HorarioDelDia | null | undefined, i
   return false;
 }
 
+/**
+ * ¿El hueco se pinta «fuera de horario»? (ws1-t1, ronda final — N-A). Antes solo un hueco LIBRE se apagaba, y el
+ * último del día (19:45 con 30 min) no cabe antes del final de la rejilla: salía como ocupado, sin el punteado,
+ * aunque está fuera de horario igual que los demás. Un hueco que no está libre solo porque se pasa del final del
+ * día se pinta también fuera de horario (sigue sin poder elegirse).
+ */
+export function pintarFueraDeHorario(o: { libre: boolean; seSaleDelDia: boolean; fueraDeHorario: boolean }): boolean {
+  return (o.libre || o.seSaleDelDia) && o.fueraDeHorario;
+}
+
 export const DONDE_SE_CAMBIA_EL_HORARIO = "Configuración → Horarios y bloqueos";
 
 /** La línea que va sobre la rejilla. null = nada que decir. */
