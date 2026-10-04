@@ -429,7 +429,10 @@ export function FinanzasRediseno() {
                           <td>
                             <span className={s.chip}>{g.category}</span>
                             {/* ws1-t6 (arreglo B6) — mismo criterio que finanzas-client.tsx: el
-                                gasto que nació de una compra de inventario lleva su proveedor. */}
+                                gasto que nació de una compra de inventario lleva su proveedor.
+                                ws1-t2 (C-36): con un espacio de verdad entre las dos pastillas; el
+                                texto se leía «InsumosCompra» (copiar, lector de pantalla). */}
+                            {g.purchaseId && " "}
                             {g.purchaseId && (
                               <span
                                 className={s.chipCompra}

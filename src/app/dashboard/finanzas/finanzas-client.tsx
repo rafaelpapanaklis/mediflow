@@ -17,6 +17,9 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
 import { BloqueOrtodoncia } from "@/components/dashboard/finanzas-rediseno/bloque-ortodoncia";
 import { QueCuenta, type ClaveQueCuenta } from "@/components/dashboard/que-cuenta";
+import { avisoBorrarGasto } from "@/lib/finanzas/aviso-borrar-gasto";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useLocale } from "@/i18n/i18n-provider";
 
 // ── Contrato de datos (no renombrar claves) ────────────────────────
 interface SeriePoint { fecha: string; ingresos: number; gastos: number }
@@ -146,6 +149,8 @@ function Skeletons() {
 
 // ── Cliente principal ──────────────────────────────────────────────
 export function FinanzasClient() {
+  const confirm = useConfirm();
+  const locale = useLocale();
   const [tab, setTab]       = useState<TabKey>("resumen");
   const [period, setPeriod] = useState<PeriodKey>("mes");
   const [customFrom, setCustomFrom] = useState("");
@@ -288,10 +293,10 @@ export function FinanzasClient() {
     // desaparece de Finanzas. No se bloquea (eso es decisión de Rafael, ver
     // el reporte de ws1-t6); por ahora se avisa antes de borrar.
     const gasto = gastos.find((g) => g.id === id);
-    const aviso = gasto?.purchaseId
-      ? "Este gasto viene de una compra de inventario. Borrarlo NO revierte las existencias ni el costo que sumó esa compra: los números dejarán de cuadrar entre Finanzas e Inventario.\n\n¿Eliminar de todas formas?"
-      : "¿Eliminar este gasto?";
-    if (!window.confirm(aviso)) return;
+    // ws1-t2 (auditoría de uso C-35): el diálogo del panel, no el `confirm()` del
+    // navegador, y dice que el gasto queda en Movimientos (borrado lógico).
+    const aviso = avisoBorrarGasto(gasto, locale === "en" ? "en" : "es");
+    if (!(await confirm({ ...aviso, variant: "danger" }))) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/gastos?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -551,6 +556,8 @@ export function FinanzasClient() {
                     }}>
                       {g.category}
                     </span>
+                    {/* ws1-t2 (C-36): un espacio de verdad; el texto se leía «InsumosCompra». */}
+                    {g.purchaseId && " "}
                     {g.purchaseId && (
                       <span
                         title={g.providerName ? `Compra de inventario — ${g.providerName}` : "Compra de inventario"}
