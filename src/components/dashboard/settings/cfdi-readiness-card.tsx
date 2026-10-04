@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, XCircle, MinusCircle, ExternalLink, RefreshCw } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import type { AvisoEmisor } from "@/lib/cfdi/emisor";
+import { AvisosEmisor } from "./cfdi-avisos-emisor";
 
 // Portal público de Facturapi para firmar la Carta Manifiesto. Se firma con la
 // e.firma del RFC emisor (requisito SAT, reglas 2.7.2.5 y 2.7.2.7 de la RMF) y
@@ -20,6 +22,8 @@ interface CfdiStatus {
   steps:             { legal: boolean | null; certificate: boolean | null; manifiesto: boolean | null; logo: boolean | null };
   pendingSteps:      { type: string; description: string | null }[];
   csdValidUntil?:    string | null;
+  /** ws1-t8 (F-15): CSD por vencer, RFC distinto al del CSD, persona moral en «exento». */
+  avisos?:           AvisoEmisor[];
 }
 
 /** ✓ / ✗ / — (— = no se pudo determinar; jamás se afirma lo que no se sabe). */
@@ -92,6 +96,7 @@ export function CfdiReadinessCard({ refreshKey = 0 }: { refreshKey?: number }) {
         )}
       </div>
       <div className="card__body space-y-3">
+        <AvisosEmisor avisos={status?.avisos} />
 
         {loading && !status && (
           <div className="text-sm" style={{ color: "var(--text-3)" }}>{t("settings.client.readyLoading")}</div>

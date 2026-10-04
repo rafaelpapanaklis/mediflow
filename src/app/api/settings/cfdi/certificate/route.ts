@@ -4,6 +4,10 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { uploadCertificate } from "@/lib/facturapi";
+import { logMutation } from "@/lib/audit";
+import { avisosDelEmisor } from "@/lib/cfdi/emisor";
+import { leerCertificadoCsd } from "@/lib/cfdi/csd-certificado.server";
+import { rfcDeLaOrganizacion } from "@/lib/cfdi/facturapi-extra.server";
 
 export const runtime = "nodejs"; // Buffer / multipart hacia Facturapi
 
@@ -37,7 +41,10 @@ export async function POST(req: NextRequest) {
 
   const clinic = await prisma.clinic.findUnique({
     where:  { id: ctx!.clinicId },
-    select: { facturApiOrgId: true },
+    select: {
+      facturApiOrgId: true, locale: true, rfcEmisor: true, cfdiTaxMode: true,
+      csdUploaded: true, csdValidUntil: true,
+    },
   });
   if (!clinic?.facturApiOrgId) {
     return NextResponse.json({ error: "Primero configura tu RFC en Facturación; eso crea tu organización fiscal antes de subir el CSD." }, { status: 400 });
@@ -48,6 +55,10 @@ export async function POST(req: NextRequest) {
   if (cerBuffer.length === 0 || keyBuffer.length === 0) {
     return NextResponse.json({ error: "Los archivos están vacíos o corruptos." }, { status: 400 });
   }
+
+  // ws1-t8 (F-15): el RFC y la vigencia del .cer se leen aquí mismo (es el certificado público,
+  // no la llave) para la bitácora y para compararlo con el RFC del panel.
+  const delCer = leerCertificadoCsd(cerBuffer);
 
   try {
     const status = await uploadCertificate(clinic.facturApiOrgId, cerBuffer, keyBuffer, String(password));
@@ -62,11 +73,40 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const vigencia = status.validUntil ?? delCer?.validoHasta?.toISOString() ?? null;
+    // RFC del CSD: el que asignó Facturapi (legal.tax_id) y, si no contesta, el del .cer.
+    const rfcDelCsd = (await rfcDeLaOrganizacion(clinic.facturApiOrgId, { refresh: true })) ?? delCer?.rfc ?? null;
+
+    // Subir el CSD queda en Movimientos (antes no dejaba rastro: auditoría CFDI §0.1). Solo datos
+    // públicos del certificado: número de serie, RFC y vigencia. Nada de la llave ni la contraseña.
+    await logMutation({
+      texto: "Subió el certificado de sello digital (CSD) para facturar",
+      req,
+      clinicId:   ctx!.clinicId,
+      userId:     ctx!.userId,
+      entityType: "clinic",
+      entityId:   ctx!.clinicId,
+      action:     "update",
+      before: { csd: { cargado: clinic.csdUploaded, vigencia: clinic.csdValidUntil?.toISOString() ?? null } },
+      after:  { csd: { cargado: true, vigencia, numeroDeSerie: status.serialNumber ?? null, rfc: rfcDelCsd } },
+    });
+
+    const avisos = avisosDelEmisor({
+      rfcEmisor: clinic.rfcEmisor,
+      cfdiTaxMode: clinic.cfdiTaxMode,
+      csdUploaded: true,
+      csdValidUntil: vigencia,
+      rfcDelCsd,
+      ahora: new Date(),
+      locale: clinic.locale,
+    });
+
     return NextResponse.json({
       success:       true,
       csdUploaded:   true,
       csdValidUntil: status.validUntil,
       serialNumber:  status.serialNumber,
+      avisos,
     });
   } catch (err: any) {
     console.error("CSD upload error:", err);

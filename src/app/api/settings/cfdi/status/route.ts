@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getOrganizationStatus } from "@/lib/facturapi";
 import { isFacturapiLive } from "@/lib/facturapi-env";
+import { avisosDelEmisor } from "@/lib/cfdi/emisor";
+import { rfcDeLaOrganizacion } from "@/lib/cfdi/facturapi-extra.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,9 +38,19 @@ export async function GET(req: NextRequest) {
 
   const clinic = await prisma.clinic.findUnique({
     where:  { id: ctx!.clinicId },
-    select: { facturApiOrgId: true, facturApiEnabled: true, csdUploaded: true, csdValidUntil: true },
+    select: {
+      facturApiOrgId: true, facturApiEnabled: true, csdUploaded: true, csdValidUntil: true,
+      rfcEmisor: true, cfdiTaxMode: true, locale: true,
+    },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+
+  // ws1-t8 (F-15): CSD vencido o por vencer, RFC del panel distinto al del CSD y persona moral
+  // en «exento». Nunca bloquean; la tarjeta del checklist los pinta arriba.
+  const avisosCon = (csdValidUntil: Date | string | null, rfcDelCsd: string | null) => avisosDelEmisor({
+    rfcEmisor: clinic.rfcEmisor, cfdiTaxMode: clinic.cfdiTaxMode, csdUploaded: clinic.csdUploaded,
+    csdValidUntil, rfcDelCsd, ahora: new Date(), locale: clinic.locale,
+  });
 
   const live = isFacturapiLive();
 
@@ -54,13 +66,16 @@ export async function GET(req: NextRequest) {
       steps:             { legal: false, certificate: false, manifiesto: false, logo: false },
       pendingSteps:      [],
       csdValidUntil:     clinic.csdValidUntil,
+      avisos:            avisosCon(clinic.csdValidUntil, null),
     });
   }
 
   try {
-    const status = await getOrganizationStatus(clinic.facturApiOrgId, {
-      refresh: req.nextUrl.searchParams.get("refresh") === "1",
-    });
+    const refresh = req.nextUrl.searchParams.get("refresh") === "1";
+    const [status, rfcDelCsd] = await Promise.all([
+      getOrganizationStatus(clinic.facturApiOrgId, { refresh }),
+      clinic.csdUploaded ? rfcDeLaOrganizacion(clinic.facturApiOrgId, { refresh }) : Promise.resolve(null),
+    ]);
     return NextResponse.json({
       live,
       configured:        true,
@@ -75,6 +90,7 @@ export async function GET(req: NextRequest) {
       },
       pendingSteps:  status.pendingSteps,
       csdValidUntil: status.certificateExpiresAt ?? clinic.csdValidUntil,
+      avisos:        avisosCon(status.certificateExpiresAt ?? clinic.csdValidUntil, rfcDelCsd),
     });
   } catch (err: any) {
     // Facturapi no respondió: no afirmamos nada (mostrar todo en rojo asustaría
@@ -89,6 +105,7 @@ export async function GET(req: NextRequest) {
       steps:             { legal: null, certificate: null, manifiesto: null, logo: null },
       pendingSteps:      [],
       csdValidUntil:     clinic.csdValidUntil,
+      avisos:            avisosCon(clinic.csdValidUntil, null),
     });
   }
 }

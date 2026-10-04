@@ -7,6 +7,7 @@ import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
+import { AvisoExentoPersonaMoral } from "@/components/dashboard/settings/cfdi-avisos-emisor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -1122,6 +1123,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       ))}
                     </Opciones>
                   </Campo>
+                  {/* ws1-t8 (F-15): persona moral + «exento» — avisa, no bloquea (una S.C. sí puede). */}
+                  <AvisoExentoPersonaMoral rfc={cfdiForm.rfcEmisor} modo={cfdiForm.cfdiTaxMode} />
                   <Aviso>
                     <strong>{t("settings.client.cfdiNoteLabel")}</strong>
                     {cfdiLive ? t("settings.client.cfdiNoteBodyLive") : t("settings.client.cfdiNoteBody")}
@@ -1975,6 +1978,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <p className="text-xs text-muted-foreground">{t("settings.client.taxModeHelp")}</p>
               </div>
             </div>
+            {/* ws1-t8 (F-15): persona moral + «exento» — avisa, no bloquea (una S.C. sí puede). */}
+            <AvisoExentoPersonaMoral rfc={cfdiForm.rfcEmisor} modo={cfdiForm.cfdiTaxMode} />
 
             <div className="pt-2 flex gap-3">
               <Button onClick={saveCfdi} disabled={saving} className="flex-1">

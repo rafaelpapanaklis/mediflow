@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { esRfcValido, MENSAJE_RFC_INVALIDO } from "@/lib/clinic-fields";
 import { createOrganization, updateOrgLegal, getOrganizationStatus } from "@/lib/facturapi";
+import { errorDeRegimenEmisor, avisosDelEmisor, datosFiscalesParaBitacora } from "@/lib/cfdi/emisor";
+import { rfcDeLaOrganizacion } from "@/lib/cfdi/facturapi-extra.server";
 
 // POST /api/settings/cfdi — configure clinic's RFC for invoicing
 export async function POST(req: NextRequest) {
@@ -21,6 +23,10 @@ export async function POST(req: NextRequest) {
   if (!esRfcValido(rfcEmisor)) return NextResponse.json({ error: MENSAJE_RFC_INVALIDO }, { status:400 });
   if (!cpEmisor?.trim() || cpEmisor.length !== 5) return NextResponse.json({ error:"Código postal debe tener 5 dígitos" }, { status:400 });
   if (!razonSocial?.trim()) return NextResponse.json({ error:"Razón social es requerida" }, { status:400 });
+  // ws1-t8 (F-15): el régimen tiene que existir en c_RegimenFiscal y aplicar al tipo de persona
+  // del RFC (12 = moral, 13 = física). Antes llegaba cualquier cosa a Facturapi.
+  const errorRegimen = errorDeRegimenEmisor(rfcEmisor, regimenFiscal);
+  if (errorRegimen) return NextResponse.json({ error: errorRegimen }, { status:400 });
 
   // Validate FACTURAPI_USER_KEY exists
   if (!process.env.FACTURAPI_USER_KEY) {
@@ -29,10 +35,15 @@ export async function POST(req: NextRequest) {
 
   const clinic = await prisma.clinic.findUnique({
     where:  { id: ctx!.clinicId },
-    select: { facturApiOrgId:true, name:true },
+    select: {
+      facturApiOrgId:true, name:true, locale:true,
+      // Para la bitácora (antes / después) y los avisos del emisor (ws1-t8, F-15).
+      rfcEmisor:true, regimenFiscal:true, cpEmisor:true, cfdiTaxMode:true, csdUploaded:true, csdValidUntil:true,
+    },
   });
 
   if (!clinic) return NextResponse.json({ error:"Clínica no encontrada" }, { status:404 });
+  const fiscalesAntes = datosFiscalesParaBitacora(clinic);
 
   try {
     let orgId = clinic.facturApiOrgId;
@@ -92,7 +103,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Save to our DB
-    await prisma.clinic.update({
+    const guardada = await prisma.clinic.update({
       where: { id: ctx!.clinicId },
       data: {
         facturApiOrgId:   orgId,
@@ -105,9 +116,32 @@ export async function POST(req: NextRequest) {
         // pudiendo sobreescribirlo por factura.
         ...(cfdiTaxMode === "exempt" || cfdiTaxMode === "iva16" ? { cfdiTaxMode } : {}),
       },
+      select: { rfcEmisor:true, regimenFiscal:true, cpEmisor:true, cfdiTaxMode:true, csdUploaded:true, csdValidUntil:true },
     });
 
-    return NextResponse.json({ success:true, orgId });
+    // ws1-t8 (F-15): cambiar los datos fiscales queda en Movimientos (antes no dejaba rastro).
+    // La razón social no se guarda en nuestra base (va a Facturapi), así que va solo en «después».
+    await logMutation({
+      texto: "Cambió los datos fiscales de facturación (CFDI)",
+      req,
+      clinicId:   ctx!.clinicId,
+      userId:     ctx!.userId,
+      entityType: "clinic",
+      entityId:   ctx!.clinicId,
+      action:     "update",
+      before: { ...fiscalesAntes, razonSocial: null },
+      after:  datosFiscalesParaBitacora({ ...guardada, razonSocial: razonSocial.trim().toUpperCase() }),
+    });
+
+    // Avisos que NO bloquean: persona moral + «exento», RFC distinto al del CSD, CSD por vencer.
+    const avisos = avisosDelEmisor({
+      ...guardada,
+      rfcDelCsd: guardada.csdUploaded ? await rfcDeLaOrganizacion(orgId, { refresh: true }) : null,
+      ahora: new Date(),
+      locale: clinic.locale,
+    });
+
+    return NextResponse.json({ success:true, orgId, avisos });
 
   } catch (err: any) {
     console.error("Facturapi setup error:", err);

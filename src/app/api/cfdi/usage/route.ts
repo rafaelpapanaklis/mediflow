@@ -5,6 +5,7 @@ import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import { resolveOverageBilling, CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { isFacturapiLive } from "@/lib/facturapi-env";
+import { avisosDelEmisor } from "@/lib/cfdi/emisor";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +36,12 @@ export async function GET(_req: NextRequest) {
       // un round-trip extra ni pasar la clínica por props a los 4 sitios donde se
       // monta InvoiceDetailModal.
       cfdiTaxMode: true,
+      // ws1-t8 (F-15): CSD vencido / por vencer y persona moral en «exento» para el formulario
+      // de timbrado. Sin llamar a Facturapi (el RFC del CSD se compara en Configuración).
+      rfcEmisor: true,
+      csdUploaded: true,
+      csdValidUntil: true,
+      locale: true,
     },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
@@ -78,5 +85,9 @@ export async function GET(_req: NextRequest) {
     // Solo el boolean del ambiente (nunca la env): el modal de timbrado lo usa
     // para no prometer validez fiscal en pruebas ni hablar de pruebas en Live.
     live: isFacturapiLive(),
+    avisosEmisor: avisosDelEmisor({
+      rfcEmisor: clinic.rfcEmisor, cfdiTaxMode: clinic.cfdiTaxMode, csdUploaded: clinic.csdUploaded,
+      csdValidUntil: clinic.csdValidUntil, ahora: new Date(), locale: clinic.locale,
+    }),
   });
 }
