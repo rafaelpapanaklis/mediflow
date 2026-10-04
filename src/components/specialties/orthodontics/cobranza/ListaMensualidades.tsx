@@ -45,6 +45,9 @@ const ESTADO_PILL: Record<MensualidadPorCobrar["estado"], { tono: "danger" | "wa
   proxima: { tono: "neutral", label: "Próxima" },
 };
 
+/** Filas que se ven sin pulsar «Ver las N» (N-19). */
+const VISIBLES = 5;
+
 interface Grupo {
   clave: string;
   guardianName: string | null;
@@ -97,6 +100,8 @@ export function ListaMensualidades({
   const [cobrandoCola, setCobrandoCola] = useState<MensualidadPorCobrar[] | null>(null);
   // Cuántas facturas tenía el cobro encadenado al empezar (para decir «1 de 2»).
   const [cobrandoTotal, setCobrandoTotal] = useState(0);
+  // N-19 (ws1-t2): las primeras VISIBLES filas; el resto con «Ver las N».
+  const [todos, setTodos] = useState(false);
 
   function recargar() {
     listarMensualidadesPorCobrar()
@@ -149,7 +154,10 @@ export function ListaMensualidades({
               </>
             )}
           </h2>
-          <span className={av.venceRotulo}>{desgloseDeCuotas(resumen)}</span>
+          {/* N-19 (ws1-t2): las vencidas ya están en la insignia; aquí solo lo demás. */}
+          {desgloseDeCuotas(resumen, { sinVencidas: true }) && (
+            <span className={av.venceRotulo}>{desgloseDeCuotas(resumen, { sinVencidas: true })}</span>
+          )}
         </div>
         <div className={av.listaTotal}>
           <span className={av.listaTotalRotulo}>Vencido</span>
@@ -161,7 +169,7 @@ export function ListaMensualidades({
       </header>
 
       <ul className={av.filas}>
-        {grupos.map((g) => {
+        {(todos ? grupos : grupos.slice(0, VISIBLES)).map((g) => {
           const subtotal = g.items.reduce((s, it) => s + it.monto, 0);
           const peorEstado = g.items.some((it) => it.estado === "vencida")
             ? "vencida"
@@ -201,6 +209,16 @@ export function ListaMensualidades({
           );
         })}
       </ul>
+
+      {/* N-19 (ws1-t2): con muchas filas, la lista empujaba el corte de caja (en el celular,
+          catorce filas antes de llegar a la caja). Se enseñan las primeras y el resto con un clic. */}
+      {grupos.length > VISIBLES && (
+        <p className={av.siguiente}>
+          <button type="button" className={av.verMas} onClick={() => setTodos((v) => !v)} aria-expanded={todos}>
+            {todos ? "Ver menos" : `Ver las ${grupos.length}`}
+          </button>
+        </p>
+      )}
 
       {/* ws1-t2 (C-23): de dónde sale este «Vencido» y cómo se relaciona con el de Caja. */}
       <p className={av.siguiente}>

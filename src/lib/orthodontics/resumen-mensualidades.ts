@@ -55,10 +55,17 @@ export function rotuloDeCuotas(n: number): string {
   return n === 1 ? "1 cuota por cobrar" : `${n} cuotas por cobrar`;
 }
 
-/** «15 vencidas · 1 vence hoy · 2 próximas» (solo las partes que hay). */
-export function desgloseDeCuotas(r: Pick<ResumenDeMensualidades, "vencidas" | "hoy" | "proximas">): string {
+/**
+ * «15 vencidas · 1 vence hoy · 2 próximas» (solo las partes que hay). Con
+ * `sinVencidas` deja fuera las vencidas: la cabecera ya las enseña en su
+ * insignia y salían dos veces (auditoría de uso N-19).
+ */
+export function desgloseDeCuotas(
+  r: Pick<ResumenDeMensualidades, "vencidas" | "hoy" | "proximas">,
+  opciones: { sinVencidas?: boolean } = {},
+): string {
   const partes: string[] = [];
-  if (r.vencidas > 0) partes.push(r.vencidas === 1 ? "1 vencida" : `${r.vencidas} vencidas`);
+  if (r.vencidas > 0 && !opciones.sinVencidas) partes.push(r.vencidas === 1 ? "1 vencida" : `${r.vencidas} vencidas`);
   if (r.hoy > 0) partes.push(r.hoy === 1 ? "1 vence hoy" : `${r.hoy} vencen hoy`);
   if (r.proximas > 0) partes.push(r.proximas === 1 ? "1 próxima" : `${r.proximas} próximas`);
   return partes.join(" · ");

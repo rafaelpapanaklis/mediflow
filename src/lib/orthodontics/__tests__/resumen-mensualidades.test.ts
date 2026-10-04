@@ -101,3 +101,15 @@ test("textos es/en de las cifras de Caja", () => {
   assert.equal(es.billing.billingClient.kpiTotalCollected, "Pagado en facturas");
   assert.equal(es.billing.billingClient.kpiThisMonth, "Facturas del mes");
 });
+
+test("N-19: «16 vencidas» una sola vez, y la lista enseña 5 filas con «Ver las N»", () => {
+  const r = resumenDeMensualidades(FILAS);
+  assert.equal(desgloseDeCuotas(r, { sinVencidas: true }), "1 próxima", "las vencidas ya van en la insignia");
+  assert.equal(desgloseDeCuotas({ vencidas: 3, hoy: 0, proximas: 0 }, { sinVencidas: true }), "", "sin nada más, no hay renglón");
+  const lista = leer("src/components/specialties/orthodontics/cobranza/ListaMensualidades.tsx");
+  assert.match(lista, /desgloseDeCuotas\(resumen, \{ sinVencidas: true \}\)/);
+  assert.doesNotMatch(lista, /desgloseDeCuotas\(resumen\)\}/);
+  assert.match(lista, /const VISIBLES = 5;/);
+  assert.match(lista, /\(todos \? grupos : grupos\.slice\(0, VISIBLES\)\)\.map/);
+  assert.match(lista, /`Ver las \$\{grupos\.length\}`/);
+});
