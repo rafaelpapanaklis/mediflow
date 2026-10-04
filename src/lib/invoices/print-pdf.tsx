@@ -48,12 +48,36 @@ function fmtMXN(n: number): string {
   }).format(Number.isFinite(n) ? n : 0);
 }
 
-function fmtFecha(d: Date | string | null): string {
+// Auditoría de uso C-19 (4-oct-2026): la fecha EN LA ZONA DE LA CLÍNICA. Sin
+// zona, el servidor (UTC) ponía «4 de octubre» a un cobro del 3 a las 23:12 en CDMX.
+export function fmtFecha(d: Date | string | null, zona: string = ZONA_POR_DEFECTO): string {
   if (!d) return "—";
   const dt = typeof d === "string" ? new Date(d) : d;
   if (isNaN(dt.getTime())) return "—";
-  return dt.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+  try {
+    return dt.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: zona });
+  } catch {
+    return dt.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: ZONA_POR_DEFECTO });
+  }
 }
+
+/**
+ * Auditoría de uso C-02 (4-oct-2026): cómo se lee un renglón de «Pagos». Un
+ * reembolso NUNCA sale como un pago positivo (antes, fuera de un plan a plazos,
+ * «Reembolso $1,000» se leía como dinero recibido): va en negativo y dice por
+ * dónde salió; un traspaso a saldo a favor dice eso.
+ */
+export function renglonDePago(pay: { method: string; amount: number; refundMethod?: string | null }): { etiqueta: string; signo: "" | "−"; resta: boolean } {
+  if (pay.method !== "refund") return { etiqueta: METHOD_LABELS[pay.method] ?? pay.method, signo: "", resta: false };
+  if (pay.refundMethod === "saldo_a_favor") return { etiqueta: "Pasó a saldo a favor", signo: "−", resta: true };
+  const por = pay.refundMethod ? REEMBOLSO_POR[pay.refundMethod] : null;
+  return { etiqueta: por ? `Reembolso (${por})` : "Reembolso", signo: "−", resta: true };
+}
+
+const REEMBOLSO_POR: Record<string, string> = {
+  cash: "en efectivo", transfer: "por transferencia", debit: "a tarjeta de débito",
+  credit: "a tarjeta de crédito", check: "con cheque", other: "otro medio",
+};
 
 // status/saldo → sello de estado grande
 function estadoSello(status: string, paid: number, balance: number): { label: string; color: string; bg: string } {
@@ -155,7 +179,7 @@ interface ComprobanteProps {
   invoice: { invoiceNumber: string; createdAt: Date; status: string; subtotal: number; discount: number; total: number; paid: number; balance: number; cfdiUuid: string | null; taxRate: number | null; taxIncluded: boolean | null };
   patient: { name: string; rfc: string | null; razonSocial: string | null; regimen: string | null; cp: string | null };
   items: { description: string; quantity: number; unitPrice: number; total: number }[];
-  payments: { amount: number; method: string; reference: string | null; paidAt: Date }[];
+  payments: { amount: number; method: string; reference: string | null; paidAt: Date; refundMethod?: string | null }[];
   /** ws1-t10: solo una factura A PLAZOS lo trae; sin él el comprobante sale como siempre. */
   plan?: PlanDelComprobante | null;
   /** Zona de la clínica, para las fechas de los movimientos del plan. */
@@ -166,13 +190,14 @@ const ESTADO_COLOR: Record<string, string> = { pagada: "#047857", porVencer: "#6
 
 /** Un renglón de «Pagos realizados / recibidos». */
 function FilaDePago({ pay, plan, zona }: { pay: ComprobanteProps["payments"][number]; plan: boolean; zona?: string }) {
-  const reembolso = plan && pay.method === "refund";
+  const r = renglonDePago(pay);
+  const reembolso = r.resta;
   return (
     <View style={styles.payRow} wrap={false}>
       <View>
-        <Text style={styles.payLeft}>{METHOD_LABELS[pay.method] ?? pay.method}</Text>
+        <Text style={styles.payLeft}>{r.etiqueta}</Text>
         <Text style={styles.paySub}>
-          {plan ? fechaDeMovimiento(pay.paidAt, zona) : fmtFecha(pay.paidAt)}
+          {plan ? fechaDeMovimiento(pay.paidAt, zona) : fmtFecha(pay.paidAt, zona)}
           {pay.reference ? `  ·  Ref: ${pay.reference}` : ""}
         </Text>
       </View>
@@ -189,6 +214,8 @@ function ComprobanteDocument(p: ComprobanteProps) {
   // Renglones de dinero que hacen cuadrar el documento: con "IVA agregado" las
   // líneas suman la base y el TOTAL trae el impuesto encima.
   const totales = invoicePrintTotals(p.invoice);
+  // Una factura CANCELADA conserva su `balance` en la base, pero no se debe.
+  const saldo = p.invoice.status === "CANCELLED" ? 0 : p.invoice.balance;
 
   return (
     <Document title={`Comprobante ${p.invoice.invoiceNumber}`} author={p.clinic.clinicName} subject="Comprobante de pago">
@@ -206,7 +233,7 @@ function ComprobanteDocument(p: ComprobanteProps) {
               <Text style={styles.metaLabel}>Folio</Text>
               <Text style={styles.metaValue}>{p.invoice.invoiceNumber}</Text>
               <Text style={styles.metaLabel}>Fecha</Text>
-              <Text style={styles.metaValue}>{fmtFecha(p.invoice.createdAt)}</Text>
+              <Text style={styles.metaValue}>{fmtFecha(p.invoice.createdAt, p.zona)}</Text>
               <Text style={[styles.sello, { color: sello.color, backgroundColor: sello.bg }]}>{sello.label}</Text>
             </View>
           }
@@ -325,8 +352,8 @@ function ComprobanteDocument(p: ComprobanteProps) {
           ) : null}
           <View style={[styles.totalLine, { marginTop: plan ? 0 : 8 }]}>
             <Text style={styles.totalLabel}>{plan ? "Saldo" : "Saldo pendiente"}</Text>
-            <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: p.invoice.balance > 0 ? "#b91c1c" : "#047857" }]}>
-              {fmtMXN(p.invoice.balance)}
+            <Text style={[styles.totalValue, { fontFamily: "Helvetica-Bold", color: saldo > 0 ? "#b91c1c" : "#047857" }]}>
+              {fmtMXN(saldo)}
             </Text>
           </View>
         </View>
@@ -375,7 +402,7 @@ export async function buildInvoicePrintPdf(
       // porque el membrete solo pinta el fiscal donde corresponde y aquí sí.
       clinic:  { select: { ...CLINIC_LETTERHEAD_SELECT, rfcEmisor: true, timezone: true } },
       patient: { select: { firstName: true, lastName: true, rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } },
-      payments: { orderBy: { paidAt: "asc" }, select: { amount: true, method: true, reference: true, paidAt: true } },
+      payments: { orderBy: { paidAt: "asc" }, select: { amount: true, method: true, reference: true, paidAt: true, refundMethod: true } },
     },
   });
   if (!invoice) return null;
@@ -436,8 +463,10 @@ export async function buildInvoicePrintPdf(
     },
     items,
     payments: (invoice.payments ?? []).map((pay) => ({
-      amount: pay.amount, method: pay.method, reference: pay.reference, paidAt: pay.paidAt,
+      amount: pay.amount, method: pay.method, reference: pay.reference, paidAt: pay.paidAt, refundMethod: pay.refundMethod,
     })),
+    // C-19: la zona va siempre (no solo con plan a plazos): fecha y pagos en hora de la clínica.
+    zona: invoice.clinic?.timezone || ZONA_POR_DEFECTO,
   };
 
   // ws1-t10 — una factura A PLAZOS (invoice_payment_terms) explica cómo se paga.

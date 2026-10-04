@@ -14,6 +14,8 @@ import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { esMetodoDeDevolucion, METODOS_DE_DEVOLUCION } from "@/lib/dinero/reembolsos";
+import { efectoDelReembolso, esDestinoDeReembolso, type DestinoDeReembolso } from "@/lib/dinero/reembolso-destino";
+import { reajustarAlTotal } from "@/lib/invoices/reajustar-total";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -24,7 +26,12 @@ async function getCtx() {
   return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
 }
 
-// POST /api/invoices/[id]/refund — body { amount: number; refundMethod: string; reason?: string }
+// POST /api/invoices/[id]/refund — body { amount: number; refundMethod: string; reason?: string;
+//                                       destino?: "baja_total" | "sigue_debiendo" | "baja_resto" }
+//
+// Auditoría de uso C-02/C-03 (4-oct-2026): `destino` dice qué le pasa a la
+// FACTURA (lib/dinero/reembolso-destino.ts). La pantalla lo pregunta siempre;
+// sin él vale «sigue_debiendo», lo de antes, para no romper a quien no lo manda.
 //
 // ws1-t5 (F5): `refundMethod` es OBLIGATORIO — por dónde salió el dinero
 // (METODOS_DE_DEVOLUCION). El corte de caja resta del efectivo esperado solo
@@ -62,6 +69,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       code: "REFUND_METHOD_REQUIRED",
     }, { status: 400 });
   }
+
+  const destinoRaw = body?.destino ?? "sigue_debiendo";
+  if (!esDestinoDeReembolso(destinoRaw)) {
+    return NextResponse.json({ error: "Di qué pasa con la factura: baja el total, sigue debiendo o se da de baja el resto.", code: "REFUND_DESTINO_INVALIDO" }, { status: 400 });
+  }
+  const destino: DestinoDeReembolso = destinoRaw;
 
   const invoicePeek = await prisma.invoice.findFirst({
     where: { id: params.id, clinicId },
@@ -119,11 +132,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // El piso en 0 evita el −0 que deja ese mismo caso legado (1000.0099999999999
     // − 1000.01) y que se pintaría como "−$0.00".
-    const newPaid    = round2(Math.max(0, invoice.paid - amountRaw));
-    const newBalance = round2(invoice.total - newPaid);
+    const efecto = efectoDelReembolso({ total: invoice.total, pagado: round2(invoice.paid), monto: amountRaw, destino });
+    const newPaid = efecto.pagado;
+    // C-02/C-03: con «baja el total» / «se da de baja el resto» el total nuevo
+    // se escribe contra los conceptos (descuento explícito, como «Editar
+    // precio»), para que la factura siga cuadrando si luego se timbra.
+    const cancelada = efecto.estado === "CANCELLED";
+    const reajuste = !cancelada && efecto.bajaDelTotal > 0 ? reajustarAlTotal(invoice, efecto.total) : null;
+    const newTotal = reajuste ? reajuste.total : invoice.total;
+    const newBalance = cancelada ? round2(invoice.total) : round2(Math.max(0, newTotal - newPaid));
     const newStatus  =
+      cancelada ? "CANCELLED" :
       newPaid <= 0 ? "PENDING" :
       newBalance > 0 ? "PARTIAL" : "PAID";
+    const lineaNota = cancelada
+      ? `[CANCELADA: se devolvió todo lo pagado (${amountRaw.toFixed(2)})${reason ? `: ${reason}` : ""}]`
+      : null;
 
     await tx.payment.create({
       data: {
@@ -140,24 +164,29 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         paid: newPaid,
         balance: Math.max(0, newBalance),
         status: newStatus as any,
+        ...(reajuste ? { items: reajuste.items, subtotal: reajuste.subtotal, discount: reajuste.discount, total: reajuste.total } : {}),
+        ...(lineaNota ? { notes: invoice.notes ? `${invoice.notes}\n${lineaNota}` : lineaNota } : {}),
         // Si el reembolso vacía el paid, limpiamos paidAt para reflejar
         // que ya no está liquidada.
         ...(newStatus !== "PAID" ? { paidAt: null } : {}),
       },
     });
-    return { invoice, newPaid, newBalance, newStatus };
+    return { invoice, newPaid, newBalance, newStatus, newTotal, bajaDelTotal: cancelada ? 0 : round2(invoice.total - newTotal) };
   });
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
   if ("denied" in result) return result.denied;
-  const { invoice, newPaid, newBalance, newStatus } = result;
+  const { invoice, newPaid, newBalance, newStatus, newTotal, bajaDelTotal } = result;
 
+  const queHizo = newStatus === "CANCELLED"
+    ? " y la canceló"
+    : bajaDelTotal > 0 ? ` y bajó el total a ${montoParaTexto(newTotal)}` : "; el paciente sigue debiendo ese monto";
   await logMutation({
       patientId: invoice.patientId,
-      texto: `Reembolsó ${montoParaTexto(amountRaw)} de la factura ${invoice.invoiceNumber}`,
+      texto: `Reembolsó ${montoParaTexto(amountRaw)} de la factura ${invoice.invoiceNumber}${queHizo}`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
-    before: { paid: invoice.paid, balance: invoice.balance, status: invoice.status },
-    after:  { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, refund: { amount: amountRaw, refundMethod, reason: reason || undefined } },
+    before: { paid: invoice.paid, balance: invoice.balance, status: invoice.status, total: invoice.total },
+    after:  { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, total: newTotal, refund: { amount: amountRaw, refundMethod, destino, reason: reason || undefined } },
   });
 
   // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
@@ -166,5 +195,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, status: newStatus, total: newTotal, balance: Math.max(0, newBalance) });
 }

@@ -40,6 +40,55 @@ const es = {
     ajustesSinSql: "Falta pegar sql/ws1-t5-dinero-caja.sql para poder guardar estos ajustes (mientras, valen los de fábrica).",
     verTodos: (n: number) => `Ver los ${n}`,
     verMenos: "Ver menos",
+    // Auditoría de uso C-17 (4-oct-2026): la tabla del turno dice lo que es.
+    thCobrado: "Cobrado",
+    thDescuentoFactura: "Descuento de la factura",
+    notaDescuento: "El descuento se ve una vez por factura. En el arqueo, «Descuentos» es la parte que le toca a lo cobrado en este turno.",
+    csvDescuento: "Descuento (parte de este cobro)",
+  },
+  // Auditoría de uso C-02/C-03/C-30/C-32 (4-oct-2026): qué pasa con la factura al reembolsar.
+  reembolso: {
+    queHacer: "¿Qué pasa con la factura?",
+    elige: "Elige qué pasa con la factura: si no, el paciente podría quedar debiendo lo que le devolviste.",
+    destinos: {
+      baja_total: "Le cobré de más: baja el total",
+      sigue_debiendo: "El paciente sigue debiendo lo devuelto",
+      baja_resto: "El tratamiento no sigue: dar de baja el resto",
+    },
+    ayudas: {
+      baja_total: "El total baja lo mismo que devuelves. Lo que debía, lo sigue debiendo.",
+      sigue_debiendo: "El total no cambia: lo devuelto vuelve a quedar por cobrar.",
+      baja_resto: "El total queda en lo que el paciente se queda pagado; no queda nada por cobrar.",
+    },
+    quedara: (total: string, saldo: string, estado: string) => `La factura queda: total ${total} · por cobrar ${saldo} · ${estado}.`,
+    estados: { PENDING: "Pendiente", PARTIAL: "Parcial", PAID: "Pagada", CANCELLED: "Cancelada" } as Record<string, string>,
+    reembolsado: "Reembolsado",
+    pasoASaldo: "Pasó a saldo a favor",
+    anticipoPorRecibir: "Anticipo pedido, sin recibir",
+    exito: (estado: string) => `Reembolso registrado. La factura queda ${estado.toLowerCase()}.`,
+  },
+  // C-15: el mismo dinero, la misma regla que «Registrar anticipo recibido».
+  cobro: {
+    faltaReferencia: "Para transferencia, escribe la referencia del depósito (clave de rastreo o folio).",
+  },
+  // C-07: «Cobrar hoy» con doctor.
+  doctorCobro: {
+    doctor: "Doctor",
+    sinAsignar: "Sin asignar",
+    origen: {
+      cita: "Lo tomamos de la cita. Puedes cambiarlo.",
+      cita_de_hoy: "Lo tomamos de la cita de hoy del paciente. Puedes cambiarlo.",
+      plan: "Lo tomamos de su plan de tratamiento activo. Puedes cambiarlo.",
+      cabecera: "Lo tomamos de su doctor de cabecera. Puedes cambiarlo.",
+    } as Record<string, string>,
+    sinDoctor: "Sin doctor, este cobro no entra a la comisión de nadie.",
+  },
+  cancelarConPagos: {
+    texto: (pagado: string, resto: string) => `Esta factura tiene ${pagado} cobrados y ${resto} por cobrar. Elige qué hacer:`,
+    devolver: (pagado: string) => `Devolver lo pagado (${pagado}) y cancelar`,
+    conservar: (resto: string) => `Quedarse con lo pagado y dar de baja el resto (${resto})`,
+    conservarAyuda: "La factura queda pagada por lo que ya se cobró; deja de contar como deuda.",
+    exitoConservar: (resto: string) => `Se dio de baja el resto (${resto}). La factura queda pagada.`,
   },
   descuento: {
     requiereDueno: (pct: number, limite: number) =>
@@ -89,6 +138,51 @@ const en: Textos = {
     ajustesSinSql: "sql/ws1-t5-dinero-caja.sql must be applied before these settings can be saved (until then, the defaults apply).",
     verTodos: (n: number) => `See all ${n}`,
     verMenos: "See less",
+    thCobrado: "Collected",
+    thDescuentoFactura: "Invoice discount",
+    notaDescuento: "The discount shows once per invoice. In the cash count, «Discounts» is the part that belongs to what was collected in this shift.",
+    csvDescuento: "Discount (share of this payment)",
+  },
+  reembolso: {
+    queHacer: "What happens to the invoice?",
+    elige: "Choose what happens to the invoice: otherwise the patient could end up owing what you refunded.",
+    destinos: {
+      baja_total: "I overcharged: lower the total",
+      sigue_debiendo: "The patient still owes the refunded amount",
+      baja_resto: "Treatment won't continue: write off the rest",
+    },
+    ayudas: {
+      baja_total: "The total goes down by what you refund. What they owed, they still owe.",
+      sigue_debiendo: "The total doesn't change: the refunded amount is due again.",
+      baja_resto: "The total becomes what the patient keeps paid; nothing is left to collect.",
+    },
+    quedara: (total: string, saldo: string, estado: string) => `The invoice will be: total ${total} · due ${saldo} · ${estado}.`,
+    estados: { PENDING: "Pending", PARTIAL: "Partial", PAID: "Paid", CANCELLED: "Cancelled" } as Record<string, string>,
+    reembolsado: "Refunded",
+    pasoASaldo: "Moved to patient credit",
+    anticipoPorRecibir: "Deposit requested, not received",
+    exito: (estado: string) => `Refund recorded. The invoice is now ${estado.toLowerCase()}.`,
+  },
+  cobro: {
+    faltaReferencia: "For a bank transfer, enter the deposit reference (tracking key or folio).",
+  },
+  doctorCobro: {
+    doctor: "Doctor",
+    sinAsignar: "Unassigned",
+    origen: {
+      cita: "Taken from the appointment. You can change it.",
+      cita_de_hoy: "Taken from the patient's appointment today. You can change it.",
+      plan: "Taken from their active treatment plan. You can change it.",
+      cabecera: "Taken from their primary doctor. You can change it.",
+    } as Record<string, string>,
+    sinDoctor: "With no doctor, this payment won't count toward anyone's commission.",
+  },
+  cancelarConPagos: {
+    texto: (pagado: string, resto: string) => `This invoice has ${pagado} collected and ${resto} still due. Choose what to do:`,
+    devolver: (pagado: string) => `Refund what was paid (${pagado}) and cancel`,
+    conservar: (resto: string) => `Keep what was paid and write off the rest (${resto})`,
+    conservarAyuda: "The invoice is marked paid for what was already collected; it no longer counts as debt.",
+    exitoConservar: (resto: string) => `The rest (${resto}) was written off. The invoice is now paid.`,
   },
   descuento: {
     requiereDueno: (pct: number, limite: number) =>

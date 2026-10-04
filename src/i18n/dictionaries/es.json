@@ -8633,7 +8633,7 @@
       "applyDiscountFirst": "Aplica el descuento antes de cobrar, o déjalo como estaba.",
       "applying": "Aplicando…",
       "cancelInvoiceTitle": "Cancelar factura {number}",
-      "cancelWarning": "No podrá registrar pagos después. La razón quedará en el audit log y en las notas de la factura.",
+      "cancelWarning": "No podrá registrar pagos después. La razón quedará en Movimientos (la bitácora) y en las notas de la factura.",
       "cancelWarningAnticipo": "Además, tiene un anticipo pendiente de {monto}: se cerrará y, si apartaba una cita, se le quitará el apartado.",
       "reasonOptional": "Razón (opcional)",
       "cancelReasonPlaceholder": "Cita cancelada, paciente no se presentó, error en cobro…",

@@ -24,6 +24,7 @@ export function AvisoDineroCitaCancelada({
   pagado,
   estado,
   puedeCobrar,
+  puedeReembolsar,
   onListo,
 }: {
   invoiceId: string;
@@ -31,6 +32,12 @@ export function AvisoDineroCitaCancelada({
   pagado: number;
   estado: string;
   puedeCobrar: boolean;
+  /**
+   * Auditoría de uso C-16 (4-oct-2026): «Ya lo devolví» registra un reembolso,
+   * que el servidor exige con billing.refund. Sin ese permiso (recepción) el
+   * botón daba 403: ahora no sale y se dice quién lo registra.
+   */
+  puedeReembolsar?: boolean;
   onListo?: () => void;
 }) {
   const t = useT();
@@ -99,14 +106,17 @@ export function AvisoDineroCitaCancelada({
       {marca === "reembolso" ? (
         <>
           <p>DaleControl no mueve dinero: devuélvelo por Mercado Pago o en efectivo y después regístralo aquí.</p>
-          {puedeCobrar &&
+          {puedeCobrar && puedeReembolsar === false && (
+            <p>Lo registra quien tiene permiso de reembolsos (dueño o administración).</p>
+          )}
+          {puedeCobrar && puedeReembolsar !== false &&
             (confirmando ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span>¿Ya se lo devolviste al paciente?</span>
                 <div className="w-full sm:w-64">
                   <MetodoDevolucion id={`metodo-devolucion-${invoiceId}`} valor={metodo} onCambio={setMetodo} disabled={enviando !== null} />
                 </div>
-                <ButtonNew variant="danger" size="sm" disabled={enviando !== null || !metodo} onClick={registrarDevuelto}>
+                <ButtonNew variant="danger" size="sm" disabled={enviando !== null} onClick={registrarDevuelto}>
                   {enviando === "devuelto" ? "Registrando…" : "Sí, registrar reembolso"}
                 </ButtonNew>
                 <ButtonNew variant="ghost" size="sm" disabled={enviando !== null} onClick={() => setConfirmando(false)}>

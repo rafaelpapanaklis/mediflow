@@ -14,6 +14,9 @@ import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { devolverAnticipoAlCancelar } from "@/lib/patient-credit-aplicar";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 import { round2 } from "@/lib/invoice-totals";
+import { efectoDelReembolso } from "@/lib/dinero/reembolso-destino";
+import { reajustarAlTotal } from "@/lib/invoices/reajustar-total";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 // Multi-tenant: clinicId siempre desde la sesión, nunca del body. Mismo
 // patrón que /api/invoices/[id]/route.ts.
@@ -26,7 +29,12 @@ async function getCtx() {
   return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
 }
 
-// POST /api/invoices/[id]/cancel — body { reason?: string }
+// POST /api/invoices/[id]/cancel — body { reason?: string; modo?: "baja_resto" }
+//
+// Auditoría de uso C-03 (4-oct-2026): `modo: "baja_resto"` es la salida de una
+// factura PARCIAL cuyo tratamiento no sigue y el paciente se queda con lo que
+// pagó: el total baja a lo pagado y la factura queda PAGADA (sin deuda
+// fantasma). Devolver lo pagado va por /refund con destino «baja_resto».
 // Marca la factura como CANCELLED. Solo si paid == 0 (las que tienen pagos
 // requieren un reembolso primero)… salvo que lo pagado sea SOLO el saldo a
 // favor aplicado al emitirla (anticipo): entonces se cancela y ese dinero
@@ -40,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (denied) return denied;
   const { clinicId } = ctx;
 
-  const { reason } = await req.json().catch(() => ({ reason: undefined }));
+  const { reason, modo } = await req.json().catch(() => ({ reason: undefined, modo: undefined }));
 
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
@@ -66,6 +74,49 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const notasCon = (notes: string | null) => reasonText
     ? `${notes ? notes + "\n" : ""}[CANCELADA: ${reasonText}]`
     : notes;
+
+  // C-03: dar de baja lo que falta y quedarse con lo pagado.
+  if (modo === "baja_resto") {
+    if (!(invoice.paid > 0)) return NextResponse.json({ error: "Esta factura no tiene nada pagado: cancélala sin más." }, { status: 400 });
+    const r = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${params.id} FOR UPDATE`;
+      const fresca = await tx.invoice.findFirst({ where: { id: params.id, clinicId } });
+      if (!fresca) return { error: "Factura no encontrada", status: 404 };
+      if (fresca.status === "CANCELLED") return { error: "La factura ya está cancelada", status: 400 };
+      if (!(fresca.balance > 0)) return { error: "Esta factura no tiene saldo pendiente: no hay nada que dar de baja.", status: 400 };
+      const cfdiDentro = await denyIfCfdiVigenteEnAmbiente(tx, { clinicId, cfdiUuid: fresca.cfdiUuid, accion: "cancelar" });
+      if (cfdiDentro) return { denied: cfdiDentro };
+      const efecto = efectoDelReembolso({ total: fresca.total, pagado: round2(fresca.paid), monto: 0, destino: "baja_resto" });
+      const ajuste = reajustarAlTotal(fresca, efecto.total);
+      const linea = `[RESTO DADO DE BAJA: ${montoParaTexto(round2(fresca.total - ajuste.total))}${reasonText ? `: ${reasonText}` : ""}]`;
+      await tx.invoice.updateMany({
+        where: { id: params.id, clinicId, paid: fresca.paid },
+        data: {
+          items: ajuste.items, subtotal: ajuste.subtotal, discount: ajuste.discount, total: ajuste.total,
+          balance: round2(Math.max(0, ajuste.total - fresca.paid)),
+          status: "PAID", paidAt: new Date(),
+          notes: fresca.notes ? `${fresca.notes}\n${linea}` : linea,
+        },
+      });
+      return { fresca, total: ajuste.total };
+    });
+    if ("denied" in r && r.denied) return r.denied;
+    if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
+    const { fresca, total } = r as { fresca: NonNullable<typeof invoice>; total: number };
+    await logMutation({
+      patientId: invoice.patientId,
+      texto: `Dio de baja el resto de la factura ${invoice.invoiceNumber} (${montoParaTexto(round2(fresca.total - total))}); el paciente se queda con lo pagado`,
+      req, clinicId, userId: ctx.userId,
+      entityType: "invoice", entityId: params.id, action: "update",
+      before: { status: fresca.status, total: fresca.total, balance: fresca.balance },
+      after:  { status: "PAID", total, balance: 0, reason: reasonText || undefined, modo: "baja_resto" },
+    });
+    await cerrarLinksDeFactura({ clinicId, invoiceId: params.id });
+    await cerrarAnticiposDePanel({ clinicId, invoiceId: params.id });
+    revalidateAfter("invoices");
+    revalidatePath(`/dashboard/patients/${invoice.patientId}`);
+    return NextResponse.json({ success: true, total, bajaDelResto: round2(fresca.total - total) });
+  }
 
   // Sin nada pagado: el camino de siempre (una sola escritura, mismas respuestas).
   if (!(invoice.paid > 0)) {

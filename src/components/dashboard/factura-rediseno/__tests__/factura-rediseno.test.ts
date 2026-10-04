@@ -205,11 +205,13 @@ test("las acciones que tocan dinero y SAT siguen cableadas igual", () => {
   for (const llamada of [
     'callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"))',
     'callApi("", "DELETE", undefined, t("clinical.invoiceDetail.draftDeleted"))',
-    'callApi("/refund", "POST", { amount, reason: refundReason.trim() || undefined }, t("clinical.invoiceDetail.refundSuccess"))',
+    // Auditoría de uso C-02 (ws1-t5): el reembolso dice cómo salió el dinero y qué pasa con la factura.
+    'callApi("/refund", "POST", { amount, refundMethod, destino: refundDestino, reason: refundReason.trim() || undefined }, (r) => txReembolso.exito(',
     'callApi("/edit-price", "POST", { total }, t("clinical.invoiceDetail.priceUpdated"))',
     'callApi("/edit-price", "POST", { discount }, t("clinical.invoiceDetail.discountApplied"))',
     // Mismo endpoint y mismo cuerpo; el mensaje dice si el anticipo volvió a favor (WS1-T4).
-    'callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, mensajeCancelada)',
+    // C-03 (ws1-t5): con `modo` «baja_resto» la Parcial se queda con lo pagado.
+    'callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined, ...(modo ? { modo } : {}) }, mensajeCancelada)',
     'fetch(`/api/invoices/${invoice.id}/confirm`, { method: "POST" })',
     'fetch("/api/cfdi", {',
     // ws1-t4 (tanda 0): `confirmUnpaidPue` ya no viaja — con saldo no se timbra.

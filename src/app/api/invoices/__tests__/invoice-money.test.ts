@@ -882,3 +882,84 @@ test("F14 · el precio no se escribe si `paid` cambió entre la lectura y la esc
   assert.match(src, /updateMany\(\{\s*where: \{ id: params\.id, clinicId, cfdiUuid: invoice\.cfdiUuid, paid: invoice\.paid \}/);
   assert.match(src, /FACTURA_CAMBIO[\s\S]{0,40}status: 409/);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría de uso C-02 / C-03 (ws1-t5, 4-oct-2026) — el reembolso dice qué
+// pasa con la factura, y una Parcial con dinero cobrado tiene salida.
+// Con el código viejo: MF-1128 quedaba «Parcial · Saldo $1,000» y MF-1131 no
+// se podía cancelar sin inventar un cobro.
+// ═══════════════════════════════════════════════════════════════════════════
+const CONCEPTO = (n: number) => [{ description: "Endodoncia", quantity: 1, unitPrice: n, total: n }];
+
+test("C-02 · MF-1128: $3,000 cobrados, reembolso de $1,000 «le cobré de más» → total $2,000, PAGADA, sin saldo", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ items: CONCEPTO(3000), subtotal: 3000, total: 3000, paid: 3000, balance: 0, status: "PAID", paidAt: new Date() });
+  const r = await readJson(await POST(req({ amount: 1000, refundMethod: "cash", destino: "baja_total", reason: "endodoncia acordada en $2,000" }), P));
+  assert.equal(r.status, 200, r.body?.error);
+  assert.equal(db.invoice.total, 2000);
+  assert.equal(db.invoice.paid, 2000);
+  assert.equal(db.invoice.balance, 0, "antes: saldo $1,000 — debía lo que se le devolvió");
+  assert.equal(db.invoice.status, "PAID");
+  assert.equal(db.invoice.discount, 1000, "la baja va como descuento explícito: los conceptos siguen cuadrando");
+  assert.equal(db.payments.find((p) => p.method === "refund")?.refundMethod, "cash");
+});
+
+test("C-02 · MF-1125: $640 pagados, reembolso de $100 «sigue debiendo» → Parcial con $100 por cobrar (lo de antes, pero elegido)", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ items: CONCEPTO(800), subtotal: 800, discount: 160, total: 640, paid: 640, balance: 0, status: "PAID", paidAt: new Date() });
+  const r = await readJson(await POST(req({ amount: 100, refundMethod: "cash", destino: "sigue_debiendo" }), P));
+  assert.equal(r.status, 200);
+  assert.equal(db.invoice.total, 640);
+  assert.equal(db.invoice.balance, 100);
+  assert.equal(db.invoice.status, "PARTIAL");
+});
+
+test("C-02 · un destino inventado → 400 y no escribe nada", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ items: CONCEPTO(3000), subtotal: 3000, total: 3000, paid: 3000, balance: 0, status: "PAID", paidAt: new Date() });
+  const r = await readJson(await POST(req({ amount: 1000, refundMethod: "cash", destino: "regalar" }), P));
+  assert.equal(r.status, 400);
+  assert.equal(db.payments.length, 0);
+  assert.equal(db.invoice.paid, 3000);
+});
+
+test("C-03 · MF-1131 Parcial (enganche $500 de $3,500): devolver lo pagado y dar de baja el resto → CANCELADA con su reembolso", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ items: CONCEPTO(3500), subtotal: 3500, total: 3500, paid: 500, balance: 3000, status: "PARTIAL" });
+  const r = await readJson(await POST(req({ amount: 500, refundMethod: "transfer", destino: "baja_resto", reason: "deja el tratamiento" }), P));
+  assert.equal(r.status, 200, r.body?.error);
+  assert.equal(db.invoice.status, "CANCELLED", "antes: PENDIENTE con $3,500 de deuda fantasma");
+  assert.equal(db.invoice.paid, 0);
+  assert.match(db.invoice.notes ?? "", /CANCELADA: se devolvió todo lo pagado/);
+  assert.equal(db.payments.filter((p) => p.method === "refund").length, 1, "el reembolso queda: resta el día que salió el dinero");
+});
+
+test("C-03 · MF-1131: quedarse con el enganche y dar de baja el resto → total $500, PAGADA, saldo 0 (solo billing.refund)", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/cancel/route");
+  setInvoice({ items: CONCEPTO(3500), subtotal: 3500, total: 3500, paid: 500, balance: 3000, status: "PARTIAL" });
+  const r = await readJson(await POST(req({ modo: "baja_resto", reason: "deja el tratamiento" }), P));
+  assert.equal(r.status, 200, r.body?.error);
+  assert.equal(r.body.bajaDelResto, 3000);
+  assert.equal(db.invoice.total, 500);
+  assert.equal(db.invoice.balance, 0);
+  assert.equal(db.invoice.status, "PAID");
+  assert.equal(db.payments.length, 0, "no se inventa ningún cobro (antes la única salida era «Marcar pagada»)");
+
+  // Recepción (sin billing.refund) no puede.
+  setInvoice({ items: CONCEPTO(3500), subtotal: 3500, total: 3500, paid: 500, balance: 3000, status: "PARTIAL" });
+  authCtx.role = "RECEPTIONIST";
+  try {
+    const rec = await (await POST(req({ modo: "baja_resto" }), P)).status;
+    assert.equal(rec, 403);
+  } finally { authCtx.role = "ADMIN"; }
+  assert.equal(db.invoice.total, 3500);
+});
+
+test("C-03 · sin «modo» una Parcial con cobros sigue pidiendo reembolsar primero (no se cancela con dinero dentro)", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/cancel/route");
+  setInvoice({ items: CONCEPTO(3500), subtotal: 3500, total: 3500, paid: 500, balance: 3000, status: "PARTIAL" });
+  (paymentDelegate as any).count = async () => 0;
+  const r = await readJson(await POST(req({}), P));
+  assert.equal(r.status, 400);
+  assert.equal(db.invoice.status, "PARTIAL");
+});

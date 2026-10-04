@@ -74,6 +74,10 @@ import { AvisoDineroCitaCancelada } from "./aviso-dinero-cita-cancelada";
 import { MetodoDevolucion } from "./metodo-devolucion";
 import type { MetodoDeDevolucion } from "@/lib/dinero/reembolsos";
 import { textosDinero } from "@/lib/dinero/textos";
+// Auditoría de uso G1 (ws1-t5, 4-oct-2026): qué pasa con la factura al
+// reembolsar (C-02/C-03), el método con más dinero y lo reembolsado (C-32).
+import { efectoDelReembolso, type DestinoDeReembolso } from "@/lib/dinero/reembolso-destino";
+import { metodoPrincipal, reembolsadoDeFactura } from "@/lib/invoices/metodo-principal";
 import { useLocale as useLocaleDinero } from "@/i18n/i18n-provider";
 import { ultimaMarca } from "@/lib/anticipos/cita-cancelada-core";
 import { invoiceStatusBadge } from "./invoice-status";
@@ -242,6 +246,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // ws1-t5 (F5): por dónde salió el dinero; obligatorio (el corte resta solo el efectivo).
   const [refundMethod, setRefundMethod] = useState<MetodoDeDevolucion | "">("");
   const txDevolucion = textosDinero(useLocaleDinero()).devolucion;
+  // C-02/C-03: qué pasa con la factura (sin opción preseleccionada: se elige siempre).
+  const [refundDestino, setRefundDestino] = useState<DestinoDeReembolso | "">("");
+  const txReembolso = textosDinero(useLocaleDinero()).reembolso;
+  const txCancelarConPagos = textosDinero(useLocaleDinero()).cancelarConPagos;
   const [editTotal,    setEditTotal]    = useState("");
   const [discountAmt,  setDiscountAmt]  = useState("");
   const [cancelReason, setCancelReason] = useState("");
@@ -335,9 +343,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // de antes) ya no vale: manda el de la factura con lo pagado nuevo (lo que
   // queda de la cuota, o el saldo del control).
   const [saldoUsado, setSaldoUsado] = useState(0);
-  useEffect(() => { setSaldoUsado(0); }, [invoiceProp?.id, open]);
+  useEffect(() => { setSaldoUsado(0); setAnticipoRegistrado(false); }, [invoiceProp?.id, open]);
+  // Auditoría de uso C-14 (t5 F8): igual tras «Registrar anticipo recibido»: la
+  // cuota avanzó y el monto con que se abrió («$100») ya no es lo que toca.
+  const [anticipoRegistrado, setAnticipoRegistrado] = useState(false);
   const montoSugerido = montoDelCobroAlAbrir(
-    saldoUsado > 0 ? undefined : montoSugeridoDeQuienAbre,
+    saldoUsado > 0 || anticipoRegistrado ? undefined : montoSugeridoDeQuienAbre,
     invoice ? montoSugeridoDeCobro(condicionesPago, invoice.total, invoice.paid, todayLocalISO()) : 0,
   );
   const cobro = useCobro({
@@ -476,6 +487,15 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Lo pagado es SOLO el saldo a favor aplicado al emitirla: se puede cancelar
   // y ese dinero vuelve a favor del paciente (el servidor lo vuelve a decidir).
   const soloAnticipo = !invoice.cfdiUuid && pagadoEsSoloAnticipo(invoice.paid, invoice.payments);
+  // C-03: dinero cobrado de verdad (no solo saldo a favor aplicado): reembolsar
+  // y cancelar también en una Parcial, con su pregunta.
+  const conCobros = invoice.paid > 0 && !soloAnticipo;
+  // C-32: lo reembolsado (a la vista en el resumen) y el método con más dinero.
+  const reembolsado = reembolsadoDeFactura(invoice.payments);
+  const metodoDeLaFactura = metodoPrincipal(invoice.payments, invoice.paymentMethod ?? null);
+  // C-16: una factura ya reembolsada no pide ni registra anticipos.
+  const tieneReembolsos = Array.isArray(invoice.payments) && invoice.payments.some((p: any) => p?.method === "refund");
+  const ofreceAnticipos = !citaCanceladaConDinero && !tieneReembolsos;
   const s = invoiceStatusBadge(status);
 
   // CFDI: uuid efectivo (prop o timbrado optimista) y si aplica facturar.
@@ -503,6 +523,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     setRefundAmount(String(invoice?.paid ?? 0));
     setRefundReason("");
     setRefundMethod("");
+    setRefundDestino("");
     setEditTotal(String(invoice?.total ?? 0));
     setDiscountAmt(String(invoice?.discount ?? 0));
     setCancelReason("");
@@ -798,12 +819,24 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     }
   }
 
-  async function handleCancel() {
+  // C-03: `modo: "baja_resto"` = quedarse con lo pagado y dar de baja el resto.
+  async function handleCancel(modo?: "baja_resto") {
     // Si lo pagado era el saldo a favor aplicado, el servidor dice cuánto volvió a favor.
-    const mensajeCancelada = (r: any) => r?.anticipoDevuelto > 0
+    const mensajeCancelada = (r: any) => r?.bajaDelResto > 0
+      ? txCancelarConPagos.exitoConservar(fmtMXNdec(r.bajaDelResto))
+      : r?.anticipoDevuelto > 0
       ? t("clinical.invoiceDetail.cancelSuccessAnticipo", { monto: fmtMXNdec(r.anticipoDevuelto) })
       : t("clinical.invoiceDetail.cancelSuccess");
-    await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, mensajeCancelada);
+    await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined, ...(modo ? { modo } : {}) }, mensajeCancelada);
+  }
+
+  // C-03: «Devolver lo pagado y cancelar» = el reembolso de todo con el resto dado de baja.
+  function devolverTodoYCancelar() {
+    setRefundAmount(String(invoice?.paid ?? 0));
+    setRefundMethod("");
+    setRefundDestino("baja_resto");
+    setRefundReason(cancelReason);
+    setSub("refund");
   }
 
   async function handleRefund() {
@@ -811,7 +844,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     if (!amount || amount <= 0) { toast.error(t("clinical.invoiceDetail.invalidAmount")); return; }
     if (amount > invoice!.paid) { toast.error(t("clinical.invoiceDetail.exceedsPaid")); return; }
     if (!refundMethod) { toast.error(txDevolucion.obligatorio); return; }
-    await callApi("/refund", "POST", { amount, refundMethod, reason: refundReason.trim() || undefined }, t("clinical.invoiceDetail.refundSuccess"));
+    if (!refundDestino) { toast.error(txReembolso.elige); return; }
+    await callApi("/refund", "POST", { amount, refundMethod, destino: refundDestino, reason: refundReason.trim() || undefined }, (r) => txReembolso.exito(txReembolso.estados[r?.status] ?? t("clinical.invoiceDetail.refundSuccess")));
   }
 
   async function handleEditPrice() {
@@ -925,6 +959,19 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               )}
               <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("common.total")}</span><span className={cx("font-bold", `${c.cifra} ${c.cifraTotal}`)}>{fmtMXNdec(invoice.total)}</span></div>
               <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.paid")}</span><span className={cx("font-bold", `${c.cifra} ${c.cifraExito}`)} style={rediseno ? undefined : { color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span></div>
+              {/* C-02/C-32: lo reembolsado, a la vista (en negativo: salió). */}
+              {reembolsado.devuelto > 0 && (
+                <div className={cx("flex justify-between", c.resumenFila)} data-reembolsado>
+                  <span className={cx("text-muted-foreground", c.rotulo)}>{txReembolso.reembolsado}</span>
+                  <span className={cx("font-bold", `${c.cifra} ${c.cifraPeligro}`)} style={rediseno ? undefined : { color: "var(--danger)" }}>−{fmtMXNdec(reembolsado.devuelto)}</span>
+                </div>
+              )}
+              {reembolsado.aSaldoAFavor > 0 && (
+                <div className={cx("flex justify-between", c.resumenFila)}>
+                  <span className={cx("text-muted-foreground", c.rotulo)}>{txReembolso.pasoASaldo}</span>
+                  <span className={rediseno ? c.cifra : undefined}>−{fmtMXNdec(reembolsado.aSaldoAFavor)}</span>
+                </div>
+              )}
               {/* ws1-t3 fase 1 — cuánto de lo pagado es anticipo. Solo se pinta
                   si hay alguno: no añade ruido a una factura sin anticipo. */}
               {anticipoPagado > 0 && (
@@ -942,12 +989,14 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   PENDING quien abría «Cancelar» o «Registrar anticipo» — el
                   resumen de arriba no lo mencionaba y parecía una factura
                   sin nada en curso. */}
+              {/* C-32 (auditoría de uso): fila propia, sin sangría — no es una parte
+                  de lo pagado, es dinero que todavía no llega. */}
               {anticipoPendiente && (
-                <div className={`${cx("flex justify-between", c.resumenFila)} ${ant.subfila}`}>
-                  <span className={`${cx("text-muted-foreground", c.rotulo)} ${ant.subfilaRotulo}`}>
-                    <Clock size={12} strokeWidth={1.75} aria-hidden /> Anticipo pendiente
+                <div className={cx("flex justify-between", c.resumenFila)} data-anticipo-por-recibir>
+                  <span className={cx("text-muted-foreground inline-flex items-center gap-1", `${c.rotulo} inline-flex items-center gap-1`)}>
+                    <Clock size={12} strokeWidth={1.75} aria-hidden /> {txReembolso.anticipoPorRecibir}
                   </span>
-                  <span className={`${rediseno ? c.cifra : ""} ${ant.subfilaCifra}`}>{fmtMXNdec(anticipoPendiente.amount)}</span>
+                  <span className={rediseno ? c.cifra : undefined}>{fmtMXNdec(anticipoPendiente.amount)}</span>
                 </div>
               )}
               {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el
@@ -964,8 +1013,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   {fmtMXNdec(isCancelled ? 0 : invoice.balance)}
                 </span>
               </div>
-              {invoice.paymentMethod && (
-                <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.method")}</span><span className={cx("capitalize", `capitalize ${c.valor}`)}>{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
+              {metodoDeLaFactura && (
+                <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.method")}</span><span className={cx("capitalize", `capitalize ${c.valor}`)}>{METHOD_LABEL_KEYS[metodoDeLaFactura] ? t(METHOD_LABEL_KEYS[metodoDeLaFactura]) : metodoDeLaFactura}</span></div>
               )}
               {effectiveUuid && (
                 <div className={cx("flex justify-between gap-2 items-center", c.resumenFila)}>
@@ -999,6 +1048,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 pagado={invoice.paid}
                 estado={invoice.status}
                 puedeCobrar={puedeCobrar}
+                puedeReembolsar={puedeReembolsar}
                 onListo={() => { void onMutated(); void refrescarFactura(); setAnticipoTick((n) => n + 1); }}
               />
             </div>
@@ -1028,7 +1078,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 la sesión (billing.deposit vía el GET de arriba — QA t2, fase
                 2), no "sin mirar nada": un READONLY o un permiso a medida sin
                 billing.deposit ya no lo ve. */}
-            {isPending && puedeDepositar && (
+            {isPending && puedeDepositar && ofreceAnticipos && (
               <button
                 type="button"
                 onClick={() => setPidiendoAnticipo(true)}
@@ -1043,7 +1093,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 transferencia o terminal — el dinero YA está, no hay link que
                 esperar. Gateado por "billing.charge" (billing.deposit no
                 basta: registrar dinero recibido es cobrar). */}
-            {isPending && puedeRegistrarAnticipo && (
+            {isPending && puedeRegistrarAnticipo && ofreceAnticipos && (
               <button
                 type="button"
                 onClick={() => setRegistrandoAnticipo(true)}
@@ -1288,7 +1338,14 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     )}
                   </>
                 )}
-                {puedeReembolsar && (invoice.paid === 0 || soloAnticipo) && (
+                {/* C-03 (auditoría de uso): con dinero cobrado también, ni el dueño
+                    tenía salida (solo «Marcar pagada», que inventa un cobro). */}
+                {puedeReembolsar && conCobros && (
+                  <ButtonNew variant="danger" icon={<Undo2 size={14} aria-hidden />} onClick={() => openSub("refund")} disabled={busy}>
+                    {t("clinical.invoiceDetail.refund")}
+                  </ButtonNew>
+                )}
+                {puedeReembolsar && (
                   <ButtonNew variant="danger" icon={<XCircle size={14} aria-hidden />} onClick={() => openSub("cancel")} disabled={busy}>
                     {t("clinical.invoiceDetail.cancelInvoice")}
                   </ButtonNew>
@@ -1365,6 +1422,33 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             <div className={cx("space-y-1.5", c.campo)}>
               <MetodoDevolucion valor={refundMethod} onCambio={setRefundMethod} disabled={busy} />
             </div>
+            {/* C-02/C-03 (auditoría de uso): qué pasa con la factura. Se elige siempre. */}
+            <fieldset className={cx("space-y-1.5", c.campo)} data-destino-reembolso>
+              <legend className="block text-xs font-medium mb-1" style={{ color: "var(--text-2)" }}>{txReembolso.queHacer}</legend>
+              {(["baja_total", "sigue_debiendo", "baja_resto"] as const)
+                .filter((d) => d !== "baja_resto" || invoice.balance > 0)
+                .map((d) => (
+                  <label key={d} className="flex items-start gap-2 text-xs cursor-pointer">
+                    <input type="radio" name="destino-reembolso" value={d} checked={refundDestino === d} onChange={() => setRefundDestino(d)} disabled={busy} className="mt-0.5" />
+                    <span>
+                      <span className="font-medium" style={{ color: "var(--text-1)" }}>{txReembolso.destinos[d]}</span>
+                      <span className="block" style={{ color: "var(--text-3)" }}>{txReembolso.ayudas[d]}</span>
+                    </span>
+                  </label>
+                ))}
+              {(() => {
+                const monto = Number(refundAmount);
+                if (!refundDestino || !(monto > 0) || monto > invoice.paid) return null;
+                try {
+                  const e = efectoDelReembolso({ total: invoice.total, pagado: invoice.paid, monto, destino: refundDestino });
+                  return (
+                    <p className="text-xs font-medium" style={{ color: "var(--text-2)" }} role="status">
+                      {txReembolso.quedara(fmtMXNdec(e.estado === "CANCELLED" ? 0 : e.total), fmtMXNdec(e.saldo), txReembolso.estados[e.estado] ?? e.estado)}
+                    </p>
+                  );
+                } catch { return null; }
+              })()}
+            </fieldset>
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.reason")}</Label>
               <textarea
@@ -1377,7 +1461,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="danger" onClick={handleRefund} disabled={busy || !refundMethod}>
+            <ButtonNew variant="danger" onClick={handleRefund} disabled={busy}>
               {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: fmtMXNdec(Number(refundAmount) || 0) })}
             </ButtonNew>
           </DialogFooter>
@@ -1434,6 +1518,23 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </DialogHeader>
           <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
             <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.cancelWarning")}</p>
+            {/* C-03 (auditoría de uso): factura con dinero cobrado → dos salidas. */}
+            {conCobros && (
+              <div className={cx("space-y-2", c.campo)} data-cancelar-con-cobros>
+                <p className={cx("text-xs font-medium", c.texto)}>{txCancelarConPagos.texto(fmtMXNdec(invoice.paid), fmtMXNdec(invoice.balance))}</p>
+                <ButtonNew variant="danger" size="sm" onClick={devolverTodoYCancelar} disabled={busy}>
+                  {txCancelarConPagos.devolver(fmtMXNdec(invoice.paid))}
+                </ButtonNew>
+                {invoice.balance > 0 && (
+                  <>
+                    <ButtonNew variant="secondary" size="sm" onClick={() => void handleCancel("baja_resto")} disabled={busy}>
+                      {txCancelarConPagos.conservar(fmtMXNdec(invoice.balance))}
+                    </ButtonNew>
+                    <p className={cx("text-[11px] text-muted-foreground", c.ayuda)}>{txCancelarConPagos.conservarAyuda}</p>
+                  </>
+                )}
+              </div>
+            )}
             {/* ws1-t1 (B2): cancelar cierra el anticipo pendiente (y, si
                 apartaba una cita, quita el apartado) — que no se lea como
                 sorpresa a mitad de la confirmación. */}
@@ -1454,9 +1555,11 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.back")}</ButtonNew>
-            <ButtonNew variant="danger" onClick={handleCancel} disabled={busy}>
+            {!conCobros && (
+            <ButtonNew variant="danger" onClick={() => void handleCancel()} disabled={busy}>
               {busy ? t("clinical.invoiceDetail.cancelling") : t("clinical.invoiceDetail.confirmCancellation")}
             </ButtonNew>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1670,7 +1773,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         invoiceId={invoice.id}
         saldo={invoice.balance}
         anticipoPendiente={anticipoPendiente}
-        onListo={() => { void onMutated(); void refrescarFactura(); setAnticipoTick((n) => n + 1); }}
+        onListo={() => { setAnticipoRegistrado(true); void onMutated(); void refrescarFactura(); setAnticipoTick((n) => n + 1); }}
       />
     </>
   );

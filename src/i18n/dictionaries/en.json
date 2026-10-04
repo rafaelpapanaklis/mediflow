@@ -8633,7 +8633,7 @@
       "applyDiscountFirst": "Apply the discount before charging, or leave it as it was.",
       "applying": "Applying…",
       "cancelInvoiceTitle": "Cancel invoice {number}",
-      "cancelWarning": "You will not be able to record payments afterward. The reason will be kept in the audit log and the invoice notes.",
+      "cancelWarning": "You will not be able to record payments afterward. The reason will be kept in the activity log and the invoice notes.",
       "cancelWarningAnticipo": "It also has a pending deposit of {monto}: it will be closed and, if it was holding an appointment, the hold will be released.",
       "reasonOptional": "Reason (optional)",
       "cancelReasonPlaceholder": "Appointment cancelled, patient no-show, billing error…",
