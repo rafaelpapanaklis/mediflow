@@ -158,6 +158,16 @@ const es = {
     saldoCompleto: "Saldo completo",
     pagaHoy: "Paga hoy",
   },
+  // El descuento de factura en $ o en % (pedido de Rafael, 4-oct-2026).
+  descuentoFactura: {
+    etiqueta: "Descuento",
+    modo: "Descuento en pesos o en porcentaje",
+    enPesos: "En pesos",
+    enPorcentaje: "En porcentaje",
+    equivale: (pct: string, pesos: string) => `${pct}% = ${pesos}`,
+    recortado: (subtotal: string) => `No puede pasar del subtotal: se queda en ${subtotal}.`,
+    invalido: "Escribe un número (sin signos).",
+  },
   // «Se cobrará hoy» de un presupuesto: el abono es un PAGO (decisión de Rafael, 4-oct-2026).
   presupuesto: {
     abonoA: "¿A qué concepto va el abono?",
@@ -321,6 +331,15 @@ const en: Textos = {
     saldoDeLaFactura: "Invoice balance",
     saldoCompleto: "Full balance",
     pagaHoy: "Pays today",
+  },
+  descuentoFactura: {
+    etiqueta: "Discount",
+    modo: "Discount in pesos or percent",
+    enPesos: "In pesos",
+    enPorcentaje: "In percent",
+    equivale: (pct: string, pesos: string) => `${pct}% = ${pesos}`,
+    recortado: (subtotal: string) => `It can't exceed the subtotal: it stays at ${subtotal}.`,
+    invalido: "Type a number (no signs).",
   },
   presupuesto: {
     abonoA: "Which treatment does the payment go to?",

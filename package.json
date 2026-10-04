@@ -354,6 +354,7 @@
     "test:dinero-auditoria-uso-r3": "tsx --test --experimental-test-module-mocks src/lib/dinero/__tests__/auditoria-uso-g1-r3.test.ts",
     "test:dinero-auditoria-uso-final": "tsx --test --experimental-test-module-mocks src/lib/dinero/__tests__/auditoria-uso-g1-final.test.ts",
     "test:abono-otra-factura": "tsx --test src/lib/dinero/__tests__/abono-otra-factura.test.ts",
+    "test:descuento-pesos": "tsx --test src/lib/dinero/__tests__/descuento-pesos.test.ts",
     "test:presupuesto-abono-pago": "tsx --test src/lib/quotes/__tests__/abono-es-pago.test.ts",
     "test:anulables-cancelada": "tsx --test src/lib/anticipos/__tests__/anulables-cancelada.test.ts",
     "test:anular-anticipo-permiso": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/anular-anticipo-permiso.test.ts",

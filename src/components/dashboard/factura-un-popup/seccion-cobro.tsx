@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { todayLocalISO } from "@/lib/billing/paid-at";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDinero } from "@/lib/dinero/textos";
+import { calcularDescuento, convertirEntrada, type ModoDescuento } from "@/lib/dinero/descuento-pesos";
 import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { BotonMercadoPago, LinkMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
@@ -252,6 +253,91 @@ function conFormato(valor: string): string {
 }
 
 /**
+ * El campo del descuento de la factura en PESOS o en PORCENTAJE (pedido de
+ * Rafael, 4-oct-2026): un selector $ / % junto al campo. Con % se calcula sobre
+ * el subtotal y se enseña el equivalente («10% = $50.00»). Quien lo monta
+ * recibe SIEMPRE pesos (a centavos y nunca más que el subtotal): lo que se
+ * guarda no cambia. Reglas en lib/dinero/descuento-pesos.ts.
+ */
+export function CampoDescuento({ subtotal, pesos, alCambiarPesos, ocupado, etiqueta, autoFocus, accion }: {
+  subtotal: number;
+  /** El descuento en pesos que tiene el detalle (texto, como `discountAmt`). */
+  pesos: string;
+  alCambiarPesos: (pesos: string) => void;
+  ocupado: boolean;
+  etiqueta: string;
+  autoFocus?: boolean;
+  /** Un botón en la misma fila que el campo («Aplicar descuento»). */
+  accion?: ReactNode;
+}) {
+  const tx = textosDinero(useLocale()).descuentoFactura;
+  const [modo, setModo] = useState<ModoDescuento>("pesos");
+  const [entrada, setEntrada] = useState(pesos);
+  // Si el detalle cambia el descuento por su cuenta (al abrir otra factura), el campo lo sigue.
+  useEffect(() => {
+    const r = calcularDescuento(modo, entrada, subtotal);
+    if (r.pesos !== null && Number(pesos || 0) !== r.pesos) {
+      setEntrada(modo === "pesos" ? pesos : convertirEntrada("pesos", "porcentaje", pesos, subtotal));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pesos, subtotal]);
+  const r = calcularDescuento(modo, entrada, subtotal);
+  function teclear(valor: string) {
+    setEntrada(valor);
+    const nuevo = calcularDescuento(modo, valor, subtotal);
+    // Inválido: no se manda nada al detalle (se queda lo último bueno) y se avisa abajo.
+    if (nuevo.pesos !== null) alCambiarPesos(nuevo.pesos === 0 && valor.trim() === "" ? "" : String(nuevo.pesos));
+  }
+  function cambiarModo(m: ModoDescuento) {
+    if (m === modo) return;
+    setEntrada(convertirEntrada(modo, m, entrada, subtotal));
+    setModo(m);
+  }
+  return (
+    <div className={c.campo} data-campo-descuento>
+      <Label htmlFor="factura-descuento">{etiqueta}</Label>
+      <div className={c.descuentoModo}>
+        <div className={c.segmento} role="radiogroup" aria-label={tx.modo}>
+          {(["pesos", "porcentaje"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={modo === m}
+              aria-label={m === "pesos" ? tx.enPesos : tx.enPorcentaje}
+              className={`${c.segmentoOpcion} ${modo === m ? c.segmentoActivo : ""}`}
+              onClick={() => cambiarModo(m)}
+              disabled={ocupado}
+            >
+              {m === "pesos" ? "$" : "%"}
+            </button>
+          ))}
+        </div>
+        <Input
+          id="factura-descuento"
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={entrada}
+          onChange={(e) => teclear(e.target.value)}
+          disabled={ocupado}
+          autoFocus={autoFocus}
+          aria-invalid={r.pesos === null}
+        />
+        {accion}
+      </div>
+      {r.pesos === null ? (
+        <p className={c.ayuda} role="alert">{tx.invalido}</p>
+      ) : r.recortado ? (
+        <p className={c.ayuda} role="status">{tx.recortado(fmtMXNdec(subtotal))}</p>
+      ) : modo === "porcentaje" && r.pesos > 0 ? (
+        <p className={c.ayuda} role="status" data-equivalente>{tx.equivale(String(r.porcentaje), fmtMXNdec(r.pesos))}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * La fila del descuento dentro de la sección de cobro: lo que hoy es el
  * diálogo «Aplicar descuento» (subtotal actual, importe, la nota de cómo se
  * recalcula y el botón). El estado y la llamada son los del detalle
@@ -267,18 +353,23 @@ export function DescuentoEnLinea({ subtotal, valor, alCambiar, alAplicar, ocupad
   pendiente: boolean;
 }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <div className={u.descuento}>
       <div className={c.campo}>
-        {/* La cadena trae « *» porque en su diálogo el campo era lo único que
-            había; aquí el descuento es opcional y el asterisco confundiría. */}
-        <Label>{t("clinical.invoiceDetail.discountMxnLabel").replace(/\s*\*$/, "")}</Label>
-        <div className={u.descuentoFila}>
-          <Input type="number" inputMode="decimal" step="0.01" min={0} value={valor} onChange={(e) => alCambiar(e.target.value)} disabled={ocupado} />
-          <ButtonNew variant="secondary" onClick={alAplicar} disabled={ocupado || !pendiente}>
-            {t("clinical.invoiceDetail.applyDiscount")}
-          </ButtonNew>
-        </div>
+        {/* Pedido de Rafael: en pesos o en porcentaje (selector $ / %). */}
+        <CampoDescuento
+          subtotal={subtotal}
+          pesos={valor}
+          alCambiarPesos={alCambiar}
+          ocupado={ocupado}
+          etiqueta={textosDinero(locale).descuentoFactura.etiqueta}
+          accion={
+            <ButtonNew variant="secondary" onClick={alAplicar} disabled={ocupado || !pendiente}>
+              {t("clinical.invoiceDetail.applyDiscount")}
+            </ButtonNew>
+          }
+        />
         <p className={c.ayuda}>
           {t("clinical.invoiceDetail.currentSubtotalLabel")} <span className={u.cifraEnTexto}>{fmtMXNdec(subtotal)}</span>
           {" · "}{t("clinical.invoiceDetail.discountHelper")}

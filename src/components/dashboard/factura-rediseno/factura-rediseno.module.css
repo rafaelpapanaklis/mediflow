@@ -427,6 +427,59 @@
   flex-shrink: 0;
 }
 
+/* El descuento en $ o en % (pedido de Rafael, 4-oct-2026): selector de dos
+   opciones pegado al campo, como los métodos de pago. `.descuentoModo` triple
+   (0,4,1) para ganarle al ancho de `.raiz input:not(…):not(…)` (0,3,1). */
+.raiz .descuentoModo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* En el celular el botón de al lado («Aplicar descuento») baja a su renglón
+   antes que dejar el campo en un dedo de ancho. */
+.raiz .descuentoModo.descuentoModo.descuentoModo > input {
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 0;
+}
+
+.raiz .segmento {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+}
+
+.raiz .segmentoOpcion {
+  min-width: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.raiz .segmentoOpcion:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.raiz .segmentoActivo.segmentoActivo {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
 .raiz .rejilla2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

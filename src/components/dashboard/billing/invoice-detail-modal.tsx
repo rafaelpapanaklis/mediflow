@@ -53,7 +53,7 @@ import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-
 import { PaymentCfdiButton } from "./payment-cfdi-button";
 // Decisión de Rafael (4-oct-2026): «Abonar a otra factura».
 import { DialogoAbonar, useDatosAbono } from "./dialogo-abonar";
-import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
+import { SeccionCobro, DescuentoEnLinea, CampoDescuento, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 // ws1-t8: mandar el CFDI al paciente (F-17), paciente extranjero (F-22) y avisos del emisor (F-15).
 import { BotonEnviarCfdi, EnviarCfdiDialog, OpcionesEnvioAlTimbrar, useEnvioCfdi } from "./enviar-cfdi";
@@ -276,6 +276,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   const txReembolso = textosDinero(useLocaleDinero()).reembolso;
   const txCancelarConPagos = textosDinero(useLocaleDinero()).cancelarConPagos;
   const txAbono = textosDinero(useLocaleDinero()).abono;
+  const txDescuentoFactura = textosDinero(useLocaleDinero()).descuentoFactura;
   const [editTotal,    setEditTotal]    = useState("");
   const [discountAmt,  setDiscountAmt]  = useState("");
   const [cancelReason, setCancelReason] = useState("");
@@ -1562,10 +1563,15 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </DialogHeader>
           <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
             <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className={cx("font-mono font-bold text-foreground", c.cifra)}>{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
-            <div className={cx("space-y-1.5", c.campo)}>
-              <Label>{t("clinical.invoiceDetail.discountMxnLabel")}</Label>
-              <Input type="number" step="0.01" min={0} value={discountAmt} onChange={(e) => setDiscountAmt(e.target.value)} autoFocus />
-            </div>
+            {/* Pedido de Rafael: en pesos o en porcentaje; se guarda en pesos. */}
+            <CampoDescuento
+              subtotal={invoice.subtotal ?? invoice.total + (invoice.discount ?? 0)}
+              pesos={discountAmt}
+              alCambiarPesos={setDiscountAmt}
+              ocupado={busy}
+              etiqueta={`${txDescuentoFactura.etiqueta} *`}
+              autoFocus
+            />
             <p className={cx("text-[11px] text-muted-foreground", c.ayuda)}>{t("clinical.invoiceDetail.discountHelper")}</p>
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
