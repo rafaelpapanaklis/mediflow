@@ -97,7 +97,7 @@ export function ConfirmarPacienteNuevo({
       <div className={fondo} onKeyDown={alTeclear}>
         <RaizRediseno>
           <form role="dialog" aria-modal="true" aria-labelledby="wi-nuevo-titulo" onSubmit={confirmar}
-            className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-xl space-y-4">
+            className="mx-auto w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-xl space-y-4">
             <div>
               <h2 id="wi-nuevo-titulo" className={s.nombre}>{tx.titulo}</h2>
               <p className={s.detalle}>{tx.explicacion}</p>

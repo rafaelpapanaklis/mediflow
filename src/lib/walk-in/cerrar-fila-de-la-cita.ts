@@ -5,7 +5,7 @@
 // la cita que creó «Iniciar» se completaba, se cancelaba o se marcaba «No asistió» desde la Agenda (o con
 // «Terminar consulta» en la ficha), la fila seguía «En atención» para siempre y había que cancelarla a mano.
 //
-//   cita COMPLETED          → fila COMPLETED (completedAt = ahora)
+//   cita COMPLETED / CHECKED_OUT («Salió») → fila COMPLETED (completedAt = ahora)
 //   cita CANCELLED/NO_SHOW  → fila CANCELLED
 //
 // Solo se mueve una fila «En atención» (IN_PROGRESS) de la MISMA clínica: la ligada por la columna
@@ -18,13 +18,14 @@
 // lo que importa; la fila es un reflejo.
 import { prisma } from "@/lib/prisma";
 
-export type EstadoQueCierra = "COMPLETED" | "CANCELLED" | "NO_SHOW";
+export type EstadoQueCierra = "COMPLETED" | "CHECKED_OUT" | "CANCELLED" | "NO_SHOW";
 
 const g = globalThis as { __walkInSinLiga?: boolean };
 
 /** Qué escribe en la fila cada cierre de la cita (null = ese estado no cierra la fila). */
 export function datosDeLaFila(estado: string, ahora: Date): { status: "COMPLETED"; completedAt: Date } | { status: "CANCELLED" } | null {
-  if (estado === "COMPLETED") return { status: "COMPLETED", completedAt: ahora };
+  // «Salió» (CHECKED_OUT) también es una visita atendida: desde «En consulta» la Agenda deja ir ahí directo.
+  if (estado === "COMPLETED" || estado === "CHECKED_OUT") return { status: "COMPLETED", completedAt: ahora };
   if (estado === "CANCELLED" || estado === "NO_SHOW") return { status: "CANCELLED" };
   return null;
 }

@@ -97,6 +97,12 @@ test("completar la cita de un walk-in en la Agenda completa su fila (sin la colu
   assert.equal(fila("w-ajena").status, "IN_PROGRESS", "otra clínica no se toca");
 });
 
+test("«Salió» (CHECKED_OUT) desde «En consulta» también deja la fila atendida", async () => {
+  const { cerrarFilaDeLaCita } = await import("@/lib/walk-in/cerrar-fila-de-la-cita");
+  assert.equal(await cerrarFilaDeLaCita({ clinicId: "c1", appointmentId: "cita-walkin", estado: "CHECKED_OUT" }), 1);
+  assert.equal(fila("w1").status, "COMPLETED");
+});
+
 test("cancelar o «No asistió» en la Agenda cancela la fila", async () => {
   const { cerrarFilaDeLaCita } = await import("@/lib/walk-in/cerrar-fila-de-la-cita");
   assert.equal(await cerrarFilaDeLaCita({ clinicId: "c1", appointmentId: "cita-walkin", estado: "CANCELLED" }), 1);
@@ -154,8 +160,8 @@ for (const p of PUERTAS) {
   });
 }
 
-test("la Agenda cierra la fila al completar, cancelar y «No asistió», no en cada cambio de estado", () => {
+test("la Agenda cierra la fila al completar, «Salió», cancelar y «No asistió», no en cada cambio de estado", () => {
   const src = readFileSync(join(process.cwd(), "src/app/api/appointments/[id]/status/route.ts"), "utf8");
-  assert.match(src, /if \(body\.status === "COMPLETED" \|\| closesAppointment\) \{\s*await cerrarFilaDeLaCita\(/);
+  assert.match(src, /if \(body\.status === "COMPLETED" \|\| body\.status === "CHECKED_OUT" \|\| closesAppointment\) \{\s*await cerrarFilaDeLaCita\(/);
   assert.match(src, /const closesAppointment = body\.status === "CANCELLED" \|\| body\.status === "NO_SHOW";/);
 });

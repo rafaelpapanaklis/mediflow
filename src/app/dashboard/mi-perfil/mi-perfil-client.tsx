@@ -11,6 +11,9 @@ import { cambiosDeMiPerfil, textosMiPerfil, type CampoPropio } from "@/lib/team/
 
 type Datos = Record<CampoPropio, string>;
 
+// `.campoFila` alinea abajo (pensado para un botón al lado); aquí hay campos con ayuda debajo: arriba.
+const FILA = { alignItems: "flex-start", marginBottom: 12 } as const;
+
 // El texto visible de cada especialidad: las mismas llaves que Equipo.
 const NOMBRE_ESPECIALIDAD: Record<string, string> = {
   "Odontología General": "settings.team.specGeneral",
@@ -93,18 +96,18 @@ export function MiPerfilClient({ inicial, email, role, clinico }: {
       />
       <div className={s.apilado}>
         <Tarjeta icono={<UserRound size={15} strokeWidth={1.75} />} titulo={tx.personales}>
-          <div className={s.campoFila}>
+          <div className={s.campoFila} style={FILA}>
             {entrada("firstName", tx.nombre)}
             {entrada("lastName", tx.apellidos)}
           </div>
-          <div className={s.campoFila}>
+          <div className={s.campoFila} style={FILA}>
             {entrada("phone", tx.telefono, { tipo: "tel", placeholder: "+52 999 000 0000" })}
             <Campo etiqueta={tx.correo} htmlFor="mp-correo">
               <input id="mp-correo" className={s.campoEntrada} value={email} disabled aria-describedby="mp-correo-ayuda" />
               <span id="mp-correo-ayuda" className={s.detalle}>{tx.correoAyuda}</span>
             </Campo>
           </div>
-          <div className={s.campoFila}>
+          <div className={s.campoFila} style={FILA}>
             <Campo etiqueta={tx.rol} htmlFor="mp-rol">
               <input id="mp-rol" className={s.campoEntrada} value={ROL[role] ? t(ROL[role]) : role} disabled aria-describedby="mp-rol-ayuda" />
               <span id="mp-rol-ayuda" className={s.detalle}>{tx.rolAyuda}</span>
@@ -114,7 +117,7 @@ export function MiPerfilClient({ inicial, email, role, clinico }: {
 
         {clinico && (
           <Tarjeta icono={<BadgeCheck size={15} strokeWidth={1.75} />} titulo={tx.profesionales} sub={tx.profesionalesAyuda}>
-            <div className={s.campoFila}>
+            <div className={s.campoFila} style={FILA}>
               <Campo etiqueta={tx.especialidadEquipo} htmlFor="mp-specialty">
                 <select id="mp-specialty" className={s.campoEntrada} value={datos.specialty} onChange={set("specialty")}>
                   <option value="">{tx.sinEspecialidad}</option>
@@ -124,7 +127,7 @@ export function MiPerfilClient({ inicial, email, role, clinico }: {
               </Campo>
               {entrada("cedulaProfesional", tx.cedula)}
             </div>
-            <div className={s.campoFila}>
+            <div className={s.campoFila} style={FILA}>
               {entrada("especialidad", tx.especialidadOficial, { placeholder: tx.especialidadOficialEjemplo })}
               {entrada("cedulaEspecialidad", tx.cedulaEspecialidad)}
             </div>

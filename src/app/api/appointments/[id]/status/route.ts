@@ -210,7 +210,7 @@ export async function PATCH(
   }
 
   // ws1-t1: la cita de un walk-in cerrada aquí cierra también su fila (antes seguía «En atención»).
-  if (body.status === "COMPLETED" || closesAppointment) {
+  if (body.status === "COMPLETED" || body.status === "CHECKED_OUT" || closesAppointment) {
     await cerrarFilaDeLaCita({ clinicId: session.clinic.id, appointmentId: params.id, estado: body.status, ahora: now });
   }
 
