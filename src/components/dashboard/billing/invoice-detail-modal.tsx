@@ -200,11 +200,18 @@ interface InvoiceDetailModalProps {
    * él, no hay botón (se sigue con «Editar precio», como siempre).
    */
   onEditar?: (invoice: any) => void;
+  /**
+   * Auditoría de uso C-14 (4-oct-2026): tras cobrar, reembolsar o cancelar, la
+   * factura FRESCA (GET /api/invoices/[id]) para que quien abrió el detalle la
+   * pinte al instante. Sin esto la lista esperaba al router.refresh() (~7 s con
+   * la cifra vieja, invitando a cobrar dos veces). Opcional: sin él, como antes.
+   */
+  onFacturaActualizada?: (invoice: any) => void;
 }
 
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel" | "cfdi";
 
-export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false, abrirCobro = false, montoSugerido: montoSugeridoDeQuienAbre, onCobrado, onEditar }: InvoiceDetailModalProps) {
+export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, onClose, onMutated, initialAction = null, clinicTaxMode, rediseno = false, abrirCobro = false, montoSugerido: montoSugeridoDeQuienAbre, onCobrado, onEditar, onFacturaActualizada }: InvoiceDetailModalProps) {
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
@@ -231,6 +238,14 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       // Silencioso: la próxima apertura del modal trae el dato fresco igual.
     }
   }, [invoiceProp?.id]);
+  // C-14: la factura fresca a quien abrió el detalle (no espera al refresco de la página).
+  const subirFacturaFresca = useCallback((id: string | undefined) => {
+    if (!id || !onFacturaActualizada) return;
+    fetch(`/api/invoices/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((f) => { if (f?.id) onFacturaActualizada(f); })
+      .catch(() => {});
+  }, [onFacturaActualizada]);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
   const [busy, setBusy] = useState(false);
@@ -756,6 +771,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           ?? t("clinical.invoiceDetail.operationSuccess"),
       );
       setSub(null);
+      subirFacturaFresca(invoice.id);
       await onMutated();
       onClose();
       // Forzamos refresh del segmento server-rendered actual además de la
@@ -926,6 +942,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
 
   function handlePaymentSuccess() {
     setPaymentOpen(false);
+    subirFacturaFresca(invoice?.id);
     onMutated();
     if (onCobrado) onCobrado(); else onClose();
     router.refresh();

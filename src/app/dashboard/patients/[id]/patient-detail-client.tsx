@@ -3920,7 +3920,14 @@ export function PatientDetailClient({
         puedeEnviarComprobante={permisosCobro?.enviar === true}
         pendientes={pendientesPrevios(invoices)}
         onCobrarPendientes={() => { setCobrarHoyAbierto(false); openChargeShortcut(); }}
-        onListo={() => router.refresh()}
+        // C-14 (auditoría de uso): la nota nueva entra a la lista al instante (sin esperar al refresco).
+        onListo={(nota) => {
+          fetch(`/api/invoices/${nota.id}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((f) => { if (f?.id) setInvoices((prev: any[]) => (prev.some((i: any) => i.id === f.id) ? prev.map((i: any) => (i.id === f.id ? { ...i, ...f } : i)) : [f, ...prev])); })
+            .catch(() => {});
+          router.refresh();
+        }}
       />
 
       {/* Modal de detalle de nota SOAP — abre al hacer click en una row del
@@ -3947,6 +3954,8 @@ export function PatientDetailClient({
         patientName={fullName}
         onClose={() => { setInvoiceDetailOpen(null); setInvoiceDetailAction(null); setCobroMontoSugerido(null); }}
         onMutated={() => router.refresh()}
+        // C-14 (auditoría de uso): la factura cobrada/reembolsada se pinta al instante.
+        onFacturaActualizada={(f: any) => setInvoices((prev: any[]) => prev.map((i: any) => (i.id === f.id ? { ...i, ...f } : i)))}
         initialAction={invoiceDetailAction}
         clinicTaxMode={clinicTaxMode ?? null}
         // ws1-t4: abierto desde «Cobrar» / «Cobrar ahora» → el pago ya abierto.
