@@ -51,6 +51,10 @@ import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-
 import { PaymentCfdiButton } from "./payment-cfdi-button";
 import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
+// ws1-t8: mandar el CFDI al paciente (F-17), paciente extranjero (F-22) y avisos del emisor (F-15).
+import { BotonEnviarCfdi, EnviarCfdiDialog, OpcionesEnvioAlTimbrar, useEnvioCfdi } from "./enviar-cfdi";
+import { CamposReceptorExtranjero, useReceptorExtranjero } from "./cfdi-receptor-extranjero";
+import { AvisosEmisorAlTimbrar } from "./cfdi-avisos-emisor-timbrado";
 // ws1-t3: los CFDI de la factura ante el SAT (consultar, cancelar, sustituir, nota de crédito).
 import { CfdiAnteElSat } from "./cfdi-ante-el-sat";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
@@ -253,6 +257,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Cerrar el formulario sin timbrar deja de «sustituir»: el próximo timbrado es normal.
   useEffect(() => { if (sub !== "cfdi") setSustituyeCfdiId(null); }, [sub]);
   const [cfdiId, setCfdiId] = useState<string | null>(null);
+  // ws1-t8: «Enviar CFDI» (correo / WhatsApp) y el receptor extranjero, cada uno en su hook.
+  const envioCfdi = useEnvioCfdi(invoice?.id);
+  const extranjero = useReceptorExtranjero(invoice?.id);
   // Consumo CFDI del mes (contador discreto en el sub-form + aviso de excedente).
   const [cfdiQuota, setCfdiQuota] = useState<{ used: number; included: number } | null>(null);
   // Ambiente de timbrado (boolean que expone /api/cfdi/usage). null = todavía no
@@ -569,7 +576,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     const rfc    = fiscal.rfc.trim().toUpperCase();
     const nombre = fiscal.nombre.trim();
     const cp     = fiscal.cp.trim();
-    if (!rfc || !nombre || !fiscal.regimen || !cp) {
+    const errorExtranjero = extranjero.error(nombre);
+    if (errorExtranjero) { toast.error(errorExtranjero); return; }
+    if (!extranjero.activo && (!rfc || !nombre || !fiscal.regimen || !cp)) {
       toast.error(t("clinical.invoiceDetail.fiscalRequired"));
       return;
     }
@@ -578,7 +587,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       // (a) Persistir fiscales en el paciente (best-effort, no bloquea el timbrado).
       // Con responsable de pago los fiscales son SUYOS: guardarlos en el niño
       // le pondría el RFC del tutor a su ficha.
-      if (fiscalOrigen === "responsable") {
+      if (extranjero.activo) {
+        // Sin RFC mexicano: no se le guarda XEXX010101000 en la ficha.
+      } else if (fiscalOrigen === "responsable") {
         fetch(`/api/invoices/${invoice.id}/receptor-responsable`, {
           method:  "PUT",
           headers: { "Content-Type": "application/json" },
@@ -598,8 +609,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           invoiceId:   invoice.id,
-          receptor:    { rfc, nombre, regimenFiscal: fiscal.regimen, cp, email: fiscal.email.trim() || undefined },
-          usoCfdi:     fiscal.uso,
+          receptor:    extranjero.receptor({ rfc, nombre, regimenFiscal: fiscal.regimen, cp, email: fiscal.email.trim() || undefined }),
+          usoCfdi:     extranjero.usoForzado ?? fiscal.uso,
           paymentForm: fiscal.formaPago,
           taxMode:     fiscal.impuestos,
           ...(sustituyeCfdiId ? { sustituyeCfdiId } : {}),
@@ -629,6 +640,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       setSustituyeCfdiId(null);
       setCfdiSatTick((n) => n + 1);
       setCfdiId(data.cfdiId ?? null);
+      // ws1-t8: lo que se pidió en «Mandársela al paciente al timbrar» (no lanza; avisa por toast).
+      if (data.cfdiId) void envioCfdi.trasTimbrar(data.cfdiId, fiscal.email);
       setSub(null);
       toast.success(t("clinical.invoiceDetail.cfdiStampedToast"));
       // El SAT timbró por un importe distinto al de la factura. El CFDI ya está
@@ -1304,6 +1317,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   <ButtonNew variant="secondary" icon={<Download size={14} aria-hidden />} onClick={() => downloadCfdi("xml")} disabled={busy}>
                     {t("clinical.invoiceDetail.downloadXml")}
                   </ButtonNew>
+                  <BotonEnviarCfdi onClick={async () => envioCfdi.abrir(await resolveCfdiId())} disabled={busy} />
                 </>
               ) : puedeTimbrar && (
                 <ButtonNew variant="secondary" icon={<Receipt size={14} aria-hidden />} onClick={openCfdiForm} disabled={busy}>
@@ -1505,6 +1519,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 {responsableDePago.parentesco ? ` (${responsableDePago.parentesco})` : ""}. El comprobante sale a su nombre, no al del paciente; lo que captures aquí se guarda en el responsable.
               </p>
             )}
+            <AvisosEmisorAlTimbrar />
+            <CamposReceptorExtranjero ext={extranjero} />
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalRfc")}</Label>
               <Input value={fiscal.rfc} onChange={(e) => setFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase(), uso: f.usoManual ? f.uso : usoCfdiPorRegimen(f.regimen, e.target.value) }))}
@@ -1559,6 +1575,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               <Label>{t("clinical.invoiceDetail.fiscalEmail")}</Label>
               <Input type="email" value={fiscal.email} onChange={(e) => setFiscal(f => ({ ...f, email: e.target.value }))} />
             </div>
+            <OpcionesEnvioAlTimbrar valor={envioCfdi.alTimbrar} onChange={envioCfdi.setAlTimbrar} hayCorreo={!!fiscal.email.trim()} rediseno={rediseno} />
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
@@ -1592,6 +1609,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           }}
         />
       )}
+
+      {/* ws1-t8: «Enviar CFDI» por correo o WhatsApp. */}
+      <EnviarCfdiDialog open={envioCfdi.abierto} cfdiId={envioCfdi.cfdiId} onClose={envioCfdi.cerrar} rediseno={rediseno} />
 
       {/* PaymentModal compartido — el de Commit 1 */}
       <PaymentModal
