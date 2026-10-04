@@ -255,8 +255,7 @@ export interface LineaDeCargo {
   discount: number;
   /**
    * ws1-t5 (F10): de `discount`, lo que es el ABONO ya cobrado (anticipo
-   * aplicado), no un descuento comercial. No cuenta como descuento ni para el
-   * tope del dueño. En el CFDI es el esquema de «remanente» del Apéndice 6 de
+   * aplicado), no un descuento comercial. No cuenta como descuento. En el CFDI es el esquema de «remanente» del Apéndice 6 de
    * la Guía de llenado (anticipo en Descuento + relación 07): ws1-t3.
    */
   anticipoAplicado?: number;

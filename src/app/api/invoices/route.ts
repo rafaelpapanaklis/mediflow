@@ -24,7 +24,6 @@ import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { doctorPedido } from "@/lib/invoices/doctor-de-factura";
 import { doctorDeFacturaNueva } from "@/lib/invoices/doctor-de-factura.server";
-import { denegarDescuentoSobreTope } from "@/lib/dinero/descuento.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -190,10 +189,6 @@ export async function POST(req: NextRequest) {
     if (discount > subtotal) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    // ws1-t5 (punto 7): por encima del tope de descuento de la clínica (20 % de
-    // fábrica), solo el dueño. Antes una factura podía nacer en $0 sin autorización.
-    const descuentoDenegado = await denegarDescuentoSobreTope({ clinicId, role: ctx.role, items: data.items, discount });
-    if (descuentoDenegado) return descuentoDenegado;
     // Los CONCEPTOS, no el subtotal: con IVA agregado el impuesto se redondea por
     // concepto (criterio SAT) y pasar la suma daba hasta 2¢ de diferencia con lo
     // que timbra Facturapi — el hallazgo 19. `subtotal` se sigue persistiendo.

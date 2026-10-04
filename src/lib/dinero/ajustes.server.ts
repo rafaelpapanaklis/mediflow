@@ -3,7 +3,8 @@
 //
 // Dos tablas NUEVAS por SQL crudo (sql/ws1-t5-dinero-caja.sql, lo pega Rafael):
 //   · clinic_dinero_ajustes  — «cierre automático a medianoche» (apagado de
-//     fábrica) y el % máximo de descuento sin el dueño (20 de fábrica).
+//     fábrica). Si la tabla ya trae otra columna de una versión anterior, el
+//     código no la lee ni la escribe (tiene su valor por defecto).
 //   · caja_cobros_asignados  — cobro en efectivo fuera de corte que alguien
 //     pasó a la caja abierta.
 // Mientras no exista una tabla: se pregunta con to_regclass (no falla ni
@@ -13,7 +14,6 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { prisma } from "@/lib/prisma";
-import { DESCUENTO_MAX_PCT_POR_DEFECTO } from "./descuento-autorizacion";
 
 type Db = Pick<typeof prisma, "$queryRaw" | "$executeRaw">;
 
@@ -50,29 +50,22 @@ export function _olvidarTablas() {
 
 export interface AjustesDinero {
   cajaCierreAutomatico: boolean;
-  descuentoMaxPct: number;
   /** false = falta el SQL: son los valores de fábrica y no se pueden guardar. */
   disponible: boolean;
 }
 
 export const AJUSTES_DE_FABRICA: Omit<AjustesDinero, "disponible"> = {
   cajaCierreAutomatico: false,
-  descuentoMaxPct: DESCUENTO_MAX_PCT_POR_DEFECTO,
 };
 
 export async function leerAjustesDinero(clinicId: string, db: Db = prisma): Promise<AjustesDinero> {
   if (!clinicId || !(await tablaExiste(TABLA_AJUSTES, db))) return { ...AJUSTES_DE_FABRICA, disponible: false };
   try {
-    const filas = await db.$queryRaw<{ cajaCierreAutomatico: boolean; descuentoMaxPct: unknown }[]>`
-      SELECT "cajaCierreAutomatico", "descuentoMaxPct" FROM clinic_dinero_ajustes WHERE "clinicId" = ${clinicId}`;
+    const filas = await db.$queryRaw<{ cajaCierreAutomatico: boolean }[]>`
+      SELECT "cajaCierreAutomatico" FROM clinic_dinero_ajustes WHERE "clinicId" = ${clinicId}`;
     const f = filas[0];
     if (!f) return { ...AJUSTES_DE_FABRICA, disponible: true };
-    const pct = Number(f.descuentoMaxPct);
-    return {
-      cajaCierreAutomatico: f.cajaCierreAutomatico === true,
-      descuentoMaxPct: Number.isFinite(pct) ? pct : DESCUENTO_MAX_PCT_POR_DEFECTO,
-      disponible: true,
-    };
+    return { cajaCierreAutomatico: f.cajaCierreAutomatico === true, disponible: true };
   } catch (e) {
     console.warn("[dinero:ajustes] no se pudieron leer:", (e as Error)?.message);
     return { ...AJUSTES_DE_FABRICA, disponible: true };
@@ -89,13 +82,11 @@ export async function guardarAjustesDinero(
   if (!clinicId || !(await tablaExiste(TABLA_AJUSTES, db, true))) return false;
   const actual = await leerAjustesDinero(clinicId, db);
   const cierre = cambios.cajaCierreAutomatico ?? actual.cajaCierreAutomatico;
-  const pct = cambios.descuentoMaxPct ?? actual.descuentoMaxPct;
   await db.$executeRaw`
-    INSERT INTO clinic_dinero_ajustes ("clinicId", "cajaCierreAutomatico", "descuentoMaxPct", "updatedAt", "updatedById")
-    VALUES (${clinicId}, ${cierre}, ${pct}, now(), ${userId})
+    INSERT INTO clinic_dinero_ajustes ("clinicId", "cajaCierreAutomatico", "updatedAt", "updatedById")
+    VALUES (${clinicId}, ${cierre}, now(), ${userId})
     ON CONFLICT ("clinicId") DO UPDATE SET
       "cajaCierreAutomatico" = EXCLUDED."cajaCierreAutomatico",
-      "descuentoMaxPct"      = EXCLUDED."descuentoMaxPct",
       "updatedAt"            = now(),
       "updatedById"          = EXCLUDED."updatedById"`;
   return true;

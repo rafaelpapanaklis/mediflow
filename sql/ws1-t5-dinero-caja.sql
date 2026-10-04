@@ -1,10 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════
--- ws1-t5 · DINERO: caja y descuentos (auditoría del dinero, 3-oct-2026)
+-- ws1-t5 · DINERO: caja (auditoría del dinero, 3-oct-2026)
 --
 -- ⚠️ CORRER EN SUPABASE (SQL Editor). ADITIVO e IDEMPOTENTE: no borra ni
 --    modifica ninguna fila existente. Se puede correr antes o después del
 --    deploy: sin estas tablas el código usa los valores de fábrica (cierre
---    automático APAGADO, descuento máximo sin el dueño = 20 %) y los botones
+--    automático APAGADO) y los botones
 --    «Pasar a esta caja» / guardar ajustes contestan «falta el SQL».
 --    https://supabase.com/dashboard/project/_/sql/new
 -- ═══════════════════════════════════════════════════════════════════
@@ -22,8 +22,6 @@ CREATE TABLE IF NOT EXISTS "clinic_dinero_ajustes" (
   "clinicId"             text         PRIMARY KEY REFERENCES "clinics" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   -- Cierre automático de caja a medianoche (hora de la clínica). Apagado de fábrica.
   "cajaCierreAutomatico" boolean      NOT NULL DEFAULT false,
-  -- % máximo de descuento (sobre el importe bruto) sin el dueño. 20 de fábrica.
-  "descuentoMaxPct"      numeric(5,2) NOT NULL DEFAULT 20 CHECK ("descuentoMaxPct" >= 0 AND "descuentoMaxPct" <= 100),
   "updatedAt"            timestamptz  NOT NULL DEFAULT now(),
   "updatedById"          text         REFERENCES "users" ("id") ON DELETE SET NULL
 );

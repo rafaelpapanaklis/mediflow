@@ -15,7 +15,6 @@ import {
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
-import { denegarDescuentoSobreTope } from "@/lib/dinero/descuento.server";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -149,14 +148,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     newTotal = computeInvoiceTotal(newItems, newDiscount, taxRate, taxIncluded).total;
   }
-
-  // ws1-t5 (punto 7): bajar el precio ES un descuento. Por encima del tope de
-  // la clínica (20 % de fábrica) solo lo aplica el dueño.
-  const descuentoDenegado = await denegarDescuentoSobreTope({
-    clinicId, role: ctx.role, items: newItems, discount: newDiscount,
-    antes: { items: rawItems, discount: invoice.discount },
-  });
-  if (descuentoDenegado) return descuentoDenegado;
 
   const newBalance = round2(newTotal - invoice.paid);
   // ws1-t5 (F14b): una factura que queda en $0 (cortesía) no tiene nada que

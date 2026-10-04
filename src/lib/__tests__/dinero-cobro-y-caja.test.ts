@@ -270,27 +270,22 @@ test("F7 · el cierre de caja solo cierra una caja que SIGUE abierta (dos cierre
   assert.match(auto, /snapshotVariance:\s*null/, "sin diferencia inventada");
 });
 
-// ── Punto 7: descuentos por encima del tope ─────────────────────────────
-import { porcentajeDeDescuento, revisarDescuento } from "../dinero/descuento-autorizacion";
-
-test("descuento · % sobre el importe bruto: conceptos + global", () => {
-  const items = [{ description: "Limpieza", quantity: 1, unitPrice: 1_000, discount: 100 }, { description: "Resina", quantity: 2, unitPrice: 500 }];
-  assert.equal(porcentajeDeDescuento(items, 0), 5);
-  assert.equal(porcentajeDeDescuento(items, 300), 20);
-  assert.equal(porcentajeDeDescuento([], 100), 0);
-});
-
-test("descuento · tope 20 %: 20 pasa; 25 % de recepción → DESCUENTO_REQUIERE_DUENO; el dueño sí; bajar uno que ya estaba, sí", () => {
-  assert.equal(revisarDescuento({ pct: 20, limite: 20, role: "RECEPTIONIST" }).error, null);
-  const r = revisarDescuento({ pct: 25, limite: 20, role: "RECEPTIONIST" });
-  assert.equal(r.error?.code, "DESCUENTO_REQUIERE_DUENO");
-  assert.equal(r.error?.limite, 20);
-  assert.equal(revisarDescuento({ pct: 100, limite: 20, role: "DOCTOR" }).error?.code, "DESCUENTO_REQUIERE_DUENO", "dejar en $0 sin autorización ya no");
-  assert.equal(revisarDescuento({ pct: 100, limite: 20, role: "SUPER_ADMIN" }).error, null);
-  assert.equal(revisarDescuento({ pct: 25, limite: 20, role: "ADMIN" }).error?.code, "DESCUENTO_REQUIERE_DUENO", "un ADMIN no es el dueño");
-  assert.equal(revisarDescuento({ pct: 30, limite: 20, role: "RECEPTIONIST", antes: 40 }).error, null, "bajarlo de 40 a 30 no se bloquea");
-  assert.equal(revisarDescuento({ pct: 45, limite: 20, role: "RECEPTIONIST", antes: 40 }).error?.code, "DESCUENTO_REQUIERE_DUENO");
-  assert.equal(revisarDescuento({ pct: 100, limite: 100, role: "RECEPTIONIST" }).error, null, "100 = sin límite");
+// ── Punto 7 (retirado): sin tope de descuento ──────────────────────────
+// Decisión de Rafael (4-oct-2026): quien puede editar la factura pone el descuento
+// que sea. Ni la regla ni su ajuste por clínica existen ya.
+import { existsSync, readFileSync as leerArchivo } from "node:fs";
+import { join as unirRuta } from "node:path";
+test("descuento sin tope · no queda ni la regla ni su ajuste por clínica", () => {
+  const join = unirRuta;
+  const readFileSync = leerArchivo;
+  const raiz = join(__dirname, "../../..");
+  assert.equal(existsSync(join(raiz, "src/lib/dinero/descuento-autorizacion.ts")), false);
+  assert.equal(existsSync(join(raiz, "src/lib/dinero/descuento.server.ts")), false);
+  for (const ruta of ["src/app/api/invoices/route.ts", "src/app/api/invoices/[id]/route.ts", "src/app/api/invoices/[id]/edit-price/route.ts",
+    "src/app/api/caja/ajustes/route.ts", "src/lib/dinero/ajustes.server.ts", "src/components/dashboard/billing/caja-fuera-de-corte.tsx"]) {
+    const src = readFileSync(join(raiz, ruta), "utf8");
+    assert.doesNotMatch(src, /denegarDescuentoSobreTope|descuentoMaxPct|DESCUENTO_REQUIERE_DUENO|limiteTitulo/, ruta);
+  }
 });
 
 // ── Tablas nuevas sin SQL: una pregunta, cero consultas a la tabla ──────
@@ -305,7 +300,7 @@ test("sin sql/ws1-t5-dinero-caja.sql: 20 lecturas → 1 to_regclass y 0 consulta
   };
   for (let i = 0; i < 10; i++) {
     const a = await leerAjustesDinero("c1", db);
-    assert.deepEqual(a, { cajaCierreAutomatico: false, descuentoMaxPct: 20, disponible: false });
+    assert.deepEqual(a, { cajaCierreAutomatico: false, disponible: false });
     assert.equal((await cobrosAsignados("c1", {}, db)).size, 0);
   }
   assert.equal(consultas.filter((q) => q.includes("to_regclass")).length, 2, "una por tabla");
@@ -343,7 +338,7 @@ test("F10 · presupuesto de $10,000, abono de $3,000 y luego todo: la factura B 
   const anticipo = b.items.reduce((s, it: any) => s + (it.anticipoAplicado ?? 0), 0);
   assert.equal(anticipo, 3000, "antes: $3,000 de «descuento» sin marca");
   assert.equal(b.total, 7000);
-  assert.equal(porcentajeDeDescuento(b.items, b.discount), 0, "no cuenta como descuento comercial ni para el tope del dueño");
+  assert.equal(b.discount, 0, "no es descuento comercial: va como anticipo aplicado");
 });
 
 test("F10 · «Cobrar hoy» sabe qué presupuestos aceptados tienen algo sin cargar", () => {

@@ -5,9 +5,8 @@
 //     con fecha anterior a la apertura. Se ven, y con la caja abierta se pasan
 //     a ella con un clic («Pasar a esta caja»), que los suma a su efectivo
 //     esperado. Se calla si no hay ninguno.
-//   · «Cierre automático a medianoche» y «Descuento máximo sin el dueño»:
-//     ajustes por clínica (apagado / 20 % de fábrica). Solo los ve quien puede
-//     cambiarlos.
+//   · «Cierre automático a medianoche»: ajuste por clínica (apagado de
+//     fábrica). Solo lo ve quien puede cambiarlo.
 // La ropa es la de los demás avisos de Caja (tokens del panel).
 
 import { useEffect, useState } from "react";
@@ -99,26 +98,25 @@ export function CobrosFueraDeCorte({
   );
 }
 
-export function AjustesDineroCaja({ puedeCierre, esDueno }: { puedeCierre: boolean; esDueno: boolean }) {
+export function AjustesDineroCaja({ puedeCierre }: { puedeCierre: boolean }) {
   const locale = useLocale();
   const tx = textosDinero(locale);
-  const [aj, setAj] = useState<{ cajaCierreAutomatico: boolean; descuentoMaxPct: number; disponible: boolean } | null>(null);
-  const [pct, setPct] = useState("");
+  const [aj, setAj] = useState<{ cajaCierreAutomatico: boolean; disponible: boolean } | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    if (!puedeCierre && !esDueno) return;
+    if (!puedeCierre) return;
     let vivo = true;
     fetch("/api/caja/ajustes")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (vivo && d) { setAj(d); setPct(String(d.descuentoMaxPct)); }
+        if (vivo && d) setAj(d);
       })
       .catch(() => {});
     return () => { vivo = false; };
-  }, [puedeCierre, esDueno]);
+  }, [puedeCierre]);
 
-  if ((!puedeCierre && !esDueno) || !aj) return null;
+  if (!puedeCierre || !aj) return null;
 
   async function guardar(cambios: Record<string, unknown>) {
     setGuardando(true);
@@ -126,7 +124,7 @@ export function AjustesDineroCaja({ puedeCierre, esDueno }: { puedeCierre: boole
       const res = await fetch("/api/caja/ajustes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cambios) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(out?.code === "SQL_PENDIENTE" ? tx.caja.fueraSinSql : out?.error ?? "No se pudo."); return; }
-      setAj(out); setPct(String(out.descuentoMaxPct)); toast.success(tx.caja.guardado);
+      setAj(out); toast.success(tx.caja.guardado);
     } finally {
       setGuardando(false);
     }
@@ -136,43 +134,23 @@ export function AjustesDineroCaja({ puedeCierre, esDueno }: { puedeCierre: boole
     <details className={s.aviso} data-caja-ajustes>
       <summary className={s.cabeza} style={{ cursor: "pointer", listStyle: "none" }}>
         <span className={`${s.icono} ${s.iconoInfo}`}><Settings2 size={16} strokeWidth={1.75} aria-hidden /></span>
-        <span className={s.titulo}>{tx.caja.cierreAutoTitulo} · {tx.descuento.limiteTitulo}</span>
+        <span className={s.titulo}>{tx.caja.cierreAutoTitulo}</span>
       </summary>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 10 }}>
         {!aj.disponible && <p className={s.sub}>{tx.caja.ajustesSinSql}</p>}
-        {puedeCierre && (
-          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "var(--text-1)" }}>
-            <input
-              type="checkbox"
-              checked={aj.cajaCierreAutomatico}
-              disabled={guardando || !aj.disponible}
-              onChange={(e) => guardar({ cajaCierreAutomatico: e.target.checked })}
-              style={{ marginTop: 3 }}
-            />
-            <span>
-              <strong>{tx.caja.cierreAutoTitulo}</strong>
-              <span className={s.sub} style={{ display: "block" }}>{tx.caja.cierreAutoTexto}</span>
-            </span>
-          </label>
-        )}
-        <div style={{ fontSize: 13, color: "var(--text-1)" }}>
-          <strong>{tx.descuento.limiteTitulo}</strong>
-          <span className={s.sub} style={{ display: "block" }}>{tx.descuento.limiteTexto}</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
-            <input
-              type="number" min={0} max={100} step={1} value={pct}
-              disabled={!esDueno || guardando || !aj.disponible}
-              onChange={(e) => setPct(e.target.value)}
-              className="input-new" style={{ width: 90 }} aria-label={tx.descuento.limiteTitulo}
-            />
-            <span>%</span>
-            {esDueno && (
-              <ButtonNew variant="secondary" size="sm" disabled={guardando || !aj.disponible || pct === String(aj.descuentoMaxPct)} onClick={() => guardar({ descuentoMaxPct: Number(pct) })}>
-                {tx.caja.guardar}
-              </ButtonNew>
-            )}
-          </div>
-        </div>
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "var(--text-1)" }}>
+          <input
+            type="checkbox"
+            checked={aj.cajaCierreAutomatico}
+            disabled={guardando || !aj.disponible}
+            onChange={(e) => guardar({ cajaCierreAutomatico: e.target.checked })}
+            style={{ marginTop: 3 }}
+          />
+          <span>
+            <strong>{tx.caja.cierreAutoTitulo}</strong>
+            <span className={s.sub} style={{ display: "block" }}>{tx.caja.cierreAutoTexto}</span>
+          </span>
+        </label>
       </div>
     </details>
   );

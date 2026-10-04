@@ -291,9 +291,7 @@ test("H10 · el descuento se compara contra el subtotal que muestra el modal", a
 
   // El modal enseña "Subtotal actual: $3,500"; teclear 3,200 daba un 400 porque
   // el servidor comparaba contra la suma SIN el ajuste (3,000).
-  // ws1-t5: un 91 % de descuento pasa del tope de la clínica: lo aplica el dueño.
-  authCtx.role = "SUPER_ADMIN";
-  const res = await readJson(await POST(req({ discount: 3200 }), P)).finally(() => { authCtx.role = "ADMIN"; });
+  const res = await readJson(await POST(req({ discount: 3200 }), P));
   assert.equal(res.status, 200, `un descuento ≤ subtotal no se rechaza (${res.body?.error})`);
   assert.equal(db.invoice.total, 300);
 });
@@ -847,31 +845,32 @@ test("F5 · reembolso de $500 en efectivo: se guarda refundMethod «cash»", asy
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ws1-t5 · punto 7 — descuento por encima del tope (20 % de fábrica): solo el dueño
+// Decisión de Rafael (4-oct-2026): los descuentos no tienen tope. Quien puede
+// editar la factura pone el descuento que sea (como en producción antes de esta tanda).
 // ═══════════════════════════════════════════════════════════════════════════
-test("descuento · un ADMIN que pone $750 de descuento a $3,000 (25 %) → 403 y la factura no cambia; $600 (20 %) sí", async () => {
+test("descuento sin tope · recepción pone $750 (25 %), $2,700 (90 %) o baja el precio a $100 a una factura de $3,000: se guarda", async () => {
   const { POST } = await import("@/app/api/invoices/[id]/edit-price/route");
-  setInvoice({ items: [{ description: "Corona", quantity: 1, unitPrice: 3000, total: 3000 }], subtotal: 3000, total: 3000, balance: 3000 });
-  const r = await readJson(await POST(req({ discount: 750 }), P));
-  assert.equal(r.status, 403);
-  assert.equal(r.body.code, "DESCUENTO_REQUIERE_DUENO");
-  assert.equal(db.invoice.total, 3000);
-  const ok = await readJson(await POST(req({ discount: 600 }), P));
-  assert.equal(ok.status, 200);
-  assert.equal(db.invoice.total, 2400);
-  // «Editar precio» a $1,000 es un descuento del 67 %: también lo frena.
-  const precio = await readJson(await POST(req({ total: 1000 }), P));
-  assert.equal(precio.status, 403);
+  authCtx.role = "RECEPTIONIST";
+  try {
+    setInvoice({ items: [{ description: "Corona", quantity: 1, unitPrice: 3000, total: 3000 }], subtotal: 3000, total: 3000, balance: 3000 });
+    const r = await readJson(await POST(req({ discount: 750 }), P));
+    assert.equal(r.status, 200, r.body?.error);
+    assert.equal(db.invoice.total, 2250);
+    const noventa = await readJson(await POST(req({ discount: 2700 }), P));
+    assert.equal(noventa.status, 200, noventa.body?.error);
+    assert.equal(db.invoice.total, 300);
+    setInvoice({ items: [{ description: "Corona", quantity: 1, unitPrice: 3000, total: 3000 }], subtotal: 3000, total: 3000, balance: 3000 });
+    const precio = await readJson(await POST(req({ total: 100 }), P));
+    assert.equal(precio.status, 200, precio.body?.error);
+    assert.equal(db.invoice.total, 100);
+  } finally { authCtx.role = "ADMIN"; }
 });
 
 test("F14 · editar el precio a $0 deja la factura PAGADA (antes: PENDIENTE con saldo 0 para siempre)", async () => {
   const { POST } = await import("@/app/api/invoices/[id]/edit-price/route");
   setInvoice({ items: [{ description: "Garantía", quantity: 1, unitPrice: 800, total: 800 }], subtotal: 800, total: 800, balance: 800 });
-  authCtx.role = "SUPER_ADMIN";
-  try {
-    const r = await readJson(await POST(req({ total: 0 }), P));
-    assert.equal(r.status, 200);
-  } finally { authCtx.role = "ADMIN"; }
+  const r = await readJson(await POST(req({ total: 0 }), P));
+  assert.equal(r.status, 200);
   assert.equal(db.invoice.total, 0);
   assert.equal(db.invoice.status, "PAID");
 });

@@ -16,7 +16,6 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
-import { puedeAutorizarDescuentos } from "@/lib/dinero/descuento-autorizacion";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -127,7 +126,6 @@ export default async function CajaPage() {
       hasPin={!!user.cajaPinHash}
       rediseno={rediseno}
       puedeAjustarCierre={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "settings.edit")}
-      esDueno={puedeAutorizarDescuentos(user.role)}
       billing={{
         invoices: visibleInvoices as any,
         patients,

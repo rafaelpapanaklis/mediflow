@@ -7,8 +7,8 @@
 // que el CFDI siga cuadrando por conceptos, esa baja se escribe en
 // `Invoice.discount` (lib/invoices/reajustar-total.ts) y deja una marca en las
 // notas: «[BAJA DEL TOTAL: $X …]» o «[RESTO DADO DE BAJA: $X …]». Aquí se lee
-// esa marca para separar lo que de verdad fue DESCUENTO (lo que vigila el tope
-// del 20 %) de lo que fue una baja: Caja › «Descuentos» decía $2,525 cuando
+// esa marca para separar lo que de verdad fue DESCUENTO comercial de lo que
+// fue una baja: Caja › «Descuentos» decía $2,525 cuando
 // solo $300 eran descuento.
 // ═══════════════════════════════════════════════════════════════════
 

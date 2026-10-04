@@ -67,8 +67,6 @@ interface Props {
   rediseno?: boolean;
   /** ws1-t5: la sesión tiene settings.edit — puede encender el cierre automático. */
   puedeAjustarCierre?: boolean;
-  /** ws1-t5: la sesión es el dueño — puede cambiar el tope de descuento. */
-  esDueno?: boolean;
 }
 
 interface CloseSummary {
@@ -106,7 +104,7 @@ const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) 
 const netoDelTurno = (x: { netIncome?: number; totalIncome: number; refunds: number }) =>
   x.netIncome ?? Math.round((x.totalIncome - x.refunds) * 100) / 100;
 
-export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false, esDueno = false }: Props) {
+export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false }: Props) {
   const t = useT();
   const qc = useQueCuenta();
   const locale = useLocale();
@@ -591,7 +589,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
         <AvisoAnticiposPorRevisar />
         {/* ws1-t5 (F7) — efectivo cobrado fuera de todo corte; se calla si no hay. */}
         <CobrosFueraDeCorte cobros={caja.fueraDeCorte} cajaAbierta={!!reg} timezone={timezone} />
-        <AjustesDineroCaja puedeCierre={puedeAjustarCierre} esDueno={esDueno} />
+        <AjustesDineroCaja puedeCierre={puedeAjustarCierre} />
         {/* ws1-t6 — cobros automáticos con tarjeta rechazados por Mercado Pago. Se calla sola. */}
         <AvisoCobrosAutomaticos />
         <ListaMensualidades />

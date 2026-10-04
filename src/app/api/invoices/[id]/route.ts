@@ -24,7 +24,6 @@ import { permisoParaAnular } from "@/lib/invoices/anular-factura";
 import { decidirEdicion, motivoParaNoEditar } from "@/lib/invoices/editar-factura-core";
 import { notasParaGuardar } from "@/lib/invoices/marcas-internas";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
-import { denegarDescuentoSobreTope } from "@/lib/dinero/descuento.server";
 import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
@@ -301,13 +300,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (discount > subtotal) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    // ws1-t5 (punto 7): subir el descuento por encima del tope de la clínica
-    // (20 % de fábrica) es solo del dueño; bajarlo o dejarlo igual, no se frena.
-    const descuentoDenegado = await denegarDescuentoSobreTope({
-      clinicId, role: ctx.role, items, discount,
-      antes: { items: invoice.items, discount: invoice.discount },
-    });
-    if (descuentoDenegado) return descuentoDenegado;
     // Los CONCEPTOS, no el subtotal (hallazgo 19): el IVA agregado se redondea
     // por concepto, igual que el timbrado.
     const { total } = computeInvoiceTotal(items, discount, invoice.taxRate ?? 16, invoice.taxIncluded !== false);

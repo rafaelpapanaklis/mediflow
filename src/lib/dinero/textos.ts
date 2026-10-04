@@ -64,7 +64,7 @@ const es = {
     historialSinDetalle: "No se pudieron calcular los reembolsos, el saldo a favor ni las bajas del turno. Las cifras de arriba son las que se guardaron al cerrar.",
     historialNotas: "Notas del corte",
     bajasYReembolsos: "Bajas de tratamiento y reembolsos que bajaron el total (no son descuento)",
-    descuentosNota: "Solo descuentos comerciales (los que cuentan para el tope). Las bajas de tratamiento y los reembolsos «le cobré de más» van aparte.",
+    descuentosNota: "Solo descuentos comerciales. Las bajas de tratamiento y los reembolsos «le cobré de más» van aparte.",
   },
   // Auditoría de uso C-02/C-03/C-30/C-32 (4-oct-2026): qué pasa con la factura al reembolsar.
   reembolso: {
@@ -125,12 +125,6 @@ const es = {
     conservar: (resto: string) => `Quedarse con lo pagado y dar de baja el resto (${resto})`,
     conservarAyuda: "La factura queda pagada por lo que ya se cobró; deja de contar como deuda.",
     exitoConservar: (resto: string) => `Se dio de baja el resto (${resto}). La factura queda pagada.`,
-  },
-  descuento: {
-    requiereDueno: (pct: number, limite: number) =>
-      `Un descuento del ${pct}% pasa del ${limite}% que la clínica permite sin autorización. Solo el dueño de la clínica puede aplicarlo.`,
-    limiteTitulo: "Descuento máximo sin autorización del dueño",
-    limiteTexto: "Por encima de este porcentaje del importe, solo el dueño de la clínica puede aplicar el descuento. 100 = sin límite.",
   },
 };
 
@@ -196,7 +190,7 @@ const en: Textos = {
     historialSinDetalle: "The shift's refunds, patient credit and write-offs couldn't be calculated. The figures above are the ones saved at closing.",
     historialNotas: "Count notes",
     bajasYReembolsos: "Treatment write-offs and refunds that lowered the total (not discounts)",
-    descuentosNota: "Commercial discounts only (the ones that count toward the cap). Treatment write-offs and «overcharged» refunds are shown apart.",
+    descuentosNota: "Commercial discounts only. Treatment write-offs and «overcharged» refunds are shown apart.",
   },
   reembolso: {
     queHacer: "What happens to the invoice?",
@@ -251,12 +245,6 @@ const en: Textos = {
     conservar: (resto: string) => `Keep what was paid and write off the rest (${resto})`,
     conservarAyuda: "The invoice is marked paid for what was already collected; it no longer counts as debt.",
     exitoConservar: (resto: string) => `The rest (${resto}) was written off. The invoice is now paid.`,
-  },
-  descuento: {
-    requiereDueno: (pct: number, limite: number) =>
-      `A ${pct}% discount is above the ${limite}% the clinic allows without approval. Only the clinic owner can apply it.`,
-    limiteTitulo: "Maximum discount without the owner's approval",
-    limiteTexto: "Above this percentage of the amount, only the clinic owner can apply the discount. 100 = no limit.",
   },
 };
 
