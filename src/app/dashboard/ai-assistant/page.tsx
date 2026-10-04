@@ -34,5 +34,7 @@ export default async function AIAssistantPage() {
   const rediseno = await menuDosNivelesEncendido(user.clinicId);
   // La categoría sale de la sesión: una clínica DENTAL ve las tarjetas y la
   // bienvenida en clave odontológica (el prompt lo elige /api/ai por su cuenta).
-  return <AiAssistantClient key={user.clinicId} rediseno={rediseno} categoria={user.clinic?.category ?? null} />;
+  const nombre = `${user.firstName ?? ""} ${user.lastName ?? ""}`.replace(/\s+/g, " ").trim();
+  const iniciales = nombre.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
+  return <AiAssistantClient key={user.clinicId} rediseno={rediseno} categoria={user.clinic?.category ?? null} usuario={nombre ? { nombre, iniciales } : null} />;
 }

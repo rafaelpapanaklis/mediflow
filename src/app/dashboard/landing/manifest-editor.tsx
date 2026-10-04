@@ -21,6 +21,14 @@ import type { SectionState } from "@/app/[slug]/_shared/landing-data";
 // landing-config-client.tsx: solo se monta con `rediseno` encendido.
 import rd from "@/components/dashboard/pagina-web-rediseno/pagina-web.module.css";
 
+// N-59 (ws1-t8): los datos de cada sección se enseñaban con su nombre de
+// programa («galeria», «faqs», «resenas»). Así los lee la clínica.
+const DATO_LEGIBLE: Record<string, string> = {
+  servicios: "servicios", doctores: "doctores", galeria: "galería", testimonios: "testimonios",
+  faqs: "preguntas frecuentes", horarios: "horarios", mapa: "mapa", msi: "meses sin intereses",
+  urgencias: "urgencias", fotos: "fotos", resenas: "reseñas",
+};
+
 const CARD = "bg-card border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-1)]";
 const ITEM = "border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] p-4";
 const INPUT = "w-full bg-[color:var(--bg-elev)] text-sm text-[color:var(--text-1)] border border-[color:var(--border-soft)] rounded-[var(--radius)] px-3 py-2.5 placeholder:text-[color:var(--text-4)] transition-colors duration-150";
@@ -241,7 +249,7 @@ export function ManifestEditor({
                       {meta.obligatoria && <Lock size={12} style={{ color: "var(--m2-texto-3)" }} />}
                     </div>
                     <div className={rd.ayuda} style={{ margin: 0 }}>
-                      {meta.consume.length === 0 ? "Siempre visible" : `Se pinta si hay: ${meta.consume.join(", ")}`}
+                      {meta.consume.length === 0 ? "Siempre visible" : `Sale si tienes: ${meta.consume.map((d) => DATO_LEGIBLE[d] ?? d).join(", ")}`}
                     </div>
                   </div>
                   <button type="button" role="switch" aria-checked={s.visible} aria-label={`Mostrar ${meta.nombre}`}
@@ -376,7 +384,7 @@ export function ManifestEditor({
                   <div className={HELP}>
                     {meta.consume.length === 0
                       ? "Siempre visible"
-                      : `Se pinta si hay: ${meta.consume.join(", ")}`}
+                      : `Sale si tienes: ${meta.consume.map((d) => DATO_LEGIBLE[d] ?? d).join(", ")}`}
                   </div>
                 </div>
 

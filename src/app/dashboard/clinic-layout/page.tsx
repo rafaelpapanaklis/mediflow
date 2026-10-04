@@ -8,14 +8,15 @@ import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ClinicLayoutClient } from "./layout-client";
+import { direccionDeRebotePorRol } from "@/lib/auth/aviso-denegado";
 
 export const metadata: Metadata = { title: "Mi Clínica Visual — DaleControl" };
 
 export default async function ClinicLayoutPage() {
   const user = await getCurrentUser();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    // Solo admin/owner pueden editar el layout.
-    redirect("/dashboard");
+    // Solo admin/owner pueden editar el layout. C-109: rebota con motivo.
+    redirect(direccionDeRebotePorRol("admin"));
   }
 
   try {

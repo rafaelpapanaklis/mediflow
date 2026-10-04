@@ -25,6 +25,7 @@ import {
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 const DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const CERRADO = "#b91c1c";
@@ -183,7 +184,7 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
   return (
     <div className="tf-root relative overflow-x-hidden" style={{ background: bg, color: inkText, fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
       {/* ---------- fuentes + keyframes (estilo landing-client.tsx) ---------- */}
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
         .tf-root { font-family:'Space Grotesk', system-ui, sans-serif; }
         .tf-mono { font-family:'JetBrains Mono', ui-monospace, monospace; }
@@ -205,7 +206,7 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
           .tf-scan { animation: mfScan 5s linear infinite; }
           .tf-pop { animation: mfPop .4s cubic-bezier(.2,1.4,.4,1) both; }
         }
-      `}</style>
+      `)} />
 
       {/* ---------- CAPA DE FONDO (grid técnico + orbes) ---------- */}
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">

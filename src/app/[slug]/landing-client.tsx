@@ -12,6 +12,7 @@ import { Foto, Txt, useEnEdicion } from "./_shared/edit-context";
 import { dirClinica, dirCopia, dirFaq, dirSeccion, dirServicio, dirTestimonio } from "@/lib/landing-address-parts";
 import { copyMap, copyValue, photoOf, sectionMap, showSection } from "./_shared/landing-data";
 import { porDefectoSegunGiro } from "./_shared/textos-por-giro";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
@@ -117,7 +118,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
 
   return (
     <>
-    <style>{`
+    <style dangerouslySetInnerHTML={cssEnLinea(`
       @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,800;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
       .l-root { font-family:'Plus Jakarta Sans',sans-serif; color:#1a1a2e; }
       .l-serif { font-family:'Fraunces',serif; }
@@ -132,7 +133,7 @@ export function ClinicLandingClient({ clinic: publicada, highlights }:{ clinic:C
       .l-delay1 { animation-delay:.12s; }
       .l-delay2 { animation-delay:.24s; }
       .l-delay3 { animation-delay:.36s; }
-    `}</style>
+    `)} />
 
     <div className="l-root min-h-screen bg-white">
 

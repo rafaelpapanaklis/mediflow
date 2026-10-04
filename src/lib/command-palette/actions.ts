@@ -72,7 +72,7 @@ export function buildGlobalActions(opciones?: OpcionesAccionesGlobales): Command
     { id: "go:xrays", group: "ir-a", label: "Radiografías", icon: FileImage, shortcut: "G R",
       keywords: ["rx", "rayos", "imagenes"],
       run: (ctx) => ctx.push("/dashboard/xrays") },
-    { id: "go:ai", group: "ir-a", label: "IA Asistente", icon: Sparkles, shortcut: "G I",
+    { id: "go:ai", group: "ir-a", label: "IA asistente", icon: Sparkles, shortcut: "G I",
       keywords: ["ai", "claude", "asistente", "ia"],
       run: (ctx) => ctx.push("/dashboard/ai-assistant") },
     { id: "go:settings", group: "ir-a", label: "Configuración", icon: Settings, shortcut: "G S",

@@ -26,6 +26,7 @@ import {
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 const DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const CLOSED_RED = "#b91c1c";
@@ -235,7 +236,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
 
   return (
     <div className="ht-root min-h-screen" style={{ background: "#fff", color: ink }}>
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         .ht-root { font-family:'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing:antialiased; }
         .ht-root ::selection { background:${alpha(theme, 0.18)}; }
@@ -247,7 +248,7 @@ export function TemplateHealthtech({ clinic: publicada, highlights }: TemplatePr
           .ht-pop { animation: mfPop .5s cubic-bezier(.2,1.4,.4,1) both; }
           .ht-reveal { animation: mfReveal .6s cubic-bezier(.2,.8,.2,1) both; }
         }
-      `}</style>
+      `)} />
 
       {/* ---------------- NAVBAR ---------------- */}
       <header

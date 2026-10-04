@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
 import { type PlanId, isPlanId } from "@/lib/billing/plans";
-import { cfdiBullet } from "@/lib/plan-shared";
+import { cfdiBullet, PLAN_MARKETING } from "@/lib/plan-shared";
 import { exencionDeIva, ivaAplica } from "@/lib/billing/iva-cobro";
 import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
 import { varianteMetodos, type MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
@@ -18,6 +18,7 @@ import { StorageUsageCard } from "./storage-usage-card";
 import { useT } from "@/i18n/i18n-provider";
 import { textosDeFila, type BillingInvoiceRow } from "@/lib/billing/historial-facturas";
 import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 
 export interface ClinicData {
   id: string;
@@ -382,6 +383,16 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
   // SU plan; las nuevas, en todo. (Aquí basta un método manual: la excepción de la tarjeta reactivada no se ve.)
   const exencionIva = exencionDeIva({ createdAt: clinic.createdAt, plan: clinic.plan, tuvoTarjeta: false });
   const sufijoIva = (id: PlanId) => (ivaAplica({ metodo: "spei", plan: id, exencion: exencionIva }) ? " + IVA" : "");
+  // N-64 (ws1-t8): el plan actual de una clínica exenta salía sin «+ IVA» al lado de los otros con él,
+  // y parecía un olvido. Se dice por qué: es el precio que conserva desde su alta.
+  const sufijoIvaActual = (id: PlanId) => sufijoIva(id) || " · sin IVA (lo conservas desde tu alta)";
+  // N-64: si la lista de planes no llegó, no se inventa «Plan CLINIC — $0 MXN/mes»: el nombre de
+  // siempre y sin precio (el precio solo sale de plan_configs, nunca escrito a mano).
+  const lineaPlanActual = () =>
+    currentPlan
+      ? t(isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
+          { name: currentPlan.name, price: miles(planPrice(currentPlan)) }) + sufijoIvaActual(currentPlanId)
+      : `Plan ${PLAN_MARKETING[currentPlanId as keyof typeof PLAN_MARKETING]?.name ?? currentPlanId}`;
   const prueba = pruebaVista(daysLeft, TRIAL_DAYS_TOTAL);
   // «Activa o renueva tu plan»: dice solo los métodos que existen (sin SPEI si no hay cuenta bancaria).
   const subtituloActivar = metodosPago
@@ -496,10 +507,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           clinic,
           estadoTexto: statusLabel,
           estadoTono: subscriptionActive ? "exito" : isInTrial ? "violeta" : "peligro",
-          lineaPlan: t(
-            isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
-            { name: currentPlan?.name ?? currentPlanId, price: miles(currentPlan ? planPrice(currentPlan) : 0) },
-          ) + sufijoIva(currentPlanId),
+          lineaPlan: lineaPlanActual(),
           enPrueba: isInTrial,
           finPrueba: trialEndsAt,
           diasRestantes: daysLeft,
@@ -583,13 +591,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                 {statusLabel}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-                {t(
-                  isAnnualBilling ? "shell.subscriptionTab.planLineAnnual" : "shell.subscriptionTab.planLine",
-                  {
-                    name: currentPlan?.name ?? currentPlanId,
-                    price: miles(currentPlan ? planPrice(currentPlan) : 0),
-                  },
-                ) + sufijoIva(currentPlanId)}
+                {lineaPlanActual()}
               </div>
             </div>
           </div>
@@ -884,7 +886,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                   const textos = textosDeFila(inv, t);
                   return (
                   <tr key={inv.id} style={{ borderBottom: "1px solid var(--border-soft, hsl(var(--border)))" }}>
-                    <td style={tdStyle}>{new Date(inv.date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                    <td style={tdStyle}>{fechaPanel(inv.date) /* N-61: formato único del panel */}</td>
                     <td style={tdStyle}>
                       <div>{textos.concepto}</div>
                       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 3, fontSize: 11, color: "var(--text-3)" }}>

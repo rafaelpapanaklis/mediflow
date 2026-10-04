@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { DoctorsClient } from "./doctors-client";
+import { SinAcceso, TITULO_SIN_ACCESO } from "@/components/dashboard/sin-permiso-rediseno/sin-acceso";
 
 export const metadata: Metadata = { title: "Doctores — Analytics" };
 
@@ -12,7 +13,8 @@ export default async function DoctorsAnalyticsPage() {
   const { t } = await getServerT();
   const user = await getCurrentUser();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.doctorsPage.adminOnly")}</div>;
+    // C-109: el mismo «sin acceso» que el resto del panel.
+    return <SinAcceso titulo={TITULO_SIN_ACCESO[(await getServerT()).locale.startsWith("en") ? "en" : "es"]} texto={t("analytics.doctorsPage.adminOnly")} volver={t("menuDosNiveles.cajaSinPermisoVolver")} />;
   }
   // REDISEÑO DE ANALÍTICA — el MISMO interruptor por clínica que enciende el
   // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).

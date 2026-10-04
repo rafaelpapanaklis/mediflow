@@ -5,11 +5,14 @@ import { getAuthContext } from "@/lib/auth-context";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { AuditoriaClient } from "./auditoria-client";
+import { direccionDeRebotePorRol } from "@/lib/auth/aviso-denegado";
 
 // Bitácora de la clínica. SOLO ADMIN/dueño — recepción/doctor no.
 export default async function DashboardAuditoriaPage() {
   const ctx = await getAuthContext();
-  if (!ctx || !ctx.isAdmin) redirect("/dashboard");
+  if (!ctx) redirect("/dashboard");
+  // C-109: rebota diciendo por qué (antes, a Hoy sin aviso).
+  if (!ctx.isAdmin) redirect(direccionDeRebotePorRol("admin"));
   // REDISEÑO (ws1-t6) — el MISMO interruptor por clínica que enciende el menú de
   // dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno
   // propio. Falla cerrado (→ false = la pantalla de hoy, tal cual). No añade un

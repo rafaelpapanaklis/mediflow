@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getOwnedBranches, listPatientLinks } from "@/lib/branches";
 import { SucursalesClient } from "./sucursales-client";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { direccionDeRebotePorRol } from "@/lib/auth/aviso-denegado";
 
 export const metadata: Metadata = { title: "Sucursales — DaleControl" };
 
@@ -22,7 +23,7 @@ export const metadata: Metadata = { title: "Sucursales — DaleControl" };
  */
 export default async function SucursalesSettingsPage() {
   const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") redirect("/dashboard");
+  if (user.role !== "SUPER_ADMIN") redirect(direccionDeRebotePorRol("dueno")); // C-109: con motivo
 
   // REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
   // junto a las sedes (ni una consulta más; falla cerrado → false = la

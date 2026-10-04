@@ -66,6 +66,8 @@ export async function GET() {
         model: e.model,
         inputTokens: e.inputTokens,
         outputTokens: e.outputTokens,
+        // N-57: lo releído (caché) también se cobra; sin él la fila no cuadraba.
+        cacheTokens: e.cacheTokens,
         billedCents: e.billedCents,
         createdAt: e.createdAt,
       })),

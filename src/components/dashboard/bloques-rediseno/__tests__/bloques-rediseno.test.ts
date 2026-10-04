@@ -225,7 +225,8 @@ test("la pestaña Suscripción conserva su camino de siempre y arma el modelo de
 test("la tarjeta CFDI conserva su camino de siempre y el nuevo usa las mismas claves", () => {
   const src = leer("components/dashboard/cfdi-usage-card.tsx");
   assert.match(src, /rediseno = false/, "la bandera no cae en false por defecto");
-  assert.match(src, /if \(rediseno\) \{\s*return <CfdiRediseno m=\{data \? modeloCfdi\(data, t\) : null\} \/>;/, "el rediseño no está detrás de la bandera");
+  // ws1-t8 (C-122): el modelo recibe además el idioma del panel (el mes salía en el del navegador).
+  assert.match(src, /if \(rediseno\) \{\s*return <CfdiRediseno m=\{data \? modeloCfdi\(data, t, locale\) : null\} \/>;/, "el rediseño no está detrás de la bandera");
   assert.match(src, /className="bg-card border border-border rounded-2xl p-6"/, "el camino viejo ya no está");
   assert.match(src, /fetch\("\/api\/cfdi\/usage"\)/, "la petición cambió");
   const viejo = src.slice(src.indexOf("function CfdiBody("));

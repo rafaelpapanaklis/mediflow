@@ -928,10 +928,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* N-58 (ws1-t8): sin `capitalize` («Octubre De 2026»); el texto ya trae su mayúscula. */
 .cfdiMes {
   font-size: 11px;
   color: var(--m2-texto-3);
-  text-transform: capitalize;
 }
 
 /* ── Salida a Ortodoncia (expediente) ────────────────────────────── */

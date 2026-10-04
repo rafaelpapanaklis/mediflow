@@ -25,6 +25,7 @@ import {
 import { BeforeAfter, MsiSimulator, StarRow, priceToNumber } from "../_shared/landing-pieces";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
@@ -139,7 +140,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
 
   return (
     <div style={{ fontFamily: "var(--font-sans)", background: fondo, color: tinta, fontSize: 16.5, lineHeight: 1.7 }}>
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         .es-wrap { max-width:1200px; margin:0 auto; padding:0 24px; }
         .es-sec { padding:104px 0; }
         .es-links a:hover { color:${acento}; }
@@ -170,7 +171,7 @@ export function TemplateEspecialistas({ clinic: publicada }: TemplateProps) {
           .es-t:hover { padding-left:0; }
           .es-tc:hover img { transform:none; }
         }
-      `}</style>
+      `)} />
 
       {/* ============ NAV ============ */}
       <nav style={{

@@ -1,19 +1,21 @@
+import { fechaHoraPanel, fechaPanel } from "@/lib/formato-fecha-panel";
+
 // Formateadores de la pantalla de Soporte rediseñada. Dicen EXACTAMENTE lo mismo
 // que los de `soporte-client.tsx` y `[id]/ticket-client.tsx` (que no se exportan
 // y no se tocan): misma salida, mismo idioma, mismos casos vacíos.
 
-/** «16 sep, 13:02» — la última actividad de un ticket en la lista. */
+/** «16 sep 2026, 1:02 p.m.» — la última actividad de un ticket (N-61: formato único del panel). */
 export function fechaCorta(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return fechaHoraPanel(d);
 }
 
-/** «16 de septiembre de 2026» — la fecha de creación en la cabecera del ticket. */
+/** «16 sep 2026» — la fecha de creación en la cabecera del ticket (N-61). */
 export function fechaLarga(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+  return fechaPanel(d);
 }
 
 /** Hora de un mensaje del hilo; añade el año solo si no es el actual. */

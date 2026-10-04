@@ -7,6 +7,7 @@ import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { OccupancyClient } from "./occupancy-client";
 import { getServerT } from "@/i18n/server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { SinAcceso, TITULO_SIN_ACCESO } from "@/components/dashboard/sin-permiso-rediseno/sin-acceso";
 
 export const metadata: Metadata = { title: "Ocupación — Analytics" };
 
@@ -14,7 +15,8 @@ export default async function OccupancyPage() {
   const user = await getCurrentUser();
   const { t } = await getServerT();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.occupancyPage.adminOnly")}</div>;
+    // C-109: el mismo «sin acceso» que el resto del panel.
+    return <SinAcceso titulo={TITULO_SIN_ACCESO[(await getServerT()).locale.startsWith("en") ? "en" : "es"]} texto={t("analytics.occupancyPage.adminOnly")} volver={t("menuDosNiveles.cajaSinPermisoVolver")} />;
   }
 
   // REDISEÑO DE ANALÍTICA — el MISMO interruptor por clínica que enciende el

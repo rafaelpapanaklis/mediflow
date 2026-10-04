@@ -20,10 +20,14 @@
    árbol de siempre y no llega a importar ni una clase de aquí.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* C-127 (ws1-t8, tercera ronda): mismo contenedor que Equipo, Configuración y Caja
+   (1400 px centrado, relleno lateral clamp(14px, 1.6vw, 28px)). */
 .raiz {
-  max-width: 1240px;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+  padding-left: clamp(14px, 1.6vw, 28px);
+  padding-right: clamp(14px, 1.6vw, 28px);
   container-type: inline-size;
   container-name: piezas;
   color: var(--m2-texto);

@@ -5,11 +5,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SignatureClient } from "./signature-client";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { direccionDeRebotePorRol } from "@/lib/auth/aviso-denegado";
 
 export default async function SignatureSettingsPage() {
   const user = await getCurrentUser();
   if (!["DOCTOR", "ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-    redirect("/dashboard");
+    redirect(direccionDeRebotePorRol("clinico")); // C-109: con motivo
   }
 
   // REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,

@@ -25,6 +25,7 @@ import {
 import { BeforeAfter, MsiSimulator, StarRow, priceToNumber } from "../_shared/landing-pieces";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
@@ -136,7 +137,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
 
   return (
     <div style={{ fontFamily: "var(--font-sans)", color: tinta, background: "#fff", fontSize: 16.5, lineHeight: 1.65 }}>
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         .so-wrap { max-width:1240px; margin:0 auto; padding:0 26px; }
         .so-sec { padding:100px 0; }
         .so-links a:hover { color:${acento}; }
@@ -166,7 +167,7 @@ export function TemplateSonrisa({ clinic: publicada }: TemplateProps) {
         @media (prefers-reduced-motion: reduce) {
           .so-tr:hover img, .so-gal a:hover img { transform:none; }
         }
-      `}</style>
+      `)} />
 
       {/* ============ NAV ============ */}
       <nav style={{

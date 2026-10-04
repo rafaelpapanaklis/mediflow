@@ -22,6 +22,7 @@ import {
 } from "../_shared/landing-utils";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 const DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -148,12 +149,12 @@ export function TemplateCalido({ clinic: publicada }: TemplateProps) {
 
   return (
     <div style={{ background: cream, color: ink, ...body }}>
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap');
         @keyframes calFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
         .cal-blob { animation: calFloat 9s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce){ .cal-blob{ animation:none !important; } }
-      `}</style>
+      `)} />
 
       {/* ---------------- NAVBAR ---------------- */}
       <header className="fixed top-0 inset-x-0 z-50 transition-all duration-300 px-3 pt-3">

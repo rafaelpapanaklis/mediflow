@@ -791,16 +791,19 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
   // C-124 (ws1-t8): «Agregar miembro» y «Editar» cierran con Esc, como el resto
   // de ventanas del panel. Mientras guarda, no: se perdería la respuesta.
+  // C-124 (vuelta 3): también «Horario de…» y «Sabina en nombre de…».
   useEffect(() => {
-    if (!showNew && !editMember) return;
+    if (!showNew && !editMember && !horarioMember && !sabinaMember) return;
     const alTeclear = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || loading) return;
-      if (editMember) setEditMember(null);
+      if (horarioMember) setHorarioMember(null);
+      else if (sabinaMember) setSabinaMember(null);
+      else if (editMember) setEditMember(null);
       else setShowNew(false);
     };
     window.addEventListener("keydown", alTeclear);
     return () => window.removeEventListener("keydown", alTeclear);
-  }, [showNew, editMember, loading]);
+  }, [showNew, editMember, horarioMember, sabinaMember, loading]);
 
   const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
   // «Horario» por doctor: lo ponen ADMIN y SUPER_ADMIN (no solo el super,
@@ -1171,12 +1174,13 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label={t("settings.team.kpiTotalActive")}  value={String(active)}   icon={UsersIcon} hero />
+        {/* N-62 (vuelta 3): las tarjetas suman: activos = doctores + administración + recepción y
+            solo lectura. Los inactivos se dicen en la primera (antes, «Total miembros 26» aparte). */}
+        <KpiCard label={t("settings.team.kpiTotalActive")}  value={String(active)}   icon={UsersIcon} hero
+          hint={team.length > active ? x.incluyeInactivos(team.length - active) : undefined} />
         <KpiCard label={t("settings.team.kpiDoctors")}      value={String(doctors)}  icon={Stethoscope} />
         <KpiCard label={t("settings.team.kpiAdmins")}       value={String(admins)}   icon={Shield} />
-        {/* C-124 (ws1-t8): «Total 26» con 25 activos no decía de dónde salía el otro. */}
-        <KpiCard label={t("settings.team.kpiTotalMembers")} value={String(team.length)} icon={UsersIcon}
-          hint={team.length > active ? x.incluyeInactivos(team.length - active) : undefined} />
+        <KpiCard label={x.kpiRecepcion} value={String(active - doctors - admins)} icon={ClipboardList} />
       </div>
 
       {/* Filter */}

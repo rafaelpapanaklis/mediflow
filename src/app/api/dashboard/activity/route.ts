@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAuthContext } from "@/lib/auth-context";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
+import { TOPE_POR_PERSONA_POR_MINUTO } from "@/lib/dashboard/actividad-tope";
 import { prisma } from "@/lib/prisma";
 import { filtrosDeActividad } from "@/lib/dashboard/actividad-filtros";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
@@ -40,11 +41,19 @@ interface ActivityEvent {
 }
 
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(req, 20);
+  // N-66 (ws1-t8): el tope era 20 por minuto POR IP. Una clínica entera sale
+  // a internet con la misma IP (y cada pantalla nueva vuelve a montar la
+  // campana), así que navegar normal con varias personas daba 429. Ahora el
+  // tope es por PERSONA (la respuesta ya vive 30 s en caché); por IP queda un
+  // freno amplio contra abuso.
+  const rl = rateLimit(req, 240);
   if (rl) return rl;
 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!rateLimitKey(`dashboard-activity:${ctx.userId}`, TOPE_POR_PERSONA_POR_MINUTO)) {
+    return NextResponse.json({ error: "Demasiadas solicitudes. Intenta de nuevo más tarde." }, { status: 429 });
+  }
 
   // Visibilidad por paciente: el feed de actividad NO tiene gate de rol (lo ven
   // doctores y recepción) y expone nombres de pacientes en pagos, altas y citas

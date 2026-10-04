@@ -29,6 +29,7 @@ import {
 import { BeforeAfter, StarRow } from "../_shared/landing-pieces";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
   // En /dashboard/landing esto trae lo que la clínica lleva escrito sin
@@ -155,7 +156,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
 
   return (
     <div style={{ fontFamily: "var(--font-sans)", color: tinta, background: "#fff", fontSize: 16, lineHeight: 1.6 }}>
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         .eq-wrap { max-width:1180px; margin:0 auto; padding:0 20px; }
         .eq-sec { padding:76px 0; }
         .eq-links a:hover { color:${acento}; border-color:${acento}; }
@@ -189,7 +190,7 @@ export function TemplateEquipo({ clinic: publicada }: TemplateProps) {
         @media (prefers-reduced-motion: reduce) {
           .eq-srv:hover, .eq-acc:hover, .eq-doc:hover .eq-doc-f img, .eq-gal a:hover img { transform:none; }
         }
-      `}</style>
+      `)} />
 
       {/* ============ BARRA SUPERIOR ============ */}
       <div style={{ background: tinta, color: tint(acento, 0.72), fontSize: 13 }}>

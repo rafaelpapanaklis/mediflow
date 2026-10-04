@@ -22,6 +22,7 @@ import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT, useLocale } from "@/i18n/i18n-provider";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
+import { ZONAS_HORARIAS, etiquetaDeZona } from "@/lib/clinic/zonas-horarias";
 import { reservaAlCambiarVisibilidad } from "@/lib/reserva-web/estado";
 import { getResenasSettings } from "@/lib/reminders/config";
 import { useTextosResena } from "@/lib/reviews/textos-resena";
@@ -66,30 +67,8 @@ const CATEGORIES: { id: string; label: string }[] = [
   ...DIRECTORY_CATEGORIES.map((c) => ({ id: c.category, label: c.label })),
   { id: "OTHER", label: "Otra / general" },
 ];
-const TIMEZONES = [
-  { id: "America/Mexico_City",  label: "Ciudad de México (GMT-6)" },
-  { id: "America/Cancun",       label: "Cancún / Quintana Roo (GMT-5)" },
-  { id: "America/Merida",       label: "Mérida / Yucatán (GMT-6)" },
-  { id: "America/Monterrey",    label: "Monterrey (GMT-6)" },
-  { id: "America/Hermosillo",   label: "Hermosillo / Sonora (GMT-7)" },
-  { id: "America/Mazatlan",     label: "Mazatlán / Sinaloa (GMT-7)" },
-  { id: "America/Tijuana",      label: "Tijuana / BC (GMT-8)" },
-  { id: "America/Bogota",       label: "Bogotá - Colombia (GMT-5)" },
-  { id: "America/Lima",         label: "Lima - Perú (GMT-5)" },
-  { id: "America/Guatemala",    label: "Guatemala (GMT-6)" },
-  { id: "America/Costa_Rica",   label: "Costa Rica (GMT-6)" },
-  { id: "America/Santo_Domingo",label: "Santo Domingo - RD (GMT-4)" },
-  { id: "America/Caracas",      label: "Caracas - Venezuela (GMT-4)" },
-  { id: "America/La_Paz",       label: "La Paz - Bolivia (GMT-4)" },
-  { id: "America/Asuncion",     label: "Asunción - Paraguay (GMT-4)" },
-  { id: "America/Santiago",     label: "Santiago - Chile (GMT-4)" },
-  { id: "America/Buenos_Aires", label: "Buenos Aires - Argentina (GMT-3)" },
-  { id: "America/Montevideo",   label: "Montevideo - Uruguay (GMT-3)" },
-  { id: "America/Sao_Paulo",    label: "São Paulo - Brasil (GMT-3)" },
-  { id: "Europe/Madrid",        label: "Madrid - España (GMT+1)" },
-  { id: "America/New_York",     label: "New York - US Eastern (GMT-5)" },
-  { id: "America/Los_Angeles",  label: "Los Angeles - US Pacific (GMT-8)" },
-];
+// N-63: el desfase sale de Intl (horario de verano incluido); ver lib/clinic/zonas-horarias.ts.
+const TIMEZONES = ZONAS_HORARIAS.map((z) => ({ id: z.id, label: etiquetaDeZona(z.id, z.nombre) }));
 // C-110 (ws1-t8): el rol como se lee («Dueño/a»), nunca la llave `SUPER_ADMIN`.
 const ROL_LEGIBLE: Record<string, string> = {
   SUPER_ADMIN: "settings.team.roleSuperAdmin", ADMIN: "settings.team.roleAdmin", DOCTOR: "settings.team.roleDoctor",
@@ -98,12 +77,17 @@ const ROL_LEGIBLE: Record<string, string> = {
 // C-113 (ws1-t8): hay dos «Mi perfil»; este apartado solo lleva lo básico y
 // enlaza al completo (cédula y especialidad), que es el del menú de la foto.
 const MI_PERFIL_COMPLETO = {
-  es: { antes: "Tu cédula, tu especialidad y el resto de tus datos profesionales están en ", enlace: "Mi perfil", despues: " (menú de tu foto, arriba a la derecha)." },
-  en: { antes: "Your license, specialty and other professional details are in ", enlace: "My profile", despues: " (your photo menu, top right)." },
+  es: { antes: "Tu cédula, tu especialidad y el resto de tus datos profesionales están en ", enlace: "Mi perfil", despues: " (el menú con tu nombre, abajo a la izquierda del menú lateral).", despuesClasico: " (el menú con tu nombre, abajo a la izquierda del menú lateral)." },
+  en: { antes: "Your license, specialty and other professional details are in ", enlace: "My profile", despues: " (the menu with your name, at the bottom left of the side menu).", despuesClasico: " (the menu with your name, at the bottom left of the side menu)." },
 } as const;
 
 const txPerfilLocale = (locale: string | null | undefined): "es" | "en" => (locale === "en" ? "en" : "es");
 // C-114 (ws1-t8, decisión 10): ocultar la clínica cierra también su reserva web.
+// N-56 (ws1-t8): el cupo del plan y el Saldo IA son monederos distintos.
+const TEXTOS_IA = {
+  es: { saldoAntes: "Sabina y el bot de WhatsApp no gastan este cupo: se pagan con tu ", saldoEnlace: "Saldo IA" },
+  en: { saldoAntes: "Sabina and the WhatsApp bot don't use this allowance: they're paid from your ", saldoEnlace: "AI balance" },
+} as const;
 const TEXTOS_RESERVA = {
   es: {
     titulo: "Reserva web en línea",
@@ -111,6 +95,8 @@ const TEXTOS_RESERVA = {
     cerrada: (slug: string) => `Cerrada: /reservar/${slug} avisa que no recibes reservas en línea y muestra tu teléfono.`,
     privadaAbierta: "No apareces en el directorio /clinicas, pero tu reserva web sigue abierta (abajo puedes cerrarla).",
     privadaCerrada: "No apareces en el directorio /clinicas y tu reserva web está cerrada.",
+    // Sin el SQL de la columna todavía no hay interruptor: no se promete uno (t12 F-04).
+    privadaSinInterruptor: "No apareces en el directorio /clinicas. Tu reserva web sigue abierta para quien tenga el enlace.",
     alOcultar: "Al ocultar la clínica también se cierra su reserva web. Puedes dejarla abierta con el interruptor de abajo.",
   },
   en: {
@@ -119,6 +105,7 @@ const TEXTOS_RESERVA = {
     cerrada: (slug: string) => `Closed: /reservar/${slug} says you aren't taking online bookings and shows your phone.`,
     privadaAbierta: "You don't appear in the /clinicas directory, but your online booking is still open (you can close it below).",
     privadaCerrada: "You don't appear in the /clinicas directory and your online booking is closed.",
+    privadaSinInterruptor: "You don't appear in the /clinicas directory. Your online booking stays open for anyone with the link.",
     alOcultar: "Hiding the clinic also closes its online booking. You can keep it open with the switch below.",
   },
 } as const;
@@ -204,7 +191,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const [reservaAbierta, setReservaAbierta] = useState<boolean>(reservaWeb?.abierta !== false);
   const reservaDisponible = reservaWeb?.disponible === true;
   const txReserva = TEXTOS_RESERVA[txPerfilLocale(initClinic?.locale)];
-  const descPrivada = reservaAbierta ? txReserva.privadaAbierta : txReserva.privadaCerrada;
+  const txIa = TEXTOS_IA[txPerfilLocale(initClinic?.locale)];
+  const descPrivada = !reservaDisponible ? txReserva.privadaSinInterruptor : reservaAbierta ? txReserva.privadaAbierta : txReserva.privadaCerrada;
   function cambiarVisibilidad(nueva: boolean) {
     setIsPublic(nueva);
     if (reservaDisponible) {
@@ -1054,7 +1042,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 ) : (
                   team.map(member => (
                     <Bloque key={member.id}>
-                      <Persona iniciales={`${member.firstName[0]}${member.lastName[0]}`} nombre={`${member.firstName} ${member.lastName}`} sub={rolDe(member)} />
+                      <Persona iniciales={`${member.firstName[0] ?? ""}${member.lastName[0] ?? ""}`.toUpperCase() /* N-62: «Cd» → «CD», como en Equipo */} nombre={`${member.firstName} ${member.lastName}`} sub={rolDe(member)} />
                       <Chips>
                         {member.services.length === 0 && (
                           <span className={cr.campoAyuda}>{t("settings.client.noServicesAssigned")}</span>
@@ -1100,7 +1088,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 pie={<BotonGuardar onClick={saveUser} guardando={saving} texto={t("settings.client.saveProfileBtn")} textoGuardando={t("common.saving")} />}
               >
                 <Aviso tono="info">
-                  {txPerfil.antes}<Enlace href="/dashboard/mi-perfil">{txPerfil.enlace}</Enlace>{txPerfil.despues}
+                  {txPerfil.antes}<Enlace href="/dashboard/mi-perfil">{txPerfil.enlace}</Enlace>{txPerfil.despues /* C-113: con el menú nuevo, el de tu nombre está abajo a la izquierda */}
                 </Aviso>
                 <Campos2>
                   <Campo etiqueta={t("settings.client.firstNameLabel")}>
@@ -1263,11 +1251,16 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                         <strong>{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</strong>
                       </div>
                     </div>
+                    {/* N-56 (ws1-t8): «tokens restantes» salía dos veces y el «~$0.0000 USD»
+                        era un costo interno en dólares. Ahora: lo usado, lo que alcanza, y
+                        dónde se ve lo que gastan Sabina y el bot (otro monedero). */}
                     <Estadisticas>
-                      <Estadistica valor={aiRemaining.toLocaleString()} etiqueta={t("settings.client.aiStatTokensRemaining")} tono="violeta" />
+                      <Estadistica valor={aiUsed.toLocaleString()} etiqueta={t("settings.client.aiTokensUsedThisMonth")} tono="violeta" />
                       <Estadistica valor={Math.floor(aiRemaining/AVG_CONSULT_TOKENS).toString()} etiqueta={t("settings.client.aiStatConsultations")} />
-                      <Estadistica valor={`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`} etiqueta={t("settings.client.aiStatEstimatedCost")} tono="exito" />
                     </Estadisticas>
+                    <p className={cr.campoAyuda}>
+                      {txIa.saldoAntes}<Enlace href="/dashboard/whatsapp/bot/saldo">{txIa.saldoEnlace}</Enlace>.
+                    </p>
                     <div>
                       <SubtituloGrupo>{t("settings.client.aiBreakdownTitle")}</SubtituloGrupo>
                       {aiBreakdownRows.length === 0 ? (
@@ -1462,13 +1455,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                             {!sd.enabled ? (
                               <span className={cr.horaHasta}>{t("settings.client.hoursClosed")}</span>
                             ) : horarioEditable ? (
-                              <>
+                              // C-126 (ws1-t8): las dos horas y la «a» van juntas; a 390 px la «a»
+                              // se quedaba sola en un renglón con la hora de cierre.
+                              <span className={cr.horaRango}>
                                 <Entrada type="time" corta value={sd.open}
                                   onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))} />
                                 <span className={cr.horaHasta}>{t("settings.client.hoursTo")}</span>
                                 <Entrada type="time" corta value={sd.close}
                                   onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))} />
-                              </>
+                              </span>
                             ) : (
                               <span className={cr.horaHasta}>
                                 {sd.open} {t("settings.client.hoursTo")} {sd.close}
@@ -1895,7 +1890,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   <div key={member.id} style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 16 }}>
                     <div className="flex items-center gap-3 mb-3">
                       <div className="avatar-new">
-                        {member.firstName[0]}{member.lastName[0]}
+                        {`${member.firstName[0] ?? ""}${member.lastName[0] ?? ""}`.toUpperCase()}
                       </div>
                       <div>
                         <div className="text-sm font-bold">{member.firstName} {member.lastName}</div>
@@ -1957,7 +1952,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
           <div className="card__body space-y-4">
           <p className="text-xs text-muted-foreground">
-            {txPerfil.antes}<a href="/dashboard/mi-perfil" className="underline">{txPerfil.enlace}</a>{txPerfil.despues}
+            {txPerfil.antes}<a href="/dashboard/mi-perfil" className="underline">{txPerfil.enlace}</a>{txPerfil.despuesClasico}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="field-new"><label className="field-new__label">{t("settings.client.firstNameLabel")}</label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
@@ -2198,11 +2193,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="grid grid-cols-2 gap-3 mb-5">
                 {[
-                  { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
+                  { label:t("settings.client.aiTokensUsedThisMonth"), val:aiUsed.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
                   { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/AVG_CONSULT_TOKENS).toString(), color:"text-foreground" },
-                  { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600 dark:text-emerald-300" },
                 ].map(s => (
                   <div key={s.label} className="text-center" style={{ background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>
                     <div className={`text-xl font-bold ${s.color}`} style={{ fontVariantNumeric: "tabular-nums" }}>{s.val}</div>

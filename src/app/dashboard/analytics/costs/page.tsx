@@ -5,14 +5,16 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { CostsClient } from "./costs-client";
+import { SinAcceso, TITULO_SIN_ACCESO } from "@/components/dashboard/sin-permiso-rediseno/sin-acceso";
 
-export const metadata: Metadata = { title: "Costos & Margen — Analytics" };
+export const metadata: Metadata = { title: "Costos y margen — Analítica" };
 
 export default async function CostsAnalyticsPage() {
   const user = await getCurrentUser();
   const { t } = await getServerT();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.costs.adminOnly")}</div>;
+    // C-109: el mismo «sin acceso» que el resto del panel.
+    return <SinAcceso titulo={TITULO_SIN_ACCESO[(await getServerT()).locale.startsWith("en") ? "en" : "es"]} texto={t("analytics.costs.adminOnly")} volver={t("menuDosNiveles.cajaSinPermisoVolver")} />;
   }
   // REDISEÑO DE ANALÍTICA — el MISMO interruptor por clínica que enciende el
   // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).

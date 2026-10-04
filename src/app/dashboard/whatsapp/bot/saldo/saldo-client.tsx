@@ -21,6 +21,7 @@ import { SaldoRediseno } from "@/components/dashboard/whatsapp-rediseno/saldo";
 import { FuncionesIaCard, useFuncionesIa } from "./funciones-ia";
 import { useT } from "@/i18n/i18n-provider";
 import { montoMxn, SPEI_MAX_CENTS, SPEI_MIN_CENTS } from "@/lib/ai-wallet/spei-montos";
+import { desgloseConsumo, modeloLegible, NOTA_COSTO_CONSUMO } from "@/lib/ai-billing/consumo-legible";
 
 // ── Tipos de la API (GET /api/ai-wallet) ──────────────────────────────────────
 type UsageRow = {
@@ -29,6 +30,8 @@ type UsageRow = {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** N-57: contexto releído (caché); viene desde ws1-t8. */
+  cacheTokens?: number;
   billedCents: number;
   createdAt: string;
 };
@@ -739,7 +742,8 @@ export function SaldoClient({
                   <tr>
                     <th>Fecha</th>
                     <th>Detalle</th>
-                    <th className="mono">Tokens</th>
+                    <th className="mono">Leídos</th>
+                    <th className="mono">Escritos</th>
                     <th className="mono">Costo</th>
                   </tr>
                 </thead>
@@ -747,15 +751,15 @@ export function SaldoClient({
                   {data.usage.map((u) => (
                     <tr key={u.id}>
                       <td>{formatRelativeDate(u.createdAt)}</td>
-                      <td>{featureLabel(u.feature)}</td>
-                      <td className="mono">
-                        {(u.inputTokens + u.outputTokens).toLocaleString("es-MX")}
-                      </td>
+                      <td>{featureLabel(u.feature)} · {modeloLegible(u.model)}</td>
+                      <td className="mono">{desgloseConsumo(u).leidos.toLocaleString("es-MX")}</td>
+                      <td className="mono">{desgloseConsumo(u).escritos.toLocaleString("es-MX")}</td>
                       <td className="mono">{fmtMXNdec(u.billedCents / 100)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <p className="text-xs text-muted-foreground" style={{ marginTop: 8 }}>{NOTA_COSTO_CONSUMO.es}</p>
             </div>
           )}
         </CardNew>

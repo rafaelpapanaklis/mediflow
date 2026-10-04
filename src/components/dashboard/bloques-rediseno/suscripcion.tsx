@@ -11,6 +11,7 @@ import { Boton, Insignia, Aviso, type Tono } from "@/components/dashboard/config
 import { Seccion } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { useT } from "@/i18n/i18n-provider";
 import s from "./bloques.module.css";
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 
 /**
  * La ROPA nueva de la pestaña Suscripción de Configuración (hallazgo 14: 42
@@ -352,7 +353,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
                   return (
                     <tr key={inv.id}>
                       <td className={s.fecha}>
-                        {new Date(inv.date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                        {fechaPanel(inv.date) /* N-61: formato único del panel */}
                       </td>
                       <td>
                         <div>{textos.concepto}</div>

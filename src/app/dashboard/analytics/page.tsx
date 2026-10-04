@@ -13,6 +13,7 @@ import { getServerT } from "@/i18n/server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
 import { citasDelPeriodoWhere, diaDeLaClinica, mesDeLaClinica } from "@/lib/agenda/citas-del-periodo";
+import { SinAcceso, TITULO_SIN_ACCESO } from "@/components/dashboard/sin-permiso-rediseno/sin-acceso";
 
 export const metadata: Metadata = { title: "Analytics — DaleControl" };
 
@@ -38,11 +39,8 @@ export default async function AnalyticsOverviewPage() {
 
   // Solo admin/owner ven analytics.
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return (
-      <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-        {t("analytics.overviewPage.adminOnly")}
-      </div>
-    );
+    // C-109: el mismo «sin acceso» que el resto del panel.
+    return <SinAcceso titulo={TITULO_SIN_ACCESO[(await getServerT()).locale.startsWith("en") ? "en" : "es"]} texto={t("analytics.overviewPage.adminOnly")} volver={t("menuDosNiveles.cajaSinPermisoVolver")} />;
   }
 
   // Conteo de citas históricas para detectar "Recolectando datos…".

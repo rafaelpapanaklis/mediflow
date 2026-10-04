@@ -1468,3 +1468,20 @@ select.entrada {
     transition: none;
   }
 }
+
+/* C-126 (ws1-t8, tercera ronda): las casillas de Horarios medían 16 px con el dedo. */
+@media (pointer: coarse) {
+  .casilla {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* C-126: «09:00 a 19:00» es una sola pieza: si no cabe al lado del día, baja
+   entera al renglón de abajo (antes la «a» quedaba suelta con la hora de cierre). */
+.horaRango {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}

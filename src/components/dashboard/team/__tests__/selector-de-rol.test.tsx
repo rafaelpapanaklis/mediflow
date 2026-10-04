@@ -104,9 +104,9 @@ test("los textos nuevos existen en español e inglés, con las mismas claves", (
   assert.match(TEXTOS_EQUIPO.es.atiendeDesc, /No cambia sus permisos/);
 });
 
-test("la casilla «Aparece en la agenda» solo sale al editar y a quien tiene agenda propia", () => {
+test("la casilla «Aparece en la agenda» sale a quien tiene agenda propia (desde ws1-t8, también al agregar)", () => {
   const src = readFileSync(join(__dirname, "..", "..", "..", "..", "app", "dashboard", "team", "team-client.tsx"), "utf8");
-  assert.match(src, /isEdit && puedeMarcarAtiende\(form\.role\) && \(/);
+  assert.match(src, /\{puedeMarcarAtiende\(form\.role\) && \(/);
   assert.match(src, /ofreceHorario\(m\)/, "el botón Horario sale también para el dueño que atiende");
   assert.equal(src.includes('puedeHorario && m.role === "DOCTOR"'), false);
 });

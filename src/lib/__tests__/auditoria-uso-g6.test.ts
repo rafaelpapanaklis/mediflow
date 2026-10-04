@@ -162,7 +162,8 @@ test("C-115: entidades con nombre y filtros de Gasto y de CFDI", () => {
 
 test("C-115: fechas y montos legibles (el gasto de $100 del 3-oct)", () => {
   assert.equal(fechaLegible("2026-10-03T06:00:00.000Z"), "3 oct 2026");
-  assert.equal(fechaLegible("2026-10-03T17:12:00.000Z"), "3 oct 2026, 11:12");
+  // N-61 (tercera ronda): con hora, en el formato único del panel (12 h).
+  assert.equal(fechaLegible("2026-10-03T17:12:00.000Z").replace(/\s+/g, " "), "3 oct 2026, 11:12 a.m.");
   const ctx = { entityType: "expense" };
   assert.equal(formatAuditFieldValue("fecha", "2026-10-03T06:00:00.000Z", ctx), "3 oct 2026");
   assert.equal(formatAuditFieldValue("monto", 100, ctx), "$100");

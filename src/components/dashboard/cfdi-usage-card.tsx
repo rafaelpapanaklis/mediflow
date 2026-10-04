@@ -38,11 +38,14 @@ function money(cents: number): string {
 export function monthLabel(period: string, locale: string = "es"): string {
   const [y, m] = period.split("-").map(Number);
   if (!y || !m) return period;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(locale.startsWith("en") ? "en-US" : "es-MX", {
+  const texto = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(locale.startsWith("en") ? "en-US" : "es-MX", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
   });
+  // N-58 (vuelta 3): mayúscula SOLO en la primera letra («Octubre de 2026»). Con
+  // `text-transform: capitalize` salía «Octubre De 2026».
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 const RING_R = 34;
@@ -97,7 +100,7 @@ export function CfdiUsageCard({ rediseno = false }: { rediseno?: boolean } = {})
           </h2>
         </div>
         {data && (
-          <span style={{ fontSize: 11, color: "var(--text-3)", textTransform: "capitalize" }}>
+          <span style={{ fontSize: 11, color: "var(--text-3)" }}>
             {monthLabel(data.period, locale)}
           </span>
         )}

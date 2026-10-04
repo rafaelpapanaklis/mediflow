@@ -124,6 +124,8 @@ export interface ClinicReviewsResponse {
   items: ClinicReviewDTO[];
   /** Invitaciones pendientes recientes (solo en la página 1). */
   invitaciones?: InvitacionResenaDTO[];
+  /** N-65: ¿la clínica tiene WhatsApp conectado? Para decir por qué no salió una invitación. */
+  whatsappConectado?: boolean;
   page: number;
   pageSize: number;
   total: number;

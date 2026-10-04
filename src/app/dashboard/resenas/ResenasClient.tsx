@@ -12,6 +12,7 @@ import {
 } from "@/lib/reviews/types";
 import { Invitaciones } from "./invitaciones";
 import { ResenasRediseno } from "@/components/dashboard/pequenas-rediseno/resenas";
+import { SinAcceso, TITULO_SIN_ACCESO } from "@/components/dashboard/sin-permiso-rediseno/sin-acceso";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Panel de la clínica: ver sus reseñas verificadas y responder (una respuesta
@@ -26,6 +27,8 @@ export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {})
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // C-109: sin permiso no es un error de carga: es el «sin acceso» común del panel.
+  const [sinAcceso, setSinAcceso] = useState(false);
 
   const load = useCallback(async (p: number) => {
     setLoading(true);
@@ -35,6 +38,7 @@ export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {})
       if (res.status === 401 || res.status === 403) {
         // /api/reviews es solo para dueño y administrador: sin permiso no es una falla, es «no tienes acceso».
         setError("No tienes acceso a las reseñas de la clínica.");
+        setSinAcceso(true);
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
@@ -53,6 +57,10 @@ export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {})
 
   function patchItem(updated: ClinicReviewDTO) {
     setData((d) => (d ? { ...d, items: d.items.map((i) => (i.id === updated.id ? updated : i)) } : d));
+  }
+
+  if (sinAcceso) {
+    return <SinAcceso titulo={TITULO_SIN_ACCESO.es} texto="Las reseñas de la clínica son solo para el dueño/a y los administradores. Si las necesitas, pídele acceso al dueño/a." volver="Volver a Hoy" />;
   }
 
   if (rediseno) {
@@ -98,7 +106,7 @@ export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {})
         </div>
       )}
 
-      {!loading && !error && page === 1 && <Invitaciones items={data?.invitaciones} />}
+      {!loading && !error && page === 1 && <Invitaciones items={data?.invitaciones} whatsappConectado={data?.whatsappConectado} />}
 
       {loading ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "40px 0", justifyContent: "center", color: "var(--text-3)" }}>

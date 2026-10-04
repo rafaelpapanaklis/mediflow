@@ -75,7 +75,7 @@ export function ResenasRediseno({
         </div>
       )}
 
-      {!loading && !error && page === 1 && <Invitaciones items={data?.invitaciones} rediseno />}
+      {!loading && !error && page === 1 && <Invitaciones items={data?.invitaciones} rediseno whatsappConectado={data?.whatsappConectado} />}
 
       {loading ? (
         <Cargando texto="Cargando…" />

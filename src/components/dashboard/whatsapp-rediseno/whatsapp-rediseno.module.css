@@ -16,12 +16,13 @@
    pintan su JSX de siempre: no comparten ni un nodo con esto.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* C-127 (ws1-t8, tercera ronda): mismo contenedor que Equipo, Configuración y Caja
+   (1400 px centrado, relleno lateral clamp(14px, 1.6vw, 28px)). */
 .raiz {
-  max-width: 1240px;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
-  /* Sin padding lateral: ese lo pone el <main> del layout. */
-  padding: clamp(6px, 1vw, 12px) 0 clamp(24px, 2.8vw, 32px);
+  padding: clamp(6px, 1vw, 12px) clamp(14px, 1.6vw, 28px) clamp(24px, 2.8vw, 32px);
   container-type: inline-size;
   container-name: whatsapp;
   color: var(--m2-texto);

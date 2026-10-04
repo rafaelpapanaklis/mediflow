@@ -3614,3 +3614,27 @@
   .an-2col { grid-template-columns: 1fr; }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════
+   C-126 (ws1-t8, tercera ronda): tamaño mínimo táctil en TODO el panel.
+   Pantalla por pantalla quedaban cientos de controles de 28-30 px
+   (Procedimientos, Pacientes, CRM, Página web, casillas de Horarios de
+   16 px). Solo con puntero táctil (celular, tableta): con ratón nada cambia.
+   `:where()` deja la especificidad en cero: cualquier regla de pantalla que
+   ya sea más grande gana; `min-height` le gana a un `height` fijo menor.
+   Los interruptores (role=switch / .switch) se excluyen: su forma depende
+   de su alto exacto.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (pointer: coarse) {
+  main :where(button, [role="button"], [role="tab"], select, summary, a[class*="boton"], a[class*="btn"], a[class*="enlace"]):not([role="switch"]):not(.switch) {
+    min-height: 36px;
+  }
+  /* Botones de solo icono (llevan aria-label): también de ancho. */
+  main :where(button[aria-label], a[aria-label]):not([role="switch"]):not(.switch) {
+    min-width: 36px;
+  }
+  main :where(input[type="checkbox"], input[type="radio"]) {
+    width: 22px;
+    height: 22px;
+  }
+}

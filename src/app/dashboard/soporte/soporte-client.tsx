@@ -29,6 +29,7 @@ import type { SupportAttachment, SupportTicketSummary } from "@/lib/support/type
 import { AccountManagerCard } from "@/components/dashboard/account-manager-card";
 import type { AccountManagerCardData } from "@/lib/account-manager/get-for-clinic";
 import { ListaTicketsRediseno } from "@/components/dashboard/soporte-rediseno/lista-tickets";
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 
 // Tono visual del badge de estado: ABIERTO azul/info, EN_PROGRESO violeta/brand,
 // ESPERANDO_RESPUESTA ámbar, RESUELTO verde, CERRADO gris.
@@ -56,7 +57,7 @@ const MAX_FILE_MB = Math.round(SUPPORT_MAX_FILE_BYTES / (1024 * 1024));
 function formatShortDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return fechaHoraPanel(d); // N-61: formato único del panel
 }
 
 function formatBytes(n: number): string {

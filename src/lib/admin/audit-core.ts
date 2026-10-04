@@ -7,6 +7,7 @@
  */
 
 import type { Prisma } from "@prisma/client";
+import { fechaHoraPanel, fechaPanel } from "../formato-fecha-panel";
 
 // ───────────────────────── Tipos públicos ─────────────────────────
 
@@ -132,7 +133,8 @@ export const ACTION_META: Record<string, { label: string; tone: AuditTone }> = {
   update: { label: "Edición", tone: "info" },
   delete: { label: "Borrado", tone: "danger" },
   void: { label: "Anulación", tone: "danger" },
-  soft_delete: { label: "Borrado lógico", tone: "warning" },
+  // C-115 (vuelta 3): «Borrado lógico» es jerga; la fila se conserva (se ve el «Antes»).
+  soft_delete: { label: "Borrado (se guarda copia)", tone: "warning" },
   archive: { label: "Archivado", tone: "warning" },
   view: { label: "Lectura", tone: "neutral" },
   password_reset: { label: "Reset contraseña", tone: "warning" },
@@ -401,9 +403,9 @@ export function fieldLabel(field: string, entityType: string): string {
 export function fechaLegible(iso: string, timeZone: string = ZONA_BITACORA): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const partes = new Intl.DateTimeFormat("es-MX", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
-  const dia = new Intl.DateTimeFormat("es-MX", { timeZone, day: "numeric", month: "short", year: "numeric" }).format(d).replace(/\./g, "");
-  return partes === "00:00" ? dia : `${dia}, ${partes}`;
+  const medianoche = new Intl.DateTimeFormat("es-MX", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d) === "00:00";
+  // N-61: el formato único del panel (12 h).
+  return medianoche ? fechaPanel(d, timeZone) : fechaHoraPanel(d, timeZone);
 }
 
 /** Un valor suelto para la bitácora (sin saber el campo): fechas ISO legibles y objetos campo por campo. */
@@ -465,6 +467,27 @@ export function formatAuditFieldValue(
   return valorLegible(value);
 }
 
+/**
+ * La frase de una alta que no la guardó: «Alta de Usuario: Sexta Auditora
+ * Cifras», «Apertura de Caja con $1,900», «Alta de Paciente: P0215 Zzaudit…».
+ * Solo con datos que ya están en `changes`; null si no hay nada que decir.
+ */
+export function resumenDeAlta(row: { entityType: string; changes: unknown }): string | null {
+  if (!isPlainObject(row.changes) || !isPlainObject(row.changes._created)) return null;
+  const d = row.changes._created.after;
+  if (!isPlainObject(d)) return null;
+  const etiqueta = entityLabel(row.entityType);
+  if (row.entityType === "cash-register") {
+    const monto = pesosDe(d.openingBalance);
+    return monto ? `Apertura de Caja con ${monto}` : "Apertura de Caja";
+  }
+  const nombre = [d.firstName, d.lastName].filter((x) => typeof x === "string" && x.trim()).join(" ").trim()
+    || (typeof d.name === "string" ? d.name.trim() : "");
+  const numero = typeof d.patientNumber === "string" ? `${d.patientNumber} ` : "";
+  if (nombre) return `Alta de ${etiqueta}: ${numero}${nombre}`;
+  return null;
+}
+
 /** El texto que el propio movimiento guardó para la persona («Borró el gasto «Otro» de $100.00»). */
 export function textoDelMovimiento(changes: unknown): string | null {
   if (!isPlainObject(changes) || !isPlainObject(changes._mov)) return null;
@@ -485,6 +508,9 @@ export function resumenDeCambio(row: {
   // C-115 (ws1-t8): si el movimiento ya trae su frase, esa es la línea (cualquier entidad).
   const texto = textoDelMovimiento(row.changes);
   if (texto) return texto;
+  // C-115 (vuelta 3): una alta sin frase dice qué se dio de alta, no un id.
+  const alta = resumenDeAlta(row);
+  if (alta) return alta;
   if (!esEntidadDeOrtodoncia(row.entityType)) return null;
   const norm = normalizeChanges(row.changes);
   if (norm.kind !== "updated") return null;

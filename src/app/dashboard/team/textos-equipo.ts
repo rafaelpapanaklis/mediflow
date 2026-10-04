@@ -72,6 +72,7 @@ const es = {
   // C-124 (ws1-t8)
   incluyeInactivos: (n: number) => (n === 1 ? "Incluye 1 inactivo (filtro «Inactivos»)" : `Incluye ${n} inactivos (filtro «Inactivos»)`),
   insigniaOrtodoncia: "Ortodoncia",
+  kpiRecepcion: "Recepción y solo lectura",
 };
 
 const en: typeof es = {
@@ -128,6 +129,7 @@ const en: typeof es = {
   atiendeDesc: "Receives appointments: appears as a column in the Agenda and in “New appointment”, and can be assigned cases. Turn it off if they only administer. It doesn't change their permissions.",
   incluyeInactivos: (n: number) => (n === 1 ? "Includes 1 inactive (“Inactive” filter)" : `Includes ${n} inactive (“Inactive” filter)`),
   insigniaOrtodoncia: "Orthodontics",
+  kpiRecepcion: "Reception and read-only",
 };
 
 export const TEXTOS_EQUIPO = { es, en } as const;

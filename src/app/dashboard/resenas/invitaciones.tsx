@@ -2,8 +2,10 @@
 
 import { Mail, Send } from "lucide-react";
 import { useLocale } from "@/i18n/i18n-provider";
-import { formatInvitationDate, type EstadoInvitacion, type InvitacionResenaDTO } from "@/lib/reviews/types";
+import { type EstadoInvitacion, type InvitacionResenaDTO } from "@/lib/reviews/types";
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { Etiqueta, estilos as s } from "@/components/dashboard/pequenas-rediseno/piezas";
+import { causaSinEnvio } from "@/lib/reviews/causa-sin-envio";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // «Invitaciones» de Reseñas (ws1-t4, 11.4): lo que se pidió al cerrar cada cita
@@ -78,7 +80,7 @@ const CLASICA: Record<"info" | "ambar" | "neutra" | "violeta", string> = {
 
 // `rediseno` elige el vestido: las piezas del menú de dos niveles (variables
 // --pr-*, que solo existen dentro de RaizPequenas) o las clases de siempre.
-export function Invitaciones({ items, rediseno = false }: { items: InvitacionResenaDTO[] | undefined; rediseno?: boolean }) {
+export function Invitaciones({ items, rediseno = false, whatsappConectado }: { items: InvitacionResenaDTO[] | undefined; rediseno?: boolean; whatsappConectado?: boolean }) {
   const locale = useLocale();
   const t = locale.startsWith("en") ? en : es;
   if (!items || items.length === 0) return null;
@@ -104,8 +106,10 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
       {items.map((i) => {
         const motivo =
           i.estado === "fallo" ? t.motivos[i.motivo ?? "generic"] ?? t.motivos.generic
-          : i.estado === "sin_enviar" ? t.sinEnviar
+          : i.estado === "sin_enviar" ? causaSinEnvio(whatsappConectado, locale).texto
           : null;
+        // N-65: el botón que resuelve la causa (solo en «No se envió»).
+        const accion = i.estado === "sin_enviar" ? causaSinEnvio(whatsappConectado, locale).accion : null;
         const chips = (
           <>
             {i.porCorreo && (
@@ -120,11 +124,12 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
               <div className={s.tarjetaCabeza}>
                 <div className={s.tarjetaTextos}>
                   <h3 className={s.tarjetaTitulo}>{i.authorName}</h3>
-                  <p className={s.tarjetaSub}>{formatInvitationDate(i.createdAt, locale)}</p>
+                  <p className={s.tarjetaSub}>{fechaPanel(i.createdAt, null, locale)}</p>
                 </div>
                 <div className={s.tarjetaAcciones}>{chips}</div>
               </div>
               {motivo && <p className={s.parrafo}>{motivo}</p>}
+              {accion && <a href={accion.href} className={s.enlace}>{accion.texto} →</a>}
             </div>
           </article>
         ) : (
@@ -133,11 +138,12 @@ export function Invitaciones({ items, rediseno = false }: { items: InvitacionRes
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <div>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{i.authorName}</h3>
-                  <p style={{ fontSize: 12, color: "var(--text-3)" }}>{formatInvitationDate(i.createdAt, locale)}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-3)" }}>{fechaPanel(i.createdAt, null, locale)}</p>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chips}</div>
               </div>
               {motivo && <p style={{ fontSize: 13, color: "var(--text-2)", marginTop: 8 }}>{motivo}</p>}
+              {accion && <a href={accion.href} style={{ display: "inline-block", marginTop: 6, fontSize: 13, fontWeight: 600, color: "var(--brand)" }}>{accion.texto} →</a>}
             </div>
           </article>
         );

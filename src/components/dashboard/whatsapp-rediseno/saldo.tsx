@@ -6,6 +6,7 @@ import type { FuncionesIaVM } from "@/app/dashboard/whatsapp/bot/saldo/funciones
 import { useT } from "@/i18n/i18n-provider";
 import { montoMxn } from "@/lib/ai-wallet/spei-montos";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
+import { desgloseConsumo, modeloLegible, NOTA_COSTO_CONSUMO } from "@/lib/ai-billing/consumo-legible";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { RaizWhatsApp } from "./raiz";
 import { FuncionesIaRediseno } from "./funciones-ia";
@@ -322,7 +323,7 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
 
           <div className={s.columna}>
             {/* ── Historial de consumo ── */}
-            <Tarjeta titulo="Consumo de IA" sub="Detalle de lo que ha consumido tu asistente." tabla>
+            <Tarjeta titulo="Consumo de IA" sub={`Detalle de lo que ha consumido tu asistente. ${NOTA_COSTO_CONSUMO.es}`} tabla>
               {data.usage.length === 0 ? (
                 <div className={s.vacioCentrado}>
                   <div className={s.saldoCifraMedia}>{fmtMXNdec(spentCents / 100)}</div>
@@ -342,7 +343,8 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                       <tr>
                         <th>Fecha</th>
                         <th>Detalle</th>
-                        <th className={s.numero}>Tokens</th>
+                        <th className={s.numero}>Leídos</th>
+                        <th className={s.numero}>Escritos</th>
                         <th className={s.numero}>Costo</th>
                       </tr>
                     </thead>
@@ -350,8 +352,9 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                       {data.usage.map((u) => (
                         <tr key={u.id}>
                           <td>{formatRelativeDate(u.createdAt)}</td>
-                          <td>{aiBillingFeatureLabel(u.feature)}</td>
-                          <td className={s.numero}>{(u.inputTokens + u.outputTokens).toLocaleString("es-MX")}</td>
+                          <td>{aiBillingFeatureLabel(u.feature)} · {modeloLegible(u.model)}</td>
+                          <td className={s.numero}>{desgloseConsumo(u).leidos.toLocaleString("es-MX")}</td>
+                          <td className={s.numero}>{desgloseConsumo(u).escritos.toLocaleString("es-MX")}</td>
                           <td className={s.numero}>{fmtMXNdec(u.billedCents / 100)}</td>
                         </tr>
                       ))}

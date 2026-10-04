@@ -39,7 +39,6 @@ import type { TFunction } from "@/i18n/t";
 import { AiQuotaBanner, type AiUsageSnapshot } from "@/components/dashboard/ai-quota-banner";
 // El id sale del MISMO sitio que consume /api/ai: este badge decía
 // "claude-sonnet-4-6" mientras el chat corría en Haiku.
-import { AI_CHAT_MODEL } from "@/lib/ai/models";
 import {
   bienvenidaAsistentePara,
   sugerenciasAsistentePara,
@@ -198,10 +197,11 @@ const SLASH_COMMANDS = [
 ];
 
 const QUICK_ACTIONS = [
-  { label: "/soap", labelKey: null, icon: FileText },
+  // C-122 (ws1-t8): el botón sigue metiendo el comando /soap, pero dice qué hace.
+  { label: "/soap", labelKey: null, texto: "Nota de evolución", icon: FileText },
   { label: "Resumir historia", labelKey: "pages.aiAssistant.quickSummarizeHistory", icon: ClipboardList },
   { label: "Preguntar sobre xray", labelKey: "pages.aiAssistant.quickAskXray", icon: Sparkles },
-  { label: "/receta", labelKey: null, icon: Pill },
+  { label: "/receta", labelKey: null, texto: "Receta", icon: Pill },
   { label: "WhatsApp paciente", labelKey: "pages.aiAssistant.quickWhatsappPatient", icon: Send },
 ];
 
@@ -383,8 +383,11 @@ function archiveLegacyStorage() {
 export function AiAssistantClient({
   rediseno = false,
   categoria = null,
+  usuario = null,
 }: {
   rediseno?: boolean;
+  /** C-122 (ws1-t8): quién escribe, como en el resto del panel (antes, «Doctor» para todos, dueño incluido). */
+  usuario?: { nombre: string; iniciales: string } | null;
   /** `Clinic.category`, leída en el servidor (page.tsx). Solo cambia textos. */
   categoria?: string | null;
 } = {}) {
@@ -734,7 +737,7 @@ export function AiAssistantClient({
     const lines = [
       `# ${title}`,
       "",
-      `${stamp.toLocaleString("es-MX")} · ${AI_CHAT_MODEL}`,
+      `${stamp.toLocaleString("es-MX")}`,
       "",
       "> Apoyo de IA. No es una nota clínica ni sustituye el criterio del profesional.",
       "",
@@ -1470,9 +1473,9 @@ export function AiAssistantClient({
         </div>
 
         <div className={c.userBlock}>
-          <div className={c.userAvatar}>DR</div>
+          <div className={c.userAvatar}>{usuario?.iniciales || "DR"}</div>
           <div style={{ minWidth: 0 }}>
-            <div className={c.userName}>{t("pages.aiAssistant.doctor")}</div>
+            <div className={c.userName}>{usuario?.nombre || t("pages.aiAssistant.doctor")}</div>
             <div className={c.userRole}>{t("pages.aiAssistant.activeSession")}</div>
           </div>
         </div>
@@ -1496,7 +1499,7 @@ export function AiAssistantClient({
               {activeConv?.title ?? t("pages.aiAssistant.clinicalAssistant")}
             </h1>
             <div className={c.chatMeta}>
-              {AI_CHAT_MODEL} · {t("pages.aiAssistant.messageCount", { count: messages.length })}
+              {t("pages.aiAssistant.messageCount", { count: messages.length })}
             </div>
           </div>
           <div className={c.chatHeaderActions}>
@@ -1655,12 +1658,9 @@ export function AiAssistantClient({
                   <div className={c.messageRow}>
                     <div className={c.messageMeta}>
                       <span className={c.messageName}>
-                        {m.role === "user" ? t("pages.aiAssistant.doctor") : t("pages.aiAssistant.aiAssistant")}
+                        {m.role === "user" ? (usuario?.nombre || t("pages.aiAssistant.doctor")) : t("pages.aiAssistant.aiAssistant")}
                       </span>
                       <span className={c.messageTimestamp}>{formatTime(m.timestamp)}</span>
-                      {m.role === "assistant" && (
-                        <span className={c.modelBadge}>{AI_CHAT_MODEL}</span>
-                      )}
                     </div>
                     <div className={`${c.messageContent} ${m.streaming ? c.streamingCursor : ""}${rediseno && m.role === "user" ? ` ${piel.burbujaUsuario}` : ""}`}>
                       {m.content || (m.streaming ? "" : "—")}
@@ -1696,7 +1696,7 @@ export function AiAssistantClient({
                   }}
                 >
                   <qa.icon size={11} aria-hidden />
-                  {qa.label.startsWith("/") ? <code>{qa.label}</code> : (qa.labelKey ? t(qa.labelKey) : qa.label)}
+                  {"texto" in qa && qa.texto ? qa.texto : qa.label.startsWith("/") ? <code>{qa.label}</code> : (qa.labelKey ? t(qa.labelKey) : qa.label)}
                 </button>
               ))}
             </div>

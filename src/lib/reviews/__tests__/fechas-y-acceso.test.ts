@@ -37,7 +37,8 @@ test("formatInvitationDate sigue el idioma de la interfaz: en inglés, «October
 test("ninguna pantalla de reseñas pone `capitalize` sobre la fecha, y Invitaciones usa la fecha con día", () => {
   const inv = leer("src/app/dashboard/resenas/invitaciones.tsx");
   assert.ok(!/capitalize/.test(inv));
-  assert.equal((inv.match(/formatInvitationDate\(i\.createdAt, locale\)/g) ?? []).length, 2);
+  // ws1-t8 (N-61): la fecha con día, en el formato único del panel («3 oct 2026»).
+  assert.equal((inv.match(/fechaPanel\(i\.createdAt, null, locale\)/g) ?? []).length, 2);
   assert.ok(!/capitalize/.test(leer("src/app/dashboard/resenas/ResenasClient.tsx")));
   assert.ok(!/capitalize/.test(leer("src/components/dashboard/pequenas-rediseno/resenas.tsx")));
 });

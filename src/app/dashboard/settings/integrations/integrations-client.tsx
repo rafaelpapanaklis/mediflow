@@ -257,7 +257,7 @@ export function IntegrationsClient({
             extra={<InsigniaEstado status={aiStatus} />}
           >
             <div className={cr.estadoFila}>
-              <strong className="mono-tecnico">ANTHROPIC_API_KEY</strong>
+              <strong>{t("settings.integrations.aiTitle")}</strong>
               {serverStatus.anthropic ? (
                 <span className={cr.estadoOk}><CheckCircle2 size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}</span>
               ) : (
@@ -265,8 +265,8 @@ export function IntegrationsClient({
               )}
             </div>
             <p className={cr.campoAyuda}>
-              {t("settings.integrations.aiNotePrefix")}{" "}
-              <code className="mono-tecnico">ANTHROPIC_API_KEY</code> {t("settings.integrations.aiNoteSuffix")}
+              {/* N-59 (ws1-t8): sin nombres de variables de entorno: eso no lo configura la clínica. */}
+              {t("settings.integrations.aiNotePrefix")}
             </p>
           </Seccion>
 
@@ -279,7 +279,7 @@ export function IntegrationsClient({
             extra={<InsigniaEstado status={sttStatus} />}
           >
             <div className={cr.estadoFila}>
-              <strong className="mono-tecnico">OPENAI_API_KEY</strong>
+              <strong>{t("settings.integrations.sttTitle")}</strong>
               {serverStatus.openai ? (
                 <span className={cr.estadoOk}><CheckCircle2 size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}</span>
               ) : (
@@ -448,7 +448,7 @@ export function IntegrationsClient({
 
           <div className={styles.cardBody}>
             <div className={styles.envCheckRow}>
-              <span className={styles.envCheckLabel}>ANTHROPIC_API_KEY</span>
+              <span className={styles.envCheckLabel}>{t("settings.integrations.aiTitle")}</span>
               {serverStatus.anthropic ? (
                 <span className={styles.envCheckOk}>
                   <CheckCircle2 size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}
@@ -460,8 +460,7 @@ export function IntegrationsClient({
               )}
             </div>
             <p className={styles.cardNote}>
-              {t("settings.integrations.aiNotePrefix")}{" "}
-              <code>ANTHROPIC_API_KEY</code> {t("settings.integrations.aiNoteSuffix")}
+              {t("settings.integrations.aiNotePrefix")}
             </p>
           </div>
         </section>
@@ -483,7 +482,7 @@ export function IntegrationsClient({
 
           <div className={styles.cardBody}>
             <div className={styles.envCheckRow}>
-              <span className={styles.envCheckLabel}>OPENAI_API_KEY</span>
+              <span className={styles.envCheckLabel}>{t("settings.integrations.sttTitle")}</span>
               {serverStatus.openai ? (
                 <span className={styles.envCheckOk}>
                   <CheckCircle2 size={11} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}

@@ -18,6 +18,7 @@ import {
   type QuickRangeKey, type AuditTone, type AuditLogRow, type AuditQueryResult,
 } from "@/lib/admin/audit-core";
 import { AuditoriaRediseno } from "@/components/dashboard/pequenas-rediseno/auditoria";
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 
 const PAGE_SIZE = 50;
 
@@ -74,11 +75,8 @@ function useDebounce<T>(value: T, ms: number): T {
 }
 
 function fmtDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
+  // N-61: el formato único del panel («3 oct 2026, 11:45 p.m.»).
+  return fechaHoraPanel(iso);
 }
 
 interface Filters {
@@ -283,7 +281,7 @@ export function AuditoriaClient(props: { rediseno?: boolean; ortodoncia?: boolea
                   <td>
                     <button type="button" onClick={() => patch({ entityId: r.entityId })} title={tr("auditoria.filterByEntity", "Filtrar por esta entidad")} className="text-left hover:underline">
                       <span className="block" style={{ color: "var(--text-2)" }}>{entityLabel(r.entityType)}</span>
-                      <span className="block max-w-[160px] truncate mono" style={{ fontSize: 10, color: "var(--text-3)" }}>{r.entityId}</span>
+                      {!resumenDeCambio(r) && <span className="block max-w-[160px] truncate mono" style={{ fontSize: 10, color: "var(--text-3)" }}>{r.entityId}</span>}
                     </button>
                   </td>
                   <td className="mono whitespace-nowrap" style={{ fontSize: 11, color: "var(--text-3)" }}>{r.ipAddress ?? "—"}</td>

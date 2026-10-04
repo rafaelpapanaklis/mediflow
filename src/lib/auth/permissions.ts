@@ -58,7 +58,7 @@ export const ALL_PERMISSIONS = {
   // una key aparte de borrado y darle el borrado a "Subir radiografías" se lo
   // regalaría a recepción.
   "medicalRecord.view":   "Ver expediente clínico",
-  "medicalRecord.edit":   "Editar notas SOAP / firmar (y borrar borradores, placas y modelos 3D)",
+  "medicalRecord.edit":   "Editar el expediente clínico (notas, firmas, radiografías y modelos)",
   // Sacar el expediente COMPLETO en un PDF (GET /api/patients/[id]/expediente-pdf).
   // Es una key aparte de `medicalRecord.view` y no un extra de ella porque no
   // son la misma acción: ver la ficha en pantalla deja al dato dentro del
@@ -120,7 +120,7 @@ export const ALL_PERMISSIONS = {
   // identificada. Quien ya tiene "billing.charge" también puede — no se le
   // quita nada a quien ya cobraba en Caja, ver los dos route handlers.
   "billing.deposit.register": "Registrar anticipo recibido",
-  "analytics.view":       "Ver Analítica",
+  "analytics.view":       "Ver Analítica y Finanzas",
   // ws1-t4: POST/DELETE /api/gastos pedían "analytics.view" — key que
   // TERMINA en ".view", así que READONLY la recibía por construcción (línea
   // 302 más abajo) y de paso podía crear y borrar gastos, no solo verlos.

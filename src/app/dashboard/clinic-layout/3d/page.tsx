@@ -10,6 +10,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Error3D } from "@/components/dashboard/bloques-rediseno/salidas";
 import { Clinic3DMount } from "./Clinic3DMount";
+import { direccionDeRebotePorRol } from "@/lib/auth/aviso-denegado";
 
 export const metadata: Metadata = { title: "Mi Clínica 3D — DaleControl" };
 
@@ -20,7 +21,7 @@ export const metadata: Metadata = { title: "Mi Clínica 3D — DaleControl" };
 export default async function ClinicLayout3DPage() {
   const user = await getCurrentUser();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    redirect("/dashboard");
+    redirect(direccionDeRebotePorRol("admin")); // C-109: con motivo
   }
 
   // Hallazgo 21 (ws1-t5): el MISMO interruptor por clínica que enciende el

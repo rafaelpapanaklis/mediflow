@@ -29,6 +29,7 @@ import {
 import { StarRow } from "../_shared/landing-pieces";
 import { BookingModal } from "../_shared/booking-modal";
 import { useBookingReopen, type PendingBooking } from "../_shared/booking-session";
+import { cssEnLinea } from "@/lib/landing/css-en-linea";
 
 /** Patrón geométrico del hero: SVG en data-uri, cero peticiones y cero fotos. */
 function patronHero(): string {
@@ -135,7 +136,7 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
 
   return (
     <div style={{ fontFamily: "var(--font-sans)", color: tinta, background: "#fff", fontSize: 16, lineHeight: 1.6 }}>
-      <style>{`
+      <style dangerouslySetInnerHTML={cssEnLinea(`
         .co-wrap { max-width:1120px; margin:0 auto; padding:0 20px; }
         .co-sec { padding:60px 0; }
         .co-links a:hover { color:${acento}; }
@@ -158,7 +159,7 @@ export function TemplateConsultorio({ clinic: publicada }: TemplateProps) {
           .co-sec { padding:44px 0; }
           .co-datos { grid-template-columns:1fr; }
         }
-      `}</style>
+      `)} />
 
       {/* ============ BARRA SUPERIOR ============ */}
       <div style={{ background: tinta, color: tint(acento, 0.7), fontSize: 14 }}>

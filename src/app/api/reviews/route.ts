@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { getClinicReviews, getInvitacionesRecientes } from "@/lib/reviews/service";
+import { prisma } from "@/lib/prisma";
 
 // GET /api/reviews?page=<n> — reseñas de LA clínica de la sesión (multi-tenant).
 export const dynamic = "force-dynamic";
@@ -21,7 +22,15 @@ export async function GET(req: NextRequest) {
     // tumban la lista de reseñas.
     const invitaciones =
       page === 1 ? await getInvitacionesRecientes(session.clinic.id).catch(() => []) : [];
-    return NextResponse.json({ ...data, invitaciones });
+    // N-65: con esto «No se envió» dice la causa probable y el botón que la arregla.
+    const whatsappConectado =
+      page === 1
+        ? await prisma.clinic
+            .findUnique({ where: { id: session.clinic.id }, select: { waConnected: true } })
+            .then((c) => c?.waConnected === true)
+            .catch(() => undefined)
+        : undefined;
+    return NextResponse.json({ ...data, invitaciones, whatsappConectado });
   } catch (err) {
     console.error("[reviews:list]", err);
     return NextResponse.json({ error: "Error al cargar reseñas" }, { status: 500 });

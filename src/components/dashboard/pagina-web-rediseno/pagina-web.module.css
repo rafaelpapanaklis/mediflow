@@ -22,11 +22,13 @@
    abajo — en vez de desaparecer.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* C-127 (ws1-t8, tercera ronda): mismo contenedor que Equipo, Configuración y Caja
+   (1400 px centrado, relleno lateral clamp(14px, 1.6vw, 28px)). */
 .raiz {
-  max-width: 1320px;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
-  padding: clamp(14px, 2vw, 24px) 0 clamp(24px, 2.8vw, 40px);
+  padding: clamp(14px, 2vw, 24px) clamp(14px, 1.6vw, 28px) clamp(24px, 2.8vw, 40px);
   container-type: inline-size;
   container-name: paginaWeb;
   color: var(--m2-texto);
@@ -65,10 +67,20 @@
    iframe se queda pidiendo el alto de escritorio, y el marco lo recorta de
    más de lo que ya recortaba. */
 @container paginaWeb (max-width: 900px) {
+  /* C-118 (ws1-t8, tercera ronda): con `align-items: flex-start` la columna
+     apilada medía lo que su contenido más ancho (495 px a 390): se estira al
+     ancho del contenedor y lo de dentro se parte. */
   .shell {
     flex-direction: column;
+    align-items: stretch;
   }
-  .previa {
+  .columna {
+    max-width: 100%;
+  }
+  /* `.shell .previa` y no `.previa`: la regla base (`width: 420px`) va más
+     abajo en la hoja y le ganaba a esta, así que la vista previa apilada seguía
+     midiendo 420 px y desbordaba el celular (C-118, tercera ronda). */
+  .shell .previa {
     width: 100%;
     max-width: 640px;
     margin: 0 auto;
@@ -443,6 +455,16 @@
 
 .interruptor:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* C-126 (ws1-t8): con el dedo, el interruptor «Publicada/Oculta» (42 × 22) se
+   tocaba mal. Se amplía el área que recibe el toque sin cambiar cómo se ve. */
+@media (pointer: coarse) {
+  .interruptor::after {
+    content: "";
+    position: absolute;
+    inset: -8px -2px;
+  }
+}
+
 .interruptorActivo { background: var(--m2-activo); }
 
 .interruptorBola {
@@ -471,7 +493,10 @@
   letter-spacing: 0.03em;
   border-radius: 999px;
   padding: 3px 9px;
-  white-space: nowrap;
+  /* C-118: hay insignias con una frase entera («Tu sitio seguirá oculto…»);
+     con `nowrap` estiraban la página a 502 px en el celular. */
+  white-space: normal;
+  max-width: 100%;
 }
 
 .insigniaExito { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
