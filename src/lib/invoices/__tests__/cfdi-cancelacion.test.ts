@@ -445,3 +445,27 @@ test("con una nota de crédito vigente el ingreso no se puede cancelar ni sustit
   assert.equal(a.sustituir, false);
   assert.equal(a.notaCredito, true);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría de uso (ws1-t4, 4-oct-2026) · C-42: motivo 03 con dinero cobrado
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("C-42 · motivo 03 en una factura cobrada ($3,000, MF-1080) → MOTIVO_03_CON_COBRO; sin cobro o devuelta, pasa", () => {
+  assert.equal(val({ motive: "03", cobrado: 3000 }), "MOTIVO_03_CON_COBRO");
+  assert.equal(val({ motive: "03", cobrado: 0 }), null, "devuelta (pagado neto $0): sí es 03");
+  assert.equal(val({ motive: "03" }), null, "sin dato no se bloquea por esto");
+  assert.equal(val({ motive: "02", cobrado: 3000 }), null, "02 sí se puede (y reemitir)");
+  // Una nota de crédito (egreso) no es «la operación»: el candado es solo para ingresos.
+  assert.equal(val({ motive: "03", cobrado: 3000, cfdi: { ...CFDI, tipoComprobante: "E" } }), null);
+});
+
+test("C-42 · el servidor lo corta antes de reservar o hablar con Facturapi", async () => {
+  const { reg, deps } = dobles({ status: "canceled", cancellationStatus: "accepted" }, {
+    cfdiUuidDeFactura: async () => ({ cfdiUuid: "U-1", patientId: "pac1", invoiceNumber: "MF-1080", paid: 3000 }),
+  });
+  const r = await pedirCancelacion({ ...PEDIR, motive: "03" }, deps as any);
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "MOTIVO_03_CON_COBRO");
+  assert.equal(reg.cancelar.length, 0);
+  assert.equal(reg.llave, 0);
+});

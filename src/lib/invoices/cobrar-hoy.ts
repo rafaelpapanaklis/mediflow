@@ -53,7 +53,8 @@ function numero(v: unknown): number {
 export function itemsDeCobroHoy(conceptos: ConceptoCobroHoy[]) {
   return conceptos.map((c) => {
     const importe = round2(Math.max(0, numero(c.importe) || 0));
-    return { description: String(c.nombre ?? "").trim(), quantity: 1, unitPrice: importe, total: importe };
+    // C-40: el procedimiento del catálogo viaja con el concepto (clave SAT e IVA del CFDI).
+    return { description: String(c.nombre ?? "").trim(), ...(c.procedureId ? { procedureId: c.procedureId } : {}), quantity: 1, unitPrice: importe, total: importe };
   });
 }
 

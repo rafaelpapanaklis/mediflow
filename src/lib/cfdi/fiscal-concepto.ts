@@ -65,6 +65,10 @@ export function claveSatPorDefecto(p: { category?: string | null; name?: string 
 }
 
 export interface ProcedimientoFiscal {
+  /** id del procedimiento en el catálogo (el renglón lo trae como `procedureId`). */
+  id?: string;
+  /** false = dado de baja. Si un nombre se repite, gana el activo. */
+  activo?: boolean;
   name: string;
   category: string | null;
   claveSat: string | null;
@@ -75,20 +79,85 @@ export interface ConceptoResuelto {
   claveSat: string;
   ivaModo: IvaConcepto;
   origenClave: "renglon" | "procedimiento" | "porDefecto";
+  /** De dónde salió el IVA: del renglón, de su procedimiento o, sin dato, de la factura. */
+  origenIva: "renglon" | "procedimiento" | "factura";
+  /** Cómo se encontró su procedimiento: por id (lo fiable), por nombre, o no se encontró. */
+  ligado: "id" | "nombre" | null;
+  /** Varios procedimientos con ese nombre y datos fiscales DISTINTOS: no se adivina cuál. */
+  ambiguo: boolean;
+}
+
+/** «Resina (36)» → «resina»: sin el diente ni otra aclaración final entre paréntesis. */
+export function nombreSinAclaracion(s: unknown): string {
+  let n = normalizarNombre(s);
+  for (let i = 0; i < 3; i++) {
+    const sin = n.replace(/\s*\([^()]*\)\s*$/, "").trim();
+    if (sin === n) break;
+    n = sin;
+  }
+  return n;
+}
+
+const datosFiscales = (p: ProcedimientoFiscal) => `${esClaveSat(p.claveSat) ? p.claveSat!.trim() : ""}|${esIvaConcepto(p.ivaCfdi) ? p.ivaCfdi : ""}`;
+
+/**
+ * Entre los procedimientos con el mismo nombre: los activos primero; los que tienen datos
+ * fiscales capturados ganan a los que no (un duplicado sin configurar no anula lo que la
+ * clínica sí eligió). Si quedan dos con datos distintos, no se adivina: `ambiguo`.
+ */
+function elegirPorNombre(candidatos: ProcedimientoFiscal[]): { proc: ProcedimientoFiscal | null; ambiguo: boolean } {
+  if (candidatos.length === 0) return { proc: null, ambiguo: false };
+  const activos = candidatos.filter((p) => p.activo !== false);
+  let xs = activos.length > 0 ? activos : candidatos;
+  const conDatos = xs.filter((p) => datosFiscales(p) !== "|");
+  if (conDatos.length > 0) xs = conDatos;
+  const distintos = new Set(xs.map(datosFiscales));
+  if (distintos.size > 1) return { proc: null, ambiguo: true };
+  return { proc: xs[0], ambiguo: false };
 }
 
 /**
- * Clave e IVA de un renglón de la factura. El renglón no guarda de qué
- * procedimiento salió (solo la descripción), así que se busca en el catálogo
- * de la clínica por NOMBRE (sin acentos ni mayúsculas).
+ * El procedimiento del catálogo de un renglón (ws1-t4, auditoría de uso C-40). En orden:
+ *   1. por su `procedureId` (lo guardan el editor de facturas, «Cobrar hoy» y el presupuesto);
+ *   2. por el procedimiento que le pasa quien llama (`procedureIdDelServidor`: p. ej. el
+ *      concepto del presupuesto del que salió la factura);
+ *   3. respaldo por NOMBRE normalizado (sin acentos ni mayúsculas), y si no, sin la aclaración
+ *      final entre paréntesis («Resina (36)» → «Resina»), para las facturas viejas.
+ * Un id que no es de esta clínica no está en `catalogo` (se arma con el clinicId de la sesión).
+ */
+export function procedimientoDelRenglon(
+  item: { description?: unknown; procedureId?: unknown },
+  catalogo: readonly ProcedimientoFiscal[],
+  procedureIdDelServidor?: string | null,
+): { proc: ProcedimientoFiscal | null; ligado: "id" | "nombre" | null; ambiguo: boolean } {
+  for (const id of [item.procedureId, procedureIdDelServidor]) {
+    if (typeof id === "string" && id) {
+      const porId = catalogo.find((p) => p.id === id);
+      if (porId) return { proc: porId, ligado: "id", ambiguo: false };
+    }
+  }
+  const nombre = normalizarNombre(item.description);
+  if (!nombre) return { proc: null, ligado: null, ambiguo: false };
+  let r = elegirPorNombre(catalogo.filter((p) => normalizarNombre(p.name) === nombre));
+  if (!r.proc && !r.ambiguo) {
+    const corto = nombreSinAclaracion(item.description);
+    if (corto && corto !== nombre) r = elegirPorNombre(catalogo.filter((p) => nombreSinAclaracion(p.name) === corto));
+  }
+  return { proc: r.proc, ligado: r.proc ? "nombre" : null, ambiguo: r.ambiguo };
+}
+
+/**
+ * Clave e IVA de un renglón de la factura: los del renglón si los trae, si no los de su
+ * procedimiento (`procedimientoDelRenglon`), y si no, la clave de su categoría o nombre y el
+ * IVA de la factura.
  */
 export function resolverConcepto(
-  item: { description?: unknown; claveSat?: unknown; ivaModo?: unknown },
+  item: { description?: unknown; claveSat?: unknown; ivaModo?: unknown; procedureId?: unknown },
   catalogo: readonly ProcedimientoFiscal[],
   ivaDeLaFactura: IvaConcepto,
+  procedureIdDelServidor?: string | null,
 ): ConceptoResuelto {
-  const nombre = normalizarNombre(item.description);
-  const proc = nombre ? catalogo.find((p) => normalizarNombre(p.name) === nombre) ?? null : null;
+  const { proc, ligado, ambiguo } = procedimientoDelRenglon(item, catalogo, procedureIdDelServidor);
 
   let claveSat: string;
   let origenClave: ConceptoResuelto["origenClave"];
@@ -96,11 +165,41 @@ export function resolverConcepto(
   else if (proc && esClaveSat(proc.claveSat)) { claveSat = proc.claveSat!.trim(); origenClave = "procedimiento"; }
   else { claveSat = claveSatPorDefecto(proc ?? { name: String(item.description ?? "") }); origenClave = "porDefecto"; }
 
-  const ivaModo: IvaConcepto = esIvaConcepto(item.ivaModo)
-    ? item.ivaModo
-    : proc && esIvaConcepto(proc.ivaCfdi) ? proc.ivaCfdi : ivaDeLaFactura;
+  let ivaModo: IvaConcepto;
+  let origenIva: ConceptoResuelto["origenIva"];
+  if (esIvaConcepto(item.ivaModo)) { ivaModo = item.ivaModo; origenIva = "renglon"; }
+  else if (proc && esIvaConcepto(proc.ivaCfdi)) { ivaModo = proc.ivaCfdi; origenIva = "procedimiento"; }
+  else { ivaModo = ivaDeLaFactura; origenIva = "factura"; }
 
-  return { claveSat, ivaModo, origenClave };
+  return { claveSat, ivaModo, origenClave, origenIva, ligado, ambiguo };
+}
+
+/**
+ * Aviso ANTES de timbrar (C-40: «un blanqueamiento marcado con 16% salía EXENTO sin avisar»):
+ * los conceptos cuyo IVA no salió de su procedimiento porque hay duplicados con datos distintos,
+ * o porque no se encontró y la clínica tiene procedimientos con IVA 16%. null = nada que decir.
+ */
+export function avisoDeConceptos(
+  conceptos: readonly { descripcion: string; resuelto: ConceptoResuelto }[],
+  catalogo: readonly ProcedimientoFiscal[],
+  locale?: string | null,
+): string | null {
+  const ambiguos = conceptos.filter((c) => c.resuelto.ambiguo).map((c) => c.descripcion);
+  const hayGravados = catalogo.some((p) => p.activo !== false && p.ivaCfdi === "iva16");
+  const sueltos = hayGravados
+    ? conceptos.filter((c) => !c.resuelto.ambiguo && c.resuelto.ligado === null && c.resuelto.origenIva === "factura").map((c) => c.descripcion)
+    : [];
+  if (ambiguos.length === 0 && sueltos.length === 0) return null;
+  const lista = (xs: string[]) => xs.map((x) => `«${x}»`).join(", ");
+  const partes: string[] = [];
+  if (en(locale)) {
+    if (ambiguos.length) partes.push(`${lista(ambiguos)}: there are several procedures with that name and different tax data, so it takes the invoice's VAT. Merge the duplicates in Procedures.`);
+    if (sueltos.length) partes.push(`${lista(sueltos)}: it isn't linked to any procedure of your catalog, so it takes the invoice's VAT.`);
+    return `${partes.join(" ")} Check the «Taxes» field before stamping.`;
+  }
+  if (ambiguos.length) partes.push(`${lista(ambiguos)}: hay varios procedimientos con ese nombre y datos fiscales distintos, así que toma el IVA de la factura. Une los duplicados en Procedimientos.`);
+  if (sueltos.length) partes.push(`${lista(sueltos)}: no está ligado a ningún procedimiento de tu catálogo, así que toma el IVA de la factura.`);
+  return `${partes.join(" ")} Revisa «Impuestos» antes de timbrar.`;
 }
 
 export const CFDI_IVA_MIXTO_AGREGADO = "CFDI_IVA_MIXTO_AGREGADO";

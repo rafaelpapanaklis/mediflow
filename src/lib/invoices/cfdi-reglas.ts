@@ -60,6 +60,26 @@ export const REGIMENES_EMISOR_CON_RETENCION: readonly string[] = ["612", "626"];
 
 export const CFDI_RETENCION_PENDIENTE = "CFDI_RETENCION_PENDIENTE";
 
+/**
+ * ¿Una persona moral le retiene ISR a este EMISOR? (auditoría de uso C-41, 4-oct-2026)
+ *   · 612: solo existe para personas físicas → sí (10%, art. 106 último párrafo LISR).
+ *   · 626 persona FÍSICA (RFC de 13) → sí (1.25%, art. 113-J LISR).
+ *   · 626 persona MORAL (RFC de 12, RESICO de personas morales, arts. 206-215 LISR) → NO: la
+ *     retención del 113-J es solo para personas físicas, y la de IVA (art. 1-A, fr. II, inciso a)
+ *     LIVA) solo cuando el prestador es persona física.
+ *   · 626 sin un RFC válido guardado → «duda»: no se sabe qué persona es; se deja el candado.
+ *   · Cualquier otro régimen → no.
+ */
+export function retencionDelEmisor(args: { regimenEmisor: string | null | undefined; rfcEmisor?: unknown }): "si" | "no" | "duda" {
+  const regimen = typeof args.regimenEmisor === "string" ? args.regimenEmisor.trim() : "";
+  if (regimen === "612") return "si";
+  if (regimen !== "626") return "no";
+  const persona = tipoDePersona(args.rfcEmisor);
+  if (persona === "fisica") return "si";
+  if (persona === "moral") return "no";
+  return "duda";
+}
+
 export interface Bloqueo {
   code: string;
   error: string;
@@ -73,12 +93,22 @@ export interface Bloqueo {
  */
 export function bloqueoPorRetencion(args: {
   regimenEmisor: string | null | undefined;
+  /** C-41: el RFC de la clínica (12 = persona moral: el RESICO de personas morales no lleva retención). */
+  rfcEmisor?: unknown;
   rfcReceptor: unknown;
   locale?: string | null;
 }): Bloqueo | null {
-  const regimen = typeof args.regimenEmisor === "string" ? args.regimenEmisor.trim() : "";
-  if (!REGIMENES_EMISOR_CON_RETENCION.includes(regimen)) return null;
+  const aplica = retencionDelEmisor(args);
+  if (aplica === "no") return null;
   if (tipoDePersona(args.rfcReceptor) !== "moral") return null;
+  if (aplica === "duda") {
+    return {
+      code: CFDI_RETENCION_PENDIENTE,
+      error: idioma(args.locale) === "en"
+        ? "To invoice a company from RESICO (626) we need to know whether your clinic is an individual or a company: save your RFC in Settings → Billing."
+        : "Para facturar a una empresa desde RESICO (626) hay que saber si tu clínica es persona física o moral: guarda tu RFC en Configuración → Facturación.",
+    };
+  }
   return {
     code: CFDI_RETENCION_PENDIENTE,
     error: idioma(args.locale) === "en"

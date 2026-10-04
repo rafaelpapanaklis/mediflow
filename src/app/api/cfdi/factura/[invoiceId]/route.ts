@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: { invoiceId: 
 
   const inv = await prisma.invoice.findFirst({
     where: { id: params.invoiceId, clinicId: ctx.clinicId },
-    select: { patientId: true, cfdiUuid: true },
+    select: { patientId: true, cfdiUuid: true, paid: true },
   });
   if (!inv) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
   if (inv.patientId) {
@@ -31,5 +31,6 @@ export async function GET(_req: NextRequest, { params }: { params: { invoiceId: 
   }
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
   const r = await cfdisDeLaFactura({ clinicId: ctx.clinicId, invoiceId: params.invoiceId, timeZone: clinic?.timezone });
-  return NextResponse.json({ ...r, invoiceCfdiUuid: inv.cfdiUuid, puedeCancelar: ctx.isAdmin });
+  // C-42: con lo cobrado, el diálogo de cancelar no ofrece el motivo 03.
+  return NextResponse.json({ ...r, invoiceCfdiUuid: inv.cfdiUuid, puedeCancelar: ctx.isAdmin, cobrado: inv.paid ?? 0 });
 }

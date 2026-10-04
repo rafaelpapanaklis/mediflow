@@ -80,7 +80,8 @@ test("F-11 / F-08 · lo que manda el formulario de Procedimientos", () => {
 import { tasasDeRetencion, totalesConRetenciones, conceptoConRetenciones, avisoDeRetencion } from "../retenciones";
 
 test("F-01 · quién retiene: 626 → empresa 1.25%; 612 → empresa 10%; a personas físicas y genéricos, nada", () => {
-  assert.deepEqual(tasasDeRetencion({ regimenEmisor: "626", rfcReceptor: "ABC010101AB1" }), { isr: 0.0125, ivaRetenido: 0.106667 });
+  // C-41: la del 626 es para un emisor persona FÍSICA (RFC de 13).
+  assert.deepEqual(tasasDeRetencion({ regimenEmisor: "626", rfcEmisor: "ROAB800101AB1", rfcReceptor: "ABC010101AB1" }), { isr: 0.0125, ivaRetenido: 0.106667 });
   assert.deepEqual(tasasDeRetencion({ regimenEmisor: "612", rfcReceptor: "ABC010101AB1" }), { isr: 0.10, ivaRetenido: 0.106667 });
   assert.equal(tasasDeRetencion({ regimenEmisor: "626", rfcReceptor: "GOMA800101AB1" }), null);
   assert.equal(tasasDeRetencion({ regimenEmisor: "626", rfcReceptor: "XAXX010101000" }), null);
@@ -139,4 +140,80 @@ test("F-24 · rechazos del PAC con qué revisar (el texto original se conserva)"
   assert.match(explicarRechazoPac("El campo Nombre del receptor debe pertenecer al nombre asociado al RFC"), /exactamente el de su constancia/);
   assert.equal(explicarRechazoPac("Llave de API inválida"), "Llave de API inválida");
   assert.match(explicarRechazoPac("El campo DomicilioFiscalReceptor no coincide", "en"), /Check the patient's ZIP code/);
+});
+
+// ── Auditoría de uso (ws1-t4, 4-oct-2026) · C-40: el procedimiento por su id ─────────────────
+
+import { procedimientoDelRenglon, nombreSinAclaracion, avisoDeConceptos } from "../fiscal-concepto";
+import { invoiceSchema } from "@/lib/validations";
+import { invoiceFieldsFromQuote } from "@/lib/quotes/invoice-from-quote-core";
+import { itemsDeCobroHoy } from "@/lib/invoices/cobrar-hoy";
+
+const DOS_BLANQUEAMIENTOS: ProcedimientoFiscal[] = [
+  { id: "p_blq_viejo", activo: true, name: "Blanqueamiento", category: "Estética", claveSat: null, ivaCfdi: null },
+  { id: "p_blq", activo: true, name: "Blanqueamiento", category: "Estética", claveSat: null, ivaCfdi: "iva16" },
+  { id: "p_res", activo: true, name: "Restauración con resina", category: "Operatoria", claveSat: null, ivaCfdi: "exento" },
+];
+
+test("C-40 · el blanqueamiento marcado con 16% y cobrado con número de diente ya no sale EXENTO", () => {
+  // Factura vieja (sin procedureId): «Blanqueamiento (11)» no era el nombre exacto → exento.
+  const r = resolverConcepto({ description: "Blanqueamiento (11)" }, DOS_BLANQUEAMIENTOS, "exento");
+  assert.equal(r.ivaModo, "iva16");
+  assert.equal(r.origenIva, "procedimiento");
+  assert.equal(r.ligado, "nombre");
+  // El duplicado sin configurar no anula al que la clínica sí marcó (antes `find` tomaba el primero).
+  assert.equal(resolverConcepto({ description: "Blanqueamiento" }, DOS_BLANQUEAMIENTOS, "exento").ivaModo, "iva16");
+  assert.equal(nombreSinAclaracion("Resina QA (16)"), "resina qa");
+  assert.equal(nombreSinAclaracion("Colocación/enganche — ortodoncia (brackets metálicos)"), "colocacion/enganche — ortodoncia");
+});
+
+test("C-40 · por id manda el procedimiento ligado, aunque el nombre del renglón diga otra cosa", () => {
+  const cat: ProcedimientoFiscal[] = [
+    { id: "p_a", name: "Limpieza", category: "Prevención", claveSat: "85122002", ivaCfdi: "exento" },
+    { id: "p_b", name: "Limpieza", category: "Prevención", claveSat: null, ivaCfdi: "iva16" },
+  ];
+  const porId = resolverConcepto({ description: "Limpieza dental con flúor", procedureId: "p_b" }, cat, "exento");
+  assert.equal(porId.ligado, "id");
+  assert.equal(porId.ivaModo, "iva16");
+  // El del presupuesto del que salió la factura (lo pone el servidor) también va por id.
+  const delPresupuesto = resolverConcepto({ description: "Limpieza (11)" }, cat, "iva16", "p_a");
+  assert.deepEqual([delPresupuesto.claveSat, delPresupuesto.ivaModo, delPresupuesto.ligado], ["85122002", "exento", "id"]);
+  // Un id de otra clínica no está en el catálogo: cae al respaldo por nombre (aquí ambiguo).
+  const ajeno = procedimientoDelRenglon({ description: "Limpieza", procedureId: "p_otra_clinica" }, cat);
+  assert.equal(ajeno.proc, null);
+  assert.equal(ajeno.ambiguo, true);
+});
+
+test("C-40 · dos procedimientos con el mismo nombre y datos distintos: no se adivina, toma el IVA de la factura y se avisa", () => {
+  const cat: ProcedimientoFiscal[] = [
+    { id: "x1", name: "Implante", category: "Cirugía", claveSat: null, ivaCfdi: "exento" },
+    { id: "x2", name: "Implante", category: "Cirugía", claveSat: null, ivaCfdi: "iva16" },
+    { id: "x3", name: "Implante", category: "Cirugía", claveSat: null, ivaCfdi: "iva16", activo: false },
+  ];
+  const r = resolverConcepto({ description: "Implante" }, cat, "exento");
+  assert.equal(r.ambiguo, true);
+  assert.equal(r.origenIva, "factura");
+  assert.equal(r.claveSat, "85122004", "la clave sale de su nombre");
+  const aviso = avisoDeConceptos([{ descripcion: "Implante", resuelto: r }], cat, "es");
+  assert.match(aviso!, /«Implante»: hay varios procedimientos con ese nombre/);
+  // Si el inactivo es el único distinto, gana el activo.
+  const activos = resolverConcepto({ description: "Implante" }, [cat[1], { ...cat[0], activo: false }], "exento");
+  assert.equal(activos.ivaModo, "iva16");
+});
+
+test("C-40 · aviso: un concepto suelto solo se señala si la clínica tiene procedimientos con IVA 16%", () => {
+  const suelto = resolverConcepto({ description: "Abono al presupuesto P-0016" }, DOS_BLANQUEAMIENTOS, "exento");
+  assert.equal(suelto.ligado, null);
+  assert.match(avisoDeConceptos([{ descripcion: "Abono al presupuesto P-0016", resuelto: suelto }], DOS_BLANQUEAMIENTOS)!, /no está ligado/);
+  const soloExentos = DOS_BLANQUEAMIENTOS.filter((p) => p.ivaCfdi !== "iva16");
+  assert.equal(avisoDeConceptos([{ descripcion: "x", resuelto: resolverConcepto({ description: "x" }, soloExentos, "exento") }], soloExentos), null);
+});
+
+test("C-40 · el concepto guarda su procedureId al crearse: editor (schema), «Cobrar hoy» y presupuesto", () => {
+  const parsed = invoiceSchema.parse({ patientId: "p1", items: [{ description: "Blanqueamiento", quantity: 1, unitPrice: 2000, total: 2000, procedureId: "p_blq" }] });
+  assert.equal(parsed.items[0].procedureId, "p_blq", "antes zod lo quitaba");
+  assert.deepEqual(itemsDeCobroHoy([{ nombre: "Blanqueamiento", importe: 2000, procedureId: "p_blq" }])[0], { description: "Blanqueamiento", procedureId: "p_blq", quantity: 1, unitPrice: 2000, total: 2000 });
+  const q = invoiceFieldsFromQuote({ discountAmount: 0, items: [{ name: "Resina", toothFdi: "36", quantity: 1, unitPrice: 900, procedureId: "p_res" }] });
+  assert.equal(q.items[0].description, "Resina (36)");
+  assert.equal(q.items[0].procedureId, "p_res");
 });

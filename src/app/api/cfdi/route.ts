@@ -40,19 +40,24 @@ import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server
 // ws1-t4 (F-05) + ws1-t8 (F-22): el cliente de Facturapi sale del receptor, nacional o extranjero.
 import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
 import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
+import { errorDeReceptor, esPublicoEnGeneral, receptorDePublicoEnGeneral, USO_PUBLICO_EN_GENERAL } from "@/lib/cfdi/receptor";
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
-import { resolverConcepto, hayIvaMixto, errorIvaMixtoAgregado, CFDI_IVA_MIXTO_AGREGADO } from "@/lib/cfdi/fiscal-concepto";
-import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
+import { hayIvaMixto, errorIvaMixtoAgregado, CFDI_IVA_MIXTO_AGREGADO } from "@/lib/cfdi/fiscal-concepto";
+import { conceptosFiscalesDeFactura } from "@/lib/cfdi/fiscal-concepto.server";
 import { tasasDeRetencion, conceptoConRetenciones, totalesConRetenciones, avisoDeRetencion } from "@/lib/cfdi/retenciones";
 import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
-import { avisoMesDeCobro, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
+import { avisoMesDeCobro, bloqueoPorGlobal, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
 import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
+import { textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 import { ambienteDeCfdi, marcarAmbiente, retirarCfdiDePrueba } from "@/lib/invoices/cfdi-ambiente.server";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
-  if (err) return err;
+  if (err) {
+    // C-57: sin «Solo administradores»; qué hacer, en palabras de la clínica.
+    return ctx ? NextResponse.json({ error: textoSoloDuenoTimbra(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : err;
+  }
 
   const body = await req.json();
   // ws1-t3: con `sustituyeCfdiId` este timbrado SUSTITUYE al CFDI vigente de la
@@ -66,7 +71,7 @@ export async function POST(req: NextRequest) {
   // (ws1-t4, tanda 0): si un cliente viejo lo manda, se ignora.
   const { invoiceId, receptor: receptorCrudo, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
   // El RFC como lo lee el SAT (mayúsculas, sin espacios) y nombre/CP sin espacios de más (ws1-t4, F-05).
-  const receptor = receptorCrudo && typeof receptorCrudo === "object"
+  let receptor = receptorCrudo && typeof receptorCrudo === "object"
     ? { ...receptorCrudo, rfc: normalizarRfc(receptorCrudo.rfc), nombre: typeof receptorCrudo.nombre === "string" ? receptorCrudo.nombre.trim() : receptorCrudo.nombre, cp: typeof receptorCrudo.cp === "string" ? receptorCrudo.cp.trim() : receptorCrudo.cp }
     : receptorCrudo;
 
@@ -97,7 +102,7 @@ export async function POST(req: NextRequest) {
     select: {
       facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true,
       plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true, locale: true,
-      regimenFiscal: true,
+      regimenFiscal: true, cpEmisor: true,
     },
   });
 
@@ -115,14 +120,16 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Candado de retenciones (ws1-t4, tanda 0, F-01a) ────────────────────────
-  // Emisor 612/626 + receptor persona moral: la empresa retiene ISR y el CFDI
-  // tendría que decirlo. Mientras no haya retenciones, no se timbra.
+  // Emisor persona física 612/626 + receptor persona moral: la empresa retiene ISR
+  // y el CFDI tendría que decirlo. Mientras no haya retenciones, no se timbra.
+  // C-41 (auditoría de uso): el RESICO de personas MORALES (626 con RFC de 12) no
+  // lleva retención: ni candado ni retención; sin RFC guardado, candado.
   // ws1-t4, vuelta 2 (F-01): con el ajuste «Facturar a empresas con
   // retención» ENCENDIDO, el CFDI lleva la retención en vez de bloquearse.
   // Apagado (por defecto, o sin su SQL), el candado de la Tanda 0 sigue igual.
-  const tasasRet = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc });
+  const tasasRet = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor, rfcReceptor: receptor.rfc });
   const conRetenciones = tasasRet ? await retencionesEncendidas(prisma, ctx!.clinicId) : false;
-  const retencion = conRetenciones ? null : bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
+  const retencion = conRetenciones ? null : bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor, rfcReceptor: receptor.rfc, locale: clinic.locale });
   if (retencion) return NextResponse.json(retencion, { status: 409 });
 
   // Uso del CFDI: el que manda el formulario (si existe en el catálogo) o el
@@ -139,11 +146,20 @@ export async function POST(req: NextRequest) {
     const e = errorDeReceptorExtranjero(receptor, clinic.locale);
     if (e) return NextResponse.json({ error: e, code: "CFDI_RECEPTOR_EXTRANJERO" }, { status: 400 });
   }
+  // C-47 (auditoría de uso): público en general lleva el nombre, el régimen y el CP que fija el SAT.
+  if (!extranjero) receptor = receptorDePublicoEnGeneral(receptor, clinic.cpEmisor);
   const uso: string = extranjero
     ? USO_EXTRANJERO
-    : typeof usoCfdi === "string" && usoCfdi
-      ? usoCfdi
-      : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
+    : esPublicoEnGeneral(receptor.rfc)
+      ? USO_PUBLICO_EN_GENERAL
+      : typeof usoCfdi === "string" && usoCfdi
+        ? usoCfdi
+        : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
+  // C-47: el receptor contra c_RegimenFiscal y c_UsoCFDI ANTES de hablar con Facturapi.
+  if (!extranjero) {
+    const e = errorDeReceptor(receptor, uso, clinic.locale);
+    if (e) return NextResponse.json({ error: e, code: "CFDI_RECEPTOR_INVALIDO" }, { status: 400 });
+  }
 
   // En PRUEBAS todo sigue permitido como hasta hoy (Facturapi timbra con sus
   // propios certificados de prueba y nada llega al SAT).
@@ -238,8 +254,11 @@ export async function POST(req: NextRequest) {
   // La clave sale del procedimiento del catálogo (o la de su categoría: dental
   // 85122001, ortodoncia 85122005, cirugía/implantes 85122004) y el IVA del
   // renglón, del procedimiento o, si no dice nada, de la factura (`taxMode`).
-  const catalogoCfdi = await catalogoFiscal(prisma, ctx!.clinicId);
-  const conceptosFiscales = invoiceItems.map((it: any) => resolverConcepto(it, catalogoCfdi, taxMode));
+  // C-40 (auditoría de uso): el procedimiento se busca por su id (el del renglón o el del
+  // presupuesto del que salió la factura) y solo de respaldo por nombre.
+  const { conceptos: conceptosFiscales } = await conceptosFiscalesDeFactura(prisma, {
+    clinicId: ctx!.clinicId, invoiceId, items: invoiceItems, ivaDeLaFactura: taxMode,
+  });
   const ivaMixto = hayIvaMixto(conceptosFiscales);
   // Con «IVA agregado» la factura interna suma el 16% a TODO: mezclar
   // exentos y gravados descuadraría. Con IVA incluido el precio ya es el total.
@@ -326,6 +345,15 @@ export async function POST(req: NextRequest) {
     : null;
   const saldo = bloqueoPorSaldo({ total: totalesRet ? totalesRet.neto : invoice.total, paid: invoice.paid, esAPlazos, locale: clinic.locale });
   if (saldo) return NextResponse.json(saldo, { status: 409 });
+
+  // ── C-49 (auditoría de uso): ¿esos cobros ya fueron en la factura global? ──
+  // Con cobros de un mes anterior se pide confirmar que no entraron en la global
+  // de ese mes (si entraron, timbrar la nota los duplica ante el SAT). Un
+  // sustituto (01) no: su dinero ya estaba amparado por el CFDI que reemplaza.
+  if (!sustituyeCfdiId) {
+    const global = bloqueoPorGlobal({ pagos: invoice.payments, ahora: new Date(), timeZone: clinic.timezone, confirmado: body?.confirmaFueraDeGlobal, locale: clinic.locale });
+    if (global) return NextResponse.json(global, { status: 409 });
+  }
 
   // ── Forma de pago SAT ─────────────────────────────────────────────────────
   // La manda el modal (selector editable); si no viene, la del pago de MAYOR

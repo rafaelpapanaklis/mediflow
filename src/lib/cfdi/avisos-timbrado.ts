@@ -64,6 +64,56 @@ export function avisoMesDeCobro(args: {
   };
 }
 
+// ── C-49 (auditoría de uso, 4-oct-2026): ¿ese cobro ya fue en la factura global? ──────────────
+//
+// Lo cobrado sin CFDI propio lo mete el contador en la factura global del periodo (RMF 2026,
+// regla 2.7.1.21; «Cobrado sin CFDI» es su lista). Si después se timbra la nota sola, ese
+// ingreso queda DOS veces ante el SAT. El panel no sabe si la global ya se emitió (la hace el
+// contador por fuera), así que con cobros de un mes ANTERIOR no se timbra sin que quien timbra
+// confirme que no entraron en la global de ese mes. La global es por lo menos mensual en la
+// práctica; si la clínica la hace diaria o semanal, el riesgo también existe dentro del mes
+// (CONFIRMAR CON CONTADOR).
+
+export const CFDI_CONFIRMAR_GLOBAL = "CFDI_CONFIRMAR_GLOBAL";
+
+/** Meses ANTERIORES al del CFDI (hoy) en que entró algún cobro de lo que se va a timbrar. */
+export function mesesAnterioresDeCobro(args: {
+  pagos: readonly { paidAt: Date | string | null | undefined; method?: string | null; amount?: number }[];
+  ahora: Date;
+  timeZone?: string | null;
+}): string[] {
+  const hoy = mesEnZona(args.ahora, args.timeZone);
+  const meses = new Set<string>();
+  for (const p of args.pagos) {
+    if (!p?.paidAt || p.method === "refund" || (typeof p.amount === "number" && p.amount <= 0)) continue;
+    const m = mesEnZona(p.paidAt, args.timeZone);
+    if (m < hoy) meses.add(m);
+  }
+  return Array.from(meses).sort();
+}
+
+/** El texto de la casilla (y del 409 si no se marcó). */
+export function textoConfirmarGlobal(meses: readonly string[], locale?: string | null): string {
+  const lista = meses.map((m) => nombreMes(m, locale)).join(", ");
+  return en(locale)
+    ? `I confirm this was NOT included in the global invoice of ${lista} (the one your accountant issues with «Collected without CFDI»). If it was, don't stamp it: it would count twice with the SAT.`
+    : `Confirmo que esto NO entró en la factura global de ${lista} (la que hace tu contador con «Cobrado sin CFDI»). Si entró, no lo timbres: quedaría dos veces ante el SAT.`;
+}
+
+/** El 409 del servidor cuando hay cobros de meses anteriores y no llegó la confirmación. null = puede seguir. */
+export function bloqueoPorGlobal(args: {
+  pagos: readonly { paidAt: Date | string | null | undefined; method?: string | null; amount?: number }[];
+  ahora: Date;
+  timeZone?: string | null;
+  confirmado: unknown;
+  locale?: string | null;
+}): { code: string; error: string; meses: string[] } | null {
+  if (args.confirmado === true) return null;
+  const meses = mesesAnterioresDeCobro(args);
+  if (meses.length === 0) return null;
+  return { code: CFDI_CONFIRMAR_GLOBAL, error: textoConfirmarGlobal(meses, args.locale), meses };
+}
+
 /**
  * F-24 · Lo que hay que revisar ante un rechazo del PAC por los datos del
  * receptor (CFDI 4.0 los valida contra la lista del SAT). Devuelve el mensaje

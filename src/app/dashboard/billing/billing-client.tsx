@@ -1,11 +1,9 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X, Wallet,
 } from "lucide-react";
-import toast from "react-hot-toast";
-import { cfdiAvisoPersistente, cfdiImpideReintento } from "@/lib/cfdi-avisos";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
@@ -18,19 +16,13 @@ import { invoiceStatusBadge, isVoidedInvoice } from "@/components/dashboard/bill
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT, useLocale } from "@/i18n/i18n-provider";
 import { QueCuenta } from "@/components/dashboard/que-cuenta";
-import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
-import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
-import { usoCfdiPorRegimen, avisoDeSaldo } from "@/lib/invoices/cfdi-reglas";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
-import { receptorInicial } from "@/lib/orthodontics/receptor-responsable";
-import { pedirResponsableDeFactura } from "@/components/dashboard/plan-de-pagos/use-responsable-cfdi";
 import { todayLocalISO } from "@/lib/billing/paid-at";
 // La ficha de factura del diseño nuevo (solo con `rediseno`): lo bueno de
 // Presupuestos. Ver components/dashboard/factura-ficha-rediseno/.
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
 import { borradorDesdeFactura, type BorradorDeFactura } from "@/components/dashboard/factura-ficha-rediseno/datos";
-import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 
 // Mapa de estados de factura → fuente única invoice-status.ts, compartida con
 // la ficha del paciente y el modal de detalle (la divergencia entre copias
@@ -169,75 +161,19 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
     setCobroMontoSugerido(montoSugeridoDeCobro(condiciones, inv.total, inv.paid, todayLocalISO()));
     setDetailInvoice(inv);
   }
-  const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
-  const cfdiAbiertoParaRef = useRef<string | null>(null);
+  // C-45 (auditoría de uso): «Timbrar» abre el formulario del detalle de la factura.
+  const [abrirTimbrado, setAbrirTimbrado] = useState(false);
   // «Duplicar» de la ficha (solo diseño nuevo): Nueva factura abre con el mismo
   // paciente, los mismos conceptos y el mismo trato. Apagado, siempre null.
   const [duplicar, setDuplicar] = useState<{ patientId: string; patientName: string; borrador: BorradorDeFactura } | null>(null);
 
-  // CFDI form
-  const [cfdiLoading, setCfdiLoading] = useState(false);
-  const [cfdiForm, setCfdiForm] = useState({
-    rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "S01", usoManual: false, formaPago: "" as string,
-    impuestos: (clinic.cfdiTaxMode === "iva16" ? "iva16" : "exento") as CfdiTaxMode,
-  });
-  // ws1-t4, tanda 0: el uso sigue al régimen y al RFC hasta que alguien lo
-  // escoja a mano (antes nacía en D01 para todos).
-  const setCfdiF = (k: string, v: string) => setCfdiForm(f => {
-    const n: any = { ...f, [k]: v };
-    if (k === "usoCfdi") n.usoManual = true;
-    else if ((k === "regimenFiscal" || k === "rfc") && !f.usoManual) n.usoCfdi = usoCfdiPorRegimen(n.regimenFiscal, n.rfc);
-    return n;
-  });
-  // Mismatch (y los bloqueos que dicen qué hacer) → aviso con CTA.
-  const [cfdiMismatch, setCfdiMismatch] = useState<string | null>(null);
-  const [cfdiBlockCode, setCfdiBlockCode] = useState<string | null>(null);
-
-  // Abre el modal de timbrado pre-llenado: fiscales del paciente si existen,
-  // forma de pago derivada de los pagos reales (editable) e impuestos según el
-  // modelo de la factura y la preferencia de la clínica (exento por default —
-  // servicios médicos). Todo sigue siendo editable factura por factura.
+  // C-45 (auditoría de uso, ws1-t4): «Timbrar» ya no tiene formulario propio. Abre el del
+  // DETALLE de la factura, el único: mismos valores por defecto, «Paciente extranjero»,
+  // aviso del mes de cobro y de la global antes de timbrar, y un diálogo que cierra con Escape.
   function openCfdiModal(inv: any) {
-    const regimenInicial = inv.patient?.regimenFiscalPac || "616";
-    const formaInicial = derivePaymentForm(inv.payments, inv.paymentMethod);
-    setCfdiForm({
-      rfc:           inv.patient?.rfcPaciente ?? "",
-      nombre:        inv.patient?.razonSocialPac ?? "",
-      regimenFiscal: regimenInicial,
-      cp:            inv.patient?.cpPaciente ?? "",
-      usoCfdi:       usoCfdiPorRegimen(regimenInicial, inv.patient?.rfcPaciente),
-      usoManual:     false,
-      formaPago:     formaInicial ?? "",
-      impuestos:     resolveTaxMode(inv, clinic.cfdiTaxMode),
-    });
-    // Un «anticipo» (saldo a favor) hereda la forma del dinero original: eso lo
-    // sabe el servidor. Solo llena el campo si sigue vacío y es esta factura.
-    if (!formaInicial) {
-      fetch(`/api/cfdi/forma-pago?invoiceId=${encodeURIComponent(inv.id)}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (!d?.forma || cfdiAbiertoParaRef.current !== inv.id) return;
-          setCfdiForm((f) => (f.formaPago ? f : { ...f, formaPago: d.forma }));
-        })
-        .catch(() => {});
-    }
-    setCfdiMismatch(null);
-    setCfdiBlockCode(null);
-    setCfdiFor(inv);
-    // ws1-t10 (punto 9): si la factura es de un caso de ortodoncia con responsable
-    // de pago, el CFDI arranca con los datos del TUTOR (no los del niño). Llega
-    // async; solo pisa el formulario si sigue abierto para ESTA factura y el
-    // usuario aún no lo tocó (sigue con lo que se precargó del paciente).
-    const precargado = { rfc: inv.patient?.rfcPaciente ?? "", nombre: inv.patient?.razonSocialPac ?? "", cp: inv.patient?.cpPaciente ?? "" };
-    cfdiAbiertoParaRef.current = inv.id;
-    pedirResponsableDeFactura(inv.id).then((responsable) => {
-      // Si mientras tanto se abrió el CFDI de OTRA factura, esta respuesta ya no es de esa.
-      if (!responsable || cfdiAbiertoParaRef.current !== inv.id) return;
-      const { datos } = receptorInicial(null, responsable);
-      setCfdiForm((f) => (f.rfc === precargado.rfc && f.nombre === precargado.nombre && f.cp === precargado.cp
-        ? { ...f, rfc: datos.rfc, nombre: datos.nombre, regimenFiscal: datos.regimen, cp: datos.cp, usoCfdi: f.usoManual ? f.usoCfdi : usoCfdiPorRegimen(datos.regimen, datos.rfc) }
-        : f));
-    });
+    setCobroMontoSugerido(null);
+    setAbrirTimbrado(true);
+    setDetailInvoice(inv);
   }
 
   const filtered = useMemo(() => {
@@ -270,72 +206,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
   function refresh() {
     router.refresh();
     setRefreshTick(n => n + 1);
-  }
-
-  async function timbraCfdi() {
-    if (!cfdiFor) return;
-    if (!cfdiForm.rfc.trim() || !cfdiForm.nombre.trim() || !cfdiForm.cp.trim()) {
-      toast.error(t("billing.billingClient.toastCfdiReceptorRequired"));
-      return;
-    }
-    setCfdiLoading(true);
-    try {
-      const res = await fetch("/api/cfdi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          invoiceId: cfdiFor.id,
-          receptor: {
-            rfc: cfdiForm.rfc.trim().toUpperCase(),
-            nombre: cfdiForm.nombre.trim().toUpperCase(),
-            regimenFiscal: cfdiForm.regimenFiscal,
-            cp: cfdiForm.cp.trim(),
-          },
-          usoCfdi: cfdiForm.usoCfdi,
-          paymentForm: cfdiForm.formaPago,
-          taxMode: cfdiForm.impuestos,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        // Total ≠ suma de conceptos → el server bloquea; aviso con CTA para
-        // abrir la factura y corregir en vez de un toast fugaz.
-        // CFDI_LIVE_NOT_READY = en producción falta un paso de la organización
-        // (CSD, Carta Manifiesto, datos fiscales). El mensaje es accionable, así
-        // que va en el mismo aviso persistente y no en un toast fugaz.
-        // CFDI_TIMBRADO_SIN_GUARDAR = el CFDI SÍ se timbró pero no se pudo
-        // guardar: trae el UUID y pide no volver a timbrar. Se queda a la vista
-        // y apaga el botón; en un toast de 5 s se perdía (H-9).
-        if (cfdiAvisoPersistente(data.code)) {
-          // Ya timbrado: la fila pasa a timbrada con ese UUID, igual que en el
-          // camino feliz, para que no se ofrezca timbrarla otra vez.
-          if (cfdiImpideReintento(data.code) && typeof data.uuid === "string") {
-            setInvoices(prev => prev.map(inv => inv.id === cfdiFor.id ? { ...inv, cfdiUuid: data.uuid } : inv));
-          }
-          setCfdiBlockCode(data.code);
-          setCfdiMismatch(data.error ?? t("billing.billingClient.toastCfdiStampError"));
-          return;
-        }
-        throw new Error(data.error);
-      }
-      setInvoices(prev => prev.map(inv =>
-        inv.id === cfdiFor.id ? { ...inv, cfdiUuid: data.uuid } : inv,
-      ));
-      setCfdiFor(null);
-      toast.success(t("billing.billingClient.toastCfdiStamped"));
-      // Al superar el cupo del mes: se timbra igual y se avisa que es adicional.
-      if (data.quota && data.quota.overage > 0) {
-        toast(
-          t("billing.billingClient.toastCfdiOverage", { price: fmtMXNdec((data.quota.overagePriceCents ?? 0) / 100) }),
-          { icon: "🧾", duration: 6000 },
-        );
-      }
-      if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
-    } catch (err: any) {
-      toast.error(mensajeDeError(err, t, { porDefecto: t("billing.billingClient.toastCfdiStampError") }));
-    } finally {
-      setCfdiLoading(false);
-    }
   }
 
   // ws1-t10 (H68): tabla vieja (sin `menu-dos-niveles`) — sin las condiciones
@@ -440,7 +310,8 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
           // H9 (revisión final, ws1-t4): una CANCELADA no se timbra — ni aquí ni
           // en la tabla; el servidor (POST /api/cfdi) ya la rechazaba.
           puedeCobrar={(inv) => !["PAID", "CANCELLED"].includes(inv.status) && inv.status !== "DRAFT"}
-          puedeTimbrar={(inv) => !isVoidedInvoice(inv)}
+          // C-53: «Timbrar» solo en notas con algo cobrado (con $0 no hay nada que facturar).
+          puedeTimbrar={(inv) => !isVoidedInvoice(inv) && (Number(inv.paid) || 0) > 0.005}
           textoCobrar={t("billing.billingClient.registerPayment")}
           textoVacio={invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
           onAbrir={(inv) => { setCobroMontoSugerido(null); setDetailInvoice(inv); }}
@@ -534,7 +405,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
                         <InvoiceCfdiBadge
                           cfdiUuid={inv.cfdiUuid}
                           facturApiEnabled={clinic.facturApiEnabled}
-                          onStamp={isVoidedInvoice(inv) ? undefined : () => openCfdiModal(inv)}
+                          onStamp={isVoidedInvoice(inv) || !((Number(inv.paid) || 0) > 0.005) ? undefined : () => openCfdiModal(inv)}
                         />
                       </td>
                       <td
@@ -620,8 +491,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
         open={detailInvoice !== null}
         invoice={detailInvoice}
         patientName={detailInvoice ? patientNameOf(detailInvoice) : ""}
-        onClose={() => { setDetailInvoice(null); setCobroMontoSugerido(null); }}
+        onClose={() => { setDetailInvoice(null); setCobroMontoSugerido(null); setAbrirTimbrado(false); }}
         onMutated={refresh}
+        initialAction={abrirTimbrado ? "cfdi" : null}
         clinicTaxMode={clinic.cfdiTaxMode ?? null}
         // ws1-t4: abierto desde «Registrar pago» de la fila → el pago ya abierto.
         abrirCobro={cobroMontoSugerido !== null}
@@ -649,122 +521,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
         />
       )}
 
-      {/* Modal: Timbrar CFDI — flujo SAT específico, no se reemplaza. */}
-      {cfdiFor && !cfdiFor.cfdiUuid && (
-        <div className="modal-overlay" onClick={() => setCfdiFor(null)}>
-          <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
-            <div className="modal__header">
-              <div className="modal__title">{t("billing.billingClient.cfdiModalTitle", { number: cfdiFor.invoiceNumber })}</div>
-              <button onClick={() => setCfdiFor(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
-                <X size={14} />
-              </button>
-            </div>
-            <div className="modal__body">
-              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 18 }}>
-                {t("billing.billingClient.cfdiInvoiceFor")} <strong className="mono" style={{ color: "var(--text-1)" }}>{fmtMXNdec(cfdiFor.total)}</strong>.
-                {" "}{t("billing.billingClient.cfdiIssuer", { rfc: clinic.rfcEmisor ?? "—" })}
-                {" "}{cfdiLive ? t("billing.billingClient.cfdiEnvLive") : t("billing.billingClient.cfdiEnvTest")}
-              </div>
-
-              <div style={{ marginBottom: 22 }}>
-                <div className="form-section__title">{t("billing.billingClient.cfdiReceptorData")}<span className="form-section__rule" /></div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: "12px 14px" }}>
-                  <div className="field-new">
-                    <label className="field-new__label">RFC <span className="req">*</span></label>
-                    <input className="input-new mono" style={{ textTransform: "uppercase" }}
-                      placeholder="XAXX010101000" value={cfdiForm.rfc}
-                      onChange={e => setCfdiF("rfc", e.target.value.toUpperCase())} />
-                  </div>
-                  <div className="field-new">
-                    <label className="field-new__label">{t("billing.billingClient.labelNameLegal")} <span className="req">*</span></label>
-                    <input className="input-new" style={{ textTransform: "uppercase" }}
-                      placeholder="JUAN PÉREZ GARCÍA" value={cfdiForm.nombre}
-                      onChange={e => setCfdiF("nombre", e.target.value)} />
-                  </div>
-                  <div className="field-new">
-                    <label className="field-new__label">{t("billing.billingClient.labelZip")} <span className="req">*</span></label>
-                    <input className="input-new mono" maxLength={5} placeholder="97000"
-                      value={cfdiForm.cp} onChange={e => setCfdiF("cp", e.target.value)} />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="form-section__title">Régimen, uso y forma de pago<span className="form-section__rule" /></div>
-                {/* Catálogos compartidos con el modal de detalle (cfdi-catalogs):
-                    mismas opciones en ambos flujos de timbrado. */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
-                  <div className="field-new">
-                    <label className="field-new__label">Régimen fiscal</label>
-                    <select className="input-new" value={cfdiForm.regimenFiscal} onChange={e => setCfdiF("regimenFiscal", e.target.value)}>
-                      {REGIMENES_FISCALES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.descripcion}</option>)}
-                    </select>
-                  </div>
-                  <div className="field-new">
-                    <label className="field-new__label">Uso CFDI</label>
-                    <select className="input-new" value={cfdiForm.usoCfdi} onChange={e => setCfdiF("usoCfdi", e.target.value)}>
-                      {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
-                    </select>
-                  </div>
-                  <div className="field-new">
-                    <label className="field-new__label">Forma de pago</label>
-                    <select className="input-new" value={cfdiForm.formaPago} onChange={e => setCfdiF("formaPago", e.target.value)}
-                      aria-invalid={!cfdiForm.formaPago || undefined} data-cfdi-forma-pago>
-                      {!cfdiForm.formaPago && <option value="" disabled>{locale.startsWith("en") ? "Choose how the patient paid…" : "Elige con qué pagó el paciente…"}</option>}
-                      {FORMAS_PAGO_SAT.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.descripcion}</option>)}
-                    </select>
-                  </div>
-                  <div className="field-new">
-                    <label className="field-new__label">{t("billing.billingClient.cfdiTaxesLabel")}</label>
-                    <select className="input-new" value={cfdiForm.impuestos} onChange={e => setCfdiF("impuestos", e.target.value)}>
-                      <option value="exento">{t("billing.billingClient.cfdiTaxExempt")}</option>
-                      <option value="iva16">{t("billing.billingClient.cfdiTaxIva16")}</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {cfdiMismatch && (
-                <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, fontSize: 12, background: "var(--danger-soft, rgba(225,29,72,0.08))", border: "1px solid var(--danger)", color: "var(--danger)" }}>
-                  <p style={{ margin: 0 }}>{cfdiMismatch}</p>
-                  <button
-                    type="button"
-                    className="btn-new btn-new--ghost btn-new--sm"
-                    style={{ marginTop: 8 }}
-                    onClick={() => { const inv = invoices.find(i => i.id === cfdiFor.id) ?? cfdiFor; setCfdiFor(null); setCobroMontoSugerido(null); setDetailInvoice(inv); }}
-                  >
-                    {t("billing.billingClient.cfdiOpenInvoice")}
-                  </button>
-                </div>
-              )}
-
-              {cfdiFor.balance > 0 && (
-                <div data-cfdi-con-saldo style={{ marginTop: 16, padding: "10px 12px", borderRadius: 10, fontSize: 12, background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }}>
-                  {/* ws1-t4, tanda 0: con saldo NO se timbra la factura completa
-                      (ya no hay «timbrar de todos modos»). La lista no sabe si es
-                      a plazos: el aviso dice los dos caminos y abre la factura,
-                      donde está «Facturar este pago». */}
-                  <p style={{ margin: 0 }}>{avisoDeSaldo(null, locale)}</p>
-                  <button
-                    type="button"
-                    className="btn-new btn-new--ghost btn-new--sm"
-                    style={{ marginTop: 8 }}
-                    onClick={() => { const inv = invoices.find(i => i.id === cfdiFor.id) ?? cfdiFor; setCfdiFor(null); setCobroMontoSugerido(null); setDetailInvoice(inv); }}
-                  >
-                    {locale.startsWith("en") ? "Open the invoice" : "Abrir la factura"}
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="modal__footer">
-              <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>{t("common.cancel")}</ButtonNew>
-              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading || cfdiImpideReintento(cfdiBlockCode) || cfdiFor.balance > 0 || !cfdiForm.formaPago}>
-                {cfdiLoading ? t("billing.billingClient.stampingEllipsis") : t("billing.billingClient.stampAtSat")}
-              </ButtonNew>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

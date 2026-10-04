@@ -31,6 +31,8 @@ export interface RespuestaCfdisFactura {
   cfdis: CfdiVista[];
   invoiceCfdiUuid: string | null;
   puedeCancelar: boolean;
+  /** C-42: lo cobrado neto de la factura (sin él, no se ofrece el motivo 03). */
+  cobrado?: number;
 }
 
 export type EstadoPintado =

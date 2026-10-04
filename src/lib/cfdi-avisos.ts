@@ -25,6 +25,11 @@ export const CFDI_AVISOS_PERSISTENTES: readonly string[] = [
   "CFDI_TIMBRE_INCIERTO",
   "CFDI_EN_CURSO",
   "CFDI_RECEPTOR_EXTRANJERO",
+  // Auditoría de uso (ws1-t4): el receptor contra el SAT (C-47), la global del mes anterior
+  // (C-49) y el motivo 03 con cobro (C-42) dicen qué corregir: se quedan a la vista.
+  "CFDI_RECEPTOR_INVALIDO",
+  "CFDI_CONFIRMAR_GLOBAL",
+  "MOTIVO_03_CON_COBRO",
 ];
 
 /**

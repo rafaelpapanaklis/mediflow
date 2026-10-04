@@ -251,7 +251,7 @@ export interface SustitutoParaCancelar {
 export type ErrorCancelacion =
   | "MOTIVO_INVALIDO" | "RAZON_CORTA" | "NO_VIGENTE" | "EN_CURSO" | "APARTADO"
   | "FALTA_SUSTITUTO" | "SUSTITUTO_INVALIDO" | "MOTIVO_04_SOLO_GLOBAL"
-  | "TIENE_EGRESOS_VIGENTES";
+  | "TIENE_EGRESOS_VIGENTES" | "MOTIVO_03_CON_COBRO";
 
 export const MENSAJES_ERROR_CANCELACION: Record<ErrorCancelacion, string> = {
   MOTIVO_INVALIDO: "Elige el motivo de cancelación del SAT (01, 02, 03 o 04).",
@@ -263,7 +263,18 @@ export const MENSAJES_ERROR_CANCELACION: Record<ErrorCancelacion, string> = {
   SUSTITUTO_INVALIDO: "El CFDI sustituto no es válido: tiene que ser un CFDI de ingreso vigente de la misma factura, timbrado con relación 04 a éste.",
   MOTIVO_04_SOLO_GLOBAL: "El motivo 04 solo aplica a una factura global (público en general, XAXX010101000). Para este CFDI usa 01, 02 o 03.",
   TIENE_EGRESOS_VIGENTES: "Este CFDI tiene notas de crédito vigentes relacionadas. El SAT no deja cancelarlo así: cancela primero esas notas de crédito.",
+  MOTIVO_03_CON_COBRO: "Esta factura tiene dinero cobrado: la operación sí se llevó a cabo, así que no es el motivo 03. Si el CFDI salió mal, sustitúyelo (01) o cancélalo con 02 y vuelve a timbrar; si devolviste el dinero, registra primero el reembolso o emite una nota de crédito.",
 };
+
+/**
+ * Motivo 03 «No se llevó a cabo la operación» (auditoría de uso C-42): no cabe si la factura
+ * tiene dinero cobrado — ante el SAT desaparecería un ingreso que sí entró. Lo que procede es
+ * 01/02 (y reemitir) o una nota de crédito con devolución. `cobrado` = lo pagado neto de la
+ * factura (null = no se sabe: no se bloquea por esto).
+ */
+export function motivo03Permitido(cobrado: number | null | undefined): boolean {
+  return !(typeof cobrado === "number" && cobrado > 0.005);
+}
 
 /**
  * ¿Se puede pedir la cancelación? Devuelve el primer motivo por el que no, o
@@ -276,6 +287,8 @@ export function validarCancelacion(args: {
   sustituto: SustitutoParaCancelar | null;
   egresosVigentes: number;
   ahora: Date;
+  /** C-42: lo cobrado neto de la factura del CFDI (null/undefined = no se sabe). */
+  cobrado?: number | null;
 }): ErrorCancelacion | null {
   const { cfdi } = args;
   if (!esMotivoCancelacion(args.motive)) return "MOTIVO_INVALIDO";
@@ -295,6 +308,7 @@ export function validarCancelacion(args: {
     return "MOTIVO_04_SOLO_GLOBAL";
   }
   if (cfdi.tipoComprobante === "I" && args.egresosVigentes > 0) return "TIENE_EGRESOS_VIGENTES";
+  if (args.motive === "03" && cfdi.tipoComprobante === "I" && !motivo03Permitido(args.cobrado)) return "MOTIVO_03_CON_COBRO";
   if (args.motive === "01") {
     const s = args.sustituto;
     if (!s) return "FALTA_SUSTITUTO";

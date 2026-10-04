@@ -647,7 +647,13 @@ test("F-18 · la bitácora dice con qué se timbró (uso, forma, régimen, tipo 
 
 test("F-21 · cobrado en agosto y timbrado hoy: el CFDI sale, con el aviso del mes y en la bitácora", async () => {
   setInvoice({}, [{ id: "pay1", invoiceId: "inv1", method: "debit", amount: 1600, paidAt: new Date("2026-08-15T18:00:00Z") }]);
-  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  // C-49: sin confirmar que no entró en la global de agosto, no se timbra.
+  const sin = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(sin.status, 409);
+  assert.equal(sin.body.code, "CFDI_CONFIRMAR_GLOBAL");
+  assert.match(sin.body.error, /NO entró en la factura global de agosto 2026/);
+  assert.equal(db.invoice.cfdiUuid, null, "ni se apartó");
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28", confirmaFueraDeGlobal: true });
   assert.equal(r.status, 200);
   assert.match(r.body.avisoMes, /Esto se cobró en agosto 2026, pero el CFDI sale con fecha de/);
   const e = bitacora.find((x) => x.texto === "Timbró el CFDI de una factura");

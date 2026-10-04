@@ -7,11 +7,12 @@
  * retencion-candado, forma-pago-mayor, pue-saldo y uso-por-regimen.
  */
 import { test } from "node:test";
+import { tasasDeRetencion, totalesConRetenciones } from "@/lib/cfdi/retenciones";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  tipoDePersona, bloqueoPorRetencion, bloqueoPorSaldo, avisoDeSaldo, usoCfdiPorRegimen,
+  tipoDePersona, bloqueoPorRetencion, retencionDelEmisor, bloqueoPorSaldo, avisoDeSaldo, usoCfdiPorRegimen,
   formaDePagoSat, formaDeOrigenes, formaDeMetodo, normalizarRfc,
 } from "../cfdi-reglas";
 import { derivePaymentForm } from "@/lib/invoice-totals";
@@ -43,10 +44,39 @@ test("retencion-candado · el RFC se lee como lo lee el SAT (minúsculas y espac
 
 test("retencion-candado · el mensaje dice qué hacer, en español y en inglés", () => {
   assert.equal(
-    bloqueoPorRetencion({ regimenEmisor: "626", rfcReceptor: "ABC010101AB1" })?.error,
+    bloqueoPorRetencion({ regimenEmisor: "626", rfcEmisor: "ROAB800101AB1", rfcReceptor: "ABC010101AB1" })?.error,
     "Todavía no se pueden emitir desde DaleControl facturas a empresas (RFC de 12 caracteres) con retención de ISR; emítela por fuera mientras lo habilitamos.",
   );
-  assert.match(bloqueoPorRetencion({ regimenEmisor: "626", rfcReceptor: "ABC010101AB1", locale: "en" })!.error, /Issue this one outside the system/);
+  assert.match(bloqueoPorRetencion({ regimenEmisor: "626", rfcEmisor: "ROAB800101AB1", rfcReceptor: "ABC010101AB1", locale: "en" })!.error, /Issue this one outside the system/);
+});
+
+// ── C-41 (auditoría de uso, 4-oct-2026): RESICO persona MORAL ───────────────
+test("C-41 · RESICO persona moral (626 + RFC de 12) factura a una empresa sin candado y sin retención", () => {
+  const moral = { regimenEmisor: "626", rfcEmisor: "CDS1201011A3" };
+  assert.equal(retencionDelEmisor(moral), "no");
+  // Antes: 409 CFDI_RETENCION_PENDIENTE con el ajuste apagado…
+  assert.equal(bloqueoPorRetencion({ ...moral, rfcReceptor: "ABC010101AB1" }), null);
+  // …y 1.25% de ISR retenido con el ajuste encendido (solo aplica a persona física, art. 113-J LISR).
+  assert.equal(tasasDeRetencion({ ...moral, rfcReceptor: "ABC010101AB1" }), null);
+});
+
+test("C-41 · RESICO persona física sigue con 1.25% (y 2/3 del IVA si gravado); 612 con 10%", () => {
+  assert.equal(retencionDelEmisor({ regimenEmisor: "626", rfcEmisor: "ROAB800101AB1" }), "si");
+  assert.deepEqual(tasasDeRetencion({ regimenEmisor: "626", rfcEmisor: "ROAB800101AB1", rfcReceptor: "ABC010101AB1" }), { isr: 0.0125, ivaRetenido: 0.106667 });
+  assert.deepEqual(tasasDeRetencion({ regimenEmisor: "612", rfcEmisor: "ROAB800101AB1", rfcReceptor: "ABC010101AB1" }), { isr: 0.10, ivaRetenido: 0.106667 });
+  // $1,000 exento de un RESICO PF a una empresa: retiene $12.50 y paga $987.50.
+  const t = totalesConRetenciones([{ precio: 1000, cantidad: 1, descuento: 0, ivaModo: "exento", ivaIncluido: true }], { isr: 0.0125, ivaRetenido: 0.106667 });
+  assert.deepEqual([t.isrRetenido, t.ivaRetenido, t.neto], [12.5, 0, 987.5]);
+});
+
+test("C-41 · 626 sin RFC del emisor: no se sabe si es persona física → candado, con qué hacer", () => {
+  assert.equal(retencionDelEmisor({ regimenEmisor: "626", rfcEmisor: null }), "duda");
+  assert.equal(tasasDeRetencion({ regimenEmisor: "626", rfcEmisor: "", rfcReceptor: "ABC010101AB1" }), null);
+  const b = bloqueoPorRetencion({ regimenEmisor: "626", rfcEmisor: null, rfcReceptor: "ABC010101AB1" });
+  assert.equal(b?.code, "CFDI_RETENCION_PENDIENTE");
+  assert.match(b!.error, /guarda tu RFC/);
+  // A una persona física no hay nada que decidir.
+  assert.equal(bloqueoPorRetencion({ regimenEmisor: "626", rfcEmisor: null, rfcReceptor: "GOMA800101AB1" }), null);
 });
 
 // ── pue-saldo ───────────────────────────────────────────────────────────────
@@ -74,13 +104,16 @@ test("pue-saldo · a plazos (ortodoncia en 12) el aviso SEÑALA «Facturar este 
 test("pue-saldo · los formularios ya no ofrecen «timbrar de todos modos» ni mandan confirmUnpaidPue", () => {
   for (const f of [
     "src/components/dashboard/billing/invoice-detail-modal.tsx",
-    "src/app/dashboard/billing/billing-client.tsx",
   ]) {
     const src = leer(f);
     assert.ok(!src.includes("confirmUnpaidPue"), `${f} sigue mandando confirmUnpaidPue`);
     assert.ok(!src.includes("cfdiUnpaidConfirm"), `${f} sigue ofreciendo «Timbrar de todos modos»`);
     assert.ok(src.includes("avisoDeSaldo("), `${f} no usa el aviso compartido`);
   }
+  // C-45 (auditoría de uso): la lista ya no tiene formulario propio; abre el del detalle.
+  const lista = leer("src/app/dashboard/billing/billing-client.tsx");
+  assert.match(lista, /initialAction=\{abrirTimbrado \? "cfdi" : null\}/);
+  assert.ok(!lista.includes('fetch("/api/cfdi"'), "la lista ya no timbra por su cuenta");
   // El caso de ortodoncia a plazos tiene su botón a los pagos.
   const orto = leer("src/components/specialties/orthodontics/redesign/sections/SectionFinance.tsx");
   assert.match(orto, /Facturar pagos \(CFDI\)/);
@@ -173,11 +206,37 @@ test("uso-por-regimen · CP01 ya no está en el catálogo de ingreso", () => {
 test("uso-por-regimen · los tres formularios proponen el uso según el régimen (no D01 fijo)", () => {
   for (const f of [
     "src/components/dashboard/billing/invoice-detail-modal.tsx",
-    "src/app/dashboard/billing/billing-client.tsx",
+    // billing-client.tsx ya no tiene formulario (C-45): abre el del detalle.
     "src/components/dashboard/billing/payment-cfdi-button.tsx",
   ]) {
     const src = leer(f);
     assert.match(src, /usoCfdiPorRegimen\(/, f);
     assert.ok(!/uso(Cfdi)?:\s*"D01",/.test(src), `${f} sigue con D01 fijo`);
   }
+});
+
+// ── C-47 (auditoría de uso, 4-oct-2026): el receptor contra el SAT ─────────
+import { errorDeReceptor, receptorDePublicoEnGeneral } from "@/lib/cfdi/receptor";
+
+test("C-47 · empresa (RFC de 12) con 612, o persona física (13) con 601: se rechaza antes del PAC", () => {
+  assert.match(errorDeReceptor({ rfc: "ABC010101AB1", regimenFiscal: "612" }, "G03")!, /régimen 612 es solo para personas físicas/);
+  assert.match(errorDeReceptor({ rfc: "GOMA800101AB1", regimenFiscal: "601" }, "G03")!, /régimen 601 es solo para empresas/);
+  assert.equal(errorDeReceptor({ rfc: "ABC010101AB1", regimenFiscal: "601" }, "G03"), null);
+  assert.equal(errorDeReceptor({ rfc: "GOMA800101AB1", regimenFiscal: "612" }, "D01"), null);
+  // RESICO aplica a las dos.
+  assert.equal(errorDeReceptor({ rfc: "ABC010101AB1", regimenFiscal: "626" }, "G03"), null);
+  // D01 a una empresa, o a un RESICO: no.
+  assert.match(errorDeReceptor({ rfc: "ABC010101AB1", regimenFiscal: "601" }, "D01")!, /Usa G03/);
+  assert.match(errorDeReceptor({ rfc: "GOMA800101AB1", regimenFiscal: "626" }, "D01")!, /deducciones personales/);
+  assert.match(errorDeReceptor({ rfc: "GOMA800101AB1", regimenFiscal: "616" }, "G03")!, /solo admite el uso S01/);
+  assert.match(errorDeReceptor({ rfc: "GOMA800101AB1", regimenFiscal: "999" }, "G03")!, /no está en el catálogo/);
+});
+
+test("C-47 · XAXX010101000 → «PUBLICO EN GENERAL», 616 y el CP del emisor; XEXX sin marcar extranjero → se pide", () => {
+  const r = receptorDePublicoEnGeneral({ rfc: "XAXX010101000", nombre: "juan", regimenFiscal: "612", cp: "97000" }, "06600");
+  assert.deepEqual(r, { rfc: "XAXX010101000", nombre: "PUBLICO EN GENERAL", regimenFiscal: "616", cp: "06600" });
+  assert.equal(receptorDePublicoEnGeneral({ rfc: "XAXX010101000", nombre: "x", regimenFiscal: "616", cp: "97000" }, null).cp, "97000");
+  const pf = { rfc: "GOMA800101AB1", nombre: "ANA", regimenFiscal: "612", cp: "97000" };
+  assert.equal(receptorDePublicoEnGeneral(pf, "06600"), pf, "a los demás no se les toca nada");
+  assert.match(errorDeReceptor({ rfc: "XEXX010101000", regimenFiscal: "616" }, "S01")!, /marca «Paciente extranjero»/);
 });

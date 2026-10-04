@@ -11,6 +11,9 @@ import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readines
 import { AjusteRetencionesCfdi } from "@/components/dashboard/settings/ajuste-retenciones-cfdi";
 import { AvisoExentoPersonaMoral } from "@/components/dashboard/settings/cfdi-avisos-emisor";
 import { CobradoSinCfdiCard } from "@/components/dashboard/settings/cobrado-sin-cfdi-card";
+// Auditoría de uso (ws1-t4): regímenes con los que se puede facturar (C-51) y «Activo» solo
+// cuando de verdad se puede timbrar (C-44).
+import { regimenesEmisorParaElegir, faltantesDelEmisor } from "@/lib/cfdi/emisor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -84,13 +87,6 @@ const TIMEZONES = [
   { id: "Europe/Madrid",        label: "Madrid - Espana (GMT+1)" },
   { id: "America/New_York",     label: "New York - US Eastern (GMT-5)" },
   { id: "America/Los_Angeles",  label: "Los Angeles - US Pacific (GMT-8)" },
-];
-const REGIMENES   = [
-  { clave:"601", desc:"General de Ley Personas Morales" },
-  { clave:"612", desc:"Personas Físicas con Actividades Empresariales y Profesionales" },
-  { clave:"621", desc:"Incorporación Fiscal" },
-  { clave:"626", desc:"Régimen Simplificado de Confianza" },
-  { clave:"616", desc:"Sin obligaciones fiscales" },
 ];
 
 /** Tokens promedio de un análisis de consulta con IA (lee expediente completo: paciente,
@@ -186,7 +182,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   // CFDI form state
   const [cfdiForm, setCfdiForm] = useState({
     rfcEmisor:    clinic.rfcEmisor    ?? "",
-    regimenFiscal:clinic.regimenFiscal ?? "612",
+    // C-50: sin régimen guardado no se propone ninguno (antes 612, que la tarjeta de retenciones no veía).
+    regimenFiscal:clinic.regimenFiscal ?? "",
     cpEmisor:     clinic.cpEmisor     ?? "",
     razonSocial:  clinic.name         ?? "",
     // "exempt" (servicios médicos/dentales exentos, art. 15 LIVA) | "iva16".
@@ -195,6 +192,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   // Sube al guardar datos fiscales o subir el CSD → el checklist de Facturapi
   // se vuelve a consultar sin recargar la página.
   const [cfdiStatusKey, setCfdiStatusKey] = useState(0);
+  // C-51: los regímenes del emisor en el idioma de la clínica.
+  const regimenEnIngles = useLocale().startsWith("en");
 
   // CSD (Certificado de Sello Digital) — subida a Facturapi
   const [cerFile, setCerFile]         = useState<File | null>(null);
@@ -1063,7 +1062,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <Seccion
                   titulo={t("settings.client.cfdiTitle")}
                   subtitulo={t("settings.client.cfdiSubtitle")}
-                  extra={clinic.facturApiEnabled ? <Insignia tono="exito" punto>{t("settings.client.cfdiActiveBadge")}</Insignia> : undefined}
+                  extra={clinic.facturApiEnabled
+                    ? (faltantesDelEmisor({ ...clinic, live: cfdiLive }).length === 0
+                      ? <Insignia tono="exito" punto>{t("settings.client.cfdiActiveBadge")}</Insignia>
+                      : <Insignia tono="alerta" punto>{t("settings.client.cfdiIncompleteBadge")}</Insignia>)
+                    : undefined}
                   pieIzquierda={
                     <EnlaceBoton href="https://www.facturapi.io" externo>
                       <ExternalLink size={16} strokeWidth={1.75} aria-hidden /> Facturapi
@@ -1077,7 +1080,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   <Campos2>
                     <Campo etiqueta={t("settings.client.rfcLabel")} ayuda={t("settings.client.rfcHelp")}>
                       <Entrada
-                        placeholder="Ej: XAXX010101000"
+                        placeholder={t("settings.client.rfcPlaceholder")}
                         value={cfdiForm.rfcEmisor}
                         onChange={e => setCfdiForm(f => ({ ...f, rfcEmisor: e.target.value.toUpperCase() }))}
                         mayusculas
@@ -1103,7 +1106,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   </Campo>
                   <Campo etiqueta={t("settings.client.regimenLabel")}>
                     <Selector value={cfdiForm.regimenFiscal} onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
-                      {REGIMENES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.desc}</option>)}
+                      {!cfdiForm.regimenFiscal && <option value="" disabled>{t("settings.client.regimenPlaceholder")}</option>}
+                      {regimenesEmisorParaElegir(clinic.regimenFiscal).map(r => <option key={r.clave} value={r.clave}>{r.clave} — {regimenEnIngles ? r.en : r.es}</option>)}
                     </Selector>
                   </Campo>
                   {/* Impuestos por default del timbrado (exento art. 15 LIVA es el caso común). */}
@@ -1136,7 +1140,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
                 {/* Checklist real de Facturapi, entre la captura fiscal y el CSD. */}
                 <CfdiReadinessCard refreshKey={cfdiStatusKey} />
-                <AjusteRetencionesCfdi />
+                <AjusteRetencionesCfdi refreshKey={cfdiStatusKey} />
 
                 <Seccion
                   titulo={t("settings.client.csdTitle")}
@@ -1903,11 +1907,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <div className="card__title">{t("settings.client.cfdiTitle")}</div>
                 <div className="card__sub">{t("settings.client.cfdiSubtitle")}</div>
               </div>
-              {clinic.facturApiEnabled && (
+              {clinic.facturApiEnabled && (faltantesDelEmisor({ ...clinic, live: cfdiLive }).length === 0 ? (
                 <span className="badge-new badge-new--success">
                   {t("settings.client.cfdiActiveBadge")}
                 </span>
-              )}
+              ) : (
+                <span className="badge-new badge-new--warning">
+                  {t("settings.client.cfdiIncompleteBadge")}
+                </span>
+              ))}
             </div>
             <div className="card__body space-y-4">
 
@@ -1919,7 +1927,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <div className="field-new">
                 <label className="field-new__label">{t("settings.client.rfcLabel")}</label>
                 <Input
-                  placeholder="Ej: XAXX010101000"
+                  placeholder={t("settings.client.rfcPlaceholder")}
                   value={cfdiForm.rfcEmisor}
                   onChange={e => setCfdiForm(f => ({ ...f, rfcEmisor: e.target.value.toUpperCase() }))}
                   className="font-mono text-base uppercase"
@@ -1943,7 +1951,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <label className="field-new__label">{t("settings.client.regimenLabel")}</label>
                 <select className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
                   value={cfdiForm.regimenFiscal} onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
-                  {REGIMENES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.desc}</option>)}
+                  {!cfdiForm.regimenFiscal && <option value="" disabled>{t("settings.client.regimenPlaceholder")}</option>}
+                  {regimenesEmisorParaElegir(clinic.regimenFiscal).map(r => <option key={r.clave} value={r.clave}>{r.clave} — {regimenEnIngles ? r.en : r.es}</option>)}
                 </select>
               </div>
 
@@ -2010,7 +2019,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               pending_steps). Va entre la captura fiscal y la subida del CSD: dice
               qué falta justo antes de la card que resuelve el paso más común. */}
           <CfdiReadinessCard refreshKey={cfdiStatusKey} />
-          <AjusteRetencionesCfdi />
+          <AjusteRetencionesCfdi refreshKey={cfdiStatusKey} />
 
           {/* ── CERTIFICADOS CSD ── */}
           <div className="card">

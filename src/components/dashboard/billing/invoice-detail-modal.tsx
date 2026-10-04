@@ -57,6 +57,10 @@ import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { BotonEnviarCfdi, EnviarCfdiDialog, OpcionesEnvioAlTimbrar, useEnvioCfdi } from "./enviar-cfdi";
 import { CamposReceptorExtranjero, useReceptorExtranjero } from "./cfdi-receptor-extranjero";
 import { AvisosEmisorAlTimbrar } from "./cfdi-avisos-emisor-timbrado";
+// Auditoría de uso (ws1-t4): con qué clave e IVA sale cada concepto (C-40) y la casilla de la
+// factura global del mes anterior (C-49).
+import { ConceptosAlTimbrar } from "./cfdi-conceptos-al-timbrar";
+import { pideConfirmarGlobal } from "./aviso-mes-cobro-cfdi";
 // ws1-t3: los CFDI de la factura ante el SAT (consultar, cancelar, sustituir, nota de crédito).
 import { CfdiAnteElSat } from "./cfdi-ante-el-sat";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
@@ -284,10 +288,14 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // Qué bloqueó el timbrado: cambia solo la acción del aviso (corregir la factura
   // vs. sólo cerrar cuando lo que falta se resuelve en Configuración).
   const [cfdiBlockCode, setCfdiBlockCode] = useState<string | null>(null);
+  // C-44: al emisor le falta algo para timbrar (lo dice el aviso de arriba y apaga el botón).
+  const [emisorIncompleto, setEmisorIncompleto] = useState(false);
+  // C-49: «estos cobros NO entraron en la factura global de ese mes».
+  const [fueraDeGlobal, setFueraDeGlobal] = useState(false);
 
   // El modal no se desmonta entre facturas: al cambiar de factura limpia el
   // estado de timbrado para no arrastrarlo a otra factura.
-  useEffect(() => { setStampedUuid(null); setCfdiId(null); setCfdiMismatch(null); setCfdiBlockCode(null); }, [invoice?.id]);
+  useEffect(() => { setStampedUuid(null); setCfdiId(null); setCfdiMismatch(null); setCfdiBlockCode(null); setFueraDeGlobal(false); }, [invoice?.id]);
   // La pregunta del diseño nuevo no sobrevive ni a un cambio de factura ni a
   // un cierre del modal desde fuera: si no, la siguiente apertura saldría con
   // «¿Marcar pagada?» ya abierto sobre otra factura. Con el interruptor apagado
@@ -623,6 +631,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           paymentForm: fiscal.formaPago,
           taxMode:     fiscal.impuestos,
           ...(sustituyeCfdiId ? { sustituyeCfdiId } : {}),
+          ...(fueraDeGlobal ? { confirmaFueraDeGlobal: true } : {}),
           // ws1-t4, vuelta 2 (F-12): retoma el intento que quedó en duda con la
           // MISMA llave de Facturapi; si ya se había timbrado, trae ese CFDI.
           ...(opciones?.reintentar ? { reintentarIncierto: true } : {}),
@@ -1166,7 +1175,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                     // cobros reales (no reembolsos), y solo donde ya se pinta
                     // el plan de pagos — sin eso "mensualidad 3 de 18" no
                     // significa nada en pantalla.
-                    const admiteCfdiPorPago = rediseno && !isCancelled && !isDraft && !isRefund && condicionesPago?.modo === "plazos";
+                    // Auditoría de uso (ws1-t4): cualquier cobro, no solo a plazos (C-48); solo a
+                    // quien puede timbrar (C-46: recepción lo veía y recibía «Solo administradores»),
+                    // y no si la factura completa ya tiene su CFDI.
+                    const admiteCfdiPorPago = rediseno && !isCancelled && !isDraft && !isRefund && puedeTimbrar && !effectiveUuid && p.method !== "migrated";
                     return (
                       <div key={p.id} className={cx("px-3 py-2 flex flex-col gap-1", c.fila)}>
                         <div className="flex items-center justify-between">
@@ -1190,6 +1202,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                             invoiceId={invoice.id}
                             amount={p.amount}
                             method={p.method}
+                            paidAt={p.paidAt}
                             clinicTaxMode={clinicTaxMode}
                             defaultReceptor={receptorInicial(
                               { rfc: invoice.patient?.rfcPaciente ?? "", nombre: invoice.patient?.razonSocialPac ?? "", regimen: invoice.patient?.regimenFiscalPac ?? "", cp: invoice.patient?.cpPaciente ?? "" },
@@ -1390,7 +1403,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   </ButtonNew>
                   <BotonEnviarCfdi onClick={async () => envioCfdi.abrir(await resolveCfdiId())} disabled={busy} />
                 </>
-              ) : puedeTimbrar && (
+              ) : puedeTimbrar && invoice.paid > 0.005 && (
                 <ButtonNew variant="secondary" icon={<Receipt size={14} aria-hidden />} onClick={openCfdiForm} disabled={busy}>
                   {t("clinical.invoiceDetail.cfdiInvoiceBtn")}
                 </ButtonNew>
@@ -1637,6 +1650,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
             )}
             <AvisoMesDeCobroCfdi
               pagos={invoice.payments}
+              confirmado={fueraDeGlobal}
+              onConfirmar={sustituyeCfdiId ? undefined : setFueraDeGlobal}
               className={cx("rounded-lg px-3 py-2 text-[11px]", `${c.aviso} ${c.avisoAlerta}`)}
               style={rediseno ? undefined : { background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }}
             />
@@ -1646,17 +1661,24 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 {responsableDePago.parentesco ? ` (${responsableDePago.parentesco})` : ""}. El comprobante sale a su nombre, no al del paciente; lo que captures aquí se guarda en el responsable.
               </p>
             )}
-            <AvisosEmisorAlTimbrar />
+            <AvisosEmisorAlTimbrar onBloqueo={setEmisorIncompleto} rfcReceptor={extranjero.activo ? null : fiscal.rfc} />
+            <ConceptosAlTimbrar invoiceId={invoice.id} taxMode={fiscal.impuestos}
+              className={cx("rounded-lg px-3 py-2 text-[11px]", `${c.aviso} ${c.avisoAlerta}`)}
+              style={rediseno ? undefined : { background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }} />
             <CamposReceptorExtranjero ext={extranjero} />
+            {/* C-52: con «Paciente extranjero» no se pintan RFC, régimen, CP y uso (los fija el SAT). */}
+            {!extranjero.activo && (
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalRfc")}</Label>
               <Input value={fiscal.rfc} onChange={(e) => setFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase(), uso: f.usoManual ? f.uso : usoCfdiPorRegimen(f.regimen, e.target.value) }))}
                 className={cx("font-mono uppercase", "uppercase")} maxLength={13} autoFocus />
             </div>
+            )}
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.invoiceDetail.fiscalName")}</Label>
               <Input value={fiscal.nombre} onChange={(e) => setFiscal(f => ({ ...f, nombre: e.target.value }))} />
             </div>
+            {!extranjero.activo && (<>
             <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
               <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.fiscalRegimen")}</Label>
@@ -1678,6 +1700,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 {USOS_CFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} — {u.descripcion}</option>)}
               </select>
             </div>
+            </>)}
             <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
               <div className={cx("space-y-1.5", c.campo)}>
                 <Label>{t("clinical.invoiceDetail.cfdiPaymentFormLabel")}</Label>
@@ -1706,7 +1729,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
-            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || invoice.balance > 0 || !fiscal.formaPago}>
+            <ButtonNew variant="primary" onClick={handleStampCfdi} disabled={busy || cfdiImpideReintento(cfdiBlockCode) || invoice.balance > 0 || !fiscal.formaPago || emisorIncompleto || !puedeTimbrar || (!sustituyeCfdiId && !fueraDeGlobal && pideConfirmarGlobal(invoice.payments))}>
               {busy ? t("clinical.invoiceDetail.stamping") : t("clinical.invoiceDetail.stampCfdiBtn")}
             </ButtonNew>
           </DialogFooter>

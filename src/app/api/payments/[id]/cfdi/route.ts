@@ -30,14 +30,16 @@ import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server
 // ws1-t4 (F-05) + ws1-t8 (F-22): el cliente de Facturapi sale del receptor, nacional o extranjero.
 import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
 import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
+import { errorDeReceptor, esPublicoEnGeneral, receptorDePublicoEnGeneral, USO_PUBLICO_EN_GENERAL } from "@/lib/cfdi/receptor";
 import { llaveIdempotencia } from "@/lib/invoices/cfdi-identidad";
 import { marcarAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
-import { resolverConcepto, hayIvaMixto, errorIvaMixtoPorPago, CFDI_IVA_MIXTO_POR_PAGO } from "@/lib/cfdi/fiscal-concepto";
-import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
+import { hayIvaMixto, errorIvaMixtoPorPago, CFDI_IVA_MIXTO_POR_PAGO } from "@/lib/cfdi/fiscal-concepto";
+import { conceptosFiscalesDeFactura } from "@/lib/cfdi/fiscal-concepto.server";
 import { tasasDeRetencion, errorRetencionPorPago, CFDI_RETENCION_POR_PAGO } from "@/lib/cfdi/retenciones";
 import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
-import { avisoMesDeCobro, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
+import { avisoMesDeCobro, bloqueoPorGlobal, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
 import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
+import { textoCfdiPorPagoNoDisponible, textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -69,7 +71,10 @@ import {
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
-  if (err) return err;
+  if (err) {
+    // C-57: sin «Solo administradores»; qué hacer, en palabras de la clínica.
+    return ctx ? NextResponse.json({ error: textoSoloDuenoTimbra(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : err;
+  }
 
   const paymentId = params.id;
   if (!isUsableWhereId(paymentId)) {
@@ -79,7 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const body = await req.json().catch(() => ({}));
   const { receptor: receptorCrudo, usoCfdi, paymentForm, taxMode: taxModeIn } = body;
   // El RFC como lo lee el SAT (mayúsculas, sin espacios) y nombre/CP sin espacios de más (ws1-t4, F-05).
-  const receptor = receptorCrudo && typeof receptorCrudo === "object"
+  let receptor = receptorCrudo && typeof receptorCrudo === "object"
     ? { ...receptorCrudo, rfc: normalizarRfc(receptorCrudo.rfc), nombre: typeof receptorCrudo.nombre === "string" ? receptorCrudo.nombre.trim() : receptorCrudo.nombre, cp: typeof receptorCrudo.cp === "string" ? receptorCrudo.cp.trim() : receptorCrudo.cp }
     : receptorCrudo;
   if (!receptor?.rfc || !receptor?.nombre || !receptor?.regimenFiscal || !receptor?.cp) {
@@ -93,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     select: {
       facturApiOrgId: true, facturApiEnabled: true, name: true, rfcEmisor: true,
       plan: true, timezone: true, cfdiTaxMode: true, csdUploaded: true, locale: true,
-      regimenFiscal: true,
+      regimenFiscal: true, cpEmisor: true,
     },
   });
   if (!clinic?.facturApiEnabled || !clinic.facturApiOrgId) {
@@ -106,12 +111,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!rateLimitKey(llaveLimiteTimbrado(ctx!.clinicId), LIMITE_TIMBRADO_POR_HORA, VENTANA_TIMBRADO_MS)) {
     return NextResponse.json(errorLimiteTimbrado(clinic.locale), { status: 429 });
   }
-  const retencion = bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc, locale: clinic.locale });
+  const retencion = bloqueoPorRetencion({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor, rfcReceptor: receptor.rfc, locale: clinic.locale });
   if (retencion) {
     // F-01 (ws1-t4, vuelta 2): con «Facturar a empresas con retención»
     // encendido la factura COMPLETA sí lleva la retención; el CFDI de un pago
     // suelto con retención todavía no existe.
-    const encendidas = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcReceptor: receptor.rfc })
+    const encendidas = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor, rfcReceptor: receptor.rfc })
       && await retencionesEncendidas(prisma, ctx!.clinicId);
     if (encendidas) return NextResponse.json({ error: errorRetencionPorPago(clinic.locale), code: CFDI_RETENCION_POR_PAGO }, { status: 409 });
     return NextResponse.json(retencion, { status: 409 });
@@ -127,11 +132,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const e = errorDeReceptorExtranjero(receptor, clinic.locale);
     if (e) return NextResponse.json({ error: e, code: "CFDI_RECEPTOR_EXTRANJERO" }, { status: 400 });
   }
+  // C-47 (auditoría de uso): público en general lleva el nombre, el régimen y el CP que fija el SAT.
+  if (!extranjero) receptor = receptorDePublicoEnGeneral(receptor, clinic.cpEmisor);
   const uso: string = extranjero
     ? USO_EXTRANJERO
-    : typeof usoCfdi === "string" && usoCfdi
-      ? usoCfdi
-      : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
+    : esPublicoEnGeneral(receptor.rfc)
+      ? USO_PUBLICO_EN_GENERAL
+      : typeof usoCfdi === "string" && usoCfdi
+        ? usoCfdi
+        : usoCfdiPorRegimen(receptor.regimenFiscal, receptor.rfc);
+  // C-47: el receptor contra c_RegimenFiscal y c_UsoCFDI ANTES de hablar con Facturapi.
+  if (!extranjero) {
+    const e = errorDeReceptor(receptor, uso, clinic.locale);
+    if (e) return NextResponse.json({ error: e, code: "CFDI_RECEPTOR_INVALIDO" }, { status: 400 });
+  }
   if (isFacturapiLive()) {
     const blocked = await liveReadinessBlock(clinic.facturApiOrgId, clinic.csdUploaded);
     if (blocked) return blocked;
@@ -141,8 +155,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // garantizar el candado contra doble timbrado (vive en el índice único
   // parcial de esa migración) — se corta ANTES de tocar Facturapi.
   if (!(await columnaPagoListaParaCfdi())) {
+    // C-57: el nombre del archivo SQL va al log, no a la pantalla.
+    console.error("[payments/cfdi] falta sql/cfdi-pagos-a-plazos.sql (cfdi_records.paymentId)");
     return NextResponse.json({
-      error: "Falta aplicar sql/cfdi-pagos-a-plazos.sql antes de poder facturar pagos individuales. Avisa a soporte.",
+      error: textoCfdiPorPagoNoDisponible(clinic.locale),
       code:  "CFDI_POR_PAGO_SIN_SQL",
     }, { status: 503 });
   }
@@ -200,12 +216,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { porFactura } = await leerCondicionesDeFacturas(prisma, { clinicId: ctx!.clinicId, invoiceIds: [invoice.id] });
   const condiciones = porFactura.get(invoice.id) ?? null;
-  if (!facturaAdmiteCfdiPorPago(condiciones)) {
-    return NextResponse.json({
-      error: "Esta factura no es a plazos (enganche + mensualidades): factúrala completa con el botón de siempre.",
-      code:  "CFDI_POR_PAGO_NO_APLICA",
-    }, { status: 400 });
-  }
+  // C-48 (auditoría de uso): antes solo las facturas a plazos. Un abono a una nota sin plan
+  // (MF-1114: $150 de $400) no tenía CFDI posible: la nota completa no se timbra con saldo.
+  // Ahora cualquier cobro se puede facturar por su lado, con los mismos candados (sin CFDI de
+  // la nota completa, la suma de los CFDI nunca pasa del total). CONFIRMAR CON CONTADOR (PUE por
+  // abono, igual que la mensualidad decidida el 28-sep).
+  const esAPlazos = facturaAdmiteCfdiPorPago(condiciones);
 
   const existente = await buscarCfdiDePago(prisma, { clinicId: ctx!.clinicId, paymentId });
   if (existente) {
@@ -220,21 +236,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // ── El concepto: a qué cuota corresponde este pago ─────────────────────────
   const items0 = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];
   const descripcionBase = (typeof items0[0]?.description === "string" && items0[0].description.trim()) || "Tratamiento";
-  // F-11 / F-08: el catálogo con la clave SAT y el IVA de cada procedimiento.
-  const catalogoDeLaClinica = await catalogoFiscal(prisma, ctx!.clinicId);
   const pagosOrdenados = [...invoice.payments].sort((a, b) => {
     const t = new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime();
     return t !== 0 ? t : a.id.localeCompare(b.id);
   });
   const idx = pagosOrdenados.findIndex((p) => p.id === payment.id);
   const pagosAnteriores = idx >= 0 ? pagosOrdenados.slice(0, idx) : [];
-  const concepto = conceptoDePago({
-    condiciones,
-    totalFactura: invoice.total,
-    descripcionBase,
-    pagosAnteriores: pagosAnteriores.map((p) => ({ amount: p.amount, method: p.method, paidAt: p.paidAt })),
-    pago: { amount: payment.amount, method: payment.method, paidAt: payment.paidAt },
-  });
+  const concepto = !esAPlazos
+    ? { descripcion: round2(payment.amount) + 0.005 < round2(invoice.total) ? `${descripcionBase} — abono` : descripcionBase, cuotas: [] as number[] }
+    : conceptoDePago({
+      condiciones,
+      totalFactura: invoice.total,
+      descripcionBase,
+      pagosAnteriores: pagosAnteriores.map((p) => ({ amount: p.amount, method: p.method, paidAt: p.paidAt })),
+      pago: { amount: payment.amount, method: payment.method, paidAt: payment.paidAt },
+    });
 
   // ── Candado: la suma de los CFDI nunca pasa del total del caso ─────────────
   const yaTimbrado = await sumaCfdiValidaDeFactura(prisma, { clinicId: ctx!.clinicId, invoiceId: invoice.id });
@@ -247,6 +263,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!(round2(payment.amount) > 0)) {
     return NextResponse.json({ error: "El monto a timbrar debe ser mayor a $0." }, { status: 400 });
   }
+  // C-49 (auditoría de uso): un cobro de un mes anterior pudo ir ya en la factura global.
+  const global = bloqueoPorGlobal({ pagos: [payment], ahora: new Date(), timeZone: clinic.timezone, confirmado: body?.confirmaFueraDeGlobal, locale: clinic.locale });
+  if (global) return NextResponse.json(global, { status: 409 });
 
   // ── Impuestos: mismo criterio que la factura completa (exento o IVA 16%) ───
   if (taxModeIn !== undefined && taxModeIn !== null && taxModeIn !== ""
@@ -262,9 +281,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // El CFDI de un pago es UN concepto: lleva la clave del principal (el
   // primero) y el IVA que tienen todos. Si mezclan exento y 16%, todavía no se
   // sabe repartir el pago entre ellos: se dice y no se timbra.
-  const fiscalesFactura = items0.length > 0
-    ? items0.map((it: any) => resolverConcepto(it, catalogoDeLaClinica, taxModeFactura))
-    : [resolverConcepto({ description: descripcionBase }, catalogoDeLaClinica, taxModeFactura)];
+  // C-40: cada renglón con su procedimiento por id (el del renglón o el del presupuesto) y,
+  // de respaldo, por nombre.
+  const { conceptos: fiscalesFactura } = await conceptosFiscalesDeFactura(prisma, {
+    clinicId: ctx!.clinicId, invoiceId: invoice.id,
+    items: items0.length > 0 ? items0 : [{ description: descripcionBase }],
+    ivaDeLaFactura: taxModeFactura,
+  });
   if (hayIvaMixto(fiscalesFactura)) {
     return NextResponse.json({ error: errorIvaMixtoPorPago(clinic.locale), code: CFDI_IVA_MIXTO_POR_PAGO }, { status: 409 });
   }

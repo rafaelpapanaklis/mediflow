@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: { cfdiId: str
 
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
-  if (err) return err;
+  // C-57: sin «Solo administradores» (decisión 13: solo dueño/admin, como hoy).
+  if (err) return ctx ? NextResponse.json({ error: textoSoloDuenoTimbra(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : err;
   const { clinicId, userId } = ctx!;
 
   const body = await req.json().catch(() => ({}));

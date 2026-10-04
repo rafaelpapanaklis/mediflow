@@ -10,7 +10,11 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { esClaveSat, esIvaConcepto, type IvaConcepto, type ProcedimientoFiscal } from "./fiscal-concepto";
+import { aceptacionEncendida } from "@/lib/quotes/aceptacion-db";
+import {
+  esClaveSat, esIvaConcepto, normalizarNombre, resolverConcepto,
+  type ConceptoResuelto, type IvaConcepto, type ProcedimientoFiscal,
+} from "./fiscal-concepto";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -73,11 +77,11 @@ export async function fiscalDeProcedimientos(db: Db, clinicId: string): Promise<
 
 /** El catálogo de la clínica con lo que necesita el timbrado (activos e inactivos). */
 export async function catalogoFiscal(db: Db, clinicId: string): Promise<ProcedimientoFiscal[]> {
-  let procs: { id: string; name: string; category: string | null }[] = [];
+  let procs: { id: string; name: string; category: string | null; isActive: boolean }[] = [];
   let fiscal: Record<string, FiscalDeProcedimiento> = {};
   try {
     [procs, fiscal] = await Promise.all([
-      db.procedureCatalog.findMany({ where: { clinicId }, select: { id: true, name: true, category: true } }),
+      db.procedureCatalog.findMany({ where: { clinicId }, select: { id: true, name: true, category: true, isActive: true } }),
       fiscalDeProcedimientos(db, clinicId),
     ]);
   } catch (e) {
@@ -86,11 +90,56 @@ export async function catalogoFiscal(db: Db, clinicId: string): Promise<Procedim
     console.warn("[cfdi:conceptos] no se pudo leer el catálogo:", e);
   }
   return procs.map((p) => ({
+    id: p.id,
+    activo: p.isActive !== false,
     name: p.name,
     category: p.category,
     claveSat: fiscal[p.id]?.claveSat ?? null,
     ivaCfdi: fiscal[p.id]?.ivaCfdi ?? null,
   }));
+}
+
+/**
+ * El procedimiento de cada renglón de una factura que salió de un PRESUPUESTO (C-40), para las
+ * facturas que se crearon antes de que el renglón guardara su `procedureId`: el concepto del
+ * presupuesto se llama igual que el renglón («Resina (36)» = nombre + diente). Por la factura
+ * completa del presupuesto (`quotes."invoiceId"`) y por los cargos parciales
+ * (`quote_charges`, si existe). Clave: la descripción normalizada. Nunca lanza.
+ */
+export async function procedimientosDeLaFactura(db: Db, clinicId: string, invoiceId: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!clinicId || !invoiceId) return out;
+  const poner = (r: { name: string; toothFdi: string | null; procedureId: string | null }) => {
+    if (!r.procedureId) return;
+    const k = normalizarNombre(r.toothFdi ? `${r.name} (${r.toothFdi})` : r.name);
+    // El mismo concepto con dos procedimientos distintos: no se adivina.
+    if (out.has(k) && out.get(k) !== r.procedureId) out.set(k, "");
+    else out.set(k, r.procedureId);
+  };
+  try {
+    const quotes = await db.quote.findMany({
+      where: { clinicId, invoiceId },
+      select: { items: { select: { name: true, toothFdi: true, procedureId: true } } },
+      take: 5,
+    });
+    for (const q of quotes) for (const it of q.items) poner(it);
+  } catch (e) {
+    console.warn("[cfdi:conceptos] no se pudo leer el presupuesto de la factura:", e);
+  }
+  try {
+    if (!(await aceptacionEncendida(db as any))) throw new Error("sin quote_charges");
+    const filas = await db.$queryRaw<{ name: string; toothFdi: string | null; procedureId: string | null }[]>`
+      SELECT qi."name", qi."toothFdi", qi."procedureId"
+        FROM "quote_charges" c
+        JOIN "quote_items" qi ON qi."id" = c."quoteItemId"
+        JOIN "quotes" q ON q."id" = qi."quoteId" AND q."clinicId" = ${clinicId}
+       WHERE c."clinicId" = ${clinicId} AND c."invoiceId" = ${invoiceId}`;
+    for (const f of filas) poner(f);
+  } catch {
+    // Sin la tabla de cargos parciales (sql/presupuesto-aceptacion-parcial.sql): solo el presupuesto.
+  }
+  for (const [k, v] of Array.from(out)) if (!v) out.delete(k);
+  return out;
 }
 
 /**
@@ -135,4 +184,22 @@ export async function guardarFiscalDeProcedimiento(
        WHERE "id" = ${args.procedureId} AND "clinicId" = ${args.clinicId}`;
   }
   return true;
+}
+
+/**
+ * Clave e IVA de los renglones de una factura, como se van a timbrar (C-40): catálogo de la
+ * clínica + el procedimiento de cada renglón (su id, el del presupuesto del que salió, o su
+ * nombre). Lo usan las dos rutas de timbrado y la vista previa del formulario. Nunca lanza.
+ */
+export async function conceptosFiscalesDeFactura(
+  db: Db,
+  args: { clinicId: string; invoiceId: string; items: readonly any[]; ivaDeLaFactura: IvaConcepto },
+): Promise<{ conceptos: ConceptoResuelto[]; catalogo: ProcedimientoFiscal[] }> {
+  const [catalogo, delPresupuesto] = await Promise.all([
+    catalogoFiscal(db, args.clinicId),
+    procedimientosDeLaFactura(db, args.clinicId, args.invoiceId),
+  ]);
+  const conceptos = args.items.map((it) =>
+    resolverConcepto(it ?? {}, catalogo, args.ivaDeLaFactura, delPresupuesto.get(normalizarNombre(it?.description)) ?? null));
+  return { conceptos, catalogo };
 }

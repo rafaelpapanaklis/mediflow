@@ -29,7 +29,7 @@ const db = {
   condiciones: null as any,
   cfdiPorPago: [] as any[],
 };
-const pac = { timbres: [] as any[] };
+const pac = { timbres: [] as any[], clientes: [] as any[] };
 const authCtx: any = { clinicId: "c1", userId: "u1", role: "ADMIN", isAdmin: true };
 
 function setClinic(over: Record<string, any> = {}) {
@@ -109,7 +109,7 @@ const prismaStub: any = {
   namedExports: {
     getOrgApiKey: async () => "sk_test",
     validateRfc: async () => ({ ok: true }),
-    createOrUpdateCustomer: async () => "cus_1",
+    createOrUpdateCustomer: async (_k: string, c: any) => { pac.clientes.push(c); return "cus_1"; },
     createInvoice: async (args: any) => {
       pac.timbres.push(args);
       const n = pac.timbres.length;
@@ -216,6 +216,41 @@ test("retencion-candado · una persona moral (601) que le factura a otra empresa
   setClinic({ regimenFiscal: "601", rfcEmisor: "CDE010101AB1" });
   const r = await timbrar({ receptor: EMPRESA, paymentForm: "28" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
+});
+
+test("C-41 · RESICO persona MORAL (626 + RFC de 12) → empresa: timbra, sin candado ni retención", async () => {
+  setClinic({ regimenFiscal: "626", rfcEmisor: "CDS1201011A3" });
+  const r = await timbrar({ receptor: EMPRESA, usoCfdi: "G03", paymentForm: "28" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.retencion, undefined, "sin retención de ISR (el 113-J es solo para personas físicas)");
+  const impuestos = pac.timbres[0].items.flatMap((it: any) => it.product.taxes);
+  assert.ok(impuestos.every((t: any) => !t.withholding), JSON.stringify(impuestos));
+});
+
+test("C-41 · 626 sin RFC guardado → empresa: candado (no se sabe si es persona física)", async () => {
+  setClinic({ regimenFiscal: "626", rfcEmisor: null });
+  const r = await timbrar({ receptor: EMPRESA, usoCfdi: "G03", paymentForm: "28" });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "CFDI_RETENCION_PENDIENTE");
+  assert.match(r.body.error, /guarda tu RFC/);
+});
+
+test("C-47 · público en general: el CFDI va a «PUBLICO EN GENERAL», 616, S01 y el CP del emisor, diga lo que diga el formulario", async () => {
+  setClinic({ cpEmisor: "06600" });
+  const r = await timbrar({ receptor: { ...PUBLICO, nombre: "juan perez", regimenFiscal: "612", cp: "97000" }, usoCfdi: "G03", paymentForm: "28" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(pac.timbres[0].usoCfdi, "S01");
+  assert.equal(pac.clientes.at(-1).legal_name, "PUBLICO EN GENERAL");
+  assert.equal(pac.clientes.at(-1).tax_system, "616");
+  assert.deepEqual(pac.clientes.at(-1).address, { zip: "06600" });
+});
+
+test("C-47 · empresa con 612 → 400 sin hablar con Facturapi", async () => {
+  setClinic({ regimenFiscal: "601", rfcEmisor: "CDE010101AB1" }); // sin candado de retención de por medio
+  const r = await timbrar({ receptor: { ...EMPRESA, regimenFiscal: "612" }, usoCfdi: "G03", paymentForm: "28" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, "CFDI_RECEPTOR_INVALIDO");
+  assert.equal(pac.timbres.length, 0);
 });
 
 test("retencion-candado · también en «Facturar este pago»", async () => {
@@ -368,4 +403,50 @@ test("límite · es POR CLÍNICA: a la 61.ª en una hora se frena, y otra clíni
   authCtx.clinicId = "c-otra";
   setInvoice({ clinicId: "c-otra" });
   assert.equal((await timbrar({ receptor: PF_612, paymentForm: "28" })).status, 200);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría de uso (ws1-t4, 4-oct-2026): «Facturar este pago» en cualquier nota (C-48), la
+// global del mes anterior (C-49) y el 403 en palabras de la clínica (C-46/C-57)
+// ═══════════════════════════════════════════════════════════════════════════
+test("C-48 · MF-1114: abono de $150 a una nota de $400 SIN plan a plazos → su CFDI por $150 («— abono»)", async () => {
+  db.condiciones = null;
+  setInvoice({ total: 400, paid: 150, balance: 250, status: "PARTIAL", items: [{ description: "Resina", quantity: 1, unitPrice: 400, total: 400 }] },
+    [{ id: "abono", invoiceId: "inv1", method: "cash", amount: 150, paidAt: new Date() }]);
+  const r = await timbrarPago("abono", { receptor: PF_612, paymentForm: "01" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(pac.timbres.length, 1);
+  assert.equal(pac.timbres[0].items[0].product.description, "Resina — abono");
+  assert.equal(pac.timbres[0].items[0].product.price, 150);
+});
+
+test("C-49 · un cobro de un mes anterior: sin confirmar que no entró en la global, no se timbra (ni la nota ni el pago)", async () => {
+  const septiembre = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 10, 18));
+  setInvoice({}, [{ id: "pay1", invoiceId: "inv1", method: "debit", amount: 1600, paidAt: septiembre }]);
+  const sin = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(sin.status, 409);
+  assert.equal(sin.body.code, "CFDI_CONFIRMAR_GLOBAL");
+  assert.equal(pac.timbres.length, 0);
+  const con = await timbrar({ receptor: PF_612, paymentForm: "28", confirmaFueraDeGlobal: true });
+  assert.equal(con.status, 200, JSON.stringify(con.body));
+
+  db.condiciones = null;
+  setInvoice({ total: 400, paid: 150, balance: 250, status: "PARTIAL" }, [{ id: "ab", invoiceId: "inv1", method: "cash", amount: 150, paidAt: septiembre }]);
+  const pago = await timbrarPago("ab", { receptor: PF_612, paymentForm: "01" });
+  assert.equal(pago.body.code, "CFDI_CONFIRMAR_GLOBAL");
+});
+
+test("C-46/C-57 · quien no es dueño ni admin recibe qué hacer, no «Solo administradores»", async () => {
+  authCtx.isAdmin = false;
+  try {
+    const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+    assert.equal(r.status, 403);
+    assert.equal(r.body.code, "CFDI_SOLO_DUENO");
+    assert.match(r.body.error, /solo el dueño o un administrador/);
+    const p = await timbrarPago("pay1", { receptor: PF_612, paymentForm: "28" });
+    assert.equal(p.status, 403);
+    assert.doesNotMatch(p.body.error, /Solo administradores/);
+  } finally {
+    authCtx.isAdmin = true;
+  }
 });

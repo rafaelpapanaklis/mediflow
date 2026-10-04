@@ -58,7 +58,7 @@ export interface DepsCancelacion {
   llave: typeof llaveQueVeElCfdi;
   cancelar: typeof cancelInvoice;
   orgDeClinica: (clinicId: string) => Promise<{ orgId: string | null; timezone: string | null }>;
-  cfdiUuidDeFactura: (clinicId: string, invoiceId: string) => Promise<{ cfdiUuid: string | null; patientId: string | null; invoiceNumber: string | null } | null>;
+  cfdiUuidDeFactura: (clinicId: string, invoiceId: string) => Promise<{ cfdiUuid: string | null; patientId: string | null; invoiceNumber: string | null; paid?: number | null } | null>;
   ahora: () => Date;
 }
 
@@ -80,9 +80,9 @@ const DEPS: DepsCancelacion = {
   cfdiUuidDeFactura: async (clinicId, invoiceId) => {
     const f = await prisma.invoice.findFirst({
       where: { id: invoiceId, clinicId },
-      select: { cfdiUuid: true, patientId: true, invoiceNumber: true },
+      select: { cfdiUuid: true, patientId: true, invoiceNumber: true, paid: true },
     });
-    return f ? { cfdiUuid: f.cfdiUuid, patientId: f.patientId, invoiceNumber: f.invoiceNumber } : null;
+    return f ? { cfdiUuid: f.cfdiUuid, patientId: f.patientId, invoiceNumber: f.invoiceNumber, paid: f.paid } : null;
   },
   ahora: () => new Date(),
 };
@@ -218,9 +218,13 @@ export async function pedirCancelacion(
   const egresos = cfdi.tipoComprobante === "I" ? await d.egresosVigentesDe(prisma, { clinicId: p.clinicId, uuid: cfdi.uuid }) : [];
 
   const ahora = d.ahora();
+  // C-42: con dinero cobrado no se cancela con motivo 03 (lo pagado neto de la factura).
+  const cobrado = p.motive === "03" && cfdi.invoiceId
+    ? ((await d.cfdiUuidDeFactura(p.clinicId, cfdi.invoiceId))?.paid ?? null)
+    : null;
   const err = validarCancelacion({
     motive: p.motive, reason: p.reason, cfdi: { ...cfdi, receptorRfc: cfdi.receptor?.rfc ?? null },
-    sustituto, egresosVigentes: egresos.length, ahora,
+    sustituto, egresosVigentes: egresos.length, ahora, cobrado,
   });
   if (err) {
     const status = err === "MOTIVO_INVALIDO" || err === "RAZON_CORTA" || err === "FALTA_SUSTITUTO" ? 400 : 409;

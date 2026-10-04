@@ -31,6 +31,7 @@ import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
+import { textoCorreoNoEnviado, textoEnlaceNoDisponible } from "@/lib/cfdi/mensajes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -171,7 +172,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     } catch (e) {
       const status = e instanceof EnvioCorreoError ? (e.status >= 500 ? 502 : 400) : 502;
       console.error("[cfdi/enviar] correo:", e instanceof Error ? e.message : e);
-      return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo mandar el correo." }, { status });
+      // C-57: el rechazo de Facturapi en humano, con el original entre paréntesis.
+      return NextResponse.json({ error: textoCorreoNoEnviado(e instanceof Error ? e.message : null, en ? "en" : "es") }, { status });
     }
     const a = n.correos.map(enmascararCorreo).join(", ");
     await logMutation({
@@ -192,7 +194,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
   const origen = origenPublico();
   if (!origen) {
-    return NextResponse.json({ error: "Falta NEXT_PUBLIC_APP_URL para armar el enlace de descarga." }, { status: 500 });
+    // C-57: la variable que falta va al log; a la clínica, qué hacer.
+    console.error("[cfdi/enviar] falta NEXT_PUBLIC_APP_URL para el enlace de descarga");
+    return NextResponse.json({ error: textoEnlaceNoDisponible(en ? "en" : "es") }, { status: 500 });
   }
   const responsable = await contactoDelResponsableDeLaFactura(ctx.clinicId, invoice.id).catch(() => null);
   const { destinatarios, sinContacto, motivo } = destinatariosDeEnvio({

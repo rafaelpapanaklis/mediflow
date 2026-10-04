@@ -142,6 +142,10 @@ export const invoiceSchema = z.object({
     // qty × unitPrice − discount) vería el bruto y bloquearía el timbrado.
     discount:    z.number().min(0).optional(),
     total:       z.number(),
+    // C-40 (auditoría de uso, ws1-t4): de qué procedimiento del catálogo salió el concepto.
+    // El timbrado toma de ahí la clave SAT y el IVA (antes buscaba por el nombre exacto).
+    // Un id que no sea de la clínica no encuentra nada al timbrar (catálogo por clinicId).
+    procedureId: z.string().max(64).optional(),
   }).refine((it) => !lineDiscountExceedsAmount(it), {
     // La regla vive en el SERVIDOR porque en el cliente ya estaba y no basta: el
     // editor acota el descuento a `Math.min(discount, qty × unitPrice)` al armar

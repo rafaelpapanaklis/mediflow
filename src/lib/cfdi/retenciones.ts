@@ -2,7 +2,10 @@
 //
 // Cuando una PERSONA MORAL le paga a una persona física por servicios
 // profesionales, la empresa retiene y el CFDI lo tiene que decir:
-//   · ISR, emisor RESICO (626): 1.25% sobre el valor sin IVA — art. 113-J LISR.
+//   · ISR, emisor RESICO persona FÍSICA (626, RFC de 13): 1.25% sobre el valor
+//     sin IVA — art. 113-J LISR. El RESICO de personas MORALES (626, RFC de 12;
+//     arts. 206-215 LISR) no lleva retención de ISR ni de IVA (auditoría de uso
+//     C-41): su CFDI sale sin retenciones y sin candado.
 //   · ISR, emisor actividad profesional (612): 10% — art. 106, último párrafo, LISR.
 //   · IVA retenido: 2/3 del IVA trasladado (10.6667% del valor) SOLO si el
 //     servicio está gravado — art. 1-A, fr. II, inciso a) LIVA y art. 3, fr. I,
@@ -17,7 +20,7 @@
 // false) con sus traslados y retenciones, y cada impuesto se redondea por
 // concepto. PURO.
 
-import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
+import { retencionDelEmisor, tipoDePersona } from "@/lib/invoices/cfdi-reglas";
 
 export const TASA_ISR_RESICO = 0.0125;
 export const TASA_ISR_612 = 0.10;
@@ -30,9 +33,14 @@ export interface TasasRetencion {
   ivaRetenido: number;
 }
 
-/** ¿Este timbrado lleva retenciones? null = no (receptor persona física, genérico, o emisor sin retención). */
-export function tasasDeRetencion(args: { regimenEmisor: string | null | undefined; rfcReceptor: unknown }): TasasRetencion | null {
+/**
+ * ¿Este timbrado lleva retenciones? null = no (receptor persona física o genérico, emisor sin
+ * retención, o emisor del que no se sabe si es persona física: ahí manda el candado).
+ */
+export function tasasDeRetencion(args: { regimenEmisor: string | null | undefined; rfcEmisor?: unknown; rfcReceptor: unknown }): TasasRetencion | null {
   if (tipoDePersona(args.rfcReceptor) !== "moral") return null;
+  // C-41: solo a un emisor persona física (612, o 626 con RFC de 13).
+  if (retencionDelEmisor(args) !== "si") return null;
   const r = typeof args.regimenEmisor === "string" ? args.regimenEmisor.trim() : "";
   if (r === "626") return { isr: TASA_ISR_RESICO, ivaRetenido: TASA_IVA_RETENIDO };
   if (r === "612") return { isr: TASA_ISR_612, ivaRetenido: TASA_IVA_RETENIDO };

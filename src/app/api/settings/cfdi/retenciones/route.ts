@@ -4,6 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { columnaRetenciones, retencionesEncendidas, guardarRetenciones } from "@/lib/cfdi/retenciones.server";
+import { retencionDelEmisor } from "@/lib/invoices/cfdi-reglas";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,13 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "settings.view");
   if (denied) return denied;
-  const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { regimenFiscal: true } });
+  const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { regimenFiscal: true, rfcEmisor: true } });
   return NextResponse.json({
     disponible: await columnaRetenciones(prisma),
     encendido: await retencionesEncendidas(prisma, ctx.clinicId),
     regimenFiscal: clinic?.regimenFiscal ?? null,
+    // C-41/C-50: con el régimen y el RFC GUARDADOS (no lo que diga el formulario sin guardar).
+    aplica: clinic?.regimenFiscal ? retencionDelEmisor({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor }) : null,
   });
 }
 

@@ -487,7 +487,9 @@ function InvoiceEditorBody({
     const cuerpo = cuerpoDeEdicion({
       lineas: normalized.items.map((it, i) => ({
         name: it.name, quantity: it.quantity, unitPrice: it.unitPrice,
-        discount: lineDiscount(it), lineTotal: it.lineTotal, extra: clean[i]?.extra,
+        discount: lineDiscount(it), lineTotal: it.lineTotal,
+        // C-40: un concepto elegido del catálogo al editar también guarda su procedimiento.
+        extra: clean[i]?.procedureId ? { ...(clean[i]?.extra ?? {}), procedureId: clean[i].procedureId } : clean[i]?.extra,
       })),
       descuento: normalized.discountAmount,
       notas: notes,
@@ -551,8 +553,10 @@ function InvoiceEditorBody({
     );
     const payload: any = {
       patientId: effectivePatientId,
-      items: normalized.items.map((it) => ({
+      items: normalized.items.map((it, i) => ({
         description: String(it.name).trim(),
+        // C-40: el procedimiento del catálogo viaja con el concepto (clave SAT e IVA del CFDI).
+        ...(clean[i]?.procedureId ? { procedureId: clean[i].procedureId } : {}),
         quantity: it.quantity,
         unitPrice: it.unitPrice,
         // El descuento POR LÍNEA viaja con el concepto (clamp a importe): el

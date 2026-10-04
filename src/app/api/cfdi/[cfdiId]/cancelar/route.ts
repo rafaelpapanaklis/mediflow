@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
@@ -24,7 +25,8 @@ export async function POST(req: NextRequest, { params }: { params: { cfdiId: str
 
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
-  if (err) return err;
+  // C-57: sin «Solo administradores» (decisión 13: solo dueño/admin, como hoy).
+  if (err) return ctx ? NextResponse.json({ error: textoSoloDuenoTimbra(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : err;
   const { clinicId, userId } = ctx!;
 
   // Visibilidad por paciente, como el PDF/XML: el CFDI lleva su identidad fiscal.

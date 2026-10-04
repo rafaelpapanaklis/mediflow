@@ -83,8 +83,9 @@ test("el detalle de factura precarga con el responsable y, con responsable, guar
   assert.match(src, /receptorInicial\(/);
   assert.match(src, /if \(fiscalOrigen === "responsable"\)/);
   assert.match(src, /receptor-responsable/);
+  // La lista (Caja → Facturas) abre este mismo formulario (auditoría de uso C-45).
   const lista = leer("app/dashboard/billing/billing-client.tsx");
-  assert.match(lista, /pedirResponsableDeFactura\(inv\.id\)/);
+  assert.match(lista, /initialAction=\{abrirTimbrado \? "cfdi" : null\}/);
 });
 
 test("hermanos: «Datos del caso» de un caso ya abierto también busca el tutor de otro paciente (mismo Guardian.id)", () => {

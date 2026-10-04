@@ -1,8 +1,8 @@
 "use client";
 
-// «Facturar este pago» — CFDI PUE de UN pago de una factura a plazos
-// (ws1-t1, sep-2026). Solo se pinta junto a pagos de una factura "a plazos"
-// (el detalle de factura decide cuándo montarlo, con `condicionesPago`).
+// «Facturar este pago» — CFDI PUE de UN pago (ws1-t1, sep-2026). Desde la
+// auditoría de uso (ws1-t4, C-48) cualquier cobro, no solo los de una factura a
+// plazos; el detalle de factura decide cuándo montarlo (solo a dueño/admin, C-46).
 //
 // Deliberadamente autocontenido (su propio POST, su propio estado) en vez de
 // meterse en el `SubAction` de `invoice-detail-modal.tsx`: ese archivo ya es
@@ -19,6 +19,8 @@ import { useT, useLocale } from "@/i18n/i18n-provider";
 import { derivePaymentForm } from "@/lib/invoice-totals";
 import { usoCfdiPorRegimen } from "@/lib/invoices/cfdi-reglas";
 import { cfdiAvisoPersistente } from "@/lib/cfdi-avisos";
+import { AvisoMesDeCobroCfdi, pideConfirmarGlobal } from "./aviso-mes-cobro-cfdi";
+import { AvisosEmisorAlTimbrar } from "./cfdi-avisos-emisor-timbrado";
 
 export interface PaymentCfdiButtonProps {
   paymentId: string;
@@ -26,6 +28,8 @@ export interface PaymentCfdiButtonProps {
   invoiceId?: string;
   amount: number;
   method: string | null;
+  /** C-49: cuándo entró (un cobro de un mes anterior pide confirmar lo de la factura global). */
+  paidAt?: string | Date | null;
   clinicTaxMode: string | null;
   defaultReceptor?: { rfc?: string | null; nombre?: string | null; regimen?: string | null; cp?: string | null; email?: string | null } | null;
   cfdi?: CfdiDePago;
@@ -42,6 +46,11 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
   // Un «no se puede» que dice qué hacer (retención, forma de pago): se queda en
   // el formulario en vez de irse en un toast.
   const [aviso, setAviso] = useState<string | null>(null);
+  // C-49: «no entró en la global de ese mes» y C-44: al emisor le falta algo para timbrar.
+  const [fueraDeGlobal, setFueraDeGlobal] = useState(false);
+  const [emisorIncompleto, setEmisorIncompleto] = useState(false);
+  const pagoParaAviso = [{ paidAt: props.paidAt ?? null, method: props.method, amount: props.amount }];
+  const faltaConfirmarGlobal = pideConfirmarGlobal(pagoParaAviso) && !fueraDeGlobal;
   // ws1-t4, tanda 0: la forma sale de la regla compartida (null = Mercado Pago,
   // tarjeta sin tipo… → «Elige») en vez de una tabla propia que mandaba
   // Mercado Pago y «otro» a «03 transferencia»; el uso, del régimen.
@@ -137,6 +146,7 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
           usoCfdi: fiscal.uso,
           paymentForm: fiscal.formaPago,
           taxMode: fiscal.impuestos,
+          ...(fueraDeGlobal ? { confirmaFueraDeGlobal: true } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -185,6 +195,14 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
     // la estrecha: el régimen no se leía). Fuera de una rejilla no cambia nada.
     <div className="text-[11px] space-y-1.5 border border-border rounded-md p-2 bg-muted/20 max-w-[420px]" style={{ gridColumn: "1 / -1" }} data-cfdi-pago-form>
       <div className="font-semibold">{en ? "Invoice" : "Facturar"} {fmtMXNdec(props.amount)}</div>
+      <AvisosEmisorAlTimbrar onBloqueo={setEmisorIncompleto} rfcReceptor={fiscal.rfc} />
+      <AvisoMesDeCobroCfdi
+        pagos={pagoParaAviso}
+        confirmado={fueraDeGlobal}
+        onConfirmar={setFueraDeGlobal}
+        className="rounded border p-1.5"
+        style={{ borderColor: "var(--warning-border-strong)", color: "var(--warning-strong)" }}
+      />
       <input
         placeholder="RFC"
         value={fiscal.rfc}
@@ -247,7 +265,7 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
         </p>
       )}
       <div className="flex items-center gap-2 pt-0.5">
-        <button type="button" disabled={busy || !fiscal.formaPago} onClick={timbrar} className="text-[11px] font-semibold px-2 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50">
+        <button type="button" disabled={busy || !fiscal.formaPago || emisorIncompleto || faltaConfirmarGlobal} onClick={timbrar} className="text-[11px] font-semibold px-2 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50">
           {busy ? (en ? "Stamping…" : "Timbrando…") : (en ? "Stamp CFDI" : "Timbrar CFDI")}
         </button>
         <button type="button" disabled={busy} onClick={() => setOpen(false)} className="text-[11px] underline">

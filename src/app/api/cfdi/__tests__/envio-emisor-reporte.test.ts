@@ -168,7 +168,8 @@ test("enviar: correo inválido → 400 sin llamar a Facturapi; Facturapi rechaza
   entorno.correoFalla = { status: 400, msg: "El correo no es válido" };
   const r2 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: { cfdiId: "cfdi1" } });
   assert.equal(r2.status, 400);
-  assert.equal((await r2.json()).error, "El correo no es válido");
+  // C-57: en humano, con el motivo de Facturapi entre paréntesis.
+  assert.equal((await r2.json()).error, "No se pudo mandar el correo. Revisa que la dirección esté bien escrita y vuelve a intentarlo. (El correo no es válido)");
   assert.equal(llamadas.bitacora.length, 0);
 });
 

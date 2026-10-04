@@ -15,9 +15,9 @@ import { CFDI_TIMBRADO_SIN_GUARDAR, cfdiAvisoPersistente, cfdiImpideReintento } 
 
 const SRC = join(__dirname, "..", "..");
 const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
+// Caja → Facturas ya no tiene formulario propio (auditoría de uso C-45): abre el del detalle.
 const FORMULARIOS = [
   "components/dashboard/billing/invoice-detail-modal.tsx",
-  "app/dashboard/billing/billing-client.tsx",
 ];
 
 test("«timbrado sin guardar» va en el aviso que no desaparece solo", () => {

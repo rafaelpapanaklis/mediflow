@@ -5,20 +5,43 @@
 // zona horaria de la clínica) y lo deja en la bitácora.
 
 import { useLocale } from "@/i18n/i18n-provider";
-import { avisoMesDeCobro } from "@/lib/cfdi/avisos-timbrado";
+import { avisoMesDeCobro, mesesAnterioresDeCobro, textoConfirmarGlobal } from "@/lib/cfdi/avisos-timbrado";
 
-export function AvisoMesDeCobroCfdi({ pagos, className, style }: {
-  pagos: readonly { paidAt?: string | Date | null; method?: string | null; amount?: number }[] | null | undefined;
+type Pago = { paidAt?: string | Date | null; method?: string | null; amount?: number };
+
+const zonaDelNavegador = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** C-49: ¿hay cobros de un mes anterior? (entonces hay que confirmar lo de la global para timbrar). */
+export function pideConfirmarGlobal(pagos: readonly Pago[] | null | undefined, ahora = new Date()): boolean {
+  return mesesAnterioresDeCobro({
+    pagos: (pagos ?? []).map((p) => ({ paidAt: p.paidAt ?? null, method: p.method ?? null, amount: p.amount })),
+    ahora, timeZone: zonaDelNavegador(),
+  }).length > 0;
+}
+
+export function AvisoMesDeCobroCfdi({ pagos, className, style, confirmado, onConfirmar }: {
+  pagos: readonly Pago[] | null | undefined;
   className?: string;
   style?: React.CSSProperties;
+  /** C-49: la casilla «no entró en la global» (solo con cobros de meses anteriores). */
+  confirmado?: boolean;
+  onConfirmar?: (v: boolean) => void;
 }) {
   const locale = useLocale();
-  const aviso = avisoMesDeCobro({
-    pagos: (pagos ?? []).map((p) => ({ paidAt: p.paidAt ?? null, method: p.method ?? null, amount: p.amount })),
-    ahora: new Date(),
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    locale,
-  });
+  const lista = (pagos ?? []).map((p) => ({ paidAt: p.paidAt ?? null, method: p.method ?? null, amount: p.amount }));
+  const ahora = new Date();
+  const aviso = avisoMesDeCobro({ pagos: lista, ahora, timeZone: zonaDelNavegador(), locale });
   if (!aviso) return null;
-  return <p className={className} style={style} data-cfdi-aviso-mes>{aviso.mensaje}</p>;
+  const anteriores = mesesAnterioresDeCobro({ pagos: lista, ahora, timeZone: zonaDelNavegador() });
+  return (
+    <div className={className} style={style} data-cfdi-aviso-mes>
+      <p style={{ margin: 0 }}>{aviso.mensaje}</p>
+      {anteriores.length > 0 && onConfirmar && (
+        <label style={{ display: "flex", gap: 6, alignItems: "flex-start", marginTop: 6, cursor: "pointer" }} data-cfdi-confirmar-global>
+          <input type="checkbox" checked={!!confirmado} onChange={(e) => onConfirmar(e.target.checked)} style={{ marginTop: 2 }} />
+          <span>{textoConfirmarGlobal(anteriores, locale)}</span>
+        </label>
+      )}
+    </div>
+  );
 }

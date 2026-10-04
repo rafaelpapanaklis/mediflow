@@ -5,7 +5,9 @@ import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import { resolveOverageBilling, CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { isFacturapiLive } from "@/lib/facturapi-env";
-import { avisosDelEmisor } from "@/lib/cfdi/emisor";
+import { avisosDelEmisor, faltantesDelEmisor, textoDeFaltantes } from "@/lib/cfdi/emisor";
+import { retencionDelEmisor } from "@/lib/invoices/cfdi-reglas";
+import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +44,15 @@ export async function GET(_req: NextRequest) {
       csdUploaded: true,
       csdValidUntil: true,
       locale: true,
+      // C-44 (auditoría de uso): ¿puede timbrar ya? Para avisarlo al ABRIR el formulario.
+      facturApiEnabled: true,
+      facturApiOrgId: true,
+      regimenFiscal: true,
+      cpEmisor: true,
+      // C-54: sin WhatsApp conectado el formulario no ofrece mandar el CFDI por ahí.
+      waConnected: true,
+      waPhoneNumberId: true,
+      waAccessToken: true,
     },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
@@ -69,6 +80,14 @@ export async function GET(_req: NextRequest) {
   // cuando SÍ hay excedente — evita un round-trip en cada carga de la pestaña
   // para las clínicas dentro de cupo (la mayoría).
   const billing = q.overage > 0 ? await resolveOverageBilling(clinic) : null;
+  // Mejora de la auditoría de uso (ws1-t4): avisar del candado de retención en cuanto se
+  // teclea el RFC de una empresa, no al final. Datos del emisor GUARDADOS.
+  const retencionAplica = retencionDelEmisor({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor });
+  const retencion = {
+    regimenEmisor: clinic.regimenFiscal ?? null,
+    aplica: retencionAplica,
+    encendida: retencionAplica === "si" ? await retencionesEncendidas(prisma, clinicId) : false,
+  };
 
   return NextResponse.json({
     period,
@@ -85,6 +104,12 @@ export async function GET(_req: NextRequest) {
     // Solo el boolean del ambiente (nunca la env): el modal de timbrado lo usa
     // para no prometer validez fiscal en pruebas ni hablar de pruebas en Live.
     live: isFacturapiLive(),
+    // C-44: lo que le falta al emisor para timbrar (vacío = listo) y el texto para el formulario.
+    faltaEmisor: faltantesDelEmisor({ ...clinic, live: isFacturapiLive() }),
+    textoFaltaEmisor: textoDeFaltantes(faltantesDelEmisor({ ...clinic, live: isFacturapiLive() }), clinic.locale),
+    retencion,
+    // Solo el booleano: el token nunca sale del servidor.
+    waConectado: !!(clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken),
     avisosEmisor: avisosDelEmisor({
       rfcEmisor: clinic.rfcEmisor, cfdiTaxMode: clinic.cfdiTaxMode, csdUploaded: clinic.csdUploaded,
       csdValidUntil: clinic.csdValidUntil, ahora: new Date(), locale: clinic.locale,

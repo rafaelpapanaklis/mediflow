@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { useLocale } from "@/i18n/i18n-provider";
 import { fmtMXNdec } from "@/lib/format";
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
-import { MOTIVOS_CANCELACION, disponibleParaNota } from "@/lib/invoices/cfdi-cancelacion";
+import { MOTIVOS_CANCELACION, disponibleParaNota, motivo03Permitido } from "@/lib/invoices/cfdi-cancelacion";
 import {
   accionesDe, estadoPintado, sustitutoDe, notasDe, textosCfdiSat, metodoDeDevolucionPorForma,
   FORMAS_DEVOLUCION, type CfdiVista, type RespuestaCfdisFactura,
@@ -153,6 +153,7 @@ export function CfdiAnteElSat({
       {cancelando && (
         <DialogoCancelar
           {...cancelando}
+          cobrado={datos.cobrado}
           en={en}
           rediseno={rediseno}
           onClose={() => setCancelando(null)}
@@ -172,8 +173,10 @@ export function CfdiAnteElSat({
   );
 }
 
-function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno, onClose, onHecho }: {
+function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno, onClose, onHecho, cobrado }: {
   cfdi: CfdiVista; motivo: string; sustituto: CfdiVista | null; en: boolean; rediseno: boolean;
+  /** C-42: lo cobrado de la factura; con dinero, el motivo 03 no se ofrece. */
+  cobrado?: number;
   onClose: () => void; onHecho: () => void | Promise<void>;
 }) {
   const locale = useLocale();
@@ -183,7 +186,8 @@ function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno,
   const [razon, setRazon] = useState("");
   const [enviando, setEnviando] = useState(false);
   const esGlobal = (cfdi.receptorRfc ?? "").toUpperCase() === "XAXX010101000";
-  const motivos = MOTIVOS_CANCELACION.filter((m) => (m.clave !== "04" || esGlobal) && (m.clave !== "01" || !!sustituto));
+  const sin03 = !motivo03Permitido(cobrado);
+  const motivos = MOTIVOS_CANCELACION.filter((m) => (m.clave !== "04" || esGlobal) && (m.clave !== "01" || !!sustituto) && (m.clave !== "03" || !sin03));
   const def = MOTIVOS_CANCELACION.find((m) => m.clave === motivo);
   const falta01 = motivo === "01" && !sustituto;
 
@@ -217,6 +221,13 @@ function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno,
             </select>
             {def && <p className={cx("text-[11px] text-muted-foreground", c.texto)}>{en ? def.detalleEn : def.detalleEs}</p>}
             {!sustituto && <p className={cx("text-[11px] text-muted-foreground", c.texto)}>{tx.cSin01}</p>}
+            {sin03 && (
+              <p className={cx("text-[11px] text-muted-foreground", c.texto)} data-sin-motivo-03>
+                {en
+                  ? "Reason 03 (the operation didn't take place) isn't offered: this invoice has money collected. If you returned it, record the refund or issue a credit note first."
+                  : "No se ofrece el motivo 03 (no se llevó a cabo la operación): esta factura tiene dinero cobrado. Si lo devolviste, registra primero el reembolso o emite una nota de crédito."}
+              </p>
+            )}
             {motivo === "01" && sustituto && (
               <p className="text-[11px]">{tx.cSustituto}: <span className="font-mono">{sustituto.uuid}</span></p>
             )}

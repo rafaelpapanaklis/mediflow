@@ -106,3 +106,38 @@ test("el .cer (DER) se lee sin Facturapi: RFC del titular y vigencia", () => {
 test("un archivo que no es certificado → null (lo rechazará Facturapi con su mensaje)", () => {
   assert.equal(leerCertificadoCsd(Buffer.from("no soy un cer")), null);
 });
+
+// ── Auditoría de uso (ws1-t4, 4-oct-2026): C-43, C-44 y C-51 ────────────────────────────────
+
+import { errorDeEmisor, regimenesEmisorParaElegir, faltantesDelEmisor, textoDeFaltantes, REGIMENES_EMISOR } from "../emisor";
+
+test("C-43 · el RFC de público en general (o de extranjero) no puede ser el del emisor", () => {
+  // Antes: XAXX010101000 + 612 pasaba todas las validaciones (formato válido, 13 = persona física).
+  assert.equal(errorDeRegimenEmisor("XAXX010101000", "612"), null, "la regla vieja lo dejaba pasar");
+  assert.match(errorDeEmisor("XAXX010101000", "612")!, /RFC genérico/);
+  assert.match(errorDeEmisor(" xexx010101000 ", "612", "en")!, /generic RFC/);
+  assert.equal(errorDeEmisor("GOMA800101AB1", "612"), null);
+});
+
+test("C-51 · regímenes del emisor: sin 616 ni 621 (salvo quien ya lo tenía), con 603", () => {
+  assert.deepEqual(REGIMENES_EMISOR.map((r) => r.clave), ["601", "603", "612", "626"]);
+  assert.match(errorDeEmisor("GOMA800101AB1", "616")!, /616/);
+  assert.match(errorDeEmisor("GOMA800101AB1", "621")!, /cerrado a nuevos/);
+  assert.equal(errorDeEmisor("GOMA800101AB1", "621", "es", "621"), null, "quien ya lo tenía lo conserva");
+  assert.ok(regimenesEmisorParaElegir("621").some((r) => r.clave === "621"));
+  assert.ok(!regimenesEmisorParaElegir(null).some((r) => r.clave === "621"));
+  assert.equal(errorDeEmisor("ASO120101AB1", "603"), null, "asociación civil (persona moral) con clínica");
+  assert.match(errorDeEmisor("GOMA800101AB1", "603")!, /solo para personas morales/);
+  assert.match(errorDeEmisor("GOMA800101AB1", "")!, /Elige tu régimen/);
+});
+
+test("C-44 · «Activo» solo con todo: organización, RFC, régimen, CP (y CSD en Live)", () => {
+  const vacia = { facturApiEnabled: true, facturApiOrgId: null, rfcEmisor: null, regimenFiscal: null, cpEmisor: null, csdUploaded: false, live: false };
+  // La clínica de prueba: facturApiEnabled=true sin nada más. Antes: «✅ Activo».
+  assert.deepEqual(faltantesDelEmisor(vacia), ["organizacion", "rfc", "regimen", "cp"]);
+  assert.match(textoDeFaltantes(faltantesDelEmisor(vacia))!, /Todavía no puedes timbrar: falta guardar tus datos fiscales, tu RFC/);
+  const lista = { facturApiEnabled: true, facturApiOrgId: "org", rfcEmisor: "GOMA800101AB1", regimenFiscal: "612", cpEmisor: "06600", csdUploaded: false, live: false };
+  assert.deepEqual(faltantesDelEmisor(lista), []);
+  assert.equal(textoDeFaltantes([]), null);
+  assert.deepEqual(faltantesDelEmisor({ ...lista, live: true }), ["csd"], "en Live, sin CSD no se timbra");
+});

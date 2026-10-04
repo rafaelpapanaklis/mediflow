@@ -86,6 +86,102 @@ export function errorDeRegimenEmisor(rfc: unknown, regimen: unknown, locale?: st
   return null;
 }
 
+// ── Auditoría de uso (ws1-t4, 4-oct-2026): C-43 y C-51 ─────────────────────────────────────
+
+/**
+ * Regímenes con los que una clínica puede EMITIR facturas de ingreso por sus servicios (C-51).
+ * Fuera 616 «Sin obligaciones fiscales» (no tiene ingresos que facturar) y 621 (RIF: cerrado a
+ * nuevos contribuyentes desde 2022, LISR transitorio 2022 art. segundo); 621 solo se sigue
+ * mostrando a quien ya lo tiene guardado. Añadido 603 (asociaciones y sociedades civiles sin
+ * fines de lucro que tienen clínica). Descripciones del catálogo c_RegimenFiscal.
+ */
+export const REGIMENES_EMISOR: ReadonlyArray<{ clave: string; es: string; en: string }> = [
+  { clave: "601", es: "General de Ley Personas Morales", en: "General regime for companies" },
+  { clave: "603", es: "Personas Morales con Fines no Lucrativos", en: "Non-profit organizations" },
+  { clave: "612", es: "Personas Físicas con Actividades Empresariales y Profesionales", en: "Individuals with business and professional activities" },
+  { clave: "626", es: "Régimen Simplificado de Confianza (RESICO)", en: "Simplified Trust Regime (RESICO)" },
+];
+const REGIMEN_RIF = { clave: "621", es: "Incorporación Fiscal (solo si ya lo tenías)", en: "Fiscal Incorporation (only if you already had it)" };
+
+/** La lista que ofrece Configuración: la de siempre y, si la clínica ya tenía 621, también ese. */
+export function regimenesEmisorParaElegir(guardado?: string | null): ReadonlyArray<{ clave: string; es: string; en: string }> {
+  return guardado === "621" ? [...REGIMENES_EMISOR, REGIMEN_RIF] : REGIMENES_EMISOR;
+}
+
+const RFC_GENERICOS = new Set(["XAXX010101000", "XEXX010101000"]);
+
+/**
+ * El emisor (C-43 + C-51): ni el RFC de público en general ni el de extranjero (son genéricos para
+ * RECEPTORES, Anexo 20), y un régimen con el que se puede facturar (621 solo si ya estaba guardado).
+ * Luego la regla de siempre: régimen contra tipo de persona. null = se puede guardar.
+ */
+export function errorDeEmisor(rfc: unknown, regimen: unknown, locale?: string | null, regimenGuardado?: string | null): string | null {
+  const en = idiomaDe(locale) === "en";
+  const r = typeof rfc === "string" ? normalizarRfc(rfc) : "";
+  if (RFC_GENERICOS.has(r)) {
+    return en
+      ? `${r} is a generic RFC for the general public or foreigners: it can only be used for the patient, never for the issuer. Enter your clinic's RFC as it appears on your tax certificate.`
+      : `${r} es un RFC genérico (público en general o extranjero): solo se usa para el paciente, nunca para quien factura. Escribe el RFC de tu clínica como aparece en tu constancia de situación fiscal.`;
+  }
+  const clave = typeof regimen === "string" ? regimen.trim() : "";
+  if (!regimenesEmisorParaElegir(regimenGuardado).some((x) => x.clave === clave)) {
+    if (clave === "616") {
+      return en
+        ? "Regime 616 (no tax obligations) can't issue income invoices. Pick the regime on your tax certificate."
+        : "El régimen 616 (sin obligaciones fiscales) no puede emitir facturas de ingreso. Elige el régimen que dice tu constancia de situación fiscal.";
+    }
+    if (clave === "621") {
+      return en
+        ? "Regime 621 (Fiscal Incorporation) has been closed to new taxpayers since 2022. Pick the regime on your tax certificate."
+        : "El régimen 621 (Incorporación Fiscal) está cerrado a nuevos contribuyentes desde 2022. Elige el régimen que dice tu constancia de situación fiscal.";
+    }
+    if (!clave) return en ? "Choose your tax regime." : "Elige tu régimen fiscal.";
+  }
+  return errorDeRegimenEmisor(rfc, regimen, locale);
+}
+
+/**
+ * ¿Puede timbrar ya? (C-44) Lo que falta, del primero al último; vacío = listo. «Activo» en
+ * Configuración y el formulario de timbrado lo leen de aquí, en vez de solo `facturApiEnabled`.
+ */
+export type FaltaDelEmisor = "organizacion" | "rfc" | "regimen" | "cp" | "csd";
+
+export function faltantesDelEmisor(c: {
+  facturApiEnabled?: boolean | null;
+  facturApiOrgId?: string | null;
+  rfcEmisor?: string | null;
+  regimenFiscal?: string | null;
+  cpEmisor?: string | null;
+  csdUploaded?: boolean | null;
+  /** En Live el CSD es obligatorio; en pruebas Facturapi usa el suyo. */
+  live: boolean;
+}): FaltaDelEmisor[] {
+  const f: FaltaDelEmisor[] = [];
+  if (!c.facturApiEnabled || !c.facturApiOrgId) f.push("organizacion");
+  if (!c.rfcEmisor || !personaDelRfc(c.rfcEmisor)) f.push("rfc");
+  if (!c.regimenFiscal || !PERSONA_DEL_REGIMEN[c.regimenFiscal]) f.push("regimen");
+  if (!c.cpEmisor || !/^\d{5}$/.test(c.cpEmisor.trim())) f.push("cp");
+  if (c.live && !c.csdUploaded) f.push("csd");
+  return f;
+}
+
+/** «Para timbrar falta: tu RFC, tu código postal…» (null si no falta nada). */
+export function textoDeFaltantes(f: readonly FaltaDelEmisor[], locale?: string | null): string | null {
+  if (f.length === 0) return null;
+  const en = idiomaDe(locale) === "en";
+  const nombre: Record<FaltaDelEmisor, [string, string]> = {
+    organizacion: ["guardar tus datos fiscales", "saving your tax details"],
+    rfc: ["tu RFC", "your RFC"],
+    regimen: ["tu régimen fiscal", "your tax regime"],
+    cp: ["tu código postal fiscal", "your tax ZIP code"],
+    csd: ["tus certificados de sello digital (CSD)", "your digital seal certificates (CSD)"],
+  };
+  const lista = f.map((x) => nombre[x][en ? 1 : 0]).join(", ");
+  return en
+    ? `You can't stamp CFDI yet: missing ${lista}. Complete it in Settings → Billing.`
+    : `Todavía no puedes timbrar: falta ${lista}. Complétalo en Configuración → Facturación.`;
+}
+
 /** El modo de IVA de la clínica viene como "exempt" (columna) o "exento" (por factura). */
 function esExento(modo: unknown): boolean {
   return modo === "exempt" || modo === "exento";

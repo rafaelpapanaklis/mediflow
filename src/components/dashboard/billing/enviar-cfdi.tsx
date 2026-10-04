@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocale } from "@/i18n/i18n-provider";
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
+import { pedirUsoCfdi } from "./uso-cfdi-cliente";
 
 const TEXTOS = {
   es: {
@@ -188,6 +189,17 @@ export function OpcionesEnvioAlTimbrar({ valor, onChange, hayCorreo, rediseno = 
   const locale = useLocale();
   const en = (locale ?? "").startsWith("en");
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
+  // C-54 (auditoría de uso): sin WhatsApp conectado no se ofrece «Por WhatsApp».
+  const [waConectado, setWaConectado] = useState<boolean | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    pedirUsoCfdi().then((d) => { if (vivo) setWaConectado(d?.waConectado === true); });
+    return () => { vivo = false; };
+  }, []);
+  useEffect(() => {
+    if (waConectado === false && valor.whatsapp) onChange({ ...valor, whatsapp: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waConectado]);
   return (
     <fieldset className={cx("space-y-1.5", c.campo)} data-envio-al-timbrar>
       <legend className="text-xs font-medium">{en ? "Send it to the patient when stamped" : "Mandársela al paciente al timbrar"}</legend>
@@ -196,11 +208,13 @@ export function OpcionesEnvioAlTimbrar({ valor, onChange, hayCorreo, rediseno = 
           onChange={(e) => onChange({ ...valor, correo: e.target.checked })} />
         {en ? "By email (PDF + XML) to the address above" : "Por correo (PDF + XML) al correo de arriba"}
       </label>
-      <label className="flex items-center gap-2 text-xs">
-        <input type="checkbox" checked={valor.whatsapp}
-          onChange={(e) => onChange({ ...valor, whatsapp: e.target.checked })} />
-        {en ? "By WhatsApp (only if the patient wrote in the last 24 h)" : "Por WhatsApp (solo si el paciente escribió en las últimas 24 h)"}
-      </label>
+      {waConectado && (
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" checked={valor.whatsapp}
+            onChange={(e) => onChange({ ...valor, whatsapp: e.target.checked })} />
+          {en ? "By WhatsApp (only if the patient wrote in the last 24 h)" : "Por WhatsApp (solo si el paciente escribió en las últimas 24 h)"}
+        </label>
+      )}
     </fieldset>
   );
 }

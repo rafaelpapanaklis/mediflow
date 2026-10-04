@@ -19,6 +19,8 @@ export interface QuoteItemForInvoice {
   anticipoAplicado?: unknown;
   /** ws1-t5 (F10): la línea es un abono/anticipo. */
   esAnticipo?: boolean;
+  /** C-40 (ws1-t4): el procedimiento del catálogo; el timbrado toma de ahí clave SAT e IVA. */
+  procedureId?: string | null;
 }
 
 export interface QuoteForInvoice {
@@ -33,6 +35,8 @@ export interface InvoiceItemFromQuote extends BillingInvoiceItem {
   anticipoAplicado?: number;
   /** ws1-t5 (F10): concepto de abono (anticipo). */
   esAnticipo?: boolean;
+  /** C-40 (ws1-t4): de qué procedimiento del catálogo salió. */
+  procedureId?: string;
 }
 
 export interface InvoiceFieldsFromQuote {
@@ -65,6 +69,7 @@ export function invoiceFieldsFromQuote(quote: QuoteForInvoice): InvoiceFieldsFro
     const anticipoAplicado = Math.min(round2(num(it.anticipoAplicado)), discount);
     return {
       description: it.toothFdi ? `${it.name} (${it.toothFdi})` : it.name,
+      ...(typeof it.procedureId === "string" && it.procedureId ? { procedureId: it.procedureId } : {}),
       quantity,
       unitPrice,
       ...(discount > 0 ? { discount } : {}),

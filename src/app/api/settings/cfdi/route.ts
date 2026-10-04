@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { esRfcValido, MENSAJE_RFC_INVALIDO } from "@/lib/clinic-fields";
 import { createOrganization, updateOrgLegal, getOrganizationStatus } from "@/lib/facturapi";
-import { errorDeRegimenEmisor, avisosDelEmisor, datosFiscalesParaBitacora } from "@/lib/cfdi/emisor";
+import { errorDeEmisor, avisosDelEmisor, datosFiscalesParaBitacora } from "@/lib/cfdi/emisor";
 import { rfcDeLaOrganizacion } from "@/lib/cfdi/facturapi-extra.server";
 
 // POST /api/settings/cfdi — configure clinic's RFC for invoicing
@@ -25,12 +25,17 @@ export async function POST(req: NextRequest) {
   if (!razonSocial?.trim()) return NextResponse.json({ error:"Razón social es requerida" }, { status:400 });
   // ws1-t8 (F-15): el régimen tiene que existir en c_RegimenFiscal y aplicar al tipo de persona
   // del RFC (12 = moral, 13 = física). Antes llegaba cualquier cosa a Facturapi.
-  const errorRegimen = errorDeRegimenEmisor(rfcEmisor, regimenFiscal);
+  // Auditoría de uso (ws1-t4): ni el RFC de público en general / extranjero (C-43) ni un régimen
+  // que no puede facturar ingresos (616) o cerrado a nuevos (621, salvo quien ya lo tenía) (C-51).
+  const guardado = await prisma.clinic.findUnique({ where: { id: ctx!.clinicId }, select: { regimenFiscal: true, locale: true } });
+  const errorRegimen = errorDeEmisor(rfcEmisor, regimenFiscal, guardado?.locale, guardado?.regimenFiscal);
   if (errorRegimen) return NextResponse.json({ error: errorRegimen }, { status:400 });
 
   // Validate FACTURAPI_USER_KEY exists
   if (!process.env.FACTURAPI_USER_KEY) {
-    return NextResponse.json({ error:"Facturapi no está configurado. Agrega FACTURAPI_USER_KEY en las variables de entorno." }, { status:500 });
+    // C-57: el detalle técnico va al log, no a la pantalla de la clínica.
+    console.error("[settings/cfdi] falta FACTURAPI_USER_KEY en el entorno");
+    return NextResponse.json({ error:"La facturación electrónica no está disponible en este momento. Escríbenos a soporte y lo revisamos." }, { status:500 });
   }
 
   const clinic = await prisma.clinic.findUnique({
