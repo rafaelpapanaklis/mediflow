@@ -35,6 +35,7 @@ import {
 import { arcadaDeArco } from "@/lib/orthodontics/material-de-arco";
 import { HistorialDeLigas, MecanicasDelCaso } from "../drawers/HojaExtras";
 import orto from "../orto.module.css";
+import { calibreLegible } from "@/lib/orthodontics/material-de-arco";
 
 export interface SectionPlanProps {
   treatment: OrthoTreatmentDTO;
@@ -209,7 +210,7 @@ function WireSequenceBlock({
                     </Pill>
                   </td>
                   <td className="font-semibold whitespace-nowrap">
-                    {WIRE_MATERIAL_LABELS[w.material]} {w.gauge}
+                    {WIRE_MATERIAL_LABELS[w.material]} {calibreLegible(w.gauge)}
                   </td>
                   {/* ws1-t12 (revisión en panel.108, fallo 4): con dos «actual» se ve cuál va arriba y cuál abajo. */}
                   <td className="whitespace-nowrap">{arcadaDeArco(w)}</td>
