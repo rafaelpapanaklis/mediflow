@@ -3,7 +3,7 @@ import { inter } from "@/fonts/inter-400-800";
 import {
   Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta,
   Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, LiveChat,
-  PanelVivoSection, WhatsappMpSection,
+  PanelVivoSection, WhatsappMpSection, FranjaSeguridad,
 } from "@/components/public/landing/sales/v2";
 import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
 import { FAQ_ITEMS } from "@/components/public/landing/sales/v2/landing-data";
@@ -148,6 +148,10 @@ export default async function HomePage() {
         <WhatsappMpSection />
         <Funciones />
         <PricingSection cards={cards} firstMonthFrom={firstMonthFrom} yearlyDiscountPct={yearlyDiscountPct} />
+        {/* 4-oct-2026 (ws1-t10): franja de seguridad en el sitio de las píldoras
+            con palomita que cerraban Precios. Sección propia y de servidor: su
+            marcado no entra al bundle de cliente de Precios. */}
+        <FranjaSeguridad />
         <WhatsappCta />
         {/* Ajuste 1 (25-sep-2026, ws1-t4): el trío oscuro, «Y todo lo demás,
             incluido» y «Conoce cada módulo a fondo» se juntan en UNA sección

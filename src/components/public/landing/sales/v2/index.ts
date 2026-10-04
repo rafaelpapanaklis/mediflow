@@ -2,6 +2,7 @@ export { Hero } from "./hero";
 export { SocialProofBar } from "./social-proof-bar";
 export { Funciones } from "./funciones";
 export { PricingSection } from "./pricing-section";
+export { FranjaSeguridad } from "./franja-seguridad";
 export { WhatsappCta } from "./whatsapp-cta";
 export { ModulesTrio } from "./modules-trio";
 export { FeaturesGrid } from "./features-grid";

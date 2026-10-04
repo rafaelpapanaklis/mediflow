@@ -162,15 +162,43 @@ export const PRICING_COPY = {
   toggleYearly: 'Anual',
   noContract: 'Sin permanencia · cancela cuando quieras',
   cta: '¡Contratar ahora!',
-  trustChips: [
-    'Sin permanencia ni contratos anuales',
-    'Precios en MXN + IVA',
-    'Soporte en español e inglés',
-    'Página web gratuita incluida en cualquier plan',
-    'Última tecnología de software en IA',
-    'Datos respaldados con alta seguridad',
-    'CRM incluido de tus clientes',
-    'Facturación directa desde DaleControl',
+};
+
+/**
+ * Franja de seguridad bajo los precios (franja-seguridad.tsx; 4-oct-2026,
+ * ws1-t10). Sustituye a la fila de píldoras con palomita.
+ *
+ * Redacción aprobada por Rafael: NO cambiarla por algo que no podamos probar.
+ * Cada sello se lee de corrido («antes» + «clave») y dice exactamente eso.
+ * SOC 2 e ISO 27001 son de la INFRAESTRUCTURA donde corre DaleControl, nunca
+ * certificados de DaleControl: la palabra «Infraestructura» no se quita.
+ * Todo en español; solo quedan tal cual los nombres propios (AES-256, SOC 2,
+ * ISO 27001, LFPDPPP).
+ */
+export type SelloSeguridadIcono = 'candado' | 'dos-pasos' | 'respaldo' | 'bitacora' | 'ley' | 'servidor' | 'certificado';
+
+export const SEGURIDAD: {
+  eyebrow: string;
+  titleLead: string;
+  titleAccent: string;
+  subtitle: string;
+  listLabel: string;
+  sellos: { icono: SelloSeguridadIcono; antes: string; clave: string }[];
+} = {
+  eyebrow: 'Seguridad',
+  titleLead: 'Tus pacientes,',
+  titleAccent: 'protegidos',
+  subtitle:
+    'La información clínica de tu consultorio se guarda cifrada, con respaldos y registro de accesos, sobre infraestructura certificada.',
+  listLabel: 'Medidas de seguridad',
+  sellos: [
+    { icono: 'candado', antes: 'Cifrado', clave: 'AES-256' },
+    { icono: 'dos-pasos', antes: 'Verificación en', clave: 'dos pasos' },
+    { icono: 'respaldo', antes: 'Respaldos', clave: 'cifrados' },
+    { icono: 'bitacora', antes: 'Bitácora', clave: 'de accesos' },
+    { icono: 'ley', antes: 'Cumple', clave: 'LFPDPPP' },
+    { icono: 'servidor', antes: 'Infraestructura con certificación', clave: 'SOC 2' },
+    { icono: 'certificado', antes: 'Infraestructura certificada', clave: 'ISO 27001' },
   ],
 };
 

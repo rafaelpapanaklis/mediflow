@@ -199,15 +199,6 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
             </ul>
           </div>
         )}
-
-        <ul data-reveal="" className="dcv4-price__chips">
-          {PRICING_COPY.trustChips.map((chip) => (
-            <li key={chip}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7" /></svg>
-              {chip}
-            </li>
-          ))}
-        </ul>
       </div>
     </section>
   );
