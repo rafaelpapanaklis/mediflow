@@ -237,3 +237,12 @@ test("C-56 · CSV: un reembolso ya no dice «Por definir (el panel no sabe con q
   assert.doesNotMatch(linea, /Por definir/);
   assert.match(linea, /No aplica \(devolución\)/);
 });
+
+test("C-38 · el reembolso real de una nota que después se canceló también se aparta, como lo resta Finanzas", () => {
+  n = 0;
+  const cobro = pago({ amount: 790, enDefinicionUnica: true }, { id: "inv_c", status: "CANCELLED" });
+  const devuelto = pago({ amount: 790, method: "refund", refundMethod: "cash", enDefinicionUnica: true }, { id: "inv_c", status: "CANCELLED" });
+  const r = armarReporte({ mes: "2026-09", pagos: [cobro, devuelto], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  assert.equal(r.total, 790);
+  assert.deepEqual(r.apartados.reembolsos.map((f) => f.importe), [790], "antes se perdía: global $790, neto de Finanzas $0");
+});

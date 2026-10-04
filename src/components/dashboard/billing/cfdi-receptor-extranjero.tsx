@@ -53,8 +53,8 @@ export function CamposReceptorExtranjero({ ext }: { ext: ReturnType<typeof useRe
         <>
           <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
             {en
-              ? "The CFDI goes to the generic RFC XEXX010101000, regime 616 and use S01, with the country and tax ID below. The RFC and regime fields above are ignored."
-              : "El CFDI sale al RFC genérico XEXX010101000, régimen 616 y uso S01, con el país y la identificación fiscal de abajo. El RFC y el régimen de arriba no se usan."}
+              ? "The CFDI goes to the generic RFC XEXX010101000, regime 616 and use S01, with the country and tax ID below. RFC, regime and CFDI use are not needed."
+              : "El CFDI sale al RFC genérico XEXX010101000, régimen 616 y uso S01, con el país y la identificación fiscal de abajo. No hace falta capturar RFC, régimen ni uso: los fija el SAT."}
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

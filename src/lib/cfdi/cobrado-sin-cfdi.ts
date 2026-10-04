@@ -221,7 +221,9 @@ export function armarReporte(args: {
       else if (motivo === "traspaso") traspasos.push(f);
       else if (motivo === "reembolso") {
         // Un reembolso de una nota timbrada se corrige con nota de crédito, no con la global.
-        const deLaNota = clasificarPago({ ...p, method: "cash", refundMethod: null, enDefinicionUnica: undefined }, args.cfdi);
+        // Si la definición única lo resta (p. ej. el reembolso de una nota que luego se canceló,
+        // C-01), la nota cuenta como venta aunque esté cancelada: mismo criterio que Finanzas.
+        const deLaNota = clasificarPago({ ...p, method: "cash", refundMethod: null }, args.cfdi);
         if (deLaNota === "incluido") reembolsos.push(f);
       } else if (motivo === "enRevision") enRevision.push(f);
       else if (motivo === "timbrada") excluidos.timbradas += 1;
