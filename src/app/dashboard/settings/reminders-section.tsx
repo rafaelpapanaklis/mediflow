@@ -3,6 +3,7 @@
 // Sección "Recordatorios" de /dashboard/settings: recordatorios automáticos
 // de citas (WhatsApp/email) configurables por clínica.
 
+import { fechaDeEjemplo } from "@/lib/reminders/fecha-de-ejemplo";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -65,7 +66,8 @@ export function RemindersSection({ clinic, rediseno = false }: { clinic: any; re
     .replaceAll("{nombre}", "María")
     .replaceAll("{clinica}", clinic?.name || "Clínica Dental")
     .replaceAll("{clinicName}", clinic?.name || "Clínica Dental")
-    .replaceAll("{fecha}", t("settings.reminders.previewSampleDate"))
+    // ws1-t1 (N-54): mañana, no una fecha fija («lunes 24 de junio»).
+    .replaceAll("{fecha}", fechaDeEjemplo(new Date(), clinic?.timezone))
     .replaceAll("{hora}", "10:00")
     .replaceAll("{doctor}", "Dr/a. García")
     .replaceAll("{doctorName}", "Dr/a. García")

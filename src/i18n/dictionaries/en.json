@@ -4319,7 +4319,7 @@
       "channelLabel": "Sending channel",
       "channelWhatsapp": "WhatsApp",
       "channelEmail": "Email",
-      "channelBoth": "Both (WhatsApp + Email)",
+      "channelBoth": "WhatsApp and email",
       "waNotConnectedWarning": "Your clinic doesn't have WhatsApp connected yet; WhatsApp reminders won't be sent.",
       "waConnectLink": "Connect WhatsApp →",
       "emailOnlyNote": "Email reminders are only sent to patients with a registered email.",

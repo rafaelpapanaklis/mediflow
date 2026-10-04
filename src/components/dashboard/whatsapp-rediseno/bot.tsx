@@ -1,5 +1,6 @@
 "use client";
 
+import { botSiempreCerrado } from "@/lib/whatsapp/bot/horario-desde-clinica";
 import type { Dispatch, SetStateAction } from "react";
 import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } from "lucide-react";
 import type { BotConfigDTO, BotFaqDTO } from "@/lib/whatsapp/bot/types";
@@ -41,6 +42,8 @@ export type BotVM = {
   // `unknown` y no `void`: sin permiso, los manejadores de BotClient devuelven
   // el id del toast («No tienes permiso…»); aquí no se usa el valor.
   saveConfig: () => Promise<unknown>;
+  /** ws1-t1 (N-53): copia el horario de la clínica al formulario; undefined = no se pudo leer. */
+  usarHorarioClinica?: () => void;
   toggleEnabled: () => Promise<unknown>;
   addFaq: () => Promise<unknown>;
   patchFaq: (id: string, patch: Partial<Pick<BotFaqDTO, "question" | "answer" | "enabled" | "order">>) => Promise<unknown>;
@@ -270,6 +273,14 @@ export function BotRediseno({ vm }: { vm: BotVM }) {
               sub="Define cuándo el bot responde como activo. Fuera de estos horarios envía el mensaje de fuera de horario."
               accion={<Clock size={16} />}
             >
+              {vm.usarHorarioClinica && canEdit && (
+                <div className={s.apilado} style={{ gap: 6, marginBottom: 10 }}>
+                  {botSiempreCerrado(schedule) ? (
+                    <span className={s.textoSuave}>El bot no tiene horario: responde «fuera de horario» todos los días.</span>
+                  ) : null}
+                  <Boton variante="secundario" onClick={vm.usarHorarioClinica}>Usar el horario de la clínica</Boton>
+                </div>
+              )}
               <div className={s.apilado} style={{ gap: 8 }}>
                 {DIAS.map((label, i) => {
                   const key = String(i);

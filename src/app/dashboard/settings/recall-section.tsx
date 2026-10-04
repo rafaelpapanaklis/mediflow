@@ -98,7 +98,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
   if (rediseno) {
     return (
       <Seccion
-        titulo="Reactivación de pacientes (recall)"
+        titulo="Reactivación de pacientes"
         subtitulo="Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su limpieza o revisión. Solo se contacta a quienes ya tuvieron una consulta y no tienen cita futura agendada."
         pieIzquierda={
           <Enlace
@@ -132,7 +132,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
           <Selector value={form.channel} onChange={(e) => setForm((f) => ({ ...f, channel: e.target.value as ReminderChannel }))}>
             <option value="whatsapp">WhatsApp</option>
             <option value="email">Email</option>
-            <option value="both">WhatsApp y email</option>
+            <option value="both">WhatsApp y correo</option>
           </Selector>
           {includesWhatsApp && !waConnected && (
             <Aviso tono="alerta">
@@ -166,7 +166,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
   return (
     <div className="card max-w-lg space-y-4" style={{ padding: 24 }}>
       <div>
-        <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>Reactivación de pacientes (recall)</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>Reactivación de pacientes</h2>
         <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
           Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su
           limpieza o revisión. Solo se contacta a quienes ya tuvieron una consulta y no tienen
@@ -240,7 +240,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
         >
           <option value="whatsapp">WhatsApp</option>
           <option value="email">Email</option>
-          <option value="both">WhatsApp y email</option>
+          <option value="both">WhatsApp y correo</option>
         </select>
         {includesWhatsApp && !waConnected && (
           <div style={{ fontSize: 12, color: "var(--warning-strong)", background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", borderRadius: "var(--radius)", padding: 12 }}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { fechaDeEjemplo } from "@/lib/reminders/fecha-de-ejemplo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -410,7 +411,8 @@ export function WhatsAppClient({
   // MISMO render que usa el envío (ver @/lib/reminders/preview).
   const vistaPrevia = previewReminderMessage(msg, {
     clinica: clinicName,
-    fecha: t("inbox.whatsapp.previewSampleDate"),
+    // ws1-t1 (N-54): mañana, no una fecha fija («lunes 28 de abril»).
+    fecha: fechaDeEjemplo(new Date()),
   });
 
   // REDISEÑO (ws1-t5): con el interruptor encendido se pinta la vista nueva

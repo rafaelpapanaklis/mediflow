@@ -1,5 +1,6 @@
 "use client";
 
+import { botSiempreCerrado, horarioDelBotDesdeClinica } from "@/lib/whatsapp/bot/horario-desde-clinica";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } from "lucide-react";
@@ -183,6 +184,7 @@ export function BotClient({
     canQuoteOrthoPrices: false,
   });
   const [schedule, setSchedule] = useState<ScheduleState>(emptySchedule());
+  const [horarioClinica, setHorarioClinica] = useState<ScheduleState | null>(null);
 
   const [faqs, setFaqs] = useState<BotFaqDTO[]>([]);
 
@@ -204,6 +206,13 @@ export function BotClient({
         setForm(editableFromConfig(data.config));
         setSchedule(scheduleFromConfig(data.config.businessHours));
         setFaqs(Array.isArray(data.faqs) ? data.faqs : []);
+        // ws1-t1 (N-53): el horario de la clínica, para «Usar el horario de la clínica». Si falla, sin botón.
+        fetch("/api/clinic/me", { credentials: "include" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((cuerpo) => {
+            if (alive) setHorarioClinica(horarioDelBotDesdeClinica(cuerpo?.clinic?.schedules));
+          })
+          .catch(() => undefined);
       } catch (err: unknown) {
         if (!alive) return;
         setLoadError(true);
@@ -225,6 +234,14 @@ export function BotClient({
       bh[String(i)] = { enabled: d.enabled, open: d.open, close: d.close };
     }
     return bh;
+  }
+
+  // ws1-t1 (N-53): copia el horario de la clínica al formulario (se guarda con «Guardar», como cualquier cambio).
+  function usarHorarioClinica() {
+    if (!canEdit) return noPermissionToast();
+    if (!horarioClinica) return;
+    setSchedule(horarioClinica);
+    toast("Horario de la clínica copiado. Pulsa «Guardar» para que el bot lo use.");
   }
 
   async function saveConfig() {
@@ -411,6 +428,7 @@ export function BotClient({
           canEdit, loading, loadError, config, form, setForm, schedule, setSchedule, faqs, setFaqs,
           newQuestion, setNewQuestion, newAnswer, setNewAnswer, addingFaq, saving, savingEnabled,
           saveConfig, toggleEnabled, addFaq, patchFaq, deleteFaq, textosPrecios: tp,
+          usarHorarioClinica: horarioClinica ? usarHorarioClinica : undefined,
         }}
       />
     );
@@ -696,6 +714,12 @@ export function BotClient({
           sub="Define cuándo el bot responde como activo. Fuera de estos horarios envía el mensaje de fuera de horario."
           action={<Clock size={16} style={{ color: "var(--text-3)" }} />}
         >
+          {horarioClinica && canEdit && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10, fontSize: 12, color: "var(--text-3)" }}>
+              {botSiempreCerrado(schedule) ? <span>El bot no tiene horario: responde «fuera de horario» todos los días.</span> : null}
+              <ButtonNew variant="secondary" onClick={usarHorarioClinica}>Usar el horario de la clínica</ButtonNew>
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {DAY_LABELS.map((label, i) => {
               const key = String(i);

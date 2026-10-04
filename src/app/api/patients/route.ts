@@ -581,14 +581,19 @@ async function legacyHandler(
   const patients = await prisma.patient.findMany({
     where: buildPatientWhere(ctx, {
       ...(status && { status: status as PatientStatus }),
-      ...(search && {
-        OR: [
-          { firstName: { contains: search, mode: "insensitive" as const } },
-          { lastName: { contains: search, mode: "insensitive" as const } },
-          { email: { contains: search, mode: "insensitive" as const } },
-          { phone: { contains: search, mode: "insensitive" as const } },
-          { patientNumber: { contains: search, mode: "insensitive" as const } },
-        ],
+      // ws1-t1 (N-49, tercera ronda): palabra por palabra. Con la frase entera contra cada columna, «Rosa Quiroz»
+      // no encontraba a nadie (firstName «Rosa» no contiene «Rosa Quiroz»). Cada palabra tiene que aparecer en
+      // alguna columna: es la misma lectura que la búsqueda de la lista (v=2) y de Ctrl K.
+      ...(search?.trim() && {
+        AND: palabrasDeBusqueda(search).map((tok) => ({
+          OR: [
+            { firstName: { contains: tok, mode: "insensitive" as const } },
+            { lastName: { contains: tok, mode: "insensitive" as const } },
+            { email: { contains: tok, mode: "insensitive" as const } },
+            { phone: { contains: tok, mode: "insensitive" as const } },
+            { patientNumber: { contains: tok, mode: "insensitive" as const } },
+          ],
+        })),
       }),
     }),
     include: {
@@ -901,4 +906,9 @@ export async function POST(req: NextRequest) {
 
   revalidateAfter("patients");
   return NextResponse.json(stripPatientSecrets(patient), { status: 201 });
+}
+
+/** ws1-t1 (N-49): las palabras de una búsqueda (sin vacías, máximo 6). */
+function palabrasDeBusqueda(q: string): string[] {
+  return q.trim().split(/\s+/).filter(Boolean).slice(0, 6);
 }

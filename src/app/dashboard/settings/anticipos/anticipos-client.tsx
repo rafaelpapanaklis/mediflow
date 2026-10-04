@@ -496,7 +496,8 @@ export function AnticiposClient({
             )}
             <Campo
               htmlFor={ids.botMinutos}
-              etiqueta="Plazo para pagar (minutos)"
+              // ws1-t1 (N-52): dos plazos en la misma pantalla, cada uno dice a qué anticipo aplica y en qué unidad.
+              etiqueta="Plazo para pagar el anticipo del bot (minutos)"
               ayuda={`Entre ${MINUTOS_MIN} y ${MINUTOS_MAX}. Pasado el plazo, el horario vuelve a estar libre para otros.`}
             >
               <Entrada
@@ -600,7 +601,7 @@ export function AnticiposClient({
             )}
             <Campo
               htmlFor={ids.panelHoras}
-              etiqueta="Plazo para pagar (horas)"
+              etiqueta="Plazo para pagar el anticipo pedido desde el panel (horas)"
               ayuda={`Entre ${PANEL_HORAS_MIN} y ${PANEL_HORAS_MAX}. Pasado el plazo, la cita se libera y se avisa a recepción (no al paciente).`}
             >
               <Entrada
@@ -725,7 +726,7 @@ export function AnticiposClient({
 }
 
 function FilaAnticipo({ r, tz }: { r: AnticipoReciente; tz: string }) {
-  const est = ESTADOS[r.estado] ?? { texto: r.estado, tono: "neutro" as const };
+  const est = estadoDeAnticipo(r);
   // ws1-t1 (M6): lógica PURA en core.ts (notasAnticipoReciente), probada ahí
   // — sin cita ligada nunca hubo un apartado que confirmar o liberar.
   const notas = notasAnticipoReciente(r);
@@ -757,4 +758,14 @@ function comoPago(r: AnticipoReciente): string {
   if (r.metodo === "manual") return "Registrado a mano";
   if (r.metodo === "mercadopago" || r.referenciaMp) return "Mercado Pago";
   return "—";
+}
+
+/**
+ * ws1-t1 (N-52): el estado en palabras. Una transferencia pedida y sin pagar salía «Sin link» (jerga: la
+ * transferencia no lleva link de Mercado Pago); se dice que se espera la transferencia.
+ */
+function estadoDeAnticipo(r: AnticipoReciente): { texto: string; tono: "neutro" | "info" | "exito" | "alerta" | "peligro" } {
+  const sinMp = r.metodo === "transferencia" || r.metodo === "manual";
+  if (sinMp && (r.estado === "FAILED" || r.estado === "PENDING")) return { texto: "Esperando la transferencia", tono: "info" };
+  return ESTADOS[r.estado] ?? { texto: r.estado, tono: "neutro" };
 }

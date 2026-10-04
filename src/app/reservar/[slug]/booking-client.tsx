@@ -130,7 +130,9 @@ export function BookingClient({
         />
       </main>
 
-      <style>{`input::placeholder, textarea::placeholder { color:#475569 }`}</style>
+      {/* ws1-t1 (N-48): los botones (las horas, «Selecciona un horario») salían en la tipografía del navegador
+          (serif): sin el preflight de Tailwind un <button> no hereda la fuente de la página. */}
+      <style>{`input::placeholder, textarea::placeholder { color:#475569 } button, input, select, textarea { font-family: inherit; }`}</style>
     </div>
   );
 }
