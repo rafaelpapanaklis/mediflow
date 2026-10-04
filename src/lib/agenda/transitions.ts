@@ -25,14 +25,14 @@ function noShowOk(now: Date, start: Date): string | null {
 /**
  * ws1-t1 (N-42, tercera ronda): una cita que todavía no empieza no se da por atendida. Se marcaba «Completada» una
  * cita del 7 de octubre el día 4 y después daba constancia de asistencia. Con 15 min de holgura (el paciente que
- * se atiende un poco antes de su hora). Si el paciente llegó antes de su día, «Marcar llegada» / «Pasar a
+ * se atiende un poco antes de su hora). Si el paciente llegó antes de su día, «Registrar llegada» / «Pasar a
  * consulta» traen la cita a hoy (adelantar-cita-a-hoy) y entonces sí se completa.
  */
 export const HOLGURA_COMPLETAR_MS = 15 * 60 * 1000;
 
 export function completarNoFutura(now: Date, start: Date): string | null {
   return start.getTime() > now.getTime() + HOLGURA_COMPLETAR_MS
-    ? "No se puede completar una cita que todavía no empieza. Si el paciente llegó antes, márcalo con «Marcar llegada»: la cita se trae a hoy."
+    ? "No se puede completar una cita que todavía no empieza. Si el paciente llegó antes, usa «Registrar llegada»: la cita se trae a hoy."
     : null;
 }
 

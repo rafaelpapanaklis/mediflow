@@ -25,3 +25,9 @@ export function subtituloDeLaCita(estado: string, source: string, esWalkIn: bool
   const origen = esWalkIn ? ORIGEN_WALK_IN : origenCorto(source);
   return `${estado} · ${origen.charAt(0).toLowerCase()}${origen.slice(1)}`;
 }
+
+/** ws1-t1 (N-44): «30 min», o «menos de 1 min» cuando terminó en segundos. */
+export function textoDuracion(real: number | null, dibujada: number): string {
+  if (real != null && real < 1) return "menos de 1 min";
+  return `${Math.round(real ?? dibujada)} min`;
+}

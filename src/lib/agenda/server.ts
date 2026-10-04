@@ -147,20 +147,39 @@ export interface AgendaQueryFilter {
  * está pintando. Solo columnas de sql/anticipo-whatsapp.sql (ya aplicado):
  * no depende de que se haya pegado sql/anticipo-desde-panel.sql.
  */
-async function citasConDepositoPagado(clinicId: string, appointmentIds: string[]): Promise<Set<string>> {
-  if (appointmentIds.length === 0) return new Set();
+/**
+ * ws1-t1 (N-43, tercera ronda): en la MISMA consulta, también los anticipos PEDIDOS y sin pagar, con su monto, para
+ * que el panel de la cita diga «Anticipo pedido: $300» en vez de solo «Apartada · paga antes de…». Solo columnas
+ * de sql/anticipo-whatsapp.sql (amount, status).
+ */
+async function depositosDeCitas(
+  clinicId: string,
+  appointmentIds: string[],
+): Promise<{ pagados: Set<string>; pendientes: Map<string, number> }> {
+  const vacio = { pagados: new Set<string>(), pendientes: new Map<string, number>() };
+  if (appointmentIds.length === 0) return vacio;
   try {
     const filas = await prisma.appointmentDeposit.findMany({
-      where: { clinicId, appointmentId: { in: appointmentIds }, status: "PAID" },
-      select: { appointmentId: true },
+      where: { clinicId, appointmentId: { in: appointmentIds }, status: { in: ["PAID", "PENDING"] } },
+      select: { appointmentId: true, status: true, amount: true },
     });
-    return new Set(filas.map((f) => f.appointmentId).filter((id): id is string => !!id));
+    for (const f of filas) {
+      if (!f.appointmentId) continue;
+      if (f.status === "PAID") vacio.pagados.add(f.appointmentId);
+      else vacio.pendientes.set(f.appointmentId, (vacio.pendientes.get(f.appointmentId) ?? 0) + (f.amount ?? 0));
+    }
+    return vacio;
   } catch (e) {
     // Tabla sin aplicar (P2021/P2022): la agenda se calla, nunca se rompe.
     const code = (e as { code?: string })?.code;
-    if (code === "P2021" || code === "P2022") return new Set();
+    if (code === "P2021" || code === "P2022") return vacio;
     throw e;
   }
+}
+
+function conAnticipoPedido(dtos: AgendaAppointmentDTO[], pendientes: Map<string, number>): AgendaAppointmentDTO[] {
+  if (pendientes.size === 0) return dtos;
+  return dtos.map((d) => (pendientes.has(d.id) ? { ...d, anticipoPedido: pendientes.get(d.id) } : d));
 }
 
 function conWalkIn(dtos: AgendaAppointmentDTO[], walkIns: Set<string>): AgendaAppointmentDTO[] {
@@ -298,15 +317,15 @@ export async function fetchAppointmentsForDay(
   });
 
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
-  const [pagados, vencidos, walkIns] = await Promise.all([
-    citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
+  const [depositos, vencidos, walkIns] = await Promise.all([
+    depositosDeCitas(filter.clinicId, dtos.map((d) => d.id)),
     filter.ortoAcceso === false
       ? Promise.resolve(new Set<string>())
       : pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
     // ws1-t1 (C-97): la cita que nació de la fila de espera se marca como walk-in.
     citasDeWalkIn(filter.clinicId, rows),
   ]);
-  return conWalkIn(conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos), walkIns);
+  return conAnticipoPedido(conWalkIn(conMensualidadVencida(conDepositoPagado(dtos, depositos.pagados), vencidos), walkIns), depositos.pendientes);
 }
 
 export async function fetchAppointmentsForRange(
@@ -337,15 +356,15 @@ export async function fetchAppointmentsForRange(
   });
 
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
-  const [pagados, vencidos, walkIns] = await Promise.all([
-    citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
+  const [depositos, vencidos, walkIns] = await Promise.all([
+    depositosDeCitas(filter.clinicId, dtos.map((d) => d.id)),
     filter.ortoAcceso === false
       ? Promise.resolve(new Set<string>())
       : pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
     // ws1-t1 (C-97): la cita que nació de la fila de espera se marca como walk-in.
     citasDeWalkIn(filter.clinicId, rows),
   ]);
-  return conWalkIn(conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos), walkIns);
+  return conAnticipoPedido(conWalkIn(conMensualidadVencida(conDepositoPagado(dtos, depositos.pagados), vencidos), walkIns), depositos.pendientes);
 }
 
 export async function fetchPendingValidation(

@@ -47,6 +47,8 @@ export interface CitaVista {
   duracionMin: number;
   /** `HH:MM–HH:MM`. */
   rango: string;
+  /** ws1-t1 (N-44): minutos reales (sin el piso de 5 que usa la rejilla); null si no se sabe. */
+  duracionReal: number | null;
   /** `HH:MM` de inicio, para la tarjeta compacta de Semana. */
   horaInicio: string;
   nombrePaciente: string;
@@ -239,9 +241,13 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     id: dto.id,
     inicioMin,
     duracionMin,
-    rango: dto.endsAt
-      ? `${formatTimeInTz(dto.startsAt, timezone)}–${formatTimeInTz(dto.endsAt, timezone)}`
-      : formatTimeInTz(dto.startsAt, timezone),
+    // ws1-t1 (N-44): una cita que empezó y terminó el mismo minuto (walk-in completado en segundos) decía
+    // «03:28–03:28»; ahora solo «03:28».
+    rango:
+      dto.endsAt && formatTimeInTz(dto.endsAt, timezone) !== formatTimeInTz(dto.startsAt, timezone)
+        ? `${formatTimeInTz(dto.startsAt, timezone)}–${formatTimeInTz(dto.endsAt, timezone)}`
+        : formatTimeInTz(dto.startsAt, timezone),
+    duracionReal: Number.isFinite(duracionCruda) ? duracionCruda : null,
     horaInicio: formatTimeInTz(dto.startsAt, timezone),
     nombrePaciente: dto.patient.name,
     // `maskedPatient` devuelve id vacío cuando el paciente está restringido

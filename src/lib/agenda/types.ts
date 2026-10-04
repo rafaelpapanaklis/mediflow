@@ -95,6 +95,8 @@ export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
    * rango pedido); las rutas de mutación no lo tocan y queda `undefined`
    * (se trata como falso) hasta el siguiente refetch — no se inventa. */
   depositoPagado?: boolean;
+  /** ws1-t1 (N-43): monto de un anticipo PEDIDO y todavía sin pagar (solo lo rellenan los cargadores de la agenda). */
+  anticipoPedido?: number;
   /**
    * Ortodoncia — R4 (ws1-t5): ¿el paciente de esta cita tiene una mensualidad
    * VENCIDA en su caso de ortodoncia (contrato `cobranzaDelCaso`, Ola 0)? Solo

@@ -68,7 +68,7 @@ import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useMinuto } from "./usar-minuto";
 import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
-import { ORIGEN_WALK_IN, origenCorto, subtituloDeLaCita } from "@/lib/agenda-nueva/origen-cita";
+import { ORIGEN_WALK_IN, origenCorto, subtituloDeLaCita, textoDuracion } from "@/lib/agenda-nueva/origen-cita";
 import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
 import { cancelarCitaEnServidor, useCancelarCita, type RespuestaCancelarCita } from "./cancelar-con-dinero";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
@@ -87,7 +87,11 @@ import { useT } from "@/i18n/i18n-provider";
    el paso resaltado diciendo «Atendida» se leen como dos cosas distintas.
    ═══════════════════════════════════════════════════════════════════════ */
 
+// «Registrado» es el nombre del estado en toda la app (ficha y chip, estados.test); el botón que lleva a él
+// dice ahora «Registrar llegada» (ws1-t1, N-47: el paso y el botón usaban verbos distintos).
 const PASOS = ["Confirmada", "Registrado", "En consulta", "Completada", "Salió"] as const;
+/** ws1-t1 (N-44): una cita de la fila de espera nunca se confirmó: su primer paso dice de dónde vino. */
+const PASOS_WALK_IN = ["Sin cita (fila)", "Registrado", "En consulta", "Completada", "Salió"] as const;
 
 /**
  * Dónde cae cada estado en el recorrido de cinco pasos.
@@ -129,7 +133,7 @@ const ACCIONES: Partial<Record<AppointmentStatus, Omit<AccionEstado, "destino">>
   // otra acción (el botón de WhatsApp de arriba, que además marca el
   // recordatorio como enviado). Juntarlas mentiría en el expediente.
   CONFIRMED: { etiqueta: "Confirmar cita", icono: Check },
-  CHECKED_IN: { etiqueta: "Marcar llegada", icono: DoorOpen },
+  CHECKED_IN: { etiqueta: "Registrar llegada", icono: DoorOpen },
   IN_CHAIR: { etiqueta: "Pasar al sillón", icono: ArrowRight },
   IN_PROGRESS: { etiqueta: "Pasar a consulta", icono: ArrowRight },
   COMPLETED: { etiqueta: "Terminar consulta", icono: Check },
@@ -495,7 +499,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
             <Dato rotulo="Responsable" valor={cita.responsableNombre} />
             <Dato
               rotulo="Tratamiento"
-              valor={`${cita.tratamiento || "Sin especificar"} · ${Math.round(cita.duracionMin)} min`}
+              // ws1-t1 (N-44): la duración REAL; un walk-in completado en segundos decía «5 min» (el piso de la rejilla).
+              valor={`${cita.tratamiento || "Sin especificar"} · ${textoDuracion(cita.duracionReal, cita.duracionMin)}`}
             />
             <Dato rotulo="Unidad dental" valor={cita.unidadNombre ?? "Sin asignar"} />
             <Dato rotulo="Origen" valor={dto.isWalkIn ? ORIGEN_WALK_IN : origenCorto(dto.source)} />
@@ -518,7 +523,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               </div>
             ) : (
               <div className={s.flujo}>
-                {PASOS.map((etiqueta, k) => {
+                {(dto.isWalkIn ? PASOS_WALK_IN : PASOS).map((etiqueta, k) => {
                   const hecho = k < recorrido.hechos;
                   const actual = k === recorrido.actual;
                   return (
@@ -544,7 +549,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                         >
                           {etiqueta}
                         </div>
-                        {k === pasoConDetalle && <div className={s.flujoSub}>{cita.detalle}</div>}
+                        {/* ws1-t1 (N-47): sin repetir el nombre del paso («Confirmada / Confirmada»). */}
+                        {k === pasoConDetalle && cita.detalle !== etiqueta && <div className={s.flujoSub}>{cita.detalle}</div>}
                       </div>
                     </div>
                   );
@@ -585,10 +591,20 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 </span>
                 <span>
                   {/* H4 (revisión final, ws1-t4): con su día, no solo la hora. */}
+                  {/* ws1-t1 (N-43): con el monto pedido, si se sabe. */}
+                  {dto.anticipoPedido ? <>Anticipo pedido de <span className={s.notaDato}>{pesosCortos(dto.anticipoPedido)}</span> · </> : null}
                   Apartada · paga antes de{" "}
                   <span className={s.notaDato}>{plazoApartadoEnPalabras(dto.holdExpiresAt, ahora, state.timezone)}</span>
                 </span>
               </div>
+              {/* ws1-t1 (N-43): el camino para registrar la transferencia recibida o volver a copiar el texto vive en
+                  la factura de la cita («Registrar anticipo recibido» / «Pedir anticipo»): un clic hasta ahí. */}
+              {permissions.canDeposit && (
+                <button type="button" className={s.accionSecundaria} style={{ marginTop: 8, width: "100%" }} onClick={abrirCobro} disabled={buscandoFactura}>
+                  <Wallet size={16} strokeWidth={2} />
+                  {buscandoFactura ? "Abriendo…" : "Registrar el anticipo o copiar el texto otra vez"}
+                </button>
+              )}
             </div>
           )}
 
@@ -847,4 +863,10 @@ function iniciales(nombre: string): string {
 }
 
 /** El subtítulo bajo el nombre. El diseño pone el teléfono; no lo tenemos. */
+
+/** ws1-t1 (N-43): «$300» (sin centavos cuando es entero). */
+function pesosCortos(n: number): string {
+  const entero = Number.isInteger(Math.round(n * 100) / 100);
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: entero ? 0 : 2, maximumFractionDigits: entero ? 0 : 2 }).format(n);
+}
 
