@@ -394,14 +394,16 @@
   gap: 6px;
 }
 
-/* `.enLinea.enLinea` (0,3,1): gana a `.raiz input:not(…)` / `.raiz select` (0,2,1). */
-.raiz .enLinea.enLinea > select {
+/* `.enLinea` triple (0,4,1): gana a `.raiz input:not(…):not(…)` (0,3,1) y a
+   `.raiz select` (0,1,1). Con doble, el campo del «Descuento global» se salía y
+   el selector quedaba en una flechita (N-12 de la segunda auditoría). */
+.raiz .enLinea.enLinea.enLinea > select {
   flex: 1;
   min-width: 0;
   width: auto;
 }
 
-.raiz .enLinea.enLinea > input {
+.raiz .enLinea.enLinea.enLinea > input {
   width: 110px;
   flex-shrink: 0;
 }
@@ -418,7 +420,7 @@
   gap: 8px;
 }
 
-.raiz input:not([type="checkbox"], [type="radio"]),
+.raiz input:not([type="checkbox"]):not([type="radio"]),
 .raiz select,
 .raiz textarea,
 .raiz :global(.input-new) {
@@ -451,14 +453,14 @@
 }
 
 @media (hover: hover) {
-  .raiz input:not([type="checkbox"], [type="radio"]):hover,
+  .raiz input:not([type="checkbox"]):not([type="radio"]):hover,
   .raiz select:hover,
   .raiz textarea:hover {
     border-color: var(--m2-texto-3);
   }
 }
 
-.raiz input:not([type="checkbox"], [type="radio"]):focus,
+.raiz input:not([type="checkbox"]):not([type="radio"]):focus,
 .raiz select:focus,
 .raiz textarea:focus,
 .raiz :global(.input-new):focus {
@@ -467,8 +469,8 @@
 }
 
 /* Auditoría de uso C-02: el reembolso pregunta con radios; van como las casillas.
-   (El :not de arriba lleva LISTA, no dos :not: dos subían la especificidad a
-   (0,3,1) y pisaban `.enLinea.enLinea > input` — N-12 de la segunda auditoría.) */
+   (Los dos :not de arriba suben esas reglas a (0,3,1): por eso `.enLinea` va
+   triple abajo — N-12 de la segunda auditoría.) */
 .raiz input[type="checkbox"],
 .raiz input[type="radio"] {
   width: 16px;
@@ -528,7 +530,7 @@
    (`.dark input {…}`), y eso gana a cualquier especificidad. Aquí se le gana
    con la misma arma, leyendo los tokens; es lo mismo que hace el buscador
    del menú (`menu-dos-niveles.module.css`, `.buscador input`). */
-:global(.dark) .raiz input:not([type="checkbox"], [type="radio"]),
+:global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]),
 :global(.dark) .raiz select,
 :global(.dark) .raiz textarea {
   background-color: var(--m2-n2-fondo) !important;
@@ -542,14 +544,14 @@
 }
 
 @media (hover: hover) {
-  :global(.dark) .raiz input:not([type="checkbox"], [type="radio"]):hover,
+  :global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]):hover,
   :global(.dark) .raiz select:hover,
   :global(.dark) .raiz textarea:hover {
     border-color: var(--m2-texto-3) !important;
   }
 }
 
-:global(.dark) .raiz input:not([type="checkbox"], [type="radio"]):focus,
+:global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]):focus,
 :global(.dark) .raiz select:focus,
 :global(.dark) .raiz textarea:focus {
   border-color: var(--m2-activo) !important;
