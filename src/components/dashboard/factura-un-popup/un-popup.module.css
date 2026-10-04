@@ -46,6 +46,180 @@
   color: var(--m2-texto);
 }
 
+/* ── Rediseño del cobro (pedido de Rafael, 4-oct-2026) ──────────────────
+   El lenguaje de «Cobrar hoy»: título con su acción rápida a la derecha,
+   el monto grande con su $ y el saldo al lado, lo de más con su destino y
+   un resumen de lo que pasa al cobrar. Solo tokens del panel. */
+
+.unPopup .cobroCabeza {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.unPopup .enlace {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-activo);
+  cursor: pointer;
+}
+
+.unPopup .enlace:disabled {
+  color: var(--m2-texto-3);
+  cursor: default;
+}
+
+.unPopup .enlace:focus-visible {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: var(--m2-foco);
+}
+
+.unPopup .monto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.unPopup .montoCaja {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.unPopup .montoCaja:focus-within {
+  border-color: var(--m2-activo);
+  box-shadow: var(--m2-foco);
+}
+
+.unPopup .montoPrefijo {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--m2-texto-3);
+}
+
+/* (0,4,1): gana a `.raiz input:not(…):not(…)` (0,3,1) de la hoja de la factura. */
+.unPopup.unPopup .montoCaja input.montoInput {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  color: var(--m2-texto);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.unPopup .montoSaldo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  white-space: nowrap;
+}
+
+.unPopup .montoSaldo strong {
+  font-size: 15px;
+  color: var(--m2-texto);
+}
+
+.unPopup .excedente {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+}
+
+.unPopup .excedenteTexto {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+/* El selector de destino, como los demás campos de la factura. */
+.unPopup.unPopup .excedente select.selector {
+  width: 100%;
+  min-width: 0;
+}
+
+.unPopup .resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+}
+
+.unPopup .resumenFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.unPopup .resumenFila strong {
+  color: var(--m2-texto);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.unPopup .resumenTotal {
+  padding-top: 6px;
+  border-top: 1px solid var(--m2-borde);
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.unPopup .resumenTotal strong {
+  font-size: 14px;
+}
+
+/* Celular: el saldo pasa debajo del monto (que se queda con todo el ancho). */
+@media (max-width: 480px) {
+  .unPopup .monto {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .unPopup .montoSaldo {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 12px;
+  }
+}
+
 /* Las notas, más bajas que en la ventana de cobro: aquí comparten alto con la
    factura. Crecen igual si se escribe (el alto es mínimo, no fijo). */
 .unPopup .cobro textarea.notas.notas {

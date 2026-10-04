@@ -18,6 +18,8 @@ import { useSaldoOrto, registrarCobroConAdelanto } from "@/components/dashboard/
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 // ws1-t6 (F1): el aviso del cobro automático con tarjeta (la MISMA pieza que «Registrar pago»).
 import { useAvisoCobroAutomatico } from "@/components/cobro-automatico/aviso-en-cobro";
+// Decisión de Rafael (4-oct-2026): lo cobrado de más se abona a otra factura del paciente.
+import { repartirConAbono, type FacturaAbonable } from "@/lib/dinero/abono-core";
 
 /**
  * EL COBRO DENTRO DEL DETALLE DE LA FACTURA (ws1-t2, solo con `menu-dos-niveles`).
@@ -68,7 +70,9 @@ export interface OpcionesCobro {
 
 export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar, montoSugerido }: OpcionesCobro) {
   const t = useT();
-  const txCobro = textosDinero(useLocale()).cobro;
+  const txDinero = textosDinero(useLocale());
+  const txCobro = txDinero.cobro;
+  const txAbono = txDinero.abono;
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<MetodoDelCobro>("cash");
   // C-33: la fecha por defecto es el «hoy» de la clínica, no el de la computadora.
@@ -86,6 +90,23 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   const cobroAuto = useAvisoCobroAutomatico(id, Number(amount) || 0, abierta && method !== "mercadopago");
   const balance = factura?.balance ?? 0;
 
+  // «Abonar a otra factura»: las demás facturas del paciente con saldo y su saldo
+  // a favor (GET /api/invoices/:id/abonar). `destino` "" = lo de más queda a favor.
+  const [abono, setAbono] = useState<{ abonables: FacturaAbonable[]; saldoAFavor: number } | null>(null);
+  const [destino, setDestino] = useState("");
+  const [vueltaAbono, setVueltaAbono] = useState(0);
+  useEffect(() => {
+    setAbono(null);
+    setDestino("");
+    if (!abierta || id === null) return;
+    let vivo = true;
+    fetch(`/api/invoices/${encodeURIComponent(id)}/abonar`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo && d && Array.isArray(d.abonables)) setAbono({ abonables: d.abonables, saldoAFavor: Number(d.saldoAFavor) || 0 }); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [abierta, id, vueltaAbono]);
+
   // Mismos valores iniciales que la ventana de cobro al abrirse.
   useEffect(() => {
     if (!abierta || id === null) return;
@@ -102,13 +123,19 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   // adelanto (siguientes mensualidades, y lo que sobre a favor), no un error.
   // Fuera de ortodoncia (o mientras no se sabe) sigue bloqueado como siempre.
   const adelanto = isOverpay && orto.esOrto;
+  // Fuera de ortodoncia (ya SABIDO: `info` cargó sin caso), lo de más ya no se
+  // bloquea: se abona a la factura elegida y lo que sobre queda a favor.
+  const conExcedente = isOverpay && !!orto.info && !orto.info.caso;
   const isInvalid = !amountNum || amountNum <= 0 || (isOverpay && !adelanto);
+  const invalido = isInvalid && !(conExcedente && amountNum > 0);
+  const elegida = abono?.abonables.find((f) => f.id === destino) ?? null;
+  const reparto = repartirConAbono({ monto: amountNum || 0, faltaCobrada: balance, faltaDestino: elegida ? elegida.saldo : null });
 
   // `sinAviso === true` solo lo manda «Cobrar de todos modos»; el clic del botón
   // pasa el evento, que no cuenta.
   async function submit(sinAviso?: unknown) {
     const invoice = factura;
-    if (isInvalid || saving || !invoice) return;
+    if (invalido || saving || !invoice) return;
     // Auditoría de uso C-15: transferencia sin referencia no (la regla de «Registrar
     // anticipo recibido»: el mismo dinero, la misma regla).
     if (method === "transfer" && !reference.trim()) { toast.error(txCobro.faltaReferencia); return; }
@@ -139,6 +166,26 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
           alCobrar();
           return;
         }
+      }
+      if (conExcedente) {
+        const res = await fetch(`/api/invoices/${invoice.id}/abonar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: amountNum,
+            method,
+            paidAt: paidAtInstant(paidAt, undefined, hoy)?.toISOString(),
+            reference: reference.trim() || undefined,
+            notes: notes.trim() || undefined,
+            destino: destino || null,
+            confirmarCobroAutomatico: cobroAuto.confirmado || undefined,
+          }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error ?? t("clinical.paymentModal.registerError"));
+        toast.success(txAbono.exito(fmtMXNdec(out.reparto?.enDestino ?? 0), out.folioDestino ?? null, fmtMXNdec(out.reparto?.aFavor ?? 0)), { duration: 8000 });
+        alCobrar();
+        return;
       }
       if (adelanto) {
         const r = await registrarCobroConAdelanto({ invoiceId: invoice.id, amount: amountNum, method, paidAt, reference, notes });
@@ -175,13 +222,16 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   }
 
   return {
-    amount, setAmount,
+    // El campo enseña el monto con formato («4,000.00»): las comas no son decimales.
+    amount, setAmount: (v: string) => setAmount(String(v ?? "").replace(/,/g, "")),
     method, setMethod,
     paidAt, setPaidAt,
     reference, setReference,
     notes, setNotes,
     // `isInvalid` también se apaga mientras falte confirmar el adelanto del cobro automático.
-    saving, amountNum, isOverpay, isInvalid: isInvalid || cobroAuto.bloquea, balance, adelanto, orto, cobroAuto,
+    saving, amountNum, isOverpay, isInvalid: invalido || cobroAuto.bloquea, balance, adelanto, orto, cobroAuto,
+    // «Abonar a otra factura»
+    conExcedente, abono, destino, setDestino, reparto, recargarAbono: () => setVueltaAbono((n) => n + 1),
     hoy,
     submit,
     avisoCaja: freno.visible,

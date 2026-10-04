@@ -75,7 +75,9 @@ test("el POST del cobro es, letra por letra, el de la ventana de cobro", () => {
   ]) {
     assert.ok(postNuevo.includes(campo), `el cobro ya no manda: ${campo}`);
   }
-  assert.equal((nuevo.match(/fetch\(/g) ?? []).length, 2, "el hook llama al servidor dos veces: confirmar el borrador y cobrar");
+  // + «Abonar a otra factura» (decisión de Rafael, 4-oct-2026, ws1-t5): leer las
+  // facturas abonables y cobrar con abono, en su propia ruta (/abonar).
+  assert.equal((nuevo.match(/fetch\(/g) ?? []).length, 4, "el hook llama al servidor: confirmar el borrador, cobrar, y las dos de «abonar a otra factura»");
 });
 
 test("misma validación y mismos valores iniciales que la ventana de cobro", () => {

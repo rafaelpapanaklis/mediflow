@@ -1,13 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXNdec } from "@/lib/format";
 import { todayLocalISO } from "@/lib/billing/paid-at";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { BotonMercadoPago, LinkMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
@@ -58,33 +59,92 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
   mercadoPago?: { invoiceId: string; alCambiar?: (link: unknown) => void } | null;
 }) {
   const t = useT();
+  const tx = textosDinero(useLocale());
   const esMercadoPago = !!mercadoPago && cobro.method === "mercadopago";
+  // El monto se teclea limpio y se lee con formato de moneda al salir del campo.
+  const [tecleando, setTecleando] = useState(false);
+  const montoVisible = tecleando ? cobro.amount : conFormato(cobro.amount);
+  const r = cobro.reparto;
+  const elegida = cobro.abono?.abonables.find((f) => f.id === cobro.destino) ?? null;
+  const quedaPorCobrar = Math.max(0, Math.round((cobro.balance - r.enCobrada) * 100) / 100);
   return (
     <section className={u.cobro} aria-label={t("clinical.paymentModal.title")}>
-      <h3 className={u.cobroTitulo}>{t("clinical.paymentModal.title")}</h3>
+      {/* Rediseño (pedido de Rafael, 4-oct-2026): monto grande con $ y formato, el
+          saldo a la vista, «Saldo completo», lo de más abonable a otra factura y
+          el resumen de lo que pasa al cobrar — el lenguaje de «Cobrar hoy». */}
+      <div className={u.cobroCabeza}>
+        <h3 className={u.cobroTitulo}>{t("clinical.paymentModal.title")}</h3>
+        {!esMercadoPago && (
+          <button
+            type="button"
+            className={u.enlace}
+            onClick={() => cobro.setAmount(String(cobro.balance))}
+            disabled={bloqueado || Number(cobro.amountNum) === cobro.balance}
+          >
+            {tx.abono.saldoCompleto}
+          </button>
+        )}
+      </div>
 
       {descuento}
 
       {!esMercadoPago && (
       <div className={c.campo}>
-        <Label>{t("clinical.paymentModal.amountToCharge")}</Label>
-        <Input
-          id={ID_MONTO_COBRO}
-          type="number"
-          inputMode="decimal"
-          step="0.01"
-          min={0}
-          value={cobro.amount}
-          onChange={(e) => cobro.setAmount(e.target.value)}
-          disabled={bloqueado}
-        />
-        {cobro.isOverpay && !cobro.adelanto && (
+        <Label htmlFor={ID_MONTO_COBRO}>{t("clinical.paymentModal.amountToCharge")}</Label>
+        <div className={u.monto}>
+          <div className={u.montoCaja}>
+            <span className={u.montoPrefijo} aria-hidden>$</span>
+            <input
+              id={ID_MONTO_COBRO}
+              className={u.montoInput}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={montoVisible}
+              onFocus={() => setTecleando(true)}
+              onBlur={() => setTecleando(false)}
+              onChange={(e) => cobro.setAmount(e.target.value)}
+              disabled={bloqueado}
+            />
+          </div>
+          <div className={u.montoSaldo}>
+            <span>{tx.abono.saldoDeLaFactura}</span>
+            <strong className={u.cifraEnTexto}>{fmtMXNdec(cobro.balance)}</strong>
+          </div>
+        </div>
+        {/* Mientras se sabe si es de ortodoncia (adelanto) o no (abono), un aviso
+            neutro; el rojo solo si de verdad no se puede cobrar de más. */}
+        {cobro.isOverpay && !cobro.adelanto && !cobro.conExcedente && (cobro.orto.info === null ? (
+          <p className={c.ayuda} role="status">{tx.abono.revisando}</p>
+        ) : (
           <p className={u.avisoPeligro}>
             {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(cobro.balance) })}
           </p>
-        )}
+        ))}
         {bajoElMonto}
       </div>
+      )}
+
+      {/* Lo de más (decisión de Rafael): a otra factura del paciente o a favor. */}
+      {!esMercadoPago && cobro.conExcedente && (
+        <div className={u.excedente} role="group" aria-label={tx.abono.aDonde} data-abonar-excedente>
+          <p className={u.excedenteTexto}>{tx.abono.excedente(fmtMXNdec(r.excedente))}</p>
+          <div className={c.campo}>
+            <Label htmlFor="factura-cobro-destino">{tx.abono.aDonde}</Label>
+            <select
+              id="factura-cobro-destino"
+              className={u.selector}
+              value={cobro.destino}
+              onChange={(e) => cobro.setDestino(e.target.value)}
+              disabled={bloqueado}
+            >
+              <option value="">{tx.abono.dejarAFavor}</option>
+              {(cobro.abono?.abonables ?? []).map((f) => (
+                <option key={f.id} value={f.id}>{tx.abono.opcion(f.invoiceNumber, f.concepto, fmtMXNdec(f.saldo))}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       )}
 
       <div className={c.campo}>
@@ -130,12 +190,14 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
           <DateField max={cobro.hoy ?? todayLocalISO()} className={c.campoFecha} popoverClassName={CLASES_CALENDARIO_REDISENO} value={cobro.paidAt} onChange={(e) => cobro.setPaidAt(e.target.value)} />
         </div>
         <div className={c.campo}>
-          <Label>{t("clinical.paymentModal.reference")}</Label>
+          {/* Con transferencia la referencia es obligatoria (C-15): la etiqueta lo dice. */}
+          <Label>{cobro.method === "transfer" ? tx.cobro.referenciaObligatoria : t("clinical.paymentModal.reference")}</Label>
           <Input
             placeholder={cobro.method === "transfer" ? t("clinical.paymentModal.refTransfer") : cobro.method === "check" ? t("clinical.paymentModal.refCheck") : t("clinical.paymentModal.refAuthorization")}
             value={cobro.reference}
             onChange={(e) => cobro.setReference(e.target.value)}
             disabled={bloqueado}
+            aria-required={cobro.method === "transfer"}
           />
         </div>
       </div>
@@ -150,6 +212,25 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
           disabled={bloqueado}
         />
       </div>
+
+      {/* Lo que pasa al cobrar, a la vista (como «Cobrar hoy»). */}
+      {cobro.amountNum > 0 && (
+        <div className={u.resumen} role="status" data-resumen-cobro>
+          <div className={u.resumenFila}><span>{tx.abono.pagaHoy}</span><strong>{fmtMXNdec(cobro.amountNum)}</strong></div>
+          {r.excedente > 0 && cobro.conExcedente && (
+            <>
+              <div className={u.resumenFila}><span>{tx.abono.estaFactura}</span><strong>{fmtMXNdec(r.enCobrada)}</strong></div>
+              {elegida && r.enDestino > 0 && (
+                <div className={u.resumenFila}><span>{tx.abono.abonoA(elegida.invoiceNumber)}</span><strong>{fmtMXNdec(r.enDestino)}</strong></div>
+              )}
+              {r.aFavor > 0 && (
+                <div className={u.resumenFila}><span>{tx.abono.aFavor}</span><strong>{fmtMXNdec(r.aFavor)}</strong></div>
+              )}
+            </>
+          )}
+          <div className={`${u.resumenFila} ${u.resumenTotal}`}><span>{tx.abono.quedaPorCobrar}</span><strong>{fmtMXNdec(quedaPorCobrar)}</strong></div>
+        </div>
+      )}
       </>
       )}
 
@@ -159,6 +240,15 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
       <AvisoCajaDeOtraPersona nombre={cobro.cajaDe} />
     </section>
   );
+}
+
+/** «4000» → «4,000.00» (lo tecleado, sin tocar si no es un número). */
+function conFormato(valor: string): string {
+  const limpio = String(valor ?? "").replace(/,/g, "").trim();
+  if (limpio === "") return "";
+  const n = Number(limpio);
+  if (!Number.isFinite(n)) return valor;
+  return n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /**

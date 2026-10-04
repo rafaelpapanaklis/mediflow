@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { cfdiAvisoPersistente, cfdiReintentable, cfdiImpideReintento } from "@/lib/cfdi-avisos";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet, HandCoins, Clock } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Receipt, Download, MessageCircle, Wallet, HandCoins, Clock, ArrowRightLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -51,6 +51,8 @@ import { AvisoCobroAutomaticoEnCobro } from "@/components/cobro-automatico/aviso
 import { useCondicionesDeFactura } from "@/components/dashboard/plan-de-pagos/use-condiciones";
 import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-cfdi";
 import { PaymentCfdiButton } from "./payment-cfdi-button";
+// Decisión de Rafael (4-oct-2026): «Abonar a otra factura».
+import { DialogoAbonar, useDatosAbono } from "./dialogo-abonar";
 import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 // ws1-t8: mandar el CFDI al paciente (F-17), paciente extranjero (F-22) y avisos del emisor (F-15).
@@ -273,6 +275,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   const [refundDestino, setRefundDestino] = useState<DestinoDeReembolso | "">("");
   const txReembolso = textosDinero(useLocaleDinero()).reembolso;
   const txCancelarConPagos = textosDinero(useLocaleDinero()).cancelarConPagos;
+  const txAbono = textosDinero(useLocaleDinero()).abono;
   const [editTotal,    setEditTotal]    = useState("");
   const [discountAmt,  setDiscountAmt]  = useState("");
   const [cancelReason, setCancelReason] = useState("");
@@ -388,6 +391,10 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     alCobrar: handlePaymentSuccess,
     montoSugerido,
   });
+  // «Abonar a otra factura»: las demás facturas del paciente con saldo. Sin ninguna, no hay botón.
+  const [abonarAbierto, setAbonarAbierto] = useState(false);
+  const [vueltaAbono, setVueltaAbono] = useState(0);
+  const datosAbono = useDatosAbono(invoice?.id, open && !!invoice && invoice.status !== "CANCELLED" && invoice.status !== "DRAFT", vueltaAbono);
   // H25: «Marcar pagada» también cobra en efectivo (todo el saldo): mismo aviso de caja cerrada.
   const frenoMarkPaid = useFrenoCajaCerrada(open && !!invoice && invoice.status !== "PAID" && invoice.status !== "CANCELLED", true);
   // CFDI por pago (ws1-t1): solo tiene sentido pintarlo donde YA se pinta el
@@ -1348,6 +1355,13 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
                 )}
+                {/* Pedido de Rafael: «Abonar a otra factura», justo después de «Registrar
+                    pago». Solo si el paciente tiene OTRA factura con saldo. */}
+                {puedeCobrar && !citaCanceladaConDinero && (datosAbono?.abonables.length ?? 0) > 0 && (
+                <ButtonNew variant="secondary" icon={<ArrowRightLeft size={14} aria-hidden />} onClick={() => setAbonarAbierto(true)} disabled={busy} data-boton-abonar>
+                  {txAbono.boton}
+                </ButtonNew>
+                )}
                 {/* «Marcar pagada» liquida TODO el saldo de un clic. En una factura a
                     plazos eso borra el calendario de cuotas por un descuido (ws1-t4 #69):
                     ahí se cobra con «Cobrar», que pide el monto (y si de verdad es
@@ -1447,6 +1461,15 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* «Abonar a otra factura» (decisión de Rafael, 4-oct-2026). */}
+      <DialogoAbonar
+        open={abonarAbierto}
+        onClose={() => setAbonarAbierto(false)}
+        invoice={{ id: invoice.id, invoiceNumber: invoice.invoiceNumber, balance: invoice.balance }}
+        datos={datosAbono}
+        onHecho={async () => { setVueltaAbono((n) => n + 1); cobro.recargarAbono(); await onMutated(); await refrescarFactura(); }}
+      />
 
       {/* Sub-modal: Reembolsar */}
       <Dialog open={sub === "refund"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
