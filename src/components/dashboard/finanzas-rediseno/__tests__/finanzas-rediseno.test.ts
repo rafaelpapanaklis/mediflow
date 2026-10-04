@@ -124,8 +124,12 @@ test("B6: el gasto de una compra muestra proveedor y avisa distinto al borrar (m
   assert.match(datos, /providerName\??:\s*string \| null/, "Gasto debe traer providerName");
 
   const deleteGasto = /async function deleteGasto\(id: string\) \{([\s\S]*?)\n  \}/.exec(datos)?.[1] ?? "";
-  assert.match(deleteGasto, /purchaseId/, "deleteGasto debe distinguir un gasto nacido de una compra");
-  assert.match(deleteGasto, /NO revierte las existencias/, "el aviso debe advertir que no revierte inventario");
+  // ws1-t2 (auditoría de uso C-35): el texto vive en lib/finanzas/aviso-borrar-gasto.ts (diálogo del
+  // panel, ya no `confirm()`); deleteGasto le pasa el gasto entero, con su purchaseId.
+  assert.match(deleteGasto, /avisoBorrarGasto\(gasto,/, "deleteGasto debe pasar el gasto (con purchaseId) al aviso");
+  const aviso = readFileSync(join(process.cwd(), "src/lib/finanzas/aviso-borrar-gasto.ts"), "utf8");
+  assert.match(aviso, /g\?\.purchaseId/, "el aviso debe distinguir un gasto nacido de una compra");
+  assert.match(aviso, /NO revierte las existencias/, "el aviso debe advertir que no revierte inventario");
 
   const pantalla = readFileSync(join(CARPETA, "finanzas-rediseno.tsx"), "utf8");
   assert.match(pantalla, /g\.purchaseId/, "la tabla debe leer purchaseId para pintar la insignia");
