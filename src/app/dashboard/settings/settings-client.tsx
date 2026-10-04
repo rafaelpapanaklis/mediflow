@@ -20,7 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
 import { getResenasSettings } from "@/lib/reminders/config";
 import { useTextosResena } from "@/lib/reviews/textos-resena";
 import toast from "react-hot-toast";
