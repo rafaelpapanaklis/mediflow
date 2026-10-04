@@ -413,6 +413,8 @@ async function v2Handler(
             clinicId: ctx.clinicId,
             patientId: { in: rawPatients.map((p) => p.id) },
             status: { in: [...ESTADOS_DE_VISITA] },
+            // Una «visita» ya pasó: una cita futura marcada Completada por error no es la última visita.
+            startsAt: { lte: new Date() },
           },
           _max: { startsAt: true },
         })

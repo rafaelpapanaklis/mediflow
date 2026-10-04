@@ -27,6 +27,7 @@ test("🔴→🟢 la lista usa la última cita atendida, en UNA consulta y con e
   assert.match(bloque, /groupBy\(/);
   assert.match(bloque, /clinicId: ctx\.clinicId/);
   assert.match(bloque, /status: \{ in: \[\.\.\.ESTADOS_DE_VISITA\] \}/);
+  assert.match(bloque, /startsAt: \{ lte: new Date\(\) \}/, "una cita futura no es la última visita");
 });
 
 test("🔴→🟢 «Con deuda» cuenta solo a los pacientes que este usuario ve (el mismo set que la lista)", () => {
