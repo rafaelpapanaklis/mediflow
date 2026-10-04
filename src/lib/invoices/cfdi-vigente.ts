@@ -18,7 +18,8 @@ import { isFacturapiLive } from "@/lib/facturapi-env";
  *
  * Mientras exista cualquiera de los dos últimos, cancelar, anular, reembolsar o
  * cambiar el precio dejaría el CFDI vigente por el importe original: se bloquea.
- * Cancelar el CFDI ante el SAT todavía no existe en dental.
+ * La salida es cancelar el CFDI ante el SAT, o emitir una nota de crédito, desde
+ * el bloque «CFDI ante el SAT» de la factura (ws1-t3, lib/invoices/cfdi-cancelacion.ts).
  */
 export const CFDI_CLAIM_PREFIX = "timbrando:";
 
@@ -64,8 +65,9 @@ export function cfdiVigenteResponse(cfdiUuid: string | null, accion: CfdiBlocked
   return NextResponse.json({
     error:
       `No se puede ${accion} esta factura: ${cfdi}. Si se hiciera aquí, el CFDI seguiría ` +
-      "vigente ante el SAT por el importe original. Primero hay que cancelar ese CFDI ante el SAT, " +
-      "y eso todavía no se puede hacer desde DaleControl: escríbenos a soporte con el folio de la factura.",
+      "vigente ante el SAT por el importe original. Primero cancela ese CFDI ante el SAT (o, para una " +
+      "devolución o un descuento, emite una nota de crédito) desde «CFDI ante el SAT» en el detalle de la " +
+      "factura; lo hace el dueño o un administrador.",
     code: "CFDI_VIGENTE",
   }, { status: 409 });
 }
