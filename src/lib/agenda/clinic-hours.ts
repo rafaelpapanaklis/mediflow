@@ -198,8 +198,11 @@ export interface ScheduleViolation {
    * `avisoDeHorarioDoctor` (src/lib/horario-doctor/core.ts) cuando la cita
    * cae fuera del horario PROPIO del doctor, y viaja por el mismo campo por
    * la misma razón.
+   *
+   * `patient_overlap` (ws1-t1, C-87): el PACIENTE ya tiene otra cita a esa hora con otro doctor. Lo produce
+   * `src/lib/agenda/paciente-empalmado.ts`; avisa, no bloquea.
    */
-  reason: "closed_day" | "before_open" | "after_close" | "blocked" | "doctor_off";
+  reason: "closed_day" | "before_open" | "after_close" | "blocked" | "doctor_off" | "patient_overlap";
   /** Copy listo para toast del staff. */
   message: string;
   /** Ventana del día en "HH:MM" (null si el día está cerrado). */

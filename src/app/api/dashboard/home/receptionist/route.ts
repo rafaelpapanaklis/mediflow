@@ -13,6 +13,7 @@ import type {
   WaitlistEntry as WaitlistEntryHome,
   AppointmentDTO,
 } from "@/lib/home/types";
+import { accionCitasSinConfirmar } from "@/lib/home/accion-sin-confirmar";
 
 export async function GET() {
   const session = await loadClinicSession();
@@ -69,19 +70,7 @@ export async function GET() {
 
   const unconfirmed = todayAppts.filter((a) => a.status === "SCHEDULED");
   if (unconfirmed.length > 0) {
-    actionItems.push({
-      id: "unconfirmed",
-      tone: "warning",
-      title: `${unconfirmed.length} cita${unconfirmed.length === 1 ? "" : "s"} sin confirmar`,
-      detail: unconfirmed
-        .slice(0, 3)
-        .map((a) => a.patient.name.split(" ")[0])
-        .join(", "),
-      cta: {
-        label: "Recordar por WhatsApp",
-        href: "/dashboard/whatsapp?intent=remind",
-      },
-    });
+    actionItems.push(accionCitasSinConfirmar(unconfirmed, dateISO, session.clinic.waConnected));
   }
 
   if (overdueInvoices.count > 0) {

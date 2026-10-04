@@ -43,8 +43,13 @@ let apptStartsAt: Date;
 let ultimoReclamo: any = null;
 /** Las veces que la ruta pidió dejar a Google Calendar al día: [clinicId, appointmentId]. */
 let llamadasGoogle: [string, string][] = [];
+/** ws1-t1 (C-87): la otra cita viva del MISMO paciente con OTRO doctor que se pisa con la nueva (o null). */
+let empalmePaciente: any = null;
+let consultaEmpalme: any = null;
 
 beforeEach(() => {
+  empalmePaciente = null;
+  consultaEmpalme = null;
   ultimoReclamo = null;
   llamadasGoogle = [];
   existingRow = null;
@@ -89,6 +94,11 @@ const prismaStub: any = {
   appointmentTimeline: { findUnique: async () => null, upsert: async () => undefined },
   appointment: {
     findFirst: async ({ where, select, include }: any = {}) => {
+      // ws1-t1 (C-87): la búsqueda de «el paciente ya tiene otra cita a esa hora».
+      if (where?.doctorId?.not !== undefined && where?.patientId) {
+        consultaEmpalme = where;
+        return empalmePaciente;
+      }
       // La consulta del emisor de avisos: pide la clínica y filtra por tenant.
       if (select?.clinic) {
         assert.equal(where.clinicId, "c1", "el emisor consulta SIEMPRE con el clinicId de la sesión");
@@ -479,6 +489,60 @@ test("DELETE con `notifyPatient: false` (lo que manda Sabina) no avisa aunque la
   assert.equal(res.status, 200);
   assert.equal(envios.length, 0);
   assert.equal((await res.json()).whatsapp, null);
+});
+
+// ws1-t1 (C-86): la casilla «Avisar al paciente» del diálogo «Cancelar cita» (Agenda, ficha y expediente)
+// desmarcada viaja por PATCH /status. Con el código de antes /status la ignoraba y avisaba igual.
+test("🔴→🟢 PATCH /status con `notifyPatient: false` no avisa aunque la clínica lo tenga encendido", async () => {
+  clinicRow.reminderSettings = { eventos: { alCancelar: true } };
+  citaExistente();
+  const r = await patchStatus({ status: "CANCELLED", reason: "Pidió cambio", notifyPatient: false });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(envios.length, 0);
+  assert.equal(r.body.whatsapp, null);
+});
+
+test("PATCH /status con el aviso apagado lo dice («apagadoPorClinica»), para que la pantalla no calle", async () => {
+  citaExistente();
+  const r = await patchStatus({ status: "CANCELLED" });
+  assert.deepEqual(r.body.whatsapp, { enviado: false, motivo: "apagadoPorClinica" });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ws1-t1 (C-87) · MISMO PACIENTE, OTRO DOCTOR, MISMA HORA → AVISO (no bloqueo)
+// Con el código de antes: 201 y `scheduleWarning: null`.
+// ═══════════════════════════════════════════════════════════════════════════
+test("🔴→🟢 agendar al paciente encima de otra cita suya con otro doctor: se guarda y AVISA", async () => {
+  const body = futureBody();
+  empalmePaciente = {
+    startsAt: new Date(body.startsAt),
+    endsAt: new Date(new Date(body.startsAt).getTime() + 30 * MIN),
+    doctor: { firstName: "Mariana", lastName: "Solís" },
+  };
+  const r = await post(body);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.scheduleWarning?.reason, "patient_overlap");
+  assert.match(r.body.scheduleWarning.message, /ya tiene otra cita a esa hora \(\d\d:\d\d–\d\d:\d\d con Mariana Solís\)/);
+  // Filtra por tenant, por el paciente, otro doctor, sin canceladas y por el hueco.
+  assert.equal(consultaEmpalme.clinicId, "c1");
+  assert.equal(consultaEmpalme.patientId, "p1");
+  assert.deepEqual(consultaEmpalme.doctorId, { not: "d1" });
+  assert.deepEqual(consultaEmpalme.status, { notIn: ["CANCELLED", "NO_SHOW"] });
+});
+
+test("sin otra cita del paciente a esa hora, no hay aviso de empalme", async () => {
+  const r = await post(futureBody());
+  assert.equal(r.status, 201);
+  assert.equal(r.body.scheduleWarning, null);
+});
+
+test("🔴→🟢 mover la cita encima de otra del mismo paciente con otro doctor también avisa", async () => {
+  const cita = citaExistente();
+  empalmePaciente = { startsAt: cita.startsAt, endsAt: cita.endsAt, doctor: { firstName: "Mariana", lastName: "Solís" } };
+  const r = await patch({ startsAt: new Date(cita.startsAt.getTime() + 30 * MIN).toISOString(), endsAt: new Date(cita.startsAt.getTime() + 60 * MIN).toISOString() });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.scheduleWarning?.reason, "patient_overlap");
+  assert.deepEqual(consultaEmpalme.id, { not: "a1" }, "la propia cita no cuenta");
 });
 
 test("Sabina pide expresamente que NO se avise: su propuesta promete que el sistema no le escribe al paciente", () => {

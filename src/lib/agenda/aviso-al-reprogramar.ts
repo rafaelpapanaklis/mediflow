@@ -58,6 +58,8 @@ export interface TextosAvisoReprogramar {
   casilla: string;
   rotulo: string;
   apagado: string;
+  /** ws1-t1 (C-101): sin WhatsApp conectado también se dice, en vez de no pintar nada. */
+  sinWhatsApp: string;
 }
 
 const ES: TextosAvisoReprogramar = {
@@ -65,6 +67,7 @@ const ES: TextosAvisoReprogramar = {
   casilla: "Avisar al paciente por WhatsApp del cambio",
   apagado:
     "El aviso de «cita reprogramada» está apagado en WhatsApp y recordatorios: al paciente no le llega nada.",
+  sinWhatsApp: "La clínica no tiene WhatsApp conectado: al paciente no le llega nada. Avísale por otro medio.",
 };
 
 const EN: TextosAvisoReprogramar = {
@@ -72,6 +75,7 @@ const EN: TextosAvisoReprogramar = {
   casilla: "Notify the patient about the change on WhatsApp",
   apagado:
     "The «rescheduled appointment» notice is off in WhatsApp & reminders: the patient won't get a message.",
+  sinWhatsApp: "The clinic has no WhatsApp connected: the patient won't get a message. Let them know another way.",
 };
 
 export function textosAvisoReprogramar(locale: string | null | undefined): TextosAvisoReprogramar {

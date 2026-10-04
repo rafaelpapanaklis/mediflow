@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { avisarCitaPorWhatsApp, type AvisoCitaResultado } from "@/lib/whatsapp/avisos-cita";
+import { buscarPacienteEmpalmado, juntarAvisos } from "@/lib/agenda/paciente-empalmado";
 import {
   loadClinicSession,
   requireRole,
@@ -454,6 +455,17 @@ export async function PATCH(
     // No lanza y no alarga la respuesta.
     await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
 
+    // ws1-t1 (C-87): moverla encima de otra cita del MISMO paciente con otro doctor → se avisa (no se bloquea).
+    const avisoPaciente = await buscarPacienteEmpalmado({
+      clinicId: session.clinic.id,
+      patientId: updated.patientId,
+      doctorId: updated.doctorId,
+      startsAt: updated.startsAt,
+      endsAt: updated.endsAt,
+      excluirId: params.id,
+      timezone: session.clinic.timezone,
+    });
+
     revalidateAfter("appointments");
     revalidatePatientProfile(updated.patientId);
     return NextResponse.json(
@@ -463,7 +475,8 @@ export async function PATCH(
         }),
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
         // WS1-T2: si además hay un bloqueo encima, manda el del bloqueo.
-        scheduleWarning: avisoHorario,
+        // ws1-t1 (C-87): y el del paciente con otra cita a esa hora, en el mismo texto.
+        scheduleWarning: juntarAvisos(avisoHorario, avisoPaciente),
         // null = no tocaba avisar. Si tocaba: { enviado } o { enviado:false, motivo }.
         whatsapp,
       },

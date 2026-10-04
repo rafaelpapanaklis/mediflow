@@ -295,6 +295,11 @@ export interface StatusChangeInput {
    * campo) queda «pendiente de decidir».
    */
   dineroCita?: "a_favor" | "reembolso";
+  /**
+   * ws1-t1 (C-86): `false` = no mandar el WhatsApp de «cita cancelada» por esta cancelación (la casilla
+   * «Avisar al paciente» desmarcada). Sin él, el servidor decide con el ajuste de la clínica, como el DELETE.
+   */
+  notifyPatient?: boolean;
 }
 
 export interface CreateWaitlistInput {

@@ -83,15 +83,16 @@ export function CasillaAvisarPaciente({
   textoClassName,
 }: CasillaAvisarPacienteProps) {
   const textos = useTextosAvisoReprogramar();
-  if (!cambiaHora || estado === null || estado === "sinWhatsApp") return null;
-  if (estado === "apagado") {
+  if (!cambiaHora || estado === null) return null;
+  // ws1-t1 (C-101): sin WhatsApp tampoco le llega nada al paciente, y se dice igual que con el aviso apagado.
+  if (estado === "apagado" || estado === "sinWhatsApp") {
     return (
       <p
         className={textoClassName}
         style={textoClassName ? undefined : { margin: 0, fontSize: 12, lineHeight: 1.45, color: "var(--text-3)" }}
-        data-aviso-reprogramar="apagado"
+        data-aviso-reprogramar={estado}
       >
-        {textos.apagado}
+        {estado === "apagado" ? textos.apagado : textos.sinWhatsApp}
       </p>
     );
   }

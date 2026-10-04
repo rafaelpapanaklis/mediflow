@@ -336,9 +336,10 @@ export async function PATCH(
 
   // Aviso de cancelación al paciente: solo si la clínica lo encendió en
   // Dashboard → WhatsApp (nace apagado). NO_SHOW no avisa: el paciente ya sabe
-  // que no fue. No lanza: el cambio de estado ya está hecho.
+  // que no fue. No lanza: el cambio de estado ya está hecho. `notifyPatient: false` lo calla para ESTA
+  // cancelación (la casilla «Avisar al paciente» desmarcada, ws1-t1 C-86), igual que en el DELETE.
   const whatsapp =
-    body.status === "CANCELLED"
+    body.status === "CANCELLED" && body.notifyPatient !== false
       ? await avisarCitaPorWhatsApp({
           evento: "cancelada",
           appointmentId: params.id,

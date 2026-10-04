@@ -14,20 +14,21 @@
  * ya existe, igual que `agenda-nueva/panel-cita.tsx`:
  *   · cambiar de estado → `patchAppointmentStatus` (PATCH /api/appointments/:id/status)
  *   · qué estados caben → `possibleTransitions`, CON el rol (la máquina real)
- *   · eliminar          → el mismo PATCH a CANCELLED con motivo, tras
- *                         `confirmWithReason`. La API no borra citas: las
- *                         cancela, y la confirmación lo dice con esas palabras.
+ *   · cancelar          → el MISMO diálogo «Cancelar cita» de la agenda
+ *                         (`useCancelarCita`: dinero pagado, aviso al paciente
+ *                         y motivo) y el mismo PATCH a CANCELLED. Antes decía
+ *                         «Eliminar cita» y en realidad cancelaba (C-86).
  * El servidor revalida permisos y transiciones en todos los casos.
  */
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Trash2 } from "lucide-react";
+import { XCircle } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { ROPA_EDITAR_CITA } from "@/components/dashboard/agenda-nueva/ropa";
-import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
+import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda-nueva/cancelar-con-dinero";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { ESTADO_LEGACY_PENDIENTE, estadoNormalizado } from "@/lib/agenda-nueva/estados";
@@ -68,7 +69,7 @@ export interface VentanaCitaProps {
   /** Etiqueta unificada del estado, la misma que pinta la tabla. */
   estado: (status: string) => { texto: string; tono: string };
   onClose: () => void;
-  /** El servidor confirmó un cambio de estado (cambiar o eliminar): el padre lo pinta ya, sin esperar al refresh. */
+  /** El servidor confirmó un cambio de estado (cambiar o cancelar): el padre lo pinta ya, sin esperar al refresh. */
   onEstadoCambiado?: (citaId: string, status: string) => void;
 }
 
@@ -83,9 +84,9 @@ export function VentanaCita({
   onEstadoCambiado,
 }: VentanaCitaProps) {
   const router = useRouter();
-  const confirmarConMotivo = useConfirmWithReason();
+  const cancelarCita = useCancelarCita();
   const [enVuelo, setEnVuelo] = useState(false);
-  // Mientras se confirma el borrado, el Escape es de la confirmación: la
+  // Mientras se confirma la cancelación, el Escape es de la confirmación: la
   // ventana también lo escucha (en `window`) y sin esto se cerrarían las dos.
   const confirmando = useRef(false);
 
@@ -143,7 +144,7 @@ export function VentanaCita({
           })
         : [];
   const destinos = transiciones.filter((d) => d !== "CANCELLED");
-  const puedeEliminar = agenda.permisos.canCancel && transiciones.includes("CANCELLED");
+  const puedeCancelar = agenda.permisos.canCancel && transiciones.includes("CANCELLED");
 
   function avisarError(err: unknown) {
     const e = err as { status?: number; reason?: string; error?: string; message?: string };
@@ -175,51 +176,32 @@ export function VentanaCita({
     }
   }
 
-  async function eliminar() {
+  async function cancelar() {
     if (!cita || enVuelo) return;
     const doctor = [cita.doctor?.firstName, cita.doctor?.lastName].filter(Boolean).join(" ");
     confirmando.current = true;
-    const r = await confirmarConMotivo({
-      title: "¿Eliminar esta cita?",
-      description: (
+    const r = await cancelarCita
+      .preguntar(
+        cita.id,
         <>
-          Se va a eliminar de la agenda la cita de <b>{pacienteNombre}</b> del{" "}
-          <b>{formatDate(cita.date)}</b> a las <b>{cita.startTime}</b>
+          La cita de <b>{pacienteNombre}</b> del <b>{formatDate(cita.date)}</b> a las <b>{cita.startTime}</b>
           {doctor ? <> con <b>{doctor}</b></> : null}
-          {cita.type ? <> ({cita.type})</> : null}. Su horario queda libre y se anulan sus
-          recordatorios pendientes. En el expediente se conserva como «Cancelada»: no se borra
-          del historial.
-        </>
-      ),
-      variant: "danger",
-      withReason: true,
-      reasonLabel: "Motivo (opcional)",
-      reasonPlaceholder: "Ej.: el paciente pidió reagendar",
-      confirmText: "Eliminar la cita",
-    }).finally(() => {
-      // En un `setTimeout`, no aquí mismo: la confirmación se resuelve DENTRO
-      // del Escape (captura, en `document`), y este `finally` correría antes
-      // de que ese mismo Escape llegue al oyente de la ventana (en `window`).
-      setTimeout(() => {
-        confirmando.current = false;
-      }, 0);
-    });
+          {cita.type ? <> ({cita.type})</> : null}.
+        </>,
+      )
+      .finally(() => {
+        // En un `setTimeout`, no aquí mismo: la confirmación se resuelve DENTRO
+        // del Escape (captura, en `document`), y este `finally` correría antes
+        // de que ese mismo Escape llegue al oyente de la ventana (en `window`).
+        setTimeout(() => {
+          confirmando.current = false;
+        }, 0);
+      });
     if (!r.confirmed) return;
 
     setEnVuelo(true);
     try {
-      const motivoCancelacion = r.reason?.trim();
-      const res = await fetch(`/api/appointments/${cita.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "CANCELLED",
-          ...(motivoCancelacion ? { reason: motivoCancelacion } : {}),
-        }),
-      });
-      const cuerpo = await res.json().catch(() => ({}));
-      if (!res.ok) throw { status: res.status, ...cuerpo };
-      toast.success("Cita eliminada de la agenda.");
+      await cancelarCitaEnServidor(cita.id, r);
       onEstadoCambiado?.(cita.id, "CANCELLED");
       onClose();
       router.refresh();
@@ -265,12 +247,15 @@ export function VentanaCita({
         </label>
       }
       pieExtra={
-        puedeEliminar ? (
-          <button type="button" className={s.eliminar} onClick={eliminar} disabled={enVuelo}>
-            <Trash2 size={16} strokeWidth={1.75} aria-hidden />
-            Eliminar cita
-          </button>
-        ) : null
+        <>
+          {cancelarCita.elemento}
+          {puedeCancelar ? (
+            <button type="button" className={s.eliminar} onClick={cancelar} disabled={enVuelo}>
+              <XCircle size={16} strokeWidth={1.75} aria-hidden />
+              Cancelar cita
+            </button>
+          ) : null}
+        </>
       }
     />
   );

@@ -3895,6 +3895,7 @@
       "toastCreatedWhatsAppSent": "Appointment created and WhatsApp confirmation sent",
       "toastWhatsAppNotSent": "The appointment was created, but the WhatsApp was NOT sent: {reason}",
       "whatsAppConfirmOff": "WhatsApp confirmation on booking is turned off. Turn it on in WhatsApp → Appointment notices.",
+      "whatsAppNotConnected": "The clinic has no WhatsApp connected: the patient won't get any confirmation. Let them know another way.",
       "waReasonOffByClinic": "the clinic has booking confirmations turned off (WhatsApp → Appointment notices).",
       "waReasonPastAppointment": "the appointment has already started or passed.",
       "waReasonUnknown": "we don't know why. Check WhatsApp → Recent reminders or reach the patient another way.",

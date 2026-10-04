@@ -22,7 +22,6 @@ import { Fragment, startTransition, useCallback, useMemo, useState } from "react
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { adelantoDeLaRespuesta, textoDelAdelanto } from "@/lib/agenda/adelanto-texto";
 import {
   AlertTriangle,
   ArrowRight,
@@ -45,7 +44,6 @@ import {
 } from "lucide-react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
-import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { ModalPedirAnticipo } from "@/components/dashboard/billing/modal-pedir-anticipo";
 // ws1-t4 (8d): una cita terminada SIN nota se cobra en un paso (concepto + pago).
@@ -71,7 +69,7 @@ import { useMinuto } from "./usar-minuto";
 import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
 import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
-import { useCancelarConDinero, type DineroDeLaCitaDTO } from "./cancelar-con-dinero";
+import { cancelarCitaEnServidor, useCancelarCita, type RespuestaCancelarCita } from "./cancelar-con-dinero";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -193,9 +191,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   const ag = useAgendaNueva();
   const router = useRouter();
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
-  const confirmarConMotivo = useConfirmWithReason();
-  // H15 (ws1-t4): cancelar una cita con dinero pagado pregunta qué hacer con él.
-  const cancelarConDinero = useCancelarConDinero();
+  // H15 (ws1-t4) y C-86 (ws1-t1): cancelar pregunta qué hacer con el dinero pagado y si se avisa al
+  // paciente — el MISMO diálogo que la ficha y «Editar cita» del expediente.
+  const cancelarCita = useCancelarCita();
 
   const [enVuelo, setEnVuelo] = useState<AppointmentStatus | null>(null);
   const [enviandoWa, setEnviandoWa] = useState(false);
@@ -280,34 +278,10 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         return false;
       }
 
-      let motivo: string | undefined;
-      let dineroCita: "a_favor" | "reembolso" | undefined;
-      // H15 (decisión de Rafael, opción A — ws1-t4): si la factura de la cita
-      // tiene dinero pagado, el diálogo lo dice y (con permiso de cobro)
-      // pregunta si queda a favor o se marca para reembolso.
-      const dinero: DineroDeLaCitaDTO | null = esCancelar
-        ? await fetch(`/api/appointments/${dto.id}/dinero-cita`)
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null)
-        : null;
-      if (esCancelar && dinero && dinero.pagado > 0) {
-        const r = await cancelarConDinero.preguntar(dinero);
-        if (!r.confirmed) return false;
-        motivo = r.reason?.trim() || undefined;
-        dineroCita = r.dineroCita;
-      } else if (esCancelar) {
-        const r = await confirmarConMotivo({
-          title: "¿Cancelar esta cita?",
-          description:
-            "La cita queda cancelada y se anulan sus recordatorios pendientes. Puedes anotar el motivo para que quede en el expediente.",
-          variant: "danger",
-          withReason: true,
-          reasonLabel: "Motivo de la cancelación (opcional)",
-          reasonPlaceholder: "Ej.: el paciente pidió reagendar",
-          confirmText: "Cancelar la cita",
-        });
-        if (!r.confirmed) return false;
-        motivo = r.reason?.trim() || undefined;
+      let respuesta: RespuestaCancelarCita | null = null;
+      if (esCancelar) {
+        respuesta = await cancelarCita.preguntar(dto.id);
+        if (!respuesta.confirmed) return false;
       }
 
       const original: AgendaAppointmentDTO = dto;
@@ -315,8 +289,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
       dispatch({ type: "OPTIMISTIC_STATUS", id: dto.id, status: destino });
 
       try {
-        const actualizada = motivo || dineroCita || (dinero && dinero.pagado > 0)
-          ? await patchConMotivo(dto.id, destino, motivo, dineroCita)
+        const actualizada: AgendaAppointmentDTO = respuesta
+          ? (await cancelarCitaEnServidor(dto.id, respuesta)).appointment
           : await patchAppointmentStatus(dto.id, destino);
         startTransition(() => {
           dispatch({ type: "REPLACE_APPOINTMENT", appointment: actualizada });
@@ -342,7 +316,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         setEnVuelo(null);
       }
     },
-    [dto, permissions, confirmarConMotivo, cancelarConDinero, dispatch, invalidateRangeCache, router],
+    [dto, permissions, cancelarCita, dispatch, invalidateRangeCache, router],
   );
 
   const enviarWhatsapp = useCallback(async () => {
@@ -433,7 +407,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
 
   return (
     <>
-      {cancelarConDinero.elemento}
+      {cancelarCita.elemento}
       <aside className={`${s.panel} ${s.panelCita}`} aria-label="Detalle de la cita">
         <div className={s.panelCabecera}>
           <span className={s.panelRotulo}>Cita</span>
@@ -896,34 +870,3 @@ function origenCorto(source: string): string {
   }
 }
 
-/**
- * El PATCH de estado con motivo. `patchAppointmentStatus` no acepta motivo y
- * cambiar su firma tocaría a todos sus llamadores; esto es el mismo endpoint
- * con un campo más, igual que hace el panel de detalle de siempre.
- */
-async function patchConMotivo(
-  id: string,
-  status: AppointmentStatus,
-  reason: string | undefined,
-  dineroCita?: "a_favor" | "reembolso",
-): Promise<AgendaAppointmentDTO> {
-  const res = await fetch(`/api/appointments/${id}/status`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, reason, dineroCita }),
-  });
-  const cuerpo = await res.json().catch(() => ({}));
-  if (!res.ok) throw { status: res.status, ...cuerpo };
-  // ws1-t8 (decisión 6): el paciente de una cita futura llegó hoy y la cita se trajo a hoy.
-  const adelanto = adelantoDeLaRespuesta(cuerpo);
-  if (adelanto) toast(textoDelAdelanto(adelanto), { duration: 10000 });
-  // H15: qué pasó con el dinero de la cita, dicho en palabras.
-  const d = cuerpo.dineroCita as { decision: string | null; monto: number; motivo: string | null } | null | undefined;
-  if (d && d.monto > 0) {
-    const monto = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(d.monto);
-    if (d.decision === "a_favor") toast.success(`Cita cancelada. ${monto} quedaron a favor del paciente.`);
-    else if (d.decision === "reembolso") toast(`Cita cancelada. ${monto} marcados para reembolso: devuélvelos fuera y regístralo con «Reembolsar».`, { duration: 9000 });
-    else toast(`Cita cancelada. ${monto} quedaron pendientes de decidir en la factura.${d.motivo ? ` ${d.motivo}` : ""}`, { duration: 9000 });
-  }
-  return cuerpo.appointment ?? cuerpo;
-}

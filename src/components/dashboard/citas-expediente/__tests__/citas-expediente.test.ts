@@ -79,10 +79,10 @@ test("la carpeta no guarda la cita por su cuenta ni valida nada", () => {
   const codigo = archivosNuevos.filter((a) => /\.tsx?$/.test(a.nombre)).map((a) => sinComentarios(a.texto)).join("\n");
   // Mover/editar la cita: solo el modal lo hace. Aquí ni se nombra.
   assert.ok(!/rescheduleAppointment/.test(codigo), "guardar fecha/hora/doctor es cosa del modal de la agenda");
-  // El único endpoint que se toca a mano es el de estado, como hace el panel
-  // de la agenda para cancelar con motivo.
+  // Ni un endpoint a mano: cancelar va por el diálogo de la agenda (`cancelarCitaEnServidor`, ws1-t1 C-86),
+  // que es el que llama a PATCH /status.
   const rutas = codigo.match(/\/api\/[a-z0-9\-\/\$\{\}\.]+/gi) ?? [];
-  assert.deepEqual([...new Set(rutas)], ["/api/appointments/${cita.id}/status"], `endpoints inesperados: ${rutas.join(", ")}`);
+  assert.deepEqual([...new Set(rutas)], [], `endpoints inesperados: ${rutas.join(", ")}`);
   // Ni solapes, ni horarios, ni vacaciones calculados en el cliente.
   for (const prohibido of [/overlap/i, /solap/i, /clinic-hours/, /vacacion/i, /time-?off/i, /canTransition/]) {
     assert.ok(!prohibido.test(codigo), `la carpeta menciona ${prohibido}: las reglas viven en el servidor y en el modal`);
@@ -114,20 +114,27 @@ test("el modal sigue guardando con su único camino y solo presta de dónde lee"
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Eliminar es destructivo: confirma, dice QUÉ, y no promete un borrado
+// Cancelar es destructivo: confirma, dice QUÉ, y no promete un borrado.
+// ws1-t1 (C-86): era «Eliminar cita» con su propia confirmación; ahora dice «Cancelar cita» y usa el MISMO
+// diálogo de la agenda (dinero pagado, aviso al paciente y motivo).
 // ═══════════════════════════════════════════════════════════════════════════
-test("eliminar pide confirmación y dice qué cita y qué le pasa", () => {
-  const eliminar = VENTANA.slice(VENTANA.indexOf("async function eliminar"), VENTANA.indexOf("const e = estado("));
-  const confirma = eliminar.indexOf("confirmarConMotivo(");
-  const llama = eliminar.indexOf("fetch(");
+test("cancelar pide confirmación con el diálogo de la agenda y dice qué cita y qué le pasa", () => {
+  const cancelar = VENTANA.slice(VENTANA.indexOf("async function cancelar"), VENTANA.indexOf("const e = estado("));
+  const confirma = cancelar.indexOf("cancelarCita\n      .preguntar(") > -1
+    ? cancelar.indexOf("cancelarCita\n      .preguntar(")
+    : cancelar.indexOf(".preguntar(");
+  const llama = cancelar.indexOf("cancelarCitaEnServidor(");
   assert.ok(confirma > -1 && llama > confirma, "primero se confirma, después se llama al servidor");
-  assert.match(eliminar, /if \(!r\.confirmed\) return;/);
-  assert.match(eliminar, /variant: "danger"/);
+  assert.match(cancelar, /if \(!r\.confirmed\) return;/);
   for (const dato of ["pacienteNombre", "formatDate(cita.date)", "cita.startTime", "doctor"]) {
-    assert.ok(eliminar.includes(dato), `la confirmación no dice ${dato}`);
+    assert.ok(cancelar.includes(dato), `la confirmación no dice ${dato}`);
   }
-  assert.match(eliminar, /recordatorios pendientes/, "dice qué más se anula");
-  assert.match(eliminar, /«Cancelada»/, "la API cancela, no borra: la confirmación lo dice");
+  const DIALOGO = leer("components/dashboard/agenda-nueva/cancelar-con-dinero.tsx");
+  assert.match(DIALOGO, /recordatorios pendientes/, "dice qué más se anula");
+  assert.match(DIALOGO, /«Cancelada»/, "la API cancela, no borra: la confirmación lo dice");
+  assert.match(DIALOGO, /variant="danger"/);
+  assert.ok(!/Eliminar cita/.test(sinComentarios(VENTANA)), "el botón dice lo que hace: cancelar");
+  assert.match(VENTANA, />\s*Cancelar cita\s*</);
   // Y solo se ofrece a quien la API se lo va a aceptar.
   assert.match(VENTANA, /agenda\.permisos\.canCancel && transiciones\.includes\("CANCELLED"\)/);
 });

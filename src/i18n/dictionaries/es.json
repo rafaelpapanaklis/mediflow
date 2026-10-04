@@ -3895,6 +3895,7 @@
       "toastCreatedWhatsAppSent": "Cita creada y confirmación enviada por WhatsApp",
       "toastWhatsAppNotSent": "La cita se creó, pero el WhatsApp NO salió: {reason}",
       "whatsAppConfirmOff": "La confirmación por WhatsApp al agendar está apagada. Se enciende en WhatsApp → Avisos de citas.",
+      "whatsAppNotConnected": "La clínica no tiene WhatsApp conectado: al paciente no le llega ninguna confirmación. Avísale por otro medio.",
       "waReasonOffByClinic": "la clínica tiene apagada la confirmación al agendar (WhatsApp → Avisos de citas).",
       "waReasonPastAppointment": "la cita ya empezó o ya pasó.",
       "waReasonUnknown": "no sabemos el motivo. Revisa WhatsApp → Recordatorios recientes o avísale al paciente por otro medio.",

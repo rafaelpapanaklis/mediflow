@@ -67,6 +67,7 @@ import { citaParaReagendar, doctorParaNuevoPlan, dtoParaMoverCita, prellenadoDeN
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda-nueva/cancelar-con-dinero";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
@@ -577,6 +578,8 @@ export function PatientDetailClient({
   // trae, la copia local sobra. Ver lib/patients/planes-recien-creados.
   const [planesRecienCreados, setPlanesRecienCreados] = useState<any[]>([]);
   const confirmar = useConfirm();
+  // C-86 (ws1-t1): «Cancelar cita» con el MISMO diálogo que la Agenda (dinero pagado, aviso al paciente y motivo).
+  const cancelarCita = useCancelarCita();
   const treatments = useMemo(
     () => planesConRecienCreados(planesDelServidor, planesRecienCreados),
     [planesDelServidor, planesRecienCreados],
@@ -853,20 +856,27 @@ export function PatientDetailClient({
     }
   }
 
-  async function handleCancelAppointment(appt: { id: string; date: any }) {
-    if (!window.confirm(t("patients.cancelAppt.confirm", { date: formatDate(appt.date) }))) return;
+  async function handleCancelAppointment(appt: { id: string; date: any; startTime?: string; doctor?: { firstName?: string; lastName?: string } | null }) {
+    // Antes: `window.confirm` («Quedara en estado CANCELLED…») y DELETE, sin preguntar por el dinero ni por
+    // el aviso, y un «Cita cancelada» aunque al paciente no le llegara nada.
+    const doctor = [appt.doctor?.firstName, appt.doctor?.lastName].filter(Boolean).join(" ");
+    const r = await cancelarCita.preguntar(
+      appt.id,
+      <>
+        La cita del <b>{formatDate(appt.date)}</b>
+        {appt.startTime ? <> a las <b>{appt.startTime}</b></> : null}
+        {doctor ? <> con <b>{doctor}</b></> : null}.
+      </>,
+    );
+    if (!r.confirmed) return;
     try {
-      const res = await fetch(`/api/appointments/${appt.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? t("patients.cancelAppt.failed"));
-      }
-      toast.success(t("patients.cancelAppt.success"));
+      await cancelarCitaEnServidor(appt.id, r);
       // La fila (y todo lo que cuenta citas) cambia ya; el refresh trae el resto.
       marcarEstadoDeCita(appt.id, "CANCELLED");
       router.refresh();
     } catch (err: any) {
-      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.cancelAppt.error") }));
+      const detalle = err?.reason ?? err?.error;
+      toast.error(detalle ? String(detalle) : t("patients.cancelAppt.failed"));
     }
   }
 
@@ -1805,6 +1815,7 @@ export function PatientDetailClient({
         margin: "0 auto",
       }}
     >
+      {cancelarCita.elemento}
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
         <Link href="/dashboard/patients" className="inline-flex items-center gap-1 rounded-md text-[var(--text-3)] no-underline transition-colors duration-150 hover:text-[var(--text-1)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)]">
           <ArrowLeft size={12} strokeWidth={1.75} aria-hidden /> {t("patients.breadcrumb.patients")}

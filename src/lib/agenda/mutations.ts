@@ -126,7 +126,7 @@ export interface ScheduleWarningDTO {
    * `blocked` = un bloqueo de agenda (WS1-T2). `doctor_off` = fuera del
    * horario propio del doctor (WS1-T2 · horario). Ver `ScheduleViolation`.
    */
-  reason: "closed_day" | "before_open" | "after_close" | "blocked" | "doctor_off";
+  reason: "closed_day" | "before_open" | "after_close" | "blocked" | "doctor_off" | "patient_overlap";
   message: string;
   openTime: string | null;
   closeTime: string | null;

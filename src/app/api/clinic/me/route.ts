@@ -21,8 +21,10 @@ export async function GET() {
   const waConfirmOnCreate = eventos.alAgendar;
   // ws1-t1 (F14): con esto Editar/Mover cita marcan «Avisar al paciente» igual que «Al reprogramar».
   const waNotifyOnReschedule = eventos.alReprogramar;
+  // ws1-t1 (C-86): «Cancelar cita» marca «Avisar al paciente» (o dice que no le llega nada) con «Al cancelar».
+  const waNotifyOnCancel = eventos.alCancelar;
 
-  return NextResponse.json({ clinic: { ...session.clinic, waConfirmOnCreate, waNotifyOnReschedule } }, {
+  return NextResponse.json({ clinic: { ...session.clinic, waConfirmOnCreate, waNotifyOnReschedule, waNotifyOnCancel } }, {
     headers: { "Cache-Control": "no-store, must-revalidate" },
   });
 }

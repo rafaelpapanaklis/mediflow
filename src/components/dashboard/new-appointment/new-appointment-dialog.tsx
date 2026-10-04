@@ -834,6 +834,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                   </Field>
                 )}
 
+                {/* ws1-t1 (C-101): sin WhatsApp no había ni casilla ni aviso; recepción no sabía que al paciente no le llega nada. */}
+                {!boot.waConnected && (
+                  <div {...(nueva ? { className: nc.pediatriaTexto } : { style: { fontSize: 11, color: "var(--text-3)" } })} data-aviso-agendar="sinWhatsApp">
+                    {t("appointments.newApptDialog.whatsAppNotConnected")}
+                  </div>
+                )}
+
                 {boot.waConnected && !boot.waConfirmOnCreate && (
                   <div {...(nueva ? { className: nc.pediatriaTexto } : { style: { fontSize: 11, color: "var(--text-3)" } })}>
                     {t("appointments.newApptDialog.whatsAppConfirmOff")}

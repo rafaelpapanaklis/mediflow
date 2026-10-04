@@ -71,6 +71,7 @@ import type {
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { buscarPacienteEmpalmado, juntarAvisos } from "@/lib/agenda/paciente-empalmado";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -527,6 +528,17 @@ export async function POST(req: NextRequest) {
     // Google Calendar (no lanza y no alarga la respuesta: la cita ya está guardada).
     await sincronizarCitaEnSegundoPlano(session.clinic.id, created.id);
 
+    // ws1-t1 (C-87): el mismo paciente ya tiene otra cita a esa hora con otro doctor → se avisa (no se bloquea).
+    const avisoPaciente = await buscarPacienteEmpalmado({
+      clinicId: session.clinic.id,
+      patientId: created.patientId,
+      doctorId: created.doctorId,
+      startsAt: created.startsAt,
+      endsAt: created.endsAt,
+      excluirId: created.id,
+      timezone: session.clinic.timezone,
+    });
+
     revalidateAfter("appointments");
     revalidatePatientProfile(created.patientId);
     return NextResponse.json(
@@ -534,7 +546,8 @@ export async function POST(req: NextRequest) {
         appointment: appointmentToDTO(created, session.clinic.category),
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
         // WS1-T2: si además hay un bloqueo encima, manda el del bloqueo.
-        scheduleWarning: avisoHorario,
+        // ws1-t1 (C-87): y el del paciente con otra cita a esa hora, en el mismo texto.
+        scheduleWarning: juntarAvisos(avisoHorario, avisoPaciente),
         // null = nadie pidió avisar. Si se pidió: { enviado } o { enviado:false, motivo }.
         whatsapp,
       },
