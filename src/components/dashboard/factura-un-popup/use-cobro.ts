@@ -185,6 +185,8 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
     hoy,
     submit,
     avisoCaja: freno.visible,
+    // Decisión 16 (auditoría de uso): quién abrió la caja, si no es quien cobra.
+    cajaDe: freno.cajaDe,
   };
 }
 

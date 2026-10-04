@@ -265,3 +265,22 @@ test("C-18 · traspaso a saldo a favor, anticipo pedido, firma del doctor y esta
   // Lo que no se reconoce sigue como antes.
   assert.equal(redactarMovimiento({ entityType: "invoice", action: "update", changes: { notes: { before: "a", after: "b" } } }), "Actualizó una factura: notas");
 });
+
+// ── Decisión 16 · cobrar en la caja que abrió otra persona: AVISAR ─────────
+import { cajaAbiertaDeRespuesta, cajaDeOtraPersona } from "@/components/dashboard/billing/aviso-caja-cerrada";
+
+test("decisión 16 · la caja la abrió otra persona → su nombre; la propia, cerrada o sin respuesta → nada", () => {
+  assert.equal(cajaDeOtraPersona(200, { register: { operatorName: "Cuenta de Prueba", esMia: false } }), "Cuenta de Prueba");
+  assert.equal(cajaDeOtraPersona(200, { register: { operatorName: "Yo", esMia: true } }), null);
+  assert.equal(cajaDeOtraPersona(200, { register: null }), null);
+  assert.equal(cajaDeOtraPersona(403, { error: "x" }), null);
+  // Y la misma respuesta dice si está abierta (recepción ya se entera de la caja cerrada).
+  assert.equal(cajaAbiertaDeRespuesta(200, { register: null }), false);
+});
+
+// ── C-28 · el enlace del plan cuenta como la cabecera ─────────────────────
+import { textosDinero } from "@/lib/dinero/textos";
+test("C-28 · «Cuota 1 de 3» arriba y el enlace dice «Ver el enganche y las 3 cuotas del plan» (antes «Ver los 4 pagos»)", () => {
+  assert.equal(textosDinero("es").plan.verEngancheYCuotas(3), "Ver el enganche y las 3 cuotas del plan");
+  assert.equal(textosDinero("es").plan.verCuotas(1), "Ver la cuota del plan");
+});

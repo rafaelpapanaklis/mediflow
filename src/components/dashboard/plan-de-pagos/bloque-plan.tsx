@@ -27,12 +27,13 @@ import {
   type CuotaConEstado, type EstadoCuota,
 } from "@/lib/invoices/plan-de-pagos";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
-import { todayLocalISO } from "@/lib/billing/paid-at";
 import { fmtMXNdec } from "@/lib/format";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import s from "./plan.module.css";
 import { selloDelPlan, useTextosSello } from "./sello-del-plan";
+import { textosDinero } from "@/lib/dinero/textos";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 
 /** "2026-03-03" → "3 mar 2026". En UTC: una fecha sin hora no tiene huso. */
 export function fechaDeCuota(fecha: string | null, locale: string): string | null {
@@ -72,7 +73,9 @@ export function BloquePlan({
   const t = useT();
   const locale = useLocale();
   const txSello = useTextosSello();
-  const hoy = todayLocalISO();
+  const txPlan = textosDinero(locale).plan;
+  // C-33: el «hoy» de la clínica decide qué cuota está vencida.
+  const hoy = useHoyDeLaClinica();
   const plan = useMemo(() => {
     const cuotas = calendarioDeCuotas(condiciones, total);
     return {
@@ -186,7 +189,11 @@ export function BloquePlan({
 
       <details className={s.detalle}>
         <summary className={s.detalleResumen}>
-          {t("planDePagos.verCuotas", { count: estado.cuotas.length })}
+          {/* C-28 (auditoría de uso): «Cuota 1 de 3» arriba y «Ver los 4 pagos» aquí
+              contaban distinto (el enganche). Ahora lo dice. */}
+          {estado.cuotas.some((q) => q.esEnganche)
+            ? txPlan.verEngancheYCuotas(estado.totalCuotas)
+            : txPlan.verCuotas(estado.totalCuotas)}
         </summary>
         <ol className={s.cuotas}>
           {estado.cuotas.map((q) => <Fila key={claveDe(q)} q={q} t={t} locale={locale} />)}

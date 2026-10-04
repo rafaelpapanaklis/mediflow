@@ -32,7 +32,7 @@ import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashbo
 import h from "./cobrar-hoy.module.css";
 import { METHODS, type PaymentMethod } from "@/components/dashboard/billing/payment-modal";
 import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada";
-import { AvisoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada.component";
+import { AvisoCajaCerrada, AvisoCajaDeOtraPersona } from "@/components/dashboard/billing/aviso-caja-cerrada.component";
 import { AvisoPresupuestoPorCargar } from "./aviso-presupuesto-por-cargar";
 import {
   conceptoDeLaCita,
@@ -533,6 +533,8 @@ function CuerpoCobrarHoy({
       </div>
 
       {freno.visible && <AvisoCajaCerrada onCobrarDeTodosModos={() => guardar(true)} ocupado={guardando} />}
+      {/* Decisión 16 (auditoría de uso): la caja la abrió otra persona; solo se avisa. */}
+      {pagoEfectivo > 0 && <AvisoCajaDeOtraPersona nombre={freno.cajaDe} />}
 
       <DialogFooter className={c.pie}>
         <ButtonNew variant="ghost" onClick={onClose} disabled={guardando}>

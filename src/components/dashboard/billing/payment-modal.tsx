@@ -28,7 +28,7 @@ import { montoInicialDeCobro } from "./monto-inicial-cobro";
 import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
 // ws1-t4: en un caso de ortodoncia, pagar de más es un adelanto (la MISMA pieza que el cobro en el detalle).
 import { useSaldoOrto, registrarCobroConAdelanto, SaldoOrtoEnCobro } from "@/components/dashboard/plan-de-pagos/saldo-orto-cobro";
-import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
+import { AvisoCajaCerrada, AvisoCajaDeOtraPersona } from "./aviso-caja-cerrada.component";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 // ws1-t6 (F1): el aviso del cobro automático con tarjeta, antes de cobrar.
 import { AvisoCobroAutomaticoEnCobro, useAvisoCobroAutomatico } from "@/components/cobro-automatico/aviso-en-cobro";
@@ -326,6 +326,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
         </div>
 
         {freno.visible && <AvisoCajaCerrada onCobrarDeTodosModos={() => submit(true)} ocupado={saving} />}
+        {/* Decisión 16 (auditoría de uso): la caja la abrió otra persona; solo se avisa. */}
+        <AvisoCajaDeOtraPersona nombre={freno.cajaDe} />
 
         <DialogFooter className={rediseno ? c.pie : undefined}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>

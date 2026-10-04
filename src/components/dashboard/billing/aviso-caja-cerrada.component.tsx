@@ -8,6 +8,19 @@ import { RUTA_CAJA } from "./aviso-caja-cerrada";
 
 export const TEXTO_CAJA_CERRADA = "La caja está cerrada: este efectivo no entrará en ningún corte. ¿Abrir caja?";
 
+/**
+ * Decisión 16 de la auditoría de uso (AVISAR, no bloquear): el efectivo entra a la
+ * caja que abrió otra persona. Solo informa.
+ */
+export function AvisoCajaDeOtraPersona({ nombre }: { nombre: string | null }) {
+  if (!nombre) return null;
+  return (
+    <p role="status" data-caja-de-otra-persona style={{ margin: "4px 0 8px", fontSize: 12, color: "var(--text-2)" }}>
+      Este efectivo entra a la caja que abrió {nombre}.
+    </p>
+  );
+}
+
 export function AvisoCajaCerrada({ onCobrarDeTodosModos, ocupado = false }: {
   onCobrarDeTodosModos: () => void;
   ocupado?: boolean;

@@ -262,6 +262,9 @@ export function SideCards({
             </div>
           )}
 
+          {/* C-29 (auditoría de uso): los dos botones en su propio bloque, con aire
+              entre ellos (se leían pegados: «Cobrar ahora · $40,500Cobrar hoy»). */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {finance.balance > 0 && puedeCobrar && (
             <button
               type="button"
@@ -283,6 +286,7 @@ export function SideCards({
               {t("cobrarHoy.abrir")}
             </button>
           )}
+          </div>
         </section>
       )}
 

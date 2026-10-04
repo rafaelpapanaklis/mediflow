@@ -1889,6 +1889,8 @@ export function PatientDetailClient({
           iniciandoConsulta={iniciandoCitaId !== null}
           onReschedule={reagendarProxima}
           onCharge={openChargeShortcut}
+          // C-29 (auditoría de uso): sin saldo, «Cobrar» de la cabecera abre «Cobrar hoy».
+          onCobrarHoy={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
           puedeCobrar={permisosCobro?.cobrar !== false}
           canEdit={canEditPatient}
           canDelete={canDeletePatient}

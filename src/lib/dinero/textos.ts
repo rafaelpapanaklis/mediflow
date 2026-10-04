@@ -69,6 +69,11 @@ const es = {
   },
   // C-13: «Nueva factura» avisa del saldo a favor que se le va a descontar.
   saldoAFavorEnEditor: (monto: string) => `Este paciente tiene ${monto} a favor: al crear la factura se descuentan solos y queda por cobrar el resto.`,
+  // C-28: el enlace del plan cuenta lo mismo que la cabecera («Cuota 1 de 3»).
+  plan: {
+    verCuotas: (n: number) => (n === 1 ? "Ver la cuota del plan" : `Ver las ${n} cuotas del plan`),
+    verEngancheYCuotas: (n: number) => (n === 1 ? "Ver el enganche y la cuota del plan" : `Ver el enganche y las ${n} cuotas del plan`),
+  },
   // C-31: «Vence el» con una fecha que ya pasó.
   vencePasado: "Esa fecha ya pasó: la factura contará como vencida desde ya.",
   // C-15: el mismo dinero, la misma regla que «Registrar anticipo recibido».
@@ -168,6 +173,10 @@ const en: Textos = {
     exito: (estado: string) => `Refund recorded. The invoice is now ${estado.toLowerCase()}.`,
   },
   saldoAFavorEnEditor: (monto: string) => `This patient has ${monto} in credit: it's applied automatically when the invoice is created, and the rest stays due.`,
+  plan: {
+    verCuotas: (n: number) => (n === 1 ? "See the plan's installment" : `See the plan's ${n} installments`),
+    verEngancheYCuotas: (n: number) => (n === 1 ? "See the down payment and the installment" : `See the down payment and the ${n} installments`),
+  },
   vencePasado: "That date has already passed: the invoice will count as overdue right away.",
   cobro: {
     faltaReferencia: "For a bank transfer, enter the deposit reference (tracking key or folio).",

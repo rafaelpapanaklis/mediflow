@@ -94,6 +94,12 @@ export interface HeroCardProps {
   consultaEnCurso?: boolean;
   onReschedule: () => void;
   onCharge: () => void;
+  /**
+   * Auditoría de uso C-29: sin saldo pendiente «Cobrar» de la cabecera quedaba
+   * apagado mientras «Cobrar hoy» sí funcionaba. Con esta función, sin saldo, el
+   * botón abre «Cobrar hoy».
+   */
+  onCobrarHoy?: () => void;
   /** H14: sin billing.charge no se pinta «Cobrar» (la ruta lo revalida). */
   puedeCobrar?: boolean;
   /** Abre el modal de eliminar. Solo se llama si `canDelete` es true. */
@@ -197,6 +203,7 @@ export function HeroCard({
   consultaEnCurso = false,
   onReschedule,
   onCharge,
+  onCobrarHoy,
   puedeCobrar = true,
   onDelete,
   canDelete = false,
@@ -351,10 +358,10 @@ export function HeroCard({
       <button
         type="button"
         className={`${styles.btn} ${hasBalance ? styles.btnSuccess : ""}`}
-        onClick={onCharge}
-        disabled={!hasBalance}
+        onClick={hasBalance ? onCharge : onCobrarHoy}
+        disabled={!hasBalance && !onCobrarHoy}
       >
-        <CreditCard size={13} strokeWidth={1.75} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
+        <CreditCard size={13} strokeWidth={1.75} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : onCobrarHoy ? t("cobrarHoy.abrir") : t("patients.heroCard.charge")}
       </button>
       )}
 

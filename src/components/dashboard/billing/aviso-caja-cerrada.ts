@@ -25,12 +25,29 @@ export function cajaAbiertaDeRespuesta(status: number, cuerpo: unknown): boolean
   return (cuerpo as { register: unknown }).register ? true : false;
 }
 
+/**
+ * Decisión 16 de la auditoría de uso: de quién es la caja abierta, si NO es de
+ * quien cobra (nombre), o null (cerrada, propia o no se sabe).
+ */
+export function cajaDeOtraPersona(status: number, cuerpo: unknown): string | null {
+  if (status < 200 || status >= 300 || !cuerpo || typeof cuerpo !== "object") return null;
+  const reg = (cuerpo as { register?: { operatorName?: unknown; esMia?: unknown } | null }).register;
+  if (!reg || reg.esMia !== false) return null;
+  return typeof reg.operatorName === "string" && reg.operatorName.trim() ? reg.operatorName.trim() : "otra persona";
+}
+
 const TOPE_ESPERA_MS = 10000;
 
+let ultimaCajaDe: string | null = null;
+
+// Auditoría de uso (decisión 16): /api/caja/para-cobrar pide el permiso de COBRAR, no
+// el de Caja: recepción también se entera de que la caja está cerrada o es de otro.
 async function leerCaja(): Promise<boolean | null> {
   try {
-    const r = await fetch("/api/caja/current", { cache: "no-store" });
-    return cajaAbiertaDeRespuesta(r.status, await r.json().catch(() => null));
+    const r = await fetch("/api/caja/para-cobrar", { cache: "no-store" });
+    const cuerpo = await r.json().catch(() => null);
+    ultimaCajaDe = cajaDeOtraPersona(r.status, cuerpo);
+    return cajaAbiertaDeRespuesta(r.status, cuerpo);
   } catch {
     return null;
   }
@@ -42,8 +59,9 @@ async function leerCaja(): Promise<boolean | null> {
  * viaja, la espera (con tope) — con un servidor lento, el clic en «Registrar
  * pago» puede llegar antes que la respuesta, y entonces no se avisaba.
  */
-export function useCajaAbierta(open: boolean): { abierta: boolean | null; comprobar: () => Promise<boolean | null> } {
+export function useCajaAbierta(open: boolean): { abierta: boolean | null; cajaDe: string | null; comprobar: () => Promise<boolean | null> } {
   const [abierta, setAbierta] = useState<boolean | null>(null);
+  const [cajaDe, setCajaDe] = useState<string | null>(null);
   const enVuelo = useRef<Promise<boolean | null> | null>(null);
 
   useEffect(() => {
@@ -52,7 +70,7 @@ export function useCajaAbierta(open: boolean): { abierta: boolean | null; compro
     setAbierta(null);
     const lectura = leerCaja();
     enVuelo.current = lectura;
-    lectura.then((v) => { if (vivo) setAbierta(v); });
+    lectura.then((v) => { if (vivo) { setAbierta(v); setCajaDe(v ? ultimaCajaDe : null); } });
     return () => { vivo = false; };
   }, [open]);
 
@@ -61,7 +79,7 @@ export function useCajaAbierta(open: boolean): { abierta: boolean | null; compro
     return Promise.race([enVuelo.current ?? leerCaja(), espera]);
   }, []);
 
-  return { abierta, comprobar };
+  return { abierta, cajaDe, comprobar };
 }
 
 /**
@@ -78,8 +96,10 @@ export function useFrenoCajaCerrada(open: boolean, esEfectivo: boolean): {
   visible: boolean;
   frenar: () => Promise<boolean>;
   ocultar: () => void;
+  /** Decisión 16: con efectivo, el nombre de quien abrió la caja si no es quien cobra. */
+  cajaDe: string | null;
 } {
-  const { abierta, comprobar } = useCajaAbierta(open);
+  const { abierta, cajaDe, comprobar } = useCajaAbierta(open);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => { if (!open) setVisible(false); }, [open]);
@@ -97,5 +117,5 @@ export function useFrenoCajaCerrada(open: boolean, esEfectivo: boolean): {
 
   const ocultar = useCallback(() => setVisible(false), []);
 
-  return { visible: visible && esEfectivo, frenar, ocultar };
+  return { visible: visible && esEfectivo, frenar, ocultar, cajaDe: esEfectivo ? cajaDe : null };
 }
