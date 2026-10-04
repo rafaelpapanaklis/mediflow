@@ -25,6 +25,7 @@ import { decidirEdicion, motivoParaNoEditar } from "@/lib/invoices/editar-factur
 import { notasParaGuardar } from "@/lib/invoices/marcas-internas";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { denegarDescuentoSobreTope } from "@/lib/dinero/descuento.server";
+import { DEFAULT_INVOICE_TZ, parseInvoiceDueDate } from "@/lib/invoices/due-date";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -32,7 +33,11 @@ import { denegarDescuentoSobreTope } from "@/lib/dinero/descuento.server";
 async function getCtx() {
   const ctx = await getAuthContext();
   if (!ctx) return null;
-  return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
+  return {
+    clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride,
+    // C-31: el vencimiento que llega como "AAAA-MM-DD" se ancla al día de la clínica.
+    timezone: (ctx.clinic?.timezone as string | null | undefined) || DEFAULT_INVOICE_TZ,
+  };
 }
 
 /**
@@ -256,6 +261,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // enseña en «Editar»; al guardar lo editado se le vuelve a poner delante, o la
   // factura dejaría de contar como el control de su hoja (y se podría duplicar).
   if (body.notes !== undefined) updateData.notes = notasParaGuardar(invoice.notes, body.notes);
+  // Auditoría de uso C-31: el vencimiento se pone, cambia o quita después de crear la
+  // factura ("" o null lo quitan). Una cancelada no vence: no se toca.
+  if (body.dueDate !== undefined) {
+    if (invoice.status === "CANCELLED") {
+      return NextResponse.json({ error: "Una factura cancelada no tiene vencimiento." }, { status: 400 });
+    }
+    const vence = body.dueDate === null || body.dueDate === "" ? null : parseInvoiceDueDate(body.dueDate, ctx.timezone);
+    if (vence === null && body.dueDate !== null && body.dueDate !== "") {
+      return NextResponse.json({ error: "Fecha de vencimiento inválida." }, { status: 400 });
+    }
+    updateData.dueDate = vence ?? null;
+  }
   if (body.items) {
     // Sin esta validación, un body.items no-arreglo se guardaría tal cual en el
     // JSON (sumInvoiceItems devuelve 0 para no-arreglos) dejando la factura con
@@ -348,6 +365,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     patientId: invoice.patientId,
     texto: body.items && Math.abs((updateData.total ?? invoice.total) - invoice.total) >= 0.005
       ? `Editó la factura ${invoice.invoiceNumber} (total ${montoParaTexto(invoice.total)} → ${montoParaTexto(updateData.total)})`
+      : !body.items && "dueDate" in updateData
+      ? (updateData.dueDate ? `Cambió el vencimiento de la factura ${invoice.invoiceNumber}` : `Quitó el vencimiento de la factura ${invoice.invoiceNumber}`)
       : `Editó la factura ${invoice.invoiceNumber}`,
     req,
     clinicId,
@@ -358,6 +377,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // ws1-t4 (d): el antes/después completo (conceptos incluidos) para el rastro.
     before: {
       status: invoice.status, total: invoice.total, notes: invoice.notes,
+      ...("dueDate" in updateData ? { dueDate: invoice.dueDate } : {}),
       ...(body.items ? { items: invoice.items, subtotal: invoice.subtotal, discount: invoice.discount, balance: invoice.balance, paid: invoice.paid } : {}),
     },
     after: updateData,

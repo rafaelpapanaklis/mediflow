@@ -91,12 +91,15 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeF
         }),
       ]);
       const vivos = new Set<string>(CASO_VIVO);
-      propuesta = elegirDoctorDeFactura(undefined, {
-        planes: [
-          ...planes.filter((p) => String(p.status) === "ACTIVE").map((p) => p.doctorId),
-          ...casos.filter((c) => vivos.has(String(c.status))).map((c) => c.treatingDoctorId),
-        ],
-      });
+      const pistasPlan = [
+        ...planes.filter((p) => String(p.status) === "ACTIVE").map((p) => p.doctorId),
+        ...casos.filter((c) => vivos.has(String(c.status))).map((c) => c.treatingDoctorId),
+      ];
+      // C-07: sin plan que lo diga, el doctor de cabecera del paciente.
+      const cabecera = unicoDoctor(pistasPlan)
+        ? null
+        : (await prisma.patient.findFirst({ where: { id: patientId, clinicId }, select: { primaryDoctorId: true } }))?.primaryDoctorId ?? null;
+      propuesta = elegirDoctorDeFactura(undefined, { planes: pistasPlan, cabecera });
     }
   }
 

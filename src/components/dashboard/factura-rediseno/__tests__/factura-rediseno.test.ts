@@ -228,7 +228,8 @@ test("las acciones que tocan dinero y SAT siguen cableadas igual", () => {
   assert.equal((detalle.match(/fetch\("\/api\/cfdi", \{/g) ?? []).length, 1);
 
   const pago = leer(MODALES[1]);
-  assert.ok(pago.includes("paidAt: paidAtInstant(paidAt)?.toISOString(),"), "el cobro manda la misma fecha");
+  // C-33 (ws1-t5): con el «hoy» de la clínica para saber si el día elegido es hoy.
+  assert.ok(pago.includes("paidAt: paidAtInstant(paidAt, undefined, hoy)?.toISOString(),"), "el cobro manda la misma fecha");
   assert.ok(pago.includes("const isOverpay = amountNum > invoice.balance + 0.001;"), "la validación del sobrepago no cambió");
 
   const editor = leer(MODALES[2]);

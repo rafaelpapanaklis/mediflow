@@ -19,7 +19,9 @@ import { fmtMXNdec } from "@/lib/format";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
 import { clinicInvoiceTaxDefaults, cfdiTotalBreakdown, IVA_RATE_PCT, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 // Ropa del diseño nuevo (solo con `rediseno`). Ver dashboard/factura-rediseno/.
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 // Lo que Nueva factura toma de Presupuestos (solo con `rediseno`): forma de pago
@@ -93,6 +95,8 @@ export interface FacturaEnEdicion {
   notes?: string | null;
   taxRate?: number | null;
   taxIncluded?: boolean | null;
+  /** C-31: el vencimiento guardado (00:00 del día en la zona de la clínica). */
+  dueDate?: string | Date | null;
 }
 
 let _seq = 0;
@@ -192,6 +196,9 @@ function InvoiceEditorBody({
   onGuardada?: (invoice: any) => void;
 }) {
   const t = useT();
+  const txDoctorCobro = textosDinero(useLocale()).doctorCobro;
+  const txSaldoAFavor = textosDinero(useLocale()).saldoAFavorEnEditor;
+  const txVencePasado = textosDinero(useLocale()).vencePasado;
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
   // siempre sin él. Sin `nueva`, el nodo queda sin clase en el diseño nuevo
   // (lo viste la hoja por elemento: inputs, selects…).
@@ -233,7 +240,12 @@ function InvoiceEditorBody({
   // "Vence el" (Invoice.dueDate) — opcional. Viaja como "YYYY-MM-DD" y el
   // servidor lo ancla al día natural de la clínica. Es lo ÚNICO que hace que
   // una factura cuente como vencida (KPI, filtro "Vencidas", Caja, Finanzas).
-  const [dueDate, setDueDate] = useState("");
+  // C-31 (auditoría de uso): al editar, nace con el vencimiento guardado. Se guarda
+  // como 00:00 de la clínica; en México (UTC−5 a −8) ese instante cae el MISMO día
+  // en UTC, así que su fecha ISO es la del día elegido.
+  const dueDateInicial = editar?.dueDate ? new Date(editar.dueDate).toISOString().slice(0, 10) : "";
+  const [dueDate, setDueDate] = useState(dueDateInicial);
+  const hoyClinica = useHoyDeLaClinica();
   const [saving, setSaving] = useState(false);
 
   // Paciente: fijo por prop (ficha) o elegido aquí con el buscador (Caja).
@@ -322,6 +334,20 @@ function InvoiceEditorBody({
       })
       .catch(() => setDoctors([]));
   }, []);
+
+  // Auditoría de uso C-13: el saldo a favor del paciente, para avisar que se descontará.
+  const [saldoAFavor, setSaldoAFavor] = useState(0);
+  useEffect(() => {
+    setSaldoAFavor(0);
+    if (editando || !effectivePatientId) return;
+    let vivo = true;
+    fetch(`/api/patients/${encodeURIComponent(effectivePatientId)}/saldo-a-favor`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { saldo?: number } | null) => { if (vivo && d && typeof d.saldo === "number") setSaldoAFavor(d.saldo); })
+      .catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectivePatientId]);
 
   useEffect(() => {
     if (editando || doctorTocado || !effectivePatientId) return;
@@ -471,7 +497,12 @@ function InvoiceEditorBody({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         // (c) el aviso del plan ya se enseñó (o lo mandó el servidor la vez anterior).
-        body: JSON.stringify({ ...cuerpo, ...(avisoPlan || avisoPlanServidor ? { planAvisado: true } : {}) }),
+        body: JSON.stringify({
+          ...cuerpo,
+          ...(avisoPlan || avisoPlanServidor ? { planAvisado: true } : {}),
+          // C-31: el vencimiento también se cambia (o se quita) al editar.
+          ...(dueDate !== dueDateInicial ? { dueDate: dueDate || null } : {}),
+        }),
       });
       const out = await res.json().catch(() => ({}));
       if (res.status === 409 && out?.code === CODIGO_PLAN_SE_RECALCULA) {
@@ -793,6 +824,16 @@ function InvoiceEditorBody({
                   {t(origenDoctor === "plan" ? "billing.invoiceEditor.doctorDelPlan" : "billing.invoiceEditor.doctorDeLaCitaDeHoy")}
                 </p>
               )}
+              {/* Auditoría de uso C-07: sin cita hoy ni plan, el doctor de cabecera. */}
+              {origenDoctor === "cabecera" && doctorId && (
+                <p className={cx("mt-1 text-[11px] text-muted-foreground", c.ayuda)}>{txDoctorCobro.origen.cabecera}</p>
+              )}
+              {/* Auditoría de uso C-13: el saldo a favor se descuenta solo al crearla; se dice antes. */}
+              {!editando && saldoAFavor > 0 && (
+                <p className={cx("mt-1 text-[11px] font-semibold", c.ayuda)} style={{ color: "var(--warning-strong)" }} role="status" data-aviso-saldo-a-favor>
+                  {txSaldoAFavor(fmtMXNdec(saldoAFavor))}
+                </p>
+              )}
             </div>
             )}
             <div className={rediseno ? c.campo : undefined}>
@@ -855,14 +896,18 @@ function InvoiceEditorBody({
           </div>
 
           <div className={cx("grid sm:grid-cols-2 gap-4", c.rejilla2)}>
-            {!editando && (
+            {/* C-31 (auditoría de uso): también al editar, y avisa si la fecha ya pasó. */}
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.dueDate")}</label>
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
                 className={cx("mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm")} />
               <p className={cx("mt-1 text-[11px] text-muted-foreground", c.ayuda)}>{t("billing.invoiceEditor.dueDateHint")}</p>
+              {dueDate && dueDate < hoyClinica && (
+                <p className={cx("mt-1 text-[11px] font-semibold", c.ayuda)} style={{ color: "var(--warning-strong)" }} role="status" data-vence-pasado>
+                  {txVencePasado}
+                </p>
+              )}
             </div>
-            )}
             <div className={rediseno ? c.campo : undefined}>
               <label className={cx("text-[11px] font-bold uppercase tracking-wide text-muted-foreground", c.campoRotulo)}>{t("billing.invoiceEditor.notes")}</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)}

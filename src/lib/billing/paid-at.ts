@@ -69,12 +69,13 @@ function parseDateISO(value: string): { y: number; m: number; d: number } | null
  * `default(now())`, que es justo lo que se quiere, en vez de guardar una fecha
  * inventada.
  */
-export function paidAtInstant(dateISO: string, now: Date = new Date()): Date | undefined {
+export function paidAtInstant(dateISO: string, now: Date = new Date(), hoy?: string): Date | undefined {
   if (!dateISO) return undefined;
   const parts = parseDateISO(dateISO);
   if (!parts) return undefined;
   // Hoy → el instante real del cobro (y dentro del turno de caja abierto).
-  if (dateISO === todayLocalISO(now)) return now;
+  // `hoy` (auditoría de uso C-33): el «hoy» de la CLÍNICA, si quien llama lo sabe.
+  if (dateISO === (hoy ?? todayLocalISO(now))) return now;
   // Cualquier otro día → mediodía local de ESE día.
   return new Date(parts.y, parts.m - 1, parts.d, 12, 0, 0, 0);
 }

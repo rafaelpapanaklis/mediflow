@@ -13,7 +13,11 @@
 //   3. el doctor de las citas de HOY del paciente (día de la clínica, sin canceladas ni
 //      no-asistió), solo si todas son del mismo doctor;
 //   4. el doctor de sus PLANES activos (plan de tratamiento ACTIVO y caso de ortodoncia
-//      vivo con tratante), solo si todos son del mismo doctor.
+//      vivo con tratante), solo si todos son del mismo doctor;
+//   5. su doctor de CABECERA (`Patient.primaryDoctorId`) — auditoría de uso C-07
+//      (4-oct-2026, decisión de Rafael por defecto): «Cobrar hoy» y «Nueva factura» de un
+//      paciente sin cita hoy ni plan nacían «Sin doctor» aunque tuviera doctor asignado, y
+//      su cobro no entraba a la comisión de nadie.
 // Si no hay pista o hay dos doctores distintos, nace sin doctor, como hoy: mejor vacío que un
 // doctor equivocado en el corte por doctor (mismo criterio que lib/quotes/doctor-de-la-factura).
 // Nunca se cae a «quien pulsa Guardar»: quien factura casi nunca es quien atendió.
@@ -21,7 +25,7 @@
 // PURO: sin Prisma (lo usan la ruta, el editor y las pruebas). Las lecturas viven en
 // doctor-de-factura.server.ts.
 
-export type OrigenDoctorFactura = "elegido" | "sin_asignar" | "cita" | "nota" | "cita_de_hoy" | "plan" | "ninguno";
+export type OrigenDoctorFactura = "elegido" | "sin_asignar" | "cita" | "nota" | "cita_de_hoy" | "plan" | "cabecera" | "ninguno";
 
 export interface PistasDoctorFactura {
   /** Doctor de la cita ligada a la factura. */
@@ -32,6 +36,8 @@ export interface PistasDoctorFactura {
   citasDeHoy?: Array<string | null | undefined>;
   /** Doctores de sus planes activos (dental y ortodoncia). */
   planes?: Array<string | null | undefined>;
+  /** C-07: su doctor de cabecera. */
+  cabecera?: string | null;
 }
 
 export interface DoctorDeFactura {
@@ -67,6 +73,7 @@ export function elegirDoctorDeFactura(pedido: string | null | undefined, pistas:
   if (deHoy) return { doctorId: deHoy, origen: "cita_de_hoy" };
   const delPlan = unicoDoctor(pistas.planes);
   if (delPlan) return { doctorId: delPlan, origen: "plan" };
+  if (pistas.cabecera) return { doctorId: pistas.cabecera, origen: "cabecera" };
   return { doctorId: null, origen: "ninguno" };
 }
 

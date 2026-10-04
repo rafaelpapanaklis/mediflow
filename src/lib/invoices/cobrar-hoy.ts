@@ -92,6 +92,12 @@ export function cuerpoNotaCobroHoy(input: {
   clinicTaxMode?: string | null;
   /** Hoy se registra un pago tras crearla: el servidor exige "billing.charge" ANTES de crear. */
   conPagoHoy?: boolean;
+  /**
+   * Auditoría de uso C-07: el doctor elegido en la hoja. Texto = ese doctor; `null` =
+   * «Sin asignar» elegido a mano; ausente = que el servidor lo herede con la regla de
+   * siempre (cita, citas de hoy, plan, cabecera — lib/invoices/doctor-de-factura).
+   */
+  doctorId?: string | null;
 }) {
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(input.clinicTaxMode);
   return {
@@ -102,6 +108,7 @@ export function cuerpoNotaCobroHoy(input: {
     taxRate,
     taxIncluded,
     ...(input.conPagoHoy ? { conPagoHoy: true as const } : {}),
+    ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
   };
 }
 

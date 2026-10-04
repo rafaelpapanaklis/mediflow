@@ -19,10 +19,12 @@ const db = {
   planes: [] as Array<{ clinicId: string; patientId: string; doctorId: string; status: string }>,
   casos: [] as Array<{ clinicId: string; patientId: string; treatingDoctorId: string | null; status: string; deletedAt: Date | null }>,
   usuarios: [] as Array<{ id: string; clinicId: string; role: string; isActive: boolean }>,
+  // C-07 (auditoría de uso): el doctor de cabecera del paciente.
+  pacientes: [] as Array<{ id: string; clinicId: string; primaryDoctorId: string | null }>,
   creadas: [] as any[],
 };
 function reiniciar() {
-  db.citas = []; db.planes = []; db.casos = []; db.creadas = [];
+  db.citas = []; db.planes = []; db.casos = []; db.creadas = []; db.pacientes = [];
   db.usuarios = [
     { id: "docA", clinicId: "c1", role: "DOCTOR", isActive: true },
     { id: "docB", clinicId: "c1", role: "SUPER_ADMIN", isActive: true },
@@ -73,6 +75,13 @@ const prismaStub: any = {
       const u = db.usuarios.find((x) => x.id === where.id && x.clinicId === where.clinicId
         && (where.role?.in ?? [x.role]).includes(x.role) && (where.isActive === undefined || x.isActive === where.isActive));
       return u ? { id: u.id } : null;
+    },
+  },
+  patient: {
+    findFirst: async ({ where }: any) => {
+      assert.ok(where?.clinicId, "el paciente se busca SIEMPRE con clinicId");
+      const p = db.pacientes.find((x) => x.id === where.id && x.clinicId === where.clinicId);
+      return p ? { primaryDoctorId: p.primaryDoctorId } : null;
     },
   },
   invoice: {
@@ -260,4 +269,35 @@ test("GET doctor-sugerido: misma regla que el POST, con su origen", async () => 
   assert.deepEqual(await res.json(), { doctorId: "docA", origen: "plan" });
   const sin = await GET({ url: "http://localhost/api/invoices/doctor-sugerido" } as any);
   assert.equal(sin.status, 400);
+});
+
+// ── Auditoría de uso C-07 (ws1-t5, 4-oct-2026) ──────────────────────────────
+// F1 de la auditoría: «Cobrar hoy» $1,200 a Lucía (doctor de cabecera Dr. A, sin
+// cita hoy ni plan) quedó «Sin doctor» y no entró a la comisión del Dr. A.
+test("C-07 · regla: sin cita hoy ni plan, el doctor de cabecera; el plan le gana", () => {
+  assert.deepEqual(elegirDoctorDeFactura(undefined, { cabecera: "docA" }), { doctorId: "docA", origen: "cabecera" });
+  assert.equal(elegirDoctorDeFactura(undefined, { planes: ["docB"], cabecera: "docA" }).doctorId, "docB");
+  assert.equal(elegirDoctorDeFactura(undefined, { citasDeHoy: ["docB"], cabecera: "docA" }).doctorId, "docB");
+});
+
+test("C-07 · POST /api/invoices (lo que manda «Cobrar hoy»): sin cita hoy ni plan, nace con el doctor de cabecera (antes sin doctor)", async () => {
+  const { POST } = await import("@/app/api/invoices/route");
+  reiniciar();
+  db.pacientes.push({ id: "p1", clinicId: "c1", primaryDoctorId: "docA" });
+  await POST(req(cuerpo()));
+  assert.equal(db.creadas[0].doctorId, "docA");
+
+  // De otra clínica o dado de baja: no se hereda.
+  reiniciar();
+  db.pacientes.push({ id: "p1", clinicId: "c1", primaryDoctorId: "docBaja" });
+  await POST(req(cuerpo()));
+  assert.equal(db.creadas[0].doctorId ?? null, null);
+});
+
+test("C-07 · GET doctor-sugerido dice «cabecera» (lo que preselecciona «Nueva factura»)", async () => {
+  const { GET } = await import("@/app/api/invoices/doctor-sugerido/route");
+  reiniciar();
+  db.pacientes.push({ id: "p1", clinicId: "c1", primaryDoctorId: "docA" });
+  const r = await GET({ url: "http://localhost/api/invoices/doctor-sugerido?patientId=p1", headers: new Headers() } as any);
+  assert.deepEqual(await r.json(), { doctorId: "docA", origen: "cabecera" });
 });

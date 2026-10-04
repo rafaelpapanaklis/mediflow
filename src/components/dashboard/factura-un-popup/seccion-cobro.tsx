@@ -127,7 +127,7 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
           <Label>{t("common.date")}</Label>
           {/* max = hoy: el pago se registra cuando OCURRE (el servidor rechaza
               una fecha futura con 400). Igual que en la ventana de cobro. */}
-          <DateField max={todayLocalISO()} className={c.campoFecha} popoverClassName={CLASES_CALENDARIO_REDISENO} value={cobro.paidAt} onChange={(e) => cobro.setPaidAt(e.target.value)} />
+          <DateField max={cobro.hoy ?? todayLocalISO()} className={c.campoFecha} popoverClassName={CLASES_CALENDARIO_REDISENO} value={cobro.paidAt} onChange={(e) => cobro.setPaidAt(e.target.value)} />
         </div>
         <div className={c.campo}>
           <Label>{t("clinical.paymentModal.reference")}</Label>

@@ -22,9 +22,11 @@ import { Plus, Search, Trash2, Check, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 import { fmtMXNdec } from "@/lib/format";
-import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
+import { paidAtInstant } from "@/lib/billing/paid-at";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import h from "./cobrar-hoy.module.css";
@@ -110,6 +112,35 @@ function CuerpoCobrarHoy({
   const [nota, setNota] = useState<{ id: string; invoiceNumber: string; balance: number } | null>(null);
   const [hecho, setHecho] = useState<{ id: string; invoiceNumber: string; cobrado: number; queda: number; comprobante: string | null } | null>(null);
   const freno = useFrenoCajaCerrada(true, metodo === "cash");
+  // C-33: el «hoy» de la clínica.
+  const hoy = useHoyDeLaClinica();
+  // Auditoría de uso C-07: «Cobrar hoy» también dice de qué doctor es el cobro. Nace con
+  // el que propone el servidor (cita de hoy → plan → cabecera, la regla del POST); si nadie
+  // lo toca no se manda y el servidor aplica esa misma regla.
+  const locale = useLocale();
+  const txDoctor = textosDinero(locale).doctorCobro;
+  const [doctores, setDoctores] = useState<Array<{ id: string; name: string }>>([]);
+  const [doctorId, setDoctorId] = useState("");
+  const [doctorTocado, setDoctorTocado] = useState(false);
+  const doctorTocadoRef = useRef(false);
+  const [origenDoctor, setOrigenDoctor] = useState<string | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/agenda/doctors")
+      .then((r) => (r.ok ? r.json() : { doctors: [] }))
+      .then((d) => { if (vivo) setDoctores(Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []); })
+      .catch(() => {});
+    fetch(`/api/invoices/doctor-sugerido?patientId=${encodeURIComponent(patientId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { doctorId?: string | null; origen?: string } | null) => {
+        // Solo si nadie eligió mientras tanto.
+        if (!vivo || !d || doctorTocadoRef.current) return;
+        setDoctorId(d.doctorId ?? "");
+        setOrigenDoctor(d.doctorId ? (d.origen ?? null) : null);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [patientId]);
 
   // Tarifario (el mismo que usa «Nueva factura») y, desde una cita, el concepto de su motivo.
   useEffect(() => {
@@ -149,6 +180,11 @@ function CuerpoCobrarHoy({
 
   async function guardar(sinAvisoCaja?: unknown) {
     if (guardando || vista.falta) return;
+    // C-15: transferencia sin referencia no (misma regla que el anticipo recibido).
+    if (pagoEfectivo > 0 && metodo === "transfer" && !referencia.trim()) {
+      toast.error(textosDinero(locale).cobro.faltaReferencia);
+      return;
+    }
     setGuardando(true);
     ocupado.current = true;
     try {
@@ -162,7 +198,11 @@ function CuerpoCobrarHoy({
         const res = await fetch("/api/invoices", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cuerpoNotaCobroHoy({ patientId, appointmentId: cita?.id ?? null, conceptos, clinicTaxMode, conPagoHoy: pagoEfectivo > 0 })),
+          body: JSON.stringify(cuerpoNotaCobroHoy({
+            patientId, appointmentId: cita?.id ?? null, conceptos, clinicTaxMode, conPagoHoy: pagoEfectivo > 0,
+            // C-07: lo elegido a mano viaja (null = «Sin asignar» a propósito); si no, hereda.
+            ...(doctorTocado ? { doctorId: doctorId || null } : {}),
+          })),
         });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -186,7 +226,7 @@ function CuerpoCobrarHoy({
           body: JSON.stringify({
             amount: monto,
             method: metodo,
-            paidAt: paidAtInstant(todayLocalISO())?.toISOString(),
+            paidAt: paidAtInstant(hoy, undefined, hoy)?.toISOString(),
             reference: referencia.trim() || undefined,
           }),
         });
@@ -364,6 +404,27 @@ function CuerpoCobrarHoy({
             </div>
           )}
         </div>
+
+        {/* C-07: de qué doctor es el cobro (comisiones y «Por doctor»). */}
+        {nota === null && (
+          <label className={c.campo}>
+            <span className={c.campoRotulo}>{txDoctor.doctor}</span>
+            <select
+              className={c.input}
+              value={doctorId}
+              onChange={(e) => { doctorTocadoRef.current = true; setDoctorTocado(true); setOrigenDoctor(null); setDoctorId(e.target.value); }}
+              disabled={guardando}
+              data-cobrar-hoy-doctor
+            >
+              <option value="">{txDoctor.sinAsignar}</option>
+              {doctores.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            {doctorId && origenDoctor && txDoctor.origen[origenDoctor] && (
+              <span className={c.ayuda}>{txDoctor.origen[origenDoctor]}</span>
+            )}
+            {!doctorId && <span className={c.ayuda}>{txDoctor.sinDoctor}</span>}
+          </label>
+        )}
 
         {/* Pago recibido hoy. Sin "billing.charge" (p. ej. un doctor) no se ofrece: se
             crea el cargo y lo cobra quien tiene el permiso. */}

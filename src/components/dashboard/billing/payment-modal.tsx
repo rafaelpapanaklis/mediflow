@@ -13,8 +13,10 @@ import { Label } from "@/components/ui/label";
 import { fmtMXNdec } from "@/lib/format";
 // Fecha del cobro: "hoy" en LOCAL (no en UTC) y el instante que se guarda.
 // El porqué —y el desfase de 6 h que arreglan— está en el propio archivo.
-import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
-import { useT } from "@/i18n/i18n-provider";
+import { paidAtInstant } from "@/lib/billing/paid-at";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 // Ropa del diseño nuevo (solo con `rediseno`). Ver factura-rediseno/.
 // A qué cuota va lo que se cobra (solo informa; el POST no cambia). ws1-t2.
 import { DestinoDelAbono } from "@/components/dashboard/plan-de-pagos/destino-abono";
@@ -90,9 +92,12 @@ interface PaymentModalProps {
 
 export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false, montoSugerido, alUsarSaldo }: PaymentModalProps) {
   const t = useT();
+  const txCobro = textosDinero(useLocale()).cobro;
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<MetodoDelCobro>("cash");
-  const [paidAt, setPaidAt]       = useState(() => todayLocalISO());
+  // C-33: la fecha por defecto es el «hoy» de la clínica, no el de la computadora.
+  const hoy = useHoyDeLaClinica();
+  const [paidAt, setPaidAt]       = useState(hoy);
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
@@ -112,12 +117,12 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
     if (!open || !invoice) return;
     setAmount(String(montoInicialDeCobro(montoSugerido, invoice.balance ?? 0)));
     setMethod("cash");
-    setPaidAt(todayLocalISO());
+    setPaidAt(hoy);
     setReference("");
     setNotes("");
     freno.ocultar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, invoice]);
+  }, [open, invoice, hoy]);
 
   if (!invoice) return null;
 
@@ -131,6 +136,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
 
   async function submit(sinAviso = false) {
     if (isInvalid || saving || !invoice) return;
+    // Auditoría de uso C-15: transferencia sin referencia no (misma regla que el anticipo).
+    if (method === "transfer" && !reference.trim()) { toast.error(txCobro.faltaReferencia); return; }
     // MP ya cobró este ciclo: sin confirmar que es un adelanto, no se cobra.
     if (cobroAuto.bloquea) return;
     if (!sinAviso) {
@@ -156,7 +163,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
         body: JSON.stringify({
           amount: amountNum,
           method,
-          paidAt: paidAtInstant(paidAt)?.toISOString(),
+          paidAt: paidAtInstant(paidAt, undefined, hoy)?.toISOString(),
           reference: reference.trim() || undefined,
           notes: notes.trim() || undefined,
           confirmarCobroAutomatico: cobroAuto.confirmado || undefined,
@@ -292,7 +299,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
                   podía capturar una fecha futura, que el servidor ahora rechaza
                   con 400. Misma expresión que el valor por defecto de arriba
                   para que el valor inicial nunca quede por encima del tope. */}
-              <DateField max={todayLocalISO()} className={cx("flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors", c.campoFecha)} popoverClassName={rediseno ? CLASES_CALENDARIO_REDISENO : undefined} value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <DateField max={hoy} className={cx("flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors", c.campoFecha)} popoverClassName={rediseno ? CLASES_CALENDARIO_REDISENO : undefined} value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
             <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.paymentModal.reference")}</Label>

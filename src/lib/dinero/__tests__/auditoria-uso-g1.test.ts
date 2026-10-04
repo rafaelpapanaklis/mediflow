@@ -111,3 +111,129 @@ test("C-01 · Caja: el turno del 3-oct lista el anticipo por transferencia y lo 
   const w6 = await deriveWindow(CL_NORTE, new Date("2026-10-06T06:00:00.000Z"), new Date("2026-10-07T05:59:59.000Z"), { db });
   assert.equal(w6.cashRefunds, 1_000, "el reembolso en efectivo de una factura cancelada sí sale del cajón");
 });
+
+// ── C-02 / C-03 · qué pasa con la factura al reembolsar ────────────────────
+import { efectoDelReembolso } from "@/lib/dinero/reembolso-destino";
+import { reajustarAlTotal } from "@/lib/invoices/reajustar-total";
+
+test("C-02 · MF-1128 ($3,000 pagada, devuelve $1,000): «baja el total» → $2,000 pagada; «sigue debiendo» → parcial $1,000", () => {
+  assert.deepEqual(efectoDelReembolso({ total: 3_000, pagado: 3_000, monto: 1_000, destino: "baja_total" }),
+    { pagado: 2_000, total: 2_000, saldo: 0, estado: "PAID", bajaDelTotal: 1_000 });
+  assert.deepEqual(efectoDelReembolso({ total: 3_000, pagado: 3_000, monto: 1_000, destino: "sigue_debiendo" }),
+    { pagado: 2_000, total: 3_000, saldo: 1_000, estado: "PARTIAL", bajaDelTotal: 0 });
+  // Devolver todo «baja el total» = no queda nada: cancelada.
+  assert.equal(efectoDelReembolso({ total: 3_000, pagado: 3_000, monto: 3_000, destino: "baja_total" }).estado, "CANCELLED");
+});
+
+test("C-02 · MF-1125 ($640 con $160 de descuento, devuelve $100 de más): total $540 y nada por cobrar", () => {
+  const e = efectoDelReembolso({ total: 640, pagado: 640, monto: 100, destino: "baja_total" });
+  assert.equal(e.total, 540);
+  assert.equal(e.saldo, 0);
+  assert.equal(e.estado, "PAID");
+});
+
+test("C-03 · MF-1131 Parcial ($500 de $3,500): devolver todo → CANCELADA; quedarse con lo pagado → $500 PAGADA", () => {
+  assert.equal(efectoDelReembolso({ total: 3_500, pagado: 500, monto: 500, destino: "baja_resto" }).estado, "CANCELLED");
+  assert.deepEqual(efectoDelReembolso({ total: 3_500, pagado: 500, monto: 0, destino: "baja_resto" }),
+    { pagado: 500, total: 500, saldo: 0, estado: "PAID", bajaDelTotal: 3_000 });
+  // Parcial que «baja el total» conserva lo que debía.
+  assert.equal(efectoDelReembolso({ total: 4_000, pagado: 1_500, monto: 500, destino: "baja_total" }).saldo, 2_500);
+  assert.throws(() => efectoDelReembolso({ total: 3_000, pagado: 3_000, monto: 3_001, destino: "baja_total" }));
+  assert.throws(() => efectoDelReembolso({ total: 3_000, pagado: 3_000, monto: 0, destino: "sigue_debiendo" }));
+});
+
+test("C-02 · bajar el total respeta los conceptos (descuento explícito) y el IVA agregado", () => {
+  const r = reajustarAlTotal({ items: [{ description: "Endodoncia", quantity: 1, unitPrice: 3_000, total: 3_000 }], discount: 0, taxRate: 16, taxIncluded: true }, 2_000);
+  assert.equal(r.total, 2_000);
+  assert.equal(r.discount, 1_000);
+  assert.equal(r.subtotal, 3_000);
+  const iva = reajustarAlTotal({ items: [{ description: "Corona", quantity: 1, unitPrice: 1_000, total: 1_000 }], discount: 0, taxRate: 16, taxIncluded: false }, 580);
+  assert.equal(iva.total, 580, "base $500 + 16 %");
+  assert.equal(iva.discount, 500);
+});
+
+// ── C-32 · método con más dinero ──────────────────────────────────────────
+import { metodoPrincipal, reembolsadoDeFactura } from "@/lib/invoices/metodo-principal";
+
+test("C-32 · $3,500 por transferencia y un abono de $100 en efectivo: el método es «transferencia» (antes «efectivo», el último)", () => {
+  const pagos = [
+    { method: "transfer", amount: 3_500 },
+    { method: "cash", amount: 100 },
+    { method: "refund", amount: 3_600, refundMethod: "cash" },
+  ];
+  assert.equal(metodoPrincipal(pagos, "cash"), "transfer");
+  assert.equal(metodoPrincipal([], "cash"), "cash", "sin cobros, el de la factura");
+  assert.deepEqual(reembolsadoDeFactura([...pagos, { method: "refund", amount: 500, refundMethod: "saldo_a_favor" }]), { devuelto: 3_600, aSaldoAFavor: 500 });
+});
+
+// ── C-02 / C-19 · comprobante PDF ─────────────────────────────────────────
+import { fmtFecha, renglonDePago } from "@/lib/invoices/print-pdf";
+
+test("C-02 · el comprobante pone el reembolso en negativo y dice por dónde salió (antes «Reembolso $1,000» como pago)", () => {
+  assert.deepEqual(renglonDePago({ method: "refund", amount: 1_000, refundMethod: "cash" }), { etiqueta: "Reembolso (en efectivo)", signo: "−", resta: true });
+  assert.equal(renglonDePago({ method: "refund", amount: 500, refundMethod: "saldo_a_favor" }).etiqueta, "Pasó a saldo a favor");
+  assert.equal(renglonDePago({ method: "refund", amount: 500, refundMethod: null }).signo, "−", "uno viejo sin método también resta");
+  assert.deepEqual(renglonDePago({ method: "cash", amount: 3_000 }), { etiqueta: "Efectivo", signo: "", resta: false });
+});
+
+test("C-19 · un cobro del 3-oct a las 23:12 en CDMX sale «3 de octubre» (antes «4 de octubre», hora del servidor)", () => {
+  const cobro = new Date("2026-10-04T05:12:00.000Z");
+  assert.equal(fmtFecha(cobro, "America/Mexico_City"), "3 de octubre de 2026");
+  assert.equal(fmtFecha(cobro, "Europe/Madrid"), "4 de octubre de 2026");
+  assert.equal(fmtFecha(cobro), "3 de octubre de 2026", "sin zona, la de México");
+});
+
+// ── C-06 / C-17 · caja ────────────────────────────────────────────────────
+import { cambioDelEsperado, descuentoUnaVezPorFactura } from "@/lib/dinero/caja-core";
+
+test("C-06 · el esperado cambió desde que se abrió el diálogo: $4,740 → $8,740 = +$4,000; sin cambio o sin dato, null", () => {
+  assert.deepEqual(cambioDelEsperado(4_740, 8_740), { diferencia: 4_000 });
+  assert.deepEqual(cambioDelEsperado(4_740, 4_240), { diferencia: -500 });
+  assert.equal(cambioDelEsperado(4_740, 4_740.004), null);
+  assert.equal(cambioDelEsperado(undefined, 8_740), null, "una pestaña vieja que no manda lo que vio cierra como antes");
+});
+
+test("C-17 · factura de $800 con $160 de descuento cobrada en $300 + $100: la tabla dice −$160 una vez (antes −$75 y −$25)", () => {
+  const m = descuentoUnaVezPorFactura([
+    { paymentId: "p1", invoiceId: "mf1125", invoiceDiscount: 160, method: "cash" },
+    { paymentId: "p2", invoiceId: "mf1125", invoiceDiscount: 160, method: "cash" },
+    { paymentId: "r1", invoiceId: "mf1125", invoiceDiscount: 160, method: "refund" },
+    { paymentId: "p3", invoiceId: "mf2", invoiceDiscount: 0, method: "debit" },
+  ]);
+  assert.deepEqual(Array.from(m.entries()), [["p1", 160]]);
+});
+
+// ── C-15 · transferencia sin referencia, en los tres cobros ────────────────
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+test("C-15 · «Registrar pago» (las dos ventanas) y «Cobrar hoy» piden la referencia de una transferencia, como el anticipo", () => {
+  const raiz = path.resolve(__dirname, "../../../..");
+  const leer = (rel: string) => readFileSync(path.join(raiz, rel), "utf8");
+  assert.match(leer("src/components/dashboard/factura-un-popup/use-cobro.ts"), /if \(method === "transfer" && !reference\.trim\(\)\) \{ toast\.error\(txCobro\.faltaReferencia\); return; \}/);
+  assert.match(leer("src/components/dashboard/billing/payment-modal.tsx"), /if \(method === "transfer" && !reference\.trim\(\)\) \{ toast\.error\(txCobro\.faltaReferencia\); return; \}/);
+  assert.match(leer("src/components/dashboard/cobrar-hoy/cobrar-hoy.tsx"), /pagoEfectivo > 0 && metodo === "transfer" && !referencia\.trim\(\)/);
+  // Y «Cobrar hoy» manda el doctor elegido (C-07).
+  assert.match(leer("src/components/dashboard/cobrar-hoy/cobrar-hoy.tsx"), /\.\.\.\(doctorTocado \? \{ doctorId: doctorId \|\| null \} : \{\}\)/);
+});
+
+import { cuerpoNotaCobroHoy } from "@/lib/invoices/cobrar-hoy";
+test("C-07 · el cuerpo de «Cobrar hoy» lleva el doctor elegido; sin elegir, no lo manda (lo hereda el servidor)", () => {
+  const base = { patientId: "p1", conceptos: [{ nombre: "Limpieza", importe: 1_200 }] };
+  assert.equal((cuerpoNotaCobroHoy({ ...base, doctorId: "docA" }) as any).doctorId, "docA");
+  assert.equal((cuerpoNotaCobroHoy({ ...base, doctorId: null }) as any).doctorId, null, "«Sin asignar» a propósito");
+  assert.equal("doctorId" in cuerpoNotaCobroHoy(base), false);
+});
+
+// ── C-33 · las fechas por defecto en la zona de la clínica ─────────────────
+import { hoyDeLaClinica } from "@/lib/billing/zona-clinica";
+import { paidAtInstant } from "@/lib/billing/paid-at";
+
+test("C-33 · a las 23:03 del sábado 3 en CDMX, el «hoy» de la clínica es el 3 (la compu en Nueva York ya decía 4)", () => {
+  const ahora = new Date("2026-10-04T05:03:00.000Z");
+  assert.equal(hoyDeLaClinica("America/Mexico_City", ahora), "2026-10-03");
+  assert.equal(hoyDeLaClinica("America/New_York", ahora), "2026-10-04");
+  assert.equal(hoyDeLaClinica("Zona/Inventada", ahora).length, 10, "una zona inválida cae a la del navegador sin romper");
+  // Elegido «hoy» de la clínica → el instante real del cobro, aunque el navegador ya esté en otro día.
+  assert.equal(paidAtInstant("2026-10-03", ahora, "2026-10-03")?.getTime(), ahora.getTime());
+});

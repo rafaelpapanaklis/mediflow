@@ -32,6 +32,7 @@ import { IconoMercadoPago } from "@/components/dashboard/billing/icono-mercado-p
 import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 import type { ContactoPaciente, ViaEnvio } from "./datos";
 import type { VistaEnvioWhatsApp } from "@/lib/invoices/envio-factura-vista";
 import { buildMensajeFactura } from "@/lib/invoices/invoice-message";
@@ -41,13 +42,6 @@ import s from "./ficha.module.css";
 const ICONO_METODO = new Map(METHODS.map((m) => [m.value as string, m.icon]));
 
 const num = (v: string) => { const n = Number(v); return isFinite(n) ? n : 0; };
-
-/** Hoy, en el día LOCAL de quien crea el cobro (no en UTC: a las 7 pm en México
- *  `toISOString()` ya dice mañana). */
-function hoyLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 /** El cambio de condiciones, con la misma regla que el editor de presupuestos:
  *  «lo difiere con su banco» solo vive en un pago con tarjeta de crédito. Y
@@ -75,6 +69,8 @@ export function FormaDePagoFactura({
   engancheFijo?: boolean;
 }) {
   const t = useT();
+  // Auditoría de uso C-33: el «primer pago hoy» es el hoy de la clínica, no el de la computadora.
+  const hoy = useHoyDeLaClinica();
   const parchear = (cambio: Partial<CondicionesPago>) => onChange(parchearCondiciones(cond, cambio));
   const calendario = useMemo(() => calcularCalendario(total, cond), [total, cond]);
 
@@ -93,7 +89,7 @@ export function FormaDePagoFactura({
       // números con los que ya se lee la frase, en vez de un formulario vacío.
       numPagos: modo === "plazos" ? (cond.numPagos >= MIN_PAGOS ? cond.numPagos : PAGOS_SUGERIDOS) : 0,
       enganche: modo === "plazos" ? cond.enganche : 0,
-      primerPago: modo === "plazos" && !cond.primerPago ? hoyLocal() : cond.primerPago,
+      primerPago: modo === "plazos" && !cond.primerPago ? hoy : cond.primerPago,
     });
   }
 

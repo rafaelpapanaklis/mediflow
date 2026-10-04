@@ -963,3 +963,25 @@ test("C-03 · sin «modo» una Parcial con cobros sigue pidiendo reembolsar prim
   assert.equal(r.status, 400);
   assert.equal(db.invoice.status, "PARTIAL");
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría de uso C-31 (ws1-t5) — el vencimiento se pone o cambia después de
+// crear la factura. Con el código viejo el PATCH ignoraba `dueDate`.
+// ═══════════════════════════════════════════════════════════════════════════
+test("C-31 · PATCH {dueDate:\"2026-10-20\"} lo ancla a las 00:00 de la clínica; \"\" lo quita; una cancelada no vence", async () => {
+  const { PATCH } = await import("@/app/api/invoices/[id]/route");
+  setInvoice({ items: CONCEPTO(800), subtotal: 800, total: 800, balance: 800, status: "PENDING", dueDate: null });
+  const r = await PATCH(req({ dueDate: "2026-10-20" }), P);
+  assert.equal(r.status, 200);
+  assert.equal(new Date(db.invoice.dueDate).toISOString(), "2026-10-20T06:00:00.000Z", "00:00 en Ciudad de México");
+  const q = await PATCH(req({ dueDate: "" }), P);
+  assert.equal(q.status, 200);
+  assert.equal(db.invoice.dueDate, null);
+  const malo = await PATCH(req({ dueDate: "20/26/1105" }), P);
+  assert.equal(malo.status, 400);
+
+  setInvoice({ items: CONCEPTO(800), subtotal: 800, total: 800, balance: 800, status: "CANCELLED", dueDate: null });
+  const c = await PATCH(req({ dueDate: "2026-10-20" }), P);
+  assert.equal(c.status, 400);
+  assert.equal(db.invoice.dueDate, null);
+});

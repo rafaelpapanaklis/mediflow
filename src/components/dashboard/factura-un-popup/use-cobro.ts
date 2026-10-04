@@ -5,8 +5,10 @@ import toast from "react-hot-toast";
 import { fmtMXNdec } from "@/lib/format";
 // Fecha del cobro: "hoy" en LOCAL (no en UTC) y el instante que se guarda.
 // Las mismas dos funciones que usa «Registrar pago» (billing/payment-modal).
-import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
-import { useT } from "@/i18n/i18n-provider";
+import { paidAtInstant } from "@/lib/billing/paid-at";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 import type { MetodoDelCobro } from "@/components/dashboard/billing/payment-modal";
 import { montoInicialDeCobro } from "@/components/dashboard/billing/monto-inicial-cobro";
 // El freno de «caja cerrada»: la MISMA pieza que usa «Registrar pago» (ws1-t6, H25).
@@ -66,9 +68,12 @@ export interface OpcionesCobro {
 
 export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar, montoSugerido }: OpcionesCobro) {
   const t = useT();
+  const txCobro = textosDinero(useLocale()).cobro;
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<MetodoDelCobro>("cash");
-  const [paidAt, setPaidAt]       = useState(() => todayLocalISO());
+  // C-33: la fecha por defecto es el «hoy» de la clínica, no el de la computadora.
+  const hoy = useHoyDeLaClinica();
+  const [paidAt, setPaidAt]       = useState(hoy);
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
@@ -86,10 +91,10 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
     if (!abierta || id === null) return;
     setAmount(String(montoInicialDeCobro(montoSugerido, balance ?? 0)));
     setMethod("cash");
-    setPaidAt(todayLocalISO());
+    setPaidAt(hoy);
     setReference("");
     setNotes("");
-  }, [abierta, id, balance, montoSugerido]);
+  }, [abierta, id, balance, montoSugerido, hoy]);
 
   const amountNum = Number(amount);
   const isOverpay = amountNum > balance + 0.001;
@@ -104,6 +109,9 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
   async function submit(sinAviso?: unknown) {
     const invoice = factura;
     if (isInvalid || saving || !invoice) return;
+    // Auditoría de uso C-15: transferencia sin referencia no (la regla de «Registrar
+    // anticipo recibido»: el mismo dinero, la misma regla).
+    if (method === "transfer" && !reference.trim()) { toast.error(txCobro.faltaReferencia); return; }
     // MP ya cobró este ciclo: sin confirmar que es un adelanto, no se cobra.
     if (cobroAuto.bloquea) return;
     setSaving(true);
@@ -146,7 +154,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
         body: JSON.stringify({
           amount: amountNum,
           method,
-          paidAt: paidAtInstant(paidAt)?.toISOString(),
+          paidAt: paidAtInstant(paidAt, undefined, hoy)?.toISOString(),
           reference: reference.trim() || undefined,
           notes: notes.trim() || undefined,
           confirmarCobroAutomatico: cobroAuto.confirmado || undefined,
@@ -174,6 +182,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
     notes, setNotes,
     // `isInvalid` también se apaga mientras falte confirmar el adelanto del cobro automático.
     saving, amountNum, isOverpay, isInvalid: isInvalid || cobroAuto.bloquea, balance, adelanto, orto, cobroAuto,
+    hoy,
     submit,
     avisoCaja: freno.visible,
   };

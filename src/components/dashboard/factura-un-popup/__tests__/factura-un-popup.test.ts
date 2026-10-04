@@ -68,7 +68,8 @@ test("el POST del cobro es, letra por letra, el de la ventana de cobro", () => {
     'method: "POST"',
     "amount: amountNum,",
     "method,",
-    "paidAt: paidAtInstant(paidAt)?.toISOString(),",
+    // C-33 (ws1-t5): con el «hoy» de la clínica.
+    "paidAt: paidAtInstant(paidAt, undefined, hoy)?.toISOString(),",
     "reference: reference.trim() || undefined,",
     "notes: notes.trim() || undefined,",
   ]) {
@@ -87,7 +88,8 @@ test("misma validación y mismos valores iniciales que la ventana de cobro", () 
     "const isInvalid = !amountNum || amountNum <= 0 || (isOverpay && !adelanto);",
     "const r = await registrarCobroConAdelanto({ invoiceId: invoice.id, amount: amountNum, method, paidAt, reference, notes });",
     'setMethod("cash");',
-    "setPaidAt(todayLocalISO());",
+    // C-33 (ws1-t5): el «hoy» de la clínica.
+    "setPaidAt(hoy);",
     'setReference("");',
     'setNotes("");',
     'toast.success(t("clinical.paymentModal.registerSuccess"));',
@@ -142,7 +144,7 @@ test("los seis métodos, la fecha, la referencia y las notas siguen ahí", () =>
     "cobro.setPaidAt(e.target.value)",
     "cobro.setReference(e.target.value)",
     "cobro.setNotes(e.target.value)",
-    "<DateField max={todayLocalISO()}",
+    "<DateField max={cobro.hoy ?? todayLocalISO()}",
     'popoverClassName={CLASES_CALENDARIO_REDISENO}',
     't("clinical.paymentModal.refTransfer")',
     't("clinical.paymentModal.refCheck")',
