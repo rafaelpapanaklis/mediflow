@@ -5,6 +5,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import type { TFunction } from "@/i18n/t";
 import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
 import { ventanasDeReportes } from "./ventanas-de-reportes";
+import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
 
 async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try { return await p; }
@@ -55,8 +56,10 @@ export async function cargarReportes(
     Promise.all(ranges.map(r =>
       safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lt: r.end } } }), 0)
     )),
+    // ws1-t2 (C-11): las citas de cada mes con la definición única — el mes
+    // de la clínica, SIN canceladas. Antes las contaba (104 aquí, 76 en Inicio).
     Promise.all(ranges.map(r =>
-      safe(prisma.appointment.count({ where: { clinicId, startsAt: { gte: r.start, lt: r.end } } }), 0)
+      safe(prisma.appointment.count({ where: citasDelPeriodoWhere(clinicId, r.start, r.end) }), 0)
     )),
   ]);
 

@@ -421,7 +421,8 @@ export function FinanzasClient() {
               queCuenta={{ clave: "utilidad" }}
             />
             <Kpi label="Ventas" value={(data.ventas ?? 0).toLocaleString("es-MX")} icon={Receipt} tone="brand" />
-            <Kpi label="Citas" value={(data.citas ?? 0).toLocaleString("es-MX")} icon={CalendarCheck} tone="brand" />
+            {/* ws1-t2 (C-11): «citas» = las del periodo entero, sin canceladas (la misma cifra que Inicio, Analítica y Reportes). */}
+            <Kpi label="Citas" value={(data.citas ?? 0).toLocaleString("es-MX")} icon={CalendarCheck} tone="brand" queCuenta={{ clave: "citasDelPeriodo" }} />
             <Kpi label="Efectivo recibido" value={fmtMXN(data.efectivo)} icon={Banknote} tone="success" queCuenta={{ clave: "efectivo" }} />
           </div>
           {/* ws1-t2: la historia migrada del periodo, aparte y nunca sumada a «Ingresos». */}

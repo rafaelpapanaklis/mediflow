@@ -101,8 +101,10 @@ test("/api/finanzas: ventas excluye DRAFT, porDoctor es lo cobrado (ws1-t2); nad
   // «Por doctor» ya no lee facturas: es lo COBRADO (ingresosPorDoctorDelPeriodo).
   assert.equal((src.match(/notIn:\s*\[\.\.\.NOT_A_SALE_STATUSES\]/g) ?? []).length, 1);
   assert.match(src, /ingresosPorDoctorDelPeriodo\(clinicId/);
-  // El único `not: "CANCELLED"` que queda es el de las citas, que no se tocó.
-  assert.equal((src.match(/not:\s*"CANCELLED"/g) ?? []).length, 1);
+  // Ya no queda ningún `not: "CANCELLED"` suelto: las citas usan la definición
+  // única de «citas del periodo» (ws1-t2, auditoría de uso C-11).
+  assert.equal((src.match(/not:\s*"CANCELLED"/g) ?? []).length, 0);
+  assert.match(src, /where: citasDelPeriodoWhere\(clinicId, from, /);
 });
 
 // ── La ventana del periodo (ws1-t5, ronda 6): la comparten /api/finanzas y el

@@ -113,7 +113,8 @@ test("la pestaña pide el mismo permiso que Reportes y lee las cifras de la mism
   // y no pasa a nadie por alto.
   const fuente = leer("app/dashboard/reports/cargar-reportes.ts");
   assert.match(fuente, /movimientosDelPeriodo\(clinicId, \{ gte: ranges\[0\]\.start, lt: ranges\[ranges\.length - 1\]\.end \}\)/);
-  assert.equal((fuente.match(/where: \{\s*clinicId\b|where: deudaInvoiceWhere\(clinicId\)/g) ?? []).length,
+  // ws1-t2 (C-11): las citas de cada mes van por `citasDelPeriodoWhere(clinicId, …)`, también aisladas.
+  assert.equal((fuente.match(/where: \{\s*clinicId\b|where: deudaInvoiceWhere\(clinicId\)|where: citasDelPeriodoWhere\(clinicId,/g) ?? []).length,
     (fuente.match(/prisma\.[a-zA-Z]+\.(count|aggregate|groupBy|findMany)\(/g) ?? []).length,
     "cada consulta va aislada por clinicId");
 });

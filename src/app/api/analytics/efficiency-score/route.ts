@@ -1,122 +1,80 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { diaDeLaClinica, mesDeLaClinica } from "@/lib/agenda/citas-del-periodo";
+import { puntajeDeEficiencia } from "@/lib/agenda/eficiencia";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/analytics/efficiency-score?date=2026-04-28
  *
- * Score = (% horas activas) * 0.6 + (% slots usados) * 0.4
- * - "horas activas" = suma de duraciones de citas con status COMPLETED
- *   o IN_PROGRESS o CHECKED_OUT en el día.
- * - "horas operativas" = (agendaDayEnd - agendaDayStart) horas × #doctores
- *   activos.
- * - "slots usados" = citas no canceladas / no-show.
- * - "slots totales" = horas operativas / (defaultSlotMinutes / 60).
+ * Score = (% ocupación por horario) * 0.6 + (% espacios usados) * 0.4
  *
- * Devuelve { score, today, monthAverage, hint }.
+ * ws1-t2 (auditoría de uso C-26; decisión 9 de Rafael: «ocupación por
+ * horario»): el tiempo disponible sale del HORARIO de Ajustes
+ * (`ClinicSchedule`, día por día) por cada profesional que recibe citas —la
+ * misma cuenta que la Ocupación de Inicio y la barra de la Agenda—, y los días
+ * son los de la ZONA de la clínica. Antes eran las horas fijas
+ * `agendaDayStart–End` todos los días (también domingos cerrados) y el día del
+ * SERVIDOR: decía «0 de 100» mientras Inicio decía «Ocupación 27 %».
+ * Ver lib/agenda/eficiencia.ts.
+ *
+ * Devuelve { score, today, monthAverage, ocupacionHoy, ocupacionMes, … }.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+  if (!clinicId) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const url = new URL(req.url);
   const dateParam = url.searchParams.get("date");
-  const day = dateParam ? new Date(dateParam) : new Date();
-  day.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(day);
-  dayEnd.setHours(23, 59, 59, 999);
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { agendaDayStart: true, agendaDayEnd: true, defaultSlotMinutes: true },
+    select: { timezone: true, defaultSlotMinutes: true },
   });
   if (!clinic) return NextResponse.json({ error: "clinic_not_found" }, { status: 404 });
 
-  const operativeHoursPerDoctor = Math.max(0, clinic.agendaDayEnd - clinic.agendaDayStart);
-  const slotMinutes = clinic.defaultSlotMinutes ?? 15;
+  const zona = clinic.timezone || "America/Mexico_City";
+  // `date` (YYYY-MM-DD) es un día de la clínica: se toma su mediodía para no cruzar de día por la zona.
+  const ref = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+    ? new Date(`${dateParam}T12:00:00Z`)
+    : new Date();
+  const hoy = diaDeLaClinica(zona, ref);
+  const mes = mesDeLaClinica(zona, ref);
 
-  const [activeDoctors, todayAppts] = await Promise.all([
-    prisma.user.count({
-      where: { clinicId, isActive: true, agendaActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } },
+  const [schedules, profesionales, citas] = await Promise.all([
+    prisma.clinicSchedule.findMany({
+      where: { clinicId },
+      select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
     }),
+    prisma.user.findMany({ where: { clinicId, ...RECIBE_CITAS_WHERE }, select: { id: true } }),
     prisma.appointment.findMany({
-      where: { clinicId, startsAt: { gte: day, lte: dayEnd } },
-      select: { startsAt: true, endsAt: true, status: true },
+      where: { clinicId, startsAt: { gte: mes.desde, lt: mes.hasta } },
+      select: { startsAt: true, endsAt: true, status: true, doctorId: true },
     }),
   ]);
 
-  const score = computeScore(todayAppts, activeDoctors, operativeHoursPerDoctor, slotMinutes);
-  const monthAverage = await computeMonthAverage(clinicId, day, activeDoctors, operativeHoursPerDoctor, slotMinutes);
+  const r = puntajeDeEficiencia({
+    hoy,
+    mes,
+    ahora: ref,
+    zona,
+    schedules,
+    profesionales: profesionales.map((p) => p.id),
+    citas,
+    minutosPorEspacio: clinic.defaultSlotMinutes ?? 15,
+  });
 
   return NextResponse.json({
-    score,
-    today: score,
-    monthAverage,
-    activeDoctors,
-    operativeHoursPerDoctor,
+    score: r.hoy,
+    today: r.hoy,
+    monthAverage: r.promedioDelMes,
+    ocupacionHoy: r.ocupacionHoy,
+    ocupacionMes: r.ocupacionMes,
+    activeDoctors: profesionales.length,
+    sinHorario: r.sinHorario,
   });
-}
-
-function computeScore(
-  appts: Array<{ startsAt: Date; endsAt: Date; status: string }>,
-  activeDoctors: number,
-  operativeHoursPerDoctor: number,
-  slotMinutes: number,
-): number {
-  if (activeDoctors === 0 || operativeHoursPerDoctor === 0) return 0;
-
-  const activeStatuses = new Set(["IN_PROGRESS", "COMPLETED", "CHECKED_OUT", "CHECKED_IN", "IN_CHAIR"]);
-  const usedStatuses = new Set([
-    "SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT",
-  ]);
-
-  const totalActiveMs = appts
-    .filter((a) => activeStatuses.has(a.status))
-    .reduce((sum, a) => sum + (a.endsAt.getTime() - a.startsAt.getTime()), 0);
-  const totalActiveHours = totalActiveMs / 3_600_000;
-
-  const totalOperativeHours = activeDoctors * operativeHoursPerDoctor;
-  const hourPct = Math.min(100, (totalActiveHours / totalOperativeHours) * 100);
-
-  const usedSlots = appts.filter((a) => usedStatuses.has(a.status)).length;
-  const totalSlots = (totalOperativeHours * 60) / slotMinutes;
-  const slotPct = totalSlots > 0 ? Math.min(100, (usedSlots / totalSlots) * 100) : 0;
-
-  return Math.round(hourPct * 0.6 + slotPct * 0.4);
-}
-
-async function computeMonthAverage(
-  clinicId: string,
-  refDay: Date,
-  activeDoctors: number,
-  operativeHoursPerDoctor: number,
-  slotMinutes: number,
-): Promise<number> {
-  const monthStart = new Date(refDay.getFullYear(), refDay.getMonth(), 1);
-  const monthEnd = new Date(refDay.getFullYear(), refDay.getMonth() + 1, 0, 23, 59, 59);
-
-  const monthAppts = await prisma.appointment.findMany({
-    where: { clinicId, startsAt: { gte: monthStart, lte: monthEnd } },
-    select: { startsAt: true, endsAt: true, status: true },
-  });
-
-  // Agrupa por día y calcula score por día, luego promedia.
-  const byDay = new Map<string, typeof monthAppts>();
-  for (const a of monthAppts) {
-    const key = a.startsAt.toISOString().slice(0, 10);
-    const arr = byDay.get(key) ?? [];
-    arr.push(a);
-    byDay.set(key, arr);
-  }
-  if (byDay.size === 0) return 0;
-
-  let total = 0;
-  let dayCount = 0;
-  byDay.forEach((dayAppts) => {
-    total += computeScore(dayAppts, activeDoctors, operativeHoursPerDoctor, slotMinutes);
-    dayCount += 1;
-  });
-  return dayCount > 0 ? Math.round(total / dayCount) : 0;
 }

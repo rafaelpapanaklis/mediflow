@@ -5341,7 +5341,9 @@
         "one": "You have {count} appointment recorded. We need at least 30 for the comparative metrics to be reliable.",
         "other": "You have {count} appointments recorded. We need at least 30 for the comparative metrics to be reliable."
       },
-      "percentOfMinimum": "{progress}% of the required minimum"
+      "percentOfMinimum": "{progress}% of the required minimum",
+      "ocupacionMes": "Occupancy this month by schedule: {pct}%",
+      "ocupacionSinHorario": "Occupancy: can't be calculated without a schedule in Settings"
     },
     "proceduresPage": {
       "adminOnly": "Admin only."
@@ -10893,6 +10895,8 @@
     "historiaMigrada": "Separate, not added to revenue: {monto} collected in your previous system dated in this period (migrated history).",
     "cajaHistoriaMigrada": "Separate: {monto} paid before using DaleControl (migrated history). Not added to collected.",
     "inicioIngresos": "Collected in the period minus refunds, by payment date. Without migrated data. Same figure as Finance.",
-    "ortoPorDoctor": "Orthodontic collections with the SAME rule as Finance «By doctor» and payroll: a check-up that came from an appointment goes to the invoice's doctor (or that appointment's); the treatment and extras, to whoever had the case that day. Without applied credit balance. «Cases» are the ones they have today."
+    "ortoPorDoctor": "Orthodontic collections with the SAME rule as Finance «By doctor» and payroll: a check-up that came from an appointment goes to the invoice's doctor (or that appointment's); the treatment and extras, to whoever had the case that day. Without applied credit balance. «Cases» are the ones they have today.",
+    "citasDelPeriodo": "Appointments dated within the WHOLE period (clinic calendar): past, today and upcoming, in any status except cancelled (no-shows do count). The same definition in Home, Finance, Analytics and Reports.",
+    "ocupacion": "Booked minutes (excluding cancelled and no-shows) ÷ working minutes from the Settings schedule, for each professional on the agenda. The same calculation as the Agenda bar. Without a schedule in Settings it isn't calculated."
   }
 }

@@ -11,6 +11,8 @@ import { ModuloFueraDelPlan } from "@/components/dashboard/marketplace-oculto/mo
 import { marketplaceOcultoPara } from "@/components/dashboard/marketplace-oculto/servidor";
 import { getServerT } from "@/i18n/server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
+import { citasDelPeriodoWhere, diaDeLaClinica, mesDeLaClinica } from "@/lib/agenda/citas-del-periodo";
 
 export const metadata: Metadata = { title: "Analytics — DaleControl" };
 
@@ -49,9 +51,10 @@ export default async function AnalyticsOverviewPage() {
   // El layout del panel ya lo resolvió en este mismo request y la respuesta
   // vive 60 s en memoria por clínica: aquí no hay viaje a la base. Falla
   // cerrado: apagado, la pantalla se pinta exactamente como hoy.
-  const [totalAppts, rediseno] = await Promise.all([
+  const [totalAppts, rediseno, zona] = await Promise.all([
     prisma.appointment.count({ where: { clinicId } }),
     menuDosNivelesEncendido(clinicId),
+    zonaDeClinica(clinicId),
   ]);
   const insufficientData = totalAppts < MIN_APPTS_FOR_INSIGHTS;
   const dataProgress = Math.min(100, Math.round((totalAppts / MIN_APPTS_FOR_INSIGHTS) * 100));
@@ -59,33 +62,40 @@ export default async function AnalyticsOverviewPage() {
   // KPIs del mes actual + comparativa mes anterior. Calculamos server-side
   // para evitar flash en el primer render. El cliente luego refresca el
   // efficiency score (que necesita hora-por-hora) vía API.
+  //
+  // ws1-t2 (auditoría de uso C-11): el mes es el de CALENDARIO de la clínica,
+  // ENTERO y con fin (lib/agenda/citas-del-periodo.ts). Antes empezaba el día
+  // 1 del mes del SERVIDOR y no tenía fin: contaba también las citas de los
+  // meses siguientes (85 aquí contra 76 en Inicio).
   const now = new Date();
-  const firstMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const firstPrev  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastPrev   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-  const today      = new Date(now); today.setHours(0, 0, 0, 0);
-  const todayEnd   = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+  const mes = mesDeLaClinica(zona, now);
+  const mesAnterior = mesDeLaClinica(zona, now, -1);
+  const dia = diaDeLaClinica(zona, now);
+  const enMes = { gte: mes.desde, lt: mes.hasta };
+  const enMesAnterior = { gte: mesAnterior.desde, lt: mesAnterior.hasta };
 
+  // Dos tandas (menos de 7 consultas por Promise.all: el pooler se satura).
   const [
     monthAppts, prevAppts,
     completedMonth, prevCompletedMonth,
     noShowMonth, prevNoShowMonth,
-    avgWaitMin, todayCount,
   ] = await Promise.all([
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: { not: "CANCELLED" } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: { not: "CANCELLED" } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: { in: ["COMPLETED", "CHECKED_OUT"] } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: { in: ["COMPLETED", "CHECKED_OUT"] } } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstMonth }, status: "NO_SHOW" } }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: firstPrev, lte: lastPrev }, status: "NO_SHOW" } }),
+    prisma.appointment.count({ where: citasDelPeriodoWhere(clinicId, mes.desde, mes.hasta) }),
+    prisma.appointment.count({ where: citasDelPeriodoWhere(clinicId, mesAnterior.desde, mesAnterior.hasta) }),
+    prisma.appointment.count({ where: { clinicId, startsAt: enMes, status: { in: ["COMPLETED", "CHECKED_OUT"] } } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: enMesAnterior, status: { in: ["COMPLETED", "CHECKED_OUT"] } } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: enMes, status: "NO_SHOW" } }),
+    prisma.appointment.count({ where: { clinicId, startsAt: enMesAnterior, status: "NO_SHOW" } }),
+  ]);
+  const [avgWaitMin, todayCount] = await Promise.all([
     prisma.appointmentTimeline.aggregate({
       where: {
-        appointment: { clinicId, startsAt: { gte: firstMonth } },
+        appointment: { clinicId, startsAt: enMes },
         totalWaitMin: { not: null },
       },
       _avg: { totalWaitMin: true },
     }),
-    prisma.appointment.count({ where: { clinicId, startsAt: { gte: today, lte: todayEnd }, status: { not: "CANCELLED" } } }),
+    prisma.appointment.count({ where: citasDelPeriodoWhere(clinicId, dia.desde, dia.hasta) }),
   ]);
 
   const noShowRate = monthAppts > 0 ? (noShowMonth / monthAppts) * 100 : 0;

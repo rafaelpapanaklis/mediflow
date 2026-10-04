@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { expenseWindowEnd, resolveFinanzasWindow } from "@/lib/finanzas-periodo";
+import { citasWindowEnd, expenseWindowEnd, resolveFinanzasWindow } from "@/lib/finanzas-periodo";
 import { calcularResumenFinanzas } from "@/lib/finanzas-resumen.server";
 
 export const runtime = "nodejs";
@@ -37,12 +37,15 @@ export async function GET(req: NextRequest) {
   // fecha futura (la renta del 30 registrada el 5) tiene que verse y restar.
   // Cobros, ventas y citas siguen cortando en `to` (ver finanzas-periodo.ts).
   const expenseTo = expenseWindowEnd(new URL(req.url).searchParams.get("period"), new Date(), to);
+  // ws1-t2 (C-11): las citas son las del periodo ENTERO («este mes» = el mes
+  // completo), la misma definición que Inicio, Analítica y Reportes.
+  const citasHasta = citasWindowEnd(new URL(req.url).searchParams.get("period"), new Date(), to);
 
   try {
     // El cálculo vive en @/lib/finanzas-resumen.server (movido tal cual, sin
     // tocar una consulta ni una cuenta): lo lee también Sabina, así que la
     // pantalla y ella dicen siempre las mismas cifras.
-    return NextResponse.json(await calcularResumenFinanzas({ clinicId, from, to, expenseTo }));
+    return NextResponse.json(await calcularResumenFinanzas({ clinicId, from, to, expenseTo, citasHasta }));
   } catch (err: any) {
     console.error("[finanzas] GET error:", err?.message ?? err);
     return NextResponse.json({ error: "Error al calcular el resumen de finanzas." }, { status: 500 });

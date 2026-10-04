@@ -338,7 +338,8 @@ export function FinanzasRediseno() {
               etiqueta="Citas"
               valor={(data.citas ?? 0).toLocaleString("es-MX")}
               icono={CalendarCheck}
-              pista="Agendadas, sin las canceladas"
+              // ws1-t2 (C-11): «citas» = las del periodo entero, sin canceladas (la misma cifra que Inicio, Analítica y Reportes).
+              pista={<QueCuenta clave="citasDelPeriodo" />}
             />
             <Kpi
               etiqueta="Efectivo recibido"

@@ -24,6 +24,7 @@ import { AdminAlertRow } from "./parts/admin-alert-row";
 // veía. Mismo componente self-fetch (se calla solo si no hay nada vencido).
 import { AvisoMensualidadesVencidas } from "./aviso-mensualidades-vencidas";
 import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
 
 interface Props {
@@ -54,6 +55,7 @@ function accentForKpi(label: string): KpiAccent {
 
 export function HomeAdmin({ clinic, data, period }: Props) {
   const t = useT();
+  const queCuenta = useQueCuenta();
   const router = useRouter();
 
   return (
@@ -104,6 +106,8 @@ export function HomeAdmin({ clinic, data, period }: Props) {
               value={k.value}
               icon={iconForKpi(k.label)}
               delta={k.delta}
+              // ws1-t2 (C-11, C-26): qué cuenta la cifra (citas del periodo, ocupación por horario).
+              hint={k.queCuenta ? queCuenta(k.queCuenta) : undefined}
               hero={i === 0}
               accent={accentForKpi(k.label)}
               // El sparkline sólo en ingresos: son los 6 meses que el endpoint

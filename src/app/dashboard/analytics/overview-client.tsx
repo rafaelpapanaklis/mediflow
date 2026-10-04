@@ -6,6 +6,7 @@ import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layo
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { EfficiencyGauge } from "@/components/dashboard/analytics/efficiency-gauge";
 import { useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { OverviewRediseno } from "./overview-rediseno";
 
 export interface OverviewData {
@@ -25,6 +26,15 @@ export interface OverviewData {
   totalAppts: number;
 }
 
+/** Lo que contesta /api/analytics/efficiency-score (ws1-t2, C-26: con la ocupación por horario). */
+export interface PuntajeEficiencia {
+  today: number;
+  monthAverage: number;
+  /** Ocupación por horario del mes entero: la misma cifra que la Ocupación de Inicio con «Mes». */
+  ocupacionMes: number | null;
+  sinHorario: boolean;
+}
+
 interface Props {
   data: OverviewData;
   /** Interruptor `menu-dos-niveles` de la clínica: enciende el diseño nuevo. */
@@ -33,11 +43,12 @@ interface Props {
 
 export function OverviewClient({ data, rediseno = false }: Props) {
   const t = useT();
+  const qc = useQueCuenta();
   // Efficiency score se calcula client-side via API porque depende del
   // día actual (real-time) y de joins con users + agenda config. El
   // server-component KPI ya tiene el resto; solo este número parpadea
   // un instante mientras carga.
-  const [score, setScore] = useState<{ today: number; monthAverage: number } | null>(null);
+  const [score, setScore] = useState<PuntajeEficiencia | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
 
   useEffect(() => {
@@ -45,7 +56,12 @@ export function OverviewClient({ data, rediseno = false }: Props) {
     fetch("/api/analytics/efficiency-score", { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setScore({ today: d.today ?? 0, monthAverage: d.monthAverage ?? 0 });
+        if (d) setScore({
+          today: d.today ?? 0,
+          monthAverage: d.monthAverage ?? 0,
+          ocupacionMes: typeof d.ocupacionMes === "number" ? d.ocupacionMes : null,
+          sinHorario: d.sinHorario === true,
+        });
         setScoreLoading(false);
       })
       .catch(() => setScoreLoading(false));
@@ -112,7 +128,16 @@ export function OverviewClient({ data, rediseno = false }: Props) {
             {t("analytics.overview.calculating")}
           </div>
         ) : (
-          <EfficiencyGauge score={score?.today ?? 0} monthAverage={score?.monthAverage ?? 0} />
+          <div>
+            <EfficiencyGauge score={score?.today ?? 0} monthAverage={score?.monthAverage ?? 0} />
+            {/* ws1-t2 (C-26): la ocupación por horario, la misma de Inicio, con su «Qué cuenta». */}
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-3)", lineHeight: 1.4 }}>
+              {score?.sinHorario
+                ? t("analytics.overview.ocupacionSinHorario")
+                : t("analytics.overview.ocupacionMes", { pct: score?.ocupacionMes ?? 0 })}
+              {" · "}{qc("ocupacion")}
+            </div>
+          </div>
         )}
 
         {/* display: contents por defecto: a 1440px (y en general mientras
@@ -127,7 +152,8 @@ export function OverviewClient({ data, rediseno = false }: Props) {
             label={t("analytics.overview.apptsThisMonth")}
             value={data.monthAppts.toLocaleString("es-MX")}
             delta={data.apptsDeltaPct !== 0 ? { pct: data.apptsDeltaPct } : null}
-            hint={t("analytics.overview.vsPrevMonth")}
+            // ws1-t2 (C-11): la definición única de «citas del mes», dicha en pantalla.
+            hint={`${t("analytics.overview.vsPrevMonth")} · ${qc("citasDelPeriodo")}`}
             icon={<Calendar size={16} strokeWidth={1.75} aria-hidden />}
             tone="brand"
           />

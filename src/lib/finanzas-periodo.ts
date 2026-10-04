@@ -33,6 +33,20 @@ export function expenseWindowEnd(period: string | null, now: Date, to: Date): Da
 }
 
 /**
+ * Hasta dónde llegan las CITAS del periodo (fin EXCLUSIVO). ws1-t2 (auditoría
+ * de uso C-11, decisión 9 de Rafael): «citas del mes» son las del mes ENTERO,
+ * sin canceladas —las que ya pasaron y las que faltan—, la misma cifra que
+ * Inicio, Analítica y Reportes (lib/agenda/citas-del-periodo.ts). Finanzas las
+ * cortaba en «ahora» porque su ventana de cobros acaba ahí (57 contra 76). En
+ * «hoy» llegan al fin del día; en «mes_anterior» y «custom», a `to`.
+ */
+export function citasWindowEnd(period: string | null, now: Date, to: Date): Date {
+  if (period === "mes_anterior" || period === "custom") return new Date(to.getTime() + 1);
+  if (period === "hoy") return new Date(startOfTodayMx(now).getTime() + 24 * 60 * 60 * 1000);
+  return startOfMonthMx(now, 1);
+}
+
+/**
  * Hasta dónde llega la serie diaria: hasta `to`, o hasta el último gasto si hay
  * alguno posterior. Así la suma de `serie[].gastos` sigue siendo el KPI de
  * gastos, y una clínica SIN gastos futuros recibe exactamente la misma serie

@@ -83,6 +83,8 @@ export interface HomeAdminKpi {
   label: string;
   value: string;
   delta?: { value: string; direction: "up" | "down"; sub?: string };
+  /** ws1-t2 (C-11, C-26): la clave de `queCuenta.*` que explica la cifra bajo la tarjeta. */
+  queCuenta?: "citasDelPeriodo" | "ocupacion";
 }
 
 export interface HomeAdminAlert {

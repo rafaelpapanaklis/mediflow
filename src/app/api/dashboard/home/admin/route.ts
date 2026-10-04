@@ -10,6 +10,9 @@ import { computeReceivables } from "@/lib/caja";
 import { ingresoNetoDelPeriodo, ingresosPorDoctorDelPeriodo, movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
 import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
+import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
+import { cargarOcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo.server";
+import type { OcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import { avisosDeExistencias, contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
 import { idsSinContar } from "@/lib/inventory/sin-contar.server";
@@ -36,13 +39,14 @@ export async function GET(req: NextRequest) {
   const periodParam = req.nextUrl.searchParams.get("period");
   const period: AdminPeriod = isValidPeriod(periodParam) ? periodParam : "month";
 
-  const [kpisCurrent, kpisPrev, revenueSeries, alerts, team] =
+  const [kpisCurrent, kpisPrev, revenueSeries, alerts, team, ocupacion] =
     await Promise.all([
       aggregateAdminPeriodKpis(period, session.clinic.id, session.clinic.timezone),
       aggregatePreviousPeriodKpis(period, session.clinic.id, session.clinic.timezone),
       buildRevenueSeries(session.clinic.id, session.clinic.timezone),
       buildAlerts(session.clinic.id, session.clinic),
       buildTeamPerformance(period, session.clinic.id, session.clinic.timezone, session.clinic.category),
+      buildOccupancy(period, session.clinic.id, session.clinic.timezone),
     ]);
 
   const data: HomeAdminData = {
@@ -55,8 +59,11 @@ export async function GET(req: NextRequest) {
       // periodo completo contra periodo completo: una cita futura ya está
       // agendada y cuenta desde hoy.
       formatRevenueKpi(kpisCurrent.revenueMXN, kpisPrev.revenueSamePartMXN, period),
-      formatCountKpi("Citas", kpisCurrent.appointments, kpisPrev.appointments, period),
-      formatOccupancyKpi(kpisCurrent, kpisPrev),
+      // C-11: «citas del periodo» = el periodo ENTERO de la clínica, sin
+      // canceladas (lib/agenda/citas-del-periodo.ts), la misma definición que
+      // Finanzas, Analítica y Reportes; la tarjeta lo dice con su «Qué cuenta».
+      { ...formatCountKpi("Citas", kpisCurrent.appointments, kpisPrev.appointments, period), queCuenta: "citasDelPeriodo" },
+      formatOccupancyKpi(ocupacion.actual, ocupacion.anterior),
       formatNoShowKpi(kpisCurrent.noShows, kpisPrev.noShows, period),
     ],
     revenueSeries,
@@ -101,27 +108,50 @@ function formatCountKpi(
   };
 }
 
+/**
+ * C-26 (decisión 9 de Rafael: «ocupación por horario»): minutos agendados ÷
+ * minutos de atención del horario de Ajustes, por cada profesional que recibe
+ * citas — la misma cuenta que la barra de la Agenda. Antes era completadas ÷
+ * citas (una tasa de asistencia) y contradecía a la Analítica. Sin horario en
+ * Ajustes no se inventa: «—». La diferencia contra el periodo anterior va en
+ * puntos («+3 pts»), no en un porcentaje de un porcentaje.
+ */
 function formatOccupancyKpi(
-  current: { completed: number; appointments: number },
-  prev: { completed: number; appointments: number },
+  current: OcupacionDelPeriodo | null,
+  prev: OcupacionDelPeriodo | null,
 ): HomeAdminData["kpis"][number] {
-  const pct = current.appointments > 0
-    ? Math.round((current.completed / current.appointments) * 100)
-    : 0;
-  const prevPct = prev.appointments > 0
-    ? Math.round((prev.completed / prev.appointments) * 100)
-    : 0;
-  const diff = pct - prevPct;
+  const pct = current?.porcentaje ?? null;
+  const prevPct = prev?.porcentaje ?? null;
+  const diff = pct !== null && prevPct !== null ? pct - prevPct : 0;
   return {
     label: "Ocupación",
-    value: `${pct}%`,
+    value: pct === null ? "—" : `${pct}%`,
+    queCuenta: "ocupacion",
     delta: diff !== 0
       ? {
-          value: `${diff > 0 ? "+" : ""}${diff}%`,
+          value: `${diff > 0 ? "+" : ""}${diff} pts`,
           direction: diff >= 0 ? "up" : "down",
         }
       : undefined,
   };
+}
+
+/** La ocupación por horario del periodo y del anterior (en fila: cada carga ya hace 3 lecturas en paralelo). Nunca lanza. */
+async function buildOccupancy(
+  period: AdminPeriod,
+  clinicId: string,
+  timezone: string,
+): Promise<{ actual: OcupacionDelPeriodo | null; anterior: OcupacionDelPeriodo | null }> {
+  const { from, to } = periodRangeUtc(period, timezone);
+  const prev = periodRangeUtc(period, timezone, new Date(from.getTime() - 1));
+  try {
+    const actual = await cargarOcupacionDelPeriodo(clinicId, timezone, from, to);
+    const anterior = await cargarOcupacionDelPeriodo(clinicId, timezone, prev.from, prev.to);
+    return { actual, anterior };
+  } catch (err) {
+    console.error("[home admin] occupancy query failed:", err);
+    return { actual: null, anterior: null };
+  }
 }
 
 function formatNoShowKpi(
@@ -180,21 +210,17 @@ async function aggregatePreviousPeriodKpis(
   timezone: string,
 ) {
   const { from, to } = periodRangeUtc(period, timezone);
-  const length = to.getTime() - from.getTime();
-  const prevFrom = new Date(from.getTime() - length);
-  const prevTo = from;
+  // C-11: el periodo anterior es el periodo de CALENDARIO anterior (septiembre
+  // entero contra octubre entero), igual que la Analítica. Antes era «la misma
+  // duración hacia atrás» (31 días antes del 1-oct = 31-ago) y el comparativo
+  // de citas daba −52 % aquí y −47 % allá.
+  const { from: prevFrom, to: prevTo } = periodRangeUtc(period, timezone, new Date(from.getTime() - 1));
   // Tramo ya corrido del periodo actual, proyectado sobre el anterior.
   const elapsed = Math.max(0, Math.min(Date.now(), to.getTime()) - from.getTime());
   const prevSameTo = new Date(Math.min(prevFrom.getTime() + elapsed, prevTo.getTime()));
 
   const [appts, completed, noShows, ingresosSamePart] = await Promise.all([
-    prisma.appointment.count({
-      where: {
-        clinicId,
-        startsAt: { gte: prevFrom, lt: prevTo },
-        status: { notIn: ["CANCELLED"] },
-      },
-    }),
+    prisma.appointment.count({ where: citasDelPeriodoWhere(clinicId, prevFrom, prevTo) }),
     prisma.appointment.count({
       where: {
         clinicId,

@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 import type { AdminPeriod, HomeAdminData, HomeAdminKpi } from "@/lib/home/types";
 import { AccionesRapidas, Saludo, Tarjeta } from "./piezas";
 import { TarjetaIngresos } from "./tarjeta-ingresos";
@@ -194,6 +195,8 @@ function TarjetaKpi({
           {kpi.delta.sub && <span>{kpi.delta.sub}</span>}
         </div>
       )}
+      {/* ws1-t2 (C-11, C-26): qué cuenta la cifra, con las mismas palabras que el resto del panel. */}
+      {kpi.queCuenta && <div className={s.ingresosNota}><QueCuenta clave={kpi.queCuenta} /></div>}
       <Chispa valores={chispa} etiqueta={chispaEtiqueta} />
     </div>
   );

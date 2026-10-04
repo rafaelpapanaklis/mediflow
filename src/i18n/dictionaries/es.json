@@ -5341,7 +5341,9 @@
         "one": "Llevas {count} cita registrada. Necesitamos al menos 30 para que las métricas comparativas sean confiables.",
         "other": "Llevas {count} citas registradas. Necesitamos al menos 30 para que las métricas comparativas sean confiables."
       },
-      "percentOfMinimum": "{progress}% del mínimo necesario"
+      "percentOfMinimum": "{progress}% del mínimo necesario",
+      "ocupacionMes": "Ocupación del mes por horario: {pct} %",
+      "ocupacionSinHorario": "Ocupación: sin horario en Ajustes no se puede calcular"
     },
     "proceduresPage": {
       "adminOnly": "Solo admin."
@@ -10893,6 +10895,8 @@
     "historiaMigrada": "Aparte, no suma a los ingresos: {monto} cobrados en tu sistema anterior con fecha en este periodo (historia migrada).",
     "cajaHistoriaMigrada": "Aparte: {monto} pagados antes de usar DaleControl (historia migrada). No se suman a lo cobrado.",
     "inicioIngresos": "Cobrado en el periodo menos reembolsos, por fecha de cobro. Sin lo migrado. La misma cifra que Finanzas.",
-    "ortoPorDoctor": "Lo cobrado de ortodoncia con la MISMA regla que «Por doctor» de Finanzas y la nómina: un control que nació de una cita va al doctor de la factura (o de esa cita); el tratamiento y los extras, a quien llevaba el caso ese día. Sin el saldo a favor aplicado. «Casos» son los que lleva hoy."
+    "ortoPorDoctor": "Lo cobrado de ortodoncia con la MISMA regla que «Por doctor» de Finanzas y la nómina: un control que nació de una cita va al doctor de la factura (o de esa cita); el tratamiento y los extras, a quien llevaba el caso ese día. Sin el saldo a favor aplicado. «Casos» son los que lleva hoy.",
+    "citasDelPeriodo": "Citas con fecha en el periodo ENTERO (calendario de la clínica): las que ya pasaron, las de hoy y las que faltan, de cualquier estado salvo canceladas («No asistió» sí cuenta). La misma definición en Inicio, Finanzas, Analítica y Reportes.",
+    "ocupacion": "Minutos agendados (sin canceladas ni «No asistió») ÷ minutos de atención del horario de Ajustes, por cada profesional que aparece en la agenda. La misma cuenta que la barra de la Agenda. Sin horario en Ajustes no se calcula."
   }
 }

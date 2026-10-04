@@ -6,7 +6,8 @@ import { MarcoAnalitica } from "@/components/dashboard/analitica-rediseno/marco"
 import { Indicador, Aviso } from "@/components/dashboard/analitica-rediseno/piezas";
 import { Medidor, MedidorCargando } from "@/components/dashboard/analitica-rediseno/graficas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
-import type { OverviewData } from "./overview-client";
+import type { OverviewData, PuntajeEficiencia } from "./overview-client";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 
 /**
  * Resumen con el diseño nuevo. Mismos datos, mismas cifras y el mismo
@@ -19,10 +20,11 @@ export function OverviewRediseno({
   scoreLoading,
 }: {
   data: OverviewData;
-  score: { today: number; monthAverage: number } | null;
+  score: PuntajeEficiencia | null;
   scoreLoading: boolean;
 }) {
   const t = useT();
+  const qc = useQueCuenta();
   return (
     <MarcoAnalitica title={t("analytics.overview.title")} subtitle={t("analytics.overview.subtitle")}>
       {data.insufficientData && (
@@ -42,7 +44,16 @@ export function OverviewRediseno({
           {scoreLoading ? (
             <MedidorCargando>{t("analytics.overview.calculating")}</MedidorCargando>
           ) : (
-            <Medidor score={score?.today ?? 0} monthAverage={score?.monthAverage ?? 0} />
+            <>
+              <Medidor score={score?.today ?? 0} monthAverage={score?.monthAverage ?? 0} />
+              {/* ws1-t2 (C-26): la ocupación por horario, la misma de Inicio, con su «Qué cuenta». */}
+              <p className={`${s.pequeno} ${s.apagado}`} style={{ marginTop: 8, lineHeight: 1.4 }}>
+                {score?.sinHorario
+                  ? t("analytics.overview.ocupacionSinHorario")
+                  : t("analytics.overview.ocupacionMes", { pct: score?.ocupacionMes ?? 0 })}
+                {" · "}{qc("ocupacion")}
+              </p>
+            </>
           )}
         </div>
 
@@ -51,7 +62,8 @@ export function OverviewRediseno({
           label={t("analytics.overview.apptsThisMonth")}
           value={data.monthAppts.toLocaleString("es-MX")}
           delta={data.apptsDeltaPct !== 0 ? { pct: data.apptsDeltaPct } : null}
-          hint={t("analytics.overview.vsPrevMonth")}
+          // ws1-t2 (C-11): la definición única de «citas del mes», dicha en pantalla.
+          hint={`${t("analytics.overview.vsPrevMonth")} · ${qc("citasDelPeriodo")}`}
           icon={<Calendar size={16} strokeWidth={1.75} aria-hidden />}
           tone="marca"
         />

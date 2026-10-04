@@ -335,6 +335,10 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
           </tbody>
         </table>
         </div>
+        {/* ws1-t2 (C-11): la columna «Citas» usa la definición única (mes de la clínica, sin canceladas). */}
+        <p style={{ margin: 0, padding: "10px 16px 14px", fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
+          {qc("citasDelPeriodo")}
+        </p>
       </CardNew>
 
       {/* Uso de recursos / sillones — ultimos 30 dias */}

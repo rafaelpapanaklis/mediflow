@@ -14,6 +14,7 @@ import {
 import { filtroGastosVivos } from "@/lib/gastos-borrado.server";
 import { bucketKeyOf, eachBucket } from "@/lib/analytics/query";
 import { NOT_A_SALE_STATUSES, serieEnd } from "@/lib/finanzas-periodo";
+import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
 
 // ═══════════════════════════════════════════════════════════════════
 // El cálculo de FINANZAS (ingresos, gastos, utilidad, por doctor, saldos).
@@ -68,7 +69,11 @@ export interface ResumenFinanzas {
  * dónde llegan los GASTOS (ver `expenseWindowEnd`).
  */
 export async function calcularResumenFinanzas(
-  params: { clinicId: string; from: Date; to: Date; expenseTo: Date; conSaldos?: boolean },
+  params: {
+    clinicId: string; from: Date; to: Date; expenseTo: Date; conSaldos?: boolean;
+    /** Fin EXCLUSIVO de las citas (C-11: el periodo entero). Sin él, `to` inclusive, como antes. */
+    citasHasta?: Date;
+  },
   db: FinanzasDb = prisma,
 ): Promise<ResumenFinanzas> {
   const { clinicId, from, to, expenseTo } = params;
@@ -102,9 +107,10 @@ export async function calcularResumenFinanzas(
       where: { clinicId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
     }),
     // citas del periodo (startsAt) con status distinto de cancelada
-    // (NO_SHOW sí cuenta: la cita existió).
+    // (NO_SHOW sí cuenta: la cita existió). ws1-t2 (C-11): la definición
+    // única (lib/agenda/citas-del-periodo.ts), hasta `citasHasta` si se da.
     db.appointment.count({
-      where: { clinicId, startsAt: { gte: from, lte: to }, status: { not: "CANCELLED" } },
+      where: citasDelPeriodoWhere(clinicId, from, params.citasHasta ?? new Date(to.getTime() + 1)),
     }),
     // porCobrar / vencido: los saldos GLOBALES de la clínica (no limitados
     // al periodo), de `computeReceivables` — la MISMA función que pinta Caja.
