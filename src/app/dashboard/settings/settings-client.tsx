@@ -22,6 +22,7 @@ import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT, useLocale } from "@/i18n/i18n-provider";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
+import { reservaAlCambiarVisibilidad } from "@/lib/reserva-web/estado";
 import { getResenasSettings } from "@/lib/reminders/config";
 import { useTextosResena } from "@/lib/reviews/textos-resena";
 import toast from "react-hot-toast";
@@ -101,6 +102,27 @@ const MI_PERFIL_COMPLETO = {
   en: { antes: "Your license, specialty and other professional details are in ", enlace: "My profile", despues: " (your photo menu, top right)." },
 } as const;
 
+const txPerfilLocale = (locale: string | null | undefined): "es" | "en" => (locale === "en" ? "en" : "es");
+// C-114 (ws1-t8, decisión 10): ocultar la clínica cierra también su reserva web.
+const TEXTOS_RESERVA = {
+  es: {
+    titulo: "Reserva web en línea",
+    abierta: (slug: string) => `Los pacientes pueden pedir cita en /reservar/${slug} y desde tu página.`,
+    cerrada: (slug: string) => `Cerrada: /reservar/${slug} avisa que no recibes reservas en línea y muestra tu teléfono.`,
+    privadaAbierta: "No apareces en el directorio /clinicas, pero tu reserva web sigue abierta (abajo puedes cerrarla).",
+    privadaCerrada: "No apareces en el directorio /clinicas y tu reserva web está cerrada.",
+    alOcultar: "Al ocultar la clínica también se cierra su reserva web. Puedes dejarla abierta con el interruptor de abajo.",
+  },
+  en: {
+    titulo: "Online booking",
+    abierta: (slug: string) => `Patients can request appointments at /reservar/${slug} and from your page.`,
+    cerrada: (slug: string) => `Closed: /reservar/${slug} says you aren't taking online bookings and shows your phone.`,
+    privadaAbierta: "You don't appear in the /clinicas directory, but your online booking is still open (you can close it below).",
+    privadaCerrada: "You don't appear in the /clinicas directory and your online booking is closed.",
+    alOcultar: "Hiding the clinic also closes its online booking. You can keep it open with the switch below.",
+  },
+} as const;
+
 /** Tokens promedio de un análisis de consulta con IA (lee expediente completo: paciente,
  *  odontograma, consultas previas, recetas, tratamientos). Medido ~3k-8k; usamos 5k como
  *  promedio conservador para NO inflar la estimación que ve la clínica. El chat corto
@@ -126,6 +148,8 @@ interface Props {
   metodosPago?: MetodosDisponibles;
   /** Google Calendar DE LA CLÍNICA (no del usuario que mira), resuelto en el servidor. */
   gcalClinica?: GcalClinica;
+  /** C-114: reserva web en línea (`disponible` = ya se pegó sql/ws1-t8-reserva-web.sql). */
+  reservaWeb?: { abierta: boolean; disponible: boolean };
 }
 
 /** Estado de la conexión de la clínica con Google Calendar (ver lib/google-calendar-estado). */
@@ -141,7 +165,7 @@ interface GcalClinica {
 
 const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caidoDesde: null, motivo: null, invitarPaciente: true, tablaDisponible: false };
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, gcalClinica }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, gcalClinica, reservaWeb }: Props) {
   const t = useT();
   const txPerfil = MI_PERFIL_COMPLETO[useLocale().startsWith("en") ? "en" : "es"];
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
@@ -176,6 +200,19 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const categoriaFija = esCategoriaFija(initClinic?.category);
   const etiquetaCategoriaFija = CATEGORIES.find((c) => c.id === initClinic?.category)?.label ?? "Dental";
   const [isPublic, setIsPublic] = useState<boolean>(Boolean(initClinic.isPublic ?? false));
+  // C-114: si la columna aún no existe, la reserva está abierta y no se ofrece cerrarla.
+  const [reservaAbierta, setReservaAbierta] = useState<boolean>(reservaWeb?.abierta !== false);
+  const reservaDisponible = reservaWeb?.disponible === true;
+  const txReserva = TEXTOS_RESERVA[txPerfilLocale(initClinic?.locale)];
+  const descPrivada = reservaAbierta ? txReserva.privadaAbierta : txReserva.privadaCerrada;
+  function cambiarVisibilidad(nueva: boolean) {
+    setIsPublic(nueva);
+    if (reservaDisponible) {
+      const siguiente = reservaAlCambiarVisibilidad(nueva, reservaAbierta);
+      if (!nueva && reservaAbierta && !siguiente) toast(txReserva.alOcultar, { duration: 7000 });
+      setReservaAbierta(siguiente);
+    }
+  }
   const [schedule, setSchedule] = useState<Record<number,{enabled:boolean;open:string;close:string}>>(
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
   );
@@ -376,9 +413,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, mapsUrl:clinic.mapsUrl, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone, latitude: clinic.latitude ?? null, longitude: clinic.longitude ?? null })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, mapsUrl:clinic.mapsUrl, description:clinic.description, isPublic, ...(reservaDisponible ? { reservaWebAbierta: reservaAbierta } : {}), category:clinic.category, clues:clinic.clues, timezone:clinic.timezone, latitude: clinic.latitude ?? null, longitude: clinic.longitude ?? null })
       });
       if (!res.ok) throw new Error();
+      const guardada = await res.json().catch(() => null);
+      if (typeof guardada?.reservaWebAbierta === "boolean") setReservaAbierta(guardada.reservaWebAbierta);
       toast.success(t("settings.client.clinicSavedToast"));
     } catch { toast.error(t("settings.client.saveErrorToast")); } finally { setSaving(false); }
   }
@@ -766,7 +805,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         toast.error("Completa ciudad y categoría para aparecer en el directorio.");
         return;
       }
-      setIsPublic((p: boolean) => !p);
+      cambiarVisibilidad(!isPublic);
     };
     const rolDe = (m: TeamMember) =>
       m.role === "SUPER_ADMIN" ? t("settings.client.roleSuperAdmin")
@@ -939,10 +978,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     {/* Gate: solo se ACTIVA con ciudad + categoría real (≠ OTHER). */}
                     <FilaInterruptor
                       titulo={isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
-                      descripcion={isPublic ? t("settings.client.publicClinicDesc") : t("settings.client.privateClinicDesc")}
+                      descripcion={isPublic ? t("settings.client.publicClinicDesc") : descPrivada}
                       activo={isPublic}
                       onCambiar={alternarPublica}
                     />
+                    {reservaDisponible && (
+                      <div style={{ marginTop: 10 }}>
+                        <FilaInterruptor
+                          titulo={txReserva.titulo}
+                          descripcion={reservaAbierta ? txReserva.abierta(clinic.slug ?? "") : txReserva.cerrada(clinic.slug ?? "")}
+                          activo={reservaAbierta}
+                          onCambiar={setReservaAbierta}
+                        />
+                      </div>
+                    )}
                     {!(cityOk && catOk) && (
                       <p className={cr.campoAyuda} style={{ marginTop: 8, color: isPublic ? "var(--warning-strong)" : undefined }}>
                         {isPublic ? "Completa " : "Agrega "}
@@ -1694,7 +1743,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <div className="text-xs mt-0.5" style={{ color: "var(--text-3)" }}>
                   {isPublic
                     ? t("settings.client.publicClinicDesc")
-                    : t("settings.client.privateClinicDesc")}
+                    : descPrivada}
                 </div>
               </div>
               {/* Gate: solo se ACTIVA con ciudad + categoría real (≠ OTHER) — los
@@ -1707,7 +1756,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     toast.error("Completa ciudad y categoría para aparecer en el directorio.");
                     return;
                   }
-                  setIsPublic((p: boolean) => !p);
+                  cambiarVisibilidad(!isPublic);
                 }}
                 aria-label={isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
                 className={`switch ml-4 ${isPublic ? "switch--on" : ""}`}>
@@ -1728,6 +1777,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </p>
             )}
           </div>
+          {reservaDisponible && (
+            <label className="flex items-start justify-between gap-3 p-4 cursor-pointer" style={{ borderRadius: "var(--radius)", border: "1px solid var(--border-soft)" }}>
+              <span>
+                <span className="block text-sm font-semibold" style={{ color: "var(--text-1)" }}>{txReserva.titulo}</span>
+                <span className="block text-xs mt-0.5" style={{ color: "var(--text-3)" }}>{reservaAbierta ? txReserva.abierta(clinic.slug ?? "") : txReserva.cerrada(clinic.slug ?? "")}</span>
+              </span>
+              <input type="checkbox" checked={reservaAbierta} onChange={(e) => setReservaAbierta(e.target.checked)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
+            </label>
+          )}
           <div className="pt-2 flex items-center justify-between">
             <span className={`badge-new ${clinic.plan === "CLINIC" || clinic.plan === "PRO" ? "badge-new--brand" : "badge-new--neutral"}`}>
               {t("settings.client.planBadge", { plan: PLAN_MARKETING[clinic.plan as keyof typeof PLAN_MARKETING]?.name ?? clinic.plan })}

@@ -3,6 +3,7 @@ import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clin
 import { ModuleLocked } from "@/components/dashboard/module-locked";
 import { ModuloFueraDelPlan } from "@/components/dashboard/marketplace-oculto/modulo-fuera-del-plan";
 import { marketplaceOcultoPara } from "@/components/dashboard/marketplace-oculto/servidor";
+import { ContenedorPagina } from "@/components/dashboard/contenedor-pagina/contenedor";
 
 // Gating por PLAN para TODO /dashboard/analytics (overview + sub-rutas:
 // costs/crm/doctors/journey/no-shows/occupancy/procedures/waiting-room). Al
@@ -22,5 +23,7 @@ export default async function AnalyticsLayout({
     if (await marketplaceOcultoPara(user.clinicId)) return <ModuloFueraDelPlan name="Analytics" />;
     return <ModuleLocked name="Analytics" />;
   }
-  return <>{children}</>;
+  // C-127 (ws1-t8): Analítica no traía contenedor y su título empezaba 23 px a
+  // la izquierda del de Equipo o Configuración. Uno solo para todas sus pestañas.
+  return <ContenedorPagina>{children}</ContenedorPagina>;
 }

@@ -114,3 +114,18 @@
   border-color: var(--m2-activo);
   box-shadow: 0 0 0 3px var(--m2-iniciales-fondo);
 }
+
+/* C-126 (ws1-t8): a 390 px con el dedo, Equipo tenía 76 controles de menos de
+   36 px (filtro Activos/Todos/Inactivos de 28, cámara de 28, Desactivar y
+   Eliminar de 32). Solo con puntero táctil: con ratón se ve igual que antes. */
+@media (pointer: coarse) {
+  .raiz :global(.segment-new__btn),
+  .raiz :global(.btn-new) {
+    min-height: 40px;
+  }
+  /* La cámara lleva su tamaño en línea: hace falta !important para ganarle. */
+  .raiz [data-subir-foto] {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}

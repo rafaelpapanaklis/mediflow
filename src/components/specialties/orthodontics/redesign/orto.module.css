@@ -1812,3 +1812,17 @@ textarea.entrada {
 .tonoExito { color: var(--pr-exito); }
 .tonoAlerta { color: var(--pr-alerta); }
 .tonoPeligro { color: var(--pr-peligro); }
+
+/* C-126 (ws1-t8): con el dedo, los segmentos del caso medían 34 px y los
+   enlaces de texto 19 px. Solo con puntero táctil; con ratón, igual que antes. */
+@media (pointer: coarse) {
+  .segmentoBoton {
+    height: 40px;
+  }
+  .enlace {
+    display: inline-block;
+    min-height: 36px;
+    padding: 9px 6px;
+    margin: -9px -6px;
+  }
+}

@@ -1,0 +1,8 @@
+/* C-127 (ws1-t8): el contenedor de página de referencia del panel (el mismo
+   que Equipo, Configuración y Caja). Para pantallas que no traen el suyo. */
+.pagina {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(14px, 1.6vw, 28px);
+}

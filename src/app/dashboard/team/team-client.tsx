@@ -677,9 +677,10 @@ function MemberPhoto({
           </div>
         )}
 
-        {/* Botón cámara */}
+        {/* Botón cámara (data-subir-foto: en pantallas táctiles crece a 40 px, C-126) */}
         <button
           type="button"
+          data-subir-foto
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
           aria-label={member.avatarUrl ? t("settings.team.changePhotoAria", { name: fullName }) : t("settings.team.uploadPhotoAria", { name: fullName })}

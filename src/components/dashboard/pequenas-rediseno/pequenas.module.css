@@ -16,12 +16,16 @@
    comparte ni un nodo con esto.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* C-127 (ws1-t8): un solo margen de página en el panel. El contenedor de
+   referencia es el de Equipo, Configuración y Caja: 1400 px centrado con
+   relleno clamp(14px, 1.6vw, 28px) (título en x=273 a 1440 con el menú
+   abierto). Las versiones angostas ya no se centran solas: alinean su borde
+   izquierdo con ese contenedor, así el título no «salta» de una pantalla a otra. */
 .raiz {
   width: 100%;
-  max-width: 1240px;
+  max-width: 1400px;
   margin: 0 auto;
-  /* Sin padding lateral: ese lo pone el <main> del layout. */
-  padding: clamp(14px, 2vw, 24px) 0 clamp(24px, 2.8vw, 32px);
+  padding: clamp(14px, 2vw, 24px) clamp(14px, 1.6vw, 28px) clamp(24px, 2.8vw, 32px);
   color: var(--m2-texto);
   font-size: 13px;
   line-height: 1.4;
@@ -29,8 +33,8 @@
 
 /* Reseñas se lee como una lista de opiniones: conserva el ancho de lectura
    de hoy (880 px). Pantallas TV conserva sus 1200 px. */
-.raizEstrecha { max-width: 880px; }
-.raizMedia { max-width: 1200px; }
+.raizEstrecha { max-width: 880px; margin-left: max(0px, calc((100% - 1400px) / 2)); margin-right: auto; }
+.raizMedia { max-width: 1200px; margin-left: max(0px, calc((100% - 1400px) / 2)); margin-right: auto; }
 
 /* Cifras de ancho fijo en TODO lo que cuelga de aquí (fechas, contadores,
    páginas, IP). Va sobre los HIJOS y no sobre la raíz a propósito: la raíz
@@ -1050,4 +1054,18 @@ textarea.entrada {
   border: 1px solid var(--m2-borde);
   border-radius: 10px;
   overflow-x: auto;
+}
+
+/* C-126 (ws1-t8): con el dedo, la Bitácora tenía más de cien controles de
+   menos de 36 px (rangos de 30, «Ver» de 32, filas-botón de 34). Solo con
+   puntero táctil; con ratón, igual que antes. */
+@media (pointer: coarse) {
+  .boton,
+  .botonPeq,
+  .segmentoBoton {
+    min-height: 40px;
+  }
+  .filaBoton {
+    min-height: 40px;
+  }
 }

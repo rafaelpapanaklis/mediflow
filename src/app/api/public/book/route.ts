@@ -18,6 +18,8 @@ import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { reservaWebAbierta } from "@/lib/reserva-web/db";
+import { MENSAJE_RESERVA_CERRADA } from "@/lib/reserva-web/estado";
 
 export async function POST(req: NextRequest) {
   try {
@@ -84,6 +86,10 @@ export async function POST(req: NextRequest) {
     },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  // C-114 (ws1-t8, decisión 10): la clínica que se ocultó cerró su reserva web.
+  if (!(await reservaWebAbierta(clinic.id))) {
+    return NextResponse.json({ error: MENSAJE_RESERVA_CERRADA.es, reservaCerrada: true }, { status: 403 });
+  }
 
   // ── Validate date is not in the past — en la TZ DE LA CLÍNICA (P1-10) ─────
   // Con el reloj del server en UTC, después de las 18:00 CDMX "hoy" se

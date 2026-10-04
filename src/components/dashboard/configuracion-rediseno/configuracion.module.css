@@ -25,8 +25,15 @@
   line-height: 1.45;
 }
 
+/* C-127 (ws1-t8): un solo margen de página en el panel. El contenedor de
+   referencia es el de Equipo, Configuración y Caja: 1400 px centrado con
+   relleno clamp(14px, 1.6vw, 28px) (título en x=273 a 1440 con el menú
+   abierto). Las versiones angostas ya no se centran solas: alinean su borde
+   izquierdo con ese contenedor, así el título no «salta» de una pantalla a otra. */
 .raizEstrecha {
   max-width: 980px;
+  margin-left: max(0px, calc((100% - 1400px) / 2));
+  margin-right: auto;
 }
 
 /* ── Encabezado de pantalla ───────────────────────────────────────── */

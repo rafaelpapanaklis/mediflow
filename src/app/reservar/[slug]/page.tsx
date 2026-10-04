@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { orthoValoracionParaLanding } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { BookingClient } from "./booking-client";
+import { ReservaCerrada } from "./reserva-cerrada";
+import { reservaWebAbierta } from "@/lib/reserva-web/db";
 
 const CATEGORY_SERVICES: Record<string, string[]> = {
   DENTAL: ["Consulta general", "Limpieza dental", "Ortodoncia", "Implantes", "Endodoncia", "Extracción", "Blanqueamiento", "Coronas", "Resinas"],
@@ -72,6 +74,11 @@ export default async function ReservarPage({ params, searchParams }: Props) {
   });
 
   if (!clinic) notFound();
+
+  // C-114 (ws1-t8, decisión 10): la clínica se ocultó y cerró su reserva web.
+  if (!(await reservaWebAbierta(clinic.id))) {
+    return <ReservaCerrada nombre={clinic.name} telefono={clinic.phone} direccion={clinic.address} />;
+  }
 
   const category = (clinic as any).category ?? "OTHER";
   // Use landing page services if configured, otherwise fall back to category defaults

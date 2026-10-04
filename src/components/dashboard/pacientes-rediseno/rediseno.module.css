@@ -125,6 +125,35 @@
   .menuSeparador { display: none; }
 }
 
+/* C-126 (ws1-t8): en el celular los seis fijos se partían en tres renglones y,
+   con los grupos, el menú ocupaba cuatro antes de la ficha. Por debajo de
+   600 px van en UNA fila que se desliza con el dedo (ninguno se esconde ni se
+   renombra: se llega a todos deslizando), con un desvanecido en el borde que
+   avisa que hay más. Los tres grupos siguen en su renglón. */
+@media (max-width: 599.98px) {
+  .menuFijos {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+    padding-right: 24px;
+  }
+  .menuFijos::-webkit-scrollbar { display: none; }
+  .menuFijos > * { scroll-snap-align: start; }
+}
+
+/* C-126: con el dedo, los enlaces de las tarjetas («Ver facturación», «Editar»…)
+   medían 24 px de alto. El margen negativo conserva el renglón de la cabecera. */
+@media (pointer: coarse) {
+  .tarjetaEnlace {
+    min-height: 36px;
+    padding: 8px 6px;
+    margin: -8px -6px;
+  }
+}
+
 /* Los seis fijos van SIN ícono, y es una decisión de espacio medida, no de
    gusto: con ícono los nueve botones ocupan ~1090px y a 1440 con el menú
    lateral abierto solo hay ~1111px de fila. En cuanto entras a un grupo, su

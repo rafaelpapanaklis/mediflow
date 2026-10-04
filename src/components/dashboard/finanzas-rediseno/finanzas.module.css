@@ -17,12 +17,12 @@
    no comparten ni un nodo.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* C-127 (ws1-t8): mismo contenedor que Equipo, Configuración y Caja. */
 .raiz {
-  max-width: 1240px;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
-  /* Sin padding lateral: ese lo pone el <main> del layout. */
-  padding: clamp(14px, 2vw, 24px) 0 clamp(24px, 2.8vw, 32px);
+  padding: clamp(14px, 2vw, 24px) clamp(14px, 1.6vw, 28px) clamp(24px, 2.8vw, 32px);
   container-type: inline-size;
   container-name: finanzas;
   color: var(--m2-texto);
@@ -1017,5 +1017,16 @@
   .barraRelleno,
   .contenidoCargando > :not(.actualizando) {
     transition: none;
+  }
+}
+
+/* C-126 (ws1-t8): con el dedo, el periodo y los iconos de gasto medían 30 px. */
+@media (pointer: coarse) {
+  .segmento {
+    min-height: 40px;
+  }
+  .botonIcono {
+    width: 40px;
+    height: 40px;
   }
 }

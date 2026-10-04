@@ -8,6 +8,8 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
+import { reservaWebAbierta } from "@/lib/reserva-web/db";
+import { MENSAJE_RESERVA_CERRADA } from "@/lib/reserva-web/estado";
 
 /**
  * POST /api/public/booking-request — SOLICITUD de cita sin cuenta.
@@ -115,6 +117,10 @@ export async function POST(req: NextRequest) {
     });
     if (!clinic || clinic.archivedAt) {
       return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+    }
+    // C-114 (ws1-t8, decisión 10): la clínica que se ocultó cerró su reserva web.
+    if (!(await reservaWebAbierta(clinic.id))) {
+      return NextResponse.json({ error: MENSAJE_RESERVA_CERRADA.es, reservaCerrada: true }, { status: 403 });
     }
 
     // ── El horario tiene que EXISTIR en la agenda de ese día ─────────────

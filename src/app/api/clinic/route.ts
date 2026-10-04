@@ -7,6 +7,9 @@ import { isValidLatLng } from "@/lib/directory/distance";
 import { categoriaAlGuardar } from "@/lib/clinic/categoria-fija";
 import { esNombreDeClinicaValido, MENSAJE_NOMBRE_INVALIDO } from "@/lib/clinic-fields";
 import { normalizarUrlWeb } from "@/lib/url-interna";
+import { logMutation } from "@/lib/audit";
+import { reservaTrasGuardar } from "@/lib/reserva-web/estado";
+import { guardarReservaWebAbierta, hayColumnaReservaWeb, reservaWebAbierta } from "@/lib/reserva-web/db";
 
 // Contexto vía el helper CENTRAL (getAuthContext): misma resolución
 // cookie→clínica que la copia local que había aquí, pero pasando por los
@@ -129,6 +132,14 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // C-114 (ws1-t8, decisión 10): ocultar la clínica cierra también su reserva
+  // web. Se lee cómo estaba ANTES de guardar para saber si se está ocultando.
+  const tocaReserva = body.isPublic !== undefined || typeof body.reservaWebAbierta === "boolean";
+  const antes = tocaReserva
+    ? await prisma.clinic.findUnique({ where: { id: dbUser.clinicId }, select: { isPublic: true } })
+    : null;
+  const reservaAntes = tocaReserva ? await reservaWebAbierta(dbUser.clinicId) : true;
+
   // M-25: esta ruta devolvía la fila ENTERA de Clinic al navegador — token de
   // WhatsApp, llave viva de Facturapi, tokens de Google, API key de Daily,
   // hash del password del modo En Vivo. Cualquiera con acceso al panel (y
@@ -174,6 +185,28 @@ export async function PATCH(req: NextRequest) {
     },
   });
 
+  let reservaDespues = reservaAntes;
+  if (tocaReserva) {
+    reservaDespues = reservaTrasGuardar({
+      eraPublica: antes?.isPublic === true,
+      esPublica: updated.isPublic === true,
+      abierta: reservaAntes,
+      pedida: body.reservaWebAbierta,
+    });
+    if (reservaDespues !== reservaAntes) {
+      const guardada = await guardarReservaWebAbierta(dbUser.clinicId, reservaDespues);
+      if (!guardada) reservaDespues = reservaAntes;
+      else {
+        await logMutation({
+          req, clinicId: dbUser.clinicId, userId: dbUser.id,
+          entityType: "clinic", entityId: dbUser.clinicId, action: "update",
+          before: { reservaWebAbierta: reservaAntes }, after: { reservaWebAbierta: reservaDespues },
+          texto: reservaDespues ? "Abrió la reserva web en línea de la clínica" : "Cerró la reserva web en línea de la clínica",
+        });
+      }
+    }
+  }
+
   revalidateAfter("clinic");
-  return NextResponse.json(updated);
+  return NextResponse.json({ ...updated, reservaWebAbierta: reservaDespues, reservaWebDisponible: await hayColumnaReservaWeb() });
 }

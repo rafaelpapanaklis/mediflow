@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./settings-client";
+import { hayColumnaReservaWeb, reservaWebAbierta } from "@/lib/reserva-web/db";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -81,6 +82,9 @@ export default async function SettingsPage({ searchParams }: Props) {
     tablaDisponible: ajustesGoogle.tablaDisponible,
   };
 
+  // C-114: estado de la reserva web (sin el SQL: abierta y sin interruptor).
+  const [reservaAbierta, reservaDisponible] = await Promise.all([reservaWebAbierta(user.clinicId), hayColumnaReservaWeb()]);
+
   const metodosPago = { tarjetaOxxo: ivaParaCobro(process.env).ok || exencionIva !== null, spei: cuentaSpei !== null };
 
   return (
@@ -98,6 +102,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         rediseno={rediseno}
         metodosPago={metodosPago}
         gcalClinica={gcalClinica}
+        reservaWeb={{ abierta: reservaAbierta, disponible: reservaDisponible }}
       />
     </ErrorBoundary>
   );

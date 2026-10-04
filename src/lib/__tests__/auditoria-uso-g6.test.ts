@@ -24,6 +24,8 @@ import { nombreComparable, procedimientoRepetido, textoRepetido } from "../proce
 import { marcadoresPara, DOCUMENT_MARKERS } from "../document-templates/markers";
 import { agendaActiveDelAlta } from "../team/parche-miembro";
 import { cargarInsightsDeVercel } from "../analytics/vercel-insights";
+import { reservaTrasGuardar, reservaAlCambiarVisibilidad } from "../reserva-web/estado";
+import { reservaWebAbierta, guardarReservaWebAbierta, olvidarSondaReservaWeb } from "../reserva-web/db";
 
 const SRC = join(__dirname, "..", "..");
 const leer = (rel: string) => readFileSync(join(SRC, rel), "utf8");
@@ -98,9 +100,49 @@ test("C-113: Configuración → Mi perfil enlaza al completo y las dos especiali
 });
 
 // ── C-114 · clínica privada ────────────────────────────────────────────────
-test("C-114: «Clínica privada» ya no dice que solo entra el equipo (la reserva web sigue abierta)", () => {
+test("C-114: «Clínica privada» ya no dice que solo entra el equipo", () => {
   assert.doesNotMatch(valor(ES, "settings.client.privateClinicDesc"), /Solo tu equipo accede/);
-  assert.match(valor(ES, "settings.client.privateClinicDesc"), /enlace de reservas/);
+});
+
+// ── C-114 vuelta 2 · ocultar la clínica cierra la reserva web (decisión 10) ─
+test("C-114: al ocultar la clínica se cierra la reserva; reabrirla es a propósito", () => {
+  assert.equal(reservaTrasGuardar({ eraPublica: true, esPublica: false, abierta: true }), false, "ocultar cierra");
+  assert.equal(reservaTrasGuardar({ eraPublica: false, esPublica: false, abierta: true }), true, "guardar otra cosa no la toca");
+  assert.equal(reservaTrasGuardar({ eraPublica: false, esPublica: true, abierta: false }), false, "publicar no la reabre sola");
+  assert.equal(reservaTrasGuardar({ eraPublica: true, esPublica: false, abierta: true, pedida: true }), true, "lo que pide la pantalla manda");
+  assert.equal(reservaTrasGuardar({ eraPublica: true, esPublica: true, abierta: true, pedida: false }), false);
+  assert.equal(reservaAlCambiarVisibilidad(false, true), false, "el interruptor de privada apaga el de reserva");
+  assert.equal(reservaAlCambiarVisibilidad(true, false), false);
+});
+
+test("C-114: sin la columna la reserva sigue abierta y no se consulta de más", async () => {
+  olvidarSondaReservaWeb();
+  let consultas = 0;
+  const db = { $queryRaw: async () => { consultas++; return [{ existe: false }]; }, $executeRaw: async () => { throw new Error("no debe escribir"); } };
+  assert.equal(await reservaWebAbierta("c1", db), true);
+  assert.equal(await reservaWebAbierta("c1", db), true);
+  assert.equal(consultas, 1, "una sola pregunta a information_schema, ninguna a la columna");
+  assert.equal(await guardarReservaWebAbierta("c1", false, db), false);
+  olvidarSondaReservaWeb();
+  const filas: unknown[] = [];
+  const db2 = { $queryRaw: async (q: TemplateStringsArray) => (q.join("").includes("information_schema") ? [{ existe: true }] : [{ abierta: false }]), $executeRaw: async (...a: unknown[]) => { filas.push(a); return 1; } };
+  assert.equal(await reservaWebAbierta("c1", db2), false);
+  assert.equal(await guardarReservaWebAbierta("c1", true, db2), true);
+  assert.equal(filas.length, 1);
+  olvidarSondaReservaWeb();
+});
+
+test("C-114: la página de reservas y las tres APIs públicas respetan el cierre", () => {
+  assert.match(leer("app/reservar/[slug]/page.tsx"), /if \(!\(await reservaWebAbierta\(clinic\.id\)\)\) \{\s*return <ReservaCerrada/);
+  for (const f of ["app/api/public/book/route.ts", "app/api/public/booking-request/route.ts", "app/api/public/availability/route.ts"]) {
+    assert.match(leer(f), /if \(!\(await reservaWebAbierta\(clinic\.id\)\)\) \{\s*return NextResponse\.json\(\{ error: MENSAJE_RESERVA_CERRADA\.es, reservaCerrada: true \}, \{ status: 403 \}\)/, f);
+  }
+  const ruta = leer("app/api/clinic/route.ts");
+  assert.match(ruta, /reservaTrasGuardar\(\{\s*eraPublica: antes\?\.isPublic === true,/);
+  assert.match(ruta, /texto: reservaDespues \? "Abrió la reserva web/);
+  const sql = readFileSync(join(SRC, "..", "sql", "ws1-t8-reserva-web.sql"), "utf8");
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS "reservaWebAbierta" boolean NOT NULL DEFAULT true/);
+  assert.doesNotMatch(sql, /\bUPDATE\b|\bDROP\b/);
 });
 
 // ── C-115 · Bitácora legible ───────────────────────────────────────────────
@@ -224,8 +266,36 @@ test("mejora G6: «Aparece en la agenda» también al agregar, con el default de
 });
 
 // ── C-126 / C-127 · móvil y márgenes ───────────────────────────────────────
+test("C-126 vuelta 2: controles de 40 px con el dedo en Equipo, ficha, caso de ortodoncia, Bitácora y Finanzas", () => {
+  const casos: Array<[string, RegExp]> = [
+    ["components/dashboard/equipo-rediseno/rediseno.module.css", /@media \(pointer: coarse\) \{[\s\S]*\.raiz :global\(\.btn-new\) \{\s*min-height: 40px;/],
+    ["components/dashboard/pacientes-rediseno/rediseno.module.css", /@media \(pointer: coarse\) \{\s*\.tarjetaEnlace \{\s*min-height: 36px;/],
+    ["components/specialties/orthodontics/redesign/orto.module.css", /@media \(pointer: coarse\) \{\s*\.segmentoBoton \{\s*height: 40px;/],
+    ["components/dashboard/pequenas-rediseno/pequenas.module.css", /@media \(pointer: coarse\) \{[\s\S]*\.segmentoBoton \{\s*min-height: 40px;/],
+    ["components/dashboard/finanzas-rediseno/finanzas.module.css", /@media \(pointer: coarse\) \{\s*\.segmento \{\s*min-height: 40px;/],
+  ];
+  for (const [f, re] of casos) assert.match(leer(f), re, f);
+  assert.match(leer("app/dashboard/team/team-client.tsx"), /data-subir-foto/);
+});
+
+test("C-126 vuelta 2: en el celular las pestañas fijas de la ficha van en una fila deslizable", () => {
+  assert.match(leer("components/dashboard/pacientes-rediseno/rediseno.module.css"), /@media \(max-width: 599\.98px\) \{\s*\.menuFijos \{\s*flex-wrap: nowrap;\s*overflow-x: auto;/);
+});
+
 test("C-126: el menú de Configuración va en fila desde 260 px (en el celular ya no es una columna de 10)", () => {
   assert.match(leer("components/dashboard/configuracion-rediseno/configuracion.module.css"), /@container navconfig \(min-width: 260px\)/);
+});
+
+test("C-127 vuelta 2: Analítica, Finanzas, Bitácora y las pantallas angostas en el mismo contenedor", () => {
+  assert.match(leer("app/dashboard/analytics/layout.tsx"), /return <ContenedorPagina>\{children\}<\/ContenedorPagina>;/);
+  const cont = leer("components/dashboard/contenedor-pagina/contenedor.module.css");
+  for (const regla of ["max-width: 1400px;", "margin: 0 auto;", "padding: clamp(14px, 1.6vw, 28px);"]) assert.ok(cont.includes(regla), regla);
+  for (const f of ["components/dashboard/finanzas-rediseno/finanzas.module.css", "components/dashboard/pequenas-rediseno/pequenas.module.css"]) {
+    const css = leer(f); const raiz = css.slice(css.indexOf(".raiz {"), css.indexOf("}", css.indexOf(".raiz {")));
+    assert.match(raiz, /max-width: 1400px;/, f);
+    assert.match(raiz, /padding: clamp\(14px, 2vw, 24px\) clamp\(14px, 1\.6vw, 28px\)/, f);
+  }
+  assert.match(leer("components/dashboard/configuracion-rediseno/configuracion.module.css"), /\.raizEstrecha \{\s*max-width: 980px;\s*margin-left: max\(0px, calc\(\(100% - 1400px\) \/ 2\)\);/);
 });
 
 test("C-127: Plantillas usa el mismo contenedor que Equipo y Configuración", () => {

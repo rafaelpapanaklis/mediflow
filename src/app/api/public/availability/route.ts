@@ -9,6 +9,8 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiendeSlot } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { reservaWebAbierta } from "@/lib/reserva-web/db";
+import { MENSAJE_RESERVA_CERRADA } from "@/lib/reserva-web/estado";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
@@ -57,6 +59,10 @@ export async function GET(req: NextRequest) {
   });
 
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  // C-114 (ws1-t8, decisión 10): la clínica que se ocultó cerró su reserva web.
+  if (!(await reservaWebAbierta(clinic.id))) {
+    return NextResponse.json({ error: MENSAJE_RESERVA_CERRADA.es, reservaCerrada: true }, { status: 403 });
+  }
 
   // No date → return clinic info + doctors only
   if (!dateStr) {
