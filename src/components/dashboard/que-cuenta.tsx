@@ -15,7 +15,9 @@ export type ClaveQueCuenta =
   | "efectivo" | "porDoctor" | "porCobrar" | "vencido" | "ortoCobrado" | "ortoVencido"
   | "reportesIngresos" | "reportesTicket" | "reportesConDeuda"
   | "crmLtv" | "crmCobrado" | "crmSaldo"
-  | "costosIngresos" | "costosCostos" | "costosMargen";
+  | "costosIngresos" | "costosCostos" | "costosMargen"
+  // ws1-t2 (auditoría de dinero F4/F8): la historia migrada aparte, Caja e Inicio.
+  | "historiaMigrada" | "cajaHistoriaMigrada" | "inicioIngresos";
 
 /** El texto plano (para los componentes que solo aceptan `string`, como las tarjetas de Analítica). */
 export function useQueCuenta() {

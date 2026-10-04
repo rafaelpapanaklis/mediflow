@@ -14,7 +14,7 @@
  *   1. Citas de hoy          → KPI "CITAS HOY" de /api/patients
  *   2. Citas del periodo     → KPI "Citas" del home admin
  *   3. No-shows del periodo  → KPI "No-shows" del home admin
- *   4. Ingresos del periodo  → KPI "Ingresos del mes" del home admin (BRUTO)
+ *   4. Ingresos del periodo  → KPI "Ingresos del mes" del home admin (NETO desde ws1-t2)
  *   5. Deuda: monto y nº     → KPIs "Monto adeudado" / "Pacientes con deuda"
  *   6. Vencido               → Finanzas → Saldos (`computeReceivables`)
  *
@@ -32,6 +32,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { computeReceivables } from "@/lib/caja";
+import { deudaInvoiceWhere, ingresoNetoDelPeriodo } from "@/lib/dinero/ingresos.server";
 import { ejecutarHerramienta } from "../index";
 import { sumarDias, ventanaDeRango, ventanaDelDia } from "../fechas";
 import { CL_NORTE, HOY_N, TZ_NORTE, adminNorte, base } from "./siembra";
@@ -120,37 +121,24 @@ test("3 · no-shows del periodo: el mismo número que el KPI «No-shows» del ho
 });
 
 /* ══════════════════════════════════════════════════════════════════════
- * 4 · Ingresos — el KPI del home admin suma BRUTO (no resta reembolsos).
+ * 4 · Ingresos — desde ws1-t2 el KPI del home admin es el NETO de Finanzas.
  * ══════════════════════════════════════════════════════════════════════ */
 
-test("4 · ingresos: `ingresosBrutos` es EXACTAMENTE el KPI del home admin", async () => {
+test("4 · ingresos: `ingresosNetos` es EXACTAMENTE el KPI del home admin (la definición única)", async () => {
   const db = base();
   const { desde, hasta } = ventanaDeRango(RANGO.desde, RANGO.hasta, TZ_NORTE);
 
-  // `aggregateAdminPeriodKpis`, literal: el tenant por `invoice.clinicId`, fuera
-  // las canceladas, fuera las filas de método "refund".
-  const pantalla = await comoPantalla(db).payment.aggregate({
-    where: {
-      invoice: { clinicId: CL_NORTE, status: { notIn: ["CANCELLED"] } },
-      paidAt: { gte: desde, lt: hasta },
-      method: { not: "refund" },
-    },
-    _sum: { amount: true },
-  });
+  // `aggregateAdminPeriodKpis` llama a `ingresoNetoDelPeriodo` con su ventana.
+  const pantalla = await ingresoNetoDelPeriodo(CL_NORTE, { gte: desde, lt: hasta }, comoPantalla(db));
 
   const sabina = await ejecutarHerramienta("ingresos_por_periodo", adminNorte(db), RANGO);
   assert.equal(sabina.ok, true);
   if (!sabina.ok) return;
 
-  assert.equal(
-    sabina.datos.ingresosBrutos,
-    pantalla._sum.amount,
-    "el bruto de Sabina es el número que hoy enseña la tarjeta del home",
-  );
+  assert.equal(sabina.datos.ingresosNetos, pantalla.neto, "el neto de Sabina es el número de la tarjeta del home");
+  assert.equal(sabina.datos.ingresosBrutos, pantalla.cobrado);
 
-  // 🔴 Y el NETO es distinto, a propósito: el home no resta lo devuelto y
-  // Finanzas sí (hallazgo 12). Sabina devuelve LOS DOS con su nombre, porque dar
-  // uno solo contradiría a una de las dos pantallas sin poder explicar por qué.
+  // Cobrado 7,400, devuelto 500: el home ya no enseña 7,400 como «ingresos».
   assert.equal(sabina.datos.ingresosNetos, 6900);
   assert.equal(sabina.datos.ingresosBrutos, 7400);
   assert.notEqual(sabina.datos.ingresosNetos, sabina.datos.ingresosBrutos);
@@ -163,8 +151,8 @@ test("4 · ingresos: `ingresosBrutos` es EXACTAMENTE el KPI del home admin", asy
 test("5 · deuda: monto y número de pacientes iguales a los KPIs de Pacientes", async () => {
   const db = base();
 
-  // api/patients/route.ts, `debtAggregate` y `distinctDebtPatients`.
-  const whereDeuda = { clinicId: CL_NORTE, balance: { gt: 0 }, status: { not: "CANCELLED" } };
+  // api/patients/route.ts, `debtAggregate` y `distinctDebtPatients`: la deuda única (ws1-t2).
+  const whereDeuda = deudaInvoiceWhere(CL_NORTE);
   const montoPantalla = await db.invoice.aggregate({ _sum: { balance: true }, where: whereDeuda });
   const pacientesPantalla = await db.invoice.findMany({
     where: whereDeuda,

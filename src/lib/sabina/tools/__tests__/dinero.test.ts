@@ -118,11 +118,11 @@ test("🔴 deuda: la factura CANCELADA conserva su balance y NO es deuda", async
   assert.equal(r.ok, true);
   if (!r.ok) return;
 
-  // Con saldo: inv-2 ($3,000), inv-3 ($500), inv-4 (borrador, $1,000) e inv-7
-  // (de la paciente restringida, $7,777). inv-5 está CANCELADA con balance 4,000
-  // intacto: si contara, saldrían 5 pacientes y $16,277.
-  assert.equal(r.datos.deudores.total, 4);
-  assert.equal(r.datos.totalAdeudado, 12277);
+  // Con saldo: inv-2 ($3,000), inv-3 ($500) e inv-7 (de la paciente
+  // restringida, $7,777). inv-5 está CANCELADA con balance 4,000 intacto: si
+  // contara, saldrían 4 pacientes y $15,277. (inv-4 es borrador: ver abajo.)
+  assert.equal(r.datos.deudores.total, 3);
+  assert.equal(r.datos.totalAdeudado, 11277);
   assert.equal(
     JSON.stringify(r.datos.deudores.filas).indexOf("Elias"),
     -1,
@@ -130,15 +130,16 @@ test("🔴 deuda: la factura CANCELADA conserva su balance y NO es deuda", async
   );
 });
 
-test("deuda: el BORRADOR cuenta como saldo (igual que en Pacientes) y NO como vencido", async () => {
+test("deuda: el BORRADOR no es deuda (ws1-t2: la deuda única, igual que Pacientes y Finanzas) ni vencido", async () => {
   const r = await ejecutarHerramienta("pacientes_con_deuda", adminNorte(base()), {});
   assert.equal(r.ok, true);
   if (!r.ok) return;
 
-  // El borrador de Dora ($1,000) está DENTRO del total adeudado…
+  // El borrador de Dora ($1,000) queda FUERA del total adeudado (aún no se le
+  // cobra a nadie)…
   assert.equal(
-    r.datos.deudores.filas.some((f) => f.paciente === "Dora Sanchez" && f.saldo === 1000),
-    true,
+    r.datos.deudores.filas.some((f) => f.paciente === "Dora Sanchez"),
+    false,
   );
   // …y FUERA del vencido, aunque su dueDate pasó hace 20 días: Finanzas → Saldos
   // excluye los borradores. Vencido = solo inv-2 ($3,000); inv-7 no tiene fecha
@@ -152,7 +153,7 @@ test("deuda: ordenada de mayor a menor, con el mayor en el resumen", async () =>
   if (!r.ok) return;
   assert.deepEqual(
     r.datos.deudores.filas.map((f) => f.saldo),
-    [7777, 3000, 1000, 500],
+    [7777, 3000, 500],
   );
   // El mayor ya no va en una frase aparte: es la primera línea de la lista (ver
   // «LA FORMA DEL RESUMEN» en contrato-herramientas.test.ts).
@@ -167,9 +168,9 @@ test("deuda: `saldoMinimo` estrecha, nunca ensancha", async () => {
   if (!r.ok) return;
   assert.deepEqual(
     r.datos.deudores.filas.map((f) => f.saldo),
-    [7777, 3000, 1000],
+    [7777, 3000],
   );
-  assert.equal(r.datos.totalAdeudado, 11777, "el total sigue al mismo filtro que la lista");
+  assert.equal(r.datos.totalAdeudado, 10777, "el total sigue al mismo filtro que la lista");
 });
 
 test("deuda: no manda al modelo el teléfono ni nada que no haga falta", async () => {
@@ -192,10 +193,10 @@ test("🔴 deuda: la visibilidad por paciente aplica también por la puerta de f
     -1,
     "la paciente restringida no puede salir por facturación",
   );
-  assert.equal(r.datos.deudores.total, 3, "para el doctor son tres deudores, no cuatro");
+  assert.equal(r.datos.deudores.total, 2, "para el doctor son dos deudores, no tres (el borrador no es deuda)");
   assert.equal(
     r.datos.totalAdeudado,
-    4500,
+    3500,
     "y el TOTAL también se recorta: si no, la suma delataría al paciente oculto",
   );
 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { deudaInvoiceWhere } from "@/lib/dinero/ingresos.server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
@@ -273,11 +274,12 @@ async function v2Handler(
         select: { visitDate: true },
       },
       // Saldo del paciente para la columna "Saldo", el filtro "Con deuda",
-      // hasDebt y el sort por balance. Se excluyen las CANCELADAS: el endpoint
-      // de cancelar solo cambia status y DEJA el balance intacto, así que sin
-      // este filtro una factura anulada seguía contando como deuda.
+      // hasDebt y el sort por balance: la deuda ÚNICA (ws1-t2, lib/dinero) —
+      // facturas emitidas con saldo, ni CANCELADAS (cancelar solo cambia el
+      // status y DEJA el balance) ni BORRADORES (aún no se le cobran a nadie),
+      // igual que Finanzas, Reportes, CRM e Inicio.
       invoices: {
-        where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
+        where: deudaInvoiceWhere(ctx.clinicId),
         select: { balance: true },
       },
     },
@@ -338,13 +340,13 @@ async function v2Handler(
         },
       }),
       // KPIs "pacientes con deuda" / "monto adeudado": mismo criterio que el
-      // include de arriba — las canceladas no son deuda.
+      // include de arriba — ni canceladas ni borradores.
       prisma.invoice.aggregate({
-        where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
+        where: deudaInvoiceWhere(ctx.clinicId),
         _sum: { balance: true },
       }),
       prisma.invoice.findMany({
-        where: { clinicId: ctx.clinicId, balance: { gt: 0 }, status: { not: "CANCELLED" } },
+        where: deudaInvoiceWhere(ctx.clinicId),
         select: { patientId: true },
         distinct: ["patientId"],
       }),

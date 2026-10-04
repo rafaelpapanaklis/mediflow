@@ -17,6 +17,7 @@ import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-ba
 import { invoiceStatusBadge, isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT, useLocale } from "@/i18n/i18n-provider";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
 import { derivePaymentForm, resolveTaxMode, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { usoCfdiPorRegimen, avisoDeSaldo } from "@/lib/invoices/cfdi-reglas";
@@ -47,6 +48,8 @@ interface Props {
   invoices:      any[];
   patients:      any[];
   totalPaid:     number;
+  /** ws1-t2: lo pagado antes de DaleControl (historia migrada), ya restado de `totalPaid`. */
+  historiaMigrada?: number;
   totalPending:  number;
   totalOverdue:  number;
   monthInvoices: number;
@@ -77,7 +80,7 @@ function patientNameOf(inv: any): string {
   return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false, puedeEditarFacturas = false }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, historiaMigrada = 0, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false, puedeEditarFacturas = false }: Props) {
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
@@ -372,6 +375,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           <KpiCard label={t("billing.billingClient.kpiCredit")}       value={fmtMXN(creditTotal)}     icon={Wallet} />
         )}
       </div>
+      {/* ws1-t2: «Total cobrado» es lo cobrado en DaleControl; la historia migrada va aparte. */}
+      {historiaMigrada > 0 && (
+        <p style={{ margin: "-10px 0 16px", fontSize: 12, color: "var(--text-3)" }}>
+          <QueCuenta clave="cajaHistoriaMigrada" vars={{ monto: fmtMXN(historiaMigrada) }} />
+        </p>
+      )}
       {receivablesIncompleto && (
         <p style={{ margin: "-10px 0 16px", fontSize: 12, color: "var(--text-3)" }}>
           {t("billing.billingClient.partialReceivables")}

@@ -2,8 +2,10 @@
  * `ingresos_por_periodo` — el dinero que ENTRÓ, agrupado por día, semana o mes.
  *
  * ── EL CRITERIO ES EL DEL REPO, LITERAL ────────────────────────────────
- * `revenuePaymentWhere` y `refundPaymentWhere` de @/lib/caja, y el neto con
- * `netRevenueSeries`. No se reescribe ni un filtro:
+ * La definición ÚNICA de ingresos de @/lib/dinero (ws1-t2): `ingresoPaymentWhere`
+ * (= `revenuePaymentWhere` de @/lib/caja sin la historia migrada) y
+ * `reembolsoPaymentWhere`, y el neto con `netRevenueSeries`. No se reescribe
+ * ni un filtro:
  *
  *  · el tenant se aísla por `invoice.clinicId` — `Payment` no tiene clinicId;
  *  · fuera las facturas CANCELADAS;
@@ -15,11 +17,10 @@
  *    se pagan comisiones y se decide la nómina (hallazgo 12 del repo).
  *
  * ── LOS DOS NÚMEROS, Y POR QUÉ VAN LOS DOS ─────────────────────────────
- * `ingresosNetos` (cobros − reembolsos) es el de Finanzas. `ingresosBrutos`
- * (solo cobros) es el que sigue enseñando la tarjeta "Ingresos del mes" del home
- * del administrador, que no resta lo devuelto. Devolver los dos, con el nombre
- * de cada uno, es lo único honesto: si Sabina diera uno solo, contradiría a una
- * de las dos pantallas sin poder explicar por qué.
+ * `ingresosNetos` (cobros − reembolsos) es EL ingreso: el de Finanzas, Reportes
+ * y el home del administrador (desde ws1-t2 todos restan lo devuelto).
+ * `ingresosBrutos` (solo cobros) queda como dato para explicar de dónde sale
+ * el neto («cobré X y devolví Y»), no como otra cifra de «ingresos».
  *
  * ── LOS BUCKETS SON DE LA CLÍNICA ──────────────────────────────────────
  * Un pago cae en su bucket por su fecha LOCAL (`getTzParts`), no por la UTC.
@@ -30,7 +31,8 @@
  */
 
 import { z } from "zod";
-import { money, netRevenueSeries, refundPaymentWhere, revenuePaymentWhere } from "@/lib/caja";
+import { money, netRevenueSeries } from "@/lib/caja";
+import { ingresoPaymentWhere, reembolsoPaymentWhere } from "@/lib/dinero/ingresos.server";
 import { dbDe, definirHerramienta, pesos } from "./base";
 import {
   claveBucket,
@@ -52,9 +54,9 @@ export interface DatosIngresos {
   desde: string;
   hasta: string;
   agrupar: Agrupacion;
-  /** Cobros − reembolsos. El número de Finanzas. */
+  /** Cobros − reembolsos. EL ingreso: Finanzas, Reportes e Inicio. */
   ingresosNetos: number;
-  /** Solo cobros, sin restar lo devuelto. El de la tarjeta del home admin. */
+  /** Solo cobros, sin restar lo devuelto (para explicar el neto). */
   ingresosBrutos: number;
   reembolsos: number;
   cobros: number;
@@ -85,11 +87,11 @@ export const ingresosPorPeriodo = definirHerramienta<ParamsIngresos, DatosIngres
 
     const [cobros, devueltos] = await Promise.all([
       db.payment.findMany({
-        where: revenuePaymentWhere(ctx.clinicId, paidAt),
+        where: ingresoPaymentWhere(ctx.clinicId, paidAt),
         select: { amount: true, paidAt: true },
       }),
       db.payment.findMany({
-        where: refundPaymentWhere(ctx.clinicId, paidAt),
+        where: reembolsoPaymentWhere(ctx.clinicId, paidAt),
         select: { amount: true, paidAt: true },
       }),
     ]);

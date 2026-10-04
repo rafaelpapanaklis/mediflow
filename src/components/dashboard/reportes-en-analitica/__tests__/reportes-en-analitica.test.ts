@@ -109,10 +109,11 @@ test("la pestaña pide el mismo permiso que Reportes y lee las cifras de la mism
     assert.match(src, /await cargarReportes\(/, `${nombre} lee de cargarReportes`);
     assert.doesNotMatch(src, /prisma\./, `${nombre} no consulta por su cuenta: una sola fuente`);
   }
-  // La fuente conserva el criterio de ingresos de siempre y no pasa a nadie por alto.
+  // La fuente usa la definición ÚNICA de ingresos y deuda (ws1-t2, lib/dinero)
+  // y no pasa a nadie por alto.
   const fuente = leer("app/dashboard/reports/cargar-reportes.ts");
-  assert.match(fuente, /revenuePaymentWhere\(clinicId, \{ gte: r\.start, lt: r\.end \}\)/);
-  assert.equal((fuente.match(/where: \{\s*clinicId\b|revenuePaymentWhere\(clinicId/g) ?? []).length,
+  assert.match(fuente, /movimientosDelPeriodo\(clinicId, \{ gte: ranges\[0\]\.start, lt: ranges\[ranges\.length - 1\]\.end \}\)/);
+  assert.equal((fuente.match(/where: \{\s*clinicId\b|where: deudaInvoiceWhere\(clinicId\)/g) ?? []).length,
     (fuente.match(/prisma\.[a-zA-Z]+\.(count|aggregate|groupBy|findMany)\(/g) ?? []).length,
     "cada consulta va aislada por clinicId");
 });

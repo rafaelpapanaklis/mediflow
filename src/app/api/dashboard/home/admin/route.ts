@@ -6,6 +6,9 @@ import {
   requireRole,
 } from "@/lib/agenda/api-helpers";
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
+import { computeReceivables } from "@/lib/caja";
+import { ingresoNetoDelPeriodo, movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
 import { avisosDeExistencias, contarExistenciasVigentes } from "@/lib/inventory/avisos-existencias";
 import { idsSinContar } from "@/lib/inventory/sin-contar.server";
@@ -183,7 +186,7 @@ async function aggregatePreviousPeriodKpis(
   const elapsed = Math.max(0, Math.min(Date.now(), to.getTime()) - from.getTime());
   const prevSameTo = new Date(Math.min(prevFrom.getTime() + elapsed, prevTo.getTime()));
 
-  const [appts, completed, noShows, invoicedSamePart] = await Promise.all([
+  const [appts, completed, noShows, ingresosSamePart] = await Promise.all([
     prisma.appointment.count({
       where: {
         clinicId,
@@ -205,21 +208,16 @@ async function aggregatePreviousPeriodKpis(
         status: "NO_SHOW",
       },
     }),
-    prisma.payment.aggregate({
-      where: {
-        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
-        paidAt: { gte: prevFrom, lt: prevSameTo },
-        method: { not: "refund" },
-      },
-      _sum: { amount: true },
-    }).catch(() => ({ _sum: { amount: null as number | null } })),
+    // El mismo neto que la tarjeta (ws1-t2, lib/dinero): se compara igual con igual.
+    ingresoNetoDelPeriodo(clinicId, { gte: prevFrom, lt: prevSameTo })
+      .catch(() => ({ neto: 0, cobrado: 0, reembolsos: 0 })),
   ]);
 
   return {
     appointments: appts,
     completed,
     noShows,
-    revenueSamePartMXN: Number(invoicedSamePart._sum.amount ?? 0),
+    revenueSamePartMXN: ingresosSamePart.neto,
   };
 }
 
@@ -262,27 +260,18 @@ async function buildRevenueSeries(
   // curso, no a "ahora".
   const { to } = periodRangeUtc("month", timezone, now);
 
-  const payments = await prisma.payment
-    .findMany({
-      where: {
-        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
-        paidAt: { gte: from, lt: to },
-        method: { not: "refund" },
-      },
-      select: { amount: true, paidAt: true },
-    })
+  // Ingresos NETOS por mes con la definición única (ws1-t2, lib/dinero),
+  // los mismos de la tarjeta y de Finanzas.
+  const movimientos = await movimientosDelPeriodo(clinicId, { gte: from, lt: to })
     .catch((err) => {
       console.error("[home admin] revenue series query failed:", err);
-      return [] as Array<{ amount: number; paidAt: Date | null }>;
+      return { cobros: [], reembolsos: [] };
     });
 
-  const sums: Record<string, number> = {};
-  for (const p of payments) {
-    if (!p.paidAt) continue;
-    const tp = getTzParts(p.paidAt, timezone);
-    const key = `${tp.year}-${pad2(tp.month)}`;
-    sums[key] = (sums[key] ?? 0) + Number(p.amount ?? 0);
-  }
+  const sums = netoDelPeriodo(movimientos.cobros, movimientos.reembolsos, (d) => {
+    const tp = getTzParts(d, timezone);
+    return `${tp.year}-${pad2(tp.month)}`;
+  }).porClave;
 
   return months.map((m) => ({ month: m.month, value: sums[m.key] ?? 0 }));
 }
@@ -344,26 +333,15 @@ async function buildAlerts(
     });
   }
 
-  // Facturas vencidas
+  // Facturas vencidas: el MISMO «Vencido» de Caja, Facturas y Finanzas
+  // (`computeReceivables`, ws1-t2): sin borradores ni canceladas, por cuota en
+  // las facturas a plazos y con «hoy» en la zona de la clínica. Antes contaba
+  // los borradores y el saldo entero de una factura a plazos con fecha pasada.
   try {
-    const now = new Date();
-    const rows = await prisma.invoice.findMany({
-      where: {
-        clinicId,
-        status: { notIn: ["CANCELLED"] },
-        dueDate: { lt: now },
-      },
-      select: { total: true, paid: true },
-    });
-    let count = 0;
-    let total = 0;
-    for (const r of rows) {
-      const remaining = Number(r.total) - Number(r.paid ?? 0);
-      if (remaining > 0) {
-        count += 1;
-        total += remaining;
-      }
-    }
+    const saldos = await computeReceivables(clinicId, new Date());
+    const vencidas = Object.values(saldos.vencidoPorFactura).filter((v) => v > 0.005);
+    const count = vencidas.length;
+    const total = saldos.vencido;
     if (count > 0) {
       alerts.push({
         id: "inv-overdue",

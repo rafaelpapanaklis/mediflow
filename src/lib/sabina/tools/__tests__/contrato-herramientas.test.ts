@@ -407,11 +407,11 @@ test("forma: pacientes_con_deuda — una línea por paciente, de mayor a menor, 
   assert.equal(r.ok, true);
   if (!r.ok) return;
   const { cabecera, lineas } = partir(r.resumen);
-  assert.equal(cabecera, "4 pacientes con saldo por $12,277, de los que $3,000 ya están vencidos. De mayor a menor:");
+  // ws1-t2: el borrador de Dora ($1,000) ya no es deuda (la deuda única de lib/dinero).
+  assert.equal(cabecera, "3 pacientes con saldo por $11,277, de los que $3,000 ya están vencidos. De mayor a menor:");
   assert.deepEqual(lineas, [
     "- Paula Restringida — $7,777",
     "- Beto Munoz — $3,000",
-    "- Dora Sanchez — $1,000",
     "- Carla Gomez — $500",
   ]);
   // Lo que vio Rafael: «…$7,777, Beto Munoz $3,000, …». Ya no.
@@ -422,7 +422,7 @@ test("forma: pacientes_con_deuda — una línea por paciente, de mayor a menor, 
   const filas = filasConMonto((bloques[1] as { items: string[] }).items);
   assert.deepEqual(
     filas?.map((f) => [f.etiqueta, f.monto]),
-    [["Paula Restringida", "$7,777"], ["Beto Munoz", "$3,000"], ["Dora Sanchez", "$1,000"], ["Carla Gomez", "$500"]],
+    [["Paula Restringida", "$7,777"], ["Beto Munoz", "$3,000"], ["Carla Gomez", "$500"]],
   );
 });
 

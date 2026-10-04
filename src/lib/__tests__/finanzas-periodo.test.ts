@@ -95,9 +95,12 @@ test("las dos rutas usan la MISMA ventana de gastos (lista = tarjeta = utilidad)
   assert.match(leer("src/lib/gastos-periodo.server.ts"), /date:\s*\{\s*gte:\s*from,\s*lte:\s*expenseTo\s*\}/);
 });
 
-test("/api/finanzas: ventas y porDoctor excluyen DRAFT; nada filtra ya solo CANCELLED", () => {
+test("/api/finanzas: ventas excluye DRAFT, porDoctor es lo cobrado (ws1-t2); nada filtra ya solo CANCELLED", () => {
   const src = leer("src/lib/finanzas-resumen.server.ts"); // el cálculo vive aquí; la ruta lo llama
-  assert.equal((src.match(/notIn:\s*\[\.\.\.NOT_A_SALE_STATUSES\]/g) ?? []).length, 2);
+  // `ventas` (conteo de facturas emitidas) sigue sin borradores ni canceladas;
+  // «Por doctor» ya no lee facturas: es lo COBRADO (ingresosPorDoctorDelPeriodo).
+  assert.equal((src.match(/notIn:\s*\[\.\.\.NOT_A_SALE_STATUSES\]/g) ?? []).length, 1);
+  assert.match(src, /ingresosPorDoctorDelPeriodo\(clinicId/);
   // El único `not: "CANCELLED"` que queda es el de las citas, que no se tocó.
   assert.equal((src.match(/not:\s*"CANCELLED"/g) ?? []).length, 1);
 });

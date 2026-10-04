@@ -53,12 +53,13 @@ function enTrozos<T>(lista: T[], n = 500): T[][] {
  * devuelve un mapa vacío: la producción sale solo con la factura del
  * tratamiento, como antes.
  */
-async function facturasLigadas(clinicId: string, planIds: string[]): Promise<Map<string, string>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function facturasLigadas(clinicId: string, planIds: string[], db: any = prisma): Promise<Map<string, string>> {
   const planPorFactura = new Map<string, string>();
   if (!clinicId || planIds.length === 0) return planPorFactura;
   try {
     for (const trozo of enTrozos(planIds)) {
-      const filas = await prisma.$queryRaw<{ planId: string; invoiceId: string; status: string }[]>`
+      const filas = await db.$queryRaw<{ planId: string; invoiceId: string; status: string }[]>`
         SELECT i."orthodonticTreatmentPlanId" AS "planId", i."id" AS "invoiceId", i."status"
           FROM "invoices" i
          WHERE i."clinicId" = ${clinicId}
@@ -127,12 +128,14 @@ export async function cargarCambiosDeDoctor(
   clinicId: string,
   planIds: string[],
   desde: Date,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any = prisma,
 ): Promise<CambioDeDoctor[]> {
   if (!clinicId || planIds.length === 0) return [];
   try {
     const cambios: CambioDeDoctor[] = [];
     for (const trozo of enTrozos(planIds)) {
-      const filas = await prisma.auditLog.findMany({
+      const filas = await db.auditLog.findMany({
         where: {
           clinicId,
           entityType: "OrthodonticTreatmentPlan",
@@ -174,10 +177,11 @@ export async function cargarNombresDeDoctores(clinicId: string, ids: Array<strin
  * que `treatingDoctorId`/`invoiceId` (sql/ortodoncia-nucleo.sql) no existan:
  * devuelve lista vacía, no hay dinero de casos que atribuir.
  */
-export async function cargarCasosParaProduccion(clinicId: string): Promise<CasoParaProduccion[]> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function cargarCasosParaProduccion(clinicId: string, db: any = prisma): Promise<CasoParaProduccion[]> {
   if (!clinicId) return [];
   try {
-    const planes = await prisma.orthodonticTreatmentPlan.findMany({
+    const planes: Array<{ id: string; invoiceId: string | null; treatingDoctorId: string | null }> = await db.orthodonticTreatmentPlan.findMany({
       where: { clinicId, deletedAt: null },
       select: { id: true, invoiceId: true, treatingDoctorId: true },
       take: 5000,

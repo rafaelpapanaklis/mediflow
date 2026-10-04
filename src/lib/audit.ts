@@ -113,7 +113,9 @@ export type AuditEntityType =
   | "package-redemption"
   | "payment"
   | "cfdi"
-  | "referral";
+  | "referral"
+  // Gasto de la clínica (Finanzas, ws1-t2): alta, edición y borrado dejan copia.
+  | "expense";
 
 export { PEDIATRIC_AUDIT_ACTIONS, type PediatricAuditAction } from "@/lib/pediatrics/audit";
 

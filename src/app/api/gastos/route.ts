@@ -7,6 +7,9 @@ import { money } from "@/lib/caja";
 import { MX_OFFSET_MS } from "@/lib/analytics/query";
 import { expenseWindowEnd } from "@/lib/finanzas-periodo";
 import { isMissingTable, listarGastosDelPeriodo, serializeGasto } from "@/lib/gastos-periodo.server";
+import { borrarGasto, buscarGastoVivo, copiaDeGasto } from "@/lib/gastos-borrado.server";
+import { logMutation } from "@/lib/audit";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +21,13 @@ export const dynamic = "force-dynamic";
 // con { gastos: [], tablaFaltante: true } en vez de tirar 500.
 // Categorías sugeridas en UI: Renta, Insumos, Nómina, Servicios, Marketing,
 // Otro — pero se acepta cualquier string no vacío.
-// Permiso: analytics.view (dirección financiera = solo admin/owner, igual
-// que /api/finanzas y el gate de la página).
+// Permiso: analytics.view para leer (dirección financiera = solo admin/owner,
+// igual que /api/finanzas y el gate de la página); expenses.edit para crear,
+// editar y borrar.
+// ws1-t2 (auditoría de dinero F11): crear, editar y borrar dejan su fila en la
+// bitácora (logMutation, entidad "expense") con monto, categoría, fecha y
+// nota; borrar es LÓGICO en cuanto se pegue sql/ws1-t2-gastos-borrado-logico.sql
+// (lib/gastos-borrado.server). Un gasto borrado deja de contar, pero no se pierde.
 // ═══════════════════════════════════════════════════════════════════
 
 /** Inicio del día natural de México (réplica de caja.ts, que no lo exporta). */
@@ -67,6 +75,14 @@ const createSchema = z.object({
   date:     z.string().trim().optional(),
   category: z.string().trim().min(1, "La categoría es requerida.").max(100),
   amount:   z.number().finite().positive("El monto debe ser mayor a 0."),
+  note:     z.string().trim().max(500).optional().nullable(),
+});
+
+/** Edición: los mismos campos, todos opcionales (lo que no viene no cambia). */
+const updateSchema = z.object({
+  date:     z.string().trim().min(1).optional(),
+  category: z.string().trim().min(1, "La categoría es requerida.").max(100).optional(),
+  amount:   z.number().finite().positive("El monto debe ser mayor a 0.").optional(),
   note:     z.string().trim().max(500).optional().nullable(),
 });
 
@@ -148,6 +164,12 @@ export async function POST(req: NextRequest) {
       // pegue: "registrar gasto a mano" sigue funcionando igual.
       select: { id: true, date: true, category: true, amount: true, note: true },
     });
+    await logMutation({
+      req, clinicId, userId,
+      entityType: "expense", entityId: gasto.id, action: "create",
+      after: copiaDeGasto(gasto),
+      texto: `Registró el gasto «${gasto.category}» de ${montoParaTexto(gasto.amount)}`,
+    });
     return NextResponse.json({ gasto: serializeGasto(gasto) }, { status: 201 });
   } catch (err: any) {
     if (isMissingTable(err)) return NextResponse.json({ error: TABLA_FALTANTE_MSG }, { status: 503 });
@@ -168,19 +190,77 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "Falta el id del gasto." }, { status: 400 });
 
   try {
-    // Multi-tenant guard: el gasto DEBE existir Y pertenecer a la clínica de
-    // la sesión (findFirst por {id, clinicId}) antes de borrar.
-    const existing = await prisma.expense.findFirst({
-      where:  { id, clinicId: ctx.clinicId },
-      select: { id: true },
-    });
+    // Multi-tenant guard: el gasto DEBE existir, estar vivo Y pertenecer a la
+    // clínica de la sesión antes de borrar.
+    const existing = await buscarGastoVivo(id, ctx.clinicId);
     if (!existing) return NextResponse.json({ error: "Gasto no encontrado." }, { status: 404 });
 
-    await prisma.expense.delete({ where: { id: existing.id } });
-    return NextResponse.json({ ok: true });
+    // Lógico con el SQL pegado; físico sin él. En los dos casos la bitácora
+    // guarda la copia del gasto (monto, categoría, fecha y nota).
+    const { count, logico } = await borrarGasto({ id: existing.id, clinicId: ctx.clinicId, userId: ctx.userId });
+    if (count === 0) return NextResponse.json({ error: "Gasto no encontrado." }, { status: 404 });
+    await logMutation({
+      req, clinicId: ctx.clinicId, userId: ctx.userId,
+      entityType: "expense", entityId: existing.id, action: logico ? "soft_delete" : "delete",
+      before: copiaDeGasto(existing),
+      texto: `Borró el gasto «${existing.category}» de ${montoParaTexto(existing.amount)}`,
+    });
+    return NextResponse.json({ ok: true, borradoLogico: logico });
   } catch (err: any) {
     if (isMissingTable(err)) return NextResponse.json({ error: TABLA_FALTANTE_MSG }, { status: 503 });
     console.error("[gastos] DELETE error:", err?.message ?? err);
     return NextResponse.json({ error: "Error al eliminar el gasto." }, { status: 500 });
+  }
+}
+
+// ── PATCH /api/gastos?id=<expenseId> — corrige un gasto (ws1-t2) ─────────────
+// Lo que no viene en el cuerpo no cambia. Antes y después van a la bitácora.
+export async function PATCH(req: NextRequest) {
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const denied = denyIfMissingPermission(ctx, "expenses.edit");
+  if (denied) return denied;
+
+  const id = new URL(req.url).searchParams.get("id") ?? "";
+  if (!id) return NextResponse.json({ error: "Falta el id del gasto." }, { status: 400 });
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Body JSON requerido." }, { status: 400 });
+  }
+  const parsed = updateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+  }
+  const data: { date?: Date; category?: string; amount?: number; note?: string | null } = {};
+  if (parsed.data.date !== undefined) {
+    const d = parseExpenseDate(parsed.data.date);
+    if (!d) return NextResponse.json({ error: "Fecha inválida (usa YYYY-MM-DD o ISO)." }, { status: 400 });
+    data.date = d;
+  }
+  if (parsed.data.category !== undefined) data.category = parsed.data.category;
+  if (parsed.data.amount !== undefined) data.amount = money(parsed.data.amount);
+  if (parsed.data.note !== undefined) data.note = parsed.data.note || null;
+  if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nada que cambiar." }, { status: 400 });
+
+  try {
+    const existing = await buscarGastoVivo(id, ctx.clinicId);
+    if (!existing) return NextResponse.json({ error: "Gasto no encontrado." }, { status: 404 });
+    // Mismo {id, clinicId} en la escritura: nunca se toca un gasto de otra clínica.
+    const { count } = await prisma.expense.updateMany({ where: { id: existing.id, clinicId: ctx.clinicId }, data });
+    if (count === 0) return NextResponse.json({ error: "Gasto no encontrado." }, { status: 404 });
+    const despues = { ...existing, ...data };
+    await logMutation({
+      req, clinicId: ctx.clinicId, userId: ctx.userId,
+      entityType: "expense", entityId: existing.id, action: "update",
+      before: copiaDeGasto(existing),
+      after: copiaDeGasto(despues),
+      texto: `Corrigió el gasto «${despues.category}»: ${montoParaTexto(existing.amount)} → ${montoParaTexto(despues.amount)}`,
+    });
+    return NextResponse.json({ gasto: serializeGasto(despues) });
+  } catch (err: any) {
+    if (isMissingTable(err)) return NextResponse.json({ error: TABLA_FALTANTE_MSG }, { status: 503 });
+    console.error("[gastos] PATCH error:", err?.message ?? err);
+    return NextResponse.json({ error: "Error al corregir el gasto." }, { status: 500 });
   }
 }

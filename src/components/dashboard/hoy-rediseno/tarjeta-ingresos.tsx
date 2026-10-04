@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertCircle, TrendingUp } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 import { rangeForPeriod, type RevenueRange } from "@/lib/home/revenue-buckets";
 import type { AdminPeriod } from "@/lib/home/types";
 import { Tarjeta, Vacio } from "./piezas";
@@ -147,6 +148,8 @@ export function TarjetaIngresos({ period }: { period: AdminPeriod }) {
                   unit: t(activo.unitKey),
                 })}`}
           </div>
+          {/* ws1-t2: la definición única de ingresos, dicha en una línea. */}
+          {!roto && <div className={s.ingresosNota}><QueCuenta clave="inicioIngresos" /></div>}
         </div>
 
         <div className={s.grafica}>

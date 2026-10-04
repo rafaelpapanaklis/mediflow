@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { filtroGastosVivos } from "@/lib/gastos-borrado.server";
 import { prisma } from "@/lib/prisma";
 import { money } from "@/lib/caja";
 
@@ -66,7 +67,8 @@ export async function listarGastosDelPeriodo(
   const { clinicId, from, expenseTo } = params;
   // `clinicId: undefined` no filtra nada en Prisma: sin clínica no se consulta.
   if (!clinicId) throw new Error("sesion_invalida: falta clinicId");
-  const where = { clinicId, date: { gte: from, lte: expenseTo } };
+  // ws1-t2: sin los gastos borrados (borrado lógico, lib/gastos-borrado.server).
+  const where = { clinicId, date: { gte: from, lte: expenseTo }, ...(await filtroGastosVivos(clinicId, db)) };
   const orderBy = { date: "desc" as const };
 
   try {

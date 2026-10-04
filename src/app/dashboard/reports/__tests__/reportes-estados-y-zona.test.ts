@@ -136,14 +136,24 @@ before(async () => {
 test("cargarReportes corta cada mes por la zona de la clínica y con fin exclusivo", async () => {
   llamadas.length = 0;
   const t = ((k: string) => k) as any;
-  const r = await cargarReportes("c1", t, MX, new Date("2026-10-01T03:30:00Z"));
-  const cobros = llamadas.filter((c) => c.modelo === "payment" && c.operacion === "aggregate");
-  assert.equal(cobros.length, 6);
-  const septiembre = cobros[5].args.where.paidAt;
-  assert.equal(septiembre.gte.toISOString(), "2026-09-01T06:00:00.000Z");
-  assert.equal(septiembre.lt.toISOString(), "2026-10-01T06:00:00.000Z");
-  assert.equal(septiembre.lte, undefined, "ya no hay un 23:59:59 inclusivo que se coma el último segundo");
+  // ws1-t2: una sola lectura de los 6 meses (cobros y reembolsos, la definición
+  // única de lib/dinero) y el reparto por mes en JS, con el neto.
+  const antes = porDefecto.findMany;
+  porDefecto.findMany = (args: any) =>
+    args?.where?.AND ? [{ amount: 500, paidAt: new Date("2026-10-01T05:59:59.999Z") }] // último instante de septiembre en México
+      : args?.where?.method === "refund" ? [{ amount: 100, paidAt: new Date("2026-09-15T18:00:00Z") }]
+      : [];
+  let r;
+  try { r = await cargarReportes("c1", t, MX, new Date("2026-10-01T03:30:00Z")); } finally { porDefecto.findMany = antes; }
+  const lecturas = llamadas.filter((c) => c.modelo === "payment" && c.operacion === "findMany");
+  assert.equal(lecturas.length, 2, "cobros y reembolsos, una vez cada uno");
+  const ventana = lecturas[0].args.where.AND[0].paidAt;
+  assert.equal(ventana.gte.toISOString(), "2026-04-01T06:00:00.000Z");
+  assert.equal(ventana.lt.toISOString(), "2026-10-01T06:00:00.000Z");
+  assert.equal(ventana.lte, undefined, "ya no hay un 23:59:59 inclusivo que se coma el último segundo");
   assert.match(r.monthlyData[5].label, /sep/i);
+  assert.equal(r.monthlyData[5].revenue, 400, "el último segundo de septiembre es de septiembre, y el reembolso resta");
+  assert.equal(r.monthlyData[4].revenue, 0);
   // «Pacientes nuevos este mes»: desde el 1-sep local, no desde octubre.
   const nuevos = llamadas.filter((c) => c.modelo === "patient" && c.operacion === "count" && c.args.where.createdAt?.gte && !c.args.where.createdAt.lt);
   assert.equal(nuevos[0].args.where.createdAt.gte.toISOString(), "2026-09-01T06:00:00.000Z");
@@ -155,7 +165,7 @@ test("sin zona de la sesión, el cargador la lee de la clínica (por el id de la
   const lectura = llamadas.find((c) => c.modelo === "clinic" && c.operacion === "findUnique");
   assert.deepEqual(lectura?.args.where, { id: "c1" });
   const cobro = llamadas.find((c) => c.modelo === "payment")!;
-  assert.equal(cobro.args.where.paidAt.gte.toISOString(), "2026-04-01T06:00:00.000Z");
+  assert.equal(cobro.args.where.AND[0].paidAt.gte.toISOString(), "2026-04-01T06:00:00.000Z");
 });
 
 // ── Otros estados crudos del panel dental (12i, «busca otros lugares») ──────

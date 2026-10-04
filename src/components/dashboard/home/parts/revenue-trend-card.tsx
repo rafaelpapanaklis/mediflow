@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import dynamic from "next/dynamic";
 import { TrendingUp, AlertCircle } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 import { rangeForPeriod, type RevenueRange } from "@/lib/home/revenue-buckets";
 import type { AdminPeriod } from "@/lib/home/types";
 import { HomeSection } from "../home-section";
@@ -185,6 +186,12 @@ export function RevenueTrendCard({ period }: { period: AdminPeriod }) {
                   },
                 )}`}
           </div>
+          {/* ws1-t2: la definición única de ingresos, dicha en una línea. */}
+          {!broken && (
+            <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+              <QueCuenta clave="inicioIngresos" />
+            </div>
+          )}
         </div>
 
         <div style={{ padding: "10px 18px 18px" }}>

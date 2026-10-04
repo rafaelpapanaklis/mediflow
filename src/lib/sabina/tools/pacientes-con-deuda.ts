@@ -2,16 +2,17 @@
  * `pacientes_con_deuda` — quién le debe a la clínica y cuánto, de mayor a menor.
  *
  * ── EL CRITERIO, Y POR QUÉ ESTE Y NO OTRO ──────────────────────────────
- * Deuda = `Invoice.balance > 0` con la factura NO CANCELADA, aislada por
- * `clinicId`. Es literalmente el `where` de la columna "Saldo" y de los KPIs
- * "Pacientes con deuda" / "Monto adeudado" de /dashboard/patients
- * (src/app/api/patients/route.ts), así que el total de aquí cuadra con el
- * encabezado de esa pantalla.
+ * Deuda = la definición ÚNICA de @/lib/dinero (ws1-t2, `deudaInvoiceWhere`):
+ * `Invoice.balance > 0` de facturas EMITIDAS —ni borradores ni canceladas—,
+ * aislada por `clinicId`. Es el `where` de la columna "Saldo" y de los KPIs
+ * "Pacientes con deuda" / "Monto adeudado" de /dashboard/patients, de Reportes,
+ * del CRM y de «Por cobrar» de Finanzas, así que el total de aquí cuadra con
+ * todas.
  *
  * Las CANCELADAS quedan fuera y no es cosmético: el endpoint de cancelar solo
  * cambia el `status` y DEJA el `balance` intacto, así que sin ese filtro una
- * factura anulada seguiría contando como deuda. Los BORRADORES sí entran, igual
- * que en esa pantalla.
+ * factura anulada seguiría contando como deuda. Los BORRADORES tampoco entran:
+ * aún no se le cobran a nadie.
  *
  * Aparte, y etiquetado aparte, va el VENCIDO con el criterio de Caja, Facturas
  * y Finanzas → Saldos (`computeReceivables` de @/lib/caja, fila 87): por
@@ -30,6 +31,7 @@
  * restringido no salga por la puerta de la facturación.
  */
 
+import { deudaInvoiceWhere } from "@/lib/dinero/ingresos.server";
 import { computeReceivables, type CajaDb } from "@/lib/caja";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { round2 } from "@/lib/invoice-totals";
@@ -93,11 +95,10 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
     // 🔴 clinicId de la sesión, y `balance: { gt: 0 }` con la factura no
     // cancelada: el criterio de la columna "Saldo" de /dashboard/patients.
     const whereDeuda: Record<string, any> = {
-      clinicId: ctx.clinicId,
+      ...deudaInvoiceWhere(ctx.clinicId),
       // `gt: 0` es el criterio de la pantalla; con `saldoMinimo` se estrecha a
       // `gte`, nunca se ensancha.
       balance: minimo > 0 ? { gte: minimo } : { gt: 0 },
-      status: { not: "CANCELLED" },
       ...(visRelacion.length ? { AND: visRelacion } : {}),
     };
 

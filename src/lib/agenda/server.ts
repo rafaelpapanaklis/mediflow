@@ -25,6 +25,7 @@ import {
 import { MOTIVO_APARTADO_LIBERADO, apartadoVencido } from "./apartado";
 import { ROLES_QUE_ATIENDEN } from "./roles-que-atienden";
 import { etiquetaCortaProfesional, etiquetasDeProfesionales } from "./etiqueta-profesional";
+import { ingresoNetoDelPeriodo } from "@/lib/dinero/ingresos.server";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el MISMO include para poder enmascarar en una sola
@@ -456,7 +457,7 @@ export async function aggregateAdminPeriodKpis(
 ): Promise<AdminPeriodKpiRow> {
   const { from, to } = periodRangeUtc(period, timezone);
 
-  const [appts, completed, noShows, invoicedAgg] = await Promise.all([
+  const [appts, completed, noShows, ingresos] = await Promise.all([
     prisma.appointment.count({
       where: {
         clinicId,
@@ -478,20 +479,17 @@ export async function aggregateAdminPeriodKpis(
         status: "NO_SHOW",
       },
     }),
-    prisma.payment.aggregate({
-      where: {
-        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
-        paidAt: { gte: from, lt: to },
-        method: { not: "refund" },
-      },
-      _sum: { amount: true },
-    }).catch(() => ({ _sum: { amount: null as number | null } })),
+    // Ingresos con la definición ÚNICA (ws1-t2, lib/dinero): cobrado NETO
+    // por fecha de cobro —menos reembolsos, sin canceladas ni historia
+    // migrada—, el mismo número que Finanzas y Reportes. Antes era bruto.
+    ingresoNetoDelPeriodo(clinicId, { gte: from, lt: to })
+      .catch(() => ({ neto: 0, cobrado: 0, reembolsos: 0 })),
   ]);
 
   return {
     appointments: appts,
     completed,
     noShows,
-    revenueMXN: Number(invoicedAgg._sum.amount ?? 0),
+    revenueMXN: ingresos.neto,
   };
 }

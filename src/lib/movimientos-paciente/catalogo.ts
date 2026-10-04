@@ -104,6 +104,7 @@ const CATEGORIA_POR_ENTIDAD: Record<string, CategoriaMovimiento> = {
   cfdi: "dinero",
   "orthodontic-payment": "dinero",
   "package-redemption": "dinero",
+  expense: "dinero",
 };
 
 /** Entidades que nunca son un «movimiento» del paciente aunque lo mencionen. */

@@ -205,7 +205,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
         <Text style={styles.title}>Performance de doctores · {periodLabel}</Text>
         <Text style={styles.subtitle}>
           Citas, ingresos generados, satisfacción de pacientes y tiempos promedio por doctor.
-          Ingresos = facturas pagadas asociadas a citas del doctor en el período.
+          Ingresos = lo cobrado en el período (por fecha de cobro), menos reembolsos, al doctor de cada factura; sin historia migrada.
         </Text>
 
         <View style={styles.tableHeader} fixed>

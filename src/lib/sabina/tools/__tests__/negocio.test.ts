@@ -425,7 +425,7 @@ test("reportes · utilidad negativa se llama pérdida, no «utilidad de −$»",
   assert.match(resumen, /= pérdida de \$62,750/);
 });
 
-test("reportes · producción por doctor: lo facturado, sin borradores ni canceladas, igual que «Por doctor» de Finanzas", async () => {
+test("reportes · producción por doctor: lo COBRADO neto (ws1-t2), igual que «Por doctor» de Finanzas, y suma el ingreso", async () => {
   const db = nuevaBase();
   const { datos, resumen } = await correr<any>(reportes, adminNorte(db), { vista: "produccion_doctores" });
 
@@ -435,19 +435,21 @@ test("reportes · producción por doctor: lo facturado, sin borradores ni cancel
   const finanzas = await calcularResumenFinanzas({ clinicId: CL_NORTE, from: win.from, to: win.to, expenseTo: expenseWindowEnd("mes", new Date(), win.to) }, db);
 
   assert.deepEqual(
-    datos.produccion.doctores.filas.map((d: any) => [d.doctor, d.facturado]),
+    datos.produccion.doctores.filas.map((d: any) => [d.doctor, d.cobrado]),
     finanzas.porDoctor.map((d) => [d.doctor, d.ingresos]),
   );
+  // El reembolso de $5,000 de la factura de Hugo le resta a él; la factura de $800 sin cobrar no es de nadie.
   assert.deepEqual(
-    datos.produccion.doctores.filas.map((d: any) => [d.doctor, d.facturado]),
-    [["Hugo Salas", NORTE.produccion[U_DOC_N]], ["Nadia Rojas", NORTE.produccion[U_DOC2_N]], ["Sin doctor", NORTE.produccion.sinDoctor]],
+    datos.produccion.doctores.filas.map((d: any) => [d.doctor, d.cobrado]),
+    [["Hugo Salas", NORTE.produccion[U_DOC_N]], ["Nadia Rojas", NORTE.produccion[U_DOC2_N]]],
   );
-  assert.equal(datos.produccion.total, 80_800);
+  assert.equal(datos.produccion.total, NORTE.ingresosNetos);
+  assert.equal(datos.produccion.total, finanzas.ingresos, "la suma por doctor es el ingreso del periodo");
   assert.equal(datos.produccion.facturas, NORTE.ventas);
-  assert.equal(datos.produccion.doctores.filas[0].porcentaje, 62);
+  assert.equal(datos.produccion.doctores.filas[0].porcentaje, 69);
   assert.equal(datos.utilidad, null);
-  assert.match(resumen, /lo facturado, no lo cobrado/);
-  assert.match(resumen, /Hugo Salas: \$50,000/);
+  assert.match(resumen, /lo cobrado neto por fecha de cobro, no lo facturado/);
+  assert.match(resumen, /Hugo Salas: \$45,000/);
 });
 
 test("reportes · rentabilidad: precio − gasto con las funciones del catálogo; sin costo se dice «sin costo capturado»", async () => {
@@ -513,7 +515,7 @@ test("reportes · resumen: la clínica en el periodo, con por cobrar y citas com
   assert.equal(datos.vista, "resumen");
   assert.deepEqual(datos.omitidas, []);
   assert.equal(datos.utilidad.utilidad, NORTE.utilidad);
-  assert.equal(datos.produccion.total, 80_800);
+  assert.equal(datos.produccion.total, NORTE.ingresosNetos);
   assert.equal(datos.rentabilidad.conMargen.total, 4);
   assert.equal(datos.pacientes.atendidos, 2);
   // Finanzas: citas del periodo sin canceladas (4 de 5) y saldos globales.

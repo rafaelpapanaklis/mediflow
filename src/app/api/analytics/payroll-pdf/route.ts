@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { ingresosDeCasosSinCitaPorDoctor } from "@/lib/orthodontics/produccion-db";
+import { ingresosPorDoctorDelPeriodo } from "@/lib/dinero/ingresos.server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { PayrollDocument, type PayrollRow } from "@/lib/pdf/payroll-document";
 import { createElement } from "react";
@@ -51,17 +51,15 @@ export async function GET(req: NextRequest) {
 
   if (!clinic) return NextResponse.json({ error: "clinic_not_found" }, { status: 404 });
 
-  // Igual que /api/analytics/doctor-performance (fila 89): lo cobrado de los
-  // casos de ortodoncia cuenta para el doctor que los llevaba.
-  const ingresosOrto = await ingresosDeCasosSinCitaPorDoctor(
-    clinicId,
-    { desde: from, hasta: new Date(to.getTime() + 1) },
-    user.clinic?.timezone || "America/Mexico_City",
-  );
+  // Base de la nómina (ws1-t2): lo COBRADO neto del rango por fecha de cobro,
+  // por doctor — la misma función que /api/analytics/doctor-performance y el
+  // «Por doctor» de Finanzas (lib/dinero). Incluye lo de casos de ortodoncia
+  // sin cita, para quien llevaba el caso ese día.
+  const cobradoPorDoctor = await ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lte: to });
 
   const rows: PayrollRow[] = await Promise.all(
     doctors.map(async (doc) => {
-      const [appts, satisfactions, timelines, invoiced] = await Promise.all([
+      const [appts, satisfactions, timelines] = await Promise.all([
         prisma.appointment.findMany({
           where: { clinicId, doctorId: doc.id, startsAt: { gte: from, lte: to } },
           select: { id: true, status: true, startsAt: true },
@@ -76,14 +74,6 @@ export async function GET(req: NextRequest) {
             totalConsultMin: { not: null },
           },
           select: { totalConsultMin: true },
-        }),
-        prisma.invoice.aggregate({
-          where: {
-            clinicId,
-            status: { in: ["PAID", "PARTIAL"] },
-            appointment: { doctorId: doc.id, startsAt: { gte: from, lte: to } },
-          },
-          _sum: { paid: true },
         }),
       ]);
 
@@ -111,7 +101,7 @@ export async function GET(req: NextRequest) {
         avgConsultMin,
         avgSatisfaction,
         satisfactionCount: satisfactions.length,
-        revenueGenerated: (invoiced._sum.paid ?? 0) + (ingresosOrto.get(doc.id) ?? 0),
+        revenueGenerated: cobradoPorDoctor.get(doc.id)?.total ?? 0,
       };
     }),
   );

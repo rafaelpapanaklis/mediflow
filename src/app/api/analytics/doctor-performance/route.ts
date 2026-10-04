@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { ingresosDeCasosSinCitaPorDoctor } from "@/lib/orthodontics/produccion-db";
+import { ingresosPorDoctorDelPeriodo } from "@/lib/dinero/ingresos.server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +11,13 @@ export const dynamic = "force-dynamic";
  * Devuelve por doctor:
  *  - apptsTotal, apptsCompleted, apptsNoShow
  *  - apptsPerDay (promedio sobre días con al menos una cita)
- *  - revenueGenerated (suma de Invoice.paid donde el invoice está
- *    asociado a un appointment del doctor en el rango, MÁS lo cobrado en el
- *    rango de los casos de ortodoncia que llevaba: `revenueOrtho`)
+ *  - revenueGenerated: lo COBRADO neto del rango por FECHA DE COBRO (ws1-t2,
+ *    la definición única de lib/dinero y base de comisiones): cada cobro
+ *    menos reembolsos va al doctor de la factura, si no al de su cita, y en
+ *    casos de ortodoncia sin cita a quien llevaba el caso ese día
+ *    (`revenueOrtho` es esa parte). Antes era Invoice.paid de las facturas
+ *    ligadas a una cita del rango, por fecha de la cita: no veía las facturas
+ *    hechas en Caja con doctor y se re-escribía al pasado con cada abono.
  *  - avgSatisfaction (promedio de PatientSatisfaction.score)
  *  - avgConsultMin (de AppointmentTimeline)
  *
@@ -46,19 +50,13 @@ export async function GET(req: NextRequest) {
     select: { id: true, firstName: true, lastName: true, color: true, role: true },
   });
 
-  // Fila 89 de la revisión de lógica de uso: la factura de un caso de
-  // ortodoncia no nace de una cita, así que el doctor que más cobraba salía con
-  // $0. Se suma aparte, por pago del periodo y menos reembolsos, a quien
-  // llevaba el caso ese día (produccion.ts). `to` es inclusivo aquí.
-  const ingresosOrto = await ingresosDeCasosSinCitaPorDoctor(
-    clinicId,
-    { desde: from, hasta: new Date(to.getTime() + 1) },
-    user.clinic?.timezone || "America/Mexico_City",
-  );
+  // Lo cobrado neto del rango por doctor (ws1-t2): la misma función que la
+  // nómina y el «Por doctor» de Finanzas. `to` es inclusivo aquí.
+  const cobradoPorDoctor = await ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lte: to });
 
   const rows = await Promise.all(
     doctors.map(async (doc) => {
-      const [appts, satisfactions, timelines, invoiced] = await Promise.all([
+      const [appts, satisfactions, timelines] = await Promise.all([
         prisma.appointment.findMany({
           where: { clinicId, doctorId: doc.id, startsAt: { gte: from, lte: to } },
           select: { id: true, status: true, startsAt: true },
@@ -75,17 +73,6 @@ export async function GET(req: NextRequest) {
             totalConsultMin: { not: null },
           },
           select: { totalConsultMin: true },
-        }),
-        prisma.invoice.aggregate({
-          where: {
-            clinicId,
-            status: { in: ["PAID", "PARTIAL"] },
-            appointment: {
-              doctorId: doc.id,
-              startsAt: { gte: from, lte: to },
-            },
-          },
-          _sum: { paid: true },
         }),
       ]);
 
@@ -119,9 +106,9 @@ export async function GET(req: NextRequest) {
         apptsNoShow,
         noShowRate: Math.round(noShowRate * 10) / 10,
         apptsPerDay: Math.round(apptsPerDay * 10) / 10,
-        revenueGenerated: (invoiced._sum.paid ?? 0) + (ingresosOrto.get(doc.id) ?? 0),
-        // Cuánto de `revenueGenerated` es de casos de ortodoncia (mensualidades, enganche y extras).
-        revenueOrtho: ingresosOrto.get(doc.id) ?? 0,
+        revenueGenerated: cobradoPorDoctor.get(doc.id)?.total ?? 0,
+        // Cuánto de `revenueGenerated` es de casos de ortodoncia sin cita (mensualidades, enganche y extras).
+        revenueOrtho: cobradoPorDoctor.get(doc.id)?.orto ?? 0,
         avgSatisfaction: avgSatisfaction != null ? Math.round(avgSatisfaction * 10) / 10 : null,
         satisfactionCount: satisfactions.length,
         avgConsultMin,

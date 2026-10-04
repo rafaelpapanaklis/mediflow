@@ -740,6 +740,7 @@
   width: 1%;
   padding-right: 10px;
   text-align: right;
+  white-space: nowrap; /* «Corregir» y «Eliminar» juntos (ws1-t2) */
 }
 
 .num {

@@ -4,9 +4,14 @@ import {
   computeReceivables,
   money,
   netRevenueSeries,
-  refundPaymentWhere,
-  revenuePaymentWhere,
 } from "@/lib/caja";
+import {
+  historiaMigradaDelPeriodo,
+  ingresoPaymentWhere,
+  ingresosPorDoctorDelPeriodo,
+  reembolsoPaymentWhere,
+} from "@/lib/dinero/ingresos.server";
+import { filtroGastosVivos } from "@/lib/gastos-borrado.server";
 import { bucketKeyOf, eachBucket } from "@/lib/analytics/query";
 import { NOT_A_SALE_STATUSES, serieEnd } from "@/lib/finanzas-periodo";
 
@@ -50,7 +55,10 @@ export interface ResumenFinanzas {
   citas: number;
   efectivo: number;
   serie: Array<{ fecha: string; ingresos: number; gastos: number }>;
+  /** Lo COBRADO neto del periodo por doctor (ws1-t2): suma lo mismo que `ingresos`. */
   porDoctor: Array<{ doctorId: string; doctor: string; ingresos: number }>;
+  /** Lo cobrado en el sistema anterior con fecha en el periodo. APARTE: no suma a `ingresos`. */
+  historiaMigrada: number;
   /** `null` solo si quien llama pidió `conSaldos: false` (Sabina, cuando no los necesita). La ruta siempre los pide. */
   saldos: { porCobrar: number; vencido: number; incompleto: boolean } | null;
 }
@@ -67,11 +75,12 @@ export async function calcularResumenFinanzas(
   // `clinicId: undefined` no filtra nada en Prisma: sin clínica no se consulta.
   if (!clinicId) throw new Error("sesion_invalida: falta clinicId");
 
-  // Cobros del periodo SIN reembolsos ni facturas canceladas
-  // (revenuePaymentWhere, el mismo criterio que el home y la agenda). Ojo:
-  // esto excluye la FILA del reembolso, no el pago original — el neto se
-  // calcula abajo con netRevenueSeries.
-  const revenueWhere = revenuePaymentWhere(clinicId, { gte: from, lte: to });
+  // Cobros del periodo con la definición ÚNICA de ingresos (ws1-t2,
+  // lib/dinero): sin reembolsos, sin facturas canceladas y sin la historia
+  // migrada — la misma que Reportes, Inicio, Sabina y la nómina. Ojo: esto
+  // excluye la FILA del reembolso, no el pago original — el neto se calcula
+  // abajo con netRevenueSeries.
+  const revenueWhere = ingresoPaymentWhere(clinicId, { gte: from, lte: to });
 
   // Lote 1 — agregados (máx 6 promesas por Promise.all, regla del repo).
   const [efectivoAgg, ventas, citas, saldos] = await Promise.all([
@@ -106,7 +115,7 @@ export async function calcularResumenFinanzas(
 
   // Lote 2 — filas del periodo para serie/porDoctor (se agrupan en JS; un
   // mes son cientos de filas). Los gastos toleran tabla faltante (P2021).
-  const [paymentRows, refundRows, invoiceRows, expenseRows] = await Promise.all([
+  const [paymentRows, refundRows, historiaMigrada, expenseRows] = await Promise.all([
     // El KPI de ingresos y la serie diaria salen de ESTAS MISMAS filas, así
     // que la suma de la serie es el KPI por construcción, no por casualidad.
     db.payment.findMany({
@@ -117,17 +126,15 @@ export async function calcularResumenFinanzas(
     // RESTA. Sin esto, un cobro de $10,000 reembolsado completo dentro del
     // mismo mes seguía reportando $10,000 de ingresos y de utilidad.
     db.payment.findMany({
-      where:  refundPaymentWhere(clinicId, { gte: from, lte: to }),
+      where:  reembolsoPaymentWhere(clinicId, { gte: from, lte: to }),
       select: { amount: true, paidAt: true },
     }),
-    // Misma población que `ventas`: sin borradores ni canceladas.
-    db.invoice.findMany({
-      where:  { clinicId, createdAt: { gte: from, lte: to }, status: { notIn: [...NOT_A_SALE_STATUSES] } },
-      select: { doctorId: true, total: true },
-    }),
-    Promise.resolve(
+    // La historia migrada del periodo va APARTE (ws1-t2): se enseña, no se suma.
+    historiaMigradaDelPeriodo(clinicId, { gte: from, lte: to }, db),
+    // ws1-t2: sin los gastos borrados (borrado lógico, lib/gastos-borrado.server).
+    filtroGastosVivos(clinicId, db).then((vivos) =>
       db.expense.findMany({
-        where:  { clinicId, date: { gte: from, lte: expenseTo } },
+        where:  { clinicId, date: { gte: from, lte: expenseTo }, ...vivos },
         select: { amount: true, date: true },
       }),
     ).catch((e: any): { amount: number; date: Date }[] => {
@@ -137,7 +144,7 @@ export async function calcularResumenFinanzas(
   ]) as [
     Array<{ amount: number | null; paidAt: Date }>,
     Array<{ amount: number | null; paidAt: Date }>,
-    Array<{ doctorId: string | null; total: number | null }>,
+    number,
     Array<{ amount: number; date: Date }>,
   ];
 
@@ -164,16 +171,16 @@ export async function calcularResumenFinanzas(
     gastos:   money(gastosPorDia[fecha] ?? 0),
   }));
 
-  // porDoctor: total facturado del periodo agrupado por Invoice.doctorId
-  // (String suelto que apunta a User — /api/invoices lo valida con role
-  // DOCTOR al crear; aquí solo se resuelve el nombre con un findMany).
+  // porDoctor: lo COBRADO neto del periodo por doctor (ws1-t2; antes era lo
+  // facturado). La misma función que la nómina y la analítica de doctores:
+  // doctor de la factura, si no el de su cita, y en casos de ortodoncia sin
+  // cita quien llevaba el caso ese día. La suma de todos es `ingresos`.
   const SIN_DOCTOR = "__sin_doctor__";
   const totalPorDoctor: Record<string, number> = {};
-  for (const inv of invoiceRows) {
-    const key = inv.doctorId ?? SIN_DOCTOR;
-    totalPorDoctor[key] = (totalPorDoctor[key] ?? 0) + (inv.total ?? 0);
+  for (const [doctorId, v] of await ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lte: to }, db)) {
+    totalPorDoctor[doctorId ?? SIN_DOCTOR] = v.total;
   }
-  const doctorIds = Object.keys(totalPorDoctor).filter((k) => k !== SIN_DOCTOR);
+  const doctorIds = Object.keys(totalPorDoctor).filter((k) => k !== SIN_DOCTOR && totalPorDoctor[k] !== 0);
   const doctores: Array<{ id: string; firstName: string | null; lastName: string | null }> = doctorIds.length
     ? await db.user.findMany({
         where:  { id: { in: doctorIds }, clinicId }, // multi-tenant: solo usuarios de la clínica
@@ -187,8 +194,9 @@ export async function calcularResumenFinanzas(
     doctor:   nombrePorId[id] ?? "—",
     ingresos: money(totalPorDoctor[id] ?? 0),
   }));
-  // doctorId null → "Sin doctor" SOLO si su suma > 0 (contrato).
-  if ((totalPorDoctor[SIN_DOCTOR] ?? 0) > 0) {
+  // doctorId null → "Sin doctor" SOLO si su suma ≠ 0 (un reembolso sin
+  // doctor también se ve: si no, la suma de la lista no daría `ingresos`).
+  if ((totalPorDoctor[SIN_DOCTOR] ?? 0) !== 0) {
     porDoctor.push({
       doctorId: "sin-doctor",
       doctor:   "Sin doctor",
@@ -212,6 +220,7 @@ export async function calcularResumenFinanzas(
     efectivo: money(efectivoAgg._sum.amount ?? 0),
     serie,
     porDoctor,
+    historiaMigrada: money(historiaMigrada),
     saldos: saldos
       ? {
           porCobrar: money(saldos.porCobrar),

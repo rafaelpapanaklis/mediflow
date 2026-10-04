@@ -92,7 +92,8 @@ test("las mejoras no añaden ni una petición: siguen siendo /api/finanzas y /ap
   assert.doesNotMatch(pantalla, /\bfetch\(/, "la pantalla no pide datos: eso es de usar-finanzas.ts");
   const datos = readFileSync(join(CARPETA, "usar-finanzas.ts"), "utf8");
   const rutas = Array.from(datos.matchAll(/fetch\(\s*[`"']([^?`"'$]+)/g), (m) => m[1]).sort();
-  assert.deepEqual(rutas, ["/api/finanzas", "/api/gastos", "/api/gastos", "/api/gastos"]);
+  // Leer, registrar, borrar y —ws1-t2— corregir un gasto (PATCH): la misma ruta.
+  assert.deepEqual(rutas, ["/api/finanzas", "/api/gastos", "/api/gastos", "/api/gastos", "/api/gastos"]);
 });
 
 test("cada indicador dice de dónde sale su cifra, y ninguna etiqueta se corta con puntos suspensivos", () => {

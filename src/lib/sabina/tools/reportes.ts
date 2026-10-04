@@ -25,9 +25,11 @@
  *    función que ejecuta GET /api/finanzas. Y el periodo, el de Finanzas
  *    (./finanzas-comun): hoy, este mes, mes anterior o un rango, en días
  *    naturales de México.
- *  · «Producción» de un doctor es lo que Finanzas llama «Por doctor»: el total
- *    de las facturas EMITIDAS del periodo (sin borradores ni canceladas) por
- *    `Invoice.doctorId`. Es lo facturado, no lo cobrado.
+ *  · «Producción» de un doctor es lo que Finanzas llama «Por doctor»: lo
+ *    COBRADO neto del periodo (cobros − reembolsos, por fecha de cobro) por el
+ *    doctor de la factura (o el de su cita, o quien llevaba el caso de
+ *    ortodoncia), la definición única de @/lib/dinero (ws1-t2). Es la base de
+ *    comisiones y nómina, y su suma es el ingreso del periodo.
  *  · Rentabilidad: NO existía como reporte. Se arma con las mismas piezas que
  *    la pantalla de Procedimientos —`gastoDe` y `margenDe` de
  *    dashboard/procedures/margen, y `costoDeRecetaPorProcedimiento`— sobre el
@@ -108,7 +110,7 @@ export interface DatosReportes {
   produccion: {
     total: number;
     facturas: number;
-    doctores: Lista<{ doctor: string; facturado: number; porcentaje: number }>;
+    doctores: Lista<{ doctor: string; cobrado: number; porcentaje: number }>;
   } | null;
   /** Solo en `resumen`: lo demás que cuenta la pantalla de Finanzas. */
   actividad: {
@@ -141,7 +143,7 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
   descripcion:
     "Los reportes de la clínica que ya calculan Finanzas, Reportes y Procedimientos, en cinco vistas: " +
     "`utilidad` (ingresos menos gastos del periodo, contra el anterior), `produccion_doctores` (lo " +
-    "facturado por cada doctor), `rentabilidad` (margen por procedimiento: precio de catálogo menos su " +
+    "cobrado por cada doctor, neto de reembolsos: la base de comisiones), `rentabilidad` (margen por procedimiento: precio de catálogo menos su " +
     "gasto; los que no tienen costo capturado se dicen así), `pacientes` (atendidos y nuevos del " +
     "periodo) y `resumen` (todo lo anterior junto: la clínica en un periodo). El periodo es hoy, este " +
     "mes, el mes anterior o un rango. Úsala para «¿cuánto gané este mes?», «¿cuál doctor produce más?», " +
@@ -228,7 +230,7 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
           doctores: recortar(
             actual.porDoctor.map((d) => ({
               doctor: d.doctor,
-              facturado: d.ingresos,
+              cobrado: d.ingresos,
               porcentaje: total > 0 ? Math.round((d.ingresos / total) * 100) : 0,
             })),
           ),
@@ -332,12 +334,12 @@ export const reportes = definirHerramienta<ParamsReportes, DatosReportes>({
     if (d.produccion) {
       const p = d.produccion;
       if (p.doctores.filas.length === 0) {
-        partes.push("No hay facturas emitidas en el periodo, así que ningún doctor tiene producción.");
+        partes.push("No se cobró nada en el periodo, así que ningún doctor tiene producción.");
       } else {
-        const fmt = pesosDeLista(p.doctores.filas.map((x) => x.facturado));
-        const linea = (x: { doctor: string; facturado: number; porcentaje: number }) => `${x.doctor}: ${fmt(x.facturado)} (${x.porcentaje}%)`;
+        const fmt = pesosDeLista(p.doctores.filas.map((x) => x.cobrado));
+        const linea = (x: { doctor: string; cobrado: number; porcentaje: number }) => `${x.doctor}: ${fmt(x.cobrado)} (${x.porcentaje}%)`;
         partes.push(
-          `Producción por doctor (lo facturado, no lo cobrado): ${pesos(p.total)} en ${plural(p.facturas, "factura emitida", "facturas emitidas")}` +
+          `Producción por doctor (lo cobrado neto por fecha de cobro, no lo facturado): ${pesos(p.total)}` +
             `${p.doctores.filas.length >= 2 ? `${fraseRecorte(p.doctores, "doctores")}:${lineasDeLista(p.doctores.filas, linea)}` : `, todo de ${linea(p.doctores.filas[0])}.`}`,
         );
       }

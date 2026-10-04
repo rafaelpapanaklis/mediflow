@@ -1,10 +1,11 @@
 "use client";
 
+import { cambiosDelGasto, fechaLocalDeGasto } from "@/lib/finanzas/corregir-gasto";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, PiggyBank, Receipt, CalendarCheck, Banknote,
-  Plus, Trash2, X, RefreshCw, ArrowRight, Wallet, AlertTriangle, BarChart3,
+  Pencil, Plus, Trash2, X, RefreshCw, ArrowRight, Wallet, AlertTriangle, BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -31,6 +32,8 @@ interface FinanzasResumen {
   reembolsos?: number;
   serie:     SeriePoint[];
   porDoctor: DoctorRow[];
+  /** ws1-t2: lo cobrado en el sistema anterior con fecha en el periodo. Aparte: no suma a `ingresos`. */
+  historiaMigrada?: number;
   saldos:    { porCobrar: number; vencido: number; incompleto?: boolean };
 }
 interface Gasto {
@@ -163,6 +166,8 @@ export function FinanzasClient() {
   const [mMonto, setMMonto]         = useState("");
   const [mFecha, setMFecha]         = useState(todayLocalISO());
   const [mNota, setMNota]           = useState("");
+  // ws1-t2 (F11): el mismo modal corrige un gasto; `editando` es el original.
+  const [editando, setEditando]     = useState<Gasto | null>(null);
   const [saving, setSaving]         = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -210,10 +215,19 @@ export function FinanzasClient() {
   };
 
   const openModal = () => {
+    setEditando(null);
     setMCategoria(CATEGORIAS[0]);
     setMMonto("");
     setMFecha(todayLocalISO());
     setMNota("");
+    setShowModal(true);
+  };
+  const openEdit = (g: Gasto) => {
+    setEditando(g);
+    setMCategoria(g.category);
+    setMMonto(String(g.amount));
+    setMFecha(fechaLocalDeGasto(g.date));
+    setMNota(g.note ?? "");
     setShowModal(true);
   };
 
@@ -222,6 +236,28 @@ export function FinanzasClient() {
 
   async function saveGasto() {
     if (!montoValid || saving) return;
+    if (editando) {
+      // Solo lo que cambió; la bitácora guarda antes y después (PATCH /api/gastos).
+      const cambios = cambiosDelGasto(editando, { fecha: mFecha, categoria: mCategoria, monto: montoNum, nota: mNota });
+      if (!cambios) { setShowModal(false); return; }
+      setSaving(true);
+      try {
+        const res = await fetch(`/api/gastos?id=${encodeURIComponent(editando.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cambios),
+        });
+        if (!res.ok) throw new Error();
+        setShowModal(false);
+        setReloadKey((k) => k + 1);
+        toast.success("Gasto corregido");
+      } catch {
+        toast.error("No se pudo corregir el gasto. Intenta de nuevo.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/gastos", {
@@ -388,6 +424,12 @@ export function FinanzasClient() {
             <Kpi label="Citas" value={(data.citas ?? 0).toLocaleString("es-MX")} icon={CalendarCheck} tone="brand" />
             <Kpi label="Efectivo recibido" value={fmtMXN(data.efectivo)} icon={Banknote} tone="success" queCuenta={{ clave: "efectivo" }} />
           </div>
+          {/* ws1-t2: la historia migrada del periodo, aparte y nunca sumada a «Ingresos». */}
+          {(data.historiaMigrada ?? 0) > 0 && (
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)", lineHeight: 1.5 }}>
+              <QueCuenta clave="historiaMigrada" vars={{ monto: fmtMXN(data.historiaMigrada ?? 0) }} />
+            </p>
+          )}
 
           <div style={{ marginTop: 16 }}>
             <CardNew
@@ -534,6 +576,16 @@ export function FinanzasClient() {
                     <button
                       type="button"
                       className="btn-new btn-new--ghost btn-new--sm"
+                      aria-label="Corregir gasto"
+                      title="Corregir gasto"
+                      onClick={() => openEdit(g)}
+                      style={{ color: "var(--text-3)", flexShrink: 0 }}
+                    >
+                      <Pencil size={15} strokeWidth={1.75} />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-new btn-new--ghost btn-new--sm"
                       aria-label="Eliminar gasto"
                       disabled={deletingId === g.id}
                       onClick={() => deleteGasto(g.id)}
@@ -555,7 +607,7 @@ export function FinanzasClient() {
           {(data.porDoctor ?? []).length === 0 ? (
             <CardNew>
               <div style={{ textAlign: "center", padding: "36px 20px", color: "var(--text-3)", fontSize: 13 }}>
-                Sin facturas con doctor asignado en este periodo
+                Sin cobros en este periodo
               </div>
             </CardNew>
           ) : (
@@ -635,7 +687,7 @@ export function FinanzasClient() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">Registrar gasto</div>
+              <div className="modal__title">{editando ? "Corregir gasto" : "Registrar gasto"}</div>
               <button
                 type="button"
                 className="btn-new btn-new--ghost btn-new--sm"
@@ -651,6 +703,8 @@ export function FinanzasClient() {
                   <label className="field-new__label" htmlFor="gasto-cat">Categoría <span className="req">*</span></label>
                   <select id="gasto-cat" className="input-new" value={mCategoria} onChange={(e) => setMCategoria(e.target.value)}>
                     {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {/* Una categoría libre de un gasto viejo también se puede conservar al corregirlo. */}
+                    {!CATEGORIAS.includes(mCategoria) && mCategoria && <option value={mCategoria}>{mCategoria}</option>}
                   </select>
                 </div>
                 <div className="field-new" style={{ marginBottom: 14 }}>

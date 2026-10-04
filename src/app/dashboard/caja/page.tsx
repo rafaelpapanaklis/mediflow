@@ -5,6 +5,7 @@ import { canSeePatient, patientVisibilityAnd } from "@/lib/patient-visibility";
 import { getClinicCreditTotal } from "@/lib/patient-credit";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getCajaState, getCajaHistory, money } from "@/lib/caja";
+import { historiaMigradaDeFacturas } from "@/lib/dinero/ingresos.server";
 import { periodRangeUtc } from "@/lib/agenda/time-utils";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 import type { Prisma } from "@prisma/client";
@@ -94,15 +95,20 @@ export default async function CajaPage() {
   // uno propio. Falla cerrado (sin tabla, sin fila o con error → false = la
   // Caja de hoy, tal cual). No añade un viaje a la base: el layout ya la
   // preguntó en esta misma carga y la respuesta vive 60 s en memoria por
-  // clínica. Va en este Promise.all (6) y no en el de arriba (ya con 6): menos
+  // clínica. Va en este Promise.all (5) y no en el de arriba (ya con 6): menos
   // de 7 consultas por tanda.
-  const [paidAgg, totalInvoices, monthInvoices, rediseno] = await Promise.all([
+  const [paidAgg, totalInvoices, monthInvoices, rediseno, historiaMigrada] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { paid: true },    where: issued }),
     prisma.invoice.count({ where: { clinicId: user.clinicId } }),
     prisma.invoice.count({ where: { clinicId: user.clinicId, createdAt: { gte: monthStart } } }),
     menuDosNivelesEncendido(user.clinicId),
+    // ws1-t2 (auditoría de dinero F8): de lo `paid`, lo que se pagó ANTES de
+    // DaleControl (facturas migradas con `paid` y sin cobros aquí). Se enseña
+    // aparte y se resta de «Total cobrado»: la historia no es dinero cobrado
+    // con este sistema (en una clínica fueron $592,798 sumados de más).
+    historiaMigradaDeFacturas(user.clinicId),
   ]);
-  const totalPaid    = money(paidAgg._sum.paid ?? 0);
+  const totalPaid    = money(Math.max(0, (paidAgg._sum.paid ?? 0) - historiaMigrada));
   // «Por cobrar» y «Vencido» NO se vuelven a calcular aquí (fila 87 de la
   // revisión de lógica de uso): son los de `computeReceivables`, que ya vienen
   // en `caja`. Antes esta pestaña contaba vencido por `dueDate` y la de al
@@ -123,6 +129,7 @@ export default async function CajaPage() {
         invoices: visibleInvoices as any,
         patients,
         totalPaid,
+        historiaMigrada,
         totalPending,
         totalOverdue,
         monthInvoices,

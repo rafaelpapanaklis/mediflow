@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { revenuePaymentWhere } from "@/lib/caja";
+import { deudaInvoiceWhere, movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import type { TFunction } from "@/i18n/t";
 import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
@@ -41,17 +42,16 @@ export async function cargarReportes(
   const thirtyDaysAgo = v.hace30Dias;
 
   // Promise.all #1 — series mensuales (3 promesas)
-  const [revenueResults, patientCounts, apptCounts] = await Promise.all([
-    // Ingresos del mes SIN reembolsos ni facturas canceladas (revenuePaymentWhere,
-    // el mismo criterio que el home). Antes sumaba TODO Payment: un reembolso
-    // (method "refund", monto positivo) inflaba el mes en que se devolvió el
-    // dinero, y los pagos de facturas anuladas inflaban toda la serie.
-    Promise.all(ranges.map(r =>
-      safe(
-        prisma.payment.aggregate({ where: revenuePaymentWhere(clinicId, { gte: r.start, lt: r.end }), _sum: { amount: true } }),
-        { _sum: { amount: 0 } } as any,
-      )
-    )),
+  const [movimientos, patientCounts, apptCounts] = await Promise.all([
+    // Ingresos de cada mes con la definición ÚNICA (ws1-t2, lib/dinero): lo
+    // cobrado NETO por fecha de cobro —cobros menos reembolsos, sin facturas
+    // canceladas ni historia migrada—, lo mismo que Finanzas, Inicio y Sabina.
+    // Antes restaba la fila del reembolso pero no lo devuelto: el mes salía
+    // en bruto. Una sola lectura de los 6 meses y el reparto por mes en JS.
+    safe(
+      movimientosDelPeriodo(clinicId, { gte: ranges[0].start, lt: ranges[ranges.length - 1].end }),
+      { cobros: [], reembolsos: [] },
+    ),
     Promise.all(ranges.map(r =>
       safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lt: r.end } } }), 0)
     )),
@@ -79,17 +79,19 @@ export async function cargarReportes(
     menuDosNivelesEncendido(clinicId),
   ]);
 
-  // Promise.all #3 — KPIs actuales de pacientes y deuda (5 promesas)
+  // Promise.all #3 — KPIs actuales de pacientes y deuda (5 promesas). La
+  // deuda es la ÚNICA (ws1-t2, `deudaInvoiceWhere`): facturas emitidas con
+  // saldo, ni borradores ni canceladas — la de Pacientes, CRM y Finanzas.
   const [totalPatients, newThisMonth, newLastMonth, debtAggregate, debtCount] = await Promise.all([
     safe(prisma.patient.count({ where: { clinicId } }), 0),
     safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfMonth } } }), 0),
     safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: startOfLastMonth, lt: endOfLastMonth } } }), 0),
     safe(prisma.invoice.aggregate({
-      where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+      where: deudaInvoiceWhere(clinicId),
       _sum: { balance: true },
     }), { _sum: { balance: 0 } } as any),
     safe(prisma.invoice.findMany({
-      where: { clinicId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+      where: deudaInvoiceWhere(clinicId),
       select: { patientId: true },
       distinct: ["patientId"],
     }).then(rows => rows.length), 0),
@@ -150,10 +152,12 @@ export async function cargarReportes(
     ? Math.round(((newThisMonth - newLastMonth) / newLastMonth) * 100)
     : (newThisMonth > 0 ? 100 : 0);
 
-  // Prisma tipa `_sum` como `... | null`. Defensa con Number().
+  // Cada movimiento a su mes (fines exclusivos, como las ventanas).
+  const mesDe = (d: Date) => String(ranges.findIndex((r) => d >= r.start && d < r.end));
+  const netoPorMes = netoDelPeriodo(movimientos.cobros, movimientos.reembolsos, mesDe).porClave;
   const monthlyData = ranges.map((r, i) => ({
     label:        r.label,
-    revenue:      Number(revenueResults[i]?._sum?.amount ?? 0),
+    revenue:      netoPorMes[String(i)] ?? 0,
     patients:     patientCounts[i] ?? 0,
     appointments: apptCounts[i] ?? 0,
   }));

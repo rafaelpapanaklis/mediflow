@@ -11,7 +11,7 @@
  *
  * Además, cada cifra dice de dónde sale (una línea bajo el número), la
  * cabecera nombra las fechas exactas del periodo, los gastos se reparten por
- * categoría y «Por doctor» aclara que es lo FACTURADO, no lo cobrado. Todo eso
+ * categoría y «Por doctor» aclara que es lo COBRADO por fecha de cobro (ws1-t2). Todo eso
  * se pinta con lo que YA llega en las dos peticiones de siempre: ni una
  * consulta nueva, ni una cifra de las de antes calculada de otra forma.
  *
@@ -25,7 +25,7 @@ import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BarChart3, CalendarCheck,
-  PiggyBank, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Users,
+  Pencil, PiggyBank, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Users,
   Wallet, X, type LucideIcon,
 } from "lucide-react";
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
@@ -300,9 +300,15 @@ export function FinanzasRediseno() {
               etiqueta="Ingresos"
               valor={fmtMXN(data.ingresos)}
               icono={TrendingUp}
-              pista={reembolsos > 0
-                ? <QueCuenta clave="ingresosPeriodoConReembolsos" vars={{ reembolsos: fmtMXN(reembolsos) }} />
-                : <QueCuenta clave="ingresosPeriodo" />}
+              pista={<>
+                {reembolsos > 0
+                  ? <QueCuenta clave="ingresosPeriodoConReembolsos" vars={{ reembolsos: fmtMXN(reembolsos) }} />
+                  : <QueCuenta clave="ingresosPeriodo" />}
+                {/* ws1-t2: la historia migrada del periodo, aparte y nunca sumada. */}
+                {(data.historiaMigrada ?? 0) > 0 && (
+                  <><br /><QueCuenta clave="historiaMigrada" vars={{ monto: fmtMXN(data.historiaMigrada ?? 0) }} /></>
+                )}
+              </>}
             />
             <Kpi
               etiqueta="Gastos"
@@ -437,6 +443,15 @@ export function FinanzasRediseno() {
                           <td className={s.celdaAccion}>
                             <button
                               type="button"
+                              className={s.botonIcono}
+                              aria-label="Corregir gasto"
+                              title="Corregir gasto"
+                              onClick={() => f.openEdit(g)}
+                            >
+                              <Pencil size={15} strokeWidth={1.75} aria-hidden />
+                            </button>
+                            <button
+                              type="button"
                               className={`${s.botonIcono} ${s.botonIconoPeligro}`}
                               aria-label="Eliminar gasto"
                               title="Eliminar gasto"
@@ -464,12 +479,12 @@ export function FinanzasRediseno() {
               >
                 <p className={s.kpiPista} style={{ marginBottom: 12 }}><QueCuenta clave="porDoctor" /></p>
                 {(data.porDoctor ?? []).length === 0 ? (
-                  <Vacio icono={Users} titulo="Sin facturas con doctor asignado en este periodo" />
+                  <Vacio icono={Users} titulo="Sin cobros en este periodo" />
                 ) : (
                   <div>
                     <div className={s.doctorCabecera}>
                       <span>Doctor</span>
-                      <span>Facturado</span>
+                      <span>Cobrado</span>
                     </div>
                     {data.porDoctor.map((d) => (
                       <div key={d.doctorId} className={s.doctorFila}>
@@ -542,7 +557,7 @@ export function FinanzasRediseno() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className={s.dialogoCabeza}>
-              <h2 id="gasto-titulo" className={s.dialogoTitulo}>Registrar gasto</h2>
+              <h2 id="gasto-titulo" className={s.dialogoTitulo}>{f.editando ? "Corregir gasto" : "Registrar gasto"}</h2>
               <button type="button" className={s.botonIcono} aria-label="Cerrar" onClick={f.closeModal}>
                 <X size={16} strokeWidth={1.75} aria-hidden />
               </button>
@@ -560,6 +575,8 @@ export function FinanzasRediseno() {
                     onChange={(e) => f.setMCategoria(e.target.value)}
                   >
                     {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {/* Una categoría libre de un gasto viejo también se puede conservar al corregirlo. */}
+                    {!CATEGORIAS.includes(f.mCategoria) && f.mCategoria && <option value={f.mCategoria}>{f.mCategoria}</option>}
                   </select>
                 </div>
                 <div className={s.campo}>

@@ -11,6 +11,7 @@
  * disparadas solo cuando cambia el periodo o cuando se guarda/elimina un gasto.
  */
 
+import { cambiosDelGasto, fechaLocalDeGasto } from "@/lib/finanzas/corregir-gasto";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -28,6 +29,8 @@ export interface FinanzasResumen {
   efectivo: number;
   serie:     SeriePoint[];
   porDoctor: DoctorRow[];
+  /** ws1-t2: lo cobrado en el sistema anterior con fecha en el periodo. Aparte: no suma a `ingresos`. */
+  historiaMigrada?: number;
   saldos:    { porCobrar: number; vencido: number };
 }
 export interface Gasto {
@@ -75,6 +78,8 @@ export function useFinanzas() {
   const [mNota, setMNota]           = useState("");
   const [saving, setSaving]         = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // ws1-t2 (F11): el mismo diálogo corrige un gasto; `editando` es el original.
+  const [editando, setEditando]     = useState<Gasto | null>(null);
 
   // Deps SOLO query + reloadKey (el estado que setea el efecto NO va en deps
   // para no auto-cancelarse). AbortController limpia el fetch anterior.
@@ -122,10 +127,19 @@ export function useFinanzas() {
   const reintentar = () => setReloadKey((k) => k + 1);
 
   const openModal = () => {
+    setEditando(null);
     setMCategoria(CATEGORIAS[0]);
     setMMonto("");
     setMFecha(todayLocalISO());
     setMNota("");
+    setShowModal(true);
+  };
+  const openEdit = (g: Gasto) => {
+    setEditando(g);
+    setMCategoria(g.category);
+    setMMonto(String(g.amount));
+    setMFecha(fechaLocalDeGasto(g.date));
+    setMNota(g.note ?? "");
     setShowModal(true);
   };
   const closeModal = () => setShowModal(false);
@@ -135,6 +149,28 @@ export function useFinanzas() {
 
   async function saveGasto() {
     if (!montoValid || saving) return;
+    if (editando) {
+      // Solo lo que cambió; la bitácora guarda antes y después (PATCH /api/gastos).
+      const cambios = cambiosDelGasto(editando, { fecha: mFecha, categoria: mCategoria, monto: montoNum, nota: mNota });
+      if (!cambios) { setShowModal(false); return; }
+      setSaving(true);
+      try {
+        const res = await fetch(`/api/gastos?id=${encodeURIComponent(editando.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cambios),
+        });
+        if (!res.ok) throw new Error();
+        setShowModal(false);
+        setReloadKey((k) => k + 1);
+        toast.success("Gasto corregido");
+      } catch {
+        toast.error("No se pudo corregir el gasto. Intenta de nuevo.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/gastos", {
@@ -199,7 +235,7 @@ export function useFinanzas() {
     // el bloque «Ortodoncia» pide lo suyo con los mismos.
     query, reloadKey,
     data, gastos, loading, error, reintentar,
-    showModal, openModal, closeModal,
+    showModal, openModal, closeModal, openEdit, editando,
     mCategoria, setMCategoria, mMonto, setMMonto, mFecha, setMFecha, mNota, setMNota,
     montoValid, saving, saveGasto, deletingId, deleteGasto,
     serie, hasMovs, maxDoctor, totalGastos, utilidadPos,

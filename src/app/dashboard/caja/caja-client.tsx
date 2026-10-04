@@ -28,6 +28,8 @@ interface BillingProps {
   invoices:      any[];
   patients:      any[];
   totalPaid:     number;
+  /** ws1-t2: lo pagado antes de DaleControl (historia migrada), ya restado de `totalPaid`. */
+  historiaMigrada?: number;
   totalPending:  number;
   totalOverdue:  number;
   monthInvoices: number;
@@ -457,6 +459,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       invoices={billing.invoices}
       patients={billing.patients}
       totalPaid={billing.totalPaid}
+      historiaMigrada={billing.historiaMigrada ?? 0}
       totalPending={billing.totalPending}
       totalOverdue={billing.totalOverdue}
       monthInvoices={billing.monthInvoices}

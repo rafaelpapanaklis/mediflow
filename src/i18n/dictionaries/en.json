@@ -5204,7 +5204,7 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "footerNote": "Note: Revenue = amount collected on invoices linked to the doctor's appointments, plus what was collected in the period (minus refunds) on the orthodontic cases they were treating on the payment date. Satisfaction = average survey score (1 to 5). Average time = consultation length recorded on the appointment. “Payroll” downloads a PDF with this same data.",
+      "footerNote": "Note: Revenue = what was COLLECTED in the period (by payment date, minus refunds) for each invoice's doctor; if the invoice has no doctor, the appointment's, and for orthodontic cases without an appointment, whoever had the case that day. This is the commission base and the same figure as Finance «By doctor»; without data migrated from another system. Satisfaction = average survey score (1 to 5). Average time = consultation length recorded on the appointment. “Payroll” downloads a PDF with this same data.",
       "includesOrtho": "includes {amount} from orthodontics",
       "roleOwner": "Owner",
       "roleAdmin": "Administrator",
@@ -10869,14 +10869,14 @@
     "utilidad": "Income − expenses for the same period.",
     "utilidadConMargen": "Income − expenses for the same period · you keep {pct} %.",
     "efectivo": "Cash payments in the period, refunds not subtracted. Excludes migrated payments.",
-    "porDoctor": "What was INVOICED in the period (not collected), by each invoice's doctor; no drafts or cancelled invoices. Includes migrated invoices dated in the period.",
-    "porCobrar": "Balance of every issued invoice, from any date, migrated ones included. Does not depend on the period.",
+    "porDoctor": "What was COLLECTED in the period, minus refunds, by payment date: to the invoice's doctor (if none, the appointment's; in orthodontics, whoever had the case). This is the commission base; the sum equals revenue. Without migrated data.",
+    "porCobrar": "Balance of every issued invoice (no drafts or cancelled ones), from any date, migrated ones included. Does not depend on the period.",
     "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created). An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
     "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes migrated payments.",
     "ortoVencido": "Orthodontics only: installments, placement and check-ups past their date. Already included in the Balances «Overdue».",
-    "reportesIngresos": "Payments recorded in the last 6 months, no refunds or cancelled invoices. Excludes migrated payments.",
+    "reportesIngresos": "Payments recorded in each of the last 6 months, minus refunds, by payment date; no cancelled invoices. Excludes migrated payments.",
     "reportesTicket": "Income for the 6 months ÷ appointments for the 6 months.",
-    "reportesConDeuda": "Balance of pending or partially paid invoices, from any date, migrated ones included. Counts patients with at least one.",
+    "reportesConDeuda": "Balance of issued invoices (no drafts or cancelled ones), from any date, migrated ones included. Counts patients with at least one.",
     "crmLtv": "Everything collected ÷ patients with any payment. No period; includes migrated amounts.",
     "crmCobrado": "What was paid on every non-cancelled invoice, from any date, for non-archived patients. Includes migrated amounts.",
     "crmSaldo": "Balance of issued invoices (no drafts or cancelled), from any date, for non-archived patients. Includes migrated amounts.",
@@ -10884,6 +10884,9 @@
     "crmPacientesQueDeben": "{count} patients owe",
     "costosIngresos": "What was paid on invoices linked to this month's appointments that have a chair. Invoices with no appointment or chair don't count (nor migrated ones).",
     "costosCostos": "Rent and operating costs for the month you entered for each chair.",
-    "costosMargen": "Income − costs for the month, chair by chair."
+    "costosMargen": "Income − costs for the month, chair by chair.",
+    "historiaMigrada": "Separate, not added to revenue: {monto} collected in your previous system dated in this period (migrated history).",
+    "cajaHistoriaMigrada": "Separate: {monto} paid before using DaleControl (migrated history). Not added to collected.",
+    "inicioIngresos": "Collected in the period minus refunds, by payment date. Without migrated data. Same figure as Finance."
   }
 }

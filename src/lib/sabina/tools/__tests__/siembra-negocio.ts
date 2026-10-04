@@ -71,7 +71,8 @@ export const NORTE = {
   ingresosAnterior: 40_000,
   utilidadAnterior: 9_600,
   ventas: 3, // la DRAFT y la CANCELLED no son ventas
-  produccion: { [U_DOC_N]: 50_000, [U_DOC2_N]: 30_000, sinDoctor: 800 },
+  // ws1-t2: lo COBRADO neto por doctor (i1: 50 000 − 5 000 de reembolso; i2: 20 000). Suma = ingresosNetos.
+  produccion: { [U_DOC_N]: 45_000, [U_DOC2_N]: 20_000 },
   inventario: { articulos: 8, agotados: 2, bajos: 2, valor: 2_270, unidades: 47 },
 };
 
