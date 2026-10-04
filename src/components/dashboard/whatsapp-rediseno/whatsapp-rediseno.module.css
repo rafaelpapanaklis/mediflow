@@ -88,6 +88,10 @@
   gap: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  /* ws1-t1 (C-106): sin tope, con `flex-shrink: 0` medía lo que sus botones en una sola línea (417 px) y a 390 px
+     la página desbordaba a 429 («Desactivado» y los botones se salían por la derecha). Con el tope, se acomodan
+     en dos renglones. */
+  max-width: 100%;
 }
 
 .volver {

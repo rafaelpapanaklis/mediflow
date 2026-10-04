@@ -54,3 +54,9 @@ test("🔴→🟢 «Guardar» con el nombre vacío avisa antes de mandar nada (C
   const f = c.slice(c.indexOf("async function saveConfig()"), c.indexOf("setSaving(true);", c.indexOf("async function saveConfig()")));
   assert.match(f, /if \(!form\.botName\.trim\(\)\) \{\s*toast\.error\(TEXTO_FALTA_NOMBRE_BOT\);\s*return;/);
 });
+
+test("🔴→🟢 a 390 px la cabecera del bot ya no desborda: las acciones tienen tope de ancho (C-106)", () => {
+  const css = leer("components/dashboard/whatsapp-rediseno/whatsapp-rediseno.module.css");
+  const acciones = css.slice(css.indexOf(".acciones {"), css.indexOf("}", css.indexOf(".acciones {")));
+  assert.match(acciones, /max-width: 100%;/);
+});
