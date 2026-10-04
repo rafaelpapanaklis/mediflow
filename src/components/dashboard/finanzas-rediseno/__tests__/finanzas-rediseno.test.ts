@@ -107,9 +107,10 @@ test("cada indicador dice de dónde sale su cifra, y ninguna etiqueta se corta c
   assert.doesNotMatch(etiqueta, /text-overflow:\s*ellipsis/);
 });
 
-test("«Por doctor» avisa de que es lo facturado, no lo cobrado", () => {
+test("«Por doctor» dice que es lo COBRADO y que suma lo mismo que Ingresos (ws1-t2)", () => {
   const pantalla = readFileSync(join(CARPETA, "finanzas-rediseno.tsx"), "utf8");
-  assert.match(pantalla, /Lo facturado en el periodo, no lo cobrado/);
+  assert.match(pantalla, /Lo cobrado en el periodo, por doctor: la suma es lo mismo que Ingresos\./);
+  assert.doesNotMatch(pantalla, /Lo facturado en el periodo, no lo cobrado/);
   assert.doesNotMatch(pantalla, /Ingresos generados/);
 });
 

@@ -475,7 +475,7 @@ export function FinanzasRediseno() {
               <Tarjeta
                 icono={Users}
                 titulo="Por doctor"
-                sub="Lo facturado en el periodo, no lo cobrado: por eso no suma lo mismo que Ingresos."
+                sub="Lo cobrado en el periodo, por doctor: la suma es lo mismo que Ingresos."
               >
                 <p className={s.kpiPista} style={{ marginBottom: 12 }}><QueCuenta clave="porDoctor" /></p>
                 {(data.porDoctor ?? []).length === 0 ? (
