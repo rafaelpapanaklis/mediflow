@@ -17,7 +17,9 @@ export type ClaveQueCuenta =
   | "crmLtv" | "crmCobrado" | "crmSaldo"
   | "costosIngresos" | "costosCostos" | "costosMargen"
   // ws1-t2 (auditoría de dinero F4/F8): la historia migrada aparte, Caja e Inicio.
-  | "historiaMigrada" | "cajaHistoriaMigrada" | "inicioIngresos";
+  | "historiaMigrada" | "cajaHistoriaMigrada" | "inicioIngresos"
+  // ws1-t2 (auditoría de uso C-08, C-11, C-26): Ortodoncia por doctor, citas y ocupación.
+  | "ortoPorDoctor" | "citasDelPeriodo" | "ocupacion";
 
 /** El texto plano (para los componentes que solo aceptan `string`, como las tarjetas de Analítica). */
 export function useQueCuenta() {

@@ -36,7 +36,7 @@ import { nombreDeTecnica } from "@/lib/orthodontics/tecnicas-de-la-clinica";
 import { ETIQUETA_TECNICA } from "@/lib/orthodontics/pacientes-modulo";
 import { inicioDelCaso } from "@/lib/orthodontics/controles-hechos";
 import { cargarCambiosDeDoctor, cargarNombresDeDoctores, cargarPagosDeCasos } from "@/lib/orthodontics/produccion-db";
-import { produccionPorDoctor } from "@/lib/orthodontics/produccion";
+import { idsSinNombre, produccionPorDoctor } from "@/lib/orthodontics/produccion";
 import { zonaDe } from "./orto-motor";
 import type { SabinaCtx } from "../tipos";
 
@@ -204,7 +204,7 @@ export async function produccionDelPeriodo(
     : [];
   const nombres = new Map<string, string>();
   for (const c of casos) if (c.doctorId && c.doctor) nombres.set(c.doctorId, c.doctor);
-  const sinNombre = cambios.flatMap((c) => [c.de, c.a]).filter((id): id is string => !!id && !nombres.has(id));
+  const sinNombre = idsSinNombre(pagos, cambios, nombres); // ws1-t2 (C-08)
   if (sinNombre.length > 0) for (const [id, n] of await cargarNombresDeDoctores(clinicId, sinNombre)) nombres.set(id, n);
   const filas = produccionPorDoctor({
     pagos,

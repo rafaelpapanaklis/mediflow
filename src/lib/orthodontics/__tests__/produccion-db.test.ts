@@ -15,7 +15,7 @@ const sql: Array<{ texto: string; valores: unknown[] }> = [];
 const base = {
   planes: [] as Array<{ id: string; clinicId: string; invoiceId: string | null; treatingDoctorId: string | null }>,
   ligadas: [] as Array<{ planId: string; invoiceId: string; status: string; clinicId: string }>,
-  pagos: [] as Array<{ invoiceId: string; amount: number; method: string; paidAt: Date; invoice: { appointmentId: string | null; clinicId: string; status: string } }>,
+  pagos: [] as Array<{ invoiceId: string; amount: number; method: string; refundMethod?: string | null; paidAt: Date; invoice: { appointmentId: string | null; clinicId: string; status: string } }>,
   bitacora: [] as Array<{ clinicId: string; entityId: string; createdAt: Date; changes: unknown }>,
   sqlFalla: false,
   bitacoraFalla: false,
@@ -39,7 +39,11 @@ mock.module("@/lib/prisma", {
               p.invoice.clinicId === where.invoice.clinicId &&
               !where.invoice.status.notIn.includes(p.invoice.status) &&
               p.paidAt >= where.paidAt.gte &&
-              p.paidAt < where.paidAt.lt,
+              p.paidAt < where.paidAt.lt &&
+              // ws1-t2 (C-08): el doble entiende el filtro de método y el de traspaso a saldo a favor.
+              !(where.method?.notIn ?? []).includes(p.method) &&
+              (!where.OR || where.OR.some((o: any) =>
+                o.refundMethod === null ? (p.refundMethod ?? null) === null : (p.refundMethod ?? null) !== null && p.refundMethod !== o.refundMethod.not)),
           );
         },
       },
@@ -143,6 +147,29 @@ describe("cargarPagosDeCasos", () => {
     const { cargarPagosDeCasos, cargarCasosParaProduccion } = await import("../produccion-db");
     const pagos = await cargarPagosDeCasos("norte", await cargarCasosParaProduccion("norte"), SEPTIEMBRE);
     assert.deepEqual(pagos.map((p) => p.invoiceId).sort(), ["f-ana", "f-ana", "f-ana"]);
+  });
+});
+
+describe("C-08: la misma población que «Ingresos»", () => {
+  it("no cuenta el saldo a favor aplicado, ni el traspaso a saldo a favor, ni la historia migrada", async () => {
+    base.pagos.push(
+      // MF-1097: saldo a favor aplicado (no entra dinero: contó el día que se cobró).
+      { invoiceId: "f-ana", amount: 300, method: "anticipo", paidAt: new Date("2026-09-22T18:00:00Z"), invoice: factura("norte") },
+      // Traspaso de un excedente al saldo a favor: un «refund» por donde no salió dinero.
+      { invoiceId: "f-ana", amount: 200, method: "refund", refundMethod: "saldo_a_favor", paidAt: new Date("2026-09-23T18:00:00Z"), invoice: factura("norte") },
+      { invoiceId: "f-ana", amount: 900, method: "migrated", paidAt: new Date("2026-09-24T18:00:00Z"), invoice: factura("norte") },
+      // Un reembolso real en efectivo sí resta.
+      { invoiceId: "f-extra", amount: 100, method: "refund", refundMethod: "cash", paidAt: new Date("2026-09-25T18:00:00Z"), invoice: factura("norte", "PAID") },
+    );
+    const { cargarPagosDeCasos, cargarCasosParaProduccion } = await import("../produccion-db");
+    const pagos = await cargarPagosDeCasos("norte", await cargarCasosParaProduccion("norte"), SEPTIEMBRE);
+    const metodos = pagos.map((p) => `${p.invoiceId}:${p.amount}:${p.method}`);
+    assert.ok(!metodos.includes("f-ana:300:anticipo"), "el saldo a favor aplicado no es cobro");
+    assert.ok(!metodos.includes("f-ana:200:refund"), "el traspaso a saldo a favor no es reembolso");
+    assert.ok(!metodos.includes("f-ana:900:migrated"), "la historia migrada no es ingreso");
+    assert.ok(metodos.includes("f-extra:100:refund"), "el reembolso real sí");
+    const llamada = llamadas.find((l) => l.modelo === "payment");
+    assert.deepEqual(llamada?.where.method, { notIn: ["anticipo", "migrated"] });
   });
 });
 

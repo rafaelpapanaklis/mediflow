@@ -20,7 +20,10 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { ORTHO_AUDIT_ACTIONS } from "@/app/actions/orthodontics/audit-actions";
+import { METODOS_DE_HISTORIA } from "@/lib/dinero/ingresos";
+import { REEMBOLSO_A_SALDO_A_FAVOR } from "@/lib/dinero/reembolsos";
 import {
+  METODO_SALDO_APLICADO,
   cambioDeDoctorDesdeBitacora,
   pagosSinCita,
   produccionPorDoctor,
@@ -80,6 +83,14 @@ export async function facturasLigadas(clinicId: string, planIds: string[], db: a
  * Todos los movimientos de dinero (cobros y reembolsos) de las facturas de
  * esos casos, con `paidAt` dentro de `[desde, hasta)`. Fuera los de facturas
  * canceladas, igual que `revenuePaymentWhere` (src/lib/caja.ts).
+ *
+ * ws1-t2 (C-08): la MISMA población que «Ingresos» (ingresoPaymentWhere +
+ * reembolsoPaymentWhere de lib/dinero): fuera el saldo a favor APLICADO
+ * («anticipo»: el dinero contó el día que se cobró), el traspaso de una
+ * factura al saldo a favor (un «refund» por donde no salió dinero) y la
+ * historia migrada. Antes el bloque contaba el saldo aplicado como cobrado y
+ * daba más que Finanzas. Trae también el doctor de la factura y el de su
+ * cita, para la regla única de atribución (`doctorDeUnCobro`).
  */
 export async function cargarPagosDeCasos(
   clinicId: string,
@@ -100,8 +111,16 @@ export async function cargarPagosDeCasos(
         invoiceId: { in: trozo },
         paidAt: { gte: rango.desde, lt: rango.hasta },
         invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+        method: { notIn: [METODO_SALDO_APLICADO, ...METODOS_DE_HISTORIA] },
+        OR: [{ refundMethod: null }, { refundMethod: { not: REEMBOLSO_A_SALDO_A_FAVOR } }],
       },
-      select: { invoiceId: true, amount: true, method: true, paidAt: true, invoice: { select: { appointmentId: true } } },
+      select: {
+        invoiceId: true,
+        amount: true,
+        method: true,
+        paidAt: true,
+        invoice: { select: { appointmentId: true, doctorId: true, appointment: { select: { doctorId: true } } } },
+      },
     });
     for (const f of filas) {
       const planId = planPorFactura.get(f.invoiceId);
@@ -113,6 +132,8 @@ export async function cargarPagosDeCasos(
         method: f.method ?? null,
         paidAt: f.paidAt,
         appointmentId: f.invoice?.appointmentId ?? null,
+        facturaDoctorId: f.invoice?.doctorId ?? null,
+        citaDoctorId: f.invoice?.appointment?.doctorId ?? null,
       });
     }
   }

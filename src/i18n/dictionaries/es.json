@@ -10877,7 +10877,7 @@
     "porDoctor": "Lo COBRADO en el periodo, menos reembolsos, por fecha de cobro: al doctor de la factura (si no tiene, al de su cita; en ortodoncia, a quien llevaba el caso). Es la base de comisiones; la suma da los ingresos. Sin lo migrado.",
     "porCobrar": "Saldo de todas las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. No depende del periodo.",
     "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos y cargos de ortodoncia (colocación y controles, desde el día en que se crearon). Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
-    "ortoCobrado": "Pagos del periodo a facturas de casos de ortodoncia, menos reembolsos. Sin pagos migrados.",
+    "ortoCobrado": "Pagos del periodo a facturas de casos de ortodoncia, menos reembolsos. Sin pagos migrados. Sin el saldo a favor aplicado: ese dinero contó el día que se cobró.",
     "ortoVencido": "Solo ortodoncia: cuotas, colocación y controles pasados de fecha. Ya está sumado en el «Vencido» de Saldos.",
     "reportesIngresos": "Pagos registrados en cada uno de los últimos 6 meses, menos reembolsos, por fecha de cobro; sin facturas canceladas. Sin los pagos migrados.",
     "reportesTicket": "Ingresos de los 6 meses ÷ citas de los 6 meses.",
@@ -10892,6 +10892,7 @@
     "costosMargen": "Ingresos − costos del mes, sillón por sillón.",
     "historiaMigrada": "Aparte, no suma a los ingresos: {monto} cobrados en tu sistema anterior con fecha en este periodo (historia migrada).",
     "cajaHistoriaMigrada": "Aparte: {monto} pagados antes de usar DaleControl (historia migrada). No se suman a lo cobrado.",
-    "inicioIngresos": "Cobrado en el periodo menos reembolsos, por fecha de cobro. Sin lo migrado. La misma cifra que Finanzas."
+    "inicioIngresos": "Cobrado en el periodo menos reembolsos, por fecha de cobro. Sin lo migrado. La misma cifra que Finanzas.",
+    "ortoPorDoctor": "Lo cobrado de ortodoncia con la MISMA regla que «Por doctor» de Finanzas y la nómina: un control que nació de una cita va al doctor de la factura (o de esa cita); el tratamiento y los extras, a quien llevaba el caso ese día. Sin el saldo a favor aplicado. «Casos» son los que lleva hoy."
   }
 }

@@ -19,6 +19,17 @@
 //
 // Lo usan el Tablero del módulo, el bloque «Ortodoncia» de Finanzas y la
 // analítica de doctores: una sola forma de contar, tres pantallas.
+//
+// ws1-t2 (auditoría de uso C-08): el bloque «Ortodoncia» de Finanzas repartía
+// con OTRA regla que «Por doctor», la Analítica y la nómina —todo pago al
+// doctor del caso, también el cargo de un control que nació de una cita— y
+// contaba como cobrado el saldo a favor APLICADO. Salían dos comisiones por
+// doctor. Ahora hay UNA regla, `doctorDeUnCobro`, que usan esta producción y
+// `repartirPorDoctor` (lib/dinero/ingresos.ts): el pago de una factura que
+// nació de una cita va al doctor de la factura (si no tiene, al de la cita);
+// el de la factura del tratamiento o de un extra, a quien llevaba el caso ese
+// día. Y el cargador lee la MISMA población que «Ingresos» (sin el saldo a
+// favor aplicado, sin el traspaso a saldo a favor ni la historia migrada).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { calendarDayRangeUtc } from "@/lib/agenda/time-utils";
@@ -26,6 +37,9 @@ import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 
 /** Igual que `REFUND_METHOD` de src/lib/caja.ts; se repite aquí para que este archivo siga siendo puro (caja.ts importa Prisma). */
 export const METODO_REEMBOLSO = "refund";
+
+/** Saldo a favor APLICADO a una factura: no es ingreso (C-08). Igual que `APPLIED_CREDIT_METHOD` de src/lib/caja.ts. */
+export const METODO_SALDO_APLICADO = "anticipo";
 
 /** Un movimiento de dinero de una factura ligada a un caso de ortodoncia. */
 export interface PagoDeCaso {
@@ -37,6 +51,10 @@ export interface PagoDeCaso {
   paidAt: Date;
   /** La cita de la factura, si nació de una (el cargo de un control). `null` = factura del tratamiento o extra. */
   appointmentId?: string | null;
+  /** `Invoice.doctorId` (C-08): con cita, el pago es de este doctor. */
+  facturaDoctorId?: string | null;
+  /** El doctor de la cita de la factura (C-08): si la factura no tiene doctor. */
+  citaDoctorId?: string | null;
 }
 
 /** Una reasignación del doctor tratante de un caso, leída de la bitácora. */
@@ -98,6 +116,25 @@ export function doctorVigente(
   return siguiente ? siguiente.de : doctorActual;
 }
 
+/**
+ * LA regla de atribución de un cobro (C-08), la misma en todas las pantallas:
+ *   · la factura nació de una CITA (el cargo de un control, una consulta) →
+ *     el doctor de la factura; si no tiene, el de la cita;
+ *   · la factura es de un CASO y no nació de una cita (el tratamiento, un
+ *     extra) → quien llevaba el caso el día del cobro;
+ *   · ninguna de las dos → el doctor de la factura (o `null`, «sin doctor»).
+ * `caso` es `null` si la factura no es de un caso de ortodoncia.
+ */
+export function doctorDeUnCobro(
+  cobro: { paidAt: Date; appointmentId?: string | null; facturaDoctorId?: string | null; citaDoctorId?: string | null },
+  caso: { planId: string; doctorActual: string | null; cambios: CambioDeDoctor[] } | null,
+): { doctorId: string | null; orto: boolean } {
+  if (caso && !cobro.appointmentId) {
+    return { doctorId: doctorVigente(caso.planId, cobro.paidAt, caso.doctorActual, caso.cambios), orto: true };
+  }
+  return { doctorId: cobro.facturaDoctorId ?? cobro.citaDoctorId ?? null, orto: false };
+}
+
 export interface ProduccionInput {
   pagos: PagoDeCaso[];
   /** Doctor tratante ACTUAL de cada caso. Un pago de un caso que no está aquí se ignora (no es de un caso que el usuario pueda ver). */
@@ -113,6 +150,22 @@ export interface ProduccionInput {
 export const DOCTOR_QUE_YA_NO_ESTA = "Doctor que ya no está en la clínica";
 
 /**
+ * Los doctores de la producción cuyo nombre falta en `nombres` (C-08: con la
+ * regla única un control cobrado va al doctor de su cita, que puede no llevar
+ * ningún caso). Quien llama los lee de la base antes de pintar.
+ */
+export function idsSinNombre(
+  pagos: PagoDeCaso[],
+  cambios: CambioDeDoctor[],
+  nombres: ReadonlyMap<string, string>,
+): string[] {
+  const ids = new Set<string>();
+  for (const p of pagos) for (const id of [p.facturaDoctorId, p.citaDoctorId]) if (id) ids.add(id);
+  for (const c of cambios) for (const id of [c.de, c.a]) if (id) ids.add(id);
+  return Array.from(ids).filter((id) => !nombres.has(id)).sort();
+}
+
+/**
  * Producción neta (cobros − reembolsos) por doctor, de mayor a menor. Suma en
  * centavos. Los doctores cuyo neto es exactamente cero no salen: no cobraron
  * nada o lo que cobraron se devolvió entero.
@@ -124,7 +177,11 @@ export function produccionPorDoctor(input: ProduccionInput): ProduccionDeDoctor[
   for (const p of input.pagos) {
     if (!input.doctorActualPorCaso.has(p.planId)) continue;
     if (input.mes && mesEnZona(p.paidAt, input.zonaHoraria) !== input.mes) continue;
-    const doctorId = doctorVigente(p.planId, p.paidAt, input.doctorActualPorCaso.get(p.planId) ?? null, input.cambios);
+    const { doctorId } = doctorDeUnCobro(p, {
+      planId: p.planId,
+      doctorActual: input.doctorActualPorCaso.get(p.planId) ?? null,
+      cambios: input.cambios,
+    });
     const clave = doctorId ?? SIN;
     const signo = p.method === METODO_REEMBOLSO ? -1 : 1;
     centavos.set(clave, (centavos.get(clave) ?? 0) + signo * aCentavos(p.amount));

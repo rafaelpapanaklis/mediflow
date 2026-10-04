@@ -29,7 +29,7 @@
 // el caso ese día (produccion.ts). Así la suma por doctor ES el ingreso.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { doctorVigente, type CambioDeDoctor } from "@/lib/orthodontics/produccion";
+import { doctorDeUnCobro, type CambioDeDoctor } from "@/lib/orthodontics/produccion";
 
 /** Métodos de Payment que son HISTORIA de otro sistema, no dinero cobrado aquí. */
 export const METODOS_DE_HISTORIA = ["migrated"] as const;
@@ -122,12 +122,12 @@ export function doctorDelMovimiento(
   m: MovimientoDeDoctor,
   input: Pick<RepartoInput, "casoPorFactura" | "doctorActualPorCaso" | "cambios">,
 ): { doctorId: string | null; orto: boolean } {
+  // La regla es UNA (ws1-t2, C-08): la misma que usa el bloque «Ortodoncia».
   const planId = input.casoPorFactura.get(m.invoiceId);
-  if (planId && !m.appointmentId && input.doctorActualPorCaso.has(planId)) {
-    const actual = input.doctorActualPorCaso.get(planId) ?? null;
-    return { doctorId: doctorVigente(planId, m.paidAt, actual, input.cambios), orto: true };
-  }
-  return { doctorId: m.facturaDoctorId ?? m.citaDoctorId ?? null, orto: false };
+  const caso = planId && input.doctorActualPorCaso.has(planId)
+    ? { planId, doctorActual: input.doctorActualPorCaso.get(planId) ?? null, cambios: input.cambios }
+    : null;
+  return doctorDeUnCobro(m, caso);
 }
 
 /**

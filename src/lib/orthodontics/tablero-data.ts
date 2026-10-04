@@ -54,7 +54,7 @@ import {
   type ProjectionExcluded,
   type ValoracionesSummary,
 } from "./specialty-kpis";
-import { mesEnZona, produccionPorDoctor, rangoDelMes } from "./produccion";
+import { idsSinNombre, mesEnZona, produccionPorDoctor, rangoDelMes } from "./produccion";
 import { cargarCambiosDeDoctor, cargarNombresDeDoctores, cargarPagosDeCasos } from "./produccion-db";
 import { cargarValoracionesDelTablero } from "./valoraciones-tablero-db";
 import { cargarProgresoDeControles, numerarCitasPorAtender } from "./controles-hechos-db";
@@ -367,10 +367,12 @@ export async function loadOrthoTableroData(
   ]);
 
   // Producción del mes (fila 88): cada cobro de una factura del caso, MENOS
-  // los reembolsos, atribuido a quien llevaba el caso el día del pago (no a
-  // quien lo lleva hoy) y contado en el mes de la CLÍNICA. Entran también los
+  // los reembolsos, contado en el mes de la CLÍNICA. Entran también los
   // controles cobrados y los extras, no solo la factura del tratamiento. Tres
-  // lecturas en fila (produccion-db.ts).
+  // lecturas en fila (produccion-db.ts). ws1-t2 (C-08): con la regla única de
+  // «Por doctor» — el control que nació de una cita, al doctor de la factura
+  // o de la cita; el tratamiento y los extras, a quien llevaba el caso ese día —
+  // y sin el saldo a favor aplicado.
   const mes = mesEnZona(ahora, zonaHoraria);
   const rango = rangoDelMes(mes, zonaHoraria);
   const casosParaProduccion = cases.map((c) => ({
@@ -384,7 +386,8 @@ export async function loadOrthoTableroData(
     : [];
   const nombres = new Map<string, string>();
   for (const c of cases) if (c.treatingDoctorId && c.treatingDoctorName) nombres.set(c.treatingDoctorId, c.treatingDoctorName);
-  const sinNombre = cambiosDeDoctor.flatMap((c) => [c.de, c.a]).filter((id): id is string => !!id && !nombres.has(id));
+  // ws1-t2 (C-08): un control cobrado es del doctor de su cita, que puede no llevar casos.
+  const sinNombre = idsSinNombre(pagosDelMes, cambiosDeDoctor, nombres);
   if (sinNombre.length > 0) {
     for (const [id, nombre] of await cargarNombresDeDoctores(clinicId, sinNombre)) nombres.set(id, nombre);
   }

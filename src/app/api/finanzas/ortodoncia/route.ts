@@ -6,7 +6,7 @@ import { resolveFinanzasWindow } from "@/lib/finanzas-periodo";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { loadOrthoCases } from "@/lib/orthodontics/tablero-data";
-import { produccionPorDoctor, totalesDePagos } from "@/lib/orthodontics/produccion";
+import { idsSinNombre, produccionPorDoctor, totalesDePagos } from "@/lib/orthodontics/produccion";
 import {
   cargarCambiosDeDoctor,
   cargarNombresDeDoctores,
@@ -77,7 +77,8 @@ export async function GET(req: NextRequest) {
       : [];
     const nombres = new Map<string, string>();
     for (const c of cases) if (c.treatingDoctorId && c.treatingDoctorName) nombres.set(c.treatingDoctorId, c.treatingDoctorName);
-    const sinNombre = cambios.flatMap((c) => [c.de, c.a]).filter((id): id is string => !!id && !nombres.has(id));
+    // C-08: con la regla única, un control cobrado es del doctor de su cita (puede no llevar casos).
+    const sinNombre = idsSinNombre(pagos, cambios, nombres);
     if (sinNombre.length > 0) {
       for (const [id, nombre] of await cargarNombresDeDoctores(clinicId, sinNombre)) nombres.set(id, nombre);
     }

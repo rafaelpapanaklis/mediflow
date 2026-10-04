@@ -168,6 +168,8 @@ function Cuerpo({ datos }: { datos: BloqueOrtodonciaFinanzas }) {
                 ))}
               </>
             )}
+            {/* ws1-t2 (C-08): reparte con la MISMA regla que «Por doctor» de Finanzas y la nómina. */}
+            <p className={s.cifraPista}><QueCuenta clave="ortoPorDoctor" /></p>
           </div>
 
           <div className={s.lista}>

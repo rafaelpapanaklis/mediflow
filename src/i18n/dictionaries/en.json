@@ -10877,7 +10877,7 @@
     "porDoctor": "What was COLLECTED in the period, minus refunds, by payment date: to the invoice's doctor (if none, the appointment's; in orthodontics, whoever had the case). This is the commission base; the sum equals revenue. Without migrated data.",
     "porCobrar": "Balance of every issued invoice (no drafts or cancelled ones), from any date, migrated ones included. Does not depend on the period.",
     "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created). An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
-    "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes migrated payments.",
+    "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes migrated payments. Without applied credit balance: that money counted on the day it was collected.",
     "ortoVencido": "Orthodontics only: installments, placement and check-ups past their date. Already included in the Balances «Overdue».",
     "reportesIngresos": "Payments recorded in each of the last 6 months, minus refunds, by payment date; no cancelled invoices. Excludes migrated payments.",
     "reportesTicket": "Income for the 6 months ÷ appointments for the 6 months.",
@@ -10892,6 +10892,7 @@
     "costosMargen": "Income − costs for the month, chair by chair.",
     "historiaMigrada": "Separate, not added to revenue: {monto} collected in your previous system dated in this period (migrated history).",
     "cajaHistoriaMigrada": "Separate: {monto} paid before using DaleControl (migrated history). Not added to collected.",
-    "inicioIngresos": "Collected in the period minus refunds, by payment date. Without migrated data. Same figure as Finance."
+    "inicioIngresos": "Collected in the period minus refunds, by payment date. Without migrated data. Same figure as Finance.",
+    "ortoPorDoctor": "Orthodontic collections with the SAME rule as Finance «By doctor» and payroll: a check-up that came from an appointment goes to the invoice's doctor (or that appointment's); the treatment and extras, to whoever had the case that day. Without applied credit balance. «Cases» are the ones they have today."
   }
 }
