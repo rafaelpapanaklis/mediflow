@@ -222,6 +222,11 @@ export interface AgendaDayResponse {
    * Opcional: sin él, nadie tiene horario propio = la agenda de siempre.
    */
   horariosDoctores?: Record<string, ScheduleDay[]>;
+  /**
+   * ws1-t1 (N-38): el horario de la CLÍNICA para el día pedido (`?date=`), para que «Nueva cita» avise de un día
+   * cerrado o de una hora fuera de horario ANTES de guardar. null = la clínica no tiene horario configurado.
+   */
+  horarioDelDia?: { abierto: boolean; aperturaMin: number | null; cierreMin: number | null } | null;
 }
 
 export interface CreateAppointmentInput {
@@ -366,11 +371,6 @@ export interface AgendaStoreState {
    * `AgendaDayResponse.horariosDoctores`. Vacío = nadie tiene horario propio.
    */
   horariosDoctores: Record<string, ScheduleDay[]>;
-  /**
-   * ws1-t1 (N-38): el horario de la CLÍNICA para el día pedido (`?date=`), para que «Nueva cita» avise de un día
-   * cerrado o de una hora fuera de horario ANTES de guardar. null = la clínica no tiene horario configurado.
-   */
-  horarioDelDia?: { abierto: boolean; aperturaMin: number | null; cierreMin: number | null } | null;
 
   drag: AgendaDragState;
   waitlistOpen: boolean;
