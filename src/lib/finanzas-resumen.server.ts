@@ -9,7 +9,7 @@ import {
   historiaMigradaDelPeriodo,
   ingresoPaymentWhere,
   ingresosPorDoctorDelPeriodo,
-  reembolsoPaymentWhere,
+  movimientosDelPeriodo,
 } from "@/lib/dinero/ingresos.server";
 import { filtroGastosVivos } from "@/lib/gastos-borrado.server";
 import { bucketKeyOf, eachBucket } from "@/lib/analytics/query";
@@ -115,20 +115,13 @@ export async function calcularResumenFinanzas(
 
   // Lote 2 — filas del periodo para serie/porDoctor (se agrupan en JS; un
   // mes son cientos de filas). Los gastos toleran tabla faltante (P2021).
-  const [paymentRows, refundRows, historiaMigrada, expenseRows] = await Promise.all([
+  const [movimientos, historiaMigrada, expenseRows] = await Promise.all([
     // El KPI de ingresos y la serie diaria salen de ESTAS MISMAS filas, así
-    // que la suma de la serie es el KPI por construcción, no por casualidad.
-    db.payment.findMany({
-      where:  revenueWhere,
-      select: { amount: true, paidAt: true },
-    }),
-    // Reembolsos del periodo (espejo exacto de revenueWhere): lo devuelto se
-    // RESTA. Sin esto, un cobro de $10,000 reembolsado completo dentro del
-    // mismo mes seguía reportando $10,000 de ingresos y de utilidad.
-    db.payment.findMany({
-      where:  reembolsoPaymentWhere(clinicId, { gte: from, lte: to }),
-      select: { amount: true, paidAt: true },
-    }),
+    // que la suma de la serie es el KPI por construcción, no por casualidad:
+    // cobros (con los anticipos cobrados sin factura, ws1-t5) y reembolsos
+    // reales, de la definición única (lib/dinero). Un cobro de $10,000
+    // reembolsado completo dentro del mes da $0 de ingresos.
+    movimientosDelPeriodo(clinicId, { gte: from, lte: to }, db),
     // La historia migrada del periodo va APARTE (ws1-t2): se enseña, no se suma.
     historiaMigradaDelPeriodo(clinicId, { gte: from, lte: to }, db),
     // ws1-t2: sin los gastos borrados (borrado lógico, lib/gastos-borrado.server).
@@ -142,15 +135,14 @@ export async function calcularResumenFinanzas(
       throw e;
     }),
   ]) as [
-    Array<{ amount: number | null; paidAt: Date }>,
-    Array<{ amount: number | null; paidAt: Date }>,
+    { cobros: Array<{ amount: number | null; paidAt: Date }>; reembolsos: Array<{ amount: number | null; paidAt: Date }> },
     number,
     Array<{ amount: number; date: Date }>,
   ];
 
   // Ingresos NETOS del periodo (cobros − reembolsos) y su reparto por día.
   // El reembolso resta en el día en que se devolvió el dinero.
-  const neto = netRevenueSeries(paymentRows, refundRows, (d) => bucketKeyOf(d, "day"));
+  const neto = netRevenueSeries(movimientos.cobros, movimientos.reembolsos, (d) => bucketKeyOf(d, "day"));
 
   // serie: un punto POR DÍA del periodo (días sin datos = 0), hora MX,
   // orden cronológico (eachBucket ya lo garantiza).

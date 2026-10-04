@@ -32,7 +32,7 @@
 
 import { z } from "zod";
 import { money, netRevenueSeries } from "@/lib/caja";
-import { ingresoPaymentWhere, reembolsoPaymentWhere } from "@/lib/dinero/ingresos.server";
+import { movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
 import { dbDe, definirHerramienta, pesos } from "./base";
 import {
   claveBucket,
@@ -85,16 +85,9 @@ export const ingresosPorPeriodo = definirHerramienta<ParamsIngresos, DatosIngres
     const agrupar: Agrupacion = params.agrupar ?? "dia";
     const paidAt = { gte: rango.ventana.desde, lt: rango.ventana.hasta };
 
-    const [cobros, devueltos] = await Promise.all([
-      db.payment.findMany({
-        where: ingresoPaymentWhere(ctx.clinicId, paidAt),
-        select: { amount: true, paidAt: true },
-      }),
-      db.payment.findMany({
-        where: reembolsoPaymentWhere(ctx.clinicId, paidAt),
-        select: { amount: true, paidAt: true },
-      }),
-    ]);
+    // Cobros (con los anticipos cobrados sin factura) y reembolsos reales: las
+    // mismas filas que Finanzas, Reportes e Inicio (lib/dinero).
+    const { cobros, reembolsos: devueltos } = await movimientosDelPeriodo(ctx.clinicId, paidAt, db);
 
     const neto = netRevenueSeries(
       cobros as Array<{ amount: number | null; paidAt: Date }>,

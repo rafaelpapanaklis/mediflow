@@ -9,7 +9,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { receivableInvoiceWhere, refundPaymentWhere, revenuePaymentWhere } from "@/lib/caja";
+import { anticipoCobradoCreditWhere, receivableInvoiceWhere, refundPaymentWhere, revenuePaymentWhere } from "@/lib/caja";
 import {
   cargarCambiosDeDoctor,
   cargarCasosParaProduccion,
@@ -62,34 +62,58 @@ export function deudaInvoiceWhere(clinicId: string): Prisma.InvoiceWhereInput {
   return receivableInvoiceWhere(clinicId);
 }
 
-/** Neto del periodo con dos agregados (para tarjetas que no necesitan serie). */
+/**
+ * El dinero que ENTRÓ sin factura (no tiene Payment): el anticipo pagado por
+ * Mercado Pago y el excedente de un cobro automático, en `patient_credits`
+ * (`anticipoCobradoCreditWhere` de caja.ts, ws1-t5). Es ingreso el día de
+ * `creditDate`; aplicarlo después a una factura ya no cuenta (LISR 102 /
+ * 113-E: se acumula cuando se cobra). Tolerante: sin el libro, nada.
+ */
+async function anticiposCobrados(clinicId: string, paidAt: Prisma.DateTimeFilter, db: DineroDb): Promise<MovimientoFechado[]> {
+  exigirClinica(clinicId);
+  if (!db?.patientCredit) return [];
+  try {
+    const filas = await db.patientCredit.findMany({
+      where: anticipoCobradoCreditWhere(clinicId, paidAt),
+      select: { amount: true, creditDate: true },
+    });
+    return (filas as Array<{ amount: number; creditDate: Date }>).map((f) => ({ amount: f.amount, paidAt: f.creditDate }));
+  } catch (e) {
+    console.warn("[dinero] no se pudieron leer los anticipos cobrados:", (e as Error)?.message);
+    return [];
+  }
+}
+
+/** Neto del periodo con agregados (para tarjetas que no necesitan serie). */
 export async function ingresoNetoDelPeriodo(
   clinicId: string,
   paidAt: Prisma.DateTimeFilter,
   db: DineroDb = prisma,
 ): Promise<{ neto: number; cobrado: number; reembolsos: number }> {
-  const [cob, dev] = await Promise.all([
+  const [cob, dev, anticipos] = await Promise.all([
     db.payment.aggregate({ where: ingresoPaymentWhere(clinicId, paidAt), _sum: { amount: true } }),
     db.payment.aggregate({ where: reembolsoPaymentWhere(clinicId, paidAt), _sum: { amount: true } }),
+    anticiposCobrados(clinicId, paidAt, db),
   ]);
   const r = netoDelPeriodo(
-    [{ amount: Number(cob?._sum?.amount ?? 0), paidAt: new Date(0) }],
+    [{ amount: Number(cob?._sum?.amount ?? 0), paidAt: new Date(0) }, ...anticipos],
     [{ amount: Number(dev?._sum?.amount ?? 0), paidAt: new Date(0) }],
   );
   return { neto: r.neto, cobrado: r.cobrado, reembolsos: r.reembolsos };
 }
 
-/** Las filas (monto y fecha) de cobros y reembolsos del periodo. */
+/** Las filas (monto y fecha) de cobros —con los anticipos cobrados sin factura— y reembolsos del periodo. */
 export async function movimientosDelPeriodo(
   clinicId: string,
   paidAt: Prisma.DateTimeFilter,
   db: DineroDb = prisma,
 ): Promise<{ cobros: MovimientoFechado[]; reembolsos: MovimientoFechado[] }> {
-  const [cobros, reembolsos] = await Promise.all([
+  const [cobros, reembolsos, anticipos] = await Promise.all([
     db.payment.findMany({ where: ingresoPaymentWhere(clinicId, paidAt), select: { amount: true, paidAt: true } }),
     db.payment.findMany({ where: reembolsoPaymentWhere(clinicId, paidAt), select: { amount: true, paidAt: true } }),
+    anticiposCobrados(clinicId, paidAt, db),
   ]);
-  return { cobros, reembolsos };
+  return { cobros: [...cobros, ...anticipos], reembolsos };
 }
 
 /** Neto del periodo y su serie por `clave` (día, mes… en la zona de la clínica). */
@@ -131,11 +155,18 @@ export async function ingresosPorDoctorDelPeriodo(
   paidAt: Prisma.DateTimeFilter & { gte: Date },
   db: DineroDb = prisma,
 ): Promise<Map<string | null, IngresoDeDoctor>> {
-  const [cobros, reembolsos] = await Promise.all([
+  const [cobros, reembolsos, anticipos] = await Promise.all([
     db.payment.findMany({ where: ingresoPaymentWhere(clinicId, paidAt), select: SELECT_DOCTOR }),
     db.payment.findMany({ where: reembolsoPaymentWhere(clinicId, paidAt), select: SELECT_DOCTOR }),
+    anticiposCobrados(clinicId, paidAt, db),
   ]);
-  const movCobros = (cobros as any[]).map(aMovimientoDeDoctor);
+  // El anticipo cobrado sin factura todavía no es de ningún doctor: va a
+  // «sin doctor» (y aplicarlo después ya no cuenta). Así la suma sigue siendo
+  // el ingreso del periodo. Ver DECISIONES en REPORTE-ws1-t2.
+  const movCobros = [
+    ...(cobros as any[]).map(aMovimientoDeDoctor),
+    ...anticipos.map((a): MovimientoDeDoctor => ({ ...a, invoiceId: "", facturaDoctorId: null, appointmentId: null, citaDoctorId: null })),
+  ];
   const movReembolsos = (reembolsos as any[]).map(aMovimientoDeDoctor);
 
   // Casos de ortodoncia: solo hacen falta si hubo dinero en el periodo. Los

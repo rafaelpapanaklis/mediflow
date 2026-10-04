@@ -165,8 +165,10 @@ test("resumen_clinica: se mantiene por debajo del presupuesto de consultas del p
   // sección dentro de la primera tanda sin darse cuenta.
   const db = base();
   await ejecutarHerramienta("resumen_clinica", adminNorte(db), {});
+  // 15 desde ws1-t2: los ingresos leen también el anticipo cobrado sin factura
+  // (patient_credits), una consulta más dentro de la misma tanda.
   assert.equal(
-    db.contador.llamadas.length <= 14,
+    db.contador.llamadas.length <= 15,
     true,
     `la foto costó ${db.contador.llamadas.length} consultas`,
   );

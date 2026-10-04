@@ -11,7 +11,11 @@
  *     tarjeta $1,000 de un caso de ortodoncia), un reembolso real de $1,000,
  *     un pago de una factura CANCELADA ($5,000), una fila vieja de método
  *     "migrated" ($1,400, historia) y la otra clínica con $99,999.
- *   · ingresos de septiembre = $9,000 en Finanzas, Inicio (tarjeta y gráfica),
+ *   · un anticipo de $500 pagado por Mercado Pago sin factura el 28 (fila de
+ *     patient_credits, sin Payment) que se APLICA el 29 (Payment "anticipo"):
+ *     cuenta el día que se cobró y aplicarlo no suma otra vez (ws1-t5, LISR
+ *     102); un saldo a favor migrado nunca es ingreso.
+ *   · ingresos de septiembre = $9,500 en Finanzas, Inicio (tarjeta y gráfica),
  *     Reportes, Sabina y la nómina (por doctor, que además suma lo mismo).
  *   · deuda = $4,000 (sin el borrador de $800 ni la cancelada de $5,000).
  * Con el código viejo fallan: Finanzas contaba la fila "migrated" ($10,400),
@@ -86,16 +90,23 @@ function siembra() {
       pago("g6", "iM", 1_400, "migrated", dia(5)),
       pago("gs", "s1", 99_999, "cash", dia(10)),
       pago("g0", "i1", 777, "cash", new Date("2026-08-20T18:00:00Z")), // agosto: fuera del periodo
+      pago("g7", "i2", 500, "anticipo", dia(29)), // aplicar el anticipo NO es ingreso
+    ],
+    patientCredits: [
+      { id: "pc1", clinicId: CL_NORTE, patientId: "p2", amount: 500, source: "anticipo_mercadopago", creditDate: dia(28) },
+      { id: "pc2", clinicId: CL_NORTE, patientId: "p2", amount: -500, source: "aplicado_a_factura", creditDate: dia(29) },
+      { id: "pc3", clinicId: CL_NORTE, patientId: "p1", amount: 1_000, source: "migrated", creditDate: dia(3) },
+      { id: "pcs", clinicId: CL_SUR, patientId: "ps", amount: 88_888, source: "anticipo_mercadopago", creditDate: dia(10) },
     ],
     orthodonticTreatmentPlans: [{ id: "pl1", clinicId: CL_NORTE, patientId: "p3", invoiceId: "i3", treatingDoctorId: U_DOC2_N, deletedAt: null }],
   });
 }
 
-const INGRESO_SEP = 9_000;
+const INGRESO_SEP = 9_500;
 
 // ── Las puertas ────────────────────────────────────────────────────────────
 
-test("Finanzas: ingresos $9,000 netos (sin la cancelada, sin la historia «migrated», menos el reembolso)", async () => {
+test("Finanzas: ingresos $9,500 netos (anticipo el día que se cobró; sin la cancelada, la historia «migrated» ni la aplicación; menos el reembolso)", async () => {
   const db = siembra();
   const r = await calcularResumenFinanzas({ clinicId: CL_NORTE, from: SEP.gte, to: FIN_SEP, expenseTo: FIN_SEP, conSaldos: false }, db);
   assert.equal(r.ingresos, INGRESO_SEP);
@@ -107,14 +118,15 @@ test("Finanzas: ingresos $9,000 netos (sin la cancelada, sin la historia «migra
 test("Finanzas «Por doctor»: lo COBRADO, al doctor de la factura, de la cita o del caso — y suma el ingreso", async () => {
   const db = siembra();
   const r = await calcularResumenFinanzas({ clinicId: CL_NORTE, from: SEP.gte, to: FIN_SEP, expenseTo: FIN_SEP, conSaldos: false }, db);
-  assert.deepEqual(r.porDoctor.map((d) => [d.doctor, d.ingresos]), [["Hugo Salas", 6_000], ["Nadia Rojas", 3_000]]);
+  // El anticipo cobrado sin factura todavía no es de ningún doctor: «Sin doctor».
+  assert.deepEqual(r.porDoctor.map((d) => [d.doctor, d.ingresos]), [["Hugo Salas", 6_000], ["Nadia Rojas", 3_000], ["Sin doctor", 500]]);
   assert.equal(r.porDoctor.reduce((s, d) => s + d.ingresos, 0), r.ingresos);
 });
 
 test("Inicio (tarjeta), Reportes y la gráfica: el mismo neto por mes", async () => {
   const db = siembra();
   const kpi = await ingresoNetoDelPeriodo(CL_NORTE, SEP, db);
-  assert.deepEqual(kpi, { neto: INGRESO_SEP, cobrado: 10_000, reembolsos: 1_000 });
+  assert.deepEqual(kpi, { neto: INGRESO_SEP, cobrado: 10_500, reembolsos: 1_000 });
   const serie = await ingresosDelPeriodo(CL_NORTE, { gte: new Date("2026-08-01T06:00:00Z"), lt: SEP.lt }, (d) => (d < SEP.gte ? "ago" : "sep"), db);
   assert.equal(serie.porClave.sep, INGRESO_SEP);
   assert.equal(serie.porClave.ago, 777);
@@ -134,6 +146,7 @@ test("nómina / comisiones: cobrado por fecha de cobro; el reembolso resta a qui
   assert.deepEqual(m.get(U_DOC_N), { total: 6_000, orto: 0 });
   // Nadia: 3,000 de la cita − 1,000 de reembolso + 1,000 del caso de ortodoncia.
   assert.deepEqual(m.get(U_DOC2_N), { total: 3_000, orto: 1_000 });
+  assert.deepEqual(m.get(null), { total: 500, orto: 0 }, "el anticipo sin factura, sin doctor");
   assert.equal(Array.from(m.values()).reduce((s, v) => s + v.total, 0), INGRESO_SEP);
 });
 
