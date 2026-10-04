@@ -7,7 +7,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { leerPantallaAnticipos } from "@/lib/anticipos/pantalla.server";
 import { AnticiposClient } from "./anticipos-client";
 
-export const metadata: Metadata = { title: "Anticipos por WhatsApp — DaleControl" };
+export const metadata: Metadata = { title: "Anticipos por WhatsApp" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 /**
  * /dashboard/settings/anticipos — WS1-T5.

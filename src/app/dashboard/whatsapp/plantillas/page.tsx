@@ -8,7 +8,7 @@ import { parseWaTemplates } from "@/lib/whatsapp/template-config";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { TemplatesClient } from "./templates-client";
 
-export const metadata: Metadata = { title: "Plantillas de WhatsApp — DaleControl" };
+export const metadata: Metadata = { title: "Plantillas de WhatsApp" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function WhatsAppTemplatesPage() {
   const user = await getCurrentUser();

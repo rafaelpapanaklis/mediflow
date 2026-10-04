@@ -94,3 +94,16 @@ test("el diálogo pregunta el ajuste del aviso y /api/clinic/me lo da", () => {
   assert.match(me, /waNotifyOnCancel = eventos\.alCancelar/);
   assert.match(me, /waNotifyOnCancel \}/);
 });
+
+// ws1-t1 (N-51, tercera ronda): el diálogo decía «no tiene WhatsApp conectado» y el toast «el aviso de
+// cancelación está apagado»: dos razones para lo mismo.
+test("🔴→🟢 N-51: sin WhatsApp, el mensaje final da la misma razón que el diálogo", () => {
+  const r = resumenTrasCancelar({ whatsapp: { enviado: false, motivo: "apagadoPorClinica" } }, false, "sinWhatsApp");
+  assert.match(r.texto, /No se le avisó al paciente: la clínica no tiene WhatsApp conectado/);
+  assert.ok(!/aviso de cancelación está apagado/.test(r.texto));
+  // Con WhatsApp y el interruptor apagado, sigue diciendo que está apagado.
+  assert.match(resumenTrasCancelar({ whatsapp: { enviado: false, motivo: "apagadoPorClinica" } }, false, "apagado").texto, /aviso de cancelación está apagado/);
+  const dialogo = readFileSync(join(SRC, "components/dashboard/agenda-nueva/cancelar-con-dinero.tsx"), "utf8");
+  assert.match(dialogo, /resumenTrasCancelar\(cuerpo, !!r\.avisoCallado, r\.estadoAviso\)/);
+  assert.match(dialogo, /estadoAviso: pregunta\.aviso,/);
+});

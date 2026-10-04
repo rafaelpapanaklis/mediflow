@@ -15,7 +15,7 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { getServerT } from "@/i18n/server";
 import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 
-export const metadata: Metadata = { title: "Agenda — DaleControl" };
+export const metadata: Metadata = { title: "Agenda" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function AppointmentsPage({
   searchParams,

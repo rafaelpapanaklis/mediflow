@@ -6,7 +6,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
 import { AprendeClient } from "./aprende-client";
 
-export const metadata: Metadata = { title: "Bot de WhatsApp · Aprende de tu equipo — DaleControl" };
+export const metadata: Metadata = { title: "Bot de WhatsApp · Aprende de tu equipo" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 /**
  * ws1-t11. Ver pide el permiso del bot Y el del Inbox (los textos salen de las

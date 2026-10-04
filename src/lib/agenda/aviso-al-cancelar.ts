@@ -77,6 +77,8 @@ function pesos(n: number): string {
 export function resumenTrasCancelar(
   cuerpo: { whatsapp?: ResultadoWhatsApp; dineroCita?: DineroRespuesta } | null | undefined,
   avisoCallado: boolean,
+  /** ws1-t1 (N-51): lo que el diálogo ya le dijo; el mensaje final da la MISMA razón. */
+  estadoAviso?: EstadoAvisoCancelar,
 ): ResumenCancelacion {
   const partes: string[] = ["Cita cancelada."];
   let tono: Tono = "ok";
@@ -97,7 +99,11 @@ export function resumenTrasCancelar(
   if (w && w.enviado === true) {
     partes.push("Se le avisó al paciente por WhatsApp.");
   } else if (w && w.enviado === false) {
-    if (w.motivo === "apagadoPorClinica") {
+    if (w.motivo === "apagadoPorClinica" && estadoAviso === "sinWhatsApp") {
+      // El servidor mira primero el interruptor; si además no hay WhatsApp, la razón que se dio es esa.
+      partes.push("No se le avisó al paciente: la clínica no tiene WhatsApp conectado. Avísale por otro medio.");
+      if (tono === "ok") tono = "info";
+    } else if (w.motivo === "apagadoPorClinica") {
       partes.push("No se le avisó al paciente: el aviso de cancelación está apagado. Avísale por otro medio.");
       if (tono === "ok") tono = "info";
     } else if (w.motivo === "citaPasada") {

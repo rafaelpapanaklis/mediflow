@@ -15,7 +15,7 @@ import { templateUiState } from "@/lib/whatsapp/templates-catalog";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { WhatsAppClient } from "./whatsapp-client";
 
-export const metadata: Metadata = { title: "WhatsApp — DaleControl" };
+export const metadata: Metadata = { title: "WhatsApp" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function WhatsAppPage() {
   const user = await getCurrentUser();

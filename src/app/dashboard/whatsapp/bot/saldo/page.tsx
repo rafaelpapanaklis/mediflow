@@ -7,7 +7,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { mercadoPagoConfigurado } from "@/lib/ai-wallet/metodos-recarga";
 import { SaldoClient } from "./saldo-client";
 
-export const metadata: Metadata = { title: "Saldo de IA — DaleControl" };
+export const metadata: Metadata = { title: "Saldo de IA" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function AiWalletSaldoPage() {
   const user = await getCurrentUser();

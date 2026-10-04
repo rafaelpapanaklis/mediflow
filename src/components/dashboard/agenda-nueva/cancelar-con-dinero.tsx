@@ -52,6 +52,8 @@ export interface RespuestaCancelarCita {
   cuerpo?: CuerpoCancelarCita;
   /** Quien canceló desmarcó «Avisar al paciente». */
   avisoCallado?: boolean;
+  /** ws1-t1 (N-51): lo que el diálogo dijo del aviso, para que el mensaje final dé la misma razón. */
+  estadoAviso?: EstadoAvisoCancelar;
 }
 
 interface Pregunta {
@@ -90,7 +92,7 @@ export async function cancelarCitaEnServidor(
   });
   const cuerpo = await res.json().catch(() => ({}));
   if (!res.ok) throw { status: res.status, ...cuerpo };
-  const resumen = resumenTrasCancelar(cuerpo, !!r.avisoCallado);
+  const resumen = resumenTrasCancelar(cuerpo, !!r.avisoCallado, r.estadoAviso);
   if (resumen.tono === "error") toast.error(resumen.texto, { duration: 9000 });
   else if (resumen.tono === "info") toast(resumen.texto, { duration: 9000 });
   else toast.success(resumen.texto);
@@ -144,6 +146,7 @@ export function useCancelarCita() {
         ...campoAviso,
       },
       avisoCallado: campoAviso.notifyPatient === false,
+      estadoAviso: pregunta.aviso,
     });
   };
 

@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { PatientsClient } from "./patients-client";
 
-export const metadata: Metadata = { title: "Pacientes — DaleControl" };
+export const metadata: Metadata = { title: "Pacientes" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 /**
  * /dashboard/patients — server component minimal.

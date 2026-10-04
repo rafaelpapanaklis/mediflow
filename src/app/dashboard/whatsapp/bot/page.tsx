@@ -7,7 +7,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { BotClient } from "./bot-client";
 
-export const metadata: Metadata = { title: "Bot de WhatsApp — DaleControl" };
+export const metadata: Metadata = { title: "Bot de WhatsApp" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function WhatsAppBotPage() {
   const user = await getCurrentUser();

@@ -130,3 +130,11 @@ export function firstName(fullName: string): string {
 export function lineaDePacienteReciente(folio: string | null | undefined, cuando: string): string {
   return folio ? `${folio} · ${cuando}` : cuando;
 }
+
+/** ws1-t1 (C-119): la hora (0–23) de un instante en la zona de la clínica; sin zona válida, la del navegador. */
+export function horaEnZona(now: Date, timeZone?: string | null): number {
+  const zona = zonaValida(timeZone);
+  if (!zona) return now.getHours();
+  const h = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: zona }).format(now));
+  return h === 24 ? 0 : h;
+}

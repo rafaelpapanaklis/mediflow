@@ -5,8 +5,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/auth/permissions";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { InboxClient } from "./inbox-client";
+import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 
-export const metadata: Metadata = { title: "Mensajes — DaleControl" };
+export const metadata: Metadata = { title: "Mensajes" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function InboxPage() {
   // key por clínica: el Inbox carga hilos client-side (fetch al montar +
@@ -25,6 +26,8 @@ export default async function InboxPage() {
         firstName: user.firstName,
         lastName: user.lastName,
         clinicName: user.clinic?.name ?? "",
+        // ws1-t1 (C-119): el saludo y la fecha con la hora de la clínica.
+        timezone: await zonaDeClinica(user.clinicId),
         // "inbox.send": el permiso con el que se responde. Decide también si se
         // ofrece INICIAR una conversación ("+ Componer"), porque es el mismo
         // acto. Se resuelve aquí y no en el cliente: el permiso se enciende y

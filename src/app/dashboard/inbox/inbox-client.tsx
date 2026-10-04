@@ -1,5 +1,6 @@
 "use client";
 
+import { horaEnZona, zonaValida } from "@/lib/home/greet";
 import {
   useCallback,
   useEffect,
@@ -85,6 +86,8 @@ interface Viewer {
   canSend?: boolean;
   /** ws1-t11: "whatsapp.send" — 👍/👎 sobre las respuestas del bot. */
   canTeachBot?: boolean;
+  /** ws1-t1 (C-119): zona horaria de la clínica, para el saludo y la fecha. */
+  timezone?: string | null;
 }
 
 interface Thread {
@@ -1622,16 +1625,19 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
       : t("inbox.client.windowClosesTomorrow", { time });
   }, [t]);
 
+  // ws1-t1 (C-119): la hora y la fecha de la CLÍNICA, no las del navegador (a las 03:20 de México decía
+  // «Buenos días» con el navegador en Nueva York, mientras Inicio decía «Buenas noches»).
   const greeting = useMemo(() => {
-    const h = new Date().getHours();
+    const h = horaEnZona(new Date(), viewer.timezone);
     const key = h < 12 ? "inbox.client.goodMorning" : h < 19 ? "inbox.client.goodAfternoon" : "inbox.client.goodEvening";
     return t(key, { name: viewer.firstName });
-  }, [t, viewer.firstName]);
+  }, [t, viewer.firstName, viewer.timezone]);
 
   const emptyDateLine = useMemo(() => {
-    const d = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+    const zona = zonaValida(viewer.timezone);
+    const d = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", ...(zona ? { timeZone: zona } : {}) }).format(new Date());
     return `${d} · ${viewer.clinicName} · ${t("inbox.client.inboxToday")}`;
-  }, [t, viewer.clinicName]);
+  }, [t, viewer.clinicName, viewer.timezone]);
 
   const folderTitle = folder === "snoozed"
     ? t("inbox.client.folderSnoozed")
@@ -1685,7 +1691,8 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
         <div className={styles.sidebarTop}>
           <div className={styles.brandRow}>
             <span className={styles.brandIcon}><InboxIcon size={16} strokeWidth={2} aria-hidden /></span>
-            Inbox
+            {/* ws1-t1 (C-108): el mismo nombre que el menú. */}
+            {t("sidebar.nav.inbox")}
           </div>
           {/* Sin "inbox.send" no se puede escribir a nadie: el botón no se
               pinta en vez de abrir un modal que acabaría en 403. */}

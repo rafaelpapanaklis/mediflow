@@ -9,7 +9,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { WalkInClient } from "./walk-in-client";
 
-export const metadata: Metadata = { title: "Fila de Espera — DaleControl" };
+export const metadata: Metadata = { title: "Fila de espera" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
 export default async function WalkInPage() {
   const user = await getCurrentUser();
