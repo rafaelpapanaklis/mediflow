@@ -28,6 +28,7 @@ import {
   limpiarNombreSistema,
 } from "@/lib/orthodontics/alineadores/nombre-sistema";
 import orto from "../redesign/orto.module.css";
+import { conPrecarga } from "@/components/specialties/orthodontics/redesign/precarga";
 
 export interface AlineadoresPanelProps {
   treatmentPlanId: string;
@@ -44,9 +45,9 @@ export function AlineadoresPanel({ treatmentPlanId }: AlineadoresPanelProps) {
 
   const load = async () => {
     const [a, c, p] = await Promise.all([
-      getAlignerCase(treatmentPlanId),
-      getElasticsCompliance(treatmentPlanId),
-      listMonitoringPhotos(treatmentPlanId),
+      conPrecarga("getAlignerCase", treatmentPlanId, () => getAlignerCase(treatmentPlanId)),
+      conPrecarga("getElasticsCompliance", treatmentPlanId, () => getElasticsCompliance(treatmentPlanId)),
+      conPrecarga("listMonitoringPhotos", treatmentPlanId, () => listMonitoringPhotos(treatmentPlanId)),
     ]);
     if (a.ok) setAligner(a.data);
     if (c.ok) setCompliance(c.data);

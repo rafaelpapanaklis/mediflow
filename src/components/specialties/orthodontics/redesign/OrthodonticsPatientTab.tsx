@@ -73,6 +73,7 @@ import { crearPlanDelCaso } from "@/app/actions/orthodontics/cobro/crearPlanDelC
 import { Btn } from "./atoms/Btn";
 import orto from "./orto.module.css";
 import { RAIZ_ORTO } from "./raiz";
+import { conPrecarga, iniciarPrecarga } from "./precarga";
 
 // Fallback de carga de los módulos lazy — idéntico al de
 // patient-detail-client.tsx (componente cliente para poder traducir con
@@ -247,6 +248,15 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     citaDeLaDireccionId,
     onIniciarConsulta,
   } = props;
+  // N-31 (segunda auditoría): las lecturas de la pestaña en UN viaje, arrancado al pintar (antes de que cada sección
+  // monte y pida la suya en fila). Ver precarga.ts. En el render: los efectos de los hijos corren antes que los de aquí.
+  if (!soloLectura) {
+    iniciarPrecarga({
+      patientId: patient.id,
+      treatmentPlanId: orthoRedesignVM?.treatment?.treatmentPlanId || null,
+      diagnosisId: orthoRedesignVM?.diagnosis?.id ?? null,
+    });
+  }
   const textosFirma = useTextosFirmaControl();
   const router = useRouter();
   const t = useT();
@@ -273,7 +283,7 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
       return;
     }
     let cancelled = false;
-    getCaseIntakeOptions({ patientId: patient.id }).then((res) => {
+    conPrecarga("getCaseIntakeOptions", patient.id, () => getCaseIntakeOptions({ patientId: patient.id })).then((res) => {
       if (!cancelled && !isFailure(res)) setGeneralConsentSigned(res.data.generalConsentSigned);
     });
     return () => {

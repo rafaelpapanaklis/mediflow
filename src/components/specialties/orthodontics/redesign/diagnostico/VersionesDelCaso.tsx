@@ -18,6 +18,7 @@ import orto from "../orto.module.css";
 import alta from "../alta-caso.module.css";
 import dx from "../diagnostico.module.css";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { conPrecarga } from "@/components/specialties/orthodontics/redesign/precarga";
 
 export interface VersionesDelCasoProps {
   treatmentPlanId: string;
@@ -34,7 +35,7 @@ export function VersionesDelCaso(props: VersionesDelCasoProps) {
 
   const cargar = useCallback(
     () =>
-      leerVersionesDelCaso(props.treatmentPlanId)
+      conPrecarga("leerVersionesDelCaso", props.treatmentPlanId, () => leerVersionesDelCaso(props.treatmentPlanId))
         .then((r) => setDatos(isFailure(r) ? null : r.data))
         .catch(() => setDatos(null)),
     [props.treatmentPlanId],

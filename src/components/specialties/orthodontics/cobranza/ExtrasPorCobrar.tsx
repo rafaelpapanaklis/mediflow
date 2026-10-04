@@ -16,6 +16,7 @@ import {
   type ExtraPorCobrar,
 } from "@/app/actions/orthodontics/procedimientosDeHoja";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { conPrecarga } from "@/components/specialties/orthodontics/redesign/precarga";
 
 const dinero = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 const fecha = (iso: string) => new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
@@ -40,7 +41,7 @@ export function ExtrasPorCobrar({
 
   const cargar = useCallback(async () => {
     try {
-      const r = await listarExtrasPorCobrar({ treatmentPlanId });
+      const r = await conPrecarga("listarExtrasPorCobrar", treatmentPlanId, () => listarExtrasPorCobrar({ treatmentPlanId }));
       if (!isFailure(r)) {
         setExtras(r.data.extras);
         setPuedeCobrar(r.data.puedeCobrar);

@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { leerDiagnosticoCompleto, type DiagnosticoCompleto } from "@/app/actions/orthodontics/leerDiagnosticoCompleto";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { conPrecarga } from "@/components/specialties/orthodontics/redesign/precarga";
 
 const cache = new Map<string, Promise<DiagnosticoCompleto | string>>();
 const oyentes = new Set<(id: string) => void>();
@@ -13,7 +14,7 @@ const oyentes = new Set<(id: string) => void>();
 function pedir(id: string): Promise<DiagnosticoCompleto | string> {
   let p = cache.get(id);
   if (!p) {
-    p = leerDiagnosticoCompleto(id)
+    p = conPrecarga("leerDiagnosticoCompleto", id, () => leerDiagnosticoCompleto(id))
       .then((r) => (isFailure(r) ? r.error : r.data))
       .catch(() => "No se pudo leer el diagnóstico. Revisa tu conexión.");
     cache.set(id, p);

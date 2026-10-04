@@ -104,6 +104,7 @@ import type {
   OrthoInstallmentDTO,
   QuoteScenarioDTO,
 } from "./types-finance";
+import { conPrecarga } from "./precarga";
 
 type DrawerState =
   | { kind: "tcard"; cardId: string }
@@ -603,7 +604,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       return;
     }
     setPanelDeCobro("cargando");
-    cargarPanelDeCobro(t.treatmentPlanId)
+    const planId = t.treatmentPlanId;
+    conPrecarga("cargarPanelDeCobro", planId, () => cargarPanelDeCobro(planId))
       .then((r) => setPanelDeCobro(r.ok ? r.data : "error"))
       .catch(() => setPanelDeCobro("error"));
   }, [t.treatmentPlanId]);

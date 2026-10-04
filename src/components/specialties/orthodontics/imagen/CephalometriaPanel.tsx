@@ -34,6 +34,7 @@ import { isFailure } from "@/app/actions/orthodontics/result";
 import type { ArchivoDelPaciente } from "@/app/actions/orthodontics/imagen/archivosDelPaciente";
 import { ElegirArchivoDelPaciente } from "./ElegirArchivoDelPaciente";
 import orto from "../redesign/orto.module.css";
+import { conPrecarga } from "@/components/specialties/orthodontics/redesign/precarga";
 
 export interface CephalometriaPanelProps {
   treatmentPlanId: string;
@@ -55,7 +56,7 @@ export function CephalometriaPanel({ treatmentPlanId, patientId }: Cephalometria
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listCephalometricAnalyses(treatmentPlanId).then((res) => {
+    conPrecarga("listCephalometricAnalyses", treatmentPlanId, () => listCephalometricAnalyses(treatmentPlanId)).then((res) => {
       // Si la lista no se puede leer, se pinta vacía en vez de quedarse en
       // «Cargando…» para siempre.
       setRows(res.ok ? res.data : []);

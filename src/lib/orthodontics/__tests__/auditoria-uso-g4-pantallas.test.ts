@@ -83,3 +83,28 @@ test("vuelta 2 · C-64: plan, consentimientos, cuestionario y hoja pintan en la 
   assert.match(leer("src/components/dashboard/pacientes-rediseno/cuestionario.tsx"), /fechaLarga\(vigente\.filledAt, "es-MX", zonaClinica\)/);
   assert.match(leer("src/components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx"), /fechaCorta\([^)]*, zonaClinica\)/);
 });
+
+test("tercera ronda · C-65: «Completar consulta» cierra con la nota YA firmada y usa el texto que manda el editor", () => {
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /clinicalNoteId: \(notaFirmada && notaFirmada !== clinicalNoteId \? notaFirmada : clinicalNoteId\) \?\? undefined/);
+  assert.match(ficha, /await handleEndConsult\(d\);/);
+  assert.ok(!leer("src/lib/clinical/note-validation.ts").includes("NOM-004 §6, campos mínimos"));
+});
+
+test("tercera ronda · C-71 y N-30: refresco tras agendar el control; el alta rechazada no cierra el cajón", () => {
+  assert.match(leer("src/components/specialties/orthodontics/AgendarProximoControlButton.tsx"), /router\.refresh\(\);/);
+  assert.match(leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx"), /if \(ok !== false\) closeDrawer\(\);/);
+  assert.match(leer("src/components/specialties/orthodontics/redesign/OrtodonciaSinCaso.tsx"), /if \(abierto === false\) return;/);
+});
+
+test("tercera ronda · N-31: la pestaña pide sus lecturas en UN viaje (precarga) y cada sección la reutiliza", () => {
+  assert.match(leer("src/components/specialties/orthodontics/redesign/OrthodonticsPatientTab.tsx"), /iniciarPrecarga\(\{/);
+  for (const [archivo, nombre] of [
+    ["src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx", "cargarPanelDeCobro"],
+    ["src/components/specialties/orthodontics/redesign/drawers/HojaExtras.tsx", "historialDeLigas"],
+    ["src/components/specialties/orthodontics/alineadores/AlineadoresPanel.tsx", "getAlignerCase"],
+    ["src/components/specialties/orthodontics/cobranza/ExtrasPorCobrar.tsx", "listarExtrasPorCobrar"],
+  ]) {
+    assert.ok(leer(archivo).includes(`conPrecarga("${nombre}"`), `${archivo} no usa la precarga`);
+  }
+});

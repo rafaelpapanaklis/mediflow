@@ -43,6 +43,7 @@ import {
   type MecanicaDelCaso,
 } from "@/lib/orthodontics/hoja-extras";
 import { useTextosHojaExtras, type TextosHojaExtras } from "../textos-hoja-extras";
+import { conPrecarga } from "@/components/specialties/orthodontics/redesign/precarga";
 
 /** Carga lo nuevo de la hoja una vez por (caso, hoja). `null` mientras carga o si falla (la hoja sigue como antes). */
 export function useExtrasDeHoja(treatmentPlanId: string | undefined, cardId: string | null): ExtrasDeHoja | null {
@@ -518,7 +519,7 @@ export function MecanicasDelCaso({
   const [datos, setDatos] = useState<{ puedeEditar: boolean; mecanicas: MecanicaDelCaso[]; catalogo: string[] } | null>(null);
   const cargar = useCallback(() => {
     if (!treatmentPlanId) return;
-    void mecanicasDelCasoAction({ treatmentPlanId }).then((r) => {
+    void conPrecarga("mecanicasDelCaso", treatmentPlanId, () => mecanicasDelCasoAction({ treatmentPlanId })).then((r) => {
       if (!isFailure(r) && r.data.disponible) {
         setDatos({ puedeEditar: r.data.puedeEditar, mecanicas: r.data.mecanicas, catalogo: r.data.catalogo });
         onCargado?.();
@@ -552,7 +553,7 @@ export function HistorialDeLigas({ treatmentPlanId }: { treatmentPlanId: string 
   useEffect(() => {
     if (!treatmentPlanId) return;
     let vivo = true;
-    void historialDeLigasAction({ treatmentPlanId }).then((r) => {
+    void conPrecarga("historialDeLigas", treatmentPlanId, () => historialDeLigasAction({ treatmentPlanId })).then((r) => {
       if (vivo && !isFailure(r) && r.data.disponible) setControles(r.data.controles);
     });
     return () => {
