@@ -51,6 +51,8 @@ import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-
 import { PaymentCfdiButton } from "./payment-cfdi-button";
 import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
+// ws1-t3: los CFDI de la factura ante el SAT (consultar, cancelar, sustituir, nota de crédito).
+import { CfdiAnteElSat } from "./cfdi-ante-el-sat";
 // Mercado Pago como método de pago (ws1-t1): el método en el cobro y el bloque
 // «ver / copiar link». Sin cuenta conectada no se monta nada.
 import { LinkMercadoPago, useCobroMercadoPago } from "./link-mercado-pago";
@@ -237,6 +239,12 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // panel no sabe con qué pagó el paciente (Mercado Pago, tarjeta sin tipo).
   const [fiscal, setFiscal] = useState({ rfc: "", nombre: "", regimen: "612", cp: "", uso: usoCfdiPorRegimen("612"), usoManual: false, email: "", formaPago: "" as string, impuestos: "exento" as CfdiTaxMode });
   const [stampedUuid, setStampedUuid] = useState<string | null>(null);
+  // ws1-t3: el formulario de timbrado en modo «sustituye a este CFDI» (motivo 01),
+  // y el contador que hace recargar el bloque «CFDI ante el SAT».
+  const [sustituyeCfdiId, setSustituyeCfdiId] = useState<string | null>(null);
+  const [cfdiSatTick, setCfdiSatTick] = useState(0);
+  // Cerrar el formulario sin timbrar deja de «sustituir»: el próximo timbrado es normal.
+  useEffect(() => { if (sub !== "cfdi") setSustituyeCfdiId(null); }, [sub]);
   const [cfdiId, setCfdiId] = useState<string | null>(null);
   // Consumo CFDI del mes (contador discreto en el sub-form + aviso de excedente).
   const [cfdiQuota, setCfdiQuota] = useState<{ used: number; included: number } | null>(null);
@@ -586,6 +594,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           usoCfdi:     fiscal.uso,
           paymentForm: fiscal.formaPago,
           taxMode:     fiscal.impuestos,
+          ...(sustituyeCfdiId ? { sustituyeCfdiId } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -608,6 +617,9 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       }
 
       setStampedUuid(data.uuid ?? null);
+      // ws1-t3: con sustitución, el viejo queda «sustituido» y falta cancelarlo (motivo 01) en el bloque del SAT.
+      setSustituyeCfdiId(null);
+      setCfdiSatTick((n) => n + 1);
       setCfdiId(data.cfdiId ?? null);
       setSub(null);
       toast.success(t("clinical.invoiceDetail.cfdiStampedToast"));
@@ -1144,6 +1156,16 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 ) : undefined}
               />
             )}
+            {/* ws1-t3: los CFDI de esta factura ante el SAT. No pinta nada sin CFDI. */}
+            {!isDraft && (
+              <CfdiAnteElSat
+                invoiceId={invoice.id}
+                recargar={cfdiSatTick}
+                rediseno={rediseno}
+                onSustituir={puedeTimbrar ? (id) => { openCfdiForm(); setSustituyeCfdiId(id); } : undefined}
+                onMutated={async () => { setStampedUuid(null); await onMutated(); await refrescarFactura(); }}
+              />
+            )}
           </div>
 
           <DialogFooter className={cx("flex flex-wrap gap-2", c.pie)}>
@@ -1404,6 +1426,13 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
           <DialogHeader className={rediseno ? c.cabecera : undefined}>
             <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.invoiceDetail.cfdiFormTitle")}</DialogTitle>
+            {sustituyeCfdiId && (
+              <p className={cx("text-xs", c.texto)} style={{ color: "var(--warning-strong)" }} data-cfdi-sustitucion>
+                {locale.startsWith("en")
+                  ? "Replacement CFDI (reason 01): it is related to the current one (relation 04). After stamping, cancel the previous one from «CFDI with the SAT»."
+                  : "CFDI sustituto (motivo 01): se relaciona con el actual (relación 04). Después de timbrarlo, cancela el anterior desde «CFDI ante el SAT»."}
+              </p>
+            )}
           </DialogHeader>
           <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
             <div className={cx("flex items-center justify-between gap-2", c.entreDos)}>

@@ -72,6 +72,10 @@
       "schedule": "0 7 1 * *"
     },
     {
+      "path": "/api/cron/cfdi-estado",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron/blog-publish",
       "schedule": "0 13 * * *"
     },
