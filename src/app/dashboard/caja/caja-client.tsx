@@ -1224,9 +1224,11 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
 function SumRow({ label, value, strong, rediseno }: { label: string; value: string; strong?: boolean; rediseno: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-sm)" }}>
-      {/* La celda del grid puede quedar en 160px: si algo cede es la etiqueta,
-          nunca el importe (de ahi el flexShrink:0 del segundo span). */}
-      <span title={label} style={{ color: "var(--text-3)", fontSize: 12.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      {/* La celda del grid puede quedar angosta: si algo cede es la etiqueta,
+          nunca el importe (de ahi el flexShrink:0 del segundo span). N-15
+          (segunda auditoría): la etiqueta parte en dos renglones en vez de
+          cortarse en «Tarjeta, transferencia y ot…». */}
+      <span title={label} style={{ color: "var(--text-3)", fontSize: 12.5, minWidth: 0, lineHeight: 1.3, overflowWrap: "anywhere" }}>{label}</span>
       <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
