@@ -271,6 +271,14 @@ export function Resumen({
   );
 
   const pct = finanzas.total > 0 ? Math.round((finanzas.pagado / finanzas.total) * 100) : 0;
+  // F4 de la tercera auditoría (resto de N-03): sin nada facturado vigente, «$0 pagado de
+  // $0 facturado · 0 %» contradecía la lista de Cobros de la paciente que SÍ pagó (y su
+  // dinero pasó a saldo a favor). Se dice qué pasó, sin barra ni porcentaje.
+  const pasadoASaldo = useMemo(
+    () => (facturas || []).reduce((acc: number, inv: any) => acc + Math.round(pasoASaldoAFavor(inv) * 100), 0) / 100,
+    [facturas],
+  );
+  const sinCargosVigentes = finanzas.total <= 0;
   const emergencia = [
     patient.emergencyContactName,
     patient.emergencyContactPhone,
@@ -386,23 +394,35 @@ export function Resumen({
                     : t("pacientesRediseno.resumen.sinSaldo")}
                 </span>
               </div>
-              <div className={s.barra} aria-hidden>
-                <div
-                  className={[s.barraRelleno, finanzas.saldo > 0 ? "" : s.barraRellenoExito]
-                    .filter(Boolean)
-                    .join(" ")}
-                  style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                />
-              </div>
-              <div className={s.pie}>
-                <span>
-                  {t("pacientesRediseno.resumen.pagadoDeTotal", {
-                    pagado: formatCurrency(finanzas.pagado),
-                    total: formatCurrency(finanzas.total),
-                  })}
-                </span>
-                <span className={s.importe}>{pct}%</span>
-              </div>
+              {sinCargosVigentes ? (
+                <div className={s.pie} style={{ marginTop: 6 }} data-sin-cargos>
+                  <span>
+                    {pasadoASaldo > 0
+                      ? txReembolso.sinCargosConSaldo(formatCurrency(pasadoASaldo))
+                      : txReembolso.sinCargos}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <div className={s.barra} aria-hidden>
+                    <div
+                      className={[s.barraRelleno, finanzas.saldo > 0 ? "" : s.barraRellenoExito]
+                        .filter(Boolean)
+                        .join(" ")}
+                      style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                    />
+                  </div>
+                  <div className={s.pie}>
+                    <span>
+                      {t("pacientesRediseno.resumen.pagadoDeTotal", {
+                        pagado: formatCurrency(finanzas.pagado),
+                        total: formatCurrency(finanzas.total),
+                      })}
+                    </span>
+                    <span className={s.importe}>{pct}%</span>
+                  </div>
+                </>
+              )}
               {(finanzas.plan ?? 0) > 0 && (
                 <div className={s.pie} style={{ marginTop: 6 }}>
                   <span>{t("patients.sideCards.activePlans")}</span>

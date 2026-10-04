@@ -765,6 +765,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
             {(cita.estado === "SCHEDULED" || cita.estado === "CONFIRMED") &&
               new Date(dto.startsAt).getTime() > ahora.getTime() &&
               !ocultarAnticipoPorMensualidad(esCitaOrtoConHoja(dto.reason ?? null), modoCobroOrto) &&
+              // F5 (tercera auditoría, ws1-t5): con el anticipo ya pedido o pagado no se ofrece otro
+              // (la factura ya no lo ofrecía; aquí seguía el botón). Lo pedido se ve en la nota de arriba.
+              !dto.anticipoPedido && !dto.depositoPagado &&
               permissions.canDeposit && (
               <button type="button" className={s.accionSecundaria} onClick={() => setPidiendoAnticipo(true)}>
                 <Wallet size={18} strokeWidth={2} />

@@ -162,7 +162,13 @@ function normaliza(s: string): string {
  * Concepto con que nace la hoja abierta desde una cita: el procedimiento del tarifario
  * cuyo nombre es el motivo de la cita (sin importar mayúsculas ni acentos), con su
  * precio; si no hay uno así, el motivo como texto y el importe vacío para que la
- * recepción lo escriba. Nunca adivina un precio por parecido.
+ * recepción lo escriba.
+ *
+ * F5 de la tercera auditoría (resto de N-09): los motivos de la agenda son cortos
+ * («Limpieza») y el tarifario dice «Limpieza dental». Se acepta también el ÚNICO
+ * procedimiento cuyo nombre empieza con el motivo en palabras completas (o al revés).
+ * Si hay dos o más candidatos («Limpieza dental» y «Limpieza profunda»), no se elige:
+ * nunca se adivina entre parecidos.
  */
 export function conceptoDeLaCita(
   motivo: string | null | undefined,
@@ -172,6 +178,14 @@ export function conceptoDeLaCita(
   if (!m) return null;
   const igual = catalogo.find((p) => normaliza(p.name) === m);
   if (igual) return { nombre: igual.name, importe: round2(Number(igual.basePrice) || 0), procedureId: igual.id };
+  const candidatos = catalogo.filter((p) => {
+    const n = normaliza(p.name);
+    return !!n && (n.startsWith(`${m} `) || m.startsWith(`${n} `));
+  });
+  if (candidatos.length === 1) {
+    const unico = candidatos[0];
+    return { nombre: unico.name, importe: round2(Number(unico.basePrice) || 0), procedureId: unico.id };
+  }
   return { nombre: String(motivo).trim().slice(0, 200), importe: NaN, procedureId: null };
 }
 

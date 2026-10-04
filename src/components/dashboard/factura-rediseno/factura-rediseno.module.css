@@ -166,6 +166,25 @@
   border-radius: 0 0 14px 14px;
 }
 
+/* B1 de la tercera auditoría (ws1-t3): en el celular el pie del detalle (Editar,
+   Registrar pago, Marcar pagada, WhatsApp, Reembolsar, Cancelar, CFDI, Imprimir,
+   Cerrar) envolvía en 4 renglones y se comía ~290 px de 844. Ahí va en UNA fila
+   que se desliza de lado; el formulario de arriba recupera la pantalla. */
+@media (max-width: 640px) {
+  .raiz .pie:not(.pieApilado) {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 10px 12px;
+    scrollbar-width: thin;
+  }
+
+  .raiz .pie:not(.pieApilado) > * {
+    flex-shrink: 0;
+  }
+}
+
 .raiz .pieApilado {
   flex-direction: column;
   align-items: stretch;

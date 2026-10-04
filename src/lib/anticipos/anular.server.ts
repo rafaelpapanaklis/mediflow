@@ -29,6 +29,11 @@ export interface AnticipoAnulable {
 export async function anticiposAnulables(clinicId: string, invoiceId: string): Promise<AnticipoAnulable[]> {
   if (!clinicId || !invoiceId) return [];
   try {
+    // F6 (tercera auditoría de uso): en una factura cancelada (p. ej. la cita se canceló y
+    // su anticipo pasó a saldo a favor) no se ofrece: anularAnticipoRecibido la rechaza con
+    // «La factura está cancelada.» y el botón llevaba a ese 409.
+    const factura = await prisma.invoice.findFirst({ where: { id: invoiceId, clinicId }, select: { status: true } });
+    if (!factura || factura.status === "CANCELLED") return [];
     const depositos = await prisma.appointmentDeposit.findMany({
       where: { clinicId, invoiceId, status: "PAID", paymentId: { not: null } },
       select: { id: true, paymentId: true, method: true },

@@ -496,8 +496,9 @@ function CuerpoCobrarHoy({
           {pagoEfectivo > 0 && <AvisoCajaDeOtraPersona nombre={freno.cajaDe} />}
           {pagoEfectivo > 0 && metodo !== "cash" && (
             <label className={c.campo}>
-              <span className={c.campoRotulo}>{t("cobrarHoy.referencia")}</span>
-              <input className={c.input} value={referencia} onChange={(e) => setReferencia(e.target.value)} disabled={guardando} />
+              {/* F1 (tercera auditoría): en transferencia es obligatoria (C-15); la etiqueta lo dice. */}
+              <span className={c.campoRotulo}>{metodo === "transfer" ? textosDinero(locale).cobro.referenciaObligatoria : t("cobrarHoy.referencia")}</span>
+              <input className={c.input} value={referencia} onChange={(e) => setReferencia(e.target.value)} disabled={guardando} required={metodo === "transfer"} aria-required={metodo === "transfer"} />
             </label>
           )}
           {/* N-06 (segunda auditoría): sin WhatsApp conectado no se ofrece mandarlo; se dice. */}
