@@ -165,3 +165,22 @@ export function queHacerConLaPrevia(
 export function pestanaDesfasada(claveDeLaPestana: string, marcaActual: string | null | undefined): boolean {
   return (claveDeLaPestana || "") !== (marcaActual || "");
 }
+
+/**
+ * Gracia antes de revocar en Supabase una suplantación cerrada con «Salir»
+ * cuando el navegador volvió a su sesión previa (medido en QA, 3-oct): las
+ * peticiones que otras pestañas tenían EN VUELO con la cookie de suplantación
+ * reciben `session_not_found` de Supabase si ya está revocada, y supabase-js
+ * borra entonces la cookie de sesión —que para cuando llega la respuesta ya es
+ * la devuelta—: el navegador se quedaba sin sesión otra vez. La revocación es
+ * limpieza: la fila cerrada ya corta la sesión en getSession/getAuthContext en
+ * cada petición; solo se aplaza. 30 s: de sobra para una petición en vuelo y
+ * dentro de lo que Vercel deja viva la función tras contestar (waitUntil).
+ */
+export const GRACIA_REVOCACION_MS = 30 * 1000;
+
+/** ¿Ya toca revocar en Supabase esta sesión terminada? (vencida por tiempo: sí; cerrada a mano: tras la gracia). */
+export function revocarYa(fila: FilaSuplantacion, ahora: number = Date.now()): boolean {
+  if (!fila.endedAt) return true;
+  return ahora - new Date(fila.endedAt).getTime() >= GRACIA_REVOCACION_MS;
+}

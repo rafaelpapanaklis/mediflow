@@ -350,7 +350,7 @@ test("punto 1: «Salir y volver a /admin» devuelve el navegador a la sesión de
   assert.equal(r.status, 303);
   assert.match(r.headers.get("location") ?? "", /\/admin\/clinics\/c1$/);
   assert.deepEqual(canjes, ["rt-de-rafael"], "antes: nada se canjeaba y /dashboard mandaba a /login");
-  assert.equal(revocadasPorAdmin.length, 1, "la de suplantación se revoca sola (local)");
+  assert.deepEqual(revocadasPorAdmin, [], "la revocación en Supabase se aplaza (gracia): si no, las peticiones en vuelo borran la cookie devuelta");
   assert.deepEqual(signOuts, [], "sin signOut que borre las cookies recién canjeadas");
   assert.match(cookie(r, "activeClinicId") ?? "", /^activeClinicId=clinica-de-rafael\./, "vuelve su clínica activa");
   assert.match(cookie(r, c.COOKIE_SESION_PREVIA) ?? "", /Max-Age=0/);
@@ -371,6 +371,8 @@ test("punto 1: si la sesión previa ya no sirve (o es de otra persona), se sale 
     const r = await salir.POST(post({}, "/api/admin/impersonate/salir", `${c.COOKIE_SESION_PREVIA}=${previa}`));
     assert.equal(r.status, 303);
     assert.deepEqual(signOuts, [{ scope: "local" }], `caso ${caso}: queda sin sesión, nunca con la de otro`);
+    assert.equal(revocadasPorAdmin.length, 1, `caso ${caso}: sin vuelta, la de suplantación se revoca ya`);
+    revocadasPorAdmin.length = 0;
     assert.match(cookie(r, "activeClinicId") ?? "", /Max-Age=0/);
   }
 });
@@ -454,4 +456,20 @@ test("punto 2: el vigía va en TODA pestaña del panel, con o sin suplantación 
 test("punto 3: «Ver como clínica» también en la lista de /admin/clinics", () => {
   const lista = readFileSync(join(__dirname, "..", "..", "..", "app", "admin", "clinics", "clinics-client.tsx"), "utf8");
   assert.match(lista, /<BotonVerComoClinica clinicId=\{clinic\.id\} size="sm" \/>/);
+});
+
+test("punto 1: gracia — una suplantación recién cerrada con «Salir» no se revoca en Supabase por una petición en vuelo", async () => {
+  const c = await core();
+  const base = { id: "i", adminUserId: "a", adminEmail: "e", clinicId: "c", targetUserId: "t", expiresAt: new Date(Date.now() + 3600_000) };
+  assert.equal(c.revocarYa({ ...base, endedAt: null }), true, "vencida por tiempo: se revoca");
+  assert.equal(c.revocarYa({ ...base, endedAt: new Date() }), false, "recién cerrada: espera");
+  assert.equal(c.revocarYa({ ...base, endedAt: new Date(Date.now() - c.GRACIA_REVOCACION_MS) }), true);
+  // Cableado: una petición en vuelo con el token de la recién cerrada no la revoca ni la marca.
+  tokenDeSesion = jwt({ session_id: "ses-en-vuelo" });
+  filaSuplantacion = { ...base, id: "i9", endedAt: new Date() };
+  const { estadoSuplantacionDe } = await lib();
+  const { createClient } = await import("@/lib/supabase/server");
+  assert.equal((await estadoSuplantacionDe(createClient() as never)).tipo, "terminada", "el panel la corta igual");
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(revocadasPorAdmin, []);
 });

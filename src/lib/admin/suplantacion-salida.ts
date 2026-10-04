@@ -9,8 +9,7 @@
  * en COOKIE_SESION_PREVIA y aquí se canjea: el navegador queda como estaba.
  */
 import type { NextResponse } from "next/server";
-import { clienteAdminSupabase } from "./supabase-admin";
-import { cerrarSuplantacion } from "./suplantacion";
+import { cerrarSuplantacion, revocarDespues, revocarEnSupabase } from "./suplantacion";
 import {
   COOKIE_PESTANA_VER_COMO,
   COOKIE_SESION_PREVIA,
@@ -42,7 +41,8 @@ export interface Salida {
 /**
  * Cierra la suplantación de este navegador y, si hay copia de la sesión previa,
  * la canjea. La sesión de suplantación se revoca SOLO a ella (scope "local"): el
- * "global" echaría al dueño real de todos sus dispositivos. Nunca lanza.
+ * "global" echaría al dueño real de todos sus dispositivos. Si se volvió a la
+ * sesión previa, esa revocación se aplaza (revocarDespues). Nunca lanza.
  */
 export async function salirDeSuplantacion(
   supabase: ClienteDeSesion,
@@ -52,27 +52,28 @@ export async function salirDeSuplantacion(
   if (estado.tipo === "activa") await cerrarSuplantacion(estado.fila.id, "salida");
   const previa = desempacarSesionPrevia(cookiePrevia);
   if (previa) {
-    try {
-      // Revocar la de suplantación sin borrar cookies (las pisa el canje).
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (token && key && process.env.NEXT_PUBLIC_SUPABASE_URL) {
-        await clienteAdminSupabase(key).auth.admin.signOut(token, "local");
-      }
-    } catch (e) {
-      // La fila ya está cerrada: el panel la trata como sin sesión aunque Supabase no se entere.
-      console.warn("[suplantacion] no se pudo revocar la sesión de suplantación:", e instanceof Error ? e.message : e);
-    }
+    // La de suplantación NO se revoca aún en Supabase: las peticiones en vuelo
+    // de otras pestañas con su cookie recibirían session_not_found y supabase-js
+    // borraría la cookie de sesión, ya con la sesión devuelta dentro (medido en
+    // QA). La fila cerrada ya la corta en el panel; se revoca pasada la gracia.
+    const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    const tokenSuplantacion = data.session?.access_token ?? null;
     try {
       const r = await supabase.auth.refreshSession({ refresh_token: previa.rt });
       if (!r.error && r.data.user?.id === previa.sub) {
+        if (tokenSuplantacion) revocarDespues(tokenSuplantacion);
         return { restaurada: true, clinicaPrevia: previa.clinica };
       }
-      if (!r.error) console.warn("[suplantacion] la sesión previa no es de quien la guardó; no se usa");
+      console.warn(
+        "[suplantacion] no se volvió a la sesión previa:",
+        r.error ? (r.error as { message?: string }).message ?? r.error : "es de otra persona; no se usa",
+      );
     } catch (e) {
       console.warn("[suplantacion] no se pudo volver a la sesión previa:", e instanceof Error ? e.message : e);
     }
+    // Sin vuelta no hay nada que proteger: se revoca ya (el canje fallido ya
+    // vació la sesión del cliente, así que el signOut de abajo no la alcanza).
+    if (tokenSuplantacion) await revocarEnSupabase(tokenSuplantacion);
   }
   try { await supabase.auth.signOut({ scope: "local" }); } catch { /* ya cerrada */ }
   return { restaurada: false, clinicaPrevia: null };

@@ -13,7 +13,9 @@ import { clienteAdminSupabase } from "./supabase-admin";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import {
+  GRACIA_REVOCACION_MS,
   estadoDe,
+  revocarYa,
   sessionIdDelToken,
   type EstadoSuplantacion,
   type FilaSuplantacion,
@@ -180,6 +182,40 @@ export async function cerrarSuplantacion(id: string, motivo: "salida" | "reempla
   }
 }
 
+/**
+ * Revocación aplazada (ws1-t11): tras «Salir» con vuelta a la sesión previa, la
+ * de suplantación se revoca pasada la gracia (ver GRACIA_REVOCACION_MS). De
+ * mejor esfuerzo: si la función muere antes, una petición posterior con ese
+ * token la revoca (cerrarVencida), y en todo caso la fila cerrada ya la deja
+ * sin efecto en el panel.
+ */
+export function revocarDespues(accessToken: string, ms: number = GRACIA_REVOCACION_MS): void {
+  const tarea = new Promise<void>((listo) => {
+    const t = setTimeout(() => void revocarEnSupabase(accessToken).finally(listo), ms);
+    (t as { unref?: () => void }).unref?.();
+  });
+  try {
+    // Mantiene viva la función de Vercel tras contestar (lo mismo que `waitUntil`
+    // de @vercel/functions, sin la dependencia; igual que @/lib/agenda/google-sync).
+    const ctx = (globalThis as Record<symbol, { get?: () => { waitUntil?: (p: Promise<unknown>) => void } } | undefined>)[
+      Symbol.for("@vercel/request-context")
+    ]?.get?.();
+    ctx?.waitUntil?.(tarea);
+  } catch { /* fuera de Vercel no hay contexto: el proceso sigue vivo solo */ }
+}
+
+/** Revoca en Supabase SOLO esa sesión (scope "local"). Nunca lanza. */
+export async function revocarEnSupabase(accessToken: string): Promise<void> {
+  try {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && key) {
+      await clienteAdminSupabase(key).auth.admin.signOut(accessToken, "local");
+    }
+  } catch (e) {
+    console.warn("[suplantacion] no se pudo revocar en Supabase:", e instanceof Error ? e.message : e);
+  }
+}
+
 type ClienteConSesion = {
   auth: { getSession(): Promise<{ data: { session: { access_token?: string } | null } }> };
 };
@@ -197,7 +233,7 @@ export async function estadoSuplantacionDe(supabase: ClienteConSesion): Promise<
     const sessionId = sessionIdDelToken(token);
     if (!sessionId || !token) return { tipo: "normal" };
     const estado = estadoDe(await buscarPorSesion(sessionId));
-    if (estado.tipo === "terminada") void cerrarVencida(sessionId, token, estado.fila);
+    if (estado.tipo === "terminada" && revocarYa(estado.fila)) void cerrarVencida(sessionId, token, estado.fila);
     return estado;
   } catch (e) {
     console.error("[suplantacion] lectura falló:", e instanceof Error ? e.message : e);
