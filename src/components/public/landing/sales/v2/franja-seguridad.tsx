@@ -24,6 +24,13 @@ import "./franja-seguridad.css";
  * SOC 2 (AICPA) ni de ISO, que solo puede usar la empresa certificada. Son
  * decorativos (`aria-hidden`): el sello lo dice el texto, que se lee de
  * corrido («Cifrado AES-256»).
+ *
+ * Cada sello explica qué es: al pasar el ratón (y solo mientras está encima),
+ * al enfocarlo con el teclado o al tocarlo en una pantalla táctil, el sello se
+ * enciende, una línea de luz lo une al globo y aparece su descripción —sobre
+ * el globo en escritorio, encima del propio sello en tableta y celular—. Con
+ * ratón y teclado es CSS puro; lo táctil (tocar abre, tocar fuera cierra) lo
+ * pone globo-seguridad-vivo.tsx.
  */
 
 /** Contorno ondulado del sello (16 lóbulos, caja de 56). */
@@ -93,6 +100,28 @@ const ICONOS: Record<SelloSeguridadIcono, ReactNode> = {
  * globo de reserva: cuando el canvas pinta su primer cuadro, esta malla se
  * apaga (`.is-vivo`).
  */
+/**
+ * Línea de luz de cada sello al globo, en px desde el centro del globo (mismo
+ * orden que `SEGURIDAD.sellos`): sale del centro de la medalla —un punto de la
+ * órbita de franja-seguridad.css, semiejes 362 × 181— y acaba dentro del
+ * disco, bajo la descripción. El quinto sello cuelga centrado bajo el globo:
+ * su línea sube recta desde el borde de la tarjeta.
+ */
+const ORBITA: [number, number][] = [
+  [-169.8, -159.8],
+  [169.8, -159.8],
+  [-356.6, -31.5],
+  [356.6, -31.5],
+  [0, 146],
+  [-277.3, 116.4],
+  [277.3, 116.4],
+];
+const LAZOS = ORBITA.map(([x, y]) => {
+  const d = Math.hypot(x, y);
+  const fin = [(x / d) * 96, (y / d) * 96];
+  return `M${x} ${y}L${fin[0].toFixed(1)} ${fin[1].toFixed(1)}`;
+});
+
 const MERIDIANOS: { s: number; d: string }[] = [
   { s: 0.985, d: "-0.78s" },
   { s: 0.574, d: "-4.28s" },
@@ -203,18 +232,33 @@ export function FranjaSeguridad() {
 
           <ul className="dcsg__sellos" aria-label={SEGURIDAD.listLabel}>
             {SEGURIDAD.sellos.map((s, i) => (
-              <li key={s.clave} className="dcsg__sello" style={{ "--i": i } as CSSProperties}>
+              <li key={s.clave} className="dcsg__sello" tabIndex={0} aria-describedby={`dcsg-desc-${i}`} style={{ "--i": i } as CSSProperties}>
+                {/* Línea de luz al globo (solo en la órbita de escritorio). */}
+                <svg aria-hidden="true" focusable="false" className="dcsg__lazo" viewBox="0 0 1 1" fill="none" strokeLinecap="round">
+                  <path d={LAZOS[i]} pathLength={1} className="dcsg__lazo-halo" />
+                  <path d={LAZOS[i]} pathLength={1} className="dcsg__lazo-linea" />
+                  <path d={LAZOS[i]} pathLength={1} className="dcsg__lazo-pulso" />
+                </svg>
                 <span aria-hidden="true" className="dcsg__medalla">
                   <svg focusable="false" viewBox="0 0 56 56" fill="none">
-                    <path d={CONTORNO_SELLO} fill="#1b2a6b" stroke="url(#dcsg-g)" strokeWidth="1.4" strokeLinejoin="round" />
-                    <circle cx="28" cy="28" r="19.5" stroke="rgba(255,255,255,.22)" strokeLinecap="round" strokeDasharray="0.8 3.28" />
+                    <path className="dcsg__borde" d={CONTORNO_SELLO} fill="#1b2a6b" stroke="url(#dcsg-g)" strokeWidth="1.4" strokeLinejoin="round" />
+                    <circle className="dcsg__aro" cx="28" cy="28" r="19.5" stroke="rgba(255,255,255,.22)" strokeLinecap="round" strokeDasharray="0.8 3.28" />
                     <g transform="translate(16 16)" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                      {ICONOS[s.icono]}
+                      <g className="dcsg__icono">{ICONOS[s.icono]}</g>
                     </g>
                   </svg>
                 </span>
                 <span className="dcsg__texto">
                   <span className="dcsg__antes">{s.antes}</span> <strong className="dcsg__clave">{s.clave}</strong>
+                </span>
+                <span id={`dcsg-desc-${i}`} role="tooltip" className="dcsg__desc">
+                  {/* El nombre solo acompaña a la vista cuando la descripción
+                      sale lejos del sello (sobre el globo); para lectores de
+                      pantalla sería repetir lo que ya dice el sello. */}
+                  <span aria-hidden="true" className="dcsg__desc-titulo">
+                    {s.antes} {s.clave}
+                  </span>
+                  <span className="dcsg__desc-texto">{s.descripcion}</span>
                 </span>
               </li>
             ))}

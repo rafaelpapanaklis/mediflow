@@ -19,8 +19,14 @@ import type { GloboSeguridad } from "./globo-seguridad-motor";
  *     `--px`/`--py` para que globo, escudo y sellos se muevan a distinta
  *     profundidad.
  *
+ *  4. Descripciones en pantallas táctiles: tocar un sello la muestra
+ *     (`is-abierto`), tocar fuera —u otro sello, o el mismo— la oculta. Con
+ *     ratón NO hay nada que se fije con clic: ahí manda `:hover` y la
+ *     descripción se va al quitar el ratón. Escape la cierra con teclado.
+ *
  * Con `prefers-reduced-motion` no hay entrada, ni seguimiento del ratón, ni
- * animación: el motor pinta UN cuadro fijo del globo y se queda quieto.
+ * animación: el motor pinta UN cuadro fijo del globo y se queda quieto. Las
+ * descripciones siguen funcionando igual, sin transiciones.
  */
 export function GloboSeguridadVivo() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -73,6 +79,43 @@ export function GloboSeguridadVivo() {
     vista.observe(marco);
     document.addEventListener("visibilitychange", animar);
 
+    // 4 · Descripciones al tocar. `dcsg--tactil` apaga el `:hover` del CSS en
+    // dispositivos sin ratón, donde un toque lo dejaría «pegado».
+    if (medio("(hover: none)")) panel.classList.add("dcsg--tactil");
+    const sellos = Array.from(escena.querySelectorAll<HTMLElement>(".dcsg__sello"));
+    const cerrar = (salvo?: Element | null) => {
+      for (const s of sellos) if (s !== salvo) s.classList.remove("is-abierto");
+    };
+    // Un toque = apoyar y levantar casi en el mismo punto. No se usa `click`:
+    // en iOS no llega al documento desde elementos que no son «clicables», y
+    // tocar fuera no cerraría. Si el dedo arrastra (scroll), no cuenta.
+    let apoyo: { x: number; y: number } | null = null;
+    const alApoyar = (ev: PointerEvent) => {
+      apoyo = ev.pointerType === "mouse" ? null : { x: ev.clientX, y: ev.clientY };
+    };
+    const alCancelar = () => {
+      apoyo = null;
+    };
+    const alLevantar = (ev: PointerEvent) => {
+      const a = apoyo;
+      apoyo = null;
+      if (!a || Math.hypot(ev.clientX - a.x, ev.clientY - a.y) > 12) return;
+      const sello = ev.target instanceof Element ? ev.target.closest(".dcsg__sello") : null;
+      const mio = sello && escena.contains(sello) ? sello : null;
+      cerrar(mio);
+      mio?.classList.toggle("is-abierto");
+    };
+    const alTeclear = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      cerrar();
+      const activo = document.activeElement;
+      if (activo instanceof HTMLElement && sellos.includes(activo)) activo.blur();
+    };
+    document.addEventListener("pointerdown", alApoyar, { passive: true });
+    document.addEventListener("pointerup", alLevantar, { passive: true });
+    document.addEventListener("pointercancel", alCancelar, { passive: true });
+    document.addEventListener("keydown", alTeclear);
+
     // 3 · Entrada al hacer scroll + profundidad con el ratón.
     let entrada: IntersectionObserver | null = null;
     let raf = 0;
@@ -91,7 +134,7 @@ export function GloboSeguridadVivo() {
         { threshold: 0.35, rootMargin: "0px 0px -4% 0px" },
       );
       entrada.observe(marco);
-      for (const sello of Array.from(escena.querySelectorAll(".dcsg__sello"))) entrada.observe(sello);
+      for (const sello of sellos) entrada.observe(sello);
 
       if (medio("(hover: hover) and (pointer: fine)")) {
         let x = 0;
@@ -128,6 +171,10 @@ export function GloboSeguridadVivo() {
       vista.disconnect();
       entrada?.disconnect();
       document.removeEventListener("visibilitychange", animar);
+      document.removeEventListener("pointerdown", alApoyar);
+      document.removeEventListener("pointerup", alLevantar);
+      document.removeEventListener("pointercancel", alCancelar);
+      document.removeEventListener("keydown", alTeclear);
       quitarRaton();
       if (raf) cancelAnimationFrame(raf);
       globo?.destruir();

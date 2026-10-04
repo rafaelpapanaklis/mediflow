@@ -174,6 +174,12 @@ export const PRICING_COPY = {
  * certificados de DaleControl: la palabra «Infraestructura» no se quita.
  * Todo en español; solo quedan tal cual los nombres propios (AES-256, SOC 2,
  * ISO 27001, LFPDPPP).
+ *
+ * `descripcion` es lo que aparece al pasar el ratón (o tocar, o enfocar con el
+ * teclado) cada sello: una o dos frases para un dentista, sin tecnicismos y
+ * VERDADERAS. Lo que afirman tiene que seguir siendo cierto en el producto: la
+ * bitácora de lecturas es `logRead` (src/lib/audit.ts) y la verificación en
+ * dos pasos se activa en /dashboard/2fa. No prometer «nunca» ni «nadie».
  */
 export type SelloSeguridadIcono = 'candado' | 'dos-pasos' | 'respaldo' | 'bitacora' | 'ley' | 'servidor' | 'certificado';
 
@@ -183,7 +189,7 @@ export const SEGURIDAD: {
   titleAccent: string;
   subtitle: string;
   listLabel: string;
-  sellos: { icono: SelloSeguridadIcono; antes: string; clave: string }[];
+  sellos: { icono: SelloSeguridadIcono; antes: string; clave: string; descripcion: string }[];
 } = {
   eyebrow: 'Seguridad',
   titleLead: 'Tus pacientes,',
@@ -192,13 +198,34 @@ export const SEGURIDAD: {
     'La información clínica de tu consultorio se guarda cifrada, con respaldos y registro de accesos, sobre infraestructura certificada.',
   listLabel: 'Medidas de seguridad',
   sellos: [
-    { icono: 'candado', antes: 'Cifrado', clave: 'AES-256' },
-    { icono: 'dos-pasos', antes: 'Verificación en', clave: 'dos pasos' },
-    { icono: 'respaldo', antes: 'Respaldos', clave: 'cifrados' },
-    { icono: 'bitacora', antes: 'Bitácora', clave: 'de accesos' },
-    { icono: 'ley', antes: 'Cumple', clave: 'LFPDPPP' },
-    { icono: 'servidor', antes: 'Infraestructura con certificación', clave: 'SOC 2' },
-    { icono: 'certificado', antes: 'Infraestructura certificada', clave: 'ISO 27001' },
+    {
+      icono: 'candado', antes: 'Cifrado', clave: 'AES-256',
+      descripcion: 'Tus expedientes y radiografías se guardan cifrados, con el mismo estándar que usan los bancos.',
+    },
+    {
+      icono: 'dos-pasos', antes: 'Verificación en', clave: 'dos pasos',
+      descripcion: 'Activa un código en tu celular además de la contraseña: aunque alguien la sepa, no podrá entrar.',
+    },
+    {
+      icono: 'respaldo', antes: 'Respaldos', clave: 'cifrados',
+      descripcion: 'Copias automáticas y cifradas de tu información, para recuperarla si algo llega a fallar.',
+    },
+    {
+      icono: 'bitacora', antes: 'Bitácora', clave: 'de accesos',
+      descripcion: 'Queda registrado quién abre cada expediente y cuándo.',
+    },
+    {
+      icono: 'ley', antes: 'Cumple', clave: 'LFPDPPP',
+      descripcion: 'Tratamos los datos de tus pacientes conforme a la ley mexicana de protección de datos personales.',
+    },
+    {
+      icono: 'servidor', antes: 'Infraestructura con certificación', clave: 'SOC 2',
+      descripcion: 'Nuestros servidores y base de datos están en proveedores auditados bajo SOC 2, un estándar internacional de seguridad.',
+    },
+    {
+      icono: 'certificado', antes: 'Infraestructura certificada', clave: 'ISO 27001',
+      descripcion: 'La infraestructura donde corre DaleControl está certificada en ISO 27001, la norma internacional de seguridad de la información.',
+    },
   ],
 };
 
