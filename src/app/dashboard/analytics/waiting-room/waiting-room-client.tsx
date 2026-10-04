@@ -7,6 +7,7 @@ import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { AnalyticsHeatmap } from "@/components/dashboard/analytics/analytics-heatmap";
 import { useT } from "@/i18n/i18n-provider";
 import { WaitingRoomRediseno } from "./waiting-room-rediseno";
+import { duracionLegible } from "@/lib/analytics/sala-de-espera";
 
 interface HourStat { hour: number; avgMin: number; count: number; longWaits: number }
 interface LongWait {
@@ -91,7 +92,7 @@ export function WaitingRoomClient({ rediseno = false }: { rediseno?: boolean } =
                   borderTop: "1px solid var(--danger-border-strong)",
                   padding: "10px 14px",
                   display: "grid",
-                  gridTemplateColumns: "60px 1fr",
+                  gridTemplateColumns: "minmax(60px, auto) 1fr",
                   gap: 12,
                   alignItems: "center",
                 }}>
@@ -101,7 +102,7 @@ export function WaitingRoomClient({ rediseno = false }: { rediseno?: boolean } =
                     color: "var(--danger)",
                     fontFamily: "var(--font-mono, monospace)",
                   }}>
-                    {w.waitedMin}m
+                    {duracionLegible(w.waitedMin)}
                   </div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{w.patient}</div>

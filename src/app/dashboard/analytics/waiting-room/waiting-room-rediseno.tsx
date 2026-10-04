@@ -7,6 +7,7 @@ import { Indicador, Panel, Tabla, Th, Td, Filas, Fila, Vacio, Cargando, Nota, un
 import { MapaCalor } from "@/components/dashboard/analitica-rediseno/graficas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
 import type { ApiResponse } from "./waiting-room-client";
+import { duracionLegible } from "@/lib/analytics/sala-de-espera";
 
 export function WaitingRoomRediseno({ data, loading }: { data: ApiResponse | null; loading: boolean }) {
   const t = useT();
@@ -28,7 +29,7 @@ export function WaitingRoomRediseno({ data, loading }: { data: ApiResponse | nul
                 <Filas>
                   {data.longWaits.map((w) => (
                     <Fila key={w.appointmentId}>
-                      <div className={unir(s.filaCifra, s.peligro)}>{w.waitedMin}m</div>
+                      <div className={unir(s.filaCifra, s.peligro)}>{duracionLegible(w.waitedMin)}</div>
                       <div className={s.filaCuerpo}>
                         <span className={s.filaTitulo}>{w.patient}</span>
                         <span className={s.filaSub}>

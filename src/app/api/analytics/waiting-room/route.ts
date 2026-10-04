@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { patientVisibilityFilter } from "@/lib/patient-visibility";
 import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
+import { getTzParts } from "@/lib/agenda/time-utils";
+import { diaDeLaClinica } from "@/lib/agenda/citas-del-periodo";
+import { zonaDeClinica } from "@/lib/inventory/zona-clinica.server";
+import { esperandoAhoraWhere } from "@/lib/analytics/sala-de-espera";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +29,13 @@ const CACHE_TTL_MS = 30_000;
  * Multi-tenant: appointment_timelines NO tiene clinicId directo.
  * Filtramos vía relation: where: { appointment: { clinicId } } en
  * todas las queries que tocan la tabla.
+ *
+ * ws1-t2 (auditoría de uso C-27): «esperando ahora» (la lista y la pastilla
+ * del topbar) es solo quien llegó HOY —día de la clínica— y sigue sin pasar
+ * al sillón ni a consulta, con la cita abierta (`esperandoAhoraWhere`). Antes
+ * no tenía límite de fecha y salían alertas de «1956m» por citas de días
+ * anteriores que se quedaron en «Llegó». La hora y el día del mapa de calor
+ * van en la zona de la clínica, no en la del servidor.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -49,21 +60,18 @@ export async function GET(req: NextRequest) {
   //
   // CUÁNTO PUEDE ENVEJECER: 30 s, contra un umbral de 20 min de espera.
   if (url.searchParams.get("solo") === "alerta") {
-    const umbralAtras = new Date(Date.now() - threshold * 60_000);
     const visAlerta = patientVisibilityFilter({ userId: user.id, role: user.role, clinicId });
     const longWaitsCount = await cachedByKey(
       // userId Y rol: el conteo depende de la visibilidad por paciente.
       claveDeClinica("waiting-room-alerta", clinicId, user.id, user.role, threshold),
       CACHE_TTL_MS,
-      () =>
-        prisma.appointmentTimeline.count({
-          where: {
-            appointment: { clinicId, ...(visAlerta ? { patient: visAlerta } : {}) },
-            arrivedAt: { lte: umbralAtras, not: null },
-            inChairAt: null,
-            consultStartAt: null,
-          },
-        }),
+      async () => {
+        const ahora = new Date();
+        const hoy = diaDeLaClinica(await zonaDeClinica(clinicId), ahora);
+        return prisma.appointmentTimeline.count({
+          where: esperandoAhoraWhere(clinicId, ahora, hoy.desde, threshold, visAlerta ? { patient: visAlerta } : {}),
+        });
+      },
     );
     return NextResponse.json({ threshold, longWaitsCount });
   }
@@ -75,9 +83,10 @@ export async function GET(req: NextRequest) {
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { agendaDayStart: true, agendaDayEnd: true },
+    select: { agendaDayStart: true, agendaDayEnd: true, timezone: true },
   });
   if (!clinic) return NextResponse.json({ error: "clinic_not_found" }, { status: 404 });
+  const zona = clinic.timezone || "America/Mexico_City";
 
   const dayStart = clinic.agendaDayStart;
   const dayEnd = clinic.agendaDayEnd;
@@ -121,9 +130,10 @@ export async function GET(req: NextRequest) {
     if (wait < 0) continue;
     allWaits.push(wait);
 
-    const startsAt = t.appointment.startsAt;
-    const hour = new Date(startsAt).getHours();
-    const dow = (new Date(startsAt).getDay() + 6) % 7;
+    // Hora y día de la semana en la zona de la CLÍNICA (no la del servidor).
+    const p = getTzParts(new Date(t.appointment.startsAt), zona);
+    const hour = p.hour === 24 ? 0 : p.hour;
+    const dow = (new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay() + 6) % 7;
     const hourIdx = hour - dayStart;
 
     const e = byHourAcc.get(hour) ?? { sum: 0, count: 0, long: 0 };
@@ -168,7 +178,7 @@ export async function GET(req: NextRequest) {
   // arrivedAt presente, inChairAt null. Usa appointment.clinicId para
   // tenant scope.
   const now = new Date();
-  const thresholdAgo = new Date(now.getTime() - threshold * 60_000);
+  const inicioDeHoy = diaDeLaClinica(zona, now).desde;
 
   // Visibilidad por paciente: este listado expone nombres de pacientes que
   // esperan AHORA. Va anidado bajo `appointment` (el timeline no relaciona con
@@ -186,12 +196,7 @@ export async function GET(req: NextRequest) {
     CACHE_TTL_MS,
     () =>
       prisma.appointmentTimeline.findMany({
-        where: {
-          appointment: { clinicId, ...(vis ? { patient: vis } : {}) },
-          arrivedAt: { lte: thresholdAgo, not: null },
-          inChairAt: null,
-          consultStartAt: null,
-        },
+        where: esperandoAhoraWhere(clinicId, now, inicioDeHoy, threshold, vis ? { patient: vis } : {}),
         select: {
           appointmentId: true,
           arrivedAt: true,

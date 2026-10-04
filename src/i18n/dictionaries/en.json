@@ -5275,7 +5275,10 @@
       "rateHint": "{count} of {total}",
       "worstDayLabel": "Most problematic day",
       "worstHourLabel": "Most problematic hour",
-      "worstHint": "{rate}% ({count} no-shows)",
+      "worstHint": {
+        "one": "{rate}% ({count} no-show)",
+        "other": "{rate}% ({count} no-shows)"
+      },
       "upcomingHighRisk": "Upcoming high-risk appointments (≥60%)",
       "doctorPrefix": "Dr.",
       "recalculateWithAi": "Recalculate with AI",
@@ -5392,9 +5395,9 @@
       "kpiMedianLabel": "Median",
       "kpiMedianHint": "50% wait more, 50% less",
       "kpiAlertsLabel": "Active alerts",
-      "kpiAlertsHint": "Waiting more than {threshold} min now",
+      "kpiAlertsHint": "Arrived today and waiting more than {threshold} min",
       "heatmapTitle": "Average wait time (min) by day and hour",
-      "heatmapCaption": "Color scaled proportionally to the threshold ({threshold} min). Hover shows exact minutes. Only cells with data appear.",
+      "heatmapCaption": "The color deepens as the wait approaches the {threshold}-minute limit. Hover (or tap a cell) to see the exact minutes. Only cells with data appear.",
       "tableTitle": "By hour of day",
       "colHour": "Hour",
       "colAvg": "Average",

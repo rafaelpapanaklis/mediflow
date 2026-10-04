@@ -5275,7 +5275,10 @@
       "rateHint": "{count} de {total}",
       "worstDayLabel": "Día más problemático",
       "worstHourLabel": "Hora más problemática",
-      "worstHint": "{rate}% ({count} no-shows)",
+      "worstHint": {
+        "one": "{rate}% ({count} inasistencia)",
+        "other": "{rate}% ({count} inasistencias)"
+      },
       "upcomingHighRisk": "Próximas citas con alto riesgo (≥60%)",
       "doctorPrefix": "Dr/a.",
       "recalculateWithAi": "Recalcular con IA",
@@ -5392,9 +5395,9 @@
       "kpiMedianLabel": "Mediana",
       "kpiMedianHint": "50% espera más, 50% menos",
       "kpiAlertsLabel": "Alertas activas",
-      "kpiAlertsHint": "Esperan más de {threshold} min ahora",
+      "kpiAlertsHint": "Llegaron hoy y esperan más de {threshold} min",
       "heatmapTitle": "Tiempo de espera promedio (min) por día y hora",
-      "heatmapCaption": "Color escalado proporcional al threshold ({threshold} min). Hover muestra minutos exactos. Solo aparecen celdas con datos.",
+      "heatmapCaption": "El color se intensifica conforme la espera se acerca al umbral de {threshold} min. Pasa el cursor (o toca la celda) para ver los minutos exactos. Solo aparecen celdas con datos.",
       "tableTitle": "Por hora del día",
       "colHour": "Hora",
       "colAvg": "Promedio",
