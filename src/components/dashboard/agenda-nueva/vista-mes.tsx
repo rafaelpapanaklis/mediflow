@@ -52,7 +52,7 @@ import { todayInTz } from "@/lib/agenda/time-utils";
 import css from "./vista-semana-mes.module.css";
 
 /** ws1-t1 (C-90): alto mínimo de una fila del mes (número, barra de ocupación y su texto). */
-const ALTO_MINIMO_FILA_MES = 96;
+const ALTO_MINIMO_FILA_MES = 120; // ws1-t1 (N-45): con «N sin confirmar» la fila medía más de 96 y se cortaba.
 
 export interface PropsVistaMes {
   /** El reloj. Se inyecta para poder probar qué celda es «hoy». */

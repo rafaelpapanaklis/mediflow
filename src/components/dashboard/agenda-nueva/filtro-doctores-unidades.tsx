@@ -73,7 +73,9 @@ export function FiltroDoctoresUnidades() {
           {/* En pantallas estrechas la selección se esconde (CSS) y queda el
               ícono morado con el contador: el nombre accesible no se pierde. */}
           {texto.visible !== null && <span className={s.filtroEtiqueta}>{texto.visible}</span>}
-          {ag.desmarcados > 0 && <span className={s.filtroContador}>{ag.desmarcados}</span>}
+          {/* ws1-t1 (N-45): decía «2 doctores 22» (el 22 eran los DESMARCADOS). Ahora el número solo sale en
+              pantallas estrechas, donde la etiqueta se esconde, y es lo que está a la vista. */}
+          {!ag.todoMarcado && <span className={s.filtroContador}>{ag.docsVisibles.size}</span>}
         </button>
 
         {abierto && (
@@ -92,17 +94,30 @@ export function FiltroDoctoresUnidades() {
             {ag.responsablesTodos.map((r) => {
               const marcado = ag.docsVisibles.has(r.id);
               return (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={s.filtroFila}
-                  aria-pressed={marcado}
-                  onClick={() => ag.alternarDoctor(r.id)}
-                >
-                  <Casilla marcada={marcado} />
-                  <span className={s.cuadritoColor} style={{ background: r.color }} />
-                  <span className={s.filtroNombre}>{r.nombre}</span>
-                </button>
+                <div key={r.id} className={s.filtroFilaCaja}>
+                  <button
+                    type="button"
+                    className={s.filtroFila}
+                    aria-pressed={marcado}
+                    onClick={() => ag.alternarDoctor(r.id)}
+                  >
+                    <Casilla marcada={marcado} />
+                    <span className={s.cuadritoColor} style={{ background: r.color }} />
+                    <span className={s.filtroNombre}>{r.nombre}</span>
+                  </button>
+                  {/* ws1-t1 (N-45): ver solo a este doctor sin desmarcar a los demás uno por uno. */}
+                  {ag.responsablesTodos.length > 1 && (
+                    <button
+                      type="button"
+                      className={s.filtroSolo}
+                      onClick={() => ag.soloDoctor(r.id)}
+                      aria-label={`Ver solo a ${r.nombre}`}
+                      title={`Ver solo a ${r.nombre}`}
+                    >
+                      Solo
+                    </button>
+                  )}
+                </div>
               );
             })}
 

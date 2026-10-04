@@ -152,11 +152,8 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
       <Tarjeta
         icono={Clock}
         titulo={t("home.waitlist.title")}
-        sub={
-          data.waitlist.length === 0
-            ? t("home.waitlist.emptySubtitle")
-            : t("home.waitlist.subtitle", { count: data.waitlist.length })
-        }
+        // ws1-t1 (N-46): vacía, el «vacío» ya lo dice el recuadro de abajo (antes se decía dos veces).
+        sub={data.waitlist.length === 0 ? undefined : t("home.waitlist.subtitle", { count: data.waitlist.length })}
         accion={
           <>
             {/* La fila completa (asignar, iniciar, completar) vive en /dashboard/walk-in (ws1-t4, fallo 6). */}
@@ -164,7 +161,8 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
               {t("home.waitlist.viewQueue")}
               <ChevronRight size={13} strokeWidth={1.75} aria-hidden />
             </Link>
-            {puedeAgregarEspera && (
+            {/* ws1-t1 (N-46): vacía, el botón de agregar ya está en el recuadro de abajo (no dos «Agregar»). */}
+            {puedeAgregarEspera && data.waitlist.length > 0 && (
               <button type="button" className={`${s.boton} ${s.botonPeq}`} onClick={agregarAEspera}>
                 <Plus size={14} strokeWidth={1.75} aria-hidden />
                 {t("common.add")}

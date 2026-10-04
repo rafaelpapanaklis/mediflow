@@ -27,6 +27,9 @@ export const ROUTE_LABELS: Record<string, string> = {
   "/dashboard/appointments":  "shell.topbar.routeAgenda",
   "/dashboard/patients":      "shell.topbar.routePacientes",
   "/dashboard/whatsapp":      "shell.topbar.routeMensajes",
+  // ws1-t1 (N-46): la Fila de espera y Mensajes no tenían miga (la barra solo decía el nombre de la clínica).
+  "/dashboard/walk-in":       "pages.walkIn.title",
+  "/dashboard/inbox":         "sidebar.nav.inbox",
   "/dashboard/ai-assistant":  "shell.topbar.routeIaAsistente",
   "/dashboard/xrays":         "shell.topbar.routeRadiografias",
   "/dashboard/before-after":  "shell.topbar.routeAntesDespues",

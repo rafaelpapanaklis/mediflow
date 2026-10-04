@@ -504,6 +504,8 @@
 }
 
 .filtroContador {
+  /* ws1-t1 (N-45): solo donde la etiqueta se esconde (ver el @media de .filtroEtiqueta). */
+  display: none !important;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -2369,7 +2371,36 @@ a.panelNombre:hover {
   }
 }
 
+/* ws1-t1 (N-45): la fila del filtro con su botón «Solo». */
+.filtroFilaCaja {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filtroFilaCaja > .filtroFila {
+  flex: 1;
+  min-width: 0;
+}
+
+.filtroSolo {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ag-morado-texto);
+  background: transparent;
+  border: 1px solid var(--ag-borde-control);
+  border-radius: var(--ag-r-8);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
 @media (max-width: 1279.98px) {
+  .filtroContador {
+    display: grid !important;
+  }
+
   .filtroEtiqueta {
     display: none;
   }

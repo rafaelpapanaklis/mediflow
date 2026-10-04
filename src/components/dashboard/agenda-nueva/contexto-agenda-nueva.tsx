@@ -67,6 +67,8 @@ export interface AgendaNuevaValor {
   alternarDoctor: (id: string) => void;
   alternarUnidad: (id: string) => void;
   marcarTodo: () => void;
+  /** ws1-t1 (N-45): deja a la vista SOLO a este doctor (antes había que desmarcar a los otros 21). */
+  soloDoctor: (id: string) => void;
   /** Cuántos elementos hay DESMARCADOS (el contador negro del botón). */
   desmarcados: number;
   /** ¿Está todo marcado? Entonces el botón va en su pinta neutra. */
@@ -242,6 +244,11 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
     setUnidadesOcultas(new Set());
   }, []);
 
+  const soloDoctor = useCallback(
+    (id: string) => setDocsOcultos(new Set(responsablesTodos.filter((r) => r.id !== id).map((r) => r.id))),
+    [responsablesTodos],
+  );
+
   const desmarcados = docsOcultos.size + unidadesOcultas.size;
   const todoMarcado = desmarcados === 0;
 
@@ -296,6 +303,7 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
       docsVisibles,
       unidadesVisibles,
       alternarDoctor,
+      soloDoctor,
       alternarUnidad,
       marcarTodo,
       desmarcados,
@@ -316,6 +324,7 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
       docsVisibles,
       unidadesVisibles,
       alternarDoctor,
+      soloDoctor,
       alternarUnidad,
       marcarTodo,
       desmarcados,

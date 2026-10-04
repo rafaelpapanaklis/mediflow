@@ -125,13 +125,8 @@ export function FilaEspera({
       <Cabecera
         titulo={t("pages.walkIn.title")}
         subtitulo={t("pages.walkIn.waitingCount", { count: waitingCount ?? activeQueue.length })}
-        acciones={
-          puedeAgregar ? (
-            <Boton variante="principal" icono={<UserPlus size={16} strokeWidth={2} />} onClick={() => nombreRef.current?.focus()}>
-              {t("pages.walkIn.addPatient")}
-            </Boton>
-          ) : undefined
-        }
+        // ws1-t1 (N-46): sin el botón «Agregar paciente» de la cabecera; solo ponía el cursor en el formulario
+        // «Agregar a la fila» que está justo debajo, y eran dos «Agregar» para lo mismo.
       />
 
       <div className={s.apilado}>
