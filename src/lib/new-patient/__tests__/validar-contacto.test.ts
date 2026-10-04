@@ -81,3 +81,15 @@ test("la ventana usa las mismas reglas y avisa antes de enviar", () => {
   assert.match(v, /noValidate/);
   assert.match(v, /name: nombreParaAvisoDeAlta\(patient\)/);
 });
+
+// ws1-t1 (C-88 a medias, tercera ronda): `POST /api/patients` con el teléfono de emergencia «12» daba 201.
+test("🔴→🟢 el teléfono de emergencia también se valida (si viene)", () => {
+  const r = alta({ emergencyContactPhone: "12" });
+  assert.equal(r.ok === false && r.field, "emergencyContactPhone");
+  assert.match(r.ok === false ? r.error : "", /teléfono de emergencia no es válido/);
+  assert.equal(alta({ emergencyContactPhone: "" }).ok, true);
+  assert.equal(alta({ emergencyContactPhone: "55 1234 5678" }).ok, true);
+  const v = leer("components/dashboard/new-patient-modal.tsx");
+  assert.match(v, /if \(form\.emergencyContactPhone\.trim\(\) && !telefonoValido\(form\.emergencyContactPhone\)\)/);
+  assert.match(v, /data-campo="emergencyContactPhone"/);
+});

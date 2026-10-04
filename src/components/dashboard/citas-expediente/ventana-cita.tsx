@@ -28,7 +28,7 @@ import { XCircle } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { ROPA_EDITAR_CITA } from "@/components/dashboard/agenda-nueva/ropa";
-import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda-nueva/cancelar-con-dinero";
+import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { ESTADO_LEGACY_PENDIENTE, estadoNormalizado } from "@/lib/agenda-nueva/estados";

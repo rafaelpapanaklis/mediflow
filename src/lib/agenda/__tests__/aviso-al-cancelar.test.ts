@@ -87,7 +87,7 @@ test("las tres puertas de cancelar usan el mismo diálogo", () => {
 });
 
 test("el diálogo pregunta el ajuste del aviso y /api/clinic/me lo da", () => {
-  const dialogo = leer("components/dashboard/agenda-nueva/cancelar-con-dinero.tsx");
+  const dialogo = leer("components/dashboard/agenda/cancelar-cita.tsx");
   assert.match(dialogo, /pedirJson\("\/api\/clinic\/me"\)/);
   assert.match(dialogo, /data-aviso-cancelar="casilla"/);
   const me = leer("app/api/clinic/me/route.ts");
@@ -103,7 +103,7 @@ test("🔴→🟢 N-51: sin WhatsApp, el mensaje final da la misma razón que el
   assert.ok(!/aviso de cancelación está apagado/.test(r.texto));
   // Con WhatsApp y el interruptor apagado, sigue diciendo que está apagado.
   assert.match(resumenTrasCancelar({ whatsapp: { enviado: false, motivo: "apagadoPorClinica" } }, false, "apagado").texto, /aviso de cancelación está apagado/);
-  const dialogo = readFileSync(join(SRC, "components/dashboard/agenda-nueva/cancelar-con-dinero.tsx"), "utf8");
+  const dialogo = readFileSync(join(SRC, "components/dashboard/agenda/cancelar-cita.tsx"), "utf8");
   assert.match(dialogo, /resumenTrasCancelar\(cuerpo, !!r\.avisoCallado, r\.estadoAviso\)/);
   assert.match(dialogo, /estadoAviso: pregunta\.aviso,/);
 });

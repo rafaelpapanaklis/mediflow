@@ -92,7 +92,7 @@ test("la agenda pregunta antes de cancelar y la factura deja decidir después", 
   assert.match(panel, /fetch\(`\/api\/appointments\/\$\{dto\.id\}\/dinero-cita`\)/);
   assert.match(panel, /await cancelarConDinero\.preguntar\(dinero\)/);
   assert.match(panel, /body: JSON\.stringify\(\{ status, reason, dineroCita \}\)/);
-  const dialogo = leer("src/components/dashboard/agenda-nueva/cancelar-con-dinero.tsx");
+  const dialogo = leer("src/components/dashboard/agenda/cancelar-cita.tsx");
   assert.match(dialogo, /Dejarlo como saldo a favor/);
   assert.match(dialogo, /DaleControl no mueve dinero/);
   assert.match(dialogo, /pendiente de decidir/);

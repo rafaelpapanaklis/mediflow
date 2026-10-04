@@ -13,6 +13,7 @@
  * home de siempre). Hallazgo 2 de la auditoría del rediseño (ws1-t8).
  */
 
+import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -84,7 +85,7 @@ export function HoyRecepcion({ user, clinic, data, puedeAgregarEspera = true }: 
           sub={
             data.todayAppointments.length === 0
               ? t("home.recep.todayEmpty")
-              : t("home.recep.todayCount", { count: data.todayAppointments.length })
+              : t("home.recep.todayCount", { count: citasQueCuentan(data.todayAppointments) })
           }
           accion={
             <Link href="/dashboard/agenda" className={s.tarjetaEnlace}>

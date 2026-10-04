@@ -1,5 +1,6 @@
 // src/components/dashboard/home/home-doctor.tsx
 "use client";
+import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useRouter } from "next/navigation";
 import { ChevronRight, FileText, Camera, FileSignature } from "lucide-react";
 import { HomeSection } from "./home-section";
@@ -26,7 +27,8 @@ interface Props {
 export function HomeDoctor({ user, clinic, data }: Props) {
   const t = useT();
   const router = useRouter();
-  const totalToday = data.todayAppointments.length;
+  // ws1-t1 (N-41): las canceladas no cuentan como pacientes de hoy.
+  const totalToday = citasQueCuentan(data.todayAppointments);
   const { draftNotes, unanalyzedXrays, unsignedConsents } = data.pendingTasks;
   const noTasks = draftNotes + unanalyzedXrays + unsignedConsents === 0;
 

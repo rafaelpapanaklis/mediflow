@@ -1,5 +1,6 @@
 "use client";
 
+import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
@@ -68,7 +69,7 @@ import { citaParaReagendar, doctorParaNuevoPlan, dtoParaMoverCita, prellenadoDeN
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda-nueva/cancelar-con-dinero";
+import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
@@ -1465,10 +1466,12 @@ export function PatientDetailClient({
   const ageNum = ageFromDob(patient.dob);
   const genderLabel = patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro";
   const completedCount = appointments.filter(a => a.status === "COMPLETED").length;
+  // ws1-t1 (N-41): el número de la pestaña Citas no cuenta las canceladas (se siguen listando, con su etiqueta).
+  const citasVivas = citasQueCuentan(appointments);
 
   const tabCounts: Record<string, number | undefined> = {
     historia: records.length,
-    agenda: appointments.length,
+    agenda: citasVivas, // ws1-t1 (N-41): sin canceladas
     facturacion: invoices.length,
     fotos: fotosCount,
   };
@@ -1968,7 +1971,7 @@ export function PatientDetailClient({
             radiografias: filesLoaded ? files.length : undefined,
             fotos: fotosCount,
             tratamiento: treatments.length,
-            agenda: appointments.length,
+            agenda: citasVivas, // ws1-t1 (N-41): sin canceladas
             facturacion: invoices.length,
             implantes: implants?.length ?? 0,
           }}
@@ -1995,7 +1998,7 @@ export function PatientDetailClient({
           radiografias: filesLoaded ? files.length : undefined,
           fotos: fotosCount,
           tratamiento: treatments.length,
-          agenda: appointments.length,
+          agenda: citasVivas, // ws1-t1 (N-41): sin canceladas
           facturacion: invoices.length,
           pediatria: pediatricsData?.pendingConsents.length ?? 0,
           periodoncia: perioData?.recordsCount ?? 0,

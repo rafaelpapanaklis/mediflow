@@ -138,6 +138,10 @@ export function validatePatientCreateBody(body: unknown, now: Date = new Date())
   if (typeof b.phone === "string" && b.phone.trim() && !telefonoValido(b.phone)) {
     return fail("phone", TEXTOS_CONTACTO.es.telefono);
   }
+  // ws1-t1 (C-88, tercera ronda): el teléfono de emergencia también («12» entraba).
+  if (typeof b.emergencyContactPhone === "string" && b.emergencyContactPhone.trim() && !telefonoValido(b.emergencyContactPhone)) {
+    return fail("emergencyContactPhone", TEXTOS_CONTACTO.es.telefonoEmergencia);
+  }
   if (typeof b.email === "string" && b.email.trim() && !correoValido(b.email)) {
     return fail("email", TEXTOS_CONTACTO.es.correo);
   }

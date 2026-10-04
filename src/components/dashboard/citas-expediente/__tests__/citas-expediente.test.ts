@@ -129,7 +129,7 @@ test("cancelar pide confirmación con el diálogo de la agenda y dice qué cita 
   for (const dato of ["pacienteNombre", "formatDate(cita.date)", "cita.startTime", "doctor"]) {
     assert.ok(cancelar.includes(dato), `la confirmación no dice ${dato}`);
   }
-  const DIALOGO = leer("components/dashboard/agenda-nueva/cancelar-con-dinero.tsx");
+  const DIALOGO = leer("components/dashboard/agenda/cancelar-cita.tsx");
   assert.match(DIALOGO, /recordatorios pendientes/, "dice qué más se anula");
   assert.match(DIALOGO, /«Cancelada»/, "la API cancela, no borra: la confirmación lo dice");
   assert.match(DIALOGO, /variant="danger"/);

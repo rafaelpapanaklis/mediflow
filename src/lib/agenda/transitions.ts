@@ -22,6 +22,20 @@ function noShowOk(now: Date, start: Date): string | null {
     : null;
 }
 
+/**
+ * ws1-t1 (N-42, tercera ronda): una cita que todavía no empieza no se da por atendida. Se marcaba «Completada» una
+ * cita del 7 de octubre el día 4 y después daba constancia de asistencia. Con 15 min de holgura (el paciente que
+ * se atiende un poco antes de su hora). Si el paciente llegó antes de su día, «Marcar llegada» / «Pasar a
+ * consulta» traen la cita a hoy (adelantar-cita-a-hoy) y entonces sí se completa.
+ */
+export const HOLGURA_COMPLETAR_MS = 15 * 60 * 1000;
+
+export function completarNoFutura(now: Date, start: Date): string | null {
+  return start.getTime() > now.getTime() + HOLGURA_COMPLETAR_MS
+    ? "No se puede completar una cita que todavía no empieza. Si el paciente llegó antes, márcalo con «Marcar llegada»: la cita se trae a hoy."
+    : null;
+}
+
 const TRANSITIONS: Transition[] = [
   // ── SCHEDULED ────────────────────────────────────────────────────
   { from: "SCHEDULED",   to: "CONFIRMED",   allowedRoles: FRONT_DESK },
@@ -61,14 +75,14 @@ const TRANSITIONS: Transition[] = [
   // Atajo: si el doctor ya terminó sin haber entrado en IN_PROGRESS
   // formalmente (ej. consulta de 5 min en sillón), permitimos COMPLETED
   // directo. Mejor que forzar al doctor a clickear 2 estados.
-  { from: "IN_CHAIR",    to: "COMPLETED",   allowedRoles: CLINICAL },
+  { from: "IN_CHAIR",    to: "COMPLETED",   allowedRoles: CLINICAL, predicate: completarNoFutura },
   { from: "IN_CHAIR",    to: "CANCELLED",   allowedRoles: FRONT_DESK },
 
   // ── IN_PROGRESS ──────────────────────────────────────────────────
-  { from: "IN_PROGRESS", to: "COMPLETED",   allowedRoles: CLINICAL },
+  { from: "IN_PROGRESS", to: "COMPLETED",   allowedRoles: CLINICAL, predicate: completarNoFutura },
   // Alias: marcar checkout directo cierra el ciclo (COMPLETED + checkout
   // en un solo click).
-  { from: "IN_PROGRESS", to: "CHECKED_OUT", allowedRoles: CLINICAL },
+  { from: "IN_PROGRESS", to: "CHECKED_OUT", allowedRoles: CLINICAL, predicate: completarNoFutura },
   { from: "IN_PROGRESS", to: "CANCELLED",   allowedRoles: ADMINS },
 
   // ── COMPLETED ────────────────────────────────────────────────────

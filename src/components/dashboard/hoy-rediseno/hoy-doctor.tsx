@@ -11,6 +11,7 @@
  * ella la agenda es ésa. Ver `hoy-recepcion.tsx`.
  */
 
+import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -38,7 +39,8 @@ interface Props {
 
 export function HoyDoctor({ user, clinic, data }: Props) {
   const t = useT();
-  const totalHoy = data.todayAppointments.length;
+  // ws1-t1 (N-41): las canceladas no cuentan como pacientes de hoy.
+  const totalHoy = citasQueCuentan(data.todayAppointments);
   const { draftNotes, unanalyzedXrays, unsignedConsents } = data.pendingTasks;
   const sinTareas = draftNotes + unanalyzedXrays + unsignedConsents === 0;
 

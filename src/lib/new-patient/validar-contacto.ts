@@ -31,11 +31,13 @@ export const TEXTOS_CONTACTO = {
     telefono: "El teléfono no es válido: escribe 10 dígitos (o con lada internacional, +52…), sin letras.",
     correo: "El correo no es válido: revisa que tenga la forma nombre@dominio.com.",
     fechaFutura: "La fecha de nacimiento no puede estar en el futuro.",
+    telefonoEmergencia: "El teléfono de emergencia no es válido: escribe 10 dígitos (o con lada internacional), sin letras.",
   },
   en: {
     telefono: "The phone number isn't valid: type 10 digits (or with the country code, +52…), no letters.",
     correo: "The email isn't valid: check it looks like name@domain.com.",
     fechaFutura: "The date of birth can't be in the future.",
+    telefonoEmergencia: "The emergency phone isn't valid: type 10 digits (or with the country code), no letters.",
   },
 } as const;
 

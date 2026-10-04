@@ -68,7 +68,7 @@ const SOURCE_OPTIONS = [
 
 /** ws1-t1 (F8): los campos en el orden en que salen en la ventana — al fallar se lleva la vista al primero. */
 export const ORDEN_CAMPOS_NUEVO_PACIENTE = [
-  "firstName", "lastName", "dob", "gender", "curp", "passportNo", "email", "phone", "allergies",
+  "firstName", "lastName", "dob", "gender", "curp", "passportNo", "email", "phone", "emergencyContactPhone", "allergies",
 ] as const;
 
 /** ws1-t1 (C-95): la etiqueta de cada obligatorio, para NOMBRARLO en el aviso. */
@@ -187,6 +187,12 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (!telefonoValido(form.phone)) {
       marcarErrores({ phone: true });
       toast.error(textosContacto.telefono);
+      return;
+    }
+    // ws1-t1 (C-88, tercera ronda): el teléfono de emergencia, si se escribe, también.
+    if (form.emergencyContactPhone.trim() && !telefonoValido(form.emergencyContactPhone)) {
+      marcarErrores({ emergencyContactPhone: true });
+      toast.error(textosContacto.telefonoEmergencia);
       return;
     }
     if (form.email.trim() && !correoValido(form.email)) {
@@ -453,9 +459,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                   <label className="field-new__label">Contacto de emergencia</label>
                   <input className="input-new" placeholder="Nombre" value={form.emergencyContactName} onChange={e => set("emergencyContactName", e.target.value)} />
                 </div>
-                <div className="field-new">
+                <div className="field-new" data-campo="emergencyContactPhone">
                   <label className="field-new__label">Tel. de emergencia</label>
-                  <input className="input-new" placeholder="+52 55…" value={form.emergencyContactPhone} onChange={e => set("emergencyContactPhone", e.target.value)} />
+                  <input className="input-new" placeholder="+52 55…" value={form.emergencyContactPhone} onChange={e => set("emergencyContactPhone", e.target.value)} style={{ borderColor: errors.emergencyContactPhone ? 'var(--danger)' : undefined }} />
                 </div>
                 <div className="field-new" style={{ gridColumn: "1 / -1" }}>
                   <label className="field-new__label">Parentesco</label>

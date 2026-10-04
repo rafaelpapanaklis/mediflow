@@ -1,5 +1,6 @@
 // src/components/dashboard/home/home-receptionist.tsx
 "use client";
+import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { HomeSection } from "./home-section";
@@ -93,7 +94,7 @@ export function HomeReceptionist({ user, clinic, data, puedeAgregarEspera = true
           subtitle={
             data.todayAppointments.length === 0
               ? t("home.recep.todayEmpty")
-              : t("home.recep.todayCount", { count: data.todayAppointments.length })
+              : t("home.recep.todayCount", { count: citasQueCuentan(data.todayAppointments) })
           }
           action={
             <ButtonNew

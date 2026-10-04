@@ -1,4 +1,5 @@
 "use client";
+import { etiquetaDeEstadoEnBusqueda } from "@/lib/command-palette/estado-cita";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useT, useLocale } from "@/i18n/i18n-provider";
@@ -234,7 +235,8 @@ export function CommandPalette({ open, onOpenChange, apariencia }: CommandPalett
           id: `appt-${a.id}`,
           group: "citas",
           label: a.patientName,
-          sub: [`${fmtDayMonth(a.date, locale)} · ${a.startTime}`, a.doctorName]
+          // ws1-t1 (N-41): una cita cancelada (o no asistida) lo dice; antes salía igual que una viva.
+          sub: [`${fmtDayMonth(a.date, locale)} · ${a.startTime}`, a.doctorName, etiquetaDeEstadoEnBusqueda(a.status, locale)]
             .filter(Boolean)
             .join(" · "),
           icon: CalendarIcon,
