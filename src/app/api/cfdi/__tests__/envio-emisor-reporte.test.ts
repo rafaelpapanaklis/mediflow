@@ -18,6 +18,7 @@ const db = {
   clinicUpdates: [] as any[],
   pagos: [] as any[],
   registros: [] as any[],
+  creditos: [] as any[],
 };
 const llamadas = {
   correo: [] as any[],
@@ -49,9 +50,17 @@ const prismaStub: any = {
   },
   payment: {
     findMany: async ({ where }: any) => {
-      if (!where?.invoice?.clinicId) throw new Error("pagos sin clinicId");
-      return db.pagos.filter((p) => p.invoice.clinicId === where.invoice.clinicId && p.paidAt >= where.paidAt.gte && p.paidAt < where.paidAt.lt);
+      // C-38: el reporte también pide los cobros y reembolsos de la definición única (AND de Finanzas).
+      const w = Array.isArray(where?.AND) ? where.AND[0] : where;
+      if (!w?.invoice?.clinicId) throw new Error("pagos sin clinicId");
+      let xs = db.pagos.filter((p) => p.invoice.clinicId === w.invoice.clinicId && p.paidAt >= w.paidAt.gte && p.paidAt < w.paidAt.lt);
+      if (w.method === "refund") xs = xs.filter((p) => p.method === "refund");
+      else if (Array.isArray(w.method?.notIn)) xs = xs.filter((p) => !w.method.notIn.includes(p.method));
+      return xs;
     },
+  },
+  patientCredit: {
+    findMany: async ({ where }: any) => { exigeClinica(where); return db.creditos.filter((c: any) => c.clinicId === where.clinicId); },
   },
 };
 
@@ -276,6 +285,24 @@ test("reporte: solo la clínica de la sesión, sin lo timbrado, y CSV descargabl
   assert.equal(csv.headers.get("content-type"), "text/csv; charset=utf-8");
   assert.match(csv.headers.get("content-disposition") ?? "", /cobrado-sin-cfdi-2026-10\.csv/);
   assert.match(await csv.text(), /"MF-1"/);
+});
+
+test("reporte (C-38/C-39): el traspaso a saldo a favor no resta y el anticipo de Mercado Pago sin nota entra, con la definición de Finanzas", async () => {
+  const { GET } = await import("@/app/api/cfdi/cobrado-sin-cfdi/route");
+  const p = (id: string, amount: number, extra: any = {}) => ({
+    id, paidAt: new Date("2026-09-10T18:00:00Z"), amount, method: "cash", refundMethod: null,
+    invoice: { id: "i_1036", clinicId: "c1", invoiceNumber: "MF-1036", status: "PAID", balance: 0, cfdiUuid: null, taxRate: 16, taxIncluded: true },
+    ...extra,
+  });
+  db.pagos = [p("a", 2400), p("b", 400, { method: "refund", refundMethod: "saldo_a_favor" })];
+  db.registros = [];
+  db.creditos = [{ id: "cr1", clinicId: "c1", amount: 700, creditDate: new Date("2026-09-12T18:00:00Z"), source: "anticipo_mercadopago" }];
+  const d = await (await GET(req("/api/cfdi/cobrado-sin-cfdi?mes=2026-09"))).json();
+  assert.equal(d.total, 3100);
+  assert.equal(d.apartados.reembolsos.length, 0);
+  assert.equal(d.apartados.traspasos.length, 1);
+  assert.equal(d.anticiposSinNota, 700);
+  db.creditos = [];
 });
 
 test("reporte: solo dueño y administrador; mes inválido → 400", async () => {

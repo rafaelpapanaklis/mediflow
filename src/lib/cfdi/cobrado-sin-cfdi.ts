@@ -7,8 +7,14 @@
 //
 // Unidad: el COBRO (Payment), en el mes de la clínica según su fecha de cobro — el ingreso de una
 // persona física (612 y 626) se acumula cuando se cobra (flujo de efectivo). Reglas, en orden:
-//   1. Reembolsos (method "refund"): aparte, en su propia lista. No son ingreso.
-//   2. Nota en borrador o cancelada: fuera (no es venta; mismo criterio que Caja).
+//   1. Reembolsos (method "refund"): aparte, en su propia lista. No son ingreso. Pero el
+//      TRASPASO a saldo a favor (refundMethod "saldo_a_favor": excedente de un cobro, cita
+//      cancelada…) NO es un reembolso: el dinero no salió y el cobro de origen sigue siendo
+//      ingreso (ws1-t4, auditoría de uso C-38). Va en su propia lista, sin restar nada.
+//   2. Lo que la definición ÚNICA de ingresos (lib/dinero/ingresos.server.ts, la de Finanzas)
+//      no cuenta como cobro ni como reembolso: fuera (nota en borrador o cancelada, historia
+//      migrada…). El servidor marca cada pago con `enDefinicionUnica`; sin esa marca se usa
+//      la regla de siempre (borrador o cancelada = no es venta).
 //   3. Cobro con su propio CFDI (factura a plazos, «Facturar este pago»): fuera, ya timbrado.
 //   4. Nota con CFDI vigente (o un UUID heredado sin registro): fuera, ya timbrada.
 //   5. Timbre en duda (factura apartada «timbrando:…», o un pago con su CFDI «apartado»): fuera del
@@ -19,10 +25,16 @@
 //      global, esa nota ya no debe timbrarse sola después.
 // Un CFDI cancelado (status "cancelled"/"canceled") ya no ampara nada: el cobro vuelve a contar.
 //
+// Además (C-39): el dinero que ENTRÓ sin nota (anticipo pagado por Mercado Pago, excedente de un
+// cobro automático; filas de `patient_credits` que Finanzas cuenta como ingreso el día que entran)
+// también va a la global, en el mes en que entró. Así «para la global» − reembolsos = Finanzas,
+// salvo lo ya timbrado.
+//
 // PURO: sin Prisma. El servidor (cobrado-sin-cfdi.server.ts) junta los datos.
 
 import { armarCsvExcel } from "@/lib/csv-excel";
 import { resolveTaxMode } from "@/lib/invoice-totals";
+import { esTraspasoASaldoAFavor } from "@/lib/dinero/reembolsos";
 
 export const CFDI_CLAIM_PREFIX_FACTURA = "timbrando:";
 
@@ -31,6 +43,13 @@ export interface PagoDelMes {
   paidAt: Date;
   amount: number;
   method: string;
+  /** En un reembolso: por dónde salió el dinero ("saldo_a_favor" = no salió, es un traspaso). */
+  refundMethod?: string | null;
+  /**
+   * ¿La definición única de ingresos (la de Finanzas) lo cuenta, como cobro o como reembolso?
+   * La pone el servidor. undefined = no se sabe: regla de siempre (borrador o cancelada fuera).
+   */
+  enDefinicionUnica?: boolean;
   invoice: {
     id: string;
     invoiceNumber: string | null;
@@ -50,7 +69,16 @@ export interface CfdiConocidos {
   porPago: ReadonlyMap<string, string>;
 }
 
-export type Motivo = "incluido" | "anticipo" | "reembolso" | "timbrada" | "timbradoPorPago" | "enRevision" | "noEsVenta";
+export type Motivo = "incluido" | "anticipo" | "reembolso" | "traspaso" | "timbrada" | "timbradoPorPago" | "enRevision" | "noEsVenta";
+
+/** Dinero que entró sin nota (fila de `patient_credits` que Finanzas cuenta como ingreso). */
+export interface AnticipoSinNota {
+  id: string;
+  creditDate: Date;
+  amount: number;
+  /** "anticipo_mercadopago", "cobro_automatico_mercadopago"… */
+  source: string;
+}
 
 const CANCELADO = new Set(["cancelled", "canceled"]);
 const vigente = (st: string) => !CANCELADO.has(st);
@@ -65,8 +93,14 @@ export function formaSatDe(method: string): string | null {
 }
 
 export function clasificarPago(p: PagoDelMes, cfdi: CfdiConocidos): Motivo {
-  if (p.method === "refund") return "reembolso";
-  if (p.invoice.status === "DRAFT" || p.invoice.status === "CANCELLED") return "noEsVenta";
+  // C-38: pasar dinero a saldo a favor no es devolverlo; no resta de nada.
+  if (esTraspasoASaldoAFavor(p)) return "traspaso";
+  const notaFuera = p.invoice.status === "DRAFT" || p.invoice.status === "CANCELLED";
+  // El saldo a favor aplicado («anticipo») nunca es ingreso en Finanzas (se contó al cobrarse):
+  // para él vale la regla de la nota; para lo demás, la definición única cuando se sabe.
+  const fuera = p.method === "anticipo" || p.enDefinicionUnica === undefined ? notaFuera : !p.enDefinicionUnica;
+  if (p.method === "refund") return fuera && p.enDefinicionUnica === false ? "noEsVenta" : "reembolso";
+  if (fuera) return "noEsVenta";
   const delPago = cfdi.porPago.get(p.id);
   if (delPago === "apartado") return "enRevision";
   if (delPago && vigente(delPago)) return "timbradoPorPago";
@@ -94,6 +128,8 @@ export interface FilaReporte {
   fecha: string; // YYYY-MM-DD en la zona de la clínica
   folio: string;
   metodo: string;
+  /** "cobro" = un Payment de una nota; "anticipoSinNota" = dinero que entró sin nota (C-39). */
+  origen: "cobro" | "anticipoSinNota";
   formaSat: string | null;
   importe: number;
   base: number;
@@ -116,7 +152,11 @@ export interface ReporteCobradoSinCfdi {
     anticipos: FilaReporte[];
     reembolsos: FilaReporte[];
     enRevision: FilaReporte[];
+    /** C-38: lo que pasó a saldo a favor en el mes. Informativo: no resta (el cobro de origen ya cuenta). */
+    traspasos: FilaReporte[];
   };
+  /** C-39: cuánto de `total` es dinero que entró sin nota (anticipos por Mercado Pago…). */
+  anticiposSinNota: number;
   excluidos: { timbradas: number; timbradoPorPago: number; noEsVenta: number };
 }
 
@@ -129,7 +169,9 @@ function fila(p: PagoDelMes, motivo: Motivo, fecha: string, modoClinica: string 
     fecha,
     folio: p.invoice.invoiceNumber ?? "",
     metodo: p.method,
-    formaSat: formaSatDe(p.method),
+    origen: "cobro",
+    // Un reembolso no se paga «con» nada: su forma es por dónde salió el dinero (C-56).
+    formaSat: p.method === "refund" ? (p.refundMethod ? formaSatDe(p.refundMethod) : null) : formaSatDe(p.method),
     importe,
     base,
     iva: r2(importe - base),
@@ -139,9 +181,24 @@ function fila(p: PagoDelMes, motivo: Motivo, fecha: string, modoClinica: string 
   };
 }
 
+/** Fila del dinero que entró sin nota. Sin nota no hay IVA propio: el modo de la clínica. */
+function filaDeAnticipo(a: AnticipoSinNota, fecha: string, modoClinica: string | null | undefined): FilaReporte {
+  const importe = r2(a.amount);
+  const conIva = llevaIva({ taxRate: null, taxIncluded: null }, modoClinica);
+  const base = conIva ? r2(importe / 1.16) : importe;
+  return {
+    fecha, folio: "", metodo: a.source, origen: "anticipoSinNota",
+    // Mercado Pago: el panel no sabe si fue crédito o débito (formas 30/31: CONFIRMAR CON CONTADOR).
+    formaSat: null,
+    importe, base, iva: r2(importe - base), conIva, notaConSaldo: false, motivo: "incluido",
+  };
+}
+
 export function armarReporte(args: {
   mes: string;
   pagos: readonly PagoDelMes[];
+  /** C-39: dinero que entró sin nota en el mes (Finanzas lo cuenta como ingreso ese día). */
+  anticiposSinNota?: readonly AnticipoSinNota[];
   cfdi: CfdiConocidos;
   modoClinica: string | null | undefined;
   /** Fecha local (YYYY-MM-DD) de un instante, en la zona de la clínica. */
@@ -151,22 +208,33 @@ export function armarReporte(args: {
   const anticipos: FilaReporte[] = [];
   const reembolsos: FilaReporte[] = [];
   const enRevision: FilaReporte[] = [];
+  const traspasos: FilaReporte[] = [];
   const excluidos = { timbradas: 0, timbradoPorPago: 0, noEsVenta: 0 };
-  const ordenados = [...args.pagos].sort((a, b) => a.paidAt.getTime() - b.paidAt.getTime() || a.id.localeCompare(b.id));
-  for (const p of ordenados) {
-    const motivo = clasificarPago(p, args.cfdi);
-    const f = fila(p, motivo, args.fechaLocal(p.paidAt), args.modoClinica);
-    if (motivo === "incluido") filas.push(f);
-    else if (motivo === "anticipo") anticipos.push(f);
-    else if (motivo === "reembolso") {
-      // Un reembolso de una nota timbrada se corrige con nota de crédito, no con la global.
-      const deLaNota = clasificarPago({ ...p, method: "cash" }, args.cfdi);
-      if (deLaNota === "incluido") reembolsos.push(f);
-    } else if (motivo === "enRevision") enRevision.push(f);
-    else if (motivo === "timbrada") excluidos.timbradas += 1;
-    else if (motivo === "timbradoPorPago") excluidos.timbradoPorPago += 1;
-    else excluidos.noEsVenta += 1;
+  type Mov = { t: number; id: string; f: () => void };
+  const movs: Mov[] = [];
+  for (const p of args.pagos) {
+    movs.push({ t: p.paidAt.getTime(), id: p.id, f: () => {
+      const motivo = clasificarPago(p, args.cfdi);
+      const f = fila(p, motivo, args.fechaLocal(p.paidAt), args.modoClinica);
+      if (motivo === "incluido") filas.push(f);
+      else if (motivo === "anticipo") anticipos.push(f);
+      else if (motivo === "traspaso") traspasos.push(f);
+      else if (motivo === "reembolso") {
+        // Un reembolso de una nota timbrada se corrige con nota de crédito, no con la global.
+        const deLaNota = clasificarPago({ ...p, method: "cash", refundMethod: null, enDefinicionUnica: undefined }, args.cfdi);
+        if (deLaNota === "incluido") reembolsos.push(f);
+      } else if (motivo === "enRevision") enRevision.push(f);
+      else if (motivo === "timbrada") excluidos.timbradas += 1;
+      else if (motivo === "timbradoPorPago") excluidos.timbradoPorPago += 1;
+      else excluidos.noEsVenta += 1;
+    } });
   }
+  for (const a of args.anticiposSinNota ?? []) {
+    if (!(a.amount > 0)) continue;
+    movs.push({ t: a.creditDate.getTime(), id: a.id, f: () => filas.push(filaDeAnticipo(a, args.fechaLocal(a.creditDate), args.modoClinica)) });
+  }
+  movs.sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
+  for (const m of movs) m.f();
   const suma = (xs: FilaReporte[], k: "importe" | "base" | "iva") => r2(xs.reduce((s, x) => s + x[k], 0));
   const formas = new Map<string | null, number>();
   for (const f of filas) formas.set(f.formaSat, r2((formas.get(f.formaSat) ?? 0) + f.importe));
@@ -179,9 +247,10 @@ export function armarReporte(args: {
     base: suma(filas, "base"),
     iva: suma(filas, "iva"),
     porForma,
-    notas: new Set(filas.map((f) => f.folio)).size,
+    notas: new Set(filas.filter((f) => f.origen === "cobro").map((f) => f.folio)).size,
     conSaldo: filas.filter((f) => f.notaConSaldo).length,
-    apartados: { anticipos, reembolsos, enRevision },
+    apartados: { anticipos, reembolsos, enRevision, traspasos },
+    anticiposSinNota: suma(filas.filter((f) => f.origen === "anticipoSinNota"), "importe"),
     excluidos,
   };
 }
@@ -197,13 +266,17 @@ const METODO_ES: Record<string, string> = {
   cash: "Efectivo", debit: "Tarjeta de débito", credit: "Tarjeta de crédito", transfer: "Transferencia",
   check: "Cheque", mercadopago: "Mercado Pago", card: "Tarjeta", online: "Pago en línea", other: "Otro",
   anticipo: "Saldo a favor (anticipo)", refund: "Reembolso",
+  anticipo_mercadopago: "Anticipo por Mercado Pago (sin nota)",
+  cobro_automatico_mercadopago: "Excedente de cobro automático (sin nota)",
 };
 
 /** CSV para Excel (BOM, CRLF): las filas que van a la global y, abajo, lo que va aparte. */
 export function csvDelReporte(r: ReporteCobradoSinCfdi): string {
   const enc = ["Fecha de cobro", "Folio de la nota", "Método en el panel", "Forma de pago SAT", "Importe cobrado", "Base", "IVA", "Impuesto", "Nota con saldo", "Sección"];
+  const forma = (f: FilaReporte) => f.formaSat
+    ?? (f.metodo === "refund" ? "No aplica (devolución)" : "Por definir (el panel no sabe con qué pagó)");
   const linea = (f: FilaReporte, seccion: string): (string | number | null)[] => [
-    f.fecha, f.folio, METODO_ES[f.metodo] ?? f.metodo, f.formaSat ?? "Por definir (el panel no sabe con qué pagó)",
+    f.fecha, f.folio || "Sin nota", METODO_ES[f.metodo] ?? f.metodo, forma(f),
     f.importe, f.base, f.iva, f.conIva ? "IVA 16%" : "Exento", f.notaConSaldo ? "Sí: si va en la global, no la timbres después" : "No", seccion,
   ];
   const filas: (string | number | null)[][] = [enc];
@@ -212,5 +285,6 @@ export function csvDelReporte(r: ReporteCobradoSinCfdi): string {
   for (const f of r.apartados.anticipos) filas.push(linea(f, "Aparte: pagado con saldo a favor (revisar con el contador)"));
   for (const f of r.apartados.reembolsos) filas.push(linea({ ...f, importe: -f.importe, base: -f.base, iva: -f.iva }, "Aparte: reembolso"));
   for (const f of r.apartados.enRevision) filas.push(linea(f, "Aparte: timbre en duda (revisar en Facturapi)"));
+  for (const f of r.apartados.traspasos ?? []) filas.push(linea(f, "Informativo: pasó a saldo a favor (no es reembolso, no resta)"));
   return armarCsvExcel(filas);
 }

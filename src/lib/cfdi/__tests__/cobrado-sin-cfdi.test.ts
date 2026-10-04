@@ -12,6 +12,7 @@ import {
   type PagoDelMes, type CfdiConocidos,
 } from "@/lib/cfdi/cobrado-sin-cfdi";
 import { rangoDelMes } from "@/lib/cfdi/cobrado-sin-cfdi.server";
+import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 
 const SIN: CfdiConocidos = { porFactura: new Map(), porPago: new Map() };
 const fechaUtc = (d: Date) => d.toISOString().slice(0, 10);
@@ -149,4 +150,90 @@ test("mes válido y rango del mes en la zona de la clínica (CDMX, UTC-6)", () =
   assert.equal(hasta.toISOString(), "2026-11-01T06:00:00.000Z");
   const dic = rangoDelMes("2026-12", "America/Mexico_City");
   assert.equal(dic.hasta.toISOString(), "2027-01-01T06:00:00.000Z");
+});
+
+// ── Auditoría de uso (ws1-t4, 4-oct-2026): C-38, C-39 y C-56 ────────────────────────────────
+
+test("C-38 · MF-1036: el excedente que pasó a saldo a favor NO se resta como reembolso; el cobro sigue en la global", () => {
+  n = 0;
+  const cobro = pago({ amount: 2400, enDefinicionUnica: true }, { id: "inv_1036" });
+  const traspaso = pago({ amount: 400, method: "refund", refundMethod: "saldo_a_favor", enDefinicionUnica: false }, { id: "inv_1036" });
+  const r = armarReporte({ mes: "2026-09", pagos: [cobro, traspaso], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  assert.equal(r.total, 2400);
+  assert.deepEqual(r.apartados.reembolsos, [], "antes: «Aparte: reembolso» −$400");
+  assert.deepEqual(r.apartados.traspasos.map((f) => f.importe), [400]);
+  assert.equal(clasificarPago(traspaso, SIN), "traspaso");
+  // Un reembolso viejo sin método (NULL) sigue contando como reembolso, igual que en Finanzas.
+  const viejo = pago({ amount: 300, method: "refund", refundMethod: null, enDefinicionUnica: true }, { id: "inv_1036" });
+  assert.equal(clasificarPago(viejo, SIN), "reembolso");
+  // Y uno real en efectivo trae su forma (01), no «Por definir» (C-56).
+  const real = pago({ amount: 100, method: "refund", refundMethod: "cash", enDefinicionUnica: true });
+  const r2 = armarReporte({ mes: "2026-10", pagos: [real], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  assert.equal(r2.apartados.reembolsos[0].formaSat, "01");
+});
+
+test("C-38 · la global cuadra con Finanzas: global − reembolsos reales = neto de la definición única", () => {
+  n = 0;
+  // Septiembre de la clínica de prueba, en chico: 3 cobros, un traspaso a saldo a favor, un reembolso real.
+  const pagos = [
+    pago({ amount: 1000, enDefinicionUnica: true }, { id: "inv_a" }),
+    pago({ amount: 400, method: "refund", refundMethod: "saldo_a_favor", enDefinicionUnica: false }, { id: "inv_a" }),
+    pago({ amount: 600, method: "transfer", enDefinicionUnica: true }, { id: "inv_b" }),
+    pago({ amount: 300, enDefinicionUnica: true }, { id: "inv_c" }),
+    pago({ amount: 300, method: "refund", refundMethod: "cash", enDefinicionUnica: true }, { id: "inv_c" }),
+  ];
+  const r = armarReporte({ mes: "2026-09", pagos, cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  const neto = netoDelPeriodo(
+    pagos.filter((p) => p.method !== "refund").map((p) => ({ amount: p.amount, paidAt: p.paidAt })),
+    pagos.filter((p) => p.method === "refund" && p.refundMethod !== "saldo_a_favor").map((p) => ({ amount: p.amount, paidAt: p.paidAt })),
+  ).neto;
+  const reembolsos = r.apartados.reembolsos.reduce((s, f) => s + f.importe, 0);
+  assert.equal(r.total - reembolsos, neto);
+  assert.equal(neto, 1600);
+});
+
+test("C-01/C-38 · el anticipo cobrado de una cita que se canceló (nota CANCELADA, dejado a favor) va en la global del mes en que entró", () => {
+  n = 0;
+  // La definición única (C-01) lo cuenta como cobro: el reporte lo sigue, aunque la nota esté cancelada.
+  const anticipo = pago({ amount: 500, method: "transfer", enDefinicionUnica: true }, { id: "inv_1124", status: "CANCELLED" });
+  const aFavor = pago({ amount: 500, method: "refund", refundMethod: "saldo_a_favor", enDefinicionUnica: false }, { id: "inv_1124", status: "CANCELLED" });
+  const r = armarReporte({ mes: "2026-10", pagos: [anticipo, aFavor], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc });
+  assert.equal(r.total, 500);
+  assert.equal(r.excluidos.noEsVenta, 0);
+  // Sin la marca (servidor viejo), la nota cancelada sigue fuera como siempre.
+  assert.equal(clasificarPago({ ...anticipo, enDefinicionUnica: undefined }, SIN), "noEsVenta");
+  // Y lo que la definición única no cuenta (historia migrada, borradores…) queda fuera.
+  assert.equal(clasificarPago(pago({ amount: 90, method: "migrated", enDefinicionUnica: false }), SIN), "noEsVenta");
+});
+
+test("C-39 · el anticipo pagado por Mercado Pago sin nota entra a la global el mes en que entró", () => {
+  n = 0;
+  const efectivo = pago({ amount: 1000, enDefinicionUnica: true });
+  const r = armarReporte({
+    mes: "2026-10",
+    pagos: [efectivo],
+    anticiposSinNota: [
+      { id: "cred_1", creditDate: new Date("2026-10-15T18:00:00Z"), amount: 700, source: "anticipo_mercadopago" },
+      { id: "cred_0", creditDate: new Date("2026-10-20T18:00:00Z"), amount: 0, source: "anticipo_mercadopago" },
+    ],
+    cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc,
+  });
+  assert.equal(r.total, 1700, "antes: $1,000 (el reporte solo leía payments)");
+  assert.equal(r.anticiposSinNota, 700);
+  assert.equal(r.notas, 1, "el anticipo sin nota no es una nota");
+  const fila = r.filas.find((f) => f.origen === "anticipoSinNota")!;
+  assert.equal(fila.fecha, "2026-10-15");
+  assert.equal(fila.formaSat, null, "Mercado Pago: el panel no sabe si fue crédito o débito");
+  const csv = csvDelReporte(r);
+  assert.match(csv, /"2026-10-15","Sin nota","Anticipo por Mercado Pago \(sin nota\)"/);
+});
+
+test("C-56 · CSV: un reembolso ya no dice «Por definir (el panel no sabe con qué pagó)»", () => {
+  n = 0;
+  const cobro = pago({ amount: 800, enDefinicionUnica: true }, { id: "inv_r" });
+  const viejo = pago({ amount: 200, method: "refund", refundMethod: null, enDefinicionUnica: true }, { id: "inv_r" });
+  const csv = csvDelReporte(armarReporte({ mes: "2026-10", pagos: [cobro, viejo], cfdi: SIN, modoClinica: "exempt", fechaLocal: fechaUtc }));
+  const linea = csv.split("\r\n").find((l) => l.includes("Aparte: reembolso"))!;
+  assert.doesNotMatch(linea, /Por definir/);
+  assert.match(linea, /No aplica \(devolución\)/);
 });

@@ -32,6 +32,8 @@ const T = {
     reembolsos: (n: number, m: string) => `Aparte: ${n} ${n === 1 ? "reembolso" : "reembolsos"} de notas sin CFDI (${m}).`,
     revision: (n: number) => `${n} ${n === 1 ? "cobro tiene" : "cobros tienen"} un timbre en duda: revisa en Facturapi si el CFDI salió antes de incluirlos.`,
     excluidos: (n: number) => `${n} ${n === 1 ? "cobro ya tiene" : "cobros ya tienen"} CFDI y no se cuentan.`,
+    sinNota: (m: string) => `Incluye ${m} que entraron sin nota (anticipos por Mercado Pago o excedentes de cobro automático), en el mes en que entraron, como en Finanzas.`,
+    traspasos: (n: number, m: string) => `${n} ${n === 1 ? "cobro pasó" : "cobros pasaron"} a saldo a favor (${m}). No es un reembolso: el dinero no salió y no se resta.`,
     descargar: "Descargar para Excel (CSV)",
     actualizar: "Actualizar",
     vacio: "No hay cobros sin CFDI en este mes.",
@@ -53,6 +55,8 @@ const T = {
     reembolsos: (n: number, m: string) => `Separate: ${n} ${n === 1 ? "refund" : "refunds"} of receipts without CFDI (${m}).`,
     revision: (n: number) => `${n} ${n === 1 ? "payment has" : "payments have"} a stamp in doubt: check in Facturapi whether the CFDI was issued before including them.`,
     excluidos: (n: number) => `${n} ${n === 1 ? "payment already has" : "payments already have"} a CFDI and are not counted.`,
+    sinNota: (m: string) => `Includes ${m} received without a receipt (Mercado Pago deposits or automatic-charge overpayments), in the month they came in, as in Finances.`,
+    traspasos: (n: number, m: string) => `${n} ${n === 1 ? "payment was" : "payments were"} moved to credit balance (${m}). It isn't a refund: the money didn't leave and isn't subtracted.`,
     descargar: "Download for Excel (CSV)",
     actualizar: "Refresh",
     vacio: "No payments without CFDI this month.",
@@ -134,6 +138,8 @@ export function CobradoSinCfdiCard() {
               {rep.apartados.enRevision.length > 0 && <li style={{ color: "var(--warning-strong)" }}>{tx.revision(rep.apartados.enRevision.length)}</li>}
               {rep.apartados.anticipos.length > 0 && <li>{tx.anticipos(rep.apartados.anticipos.length, pesos(suma(rep.apartados.anticipos)))}</li>}
               {rep.apartados.reembolsos.length > 0 && <li>{tx.reembolsos(rep.apartados.reembolsos.length, pesos(suma(rep.apartados.reembolsos)))}</li>}
+              {(rep.anticiposSinNota ?? 0) > 0 && <li>{tx.sinNota(pesos(rep.anticiposSinNota))}</li>}
+              {(rep.apartados.traspasos?.length ?? 0) > 0 && <li>{tx.traspasos(rep.apartados.traspasos.length, pesos(suma(rep.apartados.traspasos)))}</li>}
               {excluidos > 0 && <li>{tx.excluidos(excluidos)}</li>}
             </ul>
           </>
