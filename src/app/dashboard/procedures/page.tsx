@@ -7,6 +7,8 @@ import { costoDeRecetaPorProcedimiento } from "@/lib/inventory/costo-receta.serv
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { listarProcedimientosDeOrtodoncia } from "@/lib/orthodontics/catalog-procedures";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+// ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI por procedimiento (SQL crudo).
+import { fiscalDeProcedimientos, columnasFiscalesProcedimientos } from "@/lib/cfdi/fiscal-concepto.server";
 
 export default async function ProceduresPage() {
   const user = await getCurrentUser();
@@ -21,7 +23,7 @@ export default async function ProceduresPage() {
   // sin fila o con error → false = el catálogo de hoy, tal cual). En
   // paralelo con la consulta del catálogo, no en cascada: no añade un viaje
   // extra a la base y la respuesta vive 60 s en memoria por clínica.
-  const [procedures, rediseno, costoReceta, moduloOrtodoncia, ortoFilas] = await Promise.all([
+  const [procedures, rediseno, costoReceta, moduloOrtodoncia, ortoFilas, fiscal] = await Promise.all([
     prisma.procedureCatalog.findMany({
       where: { clinicId: user.clinicId },
       orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],
@@ -32,7 +34,10 @@ export default async function ProceduresPage() {
     hasActiveOrthodonticsModule(user.clinicId).catch(() => false),
     // «Incluido / con costo aparte» de cada procedimiento de ortodoncia (va por SQL crudo).
     listarProcedimientosDeOrtodoncia(user.clinicId).catch(() => []),
+    fiscalDeProcedimientos(prisma, user.clinicId),
   ]);
+  // Ya consultada (y recordada) dentro de fiscalDeProcedimientos: no es otro viaje.
+  const fiscalDisponible = await columnasFiscalesProcedimientos(prisma);
   const ortoIncluidos: Record<string, boolean | null> = Object.fromEntries(
     ortoFilas.map((f) => [f.id, f.orthoIncludedInTreatment]),
   );
@@ -45,6 +50,8 @@ export default async function ProceduresPage() {
       costoReceta={costoReceta}
       moduloOrtodoncia={moduloOrtodoncia}
       ortoIncluidos={ortoIncluidos}
+      fiscal={fiscal}
+      fiscalDisponible={fiscalDisponible}
     />
   );
 }

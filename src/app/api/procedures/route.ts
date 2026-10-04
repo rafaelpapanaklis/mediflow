@@ -7,6 +7,8 @@ import { datosDeAlta, leerOrthoIncluido } from "./entrada";
 import { errorDeAltaDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { sembrarProcedimientosDeOrtodoncia, aplicarOrthoIncluido, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
+// ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI de cada procedimiento (SQL crudo).
+import { leerFiscalDeEntrada, guardarFiscalDeProcedimiento, fiscalDeProcedimientos } from "@/lib/cfdi/fiscal-concepto.server";
 
 // Default dental procedures with MX average prices
 const DENTAL_SEED = [
@@ -82,7 +84,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json(procedures);
+  // F-11 / F-08: la clave SAT y el IVA guardados de cada uno (sin el SQL, nada).
+  const fiscal = await fiscalDeProcedimientos(prisma, ctx.clinicId);
+  return NextResponse.json(procedures.map((p) => ({ ...p, claveSat: fiscal[p.id]?.claveSat ?? null, ivaCfdi: fiscal[p.id]?.ivaCfdi ?? null })));
 }
 
 export async function POST(req: NextRequest) {
@@ -100,6 +104,8 @@ export async function POST(req: NextRequest) {
     // Sin `code`: es la llave del odontograma, no un dato del panel (ver ./entrada).
     const entrada = datosDeAlta(body);
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
+    const fiscal = leerFiscalDeEntrada(body);
+    if (!fiscal.ok) return NextResponse.json({ error: fiscal.error }, { status: 400 });
 
     // Categoría «Ortodoncia»: solo con el módulo activo y con el cobro elegido
     // (incluido en el tratamiento / con costo aparte). Las reglas viven en un
@@ -121,8 +127,10 @@ export async function POST(req: NextRequest) {
     // SQL crudo (ver entrada.ts/catalog-procedures.ts).
     if (orthoIncluido !== undefined) await aplicarOrthoIncluido(procedure.id, ctx.clinicId, orthoIncluido);
 
+    const fiscalGuardado = await guardarFiscalDeProcedimiento(prisma, { clinicId: ctx.clinicId, procedureId: procedure.id, datos: fiscal.datos ?? {} });
+
     revalidateAfter("procedures");
-    return NextResponse.json(procedure, { status: 201 });
+    return NextResponse.json({ ...procedure, ...fiscal.datos, ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }) }, { status: 201 });
   } catch (err: any) {
     console.error("Create procedure error:", err);
     return NextResponse.json({ error: err.message ?? "Error al crear procedimiento" }, { status: 500 });

@@ -30,6 +30,8 @@ const db = {
   cfdiRecords: [] as any[],
   /** ¿Está pegado sql/ws1-t4-cfdi-ambiente.sql? */
   columnaAmbiente: true,
+  /** Catálogo de procedimientos con su clave SAT e IVA (F-11 / F-08). */
+  catalogo: [] as { id: string; name: string; category: string; claveSat: string | null; ivaCfdi: string | null }[],
 };
 const pac = {
   /** Cada petición de timbre que llegó a Facturapi (con sus argumentos). */
@@ -83,6 +85,8 @@ function sqlDe(strings: TemplateStringsArray) { return strings.join("?"); }
 const prismaStub: any = {
   $queryRaw: async (strings: TemplateStringsArray, ...vals: any[]) => {
     const q = sqlDe(strings);
+    if (q.includes("information_schema.columns") && q.includes("procedure_catalog")) return [{ column_name: "claveSat" }, { column_name: "ivaCfdi" }];
+    if (q.includes('SELECT "id", "claveSat", "ivaCfdi"')) return db.catalogo.map((c) => ({ id: c.id, claveSat: c.claveSat, ivaCfdi: c.ivaCfdi }));
     if (q.includes("information_schema.columns")) return db.columnaAmbiente ? [{ n: 1 }] : [];
     if (q.includes('SELECT "environment"')) {
       const r = db.cfdiRecords.find((x) => x.uuid === vals[1]);
@@ -98,6 +102,7 @@ const prismaStub: any = {
   },
   $transaction: async (arg: any) => (typeof arg === "function" ? arg(prismaStub) : Promise.all(arg)),
   clinic: { findUnique: async () => ({ ...db.clinic }) },
+  procedureCatalog: { findMany: async () => db.catalogo.map((c) => ({ id: c.id, name: c.name, category: c.category })) },
   invoice: {
     findFirst: async ({ where }: any) => {
       if (!cumple(db.invoice, { id: where?.id, clinicId: where?.clinicId })) return null;
@@ -236,9 +241,11 @@ beforeEach(async () => {
   pac.perderRespuesta = false;
   pac.totalForzado = null;
   db.columnaAmbiente = true;
+  db.catalogo = [];
   entornoLive.live = false;
   // Import dinámico: así carga DESPUÉS de los dobles (facturapi-env, prisma).
   (await import("@/lib/invoices/cfdi-ambiente.server"))._olvidarColumnaAmbiente();
+  (await import("@/lib/cfdi/fiscal-concepto.server"))._olvidarColumnasFiscales();
 });
 
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
@@ -444,4 +451,90 @@ test("F-14 · las 4 rutas (anular, cancelar, reembolsar, cambiar precio) usan la
     assert.match(src, /denyIfCfdiVigenteEnAmbiente\(/, f);
     assert.doesNotMatch(src, /[^A-Za-z]denyIfCfdiVigente\(/, f);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-11 · clave SAT por procedimiento   ·   F-08 · IVA por concepto
+// ═══════════════════════════════════════════════════════════════════════════
+const CATALOGO_F2 = [
+  { id: "p-orto", name: "Control de ortodoncia", category: "orthodontics", claveSat: null, ivaCfdi: null },
+  { id: "p-resina", name: "Restauración con resina", category: "Operatoria", claveSat: null, ivaCfdi: null },
+];
+
+test("F-11 · el CFDI F2 de $1,600 sale con 85122005 (control de ortodoncia) y 85122001 (resina), no con 85121502", async () => {
+  db.catalogo = CATALOGO_F2;
+  setInvoice({ items: [
+    { description: "Control de ortodoncia", quantity: 1, unitPrice: 800, total: 800 },
+    { description: "Restauración con resina", quantity: 1, unitPrice: 800, total: 800 },
+  ] });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "04" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const items = pac.timbres[0].items;
+  assert.deepEqual(items.map((i: any) => i.product.product_key), ["85122005", "85122001"]);
+  assert.deepEqual(items.map((i: any) => i.product.unit_key), ["E48", "E48"]);
+  assert.equal(db.cfdiRecords[0].total, 1600);
+});
+
+test("F-11 · sin catálogo que coincida, ninguna sale como «consulta de médico» (85121502)", async () => {
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 200);
+  assert.equal(pac.timbres[0].items[0].product.product_key, "85122005", "«Control de ortodoncia» por su nombre");
+  setInvoice({ items: [{ description: "Corona de zirconia", quantity: 1, unitPrice: 1600, total: 1600 }] });
+  await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(pac.timbres[1].items[0].product.product_key, "85122001");
+});
+
+test("F-11 · «Facturar este pago» de ortodoncia sale con 85122005", async () => {
+  db.condiciones = PLAZOS_IVA;
+  setInvoice({ total: 26000, paid: 2000, balance: 24000, status: "PARTIAL",
+    items: [{ description: "Tratamiento de ortodoncia (brackets metálicos)", quantity: 1, unitPrice: 26000, total: 26000 }] },
+    [{ id: "eng", invoiceId: "inv1", method: "transfer", amount: 2000, paidAt: new Date("2026-10-01T12:00:00Z") }]);
+  const r = await timbrarPago("eng", { receptor: PF_612 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(pac.timbres[0].items[0].product.product_key, "85122005");
+});
+
+const CATALOGO_MIXTO = [
+  { id: "p-limp", name: "Limpieza dental", category: "Prevención", claveSat: null, ivaCfdi: "exento" },
+  { id: "p-cep", name: "Cepillo eléctrico", category: "general", claveSat: null, ivaCfdi: "iva16" },
+];
+
+test("F-08 · limpieza exenta de $800 + cepillo de $1,160 con IVA incluido → cada uno con su IVA, total $1,960.00", async () => {
+  db.catalogo = CATALOGO_MIXTO;
+  setInvoice({ total: 1960, paid: 1960, subtotal: 1960, taxRate: 0, taxIncluded: true, items: [
+    { description: "Limpieza dental", quantity: 1, unitPrice: 800, total: 800 },
+    { description: "Cepillo eléctrico", quantity: 1, unitPrice: 1160, total: 1160 },
+  ] });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28", taxMode: "exento" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const [limpieza, cepillo] = pac.timbres[0].items;
+  assert.deepEqual(limpieza.product.taxes, [{ type: "IVA", factor: "Exento", rate: 0 }]);
+  assert.equal(limpieza.product.tax_included, false);
+  assert.deepEqual(cepillo.product.taxes, [{ type: "IVA", rate: 0.16 }]);
+  assert.equal(cepillo.product.tax_included, true, "el precio de $1,160 ya trae los $160 de IVA");
+  assert.equal(db.cfdiRecords[0].total, 1960);
+});
+
+test("F-08 · la misma mezcla con «IVA agregado» no se timbra (descuadraría): dice qué hacer", async () => {
+  db.catalogo = CATALOGO_MIXTO;
+  setInvoice({ total: 2088, paid: 2088, subtotal: 1800, taxRate: 16, taxIncluded: false, items: [
+    { description: "Limpieza dental", quantity: 1, unitPrice: 800, total: 800 },
+    { description: "Cepillo eléctrico", quantity: 1, unitPrice: 1000, total: 1000 },
+  ] });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28", taxMode: "iva16" });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "CFDI_IVA_MIXTO_AGREGADO");
+  assert.equal(pac.timbres.length, 0);
+});
+
+test("F-08 · «Facturar este pago» de una factura con IVA mezclado no se timbra (no sabe repartirlo)", async () => {
+  db.catalogo = CATALOGO_MIXTO;
+  db.condiciones = PLAZOS_IVA;
+  setInvoice({ total: 1960, paid: 500, balance: 1460, status: "PARTIAL", taxIncluded: true, items: [
+    { description: "Limpieza dental", quantity: 1, unitPrice: 800, total: 800 },
+    { description: "Cepillo eléctrico", quantity: 1, unitPrice: 1160, total: 1160 },
+  ] }, [{ id: "eng", invoiceId: "inv1", method: "cash", amount: 500, paidAt: new Date("2026-10-01T12:00:00Z") }]);
+  const r = await timbrarPago("eng", { receptor: PF_612 });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "CFDI_IVA_MIXTO_POR_PAGO");
 });

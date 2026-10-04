@@ -7,7 +7,7 @@ import { rateLimitKey } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey,
-  validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
+  validateRfc, UNIDAD_SAT, FORMAS_PAGO_SAT,
   type InvoiceResult,
 } from "@/lib/facturapi";
 import { cfdiClaimFor, isCfdiClaim, CFDI_EN_CURSO_ERROR } from "@/lib/invoices/cfdi-vigente";
@@ -41,6 +41,8 @@ import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server
 import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
 import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
+import { resolverConcepto, hayIvaMixto, errorIvaMixtoAgregado, CFDI_IVA_MIXTO_AGREGADO } from "@/lib/cfdi/fiscal-concepto";
+import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
 import { ambienteDeCfdi, marcarAmbiente, retirarCfdiDePrueba } from "@/lib/invoices/cfdi-ambiente.server";
 
 export async function POST(req: NextRequest) {
@@ -223,6 +225,22 @@ export async function POST(req: NextRequest) {
     : resolveTaxMode(invoice, clinic.cfdiTaxMode);
   const taxIncludedInv = invoice.taxIncluded !== false;
 
+  // ── Clave SAT e IVA de CADA concepto (ws1-t4, vuelta 2: F-11 y F-08) ───────
+  // La clave sale del procedimiento del catálogo (o la de su categoría: dental
+  // 85122001, ortodoncia 85122005, cirugía/implantes 85122004) y el IVA del
+  // renglón, del procedimiento o, si no dice nada, de la factura (`taxMode`).
+  const catalogoCfdi = await catalogoFiscal(prisma, ctx!.clinicId);
+  const conceptosFiscales = invoiceItems.map((it: any) => resolverConcepto(it, catalogoCfdi, taxMode));
+  const ivaMixto = hayIvaMixto(conceptosFiscales);
+  // Con «IVA agregado» la factura interna suma el 16% a TODO: mezclar
+  // exentos y gravados descuadraría. Con IVA incluido el precio ya es el total.
+  if (ivaMixto && !taxIncludedInv) {
+    return NextResponse.json({ error: errorIvaMixtoAgregado(clinic.locale), code: CFDI_IVA_MIXTO_AGREGADO }, { status: 409 });
+  }
+  // El cuadre con el IVA que de verdad va: mezclado (solo con IVA incluido) =
+  // la suma de los precios; si no, el único modo de los conceptos.
+  const taxModeCuadre: CfdiTaxMode = ivaMixto ? "iva16" : (conceptosFiscales[0]?.ivaModo ?? taxMode);
+
   // ── GUARDA DE INTEGRIDAD total ↔ conceptos ────────────────────────────────
   // El CFDI se emite por los CONCEPTOS; si la factura interna tiene un total
   // distinto (p. ej. "Editar precio" legado que no tocaba los items), timbrar
@@ -234,7 +252,7 @@ export async function POST(req: NextRequest) {
   // (mover el total es tocar dinero). La cuenta vive en lib/invoices/cfdi-cuadre.ts.
   const discount = round2(Math.max(0, invoice.discount ?? 0));
   const cuadre = cfdiCuadre({
-    items: invoiceItems, discount, total: invoice.total, taxMode, taxIncluded: taxIncludedInv,
+    items: invoiceItems, discount, total: invoice.total, taxMode: taxModeCuadre, taxIncluded: taxIncludedInv,
   });
   const { cfdiTotal, tolerance } = cuadre;
   if (!cuadre.ok) {
@@ -325,29 +343,26 @@ export async function POST(req: NextRequest) {
     //   exento → taxes [{IVA, factor Exento, rate 0}] + tax_included:false
     //   iva16  → taxes [{IVA, rate 0.16}]; tax_included según el modelo interno
     //            (incluido en el precio, o agregado sobre la base).
-    const itemTaxes = taxMode === "exento"
-      ? [{ type: "IVA", factor: "Exento", rate: 0 }]
-      : [{ type: "IVA", rate: 0.16 }];
-    const taxIncludedCfdi = taxMode === "exento" ? false : taxIncludedInv;
 
     // Descuento a nivel factura → prorrateado como descuento por concepto
     // (antes se ignoraba y el CFDI salía por el subtotal completo).
     const extraDiscounts = spreadInvoiceDiscount(invoiceItems, discount);
 
     const items = invoiceItems.map((item: any, i: number) => {
-      // La clave del ítem solo se usa si es una clave SAT bien formada (8
-      // dígitos); "" u otra basura caían al payload tal cual ("" ?? x === "")
-      // y Facturapi rechazaba: "No se encontró la clave de producto o servicio".
-      const rawKey = typeof item.claveSat === "string" ? item.claveSat.trim() : "";
+      // Clave e IVA ya resueltos por concepto (F-11 / F-08). Una clave del
+      // renglón solo cuenta si es de 8 dígitos (`resolverConcepto`).
+      const fiscalDelConcepto = conceptosFiscales[i];
+      const exento = fiscalDelConcepto.ivaModo === "exento";
       return {
         quantity: itemQuantity(item),
         product: {
           description: item.description ?? "Servicio médico",
-          product_key: /^\d{8}$/.test(rawKey) ? rawKey : CLAVES_SAT_MEDICOS.consulta.clave,
+          product_key: fiscalDelConcepto.claveSat,
           unit_key:    UNIDAD_SAT,
           price:       itemUnitPrice(item),
-          tax_included: taxIncludedCfdi,
-          taxes:        itemTaxes,
+          // Exento → sin IVA; 16% → incluido en el precio o agregado, según la factura.
+          tax_included: exento ? false : taxIncludedInv,
+          taxes:        exento ? [{ type: "IVA", factor: "Exento", rate: 0 }] : [{ type: "IVA", rate: 0.16 }],
         },
         discount: round2(itemDiscount(item) + (extraDiscounts[i] ?? 0)),
       };
@@ -504,7 +519,10 @@ export async function POST(req: NextRequest) {
         cfdiUuid: result.uuid,
         ...(cfdiPrevio ? { sustituyeA: cfdiPrevio } : {}),
         cfdi: {
-          total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode,
+          total: result.total, paymentForm: payForm, usoCfdi: uso,
+          // F-08 / F-11: el IVA y la clave SAT que llevó cada concepto.
+          taxMode: ivaMixto ? "mixto" : taxModeCuadre,
+          conceptos: conceptosFiscales.map((c: { claveSat: string; ivaModo: string }) => ({ claveSat: c.claveSat, iva: c.ivaModo })),
           ...(stampedRecord ? { totalMismatch: stampedRecord } : {}),
         },
       },

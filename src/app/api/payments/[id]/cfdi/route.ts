@@ -7,7 +7,7 @@ import { rateLimitKey } from "@/lib/rate-limit";
 import { logMutation } from "@/lib/audit";
 import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey,
-  validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
+  validateRfc, UNIDAD_SAT, FORMAS_PAGO_SAT,
   type InvoiceResult,
 } from "@/lib/facturapi";
 import { liveReadinessBlock } from "@/lib/invoices/cfdi-readiness";
@@ -32,6 +32,8 @@ import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtra
 import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
 import { llaveIdempotencia } from "@/lib/invoices/cfdi-identidad";
 import { marcarAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
+import { resolverConcepto, hayIvaMixto, errorIvaMixtoPorPago, CFDI_IVA_MIXTO_POR_PAGO } from "@/lib/cfdi/fiscal-concepto";
+import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -206,6 +208,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // ── El concepto: a qué cuota corresponde este pago ─────────────────────────
   const items0 = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];
   const descripcionBase = (typeof items0[0]?.description === "string" && items0[0].description.trim()) || "Tratamiento";
+  // F-11 / F-08: el catálogo con la clave SAT y el IVA de cada procedimiento.
+  const catalogoDeLaClinica = await catalogoFiscal(prisma, ctx!.clinicId);
   const pagosOrdenados = [...invoice.payments].sort((a, b) => {
     const t = new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime();
     return t !== 0 ? t : a.id.localeCompare(b.id);
@@ -239,9 +243,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       error: `Modo de impuestos inválido: ${String(taxModeIn)}. Se espera "exento" o "iva16".`,
     }, { status: 400 });
   }
-  const taxMode: CfdiTaxMode = taxModeIn === "iva16" || taxModeIn === "exento"
+  const taxModeFactura: CfdiTaxMode = taxModeIn === "iva16" || taxModeIn === "exento"
     ? taxModeIn
     : resolveTaxMode(invoice, clinic.cfdiTaxMode);
+  // ws1-t4, vuelta 2 (F-11 / F-08): clave e IVA de los conceptos de la factura.
+  // El CFDI de un pago es UN concepto: lleva la clave del principal (el
+  // primero) y el IVA que tienen todos. Si mezclan exento y 16%, todavía no se
+  // sabe repartir el pago entre ellos: se dice y no se timbra.
+  const fiscalesFactura = items0.length > 0
+    ? items0.map((it: any) => resolverConcepto(it, catalogoDeLaClinica, taxModeFactura))
+    : [resolverConcepto({ description: descripcionBase }, catalogoDeLaClinica, taxModeFactura)];
+  if (hayIvaMixto(fiscalesFactura)) {
+    return NextResponse.json({ error: errorIvaMixtoPorPago(clinic.locale), code: CFDI_IVA_MIXTO_POR_PAGO }, { status: 409 });
+  }
+  const taxMode: CfdiTaxMode = fiscalesFactura[0].ivaModo;
   // ws1-t4, vuelta 2 (F-07): un PAGO es dinero ya recibido, con el IVA DENTRO.
   // Antes se copiaba `invoice.taxIncluded`: con una factura de «IVA agregado» el
   // CFDI sumaba el 16% ENCIMA del pago (pago de $1,160 → CFDI de $1,345.60).
@@ -302,12 +317,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const itemTaxes = taxMode === "exento"
       ? [{ type: "IVA", factor: "Exento", rate: 0 }]
       : [{ type: "IVA", rate: 0.16 }];
-    const rawKey = typeof items0[0]?.claveSat === "string" ? items0[0].claveSat.trim() : "";
     const items = [{
       quantity: 1,
       product: {
         description:  concepto.descripcion,
-        product_key:  /^\d{8}$/.test(rawKey) ? rawKey : CLAVES_SAT_MEDICOS.consulta.clave,
+        product_key:  fiscalesFactura[0].claveSat,
         unit_key:     UNIDAD_SAT,
         price:        round2(payment.amount),
         tax_included: taxIncludedCfdi,

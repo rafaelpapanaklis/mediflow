@@ -32,6 +32,9 @@ import {
 } from "lucide-react";
 // WS1-T5 — receta de materiales del procedimiento: modal propio y aislado.
 import { MaterialesModal } from "@/components/dashboard/inventory/materiales-modal";
+// ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI de cada procedimiento.
+import { CamposFiscalesCfdi, fiscalParaGuardar, type FiscalDelFormulario } from "@/components/dashboard/procedures/campos-fiscales-cfdi";
+import { esClaveSat } from "@/lib/cfdi/fiscal-concepto";
 
 interface Procedure {
   id: string;
@@ -59,6 +62,10 @@ interface Props {
   moduloOrtodoncia?: boolean;
   /** «Incluido / con costo aparte» de cada procedimiento de ortodoncia (id → valor). */
   ortoIncluidos?: Record<string, boolean | null>;
+  /** Clave SAT e IVA del CFDI guardados de cada procedimiento (id → datos). */
+  fiscal?: Record<string, { claveSat: string | null; ivaCfdi: "exento" | "iva16" | null }>;
+  /** false = falta sql/ws1-t4-cfdi-conceptos.sql: los campos se ven pero no se guardan. */
+  fiscalDisponible?: boolean;
 }
 
 const CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
@@ -85,6 +92,8 @@ interface FormState {
   isActive: boolean;
   /** Solo categoría Ortodoncia: true = incluido, false = con costo aparte, null = sin elegir. */
   orthoIncluded: boolean | null;
+  /** Clave SAT e IVA del CFDI ("" = por defecto). */
+  fiscal: FiscalDelFormulario;
 }
 
 const EMPTY_FORM: FormState = {
@@ -96,12 +105,13 @@ const EMPTY_FORM: FormState = {
   description: "",
   isActive: true,
   orthoIncluded: null,
+  fiscal: { claveSat: "", ivaCfdi: "" },
 };
 
 /** Llave del grupo de inactivos (no es una categoría real). */
 const GRUPO_INACTIVOS = "__inactivos";
 
-export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {} }: Props) {
+export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {}, fiscal: fiscalInicial = {}, fiscalDisponible = false }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -114,6 +124,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
   // H18: costo de la receta de cada procedimiento; alimenta GASTO/MARGEN sin gasto manual.
   const [costoReceta, setCostoReceta] = useState<Record<string, number>>(costoRecetaInicial);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [fiscalPorId, setFiscalPorId] = useState(fiscalInicial);
   const [saving, setSaving] = useState(false);
   // «Incluido / con costo aparte» por procedimiento de ortodoncia (se actualiza al guardar).
   const [ortoIncluidos, setOrtoIncluidos] = useState<Record<string, boolean | null>>(ortoIncluidosIniciales);
@@ -158,6 +169,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
       description: p.description ?? "",
       isActive: p.isActive,
       orthoIncluded: ortoIncluidos[p.id] ?? null,
+      fiscal: { claveSat: fiscalPorId[p.id]?.claveSat ?? "", ivaCfdi: fiscalPorId[p.id]?.ivaCfdi ?? "" },
     });
     setModalOpen(true);
   }
@@ -193,6 +205,13 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
       return;
     }
 
+    // F-11: una clave escrita a mano son 8 dígitos (vacía = la de su categoría).
+    const claveEscrita = form.fiscal.claveSat.trim();
+    if (fiscalDisponible && claveEscrita !== "" && !esClaveSat(claveEscrita)) {
+      toast.error("La clave SAT son 8 dígitos (por ejemplo 85122001).");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -204,6 +223,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
         description: form.description.trim() || null,
         isActive: form.isActive,
         ...(form.category === ORTHO_CATALOG_CATEGORY && !esControlEditado ? { orthoIncludedInTreatment: form.orthoIncluded } : {}),
+        ...(fiscalDisponible ? fiscalParaGuardar(form.fiscal) : {}),
       };
 
       if (editing) {
@@ -216,7 +236,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error ?? t("pages.procedures.updateError"));
         }
-        const updated: Procedure = await res.json();
+        const updated: Procedure & { fiscalSinGuardar?: boolean } = await res.json();
+        if (fiscalDisponible) setFiscalPorId((prev) => ({ ...prev, [updated.id]: fiscalParaGuardar(form.fiscal) }));
+        if (updated.fiscalSinGuardar) toast.error("La clave SAT y el IVA no se guardaron: falta aplicar sql/ws1-t4-cfdi-conceptos.sql.");
         setProcedures((prev) =>
           prev.map((p) => (p.id === updated.id ? updated : p))
         );
@@ -235,7 +257,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error ?? t("pages.procedures.createError"));
         }
-        const created: Procedure = await res.json();
+        const created: Procedure & { fiscalSinGuardar?: boolean } = await res.json();
+        if (fiscalDisponible) setFiscalPorId((prev) => ({ ...prev, [created.id]: fiscalParaGuardar(form.fiscal) }));
+        if (created.fiscalSinGuardar) toast.error("La clave SAT y el IVA no se guardaron: falta aplicar sql/ws1-t4-cfdi-conceptos.sql.");
         setProcedures((prev) => [created, ...prev]);
         if (form.category === ORTHO_CATALOG_CATEGORY) {
           setOrtoIncluidos((prev) => ({ ...prev, [created.id]: form.orthoIncluded }));
@@ -665,6 +689,21 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                   />
                 </div>
               </div>
+
+              <CamposFiscalesCfdi
+                valor={form.fiscal}
+                onCambio={(fiscal) => setForm({ ...form, fiscal })}
+                categoria={form.category}
+                nombre={form.name}
+                disponible={fiscalDisponible}
+                clases={{
+                  fila: rediseno ? styles.formRow : "grid grid-cols-2 gap-4",
+                  campo: rediseno ? styles.field : undefined,
+                  etiqueta: rediseno ? styles.fieldLabel : "block text-xs font-semibold text-muted-foreground mb-1.5",
+                  input: rediseno ? styles.input : "w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500",
+                  ayuda: rediseno ? styles.fieldHint : "text-xs text-muted-foreground mt-1",
+                }}
+              />
 
               {form.category === ORTHO_CATALOG_CATEGORY ? (
                 esControlEditado ? (

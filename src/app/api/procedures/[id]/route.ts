@@ -14,6 +14,8 @@ import {
   CODIGO_CONTROL_ORTO,
   ORTHO_CATALOG_CATEGORY,
 } from "@/lib/orthodontics/catalog-procedures";
+// ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI de cada procedimiento (SQL crudo).
+import { leerFiscalDeEntrada, guardarFiscalDeProcedimiento } from "@/lib/cfdi/fiscal-concepto.server";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -33,6 +35,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // ODO_* del odontograma (ver ../entrada).
     const entrada = datosDeCambio(body);
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
+    const fiscal = leerFiscalDeEntrada(body);
+    if (!fiscal.ok) return NextResponse.json({ error: fiscal.error }, { status: 400 });
 
     // Reglas de la categoría «Ortodoncia» (control fijo, módulo activo, cobro elegido).
     const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
@@ -77,8 +81,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // SQL crudo (ver entrada.ts/catalog-procedures.ts).
     if (decision.aplicarIncluido && orthoIncluido !== undefined) await aplicarOrthoIncluido(params.id, ctx.clinicId, orthoIncluido);
 
+    // F-11 / F-08: sin sql/ws1-t4-cfdi-conceptos.sql no se guarda (y se dice).
+    const fiscalGuardado = await guardarFiscalDeProcedimiento(prisma, { clinicId: ctx.clinicId, procedureId: params.id, datos: fiscal.datos ?? {} });
+
     revalidateAfter("procedures");
-    return NextResponse.json(updated);
+    return NextResponse.json({ ...updated, ...fiscal.datos, ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }) });
   } catch (err: any) {
     console.error("Update procedure error:", err);
     return NextResponse.json({ error: err.message ?? "Error" }, { status: 500 });
