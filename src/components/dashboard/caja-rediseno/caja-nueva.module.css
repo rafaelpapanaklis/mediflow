@@ -552,7 +552,10 @@
   border: 0;
   border-radius: var(--pr-radio-s);
   background: none;
-  color: var(--pr-texto-2);
+  /* Tercera auditoría: que se vea que se abre (antes, gris como el resto de la fila). */
+  color: var(--pr-activo);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;

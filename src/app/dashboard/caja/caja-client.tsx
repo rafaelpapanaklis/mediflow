@@ -21,6 +21,7 @@ import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
+import { reembolsosEnEfectivoDelCorte, type MovimientosDelCorte } from "@/lib/dinero/corte-del-historial";
 import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
 import { AvisoCobrosAutomaticos } from "@/components/cobro-automatico/AvisoCobrosAutomaticos";
@@ -131,6 +132,19 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
   const caja = cajaFresca ?? cajaProp;
   // N-15 (segunda auditoría): el corte del historial que se está viendo.
   const [corteVisto, setCorteVisto]         = useState<CajaHistoryRow | null>(null);
+  // F3 (tercera auditoría): lo que la foto del corte no guarda, pedido al abrirlo.
+  const [movCorte, setMovCorte]             = useState<{ id: string; mov: MovimientosDelCorte | null; error: boolean } | null>(null);
+  useEffect(() => {
+    if (!corteVisto) { setMovCorte(null); return; }
+    let vivo = true;
+    const id = corteVisto.id;
+    setMovCorte({ id, mov: null, error: false });
+    fetch(`/api/caja/history/${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((mov: MovimientosDelCorte) => { if (vivo) setMovCorte({ id, mov, error: false }); })
+      .catch(() => { if (vivo) setMovCorte({ id, mov: null, error: true }); });
+    return () => { vivo = false; };
+  }, [corteVisto]);
   const [showHistory, setShowHistory]       = useState(false);
 
   // Form state — apertura
@@ -502,14 +516,29 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
       [t("cashRegister.kpiDiscounts"), v(h.discounts), false],
       [t("cashRegister.kpiTax"), v(h.tax), false],
       [t("cashRegister.kpiWithdrawals"), v(h.withdrawals), false],
+      // F3: el reembolso en efectivo sí resta del esperado; sin esta línea no sumaba.
+      ...(reembolsosEnEfectivoDelCorte(h) > 0
+        ? [[txDinero.caja.historialReembolsosEfectivo, `-${fmtMXNdec(reembolsosEnEfectivoDelCorte(h))}`, false] as [string, string, boolean]]
+        : []),
       [t("cashRegister.expectedCashLabel"), v(h.expectedCash), true],
       [t("cashRegister.countedLabel"), v(h.countedClosingBalance), true],
       [t("cashRegister.varianceLabel"), v(h.variance), true],
     ];
   }
 
+  /** F3: lo que no mueve el cajón (calculado al abrir el corte), aparte de la cuenta del efectivo. */
+  function lineasSinCajon(m: MovimientosDelCorte): Array<[string, string, boolean]> {
+    const filas: Array<[string, string, boolean]> = [];
+    if (m.refunds > 0) filas.push([txDinero.caja.historialReembolsos, `-${fmtMXNdec(m.refunds)}`, false]);
+    if (m.toCredit > 0) filas.push([txDinero.caja.historialASaldo, fmtMXNdec(m.toCredit), false]);
+    if (m.appliedCredit > 0) filas.push([txDinero.caja.historialSaldoAplicado, fmtMXNdec(m.appliedCredit), false]);
+    if (m.writeOffs > 0) filas.push([txDinero.caja.bajasYReembolsos, fmtMXNdec(m.writeOffs), false]);
+    return filas;
+  }
+
   function printCorte(h: CajaHistoryRow) {
-    const filas = lineasDelCorte(h)
+    const m = movCorte?.id === h.id ? movCorte.mov : null;
+    const filas = [...lineasDelCorte(h), ...(m ? lineasSinCajon(m) : [])]
       .map(([l, val]) => `<tr><td style="padding:2px 12px 2px 0;color:#555">${esc(l)}</td><td style="text-align:right;font-weight:600">${esc(val)}</td></tr>`)
       .join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(txDinero.caja.historialTitulo)}</title>
@@ -641,9 +670,9 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
               <span style={{ color: "var(--text-2)", fontSize: 13.5, fontWeight: 600 }}>Facturación del día</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
-              <KpiCard label="Facturado hoy" value={fmtMXNdec(caja.billedToday)}  icon={Receipt} />
+              <KpiCard label="Facturado hoy" value={fmtMXNdec(caja.billedToday)}  icon={Receipt} hint={txDinero.caja.facturadoHoyNota} />
               <KpiCard label="Cobrado hoy"   value={fmtMXNdec(collectedToday)}    icon={TrendingUp} hero hint={caja.cobradoHoy != null ? txDinero.caja.cobradoHoyNota : undefined} />
-              <KpiCard label="Por cobrar de hoy" value={fmtMXNdec(caja.pendingToday)} icon={Wallet} />
+              <KpiCard label="Por cobrar de hoy" value={fmtMXNdec(caja.pendingToday)} icon={Wallet} hint={txDinero.caja.porCobrarHoyNota} />
               <KpiCard
                 label="Vencido"
                 value={fmtMXNdec(caja.overdueToday)}
@@ -1116,6 +1145,23 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
                   <SumRow key={label} label={label} value={valor} strong={fuerte} rediseno={rediseno} />
                 ))}
               </div>
+              {/* F3: reembolsos de otros métodos, saldo a favor y bajas: no mueven el cajón, van aparte. */}
+              <div style={{ color: "var(--text-3)", fontSize: 12, fontWeight: 600, margin: "0 0 8px" }}>{txDinero.caja.historialSinCajon}</div>
+              {movCorte?.id === corteVisto.id && movCorte.mov ? (
+                lineasSinCajon(movCorte.mov).length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 14 }} data-sin-cajon>
+                    {lineasSinCajon(movCorte.mov).map(([label, valor, fuerte]) => (
+                      <SumRow key={label} label={label} value={valor} strong={fuerte} rediseno={rediseno} />
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: "var(--text-3)", fontSize: 12.5, margin: "0 0 14px" }}>{txDinero.caja.historialSinMovimientos}</p>
+                )
+              ) : (
+                <p style={{ color: "var(--text-3)", fontSize: 12.5, margin: "0 0 14px" }} role="status">
+                  {movCorte?.error ? txDinero.caja.historialSinDetalle : txDinero.caja.historialCalculando}
+                </p>
+              )}
               {corteVisto.closingNotes && (
                 <p style={{ color: "var(--text-2)", fontSize: 12.5, margin: "0 0 10px" }}>{txDinero.caja.historialNotas}: {corteVisto.closingNotes}</p>
               )}

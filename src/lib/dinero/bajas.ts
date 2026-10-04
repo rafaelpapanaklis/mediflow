@@ -32,8 +32,49 @@ export function partirDescuento(inv: { discount?: number | null; notes?: string 
   return { comercial: (total - bajas) / 100, bajas: bajas / 100 };
 }
 
-/** La línea que se agrega a las notas cuando un reembolso baja el total. */
-export function lineaDeBaja(monto: number, motivo: string): string {
+/** «2026-10-04 09:35:12 UTC»: el sello de las demás marcas, con segundos (notasLegibles lo pinta en hora local). */
+export function selloUtc(cuando: Date): string {
+  return `${cuando.toISOString().slice(0, 10)} ${cuando.toISOString().slice(11, 19)} UTC`;
+}
+
+/**
+ * La línea que se agrega a las notas cuando un reembolso baja el total.
+ * F2 (tercera auditoría): lleva la fecha, para que Caja cuente la baja ENTERA en
+ * el turno en que se hizo (antes se prorrateaba con los cobros como el descuento).
+ */
+export function lineaDeBaja(monto: number, motivo: string, cuando: Date = new Date()): string {
   const pesos = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 }).format(monto);
-  return `[BAJA DEL TOTAL: ${pesos} · ${motivo}]`;
+  return `[BAJA DEL TOTAL: ${pesos} · ${motivo} · ${selloUtc(cuando)}]`;
+}
+
+const RE_MARCA_COMPLETA = /\[(?:BAJA DEL TOTAL|RESTO DADO DE BAJA):\s*\$?\s*([\d,]+(?:\.\d{1,2})?)([^\]]*)\]/g;
+const RE_SELLO = /(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}(?::\d{2})?) UTC/;
+
+/** Cada baja marcada, con su fecha si la trae (las de antes del 4-oct-2026 no la traen). */
+export function marcasDeBaja(notas: string | null | undefined): Array<{ monto: number; cuando: Date | null }> {
+  if (typeof notas !== "string" || !notas) return [];
+  const out: Array<{ monto: number; cuando: Date | null }> = [];
+  for (const m of notas.matchAll(RE_MARCA_COMPLETA)) {
+    const monto = Math.round(Number(m[1].replace(/,/g, "")) * 100) / 100 || 0;
+    const f = RE_SELLO.exec(m[2] ?? "");
+    const cuando = f ? new Date(`${f[1]}T${f[2].length === 5 ? `${f[2]}:00` : f[2]}Z`) : null;
+    out.push({ monto, cuando: cuando && !isNaN(cuando.getTime()) ? cuando : null });
+  }
+  return out;
+}
+
+/** Suma de las bajas FECHADAS dentro de [desde, hasta] (la baja entera, sin prorrateo). */
+export function bajasEnVentana(notas: string | null | undefined, desde: Date, hasta: Date): number {
+  // El sello va a segundos y la ventana se compara al segundo: dos turnos seguidos no cuentan la misma baja.
+  const d = Math.floor(desde.getTime() / 1000) * 1000;
+  const h = hasta.getTime();
+  const c = marcasDeBaja(notas)
+    .filter((b) => b.cuando && b.cuando.getTime() >= d && b.cuando.getTime() <= h)
+    .reduce((acc, b) => acc + Math.round(b.monto * 100), 0);
+  return c / 100;
+}
+
+/** Suma de las bajas SIN fecha (marcas viejas): esas siguen prorrateándose con los cobros. */
+export function bajasSinFecha(notas: string | null | undefined): number {
+  return marcasDeBaja(notas).filter((b) => !b.cuando).reduce((acc, b) => acc + Math.round(b.monto * 100), 0) / 100;
 }

@@ -34,7 +34,7 @@ import {
 } from "@/lib/dinero/reembolsos";
 import { cobrosAsignados } from "@/lib/dinero/ajustes.server";
 import { cobrosFueraDeCorte, diasAbierta, medianocheAnterior } from "@/lib/dinero/caja-core";
-import { partirDescuento } from "@/lib/dinero/bajas";
+import { bajasEnVentana, bajasSinFecha, partirDescuento } from "@/lib/dinero/bajas";
 
 /**
  * Lo único que Caja LEE de la base, y nada más.
@@ -416,6 +416,23 @@ export async function getOpenRegister(clinicId: string, db: CajaDb = prisma) {
  * (canSeePatient), que enmascara SIN sacar la fila para que los totales cuadren.
  * Sin viewer, la lista sale como siempre (la pantalla de Caja no lo pasa hoy).
  */
+/**
+ * F2 (tercera auditoría de uso): las bajas del total con fecha (marca de
+ * lib/dinero/bajas.ts) que se hicieron DENTRO de la ventana, enteras. Una baja
+ * escribe la nota de la factura en ese momento, así que `updatedAt >= from`
+ * acota sin perder ninguna. Solo la columna `notes`; siempre con `clinicId`.
+ */
+async function leerBajasFechadas(clinicId: string, from: Date, to: Date, db: CajaDb): Promise<number> {
+  if (!clinicId) return 0;
+  const filas = await db.invoice.findMany({
+    where:  { clinicId, updatedAt: { gte: from }, OR: [{ notes: { contains: "BAJA DEL TOTAL" } }, { notes: { contains: "DADO DE BAJA" } }] },
+    select: { notes: true },
+    take:   1000,
+  });
+  const c = (filas as Array<{ notes?: string | null }>).reduce((acc, f) => acc + Math.round(bajasEnVentana(f.notes, from, to) * 100), 0);
+  return c / 100;
+}
+
 export async function deriveWindow(
   clinicId: string,
   from: Date,
@@ -493,6 +510,7 @@ export async function deriveWindow(
   ]);
   const clinicTaxMode = clinic?.cfdiTaxMode ?? null;
   const anticiposCobrados = await leerAnticiposCobrados(clinicId, from, to, db);
+  const bajasFechadas = await leerBajasFechadas(clinicId, from, to, db);
 
   // Nombres de los doctores atribuidos a mano (facturas creadas desde Caja, que
   // no nacen de una cita y por tanto no tienen invoice.appointment.doctor).
@@ -543,7 +561,10 @@ export async function deriveWindow(
     const partes = partirDescuento(p.invoice as { discount?: number | null; notes?: string | null });
     const discountPortion = paymentDiscountPortion(p.method, amount, { discount: partes.comercial, total: p.invoice?.total });
     discounts += discountPortion;
-    writeOffs += paymentDiscountPortion(p.method, amount, { discount: partes.bajas, total: p.invoice?.total });
+    // F2 (tercera auditoría): solo las bajas VIEJAS (marca sin fecha) se prorratean con
+    // el cobro; las fechadas cuentan enteras en el turno en que se hicieron (abajo).
+    const bajasViejas = Math.min(partes.bajas, bajasSinFecha((p.invoice as { notes?: string | null } | null)?.notes));
+    writeOffs += paymentDiscountPortion(p.method, amount, { discount: bajasViejas, total: p.invoice?.total });
     if (p.method === REFUND_METHOD) {
       // ws1-t5 (F3/F5): el traspaso a saldo a favor no es salida de dinero, y
       // solo el reembolso EN EFECTIVO sale del cajón.
@@ -623,7 +644,7 @@ export async function deriveWindow(
     toCredit: money(toCredit), appliedCredit: money(appliedCredit),
     discounts: money(discountsTotal), tax: money(tax), list,
     // C-17: opcional en el tipo (quien arma una ventana a mano, como las pruebas, no lo trae).
-    ...({ writeOffs: money(writeOffs) } as { writeOffs?: number }),
+    ...({ writeOffs: money(writeOffs + bajasFechadas) } as { writeOffs?: number }),
   };
 }
 
@@ -1402,3 +1423,25 @@ export async function getCajaHistory(clinicId: string, limit = 30, db: CajaDb = 
 }
 
 export type CajaHistoryRow = Awaited<ReturnType<typeof getCajaHistory>>[number];
+
+/**
+ * F3 (tercera auditoría de uso): los movimientos de un corte CERRADO que su foto
+ * no guarda, recalculados de los cobros de su turno (la ventana y los cobros
+ * asignados, igual que al cerrar). null si el corte no es de la clínica o sigue abierto.
+ */
+export async function movimientosDelCorte(clinicId: string, id: string, db: CajaDb = prisma) {
+  if (!clinicId || !id) return null;
+  const reg = await db.cashRegister.findFirst({
+    where:  { id, clinicId, status: "CLOSED" },
+    select: { id: true, openedAt: true, closedAt: true },
+  });
+  if (!reg || !reg.closedAt) return null;
+  const asignados = await cobrosAsignados(clinicId, { cashRegisterId: reg.id });
+  const d = await deriveWindow(clinicId, reg.openedAt, reg.closedAt, { db, asignados });
+  return {
+    refunds:       money(Math.abs(d.refunds)),
+    toCredit:      money(d.toCredit),
+    appliedCredit: money(d.appliedCredit),
+    writeOffs:     money(d.writeOffs ?? 0),
+  };
+}

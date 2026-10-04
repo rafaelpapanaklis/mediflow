@@ -154,11 +154,14 @@ export function CajaNueva(p: CajaNuevaProps) {
 
           {/* ── Hoy en la clínica: las cuatro cifras del día, en una tira ── */}
           <section className={`${s.tarjeta} ${s.tira}`} aria-label={t("cashRegister.nueva.hoy")}>
-            <Cifra etiqueta={t("cashRegister.nueva.facturadoHoy")} icono={Receipt}       valor={fmtMXNdec(caja.billedToday)} />
+            {/* F7 (tercera auditoría): las tres tarjetas ya no se restan entre sí; cada una dice qué cuenta. */}
+            <Cifra etiqueta={t("cashRegister.nueva.facturadoHoy")} icono={Receipt}       valor={fmtMXNdec(caja.billedToday)}
+              nota={txDinero.caja.facturadoHoyNota} />
             {/* N-01 (segunda auditoría): lo que ENTRÓ hoy, con su «qué cuenta». */}
             <Cifra etiqueta={t("cashRegister.nueva.cobradoHoy")}   icono={TrendingUp}    valor={fmtMXNdec(p.collectedToday)} hero
               nota={caja.cobradoHoy != null ? txDinero.caja.cobradoHoyNota : undefined} />
-            <Cifra etiqueta={t("cashRegister.nueva.porCobrar")}    icono={Wallet}        valor={fmtMXNdec(caja.pendingToday)} />
+            <Cifra etiqueta={t("cashRegister.nueva.porCobrar")}    icono={Wallet}        valor={fmtMXNdec(caja.pendingToday)}
+              nota={txDinero.caja.porCobrarHoyNota} />
             <Cifra etiqueta={t("cashRegister.nueva.vencido")}      icono={AlertTriangle} valor={fmtMXNdec(caja.overdueToday)} peligro={caja.overdueToday > 0}
               // ws1-t2 (C-23): de dónde sale este «Vencido» (toda la clínica, también ortodoncia).
               nota={caja.receivablesIncompleto ? t("billing.billingClient.partialReceivablesShort") : qc("cajaVencido")} />

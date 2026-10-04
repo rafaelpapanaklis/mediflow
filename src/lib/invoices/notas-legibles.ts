@@ -7,7 +7,7 @@
 // aquí solo se ENSEÑAN legibles: sin corchetes, en minúsculas y con la hora en
 // la zona de quien mira, no en UTC.
 
-const RE_FECHA_UTC = /(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}) UTC/g;
+const RE_FECHA_UTC = /(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})(?::\d{2})? UTC/g;
 const RE_MARCA = /\[([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{3,}?)(?::\s*| · )([^\]]*)\]/g;
 
 function frase(t: string): string {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { selloUtc } from "@/lib/dinero/bajas";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
@@ -88,7 +89,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (cfdiDentro) return { denied: cfdiDentro };
       const efecto = efectoDelReembolso({ total: fresca.total, pagado: round2(fresca.paid), monto: 0, destino: "baja_resto" });
       const ajuste = reajustarAlTotal(fresca, efecto.total);
-      const linea = `[RESTO DADO DE BAJA: ${montoParaTexto(round2(fresca.total - ajuste.total))}${reasonText ? `: ${reasonText}` : ""}]`;
+      // F2 (tercera auditoría): con su fecha, para que Caja la cuente entera en el turno en que se hizo.
+      const linea = `[RESTO DADO DE BAJA: ${montoParaTexto(round2(fresca.total - ajuste.total))}${reasonText ? `: ${reasonText}` : ""} · ${selloUtc(new Date())}]`;
       await tx.invoice.updateMany({
         where: { id: params.id, clinicId, paid: fresca.paid },
         data: {
