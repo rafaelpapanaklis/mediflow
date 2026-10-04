@@ -33,6 +33,7 @@ import {
   type PatientDuplicateProbe,
   type PatientGender,
 } from "./patient-search-core";
+import { TEXTOS_CONTACTO, correoValido, telefonoValido } from "@/lib/new-patient/validar-contacto";
 
 export type PatientCreateCheck =
   | {
@@ -67,6 +68,7 @@ function fail(field: string, error: string): PatientCreateCheck {
 }
 
 const isBlank = (v: unknown) => v === undefined || v === null || v === "";
+
 
 /**
  * Valida el cuerpo crudo del alta. Devuelve los cuatro valores que el POST
@@ -130,6 +132,14 @@ export function validatePatientCreateBody(body: unknown, now: Date = new Date())
     if (b[k] !== undefined && b[k] !== null && typeof b[k] !== "string") {
       return fail(k, `El campo ${k} tiene que ser texto.`);
     }
+  }
+
+  // ws1-t1 (C-88, C-95): si llegan, que tengan forma de teléfono y de correo.
+  if (typeof b.phone === "string" && b.phone.trim() && !telefonoValido(b.phone)) {
+    return fail("phone", TEXTOS_CONTACTO.es.telefono);
+  }
+  if (typeof b.email === "string" && b.email.trim() && !correoValido(b.email)) {
+    return fail("email", TEXTOS_CONTACTO.es.correo);
   }
 
   for (const k of LIST_FIELDS) {

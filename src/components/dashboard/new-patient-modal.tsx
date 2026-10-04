@@ -13,6 +13,13 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { llevarAlPrimerError } from "@/lib/formularios/primer-campo-con-error";
 import { leerDuplicado, textosDuplicado, type Duplicado } from "@/lib/new-patient/paciente-duplicado";
+import {
+  TEXTOS_CONTACTO,
+  correoValido,
+  nombreParaAvisoDeAlta,
+  telefonoValido,
+  textoFaltanCampos,
+} from "@/lib/new-patient/validar-contacto";
 
 /**
  * La ROPA de la ventana: la de siempre o la del diseño nuevo (ws1-t5,
@@ -61,8 +68,18 @@ const SOURCE_OPTIONS = [
 
 /** ws1-t1 (F8): los campos en el orden en que salen en la ventana — al fallar se lleva la vista al primero. */
 export const ORDEN_CAMPOS_NUEVO_PACIENTE = [
-  "firstName", "lastName", "dob", "gender", "curp", "passportNo", "phone", "allergies",
+  "firstName", "lastName", "dob", "gender", "curp", "passportNo", "email", "phone", "allergies",
 ] as const;
+
+/** ws1-t1 (C-95): la etiqueta de cada obligatorio, para NOMBRARLO en el aviso. */
+const ETIQUETA_OBLIGATORIO: Record<string, string> = {
+  firstName: "shell.newPatient.firstName",
+  lastName: "shell.newPatient.lastName",
+  dob: "shell.newPatient.dob",
+  gender: "shell.newPatient.gender",
+  phone: "shell.newPatient.phone",
+  allergies: "shell.newPatient.allergiesLabel",
+};
 
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
@@ -155,7 +172,26 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (!form.gender) newErrors.gender = true;
     if (Object.keys(newErrors).length > 0) {
       marcarErrores(newErrors);
-      toast.error(t("shell.newPatient.errRequiredFields"));
+      // ws1-t1 (C-95): el aviso NOMBRA lo que falta (antes: «marcados en rojo» y adivina cuál).
+      const faltan = ORDEN_CAMPOS_NUEVO_PACIENTE.filter((k) => newErrors[k] && ETIQUETA_OBLIGATORIO[k]).map((k) => t(ETIQUETA_OBLIGATORIO[k]));
+      toast.error(textoFaltanCampos(faltan, locale));
+      return;
+    }
+    // ws1-t1 (C-88, C-95): teléfono y correo con forma de teléfono y de correo — la misma regla que el servidor.
+    const textosContacto = locale.toLowerCase().startsWith("en") ? TEXTOS_CONTACTO.en : TEXTOS_CONTACTO.es;
+    if (form.dob > todayISO) {
+      marcarErrores({ dob: true });
+      toast.error(textosContacto.fechaFutura);
+      return;
+    }
+    if (!telefonoValido(form.phone)) {
+      marcarErrores({ phone: true });
+      toast.error(textosContacto.telefono);
+      return;
+    }
+    if (form.email.trim() && !correoValido(form.email)) {
+      marcarErrores({ email: true });
+      toast.error(textosContacto.correo);
       return;
     }
     if (form.curpStatus === "COMPLETE") {
@@ -239,7 +275,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
       const patient = data;
       onCreated(patient);
       setForm(emptyForm);
-      toast.success(t("shell.newPatient.created", { name: patient.firstName }));
+      // ws1-t1 (C-95): nombre completo y folio (antes solo el nombre de pila: «Paciente Audit creado»).
+      toast.success(t("shell.newPatient.created", { name: nombreParaAvisoDeAlta(patient) }));
     } catch (err: any) {
       toast.error(mensajeDeError(err, t, { porDefecto: t("shell.newPatient.errCreate") }));
     } finally { setLoading(false); }
@@ -296,7 +333,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </Dialog.Close>
           </div>
 
-        <form ref={formRef} onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {/* noValidate (ws1-t1, C-95): con la validación nativa, un correo inválido paraba el envío con una burbuja del
+            navegador que casi no se ve; ahora lo dice nuestro aviso, nombrando el campo. */}
+        <form ref={formRef} onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
           <div className="modal__body" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {/* Sección: Identidad */}
             <div style={{ marginBottom: 22 }}>
@@ -397,9 +436,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 <span className="form-section__rule" />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
-                <div className="field-new">
+                <div className="field-new" data-campo="email">
                   <label className="field-new__label">{t("shell.newPatient.email")}</label>
-                  <input className="input-new" type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} />
+                  <input className="input-new" type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} style={{ borderColor: errors.email ? 'var(--danger)' : undefined }} />
                 </div>
                 <div className="field-new" data-campo="phone">
                   <label className="field-new__label">{t("shell.newPatient.phone")} <span className="req">*</span></label>
