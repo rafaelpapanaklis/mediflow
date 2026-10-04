@@ -382,6 +382,7 @@
     "test:cobro-panel-rapido": "tsx --test src/lib/__tests__/limitar-concurrencia.test.ts",
     "test:cfdi-timbre-incierto": "tsx --test --experimental-test-module-mocks src/lib/invoices/__tests__/cfdi-timbre-incierto.test.ts",
     "test:cfdi-emisor": "tsx --test src/lib/cfdi/__tests__/emisor.test.ts",
+    "test:cfdi-cobrado-sin-cfdi": "tsx --test src/lib/cfdi/__tests__/cobrado-sin-cfdi.test.ts",
     "test:cfdi-cancelacion": "tsx --test --experimental-test-module-mocks src/lib/invoices/__tests__/cfdi-cancelacion.test.ts",
     "test:iva-sat": "tsx --test src/lib/__tests__/invoice-iva-sat.test.ts",
     "//test:cbct-geometry": "Necesita el tsconfig de pruebas: el test importa GeometryWarning.tsx (JSX) y el tsconfig de la app deja jsx en 'preserve' para que lo resuelva Next.",

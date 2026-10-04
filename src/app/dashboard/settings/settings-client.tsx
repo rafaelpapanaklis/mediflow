@@ -8,6 +8,7 @@ import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
 import { AvisoExentoPersonaMoral } from "@/components/dashboard/settings/cfdi-avisos-emisor";
+import { CobradoSinCfdiCard } from "@/components/dashboard/settings/cobrado-sin-cfdi-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -1161,6 +1162,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   </Campo>
                   <Aviso tono="info">{cfdiLive ? t("settings.client.csdLiveNote") : t("settings.client.csdTestNote")}</Aviso>
                 </Seccion>
+
+                {/* ws1-t8 (F-09): lo cobrado sin CFDI del mes, para la factura global del contador. */}
+                <CobradoSinCfdiCard />
               </Columna>
             )}
 
@@ -2058,6 +2062,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
             </div>
           </div>
+
+          {/* ws1-t8 (F-09): lo cobrado sin CFDI del mes, para la factura global del contador. */}
+          <CobradoSinCfdiCard />
         </div>
       )}
 
