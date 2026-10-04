@@ -772,13 +772,14 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       );
       setSub(null);
       subirFacturaFresca(invoice.id);
-      await onMutated();
       onClose();
       // Forzamos refresh del segmento server-rendered actual además de la
       // revalidatePath del endpoint. Así la página que monta el modal
       // (patient-detail, billing, home) refleja la mutación sin que el
       // parent tenga que cablear router.refresh() en onMutated.
-      router.refresh();
+      // C-14 (auditoría de uso): DESPUÉS de cerrar; en el mismo tick la ventana
+      // esperaba al servidor para cerrarse.
+      setTimeout(() => { void onMutated(); router.refresh(); }, 0);
     } catch (err: any) {
       toast.error(mensajeDeError(err, t, { porDefecto: t("common.genericError") }));
     } finally {
@@ -943,9 +944,11 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   function handlePaymentSuccess() {
     setPaymentOpen(false);
     subirFacturaFresca(invoice?.id);
-    onMutated();
     if (onCobrado) onCobrado(); else onClose();
-    router.refresh();
+    // C-14 (auditoría de uso): el refresco de la página va DESPUÉS de cerrar. Pedido
+    // en el mismo tick, la ventana se quedaba abierta (con el monto ya cobrado) hasta
+    // que respondía el servidor: ~7 s en producción, medido 20 s con el refresco retenido.
+    setTimeout(() => { onMutated(); router.refresh(); }, 0);
   }
 
   // ws1-t4: se usó saldo a favor en esta factura (caso de ortodoncia). Si quedó
@@ -1458,8 +1461,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               {(["baja_total", "sigue_debiendo", "baja_resto"] as const)
                 .filter((d) => d !== "baja_resto" || invoice.balance > 0)
                 .map((d) => (
-                  <label key={d} className="flex items-start gap-2 text-xs cursor-pointer">
-                    <input type="radio" name="destino-reembolso" value={d} checked={refundDestino === d} onChange={() => setRefundDestino(d)} disabled={busy} className="mt-0.5" />
+                  <label key={d} className="text-xs cursor-pointer" style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <input type="radio" name="destino-reembolso" value={d} checked={refundDestino === d} onChange={() => setRefundDestino(d)} disabled={busy} style={{ marginTop: 2 }} />
                     <span>
                       <span className="font-medium" style={{ color: "var(--text-1)" }}>{txReembolso.destinos[d]}</span>
                       <span className="block" style={{ color: "var(--text-3)" }}>{txReembolso.ayudas[d]}</span>

@@ -465,7 +465,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       <h2>${t("cashRegister.listTitle")}</h2>
       <table class="mov"><thead><tr>
         <th>${multiDay ? t("cashRegister.thDateTime") : t("cashRegister.thTime")}</th><th>${t("cashRegister.thPatient")}</th><th>${t("cashRegister.thConcept")}</th>
-        <th style="text-align:right">${t("cashRegister.thAmount")}</th><th>${t("cashRegister.thMethod")}</th><th>${t("cashRegister.thDoctor")}</th>
+        <th style="text-align:right">${txDinero.caja.thCobrado}</th><th>${t("cashRegister.thMethod")}</th><th>${t("cashRegister.thDoctor")}</th>
       </tr></thead><tbody>${rows || `<tr><td colspan="6" style="color:#999">${t("cashRegister.emptyList")}</td></tr>`}</tbody></table>
       <script>window.onload=function(){window.print();}</script>
       </body></html>`;
@@ -989,10 +989,10 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 {/* Y aparte, la cuenta del efectivo del cajón (no suma al total de arriba). */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: "8px 12px", marginBottom: 14 }}>
                   <CloseLine label={t("cashRegister.kpiOpening")}   value={fmtMXNdec(totals.openingBalance)} rediseno={rediseno} />
-                  <CloseLine label={`+ ${t("cashRegister.methodCash")}`} value={fmtMXNdec(totals.cashIncome)} rediseno={rediseno} />
-                  <CloseLine label={`− ${t("cashRegister.kpiWithdrawals")}`} value={`−${fmtMXNdec(totals.withdrawals)}`} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.nueva.efectivoCobrado")} value={fmtMXNdec(totals.cashIncome)} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.kpiWithdrawals")} value={totals.withdrawals > 0 ? `−${fmtMXNdec(totals.withdrawals)}` : fmtMXNdec(0)} rediseno={rediseno} />
                   {(totals.cashRefunds ?? 0) > 0 && (
-                    <CloseLine label={`− ${txDinero.caja.reembolsosEfectivo}`} value={`−${fmtMXNdec(totals.cashRefunds ?? 0)}`} rediseno={rediseno} />
+                    <CloseLine label={`${t("cashRegister.kpiRefunds")} · ${t("cashRegister.methodCash")}`} value={`−${fmtMXNdec(totals.cashRefunds ?? 0)}`} rediseno={rediseno} />
                   )}
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--brand-softer)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", marginBottom: 14 }}>
@@ -1078,7 +1078,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                     <thead>
                       <tr>
                         <th>{summaryMultiDay ? t("cashRegister.thDateTime") : t("cashRegister.thTime")}</th><th>{t("cashRegister.thPatient")}</th><th>{t("cashRegister.thConcept")}</th>
-                        <th style={{ textAlign: "right" }}>{t("cashRegister.thAmount")}</th><th>{t("cashRegister.thMethod")}</th><th>{t("cashRegister.thDoctor")}</th>
+                        <th style={{ textAlign: "right" }}>{txDinero.caja.thCobrado}</th><th>{t("cashRegister.thMethod")}</th><th>{t("cashRegister.thDoctor")}</th>
                       </tr>
                     </thead>
                     <tbody>

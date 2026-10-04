@@ -67,12 +67,20 @@ export function fmtFecha(d: Date | string | null, zona: string = ZONA_POR_DEFECT
  * «Reembolso $1,000» se leía como dinero recibido): va en negativo y dice por
  * dónde salió; un traspaso a saldo a favor dice eso.
  */
-export function renglonDePago(pay: { method: string; amount: number; refundMethod?: string | null }): { etiqueta: string; signo: "" | "−"; resta: boolean } {
+export function renglonDePago(pay: { method: string; amount: number; refundMethod?: string | null }): { etiqueta: string; signo: "" | "-"; resta: boolean } {
   if (pay.method !== "refund") return { etiqueta: METHOD_LABELS[pay.method] ?? pay.method, signo: "", resta: false };
-  if (pay.refundMethod === "saldo_a_favor") return { etiqueta: "Pasó a saldo a favor", signo: "−", resta: true };
+  if (pay.refundMethod === "saldo_a_favor") return { etiqueta: "Pasó a saldo a favor", signo: SIGNO_MENOS, resta: true };
   const por = pay.refundMethod ? REEMBOLSO_POR[pay.refundMethod] : null;
-  return { etiqueta: por ? `Reembolso (${por})` : "Reembolso", signo: "−", resta: true };
+  return { etiqueta: por ? `Reembolso (${por})` : "Reembolso", signo: SIGNO_MENOS, resta: true };
 }
+
+/**
+ * El signo menos del PDF es el guion ASCII: la Helvetica de @react-pdf (WinAnsi)
+ * no trae el signo menos tipográfico (U+2212) y lo dejaba en blanco: el reembolso
+ * y el descuento salían como cifras positivas (auditoría de uso C-02, visto al
+ * extraer el texto del PDF).
+ */
+const SIGNO_MENOS = "-" as const;
 
 const REEMBOLSO_POR: Record<string, string> = {
   cash: "en efectivo", transfer: "por transferencia", debit: "a tarjeta de débito",
@@ -202,7 +210,7 @@ function FilaDePago({ pay, plan, zona }: { pay: ComprobanteProps["payments"][num
         </Text>
       </View>
       <Text style={[styles.payAmount, reembolso ? { color: "#b45309" } : {}]}>
-        {reembolso ? "−" : ""}{fmtMXN(pay.amount)}
+        {r.signo}{fmtMXN(pay.amount)}
       </Text>
     </View>
   );
@@ -291,7 +299,7 @@ function ComprobanteDocument(p: ComprobanteProps) {
           {p.invoice.discount > 0 ? (
             <View style={styles.totalLine}>
               <Text style={styles.totalLabel}>Descuento</Text>
-              <Text style={[styles.totalValue, { color: "#b45309" }]}>−{fmtMXN(p.invoice.discount)}</Text>
+              <Text style={[styles.totalValue, { color: "#b45309" }]}>{SIGNO_MENOS}{fmtMXN(p.invoice.discount)}</Text>
             </View>
           ) : null}
           {totales.tax > 0 ? (

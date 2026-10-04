@@ -170,9 +170,9 @@ test("C-32 · $3,500 por transferencia y un abono de $100 en efectivo: el métod
 import { fmtFecha, renglonDePago } from "@/lib/invoices/print-pdf";
 
 test("C-02 · el comprobante pone el reembolso en negativo y dice por dónde salió (antes «Reembolso $1,000» como pago)", () => {
-  assert.deepEqual(renglonDePago({ method: "refund", amount: 1_000, refundMethod: "cash" }), { etiqueta: "Reembolso (en efectivo)", signo: "−", resta: true });
+  assert.deepEqual(renglonDePago({ method: "refund", amount: 1_000, refundMethod: "cash" }), { etiqueta: "Reembolso (en efectivo)", signo: "-", resta: true });
   assert.equal(renglonDePago({ method: "refund", amount: 500, refundMethod: "saldo_a_favor" }).etiqueta, "Pasó a saldo a favor");
-  assert.equal(renglonDePago({ method: "refund", amount: 500, refundMethod: null }).signo, "−", "uno viejo sin método también resta");
+  assert.equal(renglonDePago({ method: "refund", amount: 500, refundMethod: null }).signo, "-", "uno viejo sin método también resta (guion ASCII: la Helvetica del PDF no trae el menos tipográfico)");
   assert.deepEqual(renglonDePago({ method: "cash", amount: 3_000 }), { etiqueta: "Efectivo", signo: "", resta: false });
 });
 

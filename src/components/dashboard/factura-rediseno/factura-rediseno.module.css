@@ -418,7 +418,7 @@
   gap: 8px;
 }
 
-.raiz input:not([type="checkbox"]),
+.raiz input:not([type="checkbox"]):not([type="radio"]),
 .raiz select,
 .raiz textarea,
 .raiz :global(.input-new) {
@@ -451,14 +451,14 @@
 }
 
 @media (hover: hover) {
-  .raiz input:not([type="checkbox"]):hover,
+  .raiz input:not([type="checkbox"]):not([type="radio"]):hover,
   .raiz select:hover,
   .raiz textarea:hover {
     border-color: var(--m2-texto-3);
   }
 }
 
-.raiz input:not([type="checkbox"]):focus,
+.raiz input:not([type="checkbox"]):not([type="radio"]):focus,
 .raiz select:focus,
 .raiz textarea:focus,
 .raiz :global(.input-new):focus {
@@ -466,7 +466,9 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--m2-activo) 18%, transparent);
 }
 
-.raiz input[type="checkbox"] {
+/* Auditoría de uso C-02: el reembolso pregunta con radios; van como las casillas. */
+.raiz input[type="checkbox"],
+.raiz input[type="radio"] {
   width: 16px;
   height: 16px;
   margin: 0;
@@ -524,7 +526,7 @@
    (`.dark input {…}`), y eso gana a cualquier especificidad. Aquí se le gana
    con la misma arma, leyendo los tokens; es lo mismo que hace el buscador
    del menú (`menu-dos-niveles.module.css`, `.buscador input`). */
-:global(.dark) .raiz input:not([type="checkbox"]),
+:global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]),
 :global(.dark) .raiz select,
 :global(.dark) .raiz textarea {
   background-color: var(--m2-n2-fondo) !important;
@@ -538,14 +540,14 @@
 }
 
 @media (hover: hover) {
-  :global(.dark) .raiz input:not([type="checkbox"]):hover,
+  :global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]):hover,
   :global(.dark) .raiz select:hover,
   :global(.dark) .raiz textarea:hover {
     border-color: var(--m2-texto-3) !important;
   }
 }
 
-:global(.dark) .raiz input:not([type="checkbox"]):focus,
+:global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]):focus,
 :global(.dark) .raiz select:focus,
 :global(.dark) .raiz textarea:focus {
   border-color: var(--m2-activo) !important;
