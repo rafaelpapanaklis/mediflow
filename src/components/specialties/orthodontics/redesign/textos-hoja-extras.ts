@@ -71,7 +71,8 @@ const es = {
     "Falta aplicar sql/ws1-t9-hoja-ligas-mecanicas-catalogos.sql para guardar tus catálogos. Mientras, la hoja usa los de fábrica.",
   cfgDeFabrica: "Usas los valores de fábrica.",
   cfgMaterialesAyuda: "Enciende solo los materiales que usa tu clínica.",
-  cfgCalibresAyuda: "Redondos como «014» y rectangulares como «16x22».",
+  // N-34: la hoja y la ficha los pintan con su punto («.014», «.016×.022»); la ayuda dice lo mismo.
+  cfgCalibresAyuda: "Redondos como «.014» y rectangulares como «.016×.022» (puedes escribirlos «014» o «16x22»).",
   cfgNinguna: "No ofreces ninguna opción en esta lista.",
   cfgAgregar: "Agregar",
   cfgCopiarFabrica: "Copiar los de fábrica",
@@ -153,7 +154,7 @@ const en: TextosHojaExtras = {
   cfgFaltaSql: "sql/ws1-t9-hoja-ligas-mecanicas-catalogos.sql is not applied yet, so your catalogs can't be saved. Meanwhile the sheet uses the factory ones.",
   cfgDeFabrica: "You're using the factory values.",
   cfgMaterialesAyuda: "Turn on only the materials your clinic uses.",
-  cfgCalibresAyuda: "Round like “014” and rectangular like “16x22”.",
+  cfgCalibresAyuda: "Round like “.014” and rectangular like “.016×.022” (you can type “014” or “16x22”).",
   cfgNinguna: "You don't offer any option in this list.",
   cfgAgregar: "Add",
   cfgCopiarFabrica: "Copy the factory values",

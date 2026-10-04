@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Text, View, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
+import { direccionYaDiceLaCiudad } from "@/lib/clinica/lugar-de-la-clinica";
 
 /**
  * ClinicLetterhead — la cabecera común de los PDF que se entregan a alguien.
@@ -180,7 +181,11 @@ export function clinicNameFontSize(name: string, hasLogo: boolean): number {
 export function clinicLetterheadLines(c: ClinicLetterheadClinic): string[] {
   const lines: string[] = [];
   if (c.clinicAddress) lines.push(c.clinicAddress);
-  const donde = [c.clinicCity, c.clinicState].filter(Boolean).join(", ");
+  // N-34 (segunda auditoría): sin repetir lo que la dirección ya dice («… 03100 Ciudad de México, CDMX» + «Ciudad de
+  // México» salía «Ciudad de México, CDMX, Ciudad de México»).
+  const donde = [c.clinicCity, c.clinicState]
+    .filter((x): x is string => Boolean(x) && !(c.clinicAddress && direccionYaDiceLaCiudad(c.clinicAddress, x)))
+    .join(", ");
   if (donde) lines.push(donde);
   const contacto = [c.clinicPhone ? `Tel: ${c.clinicPhone}` : null, c.clinicEmail]
     .filter(Boolean)

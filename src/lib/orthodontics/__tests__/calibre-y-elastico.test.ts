@@ -27,3 +27,8 @@ test("un elástico nuevo en la hoja no trae medida ni fuerza de fábrica, y el s
     assert.ok(!src.includes("config: z.string().min(1)"), `${accion} todavía exige medida`);
   }
 });
+
+test("N-34: «16x22» del catálogo también sale «.016×.022»", () => {
+  assert.equal(calibreLegible("16x22"), ".016×.022");
+  assert.equal(calibreLegible("17x25"), ".017×.025");
+});

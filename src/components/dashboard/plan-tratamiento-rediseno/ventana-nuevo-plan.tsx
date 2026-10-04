@@ -17,6 +17,7 @@ import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
 import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
+import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 
 /**
  * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
@@ -125,7 +126,9 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   const sinPrecio = renglonesDelPlanSinPrecio(plan.renglones);
   const [confirmarSinPrecio, setConfirmarSinPrecio] = useState(false);
   const crear = () => {
-    if (sinPrecio > 0 && !confirmarSinPrecio) {
+    // N-33 (segunda auditoría): con el plan entero en $0 ya pregunta «¿Crear el plan en $0?» quien lo guarda; no se
+    // pregunta dos veces lo mismo. Solo con ALGÚN renglón en $0 dentro de un plan con costo.
+    if (sinPrecio > 0 && !confirmarSinPrecio && !planSinCosto(form.totalCost)) {
       setConfirmarSinPrecio(true);
       return;
     }

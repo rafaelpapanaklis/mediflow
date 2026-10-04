@@ -94,6 +94,13 @@ export function sumarDiasACalendario(fecha: string, dias: number): string {
   return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
 }
 
+/** "YYYY-MM-DD" + meses de calendario; el 31 en un mes de 30 días cae en su último día. */
+export function sumarMesesACalendario(fecha: string, meses: number): string {
+  const [a, m, d] = fecha.split("-").map(Number) as [number, number, number];
+  const ultimo = new Date(Date.UTC(a, m - 1 + meses + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(a, m - 1 + meses, Math.min(d, ultimo))).toISOString().slice(0, 10);
+}
+
 export interface CalendarioPropuesto {
   /** Las primeras fechas propuestas ("YYYY-MM-DD"): la primera es el primer control. */
   fechas: string[];
@@ -139,14 +146,31 @@ export function calendarioDeControles(
   const paso = Number.isInteger(frecuenciaDias) && frecuenciaDias >= 7 && frecuenciaDias <= 120 ? frecuenciaDias : 30;
   const total = controlesPrevistos && controlesPrevistos > 0 ? Math.min(controlesPrevistos, CONTROLES_MAXIMOS) : null;
   const cuantas = total === null ? FECHAS_A_MOSTRAR : Math.min(total, FECHAS_A_MOSTRAR);
-  const fechas = Array.from({ length: cuantas }, (_, i) => siguienteDiaHabil(sumarDiasACalendario(fecha, paso * (i + 1)), diasCerrados));
+  // N-34 (segunda auditoría): «Cada mes» y «Cada 2 meses» son meses de CALENDARIO (3-oct → 3-nov → 3-dic), no
+  // bloques de 30/60 días que se van corriendo (2-nov, 2-dic, 1-ene…).
+  const meses = paso === 30 ? 1 : paso === 60 ? 2 : 0;
+  const fechas = Array.from({ length: cuantas }, (_, i) =>
+    siguienteDiaHabil(meses ? sumarMesesACalendario(fecha, meses * (i + 1)) : sumarDiasACalendario(fecha, paso * (i + 1)), diasCerrados),
+  );
   return { fechas, masAdelante: total === null ? 0 : total - fechas.length, total };
 }
 
-/** Los días de la semana en que la clínica NO abre, de sus filas de `clinic_schedules`. Sin filas: solo el domingo. */
+/**
+ * `clinic_schedules.dayOfWeek` va de 0 = LUNES a 6 = DOMINGO (api/settings/schedule y el seed del registro); el
+ * calendario de aquí, como JavaScript, de 0 = DOMINGO a 6 = sábado. C-69 (segunda auditoría): la primera versión
+ * los leía igual y proponía domingos y corría los sábados abiertos.
+ */
+export function diaJsDeHorario(dayOfWeek: number): number {
+  return (dayOfWeek + 1) % 7;
+}
+
+/**
+ * Los días de la semana (0 = domingo, como `diaDeLaSemana`) en que la clínica NO abre, de sus filas de
+ * `clinic_schedules`. Un día sin fila cuenta como cerrado; sin ninguna fila (horario sin capturar), solo el domingo.
+ */
 export function diasCerradosDelHorario(filas: ReadonlyArray<{ dayOfWeek: number; enabled: boolean }> | null | undefined): number[] {
   if (!filas || filas.length === 0) return [0];
-  const abiertos = new Set(filas.filter((f) => f.enabled).map((f) => f.dayOfWeek));
+  const abiertos = new Set(filas.filter((f) => f.enabled && f.dayOfWeek >= 0 && f.dayOfWeek <= 6).map((f) => diaJsDeHorario(f.dayOfWeek)));
   return [0, 1, 2, 3, 4, 5, 6].filter((d) => !abiertos.has(d));
 }
 

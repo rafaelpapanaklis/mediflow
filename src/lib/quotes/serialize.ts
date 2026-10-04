@@ -118,6 +118,8 @@ export function toPublicView(
   opts: {
     clinicName: string;
     clinicLogoUrl: string | null;
+    /** N-35: el teléfono de la clínica, para la página pública. */
+    clinicPhone?: string | null;
     patientFirstName: string;
     signatureUrl: string | null;
     expired: boolean;
@@ -159,6 +161,7 @@ export function toPublicView(
     condicionesPago: opts.condicionesPago ?? null,
     clinicName: opts.clinicName,
     clinicLogoUrl: opts.clinicLogoUrl,
+    clinicPhone: opts.clinicPhone ?? null,
     patientFirstName: opts.patientFirstName,
     signatureUrl: opts.signatureUrl,
     items,

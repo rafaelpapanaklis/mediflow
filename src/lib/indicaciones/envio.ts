@@ -29,8 +29,12 @@ export const KIND_ENVIO_INDICACIONES: WhatsAppSendKind = PLANTILLA_INDICACIONES_
 
 /** Estados en que la cita ya se atendió (o se está atendiendo): hay indicaciones que dar. */
 export const ESTADOS_CON_INDICACIONES = ["IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT"] as const;
-/** Estados en que el paciente ya llegó: se puede hacer constar su asistencia. */
-export const ESTADOS_CON_CONSTANCIA = ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS", "COMPLETED", "CHECKED_OUT"] as const;
+/**
+ * Estados en que la consulta ya EMPEZÓ o TERMINÓ: solo entonces se puede hacer constar la asistencia (N-29, decisión
+ * de Rafael). Antes bastaba «Registrado» (el paciente acababa de llegar) y salía un justificante de una consulta que
+ * nadie había dado.
+ */
+export const ESTADOS_CON_CONSTANCIA = ["IN_PROGRESS", "COMPLETED", "CHECKED_OUT"] as const;
 
 export function admiteIndicaciones(status: string | null | undefined): boolean {
   return (ESTADOS_CON_INDICACIONES as readonly string[]).includes(String(status ?? ""));
@@ -96,16 +100,39 @@ export function horaCorta(d: Date, tz: string | null | undefined): string {
 }
 
 /**
- * La hora que consta: la de la AGENDA (auditoría de uso, C-60).
+ * La hora que consta: la REAL (N-29, segunda auditoría; decisión de Rafael). Inicio = llegada registrada o, si no,
+ * el inicio de la consulta; fin = fin de la consulta (el mismo día) o, con la consulta todavía en curso, la hora en
+ * que se emite. `null` si el sistema no tiene ninguna hora real: entonces no se puede hacer constar nada.
  *
- * Antes constaba la hora «real» (llegada y fin registrados en el sistema): una cita de 11:00 a 11:30 a la que
- * recepción le dio llegada a las 14:08 salía «de las 14:08 a las 14:38». La llegada que se marca en el sistema
- * es cuando alguien pulsó el botón, no cuando entró el paciente; lo que la clínica ve y puede sostener es la
- * cita de su agenda. Si la cita se movió, la agenda ya dice la hora nueva.
+ * (En la primera ronda —C-60— constaba la hora de la agenda; la decisión de Rafael para la segunda es la real.)
  */
-export function horarioQueConsta(c: CitaParaHoja, _tz?: string | null): { inicio: Date; fin: Date } {
-  const fin = c.endsAt > c.startsAt ? c.endsAt : new Date(c.startsAt.getTime() + 30 * 60 * 1000);
-  return { inicio: c.startsAt, fin };
+export function horarioQueConsta(c: CitaParaHoja, tz: string | null | undefined, ahora: Date = new Date()): { inicio: Date; fin: Date } | null {
+  const inicio = c.checkedInAt ?? c.startedAt;
+  if (!inicio) return null;
+  const finReal = c.completedAt && c.completedAt > inicio && mismoDia(c.completedAt, inicio, tz) ? c.completedAt : null;
+  if (finReal) return { inicio, fin: finReal };
+  if (c.status === "IN_PROGRESS" && ahora > inicio && mismoDia(ahora, inicio, tz)) return { inicio, fin: ahora };
+  return null;
+}
+
+const mismoDia = (a: Date, b: Date, tz: string | null | undefined) => fechaLarga(a, tz) === fechaLarga(b, tz);
+
+/** Por qué NO se puede emitir la constancia de esta cita (o `null` si sí). N-29. */
+export type MotivoSinConstancia = "ESTADO" | "DIA_FUTURO" | "SIN_HORA_REAL";
+
+export const MENSAJE_SIN_CONSTANCIA: Record<MotivoSinConstancia, string> = {
+  ESTADO: "La constancia se emite cuando la consulta ya empezó o terminó.",
+  DIA_FUTURO: "Esta cita es de un día que todavía no llega: no se puede hacer constar la asistencia.",
+  SIN_HORA_REAL: "La cita no tiene registrada la hora real de llegada o de inicio: no se puede hacer constar.",
+};
+
+export function motivoSinConstancia(c: CitaParaHoja, tz: string | null | undefined, ahora: Date = new Date()): MotivoSinConstancia | null {
+  if (!admiteConstancia(c.status)) return "ESTADO";
+  // Una cita de un día que no ha llegado no se atendió, aunque esté marcada «Completada».
+  const dia = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: tz || TZ_POR_DEFECTO, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  if (dia(c.startsAt) > dia(ahora)) return "DIA_FUTURO";
+  if (!horarioQueConsta(c, tz, ahora)) return "SIN_HORA_REAL";
+  return null;
 }
 
 /** «Extracción simple y Endodoncia», o el motivo de la cita si ningún procedimiento se reconoció. */
@@ -118,7 +145,11 @@ export function textoDeProcedimientos(procedimientos: readonly string[], motivo:
 
 export function valoresDeLaCita(d: DatosParaHoja, ahora: Date): ValoresHoja {
   const tz = d.clinica.timezone;
-  const { inicio, fin } = horarioQueConsta(d.cita, tz);
+  // Sin hora real (o antes de pedir la constancia) se pinta la agendada solo para las INDICACIONES; la constancia la
+  // corta antes `motivoSinConstancia`.
+  const real = horarioQueConsta(d.cita, tz, ahora);
+  const inicio = real?.inicio ?? d.cita.startsAt;
+  const fin = real?.fin ?? d.cita.endsAt;
   // C-60: la ciudad sale de la dirección cuando el campo ciudad la contradice («en Mérida» con dirección de CDMX).
   const lugar = lugarDeLaClinica({ ciudad: d.clinica.ciudad, estado: d.clinica.estado, direccion: d.clinica.direccion }).lugar;
   return {

@@ -9,7 +9,8 @@ import { PERMISO_VER, cargarCita, entrarCita } from "@/lib/indicaciones/cita.ser
 import { constanciaSinTabla, hojasDeLaClinica, ultimoEnvioReciente } from "@/lib/indicaciones/hojas-de-cita.server";
 import { constanciaPorDefecto, hojasSugeridas } from "@/lib/indicaciones/servicio";
 import {
-  admiteConstancia,
+  MENSAJE_SIN_CONSTANCIA,
+  motivoSinConstancia,
   admiteIndicaciones,
   seccionesRellenas,
   valoresDeLaCita,
@@ -51,7 +52,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       disponible: hojas !== null,
       estado: c.datos.cita.status,
       admiteIndicaciones: admiteIndicaciones(c.datos.cita.status),
-      admiteConstancia: admiteConstancia(c.datos.cita.status),
+      // N-29: además del estado, que la cita sea de un día que ya llegó y tenga hora real.
+      admiteConstancia: motivoSinConstancia(c.datos.cita, c.datos.clinica.timezone, new Date()) === null,
+      motivoSinConstancia: (() => {
+        const m = motivoSinConstancia(c.datos.cita, c.datos.clinica.timezone, new Date());
+        return m ? MENSAJE_SIN_CONSTANCIA[m] : null;
+      })(),
       paciente: c.datos.paciente.nombre,
       procedimientos: c.datos.procedimientos,
       indicaciones: indicaciones.map((h) => ({

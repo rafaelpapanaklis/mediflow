@@ -28,6 +28,7 @@ import { parseConsentText } from "./render";
 import { consentTextToBodyHtml } from "./template-html";
 import { consentStatus, type ConsentStatus } from "./types";
 import { revisarCarta, type RevisionDeCarta } from "./huecos-carta";
+import { direccionYaDiceLaCiudad } from "@/lib/clinica/lugar-de-la-clinica";
 
 /** Lo que se lee de la base para pintar la carta. Todo puede faltar menos el texto. */
 export interface ConsentDocumentSource {
@@ -109,7 +110,15 @@ export interface ConsentDocumentoDTO {
 export function direccionDeClinica(address: string | null, city: string | null): string | null {
   const calle = valorCapturado(address);
   if (!calle) return null;
-  return [calle, valorCapturado(city)].filter(Boolean).join(", ");
+  const ciudad = valorCapturado(city);
+  // N-34: no se pega una ciudad que la dirección ya trae.
+  return [calle, ciudad && !direccionYaDiceLaCiudad(calle, ciudad) ? ciudad : null].filter(Boolean).join(", ");
+}
+
+/** La cédula profesional escrita en el texto de la carta («Cédula profesional: 4455667»), o null. Ignora la raya. */
+export function cedulaEnElTexto(contenido: string | null | undefined): string | null {
+  const m = /C[ée]dula profesional:\s*([0-9A-Za-z][0-9A-Za-z-]{3,})/i.exec(contenido ?? "");
+  return m ? m[1] : null;
 }
 
 /** Lo que la CABECERA necesita: paciente, doctor, clínica y el día de la carta. */
@@ -161,7 +170,12 @@ export function buildConsentDocumento(
     status: consentStatus(src, now),
     titulo: valorCapturado(src.procedure) || "Consentimiento informado",
     tipo: parseConsentText(src.content).title || null,
-    encabezado: encabezadoDeCarta(src),
+    // N-34 (segunda auditoría): en cartas viejas la cabecera decía «Cédula: (vacío)» mientras el §2 de la misma carta
+    // traía «Cédula profesional: 4455667». Sin cédula del doctor hoy, la cabecera usa la que la carta firmada dice.
+    encabezado: encabezadoDeCarta({
+      ...src,
+      doctorLicense: valorCapturado(src.doctorLicense) || cedulaEnElTexto(src.content) || src.doctorLicense,
+    }),
     html: consentTextToBodyHtml(src.content),
     representante: valorCapturado(src.signerName)
       ? { nombre: valorCapturado(src.signerName), relacion: valorCapturado(src.signerRelation) || null }

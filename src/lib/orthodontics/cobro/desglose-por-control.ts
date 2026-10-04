@@ -60,6 +60,20 @@ export function desglosePorControl(cuotas: readonly CuotaDelCaso[], invoiceIdCol
   return { colocacion: aP(colocacionC), pagosDeColocacion: pagos, controles: aP(controlesC), controlesFacturados: facturasDeControl.size };
 }
 
+/**
+ * N-32 (segunda auditoría): el bloque «Extras» listaba TODAS las facturas del caso — la colocación y los controles
+ * (MF-1110, 1076, 1075) y repetía MF-1127, que ya está en «Controles por cobrar». Extras son las demás.
+ */
+export function soloExtras<T extends { invoiceId: string }>(
+  extras: readonly T[],
+  cuotas: readonly CuotaDelCaso[],
+  invoiceIdDelCaso: string | null | undefined,
+): T[] {
+  const deLaCobranza = new Set(cuotas.map((q) => q.invoiceId).filter((x): x is string => Boolean(x)));
+  if (invoiceIdDelCaso) deLaCobranza.add(invoiceIdDelCaso);
+  return extras.filter((e) => !deLaCobranza.has(e.invoiceId));
+}
+
 export interface EstimadoDelCaso {
   colocacion: number;
   controles: number;

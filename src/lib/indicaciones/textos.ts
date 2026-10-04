@@ -147,7 +147,7 @@ const es = {
   errorEstado: "Esta cita todavía no se atiende: las indicaciones se dan durante o después de la consulta.",
   constanciaElegir: "Plantilla de la constancia",
   constanciaAbrir: "Abrir constancia",
-  constanciaAyuda: "Se abre en PDF para imprimir o guardar. Lleva la hora de la cita en la agenda.",
+  constanciaAyuda: "Se abre en PDF para imprimir o guardar. Lleva la hora real de llegada (o de inicio) y de fin de la consulta; se emite cuando la consulta ya empezó o terminó.",
   // C-60: sin cédula, se avisa ANTES de imprimir (no se descubre en el papel).
   sinCedulaTitulo: "{doctor} no tiene cédula profesional en «Mi perfil».",
   sinCedulaTexto: "La constancia saldrá con la línea de la cédula en blanco para llenarla a mano.",
@@ -286,7 +286,7 @@ const en: Textos = {
   errorEstado: "This appointment hasn't been seen yet: instructions are given during or after the visit.",
   constanciaElegir: "Certificate template",
   constanciaAbrir: "Open certificate",
-  constanciaAyuda: "Opens as a PDF to print or save. Uses the appointment time from the schedule.",
+  constanciaAyuda: "Opens as a PDF to print or save. Uses the actual arrival (or start) and end time of the visit; available once the visit has started or ended.",
   sinCedulaTitulo: "{doctor} has no professional license number in «My profile».",
   sinCedulaTexto: "The certificate will have the license line blank, to fill in by hand.",
   sinCedulaPoner: "Add the license number",

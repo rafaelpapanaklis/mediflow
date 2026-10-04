@@ -92,4 +92,6 @@ export interface ContextoCita {
   /** C-60: el doctor de la cita, y si le falta la cédula (la constancia avisa antes de imprimirse en blanco). */
   doctor?: string;
   doctorSinCedula?: boolean;
+  /** N-29: por qué no se puede emitir la constancia (o null). */
+  motivoSinConstancia?: string | null;
 }

@@ -178,7 +178,8 @@ async function fetchRecentPatients(clinicId: string, doctorId: string, viewer: V
       clinicId,
       doctorId,
       status: "COMPLETED",
-      startsAt: { gte: since },
+      // N-34 (segunda auditoría): una cita FUTURA marcada «Completada» salía como «Ana Prueba Uno · ahora».
+      startsAt: { gte: since, lte: new Date() },
       AND: relatedPatientVisibilityAnd(viewer),
     },
     select: {

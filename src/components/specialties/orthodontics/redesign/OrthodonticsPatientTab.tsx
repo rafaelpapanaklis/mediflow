@@ -13,7 +13,7 @@
 // siendo el punto de corte del bundle — moverlos aquí no cambia qué se
 // descarga ni cuándo.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import toast from "react-hot-toast";
@@ -312,22 +312,26 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
     return () => clearInterval(timer);
   }, [diagnosisId, generalConsentSigned, refetchGeneralConsentSigned]);
 
+  const diagnosticoDelAltaRef = useRef<string | null>(null);
   // Abrir el caso: lo usan las dos caras de la pestaña — la completa (el
   // asistente que abre `OrthodonticsRedesignClient`) y la limpia del paciente
   // que nunca tuvo caso (`OrtodonciaSinCaso`).
   const crearCaso = async (payload: DrawerNewCaseSubmit): Promise<boolean> => {
-    let diagnosisId = orthoRedesignVM?.diagnosis?.id ?? null;
+    // N-30: si un intento anterior creó el diagnóstico y el plan se rechazó, el reintento usa ESE diagnóstico (no crea
+    // otro).
+    let diagnosisId = orthoRedesignVM?.diagnosis?.id ?? diagnosticoDelAltaRef.current ?? null;
     // Abrir el caso es UNA acción: con diagnóstico y plan juntos, las filas del diagnóstico quedan solo en la bitácora y
     // Movimientos muestra una («Abrió el caso de ortodoncia: …», la escribe createTreatmentPlan).
     const juntoConElPlan = Boolean(payload.diagnosis && payload.plan);
     const pasoDelAlta = juntoConElPlan ? { parteDeUnaAccion: true } : {};
-    if (payload.diagnosis) {
+    if (payload.diagnosis && !diagnosticoDelAltaRef.current) {
       const res = await createDiagnosis({ patientId: patient.id, ...payload.diagnosis, ...pasoDelAlta });
       if (isFailure(res)) {
         toast.error(res.error);
         return false;
       }
       diagnosisId = res.data.id;
+      diagnosticoDelAltaRef.current = res.data.id;
       // ws1-t8: el diagnóstico COMPLETO (facial, oclusal, funcional, cefalometría…) se guarda enseguida con el mismo
       // servidor que «Editar diagnóstico». Si no se pudo, el caso sigue: se dice y se completa desde el resumen.
       if (payload.diagnosis.detalle) {

@@ -55,6 +55,8 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
   const previo = useRef<{ id: string; estado: string } | null>(null);
   // C-60: ¿al doctor de la cita le falta la cédula? Se pregunta al abrir la cita, para avisar ANTES de imprimir.
   const [sinCedula, setSinCedula] = useState<{ id: string; doctor: string } | null>(null);
+  // N-29: el servidor dice si la constancia se puede emitir (día que ya llegó, hora real registrada).
+  const [motivoSinConstancia, setMotivoSinConstancia] = useState<{ id: string; texto: string } | null>(null);
   const [preguntarCedula, setPreguntarCedula] = useState(false);
 
   useEffect(() => {
@@ -96,7 +98,9 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
     fetch(`/api/indicaciones/cita/${encodeURIComponent(appointmentId)}`)
       .then((r) => (r.ok ? (r.json() as Promise<ContextoCita>) : null))
       .then((d) => {
-        if (vivo) setSinCedula(d && d.doctorSinCedula ? { id: appointmentId, doctor: d.doctor || "El doctor de la cita" } : null);
+        if (!vivo) return;
+        setSinCedula(d && d.doctorSinCedula ? { id: appointmentId, doctor: d.doctor || "El doctor de la cita" } : null);
+        setMotivoSinConstancia(d && d.motivoSinConstancia ? { id: appointmentId, texto: d.motivoSinConstancia } : null);
       })
       .catch(() => undefined);
     return () => {
@@ -157,6 +161,7 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
             type="button"
             className={ag.accionSecundaria}
             title={tx.constanciaAyuda}
+            disabled={motivoSinConstancia?.id === appointmentId}
             onClick={() => (sinCedula?.id === appointmentId ? setPreguntarCedula(true) : abrirConstancia())}
           >
             <FileBadge size={18} strokeWidth={2} />
@@ -164,6 +169,12 @@ export function RanuraIndicaciones({ appointmentId, estado, puedeEmitir }: Props
           </button>
         )}
       </div>
+
+      {conConstancia && motivoSinConstancia?.id === appointmentId && (
+        <p className={ag.nota} style={{ marginTop: 8 }} role="status" data-motivo-sin-constancia>
+          {motivoSinConstancia.texto}
+        </p>
+      )}
 
       {preguntarCedula && sinCedula?.id === appointmentId && (
         <div className={ag.nota} style={{ marginTop: 10 }} role="alert" data-constancia-sin-cedula>

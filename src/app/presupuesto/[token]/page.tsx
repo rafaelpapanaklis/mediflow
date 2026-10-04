@@ -35,6 +35,7 @@ interface PublicView {
   acceptedAt: string | null;
   clinicName: string;
   clinicLogoUrl: string | null;
+  clinicPhone?: string | null;
   patientFirstName: string;
   signatureUrl: string | null;
   items: PublicItem[];
@@ -213,8 +214,22 @@ export default function PresupuestoPublicPage() {
           <h1 className="text-xl font-bold text-slate-800">¡Presupuesto aceptado!</h1>
           <p className="text-sm text-slate-500 mt-2">
             Gracias{data ? `, ${data.patientFirstName}` : ""}. Tu aceptación del presupuesto{" "}
-            <strong>{data?.folio}</strong> quedó registrada. La clínica te contactará para continuar.
+            <strong className="whitespace-nowrap">{data?.folio}</strong> quedó registrada. La clínica te contactará para continuar.
           </p>
+          {/* N-35 (segunda auditoría): a quién se le aceptó y cómo llamarle. */}
+          {data?.clinicName ? (
+            <p className="text-sm text-slate-700 mt-3" data-clinica-del-presupuesto>
+              <strong>{data.clinicName}</strong>
+              {data.clinicPhone ? (
+                <>
+                  {" · "}
+                  <a className="underline whitespace-nowrap" href={`tel:${data.clinicPhone.replace(/[^\d+]/g, "")}`}>
+                    Tel. {data.clinicPhone}
+                  </a>
+                </>
+              ) : null}
+            </p>
+          ) : null}
           {resumenElegido && resumenElegido.alcance === "parcial" && (
             <p className="text-sm text-slate-600 mt-3">
               Aceptaste {resumenElegido.aceptados} de {resumenElegido.conceptos} tratamientos, por{" "}
@@ -241,7 +256,17 @@ export default function PresupuestoPublicPage() {
             <img src={data.clinicLogoUrl} alt={data.clinicName} className="h-8 object-contain mb-1" />
           )}
           <h1 className="text-base font-bold text-slate-800">{data?.clinicName}</h1>
-          <p className="text-xs text-slate-500">Presupuesto {data?.folio}</p>
+          <p className="text-xs text-slate-500">
+            Presupuesto <span className="whitespace-nowrap">{data?.folio}</span>
+            {data?.clinicPhone ? (
+              <>
+                {" · "}
+                <a className="underline whitespace-nowrap" href={`tel:${data.clinicPhone.replace(/[^\d+]/g, "")}`}>
+                  Tel. {data.clinicPhone}
+                </a>
+              </>
+            ) : null}
+          </p>
         </div>
       </header>
 

@@ -324,7 +324,8 @@ function ConsentsPanel({
         </div>
       ) : null}
       {rows.length === 0 ? (
-        <div className={orto.vacioLinea}>Sin consentimientos registrados todavía.</div>
+        // N-32: aquí solo van los de ortodoncia; las cartas de otros tratamientos viven en Consentimientos del paciente.
+        <div className={orto.vacioLinea}>Sin consentimientos de ortodoncia todavía. Las cartas de otros tratamientos están en la pestaña «Consentimientos» del paciente.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {rows.map((c) => (

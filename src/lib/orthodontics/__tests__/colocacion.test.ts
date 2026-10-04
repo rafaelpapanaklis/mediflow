@@ -64,8 +64,8 @@ test("solo un caso «Por colocar» se coloca", () => {
 test("calendario propuesto: un control cada frecuencia desde la colocación; los previstos dicen cuántos", () => {
   assert.equal(sumarDiasACalendario("2026-01-31", 30), "2026-03-02");
   const c = calendarioDeControles("2026-10-03", 30, 18);
-  // C-69: el 31-ene-2027 es domingo → lunes 1-feb (los demás siguen contados desde la colocación).
-  assert.deepEqual(c.fechas, ["2026-11-02", "2026-12-02", "2027-01-01", "2027-02-01", "2027-03-02", "2027-04-01"]);
+  // N-34: «Cada mes» = meses de calendario desde la colocación (el 3); C-69: el domingo 3-ene-2027 → lunes 4-ene.
+  assert.deepEqual(c.fechas, ["2026-11-03", "2026-12-03", "2027-01-04", "2027-02-03", "2027-03-03", "2027-04-03"]);
   assert.equal(c.total, 18);
   assert.equal(c.masAdelante, 12);
   const sinPrevistos = calendarioDeControles("2026-10-03", 21, null);
@@ -73,7 +73,7 @@ test("calendario propuesto: un control cada frecuencia desde la colocación; los
   assert.equal(sinPrevistos.fechas[0], "2026-10-24");
   assert.equal(sinPrevistos.total, null);
   assert.equal(calendarioDeControles("2026-10-03", 30, 2).fechas.length, 2);
-  assert.equal(calendarioDeControles("2026-10-03", 999, 2).fechas[0], "2026-11-02", "frecuencia absurda → cada mes");
+  assert.equal(calendarioDeControles("2026-10-03", 999, 2).fechas[0], "2026-11-03", "frecuencia absurda → cada mes");
   assert.equal(fechaDeCalendario("2026-13-01"), null);
 });
 

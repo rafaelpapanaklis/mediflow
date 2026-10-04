@@ -51,6 +51,7 @@ import { progresoDeControles, textoControlQueSigue, textoControlesHechos, textoD
 import {
   desglosePorControl,
   estimadoDelCasoPorControl,
+  soloExtras,
   textoDelEstimadoDelCaso,
   tituloPagosDeColocacion,
   type DesglosePorControl,
@@ -181,6 +182,8 @@ export function SectionFinance(props: SectionFinanceProps) {
   const hayDeudaDeControles = Boolean(panel.cobranza && (panel.cobranza.vencidas.length > 0 || panel.cobranza.proximas.length > 0));
   // C-59 (auditoría de uso): en «Pago por control», qué parte es colocación y qué parte controles ya facturados.
   const desglose = esPorControl && panel.cobranza ? desglosePorControl(calendarioCompleto(panel.cobranza), panel.invoiceId) : null;
+  // N-32: «Extras» sin la colocación ni los controles (ya tienen su bloque).
+  const extras = soloExtras(panel.extras, panel.cobranza ? calendarioCompleto(panel.cobranza) : [], panel.invoiceId);
 
   // ronda 3 (ws1-t2, H6): lo que se sugiere cobrar con «Cobrar» — TODO lo
   // vencido (si hay), si no la cuota de hoy; en «pago por control», el saldo
@@ -472,7 +475,7 @@ export function SectionFinance(props: SectionFinanceProps) {
               </div>
             ) : null}
 
-            {panel.extras.length > 0 ? (
+            {extras.length > 0 ? (
               <div className="px-[18px] py-4">
                 {/* ronda 3 (ws1-t2, H21b): decía «cobrados aparte» pero listaba
                     CUALQUIER extra, pagado o no (`listarExtrasDelCaso` trae los
@@ -480,7 +483,7 @@ export function SectionFinance(props: SectionFinanceProps) {
                     se hubiera pagado. Título genérico + pill de estado por fila. */}
                 <h4 className={`${orto.bloqueTitulo} mb-2`}>Extras</h4>
                 <div className={orto.filas}>
-                  {panel.extras.map((e) => {
+                  {extras.map((e) => {
                     const pagada = e.status === "PAID";
                     return (
                       <div key={e.invoiceId} className={orto.fila}>

@@ -21,16 +21,19 @@ test("C-62: sin consentimiento firmado (o sin poder comprobarlo) no se coloca", 
 });
 
 test("C-69: el calendario propuesto no cae en domingo (sin horario de la clínica)", () => {
-  // Colocación el sábado 3-oct-2026, un control cada 30 días: con el código viejo el 4.º caía en domingo 31-ene-2027.
+  // Colocación el sábado 3-oct-2026, «Cada mes»: el 3 de cada mes; el 3-ene-2027 es domingo → lunes 4.
   const cal = calendarioDeControles("2026-10-03", 30, 12);
   assert.ok(cal.fechas.every((f) => diaDeLaSemana(f) !== 0), JSON.stringify(cal.fechas));
-  assert.equal(cal.fechas[3], "2027-02-01");
+  assert.equal(cal.fechas[2], "2027-01-04");
   // El siguiente control se cuenta desde la colocación, no desde el día corrido.
-  assert.equal(cal.fechas[4], "2027-03-02");
+  assert.equal(cal.fechas[3], "2027-02-03");
+  // «Cada 4 semanas» sigue siendo de 28 días.
+  assert.equal(calendarioDeControles("2026-10-03", 28, 2).fechas[0], "2026-10-31");
 });
 
 test("C-69: con el horario de la clínica se saltan sus días cerrados (aquí sábado y domingo)", () => {
-  const cerrados = diasCerradosDelHorario([1, 2, 3, 4, 5].map((d) => ({ dayOfWeek: d, enabled: true })).concat([{ dayOfWeek: 6, enabled: false }]));
+  // clinic_schedules: 0 = lunes … 6 = domingo. Lunes a viernes abiertos (0–4), sábado (5) y domingo (6) cerrados.
+  const cerrados = diasCerradosDelHorario([0, 1, 2, 3, 4].map((d) => ({ dayOfWeek: d, enabled: true })).concat([{ dayOfWeek: 5, enabled: false }, { dayOfWeek: 6, enabled: false }]));
   assert.deepEqual(cerrados, [0, 6]);
   assert.equal(siguienteDiaHabil("2026-10-31", cerrados), "2026-11-02"); // sábado → lunes
   assert.equal(siguienteDiaHabil("2026-11-04", cerrados), "2026-11-04");
@@ -70,4 +73,17 @@ test("C-84: «Proponer controles» dice cuántos casos no tienen tiempo de trata
   const parte = mensajeDePropuesta({ propuestos: 3, sinTiempo: 1, yaTenian: 1 });
   assert.equal(parte.tipo, "exito");
   assert.match(parte.texto, /Propuestos en 3 casos.*1 caso sin tiempo.*1 caso ya tenía/);
+});
+
+test("C-69 (segunda auditoría): sábado abierto y domingo cerrado — 0 = LUNES en clinic_schedules", async () => {
+  const { diasCerradosDelHorario, calendarioDeControles, siguienteDiaHabil } = await import("../colocacion");
+  // Lunes a sábado abiertos (0–5), domingo (6) cerrado: el horario de la clínica de prueba.
+  const horario = [0, 1, 2, 3, 4, 5].map((d) => ({ dayOfWeek: d, enabled: true })).concat([{ dayOfWeek: 6, enabled: false }]);
+  const cerrados = diasCerradosDelHorario(horario);
+  assert.deepEqual(cerrados, [0], "solo el domingo (JS 0) está cerrado");
+  assert.equal(siguienteDiaHabil("2027-01-02", cerrados), "2027-01-02", "el sábado 2-ene abierto no se corre");
+  assert.equal(siguienteDiaHabil("2027-01-03", cerrados), "2027-01-04", "el domingo 3-ene se corre al lunes");
+  // Beto Prueba Dos: el control 3 no cae en «dom, 3 de ene de 2027».
+  const cal = calendarioDeControles("2026-10-03", 30, 6, cerrados);
+  assert.ok(cal.fechas.every((f) => new Date(f + "T12:00:00Z").getUTCDay() !== 0), JSON.stringify(cal.fechas));
 });

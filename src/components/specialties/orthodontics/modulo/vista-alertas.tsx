@@ -163,9 +163,10 @@ export function VistaAlertas({
         id="mensualidad-vencida"
         icon={AlertTriangle}
         tono="peligro"
-        title="Mensualidad vencida"
-        sub="Casos con al menos una mensualidad sin cobrar después de su fecha."
-        empty="Sin mensualidades vencidas."
+        // N-32: incluye colocación y controles de «Pago por control», no solo mensualidades.
+        title="Pago vencido"
+        sub="Casos con al menos un pago sin cobrar después de su fecha: mensualidad, colocación o control."
+        empty="Sin pagos vencidos."
       >
         {alerts.overduePayments.map((p: OverduePatientEntry) => (
           <PatientRow

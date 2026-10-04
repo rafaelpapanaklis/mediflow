@@ -1676,7 +1676,9 @@ export function PatientDetailClient({
     [clinicalNoteId, patient.id],
   );
 
-  const handleEndConsult = useCallback(async () => {
+  // C-65 (segunda auditoría): `draft` = lo que el SOAP manda al pulsar «Firmar y completar». Sin él se leía el estado
+  // de React aún sin actualizar y, pulsando justo al pegar el texto, se firmaba vacío (422 la primera vez).
+  const handleEndConsult = useCallback(async (draft?: SoapDraft) => {
     if (!activeAppointment) {
       setConsultClosed(true);
       return;
@@ -1684,15 +1686,23 @@ export function PatientDetailClient({
     try {
       // Guarda el draft final si aún no se persistió (debounce pendiente). Si la nota de la consulta ya se
       // guardó firmada desde «Nueva consulta», no se toca (una nota firmada no se edita).
-      if (clinicalNoteId && notaFirmadaDeLaConsultaRef.current !== clinicalNoteId) {
+      const borrador = draft ?? soapDraft;
+      // C-65 (segunda auditoría): «Guardar consulta» firma OTRO registro (el expediente de la consulta), no el
+      // borrador SOAP de la barra. Con esa nota ya firmada, se cierra la cita con ELLA (el servidor no la vuelve a
+      // firmar) y el borrador SOAP vacío se quita; antes se mandaba a firmar el borrador vacío → 422.
+      const notaFirmada = notaFirmadaDeLaConsultaRef.current;
+      const borradorVacio = !borrador.subjective.trim() && !borrador.objective.trim() && !borrador.assessment.trim() && !borrador.plan.trim();
+      if (clinicalNoteId && notaFirmada && notaFirmada !== clinicalNoteId && borradorVacio) {
+        await fetch(`/api/clinical-notes/${clinicalNoteId}`, { method: "DELETE" }).catch(() => null);
+      } else if (clinicalNoteId && notaFirmada !== clinicalNoteId) {
         await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            subjective: soapDraft.subjective,
-            objective: soapDraft.objective,
-            assessment: soapDraft.assessment,
-            plan: soapDraft.plan,
+            subjective: borrador.subjective,
+            objective: borrador.objective,
+            assessment: borrador.assessment,
+            plan: borrador.plan,
           }),
         });
       }
@@ -1721,7 +1731,8 @@ export function PatientDetailClient({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clinicalNoteId: clinicalNoteId ?? undefined,
+          // C-65: con la nota de la consulta ya firmada, la cita se cierra con esa (no con el borrador vacío).
+          clinicalNoteId: (notaFirmada && notaFirmada !== clinicalNoteId ? notaFirmada : clinicalNoteId) ?? undefined,
           signNote: true,
         }),
       });
@@ -2028,8 +2039,8 @@ export function PatientDetailClient({
                 startedAt={activeAppointment.startedAt ?? activeAppointment.startsAt}
                 paused={consultPaused}
                 onPause={() => setConsultPaused((v) => !v)}
-                onComplete={handleEndConsult}
-                onClose={handleEndConsult}
+                onComplete={() => handleEndConsult()}
+                onClose={() => handleEndConsult()}
               />
               {/* En "Nueva consulta" el editor de la consulta ES el
                   formulario de especialidad de abajo (odontograma, HEA,
@@ -2074,7 +2085,7 @@ export function PatientDetailClient({
                   onSaveDraft={handleSaveDraft}
                   onComplete={async (d) => {
                     setSoapDraft(d);
-                    await handleEndConsult();
+                    await handleEndConsult(d);
                   }}
                   onAttach={handleAttach}
                 />

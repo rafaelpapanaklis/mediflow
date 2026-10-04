@@ -43,6 +43,7 @@ import {
   datosDePlantilla,
   seAcabaDeTerminar,
   horarioQueConsta,
+  motivoSinConstancia,
   mensajeDeIndicaciones,
   textoDeProcedimientos,
   valoresDeLaCita,
@@ -337,7 +338,9 @@ test("cita: la constancia por defecto es la propia más reciente en uso; si no h
 test("cita: qué estados admiten indicaciones y constancia", () => {
   assert.ok(admiteIndicaciones("COMPLETED") && admiteIndicaciones("IN_PROGRESS") && admiteIndicaciones("CHECKED_OUT"));
   assert.ok(!admiteIndicaciones("SCHEDULED") && !admiteIndicaciones("CANCELLED") && !admiteIndicaciones("CHECKED_IN"));
-  assert.ok(admiteConstancia("CHECKED_IN") && admiteConstancia("COMPLETED"));
+  // N-29: con «Registrado» (CHECKED_IN) o «En sillón» todavía NO: la consulta no ha empezado.
+  assert.ok(admiteConstancia("IN_PROGRESS") && admiteConstancia("COMPLETED") && admiteConstancia("CHECKED_OUT"));
+  assert.ok(!admiteConstancia("CHECKED_IN") && !admiteConstancia("IN_CHAIR"));
   assert.ok(!admiteConstancia("CONFIRMED") && !admiteConstancia("NO_SHOW") && !admiteConstancia("CANCELLED"));
 });
 
@@ -361,20 +364,42 @@ const cita = (p: Partial<Parameters<typeof horarioQueConsta>[0]> = {}) => ({
   ...p,
 });
 
-test("constancia (C-60): consta la hora de la AGENDA, no la llegada que alguien marcó tarde en el sistema", () => {
-  // La cita del 2-oct de 11:00 a 11:30 con «llegada» marcada a las 14:08: antes decía «de las 14:08 a las 14:38».
-  const marcadaTarde = horarioQueConsta(
-    cita({ startsAt: new Date("2026-10-02T17:00:00Z"), endsAt: new Date("2026-10-02T17:30:00Z"), checkedInAt: new Date("2026-10-02T20:08:00Z") }),
+test("constancia (N-29): consta la hora REAL — llegada o inicio, y fin; sin hora real no hay constancia", () => {
+  // Llegó 9:55, terminó 10:40 (CDMX).
+  const real = horarioQueConsta(cita({ checkedInAt: new Date("2026-10-03T15:55:00Z"), completedAt: new Date("2026-10-03T16:40:00Z") }), TZ)!;
+  assert.equal(real.inicio.toISOString(), "2026-10-03T15:55:00.000Z");
+  assert.equal(real.fin.toISOString(), "2026-10-03T16:40:00.000Z");
+  // Sin llegada, el inicio de la consulta.
+  const conInicio = horarioQueConsta(cita({ startedAt: new Date("2026-10-03T16:05:00Z"), completedAt: new Date("2026-10-03T16:35:00Z") }), TZ)!;
+  assert.equal(conInicio.inicio.toISOString(), "2026-10-03T16:05:00.000Z");
+  // En consulta todavía: el fin es la hora en que se emite.
+  const enCurso = horarioQueConsta(
+    cita({ status: "IN_PROGRESS", checkedInAt: new Date("2026-10-03T15:55:00Z") }),
     TZ,
+    new Date("2026-10-03T16:20:00Z"),
+  )!;
+  assert.equal(enCurso.fin.toISOString(), "2026-10-03T16:20:00.000Z");
+  // Completada sin ninguna hora real (cerrada desde la Agenda sin llegada ni inicio): no consta nada.
+  assert.equal(horarioQueConsta(cita({ completedAt: new Date("2026-10-03T16:30:00Z") }), TZ), null);
+});
+
+test("constancia (N-29): «Registrado», cita futura «Completada» y sin hora real no se emiten", () => {
+  const ahora = new Date("2026-10-04T09:24:00Z"); // 4-oct 03:24 CDMX
+  // Rosa: recién llegó («Registrado») a una cita de las 08:00.
+  assert.equal(
+    motivoSinConstancia(cita({ status: "CHECKED_IN", startsAt: new Date("2026-10-04T14:00:00Z"), endsAt: new Date("2026-10-04T14:30:00Z"), checkedInAt: new Date("2026-10-04T09:23:00Z") }), TZ, ahora),
+    "ESTADO",
   );
-  assert.equal(marcadaTarde.inicio.toISOString(), "2026-10-02T17:00:00.000Z");
-  assert.equal(marcadaTarde.fin.toISOString(), "2026-10-02T17:30:00.000Z");
-  const conFinReal = horarioQueConsta(cita({ checkedInAt: new Date("2026-10-03T15:55:00Z"), completedAt: new Date("2026-10-03T16:40:00Z") }), TZ);
-  assert.equal(conFinReal.inicio.toISOString(), "2026-10-03T16:00:00.000Z");
-  assert.equal(conFinReal.fin.toISOString(), "2026-10-03T16:30:00.000Z");
-  // Una cita sin duración no sale «de 10:00 a 10:00».
-  const sinDuracion = horarioQueConsta(cita({ endsAt: new Date("2026-10-03T16:00:00Z") }), TZ);
-  assert.ok(sinDuracion.fin > sinDuracion.inicio);
+  // Cita del 7-oct marcada «Completada» (dato sucio de C-85).
+  assert.equal(
+    motivoSinConstancia(cita({ startsAt: new Date("2026-10-07T19:00:00Z"), endsAt: new Date("2026-10-07T19:30:00Z"), checkedInAt: new Date("2026-10-07T19:00:00Z"), completedAt: new Date("2026-10-07T19:30:00Z") }), TZ, ahora),
+    "DIA_FUTURO",
+  );
+  assert.equal(motivoSinConstancia(cita({ completedAt: new Date("2026-10-03T16:30:00Z") }), TZ, ahora), "SIN_HORA_REAL");
+  assert.equal(
+    motivoSinConstancia(cita({ checkedInAt: new Date("2026-10-03T15:55:00Z"), completedAt: new Date("2026-10-03T16:40:00Z") }), TZ, ahora),
+    null,
+  );
 });
 
 test("constancia: los valores salen en la zona de la clínica y la cédula que falta, como raya", () => {
@@ -389,8 +414,8 @@ test("constancia: los valores salen en la zona de la clínica y la cédula que f
     new Date("2026-10-04T02:00:00Z"), // 3 de octubre, 20:00 en CDMX
   );
   assert.equal(v.fechaCita, "3 de octubre de 2026");
-  assert.equal(v.horaInicio, "10:00");
-  assert.equal(v.horaFin, "10:30");
+  assert.equal(v.horaInicio, "09:55");
+  assert.equal(v.horaFin, "10:40");
   assert.equal(v.fecha, "3 de octubre de 2026");
   assert.equal(v.lugar, "Mérida, Yucatán");
   // C-60: con una dirección de CDMX el campo ciudad «Mérida» ya no se imprime.

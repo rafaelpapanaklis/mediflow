@@ -1361,8 +1361,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           existingDiagnosisId={vm.diagnosis?.id ?? null}
           onClose={closeDrawer}
           onConfirm={async (payload) => {
-            await props.onCreateCase?.(payload);
-            closeDrawer();
+            // N-30 (segunda auditoría): si el alta se rechaza (p. ej. falta el consentimiento con fecha de colocación),
+            // el cajón NO se cierra: lo capturado (diagnóstico, plan, cobro) sigue ahí para corregir y reintentar.
+            const ok = await props.onCreateCase?.(payload);
+            if (ok !== false) closeDrawer();
           }}
         />
       ) : null}

@@ -8,6 +8,7 @@ import {
   doctorCredentialLines,
   patientIdentityLines,
 } from "@/lib/consent/document-data";
+import { direccionYaDiceLaCiudad } from "@/lib/clinica/lugar-de-la-clinica";
 
 /**
  * ConsentDocument — PDF de la carta de consentimiento informado.
@@ -251,7 +252,9 @@ export function ConsentDocument(props: ConsentDocumentProps) {
   const addressLine =
     "Dirección: " +
     (clinicAddress
-      ? [clinicAddress, consentValue(props.clinicCity)].filter(Boolean).join(", ")
+      ? [clinicAddress, consentValue(props.clinicCity) && !direccionYaDiceLaCiudad(clinicAddress, consentValue(props.clinicCity)) ? consentValue(props.clinicCity) : null]
+          .filter(Boolean)
+          .join(", ")
       : consentValueOrBlank(null));
 
   const doc = parseConsentText(props.content ?? "");

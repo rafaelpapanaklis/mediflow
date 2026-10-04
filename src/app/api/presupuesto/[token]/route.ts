@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     where: { acceptToken: params.token },
     include: {
       items: { orderBy: { sortOrder: "asc" } },
-      clinic: { select: { name: true, logoUrl: true, timezone: true } },
+      clinic: { select: { name: true, logoUrl: true, timezone: true, phone: true } },
       patient: { select: { firstName: true } },
     },
   });
@@ -52,6 +52,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const view = toPublicView(quote, {
     clinicName: quote.clinic.name,
     clinicLogoUrl: quote.clinic.logoUrl ?? null,
+    clinicPhone: quote.clinic.phone ?? null,
     patientFirstName: quote.patient.firstName,
     signatureUrl: signatureUrl || null,
     expired,

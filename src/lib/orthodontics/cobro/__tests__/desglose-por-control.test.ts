@@ -58,3 +58,14 @@ test("el calendario de la colocación no se llama «mensualidades»", () => {
   assert.equal(tituloPagosDeColocacion(6), "Pagos de la colocación (6)");
   assert.equal(tituloPagosDeColocacion(1), "Pago de la colocación");
 });
+
+test("N-32: «Extras» no lista la colocación ni los controles del caso", async () => {
+  const { soloExtras } = await import("../desglose-por-control");
+  const extras = [
+    { invoiceId: COLOCACION },
+    { invoiceId: "c4xdz2l0vr1zwf9l57a2w8g9v" }, // control
+    { invoiceId: "cmutd4ind006yivdw9z1a7h8b" }, // control MF-1127, ya en «Controles por cobrar»
+    { invoiceId: "reposicion-bracket" },
+  ];
+  assert.deepEqual(soloExtras(extras, cuotasDelCasoImportado, COLOCACION), [{ invoiceId: "reposicion-bracket" }]);
+});

@@ -180,6 +180,8 @@ export interface PublicQuoteView {
   condicionesPago: CondicionesPago | null;
   clinicName: string;
   clinicLogoUrl: string | null;
+  /** N-35 (segunda auditoría): para que el paciente sepa a quién llamar. Opcional por compatibilidad. */
+  clinicPhone?: string | null;
   patientFirstName: string;
   /** signed URL de corta vida para que el paciente vea su firma ya estampada. */
   signatureUrl: string | null;

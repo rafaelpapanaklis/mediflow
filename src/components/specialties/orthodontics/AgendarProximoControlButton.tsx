@@ -5,6 +5,7 @@
 // partir de lo que el doctor ya capturó al firmar.
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Calendar, Check } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { agendarProximoControlDesdeCard } from "@/app/actions/orthodontics/agendarProximoControlDesdeCard";
@@ -14,6 +15,7 @@ import s from "@/components/specialties/orthodontics/modulo/modulo.module.css";
 export function AgendarProximoControlButton({ cardId }: { cardId: string }) {
   const [estado, setEstado] = useState<"idle" | "cargando" | "agendado" | "error">("idle");
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const router = useRouter();
 
   async function agendar() {
     setEstado("cargando");
@@ -25,6 +27,8 @@ export function AgendarProximoControlButton({ cardId }: { cardId: string }) {
       return;
     }
     setEstado("agendado");
+    // C-71 (segunda auditoría): la cabecera seguía en «Próxima cita: Sin programar» hasta recargar.
+    router.refresh();
   }
 
   if (estado === "agendado") {

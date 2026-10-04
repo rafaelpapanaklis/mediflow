@@ -1,7 +1,7 @@
 // GET /api/indicaciones/cita/[id]/constancia?hoja=<id> — la constancia de
-// asistencia de la cita en PDF: paciente, fecha y hora (las reales si el sistema
-// las tiene: llegada y fin de la consulta), doctor con cédula y clínica, con la
-// plantilla de la clínica (o la de fábrica). Solo si el paciente llegó. Funciona
+// asistencia de la cita en PDF: paciente, fecha y hora REALES (llegada o inicio, y
+// fin de la consulta), doctor con cédula y clínica, con la plantilla de la clínica
+// (o la de fábrica). Solo con la consulta empezada o terminada (N-29). Funciona
 // también ANTES de pegar el SQL (con la de fábrica). Queda en Movimientos.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -12,7 +12,7 @@ import {
   hojasDeLaClinica,
 } from "@/lib/indicaciones/hojas-de-cita.server";
 import { constanciaPorDefecto } from "@/lib/indicaciones/servicio";
-import { admiteConstancia, fechaLarga, seccionesRellenas, valoresDeLaCita } from "@/lib/indicaciones/envio";
+import { MENSAJE_SIN_CONSTANCIA, fechaLarga, motivoSinConstancia, seccionesRellenas, valoresDeLaCita } from "@/lib/indicaciones/envio";
 import { construirPdfHoja, nombreDeArchivoHoja } from "@/lib/indicaciones/pdf";
 
 export const runtime = "nodejs"; // @react-pdf
@@ -27,7 +27,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const c = await cargarCita(ctx, params.id);
     if ("res" in c) return c.res;
-    if (!admiteConstancia(c.datos.cita.status)) return NextResponse.json({ code: "ESTADO" }, { status: 409 });
+    // N-29: solo con la consulta empezada o terminada, de un día que ya llegó y con hora real registrada.
+    const motivo = motivoSinConstancia(c.datos.cita, c.datos.clinica.timezone, new Date());
+    if (motivo) return NextResponse.json({ code: motivo, error: MENSAJE_SIN_CONSTANCIA[motivo] }, { status: 409 });
 
     const hojas = await hojasDeLaClinica(ctx.clinicId, c.catalogo);
     const pedida = req.nextUrl.searchParams.get("hoja");

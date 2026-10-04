@@ -1608,8 +1608,19 @@ export function DrawerNewCase(props: DrawerNewCaseProps) {
                                     className={inputCls}
                                   />
                                 </Field>
-                                <Field label="Fecha del primer pago">
-                                  <DateField value={primerPago} onChange={(e) => setPrimerPago(e.target.value)} max={hoyMasAniosISO(5)} className={inputCls} aria-label="Fecha del primer pago" />
+                                {/* N-34 (segunda auditoría): con enganche, esta fecha es la del ENGANCHE y la primera
+                                    mensualidad cae un mes después; el rótulo decía «primer pago». */}
+                                <Field label={Number(enganche) > 0 ? "Fecha del enganche" : "Fecha del primer pago"}>
+                                  <DateField
+                                    value={primerPago}
+                                    onChange={(e) => setPrimerPago(e.target.value)}
+                                    max={hoyMasAniosISO(5)}
+                                    className={inputCls}
+                                    aria-label={Number(enganche) > 0 ? "Fecha del enganche" : "Fecha del primer pago"}
+                                  />
+                                  {Number(enganche) > 0 ? (
+                                    <p className="mt-1 text-[11px] text-[color:var(--pr-texto-3)]">La primera mensualidad vence un mes después.</p>
+                                  ) : null}
                                 </Field>
                               </div>
                               <PlanVistaPrevia texto={vistaPrevia} />

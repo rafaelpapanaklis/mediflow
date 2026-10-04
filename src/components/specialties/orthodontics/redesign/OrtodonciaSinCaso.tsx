@@ -89,6 +89,8 @@ export function OrtodonciaSinCaso({
           onClose={() => setAltaAbierta(false)}
           onConfirm={async (payload) => {
             const abierto = await onCreateCase(payload);
+            // N-30 (segunda auditoría): rechazada el alta, el cajón sigue abierto con lo capturado.
+            if (abierto === false) return;
             if (abierto === true) setCasoAbierto(true);
             setAltaAbierta(false);
           }}

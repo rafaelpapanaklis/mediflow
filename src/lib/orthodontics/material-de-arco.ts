@@ -58,6 +58,8 @@ export function calibreLegible(gauge: string): string {
   const g = (gauge ?? "").trim();
   if (!g) return g;
   return g
+    // «16x22» (sin el cero) es el mismo rectangular .016×.022.
+    .replace(/(^|[^\d.])(\d{2})\s*[xX×]\s*(\d{2})(?!\d)/g, "$10$2x0$3")
     .replace(/(^|[^\d.])0(\d{2})(?!\d)/g, "$1.0$2")
     .replace(/(\.\d{3})\s*[xX×]\s*(\.\d{3})/g, "$1×$2");
 }

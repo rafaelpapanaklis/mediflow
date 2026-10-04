@@ -75,8 +75,10 @@ export function isClinicalNoteEmpty(note: ClinicalNoteContent): boolean {
 }
 
 /** Mensaje único (es-MX) para el 422 al intentar firmar/cerrar una nota vacía. */
+// C-65 (segunda auditoría): sin jerga («NOM-004 §6»); dice qué hacer. La regla (NOM-004: el expediente no se firma
+// vacío) sigue igual.
 export const EMPTY_NOTE_ERROR =
-  "No se puede firmar/cerrar una nota clínica vacía: captura al menos el contenido de la consulta (NOM-004 §6, campos mínimos del expediente).";
+  "La nota de la consulta está vacía: escribe al menos lo que se hizo (motivo, exploración o plan) antes de completarla.";
 
 /**
  * Normaliza el status pedido por el cliente al conjunto válido {DRAFT, SIGNED}.
