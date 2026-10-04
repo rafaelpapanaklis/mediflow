@@ -443,6 +443,32 @@
   flex-shrink: 0;
 }
 
+/* C-117 (ws1-t8): a 390 px el estado y los cuatro iconos se comían el ancho y
+   el nombre del paciente se partía letra por letra (8 renglones). En una
+   columna estrecha la cita va en dos renglones: hora + paciente arriba, y
+   estado + acciones en el de abajo, alineados a la derecha. */
+@container hoy (max-width: 560px) {
+  .filaCita {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .filaCita > .filaCuerpo {
+    flex: 1 1 calc(100% - 110px);
+  }
+  .filaCita > .filaAcciones {
+    margin-left: auto;
+    gap: 6px;
+  }
+}
+
+/* En pantallas táctiles el icono mide lo que pide un dedo (antes 30 × 30). */
+@media (pointer: coarse) {
+  .filaCita .botonIcono {
+    width: 40px;
+    height: 40px;
+  }
+}
+
 .derecha {
   flex-shrink: 0;
   font-size: 12px;

@@ -21,6 +21,7 @@ import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT, useLocale } from "@/i18n/i18n-provider";
+import { PLAN_MARKETING } from "@/lib/plan-shared";
 import { getResenasSettings } from "@/lib/reminders/config";
 import { useTextosResena } from "@/lib/reviews/textos-resena";
 import toast from "react-hot-toast";
@@ -65,29 +66,40 @@ const CATEGORIES: { id: string; label: string }[] = [
   { id: "OTHER", label: "Otra / general" },
 ];
 const TIMEZONES = [
-  { id: "America/Mexico_City",  label: "Ciudad de Mexico (GMT-6)" },
-  { id: "America/Cancun",       label: "Cancun / Quintana Roo (GMT-5)" },
-  { id: "America/Merida",       label: "Merida / Yucatan (GMT-6)" },
+  { id: "America/Mexico_City",  label: "Ciudad de México (GMT-6)" },
+  { id: "America/Cancun",       label: "Cancún / Quintana Roo (GMT-5)" },
+  { id: "America/Merida",       label: "Mérida / Yucatán (GMT-6)" },
   { id: "America/Monterrey",    label: "Monterrey (GMT-6)" },
   { id: "America/Hermosillo",   label: "Hermosillo / Sonora (GMT-7)" },
-  { id: "America/Mazatlan",     label: "Mazatlan / Sinaloa (GMT-7)" },
+  { id: "America/Mazatlan",     label: "Mazatlán / Sinaloa (GMT-7)" },
   { id: "America/Tijuana",      label: "Tijuana / BC (GMT-8)" },
-  { id: "America/Bogota",       label: "Bogota - Colombia (GMT-5)" },
-  { id: "America/Lima",         label: "Lima - Peru (GMT-5)" },
+  { id: "America/Bogota",       label: "Bogotá - Colombia (GMT-5)" },
+  { id: "America/Lima",         label: "Lima - Perú (GMT-5)" },
   { id: "America/Guatemala",    label: "Guatemala (GMT-6)" },
   { id: "America/Costa_Rica",   label: "Costa Rica (GMT-6)" },
   { id: "America/Santo_Domingo",label: "Santo Domingo - RD (GMT-4)" },
   { id: "America/Caracas",      label: "Caracas - Venezuela (GMT-4)" },
   { id: "America/La_Paz",       label: "La Paz - Bolivia (GMT-4)" },
-  { id: "America/Asuncion",     label: "Asuncion - Paraguay (GMT-4)" },
+  { id: "America/Asuncion",     label: "Asunción - Paraguay (GMT-4)" },
   { id: "America/Santiago",     label: "Santiago - Chile (GMT-4)" },
   { id: "America/Buenos_Aires", label: "Buenos Aires - Argentina (GMT-3)" },
   { id: "America/Montevideo",   label: "Montevideo - Uruguay (GMT-3)" },
-  { id: "America/Sao_Paulo",    label: "Sao Paulo - Brasil (GMT-3)" },
-  { id: "Europe/Madrid",        label: "Madrid - Espana (GMT+1)" },
+  { id: "America/Sao_Paulo",    label: "São Paulo - Brasil (GMT-3)" },
+  { id: "Europe/Madrid",        label: "Madrid - España (GMT+1)" },
   { id: "America/New_York",     label: "New York - US Eastern (GMT-5)" },
   { id: "America/Los_Angeles",  label: "Los Angeles - US Pacific (GMT-8)" },
 ];
+// C-110 (ws1-t8): el rol como se lee («Dueño/a»), nunca la llave `SUPER_ADMIN`.
+const ROL_LEGIBLE: Record<string, string> = {
+  SUPER_ADMIN: "settings.team.roleSuperAdmin", ADMIN: "settings.team.roleAdmin", DOCTOR: "settings.team.roleDoctor",
+  RECEPTIONIST: "settings.team.roleReceptionist", READONLY: "settings.team.roleReadonly",
+};
+// C-113 (ws1-t8): hay dos «Mi perfil»; este apartado solo lleva lo básico y
+// enlaza al completo (cédula y especialidad), que es el del menú de la foto.
+const MI_PERFIL_COMPLETO = {
+  es: { antes: "Tu cédula, tu especialidad y el resto de tus datos profesionales están en ", enlace: "Mi perfil", despues: " (menú de tu foto, arriba a la derecha)." },
+  en: { antes: "Your license, specialty and other professional details are in ", enlace: "My profile", despues: " (your photo menu, top right)." },
+} as const;
 
 /** Tokens promedio de un análisis de consulta con IA (lee expediente completo: paciente,
  *  odontograma, consultas previas, recetas, tratamientos). Medido ~3k-8k; usamos 5k como
@@ -131,6 +143,7 @@ const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caido
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, gcalClinica }: Props) {
   const t = useT();
+  const txPerfil = MI_PERFIL_COMPLETO[useLocale().startsWith("en") ? "en" : "es"];
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
   // «Ver configuración» concedido persona a persona desde Equipo → Permisos:
   // ese entraba antes de esta tarea y sigue viendo lo mismo que veía. Se lee
@@ -784,7 +797,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   apagada={!puedeEditarClinica}
                   pieIzquierda={
                     <Insignia tono={clinic.plan === "CLINIC" || clinic.plan === "PRO" ? "violeta" : "neutro"}>
-                      {t("settings.client.planBadge", { plan: clinic.plan })}
+                      {t("settings.client.planBadge", { plan: PLAN_MARKETING[clinic.plan as keyof typeof PLAN_MARKETING]?.name ?? clinic.plan })}
                     </Insignia>
                   }
                   pie={
@@ -1037,6 +1050,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 titulo={t("settings.client.profileTitle")}
                 pie={<BotonGuardar onClick={saveUser} guardando={saving} texto={t("settings.client.saveProfileBtn")} textoGuardando={t("common.saving")} />}
               >
+                <Aviso tono="info">
+                  {txPerfil.antes}<Enlace href="/dashboard/mi-perfil">{txPerfil.enlace}</Enlace>{txPerfil.despues}
+                </Aviso>
                 <Campos2>
                   <Campo etiqueta={t("settings.client.firstNameLabel")}>
                     <Entrada value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} />
@@ -1464,7 +1480,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <Seccion titulo={t("settings.client.accountInfoTitle")}>
                   <Filas>
                     <Fila etiqueta={t("settings.client.accountEmailLabel")}>{initUser.email}</Fila>
-                    <Fila etiqueta={t("settings.client.accountRoleLabel")}>{initUser.role}</Fila>
+                    <Fila etiqueta={t("settings.client.accountRoleLabel")}>{ROL_LEGIBLE[initUser.role] ? t(ROL_LEGIBLE[initUser.role]) : initUser.role}</Fila>
                     <Fila etiqueta={t("settings.client.accountMemberSinceLabel")}>
                       {new Date(initUser.createdAt).toLocaleDateString("es-MX",{day:"numeric",month:"long",year:"numeric"})}
                     </Fila>
@@ -1714,7 +1730,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`badge-new ${clinic.plan === "CLINIC" || clinic.plan === "PRO" ? "badge-new--brand" : "badge-new--neutral"}`}>
-              {t("settings.client.planBadge", { plan: clinic.plan })}
+              {t("settings.client.planBadge", { plan: PLAN_MARKETING[clinic.plan as keyof typeof PLAN_MARKETING]?.name ?? clinic.plan })}
             </span>
             <Button onClick={saveClinic} disabled={saving || !puedeEditarClinica}>{saving ? t("common.saving") : t("common.saveChanges")}</Button>
           </div>
@@ -1882,6 +1898,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <div className="card__title">{t("settings.client.profileTitle")}</div>
           </div>
           <div className="card__body space-y-4">
+          <p className="text-xs text-muted-foreground">
+            {txPerfil.antes}<a href="/dashboard/mi-perfil" className="underline">{txPerfil.enlace}</a>{txPerfil.despues}
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="field-new"><label className="field-new__label">{t("settings.client.firstNameLabel")}</label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
             <div className="field-new"><label className="field-new__label">{t("settings.client.lastNameLabel")}</label><Input value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} /></div>
@@ -2443,7 +2462,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <div className="space-y-2 text-sm">
               {[
                 { label:t("settings.client.accountEmailLabel"),       val:initUser.email },
-                { label:t("settings.client.accountRoleLabel"),         val:initUser.role },
+                { label:t("settings.client.accountRoleLabel"),         val:ROL_LEGIBLE[initUser.role] ? t(ROL_LEGIBLE[initUser.role]) : initUser.role },
                 { label:t("settings.client.accountMemberSinceLabel"),val:new Date(initUser.createdAt).toLocaleDateString("es-MX",{day:"numeric",month:"long",year:"numeric"}) },
               ].map(r => (
                 <div key={r.label} className="flex justify-between py-2.5 border-b border-border/60">

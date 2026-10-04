@@ -59,10 +59,11 @@ test("POST /api/team escribe la casilla con la regla y con el rol que de verdad 
   const ruta = sinComentarios(leer("src/app/api/team/route.ts"));
   assert.match(ruta, /const rolNuevo: string = role \?\? "DOCTOR";/);
   const data = bloque(ruta, "export async function POST", "prisma.user.create(");
-  assert.match(data, /agendaActive: agendaActiveAlCrear\(rolNuevo\)/, "el alta manda agendaActive");
+  // ws1-t8: el alta ya enseña la casilla; sin ella manda la regla (agendaActiveDelAlta cae a agendaActiveAlCrear).
+  assert.match(data, /agendaActive: agendaActiveDelAlta\(rolNuevo, agendaActive\)/, "el alta manda agendaActive");
   // Rol y casilla salen del MISMO valor: nada de `role ?? "DOCTOR"` en un lado y otro rol en el otro.
   assert.match(data, /role:\s+(role \?\? "DOCTOR"|rolNuevo)/);
-  assert.match(ruta, /import \{ agendaActiveAlCrear \} from "@\/lib\/agenda\/roles-que-atienden"/);
+  assert.match(ruta, /import \{ agendaActiveDelAlta \} from "@\/lib\/team\/parche-miembro"/);
 });
 
 test("registro y registro con Google crean al dueño MARCADO (explícito, no por el default de la base)", () => {

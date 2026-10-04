@@ -146,10 +146,11 @@ test("ortodoncia: las entidades del módulo tienen nombre; una nueva cae en «Or
 });
 
 test("ortodoncia: el filtro solo se ofrece en sedes con el módulo", () => {
-  assert.deepEqual(entityOptionsFor({ ortodoncia: false }), [...AUDIT_ENTITY_OPTIONS]);
+  // C-115 (ws1-t8): «CFDI y datos fiscales» va siempre, delante de las entidades.
+  assert.deepEqual(entityOptionsFor({ ortodoncia: false }), ["grupo:cfdi", ...AUDIT_ENTITY_OPTIONS]);
   const con = entityOptionsFor({ ortodoncia: true });
   assert.equal(con[0], AUDIT_ENTITY_GROUP_ORTHO);
-  assert.equal(con.length, AUDIT_ENTITY_OPTIONS.length + 1);
+  assert.equal(con.length, AUDIT_ENTITY_OPTIONS.length + 2);
 });
 
 test("ortodoncia: el filtro trae entidades y acciones del módulo, sin soltar la clínica ni la búsqueda", () => {
@@ -181,7 +182,7 @@ test("ortodoncia: reasignar doctor dice de quién a quién", () => {
   };
   assert.equal(
     resumenDeCambio(row),
-    "Doctor tratante: Ana López → Luis Gómez · Estado del caso: En tratamiento → En pausa · Precio total: $35,000 → $38,000.5",
+    "Doctor tratante: Ana López → Luis Gómez · Estado del caso: En tratamiento → En pausa · Precio total: $35,000 → $38,000.50",
   );
   assert.equal(fieldLabel("treatingDoctorId", row.entityType), "Doctor tratante");
   assert.equal(formatAuditFieldValue("treatingDoctorId", null, row), "Sin asignar");
@@ -190,7 +191,9 @@ test("ortodoncia: reasignar doctor dice de quién a quién", () => {
 });
 
 test("ortodoncia: fuera del módulo, campos y valores se leen como siempre", () => {
-  assert.equal(fieldLabel("status", "invoice"), "status");
+  // C-115 (ws1-t8): los campos comunes ya se dicen en español en todas las entidades.
+  assert.equal(fieldLabel("status", "invoice"), "Estado");
+  assert.equal(fieldLabel("gauge", "invoice"), "gauge");
   assert.equal(formatAuditFieldValue("status", "IN_PROGRESS", { entityType: "treatment" }), "IN_PROGRESS");
   assert.equal(formatAuditFieldValue("treatingDoctorId", "u1", { entityType: "invoice" }), "u1");
   assert.equal(resumenDeCambio({ entityType: "invoice", changes: { status: { before: "a", after: "b" } } }), null);

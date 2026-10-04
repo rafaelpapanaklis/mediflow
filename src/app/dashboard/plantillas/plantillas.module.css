@@ -4,12 +4,15 @@
    globals.css, así que el modo oscuro y la tipografía del panel llegan solos.
    ═══════════════════════════════════════════════════════════════ */
 
+/* C-127 (ws1-t8): el mismo contenedor que Equipo y Configuración (1400 px,
+   centrado, relleno clamp(14px, 1.6vw, 28px)). Con 1040 px centrados el título
+   de Plantillas empezaba 64 px más a la derecha que el de esas pantallas. */
 .page {
   font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
   font-size: 14px;
-  padding: clamp(16px, 1.6vw, 28px);
-  max-width: 1040px;
+  padding: clamp(14px, 1.6vw, 28px);
+  max-width: 1400px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -264,6 +267,16 @@
 }
 .iconBtnDanger:hover:not(:disabled) { background: var(--danger-strong); color: #fff; }
 .iconBtn:focus-visible { outline: none; box-shadow: var(--ring); }
+/* C-123 (ws1-t8): encender/apagar dice lo que hace («Desactivar»), no solo el
+   icono de «power», que no dejaba claro si activa o desactiva. */
+.iconBtnTexto {
+  width: auto;
+  grid-auto-flow: column;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
 .iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .empty {

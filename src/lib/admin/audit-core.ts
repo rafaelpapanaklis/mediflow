@@ -115,6 +115,13 @@ export const AUDIT_ENTITY_OPTIONS = [
   "quote",
   "payment-plan",
   "pediatric-record",
+  // C-115 (ws1-t8): entidades que la bitácora ya registraba y el filtro no ofrecía.
+  "expense",
+  "payment",
+  "procedure",
+  "cash-register",
+  "agenda-block",
+  "import",
 ] as const;
 
 export type AuditTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
@@ -132,6 +139,24 @@ export const ACTION_META: Record<string, { label: string; tone: AuditTone }> = {
   password_set: { label: "Contraseña nueva", tone: "warning" },
   XRAY_NOTES_UPDATED: { label: "Notas radiografía", tone: "info" },
   FILE_NOTES_UPDATED: { label: "Notas archivo", tone: "info" },
+  // C-115 (ws1-t8): acciones que se guardaban con nombre de programa.
+  reject: { label: "Rechazo", tone: "warning" },
+  "abrir-plan-de-pago": { label: "Abrió un plan de pagos", tone: "success" },
+  "cambiar-plan-de-pago": { label: "Cambió un plan de pagos", tone: "info" },
+  "crear-plan-al-abrir-caso": { label: "Plan creado al abrir el caso", tone: "success" },
+  "cobrar-procedimiento-de-hoja": { label: "Cobro desde la hoja de control", tone: "success" },
+  "registrar-extra-cobrado": { label: "Extra cobrado", tone: "success" },
+  "registrar-promesa-de-pago": { label: "Promesa de pago", tone: "info" },
+  "resolver-promesa-de-pago": { label: "Promesa de pago resuelta", tone: "info" },
+  odontogram_write: { label: "Odontograma editado", tone: "info" },
+  odontogram_sync: { label: "Odontograma actualizado", tone: "info" },
+  odontogram_delete: { label: "Odontograma: marca borrada", tone: "danger" },
+  sabina_proponer: { label: "Sabina propuso una acción", tone: "neutral" },
+  sabina_confirmar: { label: "Acción de Sabina confirmada", tone: "info" },
+  sabina_descartar: { label: "Acción de Sabina descartada", tone: "neutral" },
+  sabina_resultado: { label: "Resultado de Sabina", tone: "neutral" },
+  reserva: { label: "Reserva", tone: "info" },
+  libre: { label: "Movimiento", tone: "neutral" },
 };
 
 export function actionMeta(action: string): { label: string; tone: AuditTone } {
@@ -156,11 +181,41 @@ const ENTITY_LABELS: Record<string, string> = {
   subscription: "Suscripción",
   quote: "Presupuesto",
   "payment-plan": "Plan de pagos",
+  // C-115 (ws1-t8): sin nombre salían en crudo («expense», «cash-register»…).
+  expense: "Gasto",
+  payment: "Pago",
+  cfdi: "CFDI",
+  procedure: "Procedimiento",
+  ProcedureCatalog: "Procedimiento",
+  import: "Importación",
+  "agenda-block": "Bloqueo de agenda",
+  "cash-register": "Caja",
+  "clinical-photo": "Foto clínica",
+  photo: "Foto clínica",
+  "sabina-propuesta": "Propuesta de Sabina",
+  "upload-rejected": "Archivo rechazado",
+  aviso_cobro: "Aviso de cobro",
+  orthodontic_cobro: "Cobro de ortodoncia",
+  "orthodontic-case": "Caso de ortodoncia",
+  "orthodontic-plan": "Plan de ortodoncia",
+  "clinical-evolution-template": "Plantilla de nota",
+  "handout-template": "Plantilla de indicaciones",
+  "ai-consult": "Consulta a la IA",
+  "doctor-contact": "Contacto de un doctor",
+  PeriodontalRecord: "Periodontograma",
+  PeriodontalTreatmentPlan: "Plan de periodoncia",
+  odontogram: "Odontograma",
+  "model-3d": "Modelo 3D",
+  questionnaire: "Cuestionario de salud",
+  "patient-guardian": "Responsable del paciente",
+  referral: "Referencia",
+  "package-redemption": "Uso de paquete",
 };
 
 export function entityLabel(entityType: string): string {
   if (ENTITY_LABELS[entityType]) return ENTITY_LABELS[entityType];
   if (entityType === AUDIT_ENTITY_GROUP_ORTHO) return "Ortodoncia (todo)";
+  if (entityType === AUDIT_ENTITY_GROUP_CFDI) return "CFDI y datos fiscales";
   if (ORTHO_ENTITY_LABELS[entityType]) return ORTHO_ENTITY_LABELS[entityType];
   if (esEntidadDeOrtodoncia(entityType)) return "Ortodoncia";
   if (entityType.indexOf("ped-") === 0 || entityType.indexOf("pediatric") === 0) return "Pediatría";
@@ -178,6 +233,15 @@ export function entityLabel(entityType: string): string {
 
 /** Valor del filtro «Entidad» que trae TODO lo de ortodoncia. No es un entityType real. */
 export const AUDIT_ENTITY_GROUP_ORTHO = "grupo:ortodoncia";
+
+/**
+ * C-115 (ws1-t8): valor del filtro «Entidad» que trae lo fiscal. El timbrado,
+ * la cancelación y el envío de un CFDI se guardan sobre la FACTURA (entityType
+ * «invoice»), así que no basta con `entityType = "cfdi"`: se busca también por
+ * el texto del movimiento («Timbró el CFDI…», «Subió el certificado de sello…»).
+ */
+export const AUDIT_ENTITY_GROUP_CFDI = "grupo:cfdi";
+const TEXTOS_FISCALES = ["CFDI", "certificado de sello digital", "retención de ISR"];
 
 /** Los entityType del módulo empiezan por «Ortho…» u «Orthodontic…». */
 const PREFIJO_ENTIDAD_ORTO = "Ortho";
@@ -199,7 +263,7 @@ export function esFilaDeOrtodoncia(row: { action: string; entityType: string }):
  * él, las de siempre.
  */
 export function entityOptionsFor(e: { ortodoncia: boolean }): string[] {
-  const base: string[] = [...AUDIT_ENTITY_OPTIONS];
+  const base: string[] = [AUDIT_ENTITY_GROUP_CFDI, ...AUDIT_ENTITY_OPTIONS];
   return e.ortodoncia ? [AUDIT_ENTITY_GROUP_ORTHO, ...base] : base;
 }
 
@@ -304,10 +368,60 @@ const CAMPOS_DE_ORTODONCIA: Record<string, string> = {
   defaultTreatingDoctorId: "Doctor tratante por defecto",
 };
 
-/** El nombre del campo como lo lee el dueño. Fuera de ortodoncia, el de siempre. */
+/**
+ * C-115 (ws1-t8): los campos que salen en casi todas las entidades, dichos en
+ * español. Lo que no esté aquí se enseña como se guardó.
+ */
+const CAMPOS_COMUNES: Record<string, string> = {
+  monto: "Monto", amount: "Monto", total: "Total", subtotal: "Subtotal", paid: "Pagado",
+  discount: "Descuento", price: "Precio", basePrice: "Precio", cost: "Gasto",
+  fecha: "Fecha", date: "Fecha", startsAt: "Inicio", endsAt: "Fin", dueDate: "Vence",
+  nota: "Nota", notes: "Notas", reason: "Motivo", motivo: "Motivo",
+  categoria: "Categoría", category: "Categoría", status: "Estado", method: "Método",
+  name: "Nombre", firstName: "Nombre", lastName: "Apellidos", phone: "Teléfono", email: "Correo",
+  isActive: "Activo", duration: "Duración (min)", description: "Descripción",
+};
+
+/** Campos de dinero (se enseñan en pesos) y de fecha (en fecha legible). */
+const CAMPOS_DE_DINERO = new Set(["monto", "amount", "total", "subtotal", "paid", "discount", "price", "basePrice", "cost", "totalCostMxn"]);
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+const ZONA_BITACORA = "America/Mexico_City";
+
+/** El nombre del campo como lo lee el dueño. */
 export function fieldLabel(field: string, entityType: string): string {
-  if (!esEntidadDeOrtodoncia(entityType)) return field;
-  return CAMPOS_DE_ORTODONCIA[field] ?? field;
+  if (esEntidadDeOrtodoncia(entityType) && CAMPOS_DE_ORTODONCIA[field]) return CAMPOS_DE_ORTODONCIA[field];
+  return CAMPOS_COMUNES[field] ?? field;
+}
+
+/**
+ * Una fecha guardada en ISO («2026-10-03T06:00:00.000Z») como la lee una
+ * persona, en la hora de la clínica: «3 oct 2026» si cae a medianoche (un día
+ * sin hora, como la fecha de un gasto) o «3 oct 2026, 11:12» si lleva hora.
+ */
+export function fechaLegible(iso: string, timeZone: string = ZONA_BITACORA): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const partes = new Intl.DateTimeFormat("es-MX", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+  const dia = new Intl.DateTimeFormat("es-MX", { timeZone, day: "numeric", month: "short", year: "numeric" }).format(d).replace(/\./g, "");
+  return partes === "00:00" ? dia : `${dia}, ${partes}`;
+}
+
+/** Un valor suelto para la bitácora (sin saber el campo): fechas ISO legibles y objetos campo por campo. */
+function valorLegible(v: unknown): string {
+  if (typeof v === "string" && FECHA_ISO.test(v)) return fechaLegible(v);
+  if (isPlainObject(v)) {
+    const partes = Object.keys(v)
+      .filter((k) => !k.startsWith("_"))
+      .map((k) => `${CAMPOS_COMUNES[k] ?? k}: ${valorDeCampo(k, v[k])}`);
+    return partes.length > 0 ? partes.join(" · ") : formatAuditValue(v);
+  }
+  return formatAuditValue(v);
+}
+
+function valorDeCampo(field: string, value: unknown): string {
+  if (CAMPOS_DE_DINERO.has(field)) return pesosDe(value) ?? valorLegible(value);
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  return valorLegible(value);
 }
 
 const CAMPOS_DE_PERSONA = ["treatingDoctorId", "defaultTreatingDoctorId"];
@@ -325,7 +439,7 @@ export function idsDePersonas(changes: unknown): string[] {
 function pesosDe(v: unknown): string | null {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   if (!Number.isFinite(n)) return null;
-  return `$${n.toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString("es-MX", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 
 /**
@@ -338,7 +452,7 @@ export function formatAuditFieldValue(
   value: unknown,
   ctx: { entityType: string; personas?: Record<string, string> },
 ): string {
-  if (!esEntidadDeOrtodoncia(ctx.entityType)) return formatAuditValue(value);
+  if (!esEntidadDeOrtodoncia(ctx.entityType)) return valorDeCampo(field, value);
   if (CAMPOS_DE_PERSONA.indexOf(field) >= 0) {
     if (value === null || value === undefined || value === "") return "Sin asignar";
     if (typeof value === "string") {
@@ -348,7 +462,14 @@ export function formatAuditFieldValue(
   }
   if (field === "status" && typeof value === "string" && ESTADOS_DEL_CASO[value]) return ESTADOS_DEL_CASO[value];
   if (field === "totalCostMxn") return pesosDe(value) ?? formatAuditValue(value);
-  return formatAuditValue(value);
+  return valorLegible(value);
+}
+
+/** El texto que el propio movimiento guardó para la persona («Borró el gasto «Otro» de $100.00»). */
+export function textoDelMovimiento(changes: unknown): string | null {
+  if (!isPlainObject(changes) || !isPlainObject(changes._mov)) return null;
+  const after = changes._mov.after;
+  return isPlainObject(after) && typeof after.texto === "string" && after.texto.trim() ? after.texto.trim() : null;
 }
 
 /**
@@ -361,6 +482,9 @@ export function resumenDeCambio(row: {
   changes: unknown;
   personas?: Record<string, string>;
 }): string | null {
+  // C-115 (ws1-t8): si el movimiento ya trae su frase, esa es la línea (cualquier entidad).
+  const texto = textoDelMovimiento(row.changes);
+  if (texto) return texto;
   if (!esEntidadDeOrtodoncia(row.entityType)) return null;
   const norm = normalizeChanges(row.changes);
   if (norm.kind !== "updated") return null;
@@ -416,6 +540,15 @@ export function buildAuditWhere(filters: AuditQueryFilters): Prisma.AuditLogWher
         OR: [
           { entityType: { startsWith: PREFIJO_ENTIDAD_ORTO } },
           { action: { startsWith: PREFIJO_ACCION_ORTO } },
+        ],
+      },
+    ];
+  } else if (filters.entityType === AUDIT_ENTITY_GROUP_CFDI) {
+    where.AND = [
+      {
+        OR: [
+          { entityType: "cfdi" },
+          ...TEXTOS_FISCALES.map((texto) => ({ changes: { path: ["_mov", "after", "texto"], string_contains: texto } })),
         ],
       },
     ];
@@ -597,8 +730,9 @@ export function normalizeChanges(changes: unknown): NormalizedChanges {
     };
   }
 
-  // Update genérico: cada valor debería ser { before, after }.
-  const fields: AuditChangeField[] = Object.keys(changes).map((field) => {
+  // Update genérico: cada valor debería ser { before, after }. Las llaves con
+  // «_» (`_mov`, `_read`) son del registro, no campos de la entidad.
+  const fields: AuditChangeField[] = Object.keys(changes).filter((field) => !field.startsWith("_")).map((field) => {
     const v = changes[field];
     if (isPlainObject(v) && ("before" in v || "after" in v)) {
       return { field, before: (v as Record<string, unknown>).before, after: (v as Record<string, unknown>).after };

@@ -1,5 +1,5 @@
 import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
-import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
+import { agendaActiveDelAlta } from "@/lib/team/parche-miembro";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { email, firstName, lastName, role, specialty, color, phone, services,
-          cedulaProfesional, especialidad, cedulaEspecialidad, canAccessCaja, accesoOrtodoncia } = body;
+          cedulaProfesional, especialidad, cedulaEspecialidad, canAccessCaja, accesoOrtodoncia, agendaActive } = body;
 
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return NextResponse.json({ error: "Nombre, apellido y email son requeridos" }, { status: 400 });
@@ -165,7 +165,8 @@ export async function POST(req: NextRequest) {
       ...(permissionsOverrideNuevo && permissionsOverrideNuevo.length > 0 && { permissionsOverride: permissionsOverrideNuevo }),
       color:      assignedColor,
       // «Aparece en la agenda»: un ADMIN nuevo nace DESMARCADO (decisión de Rafael, 2-oct-2026); el doctor, marcado.
-      agendaActive: agendaActiveAlCrear(rolNuevo),
+      // Desde ws1-t8 el alta enseña la casilla: si la mandó, manda ella.
+      agendaActive: agendaActiveDelAlta(rolNuevo, agendaActive),
       phone:      phone || null,
       services:   services ?? [],
       isActive:   true,

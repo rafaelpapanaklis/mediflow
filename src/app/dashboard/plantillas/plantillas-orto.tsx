@@ -205,13 +205,14 @@ export function PlantillasOrto({ filas, onChange }: Props) {
                 </button>
                 <button
                   type="button"
-                  className={styles.iconBtn}
+                  className={`${styles.iconBtn} ${styles.iconBtnTexto}`}
                   disabled={busyId === p.id}
                   onClick={() => ponerActiva(p.id, !p.activa, p.activa)}
                   title={t(p.activa ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}
                   aria-label={`${t(p.activa ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}: ${p.name}`}
                 >
                   <Power size={16} aria-hidden />
+                    <span>{t(p.activa ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}</span>
                 </button>
               </div>
             </li>

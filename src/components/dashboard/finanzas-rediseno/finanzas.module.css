@@ -72,12 +72,17 @@
   white-space: nowrap;
 }
 
+/* C-118 (ws1-t8): con `flex-shrink: 0` la fila de periodo + «Registrar gasto»
+   medía 496 px a 390 de pantalla (118 px fuera). Ahora encoge hasta el ancho
+   disponible y se envuelve. */
 .acciones {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ── Control segmentado (periodo) ────────────────────────────────── */
@@ -682,7 +687,11 @@
 
 /* ── Tabla (gastos) ──────────────────────────────────────────────── */
 
+/* C-118 (ws1-t8): `position: relative` para que el «Acciones» de lector de
+   pantalla (sr-only, absoluto) se quede dentro de la caja con scroll; sin él
+   escapaba y estiraba la página 84 px a 390. */
 .tablaCaja {
+  position: relative;
   overflow-x: auto;
 }
 

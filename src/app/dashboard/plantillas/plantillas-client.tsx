@@ -316,13 +316,14 @@ export function PlantillasClient({ initialTemplates, initialOrto = null, initial
                   </button>
                   <button
                     type="button"
-                    className={styles.iconBtn}
+                    className={`${styles.iconBtn} ${styles.iconBtnTexto}`}
                     disabled={busyId === p.id}
                     onClick={() => alternarActiva(p)}
                     title={t(p.isActive ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}
                     aria-label={`${t(p.isActive ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}: ${p.name}`}
                   >
                     <Power size={16} aria-hidden />
+                    <span>{t(p.isActive ? "pages.plantillas.desactivar" : "pages.plantillas.activar")}</span>
                   </button>
                   <button
                     type="button"

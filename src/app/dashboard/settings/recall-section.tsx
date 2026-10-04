@@ -99,7 +99,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
     return (
       <Seccion
         titulo="Reactivación de pacientes (recall)"
-        subtitulo="Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su limpieza o revisión. Sólo se contacta a quienes ya tuvieron una consulta y no tienen cita futura agendada."
+        subtitulo="Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su limpieza o revisión. Solo se contacta a quienes ya tuvieron una consulta y no tienen cita futura agendada."
         pieIzquierda={
           <Enlace
             onClick={runNow}
@@ -169,7 +169,7 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
         <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>Reactivación de pacientes (recall)</h2>
         <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
           Avísale automáticamente a los pacientes que llevan tiempo sin venir que les toca su
-          limpieza o revisión. Sólo se contacta a quienes ya tuvieron una consulta y no tienen
+          limpieza o revisión. Solo se contacta a quienes ya tuvieron una consulta y no tienen
           cita futura agendada.
         </p>
       </div>

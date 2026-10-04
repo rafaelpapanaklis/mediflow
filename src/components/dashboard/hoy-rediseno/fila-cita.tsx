@@ -45,7 +45,7 @@ export function FilaCita({ appt, compacta, timeZone, onCheckIn, onCall, onWhatsA
   const abrirEnAgenda = () => router.push(`/dashboard/agenda?highlight=${appt.id}`);
 
   return (
-    <div className={s.fila}>
+    <div className={`${s.fila} ${s.filaCita}`}>
       <span className={s.hora}>{formatShortTime(appt.startsAt, timeZone)}</span>
 
       <div className={s.filaCuerpo}>

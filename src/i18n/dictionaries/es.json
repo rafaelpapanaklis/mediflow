@@ -164,7 +164,7 @@
       "opSummary": "Resumen operativo",
       "kpiGroupAria": "Indicadores clave",
       "revenueSparkAria": "Ingresos de los últimos 6 meses",
-      "teamPerformanceTitle": "Performance del equipo",
+      "teamPerformanceTitle": "Rendimiento del equipo",
       "teamPerformanceSubtitle": "Citas, % completadas e ingresos cobrados por doctor (la misma cifra que «Por doctor» de Finanzas)",
       "viewFullReport": "Ver reporte completo",
       "noTeamActivity": "Sin actividad de equipo en este período.",
@@ -193,7 +193,7 @@
       "viewAgenda": "Ver agenda",
       "pendingTasksTitle": "Tareas pendientes",
       "tasksSubtitle": "Acciones que puedes cerrar en minutos",
-      "noPendingTasks": "Sin tareas pendientes 🎉",
+      "noPendingTasks": "Sin tareas pendientes",
       "draftSoapNotes": {
         "one": "nota SOAP en borrador",
         "other": "notas SOAP en borrador"
@@ -1422,7 +1422,7 @@
       "planUpdatedToast": "Plan actualizado a {plan}",
       "errChangePlanGeneric": "Error al cambiar plan",
       "statusActive": "Suscripción activa",
-      "statusTrial": "Por activar",
+      "statusTrial": "En prueba",
       "statusTrialExpired": "Suscripción vencida",
       "statusNone": "Sin suscripción",
       "yourPlan": "Tu plan",
@@ -1561,7 +1561,7 @@
       "invoiceLabel": "Crea una factura",
       "invoiceDesc": "Ve a Facturación → Nueva factura",
       "whatsappLabel": "Conecta WhatsApp",
-      "whatsappDesc": "Ve a WhatsApp → Configurar API"
+      "whatsappDesc": "En Administración → WhatsApp y recordatorios, conecta tu número"
     },
     "onboardingSteps": {
       "doctorLabel": "Agrega un doctor",
@@ -1575,7 +1575,7 @@
       "invoiceLabel": "Crea una factura",
       "invoiceDesc": "Ve a Facturación → Nueva factura",
       "whatsappLabel": "Conecta WhatsApp",
-      "whatsappDesc": "Ve a WhatsApp → Configurar API"
+      "whatsappDesc": "En Administración → WhatsApp y recordatorios, conecta tu número"
     },
     "themeToggle": {
       "switchToLight": "Cambiar a modo claro",
@@ -2581,7 +2581,7 @@
       "optNutrition": "Nutricion",
       "optPsychology": "Psicologia",
       "optMedicine": "Medicina general",
-      "resetTitle": "Volver al tipo default de la clinica",
+      "resetTitle": "Volver al tipo de la clínica",
       "reset": "Reset"
     },
     "consultHistory": {
@@ -3331,7 +3331,7 @@
       "imagesOffHint": "Apagada, las radiografías y fotos salen listadas con su tipo, su fecha y quién las subió.",
       "imagesCapped": "Se incrustarán como máximo {max} imágenes; las demás saldrán listadas y el PDF dirá por qué.",
       "billingLabel": "Incluir facturas y presupuestos",
-      "billingHint": "Apagada por default: la NOM-004 no las pide — el expediente es clínico — y mezclar dinero con historia clínica se lee mal en una reclamación.",
+      "billingHint": "Apagada por defecto: la NOM-004 no las pide — el expediente es clínico — y mezclar dinero con historia clínica se lee mal en una reclamación.",
       "auditNotice": "Queda registrado en la bitácora quién generó este expediente y cuándo. Contiene datos personales sensibles: entrégalo solo al paciente o a quien él autorice.",
       "generate": "Generar PDF",
       "generating": "Generando…",
@@ -4084,7 +4084,7 @@
       "categoryLabel": "Categoría",
       "categoryFixedNote": "La categoría de tu clínica es fija.",
       "timezoneLabel": "Zona horaria",
-      "timezoneHelp": "Afecta todos los horarios visibles: agenda, citas, recordatorios. Tras guardar, recarga la pagina.",
+      "timezoneHelp": "Afecta todos los horarios visibles: agenda, citas, recordatorios. Tras guardar, recarga la página.",
       "cityLabel": "Ciudad",
       "addressLabel": "Dirección",
       "mapsLinkLabel": "Link de Google Maps de tu clínica",
@@ -4098,17 +4098,17 @@
       "descriptionPlaceholder": "Ej: Clínica dental especializada en ortodoncia e implantes en Mérida",
       "publicClinicLabel": "🌐 Clínica pública",
       "privateClinicLabel": "🔒 Clínica privada",
-      "publicClinicDesc": "Apareces en el directorio /clinicas y recibes reservas en línea",
-      "privateClinicDesc": "Solo tu equipo accede. No apareces en el directorio público.",
+      "publicClinicDesc": "Apareces en el directorio /clinicas, donde los pacientes te encuentran y reservan en línea.",
+      "privateClinicDesc": "No apareces en el directorio /clinicas. Tu enlace de reservas (/reservar/…) sigue abierto para quien lo tenga.",
       "planBadge": "Plan {plan}",
       "servicesTitle": "Servicios por profesional",
-      "servicesSubtitle": "Asigna los servicios que ofrece cada profesional. Estos aparecerán en la página de reservas para que los pacientes elijan.",
+      "servicesSubtitle": "Lo que hace cada profesional (es el mismo dato que «Servicios» en Equipo → Editar). En la página de reservas sale debajo de su nombre para que el paciente sepa con quién agendar; no limita qué servicios se pueden reservar: esos salen de los servicios de tu página web.",
       "noActiveProfessionals": "No hay profesionales activos",
-      "roleSuperAdmin": "Super Admin",
+      "roleSuperAdmin": "Dueño/a",
       "roleAdmin": "Administrador/a",
       "roleReceptionist": "Recepción",
       "roleDoctor": "Doctor/a",
-      "noServicesAssigned": "Sin servicios asignados — agrega al menos uno",
+      "noServicesAssigned": "Sin servicios escritos (opcional)",
       "removeServiceTitle": "Quitar",
       "servicePlaceholder": "Ej: Consulta general, Ortodoncia, Limpieza…",
       "addServiceBtn": "+ Agregar",
@@ -4124,7 +4124,7 @@
       "cfdiIncompleteBadge": "Incompleto: todavía no timbra",
       "rfcPlaceholder": "13 caracteres (persona física) o 12 (moral)",
       "regimenPlaceholder": "Elige tu régimen fiscal…",
-      "cfdiPoweredByTitle": "Powered by Facturapi",
+      "cfdiPoweredByTitle": "Facturación con Facturapi",
       "cfdiPoweredByBody": " — Tu RFC es el emisor. Timbras cada factura desde su detalle cuando ya está pagada (no se timbra sola). El paciente puede descargar XML y PDF.",
       "rfcLabel": "RFC del emisor *",
       "rfcHelp": "RFC de la clínica o del médico según facture",
@@ -4194,7 +4194,7 @@
       "aiBreakdownUntracked": "Otro consumo sin detalle",
       "aiNoPlanNotice": "Tu plan no incluye IA. Sube de plan para usar el asistente, el dictado por voz y el análisis de radiografías.",
       "aiHowItWorksTitle": "¿Cómo funciona?",
-      "aiHowItWorksBody": " El consumo depende de la función: una pregunta al chat gasta ~800 tokens, mientras que un análisis completo de consulta (que lee todo el expediente) gasta entre 3,000 y 8,000. El límite se renueva automáticamente el primer día de cada mes. El chat usa Claude Haiku (rápido y económico) y los análisis clínicos usan Claude Sonnet, el modelo de mayor capacidad de razonamiento.",
+      "aiHowItWorksBody": " El consumo depende de la función: una pregunta al chat gasta ~800 tokens, mientras que un análisis completo de consulta (que lee todo el expediente) gasta entre 3,000 y 8,000. El límite se renueva automáticamente el primer día de cada mes. El chat usa un modelo rápido y económico y los análisis clínicos, el de mayor capacidad de razonamiento.",
       "gcalSubtitle": "Sincroniza tus citas automáticamente",
       "gcalConnectedBadge": "✅ Conectado",
       "gcalNotConnectedBadge": "No conectado",
@@ -4237,7 +4237,7 @@
       "whatsappSubtitle": "Recordatorios automáticos a pacientes",
       "whatsappDesc": "Configura WhatsApp Cloud API para enviar recordatorios automáticos de citas a los pacientes.",
       "whatsappLink": "Ir a configuración de WhatsApp →",
-      "anticiposTitle": "Configurar cuenta - Recibir pagos por MercadoPago",
+      "anticiposTitle": "Recibir pagos con Mercado Pago",
       "hoursTitle": "Horario de atención",
       "hoursTo": "a",
       "hoursClosed": "Cerrado",
@@ -4325,7 +4325,7 @@
       "emailOnlyNote": "Los recordatorios por email solo se envían a pacientes con email registrado.",
       "templateLabel": "Mensaje del recordatorio",
       "templateVarsHint": "Variables disponibles: {paciente}, {clinica}, {fecha}, {hora}, {doctor}, {link}",
-      "restoreDefaultBtn": "Restaurar mensaje default",
+      "restoreDefaultBtn": "Restaurar el mensaje original",
       "previewLabel": "Vista previa",
       "previewSampleDate": "lunes 24 de junio",
       "confirmLinkNote": "El recordatorio siempre incluye el link público de confirmación: el paciente puede confirmar o cancelar sin iniciar sesión y el estado se refleja en tu agenda.",
@@ -4360,7 +4360,7 @@
       "errorPrefix": "Error"
     },
     "team": {
-      "roleSuperAdmin": "Super Admin",
+      "roleSuperAdmin": "Dueño/a",
       "roleAdmin": "Administrador/a",
       "roleDoctor": "Doctor/a",
       "roleReceptionist": "Recepción",
@@ -4468,11 +4468,11 @@
       "horario": "Horario"
     },
     "permissions": {
-      "useRoleDefault": "Usar default del rol",
+      "useRoleDefault": "Usar los permisos de su rol",
       "useRoleDefaultHint": "Cuando está activado, este usuario hereda los permisos por defecto de su rol. Desmárcalo para personalizar permiso por permiso.",
-      "roleBadge": "rol",
+      "roleBadge": "viene con el rol",
       "permissionsOf": "Permisos de {name}",
-      "revertToRoleDefault": "Volver a default del rol",
+      "revertToRoleDefault": "Volver a los permisos de su rol",
       "savePermissionsCount": "Guardar permisos ({count})",
       "saveError": "Error al guardar permisos",
       "updated": "Permisos actualizados"
@@ -5184,11 +5184,11 @@
       "fieldNotes": "Notas (opcional)",
       "fieldNotesPlaceholder": "Ej. Renta compartida con otra clínica, contrato vence en oct…",
       "saving": "Guardando…",
-      "adminOnly": "Solo admin."
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "doctors": {
       "title": "Doctores",
-      "subtitle": "Performance, ingresos generados y satisfacción de pacientes",
+      "subtitle": "Rendimiento, ingresos generados y satisfacción de pacientes",
       "presetMonth": "Este mes",
       "preset30d": "30 días",
       "preset90d": "90 días",
@@ -5221,10 +5221,10 @@
       "sinDoctorHint": "cobros sin doctor en la factura ni en la cita"
     },
     "doctorsPage": {
-      "adminOnly": "Solo admin."
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "journeyPage": {
-      "adminOnly": "Solo admin."
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "journeyClient": {
       "preset30d": "30 días",
@@ -5291,7 +5291,7 @@
         "one": "{count} no-show",
         "other": "{count} no-shows"
       },
-      "adminOnly": "Solo admin.",
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a.",
       "dayMon": "Lun",
       "dayTue": "Mar",
       "dayWed": "Mié",
@@ -5302,23 +5302,23 @@
     },
     "occupancy": {
       "title": "Ocupación",
-      "subtitle": "Heatmap de uso por día de la semana y hora",
+      "subtitle": "Mapa de calor de uso por día de la semana y hora",
       "preset7d": "7 días",
       "preset30d": "30 días",
       "preset90d": "90 días",
       "chairFilter": "Sillón",
       "doctorFilter": "Doctor",
-      "calculatingHeatmap": "Calculando heatmap…",
+      "calculatingHeatmap": "Calculando el mapa de calor…",
       "noData": "Sin datos suficientes en el rango seleccionado.",
       "apptsInRange": "Citas en el rango",
       "activeChairs": "Sillones activos",
       "leastUsedHint": "solo recibe el {pct}% de las citas. Considera reasignar pacientes o reducir el horario de ese sillón."
     },
     "overviewPage": {
-      "adminOnly": "Solo los administradores tienen acceso a Analytics."
+      "adminOnly": "Analítica es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "occupancyPage": {
-      "adminOnly": "Solo admin."
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "overview": {
       "title": "Resumen",
@@ -5352,10 +5352,10 @@
       "ocupacionSinHorario": "Ocupación: sin horario en Ajustes no se puede calcular"
     },
     "proceduresPage": {
-      "adminOnly": "Solo admin."
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "waitingRoomPage": {
-      "adminOnly": "Solo admin."
+      "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."
     },
     "procedures": {
       "title": "Procedimientos",
@@ -9418,7 +9418,7 @@
       "sinResultados": "Ninguna plantilla coincide con la búsqueda.",
       "inactiva": "Inactiva",
       "enUso": "En uso",
-      "precargada": "Precargada",
+      "precargada": "De fábrica",
       "propia": "De tu clínica",
       "activar": "Activar",
       "desactivar": "Desactivar",

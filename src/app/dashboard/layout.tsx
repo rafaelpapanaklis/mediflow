@@ -25,6 +25,7 @@ import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
 import { PresenciaLatido } from "@/components/dashboard/presencia-latido";
+import { AvisoPermisoDenegado } from "@/components/dashboard/aviso-permiso-denegado";
 import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
 import { SabinaLanzador } from "@/components/dashboard/sabina/lanzador";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
@@ -378,6 +379,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         de a un toast rojo genérico o a un rebote al login. Va aquí y no en el
         minimalShell: sobre la propia pantalla del reto no tiene nada que hacer. */}
     <TwoFactorFetchGuard />
+    {/* Rebote por permisos (`?denied=`): dice por qué y limpia la dirección (C-109). */}
+    <AvisoPermisoDenegado />
     {/* Señal de vida para «Clínicas en línea» de /admin: cada 60 s con la pestaña
         visible y actividad en los últimos 15 min. No pinta nada; sin Redis no hace nada. */}
     <PresenciaLatido />

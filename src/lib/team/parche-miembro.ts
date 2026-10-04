@@ -17,6 +17,7 @@
    ============================================================ */
 
 import { especialidadParaElSelector } from "@/lib/team/especialidad-equipo";
+import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
 /** Los campos del formulario de Equipo que viajan en el PATCH de /api/team/[id]. */
 export const CAMPOS_DEL_PARCHE = [
@@ -143,6 +144,17 @@ export function rolLlevaDatosClinicos(role: string): boolean {
  */
 export function puedeMarcarAtiende(role: string): boolean {
   return role === "DOCTOR" || role === "ADMIN" || role === "SUPER_ADMIN";
+}
+
+/**
+ * Mejora de la auditoría de uso (ws1-t8): «Aparece en la agenda» también se
+ * pregunta al AGREGAR a alguien. Si el formulario mandó la casilla y el rol
+ * puede tener agenda, manda la casilla; si no, el default de siempre
+ * (`agendaActiveAlCrear`: el ADMIN nuevo nace desmarcado, el doctor marcado).
+ */
+export function agendaActiveDelAlta(role: string, marcada: unknown): boolean {
+  if (puedeMarcarAtiende(role) && typeof marcada === "boolean") return marcada;
+  return agendaActiveAlCrear(role);
 }
 
 /**

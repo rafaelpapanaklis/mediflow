@@ -6,7 +6,8 @@ import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
 import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "@/lib/procedures/quitar-procedimiento";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
+import { procedimientoRepetido, textoRepetido } from "@/lib/procedures/duplicado";
 import styles from "./procedures.module.css";
 import { gastoDe, margenDe } from "./margen";
 import { ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures-constantes";
@@ -115,6 +116,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
+  const locale = useLocale();
   const [procedures, setProcedures] = useState<Procedure[]>(initialProcedures);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -210,6 +212,13 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
     if (fiscalDisponible && claveEscrita !== "" && !esClaveSat(claveEscrita)) {
       toast.error("La clave SAT son 8 dígitos (por ejemplo 85122001).");
       return;
+    }
+
+    // C-116 (ws1-t8): un nombre que ya está en el tarifario se pregunta antes de guardar.
+    const repetido = procedimientoRepetido(form.name, procedures, editing?.id ?? null);
+    if (repetido && (!editing || editing.name.trim() !== form.name.trim())) {
+      const txt = textoRepetido(repetido, formatCurrency(repetido.basePrice), locale);
+      if (!(await askConfirm({ title: txt.titulo, description: txt.descripcion, confirmText: txt.confirmar }))) return;
     }
 
     setSaving(true);

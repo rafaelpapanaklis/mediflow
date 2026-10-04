@@ -193,7 +193,7 @@
       "viewAgenda": "View schedule",
       "pendingTasksTitle": "Pending tasks",
       "tasksSubtitle": "Actions you can close in minutes",
-      "noPendingTasks": "No pending tasks 🎉",
+      "noPendingTasks": "No pending tasks",
       "draftSoapNotes": {
         "one": "draft SOAP note",
         "other": "draft SOAP notes"
@@ -1422,7 +1422,7 @@
       "planUpdatedToast": "Plan updated to {plan}",
       "errChangePlanGeneric": "Error changing plan",
       "statusActive": "Active subscription",
-      "statusTrial": "To activate",
+      "statusTrial": "On trial",
       "statusTrialExpired": "Subscription expired",
       "statusNone": "No subscription",
       "yourPlan": "Your plan",
@@ -1561,7 +1561,7 @@
       "invoiceLabel": "Create an invoice",
       "invoiceDesc": "Go to Billing → New invoice",
       "whatsappLabel": "Connect WhatsApp",
-      "whatsappDesc": "Go to WhatsApp → Configure API"
+      "whatsappDesc": "In Administration → WhatsApp & reminders, connect your number"
     },
     "onboardingSteps": {
       "doctorLabel": "Add a doctor",
@@ -1575,7 +1575,7 @@
       "invoiceLabel": "Create an invoice",
       "invoiceDesc": "Go to Billing → New invoice",
       "whatsappLabel": "Connect WhatsApp",
-      "whatsappDesc": "Go to WhatsApp → Configure API"
+      "whatsappDesc": "In Administration → WhatsApp & reminders, connect your number"
     },
     "themeToggle": {
       "switchToLight": "Switch to light mode",
@@ -2581,7 +2581,7 @@
       "optNutrition": "Nutrition",
       "optPsychology": "Psychology",
       "optMedicine": "General medicine",
-      "resetTitle": "Return to the clinic's default type",
+      "resetTitle": "Back to the clinic's type",
       "reset": "Reset"
     },
     "consultHistory": {
@@ -4098,17 +4098,17 @@
       "descriptionPlaceholder": "E.g.: Dental clinic specialized in orthodontics and implants in Mérida",
       "publicClinicLabel": "🌐 Public clinic",
       "privateClinicLabel": "🔒 Private clinic",
-      "publicClinicDesc": "You appear in the /clinicas directory and receive online bookings",
-      "privateClinicDesc": "Only your team has access. You don't appear in the public directory.",
+      "publicClinicDesc": "You appear in the /clinicas directory, where patients find you and book online.",
+      "privateClinicDesc": "You don't appear in the /clinicas directory. Your booking link (/reservar/…) stays open for anyone who has it.",
       "planBadge": "{plan} plan",
       "servicesTitle": "Services by professional",
-      "servicesSubtitle": "Assign the services each professional offers. These will appear on the booking page for patients to choose from.",
+      "servicesSubtitle": "What each professional does (the same data as «Services» in Team → Edit). On the booking page it shows under their name so patients know whom to book with; it does not limit which services can be booked: those come from your website services.",
       "noActiveProfessionals": "No active professionals",
-      "roleSuperAdmin": "Super Admin",
+      "roleSuperAdmin": "Owner",
       "roleAdmin": "Administrator",
       "roleReceptionist": "Reception",
       "roleDoctor": "Doctor",
-      "noServicesAssigned": "No services assigned — add at least one",
+      "noServicesAssigned": "No services written (optional)",
       "removeServiceTitle": "Remove",
       "servicePlaceholder": "E.g.: General consultation, Orthodontics, Cleaning…",
       "addServiceBtn": "+ Add",
@@ -4124,7 +4124,7 @@
       "cfdiIncompleteBadge": "Incomplete: can't stamp yet",
       "rfcPlaceholder": "13 characters (individual) or 12 (company)",
       "regimenPlaceholder": "Choose your tax regime…",
-      "cfdiPoweredByTitle": "Powered by Facturapi",
+      "cfdiPoweredByTitle": "Invoicing with Facturapi",
       "cfdiPoweredByBody": " — Your RFC is the issuer. You stamp each invoice from its detail once it is paid (it isn't stamped automatically). The patient can download XML and PDF.",
       "rfcLabel": "Issuer RFC *",
       "rfcHelp": "RFC of the clinic or the doctor, depending on who invoices",
@@ -4194,7 +4194,7 @@
       "aiBreakdownUntracked": "Other usage without detail",
       "aiNoPlanNotice": "Your plan does not include AI. Upgrade to use the assistant, voice dictation and X-ray analysis.",
       "aiHowItWorksTitle": "How does it work?",
-      "aiHowItWorksBody": " Usage depends on the feature: a chat question uses ~800 tokens, while a full consult analysis (which reads the entire patient record) uses between 3,000 and 8,000. The limit renews automatically on the first day of each month. Chat uses Claude Haiku (fast and economical) and clinical analyses use Claude Sonnet, the model with the highest reasoning capability.",
+      "aiHowItWorksBody": " Usage depends on the feature: a chat question uses ~800 tokens, while a full consult analysis (which reads the entire patient record) uses between 3,000 and 8,000. The limit renews automatically on the first day of each month. Chat uses a fast, economical model and clinical analyses use the one with the highest reasoning capability.",
       "gcalSubtitle": "Sync your appointments automatically",
       "gcalConnectedBadge": "✅ Connected",
       "gcalNotConnectedBadge": "Not connected",
@@ -4237,7 +4237,7 @@
       "whatsappSubtitle": "Automatic reminders to patients",
       "whatsappDesc": "Set up the WhatsApp Cloud API to send automatic appointment reminders to patients.",
       "whatsappLink": "Go to WhatsApp settings →",
-      "anticiposTitle": "Set up account - Receive payments with MercadoPago",
+      "anticiposTitle": "Receive payments with Mercado Pago",
       "hoursTitle": "Business hours",
       "hoursTo": "to",
       "hoursClosed": "Closed",
@@ -4325,7 +4325,7 @@
       "emailOnlyNote": "Email reminders are only sent to patients with a registered email.",
       "templateLabel": "Reminder message",
       "templateVarsHint": "Available variables: {paciente}, {clinica}, {fecha}, {hora}, {doctor}, {link}",
-      "restoreDefaultBtn": "Restore default message",
+      "restoreDefaultBtn": "Restore the original message",
       "previewLabel": "Preview",
       "previewSampleDate": "Monday, June 24",
       "confirmLinkNote": "The reminder always includes the public confirmation link: the patient can confirm or cancel without signing in, and the status is reflected in your schedule.",
@@ -4360,7 +4360,7 @@
       "errorPrefix": "Error"
     },
     "team": {
-      "roleSuperAdmin": "Super Admin",
+      "roleSuperAdmin": "Owner",
       "roleAdmin": "Administrator",
       "roleDoctor": "Doctor",
       "roleReceptionist": "Reception",
@@ -4468,11 +4468,11 @@
       "horario": "Schedule"
     },
     "permissions": {
-      "useRoleDefault": "Use role default",
+      "useRoleDefault": "Use the role's permissions",
       "useRoleDefaultHint": "When enabled, this user inherits the default permissions of their role. Uncheck it to customize permission by permission.",
-      "roleBadge": "role",
+      "roleBadge": "comes with the role",
       "permissionsOf": "Permissions for {name}",
-      "revertToRoleDefault": "Revert to role default",
+      "revertToRoleDefault": "Back to the role's permissions",
       "savePermissionsCount": "Save permissions ({count})",
       "saveError": "Error saving permissions",
       "updated": "Permissions updated"
@@ -5184,7 +5184,7 @@
       "fieldNotes": "Notes (optional)",
       "fieldNotesPlaceholder": "E.g. Rent shared with another clinic, contract expires in Oct…",
       "saving": "Saving…",
-      "adminOnly": "Admin only."
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "doctors": {
       "title": "Doctors",
@@ -5221,10 +5221,10 @@
       "sinDoctorHint": "payments with no doctor on the invoice or appointment"
     },
     "doctorsPage": {
-      "adminOnly": "Admins only."
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "journeyPage": {
-      "adminOnly": "Admins only."
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "journeyClient": {
       "preset30d": "30 days",
@@ -5291,7 +5291,7 @@
         "one": "{count} no-show",
         "other": "{count} no-shows"
       },
-      "adminOnly": "Admins only.",
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access.",
       "dayMon": "Mon",
       "dayTue": "Tue",
       "dayWed": "Wed",
@@ -5315,10 +5315,10 @@
       "leastUsedHint": "only receives {pct}% of appointments. Consider reassigning patients or reducing that chair's schedule."
     },
     "overviewPage": {
-      "adminOnly": "Only administrators have access to Analytics."
+      "adminOnly": "Analytics is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "occupancyPage": {
-      "adminOnly": "Admins only."
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "overview": {
       "title": "Overview",
@@ -5352,10 +5352,10 @@
       "ocupacionSinHorario": "Occupancy: can't be calculated without a schedule in Settings"
     },
     "proceduresPage": {
-      "adminOnly": "Admin only."
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "waitingRoomPage": {
-      "adminOnly": "Admin only."
+      "adminOnly": "This screen is only for the clinic owner and administrators. If you need it, ask the owner for access."
     },
     "procedures": {
       "title": "Procedures",
@@ -9418,7 +9418,7 @@
       "sinResultados": "No template matches your search.",
       "inactiva": "Inactive",
       "enUso": "In use",
-      "precargada": "Preloaded",
+      "precargada": "Factory",
       "propia": "Your clinic’s",
       "activar": "Activate",
       "desactivar": "Deactivate",

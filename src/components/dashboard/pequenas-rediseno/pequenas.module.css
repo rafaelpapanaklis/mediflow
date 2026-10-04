@@ -727,8 +727,11 @@ textarea.entrada {
 }
 
 /* Rango rápido: el segmento. */
+/* C-118 (ws1-t8): «Últimos 3 meses» quedaba 21 px fuera a 390 px: se envuelve. */
 .segmento {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 2px;
   padding: 3px;

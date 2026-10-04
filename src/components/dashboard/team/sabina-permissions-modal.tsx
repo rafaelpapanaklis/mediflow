@@ -273,8 +273,8 @@ export function SabinaPermissionsModal({ open, member, onClose }: SabinaPermissi
                                 <div
                                   className="mono"
                                   style={{ fontSize: 10.5, color: "var(--text-3)", display: "flex", alignItems: "center", gap: 6, marginTop: 1, flexWrap: "wrap" }}
+                                  data-permiso={key}
                                 >
-                                  {key}
                                   {!usuarioLaTiene && (
                                     <span
                                       className="badge-new badge-new--neutral"

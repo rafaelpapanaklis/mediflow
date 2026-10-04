@@ -53,7 +53,7 @@ function accentForKpi(label: string): KpiAccent {
   return "brand";
 }
 
-export function HomeAdmin({ clinic, data, period }: Props) {
+export function HomeAdmin({ user, clinic, data, period }: Props) {
   const t = useT();
   const queCuenta = useQueCuenta();
   const router = useRouter();
@@ -69,7 +69,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         marginBottom: 24,
       }}>
         <Greeting
-          userFullName={clinic.name}
+          userFullName={user.displayName}
           trailing={t("home.admin.opSummary")}
           clinicTimezone={clinic.timezone}
         />

@@ -144,7 +144,9 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
       ) : (
         <ul className={styles.list}>
           {visibles.map((h) => {
-            const ligados = h.procedureIds.map((id) => nombreProc.get(id)).filter((n): n is string => !!n);
+            // C-123 (ws1-t8): dos procedimientos con el mismo nombre salían repetidos
+            // («Implante dental, Implante dental»); se enseña cada nombre una vez.
+            const ligados = Array.from(new Set(h.procedureIds.map((id) => nombreProc.get(id)).filter((n): n is string => !!n)));
             return (
               <li key={h.id} className={`${styles.card} ${h.activa ? "" : styles.cardInactive}`}>
                 <span className={`${styles.cardIcon} ${h.deFabrica ? "" : styles.cardIconPropia}`} aria-hidden>
@@ -199,13 +201,14 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
                   </button>
                   <button
                     type="button"
-                    className={styles.iconBtn}
+                    className={`${styles.iconBtn} ${styles.iconBtnTexto}`}
                     disabled={busyId === h.id}
                     onClick={() => ponerActiva(h.id, !h.activa, h.activa)}
                     title={h.activa ? tx.desactivar : tx.activar}
                     aria-label={`${h.activa ? tx.desactivar : tx.activar}: ${h.nombre}`}
                   >
                     <Power size={16} aria-hidden />
+                    <span>{h.activa ? tx.desactivar : tx.activar}</span>
                   </button>
                 </div>
               </li>

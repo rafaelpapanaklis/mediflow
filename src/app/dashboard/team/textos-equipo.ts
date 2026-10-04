@@ -63,11 +63,15 @@ const es = {
   // Edición
   sinCambios: "No hay cambios que guardar",
   // Rol fijo (el dueño y uno mismo) y «Aparece en la agenda» (ws1-t10: antes «Atiende pacientes»)
-  rolDuenoDesc: "Dueño de la cuenta",
+  // C-110 (ws1-t8): la tarjeta ya dice «Dueño/a»; «Dueño de la cuenta» la repetía.
+  rolDuenoDesc: "Todos los permisos; su rol no se cambia",
   rolDuenoAyuda: "El rol del dueño no se cambia. Todos los demás datos sí puedes editarlos aquí: nombre, teléfono, cédulas, especialidad, color y si apareces en la agenda.",
   rolPropioAyuda: "No puedes cambiar tu propio rol. Los demás datos sí.",
   atiendeTitulo: "Aparece en la agenda",
   atiendeDesc: "Recibe citas: sale como columna en la Agenda y en «Nueva cita», y se le pueden asignar casos. Apágalo si solo administra. No cambia sus permisos.",
+  // C-124 (ws1-t8)
+  incluyeInactivos: (n: number) => (n === 1 ? "Incluye 1 inactivo (filtro «Inactivos»)" : `Incluye ${n} inactivos (filtro «Inactivos»)`),
+  insigniaOrtodoncia: "Ortodoncia",
 };
 
 const en: typeof es = {
@@ -117,11 +121,13 @@ const en: typeof es = {
   miembroEliminado: "Member deleted",
   desactivadoConRegistros: "Deactivated instead of deleted: they have appointments or records",
   sinCambios: "There are no changes to save",
-  rolDuenoDesc: "Account owner",
+  rolDuenoDesc: "All permissions; their role can't be changed",
   rolDuenoAyuda: "The owner's role cannot be changed. You can edit everything else here: name, phone, license numbers, specialty, color and whether you show up in the agenda.",
   rolPropioAyuda: "You cannot change your own role. Everything else you can.",
   atiendeTitulo: "Shows up in the agenda",
   atiendeDesc: "Receives appointments: appears as a column in the Agenda and in “New appointment”, and can be assigned cases. Turn it off if they only administer. It doesn't change their permissions.",
+  incluyeInactivos: (n: number) => (n === 1 ? "Includes 1 inactive (“Inactive” filter)" : `Includes ${n} inactive (“Inactive” filter)`),
+  insigniaOrtodoncia: "Orthodontics",
 };
 
 export const TEXTOS_EQUIPO = { es, en } as const;

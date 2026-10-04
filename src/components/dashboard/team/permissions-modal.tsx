@@ -89,6 +89,14 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
     return () => { vigente = false; };
   }, [open, member]);
 
+  // C-124/C-111 (ws1-t8): Esc cierra, como el resto de ventanas del panel.
+  useEffect(() => {
+    if (!open) return;
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape" && !saving) onClose(); };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [open, saving, onClose]);
+
   const memberRole = (member?.role as Role) ?? "READONLY";
   const roleDefaults = useMemo(
     () => new Set(ROLE_DEFAULT_PERMISSIONS[memberRole] ?? []),
@@ -151,10 +159,11 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
         className="modal modal--wide"
         role="dialog"
         aria-modal="true"
+        aria-labelledby="permisos-titulo"
         style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
       >
         <div className="modal__header">
-          <h2 className="modal__title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <h2 id="permisos-titulo" className="modal__title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Shield size={16} strokeWidth={1.75} aria-hidden style={{ color: "var(--brand)" }} />
             {t("settings.permissions.permissionsOf", { name: fullName })}
           </h2>
@@ -227,7 +236,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
             const nombre = (k: PermissionKey) => ALL_PERMISSIONS[k];
             return (
               <div data-permisos-diferencias style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
-                <strong>{enIngles ? "Differs from the role default:" : "Se distingue del default del rol:"}</strong>
+                <strong>{enIngles ? "Differs from the role's permissions:" : "Diferencias con los permisos de su rol:"}</strong>
                 {d.sinLoDelRol.length > 0 && <div>{enIngles ? "Without: " : "Sin: "}{d.sinLoDelRol.map(nombre).join(" · ")}</div>}
                 {d.ademasDelRol.length > 0 && <div>{enIngles ? "Plus: " : "Además: "}{d.ademasDelRol.map(nombre).join(" · ")}</div>}
               </div>
@@ -269,20 +278,18 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
                           <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-1)" }}>
                             {ALL_PERMISSIONS[key]}
                           </div>
-                          <div
-                            className="mono"
-                            style={{ fontSize: 10.5, color: "var(--text-3)", display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}
-                          >
-                            {key}
-                            {isInRoleDefault && (
+                          {/* C-111 (ws1-t8): la llave interna (`agenda.create`…) ya no se
+                              enseña; se queda en `data-permiso` para soporte y pruebas. */}
+                          {isInRoleDefault && (
+                            <div style={{ display: "flex", alignItems: "center", marginTop: 2 }} data-permiso={key}>
                               <span
                                 className="badge-new badge-new--brand"
-                                style={{ height: 16, padding: "0 6px", fontSize: 9 }}
+                                style={{ height: 16, padding: "0 6px", fontSize: 9.5 }}
                               >
                                 {t("settings.permissions.roleBadge")}
                               </span>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                         <input
                           type="checkbox"

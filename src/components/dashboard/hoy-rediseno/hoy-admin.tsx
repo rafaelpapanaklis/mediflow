@@ -56,7 +56,7 @@ const ICONO_ACENTO: Record<Acento, string> = {
   alerta: s.kpiIconoAlerta,
 };
 
-export function HoyAdmin({ clinic, data, period }: Props) {
+export function HoyAdmin({ user, clinic, data, period }: Props) {
   const t = useT();
 
   const kpis: HomeAdminKpi[] =
@@ -72,7 +72,8 @@ export function HoyAdmin({ clinic, data, period }: Props) {
   return (
     <>
       <div className={s.cabecera}>
-        <Saludo nombreCompleto={clinic.name} cola={t("home.admin.opSummary")} zonaHorariaClinica={clinic.timezone} />
+        {/* C-119 (ws1-t8): se saluda a la persona, no a la clínica («Buenas noches, Clínica.»). */}
+        <Saludo nombreCompleto={user.displayName} cola={t("home.admin.opSummary")} zonaHorariaClinica={clinic.timezone} />
         <AccionesRapidas />
       </div>
 

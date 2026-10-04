@@ -208,8 +208,12 @@
 
 /* Cuando la fila no cabe (laptop de 13" con el menú lateral abierto, iPad
    vertical), la navegación pasa ARRIBA como una fila de botones que se envuelve: los diez apartados
-   siguen a la vista, ninguno detrás de un desplegable. */
-@container navconfig (min-width: 400px) {
+   siguen a la vista, ninguno detrás de un desplegable.
+   C-126 (ws1-t8): el corte era 400 px y en un celular (caja de ~358 px) la
+   navegación quedaba en columna: diez renglones de 38 px llenaban la primera
+   pantalla. Al lado del contenido la caja mide justo 224 px (`min-width`), así
+   que cualquier ancho desde 260 px ya es «arriba» y va en fila. */
+@container navconfig (min-width: 260px) {
   .nav {
     position: static;
     flex-direction: row;

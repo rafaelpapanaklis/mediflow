@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bold, Italic, List, ListOrdered, Underline, X, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { MAX_NAME_LENGTH, type DocumentTemplateKindValue } from "@/lib/document-templates/kinds";
-import { DOCUMENT_MARKERS } from "@/lib/document-templates/markers";
+import { marcadoresPara } from "@/lib/document-templates/markers";
 import { sanitizeTemplateHtml } from "@/lib/document-templates/sanitize";
 import type { PlantillaFila } from "./plantillas-client";
 import { esPrecargada } from "./tarjeta";
@@ -299,7 +299,7 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
               <p className={styles.markersTitle}>{t("pages.plantillas.marcadoresTitulo")}</p>
               <p className={styles.markersHelp}>{t("pages.plantillas.marcadoresAyuda")}</p>
               <ul className={styles.markerList}>
-                {DOCUMENT_MARKERS.map((m) => (
+                {marcadoresPara(editing?.kind ?? kind).map((m) => (
                   <li key={m.token}>
                     <button
                       type="button"

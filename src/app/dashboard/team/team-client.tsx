@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2, Sparkles, Clock, Eye, EyeOff, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import {
 } from "@/lib/team/parche-miembro";
 import { SelectorDeRol } from "./selector-de-rol";
 import { especialidadParaElSelector, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
+import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 // labelKey -> resolved via t() at render time (never call t() at module scope).
@@ -272,8 +273,9 @@ function MemberForm({
       {/* Name */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold">{t("settings.team.firstNameLabel")}</Label>
+          <Label className="text-xs font-semibold" htmlFor="miembro-nombre">{t("settings.team.firstNameLabel")}</Label>
           <input
+            id="miembro-nombre"
             autoFocus
             className="input-new" style={{ height: 42, fontSize: 13.5 }}
             placeholder="Juan"
@@ -282,8 +284,9 @@ function MemberForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold">{t("settings.team.lastNameLabel")}</Label>
+          <Label className="text-xs font-semibold" htmlFor="miembro-apellido">{t("settings.team.lastNameLabel")}</Label>
           <input
+            id="miembro-apellido"
             className="input-new" style={{ height: 42, fontSize: 13.5 }}
             placeholder="García"
             value={form.lastName}
@@ -294,8 +297,9 @@ function MemberForm({
 
       {/* Email */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-semibold">{t("settings.team.emailLabel")}</Label>
+        <Label className="text-xs font-semibold" htmlFor="miembro-correo">{t("settings.team.emailLabel")}</Label>
         <input
+          id="miembro-correo"
           type="email"
           className="input-new" style={{ height: 42, fontSize: 13.5 }}
           placeholder="nombre@clinica.com"
@@ -316,7 +320,7 @@ function MemberForm({
         etiqueta={t("settings.team.roleLabel")}
         opciones={ROLES.map(r => ({ value: r.value, label: t(r.labelKey), desc: t(r.descKey), icon: r.icon }))}
         valor={form.role}
-        onCambiar={rol => set("role", rol)}
+        onCambiar={rol => { set("role", rol); if (!isEdit) set("agendaActive", agendaActiveAlCrear(rol)); }}
         bloqueo={rolFijo}
         ayuda={rolFijo === "dueno" ? x.rolDuenoAyuda : x.rolPropioAyuda}
         acento={acento} acentoSuave={acentoSuave} bordeSuave={bordeSuave}
@@ -327,8 +331,9 @@ function MemberForm({
       <div className={clinico ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}>
         {clinico && (
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">{t("settings.team.specialtyLabel")}</Label>
+            <Label className="text-xs font-semibold" htmlFor="miembro-especialidad">{t("settings.team.specialtyLabel")}</Label>
             <select
+              id="miembro-especialidad"
               className="input-new" style={{ height: 42, fontSize: 13.5 }}
               value={form.specialty}
               onChange={e => set("specialty", e.target.value)}>
@@ -340,8 +345,9 @@ function MemberForm({
           </div>
         )}
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold">{t("settings.team.phoneLabel")}</Label>
+          <Label className="text-xs font-semibold" htmlFor="miembro-telefono">{t("settings.team.phoneLabel")}</Label>
           <input
+            id="miembro-telefono"
             className="input-new" style={{ height: 42, fontSize: 13.5 }}
             placeholder="+52 999 000 0000"
             value={form.phone}
@@ -363,9 +369,10 @@ function MemberForm({
         />
       )}
 
-      {/* «Aparece en la agenda» (User.agendaActive; antes «Atiende pacientes»): solo al editar, y solo a quien
-          puede tener agenda (doctor, admin, dueño). Marcada por defecto: la base la crea en true. */}
-      {isEdit && puedeMarcarAtiende(form.role) && (
+      {/* «Aparece en la agenda» (User.agendaActive; antes «Atiende pacientes»): solo a quien puede tener agenda
+          (doctor, admin, dueño). Desde ws1-t8 también al AGREGAR: arranca con el default del rol (el ADMIN
+          desmarcado, el doctor marcado) y el alta la manda. */}
+      {puedeMarcarAtiende(form.role) && (
         <label className="flex items-start gap-3 cursor-pointer" data-atiende-pacientes
           style={{ padding: "10px 12px", borderRadius: "var(--radius)", border: `1px solid ${bordeSuave}` }}>
           <input
@@ -423,8 +430,9 @@ function MemberForm({
         <div className="form-section__title" style={{ marginBottom: 0 }}>{t("settings.team.profIdLabel")}<span className="form-section__rule" aria-hidden /></div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t("settings.team.cedulaProfLabel")}</Label>
+            <Label className="text-xs text-muted-foreground" htmlFor="miembro-cedula">{t("settings.team.cedulaProfLabel")}</Label>
             <input
+              id="miembro-cedula"
               className={rediseno ? "input-new" : "input-new font-mono"}
               style={{ height: 42, fontSize: 13.5, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
               placeholder="1234567"
@@ -434,8 +442,9 @@ function MemberForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t("settings.team.cedulaEspLabel")}</Label>
+            <Label className="text-xs text-muted-foreground" htmlFor="miembro-cedula-esp">{t("settings.team.cedulaEspLabel")}</Label>
             <input
+              id="miembro-cedula-esp"
               className={rediseno ? "input-new" : "input-new font-mono"}
               style={{ height: 42, fontSize: 13.5, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
               placeholder={t("settings.team.cedulaEspPlaceholder")}
@@ -446,8 +455,9 @@ function MemberForm({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">{t("settings.team.especialidadOficialLabel")}</Label>
+          <Label className="text-xs text-muted-foreground" htmlFor="miembro-especialidad-oficial">{t("settings.team.especialidadOficialLabel")}</Label>
           <input
+            id="miembro-especialidad-oficial"
             className="input-new" style={{ height: 42, fontSize: 13.5 }}
             placeholder={t("settings.team.especialidadOficialPlaceholder")}
             maxLength={100}
@@ -777,6 +787,19 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   // en toast a propósito: el admin tiene que entregarle el dato al doctor (a
   // partir de ahora entra con ese correo) y un toast de 4s se lo come.
   const [emailNotice, setEmailNotice] = useState<{ name: string; email: string } | null>(null);
+
+  // C-124 (ws1-t8): «Agregar miembro» y «Editar» cierran con Esc, como el resto
+  // de ventanas del panel. Mientras guarda, no: se perdería la respuesta.
+  useEffect(() => {
+    if (!showNew && !editMember) return;
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || loading) return;
+      if (editMember) setEditMember(null);
+      else setShowNew(false);
+    };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [showNew, editMember, loading]);
 
   const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
   // «Horario» por doctor: lo ponen ADMIN y SUPER_ADMIN (no solo el super,
@@ -1150,7 +1173,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         <KpiCard label={t("settings.team.kpiTotalActive")}  value={String(active)}   icon={UsersIcon} hero />
         <KpiCard label={t("settings.team.kpiDoctors")}      value={String(doctors)}  icon={Stethoscope} />
         <KpiCard label={t("settings.team.kpiAdmins")}       value={String(admins)}   icon={Shield} />
-        <KpiCard label={t("settings.team.kpiTotalMembers")} value={String(team.length)} icon={UsersIcon} />
+        {/* C-124 (ws1-t8): «Total 26» con 25 activos no decía de dónde salía el otro. */}
+        <KpiCard label={t("settings.team.kpiTotalMembers")} value={String(team.length)} icon={UsersIcon}
+          hint={team.length > active ? x.incluyeInactivos(team.length - active) : undefined} />
       </div>
 
       {/* Filter */}
@@ -1217,6 +1242,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
                     <BadgeNew tone={roleCfg.tone} dot={roleCfg.tone !== "neutral"}>{t(roleCfg.labelKey)}</BadgeNew>
                     {!m.isActive && <BadgeNew tone="neutral">{t("settings.team.inactiveBadge")}</BadgeNew>}
+                    {/* C-124 (ws1-t8): el módulo se veía solo entrando a Editar. */}
+                    {accesoInicial(m, ortoModulo) === "ortodoncista" && <BadgeNew tone="info">{x.insigniaOrtodoncia}</BadgeNew>}
                   </div>
 
                   {m.services?.length > 0 && (
@@ -1344,9 +1371,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       {showNew && (
         <div className="modal-overlay"
           onClick={e => { if (e.target === e.currentTarget) setShowNew(false); }}>
-          <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="miembro-alta-titulo">
             <div className="modal__header" style={{ position: "sticky", top: 0, background: "var(--bg-elev)", zIndex: 10 }}>
-              <h2 className="modal__title">{x.agregarMiembro}</h2>
+              <h2 id="miembro-alta-titulo" className="modal__title">{x.agregarMiembro}</h2>
               <button type="button" onClick={() => setShowNew(false)} className="btn-new btn-new--ghost" style={{ padding: 0, width: 36 }} aria-label={t("common.close")}>
                 <X size={18} strokeWidth={1.75} />
               </button>
@@ -1369,9 +1396,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       {editMember && (
         <div className="modal-overlay"
           onClick={e => { if (e.target === e.currentTarget) setEditMember(null); }}>
-          <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="miembro-editar-titulo">
             <div className="modal__header" style={{ position: "sticky", top: 0, background: "var(--bg-elev)", zIndex: 10 }}>
-              <h2 className="modal__title">{t("settings.team.editTitle", { name: `${editMember.firstName} ${editMember.lastName}` })}</h2>
+              <h2 id="miembro-editar-titulo" className="modal__title">{t("settings.team.editTitle", { name: `${editMember.firstName} ${editMember.lastName}` })}</h2>
               <button type="button" onClick={() => setEditMember(null)} className="btn-new btn-new--ghost" style={{ padding: 0, width: 36 }} aria-label={t("common.close")}>
                 <X size={18} strokeWidth={1.75} />
               </button>

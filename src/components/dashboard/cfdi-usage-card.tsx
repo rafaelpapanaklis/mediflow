@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Receipt, Loader2 } from "lucide-react";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { CfdiRediseno } from "./bloques-rediseno/cfdi";
 
 /**
@@ -28,13 +28,17 @@ interface CfdiUsage {
 }
 
 function money(cents: number): string {
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "MXN" });
+  return (cents / 100).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
 
-function monthLabel(period: string): string {
+/**
+ * C-122 (ws1-t8): con `undefined` el mes salía en el idioma del NAVEGADOR
+ * («October 2026» en un panel en español). Ahora, en el del panel.
+ */
+export function monthLabel(period: string, locale: string = "es"): string {
   const [y, m] = period.split("-").map(Number);
   if (!y || !m) return period;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, {
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(locale.startsWith("en") ? "en-US" : "es-MX", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
@@ -52,6 +56,7 @@ const RING_C = 2 * Math.PI * RING_R;
  */
 export function CfdiUsageCard({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
+  const locale = useLocale();
   const [data, setData] = useState<CfdiUsage | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -76,7 +81,7 @@ export function CfdiUsageCard({ rediseno = false }: { rediseno?: boolean } = {})
   if (failed) return null;
 
   if (rediseno) {
-    return <CfdiRediseno m={data ? modeloCfdi(data, t) : null} />;
+    return <CfdiRediseno m={data ? modeloCfdi(data, t, locale) : null} />;
   }
 
   return (
@@ -93,7 +98,7 @@ export function CfdiUsageCard({ rediseno = false }: { rediseno?: boolean } = {})
         </div>
         {data && (
           <span style={{ fontSize: 11, color: "var(--text-3)", textTransform: "capitalize" }}>
-            {monthLabel(data.period)}
+            {monthLabel(data.period, locale)}
           </span>
         )}
       </div>
@@ -115,7 +120,7 @@ export function CfdiUsageCard({ rediseno = false }: { rediseno?: boolean } = {})
  * `CfdiBody` (anillo, pastilla de restantes/excedente, nota de cobro y
  * adeudo), resueltos a texto para que la vista no decida nada.
  */
-function modeloCfdi(data: CfdiUsage, t: ReturnType<typeof useT>) {
+function modeloCfdi(data: CfdiUsage, t: ReturnType<typeof useT>, locale = "es") {
   const ratio = data.included > 0 ? data.used / data.included : data.used > 0 ? 1 : 0;
   const pct = Math.min(100, Math.round(ratio * 100));
   const exceeded = data.overage > 0;
@@ -127,7 +132,7 @@ function modeloCfdi(data: CfdiUsage, t: ReturnType<typeof useT>) {
         ? "cfdiCollectAnnual"
         : "cfdiCollectManual";
   return {
-    mes: monthLabel(data.period),
+    mes: monthLabel(data.period, locale),
     usadas: data.used,
     incluidas: data.included,
     porcentaje: pct,

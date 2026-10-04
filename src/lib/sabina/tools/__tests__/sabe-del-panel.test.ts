@@ -163,7 +163,7 @@ test("pregunta de ayuda: «¿cómo configuro Mercado Pago?» → los pasos de ES
   assert.equal(r.ok, true, JSON.stringify(r));
   if (!r.ok) return;
   assert.equal(r.datos.idioma, "es");
-  assert.match(r.resumen, /Configuración → pestaña Integraciones → tarjeta «Configurar cuenta - Recibir pagos por MercadoPago»/);
+  assert.match(r.resumen, /Configuración → pestaña Integraciones → tarjeta «Recibir pagos con Mercado Pago»/);
   assert.match(r.resumen, /«Conectar con Mercado Pago»/);
   assert.match(r.resumen, /No añadas pasos que no estén en este texto/);
   // Solo viaja un tema: nada de bloqueos ni de importar en esta respuesta.

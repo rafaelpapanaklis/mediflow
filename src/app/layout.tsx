@@ -13,6 +13,7 @@ import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
 import { RecargaPorDespliegue } from "@/components/recarga-por-despliegue";
 import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
 import { META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
+import { cargarInsightsDeVercel } from "@/lib/analytics/vercel-insights";
 import "./globals.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
@@ -160,8 +161,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ConfirmProvider>
           {children}
         </ConfirmProvider>
-        <Analytics />
-        <SpeedInsights />
+        {/* Solo donde existe /_vercel/* (C-129): fuera de Vercel eran dos 404 por pantalla. */}
+        {cargarInsightsDeVercel() && <Analytics />}
+        {cargarInsightsDeVercel() && <SpeedInsights />}
         {/* Analítica propia (DaleControl) — tracker de primera parte para /admin/analytics.
             No rastrea /admin ni /live; identidad resuelta server-side desde cookies. */}
         <AnalyticsTracker />

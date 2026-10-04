@@ -88,9 +88,9 @@ export const ALL_PERMISSIONS = {
   "treatments.view":      "Ver planes de tratamiento",
   "treatments.edit":      "Crear y editar planes de tratamiento (y registrar sesiones)",
   // Inbox / Mensajes
-  "inbox.view":           "Ver inbox",
+  "inbox.view":           "Ver la bandeja de mensajes",
   "inbox.send":           "Enviar mensajes",
-  "inbox.delete":         "Borrar threads del inbox",
+  "inbox.delete":         "Borrar conversaciones de la bandeja de mensajes",
   "whatsapp.view":        "Ver WhatsApp",
   "whatsapp.send":        "Enviar WhatsApp",
   // Catálogo
@@ -120,7 +120,7 @@ export const ALL_PERMISSIONS = {
   // identificada. Quien ya tiene "billing.charge" también puede — no se le
   // quita nada a quien ya cobraba en Caja, ver los dos route handlers.
   "billing.deposit.register": "Registrar anticipo recibido",
-  "analytics.view":       "Ver Analytics",
+  "analytics.view":       "Ver Analítica",
   // ws1-t4: POST/DELETE /api/gastos pedían "analytics.view" — key que
   // TERMINA en ".view", así que READONLY la recibía por construcción (línea
   // 302 más abajo) y de paso podía crear y borrar gastos, no solo verlos.
@@ -138,7 +138,7 @@ export const ALL_PERMISSIONS = {
   "settings.view":        "Ver configuración",
   "settings.edit":        "Editar configuración (datos de la clínica, horarios, recordatorios, CFDI e integraciones)",
   "landing.view":         "Ver página web pública",
-  "landing.edit":         "Editar landing",
+  "landing.edit":         "Editar la página web pública",
   "procedures.view":      "Ver procedimientos",
   "procedures.edit":      "Editar procedimientos",
   "clinicLayout.view":    "Ver Mi Clínica Visual",
