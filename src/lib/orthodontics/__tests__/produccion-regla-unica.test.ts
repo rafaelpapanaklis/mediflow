@@ -74,8 +74,8 @@ describe("C-08: Ortodoncia reparte con la misma regla que «Por doctor»", () =>
   it("la regla: cita → factura, si no la cita; caso sin cita → quien lo llevaba ese día; si no, la factura", () => {
     const caso = { planId: "p", doctorActual: "d-hoy", cambios: [{ planId: "p", at: new Date("2026-10-05T00:00:00Z"), de: "d-antes", a: "d-hoy" }] };
     const dia = new Date("2026-10-02T12:00:00Z");
-    assert.deepEqual(doctorDeUnCobro({ paidAt: dia, appointmentId: "c", facturaDoctorId: "d-fac", citaDoctorId: "d-cita" }, caso), { doctorId: "d-fac", orto: false });
-    assert.deepEqual(doctorDeUnCobro({ paidAt: dia, appointmentId: "c", facturaDoctorId: null, citaDoctorId: "d-cita" }, caso), { doctorId: "d-cita", orto: false });
+    assert.deepEqual(doctorDeUnCobro({ paidAt: dia, appointmentId: "c", facturaDoctorId: "d-fac", citaDoctorId: "d-cita" }, caso), { doctorId: "d-fac", orto: true });
+    assert.deepEqual(doctorDeUnCobro({ paidAt: dia, appointmentId: "c", facturaDoctorId: null, citaDoctorId: "d-cita" }, caso), { doctorId: "d-cita", orto: true });
     assert.deepEqual(doctorDeUnCobro({ paidAt: dia, appointmentId: null, facturaDoctorId: "d-fac" }, caso), { doctorId: "d-antes", orto: true });
     assert.deepEqual(doctorDeUnCobro({ paidAt: dia, appointmentId: null, facturaDoctorId: "d-fac" }, null), { doctorId: "d-fac", orto: false });
     assert.deepEqual(doctorDeUnCobro({ paidAt: dia }, null), { doctorId: null, orto: false });
@@ -96,5 +96,27 @@ describe("C-08: la pantalla dice qué regla usa", () => {
       assert.equal(typeof d.queCuenta.ortoPorDoctor, "string", l);
       assert.match(d.queCuenta.ortoCobrado, l === "es" ? /saldo a favor/ : /credit balance/, l);
     }
+  });
+});
+
+describe("C-08 (segunda vuelta): «incluye $X de ortodoncia» de la Analítica = Finanzas › Ortodoncia", () => {
+  it("el control que nació de una cita también es dinero de ortodoncia (T9final $4,000 + $300 = $4,300)", () => {
+    // La foto de t6: MF-1132 ($4,000, factura del tratamiento del caso de T9final, sin cita) y
+    // MF-1110 ($300, control del mismo caso cobrado desde una cita de T9final).
+    const casos = new Map<string, string | null>([["plan-t9", "d-t9"]]);
+    const pagosT9: PagoDeCaso[] = [
+      { planId: "plan-t9", invoiceId: "mf-1132", amount: 4000, method: "cash", paidAt: new Date("2026-10-03T17:00:00Z"), appointmentId: null },
+      { planId: "plan-t9", invoiceId: "mf-1110", amount: 300, method: "cash", paidAt: new Date("2026-10-03T18:00:00Z"), appointmentId: "cita-1110", facturaDoctorId: null, citaDoctorId: "d-t9" },
+    ];
+    const finanzas = produccionPorDoctor({ pagos: pagosT9, doctorActualPorCaso: casos, cambios: [], nombres: NOMBRES, zonaHoraria: TZ });
+    const analitica = repartirPorDoctor({
+      cobros: pagosT9.map(comoMovimiento),
+      reembolsos: [],
+      casoPorFactura: new Map([["mf-1132", "plan-t9"], ["mf-1110", "plan-t9"]]),
+      doctorActualPorCaso: casos,
+      cambios: [],
+    });
+    assert.equal(finanzas[0].amountMxn, 4300);
+    assert.deepEqual(analitica.get("d-t9"), { total: 4300, orto: 4300 }, "antes: orto 4,000 (el control con cita no contaba)");
   });
 });

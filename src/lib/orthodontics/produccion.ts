@@ -124,6 +124,12 @@ export function doctorVigente(
  *     extra) → quien llevaba el caso el día del cobro;
  *   · ninguna de las dos → el doctor de la factura (o `null`, «sin doctor»).
  * `caso` es `null` si la factura no es de un caso de ortodoncia.
+ *
+ * `orto` (ws1-t2, auditoría de uso C-08, segunda vuelta): ¿es dinero de un
+ * caso de ortodoncia? Lo es TODA factura ligada a un caso —también el cargo
+ * de un control que nació de una cita—, igual que en el bloque «Ortodoncia»
+ * de Finanzas. Antes solo contaba la del caso sin cita, y la Analítica decía
+ * «incluye $4,000 de ortodoncia» donde Finanzas › Ortodoncia daba $4,300.
  */
 export function doctorDeUnCobro(
   cobro: { paidAt: Date; appointmentId?: string | null; facturaDoctorId?: string | null; citaDoctorId?: string | null },
@@ -132,7 +138,7 @@ export function doctorDeUnCobro(
   if (caso && !cobro.appointmentId) {
     return { doctorId: doctorVigente(caso.planId, cobro.paidAt, caso.doctorActual, caso.cambios), orto: true };
   }
-  return { doctorId: cobro.facturaDoctorId ?? cobro.citaDoctorId ?? null, orto: false };
+  return { doctorId: cobro.facturaDoctorId ?? cobro.citaDoctorId ?? null, orto: caso !== null };
 }
 
 export interface ProduccionInput {
