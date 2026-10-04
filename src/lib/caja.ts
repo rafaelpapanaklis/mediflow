@@ -34,6 +34,7 @@ import {
 } from "@/lib/dinero/reembolsos";
 import { cobrosAsignados } from "@/lib/dinero/ajustes.server";
 import { cobrosFueraDeCorte, diasAbierta, medianocheAnterior } from "@/lib/dinero/caja-core";
+import { partirDescuento } from "@/lib/dinero/bajas";
 
 /**
  * Lo único que Caja LEE de la base, y nada más.
@@ -256,6 +257,12 @@ export interface CajaTotals {
   /** ws1-t5: dinero que pasó de una factura al saldo a favor (excedente, cita cancelada). No sale dinero. */
   toCredit?:        number;
   discounts:        number; // descuento PRORRATEADO de lo cobrado en la ventana (misma población que los ingresos)
+  /**
+   * Segunda auditoría de uso (C-17): de lo que la factura guarda como descuento,
+   * la parte que fue una BAJA del total (reembolso «le cobré de más» o el resto
+   * de un tratamiento que no siguió). Ya no entra en `discounts`.
+   */
+  writeOffs?:       number;
   tax:              number; // IVA realmente contenido en lo cobrado del turno (0 si exenta)
   withdrawals:      number; // SUM retiros de la caja
   expectedCash:     number; // opening + cashIncome − withdrawals − reembolsos en efectivo (expectedCashOf)
@@ -284,6 +291,14 @@ export interface CajaState {
   // Resumen del día natural de México — presente SIEMPRE (con o sin caja abierta):
   suggestedOpening: number; // efectivo cobrado hoy aún NO cuadrado en un corte cerrado
   billedToday:      number; // total facturado hoy (excluye DRAFT/CANCELLED)
+  /**
+   * Segunda auditoría de uso N-01: lo que ENTRÓ hoy (día de la clínica) —
+   * cobros − reembolsos reales, con el anticipo cobrado sin factura y sin el
+   * saldo a favor aplicado ni la historia migrada—: la MISMA cifra que Finanzas
+   * › Hoy (ingresoNetoDelPeriodo). Antes «Cobrado hoy» era facturado − por
+   * cobrar de las facturas creadas hoy. Opcional para quien arma uno a mano.
+   */
+  cobradoHoy?:      number;
   pendingToday:     number; // saldo por cobrar de las facturas de hoy
   // Vencido (H21a): facturas de un pago → balance completo si dueDate < hoy
   // (de siempre); facturas A PLAZOS (invoice_payment_terms) → SOLO sus cuotas
@@ -431,6 +446,9 @@ export async function deriveWindow(
           select: {
             items:       true,
             discount:    true,
+            // C-17 (segunda auditoría): las marcas de «baja del total» separan el
+            // descuento comercial de las bajas (lib/dinero/bajas.ts).
+            notes:       true,
             // El total es el DENOMINADOR del prorrateo del descuento (ya viene
             // con el descuento restado: ver computeInvoiceTotal).
             total:       true,
@@ -504,6 +522,7 @@ export async function deriveWindow(
   let appliedCredit = 0; // saldo a favor aplicado: no entra dinero
   let tax = 0;         // IVA contenido en lo cobrado, sumado pago por pago
   let discounts = 0;   // descuento prorrateado de lo cobrado, sumado pago por pago (los reembolsos lo revierten)
+  let writeOffs = 0;   // C-17: la parte de ese descuento que fue una baja del total, no descuento
   const list: CajaListRow[] = payments.map((p) => {
     const amount = p.amount ?? 0;
     // Pago por pago y no sobre el total del turno: así un día MIXTO (facturas
@@ -520,8 +539,11 @@ export async function deriveWindow(
     // La fila lo lleva igual que el total, para que la tabla impresa y el CSV
     // sumen exactamente la línea "Descuentos" del corte y no tres cifras
     // distintas para el mismo cobro.
-    const discountPortion = paymentDiscountPortion(p.method, amount, p.invoice);
+    // C-17: el prorrateo se hace sobre el descuento COMERCIAL; la baja va aparte.
+    const partes = partirDescuento(p.invoice as { discount?: number | null; notes?: string | null });
+    const discountPortion = paymentDiscountPortion(p.method, amount, { discount: partes.comercial, total: p.invoice?.total });
     discounts += discountPortion;
+    writeOffs += paymentDiscountPortion(p.method, amount, { discount: partes.bajas, total: p.invoice?.total });
     if (p.method === REFUND_METHOD) {
       // ws1-t5 (F3/F5): el traspaso a saldo a favor no es salida de dinero, y
       // solo el reembolso EN EFECTIVO sale del cajón.
@@ -561,7 +583,7 @@ export async function deriveWindow(
       ...(p.method === REFUND_METHOD ? { refundMethod: (p as { refundMethod?: string | null }).refundMethod ?? null } : {}),
       discount:    money(discountPortion),
       invoiceId:       p.invoiceId,
-      invoiceDiscount: money(Number(p.invoice?.discount ?? 0)),
+      invoiceDiscount: money(partes.comercial),
       // La cita manda (es el dato clínico); si la factura se creó suelta desde
       // Caja, se cae al doctor que el usuario eligió en el editor.
       doctorName:  fullName(p.invoice?.appointment?.doctor ?? attributedById.get((p.invoice as any)?.doctorId ?? "")),
@@ -600,6 +622,8 @@ export async function deriveWindow(
     refunds: money(refunds), cashRefunds: money(cashRefunds), refundsUnknownMethod: money(refundsUnknownMethod),
     toCredit: money(toCredit), appliedCredit: money(appliedCredit),
     discounts: money(discountsTotal), tax: money(tax), list,
+    // C-17: opcional en el tipo (quien arma una ventana a mano, como las pruebas, no lo trae).
+    ...({ writeOffs: money(writeOffs) } as { writeOffs?: number }),
   };
 }
 
@@ -765,7 +789,7 @@ export function netRevenueSeries(
  * sugerencia, no un arqueo, y quien abre la caja cuenta el dinero.
  */
 export async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma): Promise<number> {
-  const [cashPayments, cashRefundRows, closedToday] = await Promise.all([
+  const [cashPayments, cashRefundRows, closedToday, ultimoCorte] = await Promise.all([
     db.payment.findMany({
       where:  cashOnHandPaymentWhere(clinicId, todayStart, now),
       select: { amount: true, paidAt: true },
@@ -779,6 +803,13 @@ export async function computeSuggestedOpening(clinicId: string, todayStart: Date
       where:  { clinicId, status: "CLOSED", closedAt: { gte: todayStart } },
       select: { openedAt: true, closedAt: true },
     }),
+    // Segunda auditoría de uso N-15: lo que se CONTÓ en el último corte sigue en
+    // el cajón (al reabrir se sugería $0 aunque el corte dejó $1,900 contados).
+    db.cashRegister.findFirst({
+      where:   { clinicId, status: "CLOSED", countedClosingBalance: { not: null } },
+      orderBy: { closedAt: "desc" },
+      select:  { countedClosingBalance: true },
+    }),
   ]);
 
   const isCounted = (at: Date) =>
@@ -786,7 +817,8 @@ export async function computeSuggestedOpening(clinicId: string, todayStart: Date
 
   const entra = cashPayments.reduce((sum, p) => (isCounted(p.paidAt) ? sum : sum + (p.amount ?? 0)), 0);
   const sale = cashRefundRows.reduce((sum, p) => (isCounted(p.paidAt) ? sum : sum + (p.amount ?? 0)), 0);
-  return Math.max(0, entra - sale);
+  const contado = Math.max(0, Number(ultimoCorte?.countedClosingBalance ?? 0) || 0);
+  return money(contado + Math.max(0, entra - sale));
 }
 
 /** Una factura A PLAZOS, con lo que hace falta para saber cuánto de ella está
@@ -1078,16 +1110,20 @@ export async function getCajaState(clinicId: string, opts: { timezone?: string |
     || DEFAULT_INVOICE_TZ;
   const todayStart = medianocheAnterior(now, timezone);
 
-  const [reg, suggestedOpening, dayBilling, fueraDeCorte] = await Promise.all([
+  // N-01: import dinámico — ingresos.server importa de este archivo.
+  const { ingresoNetoDelPeriodo } = await import("@/lib/dinero/ingresos.server");
+  const [reg, suggestedOpening, dayBilling, fueraDeCorte, netoHoy] = await Promise.all([
     getOpenRegister(clinicId),
     computeSuggestedOpening(clinicId, todayStart, now),
     computeDayBilling(clinicId, todayStart, now),
     computeCobrosFueraDeCorte(clinicId, now),
+    ingresoNetoDelPeriodo(clinicId, { gte: todayStart, lte: now }).catch(() => null),
   ]);
 
   const day = {
     suggestedOpening: money(suggestedOpening),
     billedToday:      money(dayBilling.billedToday),
+    ...(netoHoy ? { cobradoHoy: money(netoHoy.neto) } : {}),
     pendingToday:     money(dayBilling.pendingToday),
     overdueToday:     money(dayBilling.overdueToday),
     receivableTotal:  money(dayBilling.receivableTotal),
@@ -1232,6 +1268,7 @@ async function shiftOf(
     appliedCredit:    money(derived.appliedCredit),
     toCredit:         money(derived.toCredit),
     discounts:        money(derived.discounts),
+    writeOffs:        money(derived.writeOffs ?? 0),
     tax:              money(derived.tax),
     withdrawals:      money(withdrawalsTotal),
     expectedCash:     money(expectedCash),
@@ -1283,6 +1320,8 @@ export interface CajaCloseSummary {
   cashRefunds?:     number;
   appliedCredit?:   number;
   toCredit?:        number;
+  /** C-17 (segunda auditoría): bajas del total que no son descuento. */
+  writeOffs?:       number;
   discounts:        number;
   tax:              number;
   withdrawals:      number;
@@ -1299,8 +1338,8 @@ export function buildCloseSummary(args: {
   withdrawals:    number;
   counted:        number;
   // Los tres de ws1-t5 son opcionales: quien arma el resumen a mano sin ellos sigue valiendo.
-  derived:        Omit<Awaited<ReturnType<typeof deriveWindow>>, "refundsUnknownMethod" | "toCredit" | "appliedCredit">
-                  & Partial<Pick<Awaited<ReturnType<typeof deriveWindow>>, "refundsUnknownMethod" | "toCredit" | "appliedCredit">>;
+  derived:        Omit<Awaited<ReturnType<typeof deriveWindow>>, "refundsUnknownMethod" | "toCredit" | "appliedCredit" | "writeOffs">
+                  & Partial<Pick<Awaited<ReturnType<typeof deriveWindow>>, "refundsUnknownMethod" | "toCredit" | "appliedCredit" | "writeOffs">>;
 }): CajaCloseSummary {
   const { derived } = args;
   const expectedCash = expectedCashOf({
@@ -1326,6 +1365,7 @@ export function buildCloseSummary(args: {
     appliedCredit:    money(derived.appliedCredit ?? 0),
     toCredit:         money(derived.toCredit ?? 0),
     discounts:        money(derived.discounts),
+    writeOffs:        money(derived.writeOffs ?? 0),
     tax:              money(derived.tax),
     withdrawals:      money(args.withdrawals),
     expectedCash,

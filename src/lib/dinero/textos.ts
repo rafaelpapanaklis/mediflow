@@ -45,6 +45,16 @@ const es = {
     thDescuentoFactura: "Descuento de la factura",
     notaDescuento: "El descuento se ve una vez por factura. En el arqueo, «Descuentos» es la parte que le toca a lo cobrado en este turno.",
     csvDescuento: "Descuento (parte de este cobro)",
+    // Segunda auditoría de uso (N-01, N-15, C-17).
+    cobradoHoyNota: "Lo que entró hoy: cobros menos reembolsos, sin el saldo a favor aplicado. La misma cifra que Finanzas › Hoy.",
+    sugeridoApertura: "Sugerido (lo contado en el último corte más el efectivo cobrado después, sin corte):",
+    historialVer: "Ver corte",
+    historialTitulo: "Corte de caja",
+    historialOtros: "Tarjeta, transferencia y otros",
+    historialNota: "Foto guardada al cerrar el turno. Las filas de cobros no se guardan con el corte: para verlas, usa el periodo en Finanzas.",
+    historialNotas: "Notas del corte",
+    bajasYReembolsos: "Bajas de tratamiento y reembolsos que bajaron el total (no son descuento)",
+    descuentosNota: "Solo descuentos comerciales (los que cuentan para el tope). Las bajas de tratamiento y los reembolsos «le cobré de más» van aparte.",
   },
   // Auditoría de uso C-02/C-03/C-30/C-32 (4-oct-2026): qué pasa con la factura al reembolsar.
   reembolso: {
@@ -66,6 +76,7 @@ const es = {
     pasoASaldo: "Pasó a saldo a favor",
     anticipoPorRecibir: "Anticipo pedido, sin recibir",
     exito: (estado: string) => `Reembolso registrado. La factura queda ${estado.toLowerCase()}.`,
+    quedaCancelada: "La factura queda cancelada: no se debe nada y el reembolso queda registrado.",
   },
   // C-13: «Nueva factura» avisa del saldo a favor que se le va a descontar.
   saldoAFavorEnEditor: (monto: string) => `Este paciente tiene ${monto} a favor: al crear la factura se descuentan solos y queda por cobrar el resto.`,
@@ -73,12 +84,14 @@ const es = {
   plan: {
     verCuotas: (n: number) => (n === 1 ? "Ver la cuota del plan" : `Ver las ${n} cuotas del plan`),
     verEngancheYCuotas: (n: number) => (n === 1 ? "Ver el enganche y la cuota del plan" : `Ver el enganche y las ${n} cuotas del plan`),
+    fechaEnganche: "Fecha del enganche",
   },
   // C-31: «Vence el» con una fecha que ya pasó.
   vencePasado: "Esa fecha ya pasó: la factura contará como vencida desde ya.",
   // C-15: el mismo dinero, la misma regla que «Registrar anticipo recibido».
   cobro: {
     faltaReferencia: "Para transferencia, escribe la referencia del depósito (clave de rastreo o folio).",
+    sinWhatsapp: "WhatsApp no está conectado: el comprobante no se le puede mandar. Al terminar puedes abrirlo e imprimirlo.",
   },
   // C-07: «Cobrar hoy» con doctor.
   doctorCobro: {
@@ -151,6 +164,15 @@ const en: Textos = {
     thDescuentoFactura: "Invoice discount",
     notaDescuento: "The discount shows once per invoice. In the cash count, «Discounts» is the part that belongs to what was collected in this shift.",
     csvDescuento: "Discount (share of this payment)",
+    cobradoHoyNota: "What came in today: payments minus refunds, without applied patient credit. The same figure as Finances › Today.",
+    sugeridoApertura: "Suggested (counted in the last cash count plus cash collected afterwards, not counted):",
+    historialVer: "See count",
+    historialTitulo: "Cash count",
+    historialOtros: "Card, transfer and others",
+    historialNota: "Snapshot saved when the shift closed. Payment rows are not stored with the count: see the period in Finances.",
+    historialNotas: "Count notes",
+    bajasYReembolsos: "Treatment write-offs and refunds that lowered the total (not discounts)",
+    descuentosNota: "Commercial discounts only (the ones that count toward the cap). Treatment write-offs and «overcharged» refunds are shown apart.",
   },
   reembolso: {
     queHacer: "What happens to the invoice?",
@@ -171,15 +193,18 @@ const en: Textos = {
     pasoASaldo: "Moved to patient credit",
     anticipoPorRecibir: "Deposit requested, not received",
     exito: (estado: string) => `Refund recorded. The invoice is now ${estado.toLowerCase()}.`,
+    quedaCancelada: "The invoice will be cancelled: nothing is owed and the refund is recorded.",
   },
   saldoAFavorEnEditor: (monto: string) => `This patient has ${monto} in credit: it's applied automatically when the invoice is created, and the rest stays due.`,
   plan: {
     verCuotas: (n: number) => (n === 1 ? "See the plan's installment" : `See the plan's ${n} installments`),
     verEngancheYCuotas: (n: number) => (n === 1 ? "See the down payment and the installment" : `See the down payment and the ${n} installments`),
+    fechaEnganche: "Down payment date",
   },
   vencePasado: "That date has already passed: the invoice will count as overdue right away.",
   cobro: {
     faltaReferencia: "For a bank transfer, enter the deposit reference (tracking key or folio).",
+    sinWhatsapp: "WhatsApp is not connected: the receipt can't be sent. When you finish you can open and print it.",
   },
   doctorCobro: {
     doctor: "Doctor",

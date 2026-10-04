@@ -81,6 +81,7 @@ interface CloseSummary {
   refunds:          number;
   netIncome?:       number;
   cashRefunds?:     number;
+  writeOffs?:       number;
   appliedCredit?:   number;
   toCredit?:        number;
   discounts:        number;
@@ -103,7 +104,7 @@ const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) 
 const netoDelTurno = (x: { netIncome?: number; totalIncome: number; refunds: number }) =>
   x.netIncome ?? Math.round((x.totalIncome - x.refunds) * 100) / 100;
 
-export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false, esDueno = false }: Props) {
+export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false, esDueno = false }: Props) {
   const t = useT();
   const qc = useQueCuenta();
   const txDinero = textosDinero(useLocale());
@@ -122,6 +123,14 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   const [showWithdrawal, setShowWithdrawal] = useState(false);
   const [showClose, setShowClose]           = useState(false);
   const [summary, setSummary]               = useState<CloseSummary | null>(null);
+  // C-06 (segunda auditoría): tras el 409 «entró efectivo», el diálogo se queda
+  // con la Caja FRESCA (GET /api/caja/current), no con la del render: antes
+  // seguía diciendo «Diferencia $0.00» y el segundo clic guardaba un faltante.
+  const [cajaFresca, setCajaFresca]         = useState<CajaState | null>(null);
+  useEffect(() => { setCajaFresca(null); }, [cajaProp]);
+  const caja = cajaFresca ?? cajaProp;
+  // N-15 (segunda auditoría): el corte del historial que se está viendo.
+  const [corteVisto, setCorteVisto]         = useState<CajaHistoryRow | null>(null);
   const [showHistory, setShowHistory]       = useState(false);
 
   // Form state — apertura
@@ -257,7 +266,10 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   const descuentoPorFila = useMemo(() => descuentoUnaVezPorFactura(caja.list), [caja.list]);
 
   // Facturación del día (siempre disponible, con o sin caja abierta).
-  const collectedToday = Math.max(0, caja.billedToday - caja.pendingToday);
+  // N-01 (segunda auditoría): lo que ENTRÓ hoy (cobros − reembolsos, sin saldo a
+  // favor aplicado), la cifra de Finanzas › Hoy. La cuenta vieja (facturado −
+  // por cobrar de las facturas creadas hoy) queda solo de respaldo.
+  const collectedToday = caja.cobradoHoy ?? Math.max(0, caja.billedToday - caja.pendingToday);
 
   // Diferencia en vivo dentro del modal de cierre.
   const countedNum = parseFloat(counted);
@@ -354,7 +366,13 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     }, (data) => {
       if (data?.code !== "CAJA_ESPERADO_CAMBIO") return false;
       setAvisoCierre(String(data.error ?? ""));
-      router.refresh();
+      // El esperado del servidor manda YA (aunque la lectura fresca tarde o falle).
+      const esperado = typeof data.expectedCash === "number" ? data.expectedCash : null;
+      if (esperado != null && caja.totals) setCajaFresca({ ...caja, totals: { ...caja.totals, expectedCash: esperado } });
+      fetch("/api/caja/current", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((fresca: CajaState | null) => { if (fresca?.totals) setCajaFresca(fresca); })
+        .catch(() => {});
       return true;
     });
     if (!res) return;
@@ -456,6 +474,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
         ${(s.appliedCredit ?? 0) > 0 ? line(esc(txDinero.caja.aplicadoSaldo), fmtMXNdec(s.appliedCredit ?? 0)) : ""}
         ${(s.toCredit ?? 0) > 0 ? line(esc(txDinero.caja.aSaldoFavor), fmtMXNdec(s.toCredit ?? 0)) : ""}
         ${line(t("cashRegister.kpiDiscounts"), fmtMXNdec(s.discounts))}
+        ${(s.writeOffs ?? 0) !== 0 ? line(esc(txDinero.caja.bajasYReembolsos), fmtMXNdec(s.writeOffs ?? 0)) : ""}
         ${line(t("cashRegister.kpiTax"), fmtMXNdec(s.tax))}
         ${line(t("cashRegister.kpiWithdrawals"), fmtMXNdec(s.withdrawals))}
         ${line(t("cashRegister.expectedCashLabel"), fmtMXNdec(s.expectedCash))}
@@ -469,6 +488,38 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
       </tr></thead><tbody>${rows || `<tr><td colspan="6" style="color:#999">${t("cashRegister.emptyList")}</td></tr>`}</tbody></table>
       <script>window.onload=function(){window.print();}</script>
       </body></html>`;
+    const w = window.open("", "_blank", "width=820,height=640");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  // N-15 (segunda auditoría): las cifras congeladas de un corte del historial.
+  function lineasDelCorte(h: CajaHistoryRow): Array<[string, string, boolean]> {
+    const v = (n: number | null) => (n == null ? "—" : fmtMXNdec(n));
+    return [
+      [t("cashRegister.kpiOpening"), v(h.openingBalance), false],
+      [t("cashRegister.methodCash"), v(h.cashIncome), false],
+      [txDinero.caja.historialOtros, v(h.otherIncome), false],
+      [t("cashRegister.kpiDiscounts"), v(h.discounts), false],
+      [t("cashRegister.kpiTax"), v(h.tax), false],
+      [t("cashRegister.kpiWithdrawals"), v(h.withdrawals), false],
+      [t("cashRegister.expectedCashLabel"), v(h.expectedCash), true],
+      [t("cashRegister.countedLabel"), v(h.countedClosingBalance), true],
+      [t("cashRegister.varianceLabel"), v(h.variance), true],
+    ];
+  }
+
+  function printCorte(h: CajaHistoryRow) {
+    const filas = lineasDelCorte(h)
+      .map(([l, val]) => `<tr><td style="padding:2px 12px 2px 0;color:#555">${esc(l)}</td><td style="text-align:right;font-weight:600">${esc(val)}</td></tr>`)
+      .join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(txDinero.caja.historialTitulo)}</title>
+      <style>body{font-family:system-ui,Arial,sans-serif;padding:24px;color:#111;font-size:13px}h1{font-size:18px;margin:0 0 4px}table{border-collapse:collapse}</style>
+      </head><body><h1>${esc(txDinero.caja.historialTitulo)}</h1>
+      <div style="color:#666">${fmtDateTime(h.openedAt)} → ${h.closedAt ? fmtDateTime(h.closedAt) : "—"} · ${esc(h.operatorName)}</div>
+      <table style="margin-top:12px">${filas}</table>
+      ${h.closingNotes ? `<p>${esc(txDinero.caja.historialNotas)}: ${esc(h.closingNotes)}</p>` : ""}
+      <p style="color:#666">${esc(txDinero.caja.historialNota)}</p>
+      <script>window.onload=function(){window.print();}</script></body></html>`;
     const w = window.open("", "_blank", "width=820,height=640");
     if (w) { w.document.write(html); w.document.close(); }
   }
@@ -545,6 +596,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
           onWithdrawal={() => { setWPin(""); setShowWithdrawal(true); }}
           onClose={() => { setAvisoCierre(null); setShowClose(true); }}
           onDownloadCsv={downloadVentasCsv}
+          onVerCorte={setCorteVisto}
         />
       ) : (
       <>
@@ -590,7 +642,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
               <KpiCard label="Facturado hoy" value={fmtMXNdec(caja.billedToday)}  icon={Receipt} />
-              <KpiCard label="Cobrado hoy"   value={fmtMXNdec(collectedToday)}    icon={TrendingUp} hero />
+              <KpiCard label="Cobrado hoy"   value={fmtMXNdec(collectedToday)}    icon={TrendingUp} hero hint={caja.cobradoHoy != null ? txDinero.caja.cobradoHoyNota : undefined} />
               <KpiCard label="Por cobrar de hoy" value={fmtMXNdec(caja.pendingToday)} icon={Wallet} />
               <KpiCard
                 label="Vencido"
@@ -674,7 +726,10 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 {(totals.cashRefunds ?? 0) > 0 && (
                   <KpiCard label={txDinero.caja.reembolsosEfectivo} value={`−${fmtMXNdec(totals.cashRefunds ?? 0)}`} icon={Undo2} />
                 )}
-                <KpiCard label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(totals.discounts)}        icon={Percent} />
+                <KpiCard label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(totals.discounts)}        icon={Percent} hint={(totals.writeOffs ?? 0) !== 0 ? txDinero.caja.descuentosNota : undefined} />
+                {(totals.writeOffs ?? 0) !== 0 && (
+                  <KpiCard label={txDinero.caja.bajasYReembolsos} value={fmtMXNdec(totals.writeOffs ?? 0)} icon={Percent} />
+                )}
                 <KpiCard label={t("cashRegister.kpiTax")}          value={fmtMXNdec(totals.tax)}              icon={Receipt} />
                 <KpiCard label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(totals.withdrawals)}      icon={ArrowDownCircle} />
                 <KpiCard label={t("cashRegister.kpiExpectedCash")} value={fmtMXNdec(totals.expectedCash)}     icon={Banknote} />
@@ -830,7 +885,13 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                       <tbody>
                         {history.map(h => (
                           <tr key={h.id}>
-                            <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{fmtDateTime(h.openedAt)}</td>
+                            <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>
+                              {/* N-15: el corte se abre (y se reimprime) desde aquí. */}
+                              <button type="button" onClick={() => setCorteVisto(h)} title={txDinero.caja.historialVer}
+                                style={{ background: "none", border: "none", padding: 0, color: "var(--brand)", textDecoration: "underline", cursor: "pointer", font: "inherit" }}>
+                                {fmtDateTime(h.openedAt)}
+                              </button>
+                            </td>
                             <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{h.closedAt ? fmtDateTime(h.closedAt) : "—"}</td>
                             <td style={{ color: "var(--text-2)" }}>{h.operatorName}</td>
                             <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(h.openingBalance)}</td>
@@ -894,7 +955,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <input type="number" min={0} step="0.01" className="input-new" placeholder="0.00"
                     value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
                   <span style={{ color: "var(--text-3)", fontSize: 12, marginTop: 4 }}>
-                    Sugerido por el efectivo de hoy aún no cuadrado:{" "}
+                    {txDinero.caja.sugeridoApertura}{" "}
                     <span style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(caja.suggestedOpening)}</span>
                   </span>
                 </div>
@@ -1038,6 +1099,38 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
         </div>
       )}
 
+      {/* ── Modal: un corte del historial (N-15, segunda auditoría): verlo y reimprimirlo ── */}
+      {corteVisto && (
+        <div className="modal-overlay" onClick={() => setCorteVisto(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-label={txDinero.caja.historialTitulo}>
+            <div className="modal__header">
+              <div className="modal__title">{txDinero.caja.historialTitulo}</div>
+              <button onClick={() => setCorteVisto(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}><X size={16} strokeWidth={1.75} /></button>
+            </div>
+            <div className="modal__body">
+              <div style={{ color: "var(--text-3)", fontSize: 12.5, marginBottom: 14 }}>
+                {fmtDateTime(corteVisto.openedAt)} → {corteVisto.closedAt ? fmtDateTime(corteVisto.closedAt) : "—"} · {corteVisto.operatorName}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 14 }}>
+                {lineasDelCorte(corteVisto).map(([label, valor, fuerte]) => (
+                  <SumRow key={label} label={label} value={valor} strong={fuerte} rediseno={rediseno} />
+                ))}
+              </div>
+              {corteVisto.closingNotes && (
+                <p style={{ color: "var(--text-2)", fontSize: 12.5, margin: "0 0 10px" }}>{txDinero.caja.historialNotas}: {corteVisto.closingNotes}</p>
+              )}
+              <p style={{ color: "var(--text-3)", fontSize: 12, margin: 0 }}>{txDinero.caja.historialNota}</p>
+            </div>
+            <div className="modal__footer">
+              <ButtonNew variant="secondary" type="button" icon={<Printer size={16} strokeWidth={1.75} />} onClick={() => printCorte(corteVisto)}>
+                {t("cashRegister.print")}
+              </ButtonNew>
+              <ButtonNew variant="primary" type="button" onClick={() => setCorteVisto(null)}>{t("common.close")}</ButtonNew>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal: Resumen del corte (post-cierre) ── */}
       {summary && (
         <div className="modal-overlay" onClick={() => setSummary(null)}>
@@ -1050,7 +1143,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
               <div style={{ color: "var(--text-3)", fontSize: 12.5, marginBottom: 14 }}>
                 {fmtDateTime(summary.openedAt)} → {fmtDateTime(summary.closedAt)}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 18 }}>
+              {/* N-15 (segunda auditoría): celdas más anchas, sin recortar «Efectivo esperado». */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 18 }}>
                 <SumRow label={t("cashRegister.kpiOpening")}      value={fmtMXNdec(summary.openingBalance)} rediseno={rediseno} />
                 <SumRow label={t("cashRegister.kpiIncome")}       value={fmtMXNdec(netoDelTurno(summary))} rediseno={rediseno} />
                 <SumRow label={t("cashRegister.methodCash")}      value={fmtMXNdec(summary.cashIncome)} rediseno={rediseno} />
@@ -1066,6 +1160,16 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <SumRow label={txDinero.caja.reembolsosEfectivo} value={`−${fmtMXNdec(summary.cashRefunds ?? 0)}`} rediseno={rediseno} />
                 )}
                 <SumRow label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(summary.discounts)} rediseno={rediseno} />
+                {(summary.writeOffs ?? 0) !== 0 && (
+                  <SumRow label={txDinero.caja.bajasYReembolsos} value={fmtMXNdec(summary.writeOffs ?? 0)} rediseno={rediseno} />
+                )}
+                {/* N-15: las líneas de saldo a favor que trae el arqueo, también aquí. */}
+                {(summary.appliedCredit ?? 0) > 0 && (
+                  <SumRow label={txDinero.caja.aplicadoSaldo} value={fmtMXNdec(summary.appliedCredit ?? 0)} rediseno={rediseno} />
+                )}
+                {(summary.toCredit ?? 0) > 0 && (
+                  <SumRow label={txDinero.caja.aSaldoFavor} value={fmtMXNdec(summary.toCredit ?? 0)} rediseno={rediseno} />
+                )}
                 <SumRow label={t("cashRegister.kpiTax")}          value={fmtMXNdec(summary.tax)} rediseno={rediseno} />
                 <SumRow label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(summary.withdrawals)} rediseno={rediseno} />
                 <SumRow label={t("cashRegister.expectedCashLabel")} value={fmtMXNdec(summary.expectedCash)} strong rediseno={rediseno} />

@@ -67,6 +67,8 @@ export interface CajaNuevaProps {
   varianceTone: (v: number) => "success" | "info" | "danger";
   showHistory:     boolean;
   onToggleHistory: () => void;
+  /** N-15 (segunda auditoría): abrir un corte del historial (ver y reimprimir). */
+  onVerCorte?: (h: CajaHistoryRow) => void;
   onOpen:       () => void;
   onWithdrawal: () => void;
   onClose:      () => void;
@@ -153,7 +155,9 @@ export function CajaNueva(p: CajaNuevaProps) {
           {/* ── Hoy en la clínica: las cuatro cifras del día, en una tira ── */}
           <section className={`${s.tarjeta} ${s.tira}`} aria-label={t("cashRegister.nueva.hoy")}>
             <Cifra etiqueta={t("cashRegister.nueva.facturadoHoy")} icono={Receipt}       valor={fmtMXNdec(caja.billedToday)} />
-            <Cifra etiqueta={t("cashRegister.nueva.cobradoHoy")}   icono={TrendingUp}    valor={fmtMXNdec(p.collectedToday)} hero />
+            {/* N-01 (segunda auditoría): lo que ENTRÓ hoy, con su «qué cuenta». */}
+            <Cifra etiqueta={t("cashRegister.nueva.cobradoHoy")}   icono={TrendingUp}    valor={fmtMXNdec(p.collectedToday)} hero
+              nota={caja.cobradoHoy != null ? txDinero.caja.cobradoHoyNota : undefined} />
             <Cifra etiqueta={t("cashRegister.nueva.porCobrar")}    icono={Wallet}        valor={fmtMXNdec(caja.pendingToday)} />
             <Cifra etiqueta={t("cashRegister.nueva.vencido")}      icono={AlertTriangle} valor={fmtMXNdec(caja.overdueToday)} peligro={caja.overdueToday > 0}
               // ws1-t2 (C-23): de dónde sale este «Vencido» (toda la clínica, también ortodoncia).
@@ -170,7 +174,7 @@ export function CajaNueva(p: CajaNuevaProps) {
                 {/* La cifra con la que se prefija la apertura: hoy solo se ve
                     dentro del modal. Aquí se adelanta; el valor es el mismo. */}
                 <p className={s.cerradaSugerido}>
-                  {t("cashRegister.nueva.sugerido")} <strong>{fmtMXNdec(caja.suggestedOpening)}</strong>
+                  {txDinero.caja.sugeridoApertura} <strong>{fmtMXNdec(caja.suggestedOpening)}</strong>
                 </p>
                 <ButtonNew variant="primary" icon={<Wallet size={16} strokeWidth={1.75} />} onClick={p.onOpen}>
                   {t("cashRegister.openCta")}
@@ -239,6 +243,10 @@ export function CajaNueva(p: CajaNuevaProps) {
                       <Linea etiqueta={txDinero.caja.aSaldoFavor} valor={fmtMXNdec(totals.toCredit ?? 0)} />
                     )}
                     <Linea etiqueta={t("cashRegister.kpiDiscounts")} valor={fmtMXNdec(totals.discounts)} />
+                    {/* C-17 (segunda auditoría): las bajas ya no se mezclan con los descuentos. */}
+                    {(totals.writeOffs ?? 0) !== 0 && (
+                      <Linea etiqueta={txDinero.caja.bajasYReembolsos} valor={fmtMXNdec(totals.writeOffs ?? 0)} />
+                    )}
                     <Linea etiqueta={t("cashRegister.kpiTax")}       valor={fmtMXNdec(totals.tax)} />
                   </div>
                 </div>
@@ -335,7 +343,14 @@ export function CajaNueva(p: CajaNuevaProps) {
                       <tbody>
                         {history.map(h => (
                           <tr key={h.id}>
-                            <td className={s.tablaHora}>{p.fmtDateTime(h.openedAt)}</td>
+                            <td className={s.tablaHora}>
+                              {/* N-15: el corte se abre (y se reimprime) desde aquí. */}
+                              {p.onVerCorte ? (
+                                <button type="button" className={s.historialBoton} onClick={() => p.onVerCorte?.(h)} title={txDinero.caja.historialVer}>
+                                  {p.fmtDateTime(h.openedAt)}
+                                </button>
+                              ) : p.fmtDateTime(h.openedAt)}
+                            </td>
                             <td className={s.tablaHora}>{h.closedAt ? p.fmtDateTime(h.closedAt) : "—"}</td>
                             <td className={s.tablaTexto}>{h.operatorName}</td>
                             <td className={s.historialCifra}>{fmtMXNdec(h.openingBalance)}</td>

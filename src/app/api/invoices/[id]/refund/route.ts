@@ -16,6 +16,7 @@ import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { esMetodoDeDevolucion, METODOS_DE_DEVOLUCION } from "@/lib/dinero/reembolsos";
 import { efectoDelReembolso, esDestinoDeReembolso, type DestinoDeReembolso } from "@/lib/dinero/reembolso-destino";
 import { reajustarAlTotal } from "@/lib/invoices/reajustar-total";
+import { lineaDeBaja } from "@/lib/dinero/bajas";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -140,13 +141,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const cancelada = efecto.estado === "CANCELLED";
     const reajuste = !cancelada && efecto.bajaDelTotal > 0 ? reajustarAlTotal(invoice, efecto.total) : null;
     const newTotal = reajuste ? reajuste.total : invoice.total;
-    const newBalance = cancelada ? round2(invoice.total) : round2(Math.max(0, newTotal - newPaid));
+    // N-14 (segunda auditoría): la cancelada por devolver todo no debe nada: saldo 0
+    // (antes guardaba total y saldo de $600 y ensuciaba «nota con saldo»).
+    const newBalance = cancelada ? 0 : round2(Math.max(0, newTotal - newPaid));
     const newStatus  =
       cancelada ? "CANCELLED" :
       newPaid <= 0 ? "PENDING" :
       newBalance > 0 ? "PARTIAL" : "PAID";
+    // C-17 (segunda auditoría): la baja del total se marca para que Caja no la
+    // cuente como descuento comercial (lib/dinero/bajas.ts).
     const lineaNota = cancelada
       ? `[CANCELADA: se devolvió todo lo pagado (${amountRaw.toFixed(2)})${reason ? `: ${reason}` : ""}]`
+      : reajuste
+      ? lineaDeBaja(round2(invoice.total - reajuste.total), destino === "baja_total" ? "reembolso por cobro de más" : "el tratamiento no siguió")
       : null;
 
     await tx.payment.create({
