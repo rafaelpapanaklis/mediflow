@@ -33,6 +33,9 @@ import {
   listarMensualidadesPorCobrar,
   type MensualidadPorCobrar,
 } from "@/app/actions/orthodontics/recepcion/listarMensualidadesPorCobrar";
+// ws1-t2 (C-22, C-23): la cabecera cuenta CUOTAS y separa lo vencido de lo próximo.
+import { desgloseDeCuotas, resumenDeMensualidades, rotuloDeCuotas } from "@/lib/orthodontics/resumen-mensualidades";
+import { QueCuenta } from "@/components/dashboard/que-cuenta";
 // ws1-t4: «Cobrar» abre la ventana completa de la factura, no la de cobro suelta.
 import { CobrarEnFactura } from "@/components/dashboard/billing/cobrar-en-factura";
 
@@ -112,9 +115,10 @@ export function ListaMensualidades({
 
   if (!items || items.length === 0) return null;
 
-  const total = items.reduce((s, it) => s + it.monto, 0);
-  // ws1-t4 #84: cuotas vencidas (no filas): el mismo criterio que el aviso de Hoy.
-  const vencidas = items.filter((it) => it.estado === "vencida").reduce((n, it) => n + Math.max(1, it.cantidadVencidas), 0);
+  // ws1-t2 (auditoría de uso C-22 y C-23): decía «14 mensualidades por cobrar ·
+  // 15 vencidas» (filas arriba, cuotas en la pastilla) y un «Total» que mezclaba
+  // lo vencido con lo de la semana. Ahora todo en cuotas, y el dinero separado.
+  const resumen = resumenDeMensualidades(items);
   const grupos = agrupar(items);
 
   function iniciarCobro(grupo: MensualidadPorCobrar[]) {
@@ -135,20 +139,24 @@ export function ListaMensualidades({
         <div className={av.textos}>
           <p className={av.ceja}>Ortodoncia</p>
           <h2 id="mensualidades-ortodoncia-titulo" className={av.listaTitulo}>
-            {items.length === 1 ? "1 mensualidad" : `${items.length} mensualidades`} por cobrar
-            {vencidas > 0 && (
+            {rotuloDeCuotas(resumen.cuotas)}
+            {resumen.vencidas > 0 && (
               <>
                 {" "}
                 <BadgeNew tone="danger" dot>
-                  {vencidas === 1 ? "1 vencida" : `${vencidas} vencidas`}
+                  {resumen.vencidas === 1 ? "1 vencida" : `${resumen.vencidas} vencidas`}
                 </BadgeNew>
               </>
             )}
           </h2>
+          <span className={av.venceRotulo}>{desgloseDeCuotas(resumen)}</span>
         </div>
         <div className={av.listaTotal}>
-          <span className={av.listaTotalRotulo}>Total</span>
-          <span className={av.listaTotalCifra}>{fmtMoney(total)}</span>
+          <span className={av.listaTotalRotulo}>Vencido</span>
+          <span className={av.listaTotalCifra}>{fmtMoney(resumen.montoVencido)}</span>
+          {resumen.montoTotal !== resumen.montoVencido && (
+            <span className={av.listaTotalRotulo}>Con lo de esta semana: {fmtMoney(resumen.montoTotal)}</span>
+          )}
         </div>
       </header>
 
@@ -193,6 +201,11 @@ export function ListaMensualidades({
           );
         })}
       </ul>
+
+      {/* ws1-t2 (C-23): de dónde sale este «Vencido» y cómo se relaciona con el de Caja. */}
+      <p className={av.siguiente}>
+        <span><QueCuenta clave="ortoMensualidades" /></span>
+      </p>
 
       {cobrandoCola && cobrandoCola.length > 0 && (
         <CobrarEnFactura

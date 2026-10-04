@@ -19,7 +19,9 @@ export type ClaveQueCuenta =
   // ws1-t2 (auditoría de dinero F4/F8): la historia migrada aparte, Caja e Inicio.
   | "historiaMigrada" | "cajaHistoriaMigrada" | "inicioIngresos"
   // ws1-t2 (auditoría de uso C-08, C-11, C-26): Ortodoncia por doctor, citas y ocupación.
-  | "ortoPorDoctor" | "citasDelPeriodo" | "ocupacion";
+  | "ortoPorDoctor" | "citasDelPeriodo" | "ocupacion"
+  // ws1-t2 (auditoría de uso C-21..C-24): Caja › Facturas, Caja › Ortodoncia y el Hoy de recepción.
+  | "cajaPagado" | "cajaFacturasMes" | "cajaVencido" | "ortoMensualidades";
 
 /** El texto plano (para los componentes que solo aceptan `string`, como las tarjetas de Analítica). */
 export function useQueCuenta() {

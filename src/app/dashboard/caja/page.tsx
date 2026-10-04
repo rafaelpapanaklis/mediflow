@@ -100,7 +100,10 @@ export default async function CajaPage() {
   const [paidAgg, totalInvoices, monthInvoices, rediseno, historiaMigrada] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { paid: true },    where: issued }),
     prisma.invoice.count({ where: { clinicId: user.clinicId } }),
-    prisma.invoice.count({ where: { clinicId: user.clinicId, createdAt: { gte: monthStart } } }),
+    // ws1-t2 (auditoría de uso C-21): las facturas EMITIDAS del mes (sin
+    // borradores ni canceladas), la misma cifra que «Ventas» de Finanzas.
+    // Contaba todas y salía «Este mes 37» contra «Ventas 34».
+    prisma.invoice.count({ where: { ...issued, createdAt: { gte: monthStart } } }),
     menuDosNivelesEncendido(user.clinicId),
     // ws1-t2 (auditoría de dinero F8): de lo `paid`, lo que se pagó ANTES de
     // DaleControl (facturas migradas con `paid` y sin cobros aquí). Se enseña

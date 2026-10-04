@@ -7,6 +7,7 @@ import {
   fetchPendingValidation,
 } from "@/lib/agenda/server";
 import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
+import { computeReceivables } from "@/lib/caja";
 import type {
   HomeActionItem,
   HomeReceptionistData,
@@ -77,9 +78,11 @@ export async function GET() {
     actionItems.push({
       id: "overdue-invoices",
       tone: "danger",
+      // ws1-t2 (auditoría de uso C-24): la MISMA cifra que el aviso del dueño y
+      // el «Vencido» de Caja, y dicha igual («vencidas», no «por cobrar»).
       title: `${overdueInvoices.count} factura${
         overdueInvoices.count === 1 ? "" : "s"
-      } por cobrar · $${formatMxn(overdueInvoices.total)}`,
+      } vencida${overdueInvoices.count === 1 ? "" : "s"} · $${formatMxn(overdueInvoices.total)}`,
       cta: {
         label: "Registrar pago",
         href: "/dashboard/billing?filter=overdue",
@@ -152,28 +155,21 @@ async function countUnreadWhatsapp(_clinicId: string): Promise<number> {
   return 0;
 }
 
+/**
+ * Facturas VENCIDAS con el mismo cálculo que el aviso del dueño, Caja y
+ * Finanzas (`computeReceivables`, ws1-t2 · auditoría de uso C-24): sin
+ * borradores, por cuota en las facturas a plazos, con los cargos de control de
+ * ortodoncia y con «hoy» en la zona de la clínica. Antes contaba a mano
+ * `total − paid` de las facturas con `dueDate` pasada (con borradores, sin
+ * cuotas ni controles) y recepción veía «1 factura por cobrar · $800» mientras
+ * el dueño veía «15 vencidas · $66,900».
+ */
 async function sumOverdueInvoices(
   clinicId: string,
 ): Promise<{ count: number; total: number }> {
-  const now = new Date();
-  const rows = await prisma.invoice.findMany({
-    where: {
-      clinicId,
-      status: { notIn: ["CANCELLED"] },
-      dueDate: { lt: now },
-    },
-    select: { total: true, paid: true },
-  });
-  let count = 0;
-  let total = 0;
-  for (const r of rows) {
-    const remaining = Number(r.total) - Number(r.paid ?? 0);
-    if (remaining > 0) {
-      count += 1;
-      total += remaining;
-    }
-  }
-  return { count, total };
+  const saldos = await computeReceivables(clinicId, new Date());
+  const count = Object.values(saldos.vencidoPorFactura).filter((v) => v > 0.005).length;
+  return { count, total: saldos.vencido };
 }
 
 function formatMxn(n: number): string {

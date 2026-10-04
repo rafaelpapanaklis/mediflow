@@ -13,6 +13,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXNdec } from "@/lib/format";
 import { useLocale, useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { textosDinero } from "@/lib/dinero/textos";
 import { descuentoUnaVezPorFactura } from "@/lib/dinero/caja-core";
 import { BillingClient } from "../billing/billing-client";
@@ -104,6 +105,7 @@ const netoDelTurno = (x: { netIncome?: number; totalIncome: number; refunds: num
 
 export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false, esDueno = false }: Props) {
   const t = useT();
+  const qc = useQueCuenta();
   const txDinero = textosDinero(useLocale());
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -595,7 +597,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 value={fmtMXNdec(caja.overdueToday)}
                 icon={AlertTriangle}
                 // Solo si `computeReceivables` tocó su techo de lectura: la cifra es un mínimo.
-                hint={caja.receivablesIncompleto ? t("billing.billingClient.partialReceivablesShort") : undefined}
+                // ws1-t2 (C-23): de dónde sale este «Vencido» (toda la clínica, también ortodoncia).
+                hint={caja.receivablesIncompleto ? t("billing.billingClient.partialReceivablesShort") : qc("cajaVencido")}
               />
             </div>
           </div>

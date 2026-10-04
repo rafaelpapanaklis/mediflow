@@ -32,6 +32,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXNdec } from "@/lib/format";
 import { useLocale, useT } from "@/i18n/i18n-provider";
+import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { textosDinero } from "@/lib/dinero/textos";
 import { descuentoUnaVezPorFactura } from "@/lib/dinero/caja-core";
 import type { CajaState, CajaHistoryRow } from "@/lib/caja";
@@ -74,6 +75,7 @@ export interface CajaNuevaProps {
 
 export function CajaNueva(p: CajaNuevaProps) {
   const t = useT();
+  const qc = useQueCuenta();
   const txDinero = textosDinero(useLocale());
   const { caja, history, tab } = p;
   // C-17: el descuento de cada factura, una vez, en su primer cobro de la lista.
@@ -154,7 +156,8 @@ export function CajaNueva(p: CajaNuevaProps) {
             <Cifra etiqueta={t("cashRegister.nueva.cobradoHoy")}   icono={TrendingUp}    valor={fmtMXNdec(p.collectedToday)} hero />
             <Cifra etiqueta={t("cashRegister.nueva.porCobrar")}    icono={Wallet}        valor={fmtMXNdec(caja.pendingToday)} />
             <Cifra etiqueta={t("cashRegister.nueva.vencido")}      icono={AlertTriangle} valor={fmtMXNdec(caja.overdueToday)} peligro={caja.overdueToday > 0}
-              nota={caja.receivablesIncompleto ? t("billing.billingClient.partialReceivablesShort") : undefined} />
+              // ws1-t2 (C-23): de dónde sale este «Vencido» (toda la clínica, también ortodoncia).
+              nota={caja.receivablesIncompleto ? t("billing.billingClient.partialReceivablesShort") : qc("cajaVencido")} />
           </section>
 
           {!abierta || !reg || !totals ? (

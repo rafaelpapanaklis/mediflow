@@ -15,7 +15,7 @@ import { InvoiceCfdiBadge } from "@/components/dashboard/billing/invoice-cfdi-ba
 import { invoiceStatusBadge, isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { InvoiceEditorModal } from "@/components/billing/invoice-editor-modal";
 import { useT, useLocale } from "@/i18n/i18n-provider";
-import { QueCuenta } from "@/components/dashboard/que-cuenta";
+import { QueCuenta, useQueCuenta } from "@/components/dashboard/que-cuenta";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { todayLocalISO } from "@/lib/billing/paid-at";
@@ -74,6 +74,7 @@ function patientNameOf(inv: any): string {
 
 export function BillingClient({ invoices: initial, patients, totalPaid, historiaMigrada = 0, totalPending, totalOverdue, monthInvoices, totalInvoices, overdueByInvoice, receivablesIncompleto = false, creditTotal = 0, clinic, cfdiLive = false, rediseno = false, puedeEditarFacturas = false }: Props) {
   const t = useT();
+  const qc = useQueCuenta();
   const locale = useLocale();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
@@ -237,10 +238,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, historia
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label={t("billing.billingClient.kpiTotalCollected")} value={fmtMXN(totalPaid)}       icon={CheckCircle2} />
-        <KpiCard label={t("billing.billingClient.kpiToCollect")}      value={fmtMXN(totalPending)}    icon={Clock} />
-        <KpiCard label={t("billing.billingClient.kpiOverdue")}        value={fmtMXN(totalOverdue)}    icon={AlertCircle} />
-        <KpiCard label={t("billing.billingClient.kpiThisMonth")}      value={String(monthInvoices)}   icon={FileText} />
+        {/* ws1-t2 (auditoría de uso C-21, C-23): cada cifra dice qué cuenta. «Pagado en facturas» no es
+            el ingreso de un periodo (ese vive en Finanzas) y «Facturas del mes» es la «Ventas» de Finanzas. */}
+        <KpiCard label={t("billing.billingClient.kpiTotalCollected")} value={fmtMXN(totalPaid)}       icon={CheckCircle2} hint={qc("cajaPagado")} />
+        <KpiCard label={t("billing.billingClient.kpiToCollect")}      value={fmtMXN(totalPending)}    icon={Clock} hint={qc("porCobrar")} />
+        <KpiCard label={t("billing.billingClient.kpiOverdue")}        value={fmtMXN(totalOverdue)}    icon={AlertCircle} hint={qc("cajaVencido")} />
+        <KpiCard label={t("billing.billingClient.kpiThisMonth")}      value={String(monthInvoices)}   icon={FileText} hint={qc("cajaFacturasMes")} />
         {creditTotal > 0 && (
           <KpiCard label={t("billing.billingClient.kpiCredit")}       value={fmtMXN(creditTotal)}     icon={Wallet} />
         )}
