@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
 
 export const dynamic = "force-dynamic";
@@ -12,14 +13,13 @@ export const dynamic = "force-dynamic";
  * df_ver_como cambió desde que se pintó, para confirmar con la verdad del
  * servidor (admin_impersonation_sessions) antes de bloquear la pestaña. No pide
  * sesión de admin: habla solo de la sesión que el propio navegador trae, y a
- * un usuario normal le contesta «no».
+ * un usuario normal le contesta «no». Pasa por getAuthContext (el gate de 2FA
+ * y de sesión terminada) como cualquier ruta del panel.
  */
 export async function GET() {
   const sinCache = { headers: { "Cache-Control": "no-store" } };
-  const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return NextResponse.json({ activa: false }, sinCache);
-  const estado = await estadoSuplantacionDe(supabase);
+  if (!(await getAuthContext())) return NextResponse.json({ activa: false }, sinCache);
+  const estado = await estadoSuplantacionDe(createClient());
   if (estado.tipo !== "activa") return NextResponse.json({ activa: false }, sinCache);
   const clinica = await prisma.clinic.findUnique({
     where: { id: estado.fila.clinicId },

@@ -101,6 +101,10 @@ mock.module("@/lib/admin/supabase-admin", {
     }),
   },
 });
+// GET /api/admin/impersonate/estado pasa por el gate como cualquier ruta del panel.
+mock.module("@/lib/auth-context", {
+  namedExports: { getAuthContext: async () => (tokenDeSesion ? { userId: "u", clinicId: "c1" } : null) },
+});
 mock.module("@/lib/admin-auth", {
   namedExports: { getAdminSession: async () => ({ user: { id: "adm-1", email: "admin@dalecontrol.com", role: "ADMIN" } }) },
 });
@@ -441,6 +445,9 @@ test("punto 2: GET /api/admin/impersonate/estado dice la verdad del servidor", a
   assert.equal(j.activa, true);
   assert.equal(j.id, "i3");
   assert.equal(j.clinica, "Clínica QA");
+  const src = readFileSync(join(__dirname, "..", "..", "..", "app", "api", "admin", "impersonate", "estado", "route.ts"), "utf8");
+  assert.match(src, /getAuthContext\(\)/, "pasa por el gate de 2FA");
+  assert.doesNotMatch(src, /\.auth\.getUser\s*\(/, "no lee la sesión por su cuenta (test:2fa-toda-sesion)");
 });
 
 test("punto 2: el vigía va en TODA pestaña del panel, con o sin suplantación (cableado)", () => {
