@@ -18,6 +18,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useLocale } from "@/i18n/i18n-provider";
 import { fmtMXNdec } from "@/lib/format";
 import { textosDinero } from "@/lib/dinero/textos";
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 import type { CobroFueraDeCorte } from "@/lib/caja";
 import s from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 
@@ -37,13 +38,9 @@ export function CobrosFueraDeCorte({
   const [todos, setTodos] = useState(false);
   if (!cobros || cobros.length === 0) return null;
 
-  const fecha = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: timezone });
-    } catch {
-      return new Date(iso).toLocaleString("es-MX");
-    }
-  };
+  // F-06 (comprobación final): EL formato del panel («3 oct 2026, 11:45 p.m.»), no «03-oct, 11:45 p.m.».
+  // fechaHoraPanel ya cae a la zona del navegador si la de la clínica no es válida.
+  const fecha = (iso: string) => fechaHoraPanel(iso, timezone);
 
   async function asignar(paymentId: string) {
     if (enviando) return;

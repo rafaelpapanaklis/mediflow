@@ -21,6 +21,7 @@ import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 import { reembolsosEnEfectivoDelCorte, type MovimientosDelCorte } from "@/lib/dinero/corte-del-historial";
 import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
@@ -108,7 +109,8 @@ const netoDelTurno = (x: { netIncome?: number; totalIncome: number; refunds: num
 export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false, esDueno = false }: Props) {
   const t = useT();
   const qc = useQueCuenta();
-  const txDinero = textosDinero(useLocale());
+  const locale = useLocale();
+  const txDinero = textosDinero(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -200,8 +202,8 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
 
   const fmtTime = (iso: string) =>
     new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: tz });
-  const fmtDateTime = (iso: string) =>
-    new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tz });
+  // F-06 (comprobación final): EL formato del panel («4 oct 2026, 8:36 a.m.»), no «04-oct, 08:36 a.m.».
+  const fmtDateTime = (iso: string) => fechaHoraPanel(iso, tz, locale);
   /** "27 jul" — prefijo de día en las filas cuando el turno cruza días. */
   const fmtDayShort = (iso: string) =>
     new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: tz });

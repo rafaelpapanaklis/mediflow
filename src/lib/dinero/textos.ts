@@ -88,6 +88,7 @@ const es = {
     exito: (estado: string) => `Reembolso registrado. La factura queda ${estado.toLowerCase()}.`,
     quedaCancelada: "La factura queda cancelada: no se debe nada y el reembolso queda registrado.",
     sinCargos: "Sin cargos vigentes.",
+    sinCargosConCredito: "Sin cargos vigentes. Su saldo a favor se usa en su próxima factura.",
     sinCargosConSaldo: (monto: string) => `Sin cargos vigentes: lo que pagó (${monto}) pasó a su saldo a favor.`,
   },
   // C-13: «Nueva factura» avisa del saldo a favor que se le va a descontar.
@@ -218,6 +219,7 @@ const en: Textos = {
     exito: (estado: string) => `Refund recorded. The invoice is now ${estado.toLowerCase()}.`,
     quedaCancelada: "The invoice will be cancelled: nothing is owed and the refund is recorded.",
     sinCargos: "No current charges.",
+    sinCargosConCredito: "No current charges. Their credit balance is used on their next invoice.",
     sinCargosConSaldo: (monto: string) => `No current charges: what they paid (${monto}) went to their credit balance.`,
   },
   saldoAFavorEnEditor: (monto: string) => `This patient has ${monto} in credit: it's applied automatically when the invoice is created, and the rest stays due.`,

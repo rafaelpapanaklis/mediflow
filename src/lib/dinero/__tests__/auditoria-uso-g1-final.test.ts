@@ -150,3 +150,18 @@ test("B1 · en el celular el pie del detalle va en una fila que se desliza", () 
   const css = leer("src/components/dashboard/factura-rediseno/factura-rediseno.module.css");
   assert.match(css, /@media \(max-width: 640px\) \{\s*\.raiz \.pie:not\(\.pieApilado\) \{\s*flex-wrap: nowrap;[\s\S]*?overflow-x: auto;/);
 });
+
+// ── Comprobación final antes del push ───────────────────────────────────────
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
+test("F4 (resto) · la tarjeta «Estado de cuenta» de la pestaña Facturación no pinta «Pagado $0 · 0 %» sin cargos vigentes", () => {
+  const sc = leer("src/components/dashboard/patient-detail/side-cards.tsx");
+  assert.match(sc, /const sinCargosVigentes = finance\.total <= 0 && finance\.balance <= 0;/);
+  assert.match(sc, /\{sinCargosVigentes \? \(\s*<div className=\{styles\.financeBarLabel\} data-sin-cargos>/);
+  assert.match(sc, /\{!sinCargosVigentes && \(\s*<>\s*<div className=\{styles\.financeBar\}>/, "sin barra ni «0 %»");
+});
+
+test("F-06 · las fechas de Caja usan el formato del panel: «3 oct 2026, 11:45 p.m.» (antes «03-oct, 11:45 p.m.»)", () => {
+  assert.equal(fechaHoraPanel("2026-10-04T05:45:00Z", "America/Mexico_City"), "3 oct 2026, 11:45 p.m.");
+  assert.match(leer("src/app/dashboard/caja/caja-client.tsx"), /const fmtDateTime = \(iso: string\) => fechaHoraPanel\(iso, tz, locale\);/);
+  assert.match(leer("src/components/dashboard/billing/caja-fuera-de-corte.tsx"), /const fecha = \(iso: string\) => fechaHoraPanel\(iso, timezone\);/);
+});

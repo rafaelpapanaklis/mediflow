@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Receipt, BellRing, BellOff, MessageCircle, CheckCircle2, Send } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { textosDinero } from "@/lib/dinero/textos";
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT, useLocale } from "@/i18n/i18n-provider";
 import { reminderOffsetHours, type ReminderOutcome } from "@/lib/reminders/promise";
@@ -113,6 +114,8 @@ export function SideCards({
   const locale = useLocale();
   const router = useRouter();
   const stampedShown = stampedInvoices.slice(0, MAX_STAMPED_ROWS);
+  const txReembolso = textosDinero(locale).reembolso;
+  const sinCargosVigentes = finance.total <= 0 && finance.balance <= 0;
   const stampedRest  = stampedInvoices.length - stampedShown.length;
   const firstName = patientName.split(" ")[0] ?? "";
   const [composeOpen, setComposeOpen] = useState(false);
@@ -201,28 +204,43 @@ export function SideCards({
               <strong>{formatCurrency(finance.plan ?? 0)}</strong>
             </div>
           )}
-          <div className={styles.financeRow}>
-            <span>{t("patients.sideCards.treatmentTotal")}</span>
-            <strong>{formatCurrency(finance.total)}</strong>
-          </div>
-          <div className={`${styles.financeRow} ${styles.success}`}>
-            <span>{t("patients.sideCards.paid")}</span>
-            <strong>{formatCurrency(finance.paid)}</strong>
-          </div>
-          <div className={`${styles.financeRow} ${styles.danger}`}>
-            <span>{t("patients.sideCards.pendingBalance")}</span>
-            <strong>{formatCurrency(finance.balance)}</strong>
-          </div>
+          {/* F4 (comprobación final, ws1-t5): sin nada facturado vigente no se pinta
+              «Pagado $0 · 0 % de lo facturado está pagado» (contradecía a quien pagó y su
+              dinero pasó a saldo a favor): se dice que no hay cargos. */}
+          {sinCargosVigentes ? (
+            <div className={styles.financeBarLabel} data-sin-cargos>
+              {(finance.credit ?? 0) > 0 ? txReembolso.sinCargosConCredito : txReembolso.sinCargos}
+            </div>
+          ) : (
+            <>
+              <div className={styles.financeRow}>
+                <span>{t("patients.sideCards.treatmentTotal")}</span>
+                <strong>{formatCurrency(finance.total)}</strong>
+              </div>
+              <div className={`${styles.financeRow} ${styles.success}`}>
+                <span>{t("patients.sideCards.paid")}</span>
+                <strong>{formatCurrency(finance.paid)}</strong>
+              </div>
+              <div className={`${styles.financeRow} ${styles.danger}`}>
+                <span>{t("patients.sideCards.pendingBalance")}</span>
+                <strong>{formatCurrency(finance.balance)}</strong>
+              </div>
+            </>
+          )}
           {(finance.credit ?? 0) > 0 && (
             <div className={`${styles.financeRow} ${styles.success}`}>
               <span>{t("patients.sideCards.creditBalance")}</span>
               <strong>{formatCurrency(finance.credit ?? 0)}</strong>
             </div>
           )}
-          <div className={styles.financeBar}>
-            <div className={styles.financeBarFill} style={{ width: `${finance.pct}%` }} />
-          </div>
-          <div className={styles.financeBarLabel}>{t("patients.sideCards.pctCovered", { pct: finance.pct })}</div>
+          {!sinCargosVigentes && (
+            <>
+              <div className={styles.financeBar}>
+                <div className={styles.financeBarFill} style={{ width: `${finance.pct}%` }} />
+              </div>
+              <div className={styles.financeBarLabel}>{t("patients.sideCards.pctCovered", { pct: finance.pct })}</div>
+            </>
+          )}
 
           {/* CFDI — un ✓ "Facturado" por cobro timbrado, para no tener que abrir
               la pestaña para saber cuáles ya se facturaron ante el SAT. */}
