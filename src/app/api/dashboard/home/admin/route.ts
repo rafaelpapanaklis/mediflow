@@ -11,6 +11,8 @@ import { ingresoNetoDelPeriodo, ingresosPorDoctorDelPeriodo, movimientosDelPerio
 import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
 import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
+import { contarCitasPorDoctor, idsConCitasFueraDeLista } from "@/lib/agenda/citas-por-doctor";
+import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cargarOcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo.server";
 import type { OcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo";
 import { getExpiryAlerts } from "@/lib/inventory/lots.server";
@@ -411,10 +413,17 @@ async function buildAlerts(
  * no es de nadie va en la fila «Sin doctor»: la columna suma los ingresos del
  * periodo, la misma cifra de la tarjeta.
  *
+ * Citas (C-11, segunda vuelta): la definición única de «citas del periodo»
+ * (`citasDelPeriodoWhere`) sobre la lista de quien atiende (`ATIENDE_WHERE`:
+ * doctores, administradores y el dueño que atiende), más quien tuvo citas o
+ * cobros sin estar en ella. «% completadas» cuenta las atendidas (COMPLETED y
+ * CHECKED_OUT), como la Analítica. Antes solo salían usuarios con rol DOCTOR y
+ * la columna no sumaba las citas del mes (84 contra 88).
+ *
  * Antes: N+1 — un loop sobre doctores hacía 2 count() por cada uno (5
  * doctores → 10 queries serie). Ahora: 3 queries fijas (doctors + groupBy
  * de appointments por doctorId+status + cobros del periodo), independiente
- * del N, y una cuarta solo si alguien cobró sin estar en la lista.
+ * del N, y una cuarta solo si alguien cobró o tuvo citas sin estar en la lista.
  */
 async function buildTeamPerformance(
   period: AdminPeriod,
@@ -426,16 +435,12 @@ async function buildTeamPerformance(
 
   const [activos, grouped, cobrado] = await Promise.all([
     prisma.user.findMany({
-      where: { clinicId, role: "DOCTOR", isActive: true },
+      where: { clinicId, ...ATIENDE_WHERE },
       select: { id: true, firstName: true, lastName: true },
     }),
     prisma.appointment.groupBy({
       by: ["doctorId", "status"],
-      where: {
-        clinicId,
-        startsAt: { gte: from, lt: to },
-        status: { notIn: ["CANCELLED"] },
-      },
+      where: citasDelPeriodoWhere(clinicId, from, to),
       _count: { _all: true },
     }),
     ingresosPorDoctorDelPeriodo(clinicId, { gte: from, lt: to }).catch((err) => {
@@ -444,7 +449,11 @@ async function buildTeamPerformance(
     }),
   ]);
 
-  const fuera = idsConIngresoFueraDeLista(activos.map((d) => d.id), cobrado);
+  const citasPorDoctor = contarCitasPorDoctor(grouped);
+  const fuera = Array.from(new Set([
+    ...idsConIngresoFueraDeLista(activos.map((d) => d.id), cobrado),
+    ...idsConCitasFueraDeLista(activos.map((d) => d.id), citasPorDoctor),
+  ]));
   const doctors = fuera.length > 0
     ? [
         ...activos,
@@ -455,17 +464,9 @@ async function buildTeamPerformance(
       ]
     : activos;
 
-  // Agregamos por doctorId: total appts + completed appts.
-  const totals = new Map<string, { appts: number; completed: number }>();
-  for (const row of grouped) {
-    const cur = totals.get(row.doctorId) ?? { appts: 0, completed: 0 };
-    cur.appts += row._count._all;
-    if (row.status === "COMPLETED") cur.completed += row._count._all;
-    totals.set(row.doctorId, cur);
-  }
-
   const rows: HomeAdminTeamRow[] = doctors.map((d) => {
-    const t = totals.get(d.id) ?? { appts: 0, completed: 0 };
+    const c = citasPorDoctor.get(d.id);
+    const t = { appts: c?.citas ?? 0, completed: c?.atendidas ?? 0 };
     return {
       userId: d.id,
       doctorName: shortName(d, category),

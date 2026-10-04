@@ -238,11 +238,15 @@ test("Inicio: tarjeta, comparación, tendencia y gráfica netas; «vencidas» co
 });
 
 test("nómina y analítica de doctores: lo cobrado por fecha de cobro, no Invoice.paid por fecha de cita", () => {
+  // ws1-t2 (C-11, segunda vuelta): las dos rutas leen las filas de lib/analytics/doctores.server.ts.
   for (const f of ["src/app/api/analytics/payroll-pdf/route.ts", "src/app/api/analytics/doctor-performance/route.ts"]) {
     const s = leer(f);
-    assert.match(s, /ingresosPorDoctorDelPeriodo\(clinicId, \{ gte: from, lte: to \}\)/, f);
+    assert.match(s, /filasDeDoctores\(clinicId, \{ desde, hasta \}/, f);
     assert.doesNotMatch(s, /_sum: \{ paid: true \}/, f);
   }
+  const comun = leer("src/lib/analytics/doctores.server.ts");
+  assert.match(comun, /ingresosPorDoctorDelPeriodo\(clinicId, \{ gte: desde, lt: hasta \}\)/);
+  assert.doesNotMatch(comun, /_sum: \{ paid: true \}/);
 });
 
 test("Pacientes: la columna «Saldo», «Con deuda» y los KPIs sin borradores", () => {

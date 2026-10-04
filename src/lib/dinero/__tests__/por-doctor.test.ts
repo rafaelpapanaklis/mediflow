@@ -109,12 +109,16 @@ test("C-09: Inicio › Performance del equipo lee los ingresos de la definición
 });
 
 test("C-10: Analítica › Doctores y la nómina añaden «Sin doctor» y a quien cobró fuera de la lista", () => {
+  // Desde C-11 (segunda vuelta) las dos rutas leen las MISMAS filas de lib/analytics/doctores.server.ts.
+  const comun = leer("src/lib/analytics/doctores.server.ts");
+  assert.match(comun, /idsConIngresoFueraDeLista\(ids, cobrado\)/);
+  assert.match(comun, /id: ID_SIN_DOCTOR/);
+  assert.match(comun, /sinDoctor: true/);
   const api = leer("src/app/api/analytics/doctor-performance/route.ts");
-  assert.match(api, /idsConIngresoFueraDeLista\(activos\.map/);
-  assert.match(api, /id: ID_SIN_DOCTOR/);
+  assert.match(api, /filasDeDoctores\(/);
   const pdf = leer("src/app/api/analytics/payroll-pdf/route.ts");
-  assert.match(pdf, /idsConIngresoFueraDeLista\(activos\.map/);
-  assert.match(pdf, /sinDoctor: true/);
+  assert.match(pdf, /filasDeDoctores\(/);
+  assert.match(pdf, /f\.sinDoctor \? \{ sinDoctor: true \}/);
   assert.match(pdf, /timezone,\n/);
   assert.doesNotMatch(leer("src/lib/pdf/payroll-document.tsx"), /toLocaleString\("es-MX"\)\s*\}/);
   assert.equal(ID_SIN_DOCTOR, "sin-doctor");

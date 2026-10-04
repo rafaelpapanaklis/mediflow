@@ -53,6 +53,18 @@ export const PRESETS = [
   }},
 ];
 
+/**
+ * ws1-t2 (C-11, segunda vuelta): «Este mes» pide el mes ENTERO de la clínica
+ * (`periodo=mes`; lo calcula el servidor en la zona de la clínica), el mismo de
+ * «Citas del mes» en Inicio, Finanzas y Reportes. Antes mandaba del día 1 del
+ * navegador a «ahora» y las citas por doctor no cuadraban con Inicio.
+ */
+function parametrosDelPreset(preset: string): URLSearchParams {
+  if (preset === "month") return new URLSearchParams({ periodo: "mes" });
+  const range = PRESETS.find((p) => p.id === preset)!.compute();
+  return new URLSearchParams({ from: range.from.toISOString(), to: range.to.toISOString() });
+}
+
 export function DoctorsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [preset, setPreset] = useState("month");
@@ -63,11 +75,7 @@ export function DoctorsClient({ rediseno = false }: { rediseno?: boolean } = {})
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
-    const range = PRESETS.find((p) => p.id === preset)!.compute();
-    const params = new URLSearchParams({
-      from: range.from.toISOString(),
-      to: range.to.toISOString(),
-    });
+    const params = parametrosDelPreset(preset);
     fetch(`/api/analytics/doctor-performance?${params}`, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -87,10 +95,7 @@ export function DoctorsClient({ rediseno = false }: { rediseno?: boolean } = {})
       // sino el server-side recalculado por preset). Para mantener
       // consistencia, pasamos from/to explícitos derivados del preset.
       const range = PRESETS.find((p) => p.id === preset)!.compute();
-      const params = new URLSearchParams({
-        from: range.from.toISOString(),
-        to: range.to.toISOString(),
-      });
+      const params = parametrosDelPreset(preset);
       const res = await fetch(`/api/analytics/payroll-pdf?${params}`);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
