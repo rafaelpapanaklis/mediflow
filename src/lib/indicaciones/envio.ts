@@ -160,11 +160,21 @@ export function valoresDeLaCita(d: DatosParaHoja, ahora: Date): ValoresHoja {
     cedulaDoctor: d.doctor.cedula,
     fechaCita: fechaLarga(inicio, tz),
     horaInicio: horaCorta(inicio, tz),
-    horaFin: horaCorta(fin, tz),
+    horaFin: horaFinQueConsta(inicio, fin, tz),
     procedimiento: textoDeProcedimientos(d.procedimientos, d.cita.motivo),
     lugar,
     fecha: fechaLarga(ahora, tz),
   };
+}
+
+/**
+ * N-C (comprobación final): una consulta de menos de un minuto salía «de las 06:16 a las 06:16». La plantilla dice
+ * «de las {horaInicio} a las {horaFin}», así que el fin se muestra al menos un minuto después del inicio (06:16 →
+ * 06:17). Solo cambia lo que se imprime cuando las dos horas caen en el mismo minuto.
+ */
+export function horaFinQueConsta(inicio: Date, fin: Date, tz: string | null | undefined): string {
+  const h = horaCorta(fin, tz);
+  return h === horaCorta(inicio, tz) ? horaCorta(new Date(inicio.getTime() + 60_000), tz) : h;
 }
 
 export interface SeccionHoja {

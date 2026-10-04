@@ -614,3 +614,21 @@ test("C-72 (vuelta 2): en una cita de ortodoncia se propone la hoja PROPIA de la
   // Fuera de ortodoncia no se propone nada por nombre.
   assert.deepEqual(hojasSugeridas(hojas, [], ["Limpieza dental"]), []);
 });
+
+test("N-C: una consulta de menos de un minuto no dice «de las 06:16 a las 06:16»", async () => {
+  const { horaFinQueConsta } = await import("../envio");
+  const v = valoresDeLaCita(
+    {
+      cita: cita({ status: "COMPLETED", checkedInAt: new Date("2026-10-04T12:16:05Z"), completedAt: new Date("2026-10-04T12:16:40Z") }),
+      paciente: { nombre: "Ana López" },
+      doctor: { nombre: "Luis Pérez", cedula: "1234567" },
+      clinica: { nombre: "Clínica QA", telefono: null, ciudad: "Ciudad de México", estado: null, timezone: TZ },
+      procedimientos: [],
+    },
+    new Date("2026-10-04T13:00:00Z"),
+  );
+  assert.equal(v.horaInicio, "06:16");
+  assert.equal(v.horaFin, "06:17");
+  // Una consulta normal no cambia.
+  assert.equal(horaFinQueConsta(new Date("2026-10-03T15:55:00Z"), new Date("2026-10-03T16:40:00Z"), TZ), "10:40");
+});
