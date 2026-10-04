@@ -118,7 +118,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true, permission: "today.view" },
   { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar,      permission: "agenda.view" },
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users,         permission: "patients.view" },
-  { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view", moduleKey: "inbox" },
+  { id: "inbox",        section: "workspace", label: "Mensajes",    href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view", moduleKey: "inbox" },
   { id: "messages",     section: "workspace", label: "Whatsapp / Bot",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view", moduleKey: "whatsapp" },
   // Ortodoncia, en el MENÚ PRINCIPAL (decisión de Rafael del 27-sep-2026, H17
   // de la QA en vivo): antes vivía en la sección "specialties", que en el menú

@@ -195,6 +195,15 @@ const CHANNEL_META: Record<Channel, { labelKey: string; color: string; icon: typ
 };
 
 /**
+ * ws1-t1 (C-108): los canales que se ofrecen como FILTRO. «Validación» y «Recordatorio» existen en el enum pero
+ * ningún código crea conversaciones con ellos: eran dos filtros siempre vacíos y sin explicación. Si algún día
+ * llega una, se sigue pintando bien (CHANNEL_META la conoce); solo no se ofrece como filtro.
+ */
+const CANALES_DEL_FILTRO = (Object.keys(CHANNEL_META) as Channel[]).filter(
+  (ch) => ch !== "VALIDATION" && ch !== "REMINDER",
+);
+
+/**
  * Palomita de entrega REAL (M-06).
  *
  * Antes se pintaba SIEMPRE la doble palomita, que en WhatsApp significa
@@ -1715,7 +1724,7 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
 
           <div className={styles.groupLabel}>{t("inbox.client.groupChannels")}</div>
           <div className={styles.navGroup}>
-            {(Object.keys(CHANNEL_META) as Channel[]).map((ch) => {
+            {CANALES_DEL_FILTRO.map((ch) => {
               const meta = CHANNEL_META[ch];
               const c = counts.byChannel[ch] ?? 0;
               const isActive = activeChannel === ch;
@@ -1919,7 +1928,7 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
           </div>
 
           <div className={styles.chipsRow}>
-            {(Object.keys(CHANNEL_META) as Channel[]).map((ch) => (
+            {CANALES_DEL_FILTRO.map((ch) => (
               <button
                 key={ch}
                 type="button"

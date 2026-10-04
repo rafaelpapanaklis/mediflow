@@ -6,7 +6,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { InboxClient } from "./inbox-client";
 
-export const metadata: Metadata = { title: "Inbox — DaleControl" };
+export const metadata: Metadata = { title: "Mensajes — DaleControl" };
 
 export default async function InboxPage() {
   // key por clínica: el Inbox carga hilos client-side (fetch al montar +

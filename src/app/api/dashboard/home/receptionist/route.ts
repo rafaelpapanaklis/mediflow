@@ -92,7 +92,8 @@ export async function GET() {
       id: "unread-wa",
       tone: "info",
       title: `${unreadMsgs} mensaje${unreadMsgs === 1 ? "" : "s"} WhatsApp sin leer`,
-      cta: { label: "Abrir inbox", href: "/dashboard/whatsapp" },
+      // ws1-t1 (C-108): un solo nombre, «Mensajes», y a la bandeja donde se contestan (no a la de conectar).
+      cta: { label: "Abrir Mensajes", href: "/dashboard/inbox" },
     });
   }
 
