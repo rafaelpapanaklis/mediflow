@@ -17,6 +17,7 @@
  * Equipo.
  */
 
+import { UMBRAL_CARRILES_FIJOS, responsablesConCarril } from "@/lib/agenda-nueva/carriles-semana";
 import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
@@ -117,7 +118,9 @@ export function VistaSemana(props: PropsVistaSemana) {
   // mínimo de columna se calcula con ése, para que ninguna columna quede más
   // apretada que el resto. Sobre los responsables VISIBLES, no los totales —
   // con seis doctores y cinco desmarcados, arrastraríamos scroll para nada.
-  let maxCarriles = Math.max(1, responsables.length);
+  // ws1-t1 (N-36): con más de UMBRAL_CARRILES_FIJOS responsables, un día solo abre carril a quien tiene citas
+  // ese día; el mínimo de partida es entonces un carril.
+  let maxCarriles = Math.max(1, responsables.length <= UMBRAL_CARRILES_FIJOS ? responsables.length : 1);
 
   const columnas: ColumnaCuadricula[] = dias.map((dia) => {
     const delDia = porDia.get(dia.iso) ?? [];
@@ -135,8 +138,12 @@ export function VistaSemana(props: PropsVistaSemana) {
     // sin columna propia (un doctor dado de baja conserva sus citas futuras);
     // sin esa unión sus citas desaparecerían de la semana aunque el contador
     // de la cabecera las siguiera sumando.
+    const conCitas = new Set(
+      // Todas las del día, también canceladas: sin carril, una cita no se pintaría en la semana.
+      delDia.map((c) => c.responsableId).filter((id): id is string => !!id),
+    );
     const carriles = carrilesConHuerfanos(
-      responsables.map((r) => ({ id: r.id, nombre: r.nombreCorto, color: r.color })),
+      responsablesConCarril(responsables, conCitas).map((r) => ({ id: r.id, nombre: r.nombreCorto, color: r.color })),
       delDia.map((c) => ({
         startsAt: c.dto.startsAt,
         endsAt: c.dto.endsAt,

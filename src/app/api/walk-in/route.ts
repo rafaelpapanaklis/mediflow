@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { citaVivaDeHoy, textoCitaVivaDeHoy } from "@/lib/walk-in/cita-viva-de-hoy";
+import { zonaDeClinica as zonaDeLaClinica } from "@/lib/movimientos-paciente/zona";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -59,5 +61,14 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(entry, { status: 201 });
+  // ws1-t1 (N-37): si ya tiene una cita viva hoy, se agrega igual pero la respuesta lo dice (la pantalla avisa).
+  const citaDeHoy =
+    typeof patientId === "string" && patientId
+      ? await citaVivaDeHoy({ clinicId: ctx.clinicId, patientId, timezone: await zonaDeLaClinica(ctx.clinicId) }).catch(() => null)
+      : null;
+
+  return NextResponse.json(
+    { ...entry, ...(citaDeHoy ? { citaDeHoy, avisoCitaDeHoy: textoCitaVivaDeHoy(citaDeHoy) } : {}) },
+    { status: 201 },
+  );
 }

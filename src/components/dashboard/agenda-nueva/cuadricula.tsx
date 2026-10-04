@@ -21,7 +21,8 @@
  *    100% / 112 px las dibuja gratis. Va en el CSS (`.columna`).
  */
 
-import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { textoFueraDeHorario } from "@/lib/agenda-nueva/entrada-dia";
 import { useDroppable } from "@dnd-kit/core";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import { comoHora, topDeHora, topDeLinea, type VentanaRejilla } from "@/lib/agenda-nueva/geometria";
@@ -110,6 +111,14 @@ export interface CuadriculaProps {
    * no lo usa: tres columnas caben de sobra.
    */
   anchoMinimoColumna?: number;
+  /**
+   * ws1-t1 (C-91, tercera ronda): al abrir un día (cambia `claveEntrada`), la rejilla se coloca en este minuto
+   * (la apertura o la primera cita viva si es antes) en vez de quedarse arriba del todo.
+   */
+  minutoDeEntrada?: number | null;
+  claveEntrada?: string;
+  /** Citas vivas fuera del horario: un aviso arriba con un botón por hora que lleva a cada una. */
+  fueraDeHorario?: Array<{ id: string; minuto: number; hora: string }>;
   refDesplazamiento?: Ref<HTMLDivElement>;
   /**
    * El paso de la clínica en minutos (`Clinic.defaultSlotMinutes`): a él se
@@ -128,6 +137,9 @@ export function Cuadricula({
   anchoMinimoColumna,
   refDesplazamiento,
   slotMinutes = 30,
+  minutoDeEntrada = null,
+  claveEntrada,
+  fueraDeHorario,
 }: CuadriculaProps) {
   const { minutoInicio, horaFin, alto } = ventana;
 
@@ -140,6 +152,30 @@ export function Cuadricula({
   // en la base). Y al arrastrar una cita hacia el borde, dnd-kit desplazaba el
   // de dentro y descuadraba cabecera y cuerpo.
   const refCabecera = useRef<HTMLDivElement | null>(null);
+
+  // ws1-t1 (C-91): el scroller propio, además del que pida quien monta la cuadrícula.
+  const refCuerpo = useRef<HTMLDivElement | null>(null);
+  const unirRefCuerpo = useCallback(
+    (el: HTMLDivElement | null) => {
+      refCuerpo.current = el;
+      if (typeof refDesplazamiento === "function") refDesplazamiento(el);
+      else if (refDesplazamiento) (refDesplazamiento as { current: HTMLDivElement | null }).current = el;
+    },
+    [refDesplazamiento],
+  );
+  const irAMinuto = useCallback(
+    (minuto: number) => {
+      const el = refCuerpo.current;
+      if (el) el.scrollTop = Math.max(0, topDeLinea(minuto, minutoInicio) - 16);
+    },
+    [minutoInicio],
+  );
+  const entradaAplicada = useRef<string | null>(null);
+  useEffect(() => {
+    if (!claveEntrada || minutoDeEntrada == null || entradaAplicada.current === claveEntrada) return;
+    entradaAplicada.current = claveEntrada;
+    irAMinuto(minutoDeEntrada);
+  }, [claveEntrada, minutoDeEntrada, irAMinuto]);
   const alDesplazarCuerpo = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const marco = refCabecera.current;
     if (marco && marco.scrollLeft !== e.currentTarget.scrollLeft) {
@@ -174,6 +210,16 @@ export function Cuadricula({
 
   return (
     <div className={s.rejilla}>
+      {fueraDeHorario && fueraDeHorario.length > 0 && (
+        <div className={s.avisoFueraHorario} role="note">
+          <span>{textoFueraDeHorario(fueraDeHorario.length)}</span>
+          {fueraDeHorario.map((c) => (
+            <button key={c.id} type="button" className={s.avisoFueraHorarioHora} onClick={() => irAMinuto(c.minuto)}>
+              {c.hora}
+            </button>
+          ))}
+        </div>
+      )}
       {/* Un solo scroller, el cuerpo, en los dos ejes; la cabecera fuera de
           él, en un marco que copia su desplazamiento horizontal
           (`alDesplazarCuerpo`). El encabezado no puede ir con
@@ -196,7 +242,7 @@ export function Cuadricula({
       </div>
       </div>
 
-      <div className={s.rejillaScroll} ref={refDesplazamiento} onScroll={alDesplazarCuerpo}>
+      <div className={s.rejillaScroll} ref={unirRefCuerpo} onScroll={alDesplazarCuerpo}>
         <div className={s.rejillaLienzo} style={{ height: alto, ...estiloMinimo }}>
           {/* ── Eje de horas ── */}
           <div className={s.eje}>

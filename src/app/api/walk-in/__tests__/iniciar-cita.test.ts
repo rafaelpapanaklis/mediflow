@@ -57,6 +57,9 @@ const tx: any = {
   },
 };
 
+let citaVivaHoy: any = null;
+let consultaCitaViva: any = null;
+
 (mock as any).module("@/lib/prisma", {
   namedExports: {
     prisma: {
@@ -72,7 +75,17 @@ const tx: any = {
           return a.where.id === "doc1" && a.where.clinicId === "c1" ? { id: "doc1" } : null;
         },
       },
-      clinic: { findFirst: async () => ({ category: "DENTAL", defaultSlotMinutes: 20 }) },
+      clinic: {
+        findFirst: async () => ({ category: "DENTAL", defaultSlotMinutes: 20 }),
+        findUnique: async () => ({ timezone: "America/Mexico_City" }),
+      },
+      // ws1-t1 (N-37): la cita VIVA de hoy del paciente (null = no tiene).
+      appointment: {
+        findFirst: async (a: any) => {
+          consultaCitaViva = a.where;
+          return citaVivaHoy;
+        },
+      },
       walkInQueue: {
         findFirst: async (a: any) => (a.where.id === fila.id && a.where.clinicId === fila.clinicId ? { ...fila } : null),
         updateMany: async (a: any) => {
@@ -210,4 +223,26 @@ test("la tarjeta de Hoy lee la fila de walk-in (de hoy, esperando), no la lista 
   assert.match(api, /prisma\.walkInQueue\.findMany/);
   assert.doesNotMatch(api, /prisma\.waitlistEntry/);
   assert.match(api, /clinicId: session\.clinic\.id,\s*status: \{ in: \["WAITING", "ASSIGNED"\] \}/);
+});
+
+// ws1-t1 (N-37, tercera ronda): con el código de antes «Iniciar» creaba OTRA cita aunque el paciente ya estuviera
+// «En sillón» con otro doctor: el mismo paciente en dos lugares y dos citas hoy.
+test("🔴→🟢 con una cita VIVA hoy, «Iniciar» no crea otra: 409 que dice cuál tiene", async () => {
+  const { PATCH } = await import("@/app/api/walk-in/[id]/route");
+  fila.patientId = "p1";
+  fila.status = "WAITING";
+  const antes = citas.length;
+  citaVivaHoy = { id: "cita-08", startsAt: new Date("2026-10-04T14:00:00Z"), status: "IN_CHAIR", doctor: { firstName: "Alejandro", lastName: "Beltrán" } };
+  const r = await PATCH(req({ action: "start", assignedTo: "doc1" }), idp);
+  citaVivaHoy = null;
+  assert.equal(r.status, 409);
+  const cuerpo = await r.json();
+  assert.equal(cuerpo.error, "cita_viva_hoy");
+  assert.match(cuerpo.reason, /Ya tiene cita hoy a las 08:00 con Alejandro Beltrán \(en sillón\)\. Atiéndelo desde esa cita/);
+  assert.equal(citas.length, antes, "no se creó otra cita");
+  assert.equal(fila.status, "WAITING", "la fila no se movió");
+  // Con el tenant de la sesión, del paciente y solo citas vivas.
+  assert.equal(consultaCitaViva.clinicId, "c1");
+  assert.equal(consultaCitaViva.patientId, "p1");
+  assert.deepEqual(consultaCitaViva.status, { in: ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"] });
 });

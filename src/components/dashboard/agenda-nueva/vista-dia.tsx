@@ -38,10 +38,12 @@ import {
   carrilDeCita,
   diaEnTz,
   minutosDeAhora,
+  minutosEnTz,
   topDeCita,
   ventanaDeRejilla,
 } from "@/lib/agenda-nueva/geometria";
 import { ALTO_ENCABEZADO_DIA, anchoMinimoColumnaDia } from "@/lib/agenda-nueva/tokens";
+import { citasFueraDeHorario, minutoDeEntrada } from "@/lib/agenda-nueva/entrada-dia";
 import { aCitaVista, resumenDeColumna, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
@@ -259,6 +261,17 @@ export function VistaDia() {
     );
   }, [columnas, destino, state.timezone, ventana.minutoInicio]);
 
+  const entrada = useMemo(() => {
+    const visibles = new Set(responsablesVisibles.map((r) => r.id));
+    const citas = citasDelDia
+      .filter((a) => visibles.has(a.doctor?.id ?? ""))
+      .map((a) => ({ id: a.id, inicioMin: minutosEnTz(a.startsAt, state.timezone), estado: a.status }));
+    return {
+      minuto: minutoDeEntrada(citas, horarioDelDia.cerrado ? null : horarioDelDia.abre),
+      fuera: horarioDelDia.cerrado ? [] : citasFueraDeHorario(citas, horarioDelDia.abre, horarioDelDia.cierra),
+    };
+  }, [citasDelDia, responsablesVisibles, state.timezone, horarioDelDia]);
+
   const ahoraMin = minutosDeAhora({
     dayISO: state.dayISO,
     timezone: state.timezone,
@@ -275,6 +288,10 @@ export function VistaDia() {
       anchoMinimoColumna={anchoMinimoColumnaDia(columnasConSombra.length)}
       ahoraMin={ahoraMin}
       columnaAhora={null}
+      // ws1-t1 (C-91): se abre en la apertura (o la primera cita si es antes) y avisa de las que quedan fuera.
+      claveEntrada={state.dayISO}
+      minutoDeEntrada={entrada.minuto}
+      fueraDeHorario={entrada.fuera}
       sinColumnas={
         responsablesTodos.length === 0
           ? "No hay doctores activos en la agenda. Actívalos en Equipo."

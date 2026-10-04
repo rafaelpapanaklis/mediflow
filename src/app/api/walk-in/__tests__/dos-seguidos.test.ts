@@ -87,7 +87,12 @@ const tx: any = {
         try { return await fn(tx); } catch (e) { filas = respaldo.filas; citas = respaldo.citas; throw e; }
       },
       user: { findFirst: async (a: any) => (a.where.id === "doc1" && a.where.clinicId === "c1" ? { id: "doc1", role: "DOCTOR", isActive: true, agendaActive: true } : null) },
-      clinic: { findFirst: async () => ({ category: "DENTAL", defaultSlotMinutes: 15 }) },
+      clinic: {
+        findFirst: async () => ({ category: "DENTAL", defaultSlotMinutes: 15 }),
+        findUnique: async () => ({ timezone: "America/Mexico_City" }),
+      },
+      // ws1-t1 (N-37): ningún paciente de estas filas tiene otra cita viva hoy.
+      appointment: { findFirst: async () => null },
       walkInQueue: {
         findFirst: async (a: any) => {
           const f = filas[a.where.id];

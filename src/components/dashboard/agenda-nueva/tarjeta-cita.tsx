@@ -180,6 +180,8 @@ export function TarjetaCita({
 
       <span className={`${s.tarjetaFila2} ${claseNota}`}>
         {cita.notaAnticipo && <Wallet size={11} strokeWidth={2} className={s.tarjetaNotaIcono} aria-hidden />}
+        {/* ws1-t1 (C-96): en tarjeta angosta la hora baja aquí (CSS: `.tarjetaHoraEstrecha`). */}
+        {variante === "dia" && !cita.notaAnticipo && <span className={s.tarjetaHoraEstrecha}>{cita.horaInicio} · </span>}
         {variante === "semana" ? (cita.notaAnticipo ?? `${cita.horaInicio} · ${cita.tratamiento}`) : segundaLinea}
       </span>
     </button>

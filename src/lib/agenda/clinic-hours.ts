@@ -89,6 +89,8 @@ export const ALL_SCHEDULE_DAYS: readonly number[] = [0, 1, 2, 3, 4, 5, 6];
 export interface AgendaSpan {
   startsAt: string;
   endsAt?: string | null;
+  /** ws1-t1 (C-91): con «CANCELLED» la cita no ensancha el eje. Opcional: quien no lo pasa, como siempre. */
+  status?: string | null;
 }
 
 export interface PaintedWindowInput {
@@ -163,6 +165,9 @@ export function paintedAgendaWindow(
   }
 
   for (const a of appointments) {
+    // ws1-t1 (C-91, tercera ronda): una cita CANCELADA no ensancha el eje. Las de 02:53 y 05:54 de la clínica de
+    // prueba hacían arrancar el día a las 02:00 y la semana a las 03:00, todo rayado, para algo que ya no pasa.
+    if (a.status === "CANCELLED") continue;
     const startMs = Date.parse(a.startsAt);
     if (!Number.isFinite(startMs)) continue;
     const s = getTzParts(new Date(startMs), timezone);

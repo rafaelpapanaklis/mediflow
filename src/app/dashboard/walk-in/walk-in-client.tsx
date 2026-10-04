@@ -195,6 +195,8 @@ export function WalkInClient({ initialQueue, profesionales = [], rediseno = fals
       setEncontrados([]);
       setPreguntarSiEsNuevo(false);
       toast.success(t("pages.walkIn.patientAdded"));
+      // ws1-t1 (N-37): ya tiene cita viva hoy → se dice (se agregó igual).
+      if (typeof created?.avisoCitaDeHoy === "string") toast(created.avisoCitaDeHoy, { duration: 9000, icon: "⚠️" });
     } catch {
       toast.error(t("pages.walkIn.addError"));
     }

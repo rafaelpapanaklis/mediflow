@@ -83,6 +83,20 @@ export async function iniciarConsultaWalkIn(args: {
   if (!clinica) return { ok: false, status: 401, body: { error: "Unauthorized" } };
   const minutos = clinica.defaultSlotMinutes && clinica.defaultSlotMinutes > 0 ? clinica.defaultSlotMinutes : MINUTOS_POR_DEFECTO;
 
+  // ws1-t1 (N-37): si el paciente ya tiene una cita VIVA hoy, no se le crea otra: se atiende desde esa.
+  if (entry.patientId) {
+    const { citaVivaDeHoy, textoNoIniciarOtraCita } = await import("@/lib/walk-in/cita-viva-de-hoy");
+    const { zonaDeClinica } = await import("@/lib/movimientos-paciente/zona");
+    const yaTiene = await citaVivaDeHoy({ clinicId, patientId: entry.patientId, timezone: await zonaDeClinica(clinicId) });
+    if (yaTiene) {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: "cita_viva_hoy", reason: textoNoIniciarOtraCita(yaTiene), citaId: yaTiene.id },
+      };
+    }
+  }
+
   const ahora = new Date();
   const fin = new Date(ahora.getTime() + minutos * 60_000);
   let citaId = "";
