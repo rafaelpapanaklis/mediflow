@@ -94,7 +94,8 @@ test("la hoja usa las rutas de siempre, en orden, y no manda avisos de cobro", (
   const recibo = hoja.indexOf("fetch(`/api/invoices/${actual.id}/send-receipt`");
   assert.ok(crear > 0 && pagar > crear && recibo > pagar, "crear → pagar → comprobante");
   // Mismo cuerpo que «Registrar pago» (useCobro / PaymentModal).
-  assert.match(hoja, /amount: monto,\s*method: metodo,\s*paidAt: paidAtInstant\(todayLocalISO\(\)\)\?\.toISOString\(\),/);
+  // C-33 (ws1-t5): con el «hoy» de la clínica, no el de la computadora.
+  assert.match(hoja, /amount: monto,\s*method: metodo,\s*paidAt: paidAtInstant\(hoy, undefined, hoy\)\?\.toISOString\(\),/);
   // Ni aviso de saldo ni nota por WhatsApp: el tope de un aviso de cobro al día no se toca.
   assert.doesNotMatch(hoja, /send-whatsapp/);
   // El comprobante nace apagado y solo sale si hubo pago.
