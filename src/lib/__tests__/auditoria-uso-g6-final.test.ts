@@ -114,3 +114,14 @@ test("F-08: Asistente IA no repite «Tokens usados este mes» en una tarjeta apa
   assert.doesNotMatch(ajustes, /<Estadistica valor=\{aiUsed\.toLocaleString\(\)\}/);
   assert.doesNotMatch(ajustes, /label:t\("settings\.client\.aiTokensUsedThisMonth"\), val:aiUsed/);
 });
+
+// ── F-09 (comprobación final) ───────────────────────────────────────────────
+test("F-09: Caja › Facturas cabe en 390: la fila de acciones y el selector «Enviar a» se encogen", () => {
+  const css = leer("components/dashboard/factura-ficha-rediseno/ficha.module.css");
+  // La fila de acciones no puede ser más ancha que la ficha (min-width:auto la estiraba a 414 de 338)…
+  assert.match(css, /^\.fichaAcciones \{ min-width: 0; \}/m);
+  // …ni la etiqueta, que además no parte «Enviar a» en dos renglones…
+  assert.match(css, /^\.fichaAcciones > label\.motivo \{ min-width: 0; max-width: 100%; white-space: nowrap; \}/m);
+  // …y el selector encoge (sin crecer en escritorio) y recorta el nombre del responsable.
+  assert.match(css, /^\.fichaAcciones > label\.motivo > select \{ flex: 0 1 auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; \}/m);
+});
