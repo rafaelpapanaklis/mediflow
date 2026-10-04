@@ -825,6 +825,8 @@ export async function registrarAnticipoRecibido(
     method: MetodoRegistroAnticipo;
     reference?: string;
     notes?: string;
+    /** N-09 (segunda auditoría): el día en que de verdad llegó el dinero (por defecto, ahora). */
+    paidAt?: Date | null;
   },
   over?: Partial<DepsAnticipoPanel>,
 ): Promise<ResultadoRegistrarAnticipo> {
@@ -845,6 +847,8 @@ async function registrarAnticipoRecibidoImpl(
     method: MetodoRegistroAnticipo;
     reference?: string;
     notes?: string;
+    /** N-09 (segunda auditoría): el día en que de verdad llegó el dinero (por defecto, ahora). */
+    paidAt?: Date | null;
   },
   over?: Partial<DepsAnticipoPanel>,
 ): Promise<ResultadoRegistrarAnticipo> {
@@ -868,6 +872,8 @@ async function registrarAnticipoRecibidoImpl(
   if (errorMonto) return falloRegistro("monto_invalido", errorMonto);
   const monto = redondear2(args.monto);
   const ahora = d.ahora();
+  // N-09: la fecha del dinero; nunca en el futuro (un reloj adelantado no lo saca del día).
+  const fechaDelPago = args.paidAt && args.paidAt.getTime() <= ahora.getTime() + 5 * 60_000 ? args.paidAt : ahora;
   const reference = args.reference?.trim() || null;
   const notes = args.notes?.trim() || null;
   const depositMethod = metodoRegistroADeposito(args.method);
@@ -884,7 +890,7 @@ async function registrarAnticipoRecibidoImpl(
     if (monto > saldoFresco + 0.01) return { error: "monto_invalido" as const };
 
     const pago = await tx.payment.create({
-      data: { invoiceId, amount: monto, method: args.method, reference, notes, paidAt: ahora },
+      data: { invoiceId, amount: monto, method: args.method, reference, notes, paidAt: fechaDelPago },
       select: { id: true },
     });
     const nuevoPagado = redondear2(fresca.paid + monto);

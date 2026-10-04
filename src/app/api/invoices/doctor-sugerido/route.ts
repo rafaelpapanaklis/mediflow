@@ -24,7 +24,12 @@ export async function GET(req: NextRequest) {
   // Regla de la casa: `clinicId: undefined` no filtra nada. Se corta antes.
   if (!ctx.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const patientId = (new URL(req.url).searchParams.get("patientId") ?? "").trim();
+  const params = new URL(req.url).searchParams;
+  const patientId = (params.get("patientId") ?? "").trim();
+  // C-07 (segunda auditoría): «Cobrar hoy» abierto DESDE una cita manda la cita:
+  // su doctor manda (la regla «cita» de doctor-de-factura). Se valida por clínica
+  // y por paciente dentro de doctorDeFacturaNueva / abajo.
+  const appointmentId = (params.get("appointmentId") ?? "").trim() || null;
   if (!patientId) return NextResponse.json({ error: "Falta el paciente" }, { status: 400 });
   const deniedPatient = await assertPatientVisible(patientId, {
     userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId,
@@ -34,6 +39,7 @@ export async function GET(req: NextRequest) {
   const sugerido = await doctorDeFacturaNueva({
     clinicId: ctx.clinicId,
     patientId,
+    appointmentId,
     timezone: (ctx.clinic?.timezone as string | null | undefined) || DEFAULT_INVOICE_TZ,
   });
   return NextResponse.json(sugerido);

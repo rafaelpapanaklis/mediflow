@@ -8,6 +8,7 @@
 // clínica que pase el caller (mismo patrón que lib/quotes/quote-pdf).
 
 import { prisma } from "@/lib/prisma";
+import { lugarDeLaClinica } from "@/lib/clinica/lugar-de-la-clinica";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import {
   ZONA_POR_DEFECTO,
@@ -385,6 +386,11 @@ function ComprobanteDocument(p: ComprobanteProps) {
   );
 }
 
+export function ciudadQueNoContradice(clinic: { city?: string | null; state?: string | null; address?: string | null } | null | undefined): { clinicCity?: string | null; clinicState?: string | null } {
+  const lugar = lugarDeLaClinica({ ciudad: clinic?.city, estado: clinic?.state, direccion: clinic?.address });
+  return lugar.contradice ? { clinicCity: lugar.ciudad || null, clinicState: null } : {};
+}
+
 /**
  * Genera el comprobante PDF de una factura, con scope multi-tenant por
  * `clinicId`. Devuelve null si la factura no existe en esa clínica.
@@ -448,6 +454,10 @@ export async function buildInvoicePrintPdf(
     clinic: {
       ...(await clinicLetterheadProps(invoice.clinic)),
       clinicTaxId: invoice.clinic?.rfcEmisor ?? null,
+      // N-04 (segunda auditoría): si el campo ciudad contradice la dirección
+      // («Mérida» con «03100 Ciudad de México»), manda la dirección, como en la
+      // constancia y el consentimiento (lib/clinica/lugar-de-la-clinica, C-60/61).
+      ...ciudadQueNoContradice(invoice.clinic),
     },
     invoice: {
       invoiceNumber: invoice.invoiceNumber,

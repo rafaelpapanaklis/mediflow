@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDinero } from "@/lib/dinero/textos";
+import { distintivosDeRepetidos } from "@/lib/invoices/procedimientos-repetidos";
 import { fmtMXNdec } from "@/lib/format";
 import { paidAtInstant } from "@/lib/billing/paid-at";
 import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
@@ -130,7 +131,8 @@ function CuerpoCobrarHoy({
       .then((r) => (r.ok ? r.json() : { doctors: [] }))
       .then((d) => { if (vivo) setDoctores(Array.isArray(d?.doctors) ? d.doctors.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []); })
       .catch(() => {});
-    fetch(`/api/invoices/doctor-sugerido?patientId=${encodeURIComponent(patientId)}`)
+    // C-07 (segunda auditoría): desde una cita, su doctor (antes «Sin asignar» en la cita completada de la Fila).
+    fetch(`/api/invoices/doctor-sugerido?patientId=${encodeURIComponent(patientId)}${cita?.id ? `&appointmentId=${encodeURIComponent(cita.id)}` : ""}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { doctorId?: string | null; origen?: string } | null) => {
         // Solo si nadie eligió mientras tanto.
@@ -140,7 +142,7 @@ function CuerpoCobrarHoy({
       })
       .catch(() => {});
     return () => { vivo = false; };
-  }, [patientId]);
+  }, [patientId, cita?.id]);
 
   // Tarifario (el mismo que usa «Nueva factura») y, desde una cita, el concepto de su motivo.
   useEffect(() => {
@@ -151,7 +153,7 @@ function CuerpoCobrarHoy({
         if (!vivo) return;
         const lista: ProcedimientoDelCatalogo[] = (Array.isArray(d) ? d : d?.procedures ?? [])
           .filter((p: any) => p && p.id && p.name && p.isActive !== false)
-          .map((p: any) => ({ id: String(p.id), name: String(p.name), basePrice: Number(p.basePrice) || 0 }));
+          .map((p: any) => ({ id: String(p.id), name: String(p.name), basePrice: Number(p.basePrice) || 0, category: p.category ?? null, duration: p.duration ?? null, description: p.description ?? null }));
         setCatalogo(lista);
         const inicial = conceptoDeLaCita(cita?.motivo, lista);
         if (inicial) {
@@ -175,6 +177,9 @@ function CuerpoCobrarHoy({
     const q = busqueda.trim().toLowerCase();
     return (q ? catalogo.filter((p) => p.name.toLowerCase().includes(q)) : catalogo).slice(0, 30);
   }, [catalogo, busqueda]);
+
+  // N-08 (segunda auditoría): los procedimientos repetidos se distinguen en la lista.
+  const repetidos = useMemo(() => distintivosDeRepetidos(catalogo), [catalogo]);
 
   const ponLinea = (key: string, cambio: Partial<Linea>) => setLineas((prev) => prev.map((l) => (l.key === key ? { ...l, ...cambio } : l)));
 
@@ -243,7 +248,7 @@ function CuerpoCobrarHoy({
 
       // 3) Comprobante, solo si se pidió y hubo pago. Si no sale, el cobro sigue hecho.
       let estadoComprobante: string | null = null;
-      if (comprobante && cobrado > 0) {
+      if (comprobante && cobrado > 0 && freno.whatsappConectado !== false) {
         try {
           const res = await fetch(`/api/invoices/${actual.id}/send-receipt`, {
             method: "POST",
@@ -352,11 +357,21 @@ function CuerpoCobrarHoy({
                 ) : coincidencias.map((p) => (
                   <button key={p.id} type="button" className={c.opcion}
                     onClick={() => {
-                      setLineas((prev) => [...prev, { key: nuevaClave(), nombre: p.name, importe: p.basePrice, texto: comoTexto(p.basePrice), procedureId: p.id }]);
+                      // N-07 (segunda auditoría): si hay un renglón sin importe (el motivo de la
+                      // cita, una línea libre en blanco), se LLENA ese; antes se añadía otro y
+                      // «Cobrar» quedaba apagado hasta borrar el vacío.
+                      setLineas((prev) => {
+                        const nuevo = { nombre: p.name, importe: p.basePrice, texto: comoTexto(p.basePrice), procedureId: p.id };
+                        const i = prev.findIndex((l) => l.texto.trim() === "" || !l.nombre.trim());
+                        return i >= 0 ? prev.map((l, j) => (j === i ? { ...l, ...nuevo } : l)) : [...prev, { key: nuevaClave(), ...nuevo }];
+                      });
                       setBusqueda("");
                       setBuscando(false);
                     }}>
-                    <span>{p.name}</span>
+                    <span>
+                      {p.name}
+                      {repetidos.get(p.id) && <span className={c.ayuda} style={{ display: "block" }}>{repetidos.get(p.id)}</span>}
+                    </span>
                     <span className={`${c.cifra} ${c.cifraApagada}`}>{fmtMXNdec(p.basePrice)}</span>
                   </button>
                 ))}
@@ -477,13 +492,19 @@ function CuerpoCobrarHoy({
               </div>
             </div>
           )}
+          {/* Decisión 16: la caja la abrió otra persona; va bajo los métodos (N-07: antes se encimaba). */}
+          {pagoEfectivo > 0 && <AvisoCajaDeOtraPersona nombre={freno.cajaDe} />}
           {pagoEfectivo > 0 && metodo !== "cash" && (
             <label className={c.campo}>
               <span className={c.campoRotulo}>{t("cobrarHoy.referencia")}</span>
               <input className={c.input} value={referencia} onChange={(e) => setReferencia(e.target.value)} disabled={guardando} />
             </label>
           )}
-          {puedeEnviarComprobante && pagoEfectivo > 0 && (
+          {/* N-06 (segunda auditoría): sin WhatsApp conectado no se ofrece mandarlo; se dice. */}
+          {puedeEnviarComprobante && pagoEfectivo > 0 && freno.whatsappConectado === false && (
+            <p className={c.ayuda}>{textosDinero(locale).cobro.sinWhatsapp}</p>
+          )}
+          {puedeEnviarComprobante && pagoEfectivo > 0 && freno.whatsappConectado !== false && (
             <label className={c.casilla}>
               <input type="checkbox" checked={comprobante} onChange={(e) => setComprobante(e.target.checked)} disabled={guardando} />
               <span>
@@ -533,8 +554,7 @@ function CuerpoCobrarHoy({
       </div>
 
       {freno.visible && <AvisoCajaCerrada onCobrarDeTodosModos={() => guardar(true)} ocupado={guardando} />}
-      {/* Decisión 16 (auditoría de uso): la caja la abrió otra persona; solo se avisa. */}
-      {pagoEfectivo > 0 && <AvisoCajaDeOtraPersona nombre={freno.cajaDe} />}
+
 
       <DialogFooter className={c.pie}>
         <ButtonNew variant="ghost" onClick={onClose} disabled={guardando}>

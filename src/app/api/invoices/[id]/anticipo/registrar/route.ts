@@ -53,8 +53,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const reference = typeof body?.reference === "string" ? body.reference : undefined;
   const notes = typeof body?.notes === "string" ? body.notes : undefined;
+  // N-09 (segunda auditoría): el día en que llegó el dinero (ISO). Inválido → ahora.
+  const fecha = typeof body?.paidAt === "string" ? new Date(body.paidAt) : null;
+  const paidAt = fecha && !isNaN(fecha.getTime()) ? fecha : null;
 
-  const r = await registrarAnticipoRecibido({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, monto, method, reference, notes });
+  const r = await registrarAnticipoRecibido({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, monto, method, reference, notes, paidAt });
   if (!r.ok || !r.registrado) {
     const status = r.error === "no_encontrada" ? 404 : r.error === "referencia_requerida" || r.error === "metodo_invalido" ? 400 : 409;
     return NextResponse.json({ error: r.motivo ?? r.error ?? "No se pudo registrar el anticipo.", code: r.error }, { status });

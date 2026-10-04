@@ -11,11 +11,25 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { fechaCorta, fechaConAno, diasHasta } from "./fechas";
 import { etiquetaDeCobro } from "./cobros";
+
+/**
+ * N-03 (segunda auditoría de uso): lo que de una factura CANCELADA pasó al
+ * saldo a favor del paciente (anticipo de una cita cancelada). Es dinero que
+ * SÍ se recibió: la ficha decía «$0 pagado · Sin cobros registrados».
+ */
+function pasoASaldoAFavor(inv: any): number {
+  if (!isVoidedInvoice(inv) || !Array.isArray(inv?.payments)) return 0;
+  const c = inv.payments
+    .filter((p: any) => p?.method === "refund" && p?.refundMethod === "saldo_a_favor")
+    .reduce((acc: number, p: any) => acc + Math.round((Number(p.amount) || 0) * 100), 0);
+  return c / 100;
+}
 import s from "./rediseno.module.css";
 import { resumenDePlanesActivos, useTextosPlanesActivos } from "./planes-activos";
 
@@ -155,6 +169,7 @@ export function Resumen({
   movimientos,
 }: ResumenProps) {
   const t = useT();
+  const txReembolso = textosDinero(useLocale()).reembolso;
 
   // La ficha recibe las citas de la MÁS LEJANA a la más vieja (el server las
   // pide `startsAt: desc`). Buscar «la próxima» sobre esa lista sin ordenarla
@@ -244,7 +259,8 @@ export function Resumen({
         // NO pone el saldo a cero, así que una factura anulada de $5,000 se
         // pintaba «Pendiente» al lado de un «Estado de cuenta» que decía «sin
         // saldo». Es el mismo defecto que ya costó una vez (MF-0151).
-        .filter((inv: any) => !isVoidedInvoice(inv))
+        // N-03: la cancelada cuyo dinero quedó a favor SÍ es un cobro recibido.
+        .filter((inv: any) => !isVoidedInvoice(inv) || pasoASaldoAFavor(inv) > 0)
         .slice()
         // Por TIEMPO, no por texto: `createdAt` llega como Date y compararlo
         // en cadena ordenaba por el nombre del día de la semana («Fri» antes
@@ -556,7 +572,8 @@ export function Resumen({
                 // (el estado de la factura), no el saldo: una factura a medio
                 // pagar es «Parcial» aquí y allá.
                 const etiqueta = etiquetaDeCobro(inv);
-                const pagada = etiqueta.saldada;
+                const aFavor = pasoASaldoAFavor(inv);
+                const pagada = etiqueta.saldada || aFavor > 0;
                 return (
                   <div key={inv.id} className={s.listaFila}>
                     <span
@@ -568,12 +585,12 @@ export function Resumen({
                       <span className={s.listaSub}>{fechaCorta(inv.createdAt)}</span>
                     </span>
                     <span className={`${s.listaDerecha} ${s.importe}`}>
-                      {formatCurrency(inv.total ?? 0)}
+                      {formatCurrency(aFavor > 0 ? aFavor : inv.total ?? 0)}
                       <span
-                        className={[s.etiqueta, (s as any)[etiqueta.clase]].filter(Boolean).join(" ")}
+                        className={[s.etiqueta, (s as any)[aFavor > 0 ? "etiquetaExito" : etiqueta.clase]].filter(Boolean).join(" ")}
                         style={{ marginLeft: 8 }}
                       >
-                        {t(etiqueta.labelKey)}
+                        {aFavor > 0 ? txReembolso.pasoASaldo : t(etiqueta.labelKey)}
                       </span>
                     </span>
                   </div>

@@ -40,7 +40,7 @@ const prismaStub: any = {
   appointment: {
     findFirst: async ({ where }: any) => {
       assert.ok(where?.clinicId, "la cita se busca SIEMPRE con clinicId");
-      const c = db.citas.find((x) => x.id === where.id && x.clinicId === where.clinicId);
+      const c = db.citas.find((x) => x.id === where.id && x.clinicId === where.clinicId && (!where.patientId || x.patientId === where.patientId));
       return c ? { id: c.id, patientId: c.patientId, doctorId: c.doctorId } : null;
     },
     findMany: async ({ where }: any) => {
@@ -300,4 +300,20 @@ test("C-07 · GET doctor-sugerido dice «cabecera» (lo que preselecciona «Nuev
   db.pacientes.push({ id: "p1", clinicId: "c1", primaryDoctorId: "docA" });
   const r = await GET({ url: "http://localhost/api/invoices/doctor-sugerido?patientId=p1", headers: new Headers() } as any);
   assert.deepEqual(await r.json(), { doctorId: "docA", origen: "cabecera" });
+});
+
+// ── Segunda auditoría de uso, C-07 a medias: «Cobrar hoy» desde una cita ─────
+test("C-07 · doctor-sugerido con la cita: el doctor de la cita (antes «Sin asignar» en la cita completada de la Fila); una cita de OTRO paciente no cuenta", async () => {
+  const { GET } = await import("@/app/api/invoices/doctor-sugerido/route");
+  reiniciar();
+  // Hoy lo vieron dos doctores: sin la cita, la regla no adivina.
+  db.citas.push({ id: "w1", clinicId: "c1", patientId: "p1", doctorId: "docA", startsAt: HOY, status: "COMPLETED" });
+  db.citas.push({ id: "w2", clinicId: "c1", patientId: "p1", doctorId: "docB", startsAt: HOY, status: "CONFIRMED" });
+  const sin = await GET({ url: "http://localhost/api/invoices/doctor-sugerido?patientId=p1", headers: new Headers() } as any);
+  assert.equal((await sin.json()).doctorId, null);
+  const con = await GET({ url: "http://localhost/api/invoices/doctor-sugerido?patientId=p1&appointmentId=w1", headers: new Headers() } as any);
+  assert.deepEqual(await con.json(), { doctorId: "docA", origen: "cita" });
+  db.citas.push({ id: "x9", clinicId: "c1", patientId: "otro", doctorId: "docB", startsAt: HOY, status: "COMPLETED" });
+  const ajena = await GET({ url: "http://localhost/api/invoices/doctor-sugerido?patientId=p1&appointmentId=x9", headers: new Headers() } as any);
+  assert.equal((await ajena.json()).doctorId, null);
 });

@@ -101,7 +101,6 @@ export function SideCards({
   patientId,
   patientName,
   patientPhone,
-  onCharge,
   puedeCobrar = true,
   onCobrarHoy,
   onOpenBilling,
@@ -265,15 +264,10 @@ export function SideCards({
           {/* C-29 (auditoría de uso): los dos botones en su propio bloque, con aire
               entre ellos (se leían pegados: «Cobrar ahora · $40,500Cobrar hoy»). */}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {finance.balance > 0 && puedeCobrar && (
-            <button
-              type="button"
-              className={`${styles.sideBtn} ${styles.primary} ${styles.fullWidth}`}
-              onClick={onCharge}
-            >
-              {t("patients.sideCards.chargeNow")} · {formatCurrency(finance.balance)}
-            </button>
-          )}
+          {/* C-29 (segunda auditoría): «Cobrar ahora · $X» repetía al «Cobrar $X» de la
+              cabecera (la misma factura, la misma ventana): se quitó. Quedan tres
+              cobros distintos: cabecera (lo pendiente), «Cobrar» de cada factura y
+              «Cobrar hoy» (un concepto nuevo). */}
           {/* ws1-t4 (8d): lo de HOY (un concepto nuevo) en un paso. Con saldo pendiente va
               debajo de «Cobrar ahora», en secundario; sin saldo es el botón principal. */}
           {onCobrarHoy && puedeCobrar && (

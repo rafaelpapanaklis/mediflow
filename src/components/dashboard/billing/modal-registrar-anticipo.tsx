@@ -31,6 +31,8 @@ import { useFrenoCajaCerrada } from "./aviso-caja-cerrada";
 import { AvisoCajaCerrada } from "./aviso-caja-cerrada.component";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { useT } from "@/i18n/i18n-provider";
+import { paidAtInstant } from "@/lib/billing/paid-at";
+import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -39,8 +41,9 @@ type MetodoRegistro = "cash" | "transfer" | "debit" | "credit";
 const METODOS: { value: MetodoRegistro; label: string }[] = [
   { value: "cash", label: "Efectivo" },
   { value: "transfer", label: "Transferencia" },
-  { value: "debit", label: "Terminal · débito" },
-  { value: "credit", label: "Terminal · crédito" },
+  // N-09 (segunda auditoría): los mismos nombres que «Registrar pago».
+  { value: "debit", label: "Tarjeta débito" },
+  { value: "credit", label: "Tarjeta crédito" },
 ];
 
 /** El ícono de cada método: solo dibujo, no cambia qué se envía. */
@@ -84,6 +87,9 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
   const [monto, setMonto] = useState(prefill);
   const [method, setMethod] = useState<MetodoRegistro>("cash");
   const [reference, setReference] = useState("");
+  // N-09 (segunda auditoría): el día en que llegó el dinero (una transferencia de ayer).
+  const hoy = useHoyDeLaClinica();
+  const [fecha, setFecha] = useState(hoy);
   const [enviando, setEnviando] = useState(false);
   const freno = useFrenoCajaCerrada(open, method === "cash");
   const { frenar, ocultar } = freno;
@@ -97,6 +103,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
     setMonto(prefill());
     setMethod("cash");
     setReference("");
+    setFecha(hoy);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, anticipoPendiente?.id, anticipoPendiente?.amount, saldo]);
 
@@ -118,7 +125,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
       const res = await fetch(`/api/invoices/${invoiceId}/anticipo/registrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monto: montoNum, method, reference: reference.trim() || undefined }),
+        body: JSON.stringify({ monto: montoNum, method, reference: reference.trim() || undefined, paidAt: paidAtInstant(fecha, undefined, hoy)?.toISOString() }),
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -137,7 +144,7 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
     } finally {
       setEnviando(false);
     }
-  }, [monto, method, reference, invoiceId, onListo, onClose, frenar, ocultar]);
+  }, [monto, method, reference, fecha, hoy, invoiceId, onListo, onClose, frenar, ocultar]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -209,6 +216,11 @@ export function ModalRegistrarAnticipo({ open, onClose, invoiceId, saldo, antici
               <Input id="anticipo-referencia" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Clave de rastreo, folio…" />
             </div>
           )}
+
+          <div className={campo}>
+            <Label htmlFor="anticipo-fecha">Fecha en que se recibió</Label>
+            <Input id="anticipo-fecha" type="date" value={fecha} max={hoy} onChange={(e) => setFecha(e.target.value || hoy)} />
+          </div>
 
           {freno.visible && <AvisoCajaCerrada onCobrarDeTodosModos={() => void registrar(true)} ocupado={enviando} />}
         </div>

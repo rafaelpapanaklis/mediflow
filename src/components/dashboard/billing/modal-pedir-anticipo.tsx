@@ -76,6 +76,8 @@ interface EstadoGET {
   disponible: boolean;
   canales?: CanalesDTO;
   tieneFactura?: boolean; // solo en el endpoint de cita
+  /** N-09 (segunda auditoría): concepto y precio sacados del motivo de la cita y del tarifario. */
+  conceptoSugerido?: { descripcion: string; precio: number | null } | null;
   saldo?: number;
   sugerido: number | null;
   horasSugeridas: number;
@@ -160,6 +162,11 @@ export function ModalPedirAnticipo({ open, onClose, origen, id, onListo, redisen
         setEstado(d);
         setMonto(d.sugerido != null ? String(d.sugerido) : "");
         setHoras(String(d.horasSugeridas ?? 24));
+        // N-09: sin recapturar lo que la cita ya dice.
+        if (d.conceptoSugerido) {
+          setDescripcion((x) => x || d.conceptoSugerido!.descripcion);
+          if (d.conceptoSugerido.precio != null) setPrecio((x) => x || String(d.conceptoSugerido!.precio));
+        }
         // Con los dos canales disponibles, arranca en Mercado Pago (el de
         // siempre); con uno solo, ESE, aunque no sea mercadopago.
         if (d.canales?.mercadopago) setMetodo("mercadopago");

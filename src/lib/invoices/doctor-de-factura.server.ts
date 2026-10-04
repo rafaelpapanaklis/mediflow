@@ -51,7 +51,8 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeF
   let propuesta: DoctorDeFactura;
   if (args.appointmentId) {
     const cita = await prisma.appointment.findFirst({
-      where: { id: args.appointmentId, clinicId },
+      // La cita tiene que ser del MISMO paciente (doctor-sugerido la recibe del cliente).
+      where: { id: args.appointmentId, clinicId, patientId },
       select: { doctorId: true },
     });
     propuesta = elegirDoctorDeFactura(undefined, { cita: cita?.doctorId ?? null });

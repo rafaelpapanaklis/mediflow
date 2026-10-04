@@ -100,7 +100,8 @@ test("la hoja usa las rutas de siempre, en orden, y no manda avisos de cobro", (
   assert.doesNotMatch(hoja, /send-whatsapp/);
   // El comprobante nace apagado y solo sale si hubo pago.
   assert.match(hoja, /const \[comprobante, setComprobante\] = useState\(false\);/);
-  assert.match(hoja, /if \(comprobante && cobrado > 0\)/);
+  // N-06 (segunda auditoría): y solo con WhatsApp conectado.
+  assert.match(hoja, /if \(comprobante && cobrado > 0 && freno\.whatsappConectado !== false\)/);
   // Reintento: la nota creada se recuerda y no se crea otra.
   assert.match(hoja, /let actual = nota;\s*if \(!actual\) \{/);
   // Caja cerrada: el freno de siempre, ANTES de crear.

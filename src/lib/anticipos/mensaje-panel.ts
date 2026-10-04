@@ -64,7 +64,8 @@ export function textoAnticipoTransferencia(d: DatosAnticipoTransferencia): strin
     `Beneficiario: ${d.beneficiario}`,
     `CLABE: ${d.clabeAgrupada}`,
     ...(d.referencia ? [`Concepto: ${d.referencia}`] : []),
-    `Tienes ${d.horas} h para transferir. En cuanto lo veamos, te confirmamos por aquí.`,
+    // N-09 (segunda auditoría): sin prometer el canal («por aquí» suponía WhatsApp).
+    `Tienes ${d.horas} h para transferir. En cuanto lo veamos, te lo confirmamos.`,
   ].join("\n");
 }
 

@@ -98,7 +98,8 @@ test("H14: el detalle de la factura esconde cobrar, marcar pagada, WhatsApp y CF
   assert.match(m, /const botonRegistrarPago = !puedeCobrar \|\|/);
   assert.match(m, /puedeCobrar && [^\n]*!esPlanAPlazos\(condicionesPago\)/, "Marcar pagada");
   assert.match(m, /puedeEnviarRecibo && \(\s*<ButtonNew[\s\S]{0,200}handleSendWhatsApp/, "Enviar por WhatsApp");
-  assert.match(m, /\) : puedeTimbrar && \(/, "Facturar (CFDI)");
+  // ws1-t4 (C-53) añadió «invoice.paid > 0.005» a la condición de «Facturar (CFDI)».
+  assert.match(m, /\) : puedeTimbrar && /, "Facturar (CFDI)");
   const ruta = leer("src/app/api/invoices/[id]/permisos-cobro/route.ts");
   assert.match(ruta, /puedeCobrar: denyIfMissingPermission\(ctx, "billing\.charge"\) === null/);
   assert.match(ruta, /puedeTimbrar: requireAdmin\(ctx\) === null/);
@@ -111,7 +112,8 @@ test("H14 (2.ª parte): editar precio/descuento/eliminar borrador, cancelar y re
   assert.match(m, /const canEditPrice = \(isPending \|\| isDraft\) && invoice\.paid === 0 && puedeEditar;/);
   assert.match(m, /puedeEditar && \(\s*<ButtonNew[\s\S]{0,120}openSub\("edit-price"\)/);
   assert.match(m, /puedeEditar && \(\s*<ButtonNew[\s\S]{0,120}handleDeleteDraft/);
-  assert.match(m, /puedeReembolsar && \(invoice\.paid === 0 \|\| soloAnticipo\)/, "Cancelar factura");
+  // Auditoría de uso C-03 (ws1-t5): «Cancelar factura» sale a quien tiene billing.refund también con cobros.
+  assert.match(m, /\{puedeReembolsar && \(\s*<ButtonNew variant="danger" icon=\{<XCircle[\s\S]{0,80}openSub\("cancel"\)/, "Cancelar factura");
   assert.match(m, /puedeReembolsar && \(\s*<ButtonNew[\s\S]{0,120}openSub\("refund"\)/, "Reembolsar");
   // Las llaves salen de las mismas que exigen las rutas (no inventadas).
   assert.match(leer("src/app/api/invoices/[id]/edit-price/route.ts"), /denyIfMissingPermission\(ctx, "billing\.edit"\)/);
@@ -129,10 +131,11 @@ test("H14 (ficha del paciente): «Cobrar», «Timbrar» y «Enviar por WhatsApp�
   assert.match(page, /timbrar: user\.role === "ADMIN" \|\| user\.role === "SUPER_ADMIN"/);
   assert.match(page, /permisosCobro=\{permisosCobro\}/);
   const cli = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
-  assert.equal((cli.match(/puedeCobrar=\{permisosCobro\?\.cobrar !== false\}/g) ?? []).length, 2, "cabecera y rail");
+  assert.equal((cli.match(/puedeCobrar=\{permisosCobro\?\.cobrar !== false\}/g) ?? []).length, 3, "cabecera, rail y «Cobrar hoy»");
   assert.equal((cli.match(/permisosCobro=\{permisosCobro\}/g) ?? []).length, 2, "facturación nueva y vieja");
   assert.match(leer("src/components/dashboard/patient-detail/hero-card.tsx"), /\{puedeCobrar && \(\s*<button/);
-  assert.match(leer("src/components/dashboard/patient-detail/side-cards.tsx"), /finance\.balance > 0 && puedeCobrar/);
+  // C-29 (segunda auditoría, ws1-t5): la tarjeta ya no repite «Cobrar ahora»; «Cobrar hoy» sigue con el permiso.
+  assert.match(leer("src/components/dashboard/patient-detail/side-cards.tsx"), /onCobrarHoy && puedeCobrar/);
   const bt = leer("src/components/dashboard/patient-detail/billing-tab.tsx");
   assert.match(bt, /permisosCobro\?\.timbrar === false \? undefined/);
   assert.match(bt, /permisosCobro\?\.cobrar !== false/);

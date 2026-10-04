@@ -85,6 +85,7 @@ import { textosDinero } from "@/lib/dinero/textos";
 // reembolsar (C-02/C-03), el método con más dinero y lo reembolsado (C-32).
 import { efectoDelReembolso, type DestinoDeReembolso } from "@/lib/dinero/reembolso-destino";
 import { metodoPrincipal, reembolsadoDeFactura } from "@/lib/invoices/metodo-principal";
+import { notasLegibles } from "@/lib/invoices/notas-legibles";
 import { useLocale as useLocaleDinero } from "@/i18n/i18n-provider";
 import { ultimaMarca } from "@/lib/anticipos/cita-cancelada-core";
 import { invoiceStatusBadge } from "./invoice-status";
@@ -1072,7 +1073,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
               {isCancelled && notasVisibles(invoice.notes) && (
                 <div className={cx("pt-2 border-t border-border mt-2", c.resumenNotas)}>
                   <span className={cx("text-muted-foreground text-[10px] uppercase tracking-wide", c.seccionTitulo)}>{t("common.notes")}</span>
-                  <p className={cx("text-[11px] mt-1 whitespace-pre-line", c.notasTexto)}>{notasVisibles(invoice.notes)}</p>
+                  {/* N-13 (segunda auditoría): las marcas legibles y en la hora local, no «… 09:35 UTC]». */}
+                  <p className={cx("text-[11px] mt-1 whitespace-pre-line", c.notasTexto)}>{notasLegibles(notasVisibles(invoice.notes), (d) => d.toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }))}</p>
                 </div>
               )}
               {/* H15 (opción A, ws1-t4): la cita se canceló con dinero pagado. */}
@@ -1112,7 +1114,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 la sesión (billing.deposit vía el GET de arriba — QA t2, fase
                 2), no "sin mirar nada": un READONLY o un permiso a medida sin
                 billing.deposit ya no lo ve. */}
-            {isPending && puedeDepositar && ofreceAnticipos && (
+            {/* N-09 (segunda auditoría): con un anticipo ya recibido o pedido, no se ofrece pedir otro. */}
+            {isPending && puedeDepositar && ofreceAnticipos && !(anticipoPagado > 0) && !anticipoPendiente && (
               <button
                 type="button"
                 onClick={() => setPidiendoAnticipo(true)}
@@ -1481,7 +1484,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                   const e = efectoDelReembolso({ total: invoice.total, pagado: invoice.paid, monto, destino: refundDestino });
                   return (
                     <p className="text-xs font-medium" style={{ color: "var(--text-2)" }} role="status">
-                      {txReembolso.quedara(fmtMXNdec(e.estado === "CANCELLED" ? 0 : e.total), fmtMXNdec(e.saldo), txReembolso.estados[e.estado] ?? e.estado)}
+                      {/* N-14 (segunda auditoría): una cancelada no «queda en total $0». */}
+                      {e.estado === "CANCELLED" ? txReembolso.quedaCancelada : txReembolso.quedara(fmtMXNdec(e.total), fmtMXNdec(e.saldo), txReembolso.estados[e.estado] ?? e.estado)}
                     </p>
                   );
                 } catch { return null; }
@@ -1556,6 +1560,16 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
           </DialogHeader>
           <div className={cx("px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
             <p className={cx("text-xs text-muted-foreground", c.texto)}>{t("clinical.invoiceDetail.cancelWarning")}</p>
+            {/* N-16 (segunda auditoría): la razón va ANTES de los botones, que ejecutan al instante. */}
+            <div className={cx("space-y-1.5", c.campo)}>
+              <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>
+              <textarea
+                className="input-new"
+                style={{ resize: "none", minHeight: 60 }}
+                placeholder={t("clinical.invoiceDetail.cancelReasonPlaceholder")}
+                value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
+              />
+            </div>
             {/* C-03 (auditoría de uso): factura con dinero cobrado → dos salidas. */}
             {conCobros && (
               <div className={cx("space-y-2", c.campo)} data-cancelar-con-cobros>
@@ -1581,15 +1595,6 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 {t("clinical.invoiceDetail.cancelWarningAnticipo", { monto: fmtMXNdec(anticipoPendiente.amount) })}
               </p>
             )}
-            <div className={cx("space-y-1.5", c.campo)}>
-              <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>
-              <textarea
-                className="input-new"
-                style={{ resize: "none", minHeight: 60 }}
-                placeholder={t("clinical.invoiceDetail.cancelReasonPlaceholder")}
-                value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
-              />
-            </div>
           </div>
           <DialogFooter className={rediseno ? c.pie : undefined}>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.back")}</ButtonNew>

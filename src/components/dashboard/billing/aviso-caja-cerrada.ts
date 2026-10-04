@@ -39,6 +39,7 @@ export function cajaDeOtraPersona(status: number, cuerpo: unknown): string | nul
 const TOPE_ESPERA_MS = 10000;
 
 let ultimaCajaDe: string | null = null;
+let ultimoWhatsapp: boolean | null = null;
 
 // Auditoría de uso (decisión 16): /api/caja/para-cobrar pide el permiso de COBRAR, no
 // el de Caja: recepción también se entera de que la caja está cerrada o es de otro.
@@ -47,6 +48,9 @@ async function leerCaja(): Promise<boolean | null> {
     const r = await fetch("/api/caja/para-cobrar", { cache: "no-store" });
     const cuerpo = await r.json().catch(() => null);
     ultimaCajaDe = cajaDeOtraPersona(r.status, cuerpo);
+    ultimoWhatsapp = r.ok && cuerpo && typeof (cuerpo as { whatsappConectado?: unknown }).whatsappConectado === "boolean"
+      ? (cuerpo as { whatsappConectado: boolean }).whatsappConectado
+      : null;
     return cajaAbiertaDeRespuesta(r.status, cuerpo);
   } catch {
     return null;
@@ -59,9 +63,10 @@ async function leerCaja(): Promise<boolean | null> {
  * viaja, la espera (con tope) — con un servidor lento, el clic en «Registrar
  * pago» puede llegar antes que la respuesta, y entonces no se avisaba.
  */
-export function useCajaAbierta(open: boolean): { abierta: boolean | null; cajaDe: string | null; comprobar: () => Promise<boolean | null> } {
+export function useCajaAbierta(open: boolean): { abierta: boolean | null; cajaDe: string | null; whatsappConectado: boolean | null; comprobar: () => Promise<boolean | null> } {
   const [abierta, setAbierta] = useState<boolean | null>(null);
   const [cajaDe, setCajaDe] = useState<string | null>(null);
+  const [whatsappConectado, setWhatsappConectado] = useState<boolean | null>(null);
   const enVuelo = useRef<Promise<boolean | null> | null>(null);
 
   useEffect(() => {
@@ -70,7 +75,7 @@ export function useCajaAbierta(open: boolean): { abierta: boolean | null; cajaDe
     setAbierta(null);
     const lectura = leerCaja();
     enVuelo.current = lectura;
-    lectura.then((v) => { if (vivo) { setAbierta(v); setCajaDe(v ? ultimaCajaDe : null); } });
+    lectura.then((v) => { if (vivo) { setAbierta(v); setCajaDe(v ? ultimaCajaDe : null); setWhatsappConectado(ultimoWhatsapp); } });
     return () => { vivo = false; };
   }, [open]);
 
@@ -79,7 +84,7 @@ export function useCajaAbierta(open: boolean): { abierta: boolean | null; cajaDe
     return Promise.race([enVuelo.current ?? leerCaja(), espera]);
   }, []);
 
-  return { abierta, cajaDe, comprobar };
+  return { abierta, cajaDe, whatsappConectado, comprobar };
 }
 
 /**
@@ -98,8 +103,10 @@ export function useFrenoCajaCerrada(open: boolean, esEfectivo: boolean): {
   ocultar: () => void;
   /** Decisión 16: con efectivo, el nombre de quien abrió la caja si no es quien cobra. */
   cajaDe: string | null;
+  /** N-06 (segunda auditoría): ¿la clínica tiene WhatsApp conectado? null = no se sabe. */
+  whatsappConectado: boolean | null;
 } {
-  const { abierta, cajaDe, comprobar } = useCajaAbierta(open);
+  const { abierta, cajaDe, whatsappConectado, comprobar } = useCajaAbierta(open);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => { if (!open) setVisible(false); }, [open]);
@@ -117,5 +124,5 @@ export function useFrenoCajaCerrada(open: boolean, esEfectivo: boolean): {
 
   const ocultar = useCallback(() => setVisible(false), []);
 
-  return { visible: visible && esEfectivo, frenar, ocultar, cajaDe: esEfectivo ? cajaDe : null };
+  return { visible: visible && esEfectivo, frenar, ocultar, cajaDe: esEfectivo ? cajaDe : null, whatsappConectado };
 }

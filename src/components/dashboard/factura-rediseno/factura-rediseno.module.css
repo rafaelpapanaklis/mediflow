@@ -418,7 +418,7 @@
   gap: 8px;
 }
 
-.raiz input:not([type="checkbox"]):not([type="radio"]),
+.raiz input:not([type="checkbox"], [type="radio"]),
 .raiz select,
 .raiz textarea,
 .raiz :global(.input-new) {
@@ -451,14 +451,14 @@
 }
 
 @media (hover: hover) {
-  .raiz input:not([type="checkbox"]):not([type="radio"]):hover,
+  .raiz input:not([type="checkbox"], [type="radio"]):hover,
   .raiz select:hover,
   .raiz textarea:hover {
     border-color: var(--m2-texto-3);
   }
 }
 
-.raiz input:not([type="checkbox"]):not([type="radio"]):focus,
+.raiz input:not([type="checkbox"], [type="radio"]):focus,
 .raiz select:focus,
 .raiz textarea:focus,
 .raiz :global(.input-new):focus {
@@ -466,7 +466,9 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--m2-activo) 18%, transparent);
 }
 
-/* Auditoría de uso C-02: el reembolso pregunta con radios; van como las casillas. */
+/* Auditoría de uso C-02: el reembolso pregunta con radios; van como las casillas.
+   (El :not de arriba lleva LISTA, no dos :not: dos subían la especificidad a
+   (0,3,1) y pisaban `.enLinea.enLinea > input` — N-12 de la segunda auditoría.) */
 .raiz input[type="checkbox"],
 .raiz input[type="radio"] {
   width: 16px;
@@ -526,7 +528,7 @@
    (`.dark input {…}`), y eso gana a cualquier especificidad. Aquí se le gana
    con la misma arma, leyendo los tokens; es lo mismo que hace el buscador
    del menú (`menu-dos-niveles.module.css`, `.buscador input`). */
-:global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]),
+:global(.dark) .raiz input:not([type="checkbox"], [type="radio"]),
 :global(.dark) .raiz select,
 :global(.dark) .raiz textarea {
   background-color: var(--m2-n2-fondo) !important;
@@ -540,14 +542,14 @@
 }
 
 @media (hover: hover) {
-  :global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]):hover,
+  :global(.dark) .raiz input:not([type="checkbox"], [type="radio"]):hover,
   :global(.dark) .raiz select:hover,
   :global(.dark) .raiz textarea:hover {
     border-color: var(--m2-texto-3) !important;
   }
 }
 
-:global(.dark) .raiz input:not([type="checkbox"]):not([type="radio"]):focus,
+:global(.dark) .raiz input:not([type="checkbox"], [type="radio"]):focus,
 :global(.dark) .raiz select:focus,
 :global(.dark) .raiz textarea:focus {
   border-color: var(--m2-activo) !important;
@@ -757,6 +759,11 @@
     border-color: var(--m2-texto-3);
   }
   .raiz .botonPrincipal:hover:not(:disabled) {
+    /* N-11 (segunda auditoría): `.boton:hover` (misma especificidad, antes) le
+       ponía el fondo claro de tarjeta con el texto blanco: «Crear factura» se
+       veía vacío al pasar el ratón. */
+    background: var(--m2-activo);
+    border-color: var(--m2-activo);
     filter: brightness(1.08);
   }
 }

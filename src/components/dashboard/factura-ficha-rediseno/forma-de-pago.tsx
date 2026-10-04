@@ -31,7 +31,8 @@ import { IconoMercadoPago } from "@/components/dashboard/billing/icono-mercado-p
 // dos popups. Las palabras, en cambio, son las de esta pantalla (`presupuestoNuevo.metodos.*`).
 import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import { clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { textosDinero } from "@/lib/dinero/textos";
 import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 import type { ContactoPaciente, ViaEnvio } from "./datos";
 import type { VistaEnvioWhatsApp } from "@/lib/invoices/envio-factura-vista";
@@ -71,6 +72,7 @@ export function FormaDePagoFactura({
   const t = useT();
   // Auditoría de uso C-33: el «primer pago hoy» es el hoy de la clínica, no el de la computadora.
   const hoy = useHoyDeLaClinica();
+  const txPlan = textosDinero(useLocale()).plan;
   const parchear = (cambio: Partial<CondicionesPago>) => onChange(parchearCondiciones(cond, cambio));
   const calendario = useMemo(() => calcularCalendario(total, cond), [total, cond]);
 
@@ -172,7 +174,8 @@ export function FormaDePagoFactura({
               </select>
             </label>
             <label className={c.campo}>
-              <span className={c.campoRotulo}>{t("presupuestoNuevo.primerPago")}</span>
+              {/* N-17 (segunda auditoría): con enganche, esa fecha ES la del enganche. */}
+              <span className={c.campoRotulo}>{cond.enganche > 0 ? txPlan.fechaEnganche : t("presupuestoNuevo.primerPago")}</span>
               <input
                 type="date"
                 value={cond.primerPago ?? ""}
@@ -189,7 +192,8 @@ export function FormaDePagoFactura({
                 {calendario.pagos.map((p) => (
                   <li key={`${p.esEnganche ? "e" : "p"}-${p.numero}`} className={`${s.cuota} ${p.esEnganche ? s.cuotaEnganche : ""}`}>
                     <span>
-                      {p.esEnganche ? t("presupuestoNuevo.enganche") : t("presupuestoNuevo.pagoN", { n: p.numero })}
+                      {/* N-17: «Cuota N», como el plan de pagos de la factura (decía «Pago N»). */}
+                      {p.esEnganche ? t("presupuestoNuevo.enganche") : t("planDePagos.cuotaN", { n: p.numero })}
                       {p.fecha ? ` · ${fechaEnPalabras(p.fecha)}` : ""}
                     </span>
                     <span className={s.cuotaMonto}>{dinero(p.monto)}</span>

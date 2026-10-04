@@ -348,6 +348,7 @@
     "test:que-cuenta": "tsx --test --experimental-test-module-mocks src/lib/__tests__/que-cuenta-f9.test.ts",
     "test:dinero-definiciones": "tsx --test --experimental-test-module-mocks src/lib/dinero/__tests__/ingresos-y-deuda.test.ts",
     "test:dinero-auditoria-uso": "tsx --test --experimental-test-module-mocks src/lib/dinero/__tests__/auditoria-uso-g1.test.ts",
+    "test:dinero-auditoria-uso-r3": "tsx --test --experimental-test-module-mocks src/lib/dinero/__tests__/auditoria-uso-g1-r3.test.ts",
     "test:anular-anticipo-permiso": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/anular-anticipo-permiso.test.ts",
     "test:caja-cierre-esperado": "tsx --test --experimental-test-module-mocks src/app/api/caja/__tests__/cierre-esperado.test.ts",
     "test:gastos-bitacora": "tsx --test --experimental-test-module-mocks src/app/api/gastos/__tests__/gastos-bitacora.test.ts",

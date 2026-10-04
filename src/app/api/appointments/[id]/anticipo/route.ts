@@ -31,13 +31,14 @@ import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { buildSolicitudAnticipoPdf } from "@/lib/anticipos/solicitud-pdf";
 import { facturaOcupaLaCita } from "@/lib/invoices/cita-factura-cancelada";
+import { conceptoDeLaCita } from "@/lib/invoices/cobrar-hoy";
 
 export const dynamic = "force-dynamic";
 
 async function comprobarCita(ctx: { clinicId: string; userId: string; role: any }, appointmentId: string) {
   const appt = await prisma.appointment.findFirst({
     where: { id: appointmentId, clinicId: ctx.clinicId },
-    select: { id: true, patientId: true, startsAt: true, status: true },
+    select: { id: true, patientId: true, startsAt: true, status: true, type: true },
   });
   if (!appt) return { error: NextResponse.json({ error: "Cita no encontrada" }, { status: 404 }) } as const;
   if (appt.patientId) {
@@ -83,7 +84,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   if (!invoice) {
     const sugerido = await sugeridoParaFactura(ctx.clinicId, 0);
+    // N-09 (segunda auditoría): el concepto y el precio salen del motivo de la cita
+    // y del tarifario (la misma regla que «Cobrar hoy»); antes había que recapturarlos.
+    const catalogo = chk.appt.type
+      ? await prisma.procedureCatalog.findMany({
+          where: { clinicId: ctx.clinicId, isActive: true },
+          select: { id: true, name: true, basePrice: true },
+          take: 500,
+        }).catch(() => [])
+      : [];
+    const concepto = conceptoDeLaCita(chk.appt.type, catalogo.map((p) => ({ id: p.id, name: p.name, basePrice: Number(p.basePrice) || 0 })));
     return NextResponse.json({
+      conceptoSugerido: concepto ? { descripcion: concepto.nombre, precio: Number.isFinite(concepto.importe) ? concepto.importe : null } : null,
       disponible,
       canales,
       tieneFactura: false,

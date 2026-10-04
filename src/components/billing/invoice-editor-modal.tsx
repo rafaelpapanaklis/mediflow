@@ -21,6 +21,7 @@ import { clinicInvoiceTaxDefaults, cfdiTotalBreakdown, IVA_RATE_PCT, type CfdiTa
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDinero } from "@/lib/dinero/textos";
+import { distintivosDeRepetidos } from "@/lib/invoices/procedimientos-repetidos";
 import { useHoyDeLaClinica } from "@/lib/billing/zona-clinica";
 // Ropa del diseño nuevo (solo con `rediseno`). Ver dashboard/factura-rediseno/.
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
@@ -57,7 +58,7 @@ function money(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
 }
 
-interface CatalogProcedure { id: string; name: string; basePrice: number; category?: string }
+interface CatalogProcedure { id: string; name: string; basePrice: number; category?: string; duration?: number | null; description?: string | null }
 interface DoctorOption { id: string; name: string }
 
 /** Paciente del buscador. Lo provee el server ya filtrado por clínica y visibilidad. */
@@ -318,7 +319,7 @@ function InvoiceEditorBody({
   useEffect(() => {
     fetch("/api/procedures")
       .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setCatalog(Array.isArray(d) ? d.map((p: { id: string; name: string; basePrice: number; category?: string }) => ({ id: p.id, name: p.name, basePrice: Number(p.basePrice) || 0, category: p.category })) : []))
+      .then((d) => setCatalog(Array.isArray(d) ? d.map((p: { id: string; name: string; basePrice: number; category?: string; duration?: number | null; description?: string | null }) => ({ id: p.id, name: p.name, basePrice: Number(p.basePrice) || 0, category: p.category, duration: p.duration ?? null, description: p.description ?? null })) : []))
       .catch(() => setCatalog([]));
   }, []);
 
@@ -439,6 +440,8 @@ function InvoiceEditorBody({
   // Editar (ws1-t4): la MISMA regla que el servidor (editar-factura-core.ts).
   const bajoLoPagado = editando && grandTotal + 0.005 < pagadoEdicion;
   const avisoPlan = editar ? avisoDePlan(condicionesEdicion, Number(editar.total ?? 0), grandTotal) : null;
+
+  const repetidos = useMemo(() => distintivosDeRepetidos(catalog), [catalog]);
 
   function addProcedure(p: CatalogProcedure) {
     setItems((prev) => [...prev, {
@@ -750,7 +753,11 @@ function InvoiceEditorBody({
                     onClick={() => addProcedure(p)}
                     className={cx("w-full text-left px-2 py-2 hover:bg-muted/50 flex items-center justify-between gap-2", c.opcion)}
                   >
-                    <span className={cx("text-xs font-medium truncate")}>{p.name}</span>
+                    <span className={cx("text-xs font-medium truncate")}>
+                      {p.name}
+                      {/* N-08 (segunda auditoría): dos iguales se distinguen (el que se toque decide clave e IVA del CFDI). */}
+                      {repetidos.get(p.id) && <span className={cx("block text-[10px] text-muted-foreground font-normal", c.ayuda)}>{repetidos.get(p.id)}</span>}
+                    </span>
                     <span className={cx("text-xs font-bold text-muted-foreground whitespace-nowrap", `${c.cifra} ${c.cifraApagada}`)}>{money(p.basePrice)}</span>
                   </button>
                 ))}

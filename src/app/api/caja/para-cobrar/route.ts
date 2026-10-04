@@ -21,12 +21,17 @@ export async function GET() {
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.charge");
   if (denied) return denied;
-  const reg = await prisma.cashRegister.findFirst({
-    where: { clinicId: ctx.clinicId, status: "OPEN" },
-    orderBy: { openedAt: "desc" },
-    select: { operatorId: true, operator: { select: { firstName: true, lastName: true } } },
-  });
-  if (!reg) return NextResponse.json({ register: null });
+  const [reg, clinica] = await Promise.all([
+    prisma.cashRegister.findFirst({
+      where: { clinicId: ctx.clinicId, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+      select: { operatorId: true, operator: { select: { firstName: true, lastName: true } } },
+    }),
+    // N-06 (segunda auditoría): el cobro sabe si el comprobante puede salir por WhatsApp.
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { waConnected: true, waPhoneNumberId: true, waAccessToken: true } }),
+  ]);
+  const whatsappConectado = !!(clinica?.waConnected && clinica.waPhoneNumberId && clinica.waAccessToken);
+  if (!reg) return NextResponse.json({ register: null, whatsappConectado });
   const nombre = `${reg.operator?.firstName ?? ""} ${reg.operator?.lastName ?? ""}`.trim() || null;
-  return NextResponse.json({ register: { operatorName: nombre, esMia: reg.operatorId === ctx.userId } });
+  return NextResponse.json({ register: { operatorName: nombre, esMia: reg.operatorId === ctx.userId }, whatsappConectado });
 }
