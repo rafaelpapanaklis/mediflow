@@ -11,6 +11,7 @@ import { ingresoNetoDelPeriodo, ingresosPorDoctorDelPeriodo, movimientosDelPerio
 import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
 import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
+import { avisoDeFacturasVencidas } from "@/lib/dinero/aviso-vencido";
 import { contarCitasPorDoctor, idsConCitasFueraDeLista } from "@/lib/agenda/citas-por-doctor";
 import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cargarOcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo.server";
@@ -372,10 +373,14 @@ async function buildAlerts(
     const count = vencidas.length;
     const total = saldos.vencido;
     if (count > 0) {
+      // N-10 (ws1-t2): la segunda línea dice que es todo lo vencido de la
+      // clínica, para distinguirlo del aviso de mensualidades de ortodoncia.
+      const aviso = avisoDeFacturasVencidas(count, total);
       alerts.push({
         id: "inv-overdue",
         tone: "warning",
-        title: `${count} factura${count === 1 ? "" : "s"} vencida${count === 1 ? "" : "s"} · $${total.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`,
+        title: aviso.titulo,
+        detail: aviso.detalle,
         href: "/dashboard/billing?filter=overdue",
       });
     }

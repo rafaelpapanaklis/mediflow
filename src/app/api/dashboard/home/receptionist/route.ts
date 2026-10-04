@@ -8,6 +8,7 @@ import {
 } from "@/lib/agenda/server";
 import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
 import { computeReceivables } from "@/lib/caja";
+import { avisoDeFacturasVencidas } from "@/lib/dinero/aviso-vencido";
 import type {
   HomeActionItem,
   HomeReceptionistData,
@@ -80,9 +81,9 @@ export async function GET() {
       tone: "danger",
       // ws1-t2 (auditoría de uso C-24): la MISMA cifra que el aviso del dueño y
       // el «Vencido» de Caja, y dicha igual («vencidas», no «por cobrar»).
-      title: `${overdueInvoices.count} factura${
-        overdueInvoices.count === 1 ? "" : "s"
-      } vencida${overdueInvoices.count === 1 ? "" : "s"} · $${formatMxn(overdueInvoices.total)}`,
+      // N-10: con la línea que dice que es todo lo vencido de la clínica.
+      title: avisoDeFacturasVencidas(overdueInvoices.count, overdueInvoices.total).titulo,
+      detail: avisoDeFacturasVencidas(overdueInvoices.count, overdueInvoices.total).detalle,
       cta: {
         label: "Registrar pago",
         href: "/dashboard/billing?filter=overdue",
@@ -172,6 +173,3 @@ async function sumOverdueInvoices(
   return { count, total: saldos.vencido };
 }
 
-function formatMxn(n: number): string {
-  return n.toLocaleString("es-MX", { maximumFractionDigits: 0 });
-}

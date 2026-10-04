@@ -17,6 +17,7 @@
 // y la abren la ficha y la Agenda. El Hoy solo lleva hasta ella.
 
 import { esCitaControlOrto } from "./agenda-constants";
+import { detalleDeMensualidadesVencidas } from "@/lib/dinero/aviso-vencido";
 
 export const RUTA_COBRANZA_ORTODONCIA = "/dashboard/orthodontics/cobranza";
 export const RUTA_CONTROLES_ORTODONCIA = "/dashboard/orthodontics/controles";
@@ -44,7 +45,9 @@ export function destinoDeMensualidadesVencidas(puedeVerModulo: boolean): string 
 }
 
 export function subtituloDeMensualidadesVencidas(puedeVerModulo: boolean): string {
-  return puedeVerModulo ? "Ortodoncia · ver quién debe en Cobranza" : "Ortodoncia · cobrar en Caja";
+  // ws1-t2 (auditoría de uso N-10): dice que es solo ortodoncia, por cuota, y que ya va dentro
+  // de las facturas vencidas (el otro aviso de Hoy), para que los dos importes no se contradigan.
+  return detalleDeMensualidadesVencidas(puedeVerModulo);
 }
 
 export interface ControlDeHoy {

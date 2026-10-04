@@ -83,7 +83,8 @@ test("C-24: el Hoy de recepción usa el mismo «Vencido» que el dueño", () => 
   const r = leer("src/app/api/dashboard/home/receptionist/route.ts");
   assert.match(r, /computeReceivables\(clinicId, new Date\(\)\)/);
   assert.doesNotMatch(r, /Number\(r\.total\) - Number\(r\.paid/);
-  assert.match(r, /vencida\$\{overdueInvoices\.count === 1 \? "" : "s"\}/);
+  // Desde N-10 el texto sale de avisoDeFacturasVencidas (el mismo del dueño).
+  assert.match(r, /title: avisoDeFacturasVencidas\(overdueInvoices\.count, overdueInvoices\.total\)\.titulo/);
   // El del dueño, para comparar: la misma función y el mismo conteo.
   const dueno = leer("src/app/api/dashboard/home/admin/route.ts");
   assert.match(dueno, /computeReceivables\(clinicId, new Date\(\)\)/);

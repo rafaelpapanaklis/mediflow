@@ -37,7 +37,11 @@ export function FilaAviso({ alert }: { alert: HomeAdminAlert }) {
       <span className={`${s.icono} ${s.filaAvisoIcono} ${TONO[alert.tone]}`}>
         <Icono size={14} strokeWidth={1.75} aria-hidden />
       </span>
-      <span className={s.filaAvisoTexto}>{alert.title}</span>
+      <span className={s.filaAvisoTexto}>
+        {alert.title}
+        {/* ws1-t2 (N-10): la línea que dice qué cuenta (p. ej. «todo lo vencido de la clínica»). */}
+        {alert.detail && <span className={s.sub}>{alert.detail}</span>}
+      </span>
       {alert.href && <ChevronRight size={14} strokeWidth={1.75} className={s.flecha} aria-hidden />}
     </>
   );
