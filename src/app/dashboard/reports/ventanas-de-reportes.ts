@@ -17,7 +17,7 @@ export interface MesDeReportes {
   start: Date;
   /** Medianoche local del día 1 del mes siguiente, en UTC — EXCLUSIVO. */
   end: Date;
-  /** «sep 26»: el mes visto en la zona de la clínica. */
+  /** «sep 2026»: el mes visto en la zona de la clínica. */
   label: string;
 }
 
@@ -61,7 +61,8 @@ export function ventanasDeReportes(ahora: Date, timezone: string): VentanasDeRep
     return {
       start,
       end,
-      label: start.toLocaleDateString("es-MX", { month: "short", year: "2-digit", timeZone: timezone }),
+      // ws1-t2 (auditoría de uso C-37): «may 2026», no «may 26» (se leía como un día).
+      label: start.toLocaleDateString("es-MX", { month: "short", year: "numeric", timeZone: timezone }).replace(".", ""),
     };
   });
 

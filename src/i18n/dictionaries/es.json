@@ -5524,6 +5524,13 @@
       "msgGood": "Buen ritmo, hay espacio para optimizar",
       "msgImprove": "Hay oportunidades de mejora",
       "msgUnderused": "Capacidad sub-utilizada — revisa la ocupación"
+    },
+    "crm": {
+      "actualizadoHace": {
+        "one": "Cifras calculadas hace {count} min (se recalculan cada 5 min).",
+        "other": "Cifras calculadas hace {count} min (se recalculan cada 5 min)."
+      },
+      "actualizadoAhora": "Cifras recién calculadas (se recalculan cada 5 min)."
     }
   },
   "inbox": {

@@ -5,7 +5,7 @@ import { MarcoAnalitica } from "@/components/dashboard/analitica-rediseno/marco"
 import { Indicador, Panel, Tabla, Th, Td, Filas, Fila, FiltroPeriodo, Etiqueta, Vacio, Cargando, unir } from "@/components/dashboard/analitica-rediseno/piezas";
 import { GraficaLineas } from "@/components/dashboard/analitica-rediseno/graficas";
 import s from "@/components/dashboard/analitica-rediseno/analitica.module.css";
-import { money, dateShort, waLink, type ValueResp, type ChurnResp, type CohortResp, type ValueRow, type SortKey } from "./crm-client";
+import { ActualizadoHace, money, dateShort, waLink, type ValueResp, type ChurnResp, type CohortResp, type ValueRow, type SortKey } from "./crm-client";
 import { useT } from "@/i18n/i18n-provider";
 import { useQueCuenta } from "@/components/dashboard/que-cuenta";
 
@@ -71,6 +71,12 @@ export function CrmRediseno({
               tone={churn && churn.count > 0 ? "peligro" : "exito"}
             />
           </div>
+          {/* ws1-t2 (C-25): estas cifras viven 5 min en caché; se dice. */}
+          {value?.generatedAt && (
+            <p className={`${s.pequeno} ${s.apagado}`} style={{ margin: "-4px 0 12px" }}>
+              <ActualizadoHace generatedAt={value.generatedAt} />
+            </p>
+          )}
 
           <div className={s.pila}>
             <Panel title="Retención por cohorte (mes de alta)">

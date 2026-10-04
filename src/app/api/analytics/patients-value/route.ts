@@ -54,6 +54,8 @@ interface ValueResp {
     avgLtv: number;
   };
   top: ValueRow[];
+  /** ws1-t2 (C-25): cuándo se calcularon estas cifras (viven 5 min en caché). La pantalla dice «hace N min». */
+  generatedAt: string;
 }
 
 interface RawRow {
@@ -89,7 +91,11 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
           SELECT "patientId",
                  COALESCE(SUM("total"), 0)   AS invoiced,
                  COALESCE(SUM("paid"), 0)    AS paid,
-                 COALESCE(SUM("balance") FILTER (WHERE "status" <> 'DRAFT'), 0) AS balance
+                 -- ws1-t2 (C-25): solo saldos POSITIVOS, como «Por cobrar» de
+                 -- Finanzas y Reportes (deudaInvoiceWhere: balance > 0). Una
+                 -- factura con saldo negativo (pagada de más) restaba la deuda
+                 -- de otra y el CRM no cuadraba con esas pantallas.
+                 COALESCE(SUM("balance") FILTER (WHERE "status" <> 'DRAFT' AND "balance" > 0), 0) AS balance
           FROM "invoices"
           -- Las CANCELADAS quedan fuera: cancelar solo cambia el status y DEJA
           -- el balance intacto, así que sin esto una factura anulada inflaba
@@ -159,10 +165,11 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
         avgLtv: paying > 0 ? Math.round(totalPaid / paying) : 0,
       };
 
-      return { totals, top };
+      return { totals, top, generatedAt: now.toISOString() };
     },
     // v2 (ws1-t2): la respuesta trae `owingPatients`; la llave nueva no sirve la forma vieja de caché.
-    ["analytics-patients-value-v2", clinicId],
+    // v3 (ws1-t2, C-25): saldo solo positivo y `generatedAt`.
+    ["analytics-patients-value-v3", clinicId],
     { revalidate: REVALIDATE_SECONDS, tags: [`analytics-${clinicId}`] },
   )();
 }

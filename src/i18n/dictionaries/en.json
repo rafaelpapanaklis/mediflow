@@ -5524,6 +5524,13 @@
       "msgGood": "Good pace, there's room to optimize",
       "msgImprove": "There are opportunities to improve",
       "msgUnderused": "Underused capacity — review occupancy"
+    },
+    "crm": {
+      "actualizadoHace": {
+        "one": "Figures calculated {count} min ago (they refresh every 5 min).",
+        "other": "Figures calculated {count} min ago (they refresh every 5 min)."
+      },
+      "actualizadoAhora": "Figures just calculated (they refresh every 5 min)."
     }
   },
   "inbox": {

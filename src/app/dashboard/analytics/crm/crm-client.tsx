@@ -21,8 +21,9 @@ import {
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { CrmRediseno } from "./crm-rediseno";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { useQueCuenta } from "@/components/dashboard/que-cuenta";
+import { mesLegible, minutosDesde } from "@/lib/analytics/mes-legible";
 
 /* ─── Tipos ─── */
 export interface ValueRow {
@@ -41,6 +42,8 @@ export interface ValueResp {
   /** `owingPatients` (ws1-t2): los que deben. Opcional por la caché vieja de la API. */
   totals: { invoiced: number; paid: number; balance: number; patients: number; payingPatients: number; owingPatients?: number; avgLtv: number };
   top: ValueRow[];
+  /** ws1-t2 (C-25): cuándo se calcularon (la API las guarda 5 min). */
+  generatedAt?: string;
 }
 interface ChurnRow {
   id: string;
@@ -86,6 +89,7 @@ export function CrmClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("paid");
   const t = useT();
+  const locale = useLocale();
   const qc = useQueCuenta();
 
   useEffect(() => {
@@ -113,11 +117,12 @@ export function CrmClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const chartData = useMemo(() => {
     if (!cohorts) return [];
     return cohorts.cohorts.map((c) => {
-      const row: Record<string, number | string | null> = { month: c.month, signups: c.signups };
+      // ws1-t2 (C-37): «sep 2026», no la clave «2026-09».
+      const row: Record<string, number | string | null> = { month: mesLegible(c.month, locale === "en" ? "en" : "es"), signups: c.signups };
       c.retention.forEach((r) => { row[`m${r.month}`] = r.pct; });
       return row;
     });
-  }, [cohorts]);
+  }, [cohorts, locale]);
 
   const milestones = cohorts?.milestones ?? [1, 3, 6, 12];
 
@@ -176,6 +181,12 @@ export function CrmClient({ rediseno = false }: { rediseno?: boolean } = {}) {
               tone={churn && churn.count > 0 ? "danger" : "success"}
             />
           </div>
+          {/* ws1-t2 (C-25): estas cifras viven 5 min en caché; se dice, para que nadie las compare con otra pantalla a ciegas. */}
+          {value?.generatedAt && (
+            <p style={{ margin: "-6px 0 14px", fontSize: 11, color: "var(--text-3)" }}>
+              <ActualizadoHace generatedAt={value.generatedAt} />
+            </p>
+          )}
 
           {/* Retención por cohorte */}
           <Panel title="Retención por cohorte (mes de alta)">
@@ -345,4 +356,11 @@ function Box({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+/** ws1-t2 (C-25): «Cifras calculadas hace N min (se recalculan cada 5 min)». */
+export function ActualizadoHace({ generatedAt }: { generatedAt: string }) {
+  const t = useT();
+  const min = minutosDesde(generatedAt);
+  return <>{min < 1 ? t("analytics.crm.actualizadoAhora") : t("analytics.crm.actualizadoHace", { count: min })}</>;
 }
