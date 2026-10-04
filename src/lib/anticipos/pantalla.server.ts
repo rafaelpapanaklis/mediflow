@@ -319,7 +319,7 @@ export async function leerPantallaAnticipos(
 
     const conectada = !!fila?.mpUserId && !!fila.tokenExpiresAt && !fila.disconnectedAt;
     // Solo la pantalla (prisma del repo): Sabina pasa su propio cliente y no necesita la referencia.
-    const extra = db === prisma ? await metodosYReferencias(clinicId, recientes.map((r) => r.id)) : new Map();
+    const extra = (db as unknown) === prisma ? await metodosYReferencias(clinicId, recientes.map((r) => r.id)) : new Map();
     return {
       tablasListas: true,
       plataforma,
