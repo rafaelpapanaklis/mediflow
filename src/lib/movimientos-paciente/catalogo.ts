@@ -569,6 +569,55 @@ function redactarEspecial(fila: FilaParaRedactar): string | null {
   return null;
 }
 
+const ESTADO_DEL_CASO: Record<string, string> = {
+  PLANNED: "Planeado",
+  IN_PROGRESS: "En tratamiento",
+  ON_HOLD: "En pausa",
+  RETENTION: "Retención",
+  COMPLETED: "Terminado",
+  CANCELLED: "Cancelado",
+  ABANDONED: "Abandonado",
+};
+
+/**
+ * Auditoría de uso C-18 (4-oct-2026): filas que se leían vagas en Movimientos.
+ *  · el traspaso de lo pagado de una cita cancelada salía «Actualizó una factura: 1 dato más»;
+ *  · pedir un anticipo salía «Modificó una cita: 1 dato más»;
+ *  · la firma del doctor en un consentimiento, «Actualizó un consentimiento: doctor y 3 datos más»;
+ *  · el cambio de estado del caso de ortodoncia no decía a qué estado.
+ * Se arreglan aquí (y no en cada ruta) para que también se lean bien las filas viejas.
+ */
+function redactarConDetalle(fila: FilaParaRedactar): string | null {
+  const c = comoObjeto(fila.changes);
+  if (!c) return null;
+  if (fila.entityType === "invoice") {
+    const d = comoObjeto(c.dineroCitaCancelada);
+    if (d) {
+      const despues = comoObjeto(d.after);
+      if (despues && "devuelto" in despues) return "Registró que devolvió lo pagado de una cita cancelada y canceló su factura";
+      const decision = despues?.decision;
+      if (decision === "a_favor") return "Pasó a saldo a favor lo pagado de una cita cancelada";
+      if (decision === "reembolso") return "Marcó para reembolso lo pagado de una cita cancelada";
+      if (decision === "pendiente") return "Dejó pendiente de decidir lo pagado de una cita cancelada";
+    }
+    if ("anticipoAnulado" in c) return "Anuló un anticipo recibido";
+  }
+  if (fila.entityType === "appointment" && fila.action === "update" && "anticipo" in c) {
+    return "Pidió un anticipo para una cita";
+  }
+  if (fila.entityType === "consent" && fila.action === "update") {
+    if ("doctorSignedAt" in c) return "El doctor firmó un consentimiento";
+    if ("signed" in c || "signatureId" in c) return "Firmó electrónicamente un consentimiento";
+  }
+  if (fila.action === "ortho.treatmentPlan.statusChanged") {
+    const st = comoObjeto(c.status);
+    const antes = typeof st?.before === "string" ? ESTADO_DEL_CASO[st.before] : undefined;
+    const ahora = typeof st?.after === "string" ? ESTADO_DEL_CASO[st.after] : undefined;
+    if (ahora) return `Cambió el caso de ortodoncia${antes ? ` de «${antes}»` : ""} a «${ahora}»`;
+  }
+  return null;
+}
+
 /**
  * La frase de una fila. Si la fila trae su propia frase, esa; si no, se arma de
  * entidad + acción + nombres de campos. Nunca incluye valores.
@@ -577,7 +626,7 @@ export function redactarMovimiento(fila: FilaParaRedactar): string {
   const propia = textoGuardado(fila.changes);
   if (propia) return propia;
 
-  const especial = redactarEspecial(fila);
+  const especial = redactarEspecial(fila) ?? redactarConDetalle(fila);
   if (especial) return especial;
   const deModulo = redactarAccionDeModulo(fila.action);
   if (deModulo) return deModulo;

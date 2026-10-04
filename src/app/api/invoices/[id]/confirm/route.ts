@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
@@ -65,7 +66,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   await logMutation({
       patientId: invoice.patientId,
-      texto: `Confirmó la factura ${invoice.invoiceNumber}`,
+      // C-18 (auditoría de uso): la aplicación del saldo a favor también se dice.
+      texto: `Confirmó la factura ${invoice.invoiceNumber}${saldo.aplicado > 0 ? ` y le aplicó ${montoParaTexto(saldo.aplicado)} del saldo a favor` : ""}`,
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { status: "DRAFT" },

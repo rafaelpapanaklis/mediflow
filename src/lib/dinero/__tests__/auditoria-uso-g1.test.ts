@@ -237,3 +237,31 @@ test("C-33 · a las 23:03 del sábado 3 en CDMX, el «hoy» de la clínica es el
   // Elegido «hoy» de la clínica → el instante real del cobro, aunque el navegador ya esté en otro día.
   assert.equal(paidAtInstant("2026-10-03", ahora, "2026-10-03")?.getTime(), ahora.getTime());
 });
+
+// ── C-18 · Movimientos que se leían vagos ─────────────────────────────────
+import { redactarMovimiento } from "@/lib/movimientos-paciente/catalogo";
+
+test("C-18 · traspaso a saldo a favor, anticipo pedido, firma del doctor y estado del caso dicen qué pasó (antes «Actualizó una factura: 1 dato más»)", () => {
+  assert.equal(
+    redactarMovimiento({ entityType: "invoice", action: "update", changes: { dineroCitaCancelada: { before: null, after: { decision: "a_favor", monto: 500, quien: "Ana" } } } }),
+    "Pasó a saldo a favor lo pagado de una cita cancelada",
+  );
+  assert.equal(
+    redactarMovimiento({ entityType: "invoice", action: "update", changes: { dineroCitaCancelada: { before: "reembolso", after: { devuelto: 300, facturaCancelada: true } } } }),
+    "Registró que devolvió lo pagado de una cita cancelada y canceló su factura",
+  );
+  assert.equal(
+    redactarMovimiento({ entityType: "appointment", action: "update", changes: { anticipo: { before: null, after: { monto: 500 } } } }),
+    "Pidió un anticipo para una cita",
+  );
+  assert.equal(
+    redactarMovimiento({ entityType: "consent", action: "update", changes: { doctorSignedAt: { before: null, after: "x" }, doctorId: { before: null, after: "d" }, a: {}, b: {} } }),
+    "El doctor firmó un consentimiento",
+  );
+  assert.equal(
+    redactarMovimiento({ entityType: "orthodontic-case", action: "ortho.treatmentPlan.statusChanged", changes: { status: { before: "PLANNED", after: "IN_PROGRESS" } } }),
+    "Cambió el caso de ortodoncia de «Planeado» a «En tratamiento»",
+  );
+  // Lo que no se reconoce sigue como antes.
+  assert.equal(redactarMovimiento({ entityType: "invoice", action: "update", changes: { notes: { before: "a", after: "b" } } }), "Actualizó una factura: notas");
+});

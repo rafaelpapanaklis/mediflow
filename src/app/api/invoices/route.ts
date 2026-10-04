@@ -271,7 +271,8 @@ export async function POST(req: NextRequest) {
     const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: invoice.id, userId: ctx.userId, origen: "creada" });
 
     await logMutation({
-      texto: `Creó la factura ${invoice.invoiceNumber} por ${montoParaTexto(invoice.total)}`,
+      // C-18 (auditoría de uso): la aplicación del saldo a favor no salía en Movimientos.
+      texto: `Creó la factura ${invoice.invoiceNumber} por ${montoParaTexto(invoice.total)}${saldo.aplicado > 0 ? ` y le aplicó ${montoParaTexto(saldo.aplicado)} del saldo a favor` : ""}`,
       req,
       clinicId,
       userId: ctx.userId,
