@@ -576,7 +576,8 @@ async function guardarMetodoDeReembolso(paymentId: string, metodo: string): Prom
   try {
     const f = await prisma.$queryRaw<{ existe: boolean }[]>`
       SELECT EXISTS (SELECT 1 FROM information_schema.columns
-                      WHERE table_name = 'payments' AND column_name = 'refundMethod') AS existe`;
+                      WHERE table_schema = current_schema() AND table_name = 'payments'
+                        AND column_name = 'refundMethod') AS existe`;
     if (f[0]?.existe !== true) return;
     await prisma.$executeRaw`UPDATE "payments" SET "refundMethod" = ${metodo} WHERE "id" = ${paymentId}`;
   } catch (e) {

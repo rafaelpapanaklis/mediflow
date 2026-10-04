@@ -33,7 +33,7 @@ ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "cancellationStatus" TEXT;
 -- Motivo del SAT (01, 02, 03, 04) y el motivo escrito por quien canceló.
 ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "cancelMotive" TEXT;
 ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "cancelReason" TEXT;
-ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "cancelRequestedAt" TIMESTAMP(3);
+ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "cancelRequestedAt" TIMESTAMPTZ;
 -- users.id de quien la pidió (sin FK: la bitácora conserva el nombre).
 ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "cancelRequestedBy" TEXT;
 -- Con motivo 01: el UUID del CFDI que lo sustituye.
@@ -50,7 +50,7 @@ ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "refundPaymentId" TEXT;
 
 -- ── 3. Sincronía con Facturapi ──────────────────────────────────────────────
 -- Última vez que se le preguntó a Facturapi por este CFDI (cron /api/cron/cfdi-estado).
-ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "satCheckedAt" TIMESTAMP(3);
+ALTER TABLE "cfdi_records" ADD COLUMN IF NOT EXISTS "satCheckedAt" TIMESTAMPTZ;
 
 -- ── 4. Índices ──────────────────────────────────────────────────────────────
 -- Las notas de crédito de un CFDI (suma de lo ya acreditado, candado de cancelar).
@@ -65,9 +65,10 @@ CREATE INDEX IF NOT EXISTS "cfdi_records_cancelacion_en_curso_idx"
 CREATE INDEX IF NOT EXISTS "cfdi_records_facturapiId_idx"
   ON "cfdi_records" ("facturapiId");
 
+-- (TIMESTAMPTZ como "cancelledAt" y "createdAt" de esta misma tabla en la base real.)
 -- Verificación (debe devolver 10 columnas):
 -- SELECT column_name FROM information_schema.columns
---  WHERE table_name = 'cfdi_records'
+--  WHERE table_schema = current_schema() AND table_name = 'cfdi_records'
 --    AND column_name IN ('cancellationStatus','cancelMotive','cancelReason','cancelRequestedAt',
 --                        'cancelRequestedBy','substitutedByUuid','relatedUuid','relationType',
 --                        'refundPaymentId','satCheckedAt');

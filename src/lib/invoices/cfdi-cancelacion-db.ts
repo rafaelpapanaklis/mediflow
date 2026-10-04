@@ -14,7 +14,8 @@
 //     escriben `status` y `cancelledAt`, que ya existen.
 //
 // La pregunta «¿existen las columnas?» se hace con information_schema (nunca
-// falla) y se recuerda en globalThis — sobrevive a las recargas de `next dev` —
+// falla), SOLO en el esquema actual — la base real tiene otra copia de
+// cfdi_records en otro esquema (sonda del 3-oct-2026) —, y se recuerda en globalThis — sobrevive a las recargas de `next dev` —
 // para no llenar los logs de Postgres de errores de columna inexistente.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -51,7 +52,7 @@ export async function columnasCfdi(db: Db = prisma, opts?: { refrescar?: boolean
   try {
     const filas = await db.$queryRaw<{ column_name: string }[]>`
       SELECT column_name FROM information_schema.columns
-       WHERE table_name = 'cfdi_records'
+       WHERE table_schema = current_schema() AND table_name = 'cfdi_records'
          AND column_name IN ('cancellationStatus', 'relatedUuid', 'satCheckedAt', 'paymentId')`;
     const n = new Set(filas.map((f) => f.column_name));
     c.v = {
