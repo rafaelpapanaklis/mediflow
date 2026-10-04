@@ -28,6 +28,8 @@ const db = {
   condiciones: null as any,
   cfdiPorPago: [] as any[],
   cfdiRecords: [] as any[],
+  /** ¿Está pegado sql/ws1-t4-cfdi-ambiente.sql? */
+  columnaAmbiente: true,
 };
 const pac = {
   /** Cada petición de timbre que llegó a Facturapi (con sus argumentos). */
@@ -76,7 +78,24 @@ function cumple(row: any, where: any): boolean {
   return true;
 }
 
+/** Doble de $queryRaw / $executeRaw para lo que lee y escribe el ambiente (F-14). */
+function sqlDe(strings: TemplateStringsArray) { return strings.join("?"); }
 const prismaStub: any = {
+  $queryRaw: async (strings: TemplateStringsArray, ...vals: any[]) => {
+    const q = sqlDe(strings);
+    if (q.includes("information_schema.columns")) return db.columnaAmbiente ? [{ n: 1 }] : [];
+    if (q.includes('SELECT "environment"')) {
+      const r = db.cfdiRecords.find((x) => x.uuid === vals[1]);
+      return r ? [{ environment: r.environment ?? null }] : [];
+    }
+    return [];
+  },
+  $executeRaw: async (strings: TemplateStringsArray, ...vals: any[]) => {
+    const q = sqlDe(strings);
+    if (q.includes('SET "environment"')) { const r = db.cfdiRecords.find((x) => x.uuid === vals[2]); if (r) r.environment = vals[0]; return r ? 1 : 0; }
+    if (q.includes(`SET "status" = 'prueba'`)) { const r = db.cfdiRecords.find((x) => x.uuid === vals[1] && x.environment === "test" && x.status === "valid"); if (r) r.status = "prueba"; return r ? 1 : 0; }
+    return 0;
+  },
   $transaction: async (arg: any) => (typeof arg === "function" ? arg(prismaStub) : Promise.all(arg)),
   clinic: { findUnique: async () => ({ ...db.clinic }) },
   invoice: {
@@ -123,6 +142,7 @@ const prismaStub: any = {
 (mock as any).module("@/lib/facturapi", {
   namedExports: {
     getOrgApiKey: async () => "sk_test",
+    getOrganizationStatus: async () => ({ exists: true, isProductionReady: true, pendingSteps: [], stepsKnown: true }),
     validateRfc: async () => { pac.validaciones += 1; return { ok: true }; },
     createOrUpdateCustomer: async (_k: string, cliente: any) => { pac.clientes.push(cliente); return "cus_1"; },
     createInvoice: async (args: any) => {
@@ -144,7 +164,9 @@ const prismaStub: any = {
     CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
   },
 });
-(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => false } });
+/** FACTURAPI_ENV de la prueba (pruebas por defecto). */
+const entornoLive = { live: false };
+(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => entornoLive.live, facturapiEnv: () => (entornoLive.live ? "live" : "test") } });
 (mock as any).module("@/lib/plans", { namedExports: { getResolvedPlan: async () => ({ cfdiMonthly: 100, cfdiOverageCents: 0 }) } });
 (mock as any).module("@/lib/auth-context", {
   namedExports: {
@@ -197,7 +219,7 @@ async function timbrarPago(paymentId: string, body: Record<string, any>) {
   return quieto(async () => leer(await POST(req({ taxMode: "exento", ...body }), { params: { id: paymentId } })));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   authCtx.clinicId = "c1";
   setClinic();
   setInvoice();
@@ -213,9 +235,16 @@ beforeEach(() => {
   pac.validaciones = 0;
   pac.perderRespuesta = false;
   pac.totalForzado = null;
+  db.columnaAmbiente = true;
+  entornoLive.live = false;
+  // Import dinámico: así carga DESPUÉS de los dobles (facturapi-env, prisma).
+  (await import("@/lib/invoices/cfdi-ambiente.server"))._olvidarColumnaAmbiente();
 });
 
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
+import { cfdiBloqueaEnLive } from "@/lib/invoices/cfdi-ambiente";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // F-05 · receptor
@@ -348,4 +377,71 @@ test("F-19 · serieYFolio", () => {
   assert.deepEqual(serieYFolio("0042"), { folioNumber: 42 });
   assert.deepEqual(serieYFolio("SIN-NUMERO"), {});
   assert.deepEqual(serieYFolio(null), {});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-14 · ambiente test / live
+// ═══════════════════════════════════════════════════════════════════════════
+test("F-14 · cfdiBloqueaEnLive: en Live solo un CFDI de PRUEBAS deja de bloquear (sin marca = vigente)", () => {
+  assert.equal(cfdiBloqueaEnLive({ live: true, ambiente: "test" }), false);
+  assert.equal(cfdiBloqueaEnLive({ live: true, ambiente: "live" }), true);
+  assert.equal(cfdiBloqueaEnLive({ live: true, ambiente: null }), true);
+  assert.equal(cfdiBloqueaEnLive({ live: false, ambiente: "live" }), false);
+});
+
+test("F-14 · cada timbrado deja escrito su ambiente (live)", async () => {
+  entornoLive.live = true;
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(db.cfdiRecords.find((x) => x.uuid === "UUID-1")?.environment, "live");
+});
+
+test("F-14 · en Live, una factura con un CFDI de PRUEBAS (caso F-000155) se timbra de verdad y el de prueba queda retirado", async () => {
+  entornoLive.live = true;
+  db.invoice.cfdiUuid = "UUID-TEST";
+  db.cfdiRecords.push({ invoiceId: "inv1", uuid: "UUID-TEST", status: "valid", tipoComprobante: "I", environment: "test" });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(db.invoice.cfdiUuid, "UUID-1");
+  assert.equal(db.cfdiRecords.find((x) => x.uuid === "UUID-TEST")?.status, "prueba");
+});
+
+test("F-14 · sin marca de ambiente (CFDI viejo) sigue contando como vigente: no se timbra encima", async () => {
+  entornoLive.live = true;
+  db.invoice.cfdiUuid = "UUID-VIEJO";
+  db.cfdiRecords.push({ invoiceId: "inv1", uuid: "UUID-VIEJO", status: "valid", tipoComprobante: "I", environment: null });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 400);
+  assert.equal(pac.timbres.length, 0);
+});
+
+test("F-14 · sin el SQL pegado nada cambia: el de prueba sigue bloqueando como hoy", async () => {
+  entornoLive.live = true;
+  db.columnaAmbiente = false;
+  db.invoice.cfdiUuid = "UUID-TEST";
+  db.cfdiRecords.push({ invoiceId: "inv1", uuid: "UUID-TEST", status: "valid", tipoComprobante: "I", environment: "test" });
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 400);
+});
+
+test("F-14 · la guarda de cancelar/anular/reembolsar/cambiar precio: en Live un CFDI de PRUEBAS no bloquea", async () => {
+  entornoLive.live = true;
+  db.cfdiRecords.push({ uuid: "U-T", environment: "test" }, { uuid: "U-L", environment: "live" }, { uuid: "U-N", environment: null });
+  const { denyIfCfdiVigenteEnAmbiente } = await import("@/lib/invoices/cfdi-ambiente.server");
+  const g = (uuid: string) => denyIfCfdiVigenteEnAmbiente(prismaStub, { clinicId: "c1", cfdiUuid: uuid, accion: "cancelar" });
+  assert.equal(await g("U-T"), null);
+  assert.equal((await g("U-L"))?.status, 409);
+  assert.equal((await g("U-N"))?.status, 409);
+  assert.equal((await g("timbrando:inv1:x"))?.status, 409, "un timbrado en curso bloquea siempre");
+  entornoLive.live = false;
+  assert.equal(await g("U-L"), null, "en pruebas nada bloquea, como siempre");
+});
+
+test("F-14 · las 4 rutas (anular, cancelar, reembolsar, cambiar precio) usan la guarda con ambiente", () => {
+  const raiz = join(__dirname, "..", "..", "invoices", "[id]");
+  for (const f of ["route.ts", "cancel/route.ts", "refund/route.ts", "edit-price/route.ts"]) {
+    const src = readFileSync(join(raiz, f), "utf8");
+    assert.match(src, /denyIfCfdiVigenteEnAmbiente\(/, f);
+    assert.doesNotMatch(src, /[^A-Za-z]denyIfCfdiVigente\(/, f);
+  }
 });

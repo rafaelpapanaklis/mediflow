@@ -14,7 +14,7 @@ import { cfdiClaimFor, isCfdiClaim, CFDI_EN_CURSO_ERROR } from "@/lib/invoices/c
 import { cfdiCuadre, CFDI_TOTAL_MISMATCH } from "@/lib/invoices/cfdi-cuadre";
 import { pudoHaberTimbrado, CFDI_TIMBRE_INCIERTO_ERROR } from "@/lib/invoices/cfdi-timbre-incierto";
 import { liveReadinessBlock } from "@/lib/invoices/cfdi-readiness";
-import { isFacturapiLive } from "@/lib/facturapi-env";
+import { isFacturapiLive, facturapiEnv } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
@@ -41,6 +41,7 @@ import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server
 import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
 import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
 import { llaveIdempotencia, serieYFolio } from "@/lib/invoices/cfdi-identidad";
+import { ambienteDeCfdi, marcarAmbiente, retirarCfdiDePrueba } from "@/lib/invoices/cfdi-ambiente.server";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -179,7 +180,16 @@ export async function POST(req: NextRequest) {
     : null;
   if (sust && !sust.ok) return NextResponse.json({ error: sust.error, code: sust.code }, { status: sust.status });
   const cfdiPrevio: string | null = sust && sust.ok ? sust.viejo.uuid : null;
-  if (invoice.cfdiUuid && invoice.cfdiUuid !== cfdiPrevio && invoice.cfdiUuid !== reintento) return NextResponse.json({ error: "Esta factura ya tiene CFDI timbrado" }, { status: 400 });
+  // ── F-14 (ws1-t4, vuelta 2): un CFDI de PRUEBAS no cuenta en Live ─────────
+  // La factura quedó con un CFDI timbrado en TEST (sin validez ante el SAT).
+  // En Live se puede timbrar de verdad: el apartado se toma sobre ese uuid y,
+  // si falla, la factura vuelve a él.
+  const cfdiDePrueba: string | null =
+    isFacturapiLive() && !cfdiPrevio && !reintento && invoice.cfdiUuid && !isCfdiClaim(invoice.cfdiUuid)
+      && (await ambienteDeCfdi(prisma, { clinicId: ctx!.clinicId, uuid: invoice.cfdiUuid })) === "test"
+      ? invoice.cfdiUuid
+      : null;
+  if (invoice.cfdiUuid && invoice.cfdiUuid !== cfdiPrevio && invoice.cfdiUuid !== reintento && invoice.cfdiUuid !== cfdiDePrueba) return NextResponse.json({ error: "Esta factura ya tiene CFDI timbrado" }, { status: 400 });
   if (invoice.status === "DRAFT") {
     return NextResponse.json({ error: "La factura está en borrador; confírmala antes de timbrar." }, { status: 400 });
   }
@@ -356,7 +366,7 @@ export async function POST(req: NextRequest) {
     // si alguien lo soltó o lo cambió entre medias, no se sigue).
     const { count } = await prisma.invoice.updateMany({
       where: {
-        id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: reintento ?? cfdiPrevio,
+        id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: reintento ?? cfdiPrevio ?? cfdiDePrueba,
         status: { notIn: ["DRAFT", "CANCELLED"] }, total: invoice.total,
       },
       data: { cfdiUuid: claim },
@@ -474,6 +484,10 @@ export async function POST(req: NextRequest) {
     const q = cfdiOverage(usage.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
     // ws1-t3: la relación 04 queda escrita (la exige cancelar el viejo con motivo 01).
     if (sust && sust.ok) await registrarSustituto({ clinicId: ctx!.clinicId, nuevoCfdiId: cfdiRecord.id, viejoUuid: sust.viejo.uuid });
+    // F-14: en qué ambiente se timbró (sin el SQL no escribe nada) y, si
+    // reemplazó a uno de PRUEBAS, ese deja de contar como el CFDI de la factura.
+    await marcarAmbiente(prisma, { clinicId: ctx!.clinicId, uuid: result.uuid, ambiente: facturapiEnv() });
+    if (cfdiDePrueba) await retirarCfdiDePrueba(prisma, { clinicId: ctx!.clinicId, uuid: cfdiDePrueba });
 
     // Rastro en el audit log (antes el timbrado no se registraba), con la forma
     // de pago y el uso que se mandaron.
@@ -554,7 +568,7 @@ export async function POST(req: NextRequest) {
         await prisma.invoice.updateMany({
           where: { id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: claim },
           // Con sustitución vuelve al CFDI que sigue vigente, no a NULL (ws1-t3).
-          data:  { cfdiUuid: cfdiPrevio },
+          data:  { cfdiUuid: cfdiPrevio ?? cfdiDePrueba },
         }).catch((e) => console.error("CFDI: no se pudo soltar el apartado", { invoiceId, e }));
       }
       return NextResponse.json({ error: err.message ?? "Error al timbrar CFDI" }, { status: 500 });

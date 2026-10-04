@@ -214,7 +214,7 @@ const pac = {
 let fallaCliente = false;
 /** FACTURAPI_ENV=live (timbra ante el SAT) o pruebas. */
 const entorno = { live: true };
-(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => entorno.live } });
+(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => entorno.live, facturapiEnv: () => (entorno.live ? "live" : "test") } });
 (mock as any).module("@/lib/plans", {
   namedExports: { getResolvedPlan: async () => ({ cfdiMonthly: 100, cfdiOverageCents: 0 }) },
 });

@@ -10,7 +10,9 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { CASH_METHOD } from "@/lib/caja";
-import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+import { cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+// ws1-t4, vuelta 2 (F-14): en Live, un CFDI de PRUEBAS ya no bloquea la factura.
+import { denyIfCfdiVigenteEnAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
 import { esMetodoPago, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
 import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
@@ -393,7 +395,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const deniedAnular = denyIfMissingPermission(ctx, permisoParaAnular(invoice.status));
   if (deniedAnular) return deniedAnular;
   // Con CFDI, anular aquí lo dejaría vigente ante el SAT (N3).
-  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "anular");
+  const cfdiDenied = await denyIfCfdiVigenteEnAmbiente(prisma, { clinicId, cfdiUuid: invoice.cfdiUuid, accion: "anular" });
   if (cfdiDenied) return cfdiDenied;
   if (invoice.status !== "DRAFT" && invoice.paid === 0) {
     // Non-draft without payments — mark cancelled instead of delete

@@ -7,7 +7,8 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
-import { denyIfCfdiVigente } from "@/lib/invoices/cfdi-vigente";
+// ws1-t4, vuelta 2 (F-14): en Live, un CFDI de PRUEBAS ya no bloquea la factura.
+import { denyIfCfdiVigenteEnAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
 import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // timbrado (UPDATE … WHERE "cfdiUuid" IS NULL) espera a que esta transacción
     // suelte la fila, así que no se cuela un timbrado entre la comprobación y el
     // reembolso.
-    const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "reembolsar");
+    const cfdiDenied = await denyIfCfdiVigenteEnAmbiente(tx, { clinicId, cfdiUuid: invoice.cfdiUuid, accion: "reembolsar" });
     if (cfdiDenied) return { denied: cfdiDenied };
     // CFDI por pago (ws1-t1, sep-2026, facturas a plazos): un reembolso no
     // apunta a un pago concreto (baja `paid` en general), así que no se sabe

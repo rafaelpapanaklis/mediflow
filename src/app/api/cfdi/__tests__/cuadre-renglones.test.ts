@@ -168,7 +168,7 @@ const prismaStub: any = {
     CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
   },
 });
-(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => true } });
+(mock as any).module("@/lib/facturapi-env", { namedExports: { isFacturapiLive: () => true, facturapiEnv: () => "live" } });
 (mock as any).module("@/lib/plans", {
   namedExports: { getResolvedPlan: async () => ({ cfdiMonthly: 100, cfdiOverageCents: 0 }) },
 });

@@ -13,7 +13,7 @@ import {
 import { liveReadinessBlock } from "@/lib/invoices/cfdi-readiness";
 import { isCfdiClaim } from "@/lib/invoices/cfdi-vigente";
 import { pudoHaberTimbrado } from "@/lib/invoices/cfdi-timbre-incierto";
-import { isFacturapiLive } from "@/lib/facturapi-env";
+import { isFacturapiLive, facturapiEnv } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
@@ -31,6 +31,7 @@ import { formaDeAnticipoDelPaciente } from "@/lib/invoices/forma-anticipo.server
 import { clienteFacturapiDelReceptor, errorDeReceptorExtranjero, esReceptorExtranjero, USO_EXTRANJERO } from "@/lib/cfdi/extranjero";
 import { normalizarRfc } from "@/lib/invoices/cfdi-reglas";
 import { llaveIdempotencia } from "@/lib/invoices/cfdi-identidad";
+import { marcarAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -352,6 +353,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // guardándolo — se cae al mismo catch de abajo para no perder el rastro.
       throw new Error("No se pudo confirmar la fila del CFDI por pago tras el timbrado.");
     }
+
+    // F-14 (ws1-t4, vuelta 2): en qué ambiente se timbró. Nunca lanza.
+    await marcarAmbiente(prisma, { clinicId: ctx!.clinicId, uuid: result.uuid, ambiente: facturapiEnv() });
 
     // Metering del cupo CFDI: mismo contador que la factura completa.
     const period = cfdiPeriodFor(new Date(), clinic.timezone);

@@ -6,7 +6,9 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+import { cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+// ws1-t4, vuelta 2 (F-14): en Live, un CFDI de PRUEBAS ya no bloquea la factura.
+import { denyIfCfdiVigenteEnAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { devolverAnticipoAlCancelar } from "@/lib/patient-credit-aplicar";
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   if (invoice.status === "CANCELLED") return NextResponse.json({ error: "La factura ya está cancelada" }, { status: 400 });
   // Con CFDI, cancelar aquí lo dejaría vigente ante el SAT (N3).
-  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "cancelar");
+  const cfdiDenied = await denyIfCfdiVigenteEnAmbiente(prisma, { clinicId, cfdiUuid: invoice.cfdiUuid, accion: "cancelar" });
   if (cfdiDenied) return cfdiDenied;
 
   // Append razón a notes si se provee, así queda registro humano-legible
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const fresca = await tx.invoice.findFirst({ where: { id: params.id, clinicId } });
     if (!fresca) return { error: "Factura no encontrada", status: 404 };
     if (fresca.status === "CANCELLED") return { error: "La factura ya está cancelada", status: 400 };
-    const cfdiDentro = denyIfCfdiVigente(fresca.cfdiUuid, "cancelar");
+    const cfdiDentro = await denyIfCfdiVigenteEnAmbiente(tx, { clinicId, cfdiUuid: fresca.cfdiUuid, accion: "cancelar" });
     if (cfdiDentro) return { denied: cfdiDentro };
 
     // ¿Hay anticipo? Se mira primero en los Payment (tabla de siempre): sin

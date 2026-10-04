@@ -6,7 +6,9 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+import { cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
+// ws1-t4, vuelta 2 (F-14): en Live, un CFDI de PRUEBAS ya no bloquea la factura.
+import { denyIfCfdiVigenteEnAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
 import {
   sumInvoiceItems, computeInvoiceTotal, round2, PRICE_ADJUST_FLAG,
 } from "@/lib/invoice-totals";
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "No se puede modificar una factura cerrada" }, { status: 400 });
   }
   // Con CFDI, el precio nuevo no coincidiría con el CFDI vigente ante el SAT (N3).
-  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "cambiar el precio de");
+  const cfdiDenied = await denyIfCfdiVigenteEnAmbiente(prisma, { clinicId, cfdiUuid: invoice.cfdiUuid, accion: "cambiar el precio de" });
   if (cfdiDenied) return cfdiDenied;
 
   // INVARIANTE: total = Σ(conceptos) − descuento (+IVA si va agregado). Antes,
