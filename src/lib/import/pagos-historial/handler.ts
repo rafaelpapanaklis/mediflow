@@ -180,7 +180,11 @@ export const paymentHistoryHandler: EntityHandler = {
         method: metodo || null,
         concept: concepto || null,
         doctorId: doctorId ?? null,
-        paidAt: fecha,
+        // ws1-t2 (auditoría de uso C-20): el día de calendario del archivo a
+        // MEDIODÍA UTC, el mismo día en toda América. `parseDate` da la
+        // medianoche del servidor (04:00 UTC aquí, 00:00 en Vercel) y en la
+        // Ciudad de México caía el día anterior: el pago del 1-ago contaba en julio.
+        paidAt: calendarNoonUtc(fecha!),
         origin: origen,
         key: llaveFinal,
       };

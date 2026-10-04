@@ -5,6 +5,7 @@
 // patient_credits (P2021/P2022 → lista vacía, nunca tumba la ficha).
 
 import { prisma } from "@/lib/prisma";
+import { fechaDeHistoria } from "@/lib/dinero/fecha-de-historia";
 
 function isMissingRelation(e: any): boolean {
   return e?.code === "P2021" || e?.code === "P2022";
@@ -40,7 +41,7 @@ export async function getMigratedPayments(clinicId: string, patientId: string): 
     if (rows.length === 0) return [];
     const doctorIds = Array.from(new Set(rows.map((r) => r.doctorId).filter((id): id is string => !!id)));
     const doctores = doctorIds.length
-      ? await prisma.user.findMany({ where: { id: { in: doctorIds } }, select: { id: true, firstName: true, lastName: true } })
+      ? await prisma.user.findMany({ where: { id: { in: doctorIds }, clinicId }, select: { id: true, firstName: true, lastName: true } })
       : [];
     const nombreDoctor = new Map(doctores.map((d) => [d.id, `${d.firstName} ${d.lastName}`.trim()]));
     return rows.map((r) => ({
@@ -50,7 +51,9 @@ export async function getMigratedPayments(clinicId: string, patientId: string): 
       concept: r.concept,
       doctorId: r.doctorId,
       doctorName: r.doctorId ? nombreDoctor.get(r.doctorId) ?? null : null,
-      paidAt: r.paidAt.toISOString(),
+      // ws1-t2 (C-20): un pago migrado es un DÍA de calendario; los viejos se
+      // guardaron a la medianoche del servidor y en México salían un día antes.
+      paidAt: fechaDeHistoria(r.paidAt).toISOString(),
       origin: r.origin,
     }));
   } catch (e) {

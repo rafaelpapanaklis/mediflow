@@ -15,6 +15,7 @@ import {
   cargarCasosParaProduccion,
   facturasLigadas,
 } from "@/lib/orthodontics/produccion-db";
+import { ventanaDeHistoria } from "./fecha-de-historia";
 import {
   METODOS_DE_HISTORIA,
   METODOS_QUE_RESTAN,
@@ -218,13 +219,20 @@ async function hayTablaDePagosMigrados(db: DineroDb): Promise<boolean> {
  * de `migrated_payments` más las filas viejas de `payments` con método de
  * historia. Se enseña APARTE de los ingresos, nunca sumado. Nunca lanza: si
  * no se puede leer, 0.
+ *
+ * ws1-t2 (auditoría de uso C-20): esas filas traen una fecha SIN hora,
+ * guardada como la medianoche del servidor; se leen por su día de calendario
+ * (`ventanaDeHistoria`), no por el instante. Antes el abono del 1-ago contaba
+ * en julio y agosto decía $3,750 en vez de $4,250.
  */
 export async function historiaMigradaDelPeriodo(
   clinicId: string,
-  paidAt: Prisma.DateTimeFilter,
+  periodo: Prisma.DateTimeFilter,
   db: DineroDb = prisma,
+  zona?: string,
 ): Promise<number> {
   exigirClinica(clinicId);
+  const paidAt = ventanaDeHistoria(periodo as { gte?: Date; lte?: Date; lt?: Date }, zona);
   try {
     const [enPayments, tabla] = await Promise.all([
       db.payment.aggregate({
