@@ -6,7 +6,11 @@
 //   POST → { depositId, motivo } → lo anula: el pago queda en $0 con nota,
 //          el anticipo pasa a anulado y la factura vuelve a como estaba.
 //
-// Permiso: "billing.charge" (cobrar) — anular dinero es cosa de quien cobra.
+// Permiso: "billing.refund" (reembolsar / cancelar) — auditoría de uso C-04
+// (4-oct-2026, decisión de Rafael por defecto): anular un anticipo YA RECIBIDO
+// saca ese dinero del sistema igual que un reembolso, así que pide lo mismo
+// (dueño / administración). Antes bastaba «billing.charge» y recepción podía
+// dejar en $0 un cobro con solo escribir un motivo. Queda en Movimientos.
 // Multi-tenant: clinicId y quien anula, de la sesión; visibilidad por
 // paciente antes de tocar nada.
 
@@ -38,8 +42,8 @@ async function comprobar(ctx: { clinicId: string; userId: string; role: any }, i
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  // Sin permiso de cobro no hay nada que ofrecer: lista vacía, sin error.
-  if (denyIfMissingPermission(ctx, "billing.charge")) return NextResponse.json({ anulables: [] });
+  // Sin permiso de reembolso no hay nada que ofrecer: lista vacía, sin error.
+  if (denyIfMissingPermission(ctx, "billing.refund")) return NextResponse.json({ anulables: [] });
   const chk = await comprobar(ctx, params.id);
   if ("error" in chk) return chk.error;
   return NextResponse.json({ anulables: await anticiposAnulables(ctx.clinicId, params.id) });
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (limited) return limited;
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "billing.charge");
+  const denied = denyIfMissingPermission(ctx, "billing.refund");
   if (denied) return denied;
   const chk = await comprobar(ctx, params.id);
   if ("error" in chk) return chk.error;
@@ -72,7 +76,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await logMutation({
-      texto: `Anuló un anticipo de ${montoParaTexto(r.anulado.monto)}`,
+      // C-18: con el paciente, para que salga en sus Movimientos.
+      patientId: chk.patientId ?? undefined,
+      texto: `Anuló un anticipo de ${montoParaTexto(r.anulado.monto)}${motivo.trim() ? ` (motivo: ${motivo.trim()})` : ""}`,
     req,
     clinicId: ctx.clinicId,
     userId: ctx.userId,

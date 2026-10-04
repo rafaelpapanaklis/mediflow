@@ -2,7 +2,7 @@
 
 // «Anular anticipo» (H7 de la revisión final, ws1-t4) — para un anticipo
 // registrado por error. Se pinta solo si la factura tiene alguno que se pueda
-// anular Y la sesión tiene permiso de cobro (lo decide el GET). Pide el
+// anular Y la sesión tiene permiso de reembolso (lo decide el GET; C-04). Pide el
 // motivo, que queda en el historial con quién y cuándo. Las reglas, en
 // src/lib/anticipos/anular-core.ts.
 //
