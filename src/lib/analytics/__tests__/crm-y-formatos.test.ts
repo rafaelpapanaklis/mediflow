@@ -41,7 +41,7 @@ test("C-25: el CRM dice hace cuánto se calcularon sus cifras", () => {
   assert.equal(minutosDesde(null, ahora), 0);
   const api = leer("src/app/api/analytics/patients-value/route.ts");
   assert.match(api, /return \{ totals, top, generatedAt: now\.toISOString\(\) \}/);
-  assert.match(api, /"analytics-patients-value-v3"/, "la caché vieja (sin generatedAt) no se sirve");
+  assert.match(api, /"analytics-patients-value-v4"/, "la caché vieja (sin generatedAt) no se sirve");
   for (const f of ["src/app/dashboard/analytics/crm/crm-client.tsx", "src/app/dashboard/analytics/crm/crm-rediseno.tsx"]) {
     assert.match(leer(f), /<ActualizadoHace generatedAt=\{value\.generatedAt\} \/>/, f);
   }
@@ -64,4 +64,30 @@ test("textos del CRM en es y en", () => {
     assert.equal(typeof d.analytics.crm.actualizadoAhora, "string", l);
     assert.equal(typeof d.analytics.crm.actualizadoHace.other, "string", l);
   }
+});
+
+// ── Segunda vuelta (t6 F5): archivados y caché ─────────────────────────────
+test("C-25 (segunda vuelta): los totales cuentan a los archivados, como Finanzas; la lista no", () => {
+  // Dos pacientes archivados que deben $670: Finanzas los cuenta; el CRM los quitaba.
+  const pacientes = [
+    { saldo: 1000, archivado: false },
+    { saldo: 400, archivado: true },
+    { saldo: 270, archivado: true },
+  ];
+  const finanzas = pacientes.reduce((s, p) => s + p.saldo, 0);
+  const crmViejo = pacientes.filter((p) => !p.archivado).reduce((s, p) => s + p.saldo, 0);
+  assert.equal(finanzas - crmViejo, 670);
+  const api = leer("src/app/api/analytics/patients-value/route.ts");
+  assert.doesNotMatch(api, /AND p\."status" <> 'ARCHIVED'\n\s*\)/, "el WHERE de per_patient ya no quita a los archivados");
+  assert.match(api, /\(p\."deletedAt" IS NULL AND p\."status" <> 'ARCHIVED'\) AS visible/);
+  assert.match(api, /rows\.filter\(\(r\) => r\.visible\)/, "la lista «Top pacientes» sigue sin archivados ni borrados");
+});
+
+test("C-25 (segunda vuelta): la caché caduca de verdad a los 5 min (no sirve lo viejo mientras recalcula)", () => {
+  const api = leer("src/app/api/analytics/patients-value/route.ts");
+  assert.doesNotMatch(api, /unstable_cache/);
+  assert.match(api, /cachedByKey\(\n\s*\/\/[^\n]*\n\s*claveDeClinica\("analytics-patients-value-v4", clinicId\),\n\s*REVALIDATE_SECONDS \* 1000,/);
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
+  assert.match(es.queCuenta.crmSaldo, /también los archivados/);
+  assert.doesNotMatch(es.queCuenta.crmSaldo, /no archivados/);
 });

@@ -5527,10 +5527,10 @@
     },
     "crm": {
       "actualizadoHace": {
-        "one": "Figures calculated {count} min ago (they refresh every 5 min).",
-        "other": "Figures calculated {count} min ago (they refresh every 5 min)."
+        "one": "Figures calculated {count} min ago (they refresh at most every 5 min).",
+        "other": "Figures calculated {count} min ago (they refresh at most every 5 min)."
       },
-      "actualizadoAhora": "Figures just calculated (they refresh every 5 min)."
+      "actualizadoAhora": "Figures just calculated (they refresh at most every 5 min)."
     }
   },
   "inbox": {
@@ -10898,8 +10898,8 @@
     "reportesTicket": "Income for the 6 months ÷ appointments for the 6 months.",
     "reportesConDeuda": "Balance of issued invoices (no drafts or cancelled ones), from any date, migrated ones included. Counts patients with at least one.",
     "crmLtv": "Everything collected ÷ patients with any payment. No period; includes migrated amounts.",
-    "crmCobrado": "What was paid on every non-cancelled invoice, from any date, for non-archived patients. Includes migrated amounts.",
-    "crmSaldo": "Balance of issued invoices (no drafts or cancelled), from any date, for non-archived patients. Includes migrated amounts.",
+    "crmCobrado": "What was paid on every non-cancelled invoice, from any date, for all patients (archived ones too). Includes migrated amounts.",
+    "crmSaldo": "Balance of issued invoices (no drafts or cancelled), from any date, for all patients (archived ones too): the same figure as Finance «To collect». Includes migrated amounts.",
     "crmPacientesConPagos": "{count} patients with payments",
     "crmPacientesQueDeben": "{count} patients owe",
     "costosIngresos": "What was paid on invoices linked to this month's appointments that have a chair. Invoices with no appointment or chair don't count (nor migrated ones).",

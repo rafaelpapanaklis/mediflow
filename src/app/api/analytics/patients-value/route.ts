@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { unstable_cache } from "next/cache";
+import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -14,7 +14,7 @@ import { getCurrentUser } from "@/lib/auth";
  * Escala: la agregación se hace EN LA BASE (una sola query con CTEs + window
  * aggregates), sin traer filas capadas a JS. Los totales son sobre TODOS los
  * pacientes (se eliminó el viejo techo de 5000 que truncaba en silencio) y el
- * top sale con LIMIT. Resultado cacheado por clínica 5 min (unstable_cache con
+ * top sale con LIMIT. Resultado cacheado por clínica 5 min (cachedByKey con
  * clinicId en la key → sin fuga cross-clínica).
  *
  * Multi-tenant: clinicId SIEMPRE desde getCurrentUser y filtrado en cada CTE.
@@ -25,6 +25,14 @@ import { getCurrentUser } from "@/lib/auth";
  * de pacientes no archivados, no los que deben. Ahora va `owingPatients` (pacientes con saldo).
  * Y el saldo deja fuera los BORRADORES, como «Por cobrar» de Finanzas (receivableInvoiceWhere):
  * un borrador no se le ha cobrado a nadie.
+ *
+ * ws1-t2 (auditoría de uso C-25, segunda vuelta; t6 F5): los TOTALES cuentan
+ * a todos los pacientes de la clínica —también los archivados—, como
+ * «Por cobrar» de Finanzas, Reportes y Pacientes (el CRM daba $670 y 2
+ * pacientes menos: dos archivados que deben). La lista «Top pacientes» sigue
+ * sin archivados ni borrados. Y la caché ya no es la de Next (sirve lo
+ * viejo mientras recalcula: decía «calculadas hace 11 min» con «cada 5»): es
+ * `cachedByKey`, que caduca de verdad a los 5 min.
  */
 
 const REVALIDATE_SECONDS = 300;
@@ -76,10 +84,14 @@ interface RawRow {
   t_patients: number;
   t_paying: number;
   t_owing: number;
+  visible: boolean;
 }
 
 function getPatientsValue(clinicId: string): Promise<ValueResp> {
-  return unstable_cache(
+  return cachedByKey(
+    // v4 (ws1-t2, C-25 segunda vuelta): totales con archivados y caducidad estricta.
+    claveDeClinica("analytics-patients-value-v4", clinicId),
+    REVALIDATE_SECONDS * 1000,
     async (): Promise<ValueResp> => {
       const now = new Date();
       // Agregamos invoices y appointments por separado (evita el producto
@@ -119,13 +131,13 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
                  COALESCE(inv.balance, 0)  AS balance,
                  COALESCE(appt.visits, 0)  AS visits,
                  appt.last_visit,
-                 appt.next_appt
+                 appt.next_appt,
+                 -- C-25: en la lista solo los vivos; en los totales, todos.
+                 (p."deletedAt" IS NULL AND p."status" <> 'ARCHIVED') AS visible
           FROM "patients" p
           LEFT JOIN inv  ON inv."patientId"  = p."id"
           LEFT JOIN appt ON appt."patientId" = p."id"
           WHERE p."clinicId" = ${clinicId}
-            AND p."deletedAt" IS NULL
-            AND p."status" <> 'ARCHIVED'
         )
         SELECT pp.*,
                SUM(pp.invoiced) OVER ()                                 AS t_invoiced,
@@ -135,11 +147,11 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
                CAST(COUNT(*) FILTER (WHERE pp.paid > 0) OVER () AS int) AS t_paying,
                CAST(COUNT(*) FILTER (WHERE pp.balance > 0.005) OVER () AS int) AS t_owing
         FROM per_patient pp
-        ORDER BY pp.paid DESC, pp."id" ASC
+        ORDER BY pp.visible DESC, pp.paid DESC, pp."id" ASC
         LIMIT 50
       `;
 
-      const top: ValueRow[] = rows.map((r) => ({
+      const top: ValueRow[] = rows.filter((r) => r.visible).map((r) => ({
         id: r.id,
         name: `${r.firstName} ${r.lastName}`.trim(),
         patientNumber: r.patientNumber,
@@ -167,11 +179,7 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
 
       return { totals, top, generatedAt: now.toISOString() };
     },
-    // v2 (ws1-t2): la respuesta trae `owingPatients`; la llave nueva no sirve la forma vieja de caché.
-    // v3 (ws1-t2, C-25): saldo solo positivo y `generatedAt`.
-    ["analytics-patients-value-v3", clinicId],
-    { revalidate: REVALIDATE_SECONDS, tags: [`analytics-${clinicId}`] },
-  )();
+  );
 }
 
 export async function GET(_req: NextRequest) {

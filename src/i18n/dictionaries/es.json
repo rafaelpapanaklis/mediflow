@@ -5527,10 +5527,10 @@
     },
     "crm": {
       "actualizadoHace": {
-        "one": "Cifras calculadas hace {count} min (se recalculan cada 5 min).",
-        "other": "Cifras calculadas hace {count} min (se recalculan cada 5 min)."
+        "one": "Cifras calculadas hace {count} min (se recalculan como mucho cada 5 min).",
+        "other": "Cifras calculadas hace {count} min (se recalculan como mucho cada 5 min)."
       },
-      "actualizadoAhora": "Cifras recién calculadas (se recalculan cada 5 min)."
+      "actualizadoAhora": "Cifras recién calculadas (se recalculan como mucho cada 5 min)."
     }
   },
   "inbox": {
@@ -10898,8 +10898,8 @@
     "reportesTicket": "Ingresos de los 6 meses ÷ citas de los 6 meses.",
     "reportesConDeuda": "Saldo de las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. Cuenta pacientes con al menos una.",
     "crmLtv": "Todo lo cobrado ÷ pacientes con algún pago. Sin periodo; incluye lo migrado.",
-    "crmCobrado": "Lo pagado de todas las facturas no canceladas, de cualquier fecha, de pacientes no archivados. Incluye lo migrado.",
-    "crmSaldo": "Saldo de las facturas emitidas (sin borradores ni canceladas), de cualquier fecha, de pacientes no archivados. Incluye lo migrado.",
+    "crmCobrado": "Lo pagado de todas las facturas no canceladas, de cualquier fecha, de todos los pacientes (también los archivados). Incluye lo migrado.",
+    "crmSaldo": "Saldo de las facturas emitidas (sin borradores ni canceladas), de cualquier fecha, de todos los pacientes (también los archivados): la misma cifra que «Por cobrar» de Finanzas. Incluye lo migrado.",
     "crmPacientesConPagos": "{count} pacientes con pagos",
     "crmPacientesQueDeben": "{count} pacientes deben",
     "costosIngresos": "Lo pagado de las facturas ligadas a citas del mes que tienen sillón. No cuentan las facturas sin cita o sin sillón (lo migrado tampoco).",
