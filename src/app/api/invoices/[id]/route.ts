@@ -18,6 +18,7 @@ import { CODIGO_YA_COBRADO, frenoCobroDoble } from "@/lib/cobro-automatico/servi
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
+import { permisoParaAnular } from "@/lib/invoices/anular-factura";
 import { decidirEdicion, motivoParaNoEditar } from "@/lib/invoices/editar-factura-core";
 import { notasParaGuardar } from "@/lib/invoices/marcas-internas";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
@@ -385,6 +386,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
     if (denied) return denied;
   }
+  // ws1-t2 (auditoría de dinero F6): anular una factura EMITIDA borra una deuda
+  // de «Por cobrar»; pide lo mismo que cancelarla (billing.refund), no solo
+  // billing.edit, que doctor y recepción tienen de fábrica. El borrador sigue
+  // con billing.edit.
+  const deniedAnular = denyIfMissingPermission(ctx, permisoParaAnular(invoice.status));
+  if (deniedAnular) return deniedAnular;
   // Con CFDI, anular aquí lo dejaría vigente ante el SAT (N3).
   const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "anular");
   if (cfdiDenied) return cfdiDenied;
@@ -401,10 +408,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
     await logMutation({
       patientId: invoice.patientId,
-      texto: `Anuló la factura ${invoice.invoiceNumber}`,
+      texto: `Anuló la factura ${invoice.invoiceNumber} (dejó de cobrarse un saldo de ${montoParaTexto(invoice.balance)})`,
       req, clinicId, userId: ctx.userId,
       entityType: "invoice", entityId: params.id, action: "delete",
-      before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber, total: invoice.total },
+      before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber, total: invoice.total, balance: invoice.balance },
+      after: { status: "CANCELLED" },
     });
     // Mercado Pago (ws1-t1): el saldo cambió por aquí; los links pendientes piden
     // un monto viejo y se cierran. Nunca lanza.

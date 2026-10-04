@@ -345,6 +345,7 @@
     "test:caja-dinero": "tsx --test src/lib/__tests__/caja-dinero.test.ts",
     "test:dinero-cobro-caja": "tsx --test --experimental-test-module-mocks src/lib/__tests__/dinero-cobro-y-caja.test.ts",
     "test:que-cuenta": "tsx --test --experimental-test-module-mocks src/lib/__tests__/que-cuenta-f9.test.ts",
+    "test:anular-factura": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/anular-con-permiso.test.ts",
     "test:vencido-saldos-orto": "tsx --test --experimental-test-module-mocks src/lib/__tests__/vencido-saldos-vs-ortodoncia.test.ts",
     "test:finanzas-periodo": "tsx --test src/lib/__tests__/finanzas-periodo.test.ts",
     "test:equipo-rediseno": "tsx --test src/components/dashboard/equipo-rediseno/__tests__/equipo-rediseno.test.ts",
