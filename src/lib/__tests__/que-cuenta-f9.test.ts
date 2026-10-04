@@ -55,7 +55,8 @@ test("CRM: el número bajo «Saldo por cobrar» son los pacientes que DEBEN, no 
 test("CRM: el saldo deja fuera los borradores, como «Por cobrar» de Finanzas", async () => {
   const { GET } = await import("@/app/api/analytics/patients-value/route");
   await GET({} as any);
-  assert.match(sqlVisto, /SUM\("balance"\) FILTER \(WHERE "status" <> 'DRAFT'\)/);
+  // ws1-t2 (auditoría de uso C-25): además, solo saldos positivos, como «Por cobrar» de Finanzas.
+  assert.match(sqlVisto, /SUM\("balance"\) FILTER \(WHERE "status" <> 'DRAFT' AND "balance" > 0\)/);
   assert.match(sqlVisto, /"status" <> 'CANCELLED'/);
 });
 
