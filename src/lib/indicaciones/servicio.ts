@@ -298,7 +298,33 @@ export function hojasSugeridas(
   });
   // Si una copia de la clínica y su original de fábrica coinciden, va la de la clínica.
   const propias = new Set(porPalabras.filter((h) => !h.deFabrica).map((h) => h.basadaEn));
-  return porPalabras.filter((h) => !(h.deFabrica && propias.has(h.basadaEn))).map((h) => h.id);
+  const sugeridas = porPalabras.filter((h) => !(h.deFabrica && propias.has(h.basadaEn))).map((h) => h.id);
+  if (sugeridas.length > 0) return sugeridas;
+  return hojasDeOrtodonciaPorNombre(enUso, textos);
+}
+
+/** Minúsculas y sin acentos. */
+function plano(t: string | null | undefined): string {
+  return (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+const PALABRAS_ORTO = ["ortodoncia", "brackets", "bracket", "alineador", "elastico", "retenedor", "arco"];
+
+/**
+ * C-72 (auditoría de uso, vuelta 2): DaleControl no trae hojas de ortodoncia de fábrica (textos clínicos: los decide
+ * la clínica, decisión 15). Lo que sí hace el sistema: en una cita de ortodoncia («Control de ortodoncia», colocación…)
+ * propone las hojas PROPIAS de la clínica cuyo nombre habla de ortodoncia, aunque nadie las haya ligado a un
+ * procedimiento. Solo si no hubo propuesta por liga ni por palabras.
+ */
+export function hojasDeOrtodonciaPorNombre(
+  enUso: readonly HojaDTO[],
+  textos: ReadonlyArray<string | null | undefined>,
+): string[] {
+  const esCitaDeOrto = textos.some((t) => plano(t).includes("ortodoncia") || plano(t).includes("bracket"));
+  if (!esCitaDeOrto) return [];
+  return enUso
+    .filter((h) => h.tipo === "INDICACIONES" && h.activa && !h.deFabrica && PALABRAS_ORTO.some((p) => plano(h.nombre).includes(p)))
+    .map((h) => h.id);
 }
 
 /** La constancia que se usa si no se elige: la de la clínica más reciente en uso; si no, la de fábrica. */

@@ -61,6 +61,8 @@ import { ConsentVisor } from "./consent-documento";
 import { ConsentEditor, urlPreviewCarta, type PreviewCarta } from "./consent-editor";
 import styles from "./patient-detail.module.css";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { formatoEnZona } from "@/lib/fechas/fecha-en-zona";
+import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
 
 interface DoctorOption {
   id: string;
@@ -126,12 +128,9 @@ const STATUS_TONE: Record<ConsentStatus, { labelKey: string; tone: BadgeTone }> 
   REVOKED: { labelKey: "patients.consents.statusRevoked", tone: "danger" },
 };
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+// C-64: el día en la zona de la CLÍNICA (la carta se fecha igual); sin zona, la del navegador.
+function fmtDate(iso: string | null, zona: string | null = null): string {
+  return formatoEnZona(iso, { day: "2-digit", month: "short", year: "numeric" }, zona) ?? "—";
 }
 
 export function ConsentsTab(props: ConsentsTabProps) {
@@ -572,6 +571,7 @@ function ConsentRow({
   onOpen: () => void;
 }) {
   const t = useT();
+  const zonaClinica = useZonaDeLaClinica();
   const style = STATUS_TONE[c.status] ?? STATUS_TONE.PENDING;
   const isBusy = busy?.startsWith(`${c.id}:`) ?? false;
   const unsigned = c.status === "PENDING" || c.status === "EXPIRED";
@@ -624,12 +624,12 @@ function ConsentRow({
         </div>
 
         <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 5 }}>
-          {t("patients.consents.createdOn", { date: fmtDate(c.createdAt) })}
+          {t("patients.consents.createdOn", { date: fmtDate(c.createdAt, zonaClinica) })}
           {c.signedAt
-            ? ` · ${t("patients.consents.signedOn", { date: fmtDate(c.signedAt) })}`
-            : ` · ${t("patients.consents.expiresOn", { date: fmtDate(c.expiresAt) })}`}
+            ? ` · ${t("patients.consents.signedOn", { date: fmtDate(c.signedAt, zonaClinica) })}`
+            : ` · ${t("patients.consents.expiresOn", { date: fmtDate(c.expiresAt, zonaClinica) })}`}
           {c.viewedAt && !c.signedAt
-            ? ` · ${t("patients.consents.viewedOn", { date: fmtDate(c.viewedAt) })}`
+            ? ` · ${t("patients.consents.viewedOn", { date: fmtDate(c.viewedAt, zonaClinica) })}`
             : ""}
         </div>
 
@@ -665,7 +665,7 @@ function ConsentRow({
 
         {c.revokedAt ? (
           <div style={{ fontSize: 11.5, color: "var(--danger)", marginTop: 4 }}>
-            {t("patients.consents.revokedOn", { date: fmtDate(c.revokedAt) })}
+            {t("patients.consents.revokedOn", { date: fmtDate(c.revokedAt, zonaClinica) })}
             {c.revokedReason ? ` · ${c.revokedReason}` : ""}
           </div>
         ) : null}

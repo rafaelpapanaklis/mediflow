@@ -18,7 +18,8 @@
   --shadow: 0 1px 2px rgba(20, 30, 50, .04), 0 6px 24px rgba(20, 30, 50, .06);
   --font: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
 
-  min-height: 100vh;
+  /* C-83 (auditoría de uso): llevaba un alto mínimo de toda la pantalla (de cuando el odontograma era una página sola). Dentro de
+     la consulta, la ficha y el expediente dejaba un hueco en blanco del alto de la pantalla bajo la paleta. */
   display: flex;
   flex-direction: column;
   background: var(--bg);

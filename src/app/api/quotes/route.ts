@@ -28,28 +28,28 @@ export async function GET(req: NextRequest) {
   const patientId = searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
 
-  // Visibilidad por paciente: lee un solo paciente por id → 404 si no lo puede ver.
-  const denied = await assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  // C-76 (auditoría de uso): la lista tardaba 6–8 s en «Cargando…» con unas DIEZ consultas una tras otra. Las
+  // que no dependen entre sí van juntas (cinco, bajo el tope de siete del pooler); nada se ESCRIBE antes de
+  // comprobar que el paciente es visible.
+  const [denied, patient, clinica, candidatos, porConcepto] = await Promise.all([
+    // Visibilidad por paciente: lee un solo paciente por id → 404 si no lo puede ver.
+    assertPatientVisible(patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }),
+    prisma.patient.findFirst({ where: { id: patientId, clinicId: ctx.clinicId }, select: { id: true } }),
+    // La zona de la clínica: el día de vigencia (que se pinta) y el momento en que vence salen de ella.
+    prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }),
+    // Vencimiento perezoso: PRESENTED cuyo día de vigencia ya terminó en la
+    // clínica → EXPIRED. La base solo trae los que tienen el instante pasado
+    // (un día de vigencia nunca termina antes de su instante guardado); de esos,
+    // vencen los que `estaVencida` dice, no los que pasaron la medianoche UTC.
+    prisma.quote.findMany({
+      where: { clinicId: ctx.clinicId, patientId, status: "PRESENTED", validUntil: { lt: new Date() } },
+      select: { id: true, validUntil: true },
+    }),
+    aceptacionEncendida(),
+  ]);
   if (denied) return denied;
-
-  const patient = await prisma.patient.findFirst({
-    where: { id: patientId, clinicId: ctx.clinicId },
-    select: { id: true },
-  });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
-
-  // La zona de la clínica: el día de vigencia (que se pinta) y el momento en
-  // que vence salen de ella.
-  const zona = (await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }))?.timezone ?? null;
-
-  // Vencimiento perezoso: PRESENTED cuyo día de vigencia ya terminó en la
-  // clínica → EXPIRED. La base solo trae los que tienen el instante pasado
-  // (un día de vigencia nunca termina antes de su instante guardado); de esos,
-  // vencen los que `estaVencida` dice, no los que pasaron la medianoche UTC.
-  const candidatos = await prisma.quote.findMany({
-    where: { clinicId: ctx.clinicId, patientId, status: "PRESENTED", validUntil: { lt: new Date() } },
-    select: { id: true, validUntil: true },
-  });
+  const zona = clinica?.timezone ?? null;
   const vencidos = candidatos.filter((q) => estaVencida(q.validUntil, zona)).map((q) => q.id);
   if (vencidos.length > 0) {
     await prisma.quote.updateMany({
@@ -70,7 +70,6 @@ export async function GET(req: NextRequest) {
   // Formas de pago de TODAS en UNA consulta (la regla de la casa: nunca una
   // consulta por fila). Sin el SQL aplicado devuelve un mapa vacío y cada
   // presupuesto sale con `condicionesPago: null`, como antes.
-  const { porQuote, fallo } = await leerCondicionesDeVarios(prisma, quotes.map((q) => q.id));
 
   // `fallo` marca TODOS los presupuestos de la respuesta como «no se pudo leer
   // su forma de pago». Es de esta lista de donde el editor saca el presupuesto
@@ -81,13 +80,16 @@ export async function GET(req: NextRequest) {
   // la clínica y los permisos de la sesión; sin módulo, mapa vacío.
   // Aceptación por concepto y cargos (ws1-t6). Sin el SQL: nada de esto y la
   // tarjeta se pinta como siempre. Dos consultas para todos, no una por fila.
-  const porConcepto = await aceptacionEncendida();
-  const cobros = porConcepto ? await cobrosDePresupuestos(ctx.clinicId, quotes) : new Map();
   // El caso de ortodoncia se decide con lo que el paciente ACEPTÓ: si de un
   // presupuesto mixto solo aceptó la resina, no hay caso que abrir.
-  const aceptadas = porConcepto
-    ? (await leerAceptaciones(prisma, ctx.clinicId, quotes.filter((q) => q.status === "ACCEPTED").map((q) => q.id))).porQuote
-    : new Map();
+  // C-76: formas de pago, cobros y aceptaciones, a la vez.
+  const [{ porQuote, fallo }, cobros, aceptadas] = await Promise.all([
+    leerCondicionesDeVarios(prisma, quotes.map((q) => q.id)),
+    porConcepto ? cobrosDePresupuestos(ctx.clinicId, quotes) : Promise.resolve(new Map()),
+    porConcepto
+      ? leerAceptaciones(prisma, ctx.clinicId, quotes.filter((q) => q.status === "ACCEPTED").map((q) => q.id)).then((r) => r.porQuote)
+      : Promise.resolve(new Map()),
+  ]);
   const paraCasos = quotes.map((q) => {
     const g = aceptadas.get(q.id);
     if (!g) return q;

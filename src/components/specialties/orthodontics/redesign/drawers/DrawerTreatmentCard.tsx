@@ -80,6 +80,8 @@ import {
   type LigaDeHoja,
   type MecanicaDelCaso,
 } from "@/lib/orthodontics/hoja-extras";
+import { diaEnZona } from "@/lib/fechas/fecha-en-zona";
+import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
 
 export type DrawerCardSubmit = {
   cardId: string | null;
@@ -136,6 +138,11 @@ export type DrawerCardSubmit = {
 export interface DrawerTreatmentCardProps {
   /** Card existente (modo edición/lectura) o null para nueva. */
   card: TreatmentCardDTO | null;
+  /**
+   * C-82 (auditoría de uso, vuelta 2): la hoja firmada de HOY se abre en lectura; con esto ofrece «Registrar otro
+   * control hoy» (el paciente volvió: un bracket caído, una urgencia). Pregunta antes; la nueva va sin cita.
+   */
+  onRegistrarOtroHoy?: () => void;
   /** Catálogo de wire steps planificados para el dropdown wire-to. */
   availableWires: WireStepDTO[];
   /**
@@ -406,7 +413,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
     const retiros = mecanicas.filter((m) => m.retiradaEl && !antes.get(m.id)?.retiradaEl && !m.cardIdRetiro).map((m) => m.id);
     return altas.length || retiros.length ? { altas, retiros } : null;
   })();
-  const fechaDeLaHoja = fechaCorta(props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null);
+  // C-64 (auditoría de uso, vuelta 2): el día de la visita en la zona de la CLÍNICA, no la del navegador.
+  const zonaClinica = useZonaDeLaClinica();
+  const fechaDeLaHoja = fechaCorta(props.card?.visitDate ?? props.defaultsForNew?.visitDate ?? null, zonaClinica);
 
   // Plantillas de nota (Rafael, 28-sep-2026): las seis de ortodoncia que ya
   // existían y nadie usaba (Cementado de brackets, Activación de arco, Control
@@ -660,6 +669,9 @@ export function DrawerTreatmentCard(props: DrawerTreatmentCardProps) {
         <div className={orto.cajonCuerpo}>
           {/* C-82 (auditoría de uso): «Copiar del control anterior» no estaba a la vista. La hoja nueva ya se llena
               sola con la última hoja firmada; ahora lo dice (o dice que no había nada que copiar). */}
+          {isReadOnly && props.onRegistrarOtroHoy ? (
+            <OtroControlHoy onConfirmar={props.onRegistrarOtroHoy} />
+          ) : null}
           {!isReadOnly && !props.card ? (
             <p className={`${orto.tonoApagado} text-[12px] -mt-1 mb-1`} role="status" data-copia-del-anterior>
               {state.delAnterior.arco ||
@@ -1292,6 +1304,34 @@ function precargaDesdeDefaults(d: DrawerTreatmentCardProps["defaultsForNew"]): P
   };
 }
 
+/** C-82: «Registrar otro control hoy», con una pregunta antes (una sola hoja por visita sigue siendo lo normal). */
+function OtroControlHoy({ onConfirmar }: { onConfirmar: () => void }) {
+  const [preguntando, setPreguntando] = useState(false);
+  return (
+    <div className={`${orto.aviso} ${orto.avisoAlerta} mb-2`} role="status" data-otro-control-hoy>
+      <span className={orto.avisoTexto}>
+        {preguntando
+          ? "Ya hay un control firmado hoy. ¿El paciente volvió y quieres registrar OTRO control (sin cita)? Este no se toca."
+          : "Este es el control de hoy, ya firmado."}
+      </span>
+      {preguntando ? (
+        <span className="flex gap-2">
+          <Btn variant="primary" size="sm" onClick={onConfirmar}>
+            Sí, registrar otro
+          </Btn>
+          <Btn variant="ghost" size="sm" onClick={() => setPreguntando(false)}>
+            No
+          </Btn>
+        </span>
+      ) : (
+        <Btn variant="secondary" size="sm" onClick={() => setPreguntando(true)}>
+          Registrar otro control hoy
+        </Btn>
+      )}
+    </div>
+  );
+}
+
 /** Un campo en modo lectura (control ya firmado). */
 function Lectura({ children, vacio }: { children: string; vacio: string }) {
   return children ? (
@@ -1814,13 +1854,12 @@ function wireText(wire: { gauge: string; material: string; archUpper?: boolean; 
   return textoDeArcoConArcada(wire);
 }
 
-/** ws1-t9 (M3): el día de la visita en el calendario del navegador (YYYY-MM-DD), nunca después de hoy. */
-function fechaCorta(iso: string | null): string {
-  const hoy = hoyISO();
+/** ws1-t9 (M3): el día de la visita (YYYY-MM-DD), nunca después de hoy. C-64: en la zona de la clínica si se conoce. */
+function fechaCorta(iso: string | null, zona: string | null = null): string {
+  const hoy = diaEnZona(new Date(), zona) ?? hoyISO();
   if (!iso) return hoy;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return hoy;
-  const dia = hoyISO(d);
+  const dia = diaEnZona(iso, zona);
+  if (!dia) return hoy;
   return dia > hoy ? hoy : dia;
 }
 

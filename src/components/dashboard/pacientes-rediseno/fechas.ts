@@ -48,10 +48,21 @@ export function fechaConAno(valor: string | Date | null | undefined, locale = "e
     .replace(/\./g, "");
 }
 
-/** «9 de octubre de 2026» */
-export function fechaLarga(valor: string | Date | null | undefined, locale = "es-MX"): string {
+/**
+ * «9 de octubre de 2026». C-64 (auditoría de uso): con `zona`, un INSTANTE se pinta en la zona de la clínica (un
+ * día suelto sigue siendo ese día); sin ella, como siempre.
+ */
+export function fechaLarga(valor: string | Date | null | undefined, locale = "es-MX", zona?: string | null): string {
   const d = aFechaLocal(valor);
   if (!d) return "—";
+  const instante = !(typeof valor === "string" && SOLO_FECHA.test(valor.trim()));
+  if (zona && instante) {
+    try {
+      return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: zona }).format(d);
+    } catch {
+      // zona inválida: la del navegador
+    }
+  }
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(d);
 }
 

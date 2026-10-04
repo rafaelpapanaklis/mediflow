@@ -577,3 +577,15 @@ test("plantilla de indicaciones: nombre y variables traducidos, y etiqueta del I
     }
   }
 });
+
+test("C-72 (vuelta 2): en una cita de ortodoncia se propone la hoja PROPIA de la clínica que habla de ortodoncia", async () => {
+  const { hojasSugeridas } = await import("../servicio");
+  const hoja = (id: string, nombre: string, deFabrica = false) => ({
+    id, tipo: "INDICACIONES" as const, nombre, cuerpo: "x", procedureIds: [], deFabrica, basadaEn: null, activa: true,
+    createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:00:00Z",
+  });
+  const hojas = [hoja("h1", "Después de colocar brackets"), hoja("h2", "Después de una extracción"), hoja("h3", "Cuidado de elásticos")];
+  assert.deepEqual(hojasSugeridas(hojas, [], ["Control de ortodoncia"]), ["h1", "h3"]);
+  // Fuera de ortodoncia no se propone nada por nombre.
+  assert.deepEqual(hojasSugeridas(hojas, [], ["Limpieza dental"]), []);
+});

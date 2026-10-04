@@ -36,6 +36,7 @@ import s from "./rediseno.module.css";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { preguntasQueLevantanBandera, resumenDeBanderas } from "@/lib/patients/resumen-banderas";
 import { useTextosBanderas } from "./textos-banderas";
+import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
 
 /**
  * Cuestionario de salud, rediseñado.
@@ -276,6 +277,8 @@ export function Cuestionario({ patientId, onSaved }: Props) {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [vigente, setVigente] = useState<any | null>(null);
+  // C-64: «llenado el …» en el día de la clínica, no en el del navegador.
+  const zonaClinica = useZonaDeLaClinica();
   const [historial, setHistorial] = useState<any[]>([]);
   const [historialAbierto, setHistorialAbierto] = useState(false);
 
@@ -374,7 +377,7 @@ export function Cuestionario({ patientId, onSaved }: Props) {
           <p className={s.pantallaSub}>
             {vigente
               ? t("pacientesRediseno.cuestionario.vigente", {
-                  fecha: fechaLarga(vigente.filledAt),
+                  fecha: fechaLarga(vigente.filledAt, "es-MX", zonaClinica),
                   quien: vigente.filledByName ?? "—",
                 })
               : t("pacientesRediseno.cuestionario.sinPrevio")}
@@ -690,7 +693,7 @@ export function Cuestionario({ patientId, onSaved }: Props) {
                   <div key={q.id} className={s.listaFila}>
                     <span className={s.listaPunto} aria-hidden />
                     <span className={s.listaCuerpo}>
-                      <span className={s.listaTitulo}>{fechaLarga(q.filledAt)}</span>
+                      <span className={s.listaTitulo}>{fechaLarga(q.filledAt, "es-MX", zonaClinica)}</span>
                       {q.filledByName && <span className={s.listaSub}>{q.filledByName}</span>}
                     </span>
                     {Array.isArray(q.riskFlags) && q.riskFlags.length > 0 && (

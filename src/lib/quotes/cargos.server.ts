@@ -324,8 +324,8 @@ export async function cobrosDePresupuestos(
   const aceptados = quotes.filter((q) => q.status === "ACCEPTED");
   if (aceptados.length === 0 || !(await aceptacionEncendida())) return salida;
   const ids = aceptados.map((q) => q.id);
-  const acc = await leerAceptaciones(prisma, clinicId, ids);
-  const cargos = await leerCargos(prisma, clinicId, ids);
+  // C-76 (auditoría de uso): las dos lecturas a la vez (eran una tras otra).
+  const [acc, cargos] = await Promise.all([leerAceptaciones(prisma, clinicId, ids), leerCargos(prisma, clinicId, ids)]);
   // Sin poder leer, mejor no decir nada que decir «nada cargado»: la tarjeta
   // queda como siempre y el diálogo de cargo vuelve a leer al abrir.
   if (acc.fallo || cargos.fallo) return salida;

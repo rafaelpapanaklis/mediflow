@@ -116,7 +116,7 @@ const es = {
   // C-72 (auditoría de uso): DaleControl no trae hojas de ortodoncia (textos clínicos: los decide la clínica);
   // se dice cómo hacer que salgan propuestas en vez de solo «elige a mano».
   sinPropuestas:
-    "Ningún procedimiento de esta cita está ligado a una hoja. Elige a mano, o crea la tuya en Administración → Plantillas → Indicaciones y lígala al procedimiento (por ejemplo «Control de ortodoncia») para que aquí salga propuesta.",
+    "Ningún procedimiento de esta cita está ligado a una hoja. Elige a mano, o crea la tuya en Administración → Plantillas → Indicaciones y lígala al procedimiento (por ejemplo «Control de ortodoncia»). En citas de ortodoncia también se proponen solas las hojas tuyas con «ortodoncia», «brackets» o «elásticos» en el nombre.",
   sinHojas: "No hay hojas de indicaciones en uso. Créalas en Administración → Plantillas → Indicaciones.",
   vistaPrevia: "Lo que recibe el paciente",
   eligeUna: "Elige al menos una hoja.",
@@ -255,7 +255,7 @@ const en: Textos = {
   propuestas: "Suggested by the appointment's procedures",
   otras: "More from your library",
   sinPropuestas:
-    "No procedure in this appointment is linked to a sheet. Pick one by hand, or create yours in Administration → Templates → Aftercare and link it to the procedure (e.g. «Control de ortodoncia») so it is suggested here.",
+    "No procedure in this appointment is linked to a sheet. Pick one by hand, or create yours in Administration → Templates → Aftercare and link it to the procedure (e.g. «Control de ortodoncia»). In orthodontic appointments, your sheets with «ortodoncia», «brackets» or «elásticos» in the name are suggested on their own.",
   sinHojas: "There are no active aftercare sheets. Create them in Administration → Templates → Aftercare.",
   vistaPrevia: "What the patient receives",
   eligeUna: "Pick at least one sheet.",

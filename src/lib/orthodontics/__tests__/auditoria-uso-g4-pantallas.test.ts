@@ -58,3 +58,28 @@ test("C-74: acentos del plan de tratamiento", () => {
   assert.equal(tr.daysBetween, "Días entre sesiones");
   assert.equal(es.patients.commonTreatment.perioRehab, "Rehabilitación periodontal");
 });
+
+test("vuelta 2 · C-82: la hoja firmada de hoy ofrece «Registrar otro control hoy», sin cita", () => {
+  const c = leer("src/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient.tsx");
+  assert.match(c, /onRegistrarOtroHoy=\{/);
+  assert.match(c, /getTreatmentCardContextForPatient\(t\.treatmentPlanId, null, null, true\)/);
+  assert.match(leer("src/lib/orthodontics/treatment-card-context.ts"), /linkedToAppt \|\| opciones\.otraHojaHoy \? null/);
+  assert.match(leer("src/components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx"), /Registrar otro control hoy/);
+});
+
+test("vuelta 2 · C-83: el odontograma ya no ocupa el alto de la pantalla", () => {
+  assert.ok(!/min-height:\s*100vh/.test(leer("src/components/dashboard/odontogram-v2/odontogram.css")));
+});
+
+test("vuelta 2 · C-76: la lista de presupuestos pide sus datos a la vez", () => {
+  const r = leer("src/app/api/quotes/route.ts");
+  assert.match(r, /const \[denied, patient, clinica, candidatos, porConcepto\] = await Promise\.all\(/);
+  assert.match(r, /const \[\{ porQuote, fallo \}, cobros, aceptadas\] = await Promise\.all\(/);
+});
+
+test("vuelta 2 · C-64: plan, consentimientos, cuestionario y hoja pintan en la zona de la clínica", () => {
+  assert.match(leer("src/components/dashboard/plan-tratamiento-rediseno/ventanas-plan.tsx"), /useZonaDeLaClinica\(\)/);
+  assert.match(leer("src/components/dashboard/patient-detail/consents-tab.tsx"), /fmtDate\(c\.createdAt, zonaClinica\)/);
+  assert.match(leer("src/components/dashboard/pacientes-rediseno/cuestionario.tsx"), /fechaLarga\(vigente\.filledAt, "es-MX", zonaClinica\)/);
+  assert.match(leer("src/components/specialties/orthodontics/redesign/drawers/DrawerTreatmentCard.tsx"), /fechaCorta\([^)]*, zonaClinica\)/);
+});

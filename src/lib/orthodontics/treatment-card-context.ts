@@ -145,6 +145,11 @@ export async function buildTreatmentCardContext(
   },
   appt: { id: string; startsAt: Date; endsAt: Date; status?: string } | null,
   clinicTimezone: string,
+  /**
+   * C-82 (auditoría de uso, vuelta 2): «Registrar otro control hoy». Sin esto, con una hoja de hoy ya firmada la
+   * ficha solo dejaba VERLA. Con `true` no se continúa la hoja de hoy: nace una nueva (quien llama la abre sin cita).
+   */
+  opciones: { otraHojaHoy?: boolean } = {},
 ): Promise<TreatmentCardAgendaContext> {
   const [wireSteps, cards, phaseInProgress, photoSets] = await Promise.all([
     prisma.orthoWireStep.findMany({
@@ -184,7 +189,7 @@ export async function buildTreatmentCardContext(
   // ws1-t8 (punto 12 y fallo 3 de la revisión de ws1-t9): si la visita es de HOY aunque la cita sea de otro día
   // (cita futura adelantada, o futura sin el paciente que no se tocará), la hoja a continuar es la de hoy.
   const visitaHoy = appt?.status ? citaAlFirmar({ status: appt.status, startsAt: appt.startsAt }, new Date(), clinicTimezone).visitaHoy : false;
-  const deHoy = linkedToAppt ? null : tarjetaDeControlDeHoy(cards, clinicTimezone, appt && !visitaHoy ? appt.startsAt : new Date());
+  const deHoy = linkedToAppt || opciones.otraHojaHoy ? null : tarjetaDeControlDeHoy(cards, clinicTimezone, appt && !visitaHoy ? appt.startsAt : new Date());
   const raw = linkedToAppt ?? deHoy;
   const existingCard = raw ? adaptCard(raw, wireById, arcosInferiores.get(raw.id) ?? null) : null;
 

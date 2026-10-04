@@ -472,10 +472,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       }
     : undefined;
 
-  const abrirRegistrarControl = useCallback(async () => {
+  const abrirRegistrarControl = useCallback(async (opciones?: { otraHojaHoy?: boolean }) => {
     if (!t.treatmentPlanId) return;
     if (abriendoControlRef.current) return;
-    if (hojaDeHoyFirmada) {
+    const otraHojaHoy = opciones?.otraHojaHoy === true;
+    if (hojaDeHoyFirmada && !otraHojaHoy) {
       toast("El control de hoy ya está firmado. Aquí lo puedes ver.", { id: "control-hoy-firmado", duration: 6000 });
       setDrawer({ kind: "tcard", cardId: hojaDeHoyFirmada.id });
       // Fallo 2 de la revisión de ws1-t9: si se firmó «sin cita» y después apareció la cita de hoy (o se abrió la
@@ -510,7 +511,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     // ejecuta las server actions de una en una, y descarta la pendiente si la dirección cambia por debajo), el botón
     // deja de decir «Abriendo la hoja…» y un aviso lo explica, en vez de quedarse colgado. NO se abre la hoja sin su
     // contexto (perdería la cita): si la respuesta llega tarde, la hoja se abre entonces, como siempre.
-    const pedido = getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null, props.citaDeLaDireccionId ?? null).catch(() => null);
+    // C-82: la segunda hoja del día va sin cita (`otraHojaHoy`): ni continúa la firmada ni se liga a la cita de hoy.
+    const pedido = (otraHojaHoy
+      ? getTreatmentCardContextForPatient(t.treatmentPlanId, null, null, true)
+      : getTreatmentCardContextForPatient(t.treatmentPlanId, props.citaEnCursoId ?? null, props.citaDeLaDireccionId ?? null)
+    ).catch(() => null);
     const abrirCon = (res: Awaited<typeof pedido>) => {
       setNuevoControlCtx(!res || isFailure(res) ? null : res.data);
       setDrawer({ kind: "tcard-new" });
@@ -1038,6 +1043,15 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           onRegistrarColocacion={registrarColocacion}
           key={cardForDrawer.id}
           card={cardForDrawer}
+          // C-82: desde la hoja firmada de hoy, «Registrar otro control hoy» (sin cita).
+          onRegistrarOtroHoy={
+            hojaDeHoyFirmada && hojaDeHoyFirmada.id === cardForDrawer.id && t.status !== "no-iniciado"
+              ? () => {
+                  closeDrawer();
+                  void abrirRegistrarControl({ otraHojaHoy: true });
+                }
+              : undefined
+          }
           availableWires={wireSequence}
           treatmentPlanId={t.treatmentPlanId || undefined}
           controlesPrevistos={controlesPrevistosDelCaso}

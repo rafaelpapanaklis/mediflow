@@ -45,6 +45,8 @@ export async function getTreatmentCardContextForPatient(
   treatmentPlanId: string,
   citaEnCursoId?: string | null,
   citaDeLaDireccionId?: string | null,
+  /** C-82: «Registrar otro control hoy» — una hoja NUEVA, sin cita (la de hoy ya tiene la suya firmada). */
+  otraHojaHoy?: boolean,
 ): Promise<ActionResult<TreatmentCardAgendaContext>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
@@ -73,6 +75,9 @@ export async function getTreatmentCardContextForPatient(
 
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
   const timezone = clinic?.timezone ?? "America/Mexico_City";
+
+  // C-82: la segunda hoja del día no se liga a ninguna cita (la de hoy ya quedó con la primera) ni continúa la firmada.
+  if (otraHojaHoy === true) return ok(await buildTreatmentCardContext(plan, null, timezone, { otraHojaHoy: true }));
 
   if (citaEnCursoId) {
     const enCurso = await prisma.appointment.findFirst({

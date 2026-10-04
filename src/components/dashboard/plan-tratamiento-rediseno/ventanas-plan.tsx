@@ -10,6 +10,8 @@ import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "../plan-a-presu
 import s from "./plan.module.css";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
+import { formatoEnZona } from "@/lib/fechas/fecha-en-zona";
+import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
 
 /**
  * «Plan de tratamiento» (ver) y «Editar plan», con la ropa del menú nuevo.
@@ -66,8 +68,10 @@ export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar, onAbrirP
   const hechas = (plan.sessions ?? []).filter((x: any) => x.completedAt).length;
   const pct = plan.totalSessions > 0 ? Math.round((hechas / plan.totalSessions) * 100) : 0;
   const estado = ESTADO[plan.status] ?? ESTADO.ACTIVE;
+  // C-64: en la zona de la clínica (el plan creado a las 22:00 de México ya no dice «Inicio 4 oct»).
+  const zona = useZonaDeLaClinica();
   const fecha = (d: string, conAnio = true) =>
-    new Date(d).toLocaleDateString("es-MX", { day: "numeric", month: "short", ...(conAnio ? { year: "numeric" } : {}) });
+    formatoEnZona(d, { day: "numeric", month: "short", ...(conAnio ? { year: "numeric" } : {}) }, zona) ?? "—";
 
   return (
     <Marco titulo={t("patients.treatment.viewTitle")} tituloId="plan-ver-titulo" angosta={!esDescripcionDePlan(plan.description)} onCerrar={onCerrar}>
