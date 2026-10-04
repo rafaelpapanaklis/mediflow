@@ -25,6 +25,7 @@ import {
 } from "@/lib/patients/patient-search-core";
 import { findPatientIdsBySearch } from "@/lib/patients/patient-search";
 import { splitPatientDuplicates, validatePatientCreateBody } from "@/lib/patients/patient-create-core";
+import { ESTADOS_DE_VISITA, ultimaVisita } from "@/lib/patients/ultima-visita";
 
 export const dynamic = "force-dynamic";
 
@@ -341,12 +342,14 @@ async function v2Handler(
       }),
       // KPIs "pacientes con deuda" / "monto adeudado": mismo criterio que el
       // include de arriba — ni canceladas ni borradores.
+      // ws1-t1 (C-92): de los pacientes que ESTE usuario ve (el mismo set que la lista), no de toda la
+      // clínica: un doctor con 8 pacientes veía «Con deuda 40».
       prisma.invoice.aggregate({
-        where: deudaInvoiceWhere(ctx.clinicId),
+        where: { AND: [deudaInvoiceWhere(ctx.clinicId), { patient: baseStatsWhere }] },
         _sum: { balance: true },
       }),
       prisma.invoice.findMany({
-        where: deudaInvoiceWhere(ctx.clinicId),
+        where: { AND: [deudaInvoiceWhere(ctx.clinicId), { patient: baseStatsWhere }] },
         select: { patientId: true },
         distinct: ["patientId"],
       }),
@@ -400,6 +403,26 @@ async function v2Handler(
     nextAppointmentsWeek: nextApptWeek,
   };
 
+  // ws1-t1 (C-93): la última cita ATENDIDA de cada paciente de la página, en UNA consulta. «Última visita»
+  // salía solo de la última nota clínica y decía «Nunca» a quien vino y no tiene nota.
+  const citasAtendidas = rawPatients.length
+    ? await prisma.appointment
+        .groupBy({
+          by: ["patientId"],
+          where: {
+            clinicId: ctx.clinicId,
+            patientId: { in: rawPatients.map((p) => p.id) },
+            status: { in: [...ESTADOS_DE_VISITA] },
+          },
+          _max: { startsAt: true },
+        })
+        .catch((e) => {
+          console.error("[GET /api/patients?v=2] última cita atendida:", e);
+          return [] as Array<{ patientId: string; _max: { startsAt: Date | null } }>;
+        })
+    : [];
+  const ultimaCitaAtendida = new Map(citasAtendidas.map((c) => [c.patientId, c._max.startsAt]));
+
   /* ─── enriquecer + filtrar/sort post-fetch ─── */
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 180;
   const enriched = rawPatients.map((p) => {
@@ -412,9 +435,7 @@ async function v2Handler(
           type: p.appointments[0].type,
         }
       : null;
-    const lastVisit = p.records[0]?.visitDate
-      ? p.records[0].visitDate.toISOString()
-      : null;
+    const lastVisit = ultimaVisita(p.records[0]?.visitDate, ultimaCitaAtendida.get(p.id));
     const age = p.dob ? calcAge(p.dob) : null;
     const fullName = `${p.firstName} ${p.lastName}`.trim();
     return {

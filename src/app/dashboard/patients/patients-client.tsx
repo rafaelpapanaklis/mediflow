@@ -46,6 +46,7 @@ import { genderShortLabel, type PatientGender } from "@/lib/patients/patient-sea
 import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { alCrearsePaciente } from "@/lib/new-patient/evento-paciente-creado";
 import { ImportWizard } from "@/components/import/import-wizard";
 import { DateField } from "@/components/ui/date-field";
@@ -1298,6 +1299,8 @@ function PatientRowComp({
 }) {
   const t = useT();
   const router = useRouter();
+  // ws1-t1 (C-98): el icono de agenda abre «Nueva cita» con ESTE paciente ya elegido.
+  const { open: abrirNuevaCita } = useNewAppointmentDialog();
   const visibleCol = (id: ColumnId) => columnsVisible.includes(id);
   const lastVisit = formatRelative(p.lastVisit, t);
   const nextApt = p.nextAppointment ? formatRelative(p.nextAppointment.startsAt, t) : null;
@@ -1437,14 +1440,21 @@ function PatientRowComp({
               <Phone size={13} strokeWidth={1.75} aria-hidden />
             </a>
           )}
-          <Link
-            href={`/dashboard/agenda?newAppointment=1&patientId=${p.id}`}
+          {/* ws1-t1 (C-98): antes era un enlace a la agenda con «nueva cita para este paciente» en la URL,
+              parámetros que la agenda nunca leyó: llevaba a la agenda y no abría nada. Ahora abre «Nueva cita» aquí mismo, con el
+              paciente ya elegido; al guardar, lleva a la agenda en la cita nueva. */}
+          <button
+            type="button"
             className={`${styles.actionBtn} ${styles.actionCal}`}
             title={t("patients.row.schedule")}
-            onClick={(e) => e.stopPropagation()}
+            aria-label={t("patients.row.schedule")}
+            onClick={(e) => {
+              e.stopPropagation();
+              abrirNuevaCita({ initialPatient: { id: p.id, name: p.fullName }, openAgendaAfter: true });
+            }}
           >
             <Calendar size={13} strokeWidth={1.75} aria-hidden />
-          </Link>
+          </button>
           <button
             type="button"
             className={`${styles.actionBtn} ${styles.actionVip} ${p.isVip ? styles.actionVipActive : ""}`}
