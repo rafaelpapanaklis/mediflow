@@ -29,6 +29,7 @@ import { dinero } from "@/lib/quotes/condiciones-pago";
 import {
   armarAceptacion,
   claveDeConcepto,
+  destinosDeAbono,
   estadoDeCobro,
   netoDe,
   planearCargo,
@@ -39,7 +40,10 @@ import {
   type RenglonAceptado,
 } from "@/lib/quotes/aceptacion";
 import type { BillingInvoiceLite, QuoteDTO } from "@/lib/quotes/types";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import toast from "react-hot-toast";
+import { textosDinero } from "@/lib/dinero/textos";
+import { METHODS } from "@/components/dashboard/billing/payment-modal";
 import s from "./aceptacion-y-cobro.module.css";
 
 /* ── Cuadro base (portal + Escape + foco) ──────────────────────────────── */
@@ -262,6 +266,11 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [elegidos, setElegidos] = useState<string[]>([]);
   const [abono, setAbono] = useState("");
+  // El abono es un PAGO (decisión de Rafael): a qué concepto va y con qué se pagó.
+  const [abonoA, setAbonoA] = useState("");
+  const [metodoAbono, setMetodoAbono] = useState<string>("cash");
+  const [referenciaAbono, setReferenciaAbono] = useState("");
+  const txP = textosDinero(useLocale()).presupuesto;
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -289,11 +298,18 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
 
   const estado = datos ? estadoDeCobro(datos.renglones, datos.vivos) : null;
   const abonoNum = abono.trim() === "" ? 0 : Number(abono.replace(",", "."));
+  // Facturas de conceptos ya pagadas: no reciben abono.
+  const pagadas = useMemo(
+    () => new Set((datos?.cobro.cargos ?? []).filter((c) => c.quoteItemId && c.status === "PAID").map((c) => c.invoiceId)),
+    [datos],
+  );
+  const destinos = datos ? destinosDeAbono(datos.renglones, datos.vivos, elegidos, pagadas) : [];
   const plan = datos
     ? planearCargo(datos.renglones, datos.vivos, {
         itemIds: elegidos,
         abono: isFinite(abonoNum) ? abonoNum : -1,
-        etiquetaAbono: t("presupuestoAceptacion.abonoConcepto", { folio: quote.folio }),
+        abonoA: abonoA || undefined,
+        pagadas,
       })
     : null;
   const nadaElegido = elegidos.length === 0 && (abono.trim() === "" || abonoNum === 0);
@@ -310,10 +326,16 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
       const res = await fetch(`/api/quotes/${quote.id}/cargos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemIds: elegidos, abono: abonoNum || 0 }),
+        body: JSON.stringify({
+          itemIds: elegidos,
+          abono: abonoNum || 0,
+          ...(abonoNum > 0 ? { abonoA: plan.plan.abono?.quoteItemId, metodo: metodoAbono, referencia: referenciaAbono.trim() || undefined } : {}),
+        }),
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? t("presupuestoAceptacion.errorGenerico"));
+      if (out.abono) toast.success(txP.exito(dinero(out.abono.monto), out.abono.invoiceNumber, dinero(out.abono.saldo)), { duration: 8000 });
+      if (out.warning) toast(out.warning, { duration: 8000 });
       await onCargado(out.invoice);
       onCerrar();
     } catch (e) {
@@ -339,11 +361,13 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
             type="button"
             className={`${r.boton} ${r.botonPrincipal}`}
             onClick={cargar}
-            disabled={ocupado || !plan?.ok}
+            disabled={ocupado || !plan?.ok || (abonoNum > 0 && metodoAbono === "transfer" && !referenciaAbono.trim())}
           >
             <ReceiptText size={15} aria-hidden />
             {plan?.ok
-              ? t("presupuestoAceptacion.generarCargo", { total: dinero(plan.plan.total) })
+              ? plan.plan.abono
+                ? txP.boton(plan.plan.total > 0 ? dinero(plan.plan.total) : null, dinero(plan.plan.abono.monto))
+                : t("presupuestoAceptacion.generarCargo", { total: dinero(plan.plan.total) })
               : t("presupuestoAceptacion.generarCargoVacio")}
           </button>
         </>
@@ -458,7 +482,38 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
                   </button>
                 ))}
               </div>
-              <p className={s.pista}>{t("presupuestoAceptacion.abonoPista")}</p>
+              {abonoNum > 0 && (
+                <div className={s.abonoPago}>
+                  {destinos.length > 1 ? (
+                    <label className={s.abonoCampo}>
+                      <span>{txP.abonoA}</span>
+                      <select value={abonoA} onChange={(e) => setAbonoA(e.target.value)}>
+                        <option value="">—</option>
+                        {destinos.map((d) => (
+                          <option key={d.quoteItemId} value={d.quoteItemId}>
+                            {`${d.toothFdi ? `${d.nombre} (${d.toothFdi})` : d.nombre} · ${dinero(d.neto)}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : destinos.length === 1 ? (
+                    <p className={s.pista}>{txP.abonoUnico(destinos[0].nombre)}</p>
+                  ) : null}
+                  <label className={s.abonoCampo}>
+                    <span>{txP.metodo}</span>
+                    <select value={metodoAbono} onChange={(e) => setMetodoAbono(e.target.value)}>
+                      {METHODS.map((m) => <option key={m.value} value={m.value}>{t(m.labelKey)}</option>)}
+                    </select>
+                  </label>
+                  {metodoAbono !== "cash" && (
+                    <label className={s.abonoCampo}>
+                      <span>{metodoAbono === "transfer" ? `${txP.referencia} *` : txP.referencia}</span>
+                      <input value={referenciaAbono} onChange={(e) => setReferenciaAbono(e.target.value)} />
+                    </label>
+                  )}
+                </div>
+              )}
+              <p className={s.pista}>{txP.pista}</p>
             </div>
           )}
 
@@ -473,10 +528,19 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
                   <span>{dinero(l.monto)}</span>
                 </div>
               ))}
-              {plan.plan.descontadoDeAbonos > 0 && (
-                <p className={s.pista}>
-                  {t("presupuestoAceptacion.descontadoDeAbonos", { monto: dinero(plan.plan.descontadoDeAbonos) })}
-                </p>
+              {plan.plan.abonoViejo > 0 && (
+                <p className={s.pista}>{txP.abonoViejo(dinero(plan.plan.abonoViejo))}</p>
+              )}
+              {plan.plan.abono && (
+                <>
+                  <div className={s.resumenLinea} data-linea-abono>
+                    <span>{txP.lineaAbono(plan.plan.abono.nombre, plan.plan.abono.linea ? dinero(plan.plan.abono.neto) : null)}</span>
+                    <span>{dinero(plan.plan.abono.monto)}</span>
+                  </div>
+                  {plan.plan.abono.linea && (
+                    <p className={s.pista}>{txP.quedaDebiendo(dinero(Math.max(0, plan.plan.abono.neto - plan.plan.abono.monto)))}</p>
+                  )}
+                </>
               )}
               <div className={s.resumenTotal}>
                 <span>{t("presupuestoAceptacion.hoy")}</span>

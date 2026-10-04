@@ -179,7 +179,21 @@ const prismaStub: any = {
       return inv ? { ...copia(inv), payments: [] } : null;
     },
     findMany: async ({ where }: any = {}) => copia(db.invoices.filter((i) => facturaCoincide(i, where))),
+    // El abono es un pago (decisión de Rafael, ws1-t5): la factura del concepto se actualiza.
+    updateMany: async ({ where, data }: any) => {
+      const hits = db.invoices.filter((i) => facturaCoincide(i, where));
+      hits.forEach((i) => Object.assign(i, data));
+      return { count: hits.length };
+    },
   },
+  payment: {
+    create: async ({ data }: any) => {
+      const fila = { id: nuevoId("pay"), ...data };
+      (db as any).pagos = [...((db as any).pagos ?? []), fila];
+      return copia(fila);
+    },
+  },
+  cashRegister: { findFirst: async () => ({ id: "caja1" }) },
   clinic: { findUnique: async () => ({ cfdiTaxMode: "exempt", timezone: db.zona }) },
   user: {
     findFirst: async ({ where }: any = {}) => copia(db.users.find(usuarioCoincide(where)) ?? null),
@@ -320,22 +334,33 @@ test("dos «Cargar» a la vez del mismo concepto: solo uno crea factura", async 
   assert.equal(db.invoices.length, 1);
 });
 
-test("abono pactado hoy y conceptos después: se descuenta lo abonado", async () => {
+test("abono pactado hoy (decisión de Rafael): es un PAGO a la factura de su concepto, a precio completo; nada se descuenta después", async () => {
   sembrar();
+  (db as any).pagos = [];
   const estado = await import("@/app/api/quotes/[id]/status/route");
   const cargos = await import("@/app/api/quotes/[id]/cargos/route");
   await estado.POST(req({ action: "accept" }), P);
 
-  const inicial = await leer(await cargos.POST(req({ abono: 3000 }), P));
-  assert.equal(inicial.status, 201);
-  assert.equal(db.invoices[0].total, 3000);
+  // Sin método no hay abono (es dinero que entra).
+  const sinMetodo = await leer(await cargos.POST(req({ abono: 3000, abonoA: "orto" }), P));
+  assert.equal(sinMetodo.status, 400);
+  // Con dos conceptos pendientes hay que decir a cuál.
+  const sinConcepto = await leer(await cargos.POST(req({ abono: 3000, metodo: "cash" }), P));
+  assert.equal(sinConcepto.status, 409);
 
-  const todo = await leer(await cargos.POST(req({ itemIds: ["resina", "orto"] }), P));
-  assert.equal(todo.status, 201);
-  assert.equal(todo.body.total, 7000);
+  const inicial = await leer(await cargos.POST(req({ abono: 3000, abonoA: "orto", metodo: "cash" }), P));
+  assert.equal(inicial.status, 201, inicial.body?.error);
+  const orto = db.invoices[0];
+  assert.deepEqual([orto.total, orto.paid, orto.balance, orto.status], [8500, 3000, 5500, "PARTIAL"], "la ortodoncia a precio completo, con $3,000 pagados");
+  assert.deepEqual((db as any).pagos.map((p: any) => [p.invoiceId, p.amount, p.method]), [[orto.id, 3000, "cash"]]);
+  assert.equal(inicial.body.abono.saldo, 5500);
+
+  const resina = await leer(await cargos.POST(req({ itemIds: ["resina"] }), P));
+  assert.equal(resina.status, 201);
+  assert.equal(resina.body.total, 1500, "entera: antes salía con lo abonado descontado");
   assert.equal(db.invoices.reduce((s, i) => s + i.total, 0), 10000);
 
-  const mas = await leer(await cargos.POST(req({ abono: 1 }), P));
+  const mas = await leer(await cargos.POST(req({ itemIds: ["resina"] }), P));
   assert.equal(mas.status, 409);
 });
 

@@ -14,7 +14,10 @@ import {
   PresupuestoError,
 } from "@/lib/quotes/cargos.server";
 import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
-import { calcularCalendario, hayCondiciones } from "@/lib/quotes/condiciones-pago";
+import { calcularCalendario, esMetodoPago, hayCondiciones, METODOS_PAGO } from "@/lib/quotes/condiciones-pago";
+import { CASH_METHOD } from "@/lib/caja";
+import { METODO_MERCADO_PAGO } from "@/lib/factura-mp/core";
+import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +29,12 @@ interface Params { params: { id: string } }
  * GET  — lo que necesita la revisión: qué aceptó (con su precio), qué ya se
  *        cargó y en qué factura, cuánto queda, y las sugerencias de abono del
  *        plan pactado (enganche, una cuota). Lectura fresca, no la de la lista.
- * POST — { itemIds?: string[], abono?: number } crea UNA factura PENDIENTE con
- *        esos conceptos y/o ese abono. Nunca carga un concepto dos veces ni
- *        pasa del total aceptado (lib/quotes/aceptacion.ts).
+ * POST — { itemIds?: string[], abono?: number, abonoA?: string, metodo?, referencia?, fecha? }
+ *        crea UNA factura PENDIENTE con esos conceptos. El abono (decisión de
+ *        Rafael, 4-oct-2026) es un PAGO real a la factura del concepto `abonoA`
+ *        (si no tiene, se crea a precio completo): pide método y, en
+ *        transferencia, referencia — como «Registrar pago». Nunca carga un
+ *        concepto dos veces ni pasa del total aceptado (lib/quotes/aceptacion.ts).
  *
  * Sin el SQL (sql/presupuesto-aceptacion-parcial.sql) responde 404
  * `{ apagada: true }`: la pantalla no ofrece el botón y sigue «Generar factura».
@@ -125,18 +131,45 @@ export async function POST(req: NextRequest, { params }: Params) {
   const r = await cargar(ctx, params.id);
   if (r.error) return r.error;
 
+  // El abono es dinero que entra HOY: las puertas de «Registrar pago».
+  const abonoNum = Number(body.abono ?? 0);
+  let pago: { method: string; reference: string | null; paidAt: Date; avisoDeCaja: string | null } | null = null;
+  if (Number.isFinite(abonoNum) && abonoNum > 0) {
+    const denegado = denyIfMissingPermission(ctx, "billing.charge");
+    if (denegado) return denegado;
+    const method = body.metodo;
+    if (method === METODO_MERCADO_PAGO || method === METODO_ANTICIPO || !esMetodoPago(method)) {
+      return NextResponse.json({ error: `Di con qué pagó el abono: ${METODOS_PAGO.join(", ")}` }, { status: 400 });
+    }
+    const referencia = typeof body.referencia === "string" ? body.referencia.trim() : "";
+    if (method === "transfer" && !referencia) {
+      return NextResponse.json({ error: "Para transferencia, escribe la referencia del depósito (clave de rastreo o folio)." }, { status: 400 });
+    }
+    const fecha = typeof body.fecha === "string" && body.fecha ? new Date(body.fecha) : new Date();
+    const paidAt = isNaN(fecha.getTime()) ? new Date() : fecha;
+    if (paidAt.getTime() > Date.now() + 60_000) return NextResponse.json({ error: "La fecha de pago no puede ser futura" }, { status: 400 });
+    let avisoDeCaja: string | null = null;
+    if (method === CASH_METHOD) {
+      const abierta = await prisma.cashRegister.findFirst({ where: { clinicId: ctx.clinicId, status: "OPEN" }, orderBy: { openedAt: "desc" }, select: { id: true } });
+      if (!abierta) avisoDeCaja = "Efectivo cobrado sin caja abierta — no entra en ningún corte";
+    }
+    pago = { method, reference: referencia || null, paidAt, avisoDeCaja };
+  }
+
   try {
-    const { invoice, plan } = await cargarDesdePresupuesto({
+    const { invoice, plan, abono } = await cargarDesdePresupuesto({
       quote: r.quote,
       clinicId: ctx.clinicId,
       userId: ctx.userId,
       itemIds: body.itemIds,
       abono: body.abono,
+      abonoA: body.abonoA,
+      pago,
     });
     revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json(
-      { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, invoice, total: plan.total, quedaPorCargar: plan.quedaPorCargar },
+      { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, invoice, total: plan.total, quedaPorCargar: plan.quedaPorCargar, abono, ...(pago?.avisoDeCaja ? { warning: pago.avisoDeCaja } : {}) },
       { status: 201 },
     );
   } catch (e) {

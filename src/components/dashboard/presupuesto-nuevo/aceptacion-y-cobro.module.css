@@ -250,6 +250,43 @@ button.etiqueta:focus-visible { outline: none; box-shadow: var(--pr-foco); }
 .sugerencia:hover { border-color: var(--pr-activo); color: var(--pr-activo); }
 .sugerencia:focus-visible { outline: none; box-shadow: var(--pr-foco); }
 
+/* El abono es un pago (decisión de Rafael): a qué concepto, con qué método y su referencia. */
+.abonoPago {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.abonoCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--pr-texto-2);
+}
+
+.abonoCampo select,
+.abonoCampo input {
+  height: 38px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.abonoCampo select:focus-visible,
+.abonoCampo input:focus-visible {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: var(--pr-foco);
+}
+
 .pista {
   margin: 6px 0 0;
   font-size: 12px;

@@ -55,7 +55,7 @@ test("lo NO aceptado no se puede cargar", () => {
   const plan = planearCargo(r, [], { itemIds: ["orto"], ...ETIQ });
   assert.equal(plan.ok, false);
   assert.match(plan.error!, /no lo aceptó/);
-  // Tampoco por abono: no cabe más que lo aceptado.
+  // Tampoco por abono: no hay a qué concepto abonar (la resina se carga hoy o vale $1,500).
   const abono = planearCargo(r, [], { abono: 2000, ...ETIQ });
   assert.equal(abono.ok, false);
 });
@@ -91,33 +91,53 @@ test("un concepto se carga una sola vez; con su factura cancelada vuelve a «por
   assert.ok(planearCargo(r, [], { itemIds: ["resina"], ...ETIQ }).ok);
 });
 
-test("abono primero y conceptos después: el total cargado nunca pasa de lo aceptado", () => {
+test("abono primero (decisión de Rafael): es un PAGO a la factura de su concepto, creada a precio completo; lo demás se carga entero", () => {
   const r = armarAceptacion(DIEZ_MIL, ["resina", "orto"]);
-  const abono = planearCargo(r, [], { abono: 3000, ...ETIQ });
+  // Dos conceptos pendientes: hay que decir a cuál va.
+  const sinElegir = planearCargo(r, [], { abono: 3000, ...ETIQ });
+  assert.equal(sinElegir.ok, false);
+  assert.match(sinElegir.error!, /Elige a qué concepto/);
+  const abono = planearCargo(r, [], { abono: 3000, abonoA: "orto", ...ETIQ });
   assert.ok(abono.ok);
-  assert.equal(abono.plan.lineas[0].tipo, "abono");
-  const vivos: CargoVivo[] = [{ quoteItemId: null, invoiceId: "inv1", monto: 3000 }];
-  // La resina cabe entera.
+  assert.equal(abono.plan.total, 0, "hoy no se carga ningún concepto");
+  assert.equal(abono.plan.abono!.monto, 3000);
+  assert.equal(abono.plan.abono!.linea!.monto, 8500, "la factura de la ortodoncia, a su precio completo");
+  assert.equal(abono.plan.quedaPorCargar, 1500);
+  const vivos: CargoVivo[] = [{ quoteItemId: "orto", invoiceId: "inv1", monto: 8500 }];
+  // La resina cabe entera y sale sin descuento.
   const resina = planearCargo(r, vivos, { itemIds: ["resina"], ...ETIQ });
   assert.ok(resina.ok);
   assert.equal(resina.plan.total, 1500);
+  assert.equal(resina.plan.descontadoDeAbonos, 0);
+  assert.equal(invoiceFieldsFromQuote(conceptosParaFactura(resina.plan)).total, 1500);
   vivos.push({ quoteItemId: "resina", invoiceId: "inv2", monto: 1500 });
-  // La ortodoncia ya no: se descuenta lo abonado.
-  const orto = planearCargo(r, vivos, { itemIds: ["orto"], ...ETIQ });
-  assert.ok(orto.ok);
-  assert.equal(orto.plan.total, 5500);
-  assert.equal(orto.plan.descontadoDeAbonos, 3000);
-  assert.equal(orto.plan.quedaPorCargar, 0);
-  assert.equal(invoiceFieldsFromQuote(conceptosParaFactura(orto.plan)).total, 5500);
-  vivos.push({ quoteItemId: "orto", invoiceId: "inv3", monto: 5500 });
   const e = estadoDeCobro(r, vivos);
   assert.equal(e.cargado, 10000);
   assert.equal(e.porCargar, 0);
-  const otro = planearCargo(r, vivos, { abono: 1, ...ETIQ });
-  assert.equal(otro.ok, false);
+  // Con UN solo concepto que admite abono, va solo a él (la factura de la ortodoncia ya está pagada).
+  const otro = planearCargo(r, [{ quoteItemId: "orto", invoiceId: "inv1", monto: 8500 }], { abono: 500, pagadas: new Set(["inv1"]), ...ETIQ });
+  assert.ok(otro.ok);
+  assert.equal(otro.plan.abono!.invoiceId, null, "la resina no tiene factura: se crea");
+  // Pagada la factura de la ortodoncia, ya no recibe abono.
+  const pagada = planearCargo(r, vivos, { abono: 1, abonoA: "orto", pagadas: new Set(["inv1"]), ...ETIQ });
+  assert.equal(pagada.ok, false);
 });
 
-test("un abono mayor a lo que falta se rechaza y dice el máximo", () => {
+test("abono de ANTES (renglón sin concepto): al cargar el concepto sale a precio completo y el abono se aplica como pago, nunca como descuento", () => {
+  const r = armarAceptacion(DIEZ_MIL, ["resina", "orto"]);
+  const vivos: CargoVivo[] = [{ quoteItemId: null, invoiceId: "viejo", monto: 3000 }, { quoteItemId: "resina", invoiceId: "inv2", monto: 1500 }];
+  const orto = planearCargo(r, vivos, { itemIds: ["orto"], ...ETIQ });
+  assert.ok(orto.ok);
+  assert.equal(orto.plan.total, 8500, "antes: $5,500 con $3,000 «descontados»");
+  assert.equal(orto.plan.descontadoDeAbonos, 0);
+  assert.equal(orto.plan.abonoViejo, 3000, "los $3,000 de antes, como pago a esta factura");
+  const f = invoiceFieldsFromQuote(conceptosParaFactura(orto.plan));
+  assert.equal(f.total, 8500);
+  assert.equal(f.discount, 0);
+  assert.equal(orto.plan.quedaPorCargar, 0);
+});
+
+test("un abono mayor al importe del concepto se rechaza y dice el máximo", () => {
   const r = armarAceptacion(DIEZ_MIL, ["resina", "orto"]);
   const plan = planearCargo(r, [], { itemIds: ["resina"], abono: 9000, ...ETIQ });
   assert.equal(plan.ok, false);

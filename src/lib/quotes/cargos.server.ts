@@ -12,7 +12,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
-import { clinicInvoiceTaxDefaults } from "@/lib/invoice-totals";
+import { clinicInvoiceTaxDefaults, round2 } from "@/lib/invoice-totals";
 import {
   InvoiceNumberExhaustedError,
   nextInvoiceNumber,
@@ -181,15 +181,38 @@ export async function leerEstado(db: Tx | typeof prisma, clinicId: string, q: Qu
 /* ── Cargar ───────────────────────────────────────────────────────────── */
 
 export interface ResultadoCargo {
+  /** La factura de los conceptos de hoy; si solo hubo abono, la del concepto abonado. */
   invoice: BillingInvoiceLite;
   plan: PlanDeCargo;
+  /** El abono registrado como pago (decisión de Rafael, 4-oct-2026). */
+  abono: { invoiceId: string; invoiceNumber: string; monto: number; saldo: number } | null;
+}
+
+/** Fuente del libro de saldo a favor para los abonos de ANTES que se aplican como pago. */
+export const FUENTE_ABONO_PRESUPUESTO = "abono_presupuesto";
+
+/** El pago del abono: dinero real, con su método (los mismos de «Registrar pago»). */
+export interface PagoDelAbono {
+  method: string;
+  reference?: string | null;
+  paidAt?: Date;
+  /** «Efectivo sin caja abierta» (lo calcula la ruta). */
+  avisoDeCaja?: string | null;
 }
 
 /**
- * Crea UNA factura PENDIENTE con los conceptos aceptados elegidos y/o el abono,
- * y anota sus renglones en quote_charges. Todo en una transacción con el
- * presupuesto bloqueado: dos «Cargar» a la vez (dos pestañas, Sabina) no cargan
- * dos veces el mismo concepto — el segundo re-lee los cargos y recibe 409.
+ * Crea la factura PENDIENTE de los conceptos de hoy y anota sus renglones en
+ * quote_charges. Todo en una transacción con el presupuesto bloqueado: dos
+ * «Cargar» a la vez (dos pestañas, Sabina) no cargan dos veces el mismo
+ * concepto — el segundo re-lee los cargos y recibe 409.
+ *
+ * ABONO (decisión de Rafael, 4-oct-2026): ya no es un renglón ni un descuento
+ * del siguiente cargo. Es un PAGO a la factura del concepto elegido; si ese
+ * concepto no tiene factura, se crea con su precio COMPLETO y recibe el pago
+ * ahí mismo (queda «Pagado $200 · Saldo $500»). Los abonos de ANTES (renglón
+ * «Abono al presupuesto») que sigan sin usar se aplican como pago a la factura
+ * de hoy a través del saldo a favor — nunca como descuento —, y solo si ya se
+ * cobraron.
  *
  * `todoLoPendiente`: el «Generar factura» de siempre (y Sabina) con la función
  * encendida — carga todos los conceptos aceptados que falten, nada más.
@@ -200,6 +223,8 @@ export async function cargarDesdePresupuesto(args: {
   userId: string;
   itemIds?: unknown;
   abono?: unknown;
+  abonoA?: unknown;
+  pago?: PagoDelAbono | null;
   todoLoPendiente?: boolean;
 }): Promise<ResultadoCargo> {
   const { quote: q, clinicId, userId } = args;
@@ -215,7 +240,8 @@ export async function cargarDesdePresupuesto(args: {
     : false;
   const doctor = doctorDeLaFactura(q.createdById ?? null, creadorEsDoctor);
 
-  let resultado: { row: any; plan: PlanDeCargo };
+  type Hecho = { row: any | null; plan: PlanDeCargo; abono: ResultadoCargo["abono"]; abonoRow: any | null };
+  let resultado: Hecho;
   try {
     resultado = await withInvoiceNumberRetry(() =>
       prisma.$transaction(async (tx) => {
@@ -227,6 +253,9 @@ export async function cargarDesdePresupuesto(args: {
         if (!fresco) throw new PresupuestoError("Presupuesto no encontrado", 404);
         if (fresco.status !== "ACCEPTED") throw new PresupuestoError("Solo se carga un presupuesto aceptado");
         const { renglones, vivos } = await leerEstado(tx, clinicId, { ...q, invoiceId: fresco.invoiceId });
+        const pagadas = new Set(
+          vivos.filter((v) => v.quoteItemId && (v as { status?: string }).status === "PAID").map((v) => v.invoiceId),
+        );
 
         const itemIds = args.todoLoPendiente
           ? estadoDeCobro(renglones, vivos).pendientes.map((r) => r.quoteItemId)
@@ -234,42 +263,115 @@ export async function cargarDesdePresupuesto(args: {
         const plan = planearCargo(renglones, vivos, {
           itemIds,
           abono: args.todoLoPendiente ? 0 : args.abono,
-          etiquetaAbono: `Abono al presupuesto ${q.folio}`,
+          abonoA: args.abonoA,
+          pagadas,
         });
         if (!plan.ok) throw new PresupuestoError(plan.error);
+        if (plan.plan.abono && !args.pago) throw new PresupuestoError("Di con qué pagó el abono (método de pago)", 400);
 
-        const { items, subtotal, discount, total } = invoiceFieldsFromQuote(conceptosParaFactura(plan.plan));
-        const creada = await tx.invoice.create({
-          data: {
-            clinicId,
-            patientId: q.patientId,
-            invoiceNumber: await nextInvoiceNumber(clinicId, tx),
-            items: items as unknown as Prisma.InputJsonValue,
-            subtotal,
-            discount,
-            total,
-            paid: 0,
-            balance: total,
-            status: "PENDING",
-            notes: `Cargo del presupuesto ${q.folio}`,
-            taxRate,
-            taxIncluded,
-            doctorId: doctor,
-          },
-        });
-        await insertarCargos(tx, {
-          clinicId,
-          quoteId: q.id,
-          invoiceId: creada.id,
-          userId,
-          lineas: plan.plan.lineas,
-        });
-        // La primera factura queda también en quotes.invoiceId: así «Facturado»,
-        // Sabina y la tarjeta de siempre siguen viendo el vínculo.
-        if (!fresco.invoiceId) {
-          await tx.quote.updateMany({ where: { id: q.id, clinicId }, data: { invoiceId: creada.id } });
+        const crearFactura = async (lineas: PlanDeCargo["lineas"]) => {
+          const { items, subtotal, discount, total } = invoiceFieldsFromQuote(conceptosParaFactura({ ...plan.plan, lineas }));
+          const creada = await tx.invoice.create({
+            data: {
+              clinicId,
+              patientId: q.patientId,
+              invoiceNumber: await nextInvoiceNumber(clinicId, tx),
+              items: items as unknown as Prisma.InputJsonValue,
+              subtotal,
+              discount,
+              total,
+              paid: 0,
+              balance: total,
+              status: "PENDING",
+              notes: `Cargo del presupuesto ${q.folio}`,
+              taxRate,
+              taxIncluded,
+              doctorId: doctor,
+            },
+          });
+          await insertarCargos(tx, { clinicId, quoteId: q.id, invoiceId: creada.id, userId, lineas });
+          // La primera factura queda también en quotes.invoiceId: así «Facturado»,
+          // Sabina y la tarjeta de siempre siguen viendo el vínculo.
+          if (!fresco.invoiceId) {
+            await tx.quote.updateMany({ where: { id: q.id, clinicId }, data: { invoiceId: creada.id } });
+            fresco.invoiceId = creada.id;
+          }
+          return creada;
+        };
+
+        const creada = plan.plan.lineas.length > 0 ? await crearFactura(plan.plan.lineas) : null;
+
+        // Abonos de antes, sin usar: pago (vía saldo a favor) a la factura de hoy.
+        if (creada && plan.plan.abonoViejo > 0) {
+          const viejos = vivos.filter((v) => !v.quoteItemId && v.monto > 0);
+          const sinCobrar = viejos.filter((v) => (v as { status?: string }).status !== "PAID");
+          if (sinCobrar.length > 0) {
+            const folio = (sinCobrar[0] as { invoiceNumber?: string }).invoiceNumber ?? "";
+            throw new PresupuestoError(`El abono de antes (${folio}) todavía no está cobrado: cóbralo o cancélalo antes de cargar este concepto.`);
+          }
+          await insertarCargos(tx, {
+            clinicId, quoteId: q.id, invoiceId: creada.id, userId,
+            lineas: [{ tipo: "abono", quoteItemId: null, monto: -plan.plan.abonoViejo }],
+          });
+          await tx.patientCredit.create({
+            data: {
+              clinicId,
+              patientId: q.patientId,
+              amount: plan.plan.abonoViejo,
+              source: FUENTE_ABONO_PRESUPUESTO,
+              invoiceId: viejos[0]?.invoiceId ?? null,
+              createdById: userId,
+              description: `Abono del presupuesto ${q.folio} cobrado antes: se aplica como pago a la factura ${creada.invoiceNumber}`,
+            },
+          });
         }
-        return { row: { ...creada, payments: [] }, plan: plan.plan };
+
+        // El abono de hoy: PAGO a la factura de su concepto (creada a precio completo si no existía).
+        let abono: ResultadoCargo["abono"] = null;
+        let abonoRow: any | null = null;
+        const ab = plan.plan.abono;
+        if (ab && args.pago) {
+          let destino: { id: string; invoiceNumber: string; total: number; paid: number; status: string } | null;
+          if (ab.linea) {
+            const nueva = await crearFactura([ab.linea]);
+            destino = { id: nueva.id, invoiceNumber: nueva.invoiceNumber, total: nueva.total, paid: 0, status: "PENDING" };
+          } else {
+            await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${ab.invoiceId} AND "clinicId" = ${clinicId} FOR UPDATE`;
+            destino = await tx.invoice.findFirst({
+              where: { id: ab.invoiceId!, clinicId, patientId: q.patientId },
+              select: { id: true, invoiceNumber: true, total: true, paid: true, status: true },
+            });
+            if (!destino || !["PENDING", "PARTIAL", "OVERDUE"].includes(destino.status)) {
+              throw new PresupuestoError(`La factura de «${ab.nombre}» ya no recibe pagos`);
+            }
+          }
+          const falta = round2(destino.total - destino.paid);
+          if (ab.monto > falta + 0.005) {
+            throw new PresupuestoError(`El abono pasa de lo que debe la factura ${destino.invoiceNumber} (${falta.toFixed(2)})`);
+          }
+          const notas = [`Abono del presupuesto ${q.folio} a «${ab.nombre}»`, args.pago.avisoDeCaja ? `⚠️ ${args.pago.avisoDeCaja}` : null].filter(Boolean).join(" · ");
+          await tx.payment.create({
+            data: {
+              invoiceId: destino.id,
+              amount: ab.monto,
+              method: args.pago.method,
+              reference: args.pago.reference ?? null,
+              notes: notas,
+              ...(args.pago.paidAt ? { paidAt: args.pago.paidAt } : {}),
+            },
+          });
+          const paid = round2(destino.paid + ab.monto);
+          const saldo = round2(destino.total - paid);
+          const status = saldo <= 0 ? "PAID" : "PARTIAL";
+          await tx.invoice.updateMany({
+            where: { id: destino.id, clinicId },
+            data: { paid, balance: Math.max(0, saldo), status: status as any, paymentMethod: args.pago.method, ...(status === "PAID" ? { paidAt: args.pago.paidAt ?? new Date() } : {}) },
+          });
+          abono = { invoiceId: destino.id, invoiceNumber: destino.invoiceNumber, monto: ab.monto, saldo: Math.max(0, saldo) };
+          abonoRow = await tx.invoice.findFirst({ where: { id: destino.id, clinicId }, include: { payments: true } });
+        }
+
+        return { row: creada ? { ...creada, payments: [] } : null, plan: plan.plan, abono, abonoRow };
       }),
     );
   } catch (e) {
@@ -278,34 +380,43 @@ export async function cargarDesdePresupuesto(args: {
   }
 
   let row = resultado.row;
-  const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: row.id, userId, origen: "creada" });
-  if (saldo.aplicado > 0) {
-    const releida = await prisma.invoice.findFirst({ where: { id: row.id, clinicId }, include: { payments: true } });
-    if (releida) row = releida;
+  let saldoAplicado = 0;
+  if (row) {
+    const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: row.id, userId, origen: "creada" });
+    saldoAplicado = saldo.aplicado;
+    if (saldo.aplicado > 0) {
+      const releida = await prisma.invoice.findFirst({ where: { id: row.id, clinicId }, include: { payments: true } });
+      if (releida) row = releida;
+    }
   }
+  const principal = row ?? resultado.abonoRow;
+  if (!principal) throw new PresupuestoError("No se creó nada");
 
-  const conceptos = resultado.plan.lineas.filter((l) => l.tipo === "concepto").map((l) => l.name);
-  const abono = resultado.plan.lineas.find((l) => l.tipo === "abono");
+  const conceptos = resultado.plan.lineas.map((l) => l.name);
   const que = [
     conceptos.length ? conceptos.join(", ") : "",
-    abono ? `abono de ${dinero(abono.monto)}` : "",
+    resultado.abono ? `abono de ${dinero(resultado.abono.monto)} a «${resultado.plan.abono!.nombre}» (factura ${resultado.abono.invoiceNumber})` : "",
   ].filter(Boolean).join(" y ");
   await logAudit({
     clinicId,
     userId,
     patientId: q.patientId,
-    texto: `Cargó ${dinero(resultado.plan.total)} del presupuesto ${q.folio} (${que}) en la factura ${row.invoiceNumber}; quedan ${dinero(resultado.plan.quedaPorCargar)} por cargar`,
+    texto: row
+      ? `Cargó ${dinero(resultado.plan.total)} del presupuesto ${q.folio} (${que}) en la factura ${row.invoiceNumber}; quedan ${dinero(resultado.plan.quedaPorCargar)} por cargar`
+      : `Abonó ${dinero(resultado.abono!.monto)} del presupuesto ${q.folio} a «${resultado.plan.abono!.nombre}» (factura ${resultado.abono!.invoiceNumber}); quedan ${dinero(resultado.plan.quedaPorCargar)} por cargar`,
     entityType: "invoice",
-    entityId: row.id,
+    entityId: principal.id,
     action: "create",
     changes: {
       fromQuote: { before: null, after: q.folio },
       cargo: { before: null, after: resultado.plan.total },
-      ...(saldo.aplicado > 0 ? { anticipoAplicado: { before: null, after: saldo.aplicado } } : {}),
+      ...(resultado.abono ? { abono: { before: null, after: { factura: resultado.abono.invoiceNumber, monto: resultado.abono.monto, metodo: args.pago?.method ?? null } } } : {}),
+      ...(resultado.plan.abonoViejo > 0 ? { abonoAnteriorAplicado: { before: null, after: resultado.plan.abonoViejo } } : {}),
+      ...(saldoAplicado > 0 ? { anticipoAplicado: { before: null, after: saldoAplicado } } : {}),
     },
   });
 
-  return { invoice: serializeInvoice(row), plan: resultado.plan };
+  return { invoice: serializeInvoice(principal), plan: resultado.plan, abono: resultado.abono };
 }
 
 /* ── Resumen para la lista del panel ─────────────────────────────────── */

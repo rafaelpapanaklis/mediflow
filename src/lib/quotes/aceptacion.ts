@@ -265,19 +265,97 @@ export interface LineaDeCargo {
   monto: number;
 }
 
+/**
+ * El ABONO de «Se cobrará hoy» (decisión de Rafael, 4-oct-2026): ya no es un
+ * renglón ni se descuenta del siguiente cargo. Es un PAGO a la factura de UN
+ * concepto pendiente; si ese concepto todavía no tiene factura, se crea con su
+ * precio COMPLETO (y queda «Pagado $200 · Saldo $500»). Así cada factura cumple
+ * cantidad × precio = importe y se puede timbrar.
+ */
+export interface AbonoDelCargo {
+  quoteItemId: string;
+  nombre: string;
+  toothFdi: string | null;
+  /** Lo que se abona (dinero real, con su método). */
+  monto: number;
+  /** El importe completo del concepto (con su parte de descuento). */
+  neto: number;
+  /** Sin factura aún: el renglón con que se crea, a precio completo. null = ya tiene factura. */
+  linea: LineaDeCargo | null;
+  /** La factura viva del concepto, si ya se cargó. */
+  invoiceId: string | null;
+}
+
+/** Un concepto al que se puede abonar: aceptado, no cargado hoy, y sin factura o con su factura por pagar. */
+export interface DestinoDeAbono {
+  quoteItemId: string;
+  nombre: string;
+  toothFdi: string | null;
+  neto: number;
+  invoiceId: string | null;
+}
+
 export interface PlanDeCargo {
   lineas: LineaDeCargo[];
+  /** Lo que suma la factura de los conceptos de HOY (sin el abono, que es un pago). */
   total: number;
-  /** Cuánto se restó de los conceptos porque ya se había cobrado como abono. */
+  /** Siempre 0 desde que el abono es un pago (se queda por compatibilidad de lectura). */
   descontadoDeAbonos: number;
+  /** El abono de hoy, si hay. */
+  abono: AbonoDelCargo | null;
+  /**
+   * Abonos de ANTES (renglón «Abono al presupuesto» sin concepto) que todavía no
+   * se han usado: se aplican como PAGO a la factura de hoy (vía saldo a favor),
+   * no como descuento. Ver cargos.server.ts.
+   */
+  abonoViejo: number;
   /** Lo que quedará por cargar después de este cargo. */
   quedaPorCargar: number;
+}
+
+/** Los conceptos a los que se puede abonar hoy (los de `hoy` no: esos se cargan enteros). */
+export function destinosDeAbono(
+  renglones: RenglonAceptado[],
+  cargos: CargoVivo[],
+  hoy: string[] = [],
+  pagadas: ReadonlySet<string> = new Set(),
+): DestinoDeAbono[] {
+  const facturaDe = new Map<string, string>();
+  for (const c of cargos) if (c.quoteItemId) facturaDe.set(c.quoteItemId, c.invoiceId);
+  return renglones
+    .filter((r) => r.aceptado && hoy.indexOf(r.quoteItemId) === -1)
+    .map((r) => ({ quoteItemId: r.quoteItemId, nombre: r.nombre, toothFdi: r.toothFdi, neto: netoDe(r), invoiceId: facturaDe.get(r.quoteItemId) ?? null }))
+    .filter((d) => d.neto > 0 && !(d.invoiceId && pagadas.has(d.invoiceId)));
+}
+
+function lineaDeConcepto(r: RenglonAceptado): LineaDeCargo {
+  const bruto = round2(r.cantidad * r.precio);
+  const discount = round2(Math.min(bruto, r.descuento + r.descuentoGlobal));
+  return {
+    tipo: "concepto",
+    quoteItemId: r.quoteItemId,
+    name: r.nombre,
+    toothFdi: r.toothFdi,
+    quantity: r.cantidad,
+    unitPrice: r.precio,
+    discount,
+    monto: round2(bruto - discount),
+  };
 }
 
 export function planearCargo(
   renglones: RenglonAceptado[],
   cargos: CargoVivo[],
-  pedido: { itemIds?: unknown; abono?: unknown; etiquetaAbono: string },
+  pedido: {
+    itemIds?: unknown;
+    abono?: unknown;
+    /** El concepto al que va el abono (si hay uno solo posible, se elige solo). */
+    abonoA?: unknown;
+    /** Ya no se usa (el abono no es renglón); se acepta por compatibilidad. */
+    etiquetaAbono?: string;
+    /** Facturas de conceptos ya pagadas: no reciben abono. */
+    pagadas?: ReadonlySet<string>;
+  },
 ): { ok: true; plan: PlanDeCargo; error?: undefined } | { ok: false; error: string; plan?: undefined } {
   const estado = estadoDeCobro(renglones, cargos);
   const rawIds = pedido.itemIds ?? [];
@@ -301,67 +379,55 @@ export function planearCargo(
     return { ok: false, error: "Elige al menos un concepto o escribe un abono" };
   }
 
-  // Conceptos en el orden del presupuesto.
+  // Conceptos en el orden del presupuesto, a su precio COMPLETO (sin restar abonos).
   const elegidos = renglones.filter((r) => ids.indexOf(r.quoteItemId) !== -1);
-  const porCargarC = cents(estado.porCargar);
-  const conceptosC = elegidos.reduce((s, r) => s + cents(netoDe(r)), 0);
-  // Regla 4: lo ya abonado se descuenta de los conceptos que ya no caben.
-  let excesoC = Math.max(0, conceptosC - porCargarC);
-  const descontadoC = excesoC;
-  const extras = elegidos.map(() => 0);
-  for (let i = elegidos.length - 1; i >= 0 && excesoC > 0; i--) {
-    const tomar = Math.min(excesoC, cents(netoDe(elegidos[i])));
-    extras[i] = tomar;
-    excesoC -= tomar;
-  }
-  const conceptosNetoC = conceptosC - descontadoC;
-  if (abonoC > porCargarC - conceptosNetoC) {
-    const cabe = pesos(Math.max(0, porCargarC - conceptosNetoC));
-    return {
-      ok: false,
-      error: cabe > 0
-        ? `El abono pasa de lo aceptado: como máximo ${cabe.toFixed(2)}`
-        : "Ya no queda nada por cargar de este presupuesto",
+  const lineas: LineaDeCargo[] = elegidos.map(lineaDeConcepto);
+  const totalC = lineas.reduce((s, l) => s + cents(l.monto), 0);
+
+  // Abonos viejos sin usar (renglones «Abono al presupuesto»): se aplican como
+  // pago a la factura de hoy, hasta su importe.
+  const abonoViejoC = Math.max(0, Math.min(cents(estado.abonado), totalC));
+
+  let abono: AbonoDelCargo | null = null;
+  if (abonoC > 0) {
+    const destinos = destinosDeAbono(renglones, cargos, ids, pedido.pagadas);
+    let destino: DestinoDeAbono | undefined;
+    if (typeof pedido.abonoA === "string" && pedido.abonoA) {
+      destino = destinos.find((d) => d.quoteItemId === pedido.abonoA);
+      if (!destino) return { ok: false, error: "Ese concepto no admite abono: ya está pagado, no se aceptó o se carga hoy" };
+    } else if (destinos.length === 1) {
+      destino = destinos[0];
+    } else if (destinos.length === 0) {
+      return { ok: false, error: "No queda ningún concepto pendiente al que abonar" };
+    } else {
+      return { ok: false, error: "Elige a qué concepto va el abono" };
+    }
+    if (abonoC > cents(destino.neto)) {
+      return { ok: false, error: `El abono pasa del importe de «${destino.nombre}»: como máximo ${destino.neto.toFixed(2)}` };
+    }
+    const r = porId.get(destino.quoteItemId)!;
+    abono = {
+      quoteItemId: destino.quoteItemId,
+      nombre: destino.nombre,
+      toothFdi: destino.toothFdi,
+      monto: pesos(abonoC),
+      neto: destino.neto,
+      linea: destino.invoiceId ? null : lineaDeConcepto(r),
+      invoiceId: destino.invoiceId,
     };
   }
 
-  const lineas: LineaDeCargo[] = elegidos.map((r, i) => {
-    const bruto = round2(r.cantidad * r.precio);
-    const discount = round2(Math.min(bruto, r.descuento + r.descuentoGlobal + pesos(extras[i])));
-    return {
-      tipo: "concepto",
-      quoteItemId: r.quoteItemId,
-      name: r.nombre,
-      toothFdi: r.toothFdi,
-      quantity: r.cantidad,
-      unitPrice: r.precio,
-      discount,
-      ...(extras[i] > 0 ? { anticipoAplicado: pesos(extras[i]) } : {}),
-      monto: round2(bruto - discount),
-    };
-  });
-  if (abonoC > 0) {
-    lineas.push({
-      tipo: "abono",
-      quoteItemId: null,
-      name: pedido.etiquetaAbono,
-      toothFdi: null,
-      quantity: 1,
-      unitPrice: pesos(abonoC),
-      discount: 0,
-      esAnticipo: true,
-      monto: pesos(abonoC),
-    });
-  }
-  const totalC = lineas.reduce((s, l) => s + cents(l.monto), 0);
-  if (totalC <= 0) return { ok: false, error: "El cargo quedaría en $0: no hay nada que cobrar" };
+  if (totalC <= 0 && !abono) return { ok: false, error: "El cargo quedaría en $0: no hay nada que cobrar" };
+  const nuevoC = totalC + (abono?.linea ? cents(abono.linea.monto) : 0);
   return {
     ok: true,
     plan: {
       lineas,
       total: pesos(totalC),
-      descontadoDeAbonos: pesos(descontadoC),
-      quedaPorCargar: pesos(Math.max(0, porCargarC - totalC)),
+      descontadoDeAbonos: 0,
+      abono,
+      abonoViejo: pesos(abonoViejoC),
+      quedaPorCargar: pesos(Math.max(0, cents(estado.porCargar) - nuevoC + abonoViejoC)),
     },
   };
 }

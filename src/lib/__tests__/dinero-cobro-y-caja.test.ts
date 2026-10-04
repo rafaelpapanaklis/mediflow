@@ -321,24 +321,22 @@ const PRESUPUESTO = {
   ],
 };
 
-test("F10 · presupuesto de $10,000, abono de $3,000 y luego todo: la factura B lleva los $3,000 como ANTICIPO aplicado, y su descuento comercial es 0 %", () => {
+test("F10 (decisión de Rafael, 4-oct-2026) · el abono de $3,000 es un PAGO a la factura de su concepto, creada a precio completo; nada se descuenta después", () => {
   const r = armarAceptacion(PRESUPUESTO, ["resina", "orto"]);
-  const abono = planearCargo(r, [], { abono: 3000, etiquetaAbono: "Abono al presupuesto P-0001" });
+  const abono = planearCargo(r, [], { abono: 3000, abonoA: "orto" });
   assert.ok(abono.ok);
-  const lineaAbono = abono.plan!.lineas[0];
-  assert.equal(lineaAbono.esAnticipo, true, "la factura A es un anticipo del tratamiento");
-  const facturaA = invoiceFieldsFromQuote(conceptosParaFactura(abono.plan!));
-  assert.equal(facturaA.total, 3000);
-  assert.equal((facturaA.items[0] as any).esAnticipo, true);
-
-  const todo = planearCargo(r, [{ quoteItemId: null, invoiceId: "A", monto: 3000 }], { itemIds: ["resina", "orto"], etiquetaAbono: "x" });
-  assert.ok(todo.ok);
-  assert.equal(todo.plan!.total, 7000, "la deuda cuadra: 3,000 + 7,000 = 10,000");
-  const b = invoiceFieldsFromQuote(conceptosParaFactura(todo.plan!));
-  const anticipo = b.items.reduce((s, it: any) => s + (it.anticipoAplicado ?? 0), 0);
-  assert.equal(anticipo, 3000, "antes: $3,000 de «descuento» sin marca");
-  assert.equal(b.total, 7000);
-  assert.equal(b.discount, 0, "no es descuento comercial: va como anticipo aplicado");
+  assert.equal(abono.plan!.lineas.length, 0, "ningún renglón «Abono al presupuesto»");
+  assert.equal(abono.plan!.abono?.quoteItemId, "orto");
+  assert.equal(abono.plan!.abono?.linea?.monto, 8500, "la factura de la ortodoncia nace a precio completo");
+  // Luego la resina: entera, sin descuento ni «anticipo aplicado».
+  const vivos = [{ quoteItemId: "orto", invoiceId: "B", monto: 8500 }];
+  const resina = planearCargo(r, vivos, { itemIds: ["resina"] });
+  assert.ok(resina.ok);
+  const f = invoiceFieldsFromQuote(conceptosParaFactura(resina.plan!));
+  assert.equal(f.total, 1500);
+  assert.equal(f.discount, 0);
+  assert.equal(f.items.reduce((s, it: any) => s + (it.anticipoAplicado ?? 0), 0), 0);
+  assert.equal(resina.plan!.quedaPorCargar, 0);
 });
 
 test("F10 · «Cobrar hoy» sabe qué presupuestos aceptados tienen algo sin cargar", () => {
