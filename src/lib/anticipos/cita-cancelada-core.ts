@@ -21,11 +21,11 @@
 // formato fijo que se puede leer de vuelta, y además en la bitácora. Una
 // factura con dinero ligada a una cita cancelada nunca se queda sin marca.
 //
-// CAJA. «a_favor» cancela la factura, y la Caja deja fuera los cobros de
-// facturas canceladas. Si parte de lo pagado entró EN EFECTIVO en el turno que
-// sigue ABIERTO, cancelarla ahora quitaría ese efectivo del arqueo con los
-// billetes todavía en el cajón: el corte no cuadraría. En ese caso «a_favor»
-// espera a que se cierre el corte (los cerrados guardan su foto y no cambian).
+// CAJA. «a_favor» cancela la factura con un traspaso («refund» a saldo a
+// favor). Desde la auditoría de uso (C-01) la Caja SIGUE contando el cobro de
+// una factura cancelada así (facturaConDineroQueCuentaWhere) y el traspaso no
+// resta: el efectivo sigue en el arqueo y el corte cuadra. Por eso ya no se
+// bloquea «a_favor» con la caja abierta (N-02, segunda auditoría de uso).
 
 export type DecisionCitaCancelada = "a_favor" | "reembolso" | "pendiente";
 
@@ -78,19 +78,17 @@ export function decisionEfectiva(pedida: unknown, puedeCobrar: boolean): Decisio
 
 /**
  * ¿Se puede dejar a favor AHORA? No si la factura está timbrada (cancelarla
- * pide cancelar el CFDI ante el SAT) ni si parte de lo pagado entró en
- * efectivo en el turno de caja que sigue abierto (ver CAJA, arriba).
+ * pide cancelar el CFDI ante el SAT). El efectivo del turno abierto ya no
+ * bloquea (ver CAJA, arriba): `efectivoEnTurnoAbierto` se acepta y se ignora,
+ * para no romper a quien todavía lo pasa.
  */
 export function motivoParaNoDejarAFavor(args: {
   timbrada: boolean;
   cfdiPorPago: boolean;
-  efectivoEnTurnoAbierto: number;
+  efectivoEnTurnoAbierto?: number;
 }): string | null {
   if (args.timbrada || args.cfdiPorPago) {
     return "La factura está timbrada: dejarlo a favor la cancelaría y eso pide cancelar antes el CFDI ante el SAT. Márcalo para reembolso o déjalo pendiente.";
-  }
-  if (args.efectivoEnTurnoAbierto > 0) {
-    return `${pesos(args.efectivoEnTurnoAbierto)} de este dinero entró en efectivo en el turno de caja que sigue abierto: si se deja a favor ahora, el corte no cuadraría. Elige «reembolso» o déjalo pendiente y decídelo desde la factura cuando cierres el corte.`;
   }
   return null;
 }

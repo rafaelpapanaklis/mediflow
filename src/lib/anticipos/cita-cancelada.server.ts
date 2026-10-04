@@ -40,21 +40,6 @@ export interface DineroDeCita {
   motivoNoAFavor: string | null;
 }
 
-/** Efectivo de la factura cobrado dentro del turno de caja que sigue abierto. */
-async function efectivoEnTurnoAbierto(db: Tx | typeof prisma, clinicId: string, invoiceId: string): Promise<number> {
-  const turno = await db.cashRegister.findFirst({
-    where: { clinicId, status: "OPEN" },
-    select: { openedAt: true },
-    orderBy: { openedAt: "desc" },
-  });
-  if (!turno) return 0;
-  const agg = await db.payment.aggregate({
-    where: { invoiceId, method: "cash", paidAt: { gte: turno.openedAt }, amount: { gt: 0 } },
-    _sum: { amount: true },
-  });
-  return round2(agg._sum.amount ?? 0);
-}
-
 async function motivoNoAFavorDe(
   db: Tx | typeof prisma,
   clinicId: string,
@@ -63,7 +48,7 @@ async function motivoNoAFavorDe(
   return motivoParaNoDejarAFavor({
     timbrada: !!inv.cfdiUuid,
     cfdiPorPago: await algunPagoTieneCfdiVigente(db as Tx, { clinicId, invoiceId: inv.id }),
-    efectivoEnTurnoAbierto: await efectivoEnTurnoAbierto(db, clinicId, inv.id),
+    // N-02 (segunda auditoría de uso): el efectivo del turno abierto ya no bloquea «a favor».
   });
 }
 

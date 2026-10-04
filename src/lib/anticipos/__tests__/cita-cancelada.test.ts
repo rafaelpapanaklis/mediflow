@@ -43,7 +43,9 @@ test("a favor no se puede con la factura timbrada ni con efectivo del turno abie
   assert.equal(motivoParaNoDejarAFavor({ timbrada: false, cfdiPorPago: false, efectivoEnTurnoAbierto: 0 }), null);
   assert.match(motivoParaNoDejarAFavor({ timbrada: true, cfdiPorPago: false, efectivoEnTurnoAbierto: 0 }) ?? "", /timbrada/);
   assert.match(motivoParaNoDejarAFavor({ timbrada: false, cfdiPorPago: true, efectivoEnTurnoAbierto: 0 }) ?? "", /timbrada/);
-  assert.match(motivoParaNoDejarAFavor({ timbrada: false, cfdiPorPago: false, efectivoEnTurnoAbierto: 100 }) ?? "", /corte no cuadraría/);
+  // N-02 (segunda auditoría de uso): desde C-01 la Caja sigue contando el cobro de la factura que se
+  // cancela por traspaso; el efectivo del turno abierto ya NO bloquea dejarlo a favor (antes: «el corte no cuadraría»).
+  assert.equal(motivoParaNoDejarAFavor({ timbrada: false, cfdiPorPago: false, efectivoEnTurnoAbierto: 400 }), null);
 });
 
 test("servidor: una transacción con los candados, sin borrar, y lo pagado entero a favor", () => {
@@ -59,7 +61,8 @@ test("servidor: una transacción con los candados, sin borrar, y lo pagado enter
   assert.match(src, /if \(cita && cita\.status !== "CANCELLED"\)/, "solo con la cita ya cancelada");
   assert.match(src, /if \(decision === "pendiente" && previa && previa !== "pendiente"\)/, "pendiente no pisa una decisión");
   assert.match(src, /const bloqueo = await motivoNoAFavorDe\(tx, clinicId, inv\);/);
-  assert.match(src, /method: "cash", paidAt: \{ gte: turno\.openedAt \}/);
+  // N-02 (segunda auditoría de uso): ya no se mira el efectivo del turno abierto.
+  assert.doesNotMatch(src, /method: "cash", paidAt: \{ gte: turno\.openedAt \}/);
   assert.doesNotMatch(src, /\.delete\(|deleteMany/);
 });
 
