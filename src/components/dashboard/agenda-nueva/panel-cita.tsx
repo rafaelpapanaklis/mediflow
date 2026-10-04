@@ -68,6 +68,7 @@ import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useMinuto } from "./usar-minuto";
 import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
+import { ORIGEN_WALK_IN, origenCorto, subtituloDeLaCita } from "@/lib/agenda-nueva/origen-cita";
 import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
 import { cancelarCitaEnServidor, useCancelarCita, type RespuestaCancelarCita } from "./cancelar-con-dinero";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
@@ -448,7 +449,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               ) : (
                 <div className={s.panelNombre}>{cita.nombrePaciente}</div>
               )}
-              <div className={s.panelSub}>{origenDeLaCita(dto.source)}</div>
+              {/* ws1-t1 (C-94): el subtítulo dice el ESTADO y de dónde vino (antes «Cita agendada en la
+                  clínica» fija, también en una cancelada o en un walk-in en consulta). */}
+              <div className={s.panelSub}>{subtituloDeLaCita(cita.chip, dto.source, dto.isWalkIn === true)}</div>
             </div>
           </div>
 
@@ -495,7 +498,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               valor={`${cita.tratamiento || "Sin especificar"} · ${Math.round(cita.duracionMin)} min`}
             />
             <Dato rotulo="Unidad dental" valor={cita.unidadNombre ?? "Sin asignar"} />
-            <Dato rotulo="Origen" valor={origenCorto(dto.source)} />
+            <Dato rotulo="Origen" valor={dto.isWalkIn ? ORIGEN_WALK_IN : origenCorto(dto.source)} />
             <Dato rotulo="Estado" valor={cita.chip} color={cita.pinta.chipTinta} />
           </div>
 
@@ -844,29 +847,4 @@ function iniciales(nombre: string): string {
 }
 
 /** El subtítulo bajo el nombre. El diseño pone el teléfono; no lo tenemos. */
-function origenDeLaCita(source: string): string {
-  switch (source) {
-    case "WHATSAPP":
-      return "Cita agendada por WhatsApp";
-    case "PATIENT_PORTAL":
-      return "Cita agendada por el paciente";
-    case "WEBSITE":
-      return "Cita agendada desde la web";
-    default:
-      return "Cita agendada en la clínica";
-  }
-}
-
-function origenCorto(source: string): string {
-  switch (source) {
-    case "WHATSAPP":
-      return "Por WhatsApp";
-    case "PATIENT_PORTAL":
-      return "Por el paciente";
-    case "WEBSITE":
-      return "Desde la web";
-    default:
-      return "En la clínica";
-  }
-}
 

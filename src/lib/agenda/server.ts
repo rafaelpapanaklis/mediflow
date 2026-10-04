@@ -1,4 +1,5 @@
 import "server-only";
+import { citasDeWalkIn } from "@/lib/walk-in/citas-de-walk-in";
 import { prisma } from "@/lib/prisma";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
@@ -162,6 +163,11 @@ async function citasConDepositoPagado(clinicId: string, appointmentIds: string[]
   }
 }
 
+function conWalkIn(dtos: AgendaAppointmentDTO[], walkIns: Set<string>): AgendaAppointmentDTO[] {
+  if (walkIns.size === 0) return dtos;
+  return dtos.map((d) => (walkIns.has(d.id) ? { ...d, isWalkIn: true } : d));
+}
+
 function conDepositoPagado(dtos: AgendaAppointmentDTO[], pagados: Set<string>): AgendaAppointmentDTO[] {
   if (pagados.size === 0) return dtos;
   return dtos.map((d) => (pagados.has(d.id) ? { ...d, depositoPagado: true } : d));
@@ -292,13 +298,15 @@ export async function fetchAppointmentsForDay(
   });
 
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
-  const [pagados, vencidos] = await Promise.all([
+  const [pagados, vencidos, walkIns] = await Promise.all([
     citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
     filter.ortoAcceso === false
       ? Promise.resolve(new Set<string>())
       : pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
+    // ws1-t1 (C-97): la cita que nació de la fila de espera se marca como walk-in.
+    citasDeWalkIn(filter.clinicId, rows),
   ]);
-  return conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos);
+  return conWalkIn(conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos), walkIns);
 }
 
 export async function fetchAppointmentsForRange(
@@ -329,13 +337,15 @@ export async function fetchAppointmentsForRange(
   });
 
   const dtos = rows.map((r) => appointmentToDTO(r, filter.clinicCategory, filter.viewer));
-  const [pagados, vencidos] = await Promise.all([
+  const [pagados, vencidos, walkIns] = await Promise.all([
     citasConDepositoPagado(filter.clinicId, dtos.map((d) => d.id)),
     filter.ortoAcceso === false
       ? Promise.resolve(new Set<string>())
       : pacientesConMensualidadVencida(filter.clinicId, filter.clinicCategory, dtos.map((d) => d.patient.id).filter((id): id is string => !!id)),
+    // ws1-t1 (C-97): la cita que nació de la fila de espera se marca como walk-in.
+    citasDeWalkIn(filter.clinicId, rows),
   ]);
-  return conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos);
+  return conWalkIn(conMensualidadVencida(conDepositoPagado(dtos, pagados), vencidos), walkIns);
 }
 
 export async function fetchPendingValidation(
