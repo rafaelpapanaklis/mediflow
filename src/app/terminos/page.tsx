@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Términos y condiciones del servicio DaleControl: software de gestión para clínicas en México. Suscripción, precios en MXN, renovación, cancelación y responsabilidades.",
 };
 
-const LAST_UPDATED = "24 de junio de 2026";
+const LAST_UPDATED = "4 de octubre de 2026";
 const PROVIDER = "DaleControl, marca operada por Efthymios Rafail Papanaklis (persona física)";
 const SUPPORT_EMAIL = "soporte@dalecontrol.com";
 
@@ -57,7 +57,7 @@ export default function TerminosPage() {
         </p>
       </Section>
 
-      <Section title="3. Registro, cuenta y elegibilidad">
+      <Section title="3. Registro, cuenta, elegibilidad y mayoría de edad">
         <p>
           Para usar el Servicio debe registrar una cuenta con información veraz, completa y
           actualizada. El Servicio está dirigido a profesionales de la salud, clínicas y su
@@ -68,6 +68,12 @@ export default function TerminosPage() {
           El Usuario es responsable de contar con la cédula profesional y demás autorizaciones
           legales que su actividad requiera. DaleControl no verifica ni avala dichas
           credenciales.
+        </p>
+        <p>
+          El Servicio es solo para personas <b>mayores de 18 años con capacidad legal para
+          contratar</b>, que actúan a nombre propio o en representación de la clínica. Al crear
+          una cuenta, el Usuario declara cumplir ese requisito y contar con facultades para
+          obligar a la clínica. DaleControl no está dirigido a menores de edad.
         </p>
       </Section>
 

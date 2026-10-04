@@ -182,13 +182,13 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
         <span style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.5 }}>
           Acepto los{" "}
           <Link href="/legal/terminos" className="dca-link">
-            términos
+            Términos
           </Link>{" "}
-          y la{" "}
+          y el{" "}
           <Link href="/legal/privacy" className="dca-link">
-            política de privacidad
+            Aviso de privacidad
           </Link>
-          .
+          , y declaro ser mayor de edad y tener capacidad legal para contratar a nombre de la clínica.
         </span>
       </label>
 
