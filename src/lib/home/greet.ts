@@ -31,10 +31,21 @@ export function timeGreeting(now: Date = new Date(), timeZone?: string | null): 
     : now.getHours();
   // Algunos motores devuelven "24" para la medianoche con hour12:false.
   if (h === 24) h = 0;
-  if (h < 6) return "Buenas noches";
-  if (h < 13) return "Buenos días";
-  if (h < 20) return "Buenas tardes";
-  return "Buenas noches";
+  const f = franjaDelDia(h);
+  return f === "manana" ? "Buenos días" : f === "tarde" ? "Buenas tardes" : "Buenas noches";
+}
+
+/**
+ * C-119 (ronda final): LA regla del saludo, para que Inicio y Mensajes no corten
+ * a horas distintas (a las 03:00 Inicio decía «Buenas noches» y Mensajes
+ * «Buenos días», que cortaba en h < 12). Antes de las 6 sigue siendo de noche.
+ */
+export function franjaDelDia(hora: number): "manana" | "tarde" | "noche" {
+  const h = hora === 24 ? 0 : hora;
+  if (h < 6) return "noche";
+  if (h < 13) return "manana";
+  if (h < 20) return "tarde";
+  return "noche";
 }
 
 export function formatLongDate(now: Date = new Date(), timeZone?: string | null): string {

@@ -196,7 +196,8 @@ test("ortodoncia: fuera del módulo, campos y valores se leen como siempre", () 
   assert.equal(fieldLabel("gauge", "invoice"), "gauge");
   assert.equal(formatAuditFieldValue("status", "IN_PROGRESS", { entityType: "treatment" }), "IN_PROGRESS");
   assert.equal(formatAuditFieldValue("treatingDoctorId", "u1", { entityType: "invoice" }), "u1");
-  assert.equal(resumenDeCambio({ entityType: "invoice", changes: { status: { before: "a", after: "b" } } }), null);
+  // F-04 (ronda final): una edición fuera de ortodoncia dice qué campos tocó.
+  assert.equal(resumenDeCambio({ entityType: "invoice", changes: { status: { before: "a", after: "b" } } }), "Editó Factura: Estado");
   assert.deepEqual(idsDePersonas({ doctorId: { before: "u1", after: "u2" } }), []);
   // Una creación o una fila sin campos legibles no lleva resumen.
   assert.equal(resumenDeCambio({ entityType: "OrthoWireStep", changes: { _created: { before: null, after: { a: 1 } } } }), null);

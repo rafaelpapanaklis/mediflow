@@ -1,6 +1,6 @@
 "use client";
 
-import { horaEnZona, zonaValida } from "@/lib/home/greet";
+import { franjaDelDia, horaEnZona, zonaValida } from "@/lib/home/greet";
 import {
   useCallback,
   useEffect,
@@ -1629,7 +1629,9 @@ export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido
   // «Buenos días» con el navegador en Nueva York, mientras Inicio decía «Buenas noches»).
   const greeting = useMemo(() => {
     const h = horaEnZona(new Date(), viewer.timezone);
-    const key = h < 12 ? "inbox.client.goodMorning" : h < 19 ? "inbox.client.goodAfternoon" : "inbox.client.goodEvening";
+    // C-119 (ronda final): los mismos cortes que Inicio (antes de las 6, «noches»).
+    const franja = franjaDelDia(h);
+    const key = franja === "manana" ? "inbox.client.goodMorning" : franja === "tarde" ? "inbox.client.goodAfternoon" : "inbox.client.goodEvening";
     return t(key, { name: viewer.firstName });
   }, [t, viewer.firstName, viewer.timezone]);
 

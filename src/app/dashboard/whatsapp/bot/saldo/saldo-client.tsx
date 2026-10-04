@@ -32,6 +32,8 @@ type UsageRow = {
   outputTokens: number;
   /** N-57: contexto releído (caché); viene desde ws1-t8. */
   cacheTokens?: number;
+  /** N-57 (ronda final): parte del contexto que se GUARDÓ esa vez (12.5× más cara que releerla). */
+  cacheGuardado?: number;
   billedCents: number;
   createdAt: string;
 };
@@ -743,6 +745,7 @@ export function SaldoClient({
                     <th>Fecha</th>
                     <th>Detalle</th>
                     <th className="mono">Leídos</th>
+                    <th className="mono" title="Contexto guardado en memoria por primera vez">Guardados</th>
                     <th className="mono">Escritos</th>
                     <th className="mono">Costo</th>
                   </tr>
@@ -753,6 +756,7 @@ export function SaldoClient({
                       <td>{formatRelativeDate(u.createdAt)}</td>
                       <td>{featureLabel(u.feature)} · {modeloLegible(u.model)}</td>
                       <td className="mono">{desgloseConsumo(u).leidos.toLocaleString("es-MX")}</td>
+                      <td className="mono">{desgloseConsumo(u).guardados.toLocaleString("es-MX")}</td>
                       <td className="mono">{desgloseConsumo(u).escritos.toLocaleString("es-MX")}</td>
                       <td className="mono">{fmtMXNdec(u.billedCents / 100)}</td>
                     </tr>

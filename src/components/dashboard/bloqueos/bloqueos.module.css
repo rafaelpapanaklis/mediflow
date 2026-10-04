@@ -1003,3 +1003,16 @@
     flex-basis: 100%;
   }
 }
+
+/* F-05 (ws1-t8, ronda final): con el dedo, las casillas de «Días festivos» medían
+   16 px en filas de 18. Solo con puntero táctil: la etiqueta entera (que ya
+   marca la casilla) crece a 40 px y la casilla a 22, como las de los días. */
+@media (pointer: coarse) {
+  .casilla {
+    width: 22px;
+    height: 22px;
+  }
+  .festivoEtiqueta {
+    min-height: 40px;
+  }
+}

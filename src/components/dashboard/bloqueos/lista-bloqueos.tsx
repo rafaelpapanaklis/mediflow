@@ -15,9 +15,10 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Building2, CalendarClock, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
-import { diaCorto, diaDeInstante, diasDelBloqueo, horaDeInstante, mesLargo } from "./fechas";
+import { diaCorto, diasDelBloqueo, horaDeInstante, mesLargo } from "./fechas";
 import { mensajeDeError, type BloqueoDTO } from "./tipos";
 import s from "./bloqueos.module.css";
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 
 interface Grupo {
   /** `YYYY-MM-01` del mes, para el rótulo y para ordenar. */
@@ -288,6 +289,7 @@ function quienYCuando(
   if (!valida) return t("settings.bloqueos.puestoPorSinFecha", { quien: b.creadoPor });
   return t("settings.bloqueos.puestoPor", {
     quien: b.creadoPor,
-    cuando: diaCorto(diaDeInstante(b.creadoEl, timezone), locale),
+    // F-06 (ws1-t8, ronda final): el formato único del panel, con año («28 sep 2026»).
+    cuando: fechaPanel(b.creadoEl, timezone, locale),
   });
 }

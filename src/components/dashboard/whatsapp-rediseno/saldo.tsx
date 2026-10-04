@@ -344,6 +344,7 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                         <th>Fecha</th>
                         <th>Detalle</th>
                         <th className={s.numero}>Leídos</th>
+                        <th className={s.numero} title="Contexto guardado en memoria por primera vez">Guardados</th>
                         <th className={s.numero}>Escritos</th>
                         <th className={s.numero}>Costo</th>
                       </tr>
@@ -354,6 +355,7 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
                           <td>{formatRelativeDate(u.createdAt)}</td>
                           <td>{aiBillingFeatureLabel(u.feature)} · {modeloLegible(u.model)}</td>
                           <td className={s.numero}>{desgloseConsumo(u).leidos.toLocaleString("es-MX")}</td>
+                          <td className={s.numero}>{desgloseConsumo(u).guardados.toLocaleString("es-MX")}</td>
                           <td className={s.numero}>{desgloseConsumo(u).escritos.toLocaleString("es-MX")}</td>
                           <td className={s.numero}>{fmtMXNdec(u.billedCents / 100)}</td>
                         </tr>

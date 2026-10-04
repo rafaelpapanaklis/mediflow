@@ -1252,10 +1252,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       </div>
                     </div>
                     {/* N-56 (ws1-t8): «tokens restantes» salía dos veces y el «~$0.0000 USD»
-                        era un costo interno en dólares. Ahora: lo usado, lo que alcanza, y
-                        dónde se ve lo que gastan Sabina y el bot (otro monedero). */}
+                        era un costo interno en dólares. F-08 (ronda final): «usados» ya lo dice
+                        el medidor de arriba; aquí solo cuántos análisis alcanzan y dónde se ve
+                        lo que gastan Sabina y el bot (otro monedero). */}
                     <Estadisticas>
-                      <Estadistica valor={aiUsed.toLocaleString()} etiqueta={t("settings.client.aiTokensUsedThisMonth")} tono="violeta" />
                       <Estadistica valor={Math.floor(aiRemaining/AVG_CONSULT_TOKENS).toString()} etiqueta={t("settings.client.aiStatConsultations")} />
                     </Estadisticas>
                     <p className={cr.campoAyuda}>
@@ -2193,9 +2193,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-1 gap-3 mb-5">
                 {[
-                  { label:t("settings.client.aiTokensUsedThisMonth"), val:aiUsed.toLocaleString(), color:"text-violet-600 dark:text-violet-300" },
                   { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/AVG_CONSULT_TOKENS).toString(), color:"text-foreground" },
                 ].map(s => (
                   <div key={s.label} className="text-center" style={{ background: "var(--bg-elev-2)", borderRadius: "var(--radius)", padding: 12 }}>

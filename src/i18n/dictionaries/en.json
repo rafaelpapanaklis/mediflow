@@ -4333,7 +4333,7 @@
       "saveErrorToast": "Error saving"
     },
     "signature": {
-      "title": "FIEL/SAT electronic signature",
+      "title": "Electronic signature (SAT e.firma)",
       "intro": "Upload your SAT e.firma (.cer + .key + password) to digitally sign prescriptions and clinical notes. DaleControl stores your signature and checks that the key matches the certificate, but it does not yet validate the certificate with the SAT: documents are printed saying exactly that.",
       "statusExpired": "Expired certificate",
       "statusExpiringSoon": {
@@ -8390,10 +8390,10 @@
       "indicationsPlaceholder": "Soft diet, hygiene, warning signs…",
       "cofeprisFolioLabel": "COFEPRIS folio (Group {group})",
       "cofeprisFolioPlaceholder": "Folio from the official prescription pad",
-      "signWithFiel": "Sign electronically with FIEL/SAT",
+      "signWithFiel": "Sign with your SAT e.firma",
       "keyPasswordPlaceholder": "Your SAT private key password",
       "certValidUntil": "Certificate valid until {date}.",
-      "noCert": "You don't have an active FIEL/SAT certificate. Set it up in /dashboard/settings/signature to sign prescriptions electronically.",
+      "noCert": "You don't have your SAT e.firma active. Upload it in Settings → Electronic signature to sign prescriptions electronically.",
       "createPrescription": "Create prescription",
       "diagnosisLabel": "Diagnosis (optional)",
       "diagnosisPlaceholder": "E.g. Acute periapical abscess",
@@ -9253,7 +9253,7 @@
       "patientsServed": "Patients served",
       "saveInfo": "Save information",
       "coverPhoto": "Cover photo",
-      "coverPhotoHelp": "Hero background image (recommended: 1920×600)",
+      "coverPhotoHelp": "Background image for the top of your page (recommended: 1920×600)",
       "coverAlt": "Cover",
       "replacePhoto": "Replace photo",
       "uploadCoverPhoto": "Upload cover photo",

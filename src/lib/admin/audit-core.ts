@@ -382,6 +382,11 @@ const CAMPOS_COMUNES: Record<string, string> = {
   categoria: "Categoría", category: "Categoría", status: "Estado", method: "Método",
   name: "Nombre", firstName: "Nombre", lastName: "Apellidos", phone: "Teléfono", email: "Correo",
   isActive: "Activo", duration: "Duración (min)", description: "Descripción",
+  // F-04 (ronda final): los campos de las «Edición» de Usuario, Paciente y Clínica que salían crudos.
+  especialidad: "Especialidad (cédula)", cedulaProfesional: "Cédula profesional", cedulaEspecialidad: "Cédula de especialidad",
+  specialty: "Área en la clínica", role: "Rol", color: "Color", services: "Servicios", agendaActive: "Aparece en la agenda",
+  primaryDoctorId: "Doctor de cabecera", anticipoPanel: "Anticipos", timezone: "Zona horaria", address: "Dirección",
+  withdrawal: "Retiro", closed: "Corte", expectedCash: "Efectivo esperado", counted: "Efectivo contado", variance: "Diferencia",
 };
 
 /** Campos de dinero (se enseñan en pesos) y de fecha (en fecha legible). */
@@ -488,6 +493,33 @@ export function resumenDeAlta(row: { entityType: string; changes: unknown }): st
   return null;
 }
 
+/**
+ * F-04 (ronda final): una «Edición» sin frase decía solo «Usuario» y el id.
+ * Ahora dice qué se tocó: «Editó Usuario: Cédula profesional y Cédula de
+ * especialidad». Una edición de Caja sin datos (retiros y cortes viejos que no
+ * guardaban el «antes») dice lo que es.
+ */
+export function resumenDeEdicion(row: { entityType: string; changes: unknown }): string | null {
+  const etiqueta = entityLabel(row.entityType);
+  const norm = normalizeChanges(row.changes);
+  if (norm.kind === "empty") {
+    return row.entityType === "cash-register" ? "Movimiento en la caja (retiro o corte)" : null;
+  }
+  if (norm.kind !== "updated") return null;
+  if (row.entityType === "cash-register" && isPlainObject(row.changes)) {
+    const c = row.changes as Record<string, unknown>;
+    const retiro = isPlainObject(c.withdrawal) ? (c.withdrawal as Record<string, unknown>).after ?? c.withdrawal : null;
+    if (isPlainObject(retiro) && pesosDe((retiro as Record<string, unknown>).amount)) return `Retiro de caja de ${pesosDe((retiro as Record<string, unknown>).amount)}`;
+    if (c.closed !== undefined) return "Corte de caja";
+  }
+  const nombres = norm.fields.map((f) => fieldLabel(f.field, row.entityType));
+  if (nombres.length === 0) return null;
+  const lista = nombres.length <= 3
+    ? nombres.length === 1 ? nombres[0] : `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`
+    : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
+  return `Editó ${etiqueta}: ${lista}`;
+}
+
 /** El texto que el propio movimiento guardó para la persona («Borró el gasto «Otro» de $100.00»). */
 export function textoDelMovimiento(changes: unknown): string | null {
   if (!isPlainObject(changes) || !isPlainObject(changes._mov)) return null;
@@ -511,7 +543,7 @@ export function resumenDeCambio(row: {
   // C-115 (vuelta 3): una alta sin frase dice qué se dio de alta, no un id.
   const alta = resumenDeAlta(row);
   if (alta) return alta;
-  if (!esEntidadDeOrtodoncia(row.entityType)) return null;
+  if (!esEntidadDeOrtodoncia(row.entityType)) return resumenDeEdicion(row);
   const norm = normalizeChanges(row.changes);
   if (norm.kind !== "updated") return null;
   const partes = norm.fields

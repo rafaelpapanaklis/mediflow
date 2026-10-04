@@ -22,7 +22,8 @@ test("🔴→🟢 las plantillas se llaman como en Plantillas, sin claves intern
 
 test("🔴→🟢 las fechas llevan año", () => {
   const f = PANTALLA.slice(PANTALLA.indexOf("function fecha("), PANTALLA.indexOf("export function AnticiposClient"));
-  assert.match(f, /year: "numeric"/);
+  // ws1-t8 (F-06, ronda final): el formato único del panel ya lleva año («4 oct 2026, 3:30 a.m.»).
+  assert.match(f, /year: "numeric"|return fechaHoraPanel\(iso, tz\);/);
 });
 
 test("🔴→🟢 «Últimos anticipos» separa cómo pagó y la referencia (también la de la transferencia)", () => {

@@ -70,7 +70,8 @@ const es = {
   atiendeTitulo: "Aparece en la agenda",
   atiendeDesc: "Recibe citas: sale como columna en la Agenda y en «Nueva cita», y se le pueden asignar casos. Apágalo si solo administra. No cambia sus permisos.",
   // C-124 (ws1-t8)
-  incluyeInactivos: (n: number) => (n === 1 ? "Incluye 1 inactivo (filtro «Inactivos»)" : `Incluye ${n} inactivos (filtro «Inactivos»)`),
+  // F-03 (ronda final): va bajo «Total activos», así que no «incluye» al inactivo: hay uno MÁS.
+  incluyeInactivos: (n: number) => (n === 1 ? "Hay 1 inactivo más (filtro «Inactivos»)" : `Hay ${n} inactivos más (filtro «Inactivos»)`),
   insigniaOrtodoncia: "Ortodoncia",
   kpiRecepcion: "Recepción y solo lectura",
 };
@@ -127,7 +128,7 @@ const en: typeof es = {
   rolPropioAyuda: "You cannot change your own role. Everything else you can.",
   atiendeTitulo: "Shows up in the agenda",
   atiendeDesc: "Receives appointments: appears as a column in the Agenda and in “New appointment”, and can be assigned cases. Turn it off if they only administer. It doesn't change their permissions.",
-  incluyeInactivos: (n: number) => (n === 1 ? "Includes 1 inactive (“Inactive” filter)" : `Includes ${n} inactive (“Inactive” filter)`),
+  incluyeInactivos: (n: number) => (n === 1 ? "Plus 1 inactive (“Inactive” filter)" : `Plus ${n} inactive (“Inactive” filter)`),
   insigniaOrtodoncia: "Orthodontics",
   kpiRecepcion: "Reception and read-only",
 };

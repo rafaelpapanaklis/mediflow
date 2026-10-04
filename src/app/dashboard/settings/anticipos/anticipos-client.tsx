@@ -39,6 +39,7 @@ import {
   type ModoAnticipo,
   type ModoAnticipoPanel,
 } from "@/lib/anticipos/core";
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 
 /**
  * Configuración → Anticipos por WhatsApp (WS1-T5).
@@ -77,15 +78,8 @@ const ESTADOS: Record<string, { texto: string; tono: "neutro" | "info" | "exito"
 function fecha(iso: string | null, tz: string): string {
   if (!iso) return "—";
   // ws1-t1 (C-102): con año — «29-sep, 15:52» no dice de qué año es un anticipo.
-  return new Intl.DateTimeFormat("es-MX", {
-    timeZone: tz,
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(iso));
+  // F-06 (ws1-t8, ronda final): en el formato único del panel («4 oct 2026, 3:30 a.m.»).
+  return fechaHoraPanel(iso, tz);
 }
 
 export function AnticiposClient({

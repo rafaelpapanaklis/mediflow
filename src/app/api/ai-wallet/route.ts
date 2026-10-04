@@ -3,6 +3,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/ai-billing/wallet";
 import { filtroRecargas, filtroSpeiEnRevision, juntarRecargas } from "./recargas";
+import { getPricingConfig } from "@/lib/ai-billing/pricing";
+import { ANTHROPIC_MODEL_PRICES, resolveModelPrice } from "@/lib/ai-billing/pricing-core";
+import { separarCache } from "@/lib/ai-billing/consumo-legible";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +26,8 @@ export async function GET() {
     // Asegura que exista el monedero (alta perezosa, saldo 0).
     const wallet = await getOrCreateWallet(ctx.clinicId);
 
+    // Precios con los que se cobra (lista de Anthropic + lo editado en /admin). Si falla, la lista.
+    const precios = await getPricingConfig().catch(() => ({ models: ANTHROPIC_MODEL_PRICES }) as unknown as Awaited<ReturnType<typeof getPricingConfig>>);
     const [usageEvents, asientos, speiEnRevision] = await Promise.all([
       // SOLO consumo que salió del monedero (billedCents > 0). Desde que la IA
       // clínica también registra AiUsageEvent — con billedCents 0, porque el
@@ -68,6 +73,9 @@ export async function GET() {
         outputTokens: e.outputTokens,
         // N-57: lo releído (caché) también se cobra; sin él la fila no cuadraba.
         cacheTokens: e.cacheTokens,
+        // N-57 (ronda final): cuánto de ese contexto se GUARDÓ esa vez (12.5× más caro que releerlo),
+        // reconstruido del costo real con el precio del modelo con el que se cobró.
+        cacheGuardado: separarCache(e, resolveModelPrice(e.model, precios).price).guardado,
         billedCents: e.billedCents,
         createdAt: e.createdAt,
       })),

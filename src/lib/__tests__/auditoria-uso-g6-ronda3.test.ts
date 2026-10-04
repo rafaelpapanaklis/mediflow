@@ -68,8 +68,9 @@ test("N-57: cada consumo dice el modelo y cuánto leyó y escribió (incluido lo
   assert.equal(modeloLegible("claude-haiku-4-5-20251001"), "modelo rápido");
   assert.equal(modeloLegible("claude-sonnet-4-6"), "modelo estándar");
   assert.equal(modeloLegible("claude-opus-5"), "modelo avanzado");
-  assert.deepEqual(desgloseConsumo({ model: "x", inputTokens: 300, outputTokens: 57, cacheTokens: 4000 }), { leidos: 4300, escritos: 57, total: 4357 });
-  assert.deepEqual(desgloseConsumo({ model: "x", inputTokens: 300, outputTokens: 57 }), { leidos: 300, escritos: 57, total: 357 });
+  // Ronda final: además separa lo guardado en memoria (sin reparto, todo cuenta como leído).
+  assert.deepEqual(desgloseConsumo({ model: "x", inputTokens: 300, outputTokens: 57, cacheTokens: 4000 }), { leidos: 4300, guardados: 0, escritos: 57, total: 4357 });
+  assert.deepEqual(desgloseConsumo({ model: "x", inputTokens: 300, outputTokens: 57 }), { leidos: 300, guardados: 0, escritos: 57, total: 357 });
   assert.match(leer("app/api/ai-wallet/route.ts"), /cacheTokens: e\.cacheTokens,/);
   for (const f of ["components/dashboard/whatsapp-rediseno/saldo.tsx", "app/dashboard/whatsapp/bot/saldo/saldo-client.tsx"]) {
     const s = leer(f);

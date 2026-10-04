@@ -240,6 +240,7 @@
     "test:inbox-templates": "tsx --test src/lib/inbox/__tests__/composer-templates.test.ts",
     "test:inbox-componer": "tsx --test src/lib/inbox/__tests__/componer-a-la-vista.test.ts",
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
+    "test:auditoria-uso-g6-final": "tsx --test src/lib/__tests__/auditoria-uso-g6-final.test.ts",
     "test:auditoria-uso-g6-ronda3": "tsx --test src/lib/__tests__/auditoria-uso-g6-ronda3.test.ts",
     "test:css-en-linea": "tsx --tsconfig tsconfig.test.json --test src/lib/landing/__tests__/css-en-linea.test.tsx",
     "test:auditoria-uso-g6": "tsx --test src/lib/__tests__/auditoria-uso-g6.test.ts",

@@ -4333,7 +4333,7 @@
       "saveErrorToast": "Error al guardar"
     },
     "signature": {
-      "title": "Firma electrónica FIEL/SAT",
+      "title": "Firma electrónica (e.firma del SAT)",
       "intro": "Carga tu e.firma del SAT (.cer + .key + contraseña) para firmar digitalmente recetas y notas clínicas. DaleControl guarda tu firma y comprueba que la llave corresponda al certificado, pero todavía no valida el certificado ante el SAT: los documentos se imprimen diciendo exactamente eso.",
       "statusExpired": "Certificado vencido",
       "statusExpiringSoon": {
@@ -8390,10 +8390,10 @@
       "indicationsPlaceholder": "Dieta blanda, higiene, signos de alarma…",
       "cofeprisFolioLabel": "Folio COFEPRIS (Grupo {group})",
       "cofeprisFolioPlaceholder": "Folio del receteario oficial",
-      "signWithFiel": "Firmar electrónicamente con FIEL/SAT",
+      "signWithFiel": "Firmar con tu e.firma del SAT",
       "keyPasswordPlaceholder": "Contraseña de tu llave privada SAT",
       "certValidUntil": "Cert válido hasta {date}.",
-      "noCert": "No tienes certificado FIEL/SAT activo. Configúralo en /dashboard/settings/signature para firmar recetas electrónicamente.",
+      "noCert": "No tienes tu e.firma del SAT activa. Cárgala en Configuración → Firma electrónica para firmar recetas electrónicamente.",
       "createPrescription": "Crear receta",
       "diagnosisLabel": "Diagnóstico (opcional)",
       "diagnosisPlaceholder": "Ej. Absceso periapical agudo",
@@ -9253,7 +9253,7 @@
       "patientsServed": "Pacientes atendidos",
       "saveInfo": "Guardar información",
       "coverPhoto": "Foto de portada",
-      "coverPhotoHelp": "Imagen de fondo del hero (recomendado: 1920×600)",
+      "coverPhotoHelp": "Imagen de fondo de la portada de tu página (recomendado: 1920×600)",
       "coverAlt": "Portada",
       "replacePhoto": "Reemplazar foto",
       "uploadCoverPhoto": "Subir foto de portada",
