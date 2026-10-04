@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
-import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { denegarBot } from "@/lib/whatsapp/bot/permiso-bot";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateBotConfig, toConfigDTO, toFaqDTO, buildConfigUpdate } from "./service";
 import { errorDeTamanoDePersona, PERSONA_MAX_CARACTERES } from "@/lib/whatsapp/bot/ai-prompt";
@@ -21,6 +21,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // ws1-t1 (C-103): lo mismo que la página (whatsapp.view). Antes daba 200 a quien la página saca.
+  const sinVer = denegarBot(ctx, "ver");
+  if (sinVer) return sinVer;
 
   const config = await getOrCreateBotConfig(ctx.clinicId);
   const faqs = await prisma.whatsAppBotFaq.findMany({
@@ -54,7 +57,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  const denied = denegarBot(ctx, "editar");
   if (denied) return denied;
 
   let body: Record<string, unknown>;

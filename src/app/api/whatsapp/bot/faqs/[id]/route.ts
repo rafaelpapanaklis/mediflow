@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
-import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { denegarBot } from "@/lib/whatsapp/bot/permiso-bot";
 import { prisma } from "@/lib/prisma";
 import { toFaqDTO } from "../../service";
 
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  const denied = denegarBot(ctx, "editar");
   if (denied) return denied;
 
   const existing = await prisma.whatsAppBotFaq.findFirst({
@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const denied = denyIfMissingPermission(ctx, "whatsapp.send");
+  const denied = denegarBot(ctx, "editar");
   if (denied) return denied;
 
   const existing = await prisma.whatsAppBotFaq.findFirst({

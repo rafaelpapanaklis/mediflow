@@ -33,6 +33,11 @@ export interface RecallClinicResult {
   sentEmail: number;
   failedEmail: number;
   skipped: number;
+  /**
+   * ws1-t1 (C-107): el canal pide WhatsApp pero la clínica no lo tiene conectado. No se encola nada por WhatsApp
+   * (antes se encolaba y el botón anunciaba «N por WhatsApp» que nunca iban a salir).
+   */
+  whatsappDesconectado?: boolean;
 }
 
 export interface RecallSweepSummary {
@@ -136,7 +141,11 @@ export async function sweepClinic(
     if (typeof pid === "string") recalledIds[pid] = true;
   });
 
-  const wantWA = settings.channel === "whatsapp" || settings.channel === "both";
+  // ws1-t1 (C-107): sin WhatsApp conectado no se encola nada por WhatsApp: esas filas nunca saldrían y el
+  // resumen diría «N por WhatsApp» de mentira. El correo (si el canal lo incluye) sigue igual.
+  const pideWA = settings.channel === "whatsapp" || settings.channel === "both";
+  const wantWA = pideWA && clinic.waConnected === true;
+  if (pideWA && !wantWA) res.whatsappDesconectado = true;
   const wantEmail = settings.channel === "email" || settings.channel === "both";
 
   const rowsToCreate: Array<Record<string, unknown>> = [];

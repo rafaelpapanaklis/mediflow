@@ -21,6 +21,13 @@ export interface AnticipoReciente {
   pagado: number | null;
   /** Id del pago en Mercado Pago: la referencia para el «yo pagué». */
   referenciaMp: string | null;
+  /**
+   * ws1-t1 (C-105): cómo entró — "mercadopago" | "transferencia" | "manual" — y, si no fue por Mercado Pago, la
+   * referencia que se escribió al registrarlo (la del Payment que lo saldó). Antes la columna se llamaba «Ref.
+   * Mercado Pago» y una transferencia con referencia salía «—». Opcionales: Sabina lee esta pantalla sin ellos.
+   */
+  metodo?: string | null;
+  referenciaPago?: string | null;
   citaConfirmada: boolean;
   ultimoEstadoMp: string | null;
   /** Detalle de MP (motivo de rechazo) o, con «otra_cuenta», el número del pago. */
@@ -241,6 +248,41 @@ async function leerConfigPanel(
   }
 }
 
+/**
+ * ws1-t1 (C-105): cómo entró cada anticipo y la referencia del pago que lo saldó (la de la transferencia). En
+ * SU PROPIA consulta y sin lanzar: las columnas `method`/`paymentId` vienen de sql/anticipo-desde-panel.sql y,
+ * sin ellas, la tabla sigue como antes (solo la referencia de Mercado Pago). Tenant: la clínica de la sesión en
+ * los dos lados (el anticipo y la factura del pago).
+ */
+async function metodosYReferencias(
+  clinicId: string,
+  ids: string[],
+): Promise<Map<string, { metodo: string | null; referenciaPago: string | null }>> {
+  const out = new Map<string, { metodo: string | null; referenciaPago: string | null }>();
+  if (!clinicId || ids.length === 0) return out;
+  try {
+    const filas = await prisma.appointmentDeposit.findMany({
+      where: { clinicId, id: { in: ids } },
+      select: { id: true, method: true, paymentId: true },
+    });
+    const pagoIds = filas.map((f) => f.paymentId).filter((v): v is string => !!v);
+    const pagos = pagoIds.length
+      ? await prisma.payment.findMany({
+          where: { id: { in: pagoIds }, invoice: { clinicId } },
+          select: { id: true, reference: true },
+        })
+      : [];
+    const refPorPago = new Map(pagos.map((p) => [p.id, p.reference]));
+    for (const f of filas) {
+      out.set(f.id, { metodo: f.method ?? null, referenciaPago: (f.paymentId && refPorPago.get(f.paymentId)) || null });
+    }
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code !== "P2021" && code !== "P2022") console.error("[anticipos/pantalla] método y referencia:", e);
+  }
+  return out;
+}
+
 export async function leerPantallaAnticipos(
   clinicId: string,
   db: DbPantallaAnticipos = prisma,
@@ -276,6 +318,8 @@ export async function leerPantallaAnticipos(
     ]);
 
     const conectada = !!fila?.mpUserId && !!fila.tokenExpiresAt && !fila.disconnectedAt;
+    // Solo la pantalla (prisma del repo): Sabina pasa su propio cliente y no necesita la referencia.
+    const extra = db === prisma ? await metodosYReferencias(clinicId, recientes.map((r) => r.id)) : new Map();
     return {
       tablasListas: true,
       plataforma,
@@ -312,6 +356,7 @@ export async function leerPantallaAnticipos(
         estado: r.status,
         pagado: r.paidAmount,
         referenciaMp: r.mpPaymentId,
+        ...(extra.get(r.id) ?? {}),
         citaConfirmada: r.appointmentConfirmed,
         ultimoEstadoMp: r.lastMpStatus,
         ultimoDetalleMp: r.lastMpStatusDetail,

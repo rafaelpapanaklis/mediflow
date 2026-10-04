@@ -80,7 +80,11 @@ export function RecallSection({ clinic, rediseno = false }: { clinic: any; redis
       if (!res.ok) throw new Error(data?.error || "No se pudo ejecutar");
       toast.success(
         `Barrido listo: ${data.queuedWhatsapp} por WhatsApp · ${data.sentEmail} por email · ` +
-          `${data.due} por reactivar · ${data.skipped} omitidos`,
+          `${data.due} por reactivar · ${data.skipped} omitidos` +
+          // ws1-t1 (C-107): sin WhatsApp conectado no se encoló nada por ese canal, y se dice.
+          (data.whatsappDesconectado
+            ? ". WhatsApp no está conectado: por WhatsApp no se avisó a nadie."
+            : ""),
         { duration: 7000 },
       );
     } catch (e: any) {

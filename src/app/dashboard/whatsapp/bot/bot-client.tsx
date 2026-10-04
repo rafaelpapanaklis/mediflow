@@ -16,6 +16,9 @@ import { useTextosPreciosBot } from "./textos-precios";
 import { useT } from "@/i18n/i18n-provider";
 import { ErrorLegible, SIN_PERMISO, mensajeDeCatch, mensajeDeRespuestaBot } from "./mensaje-de-respuesta";
 
+/** ws1-t1 (C-106): el aviso cuando se intenta guardar sin nombre. */
+export const TEXTO_FALTA_NOMBRE_BOT = "Escribe el nombre del bot: es como se presenta con los pacientes por WhatsApp.";
+
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
 const DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -226,6 +229,12 @@ export function BotClient({
 
   async function saveConfig() {
     if (!canEdit) return noPermissionToast();
+    // ws1-t1 (C-106): con el nombre vacío «Guardar» no decía nada (el servidor lo cambiaba por «Asistente»
+    // sin avisar). Se dice qué falta antes de mandar nada.
+    if (!form.botName.trim()) {
+      toast.error(TEXTO_FALTA_NOMBRE_BOT);
+      return;
+    }
     setSaving(true);
     try {
       const body = {

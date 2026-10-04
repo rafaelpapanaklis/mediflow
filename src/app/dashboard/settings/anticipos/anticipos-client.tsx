@@ -76,10 +76,12 @@ const ESTADOS: Record<string, { texto: string; tono: "neutro" | "info" | "exito"
 
 function fecha(iso: string | null, tz: string): string {
   if (!iso) return "—";
+  // ws1-t1 (C-102): con año — «29-sep, 15:52» no dice de qué año es un anticipo.
   return new Intl.DateTimeFormat("es-MX", {
     timeZone: tz,
     day: "2-digit",
     month: "short",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
@@ -657,7 +659,8 @@ export function AnticiposClient({
           subtitulo="Para pacientes que no han escrito en las últimas 24 h. Meta las cobra a esta clínica; sin encenderlas, siempre se puede copiar el texto o el PDF."
         >
           <Filas>
-            <Fila etiqueta="Link de anticipo (dc_anticipo_cita)">
+            {/* ws1-t1 (C-102): el mismo nombre que en Plantillas, sin la clave interna de Meta. */}
+            <Fila etiqueta="Solicitud de anticipo">
               {plantillas.anticipo.encendida ? (
                 <Insignia tono={plantillas.anticipo.estado === "REJECTED" ? "peligro" : plantillas.anticipo.estado === "PENDING" ? "info" : "exito"}>
                   {plantillas.anticipo.estado === "REJECTED" ? "Rechazada por Meta" : plantillas.anticipo.estado === "PENDING" ? "En revisión" : "Activa"}
@@ -668,7 +671,7 @@ export function AnticiposClient({
                 </Boton>
               )}
             </Fila>
-            <Fila etiqueta="Recibo de pago (dc_recibo_pago)">
+            <Fila etiqueta="Recibo de pago">
               {plantillas.recibo.encendida ? (
                 <Insignia tono={plantillas.recibo.estado === "REJECTED" ? "peligro" : plantillas.recibo.estado === "PENDING" ? "info" : "exito"}>
                   {plantillas.recibo.estado === "REJECTED" ? "Rechazada por Meta" : plantillas.recibo.estado === "PENDING" ? "En revisión" : "Activa"}
@@ -686,7 +689,7 @@ export function AnticiposClient({
         <Seccion
           icono={<Receipt size={18} strokeWidth={1.75} aria-hidden />}
           titulo="Últimos anticipos"
-          subtitulo="Para comprobar un «yo pagué»: la referencia es el número de pago en Mercado Pago."
+          subtitulo="Para comprobar un «yo pagué»: la referencia es el número de pago en Mercado Pago o la que se anotó al registrar la transferencia."
           sinRelleno={datos.recientes.length > 0}
         >
           {datos.recientes.length === 0 ? (
@@ -702,7 +705,9 @@ export function AnticiposClient({
                     {/* Diseño (ws1-t5): los importes a la derecha, uno bajo otro. */}
                     <th style={{ textAlign: "right" }}>Monto</th>
                     <th>Estado</th>
-                    <th>Ref. Mercado Pago</th>
+                    {/* ws1-t1 (C-105): antes una sola columna «Ref. Mercado Pago», y una transferencia salía «—». */}
+                    <th>Cómo pagó</th>
+                    <th>Referencia</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -740,7 +745,16 @@ function FilaAnticipo({ r, tz }: { r: AnticipoReciente; tz: string }) {
           </div>
         )}
       </td>
-      <td className={cr.tablaApagado}>{r.referenciaMp ?? "—"}</td>
+      <td className={cr.tablaApagado}>{comoPago(r)}</td>
+      <td className={cr.tablaApagado}>{r.referenciaMp ?? r.referenciaPago ?? "—"}</td>
     </tr>
   );
+}
+
+/** ws1-t1 (C-105): por dónde entró el anticipo, en palabras. */
+function comoPago(r: AnticipoReciente): string {
+  if (r.metodo === "transferencia") return "Transferencia";
+  if (r.metodo === "manual") return "Registrado a mano";
+  if (r.metodo === "mercadopago" || r.referenciaMp) return "Mercado Pago";
+  return "—";
 }
