@@ -114,3 +114,29 @@ test("F-01 · el aviso dice cuánto retiene y cuánto paga", () => {
   const t = totalesConRetenciones([{ precio: 10000, cantidad: 1, descuento: 0, ivaModo: "exento", ivaIncluido: true }], { isr: 0.0125, ivaRetenido: 0.106667 });
   assert.equal(avisoDeRetencion(t), "La empresa retiene $125.00 (ISR $125.00) y paga $9,875.00.");
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-21 · mes de cobro   ·   F-24 · rechazos del PAC
+// ═══════════════════════════════════════════════════════════════════════════
+import { avisoMesDeCobro, explicarRechazoPac, mesEnZona } from "../avisos-timbrado";
+
+test("F-21 · el mes se cuenta en la zona de la clínica: 30-sep 23:00 en CDMX es septiembre aunque en UTC ya sea octubre", () => {
+  assert.equal(mesEnZona(new Date("2026-10-01T05:00:00Z"), "America/Mexico_City"), "2026-09");
+  const ahora = new Date("2026-10-03T18:00:00Z");
+  const a = avisoMesDeCobro({ pagos: [{ paidAt: "2026-10-01T05:00:00Z", amount: 400 }], ahora, timeZone: "America/Mexico_City" });
+  assert.deepEqual(a?.mesesDeCobro, ["2026-09"]);
+  assert.equal(a?.mensaje, "Esto se cobró en septiembre 2026, pero el CFDI sale con fecha de octubre 2026: el SAT verá el ingreso en octubre 2026. Revísalo con tu contador si afecta la declaración de ese mes.");
+  // Mismo mes, o un reembolso de otro mes: nada que avisar.
+  assert.equal(avisoMesDeCobro({ pagos: [{ paidAt: "2026-10-02T18:00:00Z", amount: 1600 }], ahora, timeZone: "America/Mexico_City" }), null);
+  assert.equal(avisoMesDeCobro({ pagos: [{ paidAt: "2026-09-02T18:00:00Z", amount: 100, method: "refund" }, { paidAt: "2026-10-02T18:00:00Z", amount: 1600 }], ahora, timeZone: "America/Mexico_City" }), null);
+});
+
+test("F-24 · rechazos del PAC con qué revisar (el texto original se conserva)", () => {
+  assert.match(explicarRechazoPac("El campo DomicilioFiscalReceptor no coincide"), /Revisa el código postal del paciente/);
+  assert.match(explicarRechazoPac("El RegimenFiscalReceptor no es válido para el RFC"), /Revisa el régimen fiscal del paciente/);
+  assert.match(explicarRechazoPac("La clave del campo UsoCFDI no aplica"), /El uso del CFDI no corresponde/);
+  assert.match(explicarRechazoPac("El RFC no se encuentra en la lista de RFC inscritos no cancelados"), /letra por letra/);
+  assert.match(explicarRechazoPac("El campo Nombre del receptor debe pertenecer al nombre asociado al RFC"), /exactamente el de su constancia/);
+  assert.equal(explicarRechazoPac("Llave de API inválida"), "Llave de API inválida");
+  assert.match(explicarRechazoPac("El campo DomicilioFiscalReceptor no coincide", "en"), /Check the patient's ZIP code/);
+});

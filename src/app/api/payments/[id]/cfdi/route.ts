@@ -36,6 +36,8 @@ import { resolverConcepto, hayIvaMixto, errorIvaMixtoPorPago, CFDI_IVA_MIXTO_POR
 import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
 import { tasasDeRetencion, errorRetencionPorPago, CFDI_RETENCION_POR_PAGO } from "@/lib/cfdi/retenciones";
 import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
+import { avisoMesDeCobro, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
+import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
 
 /** ws1-t4 — ¿este Payment es el excedente de un cobro de ortodoncia que pasó al saldo a favor? */
 async function pasoAlSaldoAFavor(clinicId: string, paymentId: string): Promise<boolean> {
@@ -367,9 +369,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       (stamped.level === "material" ? console.error : console.warn)("CFDI por pago: el total timbrado difiere del pago:", { paymentId, uuid: result.uuid, ...totalMismatch });
     }
 
+    // F-21: ¿este pago entró en otro mes que el del CFDI? Solo se avisa.
+    const avisoMes = avisoMesDeCobro({ pagos: [payment], ahora: new Date(), timeZone: clinic.timezone, locale: clinic.locale });
+
     const guardado = await confirmarCfdiDePago(prisma, {
       id: apartadaId, claim, uuid: result.uuid, facturapiId: result.id,
-      receptor, conceptos: items, total: result.total,
+      // F-18: el uso del CFDI viaja con el receptor.
+      receptor: { ...receptor, usoCfdi: uso }, conceptos: items, total: result.total,
       xmlUrl: result.xml_url ?? null, pdfUrl: result.pdf_url ?? null,
     });
     if (!guardado) {
@@ -398,7 +404,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // FACTURA, igual que el timbrado completo, con el paymentId adentro.
       entityType: "invoice", entityId: invoice.id, action: "update",
       before: { cfdiUuid: null },
-      after:  { paymentId, cfdiUuid: result.uuid, cfdi: { total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode, concepto: concepto.descripcion, ...(totalMismatch ? { totalMismatch } : {}) } },
+      after:  {
+        paymentId, cfdiUuid: result.uuid,
+        // F-18 (ws1-t4, vuelta 2): con qué se timbró, sin el RFC del paciente.
+        facturapiId: result.id,
+        receptor: { regimen: receptor.regimenFiscal, tipoPersona: tipoDePersona(receptor.rfc), extranjero },
+        ...(avisoMes ? { mesDeCobro: avisoMes.mesesDeCobro, mesDelCfdi: avisoMes.mesDelCfdi } : {}),
+        cfdi: { total: result.total, paymentForm: payForm, usoCfdi: uso, taxMode, claveSat: items[0].product.product_key, concepto: concepto.descripcion, ...(totalMismatch ? { totalMismatch } : {}) },
+      },
     });
 
     return NextResponse.json({
@@ -407,6 +420,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       pdfUrl:      result.pdf_url,
       xmlUrl:      result.xml_url,
       descripcion: concepto.descripcion,
+      ...(avisoMes ? { avisoMes: avisoMes.mensaje } : {}),
       quota: { used: q.used, included: q.included, overage: q.overage, overagePriceCents: q.overageCents },
       ...(totalMismatch?.level === "material" && totalMismatch.stampedTotal !== null ? {
         warning: {
@@ -436,7 +450,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (apartadaId) {
         await soltarCfdiDePago(prisma, { id: apartadaId, claim });
       }
-      return NextResponse.json({ error: err.message ?? "Error al timbrar CFDI del pago" }, { status: 500 });
+      return NextResponse.json({ error: explicarRechazoPac(err.message ?? "Error al timbrar CFDI del pago", clinic.locale) }, { status: 500 });
     }
     // El CFDI YA existe ante el SAT: no se puede perder el rastro aunque la
     // confirmación de la fila haya fallado. Se deja el log con lo necesario

@@ -21,6 +21,8 @@ import { formatDate } from "@/lib/utils";
 import { fmtMXNdec } from "@/lib/format";
 import { useT, useLocale } from "@/i18n/i18n-provider";
 import { usoCfdiPorRegimen, avisoDeSaldo } from "@/lib/invoices/cfdi-reglas";
+// ws1-t4, vuelta 2 (F-21): el cobro entró en otro mes que el del CFDI.
+import { AvisoMesDeCobroCfdi } from "./aviso-mes-cobro-cfdi";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { esPlanAPlazos, montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { abrirCobroClasicoAlAbrir, montoDelCobroAlAbrir } from "./cobrar-en-factura-core";
@@ -654,6 +656,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
       toast.success(t("clinical.invoiceDetail.cfdiStampedToast"));
       // F-01 (ws1-t4, vuelta 2): con retención, cuánto retiene la empresa y cuánto paga.
       if (typeof data.retencion?.mensaje === "string") toast(data.retencion.mensaje, { duration: 12000 });
+      // F-21: el dinero entró en otro mes (con la zona de la clínica).
+      if (typeof data.avisoMes === "string") toast(data.avisoMes, { duration: 12000 });
       // El SAT timbró por un importe distinto al de la factura. El CFDI ya está
       // emitido y no se deshace, así que no se puede bloquear nada: se avisa a
       // quien timbró, con tiempo suficiente para leerlo, antes de que entregue el
@@ -1528,6 +1532,11 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 )}
               </div>
             )}
+            <AvisoMesDeCobroCfdi
+              pagos={invoice.payments}
+              className={cx("rounded-lg px-3 py-2 text-[11px]", `${c.aviso} ${c.avisoAlerta}`)}
+              style={rediseno ? undefined : { background: "var(--warning-soft)", border: "1px solid var(--warning-border-strong)", color: "var(--warning-strong)" }}
+            />
             {fiscalOrigen === "responsable" && responsableDePago && (
               <p className={cx("text-[11px]", c.texto)} data-cfdi-responsable>
                 Datos del responsable de pago: <strong>{responsableDePago.nombreCompleto}</strong>

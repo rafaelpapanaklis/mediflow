@@ -490,7 +490,9 @@ test("N2 · Facturapi rechaza (RFC mal): la factura queda libre para corregir y 
 
   const malo = await quieto(async () => leer(await POST(req(TIMBRAR))));
   assert.equal(malo.status, 500);
-  assert.equal(malo.body.error, pac.rechazo, "el mensaje de Facturapi llega igual que antes");
+  // ws1-t4, vuelta 2 (F-24): el mensaje de Facturapi llega igual, al principio, con qué revisar después.
+  assert.ok(String(malo.body.error).startsWith(pac.rechazo!), "el mensaje de Facturapi llega igual que antes");
+  assert.match(malo.body.error, /revísalo letra por letra/);
   assert.equal(db.invoice.cfdiUuid, null, "sin timbre, la factura no queda apartada");
 
   pac.rechazo = null;

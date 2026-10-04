@@ -47,6 +47,8 @@ const pac = {
   perderRespuesta: false,
   /** Total que «timbra» el SAT (si no, el del cálculo de Facturapi). */
   totalForzado: null as number | null,
+  /** Si trae texto, Facturapi rechaza el timbre con ese mensaje (4xx: no salió). */
+  rechazo: null as string | null,
 };
 const authCtx: any = { clinicId: "c1", userId: "u1", role: "ADMIN", isAdmin: true };
 
@@ -156,6 +158,7 @@ const prismaStub: any = {
     createOrUpdateCustomer: async (_k: string, cliente: any) => { pac.clientes.push(cliente); return "cus_1"; },
     createInvoice: async (args: any) => {
       pac.timbres.push(args);
+      if (pac.rechazo) throw marcarTimbre(new Error(pac.rechazo), false);
       const ya = args.idempotencyKey ? pac.porLlave.get(args.idempotencyKey) : null;
       if (ya) return ya; // misma llave: Facturapi devuelve el que ya emitió
       // Como Facturapi: con tax_included el precio ya trae el IVA; sin él, se le suma.
@@ -189,7 +192,8 @@ const entornoLive = { live: false };
   },
 });
 (mock as any).module("@/lib/patient-visibility", { namedExports: { assertPatientVisible: async () => null } });
-(mock as any).module("@/lib/audit", { namedExports: { logMutation: async () => {} } });
+const bitacora: any[] = [];
+(mock as any).module("@/lib/audit", { namedExports: { logMutation: async (e: any) => { bitacora.push(e); } } });
 (mock as any).module("@/lib/invoices/condiciones-pago-db", {
   namedExports: {
     leerCondicionesDeFacturas: async () => ({ porFactura: new Map(db.condiciones ? [["inv1", db.condiciones]] : []) }),
@@ -249,6 +253,8 @@ beforeEach(async () => {
   pac.validaciones = 0;
   pac.perderRespuesta = false;
   pac.totalForzado = null;
+  pac.rechazo = null;
+  bitacora.length = 0;
   db.columnaAmbiente = true;
   db.catalogo = [];
   db.retenciones = null;
@@ -618,4 +624,46 @@ test("F-01 · ENCENDIDO: el CFDI de un pago suelto con retención todavía no ex
   const r = await timbrarPago("eng", { receptor: EMPRESA });
   assert.equal(r.status, 409);
   assert.equal(r.body.code, "CFDI_RETENCION_POR_PAGO");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-18 · bitácora fiscal   ·   F-21 · mes de cobro   ·   F-24 · rechazos del PAC
+// ═══════════════════════════════════════════════════════════════════════════
+test("F-18 · la bitácora dice con qué se timbró (uso, forma, régimen, tipo de persona, facturapiId, serie/folio) y NO guarda el RFC", async () => {
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 200);
+  const e = bitacora.find((x) => x.texto === "Timbró el CFDI de una factura");
+  assert.ok(e, "hay registro en Movimientos");
+  assert.equal(e.after.facturapiId, "fapi_1");
+  assert.equal(e.after.series, "F");
+  assert.equal(e.after.folioNumber, 2);
+  assert.deepEqual(e.after.receptor, { regimen: "612", tipoPersona: "fisica", extranjero: false });
+  assert.equal(e.after.cfdi.usoCfdi, "D01");
+  assert.equal(e.after.cfdi.paymentForm, "28");
+  assert.deepEqual(e.after.cfdi.conceptos, [{ claveSat: "85122005", iva: "exento" }]);
+  assert.ok(!JSON.stringify(e).includes(PF_612.rfc), "el RFC del paciente no va a la bitácora");
+  assert.equal(db.cfdiRecords[0].receptor.usoCfdi, "D01", "el uso queda guardado con el CFDI");
+});
+
+test("F-21 · cobrado en agosto y timbrado hoy: el CFDI sale, con el aviso del mes y en la bitácora", async () => {
+  setInvoice({}, [{ id: "pay1", invoiceId: "inv1", method: "debit", amount: 1600, paidAt: new Date("2026-08-15T18:00:00Z") }]);
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 200);
+  assert.match(r.body.avisoMes, /Esto se cobró en agosto 2026, pero el CFDI sale con fecha de/);
+  const e = bitacora.find((x) => x.texto === "Timbró el CFDI de una factura");
+  assert.deepEqual(e.after.mesDeCobro, ["2026-08"]);
+});
+
+test("F-24 · el PAC rechaza por el código postal: el mensaje original + qué revisar, y la factura queda libre", async () => {
+  pac.rechazo = "CFDI40147 - El campo DomicilioFiscalReceptor del receptor, debe pertenecer al nombre asociado al RFC registrado en el campo Rfc del Receptor.";
+  const r = await timbrar({ receptor: PF_612, paymentForm: "28" });
+  assert.equal(r.status, 500);
+  assert.match(r.body.error, /^CFDI40147 - El campo DomicilioFiscalReceptor/);
+  assert.match(r.body.error, /Revisa el código postal del paciente contra su constancia de situación fiscal\.$/);
+  assert.equal(db.invoice.cfdiUuid, null);
+});
+
+test("F-24 · el PDF interno no imprime «UUID: timbrando:…» de un apartado en curso", () => {
+  const src = readFileSync(join(__dirname, "..", "..", "..", "..", "lib", "invoices", "print-pdf.tsx"), "utf8");
+  assert.match(src, /cfdiUuid && !p\.invoice\.cfdiUuid\.startsWith\("timbrando:"\)/);
 });

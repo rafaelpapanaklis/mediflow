@@ -45,6 +45,8 @@ import { resolverConcepto, hayIvaMixto, errorIvaMixtoAgregado, CFDI_IVA_MIXTO_AG
 import { catalogoFiscal } from "@/lib/cfdi/fiscal-concepto.server";
 import { tasasDeRetencion, conceptoConRetenciones, totalesConRetenciones, avisoDeRetencion } from "@/lib/cfdi/retenciones";
 import { retencionesEncendidas } from "@/lib/cfdi/retenciones.server";
+import { avisoMesDeCobro, explicarRechazoPac } from "@/lib/cfdi/avisos-timbrado";
+import { tipoDePersona } from "@/lib/invoices/cfdi-reglas";
 import { ambienteDeCfdi, marcarAmbiente, retirarCfdiDePrueba } from "@/lib/invoices/cfdi-ambiente.server";
 
 export async function POST(req: NextRequest) {
@@ -508,6 +510,8 @@ export async function POST(req: NextRequest) {
     // ws1-t3: el CFDI viejo pasa a 'sustituido' ANTES de guardar el nuevo (el
     // índice «un ingreso vigente por factura» no dejaría dos 'valid'). Nunca lanza.
     if (sust && sust.ok) await antesDeGuardarSustituto({ clinicId: ctx!.clinicId, viejoCfdiId: sust.viejo.id, nuevoUuid: result.uuid });
+    // F-21 (ws1-t4, vuelta 2): ¿el dinero entró en otro mes? Solo se avisa.
+    const avisoMes = avisoMesDeCobro({ pagos: invoice.payments, ahora: new Date(), timeZone: clinic.timezone, locale: clinic.locale });
     const period = cfdiPeriodFor(new Date(), clinic.timezone);
     const [cfdiRecord, , usage] = await prisma.$transaction([
       prisma.cfdiRecord.create({
@@ -517,7 +521,8 @@ export async function POST(req: NextRequest) {
           facturapiId:    result.id,
           uuid:           result.uuid,
           tipoComprobante:"I",
-          receptor,
+          // F-18: el uso del CFDI viaja con el receptor (antes no quedaba en ningún lado).
+          receptor: { ...receptor, usoCfdi: uso },
           conceptos:      items,
           total:          result.total,
           status:         "valid",
@@ -559,6 +564,11 @@ export async function POST(req: NextRequest) {
       before: { cfdiUuid: cfdiPrevio },
       after:  {
         cfdiUuid: result.uuid,
+        // F-18 (ws1-t4, vuelta 2): con qué se timbró, sin el RFC del paciente.
+        facturapiId: result.id,
+        ...serieYFolio(invoice.invoiceNumber),
+        receptor: { regimen: receptor.regimenFiscal, tipoPersona: tipoDePersona(receptor.rfc), extranjero },
+        ...(avisoMes ? { mesDeCobro: avisoMes.mesesDeCobro, mesDelCfdi: avisoMes.mesDelCfdi } : {}),
         ...(cfdiPrevio ? { sustituyeA: cfdiPrevio } : {}),
         cfdi: {
           total: result.total, paymentForm: payForm, usoCfdi: uso,
@@ -583,6 +593,8 @@ export async function POST(req: NextRequest) {
         overagePriceCents: q.overageCents,
       },
       ...(totalWarning ? { warning: totalWarning } : {}),
+      // F-21: el dinero entró en otro mes que el del CFDI.
+      ...(avisoMes ? { avisoMes: avisoMes.mensaje } : {}),
       // F-01: cuánto retiene la empresa (para avisarlo al timbrar).
       ...(totalesRet ? { retencion: { ...totalesRet, mensaje: avisoDeRetencion(totalesRet, clinic.locale) } } : {}),
     });
@@ -634,7 +646,8 @@ export async function POST(req: NextRequest) {
           data:  { cfdiUuid: cfdiPrevio ?? cfdiDePrueba },
         }).catch((e) => console.error("CFDI: no se pudo soltar el apartado", { invoiceId, e }));
       }
-      return NextResponse.json({ error: err.message ?? "Error al timbrar CFDI" }, { status: 500 });
+      // F-24: el rechazo del PAC con lo que hay que revisar (sin esconder el original).
+      return NextResponse.json({ error: explicarRechazoPac(err.message ?? "Error al timbrar CFDI", clinic.locale) }, { status: 500 });
     }
     // El CFDI YA existe ante el SAT y algo falló después (la transacción, el
     // plan…). El UUID no se puede perder: se deja en la factura en lugar del

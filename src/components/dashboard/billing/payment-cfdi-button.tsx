@@ -160,6 +160,8 @@ export function PaymentCfdiButton(props: PaymentCfdiButtonProps) {
       // F-07: el SAT timbró otro importe que el del pago. Ya está emitido: se avisa
       // con tiempo para leerlo antes de entregarlo.
       if (data.warning?.message) toast.error(data.warning.message, { duration: 12000 });
+      // F-21: el pago entró en otro mes que el del CFDI (solo se avisa).
+      if (typeof data.avisoMes === "string") toast(data.avisoMes, { duration: 12000 });
       setOpen(false);
       props.onStamped();
     } catch (e: any) {

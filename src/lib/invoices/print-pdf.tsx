@@ -337,7 +337,8 @@ function ComprobanteDocument(p: ComprobanteProps) {
           <Text>
             {p.clinic.clinicName} · Comprobante {p.invoice.invoiceNumber} · Este documento es un
             comprobante de pago, NO es una factura fiscal (CFDI).
-            {p.invoice.cfdiUuid ? `\nCFDI timbrado · UUID: ${p.invoice.cfdiUuid}` : ""}
+            {/* ws1-t4, vuelta 2 (F-24): un apartado en curso («timbrando:…») no es un UUID. */}
+            {p.invoice.cfdiUuid && !p.invoice.cfdiUuid.startsWith("timbrando:") ? `\nCFDI timbrado · UUID: ${p.invoice.cfdiUuid}` : ""}
           </Text>
           <Text
             style={styles.pageNum}
