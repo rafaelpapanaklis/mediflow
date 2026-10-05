@@ -118,7 +118,9 @@ export async function POST(req: NextRequest) {
     if (quota.blockedReason === "LIMIT") {
       return NextResponse.json(
         {
-          error: `Tu plan incluye ${quota.max} sucursal(es) y ya las usaste. Contrata una sucursal adicional para seguir creciendo.`,
+          // No hay «sucursal adicional» que comprar: el plan Clínica no tiene tope. Esto solo lo ve
+          // una clínica con un límite propio (override de /admin), y lo amplía soporte.
+          error: `Tu plan incluye ${quota.max} sucursal(es) y ya las usaste. Para abrir otra, escríbenos a soporte y la habilitamos.`,
           code: "PLAN_LIMIT_CLINICS",
           limit: quota.max,
           used: quota.used,

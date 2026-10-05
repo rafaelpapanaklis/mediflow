@@ -417,7 +417,7 @@
       "newTitle": "New branch",
       "intro": "Your plan includes {max} branches and you're using {used}. The new location is covered by your current subscription, at no extra charge.",
       "introUnlimited": "Your plan has no branch limit. The new location is covered by your current subscription, at no extra charge.",
-      "limitReached": "You've used {used}/{max} branches — purchase an additional one",
+      "limitReached": "You've used {used}/{max} branches on your plan — contact support to open another one",
       "needsSubscription": "Activate your subscription to open branches",
       "name": "Branch name",
       "namePlaceholder": "Downtown branch",

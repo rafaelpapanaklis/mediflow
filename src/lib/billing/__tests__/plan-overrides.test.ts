@@ -7,7 +7,7 @@
  * Toca COBRO y TOPES, así que se fija lo que importa:
  *  - clínica de antes (con override) → 6 usuarios (Profesional) / 4 sedes (Clínica)
  *    / su precio de hoy ($1,719 · $13,404);
- *  - clínica nueva (sin override)   → 6 usuarios / 3 sedes / $1,489 · $11,616;
+ *  - clínica nueva (sin override)   → 6 usuarios / sedes ilimitadas / $1,489 · $11,616;
  *  - cambiar de plan = condiciones nuevas del plan elegido (guarda planOverrideFor);
  *  - los sitios que aplican un tope usan la variante «ForClinic», no el plan a secas.
  */
@@ -54,11 +54,12 @@ const NUEVA = (plan: "BASIC" | "PRO" | "CLINIC") => ({ plan });
 
 // ── Las condiciones nuevas (clínica sin override) ───────────────────────────
 
-test("el seed nuevo: usuarios 3/6/∞ (Profesional se queda en 6), sedes 1/1/3, Clínica $1,489 · $11,616", () => {
+// ws1-t5 (encargo 8, decisión de Rafael 5-oct-2026): Clínica pasó a sedes ILIMITADAS (null).
+test("el seed nuevo: usuarios 3/6/∞ (Profesional se queda en 6), sedes 1/1/∞, Clínica $1,489 · $11,616", () => {
   assert.equal(NEW.BASIC.maxUsers, 3);
   assert.equal(NEW.PRO.maxUsers, 6);
   assert.equal(NEW.CLINIC.maxUsers, null);
-  assert.deepEqual([NEW.BASIC.maxClinics, NEW.PRO.maxClinics, NEW.CLINIC.maxClinics], [1, 1, 3]);
+  assert.deepEqual([NEW.BASIC.maxClinics, NEW.PRO.maxClinics, NEW.CLINIC.maxClinics], [1, 1, null]);
   assert.equal(NEW.CLINIC.priceMxnMonthly, 1489);
   assert.equal(NEW.CLINIC.priceMxnAnnual, 11614);
 });
@@ -79,12 +80,12 @@ test("lo que NO cambia: CFDI 25/50/150 y su excedente, pacientes, storage, IA", 
   assert.equal(NEW.PRO.priceMxnMonthly, 689);
 });
 
-test("una clínica NUEVA (sin override) sale con 6 / 3 / 1489", () => {
+test("una clínica NUEVA (sin override) sale con 6 / sedes ilimitadas / 1489", () => {
   const pro = applyClinicOverrides(NEW.PRO, NUEVA("PRO"));
   assert.equal(planToLimits(pro).maxUsers, 6);
   const clinic = applyClinicOverrides(NEW.CLINIC, NUEVA("CLINIC"));
   const limits = planToLimits(clinic);
-  assert.equal(limits.maxClinics, 3);
+  assert.equal(limits.maxClinics, null);
   assert.equal(limits.monthlyPrice, 1489);
   assert.equal(clinic.priceMxnAnnual, 11614);
   assert.equal(limits.maxUsers, null);
@@ -154,7 +155,7 @@ test("si la clínica cambia de plan, los overrides del plan anterior dejan de va
   const ahoraClinica = { ...LEGACY.PRO, plan: "CLINIC" };
   assert.equal(hasActiveOverrides(ahoraClinica), false);
   const c = applyClinicOverrides(NEW.CLINIC, ahoraClinica);
-  assert.equal(c.maxClinics, 3);
+  assert.equal(c.maxClinics, null);
   assert.equal(c.priceMxn, 1489);
   assert.equal(c.maxUsers, null);
 });
@@ -206,13 +207,13 @@ test("una sede de una madre NUEVA (o sin override vigente) no hereda nada", () =
 
 // ── Marketing ───────────────────────────────────────────────────────────────
 
-test("bullets: usuarios 3/6/ilimitados y sedes 1/1/3 salen de los topes reales", () => {
+test("bullets: usuarios 3/6/ilimitados y sedes 1/1/ilimitadas salen de los topes reales", () => {
   assert.equal(NEW.BASIC.features[0], "3 usuarios");
   assert.equal(NEW.PRO.features[0], "6 usuarios");
   assert.equal(NEW.CLINIC.features[0], "Usuarios ilimitados");
   assert.ok(NEW.BASIC.features.includes("1 sede"));
   assert.ok(NEW.PRO.features.includes("1 sede"));
-  assert.ok(NEW.CLINIC.features.includes("Hasta 3 sedes"));
+  assert.ok(NEW.CLINIC.features.includes("Sedes ilimitadas"));
 });
 
 test("bullets: «reportes consolidados y comparación entre sedes» solo en el plan con varias sedes", () => {

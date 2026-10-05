@@ -81,7 +81,16 @@ const nextConfig = {
   // cliente esos builtins no existen -> los resolvemos a `false` (modulo vacio) para
   // que webpack no falle al compilar el chunk. Solo cliente: el build de servidor
   // conserva fs/path reales (no se tocan).
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
+    // MEMORIA DEL BUILD (ws1-t5, encargo 8): sin la caché persistente de webpack en el
+    // build de producción. Esa caché (.next/cache/webpack) pesaba ~7 GB solo la del
+    // servidor y se serializa en memoria al final de compilar: medido el 5-oct-2026 con
+    // 8 CPU, el pico del build pasaba de 21.3 GB (proceso + hijos) a 11.4 GB, y además
+    // compila MÁS rápido (972 s → 806 s en frío), porque ya no escribe esos 7 GB. El
+    // resultado (.next/server, .next/static) es el mismo. En `next dev` no cambia nada.
+    // Vercel guarda .next/cache entre builds: sin esta caché, cada build compila como
+    // si fuera en frío (es lo que ya pasaba al cambiar de máquina o invalidarse).
+    if (!dev) config.cache = false;
     if (!isServer) {
       config.resolve = config.resolve || {};
       config.resolve.fallback = {

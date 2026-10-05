@@ -175,12 +175,12 @@ test("las piezas de papel que llevan tema son el volante y el díptico", () => {
 test("la nota de multi-sucursal dice el plan Y el número real de sedes", () => {
   const max = FALLBACK_PLAN_CONFIG.CLINIC.maxClinics;
   // Si esto cambia, es que el plan cambió: la nota tiene que seguirlo, no
-  // quedarse con un "hasta 3" escrito a mano.
-  assert.equal(max, 3);
+  // quedarse con un número escrito a mano. ws1-t5 (encargo 8): Clínica pasó a
+  // sedes ILIMITADAS (null), así que ahora la nota lo dice y no promete un tope.
+  assert.equal(max, null);
   assert.match(PLAN_NOTES.sucursales, /Clínica/);
-  assert.match(PLAN_NOTES.sucursales, /hasta 3 sedes/);
-  // "Sucursales ilimitadas" sería mentira mientras maxClinics tenga tope.
-  assert.doesNotMatch(PLAN_NOTES.sucursales, /ilimitad/i);
+  assert.match(PLAN_NOTES.sucursales, /sedes ilimitadas/);
+  assert.doesNotMatch(PLAN_NOTES.sucursales, /hasta \d+ sedes/);
 });
 
 test("la nota de IA manda al plan que SÍ trae tokens, no al Básico", () => {
@@ -360,12 +360,12 @@ test("las notas al pie dicen el plan real, y la de papel sale de maxClinics", ()
   // La larga, la del papel: un volante se lee de cerca y se guarda, así que
   // dice el plan exacto de cada función con tope. Y el número de sedes sale de
   // FALLBACK_PLAN_CONFIG, no de la mano.
-  assert.equal(FALLBACK_PLAN_CONFIG.CLINIC.maxClinics, 3);
+  assert.equal(FALLBACK_PLAN_CONFIG.CLINIC.maxClinics, null, "ws1-t5 (encargo 8): Clínica sin tope de sedes");
   assert.match(PLAN_FOOTNOTE_PRINT, /^\*/);
   assert.match(PLAN_FOOTNOTE_PRINT, /Profesional/);
   assert.match(PLAN_FOOTNOTE_PRINT, /Clínica/);
-  assert.match(PLAN_FOOTNOTE_PRINT, /hasta 3 sedes/);
-  assert.doesNotMatch(PLAN_FOOTNOTE_PRINT, /ilimitad/i);
+  assert.match(PLAN_FOOTNOTE_PRINT, /sedes ilimitadas/);
+  assert.doesNotMatch(PLAN_FOOTNOTE_PRINT, /hasta \d+ sedes/);
 });
 
 /* ── Claims prohibidos ────────────────────────────────────────────────── */

@@ -168,22 +168,26 @@ const CLINIC_PLAN = FALLBACK_PLAN_CONFIG.CLINIC;
  * al pie del tema "todo en uno", para que no puedan contradecirse.
  */
 const SEDES_LIMIT =
-  CLINIC_PLAN.maxClinics && CLINIC_PLAN.maxClinics > 1
-    ? `plan ${CLINIC_PLAN.label}, hasta ${CLINIC_PLAN.maxClinics} sedes`
-    : `solo en el plan ${CLINIC_PLAN.label}`;
+  CLINIC_PLAN.maxClinics == null
+    ? `plan ${CLINIC_PLAN.label}, sedes ilimitadas`
+    : CLINIC_PLAN.maxClinics > 1
+      ? `plan ${CLINIC_PLAN.label}, hasta ${CLINIC_PLAN.maxClinics} sedes`
+      : `solo en el plan ${CLINIC_PLAN.label}`;
 
 export const PLAN_NOTES = {
   /** BASIC tiene aiTokensDefault 0 y "ai-assistant" apagado: NO es "para todos". */
   ia: `Disponible desde el plan ${PRO_PLAN.label}`,
   /**
-   * `maxClinics` es 3 en el plan Clínica: "sucursales ilimitadas" sería
-   * mentira. Si algún día pasara a null (sin tope), la nota deja de prometer
-   * un número en vez de prometer uno equivocado.
+   * Sale de `maxClinics` del plan Clínica: null = sin tope (decisión de Rafael,
+   * 5-oct-2026: «sedes ilimitadas, solo lo limita el almacenamiento»); un número
+   * = «hasta N sedes». Nunca un número escrito a mano.
    */
   sucursales:
-    CLINIC_PLAN.maxClinics && CLINIC_PLAN.maxClinics > 1
-      ? `Plan ${CLINIC_PLAN.label} · hasta ${CLINIC_PLAN.maxClinics} sedes`
-      : `Solo en el plan ${CLINIC_PLAN.label}`,
+    CLINIC_PLAN.maxClinics == null
+      ? `Plan ${CLINIC_PLAN.label} · sedes ilimitadas`
+      : CLINIC_PLAN.maxClinics > 1
+        ? `Plan ${CLINIC_PLAN.label} · hasta ${CLINIC_PLAN.maxClinics} sedes`
+        : `Solo en el plan ${CLINIC_PLAN.label}`,
 } as const;
 
 /**

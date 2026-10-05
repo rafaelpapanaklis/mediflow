@@ -417,7 +417,7 @@
       "newTitle": "Nueva sucursal",
       "intro": "Tu plan incluye {max} sucursales y llevas {used}. La sede nueva queda cubierta por tu suscripción actual, sin cobro aparte.",
       "introUnlimited": "Tu plan no tiene límite de sucursales. La sede nueva queda cubierta por tu suscripción actual, sin cobro aparte.",
-      "limitReached": "Has usado {used}/{max} sucursales — contrata una adicional",
+      "limitReached": "Has usado {used}/{max} sucursales de tu plan — escríbenos a soporte para abrir otra",
       "needsSubscription": "Activa tu suscripción para abrir sucursales",
       "name": "Nombre de la sucursal",
       "namePlaceholder": "Sucursal Centro",

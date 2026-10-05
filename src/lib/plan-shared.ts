@@ -210,10 +210,12 @@ export const FALLBACK_PLAN_CONFIG: Record<PlanId, PlanConfigShape> = {
     cfdiOverageCents: 125,
     maxPatients: null,
     maxUsers: null,
-    // Multi-sucursal: el precio de CLINIC incluye hasta 3 sedes bajo el mismo
-    // dueño (sin suscripción Stripe propia). La 4.ª+ = add-on aparte (pendiente).
-    // Las clínicas que ya estaban registradas conservan el tope que tenían (override).
-    maxClinics: 3,
+    // Multi-sucursal: CLINIC trae SEDES ILIMITADAS bajo el mismo dueño, sin suscripción
+    // Stripe propia por sede (decisión de Rafael, 5-oct-2026: «solo lo limita el
+    // almacenamiento de 75 GB»). null = ilimitado, igual que plan_configs.maxClinics
+    // tras sql/ws1-t5-clinica-sedes-ilimitadas.sql. Este es el respaldo cuando
+    // plan_configs no se puede leer: no puede volver a poner un tope de 3.
+    maxClinics: null,
     features: allModules(true),
   },
 };
