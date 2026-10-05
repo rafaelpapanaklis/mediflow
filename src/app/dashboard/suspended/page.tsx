@@ -74,7 +74,7 @@ export default async function SuspendedPage({
   // Promo 1er mes: solo PRIMERA contratación (el checkout re-valida server-side).
   // Enlace de contratación (/contratar/<plan>): esa clínica no ve ni paga la promo, sino el
   // precio de lista + IVA desde el primer mes. Solo se consulta en una primera contratación.
-  // Y solo ve ESE plan, mensual y con tarjeta (el checkout lo vuelve a imponer).
+  // Y solo ve ESE plan, con tarjeta, anual (de entrada) o mensual (el checkout lo vuelve a imponer).
   const enlace = isFirstContract(clinic) ? await enlaceDeContratacion(clinic.id) : null;
   const firstMonthEligible = isFirstContract(clinic) && enlace === null;
   const planesAMostrar = enlace ? planCards.filter((p) => p.id === enlace.plan) : planCards;
@@ -178,7 +178,7 @@ export default async function SuspendedPage({
             plans={planesAMostrar}
             currentPlan={enlace ? enlace.plan : currentPlan}
             firstMonthEligible={firstMonthEligible}
-            soloTarjetaMensual={enlace !== null}
+            soloTarjeta={enlace !== null}
             rediseno
             resumenInicial={!isReactivation && currentPlan !== null}
             cuentaSpei={cuentaSpei}
@@ -240,7 +240,7 @@ export default async function SuspendedPage({
           plans={planesAMostrar}
           currentPlan={enlace ? enlace.plan : currentPlan}
           firstMonthEligible={firstMonthEligible}
-          soloTarjetaMensual={enlace !== null}
+          soloTarjeta={enlace !== null}
         />
 
         <p className="mt-6 text-center text-[12.5px] text-muted-foreground">

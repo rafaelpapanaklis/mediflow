@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type KeyboardEvent, type MutableRefObject } from "react";
+import { cuentasDelEnlace, lineasDelEnlace } from "@/lib/billing/contratar";
 import { Check, CreditCard, Landmark, Loader2, Lock, RefreshCw, ShieldCheck, Store } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
@@ -50,8 +51,8 @@ export interface VistaPlanes {
   onMethodKeyDown: (e: KeyboardEvent<HTMLButtonElement>, index: number) => void;
   /** Compra nueva con plan del alta: arrancar en resumen (ver suspended-client). */
   resumenInicial: boolean;
-  /** Enlace de contratación: solo su plan, mensual y con tarjeta; sin «Cambiar plan» ni conmutador. */
-  soloTarjetaMensual?: boolean;
+  /** Enlace de contratación: solo su plan y con tarjeta, anual (de entrada) o mensual; sin «Cambiar plan». */
+  soloTarjeta?: boolean;
   handleStripeCheckout: (plan: PlanId) => void;
   /** SPEI directo: la cuenta de /admin (null = no se ofrece), el folio de la clínica y el IVA del cobro. */
   cuentaSpei: CuentaBancaria | null;
@@ -77,7 +78,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   // Solo qué se enseña: con el plan del alta se arranca en resumen y
   // «Cambiar plan» abre las tres tarjetas de siempre (misma rejilla, mismo
   // radiogroup). El plan seleccionado y el checkout no cambian.
-  const [mostrarTodos, setMostrarTodos] = useState(!(v.resumenInicial || v.soloTarjetaMensual));
+  const [mostrarTodos, setMostrarTodos] = useState(!(v.resumenInicial || v.soloTarjeta));
   const resumen = !mostrarTodos && v.selected ? v.selected : null;
   const anual = v.billing === "annual";
   // Todo pago lleva IVA 16 %, salvo lo que la exención de una clínica creada antes del corte cubre (su
@@ -92,7 +93,10 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   const cobrado = (plan: PlanCardData) => (anual ? plan.priceMxnAnnual : plan.priceMxn);
   const unidad = anual ? "al año" : "al mes";
   const notaPrecio = (plan: PlanCardData) =>
-    anual
+    // Enlace de contratación (encargo 7): lo que equivale al mes y lo que se ahorra contra 12 meses, con IVA.
+    v.soloTarjeta
+      ? lineasDelEnlace(cuentasDelEnlace(plan, anual ? "annual" : "monthly"), plan).detalle.join(" · ")
+      : anual
       ? `Equivale a ${fmt(v.perMonth(plan))} al mes · ahorras ${fmt(v.annualSavings(plan))} (35%)`
       : v.firstMonthEligible
         // La promo es el TOTAL del primer mes (IVA incluido, sin «+ IVA»); desde la renovación, precio + IVA.
@@ -117,8 +121,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
 
   return (
     <div>
-      {/* === Ciclo: mensual / anual === (el enlace de contratación es solo mensual) */}
-      {!v.soloTarjetaMensual && (
+      {/* === Ciclo: mensual / anual === */}
       <div className={s.cicloFila}>
         <div className={s.conmutador}>
           <span
@@ -142,7 +145,6 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
           {v.billing === "annual" || !v.firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
         </span>
       </div>
-      )}
 
       {/* === Tu plan elegido (la tarjeta navy del registro, con «Cambiar plan») === */}
       {resumen && (
@@ -171,7 +173,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
               ))}
             </span>
           </div>
-          {!v.soloTarjetaMensual && (
+          {!v.soloTarjeta && (
           <button type="button" className={s.cambiarPlan} onClick={() => setMostrarTodos(true)}>
             <RefreshCw size={14} aria-hidden />
             Cambiar plan

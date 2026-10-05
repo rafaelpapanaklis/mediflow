@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cuentasDelEnlace, lineasDelEnlace } from "@/lib/billing/contratar";
 import Link from "next/link";
 import { PlanCard, type Billing, type PlanId } from "./plan-card";
 import { cfdiBullet } from "@/lib/plan-shared";
@@ -54,8 +55,9 @@ interface Step3Props {
    */
   planFijo?: boolean;
   /**
-   * Enlace de contratación (/contratar/<plan>): SOLO ese plan, mensual y con tarjeta. Sin
-   * «Cambiar plan» ni otras tarjetas; el servidor lo vuelve a imponer al cobrar.
+   * Enlace de contratación (/contratar/<plan>): SOLO ese plan, con tarjeta, anual (de entrada) o
+   * mensual, a precio completo + IVA. Sin «Cambiar plan» ni otras tarjetas; el servidor lo vuelve
+   * a imponer al cobrar.
    */
   soloEstePlan?: boolean;
 }
@@ -94,6 +96,10 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
 
   const elegido = plans?.find((p) => p.id === values.plan) ?? null;
   const anual = values.billing === "annual";
+  // Enlace: las cuentas del periodo elegido (precios de plan_configs vía /api/plans) y el % del anual.
+  const cuentas = soloEstePlan && elegido ? cuentasDelEnlace(elegido, anual ? "annual" : "monthly") : null;
+  const lineas = cuentas && elegido ? lineasDelEnlace(cuentas, elegido) : null;
+  const pctAnual = soloEstePlan && elegido ? cuentasDelEnlace(elegido, "annual").pctAhorro : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -167,6 +173,40 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
         </div>
       )}
 
+      {/* Enlace de contratación: anual (de entrada) o mensual, y lo que se paga con el IVA aparte. */}
+      {soloEstePlan && elegido && (
+        <>
+          <div className="dca-periodo" role="radiogroup" aria-label="Periodo de pago">
+            {(["annual", "monthly"] as const).map((b) => (
+              <button
+                key={b}
+                type="button"
+                role="radio"
+                aria-checked={values.billing === b}
+                className={`dca-periodo__op${values.billing === b ? " dca-periodo__op--on" : ""}`}
+                onClick={() => onChange({ billing: b })}
+              >
+                {b === "annual" ? (
+                  <>
+                    Anual <span className="dca-periodo__ahorro">ahorra {pctAnual}%</span>
+                  </>
+                ) : (
+                  "Mensual"
+                )}
+              </button>
+            ))}
+          </div>
+          {lineas && (
+            <div className="dca-desglose" role="status" data-desglose-enlace>
+              <strong>{lineas.titulo}</strong>
+              {lineas.detalle.map((l) => (
+                <span key={l}>{l}</span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       <p className="dca-note" style={{ margin: 0 }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" />
@@ -174,7 +214,7 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
         </svg>
         <span>
           {soloEstePlan
-            ? "Aquí no se cobra nada. En el siguiente paso, dentro del panel, pagas con tarjeta el mes completo de tu plan (precio + IVA)."
+            ? "Aquí no se cobra nada. En el siguiente paso, dentro del panel, pagas con tarjeta el periodo que elijas, a precio completo + IVA (sin promociones)."
             : "Aquí no se cobra nada. El pago lo haces en el siguiente paso, dentro del panel: tarjeta u OXXO con Stripe, o transferencia SPEI directa."}
         </span>
       </p>

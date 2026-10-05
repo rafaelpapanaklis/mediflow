@@ -469,6 +469,9 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     // las clínicas de antes del 26-sep-2026 no aplica — siempre lleva IVA.
     "src/app/api/marketplace/module-checkout/route.ts",
     "src/app/dashboard/settings/page.tsx", // solo LEE si el IVA está configurado, para el texto de «Activa tu plan»
+    // ws1-t5 (enlaces /contratar/<plan>): solo el DESGLOSE que se enseña (anual o mensual + IVA);
+    // el cobro lo sigue haciendo el checkout de arriba.
+    "src/lib/billing/contratar.ts",
     "src/lib/billing/first-month-promo.ts", // el cupón del primer mes deja el total exacto con el IVA dentro
     "src/lib/billing/iva-clinica.ts",
     "src/lib/stripe-subscriptions.ts",

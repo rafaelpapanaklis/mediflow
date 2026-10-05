@@ -95,9 +95,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ENLACE DE CONTRATACIÓN (dalecontrol.com/contratar/<plan>, pedido de Rafael 5-oct-2026): en
-  // la PRIMERA contratación, esa clínica paga EL PLAN DEL ENLACE, mensual, con tarjeta y a precio de
-  // lista + IVA, sin la promo. Lo impone el servidor con la marca que dejó el alta
-  // (lib/billing/sin-promo.server.ts): el plan, el método y el periodo del body no cuentan.
+  // la PRIMERA contratación, esa clínica paga EL PLAN DEL ENLACE, con tarjeta, anual o mensual (lo
+  // que elija) a precio de lista + IVA, sin la promo. Lo impone el servidor con la marca que dejó el
+  // alta (lib/billing/sin-promo.server.ts): el plan y el método del body no cuentan.
   const enlace = isFirstContract(clinic) ? await enlaceDeContratacion(clinic.id) : null;
   if (enlace && enlace.plan !== planId) {
     planId = enlace.plan;
@@ -130,8 +130,10 @@ export async function POST(req: NextRequest) {
     process.env.NEXTAUTH_URL ??
     new URL(req.url).origin;
 
+  // Enlace: siempre con tarjeta. El periodo es el que elija la persona (encargo 7: arranca en
+  // anual y puede pasar a mensual); los dos importes salen de plan_configs y ninguno lleva promo.
   const method = enlace ? "card" : parsed.data.method;
-  const billing = enlace ? "monthly" : parsed.data.billing;
+  const billing = parsed.data.billing;
 
   // Tarjeta: si la clínica YA tiene una suscripción de tarjeta viva en Stripe,
   // NO crear una segunda (evita doble cobro recurrente). La mandamos al billing

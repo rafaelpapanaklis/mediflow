@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { cuentasDelEnlace, lineasDelEnlace, PERIODO_INICIAL_DEL_ENLACE } from "@/lib/billing/contratar";
 import toast from "react-hot-toast";
 import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
@@ -60,10 +61,11 @@ interface Props {
   exencionIva?: ExencionIva | null;
   /**
    * Enlace de contratación (/contratar/<plan>, pedido de Rafael 5-oct-2026): solo el plan del
-   * enlace (la página ya manda uno), mensual y con tarjeta. Sin conmutador de periodo, sin
-   * métodos, sin upsell y sin «Cambiar plan». El checkout lo vuelve a imponer en el servidor.
+   * enlace (la página ya manda uno) y con tarjeta: arranca en ANUAL y se puede pasar a mensual
+   * (encargo 7), con el desglose y el IVA a la vista. Sin otros métodos, sin upsell y sin
+   * «Cambiar plan». Ninguno de los dos periodos lleva la promo. El servidor lo vuelve a imponer.
    */
-  soloTarjetaMensual?: boolean;
+  soloTarjeta?: boolean;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -87,16 +89,16 @@ export function SuspendedPlanCards({
   referenciaSpei = null,
   cobroConIvaListo = true,
   exencionIva = null,
-  soloTarjetaMensual = false,
+  soloTarjeta = false,
 }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
   const [declarandoSpei, setDeclarandoSpei] = useState(false);
   const [method, setMethod] = useState<PayMethod>("card");
-  const [billing, setBilling] = useState<Billing>("monthly");
+  const [billing, setBilling] = useState<Billing>(soloTarjeta ? PERIODO_INICIAL_DEL_ENLACE : "monthly");
   // Plan elegido por el usuario: las tarjetas son un radiogroup. Preselección =
   // su plan actual o, si no tiene, PRO (el popular). El pago se hace sobre este.
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>(soloTarjetaMensual && plans[0] ? plans[0].id : currentPlan ?? "PRO");
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(soloTarjeta && plans[0] ? plans[0].id : currentPlan ?? "PRO");
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const methodRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -126,13 +128,19 @@ export function SuspendedPlanCards({
   // días), Mensual como siempre. En reactivación (resumenInicial=false) no se
   // mira. Va en un efecto y no en el useState para no desalinear la hidratación.
   useEffect(() => {
-    if (!resumenInicial || soloTarjetaMensual) return;
+    if (soloTarjeta) {
+      // Enlace: lo que eligió en el paso 3 del registro (anual o mensual), si es de ESTE plan.
+      const eleccion = leerEleccionAlta();
+      if (eleccion && eleccion.plan === plans[0]?.id) setBilling(eleccion.billing);
+      return;
+    }
+    if (!resumenInicial) return;
     const eleccion = leerEleccionAlta();
     if (eleccion && eleccion.plan === currentPlan && eleccion.billing === "annual") setBilling("annual");
   }, [resumenInicial, currentPlan]);
 
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
-  const recommendedPlan: PlanId | null = soloTarjetaMensual ? null : currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
+  const recommendedPlan: PlanId | null = soloTarjeta ? null : currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
 
   function priceOf(id: PlanId | null): number | null {
     if (!id) return null;
@@ -152,7 +160,7 @@ export function SuspendedPlanCards({
   // SPEI solo se ofrece en el rediseño y con una cuenta bancaria utilizable y
   // un folio de clínica: sin ellos, nunca datos vacíos ni una opción muerta.
   const speiDisponible = rediseno && cuentaSpei !== null && !!referenciaSpei;
-  const methods: Array<{ id: PayMethod; label: string }> = soloTarjetaMensual ? [{ id: "card", label: t("pages.suspended.methodCard") }] : [
+  const methods: Array<{ id: PayMethod; label: string }> = soloTarjeta ? [{ id: "card", label: t("pages.suspended.methodCard") }] : [
     { id: "card", label: t("pages.suspended.methodCard") },
     ...(!rediseno || speiDisponible ? [{ id: "spei" as PayMethod, label: t("pages.suspended.methodSpei") }] : []),
     { id: "oxxo", label: t("pages.suspended.methodOxxo") },
@@ -267,6 +275,10 @@ export function SuspendedPlanCards({
   // La promo de 1er mes SOLO aplica pagando con tarjeta en ciclo mensual
   // (misma regla que /api/billing/checkout) — el CTA la refleja tal cual.
   const ctaPromo = firstMonthEligible && billing === "monthly" && method === "card";
+  // Enlace de contratación: las cuentas del periodo elegido (precios de plan_configs).
+  const lineasEnlace = soloTarjeta && selected
+    ? lineasDelEnlace(cuentasDelEnlace(selected, billing), selected)
+    : null;
 
   // Rediseño: todo lo de arriba, tal cual, a la vista nueva. Va DESPUÉS de
   // todos los hooks para que el orden no cambie entre una vista y otra.
@@ -280,7 +292,7 @@ export function SuspendedPlanCards({
           priceOf, perMonth, annualSavings, upsellBenefit,
           setSelectedPlan, setBilling, setMethod, onCardKeyDown, onMethodKeyDown,
           resumenInicial,
-          soloTarjetaMensual,
+          soloTarjeta,
           handleStripeCheckout,
           cuentaSpei: speiDisponible ? cuentaSpei : null,
           referenciaSpei,
@@ -296,7 +308,6 @@ export function SuspendedPlanCards({
   return (
     <div>
       {/* === Toggle Mensual / Anual === */}
-      {!soloTarjetaMensual && (
       <div className="mb-7 flex flex-wrap items-center justify-center gap-3">
         <div className="relative inline-flex rounded-full bg-[#ECEAF1] p-1.5 dark:bg-[#241F32]">
           <span
@@ -322,13 +333,12 @@ export function SuspendedPlanCards({
           {billing === "annual" || !firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
         </span>
       </div>
-      )}
 
       {/* === Grid de planes (radiogroup) === */}
       <div
         role="radiogroup"
         aria-label={t("pages.suspended.choosePlanTitle")}
-        className={soloTarjetaMensual ? "mx-auto mb-7 grid max-w-sm items-stretch gap-[18px]" : "mb-7 grid items-stretch gap-[18px] md:grid-cols-3"}
+        className={soloTarjeta ? "mx-auto mb-7 grid max-w-sm items-stretch gap-[18px]" : "mb-7 grid items-stretch gap-[18px] md:grid-cols-3"}
       >
         {plans.map((plan, i) => {
           const isRecommended = plan.id === recommendedPlan;
@@ -449,7 +459,7 @@ export function SuspendedPlanCards({
         style={{ boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px -28px rgba(16,24,40,0.3)" }}
       >
         {/* Selector de método (pill deslizante). El enlace de contratación: solo tarjeta. */}
-        {!soloTarjetaMensual && (
+        {!soloTarjeta && (
         <div
           role="radiogroup"
           aria-label={t("pages.suspended.methodCard")}
@@ -492,6 +502,16 @@ export function SuspendedPlanCards({
           </p>
         )}
 
+        {/* Enlace de contratación: lo que se paga en el periodo elegido, con el IVA aparte. */}
+        {soloTarjeta && lineasEnlace && (
+          <div className="flex flex-col gap-1 rounded-[13px] border border-border bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground" role="status" data-desglose-enlace>
+            <strong className="text-[14px] text-foreground">{lineasEnlace.titulo}</strong>
+            {lineasEnlace.detalle.map((l) => (
+              <span key={l}>{l}</span>
+            ))}
+          </div>
+        )}
+
         {/* CTA único: paga el plan seleccionado con el método y ciclo elegidos */}
         <button
           type="button"
@@ -509,7 +529,9 @@ export function SuspendedPlanCards({
             : selected
               ? ctaPromo
                 ? `Pagar ${selected.name} — ${fmt(FIRST_MONTH_PROMO_MXN[selected.id])} el primer mes`
-                : `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes${soloTarjetaMensual ? " + IVA" : ""}`
+                : soloTarjeta
+                  ? `Pagar ${selected.name} — ${billing === "annual" ? `${fmt(selected.priceMxnAnnual)} al año` : `${fmt(selected.priceMxn)}/mes`} + IVA`
+                  : `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes`
               : ""}
         </button>
 

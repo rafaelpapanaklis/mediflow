@@ -19,6 +19,7 @@
 // descuento, así que falsificarla solo sube lo que paga quien la falsifica.
 // ═══════════════════════════════════════════════════════════════════════════
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
+import { desgloseConIva } from "@/lib/billing/iva-cobro";
 
 /** El último tramo de la ruta → el plan. Los nombres son los de la portada. */
 export const PLAN_POR_RUTA: Readonly<Record<string, PlanId>> = {
@@ -80,4 +81,71 @@ export function aplicaPromoPrimerMes(a: {
   sinPromo: boolean;
 }): boolean {
   return a.method === "card" && a.billing === "monthly" && a.firstContract && !a.sinPromo;
+}
+
+// ── Encargo 7 (Rafael, 5-oct-2026): el enlace arranca en ANUAL y deja pasar a MENSUAL ──────────
+// Ninguno de los dos lleva la promo. Los precios vienen de plan_configs (priceMxn y
+// priceMxnAnnual, MXN antes de IVA); aquí solo se hacen las cuentas, en centavos.
+
+export type PeriodoDelEnlace = "annual" | "monthly";
+/** Periodo con el que arranca el enlace. */
+export const PERIODO_INICIAL_DEL_ENLACE: PeriodoDelEnlace = "annual";
+
+export interface CuentasDelEnlace {
+  billing: PeriodoDelEnlace;
+  /** Lo que se cobra por periodo, antes de IVA (el unit_amount del checkout). */
+  subtotalCents: number;
+  ivaCents: number;
+  totalCents: number;
+  /** Solo anual: el precio anual entre 12 (antes de IVA) y con IVA. */
+  equivaleMesCents: number | null;
+  equivaleMesConIvaCents: number | null;
+  /** Solo anual: 12 meses al precio de lista, lo que se ahorra y su porcentaje. */
+  doceMesesCents: number | null;
+  ahorroCents: number | null;
+  pctAhorro: number | null;
+}
+
+export function cuentasDelEnlace(
+  plan: { priceMxn: number; priceMxnAnnual: number },
+  billing: PeriodoDelEnlace,
+): CuentasDelEnlace {
+  const anual = billing === "annual";
+  const d = desgloseConIva(Math.round((anual ? plan.priceMxnAnnual : plan.priceMxn) * 100));
+  if (!anual) {
+    return { billing, ...d, equivaleMesCents: null, equivaleMesConIvaCents: null, doceMesesCents: null, ahorroCents: null, pctAhorro: null };
+  }
+  const doceMesesCents = Math.round(plan.priceMxn * 100) * 12;
+  const ahorroCents = Math.max(0, doceMesesCents - d.subtotalCents);
+  return {
+    billing,
+    ...d,
+    equivaleMesCents: Math.round(d.subtotalCents / 12),
+    equivaleMesConIvaCents: Math.round(d.totalCents / 12),
+    doceMesesCents,
+    ahorroCents,
+    pctAhorro: doceMesesCents > 0 ? Math.round((ahorroCents / doceMesesCents) * 100) : 0,
+  };
+}
+
+/** «$13,472.24»: pesos con centavos, separador de miles de es-MX. */
+export function pesos(centavos: number): string {
+  return "$" + (centavos / 100).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Las líneas que enseñan el registro y la pantalla de pago (mismo texto en las dos). */
+export function lineasDelEnlace(c: CuentasDelEnlace, plan: { priceMxn: number }): { titulo: string; detalle: string[] } {
+  if (c.billing === "annual") {
+    return {
+      titulo: `Pago anual: ${pesos(c.subtotalCents)} + IVA ${pesos(c.ivaCents)} = ${pesos(c.totalCents)} al año`,
+      detalle: [
+        `Equivale a ${pesos(c.equivaleMesCents!)} al mes + IVA (${pesos(c.equivaleMesConIvaCents!)} con IVA)`,
+        `Ahorras ${pesos(c.ahorroCents!)} (${c.pctAhorro}%) contra 12 meses de ${pesos(Math.round(plan.priceMxn * 100))} (${pesos(c.doceMesesCents!)})`,
+      ],
+    };
+  }
+  return {
+    titulo: `Pago mensual: ${pesos(c.subtotalCents)} + IVA ${pesos(c.ivaCents)} = ${pesos(c.totalCents)} al mes`,
+    detalle: ["Precio de lista, sin promoción · cancela cuando quieras"],
+  };
 }

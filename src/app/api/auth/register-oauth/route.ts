@@ -61,11 +61,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = schema.parse(body);
     // Enlace de contratación (/contratar/<plan>): el plan del enlace manda (la cookie que dejó la
-    // página; si no llegó, el del formulario del enlace), mensual. Ver lib/billing/contratar.ts.
+    // página; si no llegó, el del formulario del enlace). El periodo (anual o mensual) es el que
+    // eligió; el checkout lo vuelve a decidir al cobrar. Ver lib/billing/contratar.ts.
     const planDelEnlace = planDelEnlaceDeAlta(data, req.cookies.get(COOKIE_CONTRATAR)?.value);
     if (planDelEnlace) {
       data.plan = planDelEnlace;
-      data.billing = "monthly";
     }
 
     const supabase = createClient();

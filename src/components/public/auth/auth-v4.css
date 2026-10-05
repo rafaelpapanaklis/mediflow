@@ -573,6 +573,54 @@
 }
 .dca-note svg { flex: 0 0 auto; margin-top: 1px; color: #2563eb; }
 
+/* Enlace de contratación (/contratar/<plan>): periodo anual/mensual y su desglose con IVA. */
+.dca-periodo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+.dca-periodo__op {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #475569;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dca-periodo__op--on { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }
+.dca-periodo__op:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.dca-periodo__ahorro {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #047857;
+  background: #d1fae5;
+}
+.dca-desglose {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.dca-desglose strong { color: #0f172a; font-size: 13.5px; }
+
 .dca-banner-ok {
   display: flex;
   align-items: center;

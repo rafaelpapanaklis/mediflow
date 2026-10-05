@@ -163,8 +163,8 @@ test("suspended: el marcado de siempre sigue en su sitio y la vista nueva recibe
   for (const viejo of [
     'className="min-h-screen bg-background text-foreground"',
     "text-4xl font-extrabold tracking-tight md:text-[40px]",
-    // ws1-t5 (enlaces de contratación): las tarjetas del enlace, solo su plan con tarjeta mensual.
-    "<SuspendedPlanCards\n          plans={planesAMostrar}\n          currentPlan={enlace ? enlace.plan : currentPlan}\n          firstMonthEligible={firstMonthEligible}\n          soloTarjetaMensual={enlace !== null}\n        />",
+    // ws1-t5 (enlaces de contratación): las tarjetas del enlace, solo su plan y con tarjeta.
+    "<SuspendedPlanCards\n          plans={planesAMostrar}\n          currentPlan={enlace ? enlace.plan : currentPlan}\n          firstMonthEligible={firstMonthEligible}\n          soloTarjeta={enlace !== null}\n        />",
   ]) {
     assert.ok(page.includes(viejo), `la página de siempre perdió ${viejo}`);
   }

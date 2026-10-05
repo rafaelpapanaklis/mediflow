@@ -13,7 +13,7 @@ import { Step2Clinic } from "./step-2-clinic";
 import { Step3PlanPayment, type CardDetails } from "./step-3-plan-payment";
 import type { Billing, PlanId } from "./plan-card";
 import { isPlanId } from "@/lib/billing/plans";
-import { COOKIE_CONTRATAR, COOKIE_CONTRATAR_MAX_AGE, planDeCookieContratar } from "@/lib/billing/contratar";
+import { COOKIE_CONTRATAR, COOKIE_CONTRATAR_MAX_AGE, PERIODO_INICIAL_DEL_ENLACE, planDeCookieContratar } from "@/lib/billing/contratar";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
@@ -109,7 +109,10 @@ export function SignupForm({ planDeEnlace }: {
   const initialPlan: PlanId | null = planDeEnlace ?? (isPlanId(planParam) ? planParam : null);
   // Periodo elegido en la landing (?billing=annual|monthly). Viaja al registro;
   // el cobro real se hace en el panel de activación (Stripe Checkout).
-  const initialBilling: Billing = !planDeEnlace && searchParams.get("billing") === "annual" ? "annual" : "monthly";
+  // Enlace de contratación: arranca en ANUAL (encargo 7) y en el paso 3 se puede pasar a mensual.
+  const initialBilling: Billing = planDeEnlace
+    ? PERIODO_INICIAL_DEL_ENLACE
+    : searchParams.get("billing") === "annual" ? "annual" : "monthly";
   const initialStepParam = searchParams.get("step");
   const initialStep: 1 | 2 | 3 =
     initialStepParam === "2" ? 2 :
@@ -164,7 +167,7 @@ export function SignupForm({ planDeEnlace }: {
     if (!plan) return;
     // Vuelta de Google (o el enlace abierto antes): el plan del enlace manda, mensual.
     setPlanDelEnlace(plan);
-    setForm((prev) => ({ ...prev, plan, billing: "monthly" }));
+    setForm((prev) => ({ ...prev, plan, billing: PERIODO_INICIAL_DEL_ENLACE }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
