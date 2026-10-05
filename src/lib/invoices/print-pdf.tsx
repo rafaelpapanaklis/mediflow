@@ -8,6 +8,7 @@
 // clínica que pase el caller (mismo patrón que lib/quotes/quote-pdf).
 
 import { prisma } from "@/lib/prisma";
+import { metodoCanonico } from "@/lib/dinero/metodo-pago";
 import { lugarDeLaClinica } from "@/lib/clinica/lugar-de-la-clinica";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import {
@@ -41,6 +42,8 @@ const METHOD_LABELS: Record<string, string> = {
   other: "Otro", online: "Pago en línea (tarjeta)",
   mercadopago: "Mercado Pago",
   anticipo: "Anticipo (saldo a favor)",
+  card: "Tarjeta",
+  migrated: "Saldo migrado",
 };
 
 function fmtMXN(n: number): string {
@@ -69,7 +72,8 @@ export function fmtFecha(d: Date | string | null, zona: string = ZONA_POR_DEFECT
  * dónde salió; un traspaso a saldo a favor dice eso.
  */
 export function renglonDePago(pay: { method: string; amount: number; refundMethod?: string | null }): { etiqueta: string; signo: "" | "-"; resta: boolean } {
-  if (pay.method !== "refund") return { etiqueta: METHOD_LABELS[pay.method] ?? pay.method, signo: "", resta: false };
+  // QA de Rafael #2: «credit_card», «CASH»… con su nombre de siempre.
+  if (pay.method !== "refund") return { etiqueta: METHOD_LABELS[metodoCanonico(pay.method)] ?? pay.method, signo: "", resta: false };
   if (pay.refundMethod === "saldo_a_favor") return { etiqueta: "Pasó a saldo a favor", signo: SIGNO_MENOS, resta: true };
   const por = pay.refundMethod ? REEMBOLSO_POR[pay.refundMethod] : null;
   return { etiqueta: por ? `Reembolso (${por})` : "Reembolso", signo: SIGNO_MENOS, resta: true };

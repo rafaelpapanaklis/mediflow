@@ -56,8 +56,8 @@ export function DialogoAbonar({ open, onClose, invoice, datos, onHecho }: {
   onClose: () => void;
   invoice: { id: string; invoiceNumber: string; balance: number };
   datos: DatosAbono | null;
-  /** Se registró algo: refrescar la factura y la ficha. */
-  onHecho: () => void | Promise<void>;
+  /** Se registró algo: refrescar la factura y la ficha (con la factura a la que se abonó). */
+  onHecho: (destinoId: string) => void | Promise<void>;
 }) {
   const t = useT();
   const tx = textosDinero(useLocale());
@@ -120,7 +120,8 @@ export function DialogoAbonar({ open, onClose, invoice, datos, onHecho }: {
       if (out?.warning) toast(out.warning, { duration: 8000 });
       onClose();
       // Después de cerrar (el refresco en el mismo tick dejaba el diálogo abierto).
-      setTimeout(() => { void onHecho(); }, 0);
+      const destinoId = elegida.id;
+      setTimeout(() => { void onHecho(destinoId); }, 0);
     } catch (e) {
       toast.error(mensajeDeError(e, t, { porDefecto: "No se pudo abonar." }));
     } finally {

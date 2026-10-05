@@ -46,7 +46,9 @@ const es = {
     notaDescuento: "El descuento se ve una vez por factura. En el arqueo, «Descuentos» es la parte que le toca a lo cobrado en este turno.",
     csvDescuento: "Descuento (parte de este cobro)",
     // Segunda auditoría de uso (N-01, N-15, C-17).
-    cobradoHoyNota: "Lo que entró hoy: cobros menos reembolsos, sin el saldo a favor aplicado. La misma cifra que Finanzas › Hoy.",
+    metodoTarjeta: "Tarjeta",
+    metodoMigrado: "Saldo migrado",
+    cobradoHoyNota: "Lo que entró hoy: cobros menos reembolsos, sin el saldo a favor aplicado ni los pagos traídos de tu sistema anterior (lo que un paciente paga hoy de un saldo migrado sí cuenta). La misma cifra que Finanzas › Hoy.",
     facturadoHoyNota: "Total de las facturas emitidas hoy (sin borradores ni canceladas), se cobren o no.",
     porCobrarHoyNota: "Lo que falta por cobrar de esas facturas de hoy. No se resta de «Cobrado hoy»: ese cuenta todo lo que entró hoy, también de facturas de otros días.",
     sugeridoApertura: "Sugerido (lo contado en el último corte más el efectivo cobrado después, sin corte):",
@@ -181,6 +183,13 @@ const es = {
     boton: (cargo: string | null, abono: string | null) =>
       [cargo ? `Cargar ${cargo}` : null, abono ? `registrar abono ${abono}` : null].filter(Boolean).join(" y ").replace(/^r/, "R"),
     exito: (monto: string, folio: string, saldo: string) => `Abono de ${monto} registrado en ${folio}. Queda debiendo ${saldo}.`,
+    // QA de Rafael #5: lo que hace el botón, dicho tal cual.
+    pagoAhora: "Pago que se registra ahora (abono)",
+    cargoHoy: "Cargo de hoy (queda por cobrar)",
+    notaConAbono: (hayCargo: boolean, nombre: string) =>
+      hayCargo
+        ? `Crea la nota de lo de hoy (su pago se registra al cobrarla) y registra AHORA el abono como pago en la factura de «${nombre}».`
+        : `Registra AHORA el abono como pago en la factura de «${nombre}» (si no la tiene, se crea con su precio completo).`,
   },
 };
 
@@ -228,7 +237,9 @@ const en: Textos = {
     thDescuentoFactura: "Invoice discount",
     notaDescuento: "The discount shows once per invoice. In the cash count, «Discounts» is the part that belongs to what was collected in this shift.",
     csvDescuento: "Discount (share of this payment)",
-    cobradoHoyNota: "What came in today: payments minus refunds, without applied patient credit. The same figure as Finances › Today.",
+    metodoTarjeta: "Card",
+    metodoMigrado: "Migrated balance",
+    cobradoHoyNota: "What came in today: payments minus refunds, without applied patient credit or payments brought from your previous system (what a patient pays today on a migrated balance does count). The same figure as Finances › Today.",
     facturadoHoyNota: "Total of the invoices issued today (no drafts or cancelled ones), paid or not.",
     porCobrarHoyNota: "What is still owed on today's invoices. It isn't subtracted from «Collected today»: that counts everything that came in today, also from other days' invoices.",
     sugeridoApertura: "Suggested (counted in the last cash count plus cash collected afterwards, not counted):",
@@ -353,6 +364,12 @@ const en: Textos = {
     boton: (cargo: string | null, abono: string | null) =>
       [cargo ? `Charge ${cargo}` : null, abono ? `record payment ${abono}` : null].filter(Boolean).join(" and ").replace(/^r/, "R"),
     exito: (monto: string, folio: string, saldo: string) => `Payment of ${monto} recorded on ${folio}. ${saldo} still owed.`,
+    pagoAhora: "Payment recorded now (partial payment)",
+    cargoHoy: "Today's charge (still to collect)",
+    notaConAbono: (hayCargo: boolean, nombre: string) =>
+      hayCargo
+        ? `Creates the note for today (its payment is recorded when collected) and records the partial payment NOW on the invoice for «${nombre}».`
+        : `Records the partial payment NOW on the invoice for «${nombre}» (if it has none, one is created at its full price).`,
   },
 };
 

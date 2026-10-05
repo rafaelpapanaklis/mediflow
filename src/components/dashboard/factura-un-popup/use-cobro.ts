@@ -66,9 +66,11 @@ export interface OpcionesCobro {
    * ventana de cobro de siempre.
    */
   montoSugerido?: number;
+  /** QA de Rafael #1: la factura a la que se abonó lo de más también se refresca en la ficha. */
+  alAbonarA?: (invoiceId: string) => void;
 }
 
-export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar, montoSugerido }: OpcionesCobro) {
+export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar, montoSugerido, alAbonarA }: OpcionesCobro) {
   const t = useT();
   const txDinero = textosDinero(useLocale());
   const txCobro = txDinero.cobro;
@@ -184,6 +186,7 @@ export function useCobro({ abierta, factura, confirmarAntes, alOcupar, alCobrar,
         const out = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(out.error ?? t("clinical.paymentModal.registerError"));
         toast.success(txAbono.exito(fmtMXNdec(out.reparto?.enDestino ?? 0), out.folioDestino ?? null, fmtMXNdec(out.reparto?.aFavor ?? 0)), { duration: 8000 });
+        if (destino && (out.reparto?.enDestino ?? 0) > 0) alAbonarA?.(destino);
         alCobrar();
         return;
       }

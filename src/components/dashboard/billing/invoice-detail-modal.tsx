@@ -51,6 +51,8 @@ import { AvisoCobroAutomaticoEnCobro } from "@/components/cobro-automatico/aviso
 import { useCondicionesDeFactura } from "@/components/dashboard/plan-de-pagos/use-condiciones";
 import { usePagosConCfdi } from "@/components/dashboard/plan-de-pagos/use-pagos-cfdi";
 import { PaymentCfdiButton } from "./payment-cfdi-button";
+// QA de Rafael #2: «credit_card», «CASH»… con su nombre de siempre.
+import { metodoCanonico } from "@/lib/dinero/metodo-pago";
 // Decisión de Rafael (4-oct-2026): «Abonar a otra factura».
 import { DialogoAbonar, useDatosAbono } from "./dialogo-abonar";
 import { SeccionCobro, DescuentoEnLinea, CampoDescuento, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
@@ -247,7 +249,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
   // C-14: la factura fresca a quien abrió el detalle (no espera al refresco de la página).
   const subirFacturaFresca = useCallback((id: string | undefined) => {
     if (!id || !onFacturaActualizada) return;
-    fetch(`/api/invoices/${id}`)
+    // QA de Rafael #1: sin caché del navegador (la tarjeta se quedaba en «Pagado $0»).
+    fetch(`/api/invoices/${id}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((f) => { if (f?.id) onFacturaActualizada(f); })
       .catch(() => {});
@@ -391,6 +394,8 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
     alOcupar: setBusy,
     alCobrar: handlePaymentSuccess,
     montoSugerido,
+    // QA de Rafael #1: la factura que recibió el abono también se pinta al instante.
+    alAbonarA: (id) => subirFacturaFresca(id),
   });
   // «Abonar a otra factura»: las demás facturas del paciente con saldo. Sin ninguna, no hay botón.
   const [abonarAbierto, setAbonarAbierto] = useState(false);
@@ -1057,7 +1062,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                 </span>
               </div>
               {metodoDeLaFactura && (
-                <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.method")}</span><span className={cx("capitalize", `capitalize ${c.valor}`)}>{METHOD_LABEL_KEYS[metodoDeLaFactura] ? t(METHOD_LABEL_KEYS[metodoDeLaFactura]) : metodoDeLaFactura}</span></div>
+                <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.method")}</span><span className={cx("capitalize", `capitalize ${c.valor}`)}>{METHOD_LABEL_KEYS[metodoCanonico(metodoDeLaFactura)] ? t(METHOD_LABEL_KEYS[metodoCanonico(metodoDeLaFactura)]) : metodoDeLaFactura}</span></div>
               )}
               {effectiveUuid && (
                 <div className={cx("flex justify-between gap-2 items-center", c.resumenFila)}>
@@ -1220,7 +1225,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
                         <div className="flex items-center justify-between">
                           <div className={cx("min-w-0", c.filaTextos)}>
                             <div className={rediseno ? `${c.filaTitulo} ${isRefund ? c.cifraPeligro : ""}` : `font-medium ${isRefund ? "" : "text-foreground"}`} style={isRefund && !rediseno ? { color: "var(--danger)" } : undefined}>
-                              {METHOD_LABEL_KEYS[p.method] ? t(METHOD_LABEL_KEYS[p.method]) : (p.method ?? "—")}
+                              {METHOD_LABEL_KEYS[metodoCanonico(p.method)] ? t(METHOD_LABEL_KEYS[metodoCanonico(p.method)]) : (p.method ?? "—")}
                             </div>
                             <div className={cx("text-[10px] text-muted-foreground", c.filaDetalle)}>
                               {formatDate(p.paidAt)}
@@ -1469,7 +1474,7 @@ export function InvoiceDetailModal({ open, invoice: invoiceProp, patientName, on
         onClose={() => setAbonarAbierto(false)}
         invoice={{ id: invoice.id, invoiceNumber: invoice.invoiceNumber, balance: invoice.balance }}
         datos={datosAbono}
-        onHecho={async () => { setVueltaAbono((n) => n + 1); cobro.recargarAbono(); await onMutated(); await refrescarFactura(); }}
+        onHecho={async (destinoId) => { setVueltaAbono((n) => n + 1); cobro.recargarAbono(); subirFacturaFresca(invoice.id); subirFacturaFresca(destinoId); await onMutated(); await refrescarFactura(); }}
       />
 
       {/* Sub-modal: Reembolsar */}

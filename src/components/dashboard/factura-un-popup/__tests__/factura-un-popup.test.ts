@@ -201,7 +201,8 @@ test("sin el interruptor, todo lo de siempre sigue cableado", () => {
   assert.ok(d.includes('onClick={handleConfirmAndPay} disabled={busy}>\n                  {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}'));
   assert.ok(d.includes('onClick={() => setPaymentOpen(true)} disabled={busy}>\n                  {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}'));
   // Los dos botones que abren el diálogo del descuento, ahora solo sin interruptor.
-  assert.equal((d.match(/\{!rediseno && \(\s*<ButtonNew variant="secondary" icon=\{<Tag size=\{14\} aria-hidden \/>\} onClick=\{\(\) => openSub\("discount"\)\}/g) ?? []).length, 2);
+  // ws1-t5 (roles): el de la fila de acciones además exige poder editar la factura.
+  assert.equal((d.match(/\{!rediseno && (?:puedeEditar && )?\(\s*<ButtonNew variant="secondary" icon=\{<Tag size=\{14\} aria-hidden \/>\} onClick=\{\(\) => openSub\("discount"\)\}/g) ?? []).length, 2);
   // PaymentModal y el diálogo del descuento siguen montados.
   assert.match(d, /<PaymentModal\s+rediseno=\{rediseno\}\s+open=\{paymentOpen\}/);
   assert.match(d, /<Dialog open=\{sub === "discount"\}/);

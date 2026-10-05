@@ -353,7 +353,12 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
       onCerrar={onCerrar}
       pie={
         <>
-          <p className={s.pieNota}>{t("presupuestoAceptacion.cobrarNota")}</p>
+          {/* QA de Rafael #5: con abono, el pie dice que el pago se registra AHORA. */}
+          <p className={s.pieNota}>
+            {plan?.ok && plan.plan.abono
+              ? txP.notaConAbono(plan.plan.total > 0, plan.plan.abono.nombre)
+              : t("presupuestoAceptacion.cobrarNota")}
+          </p>
           <button type="button" className={r.boton} onClick={onCerrar} disabled={ocupado}>
             {t("presupuestoAceptacion.cancelar")}
           </button>
@@ -542,8 +547,16 @@ export function CobrarPresupuesto({ quote, onCerrar, onCargado, onVerFactura, ca
                   )}
                 </>
               )}
+              {/* QA de Rafael #5: «Hoy $0.00» con un abono de $100 confundía. Con abono, el
+                  cargo (queda por cobrar) y el pago que se registra AHORA van por separado. */}
+              {plan.plan.abono && (
+                <div className={s.resumenTotal} data-abono-ahora>
+                  <span>{txP.pagoAhora}</span>
+                  <span>{dinero(plan.plan.abono.monto)}</span>
+                </div>
+              )}
               <div className={s.resumenTotal}>
-                <span>{t("presupuestoAceptacion.hoy")}</span>
+                <span>{plan.plan.abono ? txP.cargoHoy : t("presupuestoAceptacion.hoy")}</span>
                 <span>{dinero(plan.plan.total)}</span>
               </div>
               <p className={s.pista}>

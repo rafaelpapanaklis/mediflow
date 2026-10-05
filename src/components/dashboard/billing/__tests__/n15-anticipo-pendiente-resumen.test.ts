@@ -18,7 +18,9 @@ test("N15: el resumen pinta una fila de 'Anticipo pendiente' cuando anticipoPend
   const idx = SRC.indexOf("{anticipoPendiente && (");
   assert.notEqual(idx, -1, "no se encontró el bloque condicional de anticipoPendiente en el resumen");
   const bloque = SRC.slice(idx, idx + 600);
-  assert.match(bloque, /Anticipo pendiente/);
+  // ws1-t5 (C-16): el rótulo vive en lib/dinero/textos («Anticipo pedido, sin recibir»).
+  assert.match(bloque, /\{txReembolso\.anticipoPorRecibir\}/);
+  assert.match(readFileSync(join(__dirname, "../../../../lib/dinero/textos.ts"), "utf8"), /anticipoPorRecibir: "Anticipo pedido, sin recibir"/);
   assert.match(bloque, /fmtMXNdec\(anticipoPendiente\.amount\)/);
 });
 

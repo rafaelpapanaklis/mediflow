@@ -93,8 +93,9 @@ test("ventana completa: el cobro usa el freno de caja cerrada (dentro y en la cl
 
 test("ventana completa: el monto de quien abre llega al cobro de dentro y al clásico", () => {
   const d = leer(DETALLE);
-  assert.match(d, /const montoSugerido = montoDelCobroAlAbrir\(\s*montoSugeridoDeQuienAbre,/);
-  assert.match(d, /const cobro = useCobro\(\{[\s\S]*?montoSugerido,\s*\}\);/);
+  // C-14: tras usar saldo a favor o registrar el anticipo, el monto de quien abrió ya no manda.
+  assert.match(d, /const montoSugerido = montoDelCobroAlAbrir\(\s*saldoUsado > 0 \|\| anticipoRegistrado \? undefined : montoSugeridoDeQuienAbre,/);
+  assert.match(d, /const cobro = useCobro\(\{\n(?:    .*\n)*?    montoSugerido,\n(?:    .*\n)*?  \}\);/);
   assert.match(d, /<PaymentModal[\s\S]*?montoSugerido=\{montoSugerido\}/);
   // El cobro encadenado de hermanos: tras pagar, `onCobrado` en vez de cerrar.
   assert.match(d, /if \(onCobrado\) onCobrado\(\); else onClose\(\);/);
@@ -240,7 +241,10 @@ test("editor: al editar guarda por PATCH y no ofrece lo que ese PATCH no guarda"
   assert.match(m, /if \(editando\) \{ await guardarEdicion\(\); return; \}/, "editar nunca crea otra factura");
   assert.match(m, /disabled=\{editando\}/, "los impuestos no se cambian al editar");
   assert.match(m, /\{!editando && \(\s*<div className=\{rediseno \? c\.campo : undefined\}>\s*<label[^>]*>\{t\("billing\.invoiceEditor\.doctor"\)\}/);
-  assert.match(m, /\{!editando && \(\s*<div className=\{rediseno \? c\.campo : undefined\}>\s*<label[^>]*>\{t\("billing\.invoiceEditor\.dueDate"\)\}/);
+  // C-31 (auditoría de uso, ws1-t5): el vencimiento SÍ se edita, y el PATCH lo guarda solo si cambió.
+  assert.match(m, /\{\/\* C-31 \(auditoría de uso\): también al editar, y avisa si la fecha ya pasó\. \*\/\}\s*<div className=\{rediseno \? c\.campo : undefined\}>\s*<label[^>]*>\{t\("billing\.invoiceEditor\.dueDate"\)\}/);
+  assert.match(m, /\.\.\.\(dueDate !== dueDateInicial \? \{ dueDate: dueDate \|\| null \} : \{\}\)/);
+  assert.match(leer("src/app/api/invoices/[id]/route.ts"), /if \(body\.dueDate !== undefined\) \{/);
 });
 
 test("«Editar» (tarjeta de Caja y del expediente, y la ventana completa) abre el editor; lo demás «Ver factura»", () => {

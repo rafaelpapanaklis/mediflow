@@ -1,6 +1,7 @@
 "use client";
 
 import { fechaPanel } from "@/lib/formato-fecha-panel";
+import { fusionarFacturas } from "@/lib/invoices/orden-facturas";
 import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
@@ -739,8 +740,10 @@ export function PatientDetailClient({
   // ws1-t4: «Editar» (tarjeta o detalle) de un borrador sin pagos → el EDITOR.
   const [editandoFactura, setEditandoFactura] = useState<any | null>(null);
   const puedeEditarFacturas = permisosCobro?.editar === true;
+  // QA de Rafael #1: lo que llega al refrescar se MEZCLA con lo local (gana la copia más
+  // nueva por `updatedAt`): un refresco viejo ya no pisa la factura recién cobrada.
   useEffect(() => {
-    setInvoices(initialInvoices);
+    setInvoices((prev: any[]) => fusionarFacturas(initialInvoices as any[], prev ?? []));
   }, [initialInvoices]);
   // Fotos clínicas (ficha v3): count vivo para el badge del menú/tab bar.
   // Nace del count server-side y el tab lo actualiza al subir/borrar.

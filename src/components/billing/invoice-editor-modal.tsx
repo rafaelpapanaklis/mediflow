@@ -40,6 +40,7 @@ import type { BorradorDeFactura } from "@/components/dashboard/factura-ficha-red
 import { conceptosParaEditar, cuerpoDeEdicion } from "./editar-factura";
 import { avisoDePlan, CODIGO_PLAN_SE_RECALCULA } from "@/lib/invoices/editar-factura-core";
 import { notasVisibles } from "@/lib/invoices/marcas-internas";
+import { calcularDescuento } from "@/lib/dinero/descuento-pesos";
 import type { OrigenDoctorFactura } from "@/lib/invoices/doctor-de-factura";
 
 /**
@@ -200,6 +201,7 @@ function InvoiceEditorBody({
   const txDoctorCobro = textosDinero(useLocale()).doctorCobro;
   const txSaldoAFavor = textosDinero(useLocale()).saldoAFavorEnEditor;
   const txVencePasado = textosDinero(useLocale()).vencePasado;
+  const txDescuento = textosDinero(useLocale()).descuentoFactura;
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
   // siempre sin él. Sin `nueva`, el nodo queda sin clase en el diseño nuevo
   // (lo viste la hoja por elemento: inputs, selects…).
@@ -382,13 +384,32 @@ function InvoiceEditorBody({
     return base.slice(0, 30);
   }, [patients, patientQuery]);
 
+  // QA de Rafael #7: el descuento global nunca pasa del subtotal (150 % o $9,999 sobre
+  // $500 dejaban la factura en $0 sin avisar). Mismas reglas y aviso que «Registrar
+  // pago» (lib/dinero/descuento-pesos): se recorta, se avisa y lo que se guarda va recortado.
+  const descuentoGlobal = useMemo(() => {
+    const base = computeTotals(
+      items.map((it) => ({ name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount })),
+      { discountPct: null, discountAmount: null },
+    ).subtotal;
+    if (discountMode === "none") return { valor: 0, recortado: false, pesos: 0, base };
+    const r = calcularDescuento(discountMode === "pct" ? "porcentaje" : "pesos", discountValue, base);
+    const pesos = r.pesos ?? 0;
+    return {
+      valor: discountMode === "pct" ? Math.min(100, Math.max(0, Number(discountValue) || 0)) : pesos,
+      recortado: r.recortado,
+      pesos,
+      base,
+    };
+  }, [items, discountMode, discountValue]);
+
   const totals = useMemo(() => {
     const asInput = items.map((it) => ({ name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount }));
     return computeTotals(asInput, {
-      discountPct: discountMode === "pct" ? discountValue : null,
-      discountAmount: discountMode === "amount" ? discountValue : null,
+      discountPct: discountMode === "pct" ? descuentoGlobal.valor : null,
+      discountAmount: discountMode === "amount" ? descuentoGlobal.valor : null,
     });
-  }, [items, discountMode, discountValue]);
+  }, [items, discountMode, descuentoGlobal]);
 
   // IVA en vivo — CRITERIO DEL SAT, el mismo que el servidor y el timbrado.
   //
@@ -477,8 +498,8 @@ function InvoiceEditorBody({
     const normalized = computeTotals(
       clean.map((it) => ({ name: it.name.trim(), quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount })),
       {
-        discountPct: discountMode === "pct" ? discountValue : null,
-        discountAmount: discountMode === "amount" ? discountValue : null,
+        discountPct: discountMode === "pct" ? descuentoGlobal.valor : null,
+        discountAmount: discountMode === "amount" ? descuentoGlobal.valor : null,
       },
     );
     const totalNuevo = grandTotal;
@@ -550,8 +571,8 @@ function InvoiceEditorBody({
     const normalized = computeTotals(
       clean.map((it) => ({ name: it.name.trim(), quantity: it.quantity, unitPrice: it.unitPrice, discount: it.discount })),
       {
-        discountPct: discountMode === "pct" ? discountValue : null,
-        discountAmount: discountMode === "amount" ? discountValue : null,
+        discountPct: discountMode === "pct" ? descuentoGlobal.valor : null,
+        discountAmount: discountMode === "amount" ? descuentoGlobal.valor : null,
       },
     );
     const payload: any = {
@@ -859,9 +880,20 @@ function InvoiceEditorBody({
                 {discountMode !== "none" && (
                   <input type="number" min={0} step="0.01" value={discountValue}
                     onChange={(e) => setDiscountValue(num(e.target.value))}
+                    // Al salir del campo dice lo que se aplicará (como «Registrar pago»).
+                    onBlur={() => { if (descuentoGlobal.recortado) setDiscountValue(descuentoGlobal.valor); }}
                     className={cx("w-24 flex-shrink-0 bg-background border border-border rounded-lg px-3 py-2 text-sm")} />
                 )}
               </div>
+              {discountMode !== "none" && (descuentoGlobal.recortado ? (
+                <p className={cx("text-[11px] mt-1 text-muted-foreground", c.ayuda)} role="status" data-descuento-recortado>
+                  {txDescuento.recortado(money(descuentoGlobal.base))}
+                </p>
+              ) : discountMode === "pct" && descuentoGlobal.pesos > 0 ? (
+                <p className={cx("text-[11px] mt-1 text-muted-foreground", c.ayuda)} role="status">
+                  {txDescuento.equivale(String(descuentoGlobal.valor), money(descuentoGlobal.pesos))}
+                </p>
+              ) : null)}
             </div>
           </div>
 

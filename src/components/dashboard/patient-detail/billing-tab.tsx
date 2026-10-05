@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { ordenarFacturas } from "@/lib/invoices/orden-facturas";
 import { Plus, Receipt, CheckCircle2, Clock } from "lucide-react";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -134,7 +135,8 @@ export function BillingTab({
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((inv) => {
+                {/* QA de Rafael #11: orden estable, la más reciente primero (desempate por folio). */}
+                {ordenarFacturas(invoices).map((inv) => {
                   const badge = invoiceStatusBadge(inv.status);
                   // Cancelar NO pone balance a 0 en BD: la columna Saldo
                   // mostraría deuda en una fila que dice "Cancelada" — se

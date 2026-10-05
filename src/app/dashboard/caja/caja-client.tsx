@@ -22,6 +22,8 @@ import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
 import { fechaHoraPanel, fechaPanel } from "@/lib/formato-fecha-panel";
+import { metodoCanonico } from "@/lib/dinero/metodo-pago";
+import { netoDelDia } from "@/lib/dinero/caja-dia";
 import { reembolsosEnEfectivoDelCorte, type MovimientosDelCorte } from "@/lib/dinero/corte-del-historial";
 import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
@@ -184,8 +186,11 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
     mercadopago: t("cashRegister.methodMercadoPago"),
     // Saldo a favor (anticipo) aplicado al emitir la factura: no entra al cajón.
     anticipo: t("cashRegister.methodAnticipo"),
+    // QA de Rafael #2: «CARD» (tarjeta sin tipo) y el saldo migrado, en español.
+    card: txDinero.caja.metodoTarjeta,
+    migrated: txDinero.caja.metodoMigrado,
   };
-  const methodLabelOf = (m: string) => METHOD_LABEL[m] ?? m;
+  const methodLabelOf = (m: string) => METHOD_LABEL[m] ?? METHOD_LABEL[metodoCanonico(m)] ?? m;
   // ws1-t5: un «reembolso» que solo pasó el dinero a saldo a favor se dice así.
   const methodLabel = (m: string, refundMethod?: string | null) =>
     m === REFUND && refundMethod === "saldo_a_favor" ? txDinero.caja.aSaldoFavor : methodLabelOf(m);
@@ -244,17 +249,17 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
 
   // Conteo y suma por día — SOLO para el encabezado de grupo de la tabla. No
   // interviene en el arqueo: los totales del turno siguen viniendo del servidor.
-  // Los reembolsos cuentan como movimiento pero no suman al importe del día
-  // (mismo criterio que totalIncome).
+  // QA de Rafael #6: el importe del día RESTA los reembolsos reales, como «Cobrado
+  // hoy» y el corte (el traspaso a saldo a favor y el saldo aplicado no cuentan).
   const dayAgg = useMemo(() => {
-    const m = new Map<string, { count: number; total: number }>();
+    const filas = new Map<string, typeof caja.list>();
     for (const r of caja.list) {
       const k = dayKey(r.at);
-      const cur = m.get(k) ?? { count: 0, total: 0 };
-      cur.count += 1;
-      // ws1-t5: el saldo a favor aplicado tampoco es dinero que entró.
-      if (!isRefundRow(r) && r.method !== "anticipo") cur.total += r.amount;
-      m.set(k, cur);
+      filas.set(k, [...(filas.get(k) ?? []), r]);
+    }
+    const m = new Map<string, { count: number; total: number }>();
+    for (const [k, lista] of Array.from(filas.entries())) {
+      m.set(k, { count: lista.length, total: netoDelDia(lista as Array<{ method: string; amount: number; refundMethod?: string | null }>) });
     }
     return m;
   }, [caja.list, dayKey]);

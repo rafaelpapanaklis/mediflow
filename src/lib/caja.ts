@@ -35,6 +35,7 @@ import {
 import { cobrosAsignados } from "@/lib/dinero/ajustes.server";
 import { cobrosFueraDeCorte, diasAbierta, medianocheAnterior } from "@/lib/dinero/caja-core";
 import { bajasEnVentana, bajasSinFecha, partirDescuento } from "@/lib/dinero/bajas";
+import { aliasDe, grupoDelArqueo, metodoCanonico } from "@/lib/dinero/metodo-pago";
 
 /**
  * Lo único que Caja LEE de la base, y nada más.
@@ -188,7 +189,8 @@ export function refundPaymentWhere(
  * que ningún consumidor vuelva a escribir el filtro a mano y se deje una línea.
  */
 export function cashOnHandPaymentWhere(clinicId: string, from: Date, to: Date): Prisma.PaymentWhereInput {
-  return { ...revenuePaymentWhere(clinicId, { gte: from, lte: to }), method: CASH_METHOD };
+  // QA de Rafael #2: también «CASH» y demás alias del efectivo (lib/dinero/metodo-pago).
+  return { ...revenuePaymentWhere(clinicId, { gte: from, lte: to }), method: { in: aliasDe("cash") } };
 }
 
 /** Facturas con saldo POR COBRAR: emitidas (ni DRAFT ni CANCELLED) y balance > 0. */
@@ -582,12 +584,14 @@ export async function deriveWindow(
       appliedCredit += amount;
     } else {
       tax += invoiceTaxPortion(amount, p.invoice, clinicTaxMode);
-      if (p.method === CASH_METHOD) {
+      // QA de Rafael #2: «credit_card», «debit_card», «CASH»… suman donde les toca.
+      const grupo = grupoDelArqueo(p.method);
+      if (grupo === "cash") {
         cashIncome += amount;
       } else {
         otherIncome += amount;
-        if (p.method === DEBIT_METHOD) cardDebitIncome += amount;
-        else if (p.method === CREDIT_METHOD) cardCreditIncome += amount;
+        if (grupo === "debit") cardDebitIncome += amount;
+        else if (grupo === "credit") cardCreditIncome += amount;
       }
     }
     return {
@@ -600,7 +604,8 @@ export async function deriveWindow(
       // mensualidad 7 de 24». Doce abonos iguales ya no se confunden en el corte.
       concept:     conceptoConCuota(conceptOf(p.invoice?.items), cuotaDelPago.get(p.id) ?? null),
       amount,
-      method:      p.method,
+      // El método normalizado (QA #2): la tabla, el corte impreso y el CSV dicen «Tarjeta de crédito», no «credit_card».
+      method:      p.method === REFUND_METHOD || p.method === APPLIED_CREDIT_METHOD ? p.method : metodoCanonico(p.method),
       ...(p.method === REFUND_METHOD ? { refundMethod: (p as { refundMethod?: string | null }).refundMethod ?? null } : {}),
       discount:    money(discountPortion),
       invoiceId:       p.invoiceId,

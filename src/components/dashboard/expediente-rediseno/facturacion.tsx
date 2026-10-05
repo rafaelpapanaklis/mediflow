@@ -7,6 +7,7 @@ import { GastosLaboratorioMigradosCard } from "@/components/dashboard/patient-de
 import { CuotasMigradasCard } from "@/components/dashboard/patient-detail/cuotas-migradas-card";
 import { CitasMigradasCard } from "@/components/dashboard/patient-detail/citas-migradas-card";
 import { FichasFactura } from "@/components/dashboard/factura-ficha-rediseno/fichas-factura";
+import { ordenarFacturas } from "@/lib/invoices/orden-facturas";
 import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { useT } from "@/i18n/i18n-provider";
 import { RaizExpediente } from "./raiz";
@@ -80,7 +81,8 @@ export function Facturacion({ patientId, facturas, facturApiEnabled, onNueva, on
             tocar la fila. Ver `factura-ficha-rediseno/fichas-factura.tsx`. */}
         <FichasFactura
           dentroDeTarjeta
-          facturas={facturas}
+          // QA de Rafael #11: orden estable, la más reciente primero (desempate por folio).
+          facturas={ordenarFacturas(facturas)}
           facturApiEnabled={facturApiEnabled}
           textoCobrar={t("patients.billing.rowCharge")}
           textoVacio={t("patients.billing.empty")}

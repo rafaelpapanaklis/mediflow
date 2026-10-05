@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { aliasDe } from "@/lib/dinero/metodo-pago";
 import {
-  CASH_METHOD,
   computeReceivables,
   money,
   netRevenueSeries,
@@ -97,7 +97,8 @@ export async function calcularResumenFinanzas(
     // descontaría también los que salieron por transferencia o tarjeta.
     db.payment.aggregate({
       _sum:  { amount: true },
-      where: { ...revenueWhere, method: CASH_METHOD },
+      // QA de Rafael #2: con los alias del efectivo («CASH»…).
+      where: { ...revenueWhere, method: { in: aliasDe("cash") } },
     }),
     // ventas: facturas EMITIDAS creadas en el periodo. Ni canceladas ni
     // borradores: un DRAFT (nace de «presupuesto → factura») aún no se

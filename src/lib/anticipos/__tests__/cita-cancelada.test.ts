@@ -110,7 +110,8 @@ test("con la marca de cita cancelada, la factura no ofrece cobrar más", () => {
   assert.match(modal, /const citaCanceladaConDinero = invoice\?\.status !== "CANCELLED" && \(marcaCita === "pendiente" \|\| marcaCita === "reembolso"\);/);
   assert.match(modal, /const cobrable = rediseno && puedeCobrar && !citaCanceladaConDinero &&/);
   assert.match(modal, /const botonRegistrarPago = !puedeCobrar \|\| citaCanceladaConDinero \|\|/);
-  assert.equal((modal.match(/puedeCobrar && !citaCanceladaConDinero/g) ?? []).length, 4, "cobrable, los dos «Registrar pago» y «Marcar pagada»");
+  // ws1-t5 (4-oct-2026): «Abonar a otra factura» también calla con la marca.
+  assert.equal((modal.match(/puedeCobrar && !citaCanceladaConDinero/g) ?? []).length, 5, "cobrable, los dos «Registrar pago», «Abonar a otra factura» y «Marcar pagada»");
 });
 
 test("«Ya lo devolví» registra el reembolso y cancela la factura en UNA operación del servidor", () => {
