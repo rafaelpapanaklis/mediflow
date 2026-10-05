@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, XCircle, MinusCircle, ExternalLink, RefreshCw } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
-import type { AvisoEmisor } from "@/lib/cfdi/emisor";
+import { sinAvisosYaMostrados, type AvisoEmisor } from "@/lib/cfdi/emisor";
 import { AvisosEmisor } from "./cfdi-avisos-emisor";
 
 // Portal público de Facturapi para firmar la Carta Manifiesto. Se firma con la
@@ -57,7 +57,11 @@ function StepRow({ ok, label, help, children }: {
  * `refreshKey` lo sube el padre cuando cambia algo que afecta al checklist
  * (p. ej. tras subir el CSD) para volver a consultar sin recargar la página.
  */
-export function CfdiReadinessCard({ refreshKey = 0 }: { refreshKey?: number }) {
+export function CfdiReadinessCard({ refreshKey = 0, omitirAvisos = [] }: {
+  refreshKey?: number;
+  /** Códigos de aviso que la pantalla ya muestra por otro lado (no se repiten aquí). */
+  omitirAvisos?: readonly string[];
+}) {
   const t = useT();
   const [status,  setStatus]  = useState<CfdiStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +100,7 @@ export function CfdiReadinessCard({ refreshKey = 0 }: { refreshKey?: number }) {
         )}
       </div>
       <div className="card__body space-y-3">
-        <AvisosEmisor avisos={status?.avisos} />
+        <AvisosEmisor avisos={sinAvisosYaMostrados(status?.avisos, omitirAvisos)} />
 
         {loading && !status && (
           <div className="text-sm" style={{ color: "var(--text-3)" }}>{t("settings.client.readyLoading")}</div>

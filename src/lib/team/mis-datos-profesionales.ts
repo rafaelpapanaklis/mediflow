@@ -11,6 +11,8 @@
 //
 // PURO: sin Prisma ni React.
 
+import { especialidadParaElSelector } from "@/lib/team/especialidad-equipo";
+
 /** Los únicos campos que viajan de «Mi perfil». */
 export const CAMPOS_PROPIOS = [
   "firstName", "lastName", "phone", "specialty", "cedulaProfesional", "especialidad", "cedulaEspecialidad",
@@ -77,6 +79,29 @@ export function cambiosDeMiPerfil(
   for (const k of CAMPOS_PROPIOS) if ((inicial[k] ?? "") !== (actual[k] ?? "")) parche[k] = actual[k];
   return parche;
 }
+
+/** Los datos propios tal como los lee «Mi perfil» (y Configuración → Perfil) de la fila del usuario. */
+export function datosPropiosDeUsuario(u: Partial<Record<CampoPropio, string | null | undefined>> | null | undefined): Record<CampoPropio, string> {
+  const d = {} as Record<CampoPropio, string>;
+  for (const k of CAMPOS_PROPIOS) d[k] = (u?.[k] ?? "") as string;
+  // Como en Equipo: «dental» se lee como «Odontología General»; lo desconocido, tal cual.
+  d.specialty = especialidadParaElSelector(u?.specialty);
+  return d;
+}
+
+/** El texto visible de cada especialidad del selector: las mismas llaves i18n que Equipo. */
+export const LLAVE_ESPECIALIDAD: Record<string, string> = {
+  "Odontología General": "settings.team.specGeneral",
+  Ortodoncia: "settings.team.specOrtho",
+  Endodoncia: "settings.team.specEndo",
+  Periodoncia: "settings.team.specPerio",
+  "Cirugía Maxilofacial": "settings.team.specMaxillofacial",
+  Implantología: "settings.team.specImplant",
+  Odontopediatría: "settings.team.specPediatric",
+  Prostodoncia: "settings.team.specProstho",
+  "Estética Dental": "settings.team.specEsthetic",
+  Otra: "settings.team.specOther",
+};
 
 export interface TextosMiPerfil {
   titulo: string;

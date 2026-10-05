@@ -29,19 +29,22 @@ describe("WIRE_MATERIAL_OPTIONS", () => {
   it("contiene SS para mecánicas de cierre", () => {
     const ss = WIRE_MATERIAL_OPTIONS.find((o) => o.key === "SS");
     assert.ok(ss);
-    assert.match(ss!.hint, /cierre|working/i);
+    assert.match(ss!.hint, /cierre/i);
+    assert.doesNotMatch(ss!.hint, /working/i);
   });
 
   it("contiene TMA para detalles", () => {
     const tma = WIRE_MATERIAL_OPTIONS.find((o) => o.key === "TMA");
     assert.ok(tma);
-    assert.match(tma!.hint, /detalles|finishing|springs/i);
+    assert.match(tma!.hint, /detalles/i);
+    assert.doesNotMatch(tma!.hint, /finishing|springs/i);
   });
 
-  it("contiene Multi-stranded", () => {
+  it("contiene el multitrenzado, en español (revisión de Chrome ws1-t9 #10)", () => {
     const m = WIRE_MATERIAL_OPTIONS.find((o) => o.key === "MULTI");
     assert.ok(m);
-    assert.match(m!.label, /Multi/i);
+    assert.equal(m!.label, "Multitrenzado");
+    assert.doesNotMatch(m!.label, /stranded/i);
   });
 
   it("contiene Cr-Co (Elgiloy) para custom", () => {

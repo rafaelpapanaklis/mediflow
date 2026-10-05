@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake, ImagePlus, Trash2, Lock } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
@@ -27,6 +27,9 @@ import { reservaAlCambiarVisibilidad } from "@/lib/reserva-web/estado";
 import { getResenasSettings } from "@/lib/reminders/config";
 import { useTextosResena } from "@/lib/reviews/textos-resena";
 import toast from "react-hot-toast";
+import { ESPECIALIDADES_EQUIPO, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
+import { rolLlevaDatosClinicos } from "@/lib/team/parche-miembro";
+import { LLAVE_ESPECIALIDAD, cambiosDeMiPerfil, datosPropiosDeUsuario, textosMiPerfil } from "@/lib/team/mis-datos-profesionales";
 import { claveAvisoErrorGcal } from "@/lib/google-calendar-callback";
 import dynamic from "next/dynamic";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
@@ -74,12 +77,8 @@ const ROL_LEGIBLE: Record<string, string> = {
   SUPER_ADMIN: "settings.team.roleSuperAdmin", ADMIN: "settings.team.roleAdmin", DOCTOR: "settings.team.roleDoctor",
   RECEPTIONIST: "settings.team.roleReceptionist", READONLY: "settings.team.roleReadonly",
 };
-// C-113 (ws1-t8): hay dos «Mi perfil»; este apartado solo lleva lo básico y
-// enlaza al completo (cédula y especialidad), que es el del menú de la foto.
-const MI_PERFIL_COMPLETO = {
-  es: { antes: "Tu cédula, tu especialidad y el resto de tus datos profesionales están en ", enlace: "Mi perfil", despues: " (el menú con tu nombre, abajo a la izquierda del menú lateral).", despuesClasico: " (el menú con tu nombre, abajo a la izquierda del menú lateral)." },
-  en: { antes: "Your license, specialty and other professional details are in ", enlace: "My profile", despues: " (the menu with your name, at the bottom left of the side menu).", despuesClasico: " (the menu with your name, at the bottom left of the side menu)." },
-} as const;
+// Configuración → Perfil lleva TODO lo propio (nombre, teléfono y, para quien atiende, cédula y especialidad): ya no manda
+// a otro «Mi perfil» (el aviso era circular: la pestaña ya se llama así). Los textos salen de lib/team/mis-datos-profesionales.
 
 const txPerfilLocale = (locale: string | null | undefined): "es" | "en" => (locale === "en" ? "en" : "es");
 // C-114 (ws1-t8, decisión 10): ocultar la clínica cierra también su reserva web.
@@ -154,7 +153,7 @@ const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caido
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, gcalClinica, reservaWeb }: Props) {
   const t = useT();
-  const txPerfil = MI_PERFIL_COMPLETO[useLocale().startsWith("en") ? "en" : "es"];
+  const txPerfil = textosMiPerfil(useLocale());
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
   // «Ver configuración» concedido persona a persona desde Equipo → Permisos:
   // ese entraba antes de esta tarea y sigue viendo lo mismo que veía. Se lee
@@ -177,6 +176,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const [saving,   setSaving]   = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [user,     setUser]     = useState(initUser);
+  // Datos profesionales propios (cédula…), con lo guardado como base: solo viaja lo que la persona cambió.
+  const [prof, setProf] = useState(() => datosPropiosDeUsuario(initUser));
+  const perfilGuardado = useRef(datosPropiosDeUsuario(initUser));
+  const llevaDatosProfesionales = rolLlevaDatosClinicos(String(initUser?.role ?? ""));
+  const setProfCampo = (k: "specialty" | "cedulaProfesional" | "especialidad" | "cedulaEspecialidad") =>
+    (e: { target: { value: string } }) => setProf((d) => ({ ...d, [k]: e.target.value }));
   const [clinic,   setClinic]   = useState(initClinic);
   // ws1-t11 (11c): encendido si la clínica nunca lo tocó (lo de siempre).
   const pedirResena = getResenasSettings(clinic as any).alTerminar;
@@ -528,13 +533,24 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   }
 
   async function saveUser() {
+    const actual = { ...prof, firstName: user.firstName ?? "", lastName: user.lastName ?? "", phone: user.phone ?? "" };
+    if (!actual.firstName.trim() || !actual.lastName.trim()) { toast.error(txPerfil.errores.vacio); return; }
+    const parche = cambiosDeMiPerfil(perfilGuardado.current, actual);
+    // Quien no atiende (recepción, solo lectura) nunca manda datos profesionales.
+    if (!llevaDatosProfesionales) for (const k of ["specialty", "cedulaProfesional", "especialidad", "cedulaEspecialidad"] as const) delete parche[k];
+    if (Object.keys(parche).length === 0) { toast.success(t("settings.client.profileSavedToast")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/users/me", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ firstName:user.firstName, lastName:user.lastName, phone:user.phone, specialty:user.specialty }),
+        body: JSON.stringify(parche),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        toast.error(typeof j?.error === "string" ? j.error : t("settings.client.saveErrorToast"));
+        return;
+      }
+      perfilGuardado.current = actual;
       toast.success(t("settings.client.profileSavedToast"));
     } catch { toast.error(t("settings.client.saveErrorToast")); } finally { setSaving(false); }
   }
@@ -1087,9 +1103,6 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 titulo={t("settings.client.profileTitle")}
                 pie={<BotonGuardar onClick={saveUser} guardando={saving} texto={t("settings.client.saveProfileBtn")} textoGuardando={t("common.saving")} />}
               >
-                <Aviso tono="info">
-                  {txPerfil.antes}<Enlace href="/dashboard/mi-perfil">{txPerfil.enlace}</Enlace>{txPerfil.despues /* C-113: con el menú nuevo, el de tu nombre está abajo a la izquierda */}
-                </Aviso>
                 <Campos2>
                   <Campo etiqueta={t("settings.client.firstNameLabel")}>
                     <Entrada value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} />
@@ -1106,6 +1119,32 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     <Entrada value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} />
                   </Campo>
                 </Campos2>
+                {llevaDatosProfesionales && (
+                  <>
+                    <SubtituloGrupo>{txPerfil.profesionales}</SubtituloGrupo>
+                    <Aviso tono="info">{txPerfil.profesionalesAyuda}</Aviso>
+                    <Campos2>
+                      <Campo etiqueta={txPerfil.especialidadEquipo}>
+                        <Selector value={prof.specialty} onChange={setProfCampo("specialty")}>
+                          <option value="">{txPerfil.sinEspecialidad}</option>
+                          {ESPECIALIDADES_EQUIPO.map((id) => <option key={id} value={id}>{t(LLAVE_ESPECIALIDAD[id])}</option>)}
+                          {opcionFueraDeLista(prof.specialty) && <option value={prof.specialty}>{prof.specialty}</option>}
+                        </Selector>
+                      </Campo>
+                      <Campo etiqueta={txPerfil.cedula}>
+                        <Entrada value={prof.cedulaProfesional} onChange={setProfCampo("cedulaProfesional")} autoComplete="off" />
+                      </Campo>
+                    </Campos2>
+                    <Campos2>
+                      <Campo etiqueta={txPerfil.especialidadOficial}>
+                        <Entrada value={prof.especialidad} onChange={setProfCampo("especialidad")} placeholder={txPerfil.especialidadOficialEjemplo} autoComplete="off" />
+                      </Campo>
+                      <Campo etiqueta={txPerfil.cedulaEspecialidad}>
+                        <Entrada value={prof.cedulaEspecialidad} onChange={setProfCampo("cedulaEspecialidad")} autoComplete="off" />
+                      </Campo>
+                    </Campos2>
+                  </>
+                )}
               </Seccion>
             )}
 
@@ -1192,7 +1231,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 </Seccion>
 
                 {/* Checklist real de Facturapi, entre la captura fiscal y el CSD. */}
-                <CfdiReadinessCard refreshKey={cfdiStatusKey} />
+                <CfdiReadinessCard refreshKey={cfdiStatusKey} omitirAvisos={["EXENTO_PERSONA_MORAL"]} />
                 <AjusteRetencionesCfdi refreshKey={cfdiStatusKey} />
 
                 <Seccion
@@ -1378,10 +1417,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   <Seccion
                     icono={<CreditCard size={18} strokeWidth={1.75} aria-hidden />}
                     titulo={t("settings.client.anticiposTitle")}
-                    subtitulo="El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse."
+                    subtitulo="El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse. Ahí también está el cobro automático con tarjeta de las mensualidades (apagado de fábrica)."
                   >
                     <Acciones>
-                      <EnlaceBoton href="/dashboard/settings/anticipos" recto>Configurar anticipos</EnlaceBoton>
+                      <EnlaceBoton href="/dashboard/settings/anticipos" recto>Configurar anticipos y cobro automático</EnlaceBoton>
                     </Acciones>
                   </Seccion>
                 )}
@@ -1951,15 +1990,27 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <div className="card__title">{t("settings.client.profileTitle")}</div>
           </div>
           <div className="card__body space-y-4">
-          <p className="text-xs text-muted-foreground">
-            {txPerfil.antes}<a href="/dashboard/mi-perfil" className="underline">{txPerfil.enlace}</a>{txPerfil.despuesClasico}
-          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="field-new"><label className="field-new__label">{t("settings.client.firstNameLabel")}</label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
             <div className="field-new"><label className="field-new__label">{t("settings.client.lastNameLabel")}</label><Input value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} /></div>
           </div>
           <div className="field-new"><label className="field-new__label">{t("settings.client.emailLabel")}</label><Input value={user.email ?? ""} disabled className="opacity-60" /></div>
           <div className="field-new"><label className="field-new__label">{t("settings.client.phoneLabel")}</label><Input value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} /></div>
+          {llevaDatosProfesionales && (
+            <>
+              <p className="text-xs text-muted-foreground">{txPerfil.profesionalesAyuda}</p>
+              <div className="field-new"><label className="field-new__label">{txPerfil.especialidadEquipo}</label>
+                <select className="input" value={prof.specialty} onChange={setProfCampo("specialty")}>
+                  <option value="">{txPerfil.sinEspecialidad}</option>
+                  {ESPECIALIDADES_EQUIPO.map((id) => <option key={id} value={id}>{t(LLAVE_ESPECIALIDAD[id])}</option>)}
+                  {opcionFueraDeLista(prof.specialty) && <option value={prof.specialty}>{prof.specialty}</option>}
+                </select>
+              </div>
+              <div className="field-new"><label className="field-new__label">{txPerfil.cedula}</label><Input value={prof.cedulaProfesional} onChange={setProfCampo("cedulaProfesional")} autoComplete="off" /></div>
+              <div className="field-new"><label className="field-new__label">{txPerfil.especialidadOficial}</label><Input value={prof.especialidad} onChange={setProfCampo("especialidad")} placeholder={txPerfil.especialidadOficialEjemplo} autoComplete="off" /></div>
+              <div className="field-new"><label className="field-new__label">{txPerfil.cedulaEspecialidad}</label><Input value={prof.cedulaEspecialidad} onChange={setProfCampo("cedulaEspecialidad")} autoComplete="off" /></div>
+            </>
+          )}
           <div className="flex justify-end pt-2">
             <Button onClick={saveUser} disabled={saving}>{saving ? t("common.saving") : t("settings.client.saveProfileBtn")}</Button>
           </div>
@@ -2090,7 +2141,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               Checklist real de la organización en Facturapi (is_production_ready /
               pending_steps). Va entre la captura fiscal y la subida del CSD: dice
               qué falta justo antes de la card que resuelve el paso más común. */}
-          <CfdiReadinessCard refreshKey={cfdiStatusKey} />
+          <CfdiReadinessCard refreshKey={cfdiStatusKey} omitirAvisos={["EXENTO_PERSONA_MORAL"]} />
           <AjusteRetencionesCfdi refreshKey={cfdiStatusKey} />
 
           {/* ── CERTIFICADOS CSD ── */}
@@ -2353,11 +2404,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <div className="w-11 h-11 rounded-2xl bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center text-2xl">💳</div>
                 <div>
                   <h2 className="text-base font-bold">{t("settings.client.anticiposTitle")}</h2>
-                  <p className="text-sm text-muted-foreground">El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse.</p>
+                  <p className="text-sm text-muted-foreground">El bot pide un anticipo al agendar y la cita se confirma sola al acreditarse. Ahí también está el cobro automático con tarjeta de las mensualidades (apagado de fábrica).</p>
                 </div>
               </div>
               <a href="/dashboard/settings/anticipos" className="text-sm font-semibold text-brand-600 hover:underline">
-                Configurar anticipos
+                Configurar anticipos y cobro automático
               </a>
             </div>
           )}

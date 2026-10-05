@@ -1,4 +1,5 @@
 "use client";
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
@@ -301,9 +302,8 @@ function formatWhen(iso: string, t: TFunction, timeZone?: string | null): string
   const wd = cap(
     new Intl.DateTimeFormat(intlLocale, { weekday: "short", timeZone: zonaValida(timeZone) }).format(d).replace(".", ""),
   );
-  const dm = new Intl.DateTimeFormat(intlLocale, { day: "numeric", month: "short", timeZone: zonaValida(timeZone) })
-    .format(d)
-    .replace(".", "");
+  // Con año («Jue 15 oct 2026»): revisión de Chrome, ws1-t9 #9.
+  const dm = fechaPanel(d, timeZone, intlLocale);
   return `${wd} ${dm} · ${time}`;
 }
 

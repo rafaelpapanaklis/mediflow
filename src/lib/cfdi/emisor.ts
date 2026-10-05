@@ -235,6 +235,15 @@ export function avisoExentoPersonaMoral(rfc: unknown, modo: unknown, locale?: st
 }
 
 /**
+ * Quita los avisos que la pantalla ya muestra por otro lado. En Configuración → Facturación el aviso del RFC de
+ * persona moral en «Exento» sale EN VIVO sobre el formulario; la tarjeta «¿Listo para timbrar?» traía el mismo
+ * aviso desde el servidor y se veía dos veces (revisión de Chrome, ws1-t9 #12).
+ */
+export function sinAvisosYaMostrados(avisos: AvisoEmisor[] | null | undefined, codigos: readonly string[]): AvisoEmisor[] {
+  return (avisos ?? []).filter((a) => !codigos.includes(a.code));
+}
+
+/**
  * Todo lo que hay que avisarle al dueño sobre su configuración de emisor, del más grave al
  * menos. Nada de esto bloquea el timbrado: lo bloquearía el SAT (CSD vencido) o es criterio
  * del contador (exento).

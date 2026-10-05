@@ -12,7 +12,7 @@ import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cambiosDeMiPerfil, leerCambiosPropios } from "@/lib/team/mis-datos-profesionales";
+import { cambiosDeMiPerfil, datosPropiosDeUsuario, leerCambiosPropios } from "@/lib/team/mis-datos-profesionales";
 
 const yo: any = {
   id: "doc-daisy", clinicId: "c1", role: "DOCTOR", permissionsOverride: [],
@@ -106,4 +106,32 @@ test("sin settings.view, «Mi perfil» lleva a /dashboard/mi-perfil (menú nuevo
   assert.doesNotMatch(readFileSync(join(process.cwd(), "src/app/dashboard/mi-perfil/page.tsx"), "utf8"), /requirePermissionOrRedirect/);
   assert.match(pagina, /id="mp-rol"[^>]*disabled/);
   assert.match(pagina, /id="mp-correo"[^>]*disabled/);
+});
+
+// ── Revisión de Chrome (ws1-t9, #3): Configuración → Perfil edita la cédula en el sitio ──
+test("Configuración → Perfil: la cédula y la especialidad se editan ahí mismo, sin mandar a «Mi perfil»", () => {
+  const src = readFileSync(join(process.cwd(), "src/app/dashboard/settings/settings-client.tsx"), "utf8");
+  const a = src.indexOf('tab === "perfil" && ve("perfil")');
+  const b = src.indexOf('tab === "facturacion"', a);
+  const rediseno = src.slice(a, b);
+  assert.match(rediseno, /cedulaProfesional/, "la pestaña Perfil trae el campo de cédula");
+  assert.match(rediseno, /cedulaEspecialidad/);
+  assert.doesNotMatch(src, /href="\/dashboard\/mi-perfil"/, "ya no hay un enlace circular a «Mi perfil»");
+  assert.doesNotMatch(src, /están en /, "ya no dice que la cédula «está en Mi perfil»");
+  // la misma ruta y las mismas reglas que Equipo → Editar: solo viaja lo que cambió
+  assert.match(src, /cambiosDeMiPerfil\(perfilGuardado\.current/);
+});
+
+test("datosPropiosDeUsuario: lee la fila del usuario con la especialidad como la ve el selector", () => {
+  const d = datosPropiosDeUsuario(yo);
+  assert.equal(d.cedulaProfesional, "1234567");
+  assert.equal(d.especialidad, "");
+  assert.equal(d.specialty, "Odontología General"); // «dental» → opción de la lista
+  assert.equal(datosPropiosDeUsuario(null).cedulaProfesional, "");
+});
+
+test("un dueño que también atiende guarda su cédula con las mismas validaciones", () => {
+  const r = leerCambiosPropios({ cedulaProfesional: "  7654321 ", especialidad: "Ortodoncia" });
+  assert.deepEqual(r.ok && r.data, { cedulaProfesional: "7654321", especialidad: "Ortodoncia" });
+  assert.equal(leerCambiosPropios({ cedulaProfesional: "9".repeat(31) }).ok, false);
 });

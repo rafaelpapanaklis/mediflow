@@ -17,6 +17,11 @@ const es = {
   interruptor: "Permitir el cobro automático con tarjeta",
   interruptorAyuda:
     "Apagado, todo se cobra a mano como siempre. Encendido, aparece «Activar cobro automático» en el cobro de cada caso a plazos; nada se activa solo.",
+  // ws1-t9 (#18): la sección ya no se calla: dice por qué todavía no se puede encender.
+  insigniaNoDisponible: "No disponible",
+  sinCuenta:
+    "Se enciende aquí cuando conectes tu cuenta de Mercado Pago (arriba, en «Cobros con Mercado Pago»). Mientras tanto todo se cobra a mano, como siempre.",
+  aunNoDisponible: "Esta función todavía no está disponible en tu cuenta de DaleControl. Mientras tanto todo se cobra a mano, como siempre.",
   sinSql: "Falta pegar el SQL de esta función (sql/ws1-t6-cobro-automatico-mp.sql). Mientras tanto queda oculta en toda la clínica.",
   vivos: (n: number) =>
     n === 1
@@ -84,6 +89,10 @@ const en: Textos = {
   interruptor: "Allow automatic card charges",
   interruptorAyuda:
     "Off, everything is charged manually as always. On, «Turn on automatic charges» appears in each payment-plan case; nothing turns on by itself.",
+  insigniaNoDisponible: "Not available",
+  sinCuenta:
+    "You turn it on here once you connect your Mercado Pago account (above, in «Mercado Pago payments»). Until then everything is charged manually, as always.",
+  aunNoDisponible: "This feature is not available in your DaleControl account yet. Until then everything is charged manually, as always.",
   sinSql: "The SQL for this feature is not applied yet (sql/ws1-t6-cobro-automatico-mp.sql). Until then it stays hidden.",
   vivos: (n: number) =>
     n === 1

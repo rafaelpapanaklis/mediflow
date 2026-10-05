@@ -21,7 +21,7 @@ import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 import { CajaNueva } from "@/components/dashboard/caja-rediseno/caja-nueva";
-import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
+import { fechaHoraPanel, fechaPanel } from "@/lib/formato-fecha-panel";
 import { reembolsosEnEfectivoDelCorte, type MovimientosDelCorte } from "@/lib/dinero/corte-del-historial";
 import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
@@ -202,13 +202,12 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
     new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: tz });
   // F-06 (comprobación final): EL formato del panel («4 oct 2026, 8:36 a.m.»), no «04-oct, 08:36 a.m.».
   const fmtDateTime = (iso: string) => fechaHoraPanel(iso, tz, locale);
-  /** "27 jul" — prefijo de día en las filas cuando el turno cruza días. */
-  const fmtDayShort = (iso: string) =>
-    new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: tz });
-  /** "Jueves, 27 de jul" — encabezado del grupo de día dentro de la tabla. */
+  /** "27 jul 2026" — prefijo de día en las filas cuando el turno cruza días (con año, ws1-t9 #9). */
+  const fmtDayShort = (iso: string) => fechaPanel(iso, tz, locale);
+  /** "Jueves, 27 jul 2026" — encabezado del grupo de día dentro de la tabla. */
   const fmtDayLong = (iso: string) => {
-    const s = new Date(iso).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short", timeZone: tz });
-    return s.charAt(0).toUpperCase() + s.slice(1);
+    const dia = new Date(iso).toLocaleDateString("es-MX", { weekday: "long", timeZone: tz });
+    return `${dia.charAt(0).toUpperCase()}${dia.slice(1)}, ${fechaPanel(iso, tz, locale)}`;
   };
   /** dd/mm/aaaa y hh:mm de 24 h — para el CSV: Excel sí los parsea como fecha y hora. */
   const fmtDayNumeric = (iso: string) =>

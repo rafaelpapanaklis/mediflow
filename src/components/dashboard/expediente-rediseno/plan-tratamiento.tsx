@@ -1,8 +1,9 @@
 "use client";
 
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { Calendar, CheckCircle2, Clock, CreditCard, Edit, Hourglass, ListChecks, Pill, Plus, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { esDescripcionDePlan, MARCA_PLAN } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { RaizExpediente } from "./raiz";
@@ -61,6 +62,7 @@ export function PlanTratamiento({
   tratamientos, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
 }: PlanTratamientoProps) {
   const t = useT();
+  const locale = useLocale();
 
   // Abierto = por colocar, en curso, pausado o en retención. Un caso terminado
   // o abandonado se consulta en su pestaña; aquí ya no es un tratamiento vivo.
@@ -224,7 +226,7 @@ export function PlanTratamiento({
                 )}
                 {plan.nextExpectedDate && (
                   <span className={s.planDato}>
-                    <Clock size={12} strokeWidth={1.75} aria-hidden /> {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }) })}
+                    <Clock size={12} strokeWidth={1.75} aria-hidden /> {t("patients.treatment.next", { date: fechaPanel(plan.nextExpectedDate, null, locale) })}
                   </span>
                 )}
               </div>

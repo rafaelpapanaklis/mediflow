@@ -23,14 +23,14 @@ export const WIRE_MATERIAL_OPTIONS: ReadonlyArray<{
     label: "NiTi convencional",
     hint: "Casos rutinarios estándar",
   },
-  { key: "SS", label: "Acero (SS)", hint: "Mecánicas de cierre y working" },
-  { key: "TMA", label: "TMA / β-titanio", hint: "Detalles, finishing, springs" },
+  { key: "SS", label: "Acero (SS)", hint: "Mecánicas de cierre y de trabajo" },
+  { key: "TMA", label: "TMA / β-titanio", hint: "Detalles, acabado, resortes" },
   {
     key: "MULTI",
-    label: "Multi-stranded",
-    hint: "Trenzado · arcos retención provisional",
+    label: "Multitrenzado",
+    hint: "Trenzado · arcos de retención provisional",
   },
-  { key: "CRCO", label: "Cr-Co (Elgiloy)", hint: "Quad-helix, Nance, custom" },
+  { key: "CRCO", label: "Cr-Co (Elgiloy)", hint: "Quad-helix, Nance, a la medida" },
 ];
 
 export const WIRE_GAUGE_ROUND = [

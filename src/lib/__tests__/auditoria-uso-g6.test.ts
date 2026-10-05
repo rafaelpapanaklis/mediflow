@@ -91,9 +91,11 @@ test("C-112: Servicios no promete que gobierna la reserva web", () => {
 });
 
 // ── C-113 · dos «Mi perfil» ────────────────────────────────────────────────
-test("C-113: Configuración → Mi perfil enlaza al completo y las dos especialidades se distinguen", () => {
+test("C-113: Configuración → Mi perfil lleva la cédula ahí mismo (sin enlace circular) y las dos especialidades se distinguen", () => {
   const ajustes = leer("app/dashboard/settings/settings-client.tsx");
-  assert.ok((ajustes.match(/href="\/dashboard\/mi-perfil"/g) ?? []).length >= 2, "los dos caminos enlazan a /dashboard/mi-perfil");
+  // ws1-t9 (#3): antes decía que la cédula estaba «en Mi perfil» desde la propia pestaña Mi perfil.
+  assert.equal((ajustes.match(/href="\/dashboard\/mi-perfil"/g) ?? []).length, 0, "ya no hay enlace circular");
+  assert.ok((ajustes.match(/cedulaProfesional/g) ?? []).length >= 2, "los dos caminos de la pantalla editan la cédula");
   const textos = leer("lib/team/mis-datos-profesionales.ts");
   assert.doesNotMatch(textos, /especialidadEquipo: "Especialidad",/);
   assert.doesNotMatch(textos, /especialidadOficial: "Especialidad oficial",/);

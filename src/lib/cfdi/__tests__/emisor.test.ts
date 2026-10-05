@@ -141,3 +141,25 @@ test("C-44 · «Activo» solo con todo: organización, RFC, régimen, CP (y CSD 
   assert.equal(textoDeFaltantes([]), null);
   assert.deepEqual(faltantesDelEmisor({ ...lista, live: true }), ["csd"], "en Live, sin CSD no se timbra");
 });
+
+// ── Revisión de Chrome (ws1-t9, #12): el aviso de persona moral exenta se muestra UNA vez ──
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { sinAvisosYaMostrados } from "../emisor";
+
+test("#12 · la tarjeta de «listo para timbrar» no repite el aviso que ya sale en vivo sobre el formulario", () => {
+  const todos = avisosDelEmisor({ rfcEmisor: RFC_MORAL, cfdiTaxMode: "exento", ahora: new Date("2026-10-05T12:00:00Z"), locale: "es" } as any);
+  assert.deepEqual(todos.map((a) => a.code), ["EXENTO_PERSONA_MORAL"]);
+  assert.deepEqual(sinAvisosYaMostrados(todos, ["EXENTO_PERSONA_MORAL"]), []);
+  assert.equal(sinAvisosYaMostrados(null, ["X"]).length, 0);
+  // los demás avisos (CSD, RFC distinto) sí se conservan
+  const mezcla = [{ code: "CSD_VENCIDO", nivel: "peligro", texto: "x" }, ...todos] as any;
+  assert.deepEqual(sinAvisosYaMostrados(mezcla, ["EXENTO_PERSONA_MORAL"]).map((a) => a.code), ["CSD_VENCIDO"]);
+});
+
+test("#12 · Configuración → Facturación pide a la tarjeta que omita ese aviso, en las dos versiones de la pantalla", () => {
+  const src = readFileSync(join(process.cwd(), "src/app/dashboard/settings/settings-client.tsx"), "utf8");
+  const usos = src.match(/<CfdiReadinessCard [^>]*>/g) ?? [];
+  assert.equal(usos.length, 2);
+  for (const u of usos) assert.match(u, /omitirAvisos=\{\["EXENTO_PERSONA_MORAL"\]\}/);
+});

@@ -7,26 +7,12 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { RaizRediseno } from "@/components/dashboard/piezas-rediseno/raiz";
 import { Boton, Cabecera, Campo, Tarjeta, clases as s } from "@/components/dashboard/piezas-rediseno/piezas";
 import { ESPECIALIDADES_EQUIPO, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
-import { cambiosDeMiPerfil, textosMiPerfil, type CampoPropio } from "@/lib/team/mis-datos-profesionales";
+import { LLAVE_ESPECIALIDAD, cambiosDeMiPerfil, textosMiPerfil, type CampoPropio } from "@/lib/team/mis-datos-profesionales";
 
 type Datos = Record<CampoPropio, string>;
 
 // `.campoFila` alinea abajo (pensado para un botón al lado); aquí hay campos con ayuda debajo: arriba.
 const FILA = { alignItems: "flex-start", marginBottom: 12 } as const;
-
-// El texto visible de cada especialidad: las mismas llaves que Equipo.
-const NOMBRE_ESPECIALIDAD: Record<string, string> = {
-  "Odontología General": "settings.team.specGeneral",
-  Ortodoncia: "settings.team.specOrtho",
-  Endodoncia: "settings.team.specEndo",
-  Periodoncia: "settings.team.specPerio",
-  "Cirugía Maxilofacial": "settings.team.specMaxillofacial",
-  Implantología: "settings.team.specImplant",
-  Odontopediatría: "settings.team.specPediatric",
-  Prostodoncia: "settings.team.specProstho",
-  "Estética Dental": "settings.team.specEsthetic",
-  Otra: "settings.team.specOther",
-};
 
 const ROL: Record<string, string> = {
   SUPER_ADMIN: "settings.team.roleSuperAdmin",
@@ -121,7 +107,7 @@ export function MiPerfilClient({ inicial, email, role, clinico }: {
               <Campo etiqueta={tx.especialidadEquipo} htmlFor="mp-specialty">
                 <select id="mp-specialty" className={s.campoEntrada} value={datos.specialty} onChange={set("specialty")}>
                   <option value="">{tx.sinEspecialidad}</option>
-                  {ESPECIALIDADES_EQUIPO.map((id) => <option key={id} value={id}>{t(NOMBRE_ESPECIALIDAD[id])}</option>)}
+                  {ESPECIALIDADES_EQUIPO.map((id) => <option key={id} value={id}>{t(LLAVE_ESPECIALIDAD[id])}</option>)}
                   {opcionFueraDeLista(datos.specialty) && <option value={datos.specialty}>{datos.specialty}</option>}
                 </select>
               </Campo>

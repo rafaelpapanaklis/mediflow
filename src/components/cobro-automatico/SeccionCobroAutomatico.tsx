@@ -11,11 +11,13 @@ import { Repeat } from "lucide-react";
 import toast from "react-hot-toast";
 import { Aviso, FilaInterruptor, Insignia, Seccion } from "@/components/dashboard/configuracion-rediseno/piezas";
 import type { EstadoConfig } from "@/lib/cobro-automatico/servicio.server";
+import { disponibilidadCobroAutomatico } from "@/lib/cobro-automatico/disponibilidad";
 import { useTextosCobroAutomatico } from "./textos";
 
 export function SeccionCobroAutomatico({ cuentaConectada }: { cuentaConectada: boolean }) {
   const t = useTextosCobroAutomatico();
-  const [estado, setEstado] = useState<EstadoConfig | null>(null);
+  // undefined = consultando; null = la ruta falló.
+  const [estado, setEstado] = useState<EstadoConfig | null | undefined>(undefined);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -30,7 +32,21 @@ export function SeccionCobroAutomatico({ cuentaConectada }: { cuentaConectada: b
     };
   }, [cuentaConectada]);
 
-  if (!cuentaConectada || !estado || !estado.conectado || !estado.tablas) return null;
+  const disponibilidad = disponibilidadCobroAutomatico(cuentaConectada, estado);
+  if (disponibilidad === "cargando") return null;
+  if (disponibilidad !== "listo" || !estado) {
+    // Sin cuenta o sin la función en la clínica: la tarjeta se ve y dice por qué (nada que encender todavía).
+    return (
+      <Seccion
+        icono={<Repeat size={18} strokeWidth={1.75} aria-hidden />}
+        titulo={t.configTitulo}
+        subtitulo={t.configSubtitulo}
+        extra={<Insignia>{t.insigniaNoDisponible}</Insignia>}
+      >
+        <Aviso tono="info">{disponibilidad === "sin-cuenta" ? t.sinCuenta : t.aunNoDisponible}</Aviso>
+      </Seccion>
+    );
+  }
 
   async function cambiar(siguiente: boolean) {
     setGuardando(true);

@@ -7,6 +7,7 @@
  * ficha del paciente. Solo cambia la ropa.
  */
 
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Video } from "lucide-react";
@@ -151,7 +152,8 @@ function cuandoLegible(iso: string, t: TFunction, timeZone?: string | null): str
   if (dias === 1) return t("home.upcoming.whenTomorrow", { time: hora });
 
   const semana = capitalizar(new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: zonaValida(timeZone) }).format(d).replace(".", ""));
-  const diaMes = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: zonaValida(timeZone) }).format(d).replace(".", "");
+  // Con año («Jue 15 oct 2026»): revisión de Chrome, ws1-t9 #9.
+  const diaMes = fechaPanel(d, timeZone, locale);
   return `${semana} ${diaMes} · ${hora}`;
 }
 

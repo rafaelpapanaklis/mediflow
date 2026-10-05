@@ -106,7 +106,9 @@ test("C-109: el nombre del permiso ya no asusta y Analítica/Reseñas usan el «
 test("C-113: «Mi perfil» dice dónde está de verdad el menú y Equipo usa los mismos nombres", () => {
   const ajustes = leer("app/dashboard/settings/settings-client.tsx");
   assert.doesNotMatch(ajustes, /menú de tu foto, arriba a la derecha/);
-  assert.match(ajustes, /abajo a la izquierda del menú lateral/);
+  // ws1-t9 (#3): ya no hay texto que mande a «Mi perfil» desde la pestaña que se llama así; la cédula se edita ahí mismo.
+  assert.doesNotMatch(ajustes, /abajo a la izquierda del menú lateral/);
+  assert.match(ajustes, /cedulaProfesional/);
   assert.equal(valor(ES, "settings.team.specialtyLabel"), "Área en la clínica (agenda y equipo)");
   assert.equal(valor(ES, "settings.team.especialidadOficialLabel"), "Especialidad como dice su cédula (NOM-024)");
 });

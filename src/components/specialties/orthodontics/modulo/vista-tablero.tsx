@@ -40,6 +40,7 @@ import { BotonHojaControl } from "@/components/specialties/orthodontics/agenda/B
 import { horaEnZona } from "./fechas";
 import { progresoDeControles, textoControlQueSigue } from "@/lib/orthodontics/plan-detalle";
 import { RUTA_COMPLETAR_EN_BLOQUE } from "@/lib/orthodontics/casos-incompletos-ruta";
+import { recorteDeIncompletos } from "@/lib/orthodontics/recorte-incompletos";
 import { FilaDeCasoIncompleto } from "./casos-incompletos";
 import { Pantalla, Tarjeta, Vacio } from "./piezas";
 import s from "./modulo.module.css";
@@ -224,7 +225,7 @@ export function VistaTablero({
           <Tarjeta
             icono={ClipboardList}
             titulo="Casos con diagnóstico o plan incompleto"
-            sub="Sobre todo los migrados de Dentalink. Cada uno lleva al paso que falta."
+            sub={`Sobre todo los migrados de Dentalink. Cada uno lleva al paso que falta.${recorteDeIncompletos(data.incompletos).leyenda ? ` ${recorteDeIncompletos(data.incompletos).leyenda}.` : ""}`}
             accion={
               // ws1-t8 (M8): con permiso, a la tabla para completar varios a la vez; sin él, a la lista de Alertas.
               puedeEditarCasos && data.incompletos.length > 1 ? (
@@ -232,19 +233,20 @@ export function VistaTablero({
                   Completar varios a la vez
                   <ChevronRight size={14} aria-hidden />
                 </Link>
-              ) : data.incompletos.length > 5 ? (
-                <Link href="/dashboard/orthodontics/alertas#casos-incompletos" className={s.enlace}>
-                  Ver los {data.incompletos.length}
-                  <ChevronRight size={14} aria-hidden />
-                </Link>
               ) : undefined
             }
           >
             <ul className={s.tarjetaLista}>
-              {data.incompletos.slice(0, 5).map((c) => (
+              {recorteDeIncompletos(data.incompletos).visibles.map((c) => (
                 <FilaDeCasoIncompleto key={c.planId} caso={c} puedeEditar={puedeEditarCasos} />
               ))}
             </ul>
+            {recorteDeIncompletos(data.incompletos).ocultos > 0 ? (
+              <Link href="/dashboard/orthodontics/alertas#casos-incompletos" className={s.enlace}>
+                Ver los {data.incompletos.length}
+                <ChevronRight size={14} aria-hidden />
+              </Link>
+            ) : null}
           </Tarjeta>
         ) : null}
 

@@ -108,7 +108,7 @@ export function tituloDePeriodo(vista: "dia" | "semana" | "mes", dayISO: string)
   const d = alMediodia(dayISO);
 
   if (vista === "dia") {
-    return `${DIA_LARGO[d.getUTCDay()]} ${d.getUTCDate()} de ${MES_LARGO[d.getUTCMonth()]}`;
+    return `${DIA_LARGO[d.getUTCDay()]} ${d.getUTCDate()} de ${MES_LARGO[d.getUTCMonth()]} de ${d.getUTCFullYear()}`;
   }
 
   if (vista === "semana") {

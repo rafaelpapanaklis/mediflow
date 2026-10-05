@@ -1,8 +1,9 @@
 "use client";
 
+import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { citasQueCuentan } from "@/lib/home/citas-que-cuentan";
 import { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
@@ -546,6 +547,7 @@ export function PatientDetailClient({
   puedeEditarAgenda = false,
 }: Props) {
   const t = useT();
+  const locale = useLocale();
   const textosConsulta = useTextosConsultaFicha();
   const textosFirma = useTextosFirmaControl();
   const router = useRouter();
@@ -2286,7 +2288,7 @@ export function PatientDetailClient({
                       </div>
                       {activePlan.nextExpectedDate && (
                         <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
-                          {t("patients.summary.nextSessionDate", { date: new Date(activePlan.nextExpectedDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }) })}
+                          {t("patients.summary.nextSessionDate", { date: fechaPanel(activePlan.nextExpectedDate, null, locale) })}
                         </div>
                       )}
                     </div>

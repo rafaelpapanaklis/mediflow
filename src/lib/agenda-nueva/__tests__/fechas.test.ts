@@ -86,8 +86,8 @@ test("inicioDeMes", () => {
 /* ── Títulos ───────────────────────────────────────────────────────────── */
 
 test("el título del Día es el del diseño", () => {
-  assert.equal(tituloDePeriodo("dia", "2026-09-02"), "Miércoles 2 de septiembre");
-  assert.equal(tituloDePeriodo("dia", "2026-09-16"), "Miércoles 16 de septiembre");
+  assert.equal(tituloDePeriodo("dia", "2026-09-02"), "Miércoles 2 de septiembre de 2026");
+  assert.equal(tituloDePeriodo("dia", "2026-09-16"), "Miércoles 16 de septiembre de 2026");
 });
 
 test("el título de la Semana es el del diseño, y cruza mes y año", () => {

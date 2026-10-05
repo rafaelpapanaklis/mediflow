@@ -41,7 +41,7 @@ export const ETIQUETA_DE_MATERIAL: Record<MaterialDeArco, string> = {
   SS: "SS",
   TMA: "TMA",
   BETA_TITANIUM: "β-Ti",
-  MULTISTRANDED: "Multi-stranded",
+  MULTISTRANDED: "Multitrenzado",
   CR_CO: "Cr-Co",
 };
 
