@@ -17,6 +17,9 @@ import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
 import { leerErrorContrasena, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
+import { COOKIE_CONTRATAR, esSlugReservadoDeContratar, planDelEnlaceDeAlta } from "@/lib/billing/contratar";
+import { marcarEnlaceDeContratacion } from "@/lib/billing/sin-promo.server";
+import { extractAuditMeta } from "@/lib/audit";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -53,12 +56,14 @@ const schema = z.object({
   ref: z.string().optional(), // referralCode de afiliado (atribución en el alta)
   campaign: z.string().optional(), // campaña del link de afiliado (?c=)
   coupon: z.string().optional(), // código de cupón/socio (best-effort, nunca rompe el alta)
+  sinPromo: z.boolean().optional(), // alta por /contratar/<plan>: sin la promo del primer mes
 });
 
 async function generateSlug(name: string) {
   let base = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 30);
-  let slug = base; let i = 1;
+  // «contratar» es una ruta del sitio (/contratar/<plan>): ninguna clínica la usa de página.
+  let slug = esSlugReservadoDeContratar(base) ? `${base}-1` : base; let i = esSlugReservadoDeContratar(base) ? 2 : 1;
   while (await prisma.clinic.findUnique({ where: { slug } })) { slug = `${base}-${i++}`; }
   return slug;
 }
@@ -75,6 +80,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = schema.parse(body);
+    // Enlace de contratación (/contratar/<plan>): el plan del enlace manda (la cookie que dejó la
+    // página; si no llegó, el del formulario del enlace), mensual. Ver lib/billing/contratar.ts.
+    const planDelEnlace = planDelEnlaceDeAlta(data, req.cookies.get(COOKIE_CONTRATAR)?.value);
+    if (planDelEnlace) {
+      data.plan = planDelEnlace;
+      data.billing = "monthly";
+    }
     const supabase = createClient();
 
     if (data.slug) {
@@ -281,6 +293,16 @@ export async function POST(req: NextRequest) {
     // tolera que sql/ws1-t6-ads-clics.sql aún no esté aplicado y no bloquea el alta.
     await guardarClickAdsDeLaAlta(clinic.id, (n) => req.cookies.get(n)?.value);
 
+    // Enlace de contratación: la marca (ese plan, mensual, tarjeta, sin la promo) queda del lado
+    // del servidor, en la bitácora de la clínica, para que la pantalla de pago y el checkout la
+    // lean otro día y en otra sesión.
+    if (planDelEnlace) {
+      const duenio = await prisma.user.findFirst({ where: { clinicId: clinic.id }, select: { id: true } });
+      if (duenio) {
+        await marcarEnlaceDeContratacion({ clinicId: clinic.id, userId: duenio.id, plan: planDelEnlace, ...extractAuditMeta(req) });
+      }
+    }
+
     // CompleteRegistration de Meta por la API de Conversiones (WS1-T4), en segundo
     // plano: no alarga el alta y nunca lanza. El eventId vuelve al navegador para
     // que el píxel mande el mismo y Meta los deduplique.
@@ -358,12 +380,15 @@ export async function POST(req: NextRequest) {
     // Alta exitosa → resetea contadores de fallo (IP + cuenta).
     await recordAuthSuccess(req, { scope: "auth-register", account: data.email });
 
-    return NextResponse.json({
+    const respuesta = NextResponse.json({
       success: true,
       // "applied" | "invalid" | null — informativo para el form (no bloquea)
       coupon: data.coupon ? (couponValid ? "applied" : "invalid") : null,
       metaEventId,
     });
+    // La cookie del enlace ya cumplió: la marca vive en el servidor.
+    if (planDelEnlace) respuesta.cookies.delete(COOKIE_CONTRATAR);
+    return respuesta;
   } catch (err: any) {
     // Campo inválido (p. ej. el WhatsApp) → 400 con el mensaje del campo. Antes
     // caía al 500 de abajo y el formulario mostraba el volcado JSON de issues,

@@ -53,6 +53,11 @@ interface Step3Props {
    * siguen siendo `values.plan` / `values.billing`.
    */
   planFijo?: boolean;
+  /**
+   * Enlace de contratación (/contratar/<plan>): SOLO ese plan, mensual y con tarjeta. Sin
+   * «Cambiar plan» ni otras tarjetas; el servidor lo vuelve a imponer al cobrar.
+   */
+  soloEstePlan?: boolean;
 }
 
 // Descripción corta por plan (display). Features y precios viven en plans.ts.
@@ -72,9 +77,9 @@ function vinetas(p: ApiPlan): string[] {
   return todas.slice(0, 3);
 }
 
-export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, planFijo = false }: Step3Props) {
+export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, planFijo = false, soloEstePlan = false }: Step3Props) {
   const canSubmit = values.acceptedTerms && !loading;
-  const [mostrarPlanes, setMostrarPlanes] = useState(!planFijo);
+  const [mostrarPlanes, setMostrarPlanes] = useState(!planFijo && !soloEstePlan);
 
   // Planes (precio/nombre/features) desde el endpoint público — sin hardcodear.
   const [plans, setPlans] = useState<ApiPlan[] | null>(null);
@@ -112,9 +117,11 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
                 <span className="dca-resumen__pill">{anual ? "Pago anual" : "Pago mensual"}</span>
               </span>
             </span>
-            <button type="button" className="dca-resumen__cambiar" onClick={() => setMostrarPlanes(true)}>
-              Cambiar plan
-            </button>
+            {!soloEstePlan && (
+              <button type="button" className="dca-resumen__cambiar" onClick={() => setMostrarPlanes(true)}>
+                Cambiar plan
+              </button>
+            )}
           </div>
         ) : (
           <div aria-hidden="true" style={{ height: 88, borderRadius: 16, background: "#f1f5f9", border: "1px solid #e2e8f0" }} />
@@ -166,8 +173,9 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
           <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
         </svg>
         <span>
-          Aquí no se cobra nada. El pago lo haces en el siguiente paso, dentro del panel: tarjeta u OXXO con
-          Stripe, o transferencia SPEI directa.
+          {soloEstePlan
+            ? "Aquí no se cobra nada. En el siguiente paso, dentro del panel, pagas con tarjeta el mes completo de tu plan (precio + IVA)."
+            : "Aquí no se cobra nada. El pago lo haces en el siguiente paso, dentro del panel: tarjeta u OXXO con Stripe, o transferencia SPEI directa."}
         </span>
       </p>
 

@@ -88,7 +88,9 @@ test("el anual es el TOTAL del año (priceMxnAnnual), no el mensual por doce", (
 
 test("la promo del primer mes NO aplica a SPEI: ni con IVA ni sin él baja del precio de lista", () => {
   const checkout = leer("app/api/billing/checkout/route.ts");
-  assert.match(checkout, /const applyFirstMonthPromo =\s*method === "card" && billing === "monthly"/, "la promo es solo tarjeta+mensual");
+  // ws1-t5 (enlaces de contratación): la regla vive en aplicaPromoPrimerMes (lib/billing/contratar.ts).
+  assert.match(checkout, /const applyFirstMonthPromo = aplicaPromoPrimerMes\(\{ method, billing, firstContract, sinPromo \}\);/, "el checkout usa la regla");
+  assert.match(leer("lib/billing/contratar.ts"), /return a\.method === "card" && a\.billing === "monthly" && a\.firstContract && !a\.sinPromo;/, "la promo es solo tarjeta+mensual");
   const core = leer("lib/billing/spei-directo-core.ts");
   assert.ok(!/FIRST_MONTH|promo/i.test(core.replace(/\/\*[\s\S]*?\*\//g, "")), "el cálculo SPEI no lee la promo");
 });

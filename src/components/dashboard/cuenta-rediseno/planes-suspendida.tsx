@@ -50,6 +50,8 @@ export interface VistaPlanes {
   onMethodKeyDown: (e: KeyboardEvent<HTMLButtonElement>, index: number) => void;
   /** Compra nueva con plan del alta: arrancar en resumen (ver suspended-client). */
   resumenInicial: boolean;
+  /** Enlace de contratación: solo su plan, mensual y con tarjeta; sin «Cambiar plan» ni conmutador. */
+  soloTarjetaMensual?: boolean;
   handleStripeCheckout: (plan: PlanId) => void;
   /** SPEI directo: la cuenta de /admin (null = no se ofrece), el folio de la clínica y el IVA del cobro. */
   cuentaSpei: CuentaBancaria | null;
@@ -75,7 +77,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   // Solo qué se enseña: con el plan del alta se arranca en resumen y
   // «Cambiar plan» abre las tres tarjetas de siempre (misma rejilla, mismo
   // radiogroup). El plan seleccionado y el checkout no cambian.
-  const [mostrarTodos, setMostrarTodos] = useState(!v.resumenInicial);
+  const [mostrarTodos, setMostrarTodos] = useState(!(v.resumenInicial || v.soloTarjetaMensual));
   const resumen = !mostrarTodos && v.selected ? v.selected : null;
   const anual = v.billing === "annual";
   // Todo pago lleva IVA 16 %, salvo lo que la exención de una clínica creada antes del corte cubre (su
@@ -115,7 +117,8 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
 
   return (
     <div>
-      {/* === Ciclo: mensual / anual === */}
+      {/* === Ciclo: mensual / anual === (el enlace de contratación es solo mensual) */}
+      {!v.soloTarjetaMensual && (
       <div className={s.cicloFila}>
         <div className={s.conmutador}>
           <span
@@ -139,6 +142,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
           {v.billing === "annual" || !v.firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
         </span>
       </div>
+      )}
 
       {/* === Tu plan elegido (la tarjeta navy del registro, con «Cambiar plan») === */}
       {resumen && (
@@ -167,10 +171,12 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
               ))}
             </span>
           </div>
+          {!v.soloTarjetaMensual && (
           <button type="button" className={s.cambiarPlan} onClick={() => setMostrarTodos(true)}>
             <RefreshCw size={14} aria-hidden />
             Cambiar plan
           </button>
+          )}
         </div>
       )}
 

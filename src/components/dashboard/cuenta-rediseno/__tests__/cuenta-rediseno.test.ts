@@ -163,14 +163,16 @@ test("suspended: el marcado de siempre sigue en su sitio y la vista nueva recibe
   for (const viejo of [
     'className="min-h-screen bg-background text-foreground"',
     "text-4xl font-extrabold tracking-tight md:text-[40px]",
-    "<SuspendedPlanCards plans={planCards} currentPlan={currentPlan} firstMonthEligible={firstMonthEligible} />",
+    // ws1-t5 (enlaces de contratación): las tarjetas del enlace, solo su plan con tarjeta mensual.
+    "<SuspendedPlanCards\n          plans={planesAMostrar}\n          currentPlan={enlace ? enlace.plan : currentPlan}\n          firstMonthEligible={firstMonthEligible}\n          soloTarjetaMensual={enlace !== null}\n        />",
   ]) {
     assert.ok(page.includes(viejo), `la página de siempre perdió ${viejo}`);
   }
   // Camino viejo del cliente: su rejilla, su CTA en degradado y su conmutador
   // de siempre, intactos (los colores se buscan por forma, no por valor, para
   // que este archivo tampoco lleve un color escrito a mano).
-  assert.ok(cliente.includes('className="mb-7 grid items-stretch gap-[18px] md:grid-cols-3"'), "el cliente de siempre perdió su rejilla");
+  // ws1-t5: con el enlace de contratación la rejilla es de UNA tarjeta; sin él, la de siempre.
+  assert.ok(cliente.includes(': "mb-7 grid items-stretch gap-[18px] md:grid-cols-3"}'), "el cliente de siempre perdió su rejilla");
   assert.match(cliente, /linear-gradient\(135deg,#[0-9A-F]{6},#[0-9A-F]{6}\)/, "el cliente de siempre perdió su CTA en degradado");
   assert.match(cliente, /rounded-full bg-\[#[0-9A-F]{6}\] p-1\.5 dark:bg-\[#[0-9A-F]{6}\]/, "el cliente de siempre perdió su conmutador");
   // La vista nueva se monta con la lógica de aquí, después de todos los hooks.

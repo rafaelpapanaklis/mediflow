@@ -4,6 +4,7 @@ import { isPlanId, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlans } from "@/lib/plans";
 import { applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { isFirstContract } from "@/lib/billing/first-month-promo";
+import { enlaceDeContratacion } from "@/lib/billing/sin-promo.server";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -71,7 +72,12 @@ export default async function SuspendedPage({
   const { t } = serverTForLocale(localeFromClinic(clinic));
   const currentPlan: PlanId | null = isPlanId(clinic.plan) ? clinic.plan : null;
   // Promo 1er mes: solo PRIMERA contratación (el checkout re-valida server-side).
-  const firstMonthEligible = isFirstContract(clinic);
+  // Enlace de contratación (/contratar/<plan>): esa clínica no ve ni paga la promo, sino el
+  // precio de lista + IVA desde el primer mes. Solo se consulta en una primera contratación.
+  // Y solo ve ESE plan, mensual y con tarjeta (el checkout lo vuelve a imponer).
+  const enlace = isFirstContract(clinic) ? await enlaceDeContratacion(clinic.id) : null;
+  const firstMonthEligible = isFirstContract(clinic) && enlace === null;
+  const planesAMostrar = enlace ? planCards.filter((p) => p.id === enlace.plan) : planCards;
 
   // Copy adaptativo según el estado de la cuenta:
   //  - Reactivación = cuenta que YA tuvo acceso y se pausó por un pago
@@ -169,9 +175,10 @@ export default async function SuspendedPage({
             texto={isReactivation ? subcopy : subtitulo}
           />
           <SuspendedPlanCards
-            plans={planCards}
-            currentPlan={currentPlan}
+            plans={planesAMostrar}
+            currentPlan={enlace ? enlace.plan : currentPlan}
             firstMonthEligible={firstMonthEligible}
+            soloTarjetaMensual={enlace !== null}
             rediseno
             resumenInicial={!isReactivation && currentPlan !== null}
             cuentaSpei={cuentaSpei}
@@ -229,7 +236,12 @@ export default async function SuspendedPage({
           </p>
         </div>
 
-        <SuspendedPlanCards plans={planCards} currentPlan={currentPlan} firstMonthEligible={firstMonthEligible} />
+        <SuspendedPlanCards
+          plans={planesAMostrar}
+          currentPlan={enlace ? enlace.plan : currentPlan}
+          firstMonthEligible={firstMonthEligible}
+          soloTarjetaMensual={enlace !== null}
+        />
 
         <p className="mt-6 text-center text-[12.5px] text-muted-foreground">
           <Link href="/login" className="transition hover:text-foreground">

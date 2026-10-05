@@ -8,6 +8,8 @@ import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
 import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { ensureFirstMonthCoupon, isFirstContract } from "@/lib/billing/first-month-promo";
+import { aplicaPromoPrimerMes } from "@/lib/billing/contratar";
+import { enlaceDeContratacion } from "@/lib/billing/sin-promo.server";
 import { ivaParaPagoDeClinica } from "@/lib/billing/iva-cobro";
 import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
@@ -65,8 +67,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
   }
 
-  const planId: PlanId = parsed.data.plan;
-  const basePlan = await getResolvedPlan(planId);
+  let planId: PlanId = parsed.data.plan;
+  let basePlan = await getResolvedPlan(planId);
 
   // Reusar customer existente si la clínica ya tiene uno. Si no, crear.
   const clinic = await prisma.clinic.findUnique({
@@ -90,6 +92,16 @@ export async function POST(req: NextRequest) {
   });
   if (!clinic) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  }
+
+  // ENLACE DE CONTRATACIÓN (dalecontrol.com/contratar/<plan>, pedido de Rafael 5-oct-2026): en
+  // la PRIMERA contratación, esa clínica paga EL PLAN DEL ENLACE, mensual, con tarjeta y a precio de
+  // lista + IVA, sin la promo. Lo impone el servidor con la marca que dejó el alta
+  // (lib/billing/sin-promo.server.ts): el plan, el método y el periodo del body no cuentan.
+  const enlace = isFirstContract(clinic) ? await enlaceDeContratacion(clinic.id) : null;
+  if (enlace && enlace.plan !== planId) {
+    planId = enlace.plan;
+    basePlan = await getResolvedPlan(planId);
   }
 
   // PRECIO A COBRAR. Si la clínica contrata (o renueva, o paga por SPEI/OXXO) el
@@ -118,8 +130,8 @@ export async function POST(req: NextRequest) {
     process.env.NEXTAUTH_URL ??
     new URL(req.url).origin;
 
-  const method = parsed.data.method;
-  const billing = parsed.data.billing;
+  const method = enlace ? "card" : parsed.data.method;
+  const billing = enlace ? "monthly" : parsed.data.billing;
 
   // Tarjeta: si la clínica YA tiene una suscripción de tarjeta viva en Stripe,
   // NO crear una segunda (evita doble cobro recurrente). La mandamos al billing
@@ -178,8 +190,11 @@ export async function POST(req: NextRequest) {
   // change-plan ni siquiera pasa por aquí). Cupón "once": la 1a factura sale
   // al total promo y desde la 2a Stripe cobra el precio normal + IVA. NO es trial.
   const firstContract = isFirstContract(clinic);
-  const applyFirstMonthPromo =
-    method === "card" && billing === "monthly" && firstContract;
+  // Enlace de contratación (dalecontrol.com/contratar/<plan>, pedido de Rafael 5-oct-2026): la
+  // clínica paga el precio de lista + IVA desde el primer mes. Solo QUITA la promo. La marca
+  // se guardó en el servidor al darse de alta (lib/billing/sin-promo.server.ts).
+  const sinPromo = enlace !== null;
+  const applyFirstMonthPromo = aplicaPromoPrimerMes({ method, billing, firstContract, sinPromo });
   const promoCouponId = applyFirstMonthPromo
     // El IVA va DENTRO de la promo: con IVA el cupón deja subtotal + IVA = total exacto de la promo.
     ? await ensureFirstMonthCoupon(stripe, plan, { conIva: iva.modo !== "exento" })
@@ -193,6 +208,7 @@ export async function POST(req: NextRequest) {
     method,
     billing,
     firstMonthPromo: promoCouponId ? "1" : "0",
+    ...(sinPromo ? { sinPromo: "1" } : {}),
     // MEDICIÓN, no cobro (WS1-T3): "1" = esta sesión es la PRIMERA contratación
     // de la clínica (nunca tuvo suscripción ni periodo activado), estampado
     // AQUÍ porque es el único momento en que el dato existe: al confirmar el

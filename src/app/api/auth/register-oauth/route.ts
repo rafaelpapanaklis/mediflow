@@ -10,6 +10,9 @@ import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
 import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
+import { COOKIE_CONTRATAR, esSlugReservadoDeContratar, planDelEnlaceDeAlta } from "@/lib/billing/contratar";
+import { marcarEnlaceDeContratacion } from "@/lib/billing/sin-promo.server";
+import { extractAuditMeta } from "@/lib/audit";
 
 /**
  * Completar registro para usuarios que entraron via OAuth (Google/Microsoft).
@@ -35,13 +38,15 @@ const schema = z.object({
   paymentMethod: z.enum(["stripe", "transfer", "card", "paypal", "none"]).default("transfer"),
   paymentMethodLast4: z.string().regex(/^\d{4}$/).optional(),
   billing: z.enum(["monthly", "annual"]).default("monthly"),
+  sinPromo: z.boolean().optional(), // alta por /contratar/<plan>: sin la promo del primer mes
 });
 
 async function generateSlug(name: string) {
   let base = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 30);
-  let slug = base;
-  let i = 1;
+  // «contratar» es una ruta del sitio (/contratar/<plan>): ninguna clínica la usa de página.
+  let slug = esSlugReservadoDeContratar(base) ? `${base}-1` : base;
+  let i = esSlugReservadoDeContratar(base) ? 2 : 1;
   while (await prisma.clinic.findUnique({ where: { slug } })) {
     slug = `${base}-${i++}`;
   }
@@ -55,6 +60,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = schema.parse(body);
+    // Enlace de contratación (/contratar/<plan>): el plan del enlace manda (la cookie que dejó la
+    // página; si no llegó, el del formulario del enlace), mensual. Ver lib/billing/contratar.ts.
+    const planDelEnlace = planDelEnlaceDeAlta(data, req.cookies.get(COOKIE_CONTRATAR)?.value);
+    if (planDelEnlace) {
+      data.plan = planDelEnlace;
+      data.billing = "monthly";
+    }
 
     const supabase = createClient();
     const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -174,6 +186,16 @@ export async function POST(req: NextRequest) {
     // nunca lanza y tolera que la tabla aún no exista.
     await guardarClickAdsDeLaAlta(clinic.id, (n) => req.cookies.get(n)?.value);
 
+    // Enlace de contratación: la marca (ese plan, mensual, tarjeta, sin la promo) queda del lado
+    // del servidor, en la bitácora de la clínica, para que la pantalla de pago y el checkout la
+    // lean otro día y en otra sesión.
+    if (planDelEnlace) {
+      const duenio = await prisma.user.findFirst({ where: { clinicId: clinic.id }, select: { id: true } });
+      if (duenio) {
+        await marcarEnlaceDeContratacion({ clinicId: clinic.id, userId: duenio.id, plan: planDelEnlace, ...extractAuditMeta(req) });
+      }
+    }
+
     // CompleteRegistration de Meta (WS1-T4): igual que /api/auth/register.
     const metaEventId = enviarRegistroMetaEnSegundoPlano({
       clinicId: clinic.id,
@@ -191,7 +213,10 @@ export async function POST(req: NextRequest) {
       dashboardUrl: `${SITE_URL}/dashboard`,
     }).catch(err => console.error("[register-oauth] welcome email failed:", err));
 
-    return NextResponse.json({ success: true, metaEventId });
+    const respuesta = NextResponse.json({ success: true, metaEventId });
+    // La cookie del enlace ya cumplió: la marca vive en el servidor.
+    if (planDelEnlace) respuesta.cookies.delete(COOKIE_CONTRATAR);
+    return respuesta;
   } catch (err: any) {
     // Campo inválido (p. ej. el WhatsApp) → 400 legible, no el volcado de issues.
     if (err instanceof z.ZodError) {

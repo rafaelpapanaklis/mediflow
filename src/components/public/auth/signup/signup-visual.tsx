@@ -14,7 +14,11 @@ const VENTAJAS = ["Sin permanencia", "Sin instalar nada", "Datos cifrados", "Sop
  * que el hero de la portada. Cuenta qué va a pasar en los tres pasos en vez
  * de una lista de beneficios genérica. Estilos en ../auth-v4.css.
  */
-export function SignupVisual() {
+/** `soloTarjeta`: el enlace de contratación (/contratar/<plan>) se paga solo con tarjeta, mensual. */
+export function SignupVisual({ soloTarjeta = false }: { soloTarjeta?: boolean } = {}) {
+  const pasos = soloTarjeta
+    ? [PASOS[0], PASOS[1], { t: "Confirma tu plan y paga", s: "Con tarjeta, mes a mes: el precio de tu plan + IVA." }]
+    : PASOS;
   return (
     <div className="dca-visual__in">
       <div>
@@ -37,7 +41,7 @@ export function SignupVisual() {
       </div>
 
       <ol className="dca-pasos">
-        {PASOS.map((p, i) => (
+        {pasos.map((p, i) => (
           <li key={p.t} className="dca-paso">
             <span className="dca-paso__n" aria-hidden="true">{i + 1}</span>
             <span>

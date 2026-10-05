@@ -58,6 +58,12 @@ interface Props {
   cobroConIvaListo?: boolean;
   /** Qué paga SIN IVA esta clínica (creada antes del corte): su plan y si la tarjeta entra; null = todo lleva IVA. */
   exencionIva?: ExencionIva | null;
+  /**
+   * Enlace de contratación (/contratar/<plan>, pedido de Rafael 5-oct-2026): solo el plan del
+   * enlace (la página ya manda uno), mensual y con tarjeta. Sin conmutador de periodo, sin
+   * métodos, sin upsell y sin «Cambiar plan». El checkout lo vuelve a imponer en el servidor.
+   */
+  soloTarjetaMensual?: boolean;
 }
 
 // Upsell: qué plan sugerir según el actual. CLINIC es el tope (sin sugerencia).
@@ -81,6 +87,7 @@ export function SuspendedPlanCards({
   referenciaSpei = null,
   cobroConIvaListo = true,
   exencionIva = null,
+  soloTarjetaMensual = false,
 }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
@@ -89,7 +96,7 @@ export function SuspendedPlanCards({
   const [billing, setBilling] = useState<Billing>("monthly");
   // Plan elegido por el usuario: las tarjetas son un radiogroup. Preselección =
   // su plan actual o, si no tiene, PRO (el popular). El pago se hace sobre este.
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>(currentPlan ?? "PRO");
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(soloTarjetaMensual && plans[0] ? plans[0].id : currentPlan ?? "PRO");
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const methodRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -119,13 +126,13 @@ export function SuspendedPlanCards({
   // días), Mensual como siempre. En reactivación (resumenInicial=false) no se
   // mira. Va en un efecto y no en el useState para no desalinear la hidratación.
   useEffect(() => {
-    if (!resumenInicial) return;
+    if (!resumenInicial || soloTarjetaMensual) return;
     const eleccion = leerEleccionAlta();
     if (eleccion && eleccion.plan === currentPlan && eleccion.billing === "annual") setBilling("annual");
   }, [resumenInicial, currentPlan]);
 
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
-  const recommendedPlan: PlanId | null = currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
+  const recommendedPlan: PlanId | null = soloTarjetaMensual ? null : currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
 
   function priceOf(id: PlanId | null): number | null {
     if (!id) return null;
@@ -145,7 +152,7 @@ export function SuspendedPlanCards({
   // SPEI solo se ofrece en el rediseño y con una cuenta bancaria utilizable y
   // un folio de clínica: sin ellos, nunca datos vacíos ni una opción muerta.
   const speiDisponible = rediseno && cuentaSpei !== null && !!referenciaSpei;
-  const methods: Array<{ id: PayMethod; label: string }> = [
+  const methods: Array<{ id: PayMethod; label: string }> = soloTarjetaMensual ? [{ id: "card", label: t("pages.suspended.methodCard") }] : [
     { id: "card", label: t("pages.suspended.methodCard") },
     ...(!rediseno || speiDisponible ? [{ id: "spei" as PayMethod, label: t("pages.suspended.methodSpei") }] : []),
     { id: "oxxo", label: t("pages.suspended.methodOxxo") },
@@ -273,6 +280,7 @@ export function SuspendedPlanCards({
           priceOf, perMonth, annualSavings, upsellBenefit,
           setSelectedPlan, setBilling, setMethod, onCardKeyDown, onMethodKeyDown,
           resumenInicial,
+          soloTarjetaMensual,
           handleStripeCheckout,
           cuentaSpei: speiDisponible ? cuentaSpei : null,
           referenciaSpei,
@@ -288,6 +296,7 @@ export function SuspendedPlanCards({
   return (
     <div>
       {/* === Toggle Mensual / Anual === */}
+      {!soloTarjetaMensual && (
       <div className="mb-7 flex flex-wrap items-center justify-center gap-3">
         <div className="relative inline-flex rounded-full bg-[#ECEAF1] p-1.5 dark:bg-[#241F32]">
           <span
@@ -313,12 +322,13 @@ export function SuspendedPlanCards({
           {billing === "annual" || !firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
         </span>
       </div>
+      )}
 
       {/* === Grid de planes (radiogroup) === */}
       <div
         role="radiogroup"
         aria-label={t("pages.suspended.choosePlanTitle")}
-        className="mb-7 grid items-stretch gap-[18px] md:grid-cols-3"
+        className={soloTarjetaMensual ? "mx-auto mb-7 grid max-w-sm items-stretch gap-[18px]" : "mb-7 grid items-stretch gap-[18px] md:grid-cols-3"}
       >
         {plans.map((plan, i) => {
           const isRecommended = plan.id === recommendedPlan;
@@ -438,7 +448,8 @@ export function SuspendedPlanCards({
         className="mx-auto flex max-w-[560px] flex-col items-center gap-4 rounded-[18px] border border-border bg-card p-[22px]"
         style={{ boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px -28px rgba(16,24,40,0.3)" }}
       >
-        {/* Selector de método (pill deslizante) */}
+        {/* Selector de método (pill deslizante). El enlace de contratación: solo tarjeta. */}
+        {!soloTarjetaMensual && (
         <div
           role="radiogroup"
           aria-label={t("pages.suspended.methodCard")}
@@ -473,6 +484,7 @@ export function SuspendedPlanCards({
             );
           })}
         </div>
+        )}
 
         {method !== "card" && (
           <p className="-mt-1 text-center text-xs" style={{ color: "rgb(180,83,9)" }}>
@@ -497,7 +509,7 @@ export function SuspendedPlanCards({
             : selected
               ? ctaPromo
                 ? `Pagar ${selected.name} — ${fmt(FIRST_MONTH_PROMO_MXN[selected.id])} el primer mes`
-                : `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes`
+                : `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes${soloTarjetaMensual ? " + IVA" : ""}`
               : ""}
         </button>
 

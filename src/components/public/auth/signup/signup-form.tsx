@@ -13,6 +13,7 @@ import { Step2Clinic } from "./step-2-clinic";
 import { Step3PlanPayment, type CardDetails } from "./step-3-plan-payment";
 import type { Billing, PlanId } from "./plan-card";
 import { isPlanId } from "@/lib/billing/plans";
+import { COOKIE_CONTRATAR, COOKIE_CONTRATAR_MAX_AGE, planDeCookieContratar } from "@/lib/billing/contratar";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
@@ -84,7 +85,10 @@ const SPECIALTY_TO_CATEGORY: Record<string, string> = {
   homeopatia: "ALTERNATIVE_MEDICINE",
 };
 
-export function SignupForm() {
+export function SignupForm({ planDeEnlace }: {
+  /** Enlace de contratación (/contratar/<plan>): ese plan, mensual y SIN la promo del primer mes. */
+  planDeEnlace?: PlanId;
+} = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -102,10 +106,10 @@ export function SignupForm() {
   // Plan elegido en la home (?plan=basic|pro|clinic). El registro REQUIERE un
   // plan; sin uno válido (y fuera del flujo OAuth) mandamos de vuelta a /#precios.
   const planParam = (searchParams.get("plan") ?? "").toUpperCase();
-  const initialPlan: PlanId | null = isPlanId(planParam) ? planParam : null;
+  const initialPlan: PlanId | null = planDeEnlace ?? (isPlanId(planParam) ? planParam : null);
   // Periodo elegido en la landing (?billing=annual|monthly). Viaja al registro;
   // el cobro real se hace en el panel de activación (Stripe Checkout).
-  const initialBilling: Billing = searchParams.get("billing") === "annual" ? "annual" : "monthly";
+  const initialBilling: Billing = !planDeEnlace && searchParams.get("billing") === "annual" ? "annual" : "monthly";
   const initialStepParam = searchParams.get("step");
   const initialStep: 1 | 2 | 3 =
     initialStepParam === "2" ? 2 :
@@ -145,6 +149,25 @@ export function SignupForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Enlace de contratación: la marca viaja por debajo, nunca en la URL. La página deja la
+  // cookie (sobrevive a la vuelta de Google en el alta con OAuth) y el alta la guarda en el
+  // servidor, ligada a la clínica (lib/billing/contratar.ts).
+  const [planDelEnlace, setPlanDelEnlace] = useState<PlanId | null>(planDeEnlace ?? null);
+  const sinPromo = planDelEnlace !== null;
+  useEffect(() => {
+    if (planDeEnlace) {
+      document.cookie = `${COOKIE_CONTRATAR}=${planDeEnlace}; path=/; max-age=${COOKIE_CONTRATAR_MAX_AGE}; samesite=lax`;
+      return;
+    }
+    const valor = document.cookie.split("; ").find((c) => c.startsWith(`${COOKIE_CONTRATAR}=`))?.split("=")[1];
+    const plan = planDeCookieContratar(valor);
+    if (!plan) return;
+    // Vuelta de Google (o el enlace abierto antes): el plan del enlace manda, mensual.
+    setPlanDelEnlace(plan);
+    setForm((prev) => ({ ...prev, plan, billing: "monthly" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const update = (patch: Partial<SignupState>) =>
     setForm(prev => ({ ...prev, ...patch }));
 
@@ -176,6 +199,7 @@ export function SignupForm() {
         // El cobro real es vía Stripe Checkout (método elegido en el paso 3);
         // aquí solo guardamos una preferencia legacy que register/-oauth aceptan.
         paymentMethod: form.payMethod === "card" ? "card" : "transfer",
+        ...(sinPromo ? { sinPromo: true } : {}),
       };
 
       let res: Response;
@@ -304,7 +328,7 @@ export function SignupForm() {
         >
           {step === 1 && "Crea tu cuenta"}
           {step === 2 && "Cuéntanos de tu clínica dental"}
-          {step === 3 && "Elige tu plan"}
+          {step === 3 && (planDelEnlace ? "Tu plan" : "Elige tu plan")}
         </h1>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45, color: "#475569" }}>
           {step === 1 && "Tu nombre, tu correo y una contraseña. Un minuto."}
@@ -396,7 +420,8 @@ export function SignupForm() {
           onBack={() => setStep(2)}
           onSubmit={handleSubmit}
           loading={loading}
-          planFijo={initialPlan !== null}
+          planFijo={initialPlan !== null || planDelEnlace !== null}
+          soloEstePlan={planDelEnlace !== null}
         />
       )}
 
