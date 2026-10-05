@@ -14,19 +14,20 @@ import type { GloboSeguridad } from "./globo-seguridad-motor";
  *     se queda el globo SVG de debajo, que ya gira solo con CSS.
  *  2. Pausa: el globo solo se anima mientras se ve y la pestaña está activa
  *     (y en pantallas táctiles, a ~30 cuadros por segundo).
- *  3. Entrada y profundidad: marca con `is-visto` lo que va entrando en
- *     pantalla (la coreografía es CSS) y, con ratón, publica su posición en
- *     `--px`/`--py` para que globo, escudo y sellos se muevan a distinta
- *     profundidad.
- *
+ *  3. Entrada: marca con `is-visto` lo que va entrando en pantalla (la
+ *     coreografía es CSS).
  *  4. Descripciones en pantallas táctiles: tocar un sello la muestra
  *     (`is-abierto`), tocar fuera —u otro sello, o el mismo— la oculta. Con
  *     ratón NO hay nada que se fije con clic: ahí manda `:hover` y la
  *     descripción se va al quitar el ratón. Escape la cierra con teclado.
  *
- * Con `prefers-reduced-motion` no hay entrada, ni seguimiento del ratón, ni
- * animación: el motor pinta UN cuadro fijo del globo y se queda quieto. Las
- * descripciones siguen funcionando igual, sin transiciones.
+ * Nada sigue al ratón: Rafael pidió quitar la profundidad/parallax (4-oct), así
+ * que aquí no hay `pointermove`. Lo único que responde al ratón es el sello
+ * sobre el que está, y eso es CSS.
+ *
+ * Con `prefers-reduced-motion` no hay entrada ni animación: el motor pinta UN
+ * cuadro fijo del globo y se queda quieto. Las descripciones siguen
+ * funcionando igual, sin transiciones.
  */
 export function GloboSeguridadVivo() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -116,10 +117,8 @@ export function GloboSeguridadVivo() {
     document.addEventListener("pointercancel", alCancelar, { passive: true });
     document.addEventListener("keydown", alTeclear);
 
-    // 3 · Entrada al hacer scroll + profundidad con el ratón.
+    // 3 · Entrada al hacer scroll.
     let entrada: IntersectionObserver | null = null;
-    let raf = 0;
-    let quitarRaton = () => {};
     if (!quieto) {
       // El estado inicial (oculto) lo pone este script: sin JS todo se ve.
       panel.classList.add("dcsg--js");
@@ -135,34 +134,6 @@ export function GloboSeguridadVivo() {
       );
       entrada.observe(marco);
       for (const sello of sellos) entrada.observe(sello);
-
-      if (medio("(hover: hover) and (pointer: fine)")) {
-        let x = 0;
-        let y = 0;
-        const publicar = () => {
-          raf = 0;
-          escena.style.setProperty("--px", x.toFixed(3));
-          escena.style.setProperty("--py", y.toFixed(3));
-          globo?.apuntar(x, y);
-        };
-        const mover = (ev: PointerEvent) => {
-          const r = panel.getBoundingClientRect();
-          x = Math.max(-1, Math.min(1, ((ev.clientX - r.left) / r.width) * 2 - 1));
-          y = Math.max(-1, Math.min(1, ((ev.clientY - r.top) / r.height) * 2 - 1));
-          if (!raf) raf = requestAnimationFrame(publicar);
-        };
-        const salir = () => {
-          x = 0;
-          y = 0;
-          if (!raf) raf = requestAnimationFrame(publicar);
-        };
-        panel.addEventListener("pointermove", mover, { passive: true });
-        panel.addEventListener("pointerleave", salir, { passive: true });
-        quitarRaton = () => {
-          panel.removeEventListener("pointermove", mover);
-          panel.removeEventListener("pointerleave", salir);
-        };
-      }
     }
 
     return () => {
@@ -175,8 +146,6 @@ export function GloboSeguridadVivo() {
       document.removeEventListener("pointerup", alLevantar);
       document.removeEventListener("pointercancel", alCancelar);
       document.removeEventListener("keydown", alTeclear);
-      quitarRaton();
-      if (raf) cancelAnimationFrame(raf);
       globo?.destruir();
     };
   }, []);

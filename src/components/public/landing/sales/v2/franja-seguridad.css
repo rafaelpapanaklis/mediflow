@@ -56,17 +56,17 @@
 .dcsg__lead { margin: 16px auto 0; font-size: clamp(15.5px, 1.45vw, 18px); line-height: 1.6; color: #cbd5e1; max-width: 52ch; }
 
 /* ── Escena ───────────────────────────────────────────────────────────────
-   `--px`/`--py` (de −1 a 1) los publica globo-seguridad-vivo.tsx con la
-   posición del ratón; cada pieza se desplaza según su profundidad (`--z`). */
-.dcsg__escena { position: relative; margin-top: clamp(20px, 3vw, 30px); --px: 0; --py: 0; }
+   Nada sigue al ratón (pedido de Rafael, 4-oct): globo, escudo, órbitas y
+   sellos se quedan en su sitio. Lo único que responde al ratón es el sello
+   sobre el que está (más abajo, «Sello activo»). */
+.dcsg__escena { position: relative; margin-top: clamp(20px, 3vw, 30px); }
 .dcsg__orbita { display: none; }
 
 /* Globo: el SVG (mar, halo, malla de reserva), el canvas con el globo de
    puntos encima y el escudo delante. */
 .dcsg__globo {
   position: relative; width: clamp(200px, 30vw, 250px); aspect-ratio: 1; margin: 0 auto;
-  translate: calc(var(--px) * -9px) calc(var(--py) * -9px);
-  transition: translate .7s cubic-bezier(.2, .7, .2, 1), opacity .9s ease, scale 1.1s cubic-bezier(.2, .7, .2, 1);
+  transition: opacity .9s ease, scale 1.1s cubic-bezier(.2, .7, .2, 1);
 }
 .dcsg__esfera { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .dcsg__malla { transition: opacity .8s ease; }
@@ -79,8 +79,6 @@
 .dcsg__escudo {
   position: absolute; left: 10%; top: 51%; width: 27%; height: auto; overflow: visible;
   filter: drop-shadow(0 10px 16px rgba(2, 6, 23, .6)) drop-shadow(0 0 16px rgba(96, 165, 250, .5));
-  translate: calc(var(--px) * 16px) calc(var(--py) * 16px);
-  transition: translate .7s cubic-bezier(.2, .7, .2, 1);
 }
 
 /* ── Sellos: base = cuadrícula (tableta y celular) ──────────────────────── */
@@ -184,8 +182,8 @@
   .dcsg__orbita {
     display: block; position: absolute; left: 50%; top: var(--cy); width: calc(var(--rx) * 2); aspect-ratio: 1;
     border-radius: 50%; border: 1.5px solid rgba(191, 219, 254, .26); pointer-events: none;
-    translate: calc(-50% + var(--px) * 5px) calc(-50% + var(--py) * 5px); transform: scaleY(var(--k));
-    transition: translate .7s cubic-bezier(.2, .7, .2, 1), opacity 1s ease, scale 1.2s cubic-bezier(.2, .7, .2, 1);
+    translate: -50% -50%; transform: scaleY(var(--k));
+    transition: opacity 1s ease, scale 1.2s cubic-bezier(.2, .7, .2, 1);
   }
   .dcsg__orbita--dentro { width: calc(var(--rx) * 2 - 196px); border: 1.5px dashed rgba(191, 219, 254, .2); transform: scaleY(.34); }
   /* Los puntos de luz solo existen en movimiento (ver abajo): quietos no dicen nada. */
@@ -196,7 +194,7 @@
   .dcsg__cometa--2 i { background: #ede9fe; box-shadow: 0 0 14px 4px rgba(167, 139, 250, .95), 0 0 34px 10px rgba(167, 139, 250, .4); }
 
   .dcsg__globo { position: absolute; left: 50%; top: var(--cy); width: 292px; margin: 0;
-    translate: calc(-50% + var(--px) * -9px) calc(-50% + var(--py) * -9px); }
+    translate: -50% -50%; }
 
   .dcsg__sellos { position: static; display: block; margin: 0; }
   .dcsg__sello {
@@ -205,8 +203,7 @@
     width: max-content; max-width: 216px;
     flex-direction: row; text-align: left; gap: 12px; padding: 10px 17px 10px 10px; border-radius: 20px;
     background: linear-gradient(180deg, rgba(40, 54, 112, .86), rgba(20, 29, 72, .86));
-    translate: calc(var(--px) * var(--z) * 1px) calc(-50% + var(--py) * var(--z) * 1px);
-    transition: translate .7s cubic-bezier(.2, .7, .2, 1);
+    translate: 0 -50%;
   }
   .dcsg__texto { align-items: flex-start; }
   .dcsg__antes, .dcsg__sello:nth-child(n + 5) .dcsg__antes { min-height: 0; justify-content: flex-start; text-wrap: wrap; }
@@ -219,18 +216,18 @@
   .dcsg__sello:nth-child(1) .dcsg__antes, .dcsg__sello:nth-child(3) .dcsg__antes, .dcsg__sello:nth-child(6) .dcsg__antes { justify-content: flex-end; }
   /* Ángulos (desde arriba): ±28°, ±80°, ±130° y 180°. `--dx` es hacia dónde
      queda el globo (de ahí salen al entrar). */
-  .dcsg__sello:nth-child(1), .dcsg__sello:nth-child(2) { --fx: .469; --fy: -.883; --z: 13; }
-  .dcsg__sello:nth-child(3), .dcsg__sello:nth-child(4) { --fx: .985; --fy: -.174; --z: 21; }
-  .dcsg__sello:nth-child(6), .dcsg__sello:nth-child(7) { --fx: .766; --fy: .643; --z: 27; }
+  .dcsg__sello:nth-child(1), .dcsg__sello:nth-child(2) { --fx: .469; --fy: -.883; }
+  .dcsg__sello:nth-child(3), .dcsg__sello:nth-child(4) { --fx: .985; --fy: -.174; }
+  .dcsg__sello:nth-child(6), .dcsg__sello:nth-child(7) { --fx: .766; --fy: .643; }
   .dcsg__sello:nth-child(1), .dcsg__sello:nth-child(3), .dcsg__sello:nth-child(6) { --dx: 1; }
   .dcsg__sello:nth-child(2), .dcsg__sello:nth-child(4), .dcsg__sello:nth-child(7) { --dx: -1; }
   .dcsg__sello:nth-child(5) {
-    --fx: 0; --fy: 1; --z: 32; --dx: 0; left: 50%;
-    translate: calc(-50% + var(--px) * var(--z) * 1px) calc(-50% + var(--py) * var(--z) * 1px);
+    --fx: 0; --fy: 1; --dx: 0; left: 50%;
+    translate: -50% -50%;
   }
   /* En la órbita el sello NO se escala (movería la línea y la descripción,
      que cuelgan de él): crece la medalla. */
-  .dcsg__sello { scale: none; transition: translate .7s cubic-bezier(.2, .7, .2, 1), border-color .25s ease, box-shadow .25s ease; }
+  .dcsg__sello { scale: none; transition: border-color .25s ease, box-shadow .25s ease; }
   .dcsg__medalla { scale: calc(1 + .09 * var(--on, 0)); transition: scale .28s cubic-bezier(.2, .7, .2, 1); }
 
   /* Dentro de cada sello, el centro del globo queda en:
@@ -251,14 +248,13 @@
   .dcsg__lazo-linea { stroke: #a5c8ff; stroke-width: 1.6; stroke-dashoffset: calc(1 - var(--on, 0)); transition: stroke-dashoffset .45s cubic-bezier(.2, .7, .2, 1); }
   .dcsg__lazo .dcsg__lazo-pulso { stroke: #fff; stroke-width: 2.6; stroke-dasharray: .1 .9; stroke-dashoffset: 1; opacity: 0; }
 
-  /* La descripción, sobre el globo. Deshace el desplazamiento de su sello
-     (`--z`) y sigue el del globo (−9) para quedarse centrada en él. */
+  /* La descripción, centrada sobre el globo. */
   .dcsg__desc {
     bottom: auto; right: auto; width: 236px; text-align: center; padding: 14px 16px 15px; border-radius: 18px;
     left: calc(37px - var(--fx) * var(--rx) - 118px); top: calc(50% - var(--fy) * var(--rx) * var(--k));
-    translate: calc(var(--px) * (var(--z) + 9) * -1px) calc(-50% + var(--py) * (var(--z) + 9) * -1px);
+    translate: 0 -50%;
     transform-origin: 50% 50%;
-    transition: opacity .22s ease .12s, scale .3s cubic-bezier(.2, .7, .2, 1) .12s, visibility 0s linear var(--espera, .22s), translate .7s cubic-bezier(.2, .7, .2, 1);
+    transition: opacity .22s ease .12s, scale .3s cubic-bezier(.2, .7, .2, 1) .12s, visibility 0s linear var(--espera, .22s);
   }
   .dcsg__sello:nth-child(1) .dcsg__desc, .dcsg__sello:nth-child(3) .dcsg__desc, .dcsg__sello:nth-child(6) .dcsg__desc { left: auto; right: calc(37px - var(--fx) * var(--rx) - 118px); }
   .dcsg__sello:nth-child(5) .dcsg__desc { left: calc(50% - 118px); }

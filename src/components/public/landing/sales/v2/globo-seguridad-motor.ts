@@ -57,8 +57,6 @@ export type GloboSeguridad = {
   arrancar(): void;
   /** Detiene la animación (fuera de pantalla o pestaña oculta). */
   parar(): void;
-  /** Posición del ratón sobre el panel, de −1 a 1 en cada eje: el globo se ladea hacia él. */
-  apuntar(x: number, y: number): void;
   destruir(): void;
 };
 
@@ -132,10 +130,6 @@ export function crearGlobo(
   let tinta: CanvasGradient | string = "#bfdbfe";
   let angulo = ANGULO_INICIAL;
   let reloj = 0; // segundos de animación acumulados (no corre en pausa)
-  let giroRaton = 0;
-  let ladeoRaton = 0;
-  let metaGiro = 0;
-  let metaLadeo = 0;
   let rafId = 0;
   let ultimo = 0;
   let corriendo = false;
@@ -164,11 +158,11 @@ export function crearGlobo(
     const c = lado / 2;
     // El disco del SVG de debajo mide 100 de 240: el mismo radio aquí.
     const R = (lado * 100) / 240;
-    const giro = angulo + giroRaton;
+    const giro = angulo;
     const cg = Math.cos(giro);
     const sg = Math.sin(giro);
-    const ct = Math.cos(INCLINACION + ladeoRaton);
-    const st = Math.sin(INCLINACION + ladeoRaton);
+    const ct = Math.cos(INCLINACION);
+    const st = Math.sin(INCLINACION);
     const entrada = opts.quieto ? 1 : Math.min(1, reloj / 0.9);
 
     ctx.clearRect(0, 0, lado, lado);
@@ -311,9 +305,6 @@ export function crearGlobo(
     ultimo = ahora;
     reloj += dt;
     angulo += VELOCIDAD * dt;
-    const k = Math.min(1, dt * 3.5);
-    giroRaton += (metaGiro - giroRaton) * k;
-    ladeoRaton += (metaLadeo - ladeoRaton) * k;
     pintar();
     rafId = requestAnimationFrame(cuadro);
   };
@@ -342,10 +333,6 @@ export function crearGlobo(
     parar() {
       corriendo = false;
       cancelAnimationFrame(rafId);
-    },
-    apuntar(x, y) {
-      metaGiro = x * 0.42;
-      metaLadeo = y * 0.2;
     },
     destruir() {
       corriendo = false;

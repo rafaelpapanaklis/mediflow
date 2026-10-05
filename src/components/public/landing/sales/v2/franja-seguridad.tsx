@@ -15,9 +15,9 @@ import "./franja-seguridad.css";
  * JavaScript es un globo SVG (mar, halo, meridianos que giran con CSS) y los
  * sellos. Encima, globo-seguridad-vivo.tsx monta el globo 3D de puntos en un
  * <canvas> —motor propio, sin three.js ni dependencias, cargado solo cuando la
- * franja se acerca a la pantalla y pausado fuera de ella— y los gestos de
- * entrada y de profundidad con el ratón. Con `prefers-reduced-motion` no se
- * mueve nada (franja-seguridad.css y el propio motor).
+ * franja se acerca a la pantalla y pausado fuera de ella— y la entrada al
+ * hacer scroll. Nada sigue al ratón. Con `prefers-reduced-motion` no se mueve
+ * nada (franja-seguridad.css y el propio motor).
  *
  * Los textos viven en landing-data.ts (`SEGURIDAD`): redacción aprobada, en
  * español. Los íconos son PROPIOS, dibujados aquí: nunca los logotipos de
