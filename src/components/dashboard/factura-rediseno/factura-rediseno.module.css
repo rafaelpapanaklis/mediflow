@@ -166,22 +166,33 @@
   border-radius: 0 0 14px 14px;
 }
 
-/* B1 de la tercera auditoría (ws1-t3): en el celular el pie del detalle (Editar,
-   Registrar pago, Marcar pagada, WhatsApp, Reembolsar, Cancelar, CFDI, Imprimir,
-   Cerrar) envolvía en 4 renglones y se comía ~290 px de 844. Ahí va en UNA fila
-   que se desliza de lado; el formulario de arriba recupera la pantalla. */
+/* En el celular el pie del detalle (Editar, Registrar pago, Abonar, Marcar
+   pagada, WhatsApp, Reembolsar, Cancelar, CFDI, Imprimir, Cerrar) se acomoda
+   en filas: «Registrar pago» (el principal) primero y a todo lo ancho, los
+   demás de dos en dos. Sin scroll de lado (QA ws1-t3, 4-oct-2026: en una sola
+   fila deslizable quedaban 1,391 px dentro de 356 y los botones, recortados). */
 @media (max-width: 640px) {
   .raiz .pie:not(.pieApilado) {
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
+    flex-wrap: wrap;
+    justify-content: stretch;
+    gap: 8px;
     padding: 10px 12px;
-    scrollbar-width: thin;
   }
 
   .raiz .pie:not(.pieApilado) > * {
-    flex-shrink: 0;
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .raiz .pie:not(.pieApilado) > :global(.btn-new) {
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .raiz .pie:not(.pieApilado) > :global(.btn-new--primary) {
+    order: -1;
+    flex-basis: 100%;
   }
 }
 

@@ -31,6 +31,7 @@
  */
 
 import { z } from "zod";
+import { contarCobros } from "@/lib/dinero/abono-core";
 import { money, netRevenueSeries } from "@/lib/caja";
 import { movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
 import { dbDe, definirHerramienta, pesos } from "./base";
@@ -101,6 +102,8 @@ export const ingresosPorPeriodo = definirHerramienta<ParamsIngresos, DatosIngres
     const serie = claves.map((periodo) => ({ periodo, monto: money(neto.porBucket[periodo] ?? 0) }));
 
     const brutos = money(cobros.reduce((s: number, p: any) => s + (p.amount ?? 0), 0));
+    // Un cobro abonado a otra factura son varias filas (una por factura): cuenta UNA vez.
+    const numeroDeCobros = contarCobros(cobros as Array<{ notes?: string | null }>);
     const conDinero = serie.filter((s) => s.monto !== 0);
     const mejor = conDinero.length
       ? conDinero.reduce((a, b) => (b.monto > a.monto ? b : a))
@@ -113,9 +116,9 @@ export const ingresosPorPeriodo = definirHerramienta<ParamsIngresos, DatosIngres
       ingresosNetos: neto.ingresos,
       ingresosBrutos: brutos,
       reembolsos: neto.reembolsos,
-      cobros: cobros.length,
+      cobros: numeroDeCobros,
       serie,
-      ticketPromedio: cobros.length > 0 ? money(brutos / cobros.length) : null,
+      ticketPromedio: numeroDeCobros > 0 ? money(brutos / numeroDeCobros) : null,
       mejor,
     };
   },

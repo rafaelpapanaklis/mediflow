@@ -45,6 +45,8 @@ const aCentavos = (n: number | null | undefined) => Math.round((Number(n) || 0) 
 export interface MovimientoFechado {
   amount: number | null;
   paidAt: Date;
+  /** Notas del Payment: el «cobro #…» liga las partes de UN cobro repartido entre facturas. */
+  notes?: string | null;
 }
 
 export interface NetoDelPeriodo {

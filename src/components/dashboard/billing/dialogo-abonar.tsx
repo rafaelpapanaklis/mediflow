@@ -28,6 +28,7 @@ import { repartirConAbono, type FacturaAbonable } from "@/lib/dinero/abono-core"
 import { METHODS, type MetodoDelCobro } from "./payment-modal";
 import { CLASES_CALENDARIO_REDISENO, CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import u from "@/components/dashboard/factura-un-popup/un-popup.module.css";
+import { conservarSeleccion, seleccionarAlEnfocar } from "@/components/dashboard/factura-un-popup/seleccionar-al-enfocar";
 
 export interface DatosAbono {
   abonables: FacturaAbonable[];
@@ -182,6 +183,8 @@ export function DialogoAbonar({ open, onClose, invoice, datos, onHecho }: {
                     autoComplete="off"
                     value={monto}
                     onChange={(e) => setMonto(e.target.value.replace(/[^\d.,]/g, ""))}
+                    onFocus={seleccionarAlEnfocar}
+                    onMouseUp={conservarSeleccion}
                     disabled={guardando}
                     autoFocus
                   />

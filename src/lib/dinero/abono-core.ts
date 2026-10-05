@@ -92,6 +92,29 @@ export function facturasAbonables(
     .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id));
 }
 
+/** El id del cobro repartido que lleva la nota del Payment («cobro #ab12cd34»), o null. */
+export function cobroDeLaNota(notas: string | null | undefined): string | null {
+  if (typeof notas !== "string") return null;
+  const m = notas.match(/cobro #([0-9a-f]{8})\b/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Cuántos COBROS hay en unas filas de Payment: las partes de un mismo cobro
+ * repartido entre facturas (y su excedente a favor) cuentan UNA vez. Es lo que
+ * usa «número de cobros» / «ticket promedio» (QA ws1-t3, 4-oct-2026).
+ */
+export function contarCobros(filas: ReadonlyArray<{ notes?: string | null }>): number {
+  const vistos = new Set<string>();
+  let n = 0;
+  for (const f of filas) {
+    const id = cobroDeLaNota(f.notes);
+    if (!id) { n++; continue; }
+    if (!vistos.has(id)) { vistos.add(id); n++; }
+  }
+  return n;
+}
+
 /** Las notas de los pagos de un mismo cobro: los liga entre sí (mismo «cobro #…»). */
 export function notasDelAbono(args: {
   cobroId: string;

@@ -51,3 +51,12 @@ test("«Registrar pago» y «Aplicar descuento» usan el campo $ / %", () => {
   assert.match(seccion, /<CampoDescuento\s/);
   assert.match(leer("src/components/dashboard/billing/invoice-detail-modal.tsx"), /<CampoDescuento\s/);
 });
+
+test("QA ws1-t3 · la casilla dice lo que se aplicará: $9,999 sobre $500 queda «500.00» al salir del campo (y se selecciona al enfocar)", () => {
+  const seccion = leer("src/components/dashboard/factura-un-popup/seccion-cobro.tsx");
+  assert.match(seccion, /function ajustarAlSalir\(\) \{[\s\S]*?if \(actual\.recortado && actual\.pesos !== null\) \{[\s\S]*?setEntrada\(modo === "pesos" \? actual\.pesos\.toFixed\(2\) : String\(actual\.porcentaje\)\)/);
+  assert.match(seccion, /onBlur=\{ajustarAlSalir\}/);
+  // Los números de lo que se muestra al salir:
+  assert.equal(calcularDescuento("pesos", "9999", 500).pesos!.toFixed(2), "500.00");
+  assert.equal(String(calcularDescuento("porcentaje", "150", 500).porcentaje), "100");
+});

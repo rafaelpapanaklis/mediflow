@@ -15,6 +15,7 @@ import { CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/das
 import { BotonMercadoPago, LinkMercadoPago } from "@/components/dashboard/billing/link-mercado-pago";
 import { AvisoCajaCerrada, AvisoCajaDeOtraPersona } from "@/components/dashboard/billing/aviso-caja-cerrada.component";
 import type { Cobro } from "./use-cobro";
+import { conservarSeleccion, seleccionarAlEnfocar } from "./seleccionar-al-enfocar";
 import u from "./un-popup.module.css";
 
 /** El campo «Monto a cobrar»: es donde cae el foco al abrir, como en la ventana de cobro. */
@@ -102,7 +103,8 @@ export function SeccionCobro({ cobro, bloqueado, descuento, bajoElMonto, mercado
               inputMode="decimal"
               autoComplete="off"
               value={montoVisible}
-              onFocus={() => setTecleando(true)}
+              onFocus={(e) => { setTecleando(true); seleccionarAlEnfocar(e); }}
+              onMouseUp={conservarSeleccion}
               onBlur={() => setTecleando(false)}
               onChange={(e) => cobro.setAmount(e.target.value)}
               disabled={bloqueado}
@@ -288,6 +290,14 @@ export function CampoDescuento({ subtotal, pesos, alCambiarPesos, ocupado, etiqu
     // Inválido: no se manda nada al detalle (se queda lo último bueno) y se avisa abajo.
     if (nuevo.pesos !== null) alCambiarPesos(nuevo.pesos === 0 && valor.trim() === "" ? "" : String(nuevo.pesos));
   }
+  // QA ws1-t3: con «9999» sobre $500 el aviso decía «se queda en $500» pero la
+  // casilla seguía en 9999. Al salir del campo, la casilla dice lo que se aplicará.
+  function ajustarAlSalir() {
+    const actual = calcularDescuento(modo, entrada, subtotal);
+    if (actual.recortado && actual.pesos !== null) {
+      setEntrada(modo === "pesos" ? actual.pesos.toFixed(2) : String(actual.porcentaje));
+    }
+  }
   function cambiarModo(m: ModoDescuento) {
     if (m === modo) return;
     setEntrada(convertirEntrada(modo, m, entrada, subtotal));
@@ -322,6 +332,9 @@ export function CampoDescuento({ subtotal, pesos, alCambiarPesos, ocupado, etiqu
           onChange={(e) => teclear(e.target.value)}
           disabled={ocupado}
           autoFocus={autoFocus}
+          onFocus={seleccionarAlEnfocar}
+          onMouseUp={conservarSeleccion}
+          onBlur={ajustarAlSalir}
           aria-invalid={r.pesos === null}
         />
         {accion}

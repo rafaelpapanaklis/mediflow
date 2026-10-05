@@ -207,3 +207,31 @@ test("ruta · mismas puertas que el cobro de siempre", () => {
   assert.match(ruta, /frenoCobroDoble\(/);
   assert.match(ruta, /La fecha de pago no puede ser futura/);
 });
+
+// ── QA ws1-t3 (encargo 4): un cobro repartido cuenta como UN cobro ──────────
+test("número de cobros: los Payment de un mismo «cobro #…» (y su excedente a favor) cuentan UNA vez; ticket promedio $700, no $350", async () => {
+  const { contarCobros, cobroDeLaNota } = await import("@/lib/dinero/abono-core");
+  const filas = [
+    { amount: 500, notes: "Cobro de $700.00 (cobro #cd762d21): $500.00 a esta factura, $200.00 abonados a la factura MF-1192" },
+    { amount: 200, notes: "Abono: parte del cobro de $700.00 registrado en la factura MF-1191 (cobro #cd762d21)" },
+    { amount: 300, notes: null },
+    { amount: 50, notes: "Excedente del cobro de $350.00 (cobro #0a1b2c3d): pasa al saldo a favor del paciente" },
+    { amount: 300, notes: "Cobro de $350.00 (cobro #0a1b2c3d): $300.00 a esta factura, $50.00 a favor del paciente" },
+  ];
+  assert.equal(cobroDeLaNota(filas[0].notes), "cd762d21");
+  assert.equal(contarCobros(filas), 3, "antes: 5 cobros");
+  const sabina = leer("src/lib/sabina/tools/ingresos-por-periodo.ts");
+  assert.match(sabina, /const numeroDeCobros = contarCobros\(/);
+  assert.match(sabina, /ticketPromedio: numeroDeCobros > 0 \? money\(brutos \/ numeroDeCobros\) : null/);
+  assert.match(leer("src/lib/dinero/ingresos.server.ts"), /select: \{ amount: true, paidAt: true, notes: true \}/);
+});
+
+test("QA 1a · el monto del cobro y el del abono se seleccionan enteros al enfocarse (antes: «500» + teclear 700 = 500700)", () => {
+  const seccion = leer("src/components/dashboard/factura-un-popup/seccion-cobro.tsx");
+  assert.match(seccion, /onFocus=\{\(e\) => \{ setTecleando\(true\); seleccionarAlEnfocar\(e\); \}\}/);
+  assert.match(seccion, /onMouseUp=\{conservarSeleccion\}/);
+  assert.match(leer("src/components/dashboard/billing/dialogo-abonar.tsx"), /onFocus=\{seleccionarAlEnfocar\}/);
+  const sel = leer("src/components/dashboard/factura-un-popup/seleccionar-al-enfocar.ts");
+  assert.match(sel, /setTimeout\(\(\) => \{[\s\S]*?el\.select\(\)/);
+  assert.match(sel, /e\.preventDefault\(\);/);
+});

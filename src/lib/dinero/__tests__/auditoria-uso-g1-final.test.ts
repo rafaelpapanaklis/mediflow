@@ -146,9 +146,12 @@ test("F7 · «Facturado hoy» y «Por cobrar de hoy» dicen qué cuentan, en las
   assert.match(leer("src/app/dashboard/caja/caja-client.tsx"), /hint=\{txDinero\.caja\.porCobrarHoyNota\}/);
 });
 
-test("B1 · en el celular el pie del detalle va en una fila que se desliza", () => {
+test("B1 (QA ws1-t3, encargo 4) · en el celular el pie del detalle se acomoda en filas, sin scroll de lado, con «Registrar pago» primero y a todo lo ancho", () => {
   const css = leer("src/components/dashboard/factura-rediseno/factura-rediseno.module.css");
-  assert.match(css, /@media \(max-width: 640px\) \{\s*\.raiz \.pie:not\(\.pieApilado\) \{\s*flex-wrap: nowrap;[\s\S]*?overflow-x: auto;/);
+  const bloque = css.slice(css.indexOf("@media (max-width: 640px) {\n  .raiz .pie:not(.pieApilado)"));
+  assert.match(bloque, /\.raiz \.pie:not\(\.pieApilado\) \{\s*flex-wrap: wrap;/);
+  assert.doesNotMatch(bloque.slice(0, 700), /overflow-x: auto|flex-wrap: nowrap/);
+  assert.match(bloque, /:global\(\.btn-new--primary\) \{\s*order: -1;\s*flex-basis: 100%;/);
 });
 
 // ── Comprobación final antes del push ───────────────────────────────────────

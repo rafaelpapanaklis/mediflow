@@ -110,7 +110,8 @@ export async function movimientosDelPeriodo(
   db: DineroDb = prisma,
 ): Promise<{ cobros: MovimientoFechado[]; reembolsos: MovimientoFechado[] }> {
   const [cobros, reembolsos, anticipos] = await Promise.all([
-    db.payment.findMany({ where: ingresoPaymentWhere(clinicId, paidAt), select: { amount: true, paidAt: true } }),
+    // `notes`: el «cobro #…» que liga las partes de un cobro abonado a otra factura (contarCobros).
+    db.payment.findMany({ where: ingresoPaymentWhere(clinicId, paidAt), select: { amount: true, paidAt: true, notes: true } }),
     db.payment.findMany({ where: reembolsoPaymentWhere(clinicId, paidAt), select: { amount: true, paidAt: true } }),
     anticiposCobrados(clinicId, paidAt, db),
   ]);
