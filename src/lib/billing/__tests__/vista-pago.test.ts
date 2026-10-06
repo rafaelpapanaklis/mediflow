@@ -170,8 +170,8 @@ test("pantalla de pago: la promo se desglosa con el IVA DENTRO (total = promo) y
   assert.match(v, /v\.ctaPromo \? desglosePromoConIvaIncluido\(centavosBase\) : desgloseConIva\(centavosBase\)/);
   assert.match(v, /const cobroMostrado = ivaSel \? cobroNuevo : desgloseSinIva\(centavosBase\)/);
   // «Tu primer mes: solo $29 con tarjeta · luego $689/mes + IVA»: la promo sin «+ IVA», la renovación con él.
-  assert.match(v, /luego \$\{fmt\(plan\.priceMxn\)\}\/mes` \+ ivaPlan\(plan\.id\)/);
-  assert.doesNotMatch(v, /solo \$\{fmt\(FIRST_MONTH_PROMO_MXN\[plan\.id\]\)\} con tarjeta[^`]*IVA/);
+  // (ahora por aviso-promo-tarjeta.ts: promo «IVA incluido», renovación «+ IVA»).
+  assert.match(v, /lineaPrimerMesConTarjeta\(\{ promoMxn: FIRST_MONTH_PROMO_MXN\[plan\.id\], precioMensualMxn: plan\.priceMxn \}\)/);
 });
 
 test("portada: la promo del primer mes sale de plan_configs/FIRST_MONTH_PROMO_MXN y NO lleva «+ IVA»", () => {

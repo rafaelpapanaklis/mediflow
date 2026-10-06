@@ -9,6 +9,7 @@ import type { PlanCardData } from "@/app/dashboard/suspended/suspended-client";
 import { centavosAMxn, importeSpei, type CuentaBancaria } from "@/lib/billing/spei-directo-core";
 import { desgloseConIva, desglosePromoConIvaIncluido, desgloseSinIva, ivaAplica, type ExencionIva } from "@/lib/billing/iva-cobro";
 import { avisoTarjetaOxxoNoDisponible } from "@/lib/billing/metodos-de-pago";
+import { avisoPromoSoloConTarjeta, botonPagarConTarjetaPromo, lineaDespuesDelPrimerMes, lineaPrimerMesConTarjeta } from "@/lib/billing/aviso-promo-tarjeta";
 import { DatosTransferencia } from "./datos-transferencia";
 import s from "./pago.module.css";
 
@@ -100,8 +101,14 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
       ? `Equivale a ${fmt(v.perMonth(plan))} al mes · ahorras ${fmt(v.annualSavings(plan))} (35%)`
       : v.firstMonthEligible
         // La promo es el TOTAL del primer mes (IVA incluido, sin «+ IVA»); desde la renovación, precio + IVA.
-        ? `Tu primer mes: solo ${fmt(FIRST_MONTH_PROMO_MXN[plan.id])} con tarjeta · luego ${fmt(plan.priceMxn)}/mes` + ivaPlan(plan.id)
+        // Con tarjeta la cifra grande ya ES la promo: la nota dice solo lo que viene después.
+        ? v.ctaPromo
+          ? lineaDespuesDelPrimerMes({ precioMensualMxn: plan.priceMxn, conIva: ivaDe(plan.id) })
+          : lineaPrimerMesConTarjeta({ promoMxn: FIRST_MONTH_PROMO_MXN[plan.id], precioMensualMxn: plan.priceMxn })
         : "Facturación mensual · cancela cuando quieras";
+  // Cifra grande y unidad: con la promo vigente (mensual + tarjeta) el primer mes manda, tan grande como el precio.
+  const cifraDe = (plan: PlanCardData) => (v.ctaPromo ? FIRST_MONTH_PROMO_MXN[plan.id] : cobrado(plan));
+  const unidadDe = (plan: PlanCardData) => (v.ctaPromo ? "el primer mes · IVA incluido" : `${unidad}${ivaPlan(plan.id)}`);
 
   // Lo que se cobra en tarjeta/OXXO. PROMO del primer mes: el TOTAL es exactamente la promo ($29) con el IVA
   // DENTRO (subtotal $25.00 + IVA $4.00), nunca la promo + IVA. Sin promo: el precio del plan + IVA 16 % encima.
@@ -118,6 +125,19 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
   const importe = esSpei && v.selected
     ? importeSpei({ plan: v.selected, billing: v.billing, conIva: ivaSel })
     : null;
+
+  // Promo del primer mes: solo tarjeta. Quien elige SPEI/OXXO en una compra que la calificaría ve lo que
+  // pasa (paga el mes completo) y puede volver a la tarjeta con un clic. Nunca en enlaces, anual ni clínicas que ya pagaron.
+  const promoPerdida = v.firstMonthEligible && !anual && !v.soloTarjeta && v.method !== "card" && v.selected !== undefined;
+  const hayTarjeta = v.methods.some((m) => m.id === "card");
+  const totalCompleto = v.selected ? (ivaSel ? desgloseConIva(v.selected.priceMxn * 100) : desgloseSinIva(v.selected.priceMxn * 100)).totalCents : 0;
+  const avisoPromo =
+    promoPerdida && v.selected && hayTarjeta && (v.method === "spei" || v.method === "oxxo")
+      ? {
+          texto: avisoPromoSoloConTarjeta({ promoMxn: FIRST_MONTH_PROMO_MXN[v.selected.id], totalCompletoCents: totalCompleto, metodo: v.method }),
+          boton: botonPagarConTarjetaPromo(FIRST_MONTH_PROMO_MXN[v.selected.id]),
+        }
+      : null;
 
   return (
     <div>
@@ -142,7 +162,7 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
           ))}
         </div>
         <span className={`${s.etiqueta} ${s.etiquetaExito}`}>
-          {v.billing === "annual" || !v.firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
+          {v.billing === "annual" || !v.firstMonthEligible ? "Anual: 35% de descuento" : `Tu primer mes desde ${fmt(Math.min(...Object.values(FIRST_MONTH_PROMO_MXN)))}`}
         </span>
       </div>
 
@@ -156,12 +176,9 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
             <span className={s.resumenK}>Tu plan elegido</span>
             <span className={s.resumenNombre}>{resumen.name}</span>
             <span className={s.resumenPrecio}>
-              <strong className={s.resumenCifra}>{fmt(cobrado(resumen))}</strong>
-              <span>
-                MXN {unidad}
-                {iva}
-              </span>
-              <span className={s.resumenPildora}>{anual ? "Pago anual" : "Pago mensual"}</span>
+              <strong className={s.resumenCifra}>{fmt(cifraDe(resumen))}</strong>
+              <span>MXN {v.ctaPromo ? unidadDe(resumen) : `${unidad}${iva}`}</span>
+              <span className={s.resumenPildora}>{anual ? "Pago anual" : v.ctaPromo ? "Primer mes con tarjeta" : "Pago mensual"}</span>
             </span>
             <span className={s.resumenNota}>{notaPrecio(resumen)}</span>
             <span className={s.resumenBeneficios}>
@@ -234,11 +251,8 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
                 <div className={s.planNombre}>{plan.name}</div>
 
                 <div className={s.precio}>
-                  <span className={s.precioCifra}>{fmt(cobrado(plan))}</span>
-                  <span className={s.precioUnidad}>
-                    {unidad}
-                    {ivaPlan(plan.id)}
-                  </span>
+                  <span className={s.precioCifra}>{fmt(cifraDe(plan))}</span>
+                  <span className={s.precioUnidad}>{unidadDe(plan)}</span>
                 </div>
                 <div className={s.precioNota}>{notaPrecio(plan)}</div>
 
@@ -303,6 +317,15 @@ export function PlanesSuspendida({ v }: { v: VistaPlanes }) {
             );
           })}
         </div>
+
+        {avisoPromo && (
+          <div className={s.avisoPromo} role="status" data-testid="aviso-promo-solo-tarjeta">
+            <p>{avisoPromo.texto}</p>
+            <button type="button" className={s.botonTarjetaPromo} onClick={() => v.setMethod("card")}>
+              <CreditCard size={15} aria-hidden /> {avisoPromo.boton}
+            </button>
+          </div>
+        )}
 
         {v.method === "oxxo" && (
           <p className={s.notaMetodo}>

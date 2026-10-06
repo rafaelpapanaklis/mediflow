@@ -659,3 +659,37 @@
   .plan, .cta, .conmutadorDeslizante { transition: none; }
   .plan:hover, .cta:hover:not(:disabled) { transform: none; }
 }
+
+/* Promo del primer mes: solo con tarjeta. Aviso junto al método + botón para volver a la tarjeta. */
+.avisoPromo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--pg-azul-borde);
+  background: var(--pg-azul-suave);
+  color: var(--pg-azul-osc);
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+.avisoPromo p { margin: 0; }
+.botonTarjetaPromo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid var(--pg-azul-osc);
+  background: transparent;
+  color: var(--pg-azul-osc);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+:global(.dark) .avisoPromo { color: #93c5fd; }
+:global(.dark) .botonTarjetaPromo { color: #93c5fd; border-color: #93c5fd; }

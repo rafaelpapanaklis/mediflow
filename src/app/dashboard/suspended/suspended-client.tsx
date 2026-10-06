@@ -6,6 +6,8 @@ import toast from "react-hot-toast";
 import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
+import { avisoPromoSoloConTarjeta, botonPagarConTarjetaPromo, lineaPrimerMesConTarjeta } from "@/lib/billing/aviso-promo-tarjeta";
+import { desgloseConIva } from "@/lib/billing/iva-cobro";
 import { useT } from "@/i18n/i18n-provider";
 import { borrarEleccionAlta, leerEleccionAlta } from "@/lib/billing/eleccion-alta";
 import { PlanesSuspendida } from "@/components/dashboard/cuenta-rediseno/planes-suspendida";
@@ -330,7 +332,7 @@ export function SuspendedPlanCards({
           ))}
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-          {billing === "annual" || !firstMonthEligible ? "Anual: 35% de descuento" : "Tu primer mes desde $19"}
+          {billing === "annual" || !firstMonthEligible ? "Anual: 35% de descuento" : `Tu primer mes desde ${fmt(Math.min(...Object.values(FIRST_MONTH_PROMO_MXN)))}`}
         </span>
       </div>
 
@@ -424,7 +426,7 @@ export function SuspendedPlanCards({
                   {billing === "annual"
                     ? `${fmt(plan.priceMxnAnnual)} al año · ahorras ${fmt(annualSavings(plan))} (35%)`
                     : firstMonthEligible
-                      ? `Tu primer mes: solo ${fmt(FIRST_MONTH_PROMO_MXN[plan.id])} con tarjeta · luego ${fmt(plan.priceMxn)}/mes`
+                      ? lineaPrimerMesConTarjeta({ promoMxn: FIRST_MONTH_PROMO_MXN[plan.id], precioMensualMxn: plan.priceMxn })
                       : "Facturación mensual · cancela cuando quieras"}
                 </div>
 
@@ -494,6 +496,15 @@ export function SuspendedPlanCards({
             );
           })}
         </div>
+        )}
+
+        {firstMonthEligible && billing === "monthly" && !soloTarjeta && selected && method === "oxxo" && (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-center text-[13px] text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200" role="status" data-testid="aviso-promo-solo-tarjeta">
+            <p>{avisoPromoSoloConTarjeta({ promoMxn: FIRST_MONTH_PROMO_MXN[selected.id], totalCompletoCents: desgloseConIva(selected.priceMxn * 100).totalCents, metodo: "oxxo" })}</p>
+            <button type="button" onClick={() => setMethod("card")} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-current px-4 text-sm font-bold">
+              <CreditCard size={15} aria-hidden /> {botonPagarConTarjetaPromo(FIRST_MONTH_PROMO_MXN[selected.id])}
+            </button>
+          </div>
         )}
 
         {method !== "card" && (

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { cuentasDelEnlace, lineasDelEnlace } from "@/lib/billing/contratar";
 import Link from "next/link";
 import { PlanCard, type Billing, type PlanId } from "./plan-card";
-import { cfdiBullet } from "@/lib/plan-shared";
+import { FIRST_MONTH_PROMO_MXN, cfdiBullet } from "@/lib/plan-shared";
+import { lineaPrimerMesConTarjeta } from "@/lib/billing/aviso-promo-tarjeta";
 import { botonFantasma, botonPrimario } from "./estilos";
 
 interface ApiPlan {
@@ -101,6 +102,10 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
   const lineas = cuentas && elegido ? lineasDelEnlace(cuentas, elegido) : null;
   const pctAnual = soloEstePlan && elegido ? cuentasDelEnlace(elegido, "annual").pctAhorro : null;
 
+  // Promo del primer mes (solo tarjeta): el alta es siempre una primera contratación, salvo el enlace /contratar.
+  const lineaPromo = (p: ApiPlan) =>
+    soloEstePlan ? null : lineaPrimerMesConTarjeta({ promoMxn: FIRST_MONTH_PROMO_MXN[p.id], precioMensualMxn: p.priceMxn });
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {!mostrarPlanes ? (
@@ -122,6 +127,11 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
                 <span>MXN {anual ? "al año" : "al mes"} · + IVA</span>
                 <span className="dca-resumen__pill">{anual ? "Pago anual" : "Pago mensual"}</span>
               </span>
+              {!anual && !soloEstePlan && (
+                <span className="dca-resumen__promo" data-promo-primer-mes>
+                  {lineaPromo(elegido)}
+                </span>
+              )}
             </span>
             {!soloEstePlan && (
               <button type="button" className="dca-resumen__cambiar" onClick={() => setMostrarPlanes(true)}>
@@ -166,6 +176,7 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading, 
               features={vinetas(p)}
               popular={p.id === "PRO"}
               mostComplete={p.id === "CLINIC"}
+              promoLinea={lineaPromo(p)}
               selected={values.plan === p.id}
               onSelect={() => onChange({ plan: p.id })}
             />

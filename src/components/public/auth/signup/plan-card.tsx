@@ -13,6 +13,8 @@ interface PlanCardProps {
   features: string[];
   popular?: boolean;
   mostComplete?: boolean;
+  /** Línea del primer mes con tarjeta (solo alta nueva, mensual); null/ausente = sin promo. */
+  promoLinea?: string | null;
   selected: boolean;
   onSelect: () => void;
 }
@@ -33,6 +35,7 @@ export function PlanCard({
   features,
   popular,
   mostComplete,
+  promoLinea,
   selected,
   onSelect,
 }: PlanCardProps) {
@@ -71,6 +74,12 @@ export function PlanCard({
       {billing === "annual" && priceAnnual < priceMonthly && (
         <div className="dca-plan__was" style={{ marginTop: -6 }}>
           ${priceMonthly}
+        </div>
+      )}
+
+      {promoLinea && billing === "monthly" && (
+        <div className="dca-plan__promo" data-promo-primer-mes>
+          {promoLinea}
         </div>
       )}
 
