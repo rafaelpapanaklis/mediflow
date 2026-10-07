@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
 import { refundPayment } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
@@ -142,6 +143,7 @@ export async function POST(req: NextRequest) {
         monthlyPrice: invoice.amount,
       },
     });
+    await sincronizarSedesIncluidas(invoice.clinicId);
 
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId: invoice.clinicId,
@@ -192,6 +194,7 @@ export async function POST(req: NextRequest) {
         monthlyPrice,
       },
     });
+    await sincronizarSedesIncluidas(clinicId);
 
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId,
@@ -208,6 +211,8 @@ export async function POST(req: NextRequest) {
       where: { id: clinicId },
       data: { subscriptionStatus: "cancelled" },
     });
+    // A1 (ws1-t5): suspender a la madre apaga también a sus sedes incluidas.
+    await sincronizarSedesIncluidas(clinicId);
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId,
       entityType: "admin-billing", entityId: clinicId, action: "update",

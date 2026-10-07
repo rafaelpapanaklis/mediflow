@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Lock, Sparkles } from "lucide-react";
 import { isPlanId, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlans } from "@/lib/plans";
@@ -6,6 +7,8 @@ import { applyClinicOverrides } from "@/lib/billing/plan-overrides";
 import { isFirstContract } from "@/lib/billing/first-month-promo";
 import { enlaceDeContratacion } from "@/lib/billing/sin-promo.server";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
+import { SedeIncluidaSuspendida } from "./sede-incluida";
+import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
@@ -67,6 +70,15 @@ export default async function SuspendedPage({
   // así que plan / subscriptionStatus / los tres campos de la promo salen de ahí
   // SIN una segunda consulta.
   const clinic = user.clinic;
+
+  // M1 (ws1-t5): una sede incluida NUNCA ve la pantalla de pago (pagar aquí abría una segunda suscripción a
+  // nombre de la sede = doble cobro). Con acceso se va al panel; sin acceso (la madre dejó de pagar) se le
+  // explica y se le lleva a la clínica que paga.
+  const grupo = await leerGrupoDePago(user.clinicId);
+  if (grupo.esSedeIncluida) {
+    if (!isPlanExpired(clinic)) redirect("/dashboard");
+    return <SedeIncluidaSuspendida principalId={grupo.pagadoraId} principalNombre={grupo.pagadoraNombre} />;
+  }
   // t con la clínica en mano: getServerT() volvería a resolver la sesión para
   // sacar el locale. Este atajo es síncrono y no añade await al camino crítico.
   const { t } = serverTForLocale(localeFromClinic(clinic));

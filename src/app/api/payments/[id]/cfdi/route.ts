@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cfdiTimbradosDelGrupo } from "@/lib/billing/sedes-incluidas";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -426,7 +427,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       update: { stamped: { increment: 1 } },
     });
     const plan = await getResolvedPlan(clinic.plan);
-    const q = cfdiOverage(usage.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
+    // M5 (ws1-t5): el cupo del mes es del dueño, compartido con sus sedes incluidas.
+    const q = cfdiOverage(await cfdiTimbradosDelGrupo(ctx!.clinicId, period, usage.stamped), plan.cfdiMonthly, plan.cfdiOverageCents);
 
     await logMutation({
       texto: "Timbró el CFDI de un pago",

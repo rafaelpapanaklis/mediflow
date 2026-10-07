@@ -90,6 +90,7 @@
     "test:factura-un-popup": "tsx --test src/components/dashboard/factura-un-popup/__tests__/factura-un-popup.test.ts",
     "test:clinica-visual-rediseno": "tsx --test src/components/dashboard/clinica-visual-rediseno/__tests__/clinica-visual-rediseno.test.ts",
     "test:iva-cobro": "tsx --test src/lib/billing/iva-cobro.test.ts src/app/api/billing/__tests__/checkout-iva.test.ts src/app/api/billing/__tests__/change-plan-iva.test.ts src/app/api/billing/__tests__/enlaces-admin-iva.test.ts",
+    "test:sedes-madre": "tsx --tsconfig tsconfig.test.json --test src/lib/__tests__/sedes-siguen-a-su-madre.test.ts",
     "test:spei-directo": "tsx --test src/lib/billing/spei-directo.test.ts src/lib/billing/spei-directo-servidor.test.ts",
     "test:cuenta-rediseno": "tsx --test src/components/dashboard/cuenta-rediseno/__tests__/cuenta-rediseno.test.ts",
     "test:layout-rediseno": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/layout-rediseno/__tests__/layout-rediseno.test.tsx",

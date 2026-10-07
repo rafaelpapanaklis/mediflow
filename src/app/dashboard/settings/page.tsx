@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
@@ -85,6 +86,12 @@ export default async function SettingsPage({ searchParams }: Props) {
   // C-114: estado de la reserva web (sin el SQL: abierta y sin interruptor).
   const [reservaAbierta, reservaDisponible] = await Promise.all([reservaWebAbierta(user.clinicId), hayColumnaReservaWeb()]);
 
+  // M2 (ws1-t5): en una sede incluida la pestaña Suscripción no ofrece pagar/cambiar/cancelar.
+  const grupoPago = await leerGrupoDePago(user.clinicId).catch(() => null);
+  const sedeIncluida = grupoPago?.esSedeIncluida
+    ? { principalId: grupoPago.pagadoraId, principalNombre: grupoPago.pagadoraNombre }
+    : null;
+
   const metodosPago = { tarjetaOxxo: ivaParaCobro(process.env).ok || exencionIva !== null, spei: cuentaSpei !== null };
 
   return (
@@ -101,6 +108,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         puedeEditarClinica={puedeEditarClinica}
         rediseno={rediseno}
         metodosPago={metodosPago}
+        sedeIncluida={sedeIncluida}
         gcalClinica={gcalClinica}
         reservaWeb={{ abierta: reservaAbierta, disponible: reservaDisponible }}
       />

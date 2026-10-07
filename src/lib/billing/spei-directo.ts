@@ -1,4 +1,5 @@
 import "server-only";
+import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits, getResolvedPlan } from "@/lib/plans";
@@ -460,6 +461,7 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
     if ((err as { code?: string })?.code === "P2002") throw new SpeiError("ya-resuelta", "Esta transferencia ya se había resuelto.");
     throw err;
   }
+  await sincronizarSedesIncluidas(sol.clinicId);
   await avisarActivacion(sol.clinicId, plan);
 
   return { clinicId: sol.clinicId, invoiceId: factura.id, plan, billing, amountCents: sol.amountCents, periodStart: desde, periodEnd: hasta };

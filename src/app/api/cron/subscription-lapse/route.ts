@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
 import {
   MANUAL_LAPSE_STATUS,
@@ -97,6 +98,8 @@ export async function GET(req: NextRequest) {
     },
     data: { subscriptionStatus: MANUAL_LAPSE_STATUS },
   });
+  // A1 (ws1-t5): la madre que caduca arrastra a sus sedes incluidas (que este cron NO toca por su cuenta).
+  for (const id of ids) await sincronizarSedesIncluidas(id);
 
   // AuditLog NO se usa aquí: sus columnas clinicId y userId son FK NOT NULL a
   // users, y un cron no tiene usuario. El webhook de Stripe intenta salvarlo

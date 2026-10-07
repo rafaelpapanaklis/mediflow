@@ -230,8 +230,14 @@ export function hasOwnBilling(c: BranchBillingRow): boolean {
 }
 
 /** La huella con la que nace una sede en POST /api/clinics. */
-function looksLikeIncludedBranch(c: BranchBillingRow): boolean {
-  return c.subscriptionStatus === "active" && !hasOwnBilling(c);
+function looksLikeIncludedBranch(c: BranchBillingRow, madre: BranchBillingRow | null = null): boolean {
+  if (hasOwnBilling(c)) return false;
+  if (c.subscriptionStatus === "active") return true;
+  // ws1-t5 (A1): las sedes SIGUEN el estado de su madre (sincronizarSedesIncluidas): con la madre en
+  // past_due/cancelled/… la sede lleva el MISMO estado y sigue siendo sede incluida. Una clínica suelta
+  // del mismo dueño con otro estado (trial, vencida por su cuenta) no lo es.
+  const estado = c.subscriptionStatus ?? null;
+  return !!madre && estado !== null && estado !== "trialing" && estado === (madre.subscriptionStatus ?? null);
 }
 
 function time(d: Date | string): number {
@@ -285,7 +291,7 @@ export function findBranchMothers(
     }
     for (const c of group) {
       if (c === fallbackMother) continue;
-      if (looksLikeIncludedBranch(c) && madre) out.set(c.id, madre.id);
+      if (madre && looksLikeIncludedBranch(c, madre)) out.set(c.id, madre.id);
     }
   });
   return out;

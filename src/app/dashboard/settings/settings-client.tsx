@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake, ImagePlus, Trash2, Lock } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
+import { SedeIncluidaAviso } from "@/components/dashboard/sede-incluida-aviso";
 import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
@@ -132,6 +133,8 @@ interface Props {
   rediseno?: boolean;
   /** Métodos de pago que existen hoy (resuelto en el servidor): para el texto de «Activa tu plan» en Suscripción. */
   metodosPago?: MetodosDisponibles;
+  /** ws1-t5 (M2): la clínica es una sede incluida; el plan lo paga `principalNombre`. */
+  sedeIncluida?: { principalId: string; principalNombre: string | null } | null;
   /** Google Calendar DE LA CLÍNICA (no del usuario que mira), resuelto en el servidor. */
   gcalClinica?: GcalClinica;
   /** C-114: reserva web en línea (`disponible` = ya se pegó sql/ws1-t8-reserva-web.sql). */
@@ -151,7 +154,7 @@ interface GcalClinica {
 
 const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caidoDesde: null, motivo: null, invitarPaciente: true, tablaDisponible: false };
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, gcalClinica, reservaWeb }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, sedeIncluida = null, gcalClinica, reservaWeb }: Props) {
   const t = useT();
   const txPerfil = textosMiPerfil(useLocale());
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
@@ -827,7 +830,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <Contenido>
 
             {/* ── SUSCRIPCIÓN ── */}
-            {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} rediseno metodosPago={metodosPago} />}
+            {tab === "subscription" && isAdminUser && (sedeIncluida ? <SedeIncluidaAviso {...sedeIncluida} /> : <SubscriptionTab clinic={clinic} rediseno metodosPago={metodosPago} />)}
 
             {/* ── CLÍNICA ── */}
             {tab === "clinica" && ve("clinica") && (
@@ -1609,7 +1612,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         <div style={{ flex: "1 1 480px", minWidth: 0 }}>
 
       {/* ── SUSCRIPCIÓN ── */}
-      {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} metodosPago={metodosPago} />}
+      {tab === "subscription" && isAdminUser && (sedeIncluida ? <SedeIncluidaAviso {...sedeIncluida} /> : <SubscriptionTab clinic={clinic} metodosPago={metodosPago} />)}
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && ve("clinica") && (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { bloqueoDeSedesParaPlan, sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
@@ -298,7 +299,20 @@ export async function POST(req: NextRequest) {
           // Plan en la metadata de la suscripción (cambios hechos desde el
           // dashboard/portal de Stripe). Si es válido, sincroniza plan + cupo IA.
           const subPlan = sub.metadata?.plan;
-          const subPlanFields = isPlanId(subPlan)
+          // A2 (ws1-t5): un plan que admite menos sedes de las que cuelgan de este pago NO se escribe (las
+          // sedes seguirían activas sin pagar). Se queda el plan actual y se deja el motivo en la bitácora.
+          const sedesBloquean = isPlanId(subPlan) ? await bloqueoDeSedesParaPlan(clinicId, subPlan) : null;
+          if (sedesBloquean) {
+            await logAudit({
+              clinicId,
+              userId: clinicId,
+              entityType: "subscription",
+              entityId: sub.id,
+              action: "update",
+              changes: { _source: { before: null, after: { event: event.type, planNoAplicado: subPlan, motivo: sedesBloquean } } },
+            }).catch(() => {});
+          }
+          const subPlanFields = isPlanId(subPlan) && !sedesBloquean
             ? { plan: subPlan, aiTokensLimit: (await getPlanLimits(subPlan)).aiTokensDefault }
             : {};
           // Fin del periodo REAL de Stripe → nextBillingDate Y trialEndsAt (el
@@ -341,6 +355,7 @@ export async function POST(req: NextRequest) {
               ...subPlanFields,
             },
           });
+          await sincronizarSedesIncluidas(clinicId);
 
           await logAudit({
             clinicId,
@@ -376,6 +391,7 @@ export async function POST(req: NextRequest) {
             where: { id: clinicId },
             data: { subscriptionStatus: "cancelled" },
           });
+          await sincronizarSedesIncluidas(clinicId);
           await logAudit({
             clinicId,
             userId: clinicId,
@@ -416,6 +432,7 @@ export async function POST(req: NextRequest) {
               where: { id: clinicId },
               data: { subscriptionStatus: "past_due" },
             });
+            await sincronizarSedesIncluidas(clinicId);
           } else {
             console.warn(
               "[stripe webhook] invoice.payment_failed sin suspender:",
@@ -523,6 +540,7 @@ export async function POST(req: NextRequest) {
             where: { id: clinic.id, subscriptionStatus: "incomplete" },
             data: { subscriptionStatus: "active" },
           });
+          await sincronizarSedesIncluidas(clinic.id);
         }
 
         // ──────────────────────────────────────────────────────────────────
@@ -969,6 +987,7 @@ async function applyPlanUpgradeDiff(
     where: { id: clinicId },
     data: { plan, aiTokensLimit: limits.aiTokensDefault },
   });
+  await sincronizarSedesIncluidas(clinicId);
 
   await logAudit({
     clinicId,
@@ -1024,7 +1043,8 @@ async function activatePlatformSubscription(
   // Plan elegido en el checkout (source.plan, viene de session.metadata.plan).
   // Si es válido, fija plan + cupo de IA acorde; si no, deja lo existente.
   // Cubre tarjeta (checkout.session.completed) y SPEI/OXXO (async_payment_succeeded).
-  const planFields = isPlanId(source.plan)
+  const planBloqueadoPorSedes = isPlanId(source.plan) ? await bloqueoDeSedesParaPlan(clinicId, source.plan) : null;
+  const planFields = isPlanId(source.plan) && !planBloqueadoPorSedes
     ? { plan: source.plan, aiTokensLimit: (await getPlanLimits(source.plan)).aiTokensDefault }
     : {};
 
@@ -1038,6 +1058,8 @@ async function activatePlatformSubscription(
       ...planFields,
     },
   });
+  // A1 (ws1-t5): las sedes incluidas siguen a la madre también al reactivar/renovar.
+  await sincronizarSedesIncluidas(clinicId);
 
   await logAudit({
     clinicId,

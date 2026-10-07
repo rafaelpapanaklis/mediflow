@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
         ...manualPeriodFields(current, new Date(periodEnd)),
       },
     });
+    await sincronizarSedesIncluidas(clinicId);
   }
 
   await logAdminClinicMutation({

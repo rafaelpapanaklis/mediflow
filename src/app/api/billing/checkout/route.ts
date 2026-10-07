@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { bloqueoDeSedesParaPlan, leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
+import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { metadataMetaDePeticion } from "@/lib/analytics/meta-capi.server";
@@ -92,6 +94,21 @@ export async function POST(req: NextRequest) {
   });
   if (!clinic) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  }
+
+  // M1 (ws1-t5): una sede incluida NUNCA abre un cobro propio (una segunda suscripción a nombre de la sede
+  // = doble cobro del plan Clínica). Se paga en la clínica principal, que es la que lleva la suscripción.
+  const grupo = await leerGrupoDePago(clinic.id);
+  if (grupo.esSedeIncluida) {
+    return NextResponse.json(
+      { code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId },
+      { status: 409 },
+    );
+  }
+  // A2: tampoco se reactiva en un plan que admite menos sedes de las que cuelgan de este pago.
+  const sedesBloquean = await bloqueoDeSedesParaPlan(clinic.id, planId);
+  if (sedesBloquean) {
+    return NextResponse.json({ code: "SEDES_ACTIVAS", error: sedesBloquean }, { status: 409 });
   }
 
   // ENLACE DE CONTRATACIÓN (dalecontrol.com/contratar/<plan>, pedido de Rafael 5-oct-2026): en

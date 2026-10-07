@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { bloqueoDeSedesParaPlan, leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
+import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { PLAN_IDS } from "@/lib/billing/plans";
@@ -36,6 +38,15 @@ export async function POST(req: NextRequest) {
   }
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "plan o periodo inválido" }, { status: 400 });
+
+  // M1/A2 (ws1-t5): una sede incluida no paga (se paga en la principal) y no se reactiva en un plan con
+  // menos sedes de las que cuelgan del pago.
+  const grupo = await leerGrupoDePago(user.clinicId);
+  if (grupo.esSedeIncluida) {
+    return NextResponse.json({ code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId }, { status: 409 });
+  }
+  const sedesBloquean = await bloqueoDeSedesParaPlan(user.clinicId, parsed.data.plan);
+  if (sedesBloquean) return NextResponse.json({ code: "SEDES_ACTIVAS", error: sedesBloquean }, { status: 409 });
 
   try {
     const { solicitud, creada } = await crearSolicitudSpei({

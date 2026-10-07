@@ -42,6 +42,8 @@ const PLANES: Record<string, any> = {
 };
 
 const prismaDoble: any = {
+  // ws1-t5: la clínica de la prueba no tiene dueño con sedes (leerGrupoDePago → ella sola).
+  user: { findFirst: async () => null, findMany: async () => [] },
   clinic: {
     findUnique: async () => clinicaEnBase,
     update: async ({ data }: any) => Object.assign(clinicaEnBase, data),

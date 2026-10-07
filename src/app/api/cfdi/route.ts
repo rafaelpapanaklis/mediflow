@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cfdiTimbradosDelGrupo } from "@/lib/billing/sedes-incluidas";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -577,7 +578,8 @@ export async function POST(req: NextRequest) {
 
     // Cupo del plan vigente para avisar a la UI (used/incluidas/excedente).
     const plan = await getResolvedPlan(clinic.plan);
-    const q = cfdiOverage(usage.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
+    // M5 (ws1-t5): el cupo del mes es del dueño, compartido con sus sedes incluidas.
+    const q = cfdiOverage(await cfdiTimbradosDelGrupo(ctx!.clinicId, period, usage.stamped), plan.cfdiMonthly, plan.cfdiOverageCents);
     // ws1-t3: la relación 04 queda escrita (la exige cancelar el viejo con motivo 01).
     if (sust && sust.ok) await registrarSustituto({ clinicId: ctx!.clinicId, nuevoCfdiId: cfdiRecord.id, viejoUuid: sust.viejo.uuid });
     // F-14: en qué ambiente se timbró (sin el SQL no escribe nada) y, si

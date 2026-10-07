@@ -8,6 +8,8 @@ import {
   addOverageInvoiceItem,
   CFDI_OVERAGE_METHOD,
 } from "@/lib/cfdi-overage";
+import { madresDeSedes } from "@/lib/billing/sedes-incluidas";
+import { agruparCfdiPorPagadora } from "@/lib/billing/sedes-incluidas-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,11 +53,17 @@ export async function GET(req: NextRequest) {
     select: { id: true, clinicId: true, period: true, stamped: true },
   });
 
-  for (const row of pendingRows) {
-    scanned++;
+  // M5 (ws1-t5): el cupo del mes es del DUEÑO, compartido por la clínica que paga y sus sedes incluidas.
+  // Se agrupa por (pagadora, periodo): el excedente se calcula sobre el total del grupo y se cobra UNA vez
+  // a la principal (su suscripción / su tarjeta); las filas de las sedes se cierran sin cobro propio.
+  const madres = await madresDeSedes(Array.from(new Set(pendingRows.map((r) => r.clinicId))));
+  const grupos = agruparCfdiPorPagadora(pendingRows, madres);
+
+  for (const g of grupos) {
+    scanned += g.filas.length;
     try {
       const clinic = await prisma.clinic.findUnique({
-        where: { id: row.clinicId },
+        where: { id: g.pagadoraId },
         select: {
           name: true,
           plan: true,
@@ -64,17 +72,38 @@ export async function GET(req: NextRequest) {
           stripePaymentMethodId: true,
         },
       });
+      // El ancla es la fila de la pagadora; si solo timbraron sus sedes, se crea una en cero.
+      const ancla =
+        g.filas.find((f) => f.clinicId === g.pagadoraId) ??
+        (clinic
+          ? await prisma.cfdiUsage.upsert({
+              where: { clinicId_period: { clinicId: g.pagadoraId, period: g.period } },
+              create: { clinicId: g.pagadoraId, period: g.period, stamped: 0 },
+              update: {},
+              select: { id: true, clinicId: true, period: true, stamped: true },
+            })
+          : null);
+      const row = ancla ?? g.filas[0];
+      // Las demás filas del grupo se cierran sin cobro propio (el cobro va en el ancla).
+      const cerrarLasOtras = async () => {
+        await prisma.cfdiUsage.updateMany({
+          where: { id: { in: g.filas.filter((f) => f.id !== row.id).map((f) => f.id) }, billedAt: null },
+          data: { billingStatus: "none", overageCents: 0, billedAt: new Date() },
+        });
+      };
       if (!clinic) {
         await closePeriod(row.id, "none", 0, null);
+        await cerrarLasOtras();
         noOverage++;
         continue;
       }
 
       const plan = await getResolvedPlan(clinic.plan);
-      const q = cfdiOverage(row.stamped, plan.cfdiMonthly, plan.cfdiOverageCents);
+      const q = cfdiOverage(g.totalTimbrados, plan.cfdiMonthly, plan.cfdiOverageCents);
 
       if (q.overage <= 0 || q.overageTotalCents <= 0) {
         await closePeriod(row.id, "none", 0, null);
+        await cerrarLasOtras();
         noOverage++;
         continue;
       }
@@ -97,6 +126,7 @@ export async function GET(req: NextRequest) {
           await recordManualDebt(row, q, "pending", r.invoiceItemId);
           manual++;
         }
+        await cerrarLasOtras();
         continue;
       }
 
@@ -117,15 +147,17 @@ export async function GET(req: NextRequest) {
           await recordManualDebt(row, q, "failed", r.paymentIntentId);
           chargeFailed++;
         }
+        await cerrarLasOtras();
         continue;
       }
 
       // (c) Sin método automático (SPEI/pago único) o sin customer/tarjeta útil.
       await recordManualDebt(row, q, "pending", null);
+      await cerrarLasOtras();
       manual++;
     } catch (e) {
       errors++;
-      console.error(`[cron/cfdi-overage] error en clínica ${row.clinicId} (${row.period}):`, e);
+      console.error(`[cron/cfdi-overage] error en clínica ${g.pagadoraId} (${g.period}):`, e);
     }
   }
 

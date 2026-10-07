@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
+import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 
 /**
  * Marca la clínica como "cancelRequested" — no cancela inmediatamente,
@@ -15,6 +17,15 @@ export async function POST() {
   }
 
   try {
+    // M2 (ws1-t5): una sede incluida no paga; marcar «cancelar» en ella perdía la intención (la principal no
+    // se enteraba y /admin la veía en la clínica equivocada). Se avisa y se manda a la clínica que paga.
+    const grupo = await leerGrupoDePago(ctx.clinicId);
+    if (grupo.esSedeIncluida) {
+      return NextResponse.json(
+        { code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId },
+        { status: 409 },
+      );
+    }
     await prisma.clinic.update({
       where: { id: ctx.clinicId },
       data: {

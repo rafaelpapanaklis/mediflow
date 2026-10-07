@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
 import { createCustomer, createCheckoutForSubscription, cancelSubscription, getCustomerPortalUrl, pauseSubscription, resumeSubscription } from "@/lib/stripe-subscriptions";
 import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
         where: { id: clinicId },
         data: { subscriptionStatus: "cancelled", stripeSubscriptionId: null },
       });
+      await sincronizarSedesIncluidas(clinicId);
       await logAdminClinicMutation({
         req, admin: admin.user, clinicId,
         entityType: "admin-billing", entityId: clinicId, action: "update",
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest) {
       if (!clinic.stripeSubscriptionId) return NextResponse.json({ error: "No active subscription" }, { status: 400 });
       await pauseSubscription(clinic.stripeSubscriptionId);
       await prisma.clinic.update({ where: { id: clinicId }, data: { subscriptionStatus: "paused" } });
+      await sincronizarSedesIncluidas(clinicId);
       console.log("[ADMIN] pause_subscription", { clinicId, subscriptionId: clinic.stripeSubscriptionId });
       await logAdminClinicMutation({
         req, admin: admin.user, clinicId,
@@ -88,6 +91,7 @@ export async function POST(req: NextRequest) {
       if (!clinic.stripeSubscriptionId) return NextResponse.json({ error: "No subscription" }, { status: 400 });
       await resumeSubscription(clinic.stripeSubscriptionId);
       await prisma.clinic.update({ where: { id: clinicId }, data: { subscriptionStatus: "active" } });
+      await sincronizarSedesIncluidas(clinicId);
       console.log("[ADMIN] resume_subscription", { clinicId, subscriptionId: clinic.stripeSubscriptionId });
       await logAdminClinicMutation({
         req, admin: admin.user, clinicId,

@@ -68,6 +68,8 @@ let consultasFacturas: any[];
 let marcaSinPromo: "BASIC" | "PRO" | "CLINIC" | false | "falla";
 let consultasMarca: any[];
 const prismaDoble: any = {
+  // ws1-t5: la clínica de la prueba no tiene dueño con sedes (leerGrupoDePago → ella sola).
+  user: { findFirst: async () => null, findMany: async () => [] },
   auditLog: {
     findFirst: async ({ where }: any) => {
       consultasMarca.push(where);

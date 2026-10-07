@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { bloqueoDeSedesParaPlan, leerGrupoDePago, sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
+import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
 import type Stripe from "stripe";
 import { getCurrentUser } from "@/lib/auth";
@@ -127,6 +129,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // M2 (ws1-t5): una sede incluida no paga ni tiene plan propio — cambiar de plan desde ella caía en la rama
+  // de «pagador manual» y respondía mensajes que no aplican. Se explica y se manda a la clínica que paga.
+  const grupo = await leerGrupoDePago(clinic.id);
+  if (grupo.esSedeIncluida) {
+    return NextResponse.json(
+      { code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId },
+      { status: 409 },
+    );
+  }
+  // A2 (ws1-t5): con varias sedes no se puede bajar a un plan que admite menos (Básico/Profesional = 1).
+  const sedesBloquean = await bloqueoDeSedesParaPlan(clinic.id, targetPlanId);
+  if (sedesBloquean) {
+    return NextResponse.json({ code: "SEDES_ACTIVAS", error: sedesBloquean }, { status: 409 });
+  }
+
   const currentPlan = await getResolvedPlanForClinic(clinic);
   const { ipAddress, userAgent } = extractAuditMeta(req);
 
@@ -143,6 +160,7 @@ export async function POST(req: NextRequest) {
         ...clearOverridesData(),
       },
     });
+    await sincronizarSedesIncluidas(clinic.id);
     await logAudit({
       clinicId: clinic.id,
       userId: user.id,
@@ -569,6 +587,7 @@ export async function POST(req: NextRequest) {
       ...clearOverridesData(),
     },
   });
+  await sincronizarSedesIncluidas(clinic.id);
 
   await logAudit({
     clinicId: clinic.id,

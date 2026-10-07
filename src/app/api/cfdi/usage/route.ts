@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cfdiTimbradosDelGrupo } from "@/lib/billing/sedes-incluidas";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getResolvedPlan } from "@/lib/plans";
@@ -73,7 +74,8 @@ export async function GET(_req: NextRequest) {
     }),
   ]);
 
-  const q = cfdiOverage(usage?.stamped ?? 0, plan.cfdiMonthly, plan.cfdiOverageCents);
+  // M5 (ws1-t5): el cupo del mes es del dueño, compartido con sus sedes incluidas.
+  const q = cfdiOverage(await cfdiTimbradosDelGrupo(clinicId, period, usage?.stamped ?? 0), plan.cfdiMonthly, plan.cfdiOverageCents);
   const debtCents = Math.round(debtRows.reduce((sum, r) => sum + (r.amount ?? 0), 0) * 100);
 
   // Cómo se cobrará el excedente (para el copy de la card). Solo consulta Stripe
