@@ -18,6 +18,8 @@ const es = {
   emailHintAlta: "Es el correo con el que inicia sesión. La contraseña temporal aparece al crear la cuenta.",
   crearCuenta: "Crear cuenta",
   altaListo: (nombre: string) => `Cuenta de ${nombre} creada`,
+  altaSedeAdicional: (nombre: string, sedes: string) => `${nombre} ya tenía cuenta (también en ${sedes}): ahora tiene acceso a esta sede con su contraseña de siempre`,
+  tambienEn: (sedes: string) => `También en: ${sedes}`,
   tempCreadaTitulo: "Cuenta creada — contraseña temporal",
   tempCreadaDesc: (nombre: string) =>
     `Entrégasela a ${nombre} por un canal seguro. Solo se muestra una vez. Podrá cambiarla en Configuración → Seguridad.`,
@@ -83,6 +85,8 @@ const en: typeof es = {
   emailHintAlta: "This is the email they sign in with. The temporary password appears when the account is created.",
   crearCuenta: "Create account",
   altaListo: (nombre) => `Account created for ${nombre}`,
+  altaSedeAdicional: (nombre, sedes) => `${nombre} already had an account (also in ${sedes}): they now have access to this location with their usual password`,
+  tambienEn: (sedes) => `Also in: ${sedes}`,
   tempCreadaTitulo: "Account created — temporary password",
   tempCreadaDesc: (nombre) =>
     `Give it to ${nombre} through a secure channel. It is shown only once. They can change it in Settings → Security.`,

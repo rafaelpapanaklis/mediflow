@@ -84,7 +84,12 @@ mock.module("@/lib/prisma", {
         findMany: async ({ where, orderBy }: any) => {
           lecturas++;
           const r = filas.filter((f) =>
-            Object.entries(where ?? {}).every(([k, v]) => (f as any)[k] === v),
+            Object.entries(where ?? {}).every(([k, v]) =>
+              // M3: `clinic: { archivedAt: null }` mira la clínica de la fila (sin campo = viva).
+              k === "clinic"
+                ? Object.entries(v as any).every(([kk, vv]) => ((f as any).clinic?.[kk] ?? null) === vv)
+                : (f as any)[k] === v,
+            ),
           );
           if (orderBy?.createdAt === "asc") r.sort((a, b) => +a.createdAt - +b.createdAt);
           // Copias, como Prisma: cada lectura trae objetos nuevos.

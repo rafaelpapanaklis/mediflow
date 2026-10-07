@@ -141,6 +141,10 @@ interface Relacion {
 
 /** Relaciones que el doble sabe resolver, por modelo. */
 const RELACIONES: Record<string, Record<string, Relacion>> = {
+  // La sede de la ficha: la usa `sedesVisibles` para dejar fuera las sedes archivadas.
+  user: {
+    clinic: { modelo: "clinics", via: (u, c) => u.clinicId === c.id, lista: false },
+  },
   appointment: {
     patient: { modelo: "patients", via: (a, p) => a.patientId === p.id, lista: false },
     doctor: { modelo: "users", via: (a, u) => a.doctorId === u.id, lista: false },

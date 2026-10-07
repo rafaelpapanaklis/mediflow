@@ -11,6 +11,7 @@ import {
   type ClinicPatientLinkRow,
   type OwnedBranchRow,
 } from "@/lib/branches-shared";
+import { CerrarSede } from "./cerrar-sede";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
 import {
   Aviso, BloqueFila, CasillaEtiqueta, Columna, Encabezado, Insignia, Seccion, Vacio,
@@ -42,9 +43,14 @@ interface PairRow {
  * refleja y se muta vía /api/clinics/links, que revalida la pertenencia de
  * ambas sedes contra la sesión antes de escribir.
  */
-export function SucursalesClient({ branches, initialLinks, activeClinicId, rediseno = false }: Props) {
+export function SucursalesClient({ branches: branchesIniciales, initialLinks, activeClinicId, rediseno = false }: Props) {
   const t = useT();
   const [links, setLinks] = useState<ClinicPatientLinkRow[]>(initialLinks);
+  const [branches, setBranches] = useState<OwnedBranchRow[]>(branchesIniciales);
+  const cerrada = (id: string) => {
+    setBranches((prev) => prev.filter((b) => b.clinicId !== id));
+    setLinks((prev) => prev.filter((l) => l.clinicAId !== id && l.clinicBId !== id));
+  };
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   // Todos los pares no ordenados (i < j). Con maxClinics=3 son 3 filas; el
@@ -121,7 +127,7 @@ export function SucursalesClient({ branches, initialLinks, activeClinicId, redis
                   key={b.clinicId}
                   icono={<Building2 size={14} strokeWidth={1.75} style={{ color: "var(--m2-texto-3)", flexShrink: 0 }} aria-hidden />}
                   titulo={b.clinicName}
-                  derecha={b.clinicId === activeClinicId ? <Insignia>{t("sidebar.current")}</Insignia> : undefined}
+                  derecha={b.clinicId === activeClinicId ? <Insignia>{t("sidebar.current")}</Insignia> : <CerrarSede clinicId={b.clinicId} clinicName={b.clinicName} onCerrada={cerrada} />}
                 />
               ))}
             </div>
@@ -232,6 +238,9 @@ export function SucursalesClient({ branches, initialLinks, activeClinicId, redis
                 <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)", flexShrink: 0 }}>
                   {t("sidebar.current")}
                 </span>
+              )}
+              {b.clinicId !== activeClinicId && (
+                <CerrarSede clinicId={b.clinicId} clinicName={b.clinicName} onCerrada={cerrada} />
               )}
             </div>
           ))}

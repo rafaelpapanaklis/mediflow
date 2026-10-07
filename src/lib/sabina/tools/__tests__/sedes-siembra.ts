@@ -174,10 +174,11 @@ export function datosDeSedes(opciones: OpcionesSiembra = {}): Datos {
   ];
 
   const users: Fila[] = [
-    ...(d.users ?? []).map((u) => ({ ...u, supabaseId: IDENTIDAD[u.id] ?? `sb-${u.id}` })),
+    // Rafael es el DUEÑO: solo el dueño compara sedes (7-oct-2026), así que su ficha de Altabrisa es SUPER_ADMIN.
+    ...(d.users ?? []).map((u) => ({ ...u, ...(u.id === U_ADMIN_N ? { role: "SUPER_ADMIN" } : {}), supabaseId: IDENTIDAD[u.id] ?? `sb-${u.id}` })),
     // Rafael en la sede hermana: ficha ACTIVA, así que sí la ve.
     {
-      id: U_RAFA_S, clinicId: CL_SUR, supabaseId: SB_RAFA, role: "ADMIN",
+      id: U_RAFA_S, clinicId: CL_SUR, supabaseId: SB_RAFA, role: "SUPER_ADMIN",
       firstName: "Rafael", lastName: "Centro", isActive: true, permissionsOverride: [],
     },
     // 🔴 Rafael en la sede que ya no es suya: MISMA persona, MISMA fila, pero
@@ -303,7 +304,7 @@ function ctx(over: Partial<SabinaCtx>, db: BaseDoble): SabinaCtx {
   return {
     clinicId: CL_NORTE,
     userId: U_ADMIN_N,
-    role: "ADMIN",
+    role: "SUPER_ADMIN",
     permissionsOverride: [],
     timezone: TZ_NORTE,
     clinicCategory: "DENTAL",

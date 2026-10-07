@@ -1,3 +1,6 @@
+import { sedesDelDueno } from "@/lib/storage-owner";
+import { sedesDeMiembros } from "@/lib/team/tambien-en";
+import { decidirSedeAdicional } from "@/lib/team/sede-adicional";
 import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
 import { agendaActiveDelAlta } from "@/lib/team/parche-miembro";
 import { NextRequest, NextResponse } from "next/server";
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
   const team = await prisma.user.findMany({
     where: { clinicId: ctx!.clinicId },
     select: {
-      id: true, firstName: true, lastName: true, email: true,
+      id: true, supabaseId: true, firstName: true, lastName: true, email: true,
       role: true, specialty: true, color: true, services: true,
       avatarUrl: true, phone: true, isActive: true, createdAt: true,
       cedulaProfesional: true, especialidad: true, cedulaEspecialidad: true,
@@ -56,7 +59,9 @@ export async function GET(req: NextRequest) {
     orderBy: [{ role: "asc" }, { firstName: "asc" }],
   });
 
-  return NextResponse.json(team, {
+  const tambienEn = await sedesDeMiembros(ctx!.clinicId, team.map((m) => m.supabaseId));
+
+  return NextResponse.json(team.map(({ supabaseId, ...m }) => ({ ...m, tambienEn: tambienEn.get(supabaseId) ?? [] })), {
     headers: { "Cache-Control": "no-store, must-revalidate" },
   });
 }
@@ -137,6 +142,59 @@ export async function POST(req: NextRequest) {
   if (createError || !created?.user) {
     const msg = createError?.message ?? "";
     if (msg.includes("already been registered") || msg.includes("already exists")) {
+      // A3: la cuenta ya existe. Si es de una persona con ficha activa en otra sede del
+      // MISMO dueño, se le abre ESTA sede con su rol y permisos de aquí, sin contraseña nueva.
+      // Solo el dueño o un admin de la sede (aunque otro rol tenga `team.edit` por override).
+      if (ctx!.role === "SUPER_ADMIN" || ctx!.role === "ADMIN") {
+        const emailNuevo = email.trim().toLowerCase();
+        const sedes = await sedesDelDueno(ctx!.clinicId);
+        const fichas = await prisma.user.findMany({
+          where: { email: { equals: emailNuevo, mode: "insensitive" }, clinicId: { in: sedes }, isActive: true },
+          select: { supabaseId: true, clinicId: true, role: true, isActive: true, clinic: { select: { name: true } } },
+        });
+        const decision = decidirSedeAdicional({
+          clinicIdActiva: ctx!.clinicId,
+          sedesDelDueno: sedes,
+          fichas: fichas.map((f) => ({ supabaseId: f.supabaseId, clinicId: f.clinicId, clinicName: f.clinic.name, role: f.role, isActive: f.isActive })),
+        });
+        if (decision.ok) {
+          const ligado = await prisma.user.create({
+            data: {
+              supabaseId: decision.supabaseId,
+              clinicId:   ctx!.clinicId,
+              email:      emailNuevo,
+              firstName:  firstName.trim(),
+              lastName:   lastName.trim(),
+              role:       role ?? "DOCTOR",
+              specialty:  specialty || null,
+              ...(permissionsOverrideNuevo && permissionsOverrideNuevo.length > 0 && { permissionsOverride: permissionsOverrideNuevo }),
+              color:      assignedColor,
+              agendaActive: agendaActiveDelAlta(rolNuevo, agendaActive),
+              phone:      phone || null,
+              services:   services ?? [],
+              isActive:   true,
+              cedulaProfesional:  cedulaProfesional?.trim() || null,
+              especialidad:       especialidad?.trim() || null,
+              cedulaEspecialidad: cedulaEspecialidad?.trim() || null,
+              canAccessCaja:      canAccessCaja === true,
+              // Usa la contraseña que ya tiene: no se le obliga a cambiarla.
+              mustChangePassword: false,
+            },
+          });
+          await logMutation({
+            req, clinicId: ctx!.clinicId, userId: ctx!.userId, entityType: "user", entityId: ligado.id, action: "create",
+            after: { firstName: ligado.firstName, lastName: ligado.lastName, email: ligado.email, role: ligado.role, sedeAdicional: true, tambienEn: decision.otrasSedes },
+          });
+          revalidateAfter("team");
+          return NextResponse.json({
+            ...camposPublicosDeMiembro(ligado),
+            cuentaExistente: true,
+            tambienEn: decision.otrasSedes,
+            createdAt: ligado.createdAt.toISOString(),
+            updatedAt: ligado.updatedAt.toISOString(),
+          }, { status: 201 });
+        }
+      }
       return NextResponse.json({
         error: "Este email ya tiene cuenta en DaleControl. La persona debe usar su contraseña existente.",
       }, { status: 400 });

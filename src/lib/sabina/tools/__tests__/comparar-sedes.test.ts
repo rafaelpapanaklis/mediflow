@@ -547,10 +547,9 @@ test("🔴 cada trozo se gatea con la key que DECLARA su herramienta, y sin ella
   );
 });
 
-test("🔴 el recorte de Sabina es el de CADA sede: lo que el Super Admin de Centro le quitó allí", async () => {
-  // El Super Admin de Centro apagó la facturación de Sabina para la ficha de
-  // Rafael EN CENTRO. El usuario SÍ tiene la key: la frase tiene que ser la de
-  // «el Super Admin no deja a Sabina», no «no tienes acceso».
+test("🔴 el dueño no queda recortado por un ajuste de Sabina que nadie puede ponerle", async () => {
+  // Solo el dueño compara sedes y al SUPER_ADMIN nadie le edita lo de Sabina: una fila vieja de
+  // recorte en Centro NO le quita el dinero de Centro (igual que `permisosDeSabina`).
   const db = crearBase(
     datosDeSedes({
       sabinaUserPermissions: [
@@ -558,23 +557,9 @@ test("🔴 el recorte de Sabina es el de CADA sede: lo que el Super Admin de Cen
       ],
     }),
   );
-
-  const r = await comparar(rafaEnNorte(db), { metrica: "dinero" });
-  const d = datosDe(r);
-
+  const d = datosDe(await comparar(rafaEnNorte(db), { metrica: "dinero" }));
   assert.ok(d.sedes[0].ingresos, "Altabrisa no tenía recorte");
-  assert.equal(d.sedes[1].ingresos, null, "Centro trajo dinero con el recorte puesto");
-  assert.deepEqual(d.sedes[1].omitidas, [
-    { seccion: "ingresos y por cobrar", permiso: "billing.view", causa: "sabina" },
-  ]);
-
-  const resumen = (r as any).resumen as string;
-  assert.ok(resumen.includes("Super Admin"), resumen);
-  assert.equal(
-    resumen.includes("NO tienes acceso"),
-    false,
-    `le dice «no tienes acceso» a quien SÍ lo tiene: ${resumen}`,
-  );
+  assert.ok(d.sedes[1].ingresos, "un recorte fantasma le quitó el dinero de Centro al dueño");
 });
 
 test("un recorte de Sabina en la sede ACTIVA no se contagia a la hermana, ni al revés", async () => {
@@ -596,34 +581,34 @@ test("un recorte de Sabina en la sede ACTIVA no se contagia a la hermana, ni al 
   assert.ok(d.sedes[1].ingresos, "el recorte de Altabrisa se contagió a Centro");
 });
 
-test("🔴 doctor en una sede y admin en otra: el recorte usa la ficha de ALLÍ, con números", async () => {
-  // Rafael es ADMIN en Altabrisa y DOCTOR en Centro. En Centro, `ausencias`
-  // tiene que devolver SOLO las citas de la ficha de Centro (U_RAFA_S), no las
-  // de toda la clínica ni las de la ficha de Altabrisa.
+test("🔴 SOLO EL DUEÑO compara: alguien con ficha de doctor/admin en dos sedes ve solo la que pisa", async () => {
+  // A3 permite fichas en varias sedes. Eso NO le da a un ADMIN/DOCTOR la comparación: Rafael
+  // aquí es ADMIN en Altabrisa y SUPER_ADMIN en Centro, y solo ve Altabrisa.
+  for (const rol of ["ADMIN", "DOCTOR", "RECEPTIONIST"]) {
+    const datos: Datos = datosDeSedes();
+    datos.users = datos.users!.map((u: Fila) => (u.id === U_ADMIN_N ? { ...u, role: rol } : u));
+    const r = await comparar(rafaEnNorte(crearBase(datos), { role: rol }), { metrica: "todo" });
+    const d = datosDe(r);
+    assert.deepEqual(nombres(d), [NOMBRE_NORTE], `${rol} con ficha en dos sedes vio otra`);
+    assert.equal(d.totalSedes, 1);
+    assert.equal(JSON.stringify(r).includes(NOMBRE_SUR), false, `${rol}: se coló el nombre de la otra sede`);
+  }
+});
+
+test("🔴 una ficha NO de dueño en la sede hermana no la convierte en comparable (aunque pises como dueño)", async () => {
   const datos: Datos = datosDeSedes();
   datos.users = datos.users!.map((u: Fila) => (u.id === U_RAFA_S ? { ...u, role: "DOCTOR" } : u));
-  const r = await comparar(rafaEnNorte(crearBase(datos)), { metrica: "citas" });
+  const d = datosDe(await comparar(rafaEnNorte(crearBase(datos)), { metrica: "citas" }));
+  assert.deepEqual(nombres(d), [NOMBRE_NORTE]);
+});
+
+test("🔴 M3: una sede ARCHIVADA no se compara ni se nombra", async () => {
+  const datos: Datos = datosDeSedes();
+  datos.clinics = datos.clinics!.map((c: Fila) => (c.id === CL_SUR ? { ...c, archivedAt: new Date("2026-09-30T00:00:00Z") } : c));
+  const r = await comparar(rafaEnNorte(crearBase(datos)), { metrica: "todo" });
   const d = datosDe(r);
-
-  assert.equal(d.sedes[0].alcance, "clinica", "en Altabrisa es ADMIN");
-  assert.equal(d.sedes[1].alcance, "propio", "en Centro es DOCTOR: solo lo suyo");
-
-  // 🔴 EL NÚMERO. Son exactamente las citas de U_RAFA_S en Centro. Con la ficha
-  // equivocada —la de Altabrisa, o la de Sara— estos dos conteos cambian.
-  assert.equal(d.sedes[1].citas!.agendadas, CITAS_DE_RAFA_EN_SUR);
-  assert.equal(d.sedes[1].citas!.ausencias, AUSENCIAS_DE_RAFA_EN_SUR);
-
-  // Y con la ficha de ADMIN en Centro se ven MÁS: las de Sara también. Si los
-  // dos conteos fueran iguales, lo de arriba no probaría nada.
-  const comoAdmin = datosDe(await comparar(rafaEnNorte(baseDeSedes()), { metrica: "citas" }));
-  assert.ok(
-    comoAdmin.sedes[1].citas!.agendadas > CITAS_DE_RAFA_EN_SUR,
-    `el ADMIN de Centro ve ${comoAdmin.sedes[1].citas!.agendadas}, igual que el doctor: el recorte no se nota`,
-  );
-
-  const resumen = (r as any).resumen as string;
-  assert.ok(resumen.includes("doctor"), `no avisa del alcance distinto: ${resumen}`);
-  assert.ok(resumen.includes(NOMBRE_SUR), resumen);
+  assert.deepEqual(nombres(d), [NOMBRE_NORTE]);
+  assert.equal(JSON.stringify(r).includes(NOMBRE_SUR), false);
 });
 
 test("con el mismo rol en las dos, el alcance es el mismo y no hay aviso de doctor", async () => {
@@ -695,42 +680,14 @@ test("🔴 el saldo por cobrar va aparte de los ingresos y se dice que es ACUMUL
   assert.ok(resumen.includes("acumulado"), `el saldo se presenta como si fuera del periodo: ${resumen}`);
 });
 
-test("🔴 el aviso de «eres doctor» NO dice que el dinero sea tuyo (ese no lleva recorte de rol)", async () => {
-  const datos: Datos = datosDeSedes();
-  datos.users = datos.users!.map((u: Fila) => (u.id === U_RAFA_S ? { ...u, role: "DOCTOR" } : u));
-  const r = await comparar(rafaEnNorte(crearBase(datos)), { metrica: "todo" });
-  const resumen = (r as any).resumen as string;
-
-  assert.ok(resumen.includes("CITAS"), `el aviso no acota a qué aplica: ${resumen}`);
-  assert.ok(
-    resumen.includes("el dinero sí es el de la sede completa"),
-    `el aviso deja creer que los ingresos del doctor son solo suyos: ${resumen}`,
-  );
-});
-
-test("sin nada que el rol de doctor recorte, no se suelta el aviso de doctor", async () => {
-  const datos: Datos = datosDeSedes();
-  datos.users = datos.users!.map((u: Fila) => (u.id === U_RAFA_S ? { ...u, role: "DOCTOR" } : u));
-  // `dinero` no lleva recorte de rol: el aviso sobraría y confundiría.
-  const r = await comparar(rafaEnNorte(crearBase(datos)), { metrica: "dinero" });
-  assert.equal((r as any).resumen.includes("eres doctor"), false, (r as any).resumen);
-});
-
-test("🔴 con Sabina APAGADA en la sede hermana, la frase NOMBRA la sede", async () => {
+test("🔴 un «Sabina apagada» en la ficha del dueño en la hermana no lo deja sin dinero", async () => {
   const db = crearBase(
     datosDeSedes({
       sabinaUserPermissions: [{ userId: U_RAFA_S, clinicId: CL_SUR, enabled: false, permissions: [] }],
     }),
   );
-  const r = await comparar(rafaEnNorte(db), { metrica: "dinero" });
-  const d = datosDe(r);
-
-  assert.ok(d.sedes[0].ingresos, "Altabrisa tenía que seguir contestando");
-  assert.equal(d.sedes[1].ingresos, null, "Centro contestó con Sabina apagada allí");
-
-  const resumen = (r as any).resumen as string;
-  assert.ok(resumen.includes(NOMBRE_SUR), `la frase no dice de qué sede habla: ${resumen}`);
-  assert.ok(resumen.includes("apagó a Sabina"), resumen);
+  const d = datosDe(await comparar(rafaEnNorte(db), { metrica: "dinero" }));
+  assert.ok(d.sedes[0].ingresos && d.sedes[1].ingresos, "al dueño no se le apaga a Sabina");
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -745,7 +702,7 @@ test("con más sedes que el tope, se comparan las primeras y se DICE cuántas qu
     const id = `cl-extra-${i}`;
     clinicasExtra.push({ id, name: `Sede ${i}`, timezone: TZ_NORTE, category: "DENTAL" });
     extra.push({
-      id: `u-extra-${i}`, clinicId: id, supabaseId: SB_RAFA, role: "ADMIN",
+      id: `u-extra-${i}`, clinicId: id, supabaseId: SB_RAFA, role: "SUPER_ADMIN",
       firstName: "Rafael", lastName: `Extra${i}`, isActive: true, permissionsOverride: [],
     });
   }
@@ -775,9 +732,6 @@ test("🔴 una ficha que apunta a una clínica que no existe se descarta (no se 
     false,
     "se coló el id de la sede sin nombre; un cuid no es una respuesta",
   );
-  // No se calla: la lista no está completa y hay que decirlo.
-  assert.equal(d.truncado, true);
-  assert.ok((r as any).resumen.includes("de tus 2 sedes"), (r as any).resumen);
 });
 
 test("🔴 si falla la consulta de UNA sede, se marca y las demás siguen saliendo", async () => {

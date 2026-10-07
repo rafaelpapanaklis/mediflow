@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (!clinicId) return NextResponse.json({ error: "clinicId required" }, { status: 400 });
 
   const dbUser = await prisma.user.findFirst({
-    where: { supabaseId: user.id, clinicId, isActive: true },
+    where: { supabaseId: user.id, clinicId, isActive: true, clinic: { archivedAt: null } },
     select: { id: true, clinicId: true },
   });
   if (!dbUser) return NextResponse.json({ error: "No access to this clinic" }, { status: 403 });

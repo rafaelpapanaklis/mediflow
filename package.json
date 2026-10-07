@@ -113,6 +113,7 @@
     "test:conexiones-base": "tsx --test --experimental-test-module-mocks src/lib/blog/__tests__/cache-blog.test.ts src/lib/__tests__/prisma-url.test.ts src/lib/__tests__/prisma-un-cliente-por-proceso.test.ts src/lib/__tests__/active-clinic-resembrar.test.ts src/app/api/track/__tests__/base-en-apuros.test.ts src/components/dashboard/menu-dos-niveles/__tests__/sin-precarga-masiva.test.ts",
     "test:equipo-revision-final": "tsx --test src/lib/team/__tests__/equipo-revision-final.test.ts",
     "test:team-sin-cuenta": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cambio-correo-sin-cuenta.test.ts",
+    "test:team-sedes": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/team/__tests__/sedes-equipo.test.ts",
     "test:team-cupo": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cupo-usuarios.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
     "test:team-dueno-edita": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/team/__tests__/dueno-edita-su-ficha.test.ts src/components/dashboard/team/__tests__/selector-de-rol.test.tsx",

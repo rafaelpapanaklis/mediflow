@@ -24,7 +24,8 @@ const f = (id: string, over: Partial<Fila> = {}): Fila => ({
   supabaseId: "11111111-1111-4111-8111-111111111111", ...over,
 });
 const coincide = (r: Fila, w: any) =>
-  (w?.clinicId === undefined || r.clinicId === w.clinicId) &&
+  (w?.clinicId === undefined || (typeof w.clinicId === "object" ? w.clinicId.in.includes(r.clinicId) : r.clinicId === w.clinicId)) &&
+  (w?.role === undefined || r.role === w.role) &&
   (w?.isActive === undefined || r.isActive === w.isActive) &&
   (typeof w?.id !== "string" || r.id === w.id);
 

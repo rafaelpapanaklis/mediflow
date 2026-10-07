@@ -100,6 +100,7 @@ interface TeamMember {
   cedulaEspecialidad?: string | null;
   agendaActive?: boolean | null;
   permissionsOverride?: string[];
+  tambienEn?: string[];
   _count: { appointments: number; records: number };
 }
 
@@ -876,7 +877,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setTempPassFor(`${data.firstName} ${data.lastName}`);
       setShowNew(false);
       setForm(emptyForm());
-      toast.success(x.altaListo(`${data.firstName} ${data.lastName}`));
+      toast.success(data.cuentaExistente
+        ? x.altaSedeAdicional(`${data.firstName} ${data.lastName}`, (data.tambienEn ?? []).join(", "))
+        : x.altaListo(`${data.firstName} ${data.lastName}`));
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -1241,6 +1244,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                     )}
                   </div>
                   <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 2, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.email}</div>
+                  {m.tambienEn && m.tambienEn.length > 0 && (
+                    <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>{x.tambienEn(m.tambienEn.join(", "))}</div>
+                  )}
                   {m.specialty && (
                     <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 2, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nombreDeEspecialidad(m.specialty)}</div>
                   )}

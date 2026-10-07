@@ -261,7 +261,7 @@ const resolverUsuarioActual = cache(async () => {
 export const getUserClinics = cache(async () => {
   const supabaseUser = await requireAuth();
   const users = await prisma.user.findMany({
-    where: { supabaseId: supabaseUser.id, isActive: true },
+    where: { supabaseId: supabaseUser.id, isActive: true, clinic: { archivedAt: null } },
     include: { clinic: { select: { id: true, name: true, category: true, plan: true, logoUrl: true } } },
     orderBy: { createdAt: "asc" },
   });

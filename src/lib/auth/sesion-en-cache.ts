@@ -56,7 +56,8 @@ export const VIDA_SESION_MS = 10_000;
 
 function leerFilas(supabaseId: string) {
   return prisma.user.findMany({
-    where: { supabaseId, isActive: true },
+    // M3: una sede archivada no existe para la sesión (ni sede activa ni fila).
+    where: { supabaseId, isActive: true, clinic: { archivedAt: null } },
     include: { clinic: true },
     orderBy: { createdAt: "asc" },
   });

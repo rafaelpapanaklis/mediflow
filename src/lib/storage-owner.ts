@@ -28,7 +28,7 @@ export async function sedesDelDueno(clinicId: string): Promise<string[]> {
   });
   if (!propio) return [clinicId];
   const filas = await prisma.user.findMany({
-    where: { supabaseId: propio.supabaseId, role: "SUPER_ADMIN", isActive: true },
+    where: { supabaseId: propio.supabaseId, role: "SUPER_ADMIN", isActive: true, clinic: { archivedAt: null } },
     select: { supabaseId: true, clinicId: true },
   });
   return sedesDeLosDuenos(clinicId, [{ supabaseId: propio.supabaseId, clinicId }, ...filas]);

@@ -9,6 +9,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { horarioClinica } from "@/components/dashboard/horario-doctor/tipos";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
+import { sedesDeMiembros } from "@/lib/team/tambien-en";
 import { getOpcionesSubida } from "@/lib/team/opciones-subida";
 import { isClinicBillingAdmin } from "@/lib/billing/authz";
 
@@ -39,7 +40,7 @@ export default async function TeamPage() {
     prisma.user.findMany({
       where: { clinicId: user.clinicId },
       select: {
-        id: true, firstName: true, lastName: true, email: true,
+        id: true, supabaseId: true, firstName: true, lastName: true, email: true,
         role: true, specialty: true, color: true, avatarUrl: true,
         phone: true, isActive: true, createdAt: true, services: true,
         // NOM-024 — SIN estos tres el modal «Editar» arrancaba con la cédula y la
@@ -73,10 +74,13 @@ export default async function TeamPage() {
     getOpcionesSubida(user.clinicId),
   ]);
 
+  const tambienEn = await sedesDeMiembros(user.clinicId, team.map((m) => m.supabaseId));
+  const equipo = team.map(({ supabaseId, ...m }) => ({ ...m, tambienEn: tambienEn.get(supabaseId) ?? [] }));
+
   return (
     <TeamClient
       key={user.clinicId}
-      team={team as any}
+      team={equipo as any}
       currentUserId={user.id}
       currentUserRole={user.role}
       clinicName={user.clinic.name}

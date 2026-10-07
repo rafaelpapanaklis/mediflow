@@ -79,7 +79,7 @@ export async function getBranchQuota(input: {
  */
 export async function countOwnedClinics(supabaseId: string): Promise<number> {
   return prisma.user.count({
-    where: { supabaseId, role: "SUPER_ADMIN", isActive: true },
+    where: { supabaseId, role: "SUPER_ADMIN", isActive: true, clinic: { archivedAt: null } },
   });
 }
 
@@ -220,7 +220,7 @@ export function clinicScopeFilter(clinicIds: string[]): string | { in: string[] 
  */
 export async function getOwnedClinicIds(supabaseId: string): Promise<string[]> {
   const rows = await prisma.user.findMany({
-    where: { supabaseId, role: "SUPER_ADMIN", isActive: true },
+    where: { supabaseId, role: "SUPER_ADMIN", isActive: true, clinic: { archivedAt: null } },
     select: { clinicId: true },
   });
   return rows.map((r) => r.clinicId);
@@ -231,7 +231,7 @@ export async function getOwnedBranches(
   supabaseId: string,
 ): Promise<Array<{ clinicId: string; clinicName: string }>> {
   const rows = await prisma.user.findMany({
-    where: { supabaseId, role: "SUPER_ADMIN", isActive: true },
+    where: { supabaseId, role: "SUPER_ADMIN", isActive: true, clinic: { archivedAt: null } },
     select: { clinic: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },
   });

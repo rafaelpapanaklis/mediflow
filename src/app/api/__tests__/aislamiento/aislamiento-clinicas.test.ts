@@ -138,6 +138,7 @@ const clave = (metodo: string, patron: string) => `${metodo} ${patron}`;
  */
 const SEDES_DEL_MISMO_DUENO: Record<string, { motivo: string; escribeEnC?: boolean }> = {
   "GET /api/my-clinics": { motivo: "el selector de sede lista las clínicas donde ESTA persona tiene ficha activa" },
+  "GET /api/team": { motivo: "A3: Equipo dice «también en: Sede B» — solo el NOMBRE de las otras sedes vivas del mismo dueño donde ese miembro tiene ficha activa" },
   "GET /api/clinics/links": { motivo: "el dueño ve sus sedes y los vínculos de pacientes entre ellas (getOwnedBranches)" },
   "POST /api/auth/2fa/setup": { motivo: "el 2FA es de la PERSONA (EQ-02): se propaga a todas sus fichas", escribeEnC: true },
   // Solo van aquí las que el arnés DEMUESTRA que tocan la sede hermana (la

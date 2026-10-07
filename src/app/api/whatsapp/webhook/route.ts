@@ -396,6 +396,13 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
     return;
   }
 
+  // M3: una sede archivada (cerrada) está apagada de verdad: el bot no contesta ni se
+  // guarda el mensaje. El expediente se conserva; solo se corta la entrada.
+  if (clinic.archivedAt) {
+    console.warn(`[whatsapp/webhook] mensaje para una sede archivada, se ignora: ${clinic.id}`);
+    return;
+  }
+
   // Dedup por wamid: Meta reintenta el webhook ante timeouts/5xx. Si este
   // mensaje ya fue ingestado, salir antes de crear el IN y de runBotTurn
   // (sin esto el bot llama a Claude y responde DOS veces, cobrando doble).

@@ -155,9 +155,12 @@ export async function sedesVisibles(ctx: SabinaCtx): Promise<SedesVisibles> {
   // no está—, la respuesta es «solo tu sede activa». Degradar hacia MENOS sedes
   // es seguro por construcción: es lo que hace el panel hoy. Lo que no se puede
   // es tumbar la pregunta entera por no haber podido mirar la de al lado.
+  // 🔴 SOLO EL DUEÑO COMPARA SEDES (Rafael, 7-oct-2026). Un doctor, recepción o admin con ficha
+  // en dos sedes (A3 ya lo permite) trabaja en la sede donde está parado y nada más: las hermanas
+  // no se resuelven ni se nombran. Quien no es SUPER_ADMIN en la sede activa cae a «solo la activa».
   let hermanas: Ficha[] = [];
   try {
-    hermanas = await fichasHermanas(ctx, activa);
+    hermanas = activa.role === "SUPER_ADMIN" ? await fichasHermanas(ctx, activa) : [];
   } catch {
     hermanas = [];
   }
@@ -204,7 +207,8 @@ async function fichasHermanas(ctx: SabinaCtx, activa: Ficha): Promise<Ficha[]> {
   // decorativo — a quien se le desactiva la ficha de una sede se le está
   // quitando el acceso a esa sede, y la fila sigue ahí.
   const filas = await db.user.findMany({
-    where: { supabaseId, isActive: true },
+    // Solo las sedes DONDE ES DUEÑO y que siguen vivas (una sede archivada no existe para nadie).
+    where: { supabaseId, isActive: true, role: "SUPER_ADMIN", clinic: { archivedAt: null } },
     select: { id: true, clinicId: true, role: true, permissionsOverride: true },
     orderBy: { createdAt: "asc" },
   });
