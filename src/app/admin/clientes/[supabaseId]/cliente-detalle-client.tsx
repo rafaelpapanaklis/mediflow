@@ -410,7 +410,7 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
         <div className="dcp-sede__usos">
           <BarraUso label={u.storageSedes && u.storageSedes > 1 ? "Disco (todas las sedes)" : "Disco"} usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
           {u.tokensTope > 0
-            ? <BarraUso label="Tokens IA" usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
+            ? <BarraUso label={u.tokensSedes > 1 ? "Tokens IA (todas las sedes)" : "Tokens IA"} usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
             : <span className="dcp-uso--sin">Tokens IA: sin cupo en el plan</span>}
           {u.cfdiUsados !== null && u.cfdiIncluidos > 0
             ? <BarraUso label="CFDI del mes" usado={u.cfdiUsados} tope={u.cfdiIncluidos} fmt={(n) => String(n)} compacta />

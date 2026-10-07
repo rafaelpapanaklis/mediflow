@@ -319,6 +319,7 @@ async function renderAdminDashboard() {
     const acceso = ultimoAccesoPorClinica.get(c.id);
     return {
       id: c.id,
+      sedeIncluida: !!sedesIncluidas?.has(c.id),
       nombre: c.name,
       plan: c.plan,
       createdAt: c.createdAt,

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
@@ -69,7 +70,8 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
     menuDosNivelesEncendido(clinicId),
   ]);
 
-  const aiUsed = clinic?.aiTokensUsed ?? 0;
+  // Cupo POR DUEÑO: suman las otras sedes del dueño (el saldo IA no).
+  const aiUsed = (clinic?.aiTokensUsed ?? 0) + (await tokensDeLasOtrasSedes(clinicId)).tokens;
   const aiLimit = clinic?.aiTokensLimit ?? 0;
   const normalized = files.map((f) => ({ ...f, url: toPublicFileUrl(f.url) }));
 

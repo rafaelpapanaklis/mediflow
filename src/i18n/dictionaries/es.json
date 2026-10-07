@@ -4184,6 +4184,7 @@
       "aiTitle": "Asistente IA Clínico",
       "aiSubtitle": "Cupo mensual del plan para el dictado, el asistente y el análisis de radiografías. Sabina y el bot de WhatsApp se pagan aparte, con tu Saldo IA.",
       "aiTokensUsedThisMonth": "Tokens usados este mes",
+      "aiTokensUsedThisMonthAllBranches": "Tokens usados este mes (todas tus sedes)",
       "aiPercentUsed": "{percent}% usado",
       "aiTokensRemaining": "{count} tokens restantes",
       "aiStatTokensRemaining": "Tokens restantes",

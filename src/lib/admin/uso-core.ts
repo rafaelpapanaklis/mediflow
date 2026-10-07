@@ -65,6 +65,8 @@ export interface UsoClinica {
   storageTope: number | null;
   /** Sedes del dueño que suman en `storageUsado` (>1 = «todas las sedes»). */
   storageSedes: number | null;
+  /** Sedes del dueño que suman en `tokensUsados` (>1 = «todas las sedes»). El saldo IA NO se suma. */
+  tokensSedes: number;
   tokensUsados: number;
   tokensTope: number;
   cfdiUsados: number | null;
@@ -80,7 +82,7 @@ export interface UsoClinica {
 }
 
 export const USO_VACIO: UsoClinica = {
-  storageUsado: null, storageTope: null, storageSedes: null, tokensUsados: 0, tokensTope: 0,
+  storageUsado: null, storageTope: null, storageSedes: null, tokensSedes: 1, tokensUsados: 0, tokensTope: 0,
   cfdiUsados: null, cfdiIncluidos: 0, usuarios: null, usuariosTope: null,
   sedes: null, sedesTope: null, saldoIaCents: null, saldoIaStatus: null,
 };

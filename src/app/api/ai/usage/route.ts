@@ -1,3 +1,5 @@
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
+import { sedesDelDueno } from "@/lib/storage-owner";
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
@@ -33,6 +35,9 @@ export async function GET() {
   // paralelo (ws1-t1). Antes eran dos viajes de ida y vuelta seguidos a la
   // base. El desglose es fail-open: su error se captura aquí y se registra
   // abajo, igual que antes.
+  // Cupo POR DUEÑO: el consumo y el desglose suman todas las sedes (el saldo IA NO: es por clínica).
+  const sedesIds = await sedesDelDueno(ctx.clinicId);
+  const otras = await tokensDeLasOtrasSedes(ctx.clinicId, now);
   const [clinic, desgloseCupo] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: ctx.clinicId },
@@ -46,7 +51,7 @@ export async function GET() {
     prisma.aiQuotaUsage
       .groupBy({
         by: ["feature"],
-        where: { clinicId: ctx.clinicId, createdAt: { gte: monthStart } },
+        where: { clinicId: { in: sedesIds }, createdAt: { gte: monthStart } },
         _sum: { tokens: true },
       })
       .then((rows) => ({ rows, err: null as unknown }))
@@ -164,7 +169,7 @@ export async function GET() {
   // del mes en curso ya tiene filas, esas filas SON consumo real de este mes
   // que se cobró antes de que alguna ruta disparara el reseteo perezoso. Sin
   // esto la pantalla mostraría "0 usado" encima de un desglose con tokens.
-  const used = counterIsStale ? byFeatureTotal : clinic.aiTokensUsed;
+  const used = counterIsStale ? byFeatureTotal : clinic.aiTokensUsed + otras.tokens;
   const remaining = Math.max(0, limit - used);
   // Guarda contra límite 0 (plan Básico): 0/0 daría NaN.
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -182,6 +187,8 @@ export async function GET() {
     // sesión, no expone nada ajeno.
     isAdmin: ctx.isAdmin,
     clinicId: ctx.clinicId,
+    // Sedes del dueño que suman en este cupo (>1 = «todas tus sedes»).
+    sedes: otras.sedes,
     byFeature,
     // Suma del desglose. Puede ser menor que `used` si la clínica consumió IA
     // antes de que existiera el desglose: la UI lo muestra como "sin detalle".

@@ -248,6 +248,14 @@ export function findIncludedBranchIds(
   clinics: BranchBillingRow[],
   owners: ClinicOwnerRow[],
 ): Set<string> {
+  return new Set(findBranchMothers(clinics, owners).keys());
+}
+
+/** Cada sede incluida → el id de la clínica madre que la paga (la de cobro propio más antigua, o la fallback). */
+export function findBranchMothers(
+  clinics: BranchBillingRow[],
+  owners: ClinicOwnerRow[],
+): Map<string, string> {
   const byId = new Map(clinics.map((c) => [c.id, c]));
   const groups = new Map<string, BranchBillingRow[]>();
   for (const o of owners) {
@@ -258,10 +266,13 @@ export function findIncludedBranchIds(
     else if (!g.includes(c)) g.push(c);
   }
 
-  const out = new Set<string>();
+  const out = new Map<string, string>();
   groups.forEach((group) => {
     if (group.length < 2) return;
     const payers = group.filter(hasOwnBilling);
+    let madre: BranchBillingRow | null = payers.length
+      ? payers.reduce((a, b) => (time(b.createdAt) < time(a.createdAt) ? b : a))
+      : null;
     // Sin ninguna pagadora, la madre es la activa más antigua del grupo.
     let fallbackMother: BranchBillingRow | null = null;
     if (payers.length === 0) {
@@ -270,10 +281,11 @@ export function findIncludedBranchIds(
         if (!fallbackMother || time(c.createdAt) < time(fallbackMother.createdAt)) fallbackMother = c;
       }
       if (!fallbackMother) return;
+      madre = fallbackMother;
     }
     for (const c of group) {
       if (c === fallbackMother) continue;
-      if (looksLikeIncludedBranch(c)) out.add(c.id);
+      if (looksLikeIncludedBranch(c) && madre) out.set(c.id, madre.id);
     }
   });
   return out;

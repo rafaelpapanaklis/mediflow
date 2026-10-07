@@ -100,11 +100,14 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
 
   // ── Tanda 2 (3): almacenamiento (LA MISMA función que la cuota de subida y la
   //    tarjeta de Suscripción: @/lib/storage-usage), usuarios activos y saldo IA ──
-  const [almacen, usuarios, monederos] = await Promise.all([
+  const [almacen, usuarios, monederos, tokensSedesFilas] = await Promise.all([
     seguro(medirAlmacenamiento(idsAlmacen), "almacenamiento", avisos),
     seguro(prisma.user.groupBy({ by: ["clinicId"], where: { ...en, isActive: true }, _count: { _all: true } }), "usuarios", avisos),
     seguro(prisma.aiWallet.findMany({ where: en, select: { clinicId: true, balanceCents: true, status: true } }), "saldo IA", avisos),
+    // Cupo de tokens POR DUEÑO: el contador de cada sede de la familia (el saldo IA de arriba sigue por clínica).
+    seguro(prisma.clinic.findMany({ where: { id: { in: idsAlmacen } }, select: { id: true, aiTokensUsed: true, aiLastResetAt: true } }), "tokens por sede", avisos),
   ]);
+  const tokensPorSede = new Map((tokensSedesFilas ?? []).map((f) => [f.id, tokensVigentes(f.aiTokensUsed ?? 0, f.aiLastResetAt, ahora)]));
   for (const a of almacen?.avisos ?? []) avisos.push(a);
 
   const mUsuarios = new Map<string, number>();
@@ -124,7 +127,11 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
       storageUsado: almacen ? totalDesglose(sumarDesgloses(sedesDe(c.id).map((i) => almacen.porClinica.get(i) ?? desgloseVacio()))) : null,
       storageTope: lim?.storageBytes ?? null,
       storageSedes: almacen ? sedesDe(c.id).length : null,
-      tokensUsados: tokensVigentes(c.aiTokensUsed ?? 0, c.aiLastResetAt, ahora),
+      // POR DUEÑO: suma de las sedes (si no se pudo leer a las demás, solo la propia, como antes).
+      tokensUsados: tokensSedesFilas
+        ? sedesDe(c.id).reduce((s, i) => s + (i === c.id ? tokensVigentes(c.aiTokensUsed ?? 0, c.aiLastResetAt, ahora) : (tokensPorSede.get(i) ?? 0)), 0)
+        : tokensVigentes(c.aiTokensUsed ?? 0, c.aiLastResetAt, ahora),
+      tokensSedes: tokensSedesFilas ? sedesDe(c.id).length : 1,
       tokensTope: c.aiTokensLimit ?? 0,
       cfdiUsados: cfdi === null ? null : (mCfdi.get(c.id) ?? 0),
       cfdiIncluidos: lim?.cfdiMonthly ?? 0,

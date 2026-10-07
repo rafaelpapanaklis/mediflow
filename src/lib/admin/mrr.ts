@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
-import { computeMrr, EMPTY_MRR, findIncludedBranchIds, type AdminMrr } from "./mrr-core";
+import { computeMrr, EMPTY_MRR, findBranchMothers, type AdminMrr } from "./mrr-core";
 
 /**
  * FUENTE ÚNICA del MRR del panel /admin.
@@ -48,10 +48,16 @@ export async function loadPlanPrices(): Promise<Record<PlanId, number>> {
  * deja crear la sede.
  */
 export async function loadIncludedBranchIds(): Promise<Set<string>> {
+  return new Set((await loadBranchMothers()).keys());
+}
+
+/** Cada sede incluida → su clínica principal ({id, nombre}), con el mismo criterio que `loadIncludedBranchIds`. */
+export async function loadBranchMothers(): Promise<Map<string, { id: string; name: string }>> {
   const [clinics, owners] = await Promise.all([
     prisma.clinic.findMany({
       select: {
         id: true,
+        name: true,
         createdAt: true,
         subscriptionStatus: true,
         monthlyPrice: true,
@@ -66,7 +72,10 @@ export async function loadIncludedBranchIds(): Promise<Set<string>> {
       select: { supabaseId: true, clinicId: true },
     }),
   ]);
-  return findIncludedBranchIds(clinics, owners);
+  const nombres = new Map(clinics.map((c) => [c.id, c.name]));
+  const out = new Map<string, { id: string; name: string }>();
+  findBranchMothers(clinics, owners).forEach((madre, sede) => out.set(sede, { id: madre, name: nombres.get(madre) ?? "la clínica principal" }));
+  return out;
 }
 
 /**

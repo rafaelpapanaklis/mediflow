@@ -1,3 +1,4 @@
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -178,7 +179,8 @@ async function computeRemaining(clinicId: string): Promise<{ remaining: number; 
     select: { aiTokensUsed: true, aiTokensLimit: true },
   });
   if (!c) return { remaining: 0, limit: 0 };
-  return { remaining: Math.max(0, c.aiTokensLimit - c.aiTokensUsed), limit: c.aiTokensLimit };
+  const usado = c.aiTokensUsed + (await tokensDeLasOtrasSedes(clinicId)).tokens; // cupo por dueño
+  return { remaining: Math.max(0, c.aiTokensLimit - usado), limit: c.aiTokensLimit };
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -348,6 +350,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
     currentTokensUsed = 0;
   }
+
+  // Cupo POR DUEÑO: lo gastado por sus otras sedes también cuenta (ai-tokens-owner.ts).
+  currentTokensUsed += (await tokensDeLasOtrasSedes(ctx.clinicId)).tokens;
 
   if (currentTokensUsed >= clinic.aiTokensLimit) {
     const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);

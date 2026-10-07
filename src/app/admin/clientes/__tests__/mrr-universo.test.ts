@@ -147,7 +147,8 @@ test("las dos pantallas deciden las sedes con la MISMA función, sobre todo el s
   const PAGE_CLINICS = readFileSync(join(ADMIN, "clinics", "page.tsx"), "utf8");
   const DATOS_CLIENTES = readFileSync(join(ADMIN, "clientes", "datos.ts"), "utf8");
   for (const [nombre, texto] of [["clinics/page.tsx", PAGE_CLINICS], ["clientes/datos.ts", DATOS_CLIENTES]] as const) {
-    assert.match(texto, /loadIncludedBranchIds\(\)/, `${nombre} no carga las sedes incluidas`);
+    // loadBranchMothers es la MISMA decisión (loadIncludedBranchIds = sus claves) y además dice quién paga.
+    assert.match(texto, /loadIncludedBranchIds\(\)|loadBranchMothers\(\)/, `${nombre} no carga las sedes incluidas`);
   }
 });
 

@@ -1,3 +1,4 @@
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
@@ -136,7 +137,8 @@ async function computeRemaining(clinicId: string): Promise<{ remaining: number; 
     select: { aiTokensUsed: true, aiTokensLimit: true },
   });
   if (!c) return { remaining: 0, limit: 0 };
-  return { remaining: Math.max(0, c.aiTokensLimit - c.aiTokensUsed), limit: c.aiTokensLimit };
+  const usado = c.aiTokensUsed + (await tokensDeLasOtrasSedes(clinicId)).tokens; // cupo por dueño
+  return { remaining: Math.max(0, c.aiTokensLimit - usado), limit: c.aiTokensLimit };
 }
 
 /** Normaliza el veredicto del modelo a uno de los tres válidos (conservador). */
@@ -286,6 +288,9 @@ export async function POST(req: NextRequest) {
     });
     currentTokensUsed = 0;
   }
+
+  // Cupo POR DUEÑO: lo gastado por sus otras sedes también cuenta (ai-tokens-owner.ts).
+  currentTokensUsed += (await tokensDeLasOtrasSedes(ctx.clinicId)).tokens;
   if (currentTokensUsed >= clinic.aiTokensLimit) {
     const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
     return NextResponse.json(

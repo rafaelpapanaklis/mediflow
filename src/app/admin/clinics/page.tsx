@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { loadPlanPrices, loadIncludedBranchIds, computeMrr, type AdminMrr } from "@/lib/admin/mrr";
+import { loadPlanPrices, loadBranchMothers, computeMrr, type AdminMrr } from "@/lib/admin/mrr";
 import { CLINIC_MONTHLY_PRICE_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
@@ -40,7 +40,7 @@ export default async function AdminClinicsPage() {
 
   // Fuera del Promise.all de abajo: loadPlanPrices hace su propio Promise.all
   // de 3 y loadIncludedBranchIds el suyo de 2 (5 en vuelo, bajo el tope de 7).
-  const [planPrices, sedesIncluidas] = await Promise.all([loadPlanPrices(), loadIncludedBranchIds()]);
+  const [planPrices, madres] = await Promise.all([loadPlanPrices(), loadBranchMothers()]);
 
   const [clinics, citasPasadas, citasVentana, citasPrevias, citasFuturas, accesos] = await Promise.all([
     prisma.clinic.findMany({
@@ -201,7 +201,8 @@ export default async function AdminClinicsPage() {
     pagosRegistrados: mPagos.get(c.id)?._count._all ?? 0,
     ultimoPagoAt:    mPagos.get(c.id)?._max.paidAt ?? null,
     totalPagado:     mPagos.get(c.id)?._sum.amount ?? 0,
-    sedeIncluida:    sedesIncluidas.has(c.id),
+    sedeIncluida:    madres.has(c.id),
+    principalNombre: madres.get(c.id)?.name ?? null,
     uso:             uso.porClinica.get(c.id),
     origen:          origenes.get(c.id),
     modulos:         modulos.medido ? modulosDeClinica(modulosPorClinica.get(c.id) ?? [], ahora) : undefined,

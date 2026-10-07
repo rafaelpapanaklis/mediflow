@@ -253,6 +253,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     used: number; limit: number; remaining: number; percent: number;
     byFeature: { feature: string; label: string; tokens: number; percent: number }[];
     byFeatureTotal: number;
+    sedes: number;
   } | null>(null);
 
   useEffect(() => {
@@ -293,6 +294,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           percent:   limit > 0 ? Math.max(0, Math.min(100, Math.round(num(d.percent, 0)))) : 0,
           byFeature: rows,
           byFeatureTotal: Math.max(0, num(d.byFeatureTotal, 0)),
+          sedes: Math.max(1, num(d.sedes, 1)),
         });
       } catch { /* silencioso: el tab ya está pintado con los props del servidor */ }
     })();
@@ -1280,7 +1282,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     <div>
                       <div className={cr.medidorCabeza}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                          <Zap size={15} strokeWidth={1.75} aria-hidden style={{ color: "var(--m2-activo)" }} /> {t("settings.client.aiTokensUsedThisMonth")}
+                          <Zap size={15} strokeWidth={1.75} aria-hidden style={{ color: "var(--m2-activo)" }} /> {t(aiUsage && aiUsage.sedes > 1 ? "settings.client.aiTokensUsedThisMonthAllBranches" : "settings.client.aiTokensUsedThisMonth")}
                         </span>
                         <strong>{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</strong>
                       </div>
@@ -2229,7 +2231,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <Zap size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {t("settings.client.aiTokensUsedThisMonth")}
+                    <Zap size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {t(aiUsage && aiUsage.sedes > 1 ? "settings.client.aiTokensUsedThisMonthAllBranches" : "settings.client.aiTokensUsedThisMonth")}
                   </span>
                   <span className="text-sm font-bold" style={{ fontVariantNumeric: "tabular-nums" }}>{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</span>
                 </div>

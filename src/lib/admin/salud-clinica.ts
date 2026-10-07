@@ -117,6 +117,11 @@ export interface EntradaSaludClinica {
   enLinea?: boolean;
   /** Cuántos pagos de suscripción en estado "paid" tiene registrados. */
   pagosRegistrados: number;
+  /**
+   * Sede incluida en el plan de una clínica (o dueño) que paga (`findIncludedBranchIds`). No tiene pago
+   * propio porque lo cubre la que paga: NO es prueba, no es un cliente aparte ni suma a los totales.
+   */
+  sedeIncluida?: boolean;
   /** Fecha del último de esos pagos. */
   ultimoPagoAt?: Fecha;
 }
@@ -266,7 +271,9 @@ export interface SaludClinica {
   esPrueba: boolean;
   /** Por qué se la considera prueba, para poder discutirlo. null si no lo es. */
   motivoPrueba: string | null;
-  /** `!esPrueba`. Lo que debe entrar en cualquier total de clientes. */
+  /** Sede incluida en el plan de la que paga: se ve «Pagando» + «Sede incluida», no cuenta como cliente aparte. */
+  sedeIncluida: boolean;
+  /** `!esPrueba` y no es sede incluida. Lo que debe entrar en cualquier total de clientes. */
   cuentaParaTotales: boolean;
   avisos: AvisosDeDato;
   /** Cuanto más alto, antes hay que mirarla. Para ordenar la tabla. */
@@ -375,6 +382,8 @@ function calcularActividad(entrada: EntradaSaludClinica, ahora: Date): Actividad
  * ha arrancado, no basura de pruebas.
  */
 function evaluarPrueba(entrada: EntradaSaludClinica): { esPrueba: boolean; motivo: string | null } {
+  // Una sede incluida no tiene pago propio (lo paga la principal): sin esto salía «Prueba».
+  if (entrada.sedeIncluida) return { esPrueba: false, motivo: null };
   const sinPacientes = entrada.pacientes === 0;
   const sinCitas     = entrada.citasPasadas === 0;
   const sinPagos     = entrada.pagosRegistrados === 0;
@@ -553,6 +562,11 @@ function calcularPrioridad(riesgos: RiesgoClinica[], actividad: ActividadClinica
 }
 
 /** EL cálculo. Una clínica entra, un veredicto sale. */
+/** La etiqueta PROPIA de una sede incluida en /admin (no «Pagando»): dice quién paga. */
+export function etiquetaSedeIncluida(principal?: string | null): string {
+  return principal ? `Sede incluida · paga ${principal}` : "Sede incluida";
+}
+
 export function evaluarSaludClinica(
   entrada: EntradaSaludClinica,
   ahora: Date = new Date(),
@@ -572,7 +586,8 @@ export function evaluarSaludClinica(
     severidadMaxima: riesgos.length ? riesgos[0].severidad : null,
     esPrueba,
     motivoPrueba: motivo,
-    cuentaParaTotales: !esPrueba,
+    sedeIncluida: !!entrada.sedeIncluida,
+    cuentaParaTotales: !esPrueba && !entrada.sedeIncluida,
     avisos: calcularAvisos(entrada, plan, ahora),
     prioridad: calcularPrioridad(riesgos, actividad),
     diasDesdeAlta: diasDesde(entrada.createdAt, ahora),
@@ -587,6 +602,8 @@ export interface ResumenCartera {
   /** Clínicas reales: las que cuentan para cualquier total de clientes. */
   reales: number;
   pruebas: number;
+  /** Sedes incluidas en el plan de la que paga: aparte de reales y pruebas. */
+  sedesIncluidas: number;
   /** Cuántas reales hay en cada estado. Las pruebas NO entran aquí. */
   porEstado: Record<EstadoOperativo, number>;
   /** Cuántas reales hay en cada nivel de actividad. */
@@ -619,11 +636,13 @@ export function resumirCartera(saludes: SaludClinica[]): ResumenCartera {
   const porEstado    = Object.fromEntries(ESTADOS.map((e) => [e, 0])) as Record<EstadoOperativo, number>;
   const porActividad = Object.fromEntries(NIVELES.map((n) => [n, 0])) as Record<NivelActividad, number>;
 
-  let reales = 0, pruebas = 0, enRiesgo = 0, criticas = 0;
+  let reales = 0, pruebas = 0, sedesIncluidas = 0, enRiesgo = 0, criticas = 0;
   let importaciones = 0, periodosImplausibles = 0, sinRegistroDeAcceso = 0, enLinea = 0;
   let citas = 0, facturas = 0, notas = 0;
 
   for (const s of saludes) {
+    // Una sede incluida no es un cliente aparte: ni real ni prueba, ni en los estados.
+    if (s.sedeIncluida) { sedesIncluidas += 1; continue; }
     porEstado[s.estadoOperativo] += 1;
     if (s.esPrueba) {
       pruebas += 1;
@@ -644,7 +663,7 @@ export function resumirCartera(saludes: SaludClinica[]): ResumenCartera {
 
   return {
     total: saludes.length,
-    reales, pruebas, porEstado, porActividad,
+    reales, pruebas, sedesIncluidas, porEstado, porActividad,
     enRiesgo, criticas, importaciones, periodosImplausibles, sinRegistroDeAcceso, enLinea,
     volumen: sumarVolumen(citas, facturas, notas),
   };

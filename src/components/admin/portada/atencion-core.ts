@@ -139,6 +139,8 @@ export interface FilaPortada {
    * dice — como las cuentas de prueba, ni se borra ni se esconde.
    */
   archivedAt: Date | null;
+  /** Sede incluida en el plan de la que paga: no es cuenta de prueba. */
+  sedeIncluida?: boolean;
   pacientes: number;
   /** Citas de toda la vida de la clínica. */
   citasTotales: number;
@@ -339,6 +341,7 @@ export function aEntradaSalud(f: FilaPortada): EntradaSaludClinica {
     ultimoAccesoAt: f.ultimoAcceso,
     enLinea: f.enLinea,
     pagosRegistrados: f.algunaVezPago === false ? 0 : 1,
+    sedeIncluida: !!f.sedeIncluida,
   };
 }
 

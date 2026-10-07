@@ -57,7 +57,7 @@ export function ResumenClinica(p: ResumenClinicaProps) {
         barra={u && u.storageUsado !== null ? pctCupo(u.storageUsado, u.storageTope) : null}
       />
       <DatoCaja
-        label="Tokens IA del mes" icono={Sparkles}
+        label={u && u.tokensSedes > 1 ? "Tokens IA del mes (todas las sedes)" : "Tokens IA del mes"} icono={Sparkles}
         n={u ? (u.tokensTope > 0 ? `${pctCupo(u.tokensUsados, u.tokensTope)}%` : tokensCortos(u.tokensUsados)) : "—"}
         pie={u ? (u.tokensTope > 0 ? `${tokensCortos(u.tokensUsados)} de ${tokensCortos(u.tokensTope)}` : "el plan no incluye cupo de IA") : "sin medir"}
         nivel={u && u.tokensTope > 0 ? nivelCupo(u.tokensUsados, u.tokensTope) : undefined}

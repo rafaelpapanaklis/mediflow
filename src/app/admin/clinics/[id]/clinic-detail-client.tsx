@@ -28,13 +28,14 @@ import type { AccountManagerDTO } from "@/lib/account-manager/types";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { daysUntil, getPlanStatus } from "@/lib/plan-status";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
-import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO } from "@/lib/admin/salud-clinica";
+import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO, etiquetaSedeIncluida } from "@/lib/admin/salud-clinica";
 import { ClinicAiWalletCard, ClinicAiPaymentsCard } from "@/components/admin/clinic-ai-wallet-card";
 import type { SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
 import { PlanOverridesCard, type PlanOverridesDTO } from "./plan-overrides-card";
 import type { UsoClinica } from "@/lib/admin/uso-core";
 import { Chip } from "@/components/admin/rediseno/piezas";
 import { ResumenClinica } from "./resumen-clinica";
+import { SedesDelDueno, type SedeDeDueno } from "./sedes-del-dueno";
 import { OrigenClinica } from "./origen-clinica";
 import type { OrigenClinicaDTO } from "@/lib/ads/origen";
 
@@ -100,6 +101,12 @@ interface Props {
   stripeConfigured:     boolean;
   stripeInstructions:   string;
   totalClinicsInSystem: number;
+  /** Sede incluida en el plan de la clínica que paga (no es prueba ni «En trial»). */
+  sedeIncluida?: boolean;
+  /** Clínica principal que paga esta sede (null si esta clínica no es sede incluida). */
+  principal?: { id: string; name: string } | null;
+  /** Sedes del mismo dueño (vacío si solo tiene una). */
+  sedesDueno?: SedeDeDueno[];
   moduleCatalog:        ModuleCatalogRow[];
   clinicModuleRows:     ClinicModuleRow[];
   /** Manager de cuenta asignado. null = sin asignar (o SQL aún sin aplicar). */
@@ -156,6 +163,9 @@ export function AdminClinicDetailClient({
   stripeConfigured,
   stripeInstructions,
   totalClinicsInSystem,
+  sedeIncluida = false,
+  principal = null,
+  sedesDueno = [],
   moduleCatalog,
   clinicModuleRows,
   accountManager,
@@ -232,6 +242,7 @@ export function AdminClinicDetailClient({
 
   const salud = evaluarSaludClinica({
     id: clinic.id,
+    sedeIncluida,
     createdAt: clinic.createdAt,
     subscriptionStatus: clinic.subscriptionStatus ?? null,
     trialEndsAt: clinic.trialEndsAt,
@@ -423,9 +434,15 @@ export function AdminClinicDetailClient({
             <h1>{clinic.name}</h1>
             <Chip tono={planTone(clinic.plan) === "brand" ? "brand" : planTone(clinic.plan) === "info" ? "info" : "neutral"}>{clinic.plan}</Chip>
             {/* El estado COMERCIAL, que es el que manda para operar. */}
-            <Chip tono={(ESTADO_TONO[salud.estadoOperativo] ?? "neutral") as "success" | "warning" | "danger" | "info" | "brand" | "neutral"} punto>
-              {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
-            </Chip>
+            {salud.sedeIncluida ? (
+              <Chip tono="info" punto title="Incluida en el plan de la clínica que paga">
+                {etiquetaSedeIncluida(principal?.name)}
+              </Chip>
+            ) : (
+              <Chip tono={(ESTADO_TONO[salud.estadoOperativo] ?? "neutral") as "success" | "warning" | "danger" | "info" | "brand" | "neutral"} punto>
+                {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
+              </Chip>
+            )}
             {/* Y el del gate de acceso, sólo cuando no dice lo mismo. */}
             {!(ESTADO_ESPERADO[salud.plan.kind] ?? []).includes(salud.estadoOperativo) && (
               <span title="Lo que ve la clínica: el gate de acceso todavía la deja entrar">
@@ -522,6 +539,8 @@ export function AdminClinicDetailClient({
           {/* Saldo de IA: lo que antes había que ir a buscar a /admin/ai-billing.
               Es de lectura: «Ajustar saldo» sigue en Tesorería IA. */}
           <ClinicAiWalletCard saldo={saldoIa} />
+
+          <SedesDelDueno sedes={sedesDueno} principal={principal} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {/* Clinic info */}

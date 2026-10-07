@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import {
   AI_FEATURE_CHAT_ASSISTANT,
   AI_FEATURE_CONSULT_ANALYSIS,
@@ -106,6 +107,7 @@ export async function aiTokenLimitError(
     await prisma.clinic.update({ where: { id: clinicId }, data: { aiTokensUsed: 0, aiLastResetAt: now } });
     used = 0;
   }
+  used += (await tokensDeLasOtrasSedes(clinicId)).tokens; // cupo POR DUEÑO: suman todas sus sedes
   if (used >= clinic.aiTokensLimit) {
     return {
       error: "Tu plan no incluye esta función de IA o agotaste el cupo mensual. Sube de plan.",

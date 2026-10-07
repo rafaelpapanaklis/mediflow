@@ -29,6 +29,7 @@ import {
   resumirCartera,
   ordenarPorAtencion,
   ETIQUETA_ESTADO_OPERATIVO,
+  etiquetaSedeIncluida,
   DIAS_VENTANA_ACTIVIDAD,
   DIAS_APAGADA,
   MINUTOS_EN_LINEA,
@@ -98,6 +99,8 @@ export interface FilaClinica {
   totalPagado: number;
   /** Sede incluida en el plan de su clínica madre: no paga aparte, vale $0. */
   sedeIncluida: boolean;
+  /** Nombre de la clínica principal que paga esta sede incluida. */
+  principalNombre?: string | null;
   /** Consumo y cupos (@/lib/admin/uso-clinica). Ausente = no se midió. */
   uso?: UsoClinica;
   /**
@@ -243,6 +246,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
     for (const c of clinics) {
       m.set(c.id, evaluarSaludClinica({
         id: c.id,
+        sedeIncluida: c.sedeIncluida,
         createdAt: c.createdAt,
         subscriptionStatus: c.subscriptionStatus,
         trialEndsAt: c.trialEndsAt,
@@ -624,9 +628,15 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
 
                     <td data-col="Estado">
                       <div className={css.pila}>
-                        <Chip tono={TONO_ESTADO[salud.estadoOperativo] ?? "neutral"} punto>
-                          {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
-                        </Chip>
+                        {salud.sedeIncluida ? (
+                          <Chip tono="info" punto title="Incluida en el plan de la clínica que paga">
+                            {etiquetaSedeIncluida(clinic.principalNombre)}
+                          </Chip>
+                        ) : (
+                          <Chip tono={TONO_ESTADO[salud.estadoOperativo] ?? "neutral"} punto>
+                            {ETIQUETA_ESTADO_OPERATIVO[salud.estadoOperativo]}
+                          </Chip>
+                        )}
                         {/* Lo que dice el gate, SÓLO cuando no dice lo mismo. */}
                         {gateDiscrepa(salud) && (
                           <span title="Lo que ve la clínica: el gate de acceso todavía la deja entrar">
@@ -727,7 +737,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                           <>
                             <BarraUso label={u.storageSedes && u.storageSedes > 1 ? "Disco (todas las sedes)" : "Disco"} usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
                             {u.tokensTope > 0
-                              ? <BarraUso label="IA" usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
+                              ? <BarraUso label={u.tokensSedes > 1 ? "IA (todas las sedes)" : "IA"} usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
                               : <span className={`${css.meta} ${css.num}`}>IA · sin cupo</span>}
                             <span className={`${css.meta} ${css.num}`} title={`${vol.citas} citas · ${vol.facturas} facturas · ${vol.notas} notas en ${DIAS_VENTANA_ACTIVIDAD} días`}>
                               {u.usuarios ?? "—"}{u.usuariosTope !== null ? `/${u.usuariosTope}` : ""} usuarios

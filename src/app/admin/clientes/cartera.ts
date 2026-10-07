@@ -268,6 +268,7 @@ function aEntradaSalud(c: ClinicaDeCliente): EntradaSaludClinica {
     ultimoAccesoAt: c.ultimoAccesoAt,
     pagosRegistrados: c.pagosRegistrados,
     ultimoPagoAt: c.ultimoPagoAt,
+    sedeIncluida: !!c.sedeIncluida,
   };
 }
 
@@ -289,7 +290,7 @@ function aFilaMrr(c: ClinicaDeCliente): MrrClinicRow {
  * activo, aunque el promedio dijera que sí.
  */
 export function estadoDeCartera(saludes: SaludClinica[]): EstadoCliente {
-  const reales = saludes.filter((s) => !s.esPrueba);
+  const reales = saludes.filter((s) => !s.esPrueba && !s.sedeIncluida);
   if (reales.length === 0) return "prueba";
 
   const pagando = reales.filter((s) => s.estadoOperativo === "pagando").length;

@@ -1,3 +1,4 @@
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
@@ -151,6 +152,9 @@ export async function POST(req: NextRequest) {
     await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { aiTokensUsed: 0, aiLastResetAt: now } });
     currentTokensUsed = 0;
   }
+
+  // Cupo POR DUEÑO: lo gastado por sus otras sedes también cuenta (ai-tokens-owner.ts).
+  currentTokensUsed += (await tokensDeLasOtrasSedes(ctx.clinicId)).tokens;
   if (currentTokensUsed >= clinic.aiTokensLimit) {
     const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
     return NextResponse.json(

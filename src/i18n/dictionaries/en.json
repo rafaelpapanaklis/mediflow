@@ -4184,6 +4184,7 @@
       "aiTitle": "Clinical AI Assistant",
       "aiSubtitle": "Monthly plan allowance for dictation, the assistant and x-ray analysis. Sabina and the WhatsApp bot are paid separately from your AI balance.",
       "aiTokensUsedThisMonth": "Tokens used this month",
+      "aiTokensUsedThisMonthAllBranches": "Tokens used this month (all your branches)",
       "aiPercentUsed": "{percent}% used",
       "aiTokensRemaining": "{count} tokens remaining",
       "aiStatTokensRemaining": "Tokens remaining",

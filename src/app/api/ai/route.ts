@@ -1,3 +1,4 @@
+import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
@@ -55,6 +56,9 @@ export async function POST(req: NextRequest) {
     });
     currentTokensUsed = 0;
   }
+
+  // Cupo POR DUEÑO: lo gastado por sus otras sedes también cuenta (ai-tokens-owner.ts).
+  currentTokensUsed += (await tokensDeLasOtrasSedes(ctx.clinicId)).tokens;
 
   // Check monthly token limit
   if (currentTokensUsed >= clinic.aiTokensLimit) {

@@ -8,7 +8,11 @@ import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-man
 import { getLiveSubscriptionSnapshot, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { getResolvedPlan, getResolvedPlanForClinic } from "@/lib/plans";
 import { activeOverrides } from "@/lib/billing/plan-overrides";
-import { loadPlanPrices } from "@/lib/admin/mrr";
+import { loadPlanPrices, loadBranchMothers } from "@/lib/admin/mrr";
+import { sedesDelDueno } from "@/lib/storage-owner";
+import { medirAlmacenamiento } from "@/lib/storage-usage";
+import { totalDesglose } from "@/lib/storage-usage-core";
+import type { SedeDeDueno } from "./sedes-del-dueno";
 import { loadBajasProgramadas } from "@/lib/admin/modulos";
 import { DIAS_VENTANA_ACTIVIDAD, MINUTOS_EN_LINEA, SUPERFICIE_PANEL } from "@/lib/admin/salud-clinica";
 import { inicioDeHaceDias } from "@/lib/admin/zona-horaria";
@@ -301,6 +305,26 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     bajaProgramada:   !!cm.stripeSubscriptionId && bajasProgramadas.has(cm.stripeSubscriptionId),
   }));
 
+  // Sedes del dueño (solo lectura): la principal que paga, las sedes incluidas y su uso.
+  const madres = await loadBranchMothers().catch(() => new Map<string, { id: string; name: string }>());
+  const principal = madres.get(clinic.id) ?? null;
+  const sedeIncluida = principal !== null;
+  let sedesDueno: SedeDeDueno[] = [];
+  try {
+    const ids = await sedesDelDueno(clinic.id);
+    if (ids.length > 1) {
+      const [filas, uso] = await Promise.all([
+        prisma.clinic.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, plan: true, subscriptionStatus: true, _count: { select: { patients: true } } } }),
+        medirAlmacenamiento(ids).catch(() => null),
+      ]);
+      sedesDueno = filas
+        .map((f) => ({ id: f.id, name: f.name, plan: f.plan, status: f.subscriptionStatus ?? null, incluida: madres.has(f.id), esEsta: f.id === clinic.id, pacientes: f._count.patients, bytes: uso ? totalDesglose(uso.porClinica.get(f.id) ?? { fotos: 0, radiografias: 0, modelos3d: 0, documentos: 0, otros: 0 }) : null }))
+        .sort((a, b) => Number(a.incluida) - Number(b.incluida) || a.name.localeCompare(b.name));
+    }
+  } catch (e) {
+    console.error("[admin/clinics/id] sedes del dueño:", e);
+  }
+
   return (
     <AdminClinicDetailClient
       clinic={stripClinicSecrets(clinic) as any}
@@ -310,6 +334,9 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       stripeConfigured={isStripeConfigured()}
       stripeInstructions={STRIPE_SETUP_INSTRUCTIONS}
       totalClinicsInSystem={totalClinics}
+      sedeIncluida={sedeIncluida}
+      principal={principal}
+      sedesDueno={sedesDueno}
       moduleCatalog={moduleCatalog}
       clinicModuleRows={clinicModuleRows}
       accountManager={accountManager}
