@@ -313,7 +313,10 @@ export function crearGlobo(
     typeof ResizeObserver === "undefined"
       ? null
       : new ResizeObserver(() => {
-          if (medir() && !corriendo) pintar();
+          // Cambiar `canvas.width` lo deja en blanco (transparente): se repinta
+          // en el acto, también en marcha, para que el globo no desaparezca
+          // ni un cuadro al cambiar el tamaño (giro de la tableta, Split View).
+          if (medir()) pintar();
         });
   observador?.observe(canvas);
 

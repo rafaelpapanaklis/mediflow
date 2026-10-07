@@ -27,6 +27,10 @@
     radial-gradient(640px 400px at 88% -8%, rgba(124, 58, 237, .46), rgba(124, 58, 237, 0) 64%),
     radial-gradient(760px 460px at 4% 108%, rgba(37, 99, 235, .44), rgba(37, 99, 235, 0) 62%),
     linear-gradient(150deg, #0b1220, #101a3c 60%, #131a3a);
+  /* Azul noche SÓLIDO debajo de los degradados (el atajo `background` lo deja
+     transparente): el panel es azul aunque el canvas, los degradados o
+     cualquier capa compuesta todavía no estén pintados. Va DESPUÉS del atajo. */
+  background-color: #101a3c;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, .08),
     0 2px 4px rgba(2, 6, 23, .12),
@@ -126,13 +130,18 @@
 /* ── Descripción del sello ────────────────────────────────────────────────
    Base (tableta y celular): un globo de texto justo encima del sello. En la
    órbita de escritorio se coloca sobre el globo (más abajo). No recibe el
-   ratón: nunca tapa el sello de al lado ni se queda abierta. */
+   ratón: nunca tapa el sello de al lado ni se queda abierta.
+   ⛔ Sin `backdrop-filter` (7-oct-2026, parpadeo en iPad): siete descripciones
+   con desenfoque de fondo —aunque estén ocultas— convierten el panel (que
+   aísla con `isolation` y recorta con `overflow: hidden` + radio) en un grupo
+   que WebKit vuelve a componer entero cada vez que cambia el alto del viewport
+   al hacer scroll (la barra de Safari), y en el hueco se ve el blanco de la
+   página. El fondo va casi opaco y se ve igual. */
 .dcsg__desc {
   position: absolute; z-index: 2; left: 50%; bottom: calc(100% + 9px); width: 250px; translate: -50% 0;
   display: flex; flex-direction: column; gap: 5px; padding: 12px 14px 13px; border-radius: 15px; text-align: left;
-  background: rgba(9, 14, 40, .9); border: 1px solid rgba(147, 197, 253, .5);
+  background: rgba(9, 14, 40, .95); border: 1px solid rgba(147, 197, 253, .5);
   box-shadow: 0 20px 40px -14px rgba(2, 6, 23, .95), 0 0 34px -8px rgba(96, 165, 250, .6);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   pointer-events: none; opacity: var(--on, 0); visibility: var(--vis, hidden);
   scale: calc(.94 + .06 * var(--on, 0)); transform-origin: 50% 100%;
   transition: opacity .22s ease, scale .28s cubic-bezier(.2, .7, .2, 1), visibility 0s linear var(--espera, .22s);
