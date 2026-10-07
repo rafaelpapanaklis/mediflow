@@ -140,6 +140,13 @@ const SEDES_DEL_MISMO_DUENO: Record<string, { motivo: string; escribeEnC?: boole
   "GET /api/my-clinics": { motivo: "el selector de sede lista las clínicas donde ESTA persona tiene ficha activa" },
   "GET /api/team": { motivo: "A3: Equipo dice «también en: Sede B» — solo el NOMBRE de las otras sedes vivas del mismo dueño donde ese miembro tiene ficha activa" },
   "GET /api/clinics/links": { motivo: "el dueño ve sus sedes y los vínculos de pacientes entre ellas (getOwnedBranches)" },
+  // ws1-t5: cupos y cobro COMPARTIDOS por dueño (decisión de Rafael, 7-oct-2026). En todas el dueño se
+  // deduce de la SESIÓN (la clínica activa → su SUPER_ADMIN → sus sedes), jamás de un id del cliente, y solo
+  // se lee un total o el estado de pago (nunca filas de pacientes de otra sede).
+  "GET /api/ai/usage": { motivo: "tokens de IA del plan: suma el uso de las sedes del mismo dueño (cupo compartido); solo cantidades" },
+  "GET /api/cfdi/usage": { motivo: "cupo de 150 CFDI del mes compartido con las sedes incluidas del dueño (leerGrupoDePago); solo el conteo" },
+  "POST /api/clinic/subscription/cancel-request": { motivo: "una sede incluida lee quién paga (leerGrupoDePago) para negarse y mandar a la principal; no escribe en ella" },
+  "GET /api/storage/usage": { motivo: "almacenamiento del plan compartido: suma el uso de las sedes del mismo dueño; solo bytes" },
   "POST /api/auth/2fa/setup": { motivo: "el 2FA es de la PERSONA (EQ-02): se propaga a todas sus fichas", escribeEnC: true },
   // Solo van aquí las que el arnés DEMUESTRA que tocan la sede hermana (la
   // prueba falla si una entrada no hace falta). Las demás rutas del 2FA y de la
@@ -169,6 +176,17 @@ const PUBLICAS_POR_DISENO: Record<string, string> = {
  * arreglo (acotar por token) toca el flujo de pago de teleconsulta (auditoría
  * hallazgo 13, M7), que es de otra tarea.
  */
+/**
+ * ws1-t5: rutas cuya ÚNICA lectura de la sede hermana sale en el ataque MIXTO (el id de la URL es propio) y
+ * es el cupo compartido por dueño (almacenamiento / tokens de IA de TODAS las sedes del dueño). Se toleran
+ * SOLO si lo leído son totales (lecturas, sin escrituras ni datos en la respuesta); el dueño sale de la
+ * sesión (`sedesDelDueno(ctx.clinicId)`), nunca de un id del cuerpo.
+ */
+const CUPO_DEL_DUENO_EN_MIXTA: Record<string, string> = {
+  "POST /api/patients/[id]/dicom-set/sign": "el bloqueo por cupo de almacenamiento mide el uso del dueño (todas sus sedes); solo bytes",
+  "GET /api/xrays/[id]/analyze": "el cupo de tokens de IA se compara contra el uso del dueño (sus sedes); solo cantidades",
+};
+
 const LECTURA_Y_COMPROBACION: Record<string, string> = {
   "POST /api/stripe/checkout": "pública con token de pago `t`: lee la cita por id y compara clínica/token después (M7, otra tarea)",
   "GET /api/teleconsulta/join/[appointmentId]": "pública con token de paciente: lee la cita por id y compara el token después",
@@ -229,7 +247,7 @@ test("inventario: hay rutas y las listas documentadas apuntan a rutas que existe
   if (filtro) return;
   assert.ok(rutas.length > 900, `el inventario se encogió a ${rutas.length} rutas: ¿cambió la carpeta?`);
   const existentes = new Set(rutas.flatMap((r) => r.metodos.map((m) => clave(m, r.patron))));
-  for (const k of [...Object.keys(SEDES_DEL_MISMO_DUENO), ...Object.keys(PUBLICAS_POR_DISENO), ...Object.keys(LECTURA_Y_COMPROBACION), ...SIN_SESION_CONOCIDAS]) {
+  for (const k of [...Object.keys(SEDES_DEL_MISMO_DUENO), ...Object.keys(PUBLICAS_POR_DISENO), ...Object.keys(CUPO_DEL_DUENO_EN_MIXTA), ...Object.keys(LECTURA_Y_COMPROBACION), ...SIN_SESION_CONOCIDAS]) {
     assert.ok(existentes.has(k), `la lista documentada menciona «${k}», que ya no existe: bórrala`);
   }
 });
@@ -342,12 +360,13 @@ test("aislamiento: ninguna ruta toca ni devuelve datos de otra clínica", { time
   if (process.env.AISLAMIENTO_SALIDA) writeFileSync(process.env.AISLAMIENTO_SALIDA, JSON.stringify({ resultados, controles, mixtas }, null, 1));
 
   const fallos: string[] = [];
-  const usadas = { publicas: new Set<string>(), lectura: new Set<string>() };
+  const usadas = { publicas: new Set<string>(), lectura: new Set<string>(), cupo: new Set<string>() };
   for (const r of [...resultados, ...mixtas]) {
     const k = clave(r.metodo, r.ruta);
     const via = r.mixta ? " [id de la URL propio, ids del cuerpo ajenos]" : "";
     if (r.veredicto === "fuga") {
       if (PUBLICAS_POR_DISENO[k]) { usadas.publicas.add(k); continue; }
+      if (r.mixta && CUPO_DEL_DUENO_EN_MIXTA[k] && r.marcasEnRespuesta.length === 0 && r.fugas.every((f) => f.tipo === "lectura")) { usadas.cupo.add(k); continue; }
       if (LECTURA_Y_COMPROBACION[k]) {
         // Tolerada SOLO si no devolvió nada: ni marcas en la respuesta ni escrituras.
         if (r.marcasEnRespuesta.length === 0 && r.fugas.every((f) => f.tipo === "lectura")) { usadas.lectura.add(k); continue; }
@@ -360,6 +379,7 @@ test("aislamiento: ninguna ruta toca ni devuelve datos de otra clínica", { time
   }
   if (!filtro) {
     for (const k of Object.keys(PUBLICAS_POR_DISENO)) if (!usadas.publicas.has(k)) fallos.push(`«${k}» ya no es pública por diseño (ya no devuelve datos por id): quítala de PUBLICAS_POR_DISENO`);
+    for (const k of Object.keys(CUPO_DEL_DUENO_EN_MIXTA)) if (!usadas.cupo.has(k)) fallos.push(`«${k}» ya no lee el cupo de otras sedes: quítala de CUPO_DEL_DUENO_EN_MIXTA`);
     for (const k of Object.keys(LECTURA_Y_COMPROBACION)) if (!usadas.lectura.has(k)) fallos.push(`«${k}» ya filtra por clínica en la consulta: quítala de LECTURA_Y_COMPROBACION`);
   }
   assert.equal(fallos.length, 0, `\n${fallos.join("\n")}`);
