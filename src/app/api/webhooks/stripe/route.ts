@@ -40,6 +40,7 @@ import {
   isPlanTierUpgrade,
   subscriptionPeriodFields,
 } from "@/lib/billing/proration";
+import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
@@ -312,11 +313,29 @@ export async function POST(req: NextRequest) {
           // se escribía `null` y el dato se BORRABA. En las versiones nuevas de
           // la API el fin de periodo vive en el item, no en la suscripción.
           const periodFields = subscriptionPeriodFields(sub);
+          // El orden de los eventos no está garantizado: se lee el estado VIVO de la suscripción (un
+          // «created» viejo no debe pisar el «active») y un «incomplete» nunca baja a una clínica que
+          // ya está activa. Ver estado-suscripcion.ts.
+          let estadoVivo: string | null = null;
+          try {
+            estadoVivo = (await stripe.subscriptions.retrieve(sub.id)).status;
+          } catch {
+            estadoVivo = null;
+          }
+          const antes = await prisma.clinic.findUnique({
+            where: { id: clinicId },
+            select: { subscriptionStatus: true, stripeSubscriptionId: true },
+          });
+          const estadoNuevo = estadoDeSuscripcionAEscribir({
+            actual: { status: antes?.subscriptionStatus ?? null, subscriptionId: antes?.stripeSubscriptionId ?? null },
+            evento: { id: sub.id, status: sub.status },
+            vivo: estadoVivo,
+          });
           await prisma.clinic.update({
             where: { id: clinicId },
             data: {
               stripeSubscriptionId: sub.id,
-              subscriptionStatus:   sub.status,
+              ...(estadoNuevo !== undefined ? { subscriptionStatus: estadoNuevo } : {}),
               subscriptionId:       sub.id,
               ...periodFields,
               ...subPlanFields,
@@ -330,7 +349,7 @@ export async function POST(req: NextRequest) {
             entityId: sub.id,
             action: "update",
             changes: {
-              subscriptionStatus: { before: null, after: sub.status },
+              subscriptionStatus: { before: antes?.subscriptionStatus ?? null, after: estadoNuevo ?? antes?.subscriptionStatus ?? null },
               ...(periodFields.nextBillingDate
                 ? { nextBillingDate: { before: null, after: periodFields.nextBillingDate } }
                 : {}),
@@ -495,6 +514,16 @@ export async function POST(req: NextRequest) {
         // afiliado, que se calcula con las reglas del PLAN y pagaría por una
         // mensualidad de módulo lo mismo que por una de plan.
         if ((await moduloDeFactura(invoice)) !== null) break;
+
+        // Primer cobro de la suscripción del PLAN pagado: si la clínica quedó en «incomplete» (el
+        // «created» de Stripe llegó después de otro evento), este pago la deja activa. Solo toca
+        // «incomplete»; ningún otro estado se cambia aquí.
+        if (clinic && invoice.billing_reason === "subscription_create") {
+          await prisma.clinic.updateMany({
+            where: { id: clinic.id, subscriptionStatus: "incomplete" },
+            data: { subscriptionStatus: "active" },
+          });
+        }
 
         // ──────────────────────────────────────────────────────────────────
         // CORREOS DE CICLO DE VIDA DEL PLAN — van ANTES del break por afiliado
