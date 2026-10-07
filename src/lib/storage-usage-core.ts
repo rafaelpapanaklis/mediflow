@@ -23,6 +23,13 @@ export function desgloseVacio(): DesgloseAlmacenamiento {
   return { fotos: 0, radiografias: 0, modelos3d: 0, documentos: 0, otros: 0 };
 }
 
+/** Suma varios desgloses (las sedes de un mismo dueño comparten UN almacenamiento). */
+export function sumarDesgloses(lista: DesgloseAlmacenamiento[]): DesgloseAlmacenamiento {
+  const out = desgloseVacio();
+  for (const d of lista) for (const c of CATEGORIAS_ALMACENAMIENTO) out[c] += d[c];
+  return out;
+}
+
 export function totalDesglose(d: DesgloseAlmacenamiento): number {
   return CATEGORIAS_ALMACENAMIENTO.reduce((s, c) => s + d[c], 0);
 }
@@ -99,6 +106,8 @@ export interface ResumenAlmacenamiento {
   porcentaje: number | null;
   nivel: NivelAlmacenamiento;
   desglose: DesgloseAlmacenamiento;
+  /** Sedes del dueño que suman en este total (>1 = «todas tus sedes»). */
+  sedes?: number;
 }
 
 export function resumirAlmacenamiento(desglose: DesgloseAlmacenamiento, tope: number | null): ResumenAlmacenamiento {

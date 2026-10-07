@@ -725,7 +725,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                       <div className={css.celda} style={{ minWidth: 132, gap: 6 }}>
                         {u ? (
                           <>
-                            <BarraUso label="Disco" usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
+                            <BarraUso label={u.storageSedes && u.storageSedes > 1 ? "Disco (todas las sedes)" : "Disco"} usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
                             {u.tokensTope > 0
                               ? <BarraUso label="IA" usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
                               : <span className={`${css.meta} ${css.num}`}>IA · sin cupo</span>}

@@ -63,6 +63,8 @@ export function nivelCupo(usado: number, tope: number | null | undefined): Nivel
 export interface UsoClinica {
   storageUsado: number | null;
   storageTope: number | null;
+  /** Sedes del dueño que suman en `storageUsado` (>1 = «todas las sedes»). */
+  storageSedes: number | null;
   tokensUsados: number;
   tokensTope: number;
   cfdiUsados: number | null;
@@ -78,7 +80,7 @@ export interface UsoClinica {
 }
 
 export const USO_VACIO: UsoClinica = {
-  storageUsado: null, storageTope: null, tokensUsados: 0, tokensTope: 0,
+  storageUsado: null, storageTope: null, storageSedes: null, tokensUsados: 0, tokensTope: 0,
   cfdiUsados: null, cfdiIncluidos: 0, usuarios: null, usuariosTope: null,
   sedes: null, sedesTope: null, saldoIaCents: null, saldoIaStatus: null,
 };

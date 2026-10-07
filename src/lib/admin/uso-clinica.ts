@@ -4,7 +4,7 @@ import { getPlanLimits } from "@/lib/plans";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import type { PlanLimits } from "@/lib/plan-shared";
 import { medirAlmacenamiento } from "@/lib/storage-usage";
-import { desgloseVacio, totalDesglose } from "@/lib/storage-usage-core";
+import { desgloseVacio, sumarDesgloses, totalDesglose } from "@/lib/storage-usage-core";
 import { cfdiPeriodFor } from "@/lib/cfdi-quota";
 import { tokensVigentes, USO_VACIO, type UsoClinica } from "./uso-core";
 
@@ -74,34 +74,43 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
   const periodoDe = new Map(clinicas.map((c) => [c.id, cfdiPeriodFor(ahora, c.timezone)]));
   const periodos = Array.from(new Set(periodoDe.values()));
 
-  // ── Tanda 1 (2): almacenamiento (LA MISMA función que la cuota de subida y la
-  //    tarjeta de Suscripción: @/lib/storage-usage) y CFDI del mes ─────────────
-  const [almacen, cfdi] = await Promise.all([
-    seguro(medirAlmacenamiento(ids), "almacenamiento", avisos),
-    seguro(prisma.cfdiUsage.findMany({ where: { ...en, period: { in: periodos } }, select: { clinicId: true, period: true, stamped: true } }), "CFDI del mes", avisos),
-  ]);
-  for (const a of almacen?.avisos ?? []) avisos.push(a);
-
-  // ── Tanda 2 (3): usuarios activos, dueños (sedes) y saldo IA ─────────────
-  const [usuarios, duenos, monederos] = await Promise.all([
-    seguro(prisma.user.groupBy({ by: ["clinicId"], where: { ...en, isActive: true }, _count: { _all: true } }), "usuarios", avisos),
+  // ── Tanda 1 (2): dueños (sedes) y CFDI del mes ──────────────────────────
+  const [duenos, cfdi] = await Promise.all([
     // Dueño = SUPER_ADMIN activo, el mismo criterio que countOwnedClinics. Se
     // cargan TODOS (no sólo los de estas clínicas): la sede de un dueño puede
     // estar fuera de la lista y sigue contando en su tope.
     seguro(prisma.user.findMany({ where: { role: "SUPER_ADMIN", isActive: true }, select: { supabaseId: true, clinicId: true } }), "sedes por dueño", avisos),
+    seguro(prisma.cfdiUsage.findMany({ where: { ...en, period: { in: periodos } }, select: { clinicId: true, period: true, stamped: true } }), "CFDI del mes", avisos),
+  ]);
+
+  const sedesPorDueno = new Map<string, number>();
+  const idsPorDueno = new Map<string, string[]>();
+  const duenoDeClinica = new Map<string, string>();
+  for (const d of duenos ?? []) {
+    sedesPorDueno.set(d.supabaseId, (sedesPorDueno.get(d.supabaseId) ?? 0) + 1);
+    idsPorDueno.set(d.supabaseId, [...(idsPorDueno.get(d.supabaseId) ?? []), d.clinicId]);
+    if (!duenoDeClinica.has(d.clinicId)) duenoDeClinica.set(d.clinicId, d.supabaseId);
+  }
+  // El almacenamiento es POR DUEÑO (compartido entre sus sedes): se mide toda la familia de cada clínica.
+  const sedesDe = (id: string): string[] => {
+    const dueno = duenoDeClinica.get(id);
+    return dueno ? Array.from(new Set([id, ...(idsPorDueno.get(dueno) ?? [])])) : [id];
+  };
+  const idsAlmacen = Array.from(new Set(ids.flatMap(sedesDe)));
+
+  // ── Tanda 2 (3): almacenamiento (LA MISMA función que la cuota de subida y la
+  //    tarjeta de Suscripción: @/lib/storage-usage), usuarios activos y saldo IA ──
+  const [almacen, usuarios, monederos] = await Promise.all([
+    seguro(medirAlmacenamiento(idsAlmacen), "almacenamiento", avisos),
+    seguro(prisma.user.groupBy({ by: ["clinicId"], where: { ...en, isActive: true }, _count: { _all: true } }), "usuarios", avisos),
     seguro(prisma.aiWallet.findMany({ where: en, select: { clinicId: true, balanceCents: true, status: true } }), "saldo IA", avisos),
   ]);
+  for (const a of almacen?.avisos ?? []) avisos.push(a);
 
   const mUsuarios = new Map<string, number>();
   for (const f of usuarios ?? []) mUsuarios.set(f.clinicId, f._count._all);
   const mCfdi = new Map<string, number>();
   for (const f of cfdi ?? []) if (periodoDe.get(f.clinicId) === f.period) mCfdi.set(f.clinicId, f.stamped);
-  const sedesPorDueno = new Map<string, number>();
-  const duenoDeClinica = new Map<string, string>();
-  for (const d of duenos ?? []) {
-    sedesPorDueno.set(d.supabaseId, (sedesPorDueno.get(d.supabaseId) ?? 0) + 1);
-    if (!duenoDeClinica.has(d.clinicId)) duenoDeClinica.set(d.clinicId, d.supabaseId);
-  }
   const mMonedero = new Map<string, { balanceCents: number; status: string }>();
   for (const w of monederos ?? []) mMonedero.set(w.clinicId, { balanceCents: w.balanceCents, status: String(w.status) });
 
@@ -112,8 +121,9 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
     const w = mMonedero.get(c.id);
     porClinica.set(c.id, {
       ...USO_VACIO,
-      storageUsado: almacen ? totalDesglose(almacen.porClinica.get(c.id) ?? desgloseVacio()) : null,
+      storageUsado: almacen ? totalDesglose(sumarDesgloses(sedesDe(c.id).map((i) => almacen.porClinica.get(i) ?? desgloseVacio()))) : null,
       storageTope: lim?.storageBytes ?? null,
+      storageSedes: almacen ? sedesDe(c.id).length : null,
       tokensUsados: tokensVigentes(c.aiTokensUsed ?? 0, c.aiLastResetAt, ahora),
       tokensTope: c.aiTokensLimit ?? 0,
       cfdiUsados: cfdi === null ? null : (mCfdi.get(c.id) ?? 0),

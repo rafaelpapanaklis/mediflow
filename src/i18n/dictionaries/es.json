@@ -677,6 +677,7 @@
       "title": "Almacenamiento",
       "subtitle": "Todo lo que tu clínica sube: fotos, radiografías y CBCT, modelos 3D, documentos, firmas y más.",
       "usedOf": "{used} de {limit}",
+      "usedOfAllBranches": "{used} de {limit} (todas tus sedes)",
       "usedUnlimited": "{used} usados · plan sin límite",
       "loading": "Calculando tu almacenamiento…",
       "cat_fotos": "Fotos",

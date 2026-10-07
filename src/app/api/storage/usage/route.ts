@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
-import { medirAlmacenamiento } from "@/lib/storage-usage";
+import { medirAlmacenamientoDelDueno } from "@/lib/storage-owner";
 import { resumirAlmacenamiento } from "@/lib/storage-usage-core";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,8 @@ export async function GET() {
 
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { plan: true } });
   const { storageBytes } = await getPlanLimits(clinic?.plan);
-  const { porClinica, avisos } = await medirAlmacenamiento([clinicId]);
-  const resumen = resumirAlmacenamiento(porClinica.get(clinicId)!, storageBytes ?? null);
-  return NextResponse.json({ ...resumen, clinicId, parcial: avisos.length > 0 }, { headers: { "Cache-Control": "private, no-store" } });
+  // El tope es del dueño: se mide la suma de todas sus sedes.
+  const { desglose, sedes, avisos } = await medirAlmacenamientoDelDueno(clinicId);
+  const resumen = resumirAlmacenamiento(desglose, storageBytes ?? null);
+  return NextResponse.json({ ...resumen, sedes, clinicId, parcial: avisos.length > 0 }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -677,6 +677,7 @@
       "title": "Storage",
       "subtitle": "Everything your clinic uploads: photos, X-rays and CBCT, 3D models, documents, signatures and more.",
       "usedOf": "{used} of {limit}",
+      "usedOfAllBranches": "{used} of {limit} (all your branches)",
       "usedUnlimited": "{used} used · unlimited plan",
       "loading": "Calculating your storage…",
       "cat_fotos": "Photos",

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plans";
 import { NextResponse } from "next/server";
-import { medirAlmacenamientoDeClinica } from "@/lib/storage-usage";
+import { medirAlmacenamientoDelDueno } from "@/lib/storage-owner";
 import { totalDesglose } from "@/lib/storage-usage-core";
 import { formatBytes } from "@/lib/uploads/patient-study-upload";
 
@@ -18,7 +18,8 @@ export async function storageQuotaError(clinicId: string, addBytes: number): Pro
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { plan: true } });
   const { storageBytes } = await getPlanLimits(clinic?.plan);
   if (storageBytes == null) return null; // ilimitado
-  const used = totalDesglose(await medirAlmacenamientoDeClinica(clinicId));
+  // POR DUEÑO: suma de todas sus sedes contra el tope del plan de esta clínica (una sola sede = como antes).
+  const used = totalDesglose((await medirAlmacenamientoDelDueno(clinicId)).desglose);
   if (used + addBytes > storageBytes) {
     const gb = Math.round(storageBytes / (1024 ** 3));
     const free = Math.max(0, storageBytes - used);

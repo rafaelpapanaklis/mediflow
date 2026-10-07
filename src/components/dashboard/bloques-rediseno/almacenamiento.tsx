@@ -29,7 +29,7 @@ export function AlmacenamientoRediseno({ r, aviso }: { r: ResumenAlmacenamiento 
           <div className={s.almacCifra}>
             <span className={s.almacUsado}>
               {r.tope
-                ? t("shell.storageCard.usedOf", { used: bytesLegibles(r.usado), limit: bytesLegibles(r.tope) })
+                ? t(r.sedes && r.sedes > 1 ? "shell.storageCard.usedOfAllBranches" : "shell.storageCard.usedOf", { used: bytesLegibles(r.usado), limit: bytesLegibles(r.tope) })
                 : t("shell.storageCard.usedUnlimited", { used: bytesLegibles(r.usado) })}
             </span>
             {r.porcentaje !== null && <span className={s.almacPct}>{r.porcentaje}%</span>}

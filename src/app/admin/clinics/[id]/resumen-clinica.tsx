@@ -50,7 +50,7 @@ export function ResumenClinica(p: ResumenClinicaProps) {
   return (
     <div className="dcp-resumen">
       <DatoCaja
-        label="Almacenamiento" icono={HardDrive}
+        label={u?.storageSedes && u.storageSedes > 1 ? "Almacenamiento (todas las sedes)" : "Almacenamiento"} icono={HardDrive}
         n={u && u.storageUsado !== null ? `${pctCupo(u.storageUsado, u.storageTope) ?? "—"}%` : "—"}
         pie={u ? pie(u.storageUsado, u.storageTope, bytesCortos) : "sin medir"}
         nivel={u && u.storageUsado !== null ? nivelCupo(u.storageUsado, u.storageTope) : undefined}

@@ -408,7 +408,7 @@ function TarjetaSede({ valorada, ahora, variasSedes }: { valorada: ClinicaValora
 
       {u ? (
         <div className="dcp-sede__usos">
-          <BarraUso label="Disco" usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
+          <BarraUso label={u.storageSedes && u.storageSedes > 1 ? "Disco (todas las sedes)" : "Disco"} usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
           {u.tokensTope > 0
             ? <BarraUso label="Tokens IA" usado={u.tokensUsados} tope={u.tokensTope} fmt={tokensCortos} compacta />
             : <span className="dcp-uso--sin">Tokens IA: sin cupo en el plan</span>}

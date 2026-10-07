@@ -115,10 +115,12 @@ test("bytesLegibles: «X GB de Y GB»", () => {
 
 // ── Una sola fuente ──────────────────────────────────────────────────────
 test("la cuota de subida, la tarjeta de Suscripción y /admin leen medirAlmacenamiento", () => {
-  assert.match(fuente("src/lib/storage-quota.ts"), /medirAlmacenamientoDeClinica/);
-  assert.match(fuente("src/app/api/storage/usage/route.ts"), /medirAlmacenamiento\(/);
+  // Encargo 11: la misma función de uso, sumada por dueño (storage-owner.ts).
+  assert.match(fuente("src/lib/storage-quota.ts"), /medirAlmacenamientoDelDueno/);
+  assert.match(fuente("src/lib/storage-owner.ts"), /medirAlmacenamiento\(ids\)/);
+  assert.match(fuente("src/app/api/storage/usage/route.ts"), /medirAlmacenamientoDelDueno\(/);
   const admin = fuente("src/lib/admin/uso-clinica.ts");
-  assert.match(admin, /medirAlmacenamiento\(ids\)/);
+  assert.match(admin, /medirAlmacenamiento\(idsAlmacen\)/);
   // Ya no hay una segunda suma a mano en /admin.
   assert.doesNotMatch(admin, /patientFile\.groupBy|clinicalPhoto\.groupBy|patientUpload\.groupBy/);
   assert.doesNotMatch(fuente("src/lib/storage-quota.ts"), /aggregate\(/);

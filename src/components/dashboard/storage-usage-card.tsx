@@ -77,7 +77,7 @@ export function StorageUsageCard({ rediseno = false }: { rediseno?: boolean } = 
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", fontVariantNumeric: "tabular-nums" }}>
             <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-1)" }}>
               {data.tope
-                ? t("shell.storageCard.usedOf", { used: bytesLegibles(data.usado), limit: bytesLegibles(data.tope) })
+                ? t(data.sedes && data.sedes > 1 ? "shell.storageCard.usedOfAllBranches" : "shell.storageCard.usedOf", { used: bytesLegibles(data.usado), limit: bytesLegibles(data.tope) })
                 : t("shell.storageCard.usedUnlimited", { used: bytesLegibles(data.usado) })}
             </span>
             {data.porcentaje !== null && <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-3)" }}>{data.porcentaje}%</span>}
