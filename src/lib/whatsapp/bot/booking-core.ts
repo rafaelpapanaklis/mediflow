@@ -29,6 +29,7 @@ import {
   limpiarTextoOtro,
   tipoDeId,
   type FilaCatalogo,
+  type GenericasBot,
 } from "./menu-agenda-core";
 import { textoAvisoAnticipo, textoLinkDePago } from "@/lib/anticipos/core";
 import { interactivoParaOpciones, REC_BOTON, type MensajeInteractivo } from "../interactivo";
@@ -227,7 +228,7 @@ export interface BookingDeps {
    * de fábrica) y su catálogo activo (para casar «Limpieza», «Consulta»…).
    * Opcional: sin él el paso es el de siempre (todo el catálogo, tope 24).
    */
-  listBotServiceMenu?(clinicId: string): Promise<{ marcados: FilaCatalogo[]; catalogo: FilaCatalogo[] }>;
+  listBotServiceMenu?(clinicId: string): Promise<{ marcados: FilaCatalogo[]; catalogo: FilaCatalogo[]; genericas?: GenericasBot }>;
   findThreadExternalId(threadId: string, clinicId: string): Promise<string | null>;
   findAppointmentById(id: string, clinicId: string): Promise<UpcomingAppt | null>;
   /**
@@ -638,8 +639,8 @@ async function startCatalogo(
 ): Promise<BotTurnResult> {
   const state: BookingState = { ...base };
   if (deps.listBotServiceMenu) {
-    const { marcados } = await deps.listBotServiceMenu(input.clinicId);
-    const options = construirMenu({ marcados, conOrto });
+    const { marcados, genericas } = await deps.listBotServiceMenu(input.clinicId);
+    const options = construirMenu({ marcados, conOrto, genericas });
     state.options = options;
     let saludo = "¡Con gusto te agendo! 🦷";
     if (state.fechaPedida) {

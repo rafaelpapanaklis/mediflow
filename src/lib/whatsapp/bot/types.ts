@@ -83,6 +83,12 @@ export interface BotConfigDTO {
   preciosDisponibles?: boolean;
   /** Solo para la pantalla: ¿la clínica tiene el módulo de Ortodoncia? */
   tieneOrtodoncia?: boolean;
+  /** ws1-t9 — «Servicios al agendar» (solo pantalla; ausente = las tres genéricas activas). */
+  botGenericas?: { consulta: boolean; limpieza: boolean; urgencia: boolean };
+  /** false = falta pegar sql/ws1-t9-bot-genericas.sql: las casillas salen deshabilitadas. */
+  genericasDisponible?: boolean;
+  /** Nombres de los procedimientos marcados «Se agenda por WhatsApp» (solo lectura). */
+  procedimientosAgendables?: string[];
   fallbackToHuman: boolean;
   /** TZ de la clínica: el saldo necesita saber qué día es HOY donde atienden. */
   timezone?: string;

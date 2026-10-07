@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Bot, Plus, Trash2, MessageSquare, Clock, Wallet, Lock, GraduationCap } from "lucide-react";
 import type { BotConfigDTO, BotFaqDTO } from "@/lib/whatsapp/bot/types";
 import type { EditableConfig, ScheduleState } from "@/app/dashboard/whatsapp/bot/bot-client";
+import { SeccionServiciosAgenda } from "@/app/dashboard/whatsapp/bot/seccion-servicios-agenda";
 import type { TextosPreciosBot } from "@/app/dashboard/whatsapp/bot/textos-precios";
 import { PERSONA_TEMPLATES } from "@/app/dashboard/whatsapp/bot/persona-templates";
 import { avisoDeTamanoDePersona } from "@/lib/whatsapp/bot/ai-prompt";
@@ -247,6 +248,13 @@ export function BotRediseno({ vm }: { vm: BotVM }) {
                           : tp.ortodonciaDesc
                     }
                     disabled={saving || !canEdit || config.preciosDisponibles === false || config.tieneOrtodoncia === false}
+                  />
+                  <SeccionServiciosAgenda
+                    genericas={form.botGenericas}
+                    onChange={(botGenericas) => setForm((f) => ({ ...f, botGenericas }))}
+                    disponible={config.genericasDisponible !== false}
+                    disabled={saving || !canEdit}
+                    procedimientos={config.procedimientosAgendables ?? []}
                   />
                   <FilaInterruptor
                     on={form.fallbackToHuman}

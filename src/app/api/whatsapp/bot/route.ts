@@ -10,8 +10,29 @@ import {
   guardarInterruptoresDePrecios,
   interruptoresDelBody,
 } from "@/lib/whatsapp/bot/precios-bot";
+import {
+  columnaGenericasExiste,
+  guardarGenericas,
+  leerGenericas,
+  nombresMarcados,
+} from "@/lib/whatsapp/bot/servicios-agendables-db";
+import { normalizarGenericas, type GenericasBot } from "@/lib/whatsapp/bot/menu-agenda-core";
 
 export const dynamic = "force-dynamic";
+
+/** ws1-t9 — lo de «Servicios al agendar» que la pantalla pinta: casillas genéricas + procedimientos marcados (solo lectura). */
+async function estadoServiciosAgenda(clinicId: string): Promise<{
+  botGenericas: GenericasBot;
+  genericasDisponible: boolean;
+  procedimientosAgendables: string[];
+}> {
+  const [botGenericas, genericasDisponible, procedimientosAgendables] = await Promise.all([
+    leerGenericas(clinicId),
+    columnaGenericasExiste(),
+    nombresMarcados(clinicId).catch(() => [] as string[]),
+  ]);
+  return { botGenericas, genericasDisponible, procedimientosAgendables };
+}
 
 /**
  * GET /api/whatsapp/bot
@@ -36,7 +57,7 @@ export async function GET() {
   const precios = await estadoDePreciosDelBot(ctx.clinicId);
 
   return NextResponse.json({
-    config: { ...toConfigDTO(config), ...precios },
+    config: { ...toConfigDTO(config), ...precios, ...(await estadoServiciosAgenda(ctx.clinicId)) },
     faqs: faqs.map(toFaqDTO),
   });
 }
@@ -94,6 +115,20 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  // ws1-t9 — casillas genéricas de «Servicios al agendar». Sin el SQL pegado, dejarlas como están
+  // (todas activas) no hace falta guardarlo; cambiarlas se rechaza ANTES de guardar nada.
+  const genericasPedidas =
+    body.botGenericas && typeof body.botGenericas === "object" ? normalizarGenericas(body.botGenericas) : null;
+  if (genericasPedidas && !(await columnaGenericasExiste(true))) {
+    const sinCambio = genericasPedidas.consulta && genericasPedidas.limpieza && genericasPedidas.urgencia;
+    if (!sinCambio) {
+      return NextResponse.json(
+        { error: "Elegir los servicios al agendar todavía no está activo en tu clínica.", code: "genericas_sql_pendiente" },
+        { status: 503 },
+      );
+    }
+  }
+
   const data = buildConfigUpdate(body);
   const updated = await prisma.whatsAppBotConfig.update({
     where: { clinicId: ctx.clinicId },
@@ -109,5 +144,17 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ config: { ...toConfigDTO(updated), ...(await estadoDePreciosDelBot(ctx.clinicId)) } });
+  if (genericasPedidas && (await columnaGenericasExiste())) {
+    const g = await guardarGenericas(ctx.clinicId, genericasPedidas);
+    if ("motivo" in g) {
+      return NextResponse.json(
+        { error: "Se guardó la configuración, pero no los servicios al agendar. Vuelve a intentarlo.", code: "genericas_no_guardadas" },
+        { status: 500 },
+      );
+    }
+  }
+
+  return NextResponse.json({
+    config: { ...toConfigDTO(updated), ...(await estadoDePreciosDelBot(ctx.clinicId)), ...(await estadoServiciosAgenda(ctx.clinicId)) },
+  });
 }

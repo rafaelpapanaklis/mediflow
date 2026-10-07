@@ -27,7 +27,7 @@ const GRANDE: Fila[] = [
   { id: "orto-v", name: "Valoración de ortodoncia", duration: 30 },
 ].sort((a, b) => a.name.localeCompare(b.name));
 
-function deps(over: Partial<BookingDeps> & { marcados?: Fila[]; catalogo?: Fila[] } = {}) {
+function deps(over: Partial<BookingDeps> & { marcados?: Fila[]; catalogo?: Fila[]; genericas?: { consulta: boolean; limpieza: boolean; urgencia: boolean } } = {}) {
   const creadas: any[] = [];
   const consultasDeSlots: any[] = [];
   const catalogo = over.catalogo ?? GRANDE;
@@ -37,7 +37,7 @@ function deps(over: Partial<BookingDeps> & { marcados?: Fila[]; catalogo?: Fila[
     getClinicName: async () => "Clínica Demo",
     // Lo que hacía el código viejo: el catálogo alfabético con tope de 24.
     listBookableServices: async () => catalogo.slice(0, 24),
-    listBotServiceMenu: async () => ({ marcados, catalogo }),
+    listBotServiceMenu: async () => ({ marcados, catalogo, genericas: over.genericas }),
     listBookableDoctors: async () => [{ id: "doc1", firstName: "Ana", lastName: "García" }],
     getAvailableSlots: async (p) => {
       consultasDeSlots.push(p);
@@ -55,6 +55,7 @@ function deps(over: Partial<BookingDeps> & { marcados?: Fila[]; catalogo?: Fila[
     findAppointmentById: async () => null,
     ...over,
   } as BookingDeps;
+  delete (d as any).genericas;
   delete (d as any).marcados;
   delete (d as any).catalogo;
   return { d, creadas, consultasDeSlots };
@@ -161,8 +162,16 @@ describe("menú corto — sin procedimientos marcados (menú de fábrica)", () =
 describe("menú corto — con procedimientos marcados por la clínica", () => {
   const marcados = [GRANDE.find((g) => g.id === "extr")!, GRANDE.find((g) => g.id === "resi")!];
 
-  it("el menú son los marcados + Otro tratamiento", async () => {
+  const sinGenericas = { consulta: false, limpieza: false, urgencia: false };
+
+  it("ws1-t9: genéricas + marcados se combinan (ya no se ocultan las genéricas)", async () => {
     const { d } = deps({ marcados });
+    const r = await convo(d).say("agendar");
+    assert.deepEqual(lineas(r).map((l) => l.replace(/^\d+\. /, "")), ["Consulta o valoración", "Limpieza", "Urgencia o dolor", "Extracción simple (45 min)", "Resina (60 min)", "Otro tratamiento"]);
+  });
+
+  it("con las genéricas desmarcadas el menú son los marcados + Otro tratamiento", async () => {
+    const { d } = deps({ marcados, genericas: sinGenericas });
     const r = await convo(d).say("agendar");
     assert.deepEqual(lineas(r).map((l) => l.replace(/^\d+\. /, "")), ["Extracción simple (45 min)", "Resina (60 min)", "Otro tratamiento"]);
     assert.doesNotMatch(r.reply ?? "", /Limpieza|Urgencia/);
@@ -170,7 +179,7 @@ describe("menú corto — con procedimientos marcados por la clínica", () => {
 
   it("más de 8 marcados: se muestran 8 + Otro tratamiento", async () => {
     const muchos = Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, name: `Marcado ${i}`, duration: 30 }));
-    const { d } = deps({ marcados: muchos });
+    const { d } = deps({ marcados: muchos, genericas: sinGenericas });
     const r = await convo(d).say("agendar");
     assert.equal(lineas(r).length, 9);
     assert.match(lineas(r)[8], /Otro tratamiento/);
@@ -178,7 +187,7 @@ describe("menú corto — con procedimientos marcados por la clínica", () => {
 
   it("elegir un marcado (por número o por nombre) agenda ESE procedimiento", async () => {
     for (const resp of ["2", "resina", "quiero una resina"]) {
-      const { d } = deps({ marcados });
+      const { d } = deps({ marcados, genericas: sinGenericas });
       const c = convo(d);
       await c.say("agendar");
       await c.say(resp);

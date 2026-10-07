@@ -14,6 +14,8 @@ import { PERSONA_TEMPLATES } from "./persona-templates";
 import { avisoDeTamanoDePersona } from "@/lib/whatsapp/bot/ai-prompt";
 import { BotRediseno } from "@/components/dashboard/whatsapp-rediseno/bot";
 import { useTextosPreciosBot } from "./textos-precios";
+import { SeccionServiciosAgenda } from "./seccion-servicios-agenda";
+import { GENERICAS_DE_FABRICA, normalizarGenericas, type GenericasBot } from "@/lib/whatsapp/bot/menu-agenda-core";
 import { useT } from "@/i18n/i18n-provider";
 import { ErrorLegible, SIN_PERMISO, mensajeDeCatch, mensajeDeRespuestaBot } from "./mensaje-de-respuesta";
 
@@ -40,6 +42,8 @@ export type EditableConfig = {
   // ws1-t3 — interruptores de precios (apagados de fábrica).
   canQuoteProcedurePrices: boolean;
   canQuoteOrthoPrices: boolean;
+  // ws1-t9 — opciones genéricas del menú al agendar (todas marcadas de fábrica).
+  botGenericas: GenericasBot;
 };
 
 function emptySchedule(): ScheduleState {
@@ -76,6 +80,7 @@ function editableFromConfig(c: BotConfigDTO): EditableConfig {
     fallbackToHuman: c.fallbackToHuman,
     canQuoteProcedurePrices: c.canQuoteProcedurePrices === true,
     canQuoteOrthoPrices: c.canQuoteOrthoPrices === true,
+    botGenericas: normalizarGenericas(c.botGenericas),
   };
 }
 
@@ -182,6 +187,7 @@ export function BotClient({
     fallbackToHuman: true,
     canQuoteProcedurePrices: false,
     canQuoteOrthoPrices: false,
+    botGenericas: { ...GENERICAS_DE_FABRICA },
   });
   const [schedule, setSchedule] = useState<ScheduleState>(emptySchedule());
   const [horarioClinica, setHorarioClinica] = useState<ScheduleState | null>(null);
@@ -265,6 +271,7 @@ export function BotClient({
         fallbackToHuman: form.fallbackToHuman,
         canQuoteProcedurePrices: form.canQuoteProcedurePrices,
         canQuoteOrthoPrices: form.canQuoteOrthoPrices,
+        botGenericas: form.botGenericas,
         businessHours: buildBusinessHours(),
       };
       const res = await fetch("/api/whatsapp/bot", {
@@ -690,6 +697,13 @@ export function BotClient({
                       : tp.ortodonciaDesc
                 }
                 disabled={saving || !canEdit || config.preciosDisponibles === false || config.tieneOrtodoncia === false}
+              />
+              <SeccionServiciosAgenda
+                genericas={form.botGenericas}
+                onChange={(botGenericas) => setForm((f) => ({ ...f, botGenericas }))}
+                disponible={config.genericasDisponible !== false}
+                disabled={saving || !canEdit}
+                procedimientos={config.procedimientosAgendables ?? []}
               />
               <ToggleRow
                 on={form.fallbackToHuman}

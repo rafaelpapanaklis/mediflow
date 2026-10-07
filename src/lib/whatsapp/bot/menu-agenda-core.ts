@@ -5,8 +5,8 @@ import { foldAccents } from "./booking-parse";
 // grande lo posterior a la «C» nunca salía. Ahora es corto:
 //   A) de fábrica: Consulta o valoración · Limpieza · Urgencia o dolor ·
 //      (Control de ortodoncia) · Otro tratamiento.
-//   B) si la clínica marcó procedimientos «Se agenda por WhatsApp»: los
-//      marcados (máx. 8) + Otro tratamiento.
+//   B) ws1-t9: la clínica elige las genéricas (casillas en Configurar bot) y marca
+//      procedimientos «Se agenda por WhatsApp»; el menú los combina (máx. 8) + Otro tratamiento.
 // Puro y sin base de datos: lo prueban los tests de los turnos del bot.
 
 export const MAX_MARCADOS_EN_MENU = 8;
@@ -38,17 +38,51 @@ export interface OpcionMenu {
   label: string;
 }
 
-/** Las opciones del menú, en orden. `conOrto`: mostrar «Control de ortodoncia» (menú A). */
-export function construirMenu(p: { marcados: FilaCatalogo[]; conOrto: boolean }): OpcionMenu[] {
-  if (p.marcados.length > 0) {
-    const filas = p.marcados.slice(0, MAX_MARCADOS_EN_MENU).map((s) => ({
-      id: s.id,
-      label: s.duration ? `${s.name} (${s.duration} min)` : s.name,
-    }));
-    return [...filas, { id: idMenu("otro"), label: ETIQUETA_MENU.otro }];
-  }
-  const tipos: TipoMenu[] = ["consulta", "limpieza", "urgencia", ...(p.conOrto ? (["orto"] as const) : []), "otro"];
-  return tipos.map((t) => ({ id: idMenu(t), label: ETIQUETA_MENU[t] }));
+/** Las tres opciones genéricas que la clínica puede marcar o desmarcar en «Configurar bot». */
+export type TipoGenerico = "consulta" | "limpieza" | "urgencia";
+export const TIPOS_GENERICOS: readonly TipoGenerico[] = ["consulta", "limpieza", "urgencia"];
+export type GenericasBot = Record<TipoGenerico, boolean>;
+/** Sin la columna (o sin config): todas activas, como era hasta ahora. */
+export const GENERICAS_DE_FABRICA: GenericasBot = Object.freeze({ consulta: true, limpieza: true, urgencia: true });
+
+/** De cualquier valor suelto (JSON de la base o del body) a las tres casillas; lo que no sea `false` cuenta como activo. */
+export function normalizarGenericas(v: unknown): GenericasBot {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  return {
+    consulta: o.consulta !== false,
+    limpieza: o.limpieza !== false,
+    urgencia: o.urgencia !== false,
+  };
+}
+
+/**
+ * ws1-t9 — las opciones del menú, en orden:
+ * genéricas marcadas · Control de ortodoncia (si aplica) · procedimientos marcados · Otro tratamiento.
+ * Las genéricas y los procedimientos se COMBINAN (ya no se ocultan unas por marcar otros).
+ * Si no queda nada marcado, vuelven las genéricas de fábrica para no dejar el menú vacío.
+ * Tope de MAX_MARCADOS_EN_MENU opciones antes de «Otro tratamiento»: lo que sobra son
+ * los últimos procedimientos (alfabético); las genéricas y el control van primero.
+ */
+export function construirMenu(p: {
+  marcados: FilaCatalogo[];
+  conOrto: boolean;
+  genericas?: GenericasBot;
+}): OpcionMenu[] {
+  const g = p.genericas ?? GENERICAS_DE_FABRICA;
+  let tipos: TipoGenerico[] = TIPOS_GENERICOS.filter((t) => g[t]);
+  if (tipos.length === 0 && p.marcados.length === 0) tipos = [...TIPOS_GENERICOS];
+  const delTipo: OpcionMenu[] = tipos.map((t) => ({ id: idMenu(t), label: ETIQUETA_MENU[t] }));
+  const orto: OpcionMenu[] = p.conOrto ? [{ id: idMenu("orto"), label: ETIQUETA_MENU.orto }] : [];
+  const procs: OpcionMenu[] = p.marcados.map((s) => ({
+    id: s.id,
+    label: s.duration ? `${s.name} (${s.duration} min)` : s.name,
+  }));
+  return [...delTipo, ...orto, ...procs].slice(0, MAX_MARCADOS_EN_MENU).concat({ id: idMenu("otro"), label: ETIQUETA_MENU.otro });
+}
+
+/** Cuántas opciones pide la clínica antes de «Otro tratamiento» (para avisar en pantalla si pasa del tope). */
+export function opcionesPedidas(genericas: GenericasBot, nProcedimientos: number): number {
+  return TIPOS_GENERICOS.filter((t) => genericas[t]).length + nProcedimientos;
 }
 
 const PATRON_CATALOGO: Partial<Record<TipoMenu, RegExp[]>> = {

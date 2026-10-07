@@ -811,7 +811,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                 </span>
               </label>
               <p className={rediseno ? styles.fieldHint : "text-xs text-muted-foreground"}>
-                Si marcas alguno (hasta 8), el bot ofrece solo los marcados más «Otro tratamiento». Si no marcas ninguno, ofrece Consulta o valoración, Limpieza, Urgencia o dolor y Otro tratamiento.
+                Marca los procedimientos que el bot ofrecerá al agendar (junto con las opciones generales que elijas en Configurar bot).
               </p>
               </div>
 
