@@ -19,6 +19,8 @@ import { logError } from "@/lib/safe-log";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { categoriaDeSucursal } from "@/lib/clinic/categoria-fija";
 import { agendaActiveDeSedeNueva } from "@/lib/agenda/roles-que-atienden";
+import { copiarConfiguracion, leerOrigenParaAlta, sedePrincipalDe, type OrigenParaAlta } from "@/lib/branches/copia-sede.server";
+import { seccionesFallidas, type ResultadoCopia } from "@/lib/branches/copia-sede-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,6 +61,11 @@ const schema = z.object({
   // real de sedes lo impone maxClinics). Cada id se valida contra las sedes
   // del dueño ANTES de escribir nada: nunca se confía en el body.
   sharePatientsWith: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  // ws1-t10 (auditoría BEVADENT · M4): la sede nueva nace con la configuración
+  // de la sede PRINCIPAL del dueño (catálogo y precios, horario y agenda,
+  // recordatorios, plantillas, textos del bot). Por defecto sí; la casilla del
+  // diálogo lo apaga. Qué se copia y qué no: src/lib/branches/copia-sede-core.ts.
+  copiarConfiguracion: z.boolean().optional(),
 });
 
 /** Mensaje al dueño según por qué NO puede crear la sede. */
@@ -164,6 +171,20 @@ export async function POST(req: NextRequest) {
       select: { agendaActive: true },
     });
 
+    // M4 — de qué sede se copia: la PRINCIPAL del dueño (la más antigua, por el
+    // supabaseId de la sesión), no la activa. Si no se pidió copiar o no se
+    // pudo leer, la sede nace como antes (horario L-V 9-18 y defaults).
+    const copiar = data.copiarConfiguracion !== false;
+    let origen: OrigenParaAlta | null = null;
+    if (copiar) {
+      try {
+        const principal = await sedePrincipalDe(supabaseId);
+        if (principal) origen = await leerOrigenParaAlta(principal);
+      } catch (e) {
+        logError("[api/clinics POST] leer la sede principal para copiar", e);
+      }
+    }
+
     const clinic = await prisma.clinic.create({
       data: {
         name: data.name,
@@ -185,6 +206,9 @@ export async function POST(req: NextRequest) {
         // usuarios/sedes), la sede las hereda: si no, leería los topes nuevos y
         // el cupo de sedes cambiaría según desde cuál mire el dueño.
         ...inheritedOverridesData(ctx.clinic),
+        // M4: agenda, recordatorios y avisos de la sede principal (lista cerrada
+        // en AJUSTES_QUE_SE_COPIAN; nada de CFDI, WhatsApp ni cobros).
+        ...((origen?.ajustes ?? {}) as Record<string, any>),
         // Nested write = 1 sola transacción (Prisma envuelve el árbol):
         // Clinic + User dueño + horarios L-V, o nada.
         users: {
@@ -208,17 +232,34 @@ export async function POST(req: NextRequest) {
         },
         schedules: {
           createMany: {
-            data: [0, 1, 2, 3, 4].map((day) => ({
-              dayOfWeek: day,
-              enabled: true,
-              openTime: "09:00",
-              closeTime: "18:00",
-            })),
+            // M4: el horario de la principal; sin él, el L-V 9-18 de siempre.
+            data: origen
+              ? origen.horario
+              : [0, 1, 2, 3, 4].map((day) => ({
+                  dayOfWeek: day,
+                  enabled: true,
+                  openTime: "09:00",
+                  closeTime: "18:00",
+                })),
           },
         },
       },
-      select: { id: true, name: true, slug: true, plan: true, category: true },
+      select: {
+        id: true, name: true, slug: true, plan: true, category: true,
+        users: { where: { supabaseId, role: "SUPER_ADMIN" }, select: { id: true }, take: 1 },
+      },
     });
+
+    // M4 — el resto de la configuración (catálogo, paquetes, plantillas, hojas,
+    // bot), sección por sección y sin tirar la sede si una falla.
+    let copia: ResultadoCopia | null = null;
+    if (origen && clinic.users[0]) {
+      copia = await copiarConfiguracion({
+        origen: { clinicId: origen.clinicId, nombre: origen.nombre },
+        destinoId: clinic.id,
+        destinoOwnerUserId: clinic.users[0].id,
+      });
+    }
 
     // MULTI-CLÍNICA · FASE 2 — vincular la sede nueva con las que eligió el
     // dueño en el diálogo. Va DESPUÉS de crear la clínica (necesitamos su id)
@@ -268,7 +309,16 @@ export async function POST(req: NextRequest) {
       entityType: "clinic",
       entityId: clinic.id,
       action: "create",
-      after: { name: clinic.name, slug: clinic.slug, plan: clinic.plan, branchOf: ctx.clinicId },
+      after: {
+        name: clinic.name,
+        slug: clinic.slug,
+        plan: clinic.plan,
+        branchOf: ctx.clinicId,
+        // Qué se copió de la principal y qué sección falló (M4).
+        ...(copia
+          ? { copiadoDe: copia.origen.clinicId, copiado: copia.copiado, copiaFallida: seccionesFallidas(copia) }
+          : { copiadoDe: null }),
+      },
     });
 
     // El dueño cae directo en la sede nueva.
@@ -278,6 +328,8 @@ export async function POST(req: NextRequest) {
       slug: clinic.slug,
       used: quota.used + 1,
       max: quota.max,
+      // M4: lo que se copió (el diálogo lo enseña) y lo que hay que conectar aparte.
+      copia,
     });
     writeActiveClinicCookie(response, clinic.id);
     return response;

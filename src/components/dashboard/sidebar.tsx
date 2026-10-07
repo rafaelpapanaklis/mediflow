@@ -6,6 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Settings,
+  BarChart3,
   ChevronDown, Moon, Sun, LogOut, PanelLeftClose, PanelLeft, UserRound,
   X, Plus, Lock,
 } from "lucide-react";
@@ -16,7 +17,7 @@ import type { Role } from "@prisma/client";
 import { hasPermission } from "@/lib/auth/permissions";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { setSidebarSectionCollapsed } from "@/app/actions/sidebar";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { NewBranchDialog } from "@/components/dashboard/new-branch-dialog";
 import type { SidebarBranchInfo } from "@/lib/branches-shared";
 import { cerrarSesionPanel as cerrarSesionDelPanel } from "@/lib/auth/cerrar-sesion-panel";
@@ -868,6 +869,7 @@ export function ClinicSwitcher({
   apariencia?: ClinicSwitcherApariencia;
 }) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const [branchOpen, setBranchOpen] = useState(false);
@@ -1136,6 +1138,31 @@ export function ClinicSwitcher({
                 >
                   <Settings size={13} aria-hidden />
                   {t("sidebar.branches.manage")}
+                </DropdownMenu.Item>
+              )}
+              {/* ws1-t10 (auditoría BEVADENT · M6) — reporte consolidado de
+                  todas las sedes del dueño. Misma condición que «Administrar
+                  sucursales»; el guard real (SUPER_ADMIN + plan con sedes)
+                  vive en la página y en GET /api/sedes/reporte. Texto aquí:
+                  los diccionarios los editan otras pantallas a la vez. */}
+              {branches.quota.used > 1 && (
+                <DropdownMenu.Item
+                  onSelect={() => router.push("/dashboard/sedes/reporte")}
+                  data-testid="menu-reporte-sedes"
+                  style={{
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    color: "var(--text-2)",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    outline: "none",
+                  }}
+                >
+                  <BarChart3 size={13} aria-hidden />
+                  {locale.startsWith("en") ? "Locations report" : "Reporte de sedes"}
                 </DropdownMenu.Item>
               )}
             </>

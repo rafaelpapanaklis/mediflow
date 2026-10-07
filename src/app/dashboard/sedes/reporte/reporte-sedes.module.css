@@ -1,0 +1,116 @@
+/* Reporte consolidado de sedes (ws1-t10, auditoría BEVADENT · M6).
+   NO declara tokens propios: la raíz monta CLASES_MENU (tokens --m2-* del
+   menú de dos niveles, con su versión oscura) y estas clases los leen por
+   herencia, igual que el rediseño de Finanzas. Éxito/peligro salen de los
+   tokens semánticos de globals.css. */
+
+.raiz {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  padding: clamp(14px, 2vw, 24px) clamp(14px, 1.6vw, 28px) clamp(24px, 2.8vw, 32px);
+  container-type: inline-size;
+  container-name: sedes;
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.raiz > * { font-variant-numeric: tabular-nums; }
+
+.volver {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-bottom: 10px; font-size: 12.5px; font-weight: 500;
+  color: var(--m2-texto-2); text-decoration: none;
+}
+.volver:hover { color: var(--m2-texto); }
+
+/* ── Cabecera ────────────────────────────────────────────────────── */
+.cabecera {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.titulo { margin: 0; font-size: clamp(19px, 1.7vw, 23px); font-weight: 650; letter-spacing: -0.4px; line-height: 1.2; color: var(--m2-texto); }
+.subtitulo { margin: 4px 0 0; font-size: 13px; color: var(--m2-texto-3); }
+.rangoFechas { color: var(--m2-texto-2); font-weight: 500; white-space: nowrap; }
+.acciones { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+
+.segmentado { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--m2-buscador-fondo); flex: none; max-width: 100%; overflow-x: auto; }
+.segmento {
+  height: 30px; padding: 0 12px; display: grid; place-items: center; border: 0; border-radius: 7px;
+  background: transparent; color: var(--m2-texto-2); font-family: inherit; font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; cursor: pointer; user-select: none; transition: background 0.12s, color 0.12s;
+}
+@media (hover: hover) { .segmento:hover { color: var(--m2-texto); } }
+.segmentoActivo, .segmentoActivo:hover { background: var(--m2-tarjeta); color: var(--m2-texto); font-weight: 600; box-shadow: 0 1px 2px rgba(26, 24, 38, 0.1); }
+.segmento:focus-visible, .boton:focus-visible, .enlace:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+.boton {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; padding: 0 15px;
+  border: 1px solid var(--m2-tarjeta-borde); border-radius: 10px; background: var(--m2-tarjeta); color: var(--m2-texto);
+  box-shadow: var(--m2-sombra); font-family: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
+  cursor: pointer; text-decoration: none; transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+@media (hover: hover) { .boton:hover:not(:disabled) { background: var(--m2-tarjeta-hover); border-color: var(--m2-texto-3); } }
+.boton:disabled { opacity: 0.45; cursor: not-allowed; }
+.botonPrincipal, .botonPrincipal:hover:not(:disabled) { background: var(--m2-activo); border-color: var(--m2-activo); color: var(--m2-activo-texto); }
+.enlace { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; border: 0; background: transparent; color: var(--m2-activo); font: inherit; font-weight: 600; cursor: pointer; }
+
+/* ── Rango personalizado ─────────────────────────────────────────── */
+.rango { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin: -4px 0 16px; }
+.campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; width: 160px; }
+.campoEtiqueta { font-size: 11.5px; font-weight: 600; color: var(--m2-texto-3); }
+.campoEntrada {
+  width: 100%; height: 38px; padding: 0 11px; border: 1px solid var(--m2-tarjeta-borde); border-radius: 10px;
+  background: var(--m2-tarjeta); color: var(--m2-texto); font-family: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.campoEntrada:focus { outline: none; border-color: var(--m2-activo); box-shadow: 0 0 0 3px var(--m2-iniciales-fondo); }
+:global(.dark) .campoEntrada { background-color: var(--m2-tarjeta) !important; border-color: var(--m2-tarjeta-borde) !important; color: var(--m2-texto) !important; }
+
+/* ── Avisos ──────────────────────────────────────────────────────── */
+.aviso {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border-radius: 10px;
+  background: var(--danger-soft, rgba(220, 38, 38, 0.08)); color: var(--danger, #dc2626); font-size: 12.5px; line-height: 1.45;
+}
+.notaPie { margin: 10px 0 0; font-size: 12px; color: var(--m2-texto-3); line-height: 1.45; }
+.vacio { margin: 12px 0; text-align: center; color: var(--m2-texto-3); }
+.actualizando { font-size: 12px; color: var(--m2-texto-3); }
+
+/* ── Indicadores ─────────────────────────────────────────────────── */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+@container sedes (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container sedes (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px;
+  border: 1px solid var(--m2-tarjeta-borde); border-radius: 14px; background: var(--m2-tarjeta); box-shadow: var(--m2-sombra);
+}
+.kpiHero { border-color: var(--m2-activo); }
+.kpiEtiqueta { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--m2-texto-3); }
+.kpiValor { font-size: clamp(19px, 1.7vw, 24px); font-weight: 650; letter-spacing: -0.4px; line-height: 1.15; color: var(--m2-texto); overflow-wrap: anywhere; }
+.kpiValorPeligro { color: var(--danger, #dc2626); }
+.kpiPista { font-size: 12px; color: var(--m2-texto-3); }
+
+/* ── Tarjeta de la comparativa ───────────────────────────────────── */
+.tarjeta { padding: 14px 16px 16px; border: 1px solid var(--m2-tarjeta-borde); border-radius: 14px; background: var(--m2-tarjeta); box-shadow: var(--m2-sombra); }
+.tarjetaCabeza { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.tarjetaTitulo { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 14px; font-weight: 650; color: var(--m2-texto); }
+
+/* La tabla desplaza en horizontal en pantallas estrechas; la columna de la
+   sede queda fija para no perder de qué fila se lee. */
+.tablaEnvoltura { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px; }
+.tabla { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px; }
+.tabla th, .tabla td { padding: 9px 10px; border-bottom: 1px solid var(--m2-borde); text-align: left; vertical-align: middle; white-space: nowrap; }
+.tabla thead th { font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--m2-texto-3); }
+.tabla tbody tr:last-child td, .tabla tbody tr:last-child th { border-bottom: 0; }
+.celdaSede { position: sticky; left: 0; z-index: 1; background: var(--m2-tarjeta); min-width: 160px; max-width: 240px; font-weight: 600; }
+.nombreSede { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--m2-contador-fondo); color: var(--m2-contador-texto); font-size: 10.5px; font-weight: 600; vertical-align: middle; }
+.chipPeligro { background: var(--danger-soft, rgba(220, 38, 38, 0.1)); color: var(--danger, #dc2626); }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.num small { font-size: 11px; color: var(--m2-texto-3); }
+.numPeligro { color: var(--danger, #dc2626); }
+.celdaParte { min-width: 140px; }
+.barra { display: inline-block; width: 80px; height: 6px; margin-right: 8px; border-radius: 999px; background: var(--m2-buscador-fondo); vertical-align: middle; overflow: hidden; }
+.barraRelleno { display: block; height: 100%; border-radius: 999px; background: var(--m2-activo); }
+.parteTexto { font-size: 12px; color: var(--m2-texto-2); vertical-align: middle; }
+.filaTotal th, .filaTotal td { border-top: 1px solid var(--m2-tarjeta-borde); font-weight: 650; }
+.filaFallida th, .filaFallida td { color: var(--m2-texto-3); }
