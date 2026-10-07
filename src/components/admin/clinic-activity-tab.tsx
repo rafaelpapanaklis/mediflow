@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Calendar, CreditCard, FileText, User, FileImage, Activity as ActivityIcon } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
+import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 
-interface User { id: string; firstName: string; lastName: string; email: string; role: string; lastLogin: string | null }
+interface User { id: string; firstName: string; lastName: string; email: string; role: string; lastLogin: string | null; ultimoAcceso?: string | null }
 
 interface ActivityData {
   users: User[];
@@ -18,7 +19,7 @@ interface ActivityData {
     lastAudit:       any;
   };
   dailyActivity: { date: string; count: number }[];
-  userActivity:  { userId: string; count: number; user: User | null }[];
+  userActivity:  { userId: string | null; label: string; count: number; user: User | null }[];
 }
 
 function relTime(iso?: string | null): string {
@@ -169,7 +170,11 @@ export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
                     <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{u.firstName} {u.lastName}</div>
                     <div style={{ color: "var(--text-3)" }}>{u.email}</div>
                   </div>
-                  <div style={{ color: "var(--text-2)" }}>{relTime(u.lastLogin)}</div>
+                  <div style={{ color: "var(--text-2)", textAlign: "right" }}>{relTime(u.ultimoAcceso ?? u.lastLogin)}
+                    {(u.ultimoAcceso ?? u.lastLogin) && (
+                      <div style={{ color: "var(--text-3)", fontSize: 11 }}>{fechaHoraAdmin(u.ultimoAcceso ?? u.lastLogin)}</div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -182,10 +187,10 @@ export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {userActivity.slice(0, 6).map(row => (
-                <div key={row.userId} style={{ fontSize: 12 }}>
+                <div key={row.userId ?? row.label} style={{ fontSize: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                     <span style={{ fontWeight: 600, color: "var(--text-1)" }}>
-                      {row.user ? `${row.user.firstName} ${row.user.lastName}` : row.userId}
+                      {row.label}
                     </span>
                     <span className="mono" style={{ color: "var(--brand)", fontWeight: 700 }}>{row.count}</span>
                   </div>

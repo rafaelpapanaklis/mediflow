@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { CardNew }  from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { formatRelativeDate } from "@/lib/format";
+import { masReciente, ultimoAccesoPorClinica } from "@/lib/admin/ultimo-acceso";
 import { daysUntil, isInTrial } from "@/lib/plan-status";
 
 export default async function ChurnPage() {
@@ -18,8 +19,12 @@ export default async function ChurnPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  // Último acceso real = sesión de panel; User.lastLogin no lo escribe nadie.
+  const accesos = await ultimoAccesoPorClinica(prisma as any, allClinics.map(c => c.id));
+  const ultimoAcceso = (c: typeof allClinics[number]) => masReciente(c.users[0]?.lastLogin, accesos.get(c.id));
+
   const churnRisk    = allClinics.filter(c => {
-    const last = c.users[0]?.lastLogin;
+    const last = ultimoAcceso(c);
     return last && new Date(last) < prev7 && c.subscriptionStatus === "active";
   });
   // "En trial" = trial/cortesía vigente SIN suscripción viva (plan-status):
@@ -32,7 +37,7 @@ export default async function ChurnPage() {
   });
   const inactiveTrial = allClinics
     .filter(c => {
-      const last = c.users[0]?.lastLogin;
+      const last = ultimoAcceso(c);
       return isInTrial(c, now) && (!last || new Date(last) < prev7);
     })
     // Orden determinista: el trial mas proximo a vencer arriba; tiebreaker
@@ -82,7 +87,7 @@ export default async function ChurnPage() {
             </thead>
             <tbody>
               {clinics.map(c => {
-                const last = c.users[0]?.lastLogin;
+                const last = ultimoAcceso(c);
                 const isStale = !last || new Date(last) < prev7;
                 return (
                   <tr key={c.id}>

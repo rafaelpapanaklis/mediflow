@@ -2,6 +2,7 @@ import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { diaAdmin, inicioDeHaceDias } from "@/lib/admin/zona-horaria";
+import { agruparActividad, ultimoAccesoPorUsuario, type SesionPanel } from "@/lib/admin/ultimo-acceso";
 
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -21,10 +22,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     lastAudit,
     dailyAudit,
     userActivity,
+    sesionesPanel,
   ] = await Promise.all([
     prisma.user.findMany({
       where: { clinicId },
-      orderBy: { lastLogin: "desc" },
       select: { id: true, firstName: true, lastName: true, email: true, role: true, lastLogin: true },
     }),
     prisma.appointment.findFirst({
@@ -63,11 +64,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       select: { createdAt: true },
     }).catch(() => [] as { createdAt: Date }[]),
     // Actividad por usuario
+    // Por usuario Y por tipo de actor: userId NULL = bot / paciente / reserva web.
     prisma.auditLog.groupBy({
-      by: ["userId"],
+      by: ["userId", "actorType"],
       where: { clinicId, createdAt: { gte: since } },
       _count: { _all: true },
-      orderBy: { _count: { userId: "desc" } },
+    }).catch(() => [] as any[]),
+    // Último acceso REAL: sesiones de panel (User.lastLogin no lo escribe nadie).
+    prisma.analyticsSession.groupBy({
+      by: ["userId"],
+      where: { clinicId, surface: "dashboard", userId: { not: null } },
+      _max: { lastSeenAt: true },
     }).catch(() => [] as any[]),
   ]);
 
@@ -90,7 +97,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     days.push({ date: key, count: byDay.get(key) ?? 0 });
   }
 
-  const userIds = (userActivity as any[]).map(u => u.userId).filter(Boolean);
+  const userIds = (userActivity as any[]).map(u => u.userId).filter(Boolean) as string[];
   const userMap = userIds.length
     ? Object.fromEntries(
         (await prisma.user.findMany({
@@ -100,8 +107,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       )
     : {};
 
+  const actividad = agruparActividad(
+    (userActivity as any[]).map(r => ({ userId: r.userId ?? null, actorType: r.actorType ?? null, count: r._count?._all ?? 0 })),
+    userMap as any,
+  );
+
   return NextResponse.json({
-    users,
+    users: ultimoAccesoPorUsuario(
+      users,
+      (sesionesPanel as any[]).map((r): SesionPanel => ({ userId: r.userId, lastSeenAt: r._max?.lastSeenAt })),
+    ),
     timeline: {
       lastAppointment,
       lastInvoice,
@@ -111,10 +126,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       lastAudit,
     },
     dailyActivity: days,
-    userActivity: (userActivity as any[]).map(row => ({
-      userId: row.userId,
-      count: row._count?._all ?? 0,
-      user: userMap[row.userId] ?? null,
+    userActivity: actividad.map(a => ({
+      userId: a.userId,
+      label: a.etiqueta,
+      count: a.count,
+      user: a.userId ? (userMap as any)[a.userId] ?? null : null,
     })),
   });
 }

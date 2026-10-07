@@ -16,6 +16,7 @@ import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 import { conservedMonthlyPrice, type ClinicOverrideFields } from "@/lib/billing/plan-overrides";
 import { isPlanExpired } from "@/lib/plan-status";
 import { getPatientQuotaMany } from "@/lib/patient-quota";
+import { ultimoAccesoPorClinica } from "@/lib/admin/ultimo-acceso";
 import { aggregatePatientQuotas, type PatientQuota } from "@/lib/patient-quota-shared";
 
 const DAY = 86_400_000;
@@ -49,7 +50,7 @@ export interface ClienteRow {
   mrr: number;
   aggStatus: ClienteAggStatus;
   createdAt: string;            // ISO — alta (min createdAt de sus clínicas)
-  lastAccess: string | null;    // ISO — último acceso (max lastLogin)
+  lastAccess: string | null;    // ISO — último acceso (sesión de panel más reciente; lastLogin solo de respaldo)
   totalPatients: number;        // = patientQuota.used (excluye borrados ARCO)
   /** Cupo agregado de sus clínicas; max null = alguna sede es ilimitada. */
   patientQuota: PatientQuota;
@@ -344,6 +345,8 @@ export async function getClientesList(): Promise<ClienteRow[]> {
 
   // Cupo de TODAS las clínicas de la lista en 2 queries (no una por clínica).
   const quotaByClinic = await getPatientQuotaMany(allClinicIds);
+  // Último acceso REAL (sesiones de panel); User.lastLogin no lo escribe nadie.
+  const accesoPorClinica = await ultimoAccesoPorClinica(prisma as any, allClinicIds);
 
   const result: ClienteRow[] = Object.keys(groups).map((supabaseId) => {
     const grp = groups[supabaseId];
@@ -357,7 +360,10 @@ export async function getClientesList(): Promise<ClienteRow[]> {
     });
 
     let lastAccess: Date | null = null;
-    grp.forEach((r) => { lastAccess = maxDate(lastAccess, r.lastLogin); });
+    grp.forEach((r) => {
+      lastAccess = maxDate(lastAccess, r.lastLogin);
+      lastAccess = maxDate(lastAccess, r.clinic ? accesoPorClinica.get(r.clinic.id) ?? null : null);
+    });
     let createdAt: Date | null = null;
     clinics.forEach((c) => { createdAt = minDate(createdAt, c.createdAt); });
 
@@ -423,6 +429,7 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
    * queries en total: no crece con el número de sedes.
    */
   const quotaByClinic = await getPatientQuotaMany(clinicIds);
+  const accesoPorClinica = await ultimoAccesoPorClinica(prisma as any, clinicIds);
   const clinicQuota = (id: string): PatientQuota =>
     quotaByClinic[id] ?? { used: 0, max: null, remaining: null, unlimited: true, canCreate: true };
   const patientQuota = aggregatePatientQuotas(
@@ -514,7 +521,10 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
   });
 
   let lastAccess: Date | null = null;
-  withClinic.forEach((r) => { lastAccess = maxDate(lastAccess, r.lastLogin); });
+  withClinic.forEach((r) => {
+    lastAccess = maxDate(lastAccess, r.lastLogin);
+    lastAccess = maxDate(lastAccess, accesoPorClinica.get(r.clinic!.id) ?? null);
+  });
   let createdAt: Date | null = null;
   clinicsRaw.forEach((c) => { createdAt = minDate(createdAt, c.createdAt); });
 
