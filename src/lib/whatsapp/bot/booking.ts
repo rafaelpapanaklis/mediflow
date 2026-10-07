@@ -13,6 +13,7 @@ import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { anticipoParaAnunciar, crearCitaDesdeBot } from "@/lib/anticipos/servicio.server";
 import { getOrthoBookingContext } from "@/lib/orthodontics/whatsapp-bot-booking";
 import { anotarCitaCreadaPorBot, anotarCitaMovidaPorBot, citaAntesDeMover } from "./movimientos-bot";
+import { listBotServiceMenu } from "./servicios-agendables-db";
 import { runBookingTurn, type BookingDeps } from "./booking-core";
 import type { BotConfigDTO, BotTurnInput, BotTurnResult } from "./types";
 
@@ -30,6 +31,8 @@ const realDeps: BookingDeps = {
   getClinicTimezone,
   getClinicName,
   listBookableServices,
+  // ws1-t3 — menú corto de «¿qué necesitas?» (marcados por la clínica o el de fábrica).
+  listBotServiceMenu,
   listBookableDoctors,
   getAvailableSlots,
   // WS1-T5 — el alta pasa por el servicio de anticipos: si la clínica no pide

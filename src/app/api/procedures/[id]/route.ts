@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { guardarMarcaAgendable } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
@@ -84,8 +85,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // F-11 / F-08: sin sql/ws1-t4-cfdi-conceptos.sql no se guarda (y se dice).
     const fiscalGuardado = await guardarFiscalDeProcedimiento(prisma, { clinicId: ctx.clinicId, procedureId: params.id, datos: fiscal.datos ?? {} });
 
+    // ws1-t3 — «Se agenda por WhatsApp»: sin sql/ws1-t3-bot-servicios-agendables.sql no se guarda (y se dice).
+    const botGuardado = typeof body.botAgendable === "boolean" ? await guardarMarcaAgendable(params.id, ctx.clinicId, body.botAgendable) : true;
+
     revalidateAfter("procedures");
-    return NextResponse.json({ ...updated, ...fiscal.datos, ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }) });
+    return NextResponse.json({
+      ...updated,
+      ...fiscal.datos,
+      ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }),
+      ...(typeof body.botAgendable === "boolean" ? { botAgendable: body.botAgendable && botGuardado, ...(botGuardado ? {} : { botAgendableSinGuardar: true }) } : {}),
+    });
   } catch (err: any) {
     console.error("Update procedure error:", err);
     return NextResponse.json({ error: err.message ?? "Error" }, { status: 500 });

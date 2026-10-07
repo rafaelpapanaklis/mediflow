@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { marcasDeLaClinica, guardarMarcaAgendable } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
@@ -86,7 +87,9 @@ export async function GET(req: NextRequest) {
 
   // F-11 / F-08: la clave SAT y el IVA guardados de cada uno (sin el SQL, nada).
   const fiscal = await fiscalDeProcedimientos(prisma, ctx.clinicId);
-  return NextResponse.json(procedures.map((p) => ({ ...p, claveSat: fiscal[p.id]?.claveSat ?? null, ivaCfdi: fiscal[p.id]?.ivaCfdi ?? null })));
+  // ws1-t3 — «Se agenda por WhatsApp» (SQL crudo; sin la columna, nadie marcado).
+  const marcas = await marcasDeLaClinica(ctx.clinicId);
+  return NextResponse.json(procedures.map((p) => ({ ...p, claveSat: fiscal[p.id]?.claveSat ?? null, ivaCfdi: fiscal[p.id]?.ivaCfdi ?? null, botAgendable: marcas[p.id] === true })));
 }
 
 export async function POST(req: NextRequest) {
@@ -128,9 +131,10 @@ export async function POST(req: NextRequest) {
     if (orthoIncluido !== undefined) await aplicarOrthoIncluido(procedure.id, ctx.clinicId, orthoIncluido);
 
     const fiscalGuardado = await guardarFiscalDeProcedimiento(prisma, { clinicId: ctx.clinicId, procedureId: procedure.id, datos: fiscal.datos ?? {} });
+    const botGuardado = typeof body.botAgendable === "boolean" ? await guardarMarcaAgendable(procedure.id, ctx.clinicId, body.botAgendable) : true;
 
     revalidateAfter("procedures");
-    return NextResponse.json({ ...procedure, ...fiscal.datos, ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }) }, { status: 201 });
+    return NextResponse.json({ ...procedure, ...fiscal.datos, ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }), ...(typeof body.botAgendable === "boolean" ? { botAgendable: body.botAgendable && botGuardado, ...(botGuardado ? {} : { botAgendableSinGuardar: true }) } : {}) }, { status: 201 });
   } catch (err: any) {
     console.error("Create procedure error:", err);
     return NextResponse.json({ error: err.message ?? "Error al crear procedimiento" }, { status: 500 });

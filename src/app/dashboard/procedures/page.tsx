@@ -6,6 +6,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { costoDeRecetaPorProcedimiento } from "@/lib/inventory/costo-receta.server";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { listarProcedimientosDeOrtodoncia } from "@/lib/orthodontics/catalog-procedures";
+import { marcasDeLaClinica } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 // ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI por procedimiento (SQL crudo).
 import { fiscalDeProcedimientos, columnasFiscalesProcedimientos } from "@/lib/cfdi/fiscal-concepto.server";
@@ -38,6 +39,8 @@ export default async function ProceduresPage() {
   ]);
   // Ya consultada (y recordada) dentro de fiscalDeProcedimientos: no es otro viaje.
   const fiscalDisponible = await columnasFiscalesProcedimientos(prisma);
+  // ws1-t3 — «Se agenda por WhatsApp» (SQL crudo; sin la columna, ninguno).
+  const botAgendables = await marcasDeLaClinica(user.clinicId);
   const ortoIncluidos: Record<string, boolean | null> = Object.fromEntries(
     ortoFilas.map((f) => [f.id, f.orthoIncludedInTreatment]),
   );
@@ -52,6 +55,7 @@ export default async function ProceduresPage() {
       ortoIncluidos={ortoIncluidos}
       fiscal={fiscal}
       fiscalDisponible={fiscalDisponible}
+      botAgendables={botAgendables}
     />
   );
 }

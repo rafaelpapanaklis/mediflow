@@ -20,6 +20,16 @@ import {
   turnoPedido,
 } from "./booking-parse";
 import { BotIntent } from "./types";
+import {
+  casarConCatalogo,
+  construirMenu,
+  ETIQUETA_MENU,
+  esNumeroSolo,
+  indiceDeRespuesta,
+  limpiarTextoOtro,
+  tipoDeId,
+  type FilaCatalogo,
+} from "./menu-agenda-core";
 import { textoAvisoAnticipo, textoLinkDePago } from "@/lib/anticipos/core";
 import { interactivoParaOpciones, REC_BOTON, type MensajeInteractivo } from "../interactivo";
 import type { BotConfigDTO, BotJson, BotTurnInput, BotTurnResult } from "./types";
@@ -58,6 +68,8 @@ export type BookingStep =
   | "name"
   | "confirm"
   | "select_appt"
+  /** ws1-t3 — «Otro tratamiento»: espera la frase que lo describe. */
+  | "otro_texto"
   /** ws1-t1 (#12) — número compartido: ¿para quién es la cita? */
   | "who";
 
@@ -97,6 +109,10 @@ export interface BookingState {
    * ws1-t8 — el control de ortodoncia del caso activo del paciente, guardado mientras
    * elige entre ese control y otro servicio (paso `service_kind`).
    */
+  /** ws1-t3 — texto que queda como motivo (tipo) de la cita; por defecto `serviceName`. */
+  motivo?: string;
+  /** ws1-t3 — «Urgencia o dolor»: se ofrece el primer hueco, sin preguntar la fecha. */
+  urgente?: boolean;
   ortoCaso?: { label: string; durationMin: number; treatingDoctorId: string | null } | null;
   /**
    * ws1-t1 — la fecha que el paciente ya dijo al pedir la cita («quiero cita
@@ -205,6 +221,13 @@ export interface BookingDeps {
     clinicId: string,
     id: string,
   ): Promise<{ name: string; duration: number | null } | null>;
+  /**
+   * ws1-t3 — lo que decide el menú corto del paso «¿qué necesitas?»: los
+   * procedimientos que la clínica marcó «Se agenda por WhatsApp» (vacío = menú
+   * de fábrica) y su catálogo activo (para casar «Limpieza», «Consulta»…).
+   * Opcional: sin él el paso es el de siempre (todo el catálogo, tope 24).
+   */
+  listBotServiceMenu?(clinicId: string): Promise<{ marcados: FilaCatalogo[]; catalogo: FilaCatalogo[] }>;
   findThreadExternalId(threadId: string, clinicId: string): Promise<string | null>;
   findAppointmentById(id: string, clinicId: string): Promise<UpcomingAppt | null>;
   /**
@@ -292,6 +315,8 @@ export async function runBookingTurn(
       return stepWho(input, config, state, deps);
     case "service_kind":
       return stepServiceKind(input, state, deps);
+    case "otro_texto":
+      return stepOtroTexto(input, state, deps);
     case "service":
       return stepService(input, state, deps);
     case "doctor":
@@ -601,7 +626,7 @@ async function startCreate(
     return advanceToDoctorOrDate(input, state, deps);
   }
 
-  return startCatalogo(input, base, deps);
+  return startCatalogo(input, base, deps, !!ortho?.valoracion);
 }
 
 /** El catálogo normal de servicios (o «Consulta general» si la sede no tiene ninguno). */
@@ -609,9 +634,25 @@ async function startCatalogo(
   input: BotTurnInput,
   base: BookingState,
   deps: BookingDeps,
+  conOrto = false,
 ): Promise<BotTurnResult> {
-  const services = await deps.listBookableServices(input.clinicId);
   const state: BookingState = { ...base };
+  if (deps.listBotServiceMenu) {
+    const { marcados } = await deps.listBotServiceMenu(input.clinicId);
+    const options = construirMenu({ marcados, conOrto });
+    state.options = options;
+    let saludo = "¡Con gusto te agendo! 🦷";
+    if (state.fechaPedida) {
+      const tz = await deps.getClinicTimezone(input.clinicId);
+      saludo = `¡Con gusto reviso el ${formatDateHuman(state.fechaPedida, tz)}! 🦷`;
+    }
+    return step(
+      `${saludo}\n¿Qué necesitas? Responde con el número:\n${numberedList(options)}`,
+      "create",
+      state,
+    );
+  }
+  const services = await deps.listBookableServices(input.clinicId);
 
   if (services.length === 0) {
     state.serviceId = null;
@@ -729,6 +770,13 @@ async function pedirFecha(
   prefijo?: string,
 ): Promise<BotTurnResult> {
   state.step = "date";
+  // ws1-t3 — «Urgencia o dolor»: el primer hueco disponible, desde hoy, sin preguntar la fecha.
+  if (state.urgente && !state.fechaPedida && state.mode === "create") {
+    const tz = await deps.getClinicTimezone(input.clinicId);
+    state.urgente = undefined;
+    state.dateISO = todayInTz(tz);
+    return presentSlots(input, state, tz, deps, prefijo ?? "Para tu urgencia te busco el primer horario disponible. 🦷");
+  }
   if (state.fechaPedida) {
     const tz = await deps.getClinicTimezone(input.clinicId);
     state.dateISO = state.fechaPedida;
@@ -800,17 +848,94 @@ async function stepService(
   deps: BookingDeps,
 ): Promise<BotTurnResult> {
   const options = state.options ?? [];
-  const idx = indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
+  const enMenu = !!deps.listBotServiceMenu;
+  // ws1-t3 — en el menú corto, «limpieza» o «me duele una muela» valen como el número.
+  // Un número solo manda sobre las palabras; si hay palabras, mandan antes que cualquier dígito suelto.
+  const idx = enMenu
+    ? indiceTocado(input, state, options) ??
+      (esNumeroSolo(input.incomingText) ? null : indiceDeRespuesta(input.incomingText, options)) ??
+      parseChoiceIndex(input.incomingText, options.length)
+    : indiceTocado(input, state, options) ?? parseChoiceIndex(input.incomingText, options.length);
   if (idx === null) {
     return miss(state, `No te entendí. Responde con el número del servicio:\n${numberedList(options)}`);
   }
   state.misses = 0;
   const chosen = options[idx];
+  const tipo = tipoDeId(chosen.id);
+  if (tipo) return elegirOpcionDeMenu(input, state, deps, tipo);
   const svc = await deps.findServiceById(input.clinicId, chosen.id);
   state.serviceId = chosen.id;
   state.serviceName = svc?.name ?? chosen.label;
   state.durationMin = svc?.duration ?? 0;
   state.options = undefined;
+  return advanceToDoctorOrDate(input, state, deps);
+}
+
+/** ws1-t3 — una opción del menú de fábrica (o «Otro tratamiento»). */
+async function elegirOpcionDeMenu(
+  input: BotTurnInput,
+  state: BookingState,
+  deps: BookingDeps,
+  tipo: NonNullable<ReturnType<typeof tipoDeId>>,
+): Promise<BotTurnResult> {
+  state.options = undefined;
+  if (tipo === "otro") {
+    state.step = "otro_texto";
+    return step("Cuéntame en una frase qué tratamiento necesitas (por ejemplo: «una resina» o «revisar mi puente»).", state.mode, state);
+  }
+  if (tipo === "orto") {
+    const ortho = await deps.getOrthoBookingContext?.(input.clinicId, state.patientId ?? input.patient?.id ?? null);
+    if (ortho?.casoActivo) {
+      state.ortoCaso = {
+        label: ortho.casoActivo.label,
+        durationMin: ortho.casoActivo.durationMin,
+        treatingDoctorId: ortho.casoActivo.treatingDoctorId,
+      };
+      return elegirControlOrto(input, state, deps);
+    }
+    if (ortho?.valoracion) {
+      state.serviceId = null;
+      state.serviceName = ortho.valoracion.label;
+      state.durationMin = ortho.valoracion.durationMin;
+      return advanceToDoctorOrDate(input, state, deps);
+    }
+    // Sin caso ni valoración configurada: cita genérica de ortodoncia.
+    state.serviceId = null;
+    state.serviceName = ETIQUETA_MENU.orto;
+    state.durationMin = 0;
+    return advanceToDoctorOrDate(input, state, deps);
+  }
+  const { catalogo } = (await deps.listBotServiceMenu?.(input.clinicId)) ?? { catalogo: [] };
+  const hit = casarConCatalogo(tipo, catalogo);
+  if (tipo === "urgencia") state.urgente = true;
+  if (hit) {
+    state.serviceId = hit.id;
+    state.serviceName = hit.name;
+    state.durationMin = hit.duration ?? 0;
+  } else {
+    // Sin procedimiento equivalente: cita genérica (duración de la agenda de la clínica) y el motivo como tipo.
+    state.serviceId = null;
+    state.serviceName = ETIQUETA_MENU[tipo];
+    state.durationMin = 0;
+  }
+  return advanceToDoctorOrDate(input, state, deps);
+}
+
+/** ws1-t3 — «Otro tratamiento»: la frase del paciente queda como motivo; se agenda como valoración. */
+async function stepOtroTexto(
+  input: BotTurnInput,
+  state: BookingState,
+  deps: BookingDeps,
+): Promise<BotTurnResult> {
+  const texto = limpiarTextoOtro(input.incomingText);
+  if (!texto) return miss(state, "Cuéntame en una frase qué tratamiento necesitas.");
+  state.misses = 0;
+  const { catalogo } = (await deps.listBotServiceMenu?.(input.clinicId)) ?? { catalogo: [] };
+  const hit = casarConCatalogo("consulta", catalogo);
+  state.serviceId = hit?.id ?? null;
+  state.serviceName = hit?.name ?? ETIQUETA_MENU.consulta;
+  state.durationMin = hit?.duration ?? 0;
+  state.motivo = `${state.serviceName} — ${texto}`;
   return advanceToDoctorOrDate(input, state, deps);
 }
 
@@ -1163,7 +1288,7 @@ async function stepConfirm(
     dateISO: state.dateISO,
     time: state.time,
     durationMin: state.durationMin ?? 0,
-    reason: state.serviceName ?? null,
+    reason: state.motivo ?? state.serviceName ?? null,
     serviceId: state.serviceId ?? null,
     threadId: input.threadId,
   });

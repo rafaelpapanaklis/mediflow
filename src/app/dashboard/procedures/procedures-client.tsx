@@ -62,6 +62,8 @@ interface Props {
   /** ¿La clínica tiene el módulo de Ortodoncia activo? Sin él no se ofrece crear de esa categoría. */
   moduloOrtodoncia?: boolean;
   /** «Incluido / con costo aparte» de cada procedimiento de ortodoncia (id → valor). */
+  /** ws1-t3 — id → «Se agenda por WhatsApp». */
+  botAgendables?: Record<string, boolean>;
   ortoIncluidos?: Record<string, boolean | null>;
   /** Clave SAT e IVA del CFDI guardados de cada procedimiento (id → datos). */
   fiscal?: Record<string, { claveSat: string | null; ivaCfdi: "exento" | "iva16" | null }>;
@@ -95,6 +97,8 @@ interface FormState {
   orthoIncluded: boolean | null;
   /** Clave SAT e IVA del CFDI ("" = por defecto). */
   fiscal: FiscalDelFormulario;
+  /** ws1-t3 — «Se agenda por WhatsApp»: el bot lo ofrece al agendar. */
+  botAgendable: boolean;
 }
 
 const EMPTY_FORM: FormState = {
@@ -107,17 +111,19 @@ const EMPTY_FORM: FormState = {
   isActive: true,
   orthoIncluded: null,
   fiscal: { claveSat: "", ivaCfdi: "" },
+  botAgendable: false,
 };
 
 /** Llave del grupo de inactivos (no es una categoría real). */
 const GRUPO_INACTIVOS = "__inactivos";
 
-export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {}, fiscal: fiscalInicial = {}, fiscalDisponible = false }: Props) {
+export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {}, fiscal: fiscalInicial = {}, fiscalDisponible = false, botAgendables: botAgendablesIniciales = {} }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
   const locale = useLocale();
   const [procedures, setProcedures] = useState<Procedure[]>(initialProcedures);
+  const [botAgendablePorId, setBotAgendablePorId] = useState<Record<string, boolean>>(botAgendablesIniciales);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Procedure | null>(null);
@@ -172,6 +178,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
       isActive: p.isActive,
       orthoIncluded: ortoIncluidos[p.id] ?? null,
       fiscal: { claveSat: fiscalPorId[p.id]?.claveSat ?? "", ivaCfdi: fiscalPorId[p.id]?.ivaCfdi ?? "" },
+      botAgendable: botAgendablePorId[p.id] === true,
     });
     setModalOpen(true);
   }
@@ -231,6 +238,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
         duration: form.duration ? Number(form.duration) : null,
         description: form.description.trim() || null,
         isActive: form.isActive,
+        botAgendable: form.botAgendable,
         ...(form.category === ORTHO_CATALOG_CATEGORY && !esControlEditado ? { orthoIncludedInTreatment: form.orthoIncluded } : {}),
         ...(fiscalDisponible ? fiscalParaGuardar(form.fiscal) : {}),
       };
@@ -245,7 +253,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error ?? t("pages.procedures.updateError"));
         }
-        const updated: Procedure & { fiscalSinGuardar?: boolean } = await res.json();
+        const updated: Procedure & { fiscalSinGuardar?: boolean; botAgendableSinGuardar?: boolean } = await res.json();
+        setBotAgendablePorId((prev) => ({ ...prev, [updated.id]: form.botAgendable && !updated.botAgendableSinGuardar }));
+        if (updated.botAgendableSinGuardar) toast.error("«Se agenda por WhatsApp» no se guardó: falta aplicar sql/ws1-t3-bot-servicios-agendables.sql.");
         if (fiscalDisponible) setFiscalPorId((prev) => ({ ...prev, [updated.id]: fiscalParaGuardar(form.fiscal) }));
         if (updated.fiscalSinGuardar) toast.error("La clave SAT y el IVA no se guardaron: falta aplicar sql/ws1-t4-cfdi-conceptos.sql.");
         setProcedures((prev) =>
@@ -266,7 +276,9 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error ?? t("pages.procedures.createError"));
         }
-        const created: Procedure & { fiscalSinGuardar?: boolean } = await res.json();
+        const created: Procedure & { fiscalSinGuardar?: boolean; botAgendableSinGuardar?: boolean } = await res.json();
+        setBotAgendablePorId((prev) => ({ ...prev, [created.id]: form.botAgendable && !created.botAgendableSinGuardar }));
+        if (created.botAgendableSinGuardar) toast.error("«Se agenda por WhatsApp» no se guardó: falta aplicar sql/ws1-t3-bot-servicios-agendables.sql.");
         if (fiscalDisponible) setFiscalPorId((prev) => ({ ...prev, [created.id]: fiscalParaGuardar(form.fiscal) }));
         if (created.fiscalSinGuardar) toast.error("La clave SAT y el IVA no se guardaron: falta aplicar sql/ws1-t4-cfdi-conceptos.sql.");
         setProcedures((prev) => [created, ...prev]);
@@ -786,6 +798,21 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                   {t("pages.procedures.active")}
                 </span>
               </label>
+
+              <label className={rediseno ? styles.checkboxRow : "flex items-center gap-2 cursor-pointer select-none"}>
+                <input
+                  type="checkbox"
+                  checked={form.botAgendable}
+                  onChange={(e) => setForm({ ...form, botAgendable: e.target.checked })}
+                  className={rediseno ? styles.checkbox : "w-4 h-4 rounded border-border text-brand-600 focus:ring-brand-500/40"}
+                />
+                <span className={rediseno ? undefined : "text-sm font-semibold text-muted-foreground"}>
+                  Se agenda por WhatsApp
+                </span>
+              </label>
+              <p className={rediseno ? styles.fieldHint : "text-xs text-muted-foreground"}>
+                Si marcas alguno (hasta 8), el bot ofrece solo los marcados más «Otro tratamiento». Si no marcas ninguno, ofrece Consulta o valoración, Limpieza, Urgencia o dolor y Otro tratamiento.
+              </p>
               </div>
 
               <div className={rediseno ? styles.modalFoot : "flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0"}>
