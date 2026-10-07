@@ -279,11 +279,12 @@ export function findBranchMothers(
     let madre: BranchBillingRow | null = payers.length
       ? payers.reduce((a, b) => (time(b.createdAt) < time(a.createdAt) ? b : a))
       : null;
-    // Sin ninguna pagadora, la madre es la activa más antigua del grupo.
+    // Sin ninguna pagadora, la madre es la clínica MÁS ANTIGUA del grupo, sea cual sea su estado: una sede
+    // siempre nace después de su madre, así que la más antigua nunca es una sede creada desde otra (ws1-t5:
+    // con la madre en `null`/trial y una sede `active`, la regla anterior tomaba a la SEDE como pagadora).
     let fallbackMother: BranchBillingRow | null = null;
     if (payers.length === 0) {
       for (const c of group) {
-        if (c.subscriptionStatus !== "active") continue;
         if (!fallbackMother || time(c.createdAt) < time(fallbackMother.createdAt)) fallbackMother = c;
       }
       if (!fallbackMother) return;

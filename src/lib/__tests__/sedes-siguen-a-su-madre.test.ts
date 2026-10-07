@@ -179,3 +179,30 @@ test("M5: timbrar y consultar el cupo suman las sedes; el cron usa el grupo", ()
   assert.match(cron, /agruparCfdiPorPagadora\(/);
   assert.match(cron, /madresDeSedes\(/);
 });
+
+// ── Quién es la «principal que paga» (revisión antes del push) ──────────────────────────────────────────
+test("principal: con la madre en estado null y una sede active, paga la MÁS ANTIGUA, nunca la sede", () => {
+  const qa = sede("qa", { createdAt: dia("2026-09-06"), subscriptionStatus: null });
+  const copia = sede("copia", { createdAt: dia("2026-10-07") });
+  const g = grupoDePago("copia", [qa, copia], duenos("qa", "copia"));
+  assert.equal(g.pagadoraId, "qa");
+  assert.equal(g.esSedeIncluida, true);
+  assert.equal(grupoDePago("qa", [qa, copia], duenos("qa", "copia")).esSedeIncluida, false);
+});
+
+test("principal: el pagador manual (SPEI, sin Stripe, con fecha de cobro o precio) cuenta como quien paga aunque sea más nuevo", () => {
+  const vieja = sede("vieja", { createdAt: dia("2026-01-01"), subscriptionStatus: "active" });
+  const spei = sede("spei", { createdAt: dia("2026-05-01"), nextBillingDate: dia("2026-11-01") });
+  const sedeNueva = sede("nueva", { createdAt: dia("2026-10-07") });
+  const g = grupoDePago("nueva", [vieja, spei, sedeNueva], duenos("vieja", "spei", "nueva"));
+  assert.equal(g.pagadoraId, "spei", "con registro de pago manda sobre la más antigua sin pagos");
+  const porPrecio = grupoDePago("nueva", [vieja, { ...spei, nextBillingDate: null, monthlyPrice: 1489 }, sedeNueva], duenos("vieja", "spei", "nueva"));
+  assert.equal(porPrecio.pagadoraId, "spei");
+});
+
+test("principal: dos con pagos registrados → la más antigua de ellas; una principal cancelada con Stripe sigue siendo la que paga", () => {
+  const a = { ...madre, id: "a", createdAt: dia("2026-02-01"), subscriptionStatus: "cancelled" };
+  const b = { ...madre, id: "b", createdAt: dia("2026-03-01") };
+  const s1 = sede("s1", { subscriptionStatus: "cancelled" });
+  assert.equal(grupoDePago("s1", [a, b, s1], duenos("a", "b", "s1")).pagadoraId, "a");
+});
