@@ -59,6 +59,8 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
   const [anual, setAnual] = useState(false);
   // La lista común es la misma en las tres tarjetas (plan-cards.ts la calcula una vez).
   const includedInAll = cards[0]?.includedInAll ?? [];
+  // 8-oct-2026 (Rafael): el recuadro común va por categorías (plan-cards.ts → COMMON_GROUPS).
+  const includedGroups = cards[0]?.includedInAllGroups ?? [];
   // Ajuste 14 (Rafael, «que esté alineado»): en escritorio cada tarjeta es un
   // subgrid de filas del grid de tarjetas, así la misma función queda a la misma
   // altura en las tres y los botones en la misma línea. Pistas por tarjeta =
@@ -189,14 +191,26 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
               <h3 className="dcv4-price__commontitle">{PRICING_ALL_TITLE}</h3>
               <p className="dcv4-price__commonsub">{PRICING_ALL_SUB}</p>
             </div>
-            <ul className="dcv4-price__commonlist">
-              {includedInAll.map((f) => (
-                <li key={f}>
-                  <svg className="dcv4-price__chk dcv4-price__chk--on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7" /></svg>
-                  <span>{f}</span>
-                </li>
+            {/* 8-oct-2026 (Rafael): cuatro categorías con título corto; cada
+                renglón con su palomita en ficha verde. Los colores viven en
+                landing-v2.css como tokens del recuadro (`--pc-*`). */}
+            <div className="dcv4-price__commongroups">
+              {includedGroups.map((g) => (
+                <section key={g.title} className="dcv4-price__commongroup" aria-label={g.title}>
+                  <h4 className="dcv4-price__commongrouptitle">{g.title}</h4>
+                  <ul className="dcv4-price__commonlist">
+                    {g.items.map((f) => (
+                      <li key={f}>
+                        <span className="dcv4-price__commonchk" aria-hidden="true">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.2 4.2L19 7" /></svg>
+                        </span>
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           </div>
         )}
       </div>

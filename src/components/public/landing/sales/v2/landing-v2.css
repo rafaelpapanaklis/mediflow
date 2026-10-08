@@ -1017,21 +1017,39 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 /* Ajuste 9: bloque «Incluido en todos los planes», una sola vez bajo las
    tarjetas. Mismo papel que las tarjetas claras; la lista en 3 columnas
    (2 en tableta, 1 en móvil), ✓ en ficha verde como en las filas. */
-.dcv4-price__common { margin-top: clamp(22px, 2.6vw, 32px); background: #fff; border: 1px solid #e2e8f0; border-radius: 22px; padding: clamp(22px, 2.6vw, 30px) clamp(20px, 2.4vw, 32px); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(15,23,42,.04), 0 24px 52px -36px rgba(15,23,42,.35); }
-.dcv4-price__commonhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
-.dcv4-price__commontitle { display: inline-flex; align-items: center; gap: 10px; font-size: clamp(17px, 1.5vw, 20px); font-weight: 800; letter-spacing: -.015em; color: #0f172a; }
-.dcv4-price__commontitle::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #15803d; box-shadow: 0 0 0 3px #dcfce7; }
-.dcv4-price__commonsub { font-size: 14px; color: #64748b; }
-.dcv4-price__commonlist { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 22px; }
-.dcv4-price__commonlist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.45; color: #334155; padding: 6px 0; border-top: 1px solid #eef2f7; }
-.dcv4-price__commonlist li:nth-child(-n+3) { border-top: 0; }
-@media (max-width: 1000px) {
-  .dcv4-price__commonlist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dcv4-price__commonlist li:nth-child(3) { border-top: 1px solid #eef2f7; }
+/* Rediseño del recuadro (8-oct-2026, pedido de Rafael): cuatro categorías con
+   título corto, palomitas más vivas y lectura en una columna en celular. Los
+   colores del recuadro son TOKENS declarados aquí una sola vez (`--pc-*`, la
+   misma paleta verde/tinta que ya usa Precios): nada de hex sueltos abajo. */
+.dcv4-price__common {
+  --pc-ok: #16a34a; --pc-ok-deep: #15803d; --pc-ok-soft: #dcfce7; --pc-ok-ring: #bbf7d0; --pc-ok-glow: rgba(22, 163, 74, .22);
+  --pc-ink: #0f172a; --pc-text: #334155; --pc-muted: #64748b; --pc-line: #e2e8f0; --pc-paper: #fff; --pc-paper-2: #f8fafc;
+  position: relative; overflow: hidden; margin-top: clamp(22px, 2.6vw, 32px); background: var(--pc-paper); border: 1px solid var(--pc-line); border-radius: 22px;
+  padding: clamp(22px, 2.6vw, 30px) clamp(20px, 2.4vw, 32px); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(15,23,42,.04), 0 24px 52px -36px rgba(15,23,42,.35);
+}
+/* Filo verde arriba (el mismo recurso que abre Precios) y un brillo suave en la esquina. */
+.dcv4-price__common::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--pc-ok-ring), var(--pc-ok) 40%, var(--pc-ok-deep) 70%, var(--pc-ok-ring)); }
+.dcv4-price__common::after { content: ""; position: absolute; right: -120px; top: -120px; width: 320px; height: 320px; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, var(--pc-ok-glow), transparent); opacity: .55; }
+.dcv4-price__commonhead { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+.dcv4-price__commontitle { display: inline-flex; align-items: center; gap: 10px; font-size: clamp(17px, 1.5vw, 20px); font-weight: 800; letter-spacing: -.015em; color: var(--pc-ink); }
+.dcv4-price__commontitle::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--pc-ok); box-shadow: 0 0 0 3px var(--pc-ok-soft), 0 0 14px 2px var(--pc-ok-glow); }
+.dcv4-price__commonsub { font-size: 14px; color: var(--pc-muted); }
+.dcv4-price__commongroups { position: relative; margin-top: 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.dcv4-price__commongroup { min-width: 0; padding: 14px 16px 10px; border-radius: 16px; background: var(--pc-paper-2); border: 1px solid var(--pc-line); }
+.dcv4-price__commongrouptitle { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--pc-ok-deep); }
+.dcv4-price__commongrouptitle::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--pc-ok-ring), transparent); }
+.dcv4-price__commonlist { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.dcv4-price__commonlist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.45; color: var(--pc-text); padding: 7px 0; border-top: 1px solid var(--pc-line); }
+.dcv4-price__commonlist li:first-child { border-top: 0; }
+.dcv4-price__commonchk { flex: 0 0 auto; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; color: #fff; background: linear-gradient(145deg, var(--pc-ok), var(--pc-ok-deep)); box-shadow: 0 0 0 3px var(--pc-ok-soft), 0 4px 10px -4px var(--pc-ok-glow); }
+@media (max-width: 1100px) {
+  .dcv4-price__commongroups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
-  .dcv4-price__commonlist { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .dcv4-price__commonlist li:nth-child(2) { border-top: 1px solid #eef2f7; }
+  .dcv4-price__commongroups { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .dcv4-price__common::after { display: none; }
+  .dcv4-price__commongroup { padding: 12px 14px 8px; }
+  .dcv4-price__commonlist li { font-size: 13.5px; }
 }
 
 /* Ajuste 14 (Rafael, «que esté alineado»): a partir de 761 px (tres tarjetas en
