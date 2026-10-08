@@ -192,12 +192,11 @@ const COMMON_CANDIDATES: {
   /** Texto en la tarjeta cuando lleva cifra del plan (CFDI); en el bloque común va el genérico. */
   cardText?: (p: ResolvedPlan) => string;
 }[] = [
-  // 7-oct-2026 (pedido de Rafael): el bot de WhatsApp con IA. Misma condición
-  // de antes (el módulo de WhatsApp). «(con Saldo IA)» como en Sabina: la IA
-  // libre del bot se cobra del Saldo IA en todos los planes (menú y FAQ, no).
-  { text: 'Agenda + bot de WhatsApp con IA: agenda, cobra, confirma y recuerda citas 24/7 (con Saldo IA)', included: (p) => hasModule(p, 'whatsapp'), lead: true },
-  { text: 'Sabina, tu asistente del panel (con Saldo IA)', included: () => true, lead: true },
-  { text: 'Expediente clínico + odontograma 2D y 3D', included: () => true, lead: true },
+  // 7/8-oct-2026 (pedido de Rafael): el bot de WhatsApp con IA, misma condición
+  // de antes (el módulo de WhatsApp). Sin «(con Saldo IA)» en ningún renglón.
+  { text: 'Agenda + bot de WhatsApp con IA: agenda, cobra, confirma y recuerda citas 24/7', included: (p) => hasModule(p, 'whatsapp'), lead: true },
+  { text: 'Sabina, tu asistente del panel', included: () => true, lead: true },
+  { text: 'Expediente clínico + odontograma 3D y 2D', included: () => true, lead: true },
   { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p) },
   { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true },
   { text: 'Página web de la clínica gratuita', included: (p) => hasModule(p, 'landing'), lead: true },

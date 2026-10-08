@@ -55,9 +55,11 @@ function trackWhatsappClick() {
 export function WhatsappCta() {
   return (
     <section aria-label="Contacto por WhatsApp" style={{ background: "#f8fafc" }}>
-      {/* Banda, no sección grande: el padding vertical es la mitad del de sus
-          vecinas para que sea un puente entre precios y el bloque oscuro. */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(40px,5vw,64px) 20px" }}>
+      {/* Ritmo igual (8-oct-2026, pedido de Rafael): sin padding arriba —el
+          hueco con «Incluido en todos los planes» lo pone el padding inferior
+          de Precios, clamp(56px,7vw,92px)— y ese MISMO valor abajo, hacia la
+          franja de seguridad, que repite la cuenta por debajo (franja-seguridad.css). */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 20px clamp(56px,7vw,92px)" }}>
         <div
           data-reveal=""
           className="dcv4-wa-card"

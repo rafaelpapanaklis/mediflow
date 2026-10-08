@@ -17,7 +17,10 @@
    arriba desde el 7-oct-2026) y con «Todo el panel»: el panel flota entre las
    dos sin costura. */
 
-.dcsg { position: relative; background: #f8fafc; padding: 0 20px; }
+/* Abajo, el mismo hueco que hay entre Precios y la banda de WhatsApp y entre
+   la banda y esta franja (padding inferior de Precios: clamp(56px,7vw,92px));
+   antes la franja tocaba el bloque oscuro de «Todo el panel» (8-oct-2026). */
+.dcsg { position: relative; background: #f8fafc; padding: 0 20px clamp(56px, 7vw, 92px); }
 
 .dcsg__panel {
   position: relative; isolation: isolate; overflow: hidden;
