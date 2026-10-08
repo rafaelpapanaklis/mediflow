@@ -13,8 +13,9 @@
    · <1200 px — el globo arriba y los sellos en cuadrícula debajo (4 + 3 en
      tableta, 2 columnas en celular).
 
-   La sección comparte fondo (#f8fafc) con Precios y con la banda de WhatsApp:
-   el panel flota entre las dos sin costura. */
+   La sección comparte fondo (#f8fafc) con la banda de WhatsApp (que va justo
+   arriba desde el 7-oct-2026) y con «Todo el panel»: el panel flota entre las
+   dos sin costura. */
 
 .dcsg { position: relative; background: #f8fafc; padding: 0 20px; }
 

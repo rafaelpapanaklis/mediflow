@@ -6,8 +6,12 @@ import { WHATSAPP_CTA } from "./landing-data";
 type GtagFn = (...args: unknown[]) => void;
 
 /**
- * Banda de contacto entre precios y el trío oscuro: quien acaba de ver los
- * planes y le queda una duda no tiene que buscar el chat.
+ * Banda de contacto entre precios y la franja de seguridad (7-oct-2026, pedido
+ * de Rafael: antes iba después de la franja): quien acaba de ver los planes y
+ * le queda una duda no tiene que buscar el chat.
+ *
+ * El número NO se enseña (7-oct-2026, pedido de Rafael): el botón abre el chat
+ * con `WA_HREF` y el teléfono solo vive en `landing-data.ts` (`numberE164`).
  *
  * Es una sección DENTRO del flujo, no un botón flotante: la esquina inferior
  * derecha ya la ocupa el widget de LiveChat (livechat.tsx) y dos burbujas
@@ -94,7 +98,9 @@ export function WhatsappCta() {
               </div>
             </div>
 
-            <div className="dcv4-wa-action" style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            {/* Solo el botón, centrado a media altura del bloque (`alignItems:
+                center` de la fila); en móvil ocupa el ancho de la tarjeta. */}
+            <div className="dcv4-wa-action" style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", alignSelf: "center" }}>
               <a
                 className="dcv2-btn-wa dcv4-wa-btn"
                 href={WA_HREF}
@@ -110,9 +116,6 @@ export function WhatsappCta() {
                 <WhatsappGlyph size={18} />
                 {WHATSAPP_CTA.button}
               </a>
-              {/* El número a la vista: desde desktop, sin WhatsApp Web, el link
-                  no lleva a ningún lado — pero el teléfono se puede copiar. */}
-              <p style={{ fontSize: 13, color: "#64748b" }}>{WHATSAPP_CTA.numberDisplay}</p>
             </div>
           </div>
         </div>

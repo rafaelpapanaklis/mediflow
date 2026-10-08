@@ -113,7 +113,7 @@ function allModules(value: boolean): Record<string, boolean> {
 export const PLAN_MARKETING: Record<PlanId, { name: string; features: string[] }> = {
   BASIC:  { name: "Básico",      features: ["Agenda + WhatsApp", "CFDI + Portal"] },
   PRO:    { name: "Profesional", features: ["IA en radiografías 2D", "Analítica y reportes", "Mi Clínica Visual (plano y recorrido 3D)"] },
-  CLINIC: { name: "Clínica",     features: ["Soporte prioritario", "Onboarding dedicado"] },
+  CLINIC: { name: "Clínica",     features: ["Soporte prioritario dedicado", "Onboarding dedicado"] },
 };
 
 /**

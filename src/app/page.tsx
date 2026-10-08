@@ -148,11 +148,13 @@ export default async function HomePage() {
         <WhatsappMpSection />
         <Funciones />
         <PricingSection cards={cards} firstMonthFrom={firstMonthFrom} yearlyDiscountPct={yearlyDiscountPct} />
-        {/* 4-oct-2026 (ws1-t10): franja de seguridad en el sitio de las píldoras
+        {/* 7-oct-2026 (ws1-t10, pedido de Rafael): la banda «¿Tienes dudas?
+            Escríbenos por WhatsApp» va JUSTO ARRIBA de la franja de seguridad.
+            4-oct-2026 (ws1-t10): franja de seguridad en el sitio de las píldoras
             con palomita que cerraban Precios. Sección propia y de servidor: su
             marcado no entra al bundle de cliente de Precios. */}
-        <FranjaSeguridad />
         <WhatsappCta />
+        <FranjaSeguridad />
         {/* Ajuste 1 (25-sep-2026, ws1-t4): el trío oscuro, «Y todo lo demás,
             incluido» y «Conoce cada módulo a fondo» se juntan en UNA sección
             (la laptop con el panel grabado). modules-trio, features-grid y

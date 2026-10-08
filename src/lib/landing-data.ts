@@ -109,7 +109,7 @@ export const pricingPlans: PricingPlan[] = [
     subtitle: "El más popular",
     price: "$689",
     period: "/mes",
-    features: ["Hasta 5 profesionales", "Pacientes ilimitados", "Todo lo del Básico", "Fotos antes/después", "Paquetes y membresías", "WhatsApp bidireccional", "Soporte prioritario"],
+    features: ["Hasta 5 profesionales", "Pacientes ilimitados", "Todo lo del Básico", "Fotos antes/después", "Paquetes y membresías", "WhatsApp bidireccional", "Soporte prioritario dedicado"],
     cta: "Crear mi cuenta",
     highlighted: true,
   },

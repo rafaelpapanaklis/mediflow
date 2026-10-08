@@ -230,12 +230,12 @@ export const SEGURIDAD: {
 };
 
 /**
- * Banda de contacto entre precios y el trío oscuro (whatsapp-cta.tsx).
+ * Banda de contacto entre precios y la franja de seguridad (whatsapp-cta.tsx).
  *
  * `numberE164` va SIN "+" porque es lo que espera wa.me (misma convención que
  * account-manager-card.tsx y los templates de mini-web); `numberDisplay` es el
- * mismo número ya formateado para leerlo. Los dos salen de aquí, así que el
- * footer y el CTA no pueden desincronizarse.
+ * mismo número ya formateado para leerlo (lo usa el footer; la banda de
+ * contacto ya no lo enseña desde el 7-oct-2026, pedido de Rafael).
  *
  * El copy no promete tiempos de respuesta: del otro lado contesta una persona
  * en horario de oficina, no un bot.
@@ -245,6 +245,8 @@ export const WHATSAPP_CTA = {
   title: '¿Tienes dudas? Escríbenos por WhatsApp',
   subtitle: 'Cuéntanos de tu clínica y te ayudamos a decidir si DaleControl es para ti. Sin compromiso.',
   button: 'Chatear por WhatsApp',
+  // La banda de contacto ya NO lo enseña (7-oct-2026, pedido de Rafael); lo
+  // sigue usando el footer (`contact`, abajo).
   numberDisplay: '+52 999 260 2093',
   numberE164: '529992602093',
   prefilledText: 'Hola, me interesa DaleControl para mi clínica dental. ¿Me pueden dar más información?',

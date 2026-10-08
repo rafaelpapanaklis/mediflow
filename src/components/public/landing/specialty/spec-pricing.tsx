@@ -63,7 +63,7 @@ export async function SpecPricing({ spec }: { spec: Specialty }) {
         "Multi-sucursal",
         "IA ampliada (1M tokens)",
         "Reportes consolidados",
-        "Soporte prioritario",
+        "Soporte prioritario dedicado",
         "Onboarding dedicado",
       ],
     },

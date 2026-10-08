@@ -192,14 +192,17 @@ const COMMON_CANDIDATES: {
   /** Texto en la tarjeta cuando lleva cifra del plan (CFDI); en el bloque común va el genérico. */
   cardText?: (p: ResolvedPlan) => string;
 }[] = [
-  { text: 'Agenda + recordatorios por WhatsApp', included: (p) => hasModule(p, 'whatsapp'), lead: true },
+  // 7-oct-2026 (pedido de Rafael): el bot de WhatsApp con IA. Misma condición
+  // de antes (el módulo de WhatsApp). «(con Saldo IA)» como en Sabina: la IA
+  // libre del bot se cobra del Saldo IA en todos los planes (menú y FAQ, no).
+  { text: 'Agenda + bot de WhatsApp con IA: agenda, cobra, confirma y recuerda citas 24/7 (con Saldo IA)', included: (p) => hasModule(p, 'whatsapp'), lead: true },
   { text: 'Sabina, tu asistente del panel (con Saldo IA)', included: () => true, lead: true },
-  { text: 'Expediente clínico + odontograma', included: () => true, lead: true },
+  { text: 'Expediente clínico + odontograma 2D y 3D', included: () => true, lead: true },
   { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p) },
   { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true },
   { text: 'Página web de la clínica gratuita', included: (p) => hasModule(p, 'landing'), lead: true },
   // Ajuste 12 (Rafael): soporte y onboarding son de los TRES planes (antes, exclusivos de Clínica).
-  { text: 'Soporte prioritario', included: () => true, lead: true },
+  { text: 'Soporte prioritario dedicado', included: () => true, lead: true },
   { text: 'Onboarding y migración dedicados', included: () => true, lead: true },
   { text: 'Presupuestos, cobros y factura automática', included: () => true },
   { text: 'Inbox de mensajes', included: (p) => hasModule(p, 'inbox') },
@@ -275,7 +278,12 @@ function analyticsRows(p: ResolvedPlan): FeatureRow[] {
  * ✓ propio»).
  */
 const multiSede = (p: ResolvedPlan) => p.maxClinics == null || p.maxClinics > 1;
-const SEDES_NOTE = 'Reportes consolidados y comparación entre sedes';
+// 8-oct-2026 (pedido de Rafael): antes «Reportes consolidados y comparación entre sedes».
+const SEDES_NOTE = 'Crea las sedes que necesites, sin límite';
+/** Nota bajo «Almacenamiento», en todos los planes (8-oct-2026, pedido de Rafael). */
+const STORAGE_NOTE = 'Respaldos automáticos y cifrados de toda tu información';
+/** Nota bajo «Tokens IA» (7-oct-2026, pedido de Rafael): solo en los planes con tokens. */
+const TOKENS_NOTE = 'Para la IA clínica: análisis de radiografías, dictado por voz, asistente de consulta y revisión de contraindicaciones.';
 
 /**
  * Arma la lista de cada tarjeta (ver PlanCard.features) y la lista común.
@@ -324,8 +332,9 @@ export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
         { text: 'Usuarios', value: unlimited(p.maxUsers), included: true },
         // Sedes (ajuste 9): maxClinics de plan_configs (NULL = ilimitadas). Con más de una, la nota de reportes entre sedes (ajuste 15).
         { text: 'Sedes', value: formatSedes(p.maxClinics), included: true, note: multiSede(p) ? SEDES_NOTE : undefined },
-        { text: 'Almacenamiento', value: storage(p.storageBytes), included: true },
-        { text: 'Tokens IA', value: formatAiTokens(p.aiTokensDefault), included: p.aiTokensDefault > 0 },
+        { text: 'Almacenamiento', value: storage(p.storageBytes), included: true, note: STORAGE_NOTE },
+        // Con tokens, la nota de para qué sirven (misma nota que Sedes); con 0, nada.
+        { text: 'Tokens IA', value: formatAiTokens(p.aiTokensDefault), included: p.aiTokensDefault > 0, note: p.aiTokensDefault > 0 ? TOKENS_NOTE : undefined },
       ],
       features: rowsFor(p),
       includedInAll,
