@@ -83,12 +83,6 @@ export interface PlanCard {
    */
   includedInAll: string[];
   /**
-   * La misma lista, agrupada por categoría para el recuadro (8-oct-2026,
-   * pedido de Rafael): título corto + renglones, en el orden de COMMON_GROUPS.
-   * Un grupo sin renglones comunes no se pinta.
-   */
-  includedInAllGroups: { title: string; items: string[] }[];
-  /**
    * Etiqueta del plan anterior (plan_configs.label) para el chip verde de la
    * tarjeta (ajuste 11): Básico «Todo lo esencial incluido»; los demás «Todo lo
    * de <anterior> + lo esencial». null en el primero.
@@ -190,15 +184,10 @@ const hasModule = (p: ResolvedPlan, key: string) => p.moduleFeatures?.[key] !== 
  * Si una candidata NO se cumple en algún plan, no se pierde: baja a la lista
  * comparable de cada tarjeta con ✓/✗ (ver splitFeatures).
  */
-/** Categorías del recuadro «Incluido en todos los planes», en su orden (8-oct-2026, pedido de Rafael). */
-export const COMMON_GROUPS = ['Agenda y pacientes', 'Expediente clínico', 'Cobros y facturación', 'Clínica y crecimiento'] as const;
-type CommonGroup = (typeof COMMON_GROUPS)[number];
-
 const COMMON_CANDIDATES: {
   text: string;
   included: (p: ResolvedPlan) => boolean;
-  /** Categoría del recuadro común (8-oct-2026). */
-  group: CommonGroup;
+
   /** Abre la lista de CADA tarjeta en ✓ (ajuste 10: filas positivas antes de las que cambian; 8 desde el ajuste 12). */
   lead?: boolean;
   /** Texto en la tarjeta cuando lleva cifra del plan (CFDI); en el bloque común va el genérico. */
@@ -206,21 +195,21 @@ const COMMON_CANDIDATES: {
 }[] = [
   // 7/8-oct-2026 (pedido de Rafael): el bot de WhatsApp con IA, misma condición
   // de antes (el módulo de WhatsApp). Sin «(con Saldo IA)» en ningún renglón.
-  { text: 'Agenda + bot de WhatsApp con IA: agenda, cobra, confirma y recuerda citas 24/7', included: (p) => hasModule(p, 'whatsapp'), lead: true, group: 'Agenda y pacientes' },
-  { text: 'Sabina, tu asistente del panel', included: () => true, lead: true, group: 'Expediente clínico' },
-  { text: 'Expediente clínico + odontograma 3D y 2D', included: () => true, lead: true, group: 'Expediente clínico' },
-  { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p), group: 'Cobros y facturación' },
-  { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true, group: 'Agenda y pacientes' },
-  { text: 'Página web de la clínica gratuita', included: (p) => hasModule(p, 'landing'), lead: true, group: 'Clínica y crecimiento' },
+  { text: 'Agenda + bot de WhatsApp con IA: agenda, cobra, confirma y recuerda citas 24/7', included: (p) => hasModule(p, 'whatsapp'), lead: true },
+  { text: 'Sabina, tu asistente del panel', included: () => true, lead: true },
+  { text: 'Expediente clínico + odontograma 3D y 2D', included: () => true, lead: true },
+  { text: 'Facturación CFDI (timbres incluidos según plan)', included: () => true, lead: true, cardText: (p) => cfdiBullet(p) },
+  { text: 'Portal del paciente y recetas digitales', included: () => true, lead: true },
+  { text: 'Página web de la clínica gratuita', included: (p) => hasModule(p, 'landing'), lead: true },
   // Ajuste 12 (Rafael): soporte y onboarding son de los TRES planes (antes, exclusivos de Clínica).
-  { text: 'Soporte prioritario dedicado', included: () => true, lead: true, group: 'Clínica y crecimiento' },
-  { text: 'Onboarding y migración dedicados', included: () => true, lead: true, group: 'Clínica y crecimiento' },
-  { text: 'Presupuestos, cobros y factura automática', included: () => true, group: 'Cobros y facturación' },
-  { text: 'Inbox de mensajes', included: (p) => hasModule(p, 'inbox'), group: 'Agenda y pacientes' },
-  { text: 'Reportes de la clínica', included: (p) => hasModule(p, 'reports'), group: 'Cobros y facturación' },
+  { text: 'Soporte prioritario dedicado', included: () => true, lead: true },
+  { text: 'Onboarding y migración dedicados', included: () => true, lead: true },
+  { text: 'Presupuestos, cobros y factura automática', included: () => true },
+  { text: 'Inbox de mensajes', included: (p) => hasModule(p, 'inbox') },
+  { text: 'Reportes de la clínica', included: (p) => hasModule(p, 'reports') },
   // Ajuste 12b: CBCT y modelos 3D en UNA entrada (mismos hechos: nube, cortes y
   // mediciones, modelos, clínica virtual). Sigue sin mezclarse con la IA.
-  { text: 'CBCT y modelos 3D en el navegador · cortes, mediciones y clínica virtual', included: () => true, group: 'Expediente clínico' },
+  { text: 'CBCT y modelos 3D en el navegador · cortes, mediciones y clínica virtual', included: () => true },
   // 8-oct-2026 (pedidos de Rafael): renglones SOLO del recuadro común (sin
   // `lead`, no entran en las tarjetas). Verificado en el código que ninguno
   // depende del plan: PLAN_MODULES (las casillas por plan de plan_configs) solo
@@ -228,19 +217,19 @@ const COMMON_CANDIDATES: {
   // tv-modes y whatsapp; estas funciones no llevan moduleKey en el menú y sus
   // rutas solo piden permisos. La migración (Dentalink/Excel) ya va en
   // «Migración gratis…»: el importador no se repite.
-  { text: 'Reserva de citas en línea', included: () => true, group: 'Agenda y pacientes' },
-  { text: 'Sincronización con Google Calendar', included: () => true, group: 'Agenda y pacientes' },
-  { text: 'Lista de espera', included: () => true, group: 'Agenda y pacientes' },
-  { text: 'Reactivación de pacientes y felicitación de cumpleaños', included: () => true, group: 'Agenda y pacientes' },
-  { text: 'Consentimientos con firma digital', included: () => true, group: 'Expediente clínico' },
-  { text: 'Fotos clínicas antes y después', included: () => true, group: 'Expediente clínico' },
-  { text: 'Planes de tratamiento por sesiones', included: () => true, group: 'Expediente clínico' },
-  { text: 'Caja, cortes y finanzas', included: () => true, group: 'Cobros y facturación' },
-  { text: 'Cobros con Mercado Pago: links de pago y anticipos por WhatsApp', included: () => true, group: 'Cobros y facturación' },
-  { text: 'Reseñas de Google al terminar la cita', included: () => true, group: 'Clínica y crecimiento' },
-  { text: 'Inventario de insumos', included: () => true, group: 'Clínica y crecimiento' },
-  { text: 'Permisos por rol y bitácora de actividad', included: () => true, group: 'Clínica y crecimiento' },
-  { text: 'Migración gratis desde Dentalink o Excel', included: () => true, group: 'Clínica y crecimiento' },
+  { text: 'Reserva de citas en línea', included: () => true },
+  { text: 'Sincronización con Google Calendar', included: () => true },
+  { text: 'Lista de espera', included: () => true },
+  { text: 'Reactivación de pacientes y felicitación de cumpleaños', included: () => true },
+  { text: 'Consentimientos con firma digital', included: () => true },
+  { text: 'Fotos clínicas antes y después', included: () => true },
+  { text: 'Planes de tratamiento por sesiones', included: () => true },
+  { text: 'Caja, cortes y finanzas', included: () => true },
+  { text: 'Cobros con Mercado Pago: links de pago y anticipos por WhatsApp', included: () => true },
+  { text: 'Reseñas de Google al terminar la cita', included: () => true },
+  { text: 'Inventario de insumos', included: () => true },
+  { text: 'Permisos por rol y bitácora de actividad', included: () => true },
+  { text: 'Migración gratis desde Dentalink o Excel', included: () => true },
 ];
 
 /**
@@ -322,17 +311,12 @@ const TOKENS_NOTE = 'Para la IA clínica: análisis de radiografías, dictado po
  *  - Las que NO cumplen en algún plan no se pierden: van con ✓/✗ tras las
  *    filas comparables.
  */
-function splitFeatures(plans: ResolvedPlan[]): {
-  includedInAll: string[];
-  includedInAllGroups: { title: string; items: string[] }[];
-  rowsFor: (p: ResolvedPlan) => FeatureRow[];
-} {
+function splitFeatures(plans: ResolvedPlan[]): { includedInAll: string[]; rowsFor: (p: ResolvedPlan) => FeatureRow[] } {
   const inAll = COMMON_CANDIDATES.filter((c) => plans.every((p) => c.included(p)));
   const lead = inAll.filter((c) => c.lead);
   const notInAll = COMMON_CANDIDATES.filter((c) => !inAll.includes(c));
   return {
     includedInAll: inAll.map((c) => c.text),
-    includedInAllGroups: COMMON_GROUPS.map((title) => ({ title, items: inAll.filter((c) => c.group === title).map((c) => c.text) })).filter((g) => g.items.length > 0),
     rowsFor: (p) => [
       ...lead.map((c) => ({ text: c.cardText ? c.cardText(p) : c.text, included: true })),
       ...COMPARE_ROWS.map((r) => ({ text: r.text(p), included: r.included(p) })),
@@ -343,7 +327,7 @@ function splitFeatures(plans: ResolvedPlan[]): {
 }
 
 export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
-  const { includedInAll, includedInAllGroups, rowsFor } = splitFeatures(plans);
+  const { includedInAll, rowsFor } = splitFeatures(plans);
   return plans.map((p, i) => {
     const copy = CARD_COPY[p.id];
     const yearlyFull = p.priceMxnMonthly * 12;
@@ -373,7 +357,6 @@ export function buildPlanCards(plans: ResolvedPlan[]): PlanCard[] {
       ],
       features: rowsFor(p),
       includedInAll,
-      includedInAllGroups,
       previousPlanLabel: i > 0 ? plans[i - 1].label : null,
     };
   });
