@@ -361,11 +361,15 @@ export async function createBotAppointment(params: {
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { timezone: true, agendaDayStart: true, agendaDayEnd: true },
+    select: { timezone: true, agendaDayStart: true, agendaDayEnd: true, defaultSlotMinutes: true },
   });
   if (!clinic) return { ok: false, error: "invalid" };
 
-  const durationMin = params.durationMin > 0 ? params.durationMin : 30;
+  // ws1-t12 — sin duración (cita genérica del menú corto) dura lo mismo que el hueco
+  // que ofreció getAvailableSlots: el paso de la agenda de la clínica. Antes eran 30
+  // fijos: con paso de 15 pisaba el hueco siguiente («se acaba de ocupar» en bucle).
+  const paso = clinic.defaultSlotMinutes > 0 ? clinic.defaultSlotMinutes : 30;
+  const durationMin = params.durationMin > 0 ? params.durationMin : paso;
   const startsAt = tzLocalToUtc(dateISO, hh, mm, clinic.timezone);
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   if (endsAt.getTime() <= startsAt.getTime()) return { ok: false, error: "invalid" };

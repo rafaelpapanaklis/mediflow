@@ -91,16 +91,24 @@ const PATRON_CATALOGO: Partial<Record<TipoMenu, RegExp[]>> = {
   urgencia: [/\burgencia\b/, /\bemergencia\b/],
 };
 
-/** El procedimiento del catálogo que corresponde a una opción de fábrica, si existe. */
+/**
+ * El procedimiento del catálogo que corresponde a una opción de fábrica, si existe.
+ * ws1-t12 — entre los que casan gana el de nombre MÁS CORTO (el genérico): «Consulta
+ * general» antes que «Valoración de implantes», «Urgencia» antes que «Consulta de
+ * urgencia». Antes mandaba el orden de los patrones y una consulta simple podía salir
+ * con la duración (y el precio del anticipo) de una valoración especializada.
+ */
 export function casarConCatalogo(tipo: TipoMenu, catalogo: FilaCatalogo[]): FilaCatalogo | null {
   const patrones = PATRON_CATALOGO[tipo];
   if (!patrones) return null;
-  const candidatas = catalogo.filter((c) => !/ortodon/.test(foldAccents(c.name)));
-  for (const re of patrones) {
-    const hit = candidatas.find((c) => re.test(foldAccents(c.name)));
-    if (hit) return hit;
-  }
-  return null;
+  let mejor: { fila: FilaCatalogo; largo: number; orden: number } | null = null;
+  catalogo.forEach((c, orden) => {
+    const nombre = foldAccents(c.name);
+    if (/ortodon/.test(nombre) || !patrones.some((re) => re.test(nombre))) return;
+    const largo = nombre.trim().length;
+    if (!mejor || largo < mejor.largo || (largo === mejor.largo && orden < mejor.orden)) mejor = { fila: c, largo, orden };
+  });
+  return mejor ? (mejor as { fila: FilaCatalogo }).fila : null;
 }
 
 const RE_NUMERO_SOLO = /^\s*(opcion\s*)?\d{1,2}\s*[.)]?\s*$/;

@@ -865,9 +865,18 @@ async function stepService(
   const tipo = tipoDeId(chosen.id);
   if (tipo) return elegirOpcionDeMenu(input, state, deps, tipo);
   const svc = await deps.findServiceById(input.clinicId, chosen.id);
-  state.serviceId = chosen.id;
-  state.serviceName = svc?.name ?? chosen.label;
-  state.durationMin = svc?.duration ?? 0;
+  if (svc) {
+    state.serviceId = chosen.id;
+    state.serviceName = svc.name;
+    state.durationMin = svc.duration ?? 0;
+  } else {
+    // ws1-t12 — la clínica lo desactivó o lo borró entre el menú y la respuesta: cita
+    // genérica con el nombre que vio el paciente (sin el «(60 min)» de la etiqueta) como
+    // motivo. Antes se guardaba el id que ya no vale y la etiqueta entera como tipo.
+    state.serviceId = null;
+    state.serviceName = chosen.label.replace(/\s*\(\d+ min\)\s*$/, "").trim() || chosen.label;
+    state.durationMin = 0;
+  }
   state.options = undefined;
   return advanceToDoctorOrDate(input, state, deps);
 }
