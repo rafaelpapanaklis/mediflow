@@ -241,7 +241,7 @@ export function AdminSettingsClient({
   ];
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px" }}>
       {/* Header */}
       <div style={{ marginBottom: 22 }}>
         <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>

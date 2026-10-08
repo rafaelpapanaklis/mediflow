@@ -210,7 +210,7 @@ export function PostEditor({ post }: { post: BlogPostDTO | null }) {
   }
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px" }}>
       {/* Header */}
       <div
         style={{

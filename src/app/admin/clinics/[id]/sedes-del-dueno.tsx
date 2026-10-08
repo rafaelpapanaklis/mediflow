@@ -27,16 +27,30 @@ export function SedesDelDueno({ sedes, principal }: { sedes: SedeDeDueno[]; prin
           Sede incluida en el plan de <Link href={`/admin/clinics/${principal.id}`}><strong>{principal.name}</strong></Link>, que es quien paga.
         </p>
       )}
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-        {sedes.map((s) => (
-          <li key={s.id} style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline", fontSize: 13 }}>
-            {s.esEsta ? <strong>{s.name} (esta)</strong> : <Link href={`/admin/clinics/${s.id}`}>{s.name}</Link>}
-            <span>{s.plan}</span>
-            <span>{s.incluida ? "Sede incluida" : s.status === "active" ? "Pagando" : (s.status ?? "sin estado")}</span>
-            <span>{s.pacientes} pacientes</span>
-            <span>{s.bytes === null ? "uso sin medir" : bytesCortos(s.bytes)}</span>
-          </li>
-        ))}
+      <ul className="dcp-sedes-lista">
+        {sedes.map((s) => {
+          const estado = s.incluida ? "Sede incluida" : s.status === "active" ? "Pagando" : (s.status ?? "sin estado");
+          const tono = s.incluida ? "badge-new badge-new--info" : s.status === "active" ? "badge-new badge-new--success" : "badge-new";
+          const contenido = (
+            <>
+              <span className="dcp-sedes-fila__nombre">{s.name}{s.esEsta ? " (esta)" : ""}</span>
+              <span className="dcp-suave">{s.plan}</span>
+              <span className={tono}>{estado}</span>
+              <span className="dcp-suave">{s.pacientes} pacientes</span>
+              <span className="dcp-suave">{s.bytes === null ? "uso sin medir" : bytesCortos(s.bytes)}</span>
+              {!s.esEsta && <span className="dcp-sedes-fila__ir" aria-hidden="true">Abrir →</span>}
+            </>
+          );
+          return (
+            <li key={s.id}>
+              {s.esEsta ? (
+                <div className="dcp-sedes-fila dcp-sedes-fila--esta" aria-current="page">{contenido}</div>
+              ) : (
+                <Link href={`/admin/clinics/${s.id}`} className="dcp-sedes-fila" aria-label={`Abrir la ficha de ${s.name}`}>{contenido}</Link>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

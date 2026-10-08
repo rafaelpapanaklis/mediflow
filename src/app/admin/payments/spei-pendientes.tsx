@@ -81,7 +81,7 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
   const hay = filas.length > 0;
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 24px 0" }} id="transferencias-spei">
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "24px 24px 0" }} id="transferencias-spei">
       <div
         style={{
           borderRadius: 14,

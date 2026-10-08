@@ -237,7 +237,7 @@ export function AffiliateDetailClient({
       : "según la modalidad congelada de cada clínica";
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px" }}>
       {/* 1 · Header */}
       <div style={{ marginBottom: 20 }}>
         <Link

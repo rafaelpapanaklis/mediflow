@@ -6,7 +6,7 @@
    de cobros de la pestaña Facturación y la rejilla de gráficas. Todo tokens.
    ─────────────────────────────────────────────────────────────────────────── */
 
-.pagina { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.pagina { max-width: min(1800px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 
 .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 

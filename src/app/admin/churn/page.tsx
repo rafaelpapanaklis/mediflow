@@ -140,7 +140,7 @@ export default async function ChurnPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px" }}>
       <div style={{ marginBottom: 22 }}>
         <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
           Monitor de retención

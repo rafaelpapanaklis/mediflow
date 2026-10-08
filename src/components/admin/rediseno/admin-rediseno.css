@@ -48,7 +48,7 @@
 .dcp-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 
 /* ── Página y cabecera ─────────────────────────────────────────────── */
-.dcp-pagina { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.dcp-pagina { max-width: min(1800px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 .dcp-cabecera { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
 .dcp-titulo { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; color: var(--text-1); line-height: 1.15; }
 .dcp-sub { margin: 4px 0 0; font-size: 13px; color: var(--text-3); }
@@ -232,7 +232,7 @@
 /* ── Tabla ─────────────────────────────────────────────────────────── */
 .dcp-tabla { background: var(--m2-tarjeta); border: 1px solid var(--m2-tarjeta-borde); border-radius: 14px; box-shadow: var(--m2-sombra); overflow: hidden; }
 .dcp-tabla__scroll { overflow-x: auto; }
-.dcp-tabla table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dcp-tabla table { width: 100%; table-layout: auto; border-collapse: collapse; font-size: 13px; }
 .dcp-tabla th {
   text-align: left; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--text-3); padding: 11px 14px; border-bottom: 1px solid var(--m2-tarjeta-borde); white-space: nowrap;
@@ -338,7 +338,7 @@
 
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1279.98px) {
   /* La tabla se apila: cada fila es una tarjeta y cada celda lleva su rótulo. */
   .dcp-tabla--apilada .dcp-tabla__scroll { overflow-x: visible; }
   .dcp-tabla--apilada table, .dcp-tabla--apilada tbody, .dcp-tabla--apilada tr, .dcp-tabla--apilada td { display: block; width: 100%; }
@@ -359,3 +359,39 @@
 @media (prefers-reduced-motion: reduce) {
   .dcp-tile, .dcp-barra__relleno { transition: none; }
 }
+
+/* ── Sin scroll horizontal (ws1-t5): el texto de la tabla envuelve ───── */
+.dcp-tabla td { overflow-wrap: anywhere; }
+.dcp-tabla th { white-space: normal; }
+.dcp-tabla td .dcp-nombre { white-space: normal; overflow: visible; text-overflow: clip; }
+.dcp-tabla td .dcp-meta { white-space: normal; max-width: 100%; }
+.dcp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Menú «⋯» de acciones por fila */
+.dcp-menu { position: relative; }
+.dcp-menu__btn {
+  list-style: none; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--m2-tarjeta-borde); background: var(--m2-tarjeta); color: var(--text-2); font-size: 16px; line-height: 1;
+}
+.dcp-menu__btn::-webkit-details-marker { display: none; }
+.dcp-menu__btn:hover { background: var(--m2-tarjeta-hover); color: var(--text-1); }
+.dcp-menu__lista {
+  position: absolute; right: 0; top: 34px; z-index: 20; min-width: 170px; display: flex; flex-direction: column; padding: 4px;
+  background: var(--m2-tarjeta); border: 1px solid var(--m2-borde); border-radius: 10px; box-shadow: var(--m2-sombra);
+}
+.dcp-menu__lista button { text-align: left; background: none; border: none; padding: 8px 10px; border-radius: 6px; font: inherit; font-size: 13px; color: var(--text-1); cursor: pointer; }
+.dcp-menu__lista button:hover:not(:disabled) { background: var(--m2-hover); }
+.dcp-menu__lista button:disabled { opacity: 0.5; cursor: default; }
+
+/* Sedes del dueño: cada fila es un enlace a su ficha */
+.dcp-sedes-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dcp-sedes-fila {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 12px; font-size: 13px; color: var(--text-1);
+  border: 1px solid var(--m2-tarjeta-borde); border-radius: 10px; text-decoration: none; background: var(--m2-tarjeta);
+}
+a.dcp-sedes-fila { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+a.dcp-sedes-fila:hover { background: var(--m2-tarjeta-hover); border-color: var(--brand); }
+a.dcp-sedes-fila:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.dcp-sedes-fila--esta { background: var(--bg-elev-2); }
+.dcp-sedes-fila__nombre { font-weight: 600; min-width: 0; flex: 1 1 160px; }
+.dcp-sedes-fila__ir { margin-left: auto; color: var(--brand); font-weight: 600; }

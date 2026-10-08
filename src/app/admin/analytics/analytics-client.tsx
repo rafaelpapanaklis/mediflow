@@ -120,7 +120,7 @@ export function AnalyticsClient() {
   ];
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 20px 48px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "28px 20px 48px" }}>
       {/* Header */}
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>

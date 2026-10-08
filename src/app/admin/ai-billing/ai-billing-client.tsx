@@ -371,11 +371,11 @@ export function AiBillingClient() {
   }
 
   if (loading && !data) {
-    return <div style={{ maxWidth: 1280, margin: "0 auto", padding: 40, color: "var(--text-3)" }}>Cargando tesorería…</div>;
+    return <div style={{ maxWidth: 1800, margin: "0 auto", padding: 40, color: "var(--text-3)" }}>Cargando tesorería…</div>;
   }
   if (error && !data) {
     return (
-      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1800, margin: "0 auto" }}>
         <CardNew>
           <div style={{ padding: 16, color: "var(--danger)", fontSize: 13 }}>Error: {error}</div>
           <ButtonNew
@@ -403,7 +403,7 @@ export function AiBillingClient() {
     d.cost?.month ?? { prepaidUsd: 0, absorbedUsd: 0, totalUsd: 0, prepaidMxn: 0, absorbedMxn: 0, totalMxn: 0 };
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>

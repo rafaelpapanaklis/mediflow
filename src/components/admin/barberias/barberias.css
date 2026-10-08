@@ -22,7 +22,7 @@
 .dcba {
   container-type: inline-size;
   container-name: dcba;
-  max-width: 1280px;
+  max-width: min(1800px, 100%);
   margin: 0 auto;
   padding: 32px 24px;
 }

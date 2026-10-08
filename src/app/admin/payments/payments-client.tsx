@@ -401,7 +401,7 @@ export function PaymentsClient({
   ];
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px" }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>

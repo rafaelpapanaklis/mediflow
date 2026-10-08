@@ -179,7 +179,7 @@ export function BugAuditClient() {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>

@@ -176,7 +176,7 @@ export function AnnouncementsClient({ initial }: { initial: Announcement[] }) {
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
+    <div style={{ maxWidth: 1800, margin: "0 auto", padding: "32px 24px" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
         <div>

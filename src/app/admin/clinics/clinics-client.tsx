@@ -17,7 +17,6 @@ import Link from "next/link";
 import { Search, ArrowDownWideNarrow, ArrowUpNarrowWide, Upload } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PlanStatusBadge } from "@/components/admin/plan-status-badge";
@@ -580,12 +579,10 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                 <th>Estado</th>
                 <th>Plan</th>
                 <th>Módulos</th>
-                <th>Origen</th>
-                <th>Última compra</th>
-                <th>Renueva</th>
+                <th>Compra · Renueva</th>
                 <th>Uso</th>
                 <th className="dcp-der">Pacientes</th>
-                <th className="dcp-der">Acciones</th>
+                <th className="dcp-der"><span className="dcp-sr">Acciones</span></th>
               </tr>
             </thead>
             <tbody>
@@ -622,6 +619,11 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                             {owner ? (owner.email ?? `${owner.firstName ?? ""} ${owner.lastName ?? ""}`.trim()) : "sin contacto"}
                             {salud.avisos.esImportacion && <span title="Alta reciente con muchos pacientes: importación, no crecimiento"> · <Upload size={10} style={{ verticalAlign: "-1px" }} /> importación</span>}
                           </div>
+                          {clinic.origen && (
+                            <Chip tono={TONO_ORIGEN[clinic.origen.canal]} sm title={`Origen: ${clinic.origen.etiqueta}`}>
+                              {clinic.origen.etiqueta}
+                            </Chip>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -700,17 +702,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                       </div>
                     </td>
 
-                    <td data-col="Origen">
-                      {clinic.origen ? (
-                        <Chip tono={TONO_ORIGEN[clinic.origen.canal]} sm title={clinic.origen.etiqueta}>
-                          {clinic.origen.etiqueta}
-                        </Chip>
-                      ) : (
-                        <span className={css.sinDato}>sin medir</span>
-                      )}
-                    </td>
-
-                    <td data-col="Última compra">
+                    <td data-col="Compra · Renueva">
                       <div className={css.celda}>
                         <span className={`dcp-fuerte ${css.num}`}>
                           {compra.fecha ? fechaAdmin(compra.fecha) : "—"}
@@ -721,18 +713,14 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                             ? `${clinic.pagosRegistrados} pago${clinic.pagosRegistrados === 1 ? "" : "s"} · ${formatCurrency(clinic.totalPagado, "MXN")}`
                             : "sin pagos"}
                         </span>
-                      </div>
-                    </td>
-
-                    <td data-col="Renueva">
-                      <div className={css.celda}>
-                        <span className={`dcp-fuerte ${css.num}`}>{renueva ? fechaAdmin(renueva) : "—"}</span>
-                        <span className={css.meta}>{pago.etiqueta}</span>
+                        <span className={`${css.meta} ${css.num}`} title="Próxima renovación y método de pago">
+                          Renueva {renueva ? fechaAdmin(renueva) : "—"} · {pago.etiqueta}
+                        </span>
                       </div>
                     </td>
 
                     <td data-col="Uso">
-                      <div className={css.celda} style={{ minWidth: 132, gap: 6 }}>
+                      <div className={css.celda} style={{ gap: 6 }}>
                         {u ? (
                           <>
                             <BarraUso label={u.storageSedes && u.storageSedes > 1 ? "Disco (todas las sedes)" : "Disco"} usado={u.storageUsado} tope={u.storageTope} fmt={bytesCortos} compacta />
@@ -762,17 +750,15 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
                     <td data-col="Acciones" className="dcp-der">
                       {/* Los tres botones que YA cambiaban cosas: mismo texto, mismo comportamiento. */}
                       <div className={css.acciones}>
-                        {/* ws1-t11: también aquí, no solo en el detalle (abre pestaña nueva). */}
                         <BotonVerComoClinica clinicId={clinic.id} size="sm" />
-                        <ButtonNew size="sm" variant="secondary" onClick={() => extendTrial(clinic.id, 30)} disabled={isLoading}>
-                          +30 días
-                        </ButtonNew>
-                        <ButtonNew size="sm" variant="secondary" onClick={() => extendTrial(clinic.id, 14)} disabled={isLoading}>
-                          +14 días
-                        </ButtonNew>
-                        <ButtonNew size="sm" variant="ghost" onClick={() => suspendClinic(clinic.id)} disabled={isLoading} style={{ color: "var(--danger)" }}>
-                          Suspender
-                        </ButtonNew>
+                        <details className="dcp-menu">
+                          <summary className="dcp-menu__btn" aria-label={`Más acciones de ${clinic.name}`} title="Más acciones">⋯</summary>
+                          <div className="dcp-menu__lista">
+                            <button type="button" onClick={() => extendTrial(clinic.id, 30)} disabled={isLoading}>+30 días de prueba</button>
+                            <button type="button" onClick={() => extendTrial(clinic.id, 14)} disabled={isLoading}>+14 días de prueba</button>
+                            <button type="button" onClick={() => suspendClinic(clinic.id)} disabled={isLoading} style={{ color: "var(--danger)" }}>Suspender</button>
+                          </div>
+                        </details>
                       </div>
                     </td>
                   </tr>
@@ -780,7 +766,7 @@ export function AdminClinicsClient({ clinics: initial, planPrices, mrr, mrrModul
               })}
               {filtradas.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="dcp-tabla__vacio">
+                  <td colSpan={8} className="dcp-tabla__vacio">
                     {search || filtro !== "todas" ? "Ninguna clínica cumple ese filtro." : "No hay clínicas registradas."}
                   </td>
                 </tr>
