@@ -5,6 +5,7 @@
 // Sin React: se prueba con `tsx --test` simulando `window`. Nunca lanza.
 
 import { META_PIXEL_ID } from "./meta-pixel";
+import { isPrivatePath } from "./ga4";
 
 type FbqFn = ((...args: unknown[]) => void) & { callMethod?: (...a: unknown[]) => void; queue?: unknown[][] };
 
@@ -106,4 +107,37 @@ export function medirCompraMeta(compra: CompraMetaNavegador): ResultadoCompraMet
     // sin storage: ya salió una vez
   }
   return "enviada";
+}
+
+// ── Lead: clic en un botón de WhatsApp (embudo, ws1-t5) ─────────────────────
+
+/** Origen del clic: de dónde de la portada salió el botón. Solo estos valores viajan a Meta. */
+export const ORIGENES_LEAD_WHATSAPP = ["hero", "precio", "barra_movil", "banda"] as const;
+export type OrigenLeadWhatsapp = (typeof ORIGENES_LEAD_WHATSAPP)[number];
+
+/** event_id de un clic: único por clic (dos clics son dos Lead), prefijo `wa.`. */
+export function eventIdLeadWhatsapp(origen: string, ahora: number = Date.now(), azar: number = Math.random()): string {
+  return `wa.${origen}.${ahora.toString(36)}${Math.floor(azar * 1e6).toString(36)}`;
+}
+
+/**
+ * `Lead` del píxel por un clic en cualquier botón de WhatsApp. Sin datos
+ * personales: solo `content_name` con el origen (lista cerrada). Solo en rutas
+ * públicas: en el panel/paciente (isPrivatePath) no sale nada. Devuelve el
+ * eventID usado, o null si no salió (sin fbq / ruta privada / origen raro).
+ * Sin CAPI: un clic no tiene servidor detrás; el píxel es la única fuente.
+ */
+export function trackMetaLeadWhatsapp(origen: OrigenLeadWhatsapp): string | null {
+  try {
+    if (!(ORIGENES_LEAD_WHATSAPP as readonly string[]).includes(origen)) return null;
+    if (typeof window === "undefined") return null;
+    if (isPrivatePath(window.location?.pathname ?? "")) return null;
+    const fbq = fbqDe();
+    if (!fbq) return null;
+    const eventId = eventIdLeadWhatsapp(origen);
+    fbq("track", "Lead", { content_name: `whatsapp_${origen}` }, { eventID: eventId });
+    return eventId;
+  } catch {
+    return null;
+  }
 }

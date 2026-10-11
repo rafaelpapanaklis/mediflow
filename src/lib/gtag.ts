@@ -108,3 +108,26 @@ export function sendPaymentCompletedConversion(
   });
   return true;
 }
+
+// ── Conversión SECUNDARIA «Clic en WhatsApp» (ws1-t5) ───────────────────────
+//
+// Mide interés (un clic en cualquier botón de WhatsApp de la portada), no
+// ventas: va como conversión SECUNDARIA en Google Ads para que NO entre en la
+// columna «Conversiones» ni guíe la puja, solo se vea en «Todas las
+// conversiones». Sin valor y con recuento «Una» por clic-de-anuncio.
+//
+// ⚠️ LA ETIQUETA LA CREA RAFAEL (procedimiento en REPORTE-ws1-t5.md): Google
+// Ads → Objetivos → Conversiones → «+ Nueva acción de conversión» → Sitio web
+// → categoría «Contacto» → nombre «Clic en WhatsApp» → Acción SECUNDARIA.
+// La parte DESPUÉS de "AW-18276007996/" se pega aquí (solo esta línea).
+// Vacía = no se manda nada.
+export const GADS_WHATSAPP_CLIC_LABEL = "";
+
+/** Destino de «Clic en WhatsApp», o null si falta la etiqueta (nunca un "AW-…/" a medias). */
+export function whatsappClickSendTo(label: string): string | null {
+  const etiqueta = label.trim();
+  return etiqueta ? `${GADS_ACCOUNT_ID}/${etiqueta}` : null;
+}
+
+// El disparo vive en @/lib/analytics/whatsapp-clic.ts (necesita isPrivatePath de ga4;
+// este archivo no depende de ga4).
