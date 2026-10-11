@@ -17,7 +17,9 @@ import "./franja-seguridad.css";
  * <canvas> —motor propio, sin three.js ni dependencias, cargado solo cuando la
  * franja se acerca a la pantalla y pausado fuera de ella— y la entrada al
  * hacer scroll. Nada sigue al ratón. Con `prefers-reduced-motion` no se mueve
- * nada (franja-seguridad.css y el propio motor).
+ * nada (franja-seguridad.css y el propio motor). En Safari de iPad/iPhone el
+ * globo es una imagen fija del mismo cuadro y nada se anima (11-oct-2026:
+ * parpadeaba al hacer scroll; ver globo-seguridad-vivo.tsx).
  *
  * Los textos viven en landing-data.ts (`SEGURIDAD`): redacción aprobada, en
  * español. Los íconos son PROPIOS, dibujados aquí: nunca los logotipos de
@@ -132,10 +134,13 @@ const MERIDIANOS: { s: number; d: string }[] = [
 export function FranjaSeguridad() {
   return (
     <section id="seguridad" className="dcsg" aria-labelledby="dcsg-titulo" style={{ scrollMarginTop: 96 }}>
-      <div data-reveal="" className="dcsg__panel">
+      <div className="dcsg__panel">
         <div aria-hidden="true" className="dcsg__fondo" />
 
-        <div className="dcsg__head">
+        {/* El reveal va en la cabecera, NO en el panel: el panel entero en
+            `opacity: 0` hasta que el observador lo ve —y la transición sobre
+            una capa de 1160 × 730 px— era parte del parpadeo en iPad (11-oct). */}
+        <div data-reveal="" className="dcsg__head">
           <span className="dcsg__eyebrow">
             <svg aria-hidden="true" focusable="false" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3c2.6 1.7 5.2 2.5 8 2.7v6c0 4.8-3.1 8-8 9.8-4.9-1.8-8-5-8-9.8v-6c2.8-.2 5.4-1 8-2.7Z" />

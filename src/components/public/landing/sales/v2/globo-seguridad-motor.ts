@@ -13,6 +13,10 @@
  * además es lo que se ve si este módulo no llega a cargar.
  *
  * Los arcos son un adorno (luz que viaja entre puntos), no un mapa de nada.
+ *
+ * La geometría (mapa, ciudades, arcos, proyección) se exporta para que
+ * globo-seguridad-estatico.ts genere el MISMO cuadro como SVG: es lo que ve
+ * Safari de iPad/iPhone, donde este canvas no se monta (11-oct-2026).
  */
 
 /**
@@ -24,17 +28,19 @@ const TIERRA =
 const COLS = 180;
 const FILAS = 90;
 
-const RAD = Math.PI / 180;
+export const RAD = Math.PI / 180;
 /** Inclinación del eje hacia quien mira: enseña un poco más el hemisferio norte. */
-const INCLINACION = 0.3;
+export const INCLINACION = 0.3;
 /** Una vuelta cada 50 s. */
 const VELOCIDAD = (2 * Math.PI) / 50;
 /** Arranca con México casi de frente (longitud −100° → centro con 100°). */
 const ANGULO_INICIAL = 84 * RAD;
+/** Cuadro fijo (con «reducir movimiento» y en la imagen estática de iOS): México de frente. */
+export const ANGULO_QUIETO = 100 * RAD;
 const TRAMOS = 44;
 
 /** Ciudades entre las que viaja la luz: [latitud, longitud]. La 0 es Ciudad de México. */
-const NODOS: [number, number][] = [
+export const NODOS: [number, number][] = [
   [19.43, -99.13], // Ciudad de México
   [38.9, -77.4], // Virginia
   [34.05, -118.24], // Los Ángeles
@@ -48,7 +54,7 @@ const NODOS: [number, number][] = [
   [-33.87, 151.21], // Sídney
   [-26.2, 28.05], // Johannesburgo
 ];
-const ARCOS: [number, number][] = [
+export const ARCOS: [number, number][] = [
   [0, 1], [0, 2], [0, 3], [3, 4], [1, 5], [4, 11], [5, 6], [6, 7], [7, 8], [8, 9], [8, 10], [9, 2], [11, 7],
 ];
 
@@ -60,13 +66,13 @@ export type GloboSeguridad = {
   destruir(): void;
 };
 
-function vector(lat: number, lon: number): [number, number, number] {
+export function vector(lat: number, lon: number): [number, number, number] {
   const c = Math.cos(lat * RAD);
   return [c * Math.sin(lon * RAD), Math.sin(lat * RAD), c * Math.cos(lon * RAD)];
 }
 
 /** Puntos de tierra repartidos con densidad pareja (menos por fila hacia los polos). */
-function puntosDeTierra(): Float32Array {
+export function puntosDeTierra(): Float32Array {
   const bin = atob(TIERRA);
   const esTierra = (lat: number, lon: number) => {
     const f = Math.min(FILAS - 1, Math.max(0, Math.floor((90 - lat) / 2)));
@@ -88,7 +94,7 @@ function puntosDeTierra(): Float32Array {
 }
 
 /** Arco de círculo máximo entre dos nodos, levantado sobre la superficie. */
-function arco(a: [number, number, number], b: [number, number, number]): Float32Array {
+export function arco(a: [number, number, number], b: [number, number, number]): Float32Array {
   const dot = Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
   const ang = Math.acos(dot);
   const sen = Math.sin(ang) || 1;
@@ -322,7 +328,7 @@ export function crearGlobo(
 
   // Cuadro fijo de entrada: es todo lo que se ve con «reducir movimiento».
   if (opts.quieto) {
-    angulo = 100 * RAD;
+    angulo = ANGULO_QUIETO;
     pintar();
   }
 

@@ -15,7 +15,11 @@
 
    La sección comparte fondo (#f8fafc) con la banda de WhatsApp (que va justo
    arriba desde el 7-oct-2026) y con «Todo el panel»: el panel flota entre las
-   dos sin costura. */
+   dos sin costura.
+
+   Parpadeo en iPad (7 y 11-oct-2026): el panel NO recorta (`overflow`), NO
+   lleva el reveal de la página y en Safari de iPad/iPhone no se anima nada
+   (`dcsg--estatico`, al final del archivo). Ver globo-seguridad-vivo.tsx. */
 
 /* Abajo, el mismo hueco que hay entre Precios y la banda de WhatsApp y entre
    la banda y esta franja (padding inferior de Precios: clamp(56px,7vw,92px));
@@ -23,9 +27,15 @@
 .dcsg { position: relative; background: #f8fafc; padding: 0 20px clamp(56px, 7vw, 92px); }
 
 .dcsg__panel {
-  position: relative; isolation: isolate; overflow: hidden;
+  /* ⛔ Sin `overflow: hidden` (11-oct-2026, parpadeo en iPad): recortar con
+     radio a hijos compuestos (canvas, escudo, ondas, halos, sellos flotando)
+     obliga a WebKit a componer el panel entero como capa propia, que iOS
+     desengancha y repinta con retraso al hacer scroll. Nada sobresale del
+     panel: lo que lleva `inset: 0` recorta con `--dcsg-radio`. */
+  position: relative; isolation: isolate;
+  --dcsg-radio: clamp(22px, 2.6vw, 30px);
   max-width: 1160px; margin: 0 auto; color: #fff;
-  border-radius: clamp(22px, 2.6vw, 30px);
+  border-radius: var(--dcsg-radio);
   padding: clamp(30px, 4.2vw, 56px) clamp(16px, 3.6vw, 48px) clamp(20px, 3.4vw, 44px);
   background:
     radial-gradient(640px 400px at 88% -8%, rgba(124, 58, 237, .46), rgba(124, 58, 237, 0) 64%),
@@ -42,12 +52,12 @@
     0 60px 90px -52px rgba(37, 56, 140, .6);
 }
 /* Trama de puntos (la del hero y el cierre), atenuada hacia abajo. */
-.dcsg__fondo { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+.dcsg__fondo { position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: var(--dcsg-radio);
   background-image: radial-gradient(rgba(255, 255, 255, .1) 1px, transparent 1px); background-size: 26px 26px; opacity: .55;
   -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, .35) 100%);
   mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, .35) 100%); }
 /* Filo de color en el borde superior (el mismo recurso que abre Precios). */
-.dcsg__panel::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; pointer-events: none;
+.dcsg__panel::after { content: ""; position: absolute; left: var(--dcsg-radio); right: var(--dcsg-radio); top: 0; height: 1px; pointer-events: none;
   background: linear-gradient(90deg, rgba(96, 165, 250, 0), rgba(96, 165, 250, .9) 30%, rgba(167, 139, 250, .9) 70%, rgba(167, 139, 250, 0)); }
 
 /* ── Cabecera ───────────────────────────────────────────────────────────── */
@@ -81,7 +91,8 @@
 .dcsg__meridiano { transform-box: fill-box; transform-origin: center; transform: scaleX(var(--s, 1)); }
 /* El disco mide 100 de los 120 de media caja: 8.333 % de margen por lado. */
 .dcsg__onda { position: absolute; inset: 8.333%; border-radius: 50%; border: 1.5px solid #8b9cf8; opacity: 0; pointer-events: none; }
-.dcsg__lienzo { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .9s ease; pointer-events: none; }
+/* El canvas del motor o, en Safari de iPad/iPhone, la imagen fija del mismo cuadro. */
+.dcsg__lienzo { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0; transition: opacity .9s ease; pointer-events: none; }
 .dcsg__globo.is-vivo .dcsg__lienzo { opacity: 1; }
 .dcsg__globo.is-vivo .dcsg__malla { opacity: 0; }
 .dcsg__escudo {
@@ -325,3 +336,25 @@
   /* Sin el script (o antes de que hidrate) no hay entrada: solo flotan. */
   .dcsg__panel:not(.dcsg--js) .dcsg__sello { animation: dcsgFlota calc(6.4s + var(--i, 0) * .45s) ease-in-out calc(var(--i, 0) * .37s) infinite; animation-play-state: var(--flota, running); }
 }
+
+/* ── Safari de iPad/iPhone: versión ESTÁTICA (11-oct-2026, ws1-t10) ──────
+   `dcsg--estatico` lo pone globo-seguridad-vivo.tsx en WebKit táctil. Ahí la
+   franja parpadeaba al hacer scroll: iOS desplaza la página en otro proceso y
+   pinta las capas compuestas con retraso, y el panel tenía 19 animaciones de
+   capa (sellos flotando, cometas de 724 px, ondas, destellos, escudo), un
+   canvas acelerado y una entrada que promovía y degradaba capas justo al
+   pasar. En esta versión NADA se anima ni cambia de capa: el globo es una
+   imagen fija (misma caja que el canvas), los sellos están quietos desde el
+   principio y solo responden al toque (descripción, medalla, línea). Va al
+   final del archivo para pisar las reglas de movimiento de arriba. */
+.dcsg__panel.dcsg--estatico .dcsg__meridiano,
+.dcsg__panel.dcsg--estatico .dcsg__onda,
+.dcsg__panel.dcsg--estatico .dcsg__escudo,
+.dcsg__panel.dcsg--estatico .dcsg__medalla::before,
+.dcsg__panel.dcsg--estatico .dcsg__sello,
+.dcsg__panel.dcsg--estatico .dcsg__lazo .dcsg__lazo-pulso { animation: none; }
+.dcsg__panel.dcsg--estatico .dcsg__cometa { display: none; }
+.dcsg__panel.dcsg--estatico .dcsg__lienzo,
+.dcsg__panel.dcsg--estatico .dcsg__malla,
+.dcsg__panel.dcsg--estatico .dcsg__globo,
+.dcsg__panel.dcsg--estatico .dcsg__orbita { transition: none; }

@@ -26,6 +26,7 @@
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
     "test:module-purchase": "tsx --test src/lib/marketplace/module-purchase-core.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
+    "test:franja-seguridad": "tsx --test src/components/public/landing/sales/v2/__tests__/franja-seguridad-parpadeo.test.ts src/components/public/landing/sales/v2/__tests__/globo-seguridad-estatico.test.ts",
     "test:agenda-ruta-vieja": "tsx --test src/lib/agenda/__tests__/ruta-agenda-vieja.test.ts",
     "test:xrays-tipo": "tsx --test --experimental-test-module-mocks src/app/api/xrays/__tests__/cambiar-tipo.test.ts",
     "test:walk-in-permisos": "tsx --test --experimental-test-module-mocks src/app/api/walk-in/__tests__/permisos.test.ts",

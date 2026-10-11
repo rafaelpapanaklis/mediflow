@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GloboSeguridad } from "./globo-seguridad-motor";
+import { RUTA_GLOBO_ESTATICO } from "./globo-seguridad-ruta";
 
 /**
  * La parte viva de la franja de seguridad: el <canvas> del globo y los tres
@@ -28,21 +29,49 @@ import type { GloboSeguridad } from "./globo-seguridad-motor";
  * Con `prefers-reduced-motion` no hay entrada ni animación: el motor pinta UN
  * cuadro fijo del globo y se queda quieto. Las descripciones siguen
  * funcionando igual, sin transiciones.
+ *
+ * ── Safari de iPad/iPhone: versión ESTÁTICA (11-oct-2026, ws1-t10) ──
+ * En WebKit táctil la franja parpadeaba al hacer scroll: iOS desplaza la
+ * página en otro proceso y pinta las capas compuestas con retraso, y aquí
+ * había 19 animaciones de capa (sellos flotando, cometas de 724 px, ondas,
+ * destellos, escudo), un canvas acelerado y una entrada que promovía y
+ * degradaba capas justo al pasar. Ahí no se monta el motor ni se anima nada
+ * (`dcsg--estatico`, franja-seguridad.css): el globo es una IMAGEN del mismo
+ * cuadro (public/landing/seguridad/globo.svg, generada del mismo mapa) y los
+ * sellos siguen abriendo su descripción al tocarlos. Escritorio, Android y el
+ * Safari de Mac quedan igual que antes.
  */
+
+/**
+ * ¿Es Safari de iPad/iPhone (o cualquier navegador de iOS: todos son WebKit)?
+ * iPadOS se presenta como Mac en el user-agent y en `platform`, así que se mira
+ * el motor (`vendor` Apple) y que haya pantalla táctil: `maxTouchPoints` o,
+ * si el navegador no lo informa, `(any-pointer: coarse)`. El Safari de Mac
+ * (sin pantalla táctil) y Chrome/Firefox (vendor Google o vacío) quedan fuera.
+ */
+export function esWebKitTactil(nav: Pick<Navigator, "vendor" | "maxTouchPoints">, coincide: (q: string) => boolean): boolean {
+  if (!/Apple/.test(nav.vendor || "")) return false;
+  if (nav.maxTouchPoints > 1) return true;
+  return coincide("(any-pointer: coarse)");
+}
+
 export function GloboSeguridadVivo() {
-  const ref = useRef<HTMLCanvasElement>(null);
+  const ref = useRef<HTMLCanvasElement | HTMLImageElement>(null);
+  const [estatico, setEstatico] = useState(false);
 
   useEffect(() => {
-    const canvas = ref.current;
-    const marco = canvas?.parentElement;
-    const panel = canvas?.closest<HTMLElement>(".dcsg__panel");
-    const escena = canvas?.closest<HTMLElement>(".dcsg__escena");
-    if (!canvas || !marco || !panel || !escena || typeof IntersectionObserver === "undefined") return;
+    const lienzo = ref.current;
+    const marco = lienzo?.parentElement;
+    const panel = lienzo?.closest<HTMLElement>(".dcsg__panel");
+    const escena = lienzo?.closest<HTMLElement>(".dcsg__escena");
+    if (!lienzo || !marco || !panel || !escena || typeof IntersectionObserver === "undefined") return;
 
     const medio = (q: string) => typeof window.matchMedia === "function" && window.matchMedia(q).matches;
     const quieto = medio("(prefers-reduced-motion: reduce)");
     // En pantallas táctiles el globo va a ~30 cuadros por segundo (batería).
     const suave = medio("(pointer: coarse)");
+    // Red de seguridad para Safari de iPad/iPhone: imagen fija, sin animaciones.
+    const fijo = esWebKitTactil(navigator, medio);
     let globo: GloboSeguridad | null = null;
     let desmontado = false;
     let aLaVista = false;
@@ -53,32 +82,41 @@ export function GloboSeguridadVivo() {
       else globo.parar();
     };
 
-    // 1 · Carga perezosa (una sola vez).
-    const carga = new IntersectionObserver(
-      (entradas) => {
-        if (!entradas.some((e) => e.isIntersecting)) return;
-        carga.disconnect();
-        import("./globo-seguridad-motor")
-          .then((m) => {
-            if (desmontado) return;
-            globo = m.crearGlobo(canvas, { quieto, suave, alListo: () => marco.classList.add("is-vivo") });
-            animar();
-          })
-          .catch(() => {
-            /* sin motor se queda el globo SVG */
-          });
-      },
-      { rootMargin: "300px 0px" },
-    );
-    carga.observe(marco);
+    let carga: IntersectionObserver | null = null;
+    let vista: IntersectionObserver | null = null;
+    if (fijo) {
+      panel.classList.add("dcsg--estatico");
+      setEstatico(true);
+    } else if (lienzo instanceof HTMLCanvasElement) {
+      const canvas = lienzo;
+      // 1 · Carga perezosa (una sola vez).
+      const cargador = new IntersectionObserver(
+        (entradas) => {
+          if (!entradas.some((e) => e.isIntersecting)) return;
+          cargador.disconnect();
+          import("./globo-seguridad-motor")
+            .then((m) => {
+              if (desmontado) return;
+              globo = m.crearGlobo(canvas, { quieto, suave, alListo: () => marco.classList.add("is-vivo") });
+              animar();
+            })
+            .catch(() => {
+              /* sin motor se queda el globo SVG */
+            });
+        },
+        { rootMargin: "300px 0px" },
+      );
+      cargador.observe(marco);
+      carga = cargador;
 
-    // 2 · Pausa fuera de pantalla o con la pestaña oculta.
-    const vista = new IntersectionObserver((entradas) => {
-      aLaVista = entradas[entradas.length - 1].isIntersecting;
-      animar();
-    });
-    vista.observe(marco);
-    document.addEventListener("visibilitychange", animar);
+      // 2 · Pausa fuera de pantalla o con la pestaña oculta.
+      vista = new IntersectionObserver((entradas) => {
+        aLaVista = entradas[entradas.length - 1].isIntersecting;
+        animar();
+      });
+      vista.observe(marco);
+      document.addEventListener("visibilitychange", animar);
+    }
 
     // 4 · Descripciones al tocar. `dcsg--tactil` apaga el `:hover` del CSS en
     // dispositivos sin ratón, donde un toque lo dejaría «pegado».
@@ -117,9 +155,10 @@ export function GloboSeguridadVivo() {
     document.addEventListener("pointercancel", alCancelar, { passive: true });
     document.addEventListener("keydown", alTeclear);
 
-    // 3 · Entrada al hacer scroll.
+    // 3 · Entrada al hacer scroll (no en la versión estática: ahí todo se ve
+    // desde el principio y ninguna capa cambia al pasar).
     let entrada: IntersectionObserver | null = null;
-    if (!quieto) {
+    if (!quieto && !fijo) {
       // El estado inicial (oculto) lo pone este script: sin JS todo se ve.
       panel.classList.add("dcsg--js");
       entrada = new IntersectionObserver(
@@ -138,8 +177,8 @@ export function GloboSeguridadVivo() {
 
     return () => {
       desmontado = true;
-      carga.disconnect();
-      vista.disconnect();
+      carga?.disconnect();
+      vista?.disconnect();
       entrada?.disconnect();
       document.removeEventListener("visibilitychange", animar);
       document.removeEventListener("pointerdown", alApoyar);
@@ -150,5 +189,30 @@ export function GloboSeguridadVivo() {
     };
   }, []);
 
-  return <canvas ref={ref} className="dcsg__lienzo" aria-hidden="true" />;
+  // La imagen ya estaba en caché: `load` pudo dispararse antes de que React
+  // enganchara `onLoad`.
+  useEffect(() => {
+    const img = ref.current;
+    if (estatico && img instanceof HTMLImageElement && img.complete && img.naturalWidth) img.parentElement?.classList.add("is-vivo");
+  }, [estatico]);
+
+  if (estatico) {
+    return (
+      // SVG decorativo de 17 KB que solo pide Safari de iPad/iPhone: next/image
+      // no optimiza SVG y metería su propio wrapper en el globo.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        ref={ref as React.RefObject<HTMLImageElement>}
+        className="dcsg__lienzo"
+        src={RUTA_GLOBO_ESTATICO}
+        alt=""
+        aria-hidden="true"
+        width={240}
+        height={240}
+        decoding="async"
+        onLoad={(e) => e.currentTarget.parentElement?.classList.add("is-vivo")}
+      />
+    );
+  }
+  return <canvas ref={ref as React.RefObject<HTMLCanvasElement>} className="dcsg__lienzo" aria-hidden="true" />;
 }
