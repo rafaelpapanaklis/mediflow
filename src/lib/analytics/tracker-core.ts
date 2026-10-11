@@ -459,6 +459,19 @@ function emitPageLeave(): void {
   }
 }
 
+/**
+ * Evento propio con nombre (p. ej. «paso:clic_empezar», lo manda embudo.ts):
+ * queda en analytics_events como type=custom en la ruta actual. Respeta
+ * isTrackingIgnored vía enqueue y no hace nada si el tracker no arrancó.
+ */
+export function custom(name: string): void {
+  if (!started || typeof window === "undefined") return;
+  markActivity();
+  sid = ensureSession();
+  enqueue({ type: "custom", name: name.slice(0, 80), path: window.location.pathname, t: now() });
+  flush(false);
+}
+
 export function pageview(path: string): void {
   if (!started) return;
   markActivity(); // navegar ES interactuar: re-arma el latido si estaba callado
