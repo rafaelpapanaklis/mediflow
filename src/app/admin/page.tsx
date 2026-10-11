@@ -12,6 +12,7 @@ import {
   construirPortada, rankingActividad, DIAS_ACTIVIDAD, MINUTOS_EN_LINEA,
   ACTIVIDAD_CERO, type ActividadClinica, type FilaPortada,
 } from "@/components/admin/portada/atencion-core";
+import { TarjetaEmbudo } from "@/components/admin/portada/tarjeta-embudo";
 import { contarTiles, unirPendientes } from "@/components/admin/portada/pendientes";
 import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import { contarConEspera, obtenerRedis } from "@/lib/presencia/presencia-store";
@@ -417,5 +418,10 @@ async function renderAdminDashboard() {
     avisos,
   };
 
-  return <PortadaVista datos={datos} now={now} />;
+  return (
+    <>
+      <PortadaVista datos={datos} now={now} />
+      <TarjetaEmbudo />
+    </>
+  );
 }
