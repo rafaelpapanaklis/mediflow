@@ -1069,10 +1069,56 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
     .dcv4-price__card { display: grid; grid-template-rows: subgrid; grid-row: span var(--rows, 22); align-content: start; }
     .dcv4-price__feats { display: contents; }
     .dcv4-price__all { justify-self: start; align-self: start; }
-    .dcv4-price__spacer { grid-row: -3 / -2; min-height: 12px; }
-    .dcv4-price__cta { grid-row: -2 / -1; margin-top: 0; align-self: end; }
+    /* 11-oct-2026 (ws1-t4): tres pistas finales —espaciador, botón y enlace
+       de WhatsApp— para que botón y enlace queden a la misma altura en las tres. */
+    .dcv4-price__spacer { grid-row: -4 / -3; min-height: 12px; }
+    .dcv4-price__cta { grid-row: -3 / -2; margin-top: 0; align-self: end; }
+    .dcv4-price__wa { grid-row: -2 / -1; }
   }
 }
+
+/* ── WhatsApp desde arriba (11-oct-2026, ws1-t4, encargo de ws7) ───────────
+   Hero: el secundario de vidrio lleva el glifo en el verde de marca (#25D366)
+   —sobre el fondo oscuro el ícono sí contrasta; el texto sigue blanco—.
+   Tarjetas: enlace de texto bajo el botón, en el verde oscuro de los CTA
+   (#128C7E: el de marca con texto no llega a 2:1 sobre blanco); en la tarjeta
+   destacada (fondo azul noche) pasa al verde claro de sus palomitas. */
+.dcv4-hero__wa svg { color: #25D366; }
+.dcv4-price__wa { display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px; min-height: 36px; padding: 6px 10px; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: #128C7E; text-decoration: none; transition: background .16s, color .16s; }
+.dcv4-price__wa:hover { background: #ecfdf5; color: #0e7566; }
+.dcv4-price__wa:focus-visible { outline: 2px solid #128C7E; outline-offset: 2px; }
+.dcv4-price__card.is-featured .dcv4-price__wa { color: #86efac; }
+.dcv4-price__card.is-featured .dcv4-price__wa:hover { background: rgba(74,222,128,.12); color: #bbf7d0; }
+.dcv4-price__card.is-featured .dcv4-price__wa:focus-visible { outline-color: #86efac; }
+
+/* Barra fija de celular (barra-movil.tsx). Solo bajo 760 px: en escritorio
+   ni la barra ni su espaciador existen. Entra deslizando desde abajo cuando el
+   hero sale de pantalla (`data-visible`); `translateY` y no `display` para que
+   la transición exista y para que la barra oculta no reciba toques.
+   `env(safe-area-inset-bottom)`: en iPhone con barra de inicio el borde
+   inferior queda detrás del gesto; se suma al padding. */
+.dcv4-barra, .dcv4-barra__hueco { display: none; }
+@media (max-width: 760px) {
+  .dcv4-barra {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    display: flex; gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: rgba(255,255,255,.94);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -12px 32px -18px rgba(2,6,23,.35);
+    transform: translateY(110%);
+    transition: transform .26s ease;
+    pointer-events: none;
+  }
+  .dcv4-barra[data-visible] { transform: translateY(0); pointer-events: auto; }
+  .dcv4-barra__btn { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 12px; border-radius: 12px; font-size: 15.5px; font-weight: 700; }
+  /* Sin hover en táctil: los `translateY(-2px)` de los CTA no aplican aquí. */
+  .dcv4-barra__btn:hover { transform: none; }
+  /* Espaciador en flujo: el footer no queda debajo de la barra. */
+  .dcv4-barra__hueco { display: block; height: calc(68px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .dcv4-barra { transition: none; } }
 
 /* Píldoras de confianza: vidrio claro con la ✓ en ficha verde. */
 

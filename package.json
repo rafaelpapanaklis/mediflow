@@ -297,6 +297,8 @@
     "test:meta-capi": "tsx --test src/lib/analytics/__tests__/meta-capi.test.ts",
     "test:embudo": "tsx --test src/lib/analytics/__tests__/embudo.test.ts",
     "test:embudo-admin": "tsx --test src/lib/admin/__tests__/embudo-captacion.test.ts",
+    "//test:whatsapp-portada": "ws1-t4: WhatsApp desde arriba (hero, tarjetas, barra móvil, banda): número en un solo sitio, mensaje por origen, registrarPaso una vez por clic y la decisión LiveChat/barra en móvil. Con el tsconfig de pruebas porque los botones son JSX.",
+    "test:whatsapp-portada": "tsx --test --tsconfig tsconfig.test.json src/components/public/landing/sales/v2/__tests__/whatsapp-embudo.test.ts",
     "//test:meta-origen": "ws1-t10: clic de Meta (fbclid → cookie dc_meta, fbc/fbp), UTM del primer y del último toque, guardado en el alta con tolerancia a columnas/tabla sin crear, origen de la clínica en /admin y el SQL ws1-t10-meta-origen.sql. Sin Meta ni base reales.",
     "test:meta-origen": "tsx --test src/lib/ads/__tests__/meta-origen.test.ts",
     "test:analitica-sin-portal": "tsx --test src/lib/analytics/sin-portal.test.ts",

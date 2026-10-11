@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { CSSProperties, ReactNode } from "react";
-import { HERO } from "./landing-data";
+import { HERO, WHATSAPP_CTA } from "./landing-data";
+import { BotonWhatsapp, EnlaceEmpezar } from "./cta-embudo";
 import { HeroStage } from "./hero-stage";
 import { IconoPanel } from "./icono-panel";
 import { instrumentSans, materialSymbols } from "@/fonts/menu";
@@ -226,9 +227,21 @@ export function Hero({ firstMonthFrom }: { firstMonthFrom: string }) {
 
         <p className="dcv4-pretty" style={{ margin: "18px auto 0", fontSize: "clamp(16px,1.55vw,19px)", lineHeight: 1.6, color: "#cbd5e1", maxWidth: "44ch" }}>{HERO.subtitle}</p>
 
-        <div style={{ marginTop: 26, display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
-          <a href="#precios" className="dcv2-btn-primary" style={{ ...ctaBase, boxShadow: "0 16px 34px -12px rgba(37,99,235,0.9)" }}>{HERO.ctaPrimary}</a>
-          <a href="#precios" className="dcv4-btn-glass" style={{ ...ctaBase, background: "rgba(255,255,255,0.06)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)" }}>{HERO.ctaSecondary}</a>
+        {/* 11-oct-2026 (ws1-t4, encargo de ws7, punto 1a): el principal no
+            cambia; el secundario pasa de «Ver precios» (iba al MISMO ancla
+            que el principal) a WhatsApp, con el glifo en verde de marca sobre
+            el vidrio. Ambos miden el clic (cta-embudo.tsx). */}
+        <div className="dcv4-hero__ctas" style={{ marginTop: 26, display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
+          <EnlaceEmpezar href="#precios" origen="hero" className="dcv2-btn-primary" style={{ ...ctaBase, boxShadow: "0 16px 34px -12px rgba(37,99,235,0.9)" }}>
+            {HERO.ctaPrimary}
+          </EnlaceEmpezar>
+          <BotonWhatsapp
+            origen="hero"
+            className="dcv4-btn-glass dcv4-hero__wa"
+            style={{ ...ctaBase, gap: 9, background: "rgba(255,255,255,0.06)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)" }}
+          >
+            {WHATSAPP_CTA.heroButton}
+          </BotonWhatsapp>
         </div>
 
         <ul style={{ marginTop: 20, display: "flex", flexWrap: "wrap", gap: "8px 20px", justifyContent: "center", fontSize: 14, color: "#cbd5e1" }}>

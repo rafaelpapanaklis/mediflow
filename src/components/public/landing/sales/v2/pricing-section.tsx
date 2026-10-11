@@ -2,7 +2,9 @@
 
 import { useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { PRICING_COPY, fmtMXN } from "./landing-data";
+import { registrarPaso } from "@/lib/analytics/embudo";
+import { PRICING_COPY, WHATSAPP_CTA, fmtMXN } from "./landing-data";
+import { BotonWhatsapp } from "./cta-embudo";
 import type { PlanCard } from "./plan-cards";
 
 /**
@@ -65,9 +67,10 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
   // altura en las tres y los botones en la misma línea. Pistas por tarjeta =
   // 8 bloques de cabecera (nombre, eslogan, precio, línea, sin permanencia,
   // cupos, chip, «Qué incluye») + tantas filas como la lista más larga +
-  // espaciador + botón. El CSS coloca espaciador y botón en las dos últimas.
+  // espaciador + botón + enlace de WhatsApp (11-oct-2026, ws1-t4). El CSS
+  // coloca espaciador, botón y enlace en las TRES últimas.
   const HEAD_TRACKS = 8;
-  const rowTracks = HEAD_TRACKS + Math.max(0, ...cards.map((c) => c.features.length)) + 2;
+  const rowTracks = HEAD_TRACKS + Math.max(0, ...cards.map((c) => c.features.length)) + 3;
 
   return (
     <section id="precios" className="dcv4-price" style={{ scrollMarginTop: 72 }}>
@@ -174,11 +177,24 @@ export function PricingSection({ cards, firstMonthFrom, yearlyDiscountPct }: { c
 
               <span aria-hidden="true" className="dcv4-price__spacer" />
 
-              {/* precio dinámico: plan_configs */}
-              <Link href={`/signup?plan=${p.signupParam}&billing=${anual ? "annual" : "monthly"}`} className="dcv2-btn-plan dcv4-price__cta">
+              {/* precio dinámico: plan_configs. El clic es `clic_empezar` con
+                  origen precio y el plan (embudo.ts, ws1-t9); no bloquea la
+                  navegación. */}
+              <Link
+                href={`/signup?plan=${p.signupParam}&billing=${anual ? "annual" : "monthly"}`}
+                className="dcv2-btn-plan dcv4-price__cta"
+                onClick={() => registrarPaso("clic_empezar", { origen: "precio", plan: p.id })}
+              >
                 <span>{PRICING_COPY.cta}</span>
                 <span className="dcv4-price__ctasub">{anual ? `Un cobro al año: ${fmtMXN(p.yearly)} MXN` : `Empieza hoy por solo ${fmtMXN(p.firstMonth)} MXN`}</span>
               </Link>
+
+              {/* 11-oct-2026 (ws1-t4, encargo de ws7, punto 1a): debajo de
+                  contratar, la salida fácil para quien duda. Mensaje
+                  precargado con el nombre del plan; `whatsapp_clic` origen precio. */}
+              <BotonWhatsapp origen="precio" plan={p.id} planNombre={p.name} className="dcv4-price__wa" glyphSize={15}>
+                {WHATSAPP_CTA.priceLink}
+              </BotonWhatsapp>
             </article>
           ))}
         </div>

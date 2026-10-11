@@ -3,7 +3,7 @@ import { inter } from "@/fonts/inter-400-800";
 import {
   Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta,
   Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, LiveChat,
-  PanelVivoSection, WhatsappMpSection, FranjaSeguridad,
+  PanelVivoSection, WhatsappMpSection, FranjaSeguridad, BarraMovil,
 } from "@/components/public/landing/sales/v2";
 import { buildPlanCards, cheapestFirstMonthLabel, headlineYearlyDiscount } from "@/components/public/landing/sales/v2/plan-cards";
 import { FAQ_ITEMS } from "@/components/public/landing/sales/v2/landing-data";
@@ -166,6 +166,11 @@ export default async function HomePage() {
         <FinalCta firstMonthFrom={firstMonthFrom} />
       </main>
       <SalesFooter portada />
+      {/* 11-oct-2026 (ws1-t4, encargo de ws7): barra fija «Empezar · WhatsApp»
+          solo en celular; va después del footer para que su espaciador quede
+          al final del flujo. En móvil oculta el lanzador de LiveChat mientras
+          se ve (barra-movil-logica.ts explica por qué). */}
+      <BarraMovil />
       <ScrollReveal />
       <LiveChat />
       <script

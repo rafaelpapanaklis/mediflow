@@ -10,6 +10,7 @@
  */
 
 import { PRODUCTO_MODULES, PRODUCTO_SLUGS } from '@/lib/producto/data';
+import type { OrigenBoton } from '@/lib/analytics/embudo';
 import type { ProductoSlug } from '@/lib/producto/types';
 
 export const NAV = {
@@ -230,12 +231,20 @@ export const SEGURIDAD: {
 };
 
 /**
- * Banda de contacto entre precios y la franja de seguridad (whatsapp-cta.tsx).
+ * WhatsApp de ventas: el ÚNICO sitio con el número (11-oct-2026, ws1-t4, punto
+ * 1 del encargo de ws7). Lo usan el hero, cada tarjeta de precio, la barra fija
+ * de móvil, la banda de contacto (whatsapp-cta.tsx) y el footer. Rafael lo
+ * cambiará por uno de WhatsApp Business: se cambia AQUÍ y en ningún otro lado.
  *
  * `numberE164` va SIN "+" porque es lo que espera wa.me (misma convención que
  * account-manager-card.tsx y los templates de mini-web); `numberDisplay` es el
  * mismo número ya formateado para leerlo (lo usa el footer; la banda de
  * contacto ya no lo enseña desde el 7-oct-2026, pedido de Rafael).
+ *
+ * `mensajes`: texto precargado DISTINTO por botón, para que quien contesta
+ * sepa de dónde viene el chat sin preguntar. El de `precio` lleva el nombre
+ * del plan (enlaceWhatsapp lo inyecta). Las claves son los orígenes del embudo
+ * (`OrigenBoton` de @/lib/analytics/embudo): el mismo valor viaja a GA4/Meta.
  *
  * El copy no promete tiempos de respuesta: del otro lado contesta una persona
  * en horario de oficina, no un bot.
@@ -245,12 +254,37 @@ export const WHATSAPP_CTA = {
   title: '¿Tienes dudas? Escríbenos por WhatsApp',
   subtitle: 'Cuéntanos de tu clínica y te ayudamos a decidir si DaleControl es para ti. Sin compromiso.',
   button: 'Chatear por WhatsApp',
+  /** Secundario del hero (sustituye a «Ver precios», que iba al mismo ancla que el principal). */
+  heroButton: 'Escríbenos por WhatsApp',
+  /** Enlace bajo el botón de contratar de cada tarjeta de precio. */
+  priceLink: '¿Dudas? Pregúntanos por WhatsApp',
+  /** Barra fija de móvil: dos botones cortos. */
+  barStart: 'Empezar',
+  barWhatsapp: 'WhatsApp',
   // La banda de contacto ya NO lo enseña (7-oct-2026, pedido de Rafael); lo
   // sigue usando el footer (`contact`, abajo).
   numberDisplay: '+52 999 260 2093',
   numberE164: '529992602093',
-  prefilledText: 'Hola, me interesa DaleControl para mi clínica dental. ¿Me pueden dar más información?',
+  mensajes: {
+    hero: 'Hola, estoy viendo DaleControl y quiero saber más para mi clínica dental.',
+    precio: 'Hola, estoy viendo los planes de DaleControl y tengo una duda sobre el plan {plan}.',
+    barra_movil: 'Hola, me interesa DaleControl para mi clínica dental. ¿Me pueden orientar?',
+    banda: 'Hola, me interesa DaleControl para mi clínica dental. ¿Me pueden dar más información?',
+  } satisfies Record<OrigenBoton, string>,
 };
+
+/**
+ * Link de wa.me con el mensaje precargado del origen. Puro: lo prueban los
+ * tests sin navegador. En `precio` sin plan se quita el «del plan {plan}» para
+ * no mandar un hueco.
+ */
+export function enlaceWhatsapp(origen: OrigenBoton, plan?: string): string {
+  let texto: string = WHATSAPP_CTA.mensajes[origen];
+  if (origen === 'precio') {
+    texto = plan ? texto.replace('{plan}', plan) : texto.replace(' sobre el plan {plan}', '');
+  }
+  return `https://wa.me/${WHATSAPP_CTA.numberE164}?text=${encodeURIComponent(texto)}`;
+}
 
 export const MODULES_TRIO = {
   title: 'Y también dominas los números, tu equipo y tu presencia en línea',
