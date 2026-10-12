@@ -14,8 +14,12 @@ import { cssEnLinea } from "../css-en-linea";
 
 const CSS = "@import url('https://fonts.googleapis.com/css2?family=Fraunces');";
 
-test("con hijo de texto, React escapa la comilla del @import (la causa)", () => {
-  assert.match(renderToString(<style>{CSS}</style>), /&#x27;/);
+// React 18 escapaba la comilla de un hijo de texto de <style> (&#x27;): esa era la
+// causa. React 19 (Next 16) ya no la escapa en el render del servidor, así que el
+// riesgo original desapareció; cssEnLinea se queda (y la prueba de abajo la fija)
+// porque sigue siendo la forma que no depende de la versión de React.
+test("React 19: un hijo de texto de <style> ya no escapa la comilla del @import", () => {
+  assert.doesNotMatch(renderToString(<style>{CSS}</style>), /&#x27;/);
 });
 
 test("con cssEnLinea el @import llega intacto", () => {

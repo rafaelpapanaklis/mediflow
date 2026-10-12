@@ -33,7 +33,7 @@ test("en un route handler la escribe firmada, httpOnly, para todo el sitio y por
   escritas.length = 0;
   const { resembrarActiveClinicCookie, ACTIVE_CLINIC_COOKIE } = await m();
   const { unpackClinicCookie } = await core();
-  assert.equal(resembrarActiveClinicCookie("cli_a"), true);
+  assert.equal(await resembrarActiveClinicCookie("cli_a"), true);
   assert.equal(escritas.length, 1);
   assert.equal(escritas[0].nombre, ACTIVE_CLINIC_COOKIE);
   assert.equal(unpackClinicCookie(escritas[0].valor), "cli_a", "la firma vale");
@@ -47,6 +47,6 @@ test("en un server component (no se puede escribir) devuelve false y no lanza", 
   puedeEscribir = false;
   escritas.length = 0;
   const { resembrarActiveClinicCookie } = await m();
-  assert.equal(resembrarActiveClinicCookie("cli_a"), false);
+  assert.equal(await resembrarActiveClinicCookie("cli_a"), false);
   assert.equal(escritas.length, 0);
 });
