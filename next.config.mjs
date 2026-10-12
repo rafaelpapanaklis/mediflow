@@ -39,11 +39,8 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // El lint corre como gate manual (`npm run lint`); no se acopla a `next build`
-  // para no romper la build de produccion con deuda de lint preexistente.
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Next 16 ya no lee `eslint` de este archivo ni corre el lint en `next build`:
+  // el lint es un gate manual (`npm run lint` = eslint directo).
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
@@ -53,13 +50,14 @@ const nextConfig = {
   // SERVIDOR con fs.readFileSync(__dirname + "/*.wasm"). Al no haber import estatico,
   // Next no los detecta como dependencia y los deja fuera del bundle de la funcion en
   // Vercel -> el endpoint /lite no puede decodificar CBCT comprimido (0 cortes, 500).
-  // Los incluimos explicitamente en el trazado de archivos de ESA funcion (Next 14).
+  // Los incluimos explicitamente en el trazado de archivos de ESA funcion. Desde
+  // Next 15 es una opcion de primer nivel (en 14 vivia bajo `experimental`).
+  outputFileTracingIncludes: {
+    "/api/patients/[id]/dicom-set/[fileId]/lite": [
+      "./node_modules/@cornerstonejs/**/*.wasm",
+    ],
+  },
   experimental: {
-    outputFileTracingIncludes: {
-      "/api/patients/[id]/dicom-set/[fileId]/lite": [
-        "./node_modules/@cornerstonejs/**/*.wasm",
-      ],
-    },
     // Las fotos clínicas (uploadClinicalPhotoAction, ficha v3) viajan como
     // server action con MAX_PHOTO_BYTES = 25MB; el default de Next (1MB)
     // rechazaba cualquier foto real de cámara (afectaba también a las
@@ -69,10 +67,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "30mb",
     },
-    // src/instrumentation.ts: al arrancar, apaga los cargadores HEIF y .vips
-    // de sharp (avisos de libheif/libvips sin parche en 0.34). En Next 14 el
-    // archivo no se ejecuta sin esta bandera.
-    instrumentationHook: true,
+    // (src/instrumentation.ts —apaga los cargadores HEIF y .vips de sharp— ya
+    // no necesita `instrumentationHook`: desde Next 15 corre siempre.)
   },
   // Los codecs DICOM comprimidos (@cornerstonejs/dicom-codec -> glue Emscripten de
   // OpenJPEG/CharLS/libjpeg-turbo, que descomprime JPEG2000/JPEG-LS/HTJ2K/RLE en el

@@ -64,11 +64,27 @@ function nodeOptionsConHeap(actual, heapMb) {
 
 module.exports = { memoriaDeLaMaquina, heapParaMaquina, nodeOptionsConHeap };
 
+/**
+ * Argumentos de `next build`. Next 16 compila con Turbopack por defecto y, si
+ * next.config.mjs trae una función `webpack` (la trae: resolve.fallback de fs/path
+ * para el visor DICOM y `cache = false`), el build FALLA a propósito. Mientras la
+ * migración a Turbopack no se valide, se fija `--webpack`; si quien llama ya
+ * pasó `--webpack` o `--turbopack`, se respeta.
+ */
+function argumentosDeBuild(argv) {
+  const dados = argv || [];
+  return dados.some((a) => a === "--webpack" || a === "--turbopack" || a === "--turbo")
+    ? dados
+    : ["--webpack", ...dados];
+}
+
+module.exports.argumentosDeBuild = argumentosDeBuild;
+
 if (require.main === module) {
   const bytes = memoriaDeLaMaquina();
   const NODE_OPTIONS = nodeOptionsConHeap(process.env.NODE_OPTIONS, heapParaMaquina(bytes));
   console.log(`[build] memoria ${(bytes / 2 ** 30).toFixed(1)} GB → NODE_OPTIONS="${NODE_OPTIONS}"`);
-  const r = spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...process.argv.slice(2)], {
+  const r = spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...argumentosDeBuild(process.argv.slice(2))], {
     stdio: "inherit",
     env: { ...process.env, NODE_OPTIONS },
   });

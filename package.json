@@ -7,7 +7,7 @@
     "//build": "prisma generate va SOLO aquí, NO en postinstall: Vercel restaura node_modules de caché y entonces npm se salta postinstall (cliente Prisma viejo). En local, tras un npm install limpio: npm run build o npx prisma generate.",
     "build": "prisma generate && node scripts/build-con-memoria.cjs",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "//typecheck": "GATE DE TIPOS (~4 min). next build NO falla con tipos rotos en __tests__ aunque los meta en su programa; este sí. Correr ANTES del build.",
     "typecheck": "tsc --noEmit",
     "seed": "tsx prisma/seed.ts",
