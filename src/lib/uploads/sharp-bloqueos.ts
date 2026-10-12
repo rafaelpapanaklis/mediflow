@@ -3,10 +3,12 @@ import sharp from "sharp";
 // ═══════════════════════════════════════════════════════════════════════════
 // Cargadores de libvips que sharp NO debe usar (ws1-t12, auditoría H4).
 //
-// sharp 0.34.5 trae libheif y libvips con avisos que solo se arreglan en
-// sharp 0.35 (cambios incompatibles, tarea aparte): GHSA-rgj7 (libheif, con
-// posible ejecución de código) y GHSA-f88m (libvips). La mitigación oficial sin
-// cambiar de versión es apagar esos cargadores:
+// sharp 0.34.5 traía libheif y libvips con avisos que solo se arreglan en
+// sharp 0.35: GHSA-rgj7 (libheif, con posible ejecución de código) y GHSA-f88m
+// (libvips). Desde el 12-oct-2026 (ws1-t5, Next 16) el repo usa sharp 0.35.5, que
+// ya trae los parches; el bloqueo se MANTIENE como defensa en profundidad (nadie
+// sube AVIF/HEIF ni .vips, y `validarArchivo` ya los rechaza). La mitigación
+// oficial es apagar esos cargadores:
 //
 //  · VipsForeignLoadHeif — AVIF/HEIF. El HEIC de iPhone ya no se decodificaba
 //    (el libheif empaquetado no trae HEVC); AVIF solo lo admitía la subida de
