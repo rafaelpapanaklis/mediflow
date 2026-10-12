@@ -67,6 +67,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "30mb",
     },
+    // Solo aplica con Turbopack (hoy no se usa); ver el bloque `turbopack` más abajo.
+    turbopackFileSystemCacheForBuild: false,
     // Caché del router en el cliente. Next 15 bajó `dynamic` de 30 s a 0: cada clic
     // en un <Link> a una página dinámica del panel volvería a pedir la página (y sus
     // consultas a la base) aunque se abriera hace 5 s. El pooler ya va justo
@@ -112,6 +114,9 @@ const nextConfig = {
   // función `webpack` de arriba, para poder cambiar de empaquetador quitando solo el
   // `--webpack` del lanzador. Medido el 12-oct-2026: build en frío 435 s con
   // Turbopack contra 890 s con webpack (misma máquina de 56 CPU).
+  // (Con Turbopack, además, `experimental.turbopackFileSystemCacheForBuild: false`:
+  // medido con 8 CPU / 16 GB, la caché en disco del build empuja la memoria del
+  // contenedor hasta el tope —16.0 GB— y sin ella queda en 12.9 GB.)
   turbopack: {
     resolveAlias: {
       fs: { browser: "./src/lib/modulo-vacio.ts" },
