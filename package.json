@@ -710,6 +710,9 @@
     "xmlbuilder2": "^4.0.3",
     "zod": "^3.23.8"
   },
+  "engines": {
+    "node": "22.x"
+  },
   "overrides": {
     "recharts": {
       "react-is": "^19.3.0"
