@@ -82,6 +82,7 @@ export default async function TreatmentsPage() {
       clinicSlug={user.clinic.slug}
       canEdit={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "treatments.edit")}
       rediseno={rediseno}
+      timezone={user.clinic.timezone ?? null}
     />
   );
 }

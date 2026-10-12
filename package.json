@@ -68,6 +68,7 @@
     "test:orto-acceso": "tsx --test src/lib/orthodontics/__tests__/acceso-doctor.test.ts",
     "test:equipo-modulos": "tsx --test src/lib/team/__tests__/modulos-especialidades.test.ts",
     "test:permissions": "tsx --test src/lib/auth/__tests__/permissions-matrix.test.ts",
+    "test:fechas-visibles": "tsx --test src/lib/__tests__/fechas-visibles.test.ts",
     "test:use-server": "node --test scripts/use-server-guard.test.cjs",
     "test:next16-asincronas": "tsx --test src/lib/auth/__tests__/apis-asincronas-next16.test.ts",
     "test:menu-dos-niveles": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/menu-dos-niveles.test.ts",

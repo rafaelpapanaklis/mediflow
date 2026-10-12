@@ -106,10 +106,11 @@ test("la cabecera de la ficha pinta la próxima cita con `fechaCorta`, con y sin
 });
 
 test("el portal del paciente trata la fecha sin hora como día de calendario", () => {
+  // ws1-t5 (F2): el formateo vive en @/lib/fechas-visibles (zona explícita).
   const portal = sinComentarios(leer("app/portal/[token]/portal-client.tsx"));
-  const i = portal.indexOf("function formatDate");
-  assert.ok(i >= 0);
-  const cuerpo = portal.slice(i, i + 700);
-  assert.match(cuerpo, /FECHA_SIN_HORA\.exec\(s\)/);
-  assert.match(cuerpo, /timeZone:\s*"UTC"/);
+  assert.match(portal, /fechaEnZona\(v, zonaClinica\)/);
+  assert.match(portal, /fechaCalendario\(patient\.dob\)/);
+  const lib = sinComentarios(leer("lib/fechas-visibles.ts"));
+  assert.match(lib, /SOLO_FECHA\.exec\(valor\)/);
+  assert.match(lib, /timeZone:\s*"UTC"/);
 });

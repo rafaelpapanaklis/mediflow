@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, ChevronRight, AlertTriangle, CheckCircle, Clock, Activity, Users, Check, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
+import { fechaEnZona } from "@/lib/fechas-visibles";
 import { useT } from "@/i18n/i18n-provider";
 import type { Treatment, InvItem, SelectedInv } from "@/app/dashboard/treatments/treatments-client";
 import { RaizRediseno } from "./raiz";
@@ -59,6 +60,8 @@ interface FormularioPlan {
 }
 
 export interface TratamientosVm {
+  /** Zona de la clínica (IANA) para pintar fechas igual en servidor y navegador. */
+  timezone?: string | null;
   treatments: Treatment[];
   filtered: Treatment[];
   filter: string;
@@ -182,7 +185,7 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
                       <>
                         <span aria-hidden>·</span>
                         <span>
-                          {t("pages.treatments.nextLabel")} {formatRelativeDate(tp.nextExpectedDate)}
+                          {t("pages.treatments.nextLabel")} {formatRelativeDate(tp.nextExpectedDate, vm.timezone)}
                         </span>
                       </>
                     )}
@@ -275,7 +278,7 @@ export function Tratamientos({ vm }: { vm: TratamientosVm }) {
                     {se.notes && <div className={s.cronoNota}>{se.notes}</div>}
                   </div>
                   {se.completedAt && (
-                    <span className={s.derecha}>{new Date(se.completedAt).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}</span>
+                    <span className={s.derecha}>{fechaEnZona(se.completedAt, vm.timezone, { day: "numeric", month: "short" })}</span>
                   )}
                 </div>
               </div>

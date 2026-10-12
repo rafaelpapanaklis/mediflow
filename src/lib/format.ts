@@ -13,19 +13,24 @@ export const fmtMXN = (n: number): string => pesosConSigno(n ?? 0, 0);
 
 export const fmtMXNdec = (n: number): string => pesosConSigno(n ?? 0, 2);
 
-export function formatRelativeDate(date: Date | string | null | undefined): string {
+/**
+ * `zona`: zona IANA con la que se pintan las fechas absolutas (futuras o de más de un año).
+ * Sin ella se usa la del proceso, que difiere entre servidor (UTC) y navegador y da
+ * errores de hidratación; en pantallas del panel pásale la zona de la clínica.
+ */
+export function formatRelativeDate(date: Date | string | null | undefined, zona?: string | null): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   if (isNaN(d.getTime())) return "—";
   const diff = Date.now() - d.getTime();
   const days = Math.floor(diff / 86_400_000);
-  if (days < 0)  return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+  if (days < 0)  return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", ...(zona ? { timeZone: zona } : {}) });
   if (days === 0) return "Hoy";
   if (days === 1) return "Ayer";
   if (days < 7)  return `Hace ${days}d`;
   if (days < 30) return `Hace ${Math.floor(days / 7)}sem`;
   if (days < 365) return `Hace ${Math.floor(days / 30)}m`;
-  return d.toLocaleDateString("es-MX");
+  return d.toLocaleDateString("es-MX", zona ? { timeZone: zona } : undefined);
 }
 
 export function ageFromDob(dob: Date | string | null | undefined): number | null {

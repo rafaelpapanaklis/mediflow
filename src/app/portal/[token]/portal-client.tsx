@@ -1,23 +1,16 @@
 "use client";
 import { useState } from "react";
+import { fechaCalendario, fechaEnZona } from "@/lib/fechas-visibles";
 import { Calendar, FileText, CreditCard, Image, FileCheck, User, Phone, MapPin, ChevronRight, X, Check, Star, Clock } from "lucide-react";
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("es-MX", { style:"currency", currency:"MXN", maximumFractionDigits:0 }).format(n);
 }
-// Una fecha SIN hora («2026-09-28», así llegan las citas) es un día del
-// calendario: `new Date()` la lee como medianoche UTC y en México se pintaba
-// el día anterior. Se arma con sus partes y se pinta en UTC. Lo que trae hora
-// sigue igual.
-const FECHA_SIN_HORA = /^(\d{4})-(\d{2})-(\d{2})$/;
-function formatDate(s: string) {
-  const partes = typeof s === "string" ? FECHA_SIN_HORA.exec(s) : null;
-  if (partes) {
-    return new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])))
-      .toLocaleDateString("es-MX", { day:"numeric", month:"long", year:"numeric", timeZone:"UTC" });
-  }
-  return new Date(s).toLocaleDateString("es-MX", { day:"numeric", month:"long", year:"numeric" });
-}
+// Fechas con zona EXPLÍCITA (ws1-t5, F2): `toLocaleDateString` sin zona usaba la
+// zona del proceso (UTC en el servidor, México en el navegador): error de
+// hidratación #418 y la fecha de nacimiento un día antes. Ver @/lib/fechas-visibles.
+// Un instante se pinta en la zona de la clínica; la fecha de nacimiento y las
+// fechas «YYYY-MM-DD» son un día de calendario.
 
 const STATUS_MAP: Record<string, { label:string; color:string }> = {
   PENDING:     { label:"Pendiente",  color:"#f59e0b" },
@@ -50,6 +43,8 @@ const TABS = [
 ];
 
 export function PatientPortalClient({ patient }: { patient: any }) {
+  const zonaClinica: string | null = patient?.clinic?.timezone ?? null;
+  const formatDate = (v: string) => fechaEnZona(v, zonaClinica);
   const [tab, setTab]               = useState("inicio");
   const [viewConsent, setViewConsent] = useState<any|null>(null);
   const [viewImage, setViewImage]   = useState<string|null>(null);
@@ -162,7 +157,7 @@ export function PatientPortalClient({ patient }: { patient: any }) {
               <div className="space-y-2.5 text-sm">
                 {patient.phone && <div className="flex items-center gap-2 text-slate-300"><Phone size={14} className="text-slate-500"/>{patient.phone}</div>}
                 {patient.email && <div className="flex items-center gap-2 text-slate-300"><span className="text-slate-500 text-xs">@</span>{patient.email}</div>}
-                {patient.dob && <div className="flex items-center gap-2 text-slate-300"><Calendar size={14} className="text-slate-500"/>{formatDate(patient.dob)}</div>}
+                {patient.dob && <div className="flex items-center gap-2 text-slate-300"><Calendar size={14} className="text-slate-500"/>{fechaCalendario(patient.dob)}</div>}
                 {patient.bloodType && <div className="flex items-center gap-2 text-slate-300"><span className="text-slate-500">🩸</span>Tipo {patient.bloodType}</div>}
                 {patient.allergies?.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-slate-800">

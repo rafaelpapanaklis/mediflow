@@ -17,6 +17,7 @@ import { Tratamientos } from "@/components/dashboard/piezas-rediseno/tratamiento
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
+import { fechaEnZona } from "@/lib/fechas-visibles";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
 const STATUS_TONE: Record<string, { tone: StatusTone; labelKey: string }> = {
@@ -64,9 +65,11 @@ interface Props {
    *  encendido pinta la pantalla vestida con el lenguaje del menú nuevo;
    *  apagado, todo lo de abajo, tal cual. La lógica es la misma en los dos. */
   rediseno?: boolean;
+  /** Zona de la clínica: las fechas se pintan con ella, igual en servidor y navegador. */
+  timezone?: string | null;
 }
 
-export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug, canEdit = false, rediseno = false }: Props) {
+export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug, canEdit = false, rediseno = false, timezone = null }: Props) {
   const t = useT();
   const router = useRouter();
   const confirmar = useConfirm();
@@ -277,7 +280,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           loadingInv, loadInventory, form, setForm, createPlan, addSession, changeStatus, patients,
           doctors, isAdmin, canEdit, active, overdue, completed, daysOverdue, progressPct,
           commonTreatments: COMMON_TREATMENTS.slice(0, 5),
-          procedureOpts, selProcedureId, setSelProcedureId, loadProcedureOpts,
+          procedureOpts, selProcedureId, setSelProcedureId, loadProcedureOpts, timezone,
         }}
       />
     );
@@ -389,7 +392,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                     {tp.nextExpectedDate && (
                       <>
                         <span style={{ margin: "0 6px" }}>·</span>
-                        {t("pages.treatments.nextLabel")} {formatRelativeDate(tp.nextExpectedDate)}
+                        {t("pages.treatments.nextLabel")} {formatRelativeDate(tp.nextExpectedDate, timezone)}
                       </>
                     )}
                   </div>
@@ -561,7 +564,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                           </div>
                           {s.completedAt && (
                             <span className="mono" style={{ fontSize: 10, color: "var(--text-3)" }}>
-                              {new Date(s.completedAt).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                              {fechaEnZona(s.completedAt, timezone, { day: "numeric", month: "short" })}
                             </span>
                           )}
                         </div>
