@@ -16,7 +16,6 @@ import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/re
 import { LabOrderDocument } from "@/lib/pdf/lab-order-document";
 import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
 import {
-  LAB_ORDER_STATUS_LABELS,
   LAB_ORDER_TYPE_LABELS,
   type LabOrderDTO,
   type LabPartnerDTO,
@@ -349,4 +348,5 @@ function stringifyValue(v: unknown): string {
   return JSON.stringify(v);
 }
 
-export { LAB_ORDER_STATUS_LABELS, LAB_ORDER_TYPE_LABELS };
+// Next 16: un archivo "use server" solo puede exportar funciones async; los
+// objetos LAB_ORDER_*_LABELS se importan de @/lib/clinical-shared/lab-orders/types.

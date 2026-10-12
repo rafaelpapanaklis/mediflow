@@ -203,5 +203,5 @@ export async function createPediatricPatient(
   }
 }
 
-// Re-export del helper para uso conveniente desde el wizard.
-export { isFailure };
+// (isFailure se importa de "./result" o del barrel "@/app/actions/pediatrics": un
+// archivo "use server" solo puede exportar funciones async, Next 16.)
