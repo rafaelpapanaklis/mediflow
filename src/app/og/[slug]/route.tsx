@@ -1,11 +1,11 @@
 import { ImageResponse } from "next/og";
-import { getSpecialty, isPublicSpecialty, PUBLIC_SPECIALTY_SLUGS } from "@/lib/specialty-data";
+import { getSpecialty, isPublicSpecialty } from "@/lib/specialty-data";
 
 export const runtime = "edge";
 
-export function generateStaticParams() {
-  return PUBLIC_SPECIALTY_SLUGS.map((slug) => ({ slug }));
-}
+// Next 16 prohíbe `runtime = "edge"` junto con generateStaticParams. Esta ruta
+// ya era dinámica en edge (el edge nunca se prerenderiza en el build), así que
+// quitarlo no cambia lo que se sirve.
 
 export async function GET(_req: Request, props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
