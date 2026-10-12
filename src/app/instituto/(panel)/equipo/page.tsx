@@ -32,11 +32,12 @@ export const metadata: Metadata = {
  * la BASE — en memoria mentiría en cuanto el equipo pase del techo de
  * filas.
  */
-export default async function InstitutoEquipoPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoEquipoPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

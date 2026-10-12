@@ -23,7 +23,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string; messageId: string } };
+type Params = { params: Promise<{ id: string; messageId: string }> };
 
 async function actorDeLaSesion(): Promise<SupportMessageActor | null> {
   const admin = await getAdminSession();
@@ -39,7 +39,8 @@ function responderError(err: unknown, ruta: string) {
   return NextResponse.json({ error: "Error interno" }, { status: 500 });
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const actor = await actorDeLaSesion();
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -61,7 +62,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const actor = await actorDeLaSesion();
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

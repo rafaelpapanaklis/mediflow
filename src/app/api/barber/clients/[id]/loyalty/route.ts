@@ -5,7 +5,8 @@ import { gateBarberClients, readJson, serverError } from "../../_helpers";
 export const dynamic = "force-dynamic";
 
 /** GET — estado vivo de la tarjeta (recalculado, no leído de una caché). */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.view");
   if ("response" in gate) return gate.response;
 
@@ -27,7 +28,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
  * navegador no hay forma de sumarse sellos ni de canjear dos veces: el
  * segundo intento afecta 0 filas y responde 409.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 

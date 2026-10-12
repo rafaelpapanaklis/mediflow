@@ -26,8 +26,9 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string; fotoId: string } },
+  props: { params: Promise<{ id: string; fotoId: string }> }
 ) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.view");
   if ("response" in g) return g.response;
 

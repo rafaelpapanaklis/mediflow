@@ -8,10 +8,8 @@ export const dynamic = "force-dynamic";
 // GET /api/suppliers/[supplierId]/reviews — reseñas del proveedor (más
 // recientes primero). Son la reputación pública del proveedor, no datos
 // privados de una clínica, así que cualquier clínica en sesión las ve.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { supplierId: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ supplierId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
@@ -37,10 +35,8 @@ export async function GET(
 // y actualiza la fila del proveedor.
 //
 // SEGURIDAD MULTI-TENANT: el clinicId SIEMPRE sale de la sesión, nunca del body.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { supplierId: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ supplierId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

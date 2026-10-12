@@ -119,7 +119,8 @@ function Cita({
   );
 }
 
-export default async function PacienteAgendaPage({ params }: { params: { id: string } }) {
+export default async function PacienteAgendaPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

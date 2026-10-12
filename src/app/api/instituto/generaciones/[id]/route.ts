@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
  *
  * Tampoco hay DELETE: se cierra, no se borra (ver el PATCH de programas).
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("padron.manage");
   if ("response" in g) return g.response;
 

@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
  * 🔴 CAJA NO VE ESTUDIOS. Igual que el odontograma: la tabla cuelga del
  * paciente, la lectura va con el alcance del recurso "cases".
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.view");
   if ("response" in g) return g.response;
 

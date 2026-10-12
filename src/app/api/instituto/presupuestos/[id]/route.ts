@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * 🔴 Y NO HAY DELETE en esta ruta. Un presupuesto rechazado no se borra:
  * la propuesta existió.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;
   try {
@@ -30,7 +31,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 /** GET — UN presupuesto, entero (partidas incluidas). */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.view");
   if ("response" in g) return g.response;
   try {
@@ -57,7 +59,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * y dos operaciones distintas compartiendo verbo es cómo un cliente que
  * manda el cuerpo equivocado cancela un presupuesto sin querer.
  */
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;
   try {

@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
 const KINDS: BarberPhotoKind[] = ["BEFORE", "AFTER", "REFERENCE"];
 
 /** GET — fotos del cliente con su URL firmada (5 min). Bucket PRIVADO. */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.view");
   if ("response" in gate) return gate.response;
 
@@ -49,7 +50,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
  * `visibleToClient` marca las que el PORTAL DEL CLIENTE (T5) podrá mostrar.
  * Por defecto false: una foto no se publica por accidente.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 

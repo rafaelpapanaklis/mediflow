@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const redirectTo = `${origin}/auth/confirm?next=/reset-password`;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     // Neutra a propósito: "user not found", rate limit de Supabase, etc.
     // responden igual que el éxito. Solo dejamos rastro en logs.

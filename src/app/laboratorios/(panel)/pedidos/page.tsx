@@ -46,11 +46,12 @@ const FILTERS: { value: DentalLabOrderStatus | "ALL"; label: string }[] = [
   { value: "CANCELADA", label: "Canceladas" },
 ];
 
-export default async function LabOrdersPage({
-  searchParams,
-}: {
-  searchParams: { status?: string };
-}) {
+export default async function LabOrdersPage(
+  props: {
+    searchParams: Promise<{ status?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getDentalLabContext();
   if (!ctx) redirect("/laboratorios/login");
 

@@ -51,7 +51,8 @@ export const maxDuration = 60;
 // aviso le cobraría al paciente algo que la clínica no ha confirmado.
 const SENDABLE_STATUSES = CHARGEABLE_INVOICE_STATUSES.filter((s) => s !== "DRAFT");
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
 

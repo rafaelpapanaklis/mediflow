@@ -48,7 +48,8 @@ async function comprobarCita(ctx: { clinicId: string; userId: string; role: any 
   return { appt } as const;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.view");
@@ -130,7 +131,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
 

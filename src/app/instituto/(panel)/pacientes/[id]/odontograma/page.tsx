@@ -26,7 +26,8 @@ import { EduOdontogramaScreen } from "@/components/edu/expediente/odontograma-sc
  * que "parece" natural porque es de donde cuelga— caja vería el
  * odontograma de la escuela entera con solo encenderse un permiso.
  */
-export default async function PacienteOdontogramaPage({ params }: { params: { id: string } }) {
+export default async function PacienteOdontogramaPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

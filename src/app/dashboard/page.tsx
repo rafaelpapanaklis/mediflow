@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 type AdminPeriod = "day" | "month" | "quarter" | "year";
 
 interface PageProps {
-  searchParams?: { period?: string; mode?: string };
+  searchParams?: Promise<{ period?: string; mode?: string }>;
 }
 
 // REDISEÑO DE «HOY» — el MISMO interruptor por clínica que enciende el menú de
@@ -42,7 +42,8 @@ interface PageProps {
 //
 // Con la bandera apagada, lo que se devuelve abajo es, rama por rama, el
 // árbol de siempre: HomeShell y los componentes de `components/dashboard/home/`.
-export default async function DashboardHomePage({ searchParams }: PageProps) {
+export default async function DashboardHomePage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   const clinic = user.clinic;
   if (!user || !clinic) return null;

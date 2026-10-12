@@ -45,7 +45,8 @@ async function cashOutsideRegisterWarning(clinicId: string, method: unknown): Pr
 // Atajo: cobra el saldo restante en una sola operación. Crea Payment y
 // marca status=PAID. Default method="cash". El usuario lo usa cuando
 // cobra en efectivo y no necesita capturar referencia.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Cobrar el saldo en bloque requiere billing.charge.

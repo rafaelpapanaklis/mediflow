@@ -57,7 +57,8 @@ async function contexto(invoiceId: string, permiso: "billing.view" | "billing.ch
   return { ctx: { clinicId: ctx.clinicId as string, userId: ctx.userId as string }, inv };
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const c = await contexto(params.id, "billing.view");
   if ("error" in c) return c.error;
   if (!c.inv.patientId) return NextResponse.json({ abonables: [], saldoAFavor: 0 }, { headers: SIN_CACHE });
@@ -68,7 +69,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ abonables, saldoAFavor: round2(Math.max(0, saldo)) }, { headers: SIN_CACHE });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const c = await contexto(params.id, "billing.charge");
   if ("error" in c) return c.error;
   const { clinicId, userId } = c.ctx;

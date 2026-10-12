@@ -69,4 +69,4 @@ export interface BarberWebData {
   editando?: boolean;
 }
 
-export type BarberWebTemplateComponent = (props: { data: BarberWebData }) => JSX.Element;
+export type BarberWebTemplateComponent = (props: { data: BarberWebData }) => React.JSX.Element;

@@ -17,7 +17,8 @@ import { avisoParaCobro } from "@/lib/cobro-automatico/servicio.server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.charge");

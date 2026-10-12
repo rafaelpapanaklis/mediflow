@@ -35,13 +35,18 @@ export const metadata: Metadata = {
  * enseña no necesita una segunda puerta. Lo que sí se recorta —y por
  * separado— es lo clínico de dentro.
  */
-export default async function InstitutoDocenteLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { id: string };
-}) {
+export default async function InstitutoDocenteLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

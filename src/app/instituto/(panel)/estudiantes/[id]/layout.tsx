@@ -61,13 +61,18 @@ const ESTADO_TONO: Record<string, string> = {
  * no inscribe) y un ALUMNO tampoco abre la suya — su avance lo ve en su
  * bitácora, que es otra pantalla con otro alcance.
  */
-export default async function InstitutoEstudianteLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { id: string };
-}) {
+export default async function InstitutoEstudianteLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

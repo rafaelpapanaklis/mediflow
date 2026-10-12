@@ -19,8 +19,8 @@ import "@/components/public/landing/sales/sales.css";
 import "../../blog.css";
 
 interface Props {
-  params: { cat: string };
-  searchParams?: { page?: string };
+  params: Promise<{ cat: string }>;
+  searchParams?: Promise<{ page?: string }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,7 +38,8 @@ export const dynamicParams = false;
 // Cinco minutos como mucho si se pierde una invalidación de revalidateBlog().
 export const revalidate = 300;
 
-export function generateMetadata({ params }: Props): Metadata {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const cat = getBlogCategory(params.cat);
   if (!cat) return {};
   return buildMetadata({
@@ -49,7 +50,9 @@ export function generateMetadata({ params }: Props): Metadata {
   });
 }
 
-export default async function BlogCategoryPage({ params, searchParams }: Props) {
+export default async function BlogCategoryPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const cat = getBlogCategory(params.cat);
   if (!cat) notFound();
 

@@ -15,8 +15,8 @@ export const metadata: Metadata = {
 };
 
 interface Props {
-  params: { slug: string };
-  searchParams?: { preview?: string; edit?: string; borrador?: string };
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ preview?: string; edit?: string; borrador?: string }>;
 }
 
 /**
@@ -61,7 +61,9 @@ async function sesionDeEstaClinicaCon(slug: string, permiso: "landing.edit" | "l
   return hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, permiso);
 }
 
-export default async function LandingPreviewPage({ params, searchParams }: Props) {
+export default async function LandingPreviewPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const pedido = searchParams?.edit === "1";
   const edit = pedido ? await permitirEdicion(params.slug) : false;
   // Con edit ya concedido el cartel de «pronto» no sale: no se pregunta dos veces.

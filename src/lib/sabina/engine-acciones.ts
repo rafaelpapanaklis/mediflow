@@ -113,7 +113,7 @@ export type SabinaPreparacion<D> =
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** Un route handler de Next, tal cual lo exporta `route.ts`. */
-export type ManejadorRuta = (req: any, contexto: { params: Record<string, string> }) => Promise<Response> | Response;
+export type ManejadorRuta = (req: any, contexto: { params: Promise<Record<string, string>> }) => Promise<Response> | Response;
 
 export interface PeticionEndpoint {
   metodo: "POST" | "PUT" | "PATCH" | "DELETE";

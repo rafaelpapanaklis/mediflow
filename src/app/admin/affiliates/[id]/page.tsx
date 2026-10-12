@@ -32,11 +32,12 @@ const AFFILIATE_SELECT = {
   referralCode: true,
 } as const;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { id: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const affiliate = await prisma.affiliate
     .findUnique({ where: { id: params.id }, select: { name: true } })
     .catch(() => null);
@@ -47,7 +48,8 @@ export async function generateMetadata({
   };
 }
 
-export default async function AdminAffiliateDetailPage({ params }: { params: { id: string } }) {
+export default async function AdminAffiliateDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const affiliate = await prisma.affiliate
     .findUnique({ where: { id: params.id }, select: AFFILIATE_SELECT })
     .catch(() => null);

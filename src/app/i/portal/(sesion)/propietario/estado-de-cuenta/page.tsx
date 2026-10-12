@@ -36,10 +36,11 @@ import { portalT } from "@/components/realty/portal/portal-i18n";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams: { mes?: string };
+  searchParams: Promise<{ mes?: string }>;
 }
 
-export default async function PropietarioEstadoPage({ searchParams }: PageProps) {
+export default async function PropietarioEstadoPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const scope = await getOwnerScope();
   if (!scope) redirect("/i/portal");
 

@@ -23,7 +23,8 @@ import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar
 
 const MAX_NAME = 120;
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 10);
   if (rl) return rl;
 

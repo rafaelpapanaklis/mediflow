@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * `inline` y no `attachment`: se abre en una pestaña y de ahí se imprime
  * o se guarda — que es lo que hace una persona de pie con el paciente.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.view");
   if ("response" in g) return g.response;
 

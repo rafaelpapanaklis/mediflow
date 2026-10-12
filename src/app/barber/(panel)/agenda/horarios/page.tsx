@@ -17,11 +17,12 @@ import { BarberAreaLocked } from "@/components/barber/agenda/area-locked";
 
 export const dynamic = "force-dynamic";
 
-export default async function BarberSchedulePage({
-  searchParams,
-}: {
-  searchParams?: { barbero?: string | string[] };
-}) {
+export default async function BarberSchedulePage(
+  props: {
+    searchParams?: Promise<{ barbero?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);

@@ -49,7 +49,8 @@ function respuestaDeError(err: unknown): NextResponse {
 
 const SIN_CACHE = { "Cache-Control": "no-store, must-revalidate" };
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   try {
@@ -60,7 +61,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
 
@@ -80,7 +82,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   try {

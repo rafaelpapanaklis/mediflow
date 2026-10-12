@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
  * él y ahí el diagnóstico SÍ sale. Se declara aquí, que es donde se sabe que
  * al otro lado no hay sesión.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 10);
   if (rl) return rl;
 

@@ -12,7 +12,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function EditarProductoPage({ params }: { params: { productId: string } }) {
+export default async function EditarProductoPage(props: { params: Promise<{ productId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) redirect("/proveedores/login");
   if (ctx.status !== "APPROVED") redirect("/proveedores/pendiente");

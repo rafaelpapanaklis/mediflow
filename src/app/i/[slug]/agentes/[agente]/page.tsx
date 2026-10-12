@@ -49,10 +49,11 @@ export function generateStaticParams(): { slug: string; agente: string }[] {
 }
 
 interface Props {
-  params: { slug: string; agente: string };
+  params: Promise<{ slug: string; agente: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const [seo, carga] = await Promise.all([
     cargarSeoRealty(params.slug),
     cargarAgenteRealty(params.slug, params.agente),
@@ -77,7 +78,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-export default async function PaginaAgente({ params }: Props) {
+export default async function PaginaAgente(props: Props) {
+  const params = await props.params;
   const [web, carga] = await Promise.all([
     cargarWebRealty(params.slug),
     cargarAgenteRealty(params.slug, params.agente),

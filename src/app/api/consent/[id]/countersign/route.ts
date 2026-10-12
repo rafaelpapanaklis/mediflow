@@ -22,7 +22,8 @@ import { faltaConfirmarCarta, pendientesParaBitacora } from "@/lib/consent/hueco
 /** Quién puede estampar la firma del profesional responsable. */
 const COUNTERSIGN_ROLES = ["DOCTOR", "ADMIN", "SUPER_ADMIN"];
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
 

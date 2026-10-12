@@ -21,7 +21,7 @@ import {
 // del mismo render comparten UNA ejecución de cada una (antes cada
 // navegación pagaba 3-4 supabase.auth.getUser() + sus queries duplicadas).
 export const getSession = cache(async () => {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   // M5 (auditoría 30-sep): una sesión de «Ver como clínica» vencida (2 h) o
   // cerrada vale como SIN sesión, aunque el navegador conserve las cookies.
@@ -82,18 +82,18 @@ function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?:
 //
 // La única salida es getCurrentUserSinDosPasos, que usan el layout (decide él,
 // con la ruta) y las pantallas del propio flujo del 2FA.
-function enforceTwoFactorGate(user: {
+async function enforceTwoFactorGate(user: {
   supabaseId: string;
   clinicId: string;
   role?: string | null;
   totpEnabled?: boolean | null;
   clinic?: { require2fa?: boolean | null } | null;
-}): void {
-  const { decision } = decidirDosPasos(user);
+}): Promise<void> {
+  const { decision } = await decidirDosPasos(user);
   if (!bloqueaDosPasos(decision)) return;
   if (decision === "setup") redirect(TWO_FA_SETUP_PATH);
-  const pathname = (() => {
-    try { return headers().get("x-pathname"); } catch { return null; }
+  const pathname = await (async () => {
+    try { return (await headers()).get("x-pathname"); } catch { return null; }
   })();
   // `next` solo para volver a una pantalla del panel tras el reto (el reto ya
   // filtra lo que no empiece por /dashboard); en /api no hay a dónde volver.
@@ -111,10 +111,10 @@ function enforceTwoFactorGate(user: {
 // pero el redirect impide que el handler corra y el dato salga. Sólo dispara
 // en /api: las páginas server (pathname /dashboard/*) las cubre el layout, y
 // para callers sin x-pathname es no-op. Mismo criterio que getAuthContext.
-function enforceApiPlanGate(clinic: unknown): void {
+async function enforceApiPlanGate(clinic: unknown): Promise<void> {
   if (!isPlanExpired(clinic as { trialEndsAt?: Date | string | null; subscriptionStatus?: string | null } | null)) return;
-  const pathname = (() => {
-    try { return headers().get("x-pathname"); } catch { return null; }
+  const pathname = await (async () => {
+    try { return (await headers()).get("x-pathname"); } catch { return null; }
   })();
   if (isApiPathBlockedForExpiredPlan(pathname)) redirect("/dashboard/suspended");
 }
@@ -126,8 +126,8 @@ function enforceApiPlanGate(clinic: unknown): void {
 export const getCurrentUser = cache(async () => {
   const user = await resolverUsuarioActual();
   // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
-  enforceTwoFactorGate(user);
-  enforceApiPlanGate(user.clinic);
+  await enforceTwoFactorGate(user);
+  await enforceApiPlanGate(user.clinic);
   return user;
 });
 
@@ -146,7 +146,7 @@ export const getCurrentUserSinDosPasos = cache(async () => resolverUsuarioActual
 // comparten UNA lectura.
 const resolverUsuarioActual = cache(async () => {
   const supabaseUser = await requireAuth();
-  const activeClinicId = readActiveClinicCookie();
+  const activeClinicId = await readActiveClinicCookie();
 
   // UNA lectura: todas las filas ACTIVAS de la persona, de la más antigua a la
   // más nueva (ws1-t1). Antes eran la de la cookie, después —si fallaba— esta
@@ -237,7 +237,7 @@ const resolverUsuarioActual = cache(async () => {
   // persona no está activa): se reescribe con la elegida para que la próxima
   // petición ya no caiga aquí (ws1-t12; solo prende en route handlers y
   // server actions, ver resembrarActiveClinicCookie).
-  const resembrada = resembrarActiveClinicCookie(user.clinicId);
+  const resembrada = await resembrarActiveClinicCookie(user.clinicId);
   if (activeClinicId) {
     authDebug("warn", "[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
       reason: "supabaseId no es activo en clinicId solicitada",

@@ -32,7 +32,8 @@ export const dynamic = "force-dynamic";
  *
  * 🔴 institutionId de getEduContext(), JAMÁS del cuerpo ni del query.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
 

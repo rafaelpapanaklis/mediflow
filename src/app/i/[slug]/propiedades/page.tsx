@@ -35,11 +35,13 @@ import { Migas } from "@/components/realty/web/migas";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  params: { slug: string };
-  searchParams: Record<string, string | string[] | undefined>;
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const seo = await cargarSeoRealty(params.slug);
   if (!seo) return { title: "Página no encontrada", robots: { index: false, follow: false } };
 
@@ -67,7 +69,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   });
 }
 
-export default async function PaginaPropiedades({ params, searchParams }: Props) {
+export default async function PaginaPropiedades(props: Props) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const carga = await cargarWebRealty(params.slug);
   if (!carga) notFound();
   if (!carga.publicada) return <WebApagada data={carga.data} />;

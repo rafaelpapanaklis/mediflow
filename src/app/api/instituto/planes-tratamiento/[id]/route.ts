@@ -21,7 +21,8 @@ export const dynamic = "force-dynamic";
  * si alguien lo cambió entre la lectura y la escritura, no se pisa su
  * decisión.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
   try {

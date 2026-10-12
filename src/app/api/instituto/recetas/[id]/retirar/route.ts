@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
  * Una EXPEDIDA jamás pasa por aquí: ésa se anula con motivo, y la anula
  * quien tiene la cédula.
  */
-export async function POST(_request: Request, { params }: { params: { id: string } }) {
+export async function POST(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.propose");
   if ("response" in g) return g.response;
 

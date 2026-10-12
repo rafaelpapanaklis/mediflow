@@ -21,7 +21,8 @@ import { RealtyDenied, realtyOrigin } from "@/components/realty/properties/denie
  */
 const AREA = "inmuebles";
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 
@@ -73,7 +74,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       canManageOwners={hasRealtyPermission(permUser, "owners.manage")}
       hasLogo={!!ctx.account.logoUrl}
       accountSlug={ctx.account.slug}
-      origin={realtyOrigin(headers())}
+      origin={realtyOrigin(await headers())}
     />
   );
 }

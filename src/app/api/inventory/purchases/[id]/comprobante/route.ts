@@ -17,7 +17,8 @@ import { limiteSubidasPorUsuario } from "@/lib/uploads/validar-archivo";
 // misma acción de administrar la compra.
 // ═══════════════════════════════════════════════════════════════════
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "inventory.edit");

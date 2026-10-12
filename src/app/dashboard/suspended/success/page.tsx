@@ -17,7 +17,7 @@ import {
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams?: { session_id?: string };
+  searchParams?: Promise<{ session_id?: string }>;
 }
 
 /**
@@ -32,7 +32,8 @@ interface PageProps {
  *    muestra "estamos confirmando" y <ConfirmingPoll/> vuelve a preguntar
  *    cada pocos segundos (router.refresh) hasta que el webhook aterrice.
  */
-export default async function SuspendedSuccessPage({ searchParams }: PageProps) {
+export default async function SuspendedSuccessPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const { t } = await getServerT();
   const user = await getCurrentUser();
   const clinic = user.clinic;

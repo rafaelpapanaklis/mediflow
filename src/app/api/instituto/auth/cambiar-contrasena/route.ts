@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
   // ═══════════════════════════════════════════════════════════════════
   let otrasCerradas = true;
   try {
-    const sesion = createClient();
+    const sesion = await createClient();
     const { error: outError } = await sesion.auth.signOut({ scope: "others" });
     if (outError) {
       otrasCerradas = false;

@@ -36,7 +36,8 @@ export const maxDuration = 60;
 
 const NO_ESTA = "Ese recibo no está disponible.";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = await persistentRateLimit(req, {
     limit: 30,
     windowSec: 600,

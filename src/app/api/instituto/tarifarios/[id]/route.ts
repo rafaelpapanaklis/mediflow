@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * transacción, para que no exista un instante con dos listas
  * predeterminadas y un cobro en medio.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("tarifarios.manage");
   if ("response" in g) return g.response;
 

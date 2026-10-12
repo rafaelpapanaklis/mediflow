@@ -11,7 +11,8 @@ export const runtime = "nodejs"; // @react-pdf
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const e = await entrar(req, VER, 30);
   if ("res" in e) return e.res;
   try {

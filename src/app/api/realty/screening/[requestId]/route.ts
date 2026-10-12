@@ -55,7 +55,8 @@ function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-real-ip");
 }
 
-export async function GET(req: NextRequest, { params }: { params: { requestId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ requestId: string }> }) {
+  const params = await props.params;
   const gate = await openRealtyGrowthGate({
     permission: "leases.manage",
     feature: REALTY_SCREENING_FEATURE,
@@ -77,7 +78,8 @@ export async function GET(req: NextRequest, { params }: { params: { requestId: s
   return NextResponse.json({ request });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { requestId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ requestId: string }> }) {
+  const params = await props.params;
   const gate = await openRealtyGrowthGate({
     permission: "leases.manage",
     feature: REALTY_SCREENING_FEATURE,
@@ -158,7 +160,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { requestId:
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { requestId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ requestId: string }> }) {
+  const params = await props.params;
   const gate = await openRealtyGrowthGate({
     permission: "leases.manage",
     feature: REALTY_SCREENING_FEATURE,

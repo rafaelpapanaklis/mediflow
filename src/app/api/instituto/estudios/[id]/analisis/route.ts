@@ -22,7 +22,8 @@ export const maxDuration = 60;
  * dos segmentos dinámicos con nombres distintos al mismo nivel, y esa rama
  * ya usa [id] para el paciente.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.view");
   if ("response" in g) return g.response;
 
@@ -62,7 +63,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
  * con su nombre encima. Mismo criterio que el aiAssist del dental, que no
  * toca el S/O/A/P.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.analyze");
   if ("response" in g) return g.response;
 

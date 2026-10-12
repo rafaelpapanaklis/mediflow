@@ -6,10 +6,8 @@ import { gateRealty, notFound, realtyApiError } from "../../../_helpers";
 export const dynamic = "force-dynamic";
 
 /** DELETE — quitar el documento: fila, objeto del bucket y bytes del cupo. */
-export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string; docId: string } },
-) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string; docId: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

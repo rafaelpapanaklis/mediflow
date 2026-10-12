@@ -5,7 +5,8 @@ import { getPlanLimitsForClinic } from "@/lib/plans";
 import { CLINIC_OVERRIDE_SELECT } from "@/lib/billing/plan-overrides";
 
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clinicId = params.id;

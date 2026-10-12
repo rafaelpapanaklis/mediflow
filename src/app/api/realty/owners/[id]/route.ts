@@ -13,7 +13,8 @@ function ownerNotFound() {
 }
 
 /** GET — la ficha del propietario con sus inmuebles y sus exclusivas. */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("owners.manage", { requirePlanFeature: false });
   if ("response" in gate) return gate.response;
   try {
@@ -26,7 +27,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 /** PATCH — editar sus datos de contacto. */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("owners.manage", { requirePlanFeature: false });
   if ("response" in gate) return gate.response;
 
@@ -65,7 +67,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
  * TRUENA en la base con una violación de llave foránea. Se comprueba antes
  * para contestar algo que se entienda en vez de un 500.
  */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("owners.manage", { requirePlanFeature: false });
   if ("response" in gate) return gate.response;
 

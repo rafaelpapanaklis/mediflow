@@ -10,12 +10,13 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { fichaOrtodonciaDesdeRutaVieja } from "@/lib/orthodontics/rutas-viejas";
 
-export default function PatientOrthodonticsPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams?: Record<string, string | string[] | undefined>;
-}) {
+export default async function PatientOrthodonticsPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   redirect(fichaOrtodonciaDesdeRutaVieja(params.id, searchParams));
 }

@@ -59,7 +59,7 @@ async function ensureResourceInClinic(
 
 export async function GET(
   _req: Request,
-  ctx: { params: { id: string } | Promise<{ id: string }> },
+  ctx: { params: Promise<{ id: string } | Promise<{ id: string }>> },
 ) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
@@ -83,7 +83,7 @@ export async function GET(
 
 export async function PUT(
   req: Request,
-  ctx: { params: { id: string } | Promise<{ id: string }> },
+  ctx: { params: Promise<{ id: string } | Promise<{ id: string }>> },
 ) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;

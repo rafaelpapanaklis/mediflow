@@ -40,10 +40,11 @@ export function generateStaticParams(): { slug: string }[] {
 }
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const seo = await cargarSeoRealty(params.slug);
   if (!seo) return { title: "Página no encontrada", robots: { index: false, follow: false } };
   return metadataDe({
@@ -56,7 +57,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-export default async function PaginaContacto({ params }: Props) {
+export default async function PaginaContacto(props: Props) {
+  const params = await props.params;
   const carga = await cargarWebRealty(params.slug);
   if (!carga) notFound();
   if (!carga.publicada) return <WebApagada data={carga.data} />;

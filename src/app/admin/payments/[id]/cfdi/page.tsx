@@ -8,7 +8,8 @@ import { CfdiClient } from "./cfdi-client";
 
 export const metadata: Metadata = { title: "CFDI — Admin DaleControl" };
 
-export default async function CfdiPaymentPage({ params }: { params: { id: string } }) {
+export default async function CfdiPaymentPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const payment = await prisma.subscriptionInvoice.findUnique({
     where: { id: params.id },
     include: {

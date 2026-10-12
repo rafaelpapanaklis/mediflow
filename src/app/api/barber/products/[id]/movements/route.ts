@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 // GET /api/barber/products/[id]/movements?limit= → bitácora del producto
 // (products.manage o inventory.manage).
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {
@@ -23,7 +24,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // POST /api/barber/products/[id]/movements { type, qty, reason } → movimiento
 // MANUAL (inventory.manage): IN/RETURN suman, OUT resta, ADJUST lleva el
 // delta con signo. SALE no se registra a mano. Nunca deja stock negativo.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

@@ -11,10 +11,8 @@ const VALID_STATUSES = ["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELL
 const VALID_PAYMENTS = ["UNPAID", "PAID"] as const;
 
 // GET /api/proveedores/orders/[orderId] → detalle de un pedido del proveedor.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -37,10 +35,8 @@ export async function GET(
 }
 
 // PATCH /api/proveedores/orders/[orderId] → avanzar status y/o paymentStatus.
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   if (ctx.status !== "APPROVED") {

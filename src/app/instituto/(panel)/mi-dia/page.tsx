@@ -44,11 +44,12 @@ export const metadata: Metadata = {
  * ⚠️ Sin filtro por SEDE a propósito (decisión de la Ola 11): el día de
  * una persona es su día completo, ruede por el campus que ruede.
  */
-export default async function InstitutoMiDiaPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoMiDiaPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

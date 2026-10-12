@@ -22,12 +22,12 @@ export interface ResultadoDosPasos {
   decision: DecisionDosPasos;
 }
 
-export function decidirDosPasos(u: SesionParaDosPasos): ResultadoDosPasos {
+export async function decidirDosPasos(u: SesionParaDosPasos): Promise<ResultadoDosPasos> {
   const decision = decisionDosPasos({
     totpEnabled: u.totpEnabled,
     require2fa: u.clinic?.require2fa,
-    hasValidCookie: hasValidTwoFactorCookie(u.supabaseId, u.clinicId),
-    verComoAdmin: hasValidVerComoCookie(u.supabaseId, u.clinicId),
+    hasValidCookie: await hasValidTwoFactorCookie(u.supabaseId, u.clinicId),
+    verComoAdmin: await hasValidVerComoCookie(u.supabaseId, u.clinicId),
   });
   return { decision };
 }

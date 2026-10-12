@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
  * no cerrado. Está dicho así en la pantalla porque es lo contrario de lo
  * que la gente supone.
  */
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("sillones.manage");
   if ("response" in g) return g.response;
 

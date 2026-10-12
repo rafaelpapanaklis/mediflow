@@ -49,7 +49,8 @@ function contentDisposition(kind: "inline" | "attachment", filename: string | nu
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
-export async function GET(req: NextRequest, { params }: { params: { messageId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ messageId: string }> }) {
+  const params = await props.params;
   const gate = await openWaGate({
     permission: "whatsapp.view",
     feature: WA_INBOX_FEATURE,

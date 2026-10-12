@@ -48,10 +48,8 @@ const ERROR_UI: Record<BookingErrorCode, { status: number; message: string }> = 
   clientBlocked: { status: 403, message: "No podemos agendar en línea con este número. Llama a la barbería." },
 };
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { slug: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   try {
     const limited = await persistentRateLimit(req, { ...RL, scope: "barber-public-booking" });
     if (limited) return limited;

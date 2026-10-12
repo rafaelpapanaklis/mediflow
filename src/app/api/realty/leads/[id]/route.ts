@@ -14,9 +14,10 @@ import { REALTY_LEAD_FLOW, REALTY_LOST_REASONS } from "@/lib/realty/types";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkLeadsAccess(ctx, "leads.view");
   if (!guard.ok) return NextResponse.json({ error: guard.error ?? "Sin permiso" }, { status: guard.status ?? 403 });
@@ -51,7 +52,8 @@ const PatchSchema = z.object({
  * La transición la valida moveLeadStage con canTransition() del contrato:
  * el kanban puede arrastrar donde sea, el servidor es quien dice que no.
  */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkLeadsAccess(ctx, "leads.edit");
   if (!guard.ok) return NextResponse.json({ error: guard.error ?? "Sin permiso" }, { status: guard.status ?? 403 });

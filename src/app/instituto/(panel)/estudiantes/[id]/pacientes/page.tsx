@@ -26,13 +26,14 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * titular. Abrir la carpeta de alguien no es heredar su llavero — y la
  * pantalla lo dice en vez de fingir que ése es todo su historial.
  */
-export default async function EstudiantePacientesPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams?: { q?: string };
-}) {
+export default async function EstudiantePacientesPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams?: Promise<{ q?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

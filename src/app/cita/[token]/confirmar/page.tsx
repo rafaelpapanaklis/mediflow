@@ -15,10 +15,11 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Confirmar cita — DaleControl" };
 
 interface Props {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }
 
-export default async function ConfirmAppointmentPage({ params }: Props) {
+export default async function ConfirmAppointmentPage(props: Props) {
+  const params = await props.params;
   const token = params.token;
   if (!token || token.length > 64) notFound();
 

@@ -26,7 +26,8 @@ import { EduPacientePagos } from "@/components/edu/dinero/planes-screen";
  * enlace de pestaña es UNA línea al final de `definicion` cuando toque
  * integrar.
  */
-export default async function PacientePagosPage({ params }: { params: { id: string } }) {
+export default async function PacientePagosPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

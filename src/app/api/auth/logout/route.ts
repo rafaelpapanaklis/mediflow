@@ -7,7 +7,7 @@ import { COOKIE_SESION_PREVIA } from "@/lib/admin/suplantacion-core";
 import { cookiesDeSalida, salirDeSuplantacion } from "@/lib/admin/suplantacion-salida";
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   // ws1-t11: «Cerrar sesión» dentro de «Ver como clínica» cierra SOLO la sesión
   // de suplantación (scope "local"). El signOut de siempre es "global" y echaría
   // al dueño real de todos sus dispositivos: la clínica lo notaría. Y es lo

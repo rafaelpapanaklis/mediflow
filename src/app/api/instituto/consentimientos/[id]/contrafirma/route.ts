@@ -24,7 +24,8 @@ export const dynamic = "force-dynamic";
  * contrafirmar la SUYA — y solo la suya, porque el hueco lo decide la
  * comparación de arriba, no el permiso.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("consentimientos.create");
   if ("response" in g) return g.response;
 

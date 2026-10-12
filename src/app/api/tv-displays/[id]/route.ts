@@ -18,7 +18,8 @@ const VALID_MODES = new Set(["OPERATIONAL", "MARKETING", "HYBRID"]);
  * con findFirst({ id, clinicId }) ANTES de update/delete.
  */
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // EQ-07: "Configurar Pantallas TV" (antes lista de roles SA/ADMIN = mismo
   // default), con override incluido.
@@ -75,7 +76,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   });
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // EQ-07: "Configurar Pantallas TV" (antes lista de roles SA/ADMIN = mismo
   // default), con override incluido.

@@ -42,7 +42,8 @@ import { listEduCaseRecetas } from "@/lib/edu/recetas";
  * ficha del paciente no le da el expediente completo — y la pantalla lo
  * dice, en vez de fingir que ese es todo el historial.
  */
-export default async function PacienteCasosPage({ params }: { params: { id: string } }) {
+export default async function PacienteCasosPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

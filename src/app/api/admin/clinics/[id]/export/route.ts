@@ -21,7 +21,8 @@ function toCsv(rows: Record<string, any>[]): string {
   return headers.join(",") + "\n" + body;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clinicId = params.id;

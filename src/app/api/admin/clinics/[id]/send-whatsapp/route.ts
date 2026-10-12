@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { logAdminGlobalEvent } from "@/lib/admin-audit";
 
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

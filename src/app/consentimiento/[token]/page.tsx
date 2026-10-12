@@ -26,7 +26,7 @@
 // LÓGICA INTACTA: mismos endpoints públicos, mismas validaciones, mismo
 // SignaturePad con theme="light".
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import {
   AlertCircle, CalendarClock, Check, CheckCircle2, Download, FileText,
   Loader2, PenLine, ShieldCheck, UserCheck, Users, XCircle,
@@ -57,7 +57,8 @@ interface ConsentPublicData {
 /** Por qué no se puede mostrar el documento. Cambia el icono y el texto de ayuda. */
 type LoadErrorKind = "expired" | "missing" | "generic";
 
-export default function ConsentPage({ params }: { params: { token: string } }) {
+export default function ConsentPage(props: { params: Promise<{ token: string }> }) {
+  const params = use(props.params);
   const [form, setForm] = useState<ConsentPublicData | null>(null);
   const [error, setError] = useState("");
   const [errorKind, setErrorKind] = useState<LoadErrorKind>("generic");

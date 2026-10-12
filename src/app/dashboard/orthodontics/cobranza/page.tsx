@@ -20,11 +20,12 @@ import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { zonaValida } from "@/components/specialties/orthodontics/modulo/fechas";
 import { VistaCobranza } from "@/components/specialties/orthodontics/modulo/vista-cobranza";
 
-export default async function OrthodonticsCobranzaPage({
-  searchParams,
-}: {
-  searchParams?: { filtro?: string | string[] };
-}) {
+export default async function OrthodonticsCobranzaPage(
+  props: {
+    searchParams?: Promise<{ filtro?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };

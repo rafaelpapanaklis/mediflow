@@ -13,7 +13,7 @@ import "@/components/public/landing/sales/sales.css";
 import { serializeJsonLd } from "@/lib/json-ld";
 
 interface Props {
-  params: { categoria: string };
+  params: Promise<{ categoria: string }>;
 }
 
 // Solo las 17 categorías del contrato — cualquier otro slug es 404 (SSG).
@@ -23,7 +23,8 @@ export function generateStaticParams() {
 export const dynamicParams = false;
 export const revalidate = 86400;
 
-export function generateMetadata({ params }: Props): Metadata {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const cat = getCategoryBySlug(params.categoria);
   if (!cat) return {};
   return buildMetadata({
@@ -44,7 +45,8 @@ export function generateMetadata({ params }: Props): Metadata {
 /** Primera letra en mayúscula: "clínicas dentales" → "Clínicas dentales". */
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function CategoriaPage({ params }: Props) {
+export default async function CategoriaPage(props: Props) {
+  const params = await props.params;
   const cat = getCategoryBySlug(params.categoria);
   if (!cat) notFound();
 

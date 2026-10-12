@@ -29,7 +29,8 @@ export const dynamic = "force-dynamic";
 
 const CANALES: DeliveryChannel[] = ["whatsapp", "correo", "copiada"];
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateContracts();
   if ("response" in gate) return gate.response;
 

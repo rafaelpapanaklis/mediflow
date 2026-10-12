@@ -22,7 +22,8 @@ export const metadata: Metadata = { title: "Detalle de cliente — Admin DaleCon
  * Van en serie y no en paralelo porque cada una abre su propia tanda de
  * consultas: juntas pasarían de 7 en vuelo y el pooler empieza a dar timeouts.
  */
-export default async function AdminClienteDetallePage({ params }: { params: { supabaseId: string } }) {
+export default async function AdminClienteDetallePage(props: { params: Promise<{ supabaseId: string }> }) {
+  const params = await props.params;
   const cliente = await getClienteDetalle(params.supabaseId);
   if (!cliente) notFound();
 

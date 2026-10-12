@@ -40,7 +40,8 @@ function contentDisposition(kind: "inline" | "attachment", filename: string): st
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 20);
   if (limited) return limited;
 

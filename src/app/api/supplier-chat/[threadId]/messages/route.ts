@@ -49,7 +49,8 @@ async function resolveAfter(after: string | null, threadId: string): Promise<Dat
  * completa) y marca el hilo como leído para el que llama. Con `after`: solo lo
  * nuevo (polling incremental), sin escribir.
  */
-export async function GET(req: Request, { params }: { params: { threadId: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params;
   const caller = await resolveChatCaller();
   if (!caller) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401, headers: NO_STORE });
@@ -97,7 +98,8 @@ export async function GET(req: Request, { params }: { params: { threadId: string
  * (nunca del body). Mensaje + actualización del hilo (lastMessageAt y
  * contador de no-leídos del receptor) en una sola transacción.
  */
-export async function POST(req: Request, { params }: { params: { threadId: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params;
   const caller = await resolveChatCaller();
   if (!caller) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401, headers: NO_STORE });

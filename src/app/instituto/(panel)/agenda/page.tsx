@@ -58,11 +58,12 @@ export const metadata: Metadata = {
  * columna copiada en la cita. Un sillón que se traslada de edificio se
  * lleva sus citas, que es lo que la escuela espera.
  */
-export default async function InstitutoAgendaPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoAgendaPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

@@ -61,7 +61,8 @@ const STATUS_STEPS: { key: SupplierOrderStatus; labelKey: string; Icon: typeof P
 const fmtFullDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
 
-export default async function Page({ params }: { params: { orderId: string } }) {
+export default async function Page(props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const { t } = await getServerT();
   const user = await getCurrentUser();
 

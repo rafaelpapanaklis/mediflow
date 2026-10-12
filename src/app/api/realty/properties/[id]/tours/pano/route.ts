@@ -38,7 +38,8 @@ const MAX_PANOS = 24;
  * Ruta estática dentro de /tours: Next la resuelve antes que [tourId], así
  * que "pano" nunca se confunde con el id de un recorrido.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

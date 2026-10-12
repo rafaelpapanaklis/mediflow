@@ -944,7 +944,7 @@ export async function syncPortalListingsForProperty(
 /** Invalida el feed cacheado de la cuenta tras un cambio. */
 export function bustFeedCache(accountId: string): void {
   try {
-    revalidateTag(realtyFeedTag(accountId));
+    revalidateTag(realtyFeedTag(accountId), { expire: 0 });
   } catch {
     // Fuera de un route handler / server action revalidateTag lanza. No es
     // motivo para fallar: el TTL de una hora recoge el cambio igual.

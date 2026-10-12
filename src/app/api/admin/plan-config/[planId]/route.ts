@@ -36,7 +36,8 @@ function serialize(row: any) {
   return { ...row, storageBytes: Number(row.storageBytes) };
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { planId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ planId: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

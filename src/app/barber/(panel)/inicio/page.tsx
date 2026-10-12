@@ -26,7 +26,7 @@ export default async function Page() {
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);
-  const summary = await getInicioSummary(ctx, { branchId: readBranchCookie(), features: plan.features });
+  const summary = await getInicioSummary(ctx, { branchId: await readBranchCookie(), features: plan.features });
   const branches = summary.scope.canConsolidate ? await listBranchOptions(ctx) : [];
 
   return (

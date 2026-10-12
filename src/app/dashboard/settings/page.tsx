@@ -22,10 +22,11 @@ import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 export const metadata: Metadata = { title: "Configuración — DaleControl" };
 
 interface Props {
-  searchParams: { tab?: string; gcal?: string; motivo?: string };
+  searchParams: Promise<{ tab?: string; gcal?: string; motivo?: string }>;
 }
 
-export default async function SettingsPage({ searchParams }: Props) {
+export default async function SettingsPage(props: Props) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   // ws1-t1: «Mi perfil» sin settings.view (un DOCTOR por defecto) va a su página propia en vez de rebotar al
   // inicio: ahí edita sus datos profesionales (cédula…) sin entrar a Configuración.

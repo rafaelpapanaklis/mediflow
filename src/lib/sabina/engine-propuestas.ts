@@ -358,7 +358,7 @@ function acunarLlave(
       try {
         // El handler mira los permisos de la sesión (los del usuario); con esto
         // mira además los de Sabina, que ya vienen recortados en el ctx.
-        res = await conPermisosDeSabina(ctx, async () => manejador(interna, { params: peticion.params ?? {} }));
+        res = await conPermisosDeSabina(ctx, async () => manejador(interna, { params: Promise.resolve(peticion.params ?? {}) }));
       } catch (e) {
         registro.push({ metodo, ruta, status: 0, cuerpo: e instanceof Error ? e.message : "excepcion", ms: Date.now() - t0 });
         throw e;

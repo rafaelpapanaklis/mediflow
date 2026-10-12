@@ -5,7 +5,8 @@ import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 // GET /api/portal/[token] — public endpoint, no auth required
 // Returns patient's own data for the portal
-export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 20); // 20 requests per minute per IP
   if (rl) return rl;
 

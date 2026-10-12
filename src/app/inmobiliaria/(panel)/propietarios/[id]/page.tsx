@@ -12,7 +12,8 @@ import { RealtyDenied } from "@/components/realty/properties/denied";
 /** /inmobiliaria/propietarios/[id] — sus datos, sus inmuebles y sus exclusivas. */
 const AREA = "propietarios";
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

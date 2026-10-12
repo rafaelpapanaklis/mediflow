@@ -30,7 +30,8 @@ import { errorPld, gatePld, noEncontrado } from "../../_guard";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // pld.view basta: leer un expediente es exactamente lo que hace un
   // auditor, y un auditor no debería poder escribir nada.
   const gate = await gatePld("pld.view");

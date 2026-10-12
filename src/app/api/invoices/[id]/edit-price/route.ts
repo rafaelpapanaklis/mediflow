@@ -33,7 +33,8 @@ async function getCtx() {
 //
 // Endpoint dedicado en lugar de extender el PATCH existente para no
 // interferir con el flujo de items/notes/status que ya gestiona PATCH.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Editar precio/descuento es una mutación financiera admin-level.

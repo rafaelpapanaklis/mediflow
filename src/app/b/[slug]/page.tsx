@@ -41,10 +41,11 @@ export function generateStaticParams(): { slug: string }[] {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const seo = await cargarSeoBarberWeb(params.slug);
   if (!seo) return { title: "Barbería no encontrada", robots: { index: false, follow: false } };
 
@@ -77,7 +78,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PaginaBarberia({ params }: Props) {
+export default async function PaginaBarberia(props: Props) {
+  const params = await props.params;
   const carga = await cargarBarberWeb(params.slug);
   if (!carga) notFound();
 

@@ -20,7 +20,8 @@ import { SQL_PENDING_MESSAGE } from "@/lib/account-manager/admin";
 export const dynamic = "force-dynamic";
 
 // ── PUT { accountManagerId: string | null } ────────────────────────────────
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -87,7 +88,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // ── DELETE: atajo de "Quitar" ──────────────────────────────────────────────
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

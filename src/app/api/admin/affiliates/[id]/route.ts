@@ -19,7 +19,8 @@ const PAYOUT_MODES = ["recurring", "onetime"] as const;
 // Los dos campos son opcionales y pueden venir juntos o por separado, pero al
 // menos uno debe llegar. Responde SIEMPRE con el afiliado actualizado (el
 // listado de /admin/affiliates hace merge de ese JSON en su fila).
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

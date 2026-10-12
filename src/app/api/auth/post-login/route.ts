@@ -21,7 +21,7 @@ import { applyTwoFactorLoginCookies, clearAllTwoFactorCookies } from "@/lib/auth
  *   fallback "primer createdAt en cada request" para multi-clínica.
  */
 export async function POST() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -42,7 +42,7 @@ export async function POST() {
     return res;
   }
 
-  const current = readActiveClinicCookie();
+  const current = await readActiveClinicCookie();
   const ownedIds = userClinics.map(u => u.clinicId);
   const picked = pickActiveClinicId(current, ownedIds);
   writeActiveClinicCookie(res, picked.clinicId);

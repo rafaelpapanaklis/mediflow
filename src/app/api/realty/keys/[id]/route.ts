@@ -16,14 +16,15 @@ import { checkVisitsAccess } from "@/lib/realty/visits";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const PatchSchema = z.object({
   returned: z.literal(true).optional(),
   holderNote: z.string().max(300).nullable().optional(),
 });
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkVisitsAccess(ctx, "keys.manage");
   if (!guard.ok) {

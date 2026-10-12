@@ -11,10 +11,8 @@ export const dynamic = "force-dynamic";
 // para una orden de la clínica. Scope SIEMPRE por clinicId de la sesión.
 // El cobro va directo a la cuenta del proveedor (su mpAccessToken). El webhook
 // /api/webhooks/mercadopago?ref=sup:<orderId> es quien marca la orden PAID.
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

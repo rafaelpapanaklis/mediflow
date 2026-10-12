@@ -42,11 +42,12 @@ export const metadata: Metadata = {
  * docente le viajan SUS alumnos vigentes, no el padrón; a un alumno no le
  * viaja ninguna lista.
  */
-export default async function InstitutoCasosPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoCasosPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

@@ -33,11 +33,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function SuspendedPage({
-  searchParams,
-}: {
-  searchParams: { pending?: string; ver?: string };
-}) {
+export default async function SuspendedPage(
+  props: {
+    searchParams: Promise<{ pending?: string; ver?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // Vuelta de un Checkout SPEI/OXXO (asíncrono): el pago aún no se acredita.
   const pending = searchParams?.pending;
   const showPending = pending === "spei" || pending === "oxxo";

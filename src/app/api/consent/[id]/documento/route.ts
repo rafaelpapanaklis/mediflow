@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
 // Hasta cuatro firmas que bajar del bucket (4 s cada una como mucho).
 export const maxDuration = 60;
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "consents.view");

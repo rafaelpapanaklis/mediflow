@@ -130,7 +130,7 @@ export function EduPersonaLink({
   children,
   className,
   title,
-}: EduPersonaLinkProps): JSX.Element {
+}: EduPersonaLinkProps): React.JSX.Element {
   const allowed = useContext(EduPersonaLinksContext);
 
   // Sin id o sin permiso → el texto tal cual, SIN envoltorio y SIN clase. Un

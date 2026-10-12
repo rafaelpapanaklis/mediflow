@@ -7,6 +7,7 @@ export const metadata: Metadata = { title: "Chat con proveedor" };
 // ya valida la sesión de clínica. El [supplierId] de la URL es el proveedor
 // con el que se abre/crea el hilo al entrar (deep-link desde el browse/ficha
 // de proveedores de T2); el workspace también lista el resto de los hilos.
-export default function ProveedorChatPage({ params }: { params: { supplierId: string } }) {
+export default async function ProveedorChatPage(props: { params: Promise<{ supplierId: string }> }) {
+  const params = await props.params;
   return <ChatWorkspace side="CLINIC" initialSupplierId={params.supplierId} />;
 }

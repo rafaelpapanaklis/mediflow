@@ -27,10 +27,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     // Confirmar escribe: no se acepta desde otro sitio, ni como formulario simple.
     if (!origenValido(req.headers)) {

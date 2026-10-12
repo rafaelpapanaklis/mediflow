@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       moduloReal,
       vistaPreviaSinModulo({
         nodeEnv: process.env.NODE_ENV,
-        cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
+        cookie: (await cookies()).get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
       }),
     ),
     tienePermisoModulo,

@@ -11,7 +11,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function ResenaPage({ params }: { params: { token: string } }) {
+export default async function ResenaPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const view = await getInviteView(params.token);
   const theme = view.themeColor || "#7c3aed";
   const initial = view.clinicName.trim().charAt(0).toUpperCase() || "C";

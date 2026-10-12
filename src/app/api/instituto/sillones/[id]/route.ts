@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * Un sillón no se BORRA (el Cascade se llevaría su historia de citas), por
  * eso este archivo no tiene un handler DELETE.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("sillones.manage");
   if ("response" in g) return g.response;
 

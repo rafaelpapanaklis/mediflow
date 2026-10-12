@@ -23,7 +23,7 @@ import { applyTwoFactorLoginCookies } from "@/lib/auth/two-factor-cookie";
  * dejaría al dueño con varias sedes sin poder moverse entre ellas.
  */
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
  * /api/barber/clients/lookup responde `blocked: true` con el motivo, para
  * que la agenda avise ANTES de sentarlo. Desbloquear es mandar blocked:false.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 

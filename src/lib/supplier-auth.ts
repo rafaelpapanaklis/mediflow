@@ -17,7 +17,7 @@ export interface SupplierContext {
 
 export async function getSupplierContext(): Promise<SupplierContext | null> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 

@@ -58,11 +58,12 @@ const TIMELINE_TONE_VARS: Record<
   neutral: "var(--text-3)",
 };
 
-export default async function LabOrderDetailPage({
-  params,
-}: {
-  params: { orderId: string };
-}) {
+export default async function LabOrderDetailPage(
+  props: {
+    params: Promise<{ orderId: string }>;
+  }
+) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) redirect("/laboratorios/login");
 

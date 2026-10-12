@@ -126,7 +126,7 @@ function anonymous(reason: AdminAnonymousReason): AdminSessionResult {
 export async function getAdminSessionResult(): Promise<AdminSessionResult> {
   // cookies() FUERA del try: si Next lanza aquí (bail-out de render estático)
   // debe propagar, no disfrazarse de "error de BD".
-  const token = cookies().get(ADMIN_COOKIE)?.value;
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (!token) return anonymous("no-cookie");
 
   const tokenHash = sha256(token);

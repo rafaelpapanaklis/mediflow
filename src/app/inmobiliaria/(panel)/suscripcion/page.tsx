@@ -43,11 +43,12 @@ const LIMIT_ORDER: RealtyLimitKey[] = [
   "messages",
 ];
 
-export default async function RealtySubscriptionPage({
-  searchParams,
-}: {
-  searchParams?: { checkout?: string; session_id?: string };
-}) {
+export default async function RealtySubscriptionPage(
+  props: {
+    searchParams?: Promise<{ checkout?: string; session_id?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

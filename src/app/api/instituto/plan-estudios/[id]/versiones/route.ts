@@ -32,7 +32,8 @@ export const dynamic = "force-dynamic";
  */
 
 /** GET — las versiones, más recientes primero, y cuál rige hoy. */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("requisitos.manage");
   if ("response" in g) return g.response;
   try {
@@ -51,7 +52,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * pantalla lo puede poner delante antes de guardar, que es lo que H-89
  * echaba en falta.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("requisitos.manage");
   if ("response" in g) return g.response;
   try {

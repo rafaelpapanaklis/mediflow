@@ -33,7 +33,8 @@ export const maxDuration = 60;
  * existe en vez de duplicar la foto (índice único sobre el path, que ya
  * estaba en el esquema y en `sql/edu-ola-b.sql`).
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

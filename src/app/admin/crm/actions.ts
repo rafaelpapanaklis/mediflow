@@ -39,14 +39,14 @@ const RUTA = "/admin/crm";
 
 const NO_AUTORIZADO = { ok: false as const, error: "No autorizado" };
 
-function auditar(
+async function auditar(
   accion: string,
   entityId: string | null,
   admin: { id: string; email: string },
   datos?: Record<string, unknown>,
-): void {
+): Promise<void> {
   try {
-    const h = headers();
+    const h = await headers();
     console.log(
       JSON.stringify({
         tag: "ADMIN_AUDIT",
@@ -85,7 +85,7 @@ export async function crearProspectoAccion(
   const r = await crmCrear(entrada, admin.user.email);
   if (!r.ok) return r;
 
-  auditar("create", r.datos?.id ?? null, { id: admin.user.id, email: admin.user.email }, {
+  await auditar("create", r.datos?.id ?? null, { id: admin.user.id, email: admin.user.email }, {
     after: { name: r.datos?.name, vertical: r.datos?.vertical, stage: r.datos?.stage },
   });
   refrescar(r.datos?.id);
@@ -113,7 +113,7 @@ export async function eliminarProspectoAccion(id: string): Promise<CrmResultado>
 
   // Se audita ANTES de refrescar y con el mensaje que ya trae el nombre:
   // después del borrado no hay de dónde sacarlo.
-  auditar("delete", id, { id: admin.user.id, email: admin.user.email }, { before: { mensaje: r.mensaje } });
+  await auditar("delete", id, { id: admin.user.id, email: admin.user.email }, { before: { mensaje: r.mensaje } });
   refrescar();
   return r;
 }
@@ -131,7 +131,7 @@ export async function moverEtapaAccion(
   const r = await crmMoverEtapa(id, etapa, admin.user.email, opciones);
   if (!r.ok) return r;
 
-  auditar("stage", id, { id: admin.user.id, email: admin.user.email }, { after: { stage: etapa } });
+  await auditar("stage", id, { id: admin.user.id, email: admin.user.email }, { after: { stage: etapa } });
   refrescar(id);
   return r;
 }
@@ -202,7 +202,7 @@ export async function importarAccion(
   const r = await crmImportar(filas, comunes ?? {}, admin.user.email);
   if (!r.ok) return r;
 
-  auditar("import", null, { id: admin.user.id, email: admin.user.email }, {
+  await auditar("import", null, { id: admin.user.id, email: admin.user.email }, {
     after: { creados: r.datos?.creados, repetidos: r.datos?.repetidos, vertical: comunes?.vertical },
   });
   refrescar();

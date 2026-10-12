@@ -27,7 +27,8 @@ export const dynamic = "force-dynamic";
  * la llama. Ese caso queda para un barrido periódico de huérfanos, anotado
  * como pendiente en ORQUESTA.md.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

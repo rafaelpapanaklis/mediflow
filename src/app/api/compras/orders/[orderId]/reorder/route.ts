@@ -21,10 +21,8 @@ export const dynamic = "force-dynamic";
 //     así que el reorder usa siempre el PRECIO ACTUAL.
 //
 // SEGURIDAD MULTI-TENANT: el clinicId SIEMPRE sale de la sesión, nunca del body.
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

@@ -26,7 +26,8 @@ import type { PlanOverridesDTO } from "./plan-overrides-card";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
 
-export default async function AdminClinicDetailPage({ params }: { params: { id: string } }) {
+export default async function AdminClinicDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
     include: {

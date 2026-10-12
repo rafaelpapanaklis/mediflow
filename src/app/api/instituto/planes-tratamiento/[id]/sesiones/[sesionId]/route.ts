@@ -16,8 +16,9 @@ export const dynamic = "force-dynamic";
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string; sesionId: string } },
+  props: { params: Promise<{ id: string; sesionId: string }> }
 ) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
   try {

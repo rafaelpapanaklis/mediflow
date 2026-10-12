@@ -124,13 +124,18 @@ const FICHA_ICONS: Record<EduFichaChipKind, LucideIcon> = {
  * alguna acción que los necesite: es la lección del P1-4 de la auditoría
  * (el padrón completo no viaja en el payload RSC de un alumno).
  */
-export default async function InstitutoPacienteLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { id: string };
-}) {
+export default async function InstitutoPacienteLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

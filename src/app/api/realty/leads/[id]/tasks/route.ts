@@ -10,7 +10,7 @@ import { getRealtyContext } from "@/lib/realty-auth";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const PostSchema = z.object({
   title: z.string().trim().min(2).max(200),
@@ -20,7 +20,8 @@ const PostSchema = z.object({
 });
 
 /** POST — crea un pendiente colgado del prospecto. */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkLeadsAccess(ctx, "leads.edit");
   if (!guard.ok) return NextResponse.json({ error: guard.error ?? "Sin permiso" }, { status: guard.status ?? 403 });

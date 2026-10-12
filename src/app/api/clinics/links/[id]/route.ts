@@ -21,7 +21,8 @@ export const runtime = "nodejs";
 
 const LINKS_RATE_LIMIT = { limit: 10, windowSec: 60 };
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const rl = await persistentRateLimit(req, LINKS_RATE_LIMIT);
   if (rl) return rl;
 

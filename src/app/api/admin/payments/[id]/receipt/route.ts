@@ -12,7 +12,8 @@ import { renderReciboHtml } from "@/lib/admin/recibo-html";
 // A2 (auditoría 30-sep-2026): se sirve desde el mismo origen que /admin, así
 // que el HTML lo arma `renderReciboHtml` escapando CADA valor de la base, y la
 // respuesta lleva una CSP que solo deja correr el script con nonce.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const payment = await prisma.subscriptionInvoice.findUnique({

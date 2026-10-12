@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * tiene cero sedes marcadas no está fuera de ninguna, está en todas—, y la
  * pantalla la dice con esas palabras.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("sedes.manage");
   if ("response" in g) return g.response;
 
@@ -36,7 +37,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * que la pantalla lo diga en el momento, en vez de dejar a la dirección
  * creyendo que acaba de cerrarle una puerta cuando se las abrió todas.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("sedes.manage");
   if ("response" in g) return g.response;
 

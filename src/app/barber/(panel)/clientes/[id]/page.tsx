@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * fuera, "ajeno" y "no existe" se ven exactamente igual: la URL no revela
  * ni siquiera que la ficha exista.
  */
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);

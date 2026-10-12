@@ -66,8 +66,9 @@ async function objectExists(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; fileId: string } },
+  props: { params: Promise<{ id: string; fileId: string }> }
 ) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

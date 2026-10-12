@@ -49,7 +49,8 @@ function ligaMuerta(): NextResponse {
   );
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   try {
     const doc = await openSigningToken(params.token);
     if (!doc) return ligaMuerta();
@@ -70,7 +71,8 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   let body: Record<string, unknown> = {};
   try {
     const parsed = await req.json();

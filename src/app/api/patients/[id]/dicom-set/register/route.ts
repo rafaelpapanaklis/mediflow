@@ -28,7 +28,8 @@ const SAFE_PATH = /^[a-zA-Z0-9/._-]+$/;
 // MAX_SERVER_INSPECT_BYTES — arriba de eso (CBCT grandes) se guarda tal cual,
 // mismo trade-off documentado ahí (memoria de una función serverless).
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

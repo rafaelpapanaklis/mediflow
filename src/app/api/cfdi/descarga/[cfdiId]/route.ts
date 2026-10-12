@@ -19,7 +19,8 @@ function texto(status: number, mensaje: string) {
   return new NextResponse(mensaje, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
-export async function GET(req: NextRequest, { params }: { params: { cfdiId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ cfdiId: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 20, 60 * 1000);
   if (rl) return rl;
 

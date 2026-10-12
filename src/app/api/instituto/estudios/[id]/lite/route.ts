@@ -52,7 +52,8 @@ const LITE_RATE_LIMIT = { limit: 10, windowSec: 3600 };
 // candado, expira solo y el estudio se puede reintentar.
 const LITE_LOCK_TTL_SEC = 330;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.view");
   if ("response" in g) return g.response;
 

@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
  * recalculada en el servidor), historial de cortes con fotos firmadas,
  * membresía vigente y motivo del bloqueo.
  */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.view");
   if ("response" in gate) return gate.response;
 
@@ -27,7 +28,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 /** PATCH — nombre, teléfono, correo, cumpleaños y notas libres. */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 

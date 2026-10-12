@@ -51,7 +51,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     // traduciría en un «No autorizado» genérico; mandar al reto es lo que el
     // usuario necesita. La cabecera la puede poner cualquiera, pero solo elige
     // CÓMO se corta, nunca SI se corta. Fuera del try: redirect lanza.
-    if (esServerAction()) {
+    if (await esServerAction()) {
       redirect(r.bloqueoDosPasos === "challenge" ? TWO_FA_CHALLENGE_PATH : TWO_FA_SETUP_PATH);
     }
     return null;
@@ -65,13 +65,13 @@ function esBloqueo(r: AuthContext | BloqueoDosPasos): r is BloqueoDosPasos {
   return "bloqueoDosPasos" in r;
 }
 
-function esServerAction(): boolean {
-  try { return !!headers().get("next-action"); } catch { return false; }
+async function esServerAction(): Promise<boolean> {
+  try { return !!(await headers()).get("next-action"); } catch { return false; }
 }
 
 async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | null> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -79,7 +79,7 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     const suplantacion = await estadoSuplantacionDe(supabase);
     if (suplantacion.tipo === "terminada") return null;
 
-    const activeClinicId = readActiveClinicCookie();
+    const activeClinicId = await readActiveClinicCookie();
 
     // UNA lectura: todas las filas ACTIVAS de la persona (una por sede, casi
     // siempre una sola), de la más antigua a la más nueva. De ahí salen las
@@ -109,7 +109,7 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     if (!dbUser) {
       // Cookie inservible: se reescribe con la elegida (ws1-t12), así la
       // próxima petición ya no cae aquí. Ver resembrarActiveClinicCookie.
-      const resembrada = resembrarActiveClinicCookie(finalUser.clinicId);
+      const resembrada = await resembrarActiveClinicCookie(finalUser.clinicId);
       if (activeClinicId) {
         authDebug("warn", "[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
           reason: "supabaseId no es activo en clinicId solicitada",
@@ -160,7 +160,7 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
       !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled ||
       filas.some((f) => !!(f as { totpEnabled?: boolean | null }).totpEnabled);
 
-    const { decision } = decidirDosPasos({
+    const { decision } = await decidirDosPasos({
       supabaseId: finalUser.supabaseId,
       clinicId:   finalUser.clinicId,
       role:       finalUser.role,
@@ -180,8 +180,8 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     // ruta con su propia auth, no cubierta por este check).
     const planExpired = isPlanExpired(finalUser.clinic);
     if (planExpired) {
-      const pathname = (() => {
-        try { return headers().get("x-pathname"); } catch { return null; }
+      const pathname = await (async () => {
+        try { return (await headers()).get("x-pathname"); } catch { return null; }
       })();
       if (isApiPathBlockedForExpiredPlan(pathname)) return null;
     }

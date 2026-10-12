@@ -40,11 +40,12 @@ export const metadata: Metadata = {
  * diferencia entre ellos es un oráculo para ir adivinando tokens.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function PresupuestoPublicoPage({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function PresupuestoPublicoPage(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const vista = await getEduQuotePorToken(params.token);
   if (!vista) notFound();
 

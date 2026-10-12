@@ -32,7 +32,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * "casos.view" y el de saldo con "caja.view" — el alcance decide las
  * filas, el permiso decide la pantalla, y aquí se respetan los dos.
  */
-export default async function PacienteResumenPage({ params }: { params: { id: string } }) {
+export default async function PacienteResumenPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

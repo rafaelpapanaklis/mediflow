@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
  * Requiere `properties.edit` y no `web.edit`: lo que se decide aquí es si
  * ESTE inmueble sale, no cómo se ve la página — eso es de la ola de mi-web.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
 

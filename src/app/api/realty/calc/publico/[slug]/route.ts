@@ -78,7 +78,8 @@ async function cargarCuenta(slug: string) {
  * quién se le venció el pago. Los tres casos negativos responden ahora lo
  * mismo (404 "No encontrado"): no existe, no está activa, o no le toca.
  */
-export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const limitado = await persistentRateLimit(req, { ...RL, scope: "realty-calc-publico" });
   if (limitado) return limitado;
 
@@ -99,7 +100,8 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   try {
     const limitado = await persistentRateLimit(req, { ...RL, scope: "realty-calc-publico" });
     if (limitado) return limitado;

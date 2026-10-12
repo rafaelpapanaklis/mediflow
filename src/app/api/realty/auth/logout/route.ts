@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 // /api/barber/auth/logout). El sidebar redirige después a /login, que es el
 // login COMPARTIDO: este vertical no tiene uno propio.
 export async function POST() {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.auth.signOut();
   return NextResponse.json({ ok: true });
 }

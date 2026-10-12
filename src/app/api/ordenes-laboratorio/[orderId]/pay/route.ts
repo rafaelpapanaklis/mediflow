@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 // VENDEDOR → el cobro va directo a su cuenta), guarda mpPreferenceId y devuelve
 // { initPoint } para redirigir al comprador. El webhook compartido
 // (?ref=lab:<orderId>) marca la orden PAID cuando MercadoPago aprueba el pago.
-export async function POST(req: NextRequest, { params }: { params: { orderId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

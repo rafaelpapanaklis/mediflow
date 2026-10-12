@@ -265,10 +265,8 @@ function PatientReceiptDocument(props: ReceiptProps) {
   );
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(req: NextRequest, props0: { params: Promise<{ id: string }> }) {
+  const params = await props0.params;
   // renderToBuffer es CPU-intensivo: rate limit por IP contra spam.
   const limited = rateLimit(req, 15);
   if (limited) return limited;

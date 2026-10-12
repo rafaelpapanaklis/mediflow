@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * history = los últimos 20 llenados (versionado simple). Multi-tenant:
  * clinicId SIEMPRE de la sesión; valida pertenencia del paciente.
  */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -59,7 +60,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
  * (autoridad) y hace merge ADITIVO (dedup) hacia Patient.allergies /
  * chronicConditions / currentMedications sin borrar lo capturado a mano.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

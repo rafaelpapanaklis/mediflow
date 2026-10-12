@@ -111,7 +111,7 @@ function mappingKeyOf(m: ColumnMapping): string {
 }
 
 export function MultiImportWizard({ t, originId, origins, client, onClose, onImported }: Props) {
-  const fallback = useRef<ImportClientWithDetect>();
+  const fallback = useRef<ImportClientWithDetect | undefined>(undefined);
   if (!fallback.current) fallback.current = new RealImportClient() as unknown as ImportClientWithDetect;
   const api = client ?? fallback.current;
   const origin = origins.find((o) => o.id === originId) ?? ORIGINS.find((o) => o.id === "otro")!;

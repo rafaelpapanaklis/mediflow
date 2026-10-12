@@ -7,7 +7,7 @@ import type { SabinaPropuestaVista } from "@/lib/sabina/engine-propuestas-core";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
@@ -19,7 +19,8 @@ interface Params {
  * de la SESIÓN y la marca de Sabina: una conversación de otra clínica, de un
  * compañero o del Asistente IA devuelve el MISMO 404 que un id inventado.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const auth = await resolveAiScope();
   if (auth.response) return auth.response;
 

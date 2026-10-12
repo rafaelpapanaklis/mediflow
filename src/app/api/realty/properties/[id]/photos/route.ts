@@ -43,7 +43,8 @@ export const dynamic = "force-dynamic";
  * El paso 6 es el que se olvida siempre, y es el que hace que el contador
  * de la cuenta mienta. Aquí va explícito.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

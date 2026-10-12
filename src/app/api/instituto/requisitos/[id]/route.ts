@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
  * los casos que ya tenía vuelven a contar solos. Ésa es justamente la
  * ventaja de contar en vez de guardar un contador.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("requisitos.manage");
   if ("response" in g) return g.response;
 

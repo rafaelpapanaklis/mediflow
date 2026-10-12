@@ -285,8 +285,8 @@ const DUMMY_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
  * La sesión viva PARA ESTA BARBERÍA. Devuelve null si la cookie es de otra
  * barbería — la comparación es el corazón del aislamiento entre tenants.
  */
-export function getPortalSession(barbershopId: string): PortalSession | null {
-  const raw = cookies().get(BARBER_PORTAL_COOKIE)?.value;
+export async function getPortalSession(barbershopId: string): Promise<PortalSession | null> {
+  const raw = (await cookies()).get(BARBER_PORTAL_COOKIE)?.value;
   const session = readPortalSession(raw);
   if (!session) return null;
   if (session.barbershopId !== barbershopId) return null;

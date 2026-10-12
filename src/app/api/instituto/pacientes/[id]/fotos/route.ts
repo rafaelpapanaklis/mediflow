@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
  * 🔴 CAJA NO VE FOTOS. Igual que el odontograma y los estudios: la tabla
  * cuelga del paciente, la lectura va con el alcance del recurso "cases".
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.view");
   if ("response" in g) return g.response;
 

@@ -32,7 +32,7 @@ import "../../blog/blog.css";
 import "../casos.css";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,7 +56,8 @@ function ogUrlFor(title: string): string {
   return `${SITE_URL}/og/blog?title=${encodeURIComponent(title.slice(0, 110))}`;
 }
 
-export function generateMetadata({ params }: Props): Metadata {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const caso = getCasoBySlug(params.slug);
   if (!caso) {
     return { title: "Caso de uso no encontrado | DaleControl", robots: { index: false, follow: false } };
@@ -75,7 +76,8 @@ export function generateMetadata({ params }: Props): Metadata {
   });
 }
 
-export default async function CasoPage({ params }: Props) {
+export default async function CasoPage(props: Props) {
+  const params = await props.params;
   const caso = getCasoBySlug(params.slug);
   if (!caso) notFound();
 

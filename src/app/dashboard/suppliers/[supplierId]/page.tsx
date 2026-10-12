@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { SupplierDetailClient } from "./supplier-detail-client";
 
-export default async function SupplierDetailPage({ params }: { params: { supplierId: string } }) {
+export default async function SupplierDetailPage(props: { params: Promise<{ supplierId: string }> }) {
+  const params = await props.params;
   await getCurrentUser(); // exige sesión de clínica
 
   const supplier = await prisma.supplier.findFirst({

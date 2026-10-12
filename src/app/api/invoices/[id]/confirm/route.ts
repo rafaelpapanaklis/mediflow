@@ -22,7 +22,8 @@ async function getCtx() {
 // Flip DRAFT → PENDING. Las facturas creadas vía autoInvoice / from-appointment
 // nacen como DRAFT para permitir ajustes antes de "emitirlas". Una vez
 // confirmada, ya acepta pagos vía /api/invoices/[id] (POST) y /mark-paid.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Confirmar (DRAFT → PENDING) es parte del ciclo de creación/emisión de

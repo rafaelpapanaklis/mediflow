@@ -7,7 +7,8 @@ import { jsonError, openAgendaGate } from "../../../appointments/_server";
 
 export const dynamic = "force-dynamic";
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await openAgendaGate({ permission: "schedule.manage", feature: "agenda" });
   if (gate.response) return gate.response;
   const { shopId } = gate.gate;

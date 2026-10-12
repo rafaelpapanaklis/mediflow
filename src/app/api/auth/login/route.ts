@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   // Sesión previa fuera: evita mezclar cuentas en el mismo navegador (lo hacía el formulario).
   try { await supabase.auth.signOut(); } catch { /* sin sesión previa */ }
 

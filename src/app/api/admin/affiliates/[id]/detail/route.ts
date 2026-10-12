@@ -279,7 +279,8 @@ async function loadInvited(affiliateId: string): Promise<AdminAffiliateDetailInv
 
 // ── Handler ──────────────────────────────────────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const affiliateId = params.id;

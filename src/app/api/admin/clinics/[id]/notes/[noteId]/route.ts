@@ -6,8 +6,9 @@ import { logAdminClinicMutation } from "@/lib/admin-audit";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string; noteId: string } },
+  props: { params: Promise<{ id: string; noteId: string }> }
 ) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

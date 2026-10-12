@@ -31,7 +31,8 @@ import { EduFotosScreen } from "@/components/edu/fotos/fotos-screen";
  * son FIRMADAS y caducan. Una página cacheada serviría enlaces muertos, y
  * lo peor es que se verían como «se perdieron las fotos del paciente».
  */
-export default async function PacienteFotosPage({ params }: { params: { id: string } }) {
+export default async function PacienteFotosPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

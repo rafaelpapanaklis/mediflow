@@ -26,7 +26,8 @@ export const dynamic = "force-dynamic";
  * abierto; una PENDIENTE no se mueve (su petición ya está en la bandeja
  * del docente del caso viejo).
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.propose");
   if ("response" in g) return g.response;
 

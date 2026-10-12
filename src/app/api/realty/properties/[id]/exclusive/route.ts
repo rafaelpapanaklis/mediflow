@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  *
  * Se guarda UNA por inmueble (la vigente). Si ya hay, se actualiza.
  */
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("owners.manage");
   if ("response" in gate) return gate.response;
 
@@ -52,7 +53,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 /** DELETE — quitar la exclusiva del inmueble. */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("owners.manage");
   if ("response" in gate) return gate.response;
 

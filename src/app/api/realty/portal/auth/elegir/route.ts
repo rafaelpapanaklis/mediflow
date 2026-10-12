@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const csrf = portalCsrfBlocked(req);
     if (csrf) return csrf;
 
-    const session = getPortalSession();
+    const session = await getPortalSession();
     if (!session) return portalUnauthorized();
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

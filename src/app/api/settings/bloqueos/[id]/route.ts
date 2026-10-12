@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
  * El ALCANCE (`doctorId`) no se edita: para cambiarlo se retira y se pone uno
  * nuevo, que vuelve a pasar por el choque. Ver `editarBloqueo`.
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const r = await contextoDeBloqueos();
   if (r instanceof NextResponse) return r;
 
@@ -40,7 +41,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
  * esa tarde no hubo nadie en la clínica. Un DOCTOR retira los suyos; los de
  * toda la clínica, solo la administración.
  */
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const r = await contextoDeBloqueos();
   if (r instanceof NextResponse) return r;
 

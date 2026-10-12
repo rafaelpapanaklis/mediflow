@@ -36,7 +36,8 @@ const MAX_TOURS = 12;
  * El `kind` y el `provider` NO se le preguntan al asesor: se deducen de la
  * propia liga. Un desplegable ahí solo serviría para que se equivoque.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

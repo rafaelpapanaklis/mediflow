@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
 // bloque «CFDI ante el SAT» de la factura. `listo:false` = falta pegar
 // sql/ws1-t3-cfdi-cancelacion.sql (los botones de cancelar y nota de crédito
 // se ocultan; «Consultar estado» sigue).
-export async function GET(_req: NextRequest, { params }: { params: { invoiceId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ invoiceId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.view");

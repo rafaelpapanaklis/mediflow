@@ -48,7 +48,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // ── Topes de las imágenes ────────────────────────────────────────────────
@@ -130,7 +130,8 @@ const PRESUPUESTO_TIEMPO_MS = 70_000;
  * encender la casilla. No escribe bitácora a propósito: no sale ningún dato
  * clínico, solo el número y los bytes.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props0: Params) {
+  const params = await props0.params;
   const user = await getCurrentUser();
 
   const denied = denyIfMissingPermission(user, "medicalRecord.export");

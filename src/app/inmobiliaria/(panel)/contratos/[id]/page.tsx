@@ -20,7 +20,8 @@ import { TablesMissing, contractsGateDenied, gateContractScreen } from "../_gate
 
 export const metadata: Metadata = { title: "Contrato — DaleControl Inmuebles" };
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateContractScreen();
   if (contractsGateDenied(gate)) return gate.screen;
   const { ctx, dict } = gate;

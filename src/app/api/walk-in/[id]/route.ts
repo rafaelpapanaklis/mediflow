@@ -19,7 +19,8 @@ const ACCIONES = {
   cancel: { desde: ["WAITING", "ASSIGNED", "IN_PROGRESS"], a: "CANCELLED" },
 } as const;
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "agenda.edit");
@@ -102,7 +103,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "agenda.edit");

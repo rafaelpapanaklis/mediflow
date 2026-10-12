@@ -11,13 +11,14 @@ export const metadata = { title: "Pagar teleconsulta — DaleControl" };
 // él esta página es un 404 y ni siquiera se consulta la cita. Tampoco se entrega
 // nunca la URL de la sala ni el token del paciente: ya pagada, la liga de la
 // videollamada le llega por WhatsApp (webhook de Stripe).
-export default async function PagoPage({
-  params,
-  searchParams,
-}: {
-  params: { appointmentId: string };
-  searchParams: { t?: string };
-}) {
+export default async function PagoPage(
+  props: {
+    params: Promise<{ appointmentId: string }>;
+    searchParams: Promise<{ t?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   if (!esTokenDePagoValido(params.appointmentId, searchParams?.t)) notFound();
 
   const appointment = await prisma.appointment.findUnique({

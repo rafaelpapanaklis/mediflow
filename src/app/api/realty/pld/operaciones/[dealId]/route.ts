@@ -13,7 +13,8 @@ import { errorPld, gatePld, leerJson, malaPeticion } from "../../_guard";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(req: Request, { params }: { params: { dealId: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ dealId: string }> }) {
+  const params = await props.params;
   const gate = await gatePld("pld.manage");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

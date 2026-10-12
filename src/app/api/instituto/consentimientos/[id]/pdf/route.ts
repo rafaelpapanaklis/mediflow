@@ -31,7 +31,8 @@ export const dynamic = "force-dynamic";
  * el paciente delante.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("consentimientos.view");
   if ("response" in g) return g.response;
 

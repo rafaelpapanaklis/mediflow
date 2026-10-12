@@ -35,7 +35,8 @@ type WalkInAction = "call" | "wait" | "left" | "serve" | "restore";
 
 const ACTIONS: WalkInAction[] = ["call", "wait", "left", "serve", "restore"];
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const body = await readJson(req);
   if (!body) return jsonError("Cuerpo de la solicitud inválido.", 400);
 

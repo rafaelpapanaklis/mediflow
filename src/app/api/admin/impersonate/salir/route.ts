@@ -17,7 +17,7 @@ import { cookiesDeSalida, salirDeSuplantacion } from "@/lib/admin/suplantacion-s
  * no se toca nada. El middleware exige Origin de esta web (POST bajo /api/admin).
  */
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const estado = await estadoSuplantacionDe(supabase);
   if (estado.tipo === "normal") {
     return NextResponse.redirect(`${origenPublicoDe(req, req.url)}/admin`, 303);

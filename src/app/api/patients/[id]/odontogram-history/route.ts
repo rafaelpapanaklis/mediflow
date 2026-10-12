@@ -14,7 +14,7 @@ async function getDbUser() {
   return ctx?.user ?? null;
 }
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 100;
@@ -25,7 +25,8 @@ const MAX_LIMIT = 100;
  * cursor (keyset sobre snapshotAt+id, sin OFFSET). Responde { snapshots,
  * nextCursor }; nextCursor=null cuando no hay más páginas.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

@@ -6,7 +6,8 @@ import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { clearOverridesData } from "@/lib/billing/plan-overrides";
 
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json();
@@ -41,7 +42,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(stripClinicSecrets(clinic));
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

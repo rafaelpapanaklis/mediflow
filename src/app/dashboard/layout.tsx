@@ -61,7 +61,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // navegación suave (que no re-ejecuta este layout) tampoco se lo salta.
   const user = await getCurrentUserSinDosPasos();
   const clinic = user.clinic;
-  const pathname = headers().get("x-pathname") ?? "";
+  const pathname = (await headers()).get("x-pathname") ?? "";
 
   // i18n — idioma del panel resuelto desde la clínica de la sesión. El layout ya
   // tiene la clínica en mano (getCurrentUser arriba), así que resuelve locale +
@@ -90,7 +90,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // getAuthContext/getCurrentUser (y deja pasar «Ver como clínica»).
   const isTwoFaRoute = pathname.startsWith(TWO_FA_ROUTE_PREFIX);
   if (!isTwoFaRoute) {
-    const { decision } = decidirDosPasos(user);
+    const { decision } = await decidirDosPasos(user);
     if (decision === "challenge") {
       redirect(`${TWO_FA_CHALLENGE_PATH}?next=${encodeURIComponent(pathname || "/dashboard")}`);
     }
@@ -219,7 +219,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     orthodonticsModuleReal,
     vistaPreviaSinModulo({
       nodeEnv: process.env.NODE_ENV,
-      cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
+      cookie: (await cookies()).get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
     }),
   );
   // Candado (decisión de Rafael, 28-sep-2026): en clínicas dentales Ortodoncia

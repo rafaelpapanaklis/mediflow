@@ -7,7 +7,8 @@ import { ReviewError } from "@/lib/reviews/types";
 // sin login. Validación y sanitización en el service. Rate-limit por IP.
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 8); // 8 envíos / min / IP
   if (limited) return limited;
 

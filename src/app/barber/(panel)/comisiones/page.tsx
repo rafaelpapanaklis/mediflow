@@ -16,7 +16,8 @@ import { ComisionesClient } from "@/components/barber/commissions/comisiones-cli
  * feature `commissions` (AVANZADO+) + commissions.view. Un rol BARBER recibe
  * SOLO su fila (el recorte lo hace getCommissionSummary, no la UI).
  */
-export default async function Page({ searchParams }: { searchParams: { period?: string } }) {
+export default async function Page(props: { searchParams: Promise<{ period?: string }> }) {
+  const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);

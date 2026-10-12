@@ -26,7 +26,8 @@ const SELECT = {
 } as const;
 
 // ── PATCH: editar campos sueltos (incluye pausar/activar con { status }) ───
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: unknown;
@@ -64,7 +65,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // Las clínicas asignadas NO se borran: el FK es ON DELETE SET NULL, así que
 // quedan sin manager y su tarjeta vuelve al estado vacío. Devolvemos cuántas
 // fueron para que la UI lo confirme (y lo reporte después).
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {

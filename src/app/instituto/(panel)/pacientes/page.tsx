@@ -29,11 +29,12 @@ export const metadata: Metadata = {
  * las que le tocan y punto. Si el recorte viviera en el navegador, sería
  * una cortina, no un muro.
  */
-export default async function InstitutoPacientesPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoPacientesPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

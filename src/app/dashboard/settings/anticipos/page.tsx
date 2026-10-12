@@ -16,11 +16,12 @@ export const metadata: Metadata = { title: "Anticipos por WhatsApp" }; // ws1-t1
  * WhatsApp pide anticipo al agendar. Mismo permiso que las integraciones
  * (settings.edit); la API lo vuelve a exigir.
  */
-export default async function AnticiposPage({
-  searchParams,
-}: {
-  searchParams?: { mp?: string; motivo?: string };
-}) {
+export default async function AnticiposPage(
+  props: {
+    searchParams?: Promise<{ mp?: string; motivo?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "settings.edit");
 

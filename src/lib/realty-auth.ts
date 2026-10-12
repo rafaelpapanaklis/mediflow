@@ -48,7 +48,7 @@ export interface RealtyContext {
 
 export async function getRealtyContext(): Promise<RealtyContext | null> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 

@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
  * 🔴 La zona horaria del "hoy" (y por tanto del día de corte por defecto)
  * es la del INSTITUTO, de la sesión — nunca del body.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;
 

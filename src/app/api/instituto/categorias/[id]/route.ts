@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * los sillones, las especialidades y las sedes. Desactivar la saca de los
  * selectores y deja intacto todo lo que ya apunta a ella.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("tarifarios.manage");
   if ("response" in g) return g.response;
   try {

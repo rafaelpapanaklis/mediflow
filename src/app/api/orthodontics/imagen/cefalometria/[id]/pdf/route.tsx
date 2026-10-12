@@ -47,7 +47,8 @@ async function radiografiaComoDataUrl(path: string | null | undefined): Promise<
   }
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getOrthoActionContext({ write: false });
   if (isFailure(auth)) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: 403 });

@@ -48,7 +48,7 @@ export async function POST() {
   const maxAgeMs = expiresAt.getTime() - Date.now();
   const res = NextResponse.json({ ok: true, expiresAt: expiresAt.toISOString() });
 
-  const token = cookies().get(ADMIN_COOKIE)?.value;
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (token && maxAgeMs > 0) {
     res.cookies.set(ADMIN_COOKIE, token, adminCookieOptions(maxAgeMs));
   }

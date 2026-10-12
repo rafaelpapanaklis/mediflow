@@ -38,7 +38,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * decidir sobre él". Cambiar el alcance clínico compartido para tapar un
  * dato no visible es un cambio que se acuerda, no que se cuela.
  */
-export default async function DocenteCasosPage({ params }: { params: { id: string } }) {
+export default async function DocenteCasosPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

@@ -60,7 +60,7 @@ export const dynamic = "force-dynamic";
  * cuenta el candado— y no una línea de JSON, y sobre todo que ya no existe
  * la salida de emergencia que lo volvía inofensivo para quien atacaba.
  *
- * 🔴 LA SESIÓN LA ESCRIBE ESTE ENDPOINT. `createClient()` de
+ * 🔴 LA SESIÓN LA ESCRIBE ESTE ENDPOINT. `await createClient()` de
  * `@/lib/supabase/server` monta el cliente SSR sobre las cookies de la
  * petición, así que un `signInWithPassword` de aquí deja la cookie
  * `sb-…-auth-token` puesta en la RESPUESTA, exactamente igual que la dejaba
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
   if (!email || !password) return noEntra(400);
 
   // ── 2 · EL INTENTO, aquí y no en el navegador ───────────────────────
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error || !data?.session) {

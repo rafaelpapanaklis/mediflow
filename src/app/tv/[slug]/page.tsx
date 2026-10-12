@@ -15,7 +15,7 @@ import { TvMarketingView } from "./marketing-view";
 import { TvHybridView } from "./hybrid-view";
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 /**
@@ -41,7 +41,8 @@ export function generateStaticParams(): { slug: string }[] {
  * El resto de queries internas usan ese clinicId trusted (validado contra
  * la base por FK y unique slug). No hay forma de leer datos de OTRA clínica.
  */
-export default async function TvPublicPage({ params }: PageProps) {
+export default async function TvPublicPage(props: PageProps) {
+  const params = await props.params;
   const display = await prisma.tVDisplay.findUnique({
     where: { publicSlug: params.slug },
     select: {

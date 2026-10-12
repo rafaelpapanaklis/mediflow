@@ -12,10 +12,8 @@ export const dynamic = "force-dynamic";
  * y devolver los bytes al cupo. Si era una liga externa, `fileUrl` es null
  * y `bytes` es 0: no hay nada que devolver y removeRealtyFiles no hace nada.
  */
-export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string; tourId: string } },
-) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string; tourId: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

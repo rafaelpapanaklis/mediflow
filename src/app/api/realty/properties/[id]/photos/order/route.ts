@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
  * Nota de ruta: este segmento es estático, así que Next lo resuelve ANTES
  * que [photoId] — "order" nunca se toma por el id de una foto.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

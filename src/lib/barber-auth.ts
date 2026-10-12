@@ -34,7 +34,7 @@ export interface BarberContext {
 
 export async function getBarberContext(): Promise<BarberContext | null> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 

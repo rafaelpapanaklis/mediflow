@@ -40,13 +40,14 @@ function dictModelos3d(): Dictionary {
  * son FIRMADAS y caducan. Una página cacheada serviría enlaces muertos, y
  * lo peor es que se verían como "el archivo se perdió".
  */
-export default async function PacienteEstudiosPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function PacienteEstudiosPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

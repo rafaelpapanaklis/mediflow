@@ -9,7 +9,8 @@ import { signNota } from "../../_lib/service";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const e = await entrar(req, ESCRIBIR, 20);
   if ("res" in e) return e.res;
   const { ctx } = e;

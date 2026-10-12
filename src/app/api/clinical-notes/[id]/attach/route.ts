@@ -22,7 +22,7 @@ async function getDbUser() {
   return ctx?.user ?? null;
 }
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * POST /api/clinical-notes/[id]/attach
@@ -31,7 +31,8 @@ interface Params { params: { id: string } }
  *   { id, name, mime, addedAt }
  * (sin migración de schema, mismo enfoque que status DRAFT/SIGNED).
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

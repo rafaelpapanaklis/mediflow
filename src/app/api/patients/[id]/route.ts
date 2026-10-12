@@ -23,7 +23,8 @@ import { WA_REMINDER_PENDING_STATUSES } from "@/lib/whatsapp/reminder-status";
 import { linkOrphanThreadsToPatient } from "@/lib/whatsapp/inbox-log";
 import { marcarPendienteEnTx } from "@/lib/anticipos/cita-cancelada.server";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -90,7 +91,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   });
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -198,7 +200,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
  * (VIP), cambiar status, reasignar doctor, etc. El PUT exige el formulario
  * completo; sin este handler esas acciones caían en 405 y fallaban en silencio.
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -496,7 +499,8 @@ async function cancelFutureAppointmentsForPatient(
  * responde 409 con `{ blocked: true, reasons: [{ type, count }] }` para que la
  * UI lo explique en español y ofrezca archivar.
  */
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

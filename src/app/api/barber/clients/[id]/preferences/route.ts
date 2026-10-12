@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
  * se tiran del cuerpo y se conservan de la fila: por eso desde el navegador
  * no se puede fabricar un canje ni borrar un bloqueo.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 

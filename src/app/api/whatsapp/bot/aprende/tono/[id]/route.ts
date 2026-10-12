@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
  * DELETE /api/whatsapp/bot/aprende/tono/[id] (ws1-t11)
  * Quita un ejemplo de tono: lo DESACTIVA (la fila se queda), con guardia de clínica.
  */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denegarSiNoPuedeEditar(ctx);

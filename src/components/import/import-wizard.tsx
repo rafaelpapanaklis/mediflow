@@ -84,7 +84,7 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
   const t = useT();
   const nueva = apariencia === "nueva";
   // El cliente por defecto (real) se crea una sola vez por montaje.
-  const fallbackClient = useRef<ImportClient>();
+  const fallbackClient = useRef<ImportClient | undefined>(undefined);
   if (!fallbackClient.current) fallbackClient.current = new RealImportClient();
   const api = client ?? fallbackClient.current;
 

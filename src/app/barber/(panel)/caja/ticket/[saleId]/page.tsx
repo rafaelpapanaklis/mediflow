@@ -13,7 +13,8 @@ import { TicketPrint } from "@/components/barber/cash/ticket-print";
 
 /** /barber/caja/ticket/[saleId] — ticket imprimible. Solo tickets de la
  *  barbería en sesión (uno ajeno → 404, sin filtrar existencia). */
-export default async function Page({ params }: { params: { saleId: string } }) {
+export default async function Page(props: { params: Promise<{ saleId: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);

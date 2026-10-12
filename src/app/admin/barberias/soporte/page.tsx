@@ -10,11 +10,12 @@ import { AdminBarberSoporteClient } from "./soporte-client";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Soporte de barberías — Admin DaleControl" };
 
-export default function AdminBarberSoportePage({
-  searchParams,
-}: {
-  searchParams?: { barbershopId?: string };
-}) {
+export default async function AdminBarberSoportePage(
+  props: {
+    searchParams?: Promise<{ barbershopId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // Se lee aquí (server) y no con useSearchParams para no obligar a envolver
   // el cliente en un <Suspense> sólo por el filtro de entrada.
   return <AdminBarberSoporteClient initialBarbershopId={searchParams?.barbershopId ?? ""} />;

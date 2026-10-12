@@ -16,10 +16,8 @@ import { isB2BPaymentMethod } from "@/lib/payments-b2b";
 //   - serviceId (si viene) debe ser un servicio activo de ESTE lab.
 //
 // Body: { serviceId?, paymentMethod?, patientName?, internalRef?, notes?, priority? }
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { labId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ labId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

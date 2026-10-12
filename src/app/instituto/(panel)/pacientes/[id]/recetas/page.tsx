@@ -24,7 +24,8 @@ import { EduRecetasScreen } from "@/components/edu/recetas/recetas-screen";
  *     ninguna pase lo que pase — una receta es un documento clínico, no
  *     un cobro — y el alumno ve las de SUS casos.
  */
-export default async function PacienteRecetasPage({ params }: { params: { id: string } }) {
+export default async function PacienteRecetasPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

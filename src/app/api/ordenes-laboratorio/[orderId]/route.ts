@@ -72,7 +72,8 @@ function toDentalLabOrderDTO(o: OrderWith): DentalLabOrderDTO {
 
 // GET /api/ordenes-laboratorio/[orderId] — detalle de una orden de la clínica.
 // Scopeado por clinicId de sesión: una orden de otra clínica devuelve 404.
-export async function GET(_req: NextRequest, { params }: { params: { orderId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
@@ -96,7 +97,8 @@ export async function GET(_req: NextRequest, { params }: { params: { orderId: st
 // Solo permitido si la orden NO está en un estado terminal y la transición
 // hacia "CANCELADA" es válida según el flujo canónico. Registra el evento de
 // cancelación en la línea de tiempo (DentalLabOrderEvent).
-export async function PATCH(_req: NextRequest, { params }: { params: { orderId: string } }) {
+export async function PATCH(_req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

@@ -21,7 +21,7 @@ import { METODO_ANTICIPO } from "@/lib/patient-credit-core";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * Cargos de un presupuesto ACEPTADO (ws1-t6, «Se cobrará hoy»).
@@ -56,7 +56,8 @@ async function cargar(ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>
   return { quote };
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const deniedPerm = denyIfMissingPermission(ctx, "billing.view");
@@ -113,7 +114,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Emite una factura con folio: la misma llave que POST /api/invoices y

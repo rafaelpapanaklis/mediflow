@@ -17,7 +17,8 @@ import { assertRealtyArea, getOffboardImpact, offboardMember, realtyApiError } f
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ctx = await getRealtyContext();
     if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -29,7 +30,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ctx = await getRealtyContext();
     if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });

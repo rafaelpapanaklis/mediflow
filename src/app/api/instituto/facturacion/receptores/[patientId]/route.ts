@@ -12,10 +12,8 @@ export const dynamic = "force-dynamic";
  * modal de facturación. `null` (con 200) cuando todavía no tiene: no es un
  * error, es lo normal la primera vez que ese paciente pide factura.
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: { patientId: string } },
-) {
+export async function GET(_request: Request, props: { params: Promise<{ patientId: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("facturacion.view");
   if ("response" in g) return g.response;
 
@@ -37,10 +35,8 @@ export async function GET(
  * congela en la factura al timbrar. Un CFDI dice a nombre de quién se
  * emitió, no a nombre de quién se emitiría hoy.
  */
-export async function PUT(
-  request: Request,
-  { params }: { params: { patientId: string } },
-) {
+export async function PUT(request: Request, props: { params: Promise<{ patientId: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("facturacion.emit");
   if ("response" in g) return g.response;
 

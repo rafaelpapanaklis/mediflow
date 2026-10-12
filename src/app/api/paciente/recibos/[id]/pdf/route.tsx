@@ -272,7 +272,8 @@ function ReciboPagoDocument(props: ReciboProps) {
   );
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props0: { params: Promise<{ id: string }> }) {
+  const params = await props0.params;
   try {
     const ctx = await getPatientPortalContext();
     if (!ctx) return pacienteUnauthorized();

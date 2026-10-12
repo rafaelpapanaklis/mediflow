@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
  * `priceAtBooking`. La respuesta trae `previousPrice` cuando cambió, para
  * que la pantalla lo diga con el número viejo delante.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateServices();
   if ("response" in gate) return gate.response;
   try {
@@ -31,7 +32,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
  * DELETE /api/barber/services/[id] → borra de verdad SOLO si no tiene citas
  * ni ventas (409 si las tiene: hay que retirarlo, no borrarlo).
  */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateServices();
   if ("response" in gate) return gate.response;
   try {

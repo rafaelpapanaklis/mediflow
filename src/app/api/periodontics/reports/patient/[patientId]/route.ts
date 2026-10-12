@@ -16,10 +16,8 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { patientId: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ patientId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   // M6: módulo de periodoncia = expediente (antes bastaba con tener el módulo).

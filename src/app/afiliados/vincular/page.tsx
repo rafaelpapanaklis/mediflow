@@ -27,11 +27,12 @@ export const metadata: Metadata = {
  *  · Sin sesión, rebotado del registro con 409 needsLogin → escribe su
  *    contraseña de siempre y se activa.
  */
-export default async function AffiliateVincularPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function AffiliateVincularPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const { sessionEmail, alreadyAffiliate } = await getAffiliateLinkState();
 
   // Ya es afiliado: nada que vincular. El layout del panel lo manda a

@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
  * { accion: "aprobar", pregunta?, respuesta? } → crea la respuesta frecuente
  * (con el texto editado, si viene). { accion: "descartar" } → no vuelve a salir.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denegarSiNoPuedeEditar(ctx);

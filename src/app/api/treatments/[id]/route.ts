@@ -8,7 +8,8 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { consumeFefoTx, esErrorDeLotesNoAplicados, InsufficientStockError } from "@/lib/inventory/lots.server";
 import { consumeRecipeForSession } from "@/lib/inventory/recipe.server";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -245,7 +246,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({ success: true });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // EQ-07: mismo interruptor que crear y editar.

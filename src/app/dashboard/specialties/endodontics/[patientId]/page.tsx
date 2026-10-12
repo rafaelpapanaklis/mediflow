@@ -17,13 +17,14 @@ import {
   loadEndoToothSummaries,
 } from "@/lib/helpers/loadEndoToothData";
 
-export default async function EndodonticsPatientDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { patientId: string };
-  searchParams?: { tooth?: string };
-}) {
+export default async function EndodonticsPatientDetailPage(
+  props: {
+    params: Promise<{ patientId: string }>;
+    searchParams?: Promise<{ tooth?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");

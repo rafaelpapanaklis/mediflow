@@ -15,11 +15,13 @@ import { XraysClient } from "../xrays-client";
 export const metadata: Metadata = { title: "Radiografías · paciente — DaleControl" };
 
 interface Props {
-  params: { patientId: string };
-  searchParams: { fileId?: string };
+  params: Promise<{ patientId: string }>;
+  searchParams: Promise<{ fileId?: string }>;
 }
 
-export default async function XraysPatientPage({ params, searchParams }: Props) {
+export default async function XraysPatientPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const user = await getCurrentUser();
   // EQ-07: misma puerta que la lista y que GET /api/xrays.
   requirePermissionOrRedirect(user, "xrays.view");

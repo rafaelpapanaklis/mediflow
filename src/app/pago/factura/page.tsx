@@ -9,11 +9,12 @@ export const metadata = { title: "Pago de tu nota — DaleControl" };
  * no esta vuelta. Solo se lee el estado que Mercado Pago pega en la URL, para
  * no decir «¡listo!» a quien le rechazaron la tarjeta.
  */
-export default function PagoFacturaPage({
-  searchParams,
-}: {
-  searchParams?: { collection_status?: string; status?: string };
-}) {
+export default async function PagoFacturaPage(
+  props: {
+    searchParams?: Promise<{ collection_status?: string; status?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const estado = searchParams?.collection_status ?? searchParams?.status ?? "";
   const aprobado = estado === "approved";
   const rechazado = estado === "rejected" || estado === "null" || estado === "cancelled";

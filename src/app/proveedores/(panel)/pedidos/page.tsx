@@ -37,11 +37,12 @@ const FILTERS: { value: SupplierOrderStatus | "ALL"; label: string }[] = [
   { value: "CANCELLED", label: "Cancelados" },
 ];
 
-export default async function SupplierOrdersPage({
-  searchParams,
-}: {
-  searchParams: { status?: string };
-}) {
+export default async function SupplierOrdersPage(
+  props: {
+    searchParams: Promise<{ status?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getSupplierContext();
   if (!ctx) redirect("/proveedores/login");
 

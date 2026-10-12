@@ -27,7 +27,8 @@ export const dynamic = "force-dynamic";
  * cobro). Por eso se le pasa `canManage` a la capa de datos en vez de
  * partir el endpoint en dos.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("agenda.view");
   if ("response" in g) return g.response;
 

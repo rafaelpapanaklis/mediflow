@@ -68,11 +68,12 @@ export const metadata: Metadata = {
  * puerta de entrada a todo lo demás.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function InstitutoInicioPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoInicioPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

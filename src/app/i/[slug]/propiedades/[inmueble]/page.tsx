@@ -75,10 +75,11 @@ export function generateStaticParams(): { slug: string; inmueble: string }[] {
 }
 
 interface Props {
-  params: { slug: string; inmueble: string };
+  params: Promise<{ slug: string; inmueble: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const [seo, ficha] = await Promise.all([
     cargarSeoRealty(params.slug),
     cargarFichaRealty(params.slug, params.inmueble),
@@ -107,7 +108,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-export default async function PaginaFicha({ params }: Props) {
+export default async function PaginaFicha(props: Props) {
+  const params = await props.params;
   const [carga, ficha] = await Promise.all([
     cargarWebRealty(params.slug),
     cargarFichaRealty(params.slug, params.inmueble),

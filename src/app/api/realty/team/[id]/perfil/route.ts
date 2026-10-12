@@ -15,7 +15,8 @@ import { assertRealtyArea, realtyApiError, saveAgentProfile } from "@/lib/realty
 
 export const dynamic = "force-dynamic";
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ctx = await getRealtyContext();
     if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });

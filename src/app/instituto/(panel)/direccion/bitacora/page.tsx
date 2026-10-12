@@ -69,11 +69,12 @@ export const metadata: Metadata = {
  * día: desde la lista de pacientes y desde la ficha (ya filtrada).
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function DireccionBitacoraPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function DireccionBitacoraPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

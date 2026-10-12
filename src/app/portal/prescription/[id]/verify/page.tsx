@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
@@ -15,7 +15,8 @@ interface PageProps {
  * pública del documento, no hay scope adicional que aplicar — el QR
  * único (16-byte hex unique) actúa como token de bearer.
  */
-export default async function VerifyPrescriptionPage({ params }: PageProps) {
+export default async function VerifyPrescriptionPage(props: PageProps) {
+  const params = await props.params;
   const rx = await prisma.prescription.findUnique({
     where: { id: params.id },
     include: {

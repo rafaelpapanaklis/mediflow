@@ -13,7 +13,7 @@ import type { RealtyOperation, RealtyPropertyKind } from "@/lib/realty/types";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const PutSchema = z.object({
   operation: z.enum(["VENTA", "RENTA", "AMBAS"]),
@@ -32,7 +32,8 @@ const PutSchema = z.object({
  * MATCH automático, así que se guarda por CONTACTO (no por lead): la misma
  * persona con dos prospectos busca lo mismo.
  */
-export async function PUT(req: NextRequest, { params }: Params) {
+export async function PUT(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkLeadsAccess(ctx, "leads.edit");
   if (!guard.ok) return NextResponse.json({ error: guard.error ?? "Sin permiso" }, { status: guard.status ?? 403 });

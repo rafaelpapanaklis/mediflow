@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const PostSchema = z.object({
@@ -39,7 +39,8 @@ const MESSAGE_SELECT = {
   sentAt: true,
 } as const;
 
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const limited = rateLimit(req, 60);
   if (limited) return limited;
   const serverTime = new Date();
@@ -73,7 +74,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const limited = rateLimit(req, 30);
   if (limited) return limited;
   try {

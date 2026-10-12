@@ -23,7 +23,8 @@ export const dynamic = "force-dynamic";
  * odontograma del que habla. El historial de un hallazgo es el hallazgo.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("odontograma.view");
   if ("response" in g) return g.response;
   try {

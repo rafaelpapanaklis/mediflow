@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * EduPayment normal (entra al turno abierto y a su corte) y, si era la
  * última, la misma transacción deja el plan LIQUIDADO.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;
 

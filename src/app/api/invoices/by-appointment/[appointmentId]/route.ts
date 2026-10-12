@@ -22,7 +22,8 @@ async function getCtx() {
 // factura deben pertenecer a la clínica activa). 404 si la cita no tiene
 // factura todavía — el caller muestra el aviso de "genera la factura desde
 // el expediente".
-export async function GET(_req: NextRequest, { params }: { params: { appointmentId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ appointmentId: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Mismo gate que la pestaña Facturación de la ficha y que Caja: leer la

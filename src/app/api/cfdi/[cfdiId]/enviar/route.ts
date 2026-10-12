@@ -37,7 +37,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type Params = { params: { cfdiId: string } };
+type Params = { params: Promise<{ cfdiId: string }> };
 
 /** El CFDI de la clínica de la sesión con lo necesario para mandarlo, o la respuesta de error. */
 async function cargar(req: NextRequest, cfdiId: string) {
@@ -82,7 +82,8 @@ function correoDelReceptor(receptor: unknown): string | null {
   return e || null;
 }
 
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const c = await cargar(req, params.cfdiId);
   if ("error" in c) return c.error;
   const { ctx, record, invoice } = c;
@@ -126,7 +127,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   });
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
 

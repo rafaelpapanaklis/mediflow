@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 // auditoría de uso, N-21): lo neto (sin lo devuelto ni lo pasado a saldo a favor), sin pasar del
 // total de la nota ni de lo que falta por timbrar. «Facturar este pago» lo enseña en vez del monto
 // bruto del cobro. Solo lectura, mismo permiso que timbrar; el clinicId sale de la sesión.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
   if (err) return ctx ? NextResponse.json({ error: textoSoloDuenoTimbra(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : err;

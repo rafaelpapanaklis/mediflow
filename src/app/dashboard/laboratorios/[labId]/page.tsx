@@ -6,7 +6,8 @@ import { notFound } from "next/navigation";
 import { dentalLabEnabledB2BMethods } from "@/lib/laboratorios/types";
 import { LabDetailClient } from "./lab-detail-client";
 
-export default async function LabDetailPage({ params }: { params: { labId: string } }) {
+export default async function LabDetailPage(props: { params: Promise<{ labId: string }> }) {
+  const params = await props.params;
   // Sesión de clínica. El usuario trae la clínica activa incluida → de ahí
   // sacamos la dirección de recolección (clinicId SIEMPRE de sesión, nunca del
   // request, igual que getAuthContext en el POST de órdenes).

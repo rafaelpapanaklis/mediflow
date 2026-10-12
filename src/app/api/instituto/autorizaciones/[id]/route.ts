@@ -31,7 +31,8 @@ export const dynamic = "force-dynamic";
  * elige qué permiso se exige; una fila que no toca la rebota después
  * decideEduApproval con 404, igual que siempre.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("autorizaciones.decide");
   if ("response" in g) return g.response;
 

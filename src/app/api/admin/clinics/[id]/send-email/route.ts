@@ -7,7 +7,8 @@ import { logAdminGlobalEvent } from "@/lib/admin-audit";
 // Envía emails usando Resend (https://resend.com) si RESEND_API_KEY está configurada.
 // Fallback: responde 503 con instrucciones. No usamos SMTP directo para mantener el
 // bundle ligero en entornos serverless.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

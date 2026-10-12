@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
 // CFDI vigente de la factura, la factura se suelta para volver a timbrarse.
 // Funciona aunque no se haya pegado sql/ws1-t3-cfdi-cancelacion.sql (solo
 // escribe columnas que ya existen). No cambia nada ante el SAT: solo lee.
-export async function POST(req: NextRequest, { params }: { params: { cfdiId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ cfdiId: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 30, 60 * 1000);
   if (rl) return rl;
 

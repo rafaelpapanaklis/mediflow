@@ -18,7 +18,8 @@ export const runtime = "nodejs";
  * MISMO 404 con el MISMO texto. Distinguirlos convertiría esta ruta en un
  * oráculo de qué ids existen.
  */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("properties.view");
   if ("response" in gate) return gate.response;
 

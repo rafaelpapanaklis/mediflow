@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
 // El motivo va en la QUERY del DELETE de Facturapi (lib/facturapi.ts,
 // `urlCancelacion`). Con 01 hay que timbrar antes el sustituto (POST /api/cfdi
 // con `sustituyeCfdiId`). Reglas: lib/invoices/cfdi-cancelacion.ts.
-export async function POST(req: NextRequest, { params }: { params: { cfdiId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ cfdiId: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 20, 60 * 60 * 1000);
   if (rl) return rl;
 

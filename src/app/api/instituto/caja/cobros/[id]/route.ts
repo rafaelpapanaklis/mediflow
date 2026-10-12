@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * (404): el recorte va en el `where`, no en un `if` después de leer. Un
  * 403 confirmaría que ese folio existe.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.view");
   if ("response" in g) return g.response;
 
@@ -41,7 +42,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * misma clase de acto que devolverlo, no la de cobrarlo. Y exige que no
  * haya un peso pagado — primero se devuelve, después se cancela.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.refund");
   if ("response" in g) return g.response;
 

@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
  * buscar a su docente para poder anotarlo. Lo que puede revocar está
  * recortado a SUS pacientes por el alcance, como todo lo demás.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("consentimientos.revoke");
   if ("response" in g) return g.response;
 

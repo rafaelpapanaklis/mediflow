@@ -36,10 +36,11 @@ const PatchSchema = z
   .refine((v) => Object.keys(v).length > 0, "no fields to update");
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(req: Request, props: Params) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   const denied = denyIfMissingPermission(session.user, "resources.edit");
@@ -79,7 +80,8 @@ export async function PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ resource: updated });
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(_req: Request, props: Params) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   const denied = denyIfMissingPermission(session.user, "resources.edit");

@@ -22,7 +22,8 @@ function errorToResponse(err: unknown): NextResponse {
   return NextResponse.json({ error: "Error interno" }, { status: 500 });
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -36,7 +37,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });

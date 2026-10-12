@@ -38,16 +38,16 @@ const ANON: ResolvedIdentity = {
 };
 
 export async function resolveIdentity(): Promise<ResolvedIdentity> {
-  let jar: ReturnType<typeof cookies>;
+  let jar: Awaited<ReturnType<typeof cookies>>;
   try {
-    jar = cookies();
+    jar = await cookies();
   } catch {
     return { ...ANON };
   }
 
   // 1) STAFF — la señal más valiosa (clínica identificada).
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     const sUser = data?.user;
     if (sUser) {

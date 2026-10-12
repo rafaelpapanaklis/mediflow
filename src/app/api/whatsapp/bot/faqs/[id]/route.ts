@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * findFirst { id, clinicId } antes de mutar — clinicId de la sesión.
  * Exige "whatsapp.send" (mismo criterio que crear una FAQ).
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denegarBot(ctx, "editar");
@@ -53,7 +54,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
  * Borra una FAQ. Guard de pertenencia por clinicId (doble cinturón con
  * deleteMany { id, clinicId }). Exige "whatsapp.send".
  */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denegarBot(ctx, "editar");

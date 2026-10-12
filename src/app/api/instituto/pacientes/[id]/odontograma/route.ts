@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
  * es "none". Con el alcance de "patients" —el que "parece" natural porque
  * es de donde cuelga— caja vería el odontograma de la escuela entera.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("odontograma.view");
   if ("response" in g) return g.response;
 
@@ -50,7 +51,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * El `condition` se valida CONTRA EL CATÁLOGO compartido de hallazgos: sin
  * eso, el odontograma es un campo de texto libre con forma de dibujo.
  */
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("odontograma.edit");
   if ("response" in g) return g.response;
 
@@ -71,7 +73,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
  * tabla con una key RESERVADA ("__nota__") que el saneo del PUT rechaza a
  * propósito, para que el pincel no pueda pisar ni borrar una nota.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("odontograma.edit");
   if ("response" in g) return g.response;
 
@@ -103,7 +106,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
  * misma puerta de pertenencia dentro (el paciente tiene que estar en el
  * alcance clínico de quien escribe).
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("odontograma.edit");
   if ("response" in g) return g.response;
 

@@ -45,7 +45,8 @@ export const dynamic = "force-dynamic";
 /** Ventana anti-spam: no se encola dos veces al mismo número tan seguido. */
 const DEDUPE_MINUTES = 10;
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const body = await readJson(req);
   const gate = await openAgendaGate({
     permission: "walkin.manage",

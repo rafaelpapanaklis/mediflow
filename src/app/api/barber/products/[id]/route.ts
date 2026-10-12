@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 // PATCH /api/barber/products/[id] → edita nombre/SKU/precio/costo/mínimo/
 // unidad/activo. El stock NO se edita aquí (solo por movimientos).
 // products.manage. Un id de otra barbería responde 404.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

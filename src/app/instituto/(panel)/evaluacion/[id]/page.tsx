@@ -31,11 +31,12 @@ export const metadata: Metadata = {
  * teclee el id de un compañero recibe un 404 idéntico al de un alumno que
  * no existe — que es exactamente lo que tiene que verse desde fuera.
  */
-export default async function InstitutoBitacoraPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function InstitutoBitacoraPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

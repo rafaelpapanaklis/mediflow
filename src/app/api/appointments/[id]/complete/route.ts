@@ -34,14 +34,15 @@ const Schema = z.object({
   signNote: z.boolean().optional().default(true),
 });
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * PATCH /api/appointments/[id]/complete
  * Marca la cita como COMPLETED y, si existe una nota clínica vinculada,
  * la firma (specialtyData.status = "SIGNED").
  */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
 

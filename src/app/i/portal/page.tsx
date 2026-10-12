@@ -29,12 +29,13 @@ import { portalT } from "@/components/realty/portal/portal-i18n";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams: { tel?: string; c?: string };
+  searchParams: Promise<{ tel?: string; c?: string }>;
 }
 
-export default async function PortalEntradaPage({ searchParams }: PageProps) {
+export default async function PortalEntradaPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const t = portalT();
-  const session = getPortalSession();
+  const session = await getPortalSession();
 
   // 🔴 CON COOKIE, EL DESTINO SE DECIDE CON LO QUE DICE LA BASE, NO CON LO
   // QUE DICE LA COOKIE. Confiar en la cara guardada abre un bucle: si a esa

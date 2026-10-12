@@ -6,7 +6,7 @@
 // AgendaValidateBanner).
 //
 // CONTRATO:
-//   export function ChangeRequestsPanel(props: { onResolved?: () => void }): JSX.Element | null
+//   export function ChangeRequestsPanel(props: { onResolved?: () => void }): React.JSX.Element | null
 //
 // - SWR: GET /api/appointment-change-requests?status=PENDING (30s + focus).
 // - 0 pendientes → null.
@@ -88,7 +88,7 @@ function formatDayTimeRange(startIso: string, endIso: string | null | undefined,
   return `${base}–${formatTimeInTz(endIso, timezone)}`;
 }
 
-export function ChangeRequestsPanel(props: { onResolved?: () => void }): JSX.Element | null {
+export function ChangeRequestsPanel(props: { onResolved?: () => void }): React.JSX.Element | null {
   const { onResolved } = props;
   const { state } = useAgenda();
   const timezone = state.timezone;

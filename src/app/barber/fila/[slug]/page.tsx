@@ -22,7 +22,7 @@ import "../../barber-theme.css";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 /**
@@ -48,7 +48,8 @@ async function loadShop(slug: string) {
   }
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const shop = await loadShop(params.slug);
   return {
     title: shop ? `Fila virtual · ${shop.name}` : "Fila virtual",
@@ -59,7 +60,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function BarberPublicQueuePage({ params }: PageProps) {
+export default async function BarberPublicQueuePage(props: PageProps) {
+  const params = await props.params;
   const shop = await loadShop(params.slug);
   const open = Boolean(shop && shop.isActive && isBarbershopSubscriptionActive(shop));
 

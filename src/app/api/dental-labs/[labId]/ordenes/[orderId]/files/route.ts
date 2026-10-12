@@ -85,8 +85,9 @@ function validateDesignSignature(ext: string, buf: Buffer): string | null {
 //   - labId + orderId del path; la orden DEBE ser de ese lab y de esa clínica.
 export async function POST(
   req: NextRequest,
-  { params }: { params: { labId: string; orderId: string } },
+  props: { params: Promise<{ labId: string; orderId: string }> }
 ) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

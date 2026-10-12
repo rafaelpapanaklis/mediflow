@@ -36,7 +36,8 @@ export const dynamic = "force-dynamic";
  */
 
 /** GET — el paciente lee su presupuesto. */
-export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 30);
   if (rl) return rl;
   try {
@@ -56,7 +57,8 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
  * segunda petición escribe cero filas y contesta que ya estaba aceptado,
  * en vez de pisar la hora y la evidencia de la primera.
  */
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 10);
   if (rl) return rl;
   try {

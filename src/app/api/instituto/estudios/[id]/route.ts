@@ -33,7 +33,8 @@ export const dynamic = "force-dynamic";
  * escuela es 404, igual que uno inventado.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 
@@ -73,7 +74,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
  * binario y solo sirve para limpiar una subida a medias. Su 409 ahora
  * manda aquí en vez de acabarse en sí mismo.
  */
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

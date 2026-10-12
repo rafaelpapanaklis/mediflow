@@ -16,15 +16,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { slug: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   try {
     const shop = await resolvePortalShop(params.slug);
     if (!shop) return NextResponse.json({ error: "Barbería no encontrada" }, { status: 404 });
 
-    const session = getPortalSession(shop.id);
+    const session = await getPortalSession(shop.id);
     if (!session) return NextResponse.json({ error: "Sesión no válida" }, { status: 401 });
 
     const data = await loadPortalData({

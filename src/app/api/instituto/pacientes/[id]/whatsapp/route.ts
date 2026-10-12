@@ -40,7 +40,8 @@ export const dynamic = "force-dynamic";
  * `[id]` del paciente sí viene de la ruta — y por eso se vuelve a buscar
  * dentro del alcance en vez de creerle.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
 

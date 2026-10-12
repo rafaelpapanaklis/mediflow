@@ -267,7 +267,7 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.at.getTime() - a.at.getTime())
     .slice(0, 20);
 
-  const lastSeenRaw = cookies().get("notifLastSeen")?.value;
+  const lastSeenRaw = (await cookies()).get("notifLastSeen")?.value;
   const lastSeen = lastSeenRaw ? new Date(lastSeenRaw) : null;
   const unreadCount = lastSeen
     ? events.filter(e => e.at > lastSeen).length

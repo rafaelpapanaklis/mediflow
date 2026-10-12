@@ -30,11 +30,12 @@ import { OrthoPacientesTable } from "@/components/specialties/orthodontics/Ortho
 import { Pantalla } from "@/components/specialties/orthodontics/modulo/piezas";
 import { AbrirCasoBoton } from "@/components/specialties/orthodontics/modulo/abrir-caso";
 
-export default async function OrthodonticsPacientesPage({
-  searchParams,
-}: {
-  searchParams?: { estado?: string | string[]; ver?: string | string[] };
-}) {
+export default async function OrthodonticsPacientesPage(
+  props: {
+    searchParams?: Promise<{ estado?: string | string[]; ver?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await exigirModuloOrtodoncia();
   const user = await getCurrentUser();
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };

@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
  *
  * Multi-tenant: la receta debe pertenecer a la clínica del usuario.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // ISO-03: "Ver recetas" del modal, override incluido (antes capa por rol).

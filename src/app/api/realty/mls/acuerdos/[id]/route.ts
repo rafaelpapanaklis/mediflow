@@ -24,7 +24,8 @@ type Accion = (typeof ACCIONES)[number];
  * de las dos partes del acuerdo. No hay oráculo que filtre nada: ya sé que
  * existe porque es mío.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("properties.view");
   if ("response" in gate) return gate.response;
 

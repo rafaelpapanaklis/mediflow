@@ -21,7 +21,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * alumnos: cubrir el turno de un compañero es un caso real, y las dos
  * preguntas tienen respuestas distintas.
  */
-export default async function DocenteAgendaPage({ params }: { params: { id: string } }) {
+export default async function DocenteAgendaPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

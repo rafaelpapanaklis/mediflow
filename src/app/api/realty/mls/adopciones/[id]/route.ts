@@ -11,7 +11,8 @@ export const runtime = "nodejs";
  * El `where` del update lleva SIEMPRE el accountId de la sesión, así que
  * el id de la adopción de otra cuenta afecta a cero filas y responde 404.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("web.edit");
   if ("response" in gate) return gate.response;
 
@@ -35,7 +36,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
  * adopción no tiene historial colgando: es una decisión de escaparate y
  * deshacerla no deja a nadie sin el papel de dónde salió su dinero.
  */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("web.edit");
   if ("response" in gate) return gate.response;
 

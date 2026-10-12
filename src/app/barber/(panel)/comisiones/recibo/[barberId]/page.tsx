@@ -20,13 +20,14 @@ import { ReceiptPrint } from "@/components/barber/commissions/receipt-print";
 
 /** /barber/comisiones/recibo/[barberId]?period=YYYY-MM — recibo imprimible.
  *  Un BARBER que pida el recibo de otro recibe 404 (el recorte es del server). */
-export default async function Page({
-  params,
-  searchParams,
-}: {
-  params: { barberId: string };
-  searchParams: { period?: string };
-}) {
+export default async function Page(
+  props: {
+    params: Promise<{ barberId: string }>;
+    searchParams: Promise<{ period?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);

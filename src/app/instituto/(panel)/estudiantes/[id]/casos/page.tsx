@@ -25,7 +25,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * CAJA no llega: `casos.view` no lo tiene, y el recurso "cases" le devuelve
  * "none" aunque alguien le encienda el interruptor por error.
  */
-export default async function EstudianteCasosPage({ params }: { params: { id: string } }) {
+export default async function EstudianteCasosPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

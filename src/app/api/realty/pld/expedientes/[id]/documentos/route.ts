@@ -57,7 +57,8 @@ function fechaOpcional(raw: FormDataEntryValue | null): Date | null {
   return fechaDeCalendario(typeof raw === "string" ? raw : null);
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gatePld("pld.manage");
   if ("response" in gate) return gate.response;
   const { ctx, nombreUsuario } = gate;

@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   // 1) SESIÓN VERIFICADA EN EL SERVIDOR. Única fuente del supabaseId y del correo.
   let user: { id: string; email?: string } | null = null;
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     user = data.user ?? null;
   } catch {

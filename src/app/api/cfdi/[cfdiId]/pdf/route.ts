@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
 // pero quien puede VER la facturación de un paciente debe poder entregarle su
 // CFDI — timbrar sigue siendo admin-only en POST /api/cfdi) y respeta la
 // visibilidad por paciente de la factura. La org key nunca llega al cliente.
-export async function GET(req: NextRequest, { params }: { params: { cfdiId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ cfdiId: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 30, 60 * 1000);
   if (rl) return rl;
 

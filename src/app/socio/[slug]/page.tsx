@@ -68,7 +68,7 @@ async function getApprovedAffiliate(slug: string) {
 // del catálogo (@/lib/affiliates/page-config); el orden por defecto de ese
 // catálogo es EXACTAMENTE este, así que un socio sin configuración guardada ve
 // la página de siempre.
-const SECTION_COMPONENTS: Record<string, () => JSX.Element> = {
+const SECTION_COMPONENTS: Record<string, () => React.JSX.Element> = {
   "prueba-social": SocialProof,
   funciones: FeaturesGrid,
   destacados: Spotlights,
@@ -78,13 +78,14 @@ const SECTION_COMPONENTS: Record<string, () => JSX.Element> = {
 };
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
   // ?c=<campaña> para click tracking; generateMetadata NO lo usa (el canonical
   // queda limpio, sin ?c).
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const affiliate = await getApprovedAffiliate(params.slug);
   if (!affiliate) return { title: "Socio no encontrado · DaleControl" };
   return {
@@ -98,7 +99,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PartnerLandingPage({ params, searchParams }: Props) {
+export default async function PartnerLandingPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const affiliate = await getApprovedAffiliate(params.slug);
   if (!affiliate) notFound();
 
@@ -129,12 +132,12 @@ export default async function PartnerLandingPage({ params, searchParams }: Props
   // hay identificador de navegador con el que deduplicar.
   if (c) {
     try {
-      const h = headers();
+      const h = await headers();
       const counts = await shouldCountAffiliateClick({
         userAgent: h.get("user-agent"),
         ref: affiliate.referralCode,
         ipHash: hashIp(clientIp(h)),
-        vid: parseVisitorId(cookies().get(VISITOR_COOKIE)?.value),
+        vid: parseVisitorId((await cookies()).get(VISITOR_COOKIE)?.value),
       });
       if (counts) {
         await prisma.affiliateLink.updateMany({

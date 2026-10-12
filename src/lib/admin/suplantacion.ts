@@ -257,7 +257,7 @@ export async function suplantacionDeEstaPeticion(): Promise<FilaSuplantacion | n
     // Import diferido: este módulo lo carga la bitácora, que también corre en
     // crons y pruebas sin Next ni variables de Supabase.
     const { createClient } = await import("@/lib/supabase/server");
-    const estado = await estadoSuplantacionDe(createClient());
+    const estado = await estadoSuplantacionDe(await createClient());
     return estado.tipo === "activa" ? estado.fila : null;
   } catch {
     return null; // fuera de una petición (cookies() lanza) = no hay suplantación

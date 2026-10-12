@@ -6,6 +6,7 @@ import { AdminBarberTicketClient } from "./ticket-client";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Ticket de barbería — Admin DaleControl" };
 
-export default function AdminBarberTicketPage({ params }: { params: { id: string } }) {
+export default async function AdminBarberTicketPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return <AdminBarberTicketClient ticketId={params.id} />;
 }

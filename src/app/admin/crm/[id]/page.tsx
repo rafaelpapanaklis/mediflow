@@ -23,11 +23,12 @@ import { CrmProspectoClient } from "./prospecto-client";
 /** El mismo tope que el listado: es el <select> de "¿qué cuenta nació de aquí?". */
 const CLINICAS_MAX = 500;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { id: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const ficha = await crmObtener(params.id).catch(() => null);
   return {
     title: ficha
@@ -36,7 +37,8 @@ export async function generateMetadata({
   };
 }
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   let ficha;
   try {
     ficha = await crmObtener(params.id);

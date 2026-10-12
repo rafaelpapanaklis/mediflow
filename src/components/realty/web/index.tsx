@@ -53,7 +53,7 @@ import "@/components/realty/web/blocks/portada.css";
 import "@/components/realty/web/blocks/inmuebles.css";
 import "@/components/realty/web/blocks/secundarios.css";
 
-type ComponenteBloque = (props: { data: RealtyWebData }) => JSX.Element | null;
+type ComponenteBloque = (props: { data: RealtyWebData }) => React.JSX.Element | null;
 
 /** Registro id → componente. Un id sin entrada simplemente no se pinta. */
 export const REALTY_WEB_COMPONENTES: Record<RealtyWebBloqueId, ComponenteBloque> = {

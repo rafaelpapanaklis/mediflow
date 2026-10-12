@@ -32,8 +32,9 @@ function getAdminClient() {
 // manipulada no cambie contraseñas de usuarios de otra clínica.
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; userId: string } },
+  props: { params: Promise<{ id: string; userId: string }> }
 ) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

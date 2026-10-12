@@ -34,7 +34,7 @@ const BodySchema = z.object({
   text: z.string().trim().min(1, "La adenda no puede ir vacía").max(4000),
 });
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * `type` y no `interface` a propósito: Prisma exige que lo que se escribe en
@@ -71,7 +71,8 @@ function readAddenda(specialtyData: unknown): StoredAddendum[] {
     }));
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   const dbUser = ctx?.user ?? null;
   if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

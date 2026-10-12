@@ -25,11 +25,12 @@ import { notFound } from "next/navigation";
 import { DEMO_ELEMENTS } from "@/lib/floor-plan/demo-layout";
 import { DevLiveHarness } from "./harness";
 
-export default function DevLiveLookPage({
-  searchParams,
-}: {
-  searchParams: { dark?: string };
-}) {
+export default async function DevLiveLookPage(
+  props: {
+    searchParams: Promise<{ dark?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // La guardia va lo PRIMERO: en producción no se llega a construir ni un
   // dato de mentira.
   if (process.env.NODE_ENV === "production") notFound();

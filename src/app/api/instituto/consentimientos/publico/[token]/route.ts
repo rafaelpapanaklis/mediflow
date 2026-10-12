@@ -35,7 +35,8 @@ export const dynamic = "force-dynamic";
  */
 
 /** GET — el paciente lee su carta. Marca `viewedAt` la primera vez. */
-export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 30);
   if (rl) return rl;
 
@@ -66,7 +67,8 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
  *
  * Límite más estrecho que el del GET: firmar escribe, y además sube bytes.
  */
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   // 10 por minuto y no 5 como el dental: en una escuela el mostrador
   // recoge cartas en rachas y TODA la clínica sale por la misma IP, así
   // que un tope de 5 frena a la recepción antes que a nadie más.

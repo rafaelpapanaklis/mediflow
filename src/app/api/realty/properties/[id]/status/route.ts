@@ -17,7 +17,8 @@ const STATUSES = ["DISPONIBLE", "APARTADO", "VENDIDO", "RENTADO"] as const;
  * OJO: estatus ≠ publicación. Marcar VENDIDO no despublica el inmueble (eso
  * es el interruptor de la web) y despublicar no lo vuelve vendido.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
 

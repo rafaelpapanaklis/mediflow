@@ -39,10 +39,8 @@ function toProductDTO(p: any): SupplierProductDTO {
 // GET /api/suppliers/[supplierId] — ficha del proveedor + productos activos,
 // reputación (reseñas) y datos por-clínica (favorito + si puede reseñar).
 // El clinicId SIEMPRE sale de la sesión (getAuthContext), nunca del request.
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { supplierId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ supplierId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

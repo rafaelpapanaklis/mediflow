@@ -8,7 +8,7 @@ import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope, ownPr
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 export type TimelineEventType =
   | "soap"
@@ -46,7 +46,8 @@ const ALL_TYPES: TimelineEventType[] = [
  * getCurrentUser().clinicId antes de cargar nada. Todas las queries
  * filtran por clinicId directo o vía relation.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // M6/B7: la lista de roles fija que había aquí se quitó — decide el permiso
   // de abajo, que sí ve el expediente concedido o quitado a mano.

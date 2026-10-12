@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   try {
     const ctx = await getBarberContext();
     if (!ctx) return barberUnauthorized();
-    const requested = req.nextUrl.searchParams.get("branch") ?? readBranchCookie();
+    const requested = req.nextUrl.searchParams.get("branch") ?? await readBranchCookie();
     const scope = await resolveBranchScope(ctx, requested);
     const [members, team] = await Promise.all([
       listMembers(ctx, scope.branchIds),

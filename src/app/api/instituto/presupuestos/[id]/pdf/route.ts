@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
  * cuándo salió un dato de la escuela, y un PDF con el nombre del paciente
  * y sus importes es exactamente eso: un dato que sale.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.view");
   if ("response" in g) return g.response;
 

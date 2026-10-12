@@ -25,10 +25,10 @@ type ResLike = Pick<NextResponse, "cookies">;
 // ── Lectura (server components / route handlers) ──────────────────
 // true ⇔ df_2fa presente, bien firmada, atada a ESTA (persona, clínica) y
 // dentro de la vigencia. Es la prueba de "2FA superado en esta ventana".
-export function hasValidTwoFactorCookie(supabaseId: string, clinicId: string): boolean {
+export async function hasValidTwoFactorCookie(supabaseId: string, clinicId: string): Promise<boolean> {
   let raw: string | undefined;
   try {
-    raw = cookies().get(TWO_FA_COOKIE)?.value;
+    raw = (await cookies()).get(TWO_FA_COOKIE)?.value;
   } catch {
     return false;
   }
@@ -40,10 +40,10 @@ export function hasValidTwoFactorCookie(supabaseId: string, clinicId: string): b
 // ws1-t8 · ¿Esta sesión la abrió «Ver como clínica» desde /admin, para ESTA
 // persona y ESTA clínica, dentro de la vigencia? Misma verificación que df_2fa
 // con el secreto derivado (verComoSecret): no se confunden entre sí.
-export function hasValidVerComoCookie(supabaseId: string, clinicId: string): boolean {
+export async function hasValidVerComoCookie(supabaseId: string, clinicId: string): Promise<boolean> {
   let raw: string | undefined;
   try {
-    raw = cookies().get(TWO_FA_ADMIN_COOKIE)?.value;
+    raw = (await cookies()).get(TWO_FA_ADMIN_COOKIE)?.value;
   } catch {
     return false;
   }
@@ -135,7 +135,7 @@ export async function applyTwoFactorLoginCookies(
     // una sede sin enrolar dejaba la sesión sin reto ninguno. `||` perezoso: si
     // esta fila ya obliga, no se consulta nada más.
     const { personaTieneDosFactores } = await import("./two-factor-identity");
-    const enrolado = !!u?.totpEnabled || (!!u && await personaTieneDosFactores(supabaseId));
+    const enrolado = !!u?.totpEnabled || (!!u && (await personaTieneDosFactores(supabaseId)));
     // Un login de verdad nunca es «Ver como clínica»: esa prueba no sobrevive.
     clearVerComoCookie(res);
     const needs2fa = !!u && (enrolado || !!u.clinic?.require2fa);

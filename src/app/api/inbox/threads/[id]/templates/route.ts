@@ -56,7 +56,7 @@ import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const PostSchema = z.object({ kind: z.string().min(1).max(40) });
@@ -110,7 +110,8 @@ async function resolveThreadPatient(
 
 // ═══════════════════════════════ GET ═══════════════════════════════
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -193,7 +194,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 // ═══════════════════════════════ POST ═══════════════════════════════
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   // Cada plantilla se la cobra Meta a la clínica: un botón que se dispara solo
   // (doble clic, reintento del cliente) le cuesta dinero de verdad.
   const limited = rateLimit(req, 20);

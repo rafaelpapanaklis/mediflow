@@ -39,7 +39,8 @@ const MAX_DOCS = 40;
  * lista), pero el NOMBRE DEL OBJETO en el bucket se genera: un
  * "../../otra-cuenta/x.pdf" en el nombre original sería una fuga.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

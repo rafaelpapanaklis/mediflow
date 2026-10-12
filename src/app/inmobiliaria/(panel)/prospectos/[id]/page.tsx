@@ -13,7 +13,8 @@ import { LeadDetail } from "@/components/realty/leads/lead-detail";
 const AREA = "prospectos";
 
 /** FICHA DEL PROSPECTO: datos, qué busca, match y la bitácora completa. */
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

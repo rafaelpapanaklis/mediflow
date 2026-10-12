@@ -17,7 +17,8 @@ import { ProductosClient } from "@/components/barber/products/productos-client";
  * SERVIDOR: feature `products` (AVANZADO+) + products.manage. Los
  * movimientos manuales exigen además inventory.manage (lo verifica la API).
  */
-export default async function Page({ searchParams }: { searchParams: { period?: string } }) {
+export default async function Page(props: { searchParams: Promise<{ period?: string }> }) {
+  const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);

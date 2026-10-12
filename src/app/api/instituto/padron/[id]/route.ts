@@ -24,7 +24,8 @@ export const dynamic = "force-dynamic";
  * avisa en rojo si se desmarca — la decisión sigue siendo de la dirección,
  * pero ahora se toma aquí y no en otra pantalla que nadie recordaba abrir.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("padron.manage");
   if ("response" in g) return g.response;
 

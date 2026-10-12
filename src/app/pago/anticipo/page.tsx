@@ -10,11 +10,12 @@ export const metadata = { title: "Pago de anticipo — DaleControl" };
  * Mercado Pago pega en la URL, para no decir «¡listo!» a quien le rechazaron
  * la tarjeta.
  */
-export default function PagoAnticipoPage({
-  searchParams,
-}: {
-  searchParams?: { collection_status?: string; status?: string };
-}) {
+export default async function PagoAnticipoPage(
+  props: {
+    searchParams?: Promise<{ collection_status?: string; status?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const estado = searchParams?.collection_status ?? searchParams?.status ?? "";
   const aprobado = estado === "approved";
   const rechazado = estado === "rejected" || estado === "null" || estado === "cancelled";

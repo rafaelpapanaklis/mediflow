@@ -17,11 +17,12 @@ import { RealtyDenied } from "@/components/realty/team/denied";
 
 const AREA = "comisiones";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: { period?: string };
-}) {
+export default async function Page(
+  props: {
+    searchParams: Promise<{ period?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

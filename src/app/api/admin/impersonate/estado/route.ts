@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const sinCache = { headers: { "Cache-Control": "no-store" } };
   if (!(await getAuthContext())) return NextResponse.json({ activa: false }, sinCache);
-  const estado = await estadoSuplantacionDe(createClient());
+  const estado = await estadoSuplantacionDe(await createClient());
   if (estado.tipo !== "activa") return NextResponse.json({ activa: false }, sinCache);
   const clinica = await prisma.clinic.findUnique({
     where: { id: estado.fila.clinicId },

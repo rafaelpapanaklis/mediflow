@@ -3,10 +3,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { appointmentId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ appointmentId: string }> }) {
+  const params = await props.params;
   try {
     const { searchParams } = req.nextUrl;
     const role = searchParams.get("role");

@@ -24,7 +24,8 @@ const MOTIVO_TIPO: Record<string, string> = {
   tipo_bloqueado: "Este archivo pertenece a un set de ortodoncia o a un modelo 3D: su tipo no se cambia aquí",
 };
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -164,7 +165,8 @@ async function cambiarTipo(ctx: NonNullable<Awaited<ReturnType<typeof getAuthCon
   return NextResponse.json({ category: nuevo });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

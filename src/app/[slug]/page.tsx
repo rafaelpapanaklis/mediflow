@@ -45,13 +45,14 @@ const NON_SPECIALTY_RESERVED = [
   "paciente","landing-preview",
 ];
 
-interface Props { params: { slug: string } }
+interface Props { params: Promise<{ slug: string }> }
 
 export function generateStaticParams() {
   return PUBLIC_SPECIALTY_SLUGS.map((slug) => ({ slug }));
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   // 1) Specialty landing (Claude Design — sólo las 4 públicas; una despublicada
   //    sigue de largo a la rama de clínica y acaba en su notFound())
   const specialty = getSpecialty(params.slug);
@@ -78,7 +79,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function ClinicLandingPage({ params }: Props) {
+export default async function ClinicLandingPage(props: Props) {
+  const params = await props.params;
   // 1) Reserved slugs
   if (NON_SPECIALTY_RESERVED.includes(params.slug)) notFound();
 

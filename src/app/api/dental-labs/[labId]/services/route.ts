@@ -21,10 +21,8 @@ function toServiceDTO(s: any): DentalLabServiceDTO {
 
 // GET /api/dental-labs/[labId]/services — solo los servicios activos del
 // laboratorio (que debe estar APPROVED).
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { labId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ labId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

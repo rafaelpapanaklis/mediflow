@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error || !sessionData.user) {
     return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       // request" en getCurrentUser para multi-clínica.
       const { writeActiveClinicCookie, readActiveClinicCookie, pickActiveClinicId } =
         await import("@/lib/active-clinic");
-      const current = readActiveClinicCookie();
+      const current = await readActiveClinicCookie();
       const ownedIds = userClinics.map(u => u.clinicId);
       const picked = pickActiveClinicId(current, ownedIds);
       writeActiveClinicCookie(res, picked.clinicId);

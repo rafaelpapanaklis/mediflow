@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
  * 🔴 32 BYTES DE `randomBytes`, no un cuid: al otro lado del enlace no hay
  * sesión, y el token es lo ÚNICO que protege el presupuesto.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;
   try {

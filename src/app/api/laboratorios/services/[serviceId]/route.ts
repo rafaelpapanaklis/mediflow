@@ -33,7 +33,8 @@ function normDays(v: unknown): { ok: true; value: number | null } | { ok: false 
 }
 
 // ── PATCH /api/laboratorios/services/[serviceId] ─────────────────────────
-export async function PATCH(req: NextRequest, { params }: { params: { serviceId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ serviceId: string }> }) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -120,7 +121,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { serviceId:
 // ── DELETE /api/laboratorios/services/[serviceId] ────────────────────────
 // Hard delete: el schema pone serviceId=null en las órdenes (onDelete: SetNull),
 // preservando el historial de órdenes ya levantadas con este servicio.
-export async function DELETE(_req: NextRequest, { params }: { params: { serviceId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ serviceId: string }> }) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {

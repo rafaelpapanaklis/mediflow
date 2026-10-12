@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
  * Solo borra HUÉRFANOS: si la foto ya es parte del expediente, contesta 409
  * y manda a «Retirar», que deja constancia y no destruye el archivo.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

@@ -13,7 +13,8 @@ import { logMutation } from "@/lib/audit";
 // pantalla lo llamaba. Ahora contesta 410 sin escribir nada; los cobros van por
 // el cobro normal de la factura (POST /api/invoices/[id]). Se conservan la
 // sesión, el permiso, la clínica y la visibilidad: nadie de fuera aprende nada.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const deniedPerm = denyIfMissingPermission(ctx, "billing.charge");
@@ -35,7 +36,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/payment-plans/[id]
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

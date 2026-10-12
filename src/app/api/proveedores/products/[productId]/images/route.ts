@@ -35,7 +35,8 @@ function pathFromPublicUrl(url: string): string | null {
 
 // ── POST /api/proveedores/products/[productId]/images ─────────────────────
 // Sube una imagen al bucket público supplier-products y crea el registro.
-export async function POST(req: NextRequest, { params }: { params: { productId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ productId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -166,7 +167,8 @@ export async function POST(req: NextRequest, { params }: { params: { productId: 
 
 // ── DELETE /api/proveedores/products/[productId]/images ───────────────────
 // Quita una imagen. Acepta { imageId } o { url } en el body.
-export async function DELETE(req: NextRequest, { params }: { params: { productId: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ productId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {

@@ -50,10 +50,8 @@ const CAMPOS_PERSONA = ["firstName", "lastName", "email", "phone", "role"] as co
  * override guardado antes del cambio de rol lo borraría el propio cambio de
  * rol y quien lo mandó creería que quedó puesto.
  */
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("equipo.manage");
   if ("response" in g) return g.response;
 

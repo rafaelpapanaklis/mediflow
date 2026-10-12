@@ -87,9 +87,9 @@ async function tolerante<T>(leer: () => Promise<T>, siFalta: T): Promise<T> {
 }
 
 /** La cookie de la vista previa «sin módulo». Fuera de una petición de Next no hay cookies: `null`. */
-function cookieDeVistaPrevia(): string | null {
+async function cookieDeVistaPrevia(): Promise<string | null> {
   try {
-    return cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value ?? null;
+    return (await cookies()).get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value ?? null;
   } catch {
     return null;
   }
@@ -111,7 +111,7 @@ export async function estadoDelModulo(ctx: SabinaCtx, ahora: Date = new Date()):
   const real = await hasActiveOrthodonticsModule(ctx.clinicId, ahora);
   const moduloActivo = moduloActivoALaVista(
     real,
-    vistaPreviaSinModulo({ nodeEnv: process.env.NODE_ENV, cookie: cookieDeVistaPrevia() }),
+    vistaPreviaSinModulo({ nodeEnv: process.env.NODE_ENV, cookie: await cookieDeVistaPrevia() }),
   );
   const entrada = decidirEntradaAlModulo({ esDental, tienePermiso: tienePermiso(ctx, PERMISO_ORTO), moduloActivo });
   return entrada.tipo === "modulo" ? "activo" : "no_contratado";

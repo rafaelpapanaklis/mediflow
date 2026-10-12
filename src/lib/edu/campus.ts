@@ -81,9 +81,9 @@ export async function listEduCampusOptions(ctx: EduClinicaContext): Promise<EduC
 }
 
 /** Sede elegida en la cookie. Sin validar todavía: solo la lee. */
-export function readEduCampusCookie(): string | null {
+export async function readEduCampusCookie(): Promise<string | null> {
   try {
-    return cookies().get(EDU_CAMPUS_COOKIE)?.value ?? null;
+    return (await cookies()).get(EDU_CAMPUS_COOKIE)?.value ?? null;
   } catch {
     // Fuera de un request (una prueba, un script) no hay cookies y no pasa
     // nada: se cae a la vista consolidada.
@@ -141,7 +141,7 @@ export async function getEduCampusScope(
   return eduResolveCampusScope({
     campuses,
     access: eduCampusAccessFromRows(filas, campuses),
-    requested: requested === undefined ? readEduCampusCookie() : requested,
+    requested: requested === undefined ? await readEduCampusCookie() : requested,
     institutionTimezone,
   });
 }

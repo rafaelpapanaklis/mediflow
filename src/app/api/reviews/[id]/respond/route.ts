@@ -7,7 +7,8 @@ import { ReviewError } from "@/lib/reviews/types";
 // El service valida que la reseña pertenezca a session.clinic.id (multi-tenant).
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   const forbidden = requireRole(session, ["ADMIN", "SUPER_ADMIN"]);

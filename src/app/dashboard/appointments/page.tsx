@@ -17,11 +17,12 @@ import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 
 export const metadata: Metadata = { title: "Agenda" }; // ws1-t1 (N-55): el «| DaleControl» lo pone la plantilla de app/layout.tsx
 
-export default async function AppointmentsPage({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>;
-}) {
+export default async function AppointmentsPage(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   // Esta pantalla es la agenda ANTERIOR al rediseño. Con el diseño nuevo
   // encendido (el MISMO interruptor de la agenda nueva) la dirección manda a

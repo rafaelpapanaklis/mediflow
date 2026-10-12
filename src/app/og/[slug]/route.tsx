@@ -7,7 +7,8 @@ export function generateStaticParams() {
   return PUBLIC_SPECIALTY_SLUGS.map((slug) => ({ slug }));
 }
 
-export async function GET(_req: Request, { params }: { params: { slug: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   // Sólo las 4 especialidades públicas tienen tarjeta propia; una despublicada
   // (p.ej. /og/psicologia) recibe la genérica de DaleControl, igual que
   // cualquier slug desconocido.

@@ -6,10 +6,11 @@ import { buildQuotePdf } from "@/lib/quotes/quote-pdf";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /** GET /api/quotes/[id]/pdf — descarga el PDF del presupuesto (clínica de la sesión). */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

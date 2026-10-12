@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 
 // GET /api/barber/sales/[id] → detalle del ticket (para imprimir/compartir).
 // Solo tickets de la barbería en sesión: uno ajeno responde 404. cash.view.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

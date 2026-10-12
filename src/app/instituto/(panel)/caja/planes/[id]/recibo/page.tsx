@@ -27,7 +27,8 @@ export const metadata: Metadata = {
  * formatean AQUÍ, en el servidor y en la zona del instituto: en el
  * cliente pintarían la zona del navegador y romperían la hidratación.
  */
-export default async function InstitutoPlanReciboPage({ params }: { params: { id: string } }) {
+export default async function InstitutoPlanReciboPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

@@ -23,7 +23,7 @@ import {
 import "@/components/barber/billing/billing.css";
 
 interface PageProps {
-  searchParams?: { checkout?: string; session_id?: string };
+  searchParams?: Promise<{ checkout?: string; session_id?: string }>;
 }
 
 /**
@@ -34,7 +34,8 @@ interface PageProps {
  * tarjeta, facturas y cobros rechazados. Cualquier rol puede VER su estado;
  * contratar/cambiar/cancelar exige billing.manage (también en las APIs).
  */
-export default async function BarberSuscripcionPage({ searchParams }: PageProps) {
+export default async function BarberSuscripcionPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
 

@@ -16,7 +16,7 @@ import "@/components/public/landing/sales/sales.css";
 import "../blog.css";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +50,8 @@ function ogUrlFor(title: string): string {
   return `${SITE_URL}/og/blog?title=${encodeURIComponent(title.slice(0, 110))}`;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) {
     // Sin metadata inventada para un 404 — y sin indexar la página de error.
@@ -65,7 +66,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-export default async function BlogPostPage({ params }: Props) {
+export default async function BlogPostPage(props: Props) {
+  const params = await props.params;
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) notFound();
 

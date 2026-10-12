@@ -32,7 +32,8 @@ const AppendSchema = z.union([
  * clinicId + userId en el where. Escribir en la conversación de otra clínica
  * (o de otro compañero) devuelve 404, no un 200 silencioso.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await resolveAiScope();
   if (auth.response) return auth.response;
 

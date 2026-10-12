@@ -41,7 +41,8 @@ function pathFromPublicUrl(url: string): string | null {
 }
 
 // ── GET /api/proveedores/products/[productId] ─────────────────────────────
-export async function GET(_req: NextRequest, { params }: { params: { productId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ productId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -59,7 +60,8 @@ export async function GET(_req: NextRequest, { params }: { params: { productId: 
 }
 
 // ── PATCH /api/proveedores/products/[productId] ───────────────────────────
-export async function PATCH(req: NextRequest, { params }: { params: { productId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ productId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -137,7 +139,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { productId:
 // ── DELETE /api/proveedores/products/[productId] ──────────────────────────
 // Hard delete: el schema cascada las imágenes y los items de carrito, y pone
 // productId=null en los items de pedidos (preservando el historial de compra).
-export async function DELETE(_req: NextRequest, { params }: { params: { productId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ productId: string }> }) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {

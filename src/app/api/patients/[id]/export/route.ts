@@ -21,7 +21,8 @@ export const dynamic = "force-dynamic";
  * Las URLs de archivos se devuelven firmadas con TTL de 24h para que el
  * paciente pueda descargarlos durante un día sin re-llamar al endpoint.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!ctx.isAdmin) {

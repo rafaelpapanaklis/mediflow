@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 // PATCH /api/indicaciones/plantillas/[id] — nombre, texto, procedimientos ligados
 // y «en uso». Las de fábrica solo cambian liga y «en uso» (409 FABRICA_NO_SE_EDITA
 // si se intenta el texto). Nada se borra: se apaga.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, TEMPLATES_WRITE_PERMISSION);

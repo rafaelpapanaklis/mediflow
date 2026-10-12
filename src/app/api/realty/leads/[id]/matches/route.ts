@@ -8,7 +8,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /**
  * GET — ⭐ inmuebles del inventario que le quedan a este prospecto, con el
@@ -18,7 +18,8 @@ type Params = { params: { id: string } };
  * (±10% por default): quien vende terrenos de 300 mil y quien vende casas
  * de 12 millones no negocian el mismo margen.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkLeadsAccess(ctx, "leads.view");
   if (!guard.ok) return NextResponse.json({ error: guard.error ?? "Sin permiso" }, { status: guard.status ?? 403 });

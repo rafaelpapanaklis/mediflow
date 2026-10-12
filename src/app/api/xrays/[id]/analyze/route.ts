@@ -187,7 +187,8 @@ async function computeRemaining(clinicId: string): Promise<{ remaining: number; 
 /*  GET — devuelve el análisis guardado si existe, 404 si no           */
 /* ═══════════════════════════════════════════════════════════════════ */
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -239,7 +240,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 /*  POST — analiza (usa cache salvo ?refresh=true)                     */
 /* ═══════════════════════════════════════════════════════════════════ */
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

@@ -7,8 +7,8 @@ import { env } from "@/env";
 // expira y vuelve a /login. Cerrar el browser/pestaña no la borra.
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
-export function createClient() {
-  const cookieStore = cookies();
+export async function createClient() {
+  const cookieStore = (await cookies());
   return createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,

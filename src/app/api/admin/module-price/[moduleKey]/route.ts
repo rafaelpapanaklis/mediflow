@@ -19,7 +19,8 @@ export const runtime = "nodejs";
  * AdminUser activo), igual que /api/admin/plan-config. `modules` es catálogo
  * global (sin clínica): el rastro va como evento estructurado en logs.
  */
-export async function PATCH(req: NextRequest, { params }: { params: { moduleKey: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ moduleKey: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

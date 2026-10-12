@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       data.plan = planDelEnlace;
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) {
       return NextResponse.json(

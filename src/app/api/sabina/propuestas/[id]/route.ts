@@ -18,10 +18,11 @@ import { FRASE } from "@/lib/sabina/engine-propuestas-core";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const ctx = await getAuthContext();
     if (!ctx?.clinicId || !ctx?.userId) {

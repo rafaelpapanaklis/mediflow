@@ -25,7 +25,8 @@ export const dynamic = "force-dynamic";
  * alcance clínico del rol. Uno de otra escuela es 404, igual que uno
  * inventado.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

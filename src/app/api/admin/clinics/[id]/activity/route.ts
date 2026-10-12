@@ -5,7 +5,8 @@ import { diaAdmin, inicioDeHaceDias } from "@/lib/admin/zona-horaria";
 import { agruparActividad, ultimoAccesoPorUsuario, type SesionPanel } from "@/lib/admin/ultimo-acceso";
 
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clinicId = params.id;

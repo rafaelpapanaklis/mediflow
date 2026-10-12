@@ -9,11 +9,12 @@ import {
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /** Mensajes del hilo, CON sus estados de entrega reales. */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const gate = await openRealtyWaGate("whatsapp.view");
   if (!isRealtyWaGateOk(gate)) return gate.response;
 
@@ -30,7 +31,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
  * mutación que le cambia la bandeja a todo el equipo, así que pide
  * whatsapp.send — se comprueba aparte, más abajo.
  */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const gate = await openRealtyWaGate("whatsapp.view");
   if (!isRealtyWaGateOk(gate)) return gate.response;
 

@@ -53,7 +53,7 @@ export function ToothGlyph({ meta, record, w = 44, h = 62 }: ToothGlyphProps) {
   }
 
   // roots
-  const rootEls: JSX.Element[] = [];
+  const rootEls: React.JSX.Element[] = [];
   if (roots === 1) {
     rootEls.push(<path key="r1" d={`M13 ${crownBot} q-2 ${rootBot - crownBot} 7 ${rootBot - crownBot} q9 0 7 -${rootBot - crownBot} Z`} fill={fill} stroke={stroke} strokeWidth="1.5" />);
   } else if (roots === 2) {
@@ -101,7 +101,7 @@ function rootCenters(n: number): number[] {
 }
 
 function ImplantBody({ crownBot, rootBot, color }: { crownBot: number; rootBot: number; color: string }) {
-  const threads: JSX.Element[] = [];
+  const threads: React.JSX.Element[] = [];
   for (let y = crownBot + 2; y < rootBot - 4; y += 5) {
     threads.push(<line key={y} x1="14" y1={y} x2="26" y2={y + 2} stroke={color} strokeWidth="1.4" />);
   }

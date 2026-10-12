@@ -162,7 +162,7 @@ export function Reveal({
   children: ReactNode;
   className?: string;
   delay?: number;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
   style?: CSSProperties;
 }) {
   const ref = useRef<HTMLElement | null>(null);

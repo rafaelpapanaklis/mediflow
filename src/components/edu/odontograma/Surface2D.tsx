@@ -156,7 +156,7 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
   const roman = conds.find((c) => c.render === "roman");
   const icon = conds.find((c) => c.render === "icon");
   const cross = conds.find((c) => c.render === "cross");
-  const out: JSX.Element[] = [];
+  const out: React.JSX.Element[] = [];
   if (badge) {
     out.push(
       <g key="b">
@@ -190,7 +190,7 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
 }
 
 /* tiny vector icons used as badges */
-function glyphIcon(name: string, color: string): JSX.Element | null {
+function glyphIcon(name: string, color: string): React.JSX.Element | null {
   const s: CSSProperties = { fill: "none", stroke: color, strokeWidth: 4, strokeLinecap: "round", strokeLinejoin: "round" };
   switch (name) {
     case "rotate":

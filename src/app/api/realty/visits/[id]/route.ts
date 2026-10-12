@@ -25,7 +25,7 @@ import { REALTY_VISIT_OUTCOMES } from "@/components/realty/visits/visit-core";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const MoveSchema = z.object({
   scheduledAt: z.string().datetime({ offset: true }).or(z.string().datetime()),
@@ -39,7 +39,8 @@ const StatusSchema = z.object({
   note: z.string().max(2000).nullable().optional(),
 });
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkVisitsAccess(ctx, "visits.manage");
   if (!guard.ok) {

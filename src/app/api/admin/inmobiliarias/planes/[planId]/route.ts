@@ -25,7 +25,8 @@ export const dynamic = "force-dynamic";
  * esto es configuración de PLATAFORMA: no tiene accountId, y esa tabla lo
  * exige como FK.
  */
-export async function PATCH(req: NextRequest, { params }: { params: { planId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ planId: string }> }) {
+  const params = await props.params;
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

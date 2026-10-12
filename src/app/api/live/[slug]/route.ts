@@ -12,7 +12,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { slug: string } }
+interface Params { params: Promise<{ slug: string }> }
 
 /**
  * GET /api/live/[slug]
@@ -26,7 +26,8 @@ interface Params { params: { slug: string } }
  * estructurado para que el cliente pueda mostrar UI específica en vez
  * de quedarse colgado en "Cargando…".
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const slug = (params.slug ?? "").toLowerCase();
   if (!slug) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     // Si tiene password, requerir cookie unlock. Si responde 401, limpia
     // proactivamente cookies con paths legacy.
     if (clinic.liveModePassword) {
-      const cookie = cookies().get(liveCookieName(slug));
+      const cookie = (await cookies()).get(liveCookieName(slug));
       // Cookie firmada (HMAC + expiración); legacy "1" o firma inválida/vencida
       // ya no vale → 401 locked y limpia cookies de paths legacy.
       if (!verifyLiveUnlockCookie(cookie?.value, slug)) {
@@ -174,14 +175,12 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     const showFull = clinic.liveModeShowPatientNames;
     const maskInitials = (full: string) => {
-      return (
-        full
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((p) => p[0]?.toUpperCase() ?? "")
-          .join(".") + "."
-      );
+      return (full
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase() ?? "")
+        .join(".") + ".");
     };
 
     // NOM-024: a.notes puede contener diagnostico clinico (PHI). Solo se

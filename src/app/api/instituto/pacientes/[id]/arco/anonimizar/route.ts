@@ -26,7 +26,8 @@ export const dynamic = "force-dynamic";
  * tabla de la que la anonimización no lo puede sacar.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
   try {

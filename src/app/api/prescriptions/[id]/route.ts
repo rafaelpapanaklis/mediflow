@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 // receta (status=VOIDED + voidedAt + voidReason). El registro y el QR público
 // se conservan; la verificación pública muestra "ANULADA". Solo el doctor que
 // la emitió o admins. Motivo opcional en el body: { reason }.
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

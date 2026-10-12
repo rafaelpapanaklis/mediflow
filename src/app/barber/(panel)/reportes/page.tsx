@@ -23,11 +23,12 @@ import { ReportesView } from "@/components/barber/dashboard/reportes-view";
  * Un rol BARBER recibe SOLO lo suyo (getReportsSummary recorta por su fila
  * Barber); pedir ?barber= ajeno se ignora y se vuelve a la vista propia.
  */
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function Page(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/login");
   await requireBarberPaidAccess(ctx);
@@ -68,7 +69,7 @@ export default async function Page({
       range: sp("range"),
       from: sp("from"),
       to: sp("to"),
-      branchId: sp("branch") ?? readBranchCookie(),
+      branchId: sp("branch") ?? await readBranchCookie(),
       barberId: sp("barber"),
       features: plan.features,
     });

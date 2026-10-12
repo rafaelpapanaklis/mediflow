@@ -37,11 +37,12 @@ export const metadata: Metadata = {
  * la haría distinta en el servidor y en el navegador, que es una
  * discrepancia de hidratación esperando a pasar.
  */
-export default async function InstitutoPresupuestosPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoPresupuestosPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
@@ -77,7 +78,7 @@ export default async function InstitutoPresupuestosPage({
   // mostrador estás: es la misma pregunta —y la misma función— que en Caja.
   const sede = eduCampusForCharge(await getEduCampusScope(ctx));
 
-  const h = headers();
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? "https";
   const origin = host ? `${proto}://${host}` : "";

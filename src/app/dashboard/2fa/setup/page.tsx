@@ -13,7 +13,7 @@ export default async function TwoFactorSetupPage() {
   // Sin el gate de 2FA: esta pantalla ES la salida del bloqueo «setup»
   // (require2fa), así que tiene que pintarse con él puesto (ws1-t8).
   const user = await getCurrentUserSinDosPasos();
-  const { decision } = decidirDosPasos(user);
+  const { decision } = await decidirDosPasos(user);
 
   // Ya tiene 2FA: no hay nada que configurar → reto pendiente o panel.
   if ((user as { totpEnabled?: boolean }).totpEnabled) {

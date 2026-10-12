@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
  * filas" significa "entra a TODAS las sedes". Borrar una sede le abriría el
  * instituto entero a quien solo entraba ahí.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("sedes.manage");
   if ("response" in g) return g.response;
 

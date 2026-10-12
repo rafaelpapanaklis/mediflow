@@ -34,10 +34,8 @@ const ERROR_UI: Record<"notFound" | "tooLate" | "badStatus", { status: number; m
   badStatus: { status: 409, message: "Esa cita ya no se puede cambiar." },
 };
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { slug: string; id: string } },
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ slug: string; id: string }> }) {
+  const params = await props.params;
   try {
     const limited = await persistentRateLimit(req, { ...RL, scope: "barber-portal-cita" });
     if (limited) return limited;
@@ -45,7 +43,7 @@ export async function PATCH(
     const shop = await resolvePortalShop(params.slug);
     if (!shop) return NextResponse.json({ error: "Barbería no encontrada" }, { status: 404 });
 
-    const session = getPortalSession(shop.id);
+    const session = await getPortalSession(shop.id);
     if (!session) return NextResponse.json({ error: "Sesión no válida" }, { status: 401 });
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * cliente, se podrían cerrar asignaciones en el pasado y reescribir quién
  * supervisaba cuando ocurrió algo.
  */
-export async function PATCH(_request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("supervision.assign");
   if ("response" in g) return g.response;
 

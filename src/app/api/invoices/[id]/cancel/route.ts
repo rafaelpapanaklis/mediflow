@@ -40,7 +40,8 @@ async function getCtx() {
 // requieren un reembolso primero)… salvo que lo pagado sea SOLO el saldo a
 // favor aplicado al emitirla (anticipo): entonces se cancela y ese dinero
 // vuelve a estar a favor del paciente (patient-credit-aplicar.ts).
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Cancelar es una operación financiera sensible — la key billing.refund

@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     if (planDelEnlace) {
       data.plan = planDelEnlace;
     }
-    const supabase = createClient();
+    const supabase = await createClient();
 
     if (data.slug) {
       const existing = await prisma.clinic.findUnique({ where: { slug: data.slug } });

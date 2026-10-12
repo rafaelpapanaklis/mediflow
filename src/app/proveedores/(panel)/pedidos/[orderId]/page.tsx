@@ -39,11 +39,12 @@ const FLOW_STEPS: { key: SupplierOrderStatus; label: string; icon: typeof Clock 
   { key: "DELIVERED", label: "Entregado", icon: PackageCheck },
 ];
 
-export default async function SupplierOrderDetailPage({
-  params,
-}: {
-  params: { orderId: string };
-}) {
+export default async function SupplierOrderDetailPage(
+  props: {
+    params: Promise<{ orderId: string }>;
+  }
+) {
+  const params = await props.params;
   const ctx = await getSupplierContext();
   if (!ctx) redirect("/proveedores/login");
 

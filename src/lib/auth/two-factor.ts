@@ -114,13 +114,13 @@ export async function getTwoFactorActor(): Promise<{
   user: any;
   persona: DosFactoresDeLaPersona;
 } | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user: sb },
   } = await supabase.auth.getUser();
   if (!sb) return null;
 
-  const clinicId = readActiveClinicCookie();
+  const clinicId = await readActiveClinicCookie();
   let user = clinicId
     ? await prisma.user.findFirst({
         where: { supabaseId: sb.id, clinicId, isActive: true },

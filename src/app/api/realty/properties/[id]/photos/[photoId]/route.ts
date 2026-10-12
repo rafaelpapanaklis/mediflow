@@ -13,10 +13,8 @@ export const dynamic = "force-dynamic";
  * de foto entre renders y nadie entiende por qué. Por eso quitar la
  * anterior y poner la nueva van en la MISMA transacción.
  */
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string; photoId: string } },
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string; photoId: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;
@@ -59,10 +57,8 @@ export async function PATCH(
  * sin portada lo deja sin imagen en el listado, que es donde se decide si
  * alguien lo abre.
  */
-export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string; photoId: string } },
-) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string; photoId: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

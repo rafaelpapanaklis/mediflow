@@ -16,7 +16,8 @@ export const maxDuration = 60;
 // conserva la auth, el permiso y la visibilidad por paciente, que se verifican
 // ANTES de generar nada. Multi-tenant por clinicId (getAuthContext).
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 20);
   if (limited) return limited;
 

@@ -25,7 +25,8 @@ export const dynamic = "force-dynamic";
 // total: un CFDI de $1,600 con devolución de $500 deja la factura en $1,100
 // pagados y saldo $0. Solo dueño/administrador (como timbrar) y, si devuelve
 // dinero, además el permiso de reembolsar.
-export async function POST(req: NextRequest, { params }: { params: { cfdiId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ cfdiId: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 20, 60 * 60 * 1000);
   if (rl) return rl;
 

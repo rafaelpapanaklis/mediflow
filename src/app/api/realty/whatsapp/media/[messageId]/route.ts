@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 interface Params {
-  params: { messageId: string };
+  params: Promise<{ messageId: string }>;
 }
 
 /** Las que hacen funcionar el `Range` (adelantar un video). */
@@ -60,7 +60,8 @@ function contentDisposition(kind: "inline" | "attachment", filename: string | nu
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     const gate = await openRealtyWaGate("whatsapp.view");
     if (!isRealtyWaGateOk(gate)) return gate.response;

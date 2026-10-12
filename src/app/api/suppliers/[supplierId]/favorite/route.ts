@@ -10,10 +10,8 @@ export const dynamic = "force-dynamic";
 //
 // SEGURIDAD MULTI-TENANT: el clinicId SIEMPRE sale de la sesión
 // (getAuthContext), nunca del body. El supplierId viene del path.
-export async function POST(
-  _req: Request,
-  { params }: { params: { supplierId: string } },
-) {
+export async function POST(_req: Request, props: { params: Promise<{ supplierId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

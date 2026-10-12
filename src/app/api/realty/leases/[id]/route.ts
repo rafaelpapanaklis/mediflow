@@ -27,7 +27,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) return realtyUnauthorized();
   if (ctx.plan.features.rentals !== true) return realtyForbidden("rentals");
@@ -48,7 +49,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) return realtyUnauthorized();
   if (ctx.plan.features.rentals !== true) return realtyForbidden("rentals");
@@ -87,7 +89,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) return realtyUnauthorized();
   if (ctx.plan.features.rentals !== true) return realtyForbidden("rentals");

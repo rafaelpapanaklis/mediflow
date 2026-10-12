@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * devolver dinero. Lo ya pagado SE QUEDA (son pagos reales, están en su
  * corte); el saldo del cobro vuelve a cobrarse normal.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.refund");
   if ("response" in g) return g.response;
 

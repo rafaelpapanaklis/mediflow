@@ -11,10 +11,11 @@ import type { QuoteItemInput } from "@/lib/quotes/types";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /** POST /api/quotes/[id]/duplicate — clona el presupuesto como nuevo DRAFT. */
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

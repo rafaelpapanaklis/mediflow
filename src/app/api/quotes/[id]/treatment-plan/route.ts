@@ -15,7 +15,7 @@ import { doctorDelPlan, FRASE_ELEGIR_DOCTOR_DEL_PLAN } from "@/lib/quotes/doctor
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * POST /api/quotes/[id]/treatment-plan — crea un plan de tratamiento ACTIVE a
@@ -37,7 +37,8 @@ interface Params { params: { id: string } }
  * (doctor-del-plan.ts); si nadie, 409 `{ elegirDoctor, doctores }` y la tarjeta
  * pide elegir y reenvía con `{ doctorId }`.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

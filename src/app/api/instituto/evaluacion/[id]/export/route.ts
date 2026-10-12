@@ -24,7 +24,8 @@ export const dynamic = "force-dynamic";
  * `getEduBitacora`, que busca al alumno DENTRO del alcance. Un alumno solo
  * se exporta a sí mismo; caja no exporta nada.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("evaluacion.view");
   if ("response" in g) return g.response;
 

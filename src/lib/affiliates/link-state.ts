@@ -30,7 +30,7 @@ export interface AffiliateLinkState {
 
 export async function getAffiliateLinkState(): Promise<AffiliateLinkState> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();

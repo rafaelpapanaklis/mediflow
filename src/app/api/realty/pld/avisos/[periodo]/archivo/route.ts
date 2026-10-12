@@ -18,7 +18,8 @@ import { errorPld, gatePld, malaPeticion } from "../../../_guard";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, { params }: { params: { periodo: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ periodo: string }> }) {
+  const params = await props.params;
   // Basta pld.view: bajar el concentrado es una lectura. Marcarlo como
   // presentado —eso sí— pide pld.manage.
   const gate = await gatePld("pld.view");

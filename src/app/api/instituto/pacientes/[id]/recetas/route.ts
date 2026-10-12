@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  * es "none". Una receta es un documento clínico, no un cobro — la misma
  * línea del contrato que le cierra el expediente, cerrada en dos sitios.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.view");
   if ("response" in g) return g.response;
 
@@ -37,7 +38,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * alumno— contesta 404 igual que uno que no existe. El institutionId,
  * ése sí, sale SIEMPRE de la sesión.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.propose");
   if ("response" in g) return g.response;
 

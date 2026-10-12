@@ -6,14 +6,15 @@ import { sendRealtyManualMessage } from "@/lib/realty/whatsapp";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
  * Responder a mano desde el Inbox. Pasa por el MISMO camino que todo lo
  * demás (cupo, ventana de 24 h, registro): no hay atajo a Meta.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const gate = await openRealtyWaGate("whatsapp.send");
   if (!isRealtyWaGateOk(gate)) return gate.response;
 

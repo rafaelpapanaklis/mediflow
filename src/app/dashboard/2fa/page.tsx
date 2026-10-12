@@ -14,7 +14,7 @@ export default async function TwoFactorChallengePage() {
   // Sin el gate de 2FA: esta pantalla ES el reto (ws1-t8, ver
   // getCurrentUserSinDosPasos). La decisión es la misma del gate.
   const user = await getCurrentUserSinDosPasos();
-  const { decision } = decidirDosPasos(user);
+  const { decision } = await decidirDosPasos(user);
 
   // Sin 2FA activo: o hay que enrolarse (la clínica lo exige) o no hay nada
   // que retar (→ panel). Ya superado en esta

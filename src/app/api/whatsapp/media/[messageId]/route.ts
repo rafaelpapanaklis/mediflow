@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 // Se transmiten videos: 10 s no alcanzan.
 export const maxDuration = 60;
 
-interface Params { params: { messageId: string } }
+interface Params { params: Promise<{ messageId: string }> }
 
 /** Cabeceras que se copian de Meta tal cual: son las que hacen funcionar el `Range`. */
 const PASS_THROUGH_HEADERS = ["content-type", "content-length", "content-range", "accept-ranges"] as const;
@@ -54,7 +54,8 @@ function contentDisposition(kind: "inline" | "attachment", filename: string | nu
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     // 1) Sesión. El clinicId sale SIEMPRE de aquí, nunca de la URL.
     const ctx = await getAuthContext();

@@ -316,10 +316,8 @@ function SupplierReceiptDocument(props: ReceiptProps) {
   );
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function GET(_req: NextRequest, props0: { params: Promise<{ orderId: string }> }) {
+  const params = await props0.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

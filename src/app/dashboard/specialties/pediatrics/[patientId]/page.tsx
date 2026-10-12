@@ -13,11 +13,12 @@ import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pe
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import { PediatricsTab } from "@/components/patient-detail/pediatrics/PediatricsTab";
 
-export default async function PediatricsPatientDetailPage({
-  params,
-}: {
-  params: { patientId: string };
-}) {
+export default async function PediatricsPatientDetailPage(
+  props: {
+    params: Promise<{ patientId: string }>;
+  }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
 
   if (user.clinic.category !== "DENTAL" && user.clinic.category !== "MEDICINE") {

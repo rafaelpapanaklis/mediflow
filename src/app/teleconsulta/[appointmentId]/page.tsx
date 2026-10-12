@@ -37,7 +37,11 @@ export const metadata = { title: "Teleconsulta — DaleControl" };
    quien no es del equipo, que es de lo que trata el hallazgo.
    ============================================================ */
 
-export default async function TeleconsultaPage({ params, searchParams }: { params: { appointmentId: string }; searchParams: { role?: string; token?: string } }) {
+export default async function TeleconsultaPage(
+  props: { params: Promise<{ appointmentId: string }>; searchParams: Promise<{ role?: string; token?: string }> }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const appointment = await prisma.appointment.findUnique({
     where: { id: params.appointmentId },
     include: {
@@ -71,7 +75,7 @@ export default async function TeleconsultaPage({ params, searchParams }: { param
     // ws1-t8: getAuthContext ya corta siempre (devuelve null y se cae en
     // <EntraPorElPanel/>); esto queda para mandar al reto o al enrolamiento en
     // vez de a «entra por el panel». Misma decisión que el gate.
-    const { decision } = decidirDosPasos({
+    const { decision } = await decidirDosPasos({
       supabaseId: ctx.user.supabaseId,
       clinicId: ctx.clinicId,
       role: ctx.role,

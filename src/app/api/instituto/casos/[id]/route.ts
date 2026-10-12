@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * del ALCANCE: uno que no le toca a quien pregunta contesta 404, igual que
  * uno que no existe.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("casos.assign");
   if ("response" in g) return g.response;
 

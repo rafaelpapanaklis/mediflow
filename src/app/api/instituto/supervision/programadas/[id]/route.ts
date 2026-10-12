@@ -21,7 +21,8 @@ export const dynamic = "force-dynamic";
  * del pasado, y borrar su vigencia reescribiría quién supervisaba cuando
  * ocurrió algo. Aquí se rebota con 409 y lo dice.
  */
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("supervision.assign");
   if ("response" in g) return g.response;
   try {

@@ -29,7 +29,8 @@ function FormFallback() {
   );
 }
 
-export default async function ContratarPage({ params }: { params: { plan: string } }) {
+export default async function ContratarPage(props: { params: Promise<{ plan: string }> }) {
+  const params = await props.params;
   const plan = planDeRuta(params.plan);
   if (!plan) notFound();
   const user = await getSession();

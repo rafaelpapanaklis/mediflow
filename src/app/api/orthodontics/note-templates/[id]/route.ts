@@ -15,7 +15,8 @@ const FABRICA = ORTHO_DEFAULT_TEMPLATES.map((t) => t.name);
 // PATCH /api/orthodontics/note-templates/:id — edita nombre y texto, o la
 // apaga/enciende (`activa`). Las de fábrica solo admiten `activa`. No hay
 // DELETE: apagar es reversible y la fila no se borra.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, TEMPLATES_WRITE_PERMISSION);

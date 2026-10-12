@@ -23,7 +23,7 @@ import { portalT } from "@/components/realty/portal/portal-i18n";
 export const dynamic = "force-dynamic";
 
 export default async function PortalElegirPage() {
-  const session = getPortalSession();
+  const session = await getPortalSession();
   if (!session) redirect("/i/portal");
 
   const identities = await resolvePortalIdentities(session.phone);

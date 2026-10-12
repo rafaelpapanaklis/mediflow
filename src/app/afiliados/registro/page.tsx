@@ -15,11 +15,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AffiliateRegistroPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function AffiliateRegistroPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // Los montos salen de la config en vivo (getPublicOffer nunca lanza) y viajan
   // como props: el formulario es "use client" y no puede tocar Prisma.
   //

@@ -15,7 +15,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * cerrada ayer NO sale, y una que empieza mañana tampoco — que es lo que
  * distingue "a quién supervisa" de "a quién supervisó alguna vez".
  */
-export default async function DocenteEstudiantesPage({ params }: { params: { id: string } }) {
+export default async function DocenteEstudiantesPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

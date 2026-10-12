@@ -13,7 +13,8 @@ import { sanitizePermissionKeys } from "@/lib/auth/permissions";
 //
 // Solo SUPER_ADMIN. Multi-tenant: el target user.id debe pertenecer al
 // mismo clinicId del SUPER_ADMIN. Audit log obligatorio.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!ctx.isSuperAdmin) {

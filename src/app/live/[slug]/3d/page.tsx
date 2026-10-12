@@ -17,10 +17,11 @@ import { Clinic3DPublicMount } from "./Clinic3DPublicMount";
 import liveStyles from "../live-public.module.css";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   // noindex SIEMPRE: es la cara pública de la clínica, no debe indexarse.
   const fallback: Metadata = {
     title: "Recorrido 3D",
@@ -56,7 +57,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * 500 pelado; dentro del try NO va notFound()/redirect() (lanzan y el catch se
  * los tragaría).
  */
-export default async function Live3DPage({ params }: Props) {
+export default async function Live3DPage(props: Props) {
+  const params = await props.params;
   const slug = params.slug.toLowerCase();
 
   let clinic: {
@@ -92,7 +94,7 @@ export default async function Live3DPage({ params }: Props) {
   // desbloquear, el PasswordGate hace location.reload() → recarga ESTA url
   // (/3d) → cookie válida → entra directo al recorrido 3D.
   if (clinic.liveModePassword) {
-    const cookie = cookies().get(liveCookieName(slug));
+    const cookie = (await cookies()).get(liveCookieName(slug));
     if (!verifyLiveUnlockCookie(cookie?.value, slug)) {
       return <PasswordGate slug={slug} clinicName={clinic.name} />;
     }

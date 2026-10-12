@@ -14,9 +14,10 @@ export const metadata: Metadata = { title: "Ticket de soporte — Afiliados Dale
  * /api/afiliados/soporte/[id], que filtra por el affiliateId de la SESIÓN y
  * responde 404 si el ticket es de otro afiliado.
  */
-export default async function AffiliateTicketPage({ params }: { params: { id: string } }) {
-  const ctx = await getAffiliateContext();
-  if (!ctx) redirect("/afiliados/login");
+export default async function AffiliateTicketPage(props: { params: Promise<{ id: string }> }) {
+ const params = await props.params;
+ const ctx = await getAffiliateContext();
+ if (!ctx) redirect("/afiliados/login");
 
-  return <TicketAfiliadoClient ticketId={params.id} />;
+ return <TicketAfiliadoClient ticketId={params.id} />;
 }

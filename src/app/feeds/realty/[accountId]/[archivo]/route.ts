@@ -38,10 +38,11 @@ const DEBUG_FILE = "propiedades.json";
 const ACCOUNT_ID = /^[A-Za-z0-9_-]{10,64}$/;
 
 interface Params {
-  params: { accountId: string; archivo: string };
+  params: Promise<{ accountId: string; archivo: string }>;
 }
 
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const accountId = params.accountId ?? "";
   const archivo = params.archivo ?? "";
 

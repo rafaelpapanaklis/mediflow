@@ -51,13 +51,14 @@ import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
 import { parseNotifPrefs } from "@/lib/patient-notifications/types";
 
-export default async function PatientDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams?: { caso?: string | string[] };
-}) {
+export default async function PatientDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams?: Promise<{ caso?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const user = await getCurrentUser();
   const { t } = await getServerT();
   const tz = user.clinic.timezone;
@@ -230,8 +231,8 @@ export default async function PatientDetailPage({
   // en memoria para que un re-render no escriba otra fila. NO se espera aquí: se
   // lanza DESPUÉS del lote de siete de arriba (no lo engorda) y se recoge tras
   // `menuDosNivelesEncendido`, solapada con él: ningún viaje en serie de más. clinicId/userId SIEMPRE de sesión.
-  const lecturaP = (() => {
-    const h = headers();
+  const lecturaP = (async () => {
+    const h = await headers();
     const xff = h.get("x-forwarded-for");
     const ip =
       (xff ? xff.split(",")[0]!.trim() : null) ??
@@ -457,7 +458,7 @@ export default async function PatientDetailPage({
   // el acceso a la vista, igual que en el guardia del módulo.
   const orthoModuloActivo = isDental && moduloActivoALaVista(
     await hasActiveOrthodonticsModule(user.clinicId),
-    vistaPreviaSinModulo({ nodeEnv: process.env.NODE_ENV, cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value }),
+    vistaPreviaSinModulo({ nodeEnv: process.env.NODE_ENV, cookie: (await cookies()).get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value }),
   );
   // X2 / MAPA 19: además del contrato, dos llaves de la PERSONA — la del
   // módulo (sin ella no hay pestaña) y la del expediente (sin ella solo la

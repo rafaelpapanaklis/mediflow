@@ -9,7 +9,8 @@ import { setMemberBranchAccess } from "@/lib/barber/team";
 
 export const dynamic = "force-dynamic";
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ctx = await getBarberContext();
     if (!ctx) return barberUnauthorized();

@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
  * de la clínica (404). La mutación pasa por el chequeo de Origin del middleware
  * y queda en el log de auditoría de admin (sin clínica → evento estructurado).
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

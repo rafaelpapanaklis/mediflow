@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
  * escala CONGELADOS. Un 8 puesto en octubre sobre 10 tiene que seguir
  * leyéndose 8/10 aunque la escuela pase la rúbrica a 100 en noviembre.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("rubricas.manage");
   if ("response" in g) return g.response;
 

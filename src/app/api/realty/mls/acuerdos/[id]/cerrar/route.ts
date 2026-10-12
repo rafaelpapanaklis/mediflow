@@ -18,7 +18,8 @@ export const runtime = "nodejs";
  * Solo devuelve deals de MI cuenta. El `propertyId` no viene del navegador:
  * sale del acuerdo, y el acuerdo solo se lee si soy una de las dos partes.
  */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("properties.view");
   if ("response" in gate) return gate.response;
 
@@ -100,7 +101,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
  * con un "listo" sería que alguien descubriera dentro de un mes que a su
  * colega nunca se le apuntó su parte.
  */
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // `properties.edit` y no `commissions.manage`: cerrar la colaboración es
   // un acto sobre MI inventario. Si además tiene permiso de comisiones, el
   // reparto se actualiza solo; si no, se cierra igual y la respuesta dice

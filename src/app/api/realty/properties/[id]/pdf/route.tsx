@@ -199,7 +199,8 @@ async function embedPhoto(path: string, width: number): Promise<string | null> {
   }
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.view");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

@@ -31,7 +31,8 @@ export const dynamic = "force-dynamic";
  * bytes nunca pasan por el servidor. El tamaño declarado es una PISTA — un
  * cliente puede mentir — y por eso /confirm vuelve a medir el objeto real.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

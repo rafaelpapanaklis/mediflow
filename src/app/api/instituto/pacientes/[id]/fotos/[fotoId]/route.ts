@@ -24,8 +24,9 @@ export const dynamic = "force-dynamic";
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string; fotoId: string } },
+  props: { params: Promise<{ id: string; fotoId: string }> }
 ) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 
@@ -65,8 +66,9 @@ export async function PATCH(
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string; fotoId: string } },
+  props: { params: Promise<{ id: string; fotoId: string }> }
 ) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

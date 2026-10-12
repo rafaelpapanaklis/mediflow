@@ -31,7 +31,8 @@ export const dynamic = "force-dynamic";
  * dentro de updateEduRecord — el mismo reparto que la agenda hace con
  * `canManage`. El ALUMNO (write sin sign) entrega; firma quien responde.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
 
@@ -83,7 +84,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
  * con cuerpo es raro, y por eso el cuerpo se lee de forma tolerante: sin
  * él, la petición sigue funcionando igual que antes.
  */
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
 
@@ -92,7 +94,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     // cliente viejo— tiene que seguir retirando la nota, no reventar.
     const body = await request
       .json()
-      .catch(() => ({}) as { reason?: unknown });
+      .catch(() => (({}) as { reason?: unknown }));
     const retirada = await withdrawEduRecord(g.ctx, params.id, body);
     return NextResponse.json({ ok: true, id: retirada.id });
   } catch (err) {

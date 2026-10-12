@@ -110,11 +110,11 @@ export function marcarEscritura(supabaseId: string): void {
 
 type Modo = "cache" | "fresco" | "escritura";
 
-function modoDeEstaPeticion(): Modo {
+async function modoDeEstaPeticion(): Promise<Modo> {
   let ruta: string | null = null;
   let metodo: string | null = null;
   try {
-    const h = headers();
+    const h = (await headers());
     ruta = h.get("x-pathname");
     metodo = h.get("x-method");
   } catch {
@@ -153,7 +153,7 @@ export async function resolverSesion(
   supabaseId: string,
   clinicaDeLaCookie: string | null,
 ): Promise<SesionResuelta> {
-  const modo = modoDeEstaPeticion();
+  const modo = await modoDeEstaPeticion();
   const ahora = Date.now();
 
   if (modo === "escritura") marcarEscritura(supabaseId);

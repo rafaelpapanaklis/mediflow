@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
  * salió de la escuela con una cédula encima y el PDF de la anulada sigue
  * saliendo, marcado, para poder enseñar la constancia.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.void");
   if ("response" in g) return g.response;
 

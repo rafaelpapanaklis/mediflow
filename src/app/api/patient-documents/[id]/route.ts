@@ -19,7 +19,8 @@ async function notaVisible(ctx: Parameters<typeof pacienteOculto>[0], id: string
   return pacienteOculto(ctx, fila.patientId);
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const e = await entrar(req, VER, 60);
   if ("res" in e) return e.res;
   const { ctx } = e;
@@ -38,7 +39,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 // PATCH { body } — solo borradores, solo su autor. Lo firmado no se reescribe.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const e = await entrar(req, ESCRIBIR, 30);
   if ("res" in e) return e.res;
   const { ctx } = e;

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { signatureId: string } }
+interface Params { params: Promise<{ signatureId: string }> }
 
 /**
  * GET /api/signature/verify/[signatureId] — CONSULTA pública de una firma.
@@ -39,7 +39,8 @@ const DETALLE_NO_VERIFICADA =
   "criptográficamente ni validada contra el SAT. No la tomes como prueba de " +
   "la identidad del firmante ni de la integridad del documento.";
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const signed = await prisma.signedDocument.findUnique({
     where: { id: params.signatureId },
   });

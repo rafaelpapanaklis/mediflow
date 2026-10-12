@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * esto con el del paciente ("patients"). La razón larga está en la
  * cabecera de src/lib/edu/consentimientos.ts.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("consentimientos.view");
   if ("response" in g) return g.response;
 
@@ -39,7 +40,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
  * si vinieran del cliente, se podría emitir un consentimiento diciendo que
  * responde un docente que no ha visto al paciente.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("consentimientos.create");
   if ("response" in g) return g.response;
 

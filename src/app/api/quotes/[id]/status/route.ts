@@ -12,7 +12,7 @@ import { aceptarPresupuesto, fraseDeAceptacion, PresupuestoError } from "@/lib/q
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 type Action = "present" | "accept" | "reject";
 
@@ -26,7 +26,8 @@ type Action = "present" | "accept" | "reject";
  *            guardado como «no aceptado» y nunca se carga. Sin `itemIds`, todo.
  * - reject:  marca REJECTED.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

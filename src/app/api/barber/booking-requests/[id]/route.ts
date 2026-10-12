@@ -19,10 +19,8 @@ import { isRequestActionError, resolveBookingRequest } from "@/lib/barber/bookin
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

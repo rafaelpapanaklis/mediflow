@@ -16,7 +16,7 @@ import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clini
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * GET /api/clinical-notes/[id]/pdf
@@ -27,7 +27,8 @@ interface Params { params: { id: string } }
  * Multi-tenant: clinicId desde getCurrentUser(); validamos que el
  * MedicalRecord pertenezca a la clínica del usuario.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   const denied = denyIfMissingPermission(user, "medicalRecord.view");
   if (denied) return denied;

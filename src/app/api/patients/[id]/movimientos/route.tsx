@@ -21,7 +21,7 @@ import type { FiltroMovimientos } from "@/lib/movimientos-paciente/consultar-tip
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 const ROLES = ["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST"];
 
@@ -41,7 +41,8 @@ const ROLES = ["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST"];
  * AQUÍ, en el servidor, y el texto verdadero nunca viaja.
  * CSV y PDF dejan su lectura en la bitácora (`movimientos_export`).
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!ROLES.includes(user.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   // Regla (c): sin clínica en la sesión no se consulta (un undefined no filtra).

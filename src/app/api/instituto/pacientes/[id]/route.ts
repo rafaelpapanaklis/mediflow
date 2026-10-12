@@ -20,7 +20,8 @@ export const dynamic = "force-dynamic";
  * exactamente igual que uno que no existe. Es lo que debe pasar: un 403
  * confirmaría que ese folio existe.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
 
@@ -85,7 +86,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * Un paciente no se BORRA: cambia de estado. Por eso este archivo no tiene
  * un handler DELETE — sus citas y sus casos ocurrieron.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
 

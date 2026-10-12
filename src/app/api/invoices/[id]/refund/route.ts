@@ -45,7 +45,8 @@ async function getCtx() {
 // Invoice.paid se decrementa por el monto reembolsado y el status se
 // recalcula (PAID → PARTIAL si quedó saldo, → PARTIAL → … o PENDING si paid
 // llegó a 0). El audit log captura monto + razón.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Reembolsar es una operación financiera sensible — gate por permiso UI.

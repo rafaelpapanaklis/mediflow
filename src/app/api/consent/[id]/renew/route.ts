@@ -16,7 +16,8 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logMutation } from "@/lib/audit";
 import { consentPublicUrl, regenerateConsentLink } from "@/lib/consent/link";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 20);
   if (limited) return limited;
 

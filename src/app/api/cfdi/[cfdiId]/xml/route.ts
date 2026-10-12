@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 // GET /api/cfdi/[cfdiId]/xml — proxy del XML del CFDI desde Facturapi.
 // Mismo gate que el PDF hermano: clinicId de sesión + permiso "billing.view" +
 // visibilidad por paciente. Timbrar sigue admin-only. La org key nunca sale.
-export async function GET(req: NextRequest, { params }: { params: { cfdiId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ cfdiId: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 30, 60 * 1000);
   if (rl) return rl;
 

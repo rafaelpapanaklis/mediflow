@@ -19,7 +19,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const e = await entrarCita(req, PERMISO_VER, 60);
   if ("res" in e) return e.res;
   const { ctx } = e;

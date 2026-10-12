@@ -30,7 +30,8 @@ export const dynamic = "force-dynamic";
  * en su autorización. Lo de aquí es el porqué de guardarla.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.propose");
   if ("response" in g) return g.response;
   try {

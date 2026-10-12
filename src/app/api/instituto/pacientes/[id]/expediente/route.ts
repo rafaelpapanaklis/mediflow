@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
  * los necesita para el desplegable de "¿a qué caso va esta nota?": dos
  * viajes para abrir una pestaña se notan en el teléfono del piso clínico.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.view");
   if ("response" in g) return g.response;
 
@@ -65,7 +66,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
  * SESIÓN. Ninguno del body: si vinieran del cliente, se podría escribir en
  * el expediente de una persona atribuyéndolo a otra.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
 

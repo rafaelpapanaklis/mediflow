@@ -31,9 +31,9 @@ export interface AccionResultado {
   mensaje?: string;
 }
 
-function auditar(entityId: string, datos: Record<string, unknown>): void {
+async function auditar(entityId: string, datos: Record<string, unknown>): Promise<void> {
   try {
-    const h = headers();
+    const h = await headers();
     console.log(
       JSON.stringify({
         tag: "ADMIN_AUDIT",
@@ -66,7 +66,7 @@ export async function guardarCuotaAccion(input: {
   const r = await setEduAlmacenamientoCuotaTb(input?.institutionId, input?.tb);
   if (!r.ok) return { ok: false, error: r.error };
 
-  auditar(input.institutionId, {
+  await auditar(input.institutionId, {
     adminId: admin.user.id,
     adminEmail: admin.user.email,
     before: { storageQuotaBytes: r.antesBytes },

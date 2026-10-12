@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
  * Un procedimiento NO se borra: se desactiva. Los cobros que lo
  * referencian ocurrieron, y su línea guarda la descripción congelada.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("tarifarios.manage");
   if ("response" in g) return g.response;
 

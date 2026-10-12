@@ -61,7 +61,8 @@ async function contexto(req: NextRequest, invoiceId: string, permiso: "billing.v
   return { ctx: { clinicId: ctx.clinicId as string, userId: ctx.userId as string }, inv };
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const c = await contexto(req, params.id, "billing.view");
   if ("error" in c) return c.error;
   const info = await infoDeSaldoOrto(c.ctx.clinicId, params.id);
@@ -72,7 +73,8 @@ function faltaSql(e: any): boolean {
   return e?.code === "P2021" || e?.code === "P2022";
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const c = await contexto(req, params.id, "billing.charge");
   if ("error" in c) return c.error;
   const { clinicId, userId } = c.ctx;

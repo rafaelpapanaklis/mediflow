@@ -6,7 +6,8 @@ import { TicketClient } from "./ticket-client";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Ticket de soporte — DaleControl" };
 
-export default async function TicketPage({ params }: { params: { id: string } }) {
+export default async function TicketPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // REDISEÑO (ws1-t4) — el MISMO interruptor por clínica que enciende el menú de
   // dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno
   // propio. Falla cerrado: sin clínica, sin tabla o con error → false = el hilo

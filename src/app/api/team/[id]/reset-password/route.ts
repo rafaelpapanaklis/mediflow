@@ -44,7 +44,8 @@ function generateTempPassword(len = 12): string {
 //
 // Lock-out defense: rechaza target.role === "SUPER_ADMIN" para que un super
 // no pueda forzar cambio de password de otro super.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!ctx.isSuperAdmin) {

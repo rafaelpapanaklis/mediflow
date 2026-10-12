@@ -11,10 +11,8 @@ export const dynamic = "force-dynamic";
  * el cliente final. Cambiarla exige `portal.manage`, no basta con
  * `clients.edit` — publicar una foto es una acción distinta de guardarla.
  */
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string; photoId: string } },
-) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string; photoId: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 
@@ -41,10 +39,8 @@ export async function PATCH(
 }
 
 /** DELETE — borra la fila Y el binario del bucket. */
-export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string; photoId: string } },
-) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string; photoId: string }> }) {
+  const params = await props.params;
   const gate = await gateBarberClients("clients.edit");
   if ("response" in gate) return gate.response;
 

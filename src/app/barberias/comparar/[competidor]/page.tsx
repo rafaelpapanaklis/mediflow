@@ -51,14 +51,15 @@ export const dynamicParams = false;
 const t = getBarberT("es");
 
 interface PageProps {
-  params: { competidor: string };
+  params: Promise<{ competidor: string }>;
 }
 
 export function generateStaticParams(): { competidor: string }[] {
   return COMPETIDOR_SLUGS.map((competidor) => ({ competidor }));
 }
 
-export function generateMetadata({ params }: PageProps): Metadata {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const competidor = getCompetidor(params.competidor);
   if (!competidor) return {};
 
@@ -85,7 +86,8 @@ export function generateMetadata({ params }: PageProps): Metadata {
   });
 }
 
-export default async function CompararCompetidorPage({ params }: PageProps) {
+export default async function CompararCompetidorPage(props: PageProps) {
+  const params = await props.params;
   const competidor = getCompetidor(params.competidor);
   // dynamicParams=false ya cierra la puerta; esto es el cinturón por si
   // algún día se abre y para que TypeScript estreche el tipo.

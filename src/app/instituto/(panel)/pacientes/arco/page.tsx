@@ -46,11 +46,12 @@ export const metadata: Metadata = {
  * cortar en silencio.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function PacientesArcoPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function PacientesArcoPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

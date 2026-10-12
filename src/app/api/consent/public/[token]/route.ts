@@ -51,7 +51,8 @@ const PUBLIC_SELECT = {
 } as const;
 
 // GET /api/consent/public/[token] — el paciente lee su carta.
-export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 20); // 20 por minuto por IP
   if (rl) return rl;
 
@@ -103,7 +104,8 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
 }
 
 // POST /api/consent/public/[token] — el paciente (o su representante) firma.
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const rl = rateLimit(req, 5);
   if (rl) return rl;
 

@@ -34,10 +34,8 @@ const RL = { limit: 120, windowSec: 600 };
 
 const MAX_RANGE_DAYS = 28;
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { slug: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   try {
     const limited = await persistentRateLimit(req, { ...RL, scope: "barber-public-slots" });
     if (limited) return limited;

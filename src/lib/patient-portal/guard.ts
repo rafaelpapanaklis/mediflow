@@ -16,7 +16,7 @@ import { sha256 } from "./crypto";
  */
 export async function getPatientPortalContext(): Promise<PatientPortalContext | null> {
   try {
-    const token = cookies().get(PATIENT_SESSION_COOKIE)?.value;
+    const token = (await cookies()).get(PATIENT_SESSION_COOKIE)?.value;
     if (!token) return null;
 
     const tokenHash = sha256(token);

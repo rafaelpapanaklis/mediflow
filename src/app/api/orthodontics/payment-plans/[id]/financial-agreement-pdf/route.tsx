@@ -15,10 +15,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } },
-) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const result = await exportFinancialAgreementPdf({ id: params.id });
   if (isFailure(result)) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 400 });

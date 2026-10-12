@@ -30,11 +30,12 @@ import { RealtyDenied, realtyOrigin } from "@/components/realty/properties/denie
  */
 const AREA = "inmuebles";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function Page(
+  props: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 
@@ -82,7 +83,7 @@ export default async function Page({
       mode={ctx.mode}
       canEdit={hasRealtyPermission(permUser, "properties.edit")}
       accountSlug={ctx.account.slug}
-      origin={realtyOrigin(headers())}
+      origin={realtyOrigin(await headers())}
     />
   );
 }

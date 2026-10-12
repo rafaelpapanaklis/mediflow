@@ -7,13 +7,14 @@ import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string; dxId: string } }
+interface Params { params: Promise<{ id: string; dxId: string }> }
 
 /**
  * DELETE /api/medical-records/[id]/diagnoses/[dxId]
  * Multi-tenant: validamos que el medical_record pertenezca a ctx.clinicId.
  */
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // M6: antes era una lista de roles fija, que no veía el permiso quitado a mano.
   const sinPermiso = denyIfNotClinical(user, "editar");

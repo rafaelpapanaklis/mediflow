@@ -95,7 +95,7 @@ export async function enviarProspectoWeb(entrada: EntradaProspecto): Promise<Res
 
   // Freno de spam por IP. En memoria y por instancia: no es una muralla,
   // pero corta el envío repetido de un formulario abierto a la calle.
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "desconocida";
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "desconocida";
   if (!rateLimitKey(`realty-lead:${ip}`, 6, 60_000)) {
     return { ok: false, error: "Espera un minuto antes de volver a enviar." };
   }

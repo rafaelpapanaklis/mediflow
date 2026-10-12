@@ -61,7 +61,8 @@ function optText(body: Record<string, unknown>, key: string): string | null | un
 }
 
 /** GET — la ficha completa (con fotos, recorridos y documentos ya firmados). */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.view");
   if ("response" in gate) return gate.response;
   try {
@@ -80,7 +81,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
  * pestañas abiertas en el mismo inmueble no se pisan lo que la otra no
  * tocó, que es exactamente lo que hace un formulario con un botón único.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
 
@@ -225,7 +227,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
  * la cuenta deja de cuadrar. Se leen los paths ANTES del delete (después ya
  * no hay filas de dónde sacarlos).
  */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateRealty("properties.edit");
   if ("response" in gate) return gate.response;
 

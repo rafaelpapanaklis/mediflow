@@ -15,7 +15,7 @@ import { estaVencida } from "@/lib/quotes/vigencia";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { token: string } }
+interface Params { params: Promise<{ token: string }> }
 
 // El día de vigencia cuenta completo en la zona de la clínica (vigencia.ts):
 // «válido hasta el 2 oct» se acepta hasta las 23:59 del 2 oct de la clínica.
@@ -28,7 +28,8 @@ function isExpired(validUntil: Date | null, status: string, zona: string | null)
  * GET /api/presupuesto/[token] — vista pública (solo lectura) del presupuesto
  * para que el paciente lo revise antes de aceptar. Sin datos sensibles extra.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const rl = rateLimit(req, 20);
   if (rl) return rl;
 
@@ -94,7 +95,8 @@ export async function GET(req: NextRequest, { params }: Params) {
  * Valida forma, tamaño y magic bytes de la firma. Guarda el PNG en el bucket
  * privado y persiste solo el path (signed URL on-demand al leer).
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const rl = rateLimit(req, 5);
   if (rl) return rl;
 

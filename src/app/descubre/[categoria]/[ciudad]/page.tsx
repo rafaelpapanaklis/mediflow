@@ -23,7 +23,7 @@ export const revalidate = 86400;
 export const dynamicParams = true;
 
 interface Props {
-  params: { categoria: string; ciudad: string };
+  params: Promise<{ categoria: string; ciudad: string }>;
 }
 
 // Una sola carga compartida por generateMetadata y la página (React cache por
@@ -49,7 +49,8 @@ export async function generateStaticParams() {
 /** "clínicas dentales" → "Clínicas dentales". */
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const loaded = await load(params.categoria, params.ciudad);
   if (!loaded) return { robots: { index: false, follow: false } };
 
@@ -77,7 +78,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // bloques de interlinking. Estilo BLANCO + VIOLETA (.mfh). Español neutro con tú.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default async function CiudadPage({ params }: Props) {
+export default async function CiudadPage(props: Props) {
+  const params = await props.params;
   const loaded = await load(params.categoria, params.ciudad);
   if (!loaded) notFound();
 

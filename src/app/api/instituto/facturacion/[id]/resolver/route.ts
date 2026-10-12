@@ -33,7 +33,8 @@ export const dynamic = "force-dynamic";
  * humana con el UUID a la vista.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("facturacion.config");
   if ("response" in g) return g.response;
 

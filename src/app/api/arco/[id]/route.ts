@@ -7,7 +7,7 @@ import { arcoEsDeMiClinica, armarCambioArco } from "@/lib/arco/alcance";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * GET /api/arco/[id] — quien atiende ARCO en la clínica ve el detalle de una
@@ -26,7 +26,8 @@ interface Params { params: { id: string } }
  *    lo recibe todo dueño de clínica (A3, auditoría 30-sep-2026). Se responde
  *    404 y no 403 para no confirmar que el id existe.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   const denied = denyIfMissingPermission(user, "arco.manage");
   if (denied) return denied;
@@ -47,7 +48,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 /**
  * PATCH /api/arco/[id] — actualiza status/resolvedNotes de una solicitud.
  */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // ISO-03: mismo interruptor que el GET (antes `arco.update`, capa por rol).
   const denied = denyIfMissingPermission(user, "arco.manage");

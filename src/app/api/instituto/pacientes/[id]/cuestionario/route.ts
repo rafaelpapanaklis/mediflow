@@ -21,7 +21,8 @@ export const dynamic = "force-dynamic";
  */
 
 /** GET — el historial (20 versiones), más reciente primero. */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.view");
   if ("response" in g) return g.response;
   try {
@@ -39,7 +40,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
  * es «¿qué contesta?», es «¿qué contestó ANTES de la extracción?», y un
  * update la deja sin respuesta para siempre.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
   try {

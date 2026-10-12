@@ -25,10 +25,8 @@ const RL = { limit: 15, windowSec: 600 };
 
 const INVALID = "Ese código no es válido o ya venció. Pide uno nuevo.";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { slug: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   try {
     const limited = await persistentRateLimit(req, { ...RL, scope: "barber-portal-verify" });
     if (limited) return limited;

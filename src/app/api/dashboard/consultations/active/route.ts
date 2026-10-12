@@ -48,9 +48,9 @@ interface StoredConsult {
   startedAt: string;
 }
 
-function readStored(): StoredConsult | null {
+async function readStored(): Promise<StoredConsult | null> {
   try {
-    const raw = cookies().get(STATE_COOKIE)?.value;
+    const raw = (await cookies()).get(STATE_COOKIE)?.value;
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredConsult>;
     if (!parsed?.id || !parsed?.patientId || !parsed?.startedAt) return null;
@@ -162,7 +162,7 @@ export async function GET() {
   const auth = await requireViewer();
   if (auth.error) return auth.error;
 
-  const stored = readStored();
+  const stored = await readStored();
   if (!stored) return NextResponse.json({ consult: null });
 
   const consult = await hydrate(stored, auth.viewer);
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
 
   // Ya hay una consulta abierta con OTRO paciente → 409 con la consulta viva,
   // que es exactamente lo que el provider espera para repintar la barra.
-  const stored = readStored();
+  const stored = await readStored();
   if (stored && stored.patientId !== patientId) {
     const current = await hydrate(stored, viewer);
     if (current) {

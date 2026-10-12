@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     // cuerpo ilegible: la pantalla saldrá como «Otra pantalla»
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401, headers: SIN_CACHE });
   const { data: sesionData } = await supabase.auth.getSession();
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         };
       },
     },
-    { sesion, clinicaCookie: readActiveClinicCookie(), ruta, ahora: Date.now() },
+    { sesion, clinicaCookie: await readActiveClinicCookie(), ruta, ahora: Date.now() },
   );
 
   if (resultado.estado === 401) return NextResponse.json({ error: "No autorizado" }, { status: 401, headers: SIN_CACHE });

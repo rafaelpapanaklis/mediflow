@@ -6,11 +6,12 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { signMaybeUrls } from "@/lib/storage";
 import type { Metadata } from "next";
 
-interface Props { params: { token: string } }
+interface Props { params: Promise<{ token: string }> }
 
 export const metadata: Metadata = { title: "Mi Portal — DaleControl" };
 
-export default async function PatientPortalPage({ params }: Props) {
+export default async function PatientPortalPage(props: Props) {
+  const params = await props.params;
   // Minimización de datos (NOM-024/LFPDPPP): select explícito de SOLO lo que
   // el portal renderiza. Sin spreads del modelo completo — eso filtraba al
   // HTML público notes internas, SOAP completo (aun con isPrivate), CURP/RFC,

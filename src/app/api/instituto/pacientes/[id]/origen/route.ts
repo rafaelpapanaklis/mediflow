@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * marcas de quién y cuándo: guardar "lo quitó fulano" sin origen sería un
  * dato sin dueño.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.origen");
   if ("response" in g) return g.response;
 

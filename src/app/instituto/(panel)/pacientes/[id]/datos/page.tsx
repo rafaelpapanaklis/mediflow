@@ -69,7 +69,8 @@ import { EduPacienteDatosCard } from "@/components/edu/clinica/paciente-datos-fo
  * duplica el formulario fiscal: un RFC mal capturado en dos sitios es un
  * CFDI rechazado por el SAT.
  */
-export default async function PacienteDatosPage({ params }: { params: { id: string } }) {
+export default async function PacienteDatosPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

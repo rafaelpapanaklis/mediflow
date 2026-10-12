@@ -6,7 +6,11 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { esErrorDeLotesNoAplicados, writeOffExpiredLot } from "@/lib/inventory/lots.server";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string; lotId: string } }) {
+export async function POST(
+  req: NextRequest,
+  props: { params: Promise<{ id: string; lotId: string }> }
+) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

@@ -32,7 +32,8 @@ export const dynamic = "force-dynamic";
  * nunca pasan por el servidor. Por eso /confirm mide el objeto en Storage y
  * comprueba su número mágico antes de crear la fila.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

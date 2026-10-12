@@ -55,11 +55,12 @@ export const metadata: Metadata = {
  * TARJETAS de siempre. Es la misma pantalla que había antes de esta ola:
  * degradar a lo anterior es mejor que un hueco con un mensaje técnico.
  */
-export default async function InstitutoClinicaVivaPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoClinicaVivaPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

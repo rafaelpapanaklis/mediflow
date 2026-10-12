@@ -7,7 +7,7 @@ import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * POST /api/medical-records/[id]/diagnoses
@@ -16,7 +16,8 @@ interface Params { params: { id: string } }
  * Multi-tenant: validamos que el medical_record pertenezca a ctx.clinicId
  * antes de crear el dx.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // M6: antes era una lista de roles fija, que no veía el permiso quitado a mano.
   const sinPermiso = denyIfNotClinical(user, "editar");
@@ -84,7 +85,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 /**
  * GET /api/medical-records/[id]/diagnoses — listar dx del expediente.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // M6: leer los diagnósticos no pedía ningún permiso (recepción, solo lectura).
   const sinPermiso = denyIfNotClinical(user, "ver");

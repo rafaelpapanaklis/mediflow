@@ -35,9 +35,9 @@ export interface AccionResultado {
   mensaje?: string;
 }
 
-function auditar(accion: string, entityId: string, datos: Record<string, unknown>): void {
+async function auditar(accion: string, entityId: string, datos: Record<string, unknown>): Promise<void> {
   try {
-    const h = headers();
+    const h = await headers();
     console.log(
       JSON.stringify({
         tag: "ADMIN_AUDIT",
@@ -67,7 +67,7 @@ export async function sembrarAccion(): Promise<AccionResultado> {
   const r = await sembrarParametros();
   if (r.error) return { ok: false, error: r.error };
 
-  auditar("seed", "catalogo", {
+  await auditar("seed", "catalogo", {
     adminId: admin.user.id,
     adminEmail: admin.user.email,
     after: { creadas: r.creadas, omitidas: r.omitidas },
@@ -124,7 +124,7 @@ export async function guardarAccion(input: {
   const r = await guardarParametro(payload);
   if (!r.ok) return { ok: false, error: r.error };
 
-  auditar(input.id ? "update" : "create", r.id ?? "", {
+  await auditar(input.id ? "update" : "create", r.id ?? "", {
     adminId: admin.user.id,
     adminEmail: admin.user.email,
     after: {
@@ -147,7 +147,7 @@ export async function borrarAccion(id: string): Promise<AccionResultado> {
   const r = await borrarParametro(id);
   if (!r.ok) return { ok: false, error: r.error };
 
-  auditar("delete", id, { adminId: admin.user.id, adminEmail: admin.user.email });
+  await auditar("delete", id, { adminId: admin.user.id, adminEmail: admin.user.email });
   revalidatePath(RUTA);
   return { ok: true, mensaje: "Borrado." };
 }

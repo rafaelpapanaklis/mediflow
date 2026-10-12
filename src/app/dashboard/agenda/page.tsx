@@ -37,10 +37,11 @@ export const metadata: Metadata = { title: "Agenda" };
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams?: { date?: string; highlight?: string; doctorId?: string };
+  searchParams?: Promise<{ date?: string; highlight?: string; doctorId?: string }>;
 }
 
-export default async function AgendaPage({ searchParams }: PageProps) {
+export default async function AgendaPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 

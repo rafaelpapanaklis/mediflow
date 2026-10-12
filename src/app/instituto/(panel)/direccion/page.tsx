@@ -45,11 +45,12 @@ export const metadata: Metadata = {
  * contra el mismo pool. El bloque en vivo es el barato y va primero, así
  * que lo que se ve primero es lo que está pasando.
  */
-export default async function InstitutoDireccionPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoDireccionPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

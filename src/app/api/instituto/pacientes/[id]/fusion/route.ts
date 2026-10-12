@@ -35,7 +35,8 @@ export const dynamic = "force-dynamic";
  * ⚠️ NO ESCRIBE NADA. Los números son los de ANTES; el resumen de verdad
  * lo devuelve el POST, y la pantalla enseña los dos.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
   try {
@@ -56,7 +57,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
  * Cuál gana lo decide quien fusiona y no el sistema: cuál de las dos tiene
  * el folio bueno y la historia más larga es un juicio humano.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
   try {

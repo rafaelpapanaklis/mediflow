@@ -8,9 +8,9 @@ import {
 
 export { pickActiveClinicId, ACTIVE_CLINIC_COOKIE } from "./active-clinic-core";
 
-export function readActiveClinicCookie(): string | null {
+export async function readActiveClinicCookie(): Promise<string | null> {
   try {
-    const raw = cookies().get(ACTIVE_CLINIC_COOKIE)?.value;
+    const raw = (await cookies()).get(ACTIVE_CLINIC_COOKIE)?.value;
     return unpackClinicCookie(raw);
   } catch {
     return null;
@@ -43,9 +43,9 @@ export function writeActiveClinicCookie(response: NextResponse, clinicId: string
  * component `cookies().set` lanza y aquí se ignora: el armazón del panel pide
  * varias /api al abrir, y la primera la deja corregida. Devuelve si la escribió.
  */
-export function resembrarActiveClinicCookie(clinicId: string): boolean {
+export async function resembrarActiveClinicCookie(clinicId: string): Promise<boolean> {
   try {
-    cookies().set(ACTIVE_CLINIC_COOKIE, packClinicCookie(clinicId), opcionesDeLaCookie());
+    (await cookies()).set(ACTIVE_CLINIC_COOKIE, packClinicCookie(clinicId), opcionesDeLaCookie());
     return true;
   } catch {
     return false;

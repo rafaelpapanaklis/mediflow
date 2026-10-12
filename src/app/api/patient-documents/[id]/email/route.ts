@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
 
 const CORREO_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // Mismo permiso que el envío por WhatsApp y que firmar: "view" a secas no saca
   // un documento clínico de la clínica.
   const e = await entrar(req, ESCRIBIR, 10);

@@ -29,10 +29,11 @@ import "@/components/barber/booking/barber-public.css";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const shop = await resolvePortalShop(params.slug);
   const t = getBarberT(shop?.locale ?? "es");
   return {
@@ -45,7 +46,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function BarberPortalPage({ params }: PageProps) {
+export default async function BarberPortalPage(props: PageProps) {
+  const params = await props.params;
   const shop = await resolvePortalShop(params.slug);
 
   if (!shop) {
@@ -62,7 +64,7 @@ export default async function BarberPortalPage({ params }: PageProps) {
   }
 
   // La sesión se valida contra ESTA barbería: una cookie de otra no entra.
-  const session = getPortalSession(shop.id);
+  const session = await getPortalSession(shop.id);
   const data = session
     ? await loadPortalData({ barbershopId: shop.id, clientId: session.clientId })
     : null;

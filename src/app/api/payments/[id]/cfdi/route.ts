@@ -70,7 +70,8 @@ import {
 // api/cfdi/route.ts (apartado atómico antes de llamar a Facturapi, "no se
 // sabe si timbró" nunca suelta el apartado, cuadre de totales) pero por PAGO
 // en vez de por FACTURA — ver lib/invoices/cfdi-pago-db.ts.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
   if (err) {
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // encendido la factura COMPLETA sí lleva la retención; el CFDI de un pago
     // suelto con retención todavía no existe.
     const encendidas = tasasDeRetencion({ regimenEmisor: clinic.regimenFiscal, rfcEmisor: clinic.rfcEmisor, rfcReceptor: receptor.rfc })
-      && await retencionesEncendidas(prisma, ctx!.clinicId);
+      && (await retencionesEncendidas(prisma, ctx!.clinicId));
     if (encendidas) return NextResponse.json({ error: errorRetencionPorPago(clinic.locale), code: CFDI_RETENCION_POR_PAGO }, { status: 409 });
     return NextResponse.json(retencion, { status: 409 });
   }
@@ -500,7 +501,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 }
 
 // GET /api/payments/[id]/cfdi — el CFDI (vigente o apartado) de un pago, si lo hay.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.view");

@@ -67,7 +67,8 @@ function respuestaYaResuelta() {
   );
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
 

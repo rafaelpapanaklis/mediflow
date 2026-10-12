@@ -6,7 +6,7 @@ import { getMigratedOrthoCases } from "@/lib/import/ortho-casos/leer";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * GET /api/patients/[id]/migrated-ortho-cases — "Casos de ortodoncia
@@ -18,7 +18,8 @@ interface Params { params: { id: string } }
  * paciente antes de leer nada; getMigratedOrthoCases filtra SIEMPRE por
  * clinicId de la sesión.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   const deniedPerm = denyIfMissingPermission(user, "medicalRecord.view");
   if (deniedPerm) return deniedPerm;

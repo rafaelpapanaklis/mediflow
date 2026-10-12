@@ -33,11 +33,12 @@ import { RealtyAreaDenied } from "@/components/realty/rentals/area-denied";
 
 const AREA = "cobranza";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams?: { periodo?: string; moneda?: string };
-}) {
+export default async function Page(
+  props: {
+    searchParams?: Promise<{ periodo?: string; moneda?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

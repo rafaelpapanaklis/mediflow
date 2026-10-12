@@ -36,7 +36,7 @@ export const exigirModuloOrtodoncia = cache(async (): Promise<void> => {
     real,
     vistaPreviaSinModulo({
       nodeEnv: process.env.NODE_ENV,
-      cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
+      cookie: (await cookies()).get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
     }),
   );
   const entrada = decidirEntradaAlModulo({

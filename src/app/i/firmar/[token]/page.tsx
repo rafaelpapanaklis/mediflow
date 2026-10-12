@@ -53,7 +53,8 @@ function LigaMuerta({ dict }: { dict: Dictionary }) {
   );
 }
 
-export default async function Page({ params }: { params: { token: string } }) {
+export default async function Page(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   let doc: PublicSigningDTO | null = null;
   try {
     doc = await openSigningToken(params.token);

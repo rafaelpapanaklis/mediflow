@@ -33,11 +33,12 @@ import { EduConsentimientosScreen } from "@/components/edu/expediente/consentimi
  * carta— sí salen del alcance CLÍNICO. Caja no recibe ninguna, que es
  * coherente: no tiene `consentimientos.create` y no abre expediente.
  */
-export default async function PacienteConsentimientosPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function PacienteConsentimientosPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

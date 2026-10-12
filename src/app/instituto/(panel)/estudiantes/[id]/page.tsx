@@ -24,7 +24,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * ese dato". Se pintan con una raya, no con un 0, porque un 0 mentiría sobre
  * el trabajo de una persona.
  */
-export default async function EstudianteResumenPage({ params }: { params: { id: string } }) {
+export default async function EstudianteResumenPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

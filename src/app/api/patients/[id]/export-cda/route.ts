@@ -9,7 +9,7 @@ import { logRead, extractAuditMeta } from "@/lib/audit";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * GET /api/patients/[id]/export-cda
@@ -19,7 +19,8 @@ interface Params { params: { id: string } }
  *
  * Multi-tenant: validamos que patient.clinicId === user.clinicId.
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const user = await getCurrentUser();
   // ISO-03: el CDA es el expediente entero (notas y recetas) → "Ver expediente
   // clínico" del modal, override incluido (antes capa por rol).

@@ -282,7 +282,8 @@ function ReciboRentaDocument(p: ReceiptProps) {
   );
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { folio: string } }) {
+export async function GET(_req: NextRequest, props0: { params: Promise<{ folio: string }> }) {
+  const params = await props0.params;
   const ctx = await getRealtyContext();
   if (!ctx) return realtyUnauthorized();
   if (ctx.plan.features.rentals !== true) return realtyForbidden("rentals");

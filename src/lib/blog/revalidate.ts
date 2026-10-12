@@ -29,7 +29,9 @@ export function revalidateBlog(opts?: {
   // Primero la caché de datos: es la que de verdad evita ir a la base, y la
   // que alcanza también a los artículos cuyo slug no viene en `opts`.
   try {
-    revalidateTag(BLOG_CACHE_TAG);
+    // Next 16: revalidateTag pide un perfil; { expire: 0 } = caducar YA (lo que
+    // hacía el de una sola llamada en 14), no «stale-while-revalidate».
+    revalidateTag(BLOG_CACHE_TAG, { expire: 0 });
   } catch (e) {
     console.warn("[blog/revalidate] no se pudo invalidar la caché del blog:", e);
   }

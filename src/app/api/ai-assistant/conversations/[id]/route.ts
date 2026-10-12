@@ -15,7 +15,7 @@ const PatchSchema = z
   .refine((v) => Object.keys(v).length > 0, "sin campos que actualizar");
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
@@ -27,7 +27,8 @@ interface Params {
  * compañero de la misma clínica— devuelve el MISMO 404 que un id inventado: ni
  * el título ni la existencia de la fila se filtran.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const auth = await resolveAiScope();
   if (auth.response) return auth.response;
 
@@ -41,7 +42,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 /** PATCH /api/ai-assistant/conversations/[id] — renombrar / recategorizar. */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const auth = await resolveAiScope();
   if (auth.response) return auth.response;
 
@@ -66,7 +68,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 /** DELETE /api/ai-assistant/conversations/[id] — borra la conversación y sus turnos. */
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params;
   const auth = await resolveAiScope();
   if (auth.response) return auth.response;
 

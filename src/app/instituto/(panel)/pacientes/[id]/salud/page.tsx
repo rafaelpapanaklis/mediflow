@@ -42,7 +42,8 @@ import { EduCuestionarioScreen } from "@/components/edu/expediente/cuestionario-
  * quién lo abrió.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function PacienteSaludPage({ params }: { params: { id: string } }) {
+export default async function PacienteSaludPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
@@ -71,7 +72,7 @@ export default async function PacienteSaludPage({ params }: { params: { id: stri
   // La IP y el navegador para el renglón de LECTURA. `headers()` y no un
   // `Request`: en un componente de servidor no hay petición que pasar, y
   // la constancia sin IP vale menos que la constancia con IP.
-  const h = headers();
+  const h = await headers();
   const fwd = h.get("x-forwarded-for") ?? "";
   const meta = {
     ip: (fwd.split(",")[0]?.trim() || h.get("x-real-ip") || null)?.slice(0, 60) ?? null,

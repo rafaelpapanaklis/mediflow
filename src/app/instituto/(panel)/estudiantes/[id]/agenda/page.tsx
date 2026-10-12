@@ -19,7 +19,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * a diferencia de /instituto/agenda, donde el renglón entero abre la cita y
  * un ancla dentro sería HTML inválido.
  */
-export default async function EstudianteAgendaPage({ params }: { params: { id: string } }) {
+export default async function EstudianteAgendaPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

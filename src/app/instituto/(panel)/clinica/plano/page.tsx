@@ -35,11 +35,12 @@ export const metadata: Metadata = {
  * sin él, la sede elegida en la barra superior; sin ninguna, la primera a
  * la que esa persona entra.
  */
-export default async function InstitutoPlanoEditorPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoPlanoEditorPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

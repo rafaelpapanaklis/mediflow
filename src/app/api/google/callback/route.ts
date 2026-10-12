@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       console.error("Google OAuth: invalid state signature");
       return fallo("state");
     }
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
     if (!sessionUser) {
       console.error("Google OAuth: no active session for state");

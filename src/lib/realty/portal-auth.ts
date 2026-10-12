@@ -539,8 +539,8 @@ export async function verifyPortalCode(phone: string, rawCode: string): Promise<
 // ═══════════════════════════════════════════════════════════════════════
 
 /** La cookie, leída y verificada. NO comprueba nada contra la base. */
-export function getPortalSession(): RealtyPortalSession | null {
-  return readPortalSession(cookies().get(REALTY_PORTAL_COOKIE)?.value);
+export async function getPortalSession(): Promise<RealtyPortalSession | null> {
+  return readPortalSession((await cookies()).get(REALTY_PORTAL_COOKIE)?.value);
 }
 
 export interface PortalTenantScope {
@@ -582,7 +582,7 @@ export type PortalScope = PortalTenantScope | PortalOwnerScope;
  * (contrato / inmueble) ya no existe.
  */
 export async function getPortalScope(): Promise<PortalScope | null> {
-  const session = getPortalSession();
+  const session = await getPortalSession();
   if (!session || !session.role || !session.accountId) return null;
   return resolveScope(session.phone, session.role, session.accountId);
 }

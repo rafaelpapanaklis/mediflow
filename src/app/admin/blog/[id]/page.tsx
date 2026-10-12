@@ -7,7 +7,8 @@ import { PostEditor } from "../post-editor";
 
 export const metadata: Metadata = { title: "Editar artículo — Admin DaleControl" };
 
-export default async function AdminBlogEditPage({ params }: { params: { id: string } }) {
+export default async function AdminBlogEditPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const row = await prisma.blogPost.findUnique({ where: { id: params.id } });
   if (!row) notFound();
   return <PostEditor post={toBlogPostDTO(row)} />;

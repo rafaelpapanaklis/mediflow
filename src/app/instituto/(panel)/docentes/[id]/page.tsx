@@ -13,7 +13,8 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * dato" (le pasa a CAJA). Se pinta con una raya, no con un 0 — un 0 mentiría
  * sobre la carga de una persona.
  */
-export default async function DocenteResumenPage({ params }: { params: { id: string } }) {
+export default async function DocenteResumenPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

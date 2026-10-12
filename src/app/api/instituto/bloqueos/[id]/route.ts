@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * La fila se queda: un bloqueo que existió explica por qué esa tarde no
  * hubo nadie en la clínica.
  */
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("sillones.manage");
   if ("response" in g) return g.response;
   try {

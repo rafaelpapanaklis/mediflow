@@ -31,7 +31,8 @@ export const dynamic = "force-dynamic";
  * de DIRECCION, que quien llama TAMBIÉN lo sea — H-16.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export async function POST(_request: Request, { params }: { params: { id: string } }) {
+export async function POST(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("equipo.manage");
   if ("response" in g) return g.response;
 

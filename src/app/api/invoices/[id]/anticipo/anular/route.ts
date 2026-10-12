@@ -39,7 +39,8 @@ async function comprobar(ctx: { clinicId: string; userId: string; role: any }, i
   return { patientId: inv.patientId } as const;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   // Sin permiso de reembolso no hay nada que ofrecer: lista vacía, sin error.
@@ -49,7 +50,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ anulables: await anticiposAnulables(ctx.clinicId, params.id) });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
   const ctx = await getAuthContext();

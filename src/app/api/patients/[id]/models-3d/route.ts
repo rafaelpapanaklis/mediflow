@@ -142,7 +142,8 @@ async function signCbctLiteUrls(
 
 // GET /api/patients/[id]/models-3d — lista los modelos 3D del paciente con
 // signed URL fresca por archivo. Multi-tenant: clinicId SIEMPRE de la sesión.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
@@ -219,7 +220,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // tomografía DICOM (.dcm/.dicom) tal cual (sin sharp). Valida extensión y
 // tamaño. Crea un PatientFile con category SCAN_STL. Para mallas, además genera
 // best-effort un GLB web-optimizado hermano (Meshopt + decimación) para el visor.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

@@ -35,11 +35,12 @@ export const metadata: Metadata = {
  * "te faltan 3 de 8" no se lo diría nadie hasta el día que no se gradúa.
  * Lo que NO puede es calificar: eso es "evaluacion.grade", que no tiene.
  */
-export default async function InstitutoEvaluacionPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoEvaluacionPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

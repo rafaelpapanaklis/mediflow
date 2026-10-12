@@ -31,11 +31,12 @@ export const metadata: Metadata = {
  * dinero, y un segundo recurso que dijera lo mismo solo daría un segundo
  * sitio donde equivocarse (lo explica el encabezado de visibility.ts).
  */
-export default async function InstitutoFacturacionPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoFacturacionPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

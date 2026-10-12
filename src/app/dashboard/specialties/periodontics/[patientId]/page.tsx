@@ -13,11 +13,12 @@ import { PeriodonticsClient } from "@/components/specialties/periodontics/Period
 import { NewPerioRecordButton } from "@/components/specialties/periodontics/NewPerioRecordButton";
 import { loadPerioData } from "@/lib/periodontics/load-data";
 
-export default async function PeriodonticsPatientDetailPage({
-  params,
-}: {
-  params: { patientId: string };
-}) {
+export default async function PeriodonticsPatientDetailPage(
+  props: {
+    params: Promise<{ patientId: string }>;
+  }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, PERIODONTICS_MODULE_KEY);

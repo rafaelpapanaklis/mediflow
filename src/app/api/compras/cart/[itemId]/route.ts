@@ -12,7 +12,8 @@ async function ownItem(itemId: string, clinicId: string) {
 }
 
 // PATCH /api/compras/cart/[itemId] — cambia la cantidad. Body: { quantity }.
-export async function PATCH(req: NextRequest, { params }: { params: { itemId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
@@ -33,7 +34,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { itemId: st
 }
 
 // DELETE /api/compras/cart/[itemId] — quita el item del carrito.
-export async function DELETE(_req: NextRequest, { params }: { params: { itemId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

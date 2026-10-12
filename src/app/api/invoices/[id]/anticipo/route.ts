@@ -53,7 +53,8 @@ async function comprobarFactura(
 /** Los mismos estados que `pedirAnticipoDeFactura` acepta (panel.server.ts). */
 const ESTADOS_QUE_ADMITEN_ANTICIPO = ["PENDING", "PARTIAL", "OVERDUE"];
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx?.clinicId) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.view");
@@ -115,7 +116,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
 

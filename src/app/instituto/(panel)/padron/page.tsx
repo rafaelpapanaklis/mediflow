@@ -42,11 +42,12 @@ export const metadata: Metadata = {
  * un refresh, y se aplican en la BASE: filtrar en memoria mentiría en
  * cuanto el padrón pase del techo de filas.
  */
-export default async function InstitutoPadronPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoPadronPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

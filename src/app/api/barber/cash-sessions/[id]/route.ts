@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 
 // GET /api/barber/cash-sessions/[id] → resumen de un turno (abierto o
 // cerrado) de la barbería en sesión: esperado por método, tickets. cash.view.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

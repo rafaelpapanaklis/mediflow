@@ -44,11 +44,12 @@ export const metadata: Metadata = {
  * oráculo para ir adivinando tokens.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function ConsentimientoPublicoPage({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function ConsentimientoPublicoPage(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const vista = await getEduConsentPublic(params.token);
   if (!vista) notFound();
 

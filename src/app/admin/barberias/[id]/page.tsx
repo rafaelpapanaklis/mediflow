@@ -9,7 +9,8 @@ import { AdminBarbershopDetailClient } from "./barbershop-detail-client";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Barbería — Admin DaleControl" };
 
-export default async function AdminBarbershopDetailPage({ params }: { params: { id: string } }) {
+export default async function AdminBarbershopDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const detail = await getBarbershopDetailForAdmin(params.id);
   if (!detail) notFound();
   return <AdminBarbershopDetailClient detail={detail} />;

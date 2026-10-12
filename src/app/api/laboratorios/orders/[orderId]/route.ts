@@ -19,10 +19,8 @@ const VALID_STATUSES = [
 const VALID_PAYMENTS = ["UNPAID", "PAID"] as const;
 
 // GET /api/laboratorios/orders/[orderId] → detalle + timeline de un pedido del lab.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -54,10 +52,8 @@ export async function GET(
 //     PAID ⇒ paidAt=now; UNPAID ⇒ paidAt=null. (MercadoPago lo marca el webhook.)
 //   - paymentMethod (opcional, B2B válido): se persiste si viene.
 // Un update solo-de-pago NO crea evento de timeline (espejo del lado proveedor).
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { orderId: string } },
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ orderId: string }> }) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   if (ctx.status !== "APPROVED") {

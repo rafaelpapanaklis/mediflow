@@ -26,11 +26,12 @@ import "@/components/barber/booking/barber-public.css";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  params: { slug: string };
-  searchParams: { barbero?: string };
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ barbero?: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const gate = await resolveBookingGate(params.slug);
   const ok = isBookingGateOk(gate);
   const t = getBarberT(ok ? gate.shop.locale : "es");
@@ -63,7 +64,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function BarberBookingPage({ params, searchParams }: PageProps) {
+export default async function BarberBookingPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const gate = await resolveBookingGate(params.slug);
 
   if (!isBookingGateOk(gate)) {

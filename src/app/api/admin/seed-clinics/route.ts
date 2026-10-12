@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     email = targetUser.email;
   } else {
     // Called from user's own session
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (user.email !== "rafaelpapanaklis@gmail.com") return NextResponse.json({ error: "Not allowed" }, { status: 403 });

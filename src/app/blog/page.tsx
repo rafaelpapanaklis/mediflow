@@ -44,10 +44,11 @@ export const metadata: Metadata = buildMetadata({
 export const revalidate = 300;
 
 interface Props {
-  searchParams?: { page?: string };
+  searchParams?: Promise<{ page?: string }>;
 }
 
-export default async function BlogIndexPage({ searchParams }: Props) {
+export default async function BlogIndexPage(props: Props) {
+  const searchParams = await props.searchParams;
   const pageRaw = Number.parseInt(searchParams?.page ?? "", 10);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
 

@@ -30,7 +30,8 @@ export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const limited = rateLimit(req, 10);
   if (limited) return limited;
 
@@ -122,5 +123,4 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     : null;
 
   return NextResponse.json({ ok: true, enviadoA: enviados.map((d) => ({ rol: d.rol, nombre: d.nombre })), avisoParcial: parcial });
-
 }

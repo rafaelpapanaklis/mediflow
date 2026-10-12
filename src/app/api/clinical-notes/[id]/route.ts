@@ -38,14 +38,15 @@ async function getDbUser() {
   return ctx?.user ?? null;
 }
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * PATCH /api/clinical-notes/[id]
  * Actualiza fields SOAP y/o el status (DRAFT → SIGNED).
  * status vive en specialtyData.status para evitar migración del schema.
  */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -199,7 +200,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
  * Cascada: diagnósticos CIE-10 (MedicalRecordDiagnosis) por FK; prescriptions
  * quedan con medicalRecordId=NULL (SetNull configurado en PR #32).
  */
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params;
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

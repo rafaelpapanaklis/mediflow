@@ -177,7 +177,7 @@ export function TemplateFuturista({ clinic: publicada, highlights }: TemplatePro
     clinic.landingFacebook && { node: <Facebook size={20} />, href: clinic.landingFacebook, label: "Facebook" },
     clinic.landingTiktok && { node: <TiktokIcon size={20} />, href: `https://tiktok.com/@${clinic.landingTiktok.replace("@", "")}`, label: "TikTok" },
     waLink && { node: <MessageCircle size={20} />, href: waLink, label: "WhatsApp" },
-  ].filter(Boolean) as { node: JSX.Element; href: string; label: string }[];
+  ].filter(Boolean) as { node: React.JSX.Element; href: string; label: string }[];
 
   const initials = (clinic.name || "C").trim().slice(0, 2).toUpperCase();
 

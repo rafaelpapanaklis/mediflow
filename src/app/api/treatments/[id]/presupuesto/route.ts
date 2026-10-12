@@ -9,7 +9,7 @@ import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
 
 export const dynamic = "force-dynamic";
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 /**
  * «Convertir en presupuesto» (ws1-t3, punto 7e del ticket 3).
@@ -61,7 +61,8 @@ async function tarifario(clinicId: string) {
   });
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = await permisos(ctx);
@@ -83,7 +84,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
 }
 
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = await permisos(ctx);

@@ -24,7 +24,8 @@ function isSchemaDrift(e: unknown): boolean {
   return code === "P2021" || code === "P2022" || code === "42P01" || code === "42703";
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const payload = await req.json().catch(() => null);

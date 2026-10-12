@@ -35,7 +35,8 @@ export const runtime = "nodejs"; // puede generar el PDF
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const e = await entrarCita(req, PERMISO_EMITIR, 10);
   if ("res" in e) return e.res;
   const { ctx } = e;

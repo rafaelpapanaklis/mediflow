@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
   // signOut SIEMPRE con scope "local": el de por defecto ("global") revoca TODAS
   // las sesiones de esa persona —la del dueño real en su celular, si la que se
   // cierra es una de suplantación—, y eso la clínica sí lo vería.
-  const supabase = crearClienteDeSesion();
+  const supabase = await crearClienteDeSesion();
   const previa = await estadoSuplantacionDe(supabase);
   // La sesión que ya había: si es normal, se GUARDA y no se toca (un signOut,
   // aunque sea "local", la revocaría en Supabase y al salir no habría a dónde

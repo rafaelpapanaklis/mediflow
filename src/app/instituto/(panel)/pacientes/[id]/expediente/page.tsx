@@ -34,13 +34,14 @@ import { EduExpedienteScreen } from "@/components/edu/expediente/expediente-scre
  * por error, aquí no vería ni el paciente. Son dos candados, y hacen falta
  * los dos — uno solo se abre por accidente.
  */
-export default async function PacienteExpedientePage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function PacienteExpedientePage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
@@ -96,7 +97,7 @@ export default async function PacienteExpedientePage({
   // `eduAudit` NUNCA lanza: abrir un expediente no puede fallar porque no
   // se pudo escribir el renglón que dice que se abrió.
   // ═══════════════════════════════════════════════════════════════════
-  const h = headers();
+  const h = await headers();
   const fwd = h.get("x-forwarded-for") ?? "";
   await registrarEduLecturaExpediente(ctx, paciente.id, {
     ip: (fwd.split(",")[0]?.trim() || h.get("x-real-ip") || null)?.slice(0, 60) ?? null,

@@ -67,11 +67,12 @@ function idParam(value: string | string[] | undefined): string | null {
   return clean.length > 0 && clean.length <= 40 ? clean : null;
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>;
-}) {
+export default async function Page(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

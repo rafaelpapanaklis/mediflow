@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
  * lo único que cambia es que el cobro vuelve a quedar libre para
  * facturarse (`activeChargeId` a NULL).
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("facturacion.cancel");
   if ("response" in g) return g.response;
 

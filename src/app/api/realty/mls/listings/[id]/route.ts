@@ -16,7 +16,8 @@ export const runtime = "nodejs";
  * El `where` del update lleva SIEMPRE el accountId de la sesión, así que
  * un listingId ajeno afecta a cero filas y responde 404.
  */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("properties.edit");
   if ("response" in gate) return gate.response;
 
@@ -39,7 +40,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
  * historial de un trato que quizá ya generó una comisión, y a las dos
  * partes sin el papel que explica de dónde salió su dinero.
  */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gateMls("properties.edit");
   if ("response" in gate) return gate.response;
 

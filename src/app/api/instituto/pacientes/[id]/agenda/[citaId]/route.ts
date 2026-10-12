@@ -50,8 +50,9 @@ export const dynamic = "force-dynamic";
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string; citaId: string } },
+  props: { params: Promise<{ id: string; citaId: string }> }
 ) {
+  const params = await props.params;
   const g = await eduApiGuard("agenda.view");
   if ("response" in g) return g.response;
 

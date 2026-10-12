@@ -34,7 +34,8 @@ import { EduPlanScreen } from "@/components/edu/expediente/plan-screen";
  * lo que no le toca a quien mira ni se consulta ni viaja en el payload.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export default async function PacientePlanPage({ params }: { params: { id: string } }) {
+export default async function PacientePlanPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

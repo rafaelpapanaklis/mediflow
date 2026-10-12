@@ -13,10 +13,11 @@ import { LivePublicClient } from "./live-public-client";
 import liveStyles from "./live-public.module.css";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   // noindex también en el fallback: la página "no disponible" responde 200
   // (ya no notFound()) y no debe indexarse.
   const fallback: Metadata = {
@@ -40,7 +41,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function LivePublicPage({ params }: Props) {
+export default async function LivePublicPage(props: Props) {
+  const params = await props.params;
   const slug = params.slug.toLowerCase();
 
   // La migración 20260428100000_clinic_layout (columnas liveMode* en
@@ -95,7 +97,7 @@ export default async function LivePublicPage({ params }: Props) {
   // Si tiene password y no hay cookie unlock, mostramos el gate.
   const hasPassword = Boolean(clinic.liveModePassword);
   if (hasPassword) {
-    const cookie = cookies().get(liveCookieName(slug));
+    const cookie = (await cookies()).get(liveCookieName(slug));
     // Cookie firmada (HMAC + expiración). Legacy "1" o firma inválida/vencida
     // → de vuelta al gate de password, sin error feo.
     if (!verifyLiveUnlockCookie(cookie?.value, slug)) {

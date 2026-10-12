@@ -14,8 +14,9 @@ export const dynamic = "force-dynamic";
 // y su PatientFile. Multi-tenant: clinicId SIEMPRE de la sesión.
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string; fileId: string } },
+  props: { params: Promise<{ id: string; fileId: string }> }
 ) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
@@ -84,8 +85,9 @@ export async function DELETE(
 // Multi-tenant: clinicId SIEMPRE de la sesión; el body nunca define la clínica.
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string; fileId: string } },
+  props: { params: Promise<{ id: string; fileId: string }> }
 ) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 

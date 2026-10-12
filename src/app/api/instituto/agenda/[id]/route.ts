@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
  * 🔴 Una cita terminada, cancelada o marcada "no llegó" no se mueve:
  * reagendarla reescribiría algo que ya ocurrió. Se agenda otra.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("agenda.manage");
   if ("response" in g) return g.response;
 

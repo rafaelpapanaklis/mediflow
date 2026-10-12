@@ -11,7 +11,8 @@ const ASSIGNABLE_STATUSES = ["APPROVED", "REJECTED", "SUSPENDED"] as const;
 type AssignableStatus = (typeof ASSIGNABLE_STATUSES)[number];
 
 // PATCH /api/admin/suppliers/[id]  body: { status, rejectedReason? }
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

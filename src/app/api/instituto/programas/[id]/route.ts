@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
  * todo lo demás en su sitio, que es lo que de verdad se quiere cuando una
  * escuela deja de ofrecer una especialidad.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("padron.manage");
   if ("response" in g) return g.response;
 

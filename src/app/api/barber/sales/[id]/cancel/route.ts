@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 // POST /api/barber/sales/[id]/cancel { reason } → cancela el ticket: ceros,
 // stock devuelto (RETURN), comisión borrada, canjes restituidos. Solo con el
 // turno aún abierto y la comisión sin pagar. cash.manage.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

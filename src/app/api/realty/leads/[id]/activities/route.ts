@@ -10,7 +10,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const PostSchema = z.object({
   kind: z.enum(["NOTA", "LLAMADA", "WHATSAPP", "CORREO", "VISITA"]),
@@ -26,7 +26,8 @@ const PostSchema = z.object({
  * haberle hablado, y si contara, cualquiera podría quedarse un prospecto
  * escribiendo "pendiente" sin marcarle nunca.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   const guard = checkLeadsAccess(ctx, "leads.edit");
   if (!guard.ok) return NextResponse.json({ error: guard.error ?? "Sin permiso" }, { status: guard.status ?? 403 });

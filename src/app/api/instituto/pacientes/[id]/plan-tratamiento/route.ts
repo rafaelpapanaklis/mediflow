@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
  */
 
 /** GET — los planes del paciente, con sus sesiones y su avance calculado. */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.view");
   if ("response" in g) return g.response;
   try {
@@ -27,7 +28,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 }
 
 /** POST — crea un plan y sus sesiones vacías de una vez. */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
   try {

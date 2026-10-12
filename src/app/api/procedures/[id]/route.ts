@@ -18,7 +18,8 @@ import {
 // ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI de cada procedimiento (SQL crudo).
 import { leerFiscalDeEntrada, guardarFiscalDeProcedimiento } from "@/lib/cfdi/fiscal-concepto.server";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // EQ-07: "Editar procedimientos" (antes `isAdmin`, mismos roles por default).
@@ -101,7 +102,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // EQ-07: "Editar procedimientos" (antes `isAdmin`, mismos roles por default).

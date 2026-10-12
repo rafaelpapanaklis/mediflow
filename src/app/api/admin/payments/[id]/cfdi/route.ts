@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getCFDIProvider, cfdiNotConfiguredInstructions, isCFDIConfigured } from "@/lib/cfdi";
 
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!isCFDIConfigured()) {

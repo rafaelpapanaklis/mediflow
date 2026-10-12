@@ -16,10 +16,11 @@ import { crearSabinaCtx } from "@/lib/sabina/tipos";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   try {
     if (!origenValido(req.headers)) {
       return NextResponse.json({ error: "origen_invalido" }, { status: 403 });

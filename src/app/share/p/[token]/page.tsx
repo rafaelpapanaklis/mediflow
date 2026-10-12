@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 interface PageProps {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }
 
 const MODULE_LABELS: Record<string, string> = {
@@ -37,16 +37,16 @@ export default async function PublicSharePage(props: PageProps) {
   // Peek module sin auth para despachar a vista perio-específica.
   // findUnique es indexado por token (@unique) — barato.
   const peek = await prisma.patientShareLink.findUnique({
-    where: { token: props.params.token },
+    where: { token: (await props.params).token },
     select: { module: true },
   });
 
   if (peek?.module === "periodontics") {
-    return <PerioShareSection token={props.params.token} />;
+    return <PerioShareSection token={(await props.params).token} />;
   }
 
   // Vista genérica (default) — utiliza resolvePublicShareToken.
-  const res = await resolvePublicShareToken(props.params.token);
+  const res = await resolvePublicShareToken((await props.params).token);
 
   if (isFailure(res)) {
     return (
@@ -69,7 +69,7 @@ export default async function PublicSharePage(props: PageProps) {
   if (v.module === "implants") {
     return (
       <ImplantSharePage
-        token={props.params.token}
+        token={(await props.params).token}
         clinicName={v.clinicName}
         patientFirstName={v.patientFirstName}
       />

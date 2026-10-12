@@ -18,7 +18,8 @@ function serializeAccount(a: any): DentalLabBankAccountDTO {
 }
 
 // ── PATCH /api/laboratorios/bank-accounts/[accountId] ────────────────────
-export async function PATCH(req: NextRequest, { params }: { params: { accountId: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ accountId: string }> }) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
@@ -113,7 +114,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { accountId:
 
 // ── DELETE /api/laboratorios/bank-accounts/[accountId] ───────────────────
 // Si se elimina la principal y quedan otras, se promueve la más antigua.
-export async function DELETE(_req: NextRequest, { params }: { params: { accountId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ accountId: string }> }) {
+  const params = await props.params;
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {

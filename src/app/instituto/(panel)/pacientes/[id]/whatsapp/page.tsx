@@ -37,7 +37,8 @@ import { EduPacienteWhatsapp } from "@/components/edu/whatsapp/paciente-whatsapp
  * 🔴 El PACIENTE se busca dentro del alcance: uno de otra escuela —o de
  * otro alumno— da 404, igual que uno que no existe.
  */
-export default async function PacienteWhatsappPage({ params }: { params: { id: string } }) {
+export default async function PacienteWhatsappPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

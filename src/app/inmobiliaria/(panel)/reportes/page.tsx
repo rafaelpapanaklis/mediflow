@@ -54,18 +54,19 @@ function pickTab(raw: unknown, fallback: ReportTab): ReportTab {
   return TABS.includes(raw as ReportTab) ? (raw as ReportTab) : fallback;
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams?: {
-    tab?: string;
-    propertyId?: string;
-    ownerId?: string;
-    from?: string;
-    to?: string;
-    year?: string;
-  };
-}) {
+export default async function Page(
+  props: {
+    searchParams?: Promise<{
+      tab?: string;
+      propertyId?: string;
+      ownerId?: string;
+      from?: string;
+      to?: string;
+      year?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

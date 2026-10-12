@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  * propósito: mandar una receta también la MUEVE, y las dos escrituras van
  * en una sola transacción (src/lib/edu/recetas.ts).
  */
-export async function POST(_request: Request, { params }: { params: { id: string } }) {
+export async function POST(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("recetas.propose");
   if ("response" in g) return g.response;
 

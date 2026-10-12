@@ -41,11 +41,12 @@ import {
 import { RaizModulo } from "@/components/specialties/orthodontics/modulo/piezas";
 import { VistaContratar } from "@/components/specialties/orthodontics/contratar/vista-contratar";
 
-export default async function ContratarOrtodonciaPage({
-  searchParams,
-}: {
-  searchParams: { compra?: string | string[]; ciclo?: string | string[]; session_id?: string | string[] };
-}) {
+export default async function ContratarOrtodonciaPage(
+  props: {
+    searchParams: Promise<{ compra?: string | string[]; ciclo?: string | string[]; session_id?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
 
   const [activoReal, modulo] = await Promise.all([
@@ -58,7 +59,7 @@ export default async function ContratarOrtodonciaPage({
 
   const vistaPrevia = vistaPreviaSinModulo({
     nodeEnv: process.env.NODE_ENV,
-    cookie: cookies().get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
+    cookie: (await cookies()).get(COOKIE_VISTA_PREVIA_SIN_MODULO)?.value,
   });
   const moduloActivo = moduloActivoALaVista(activoReal, vistaPrevia);
   // «Pago recibido» solo si Stripe lo confirma para ESTA clínica: que la URL

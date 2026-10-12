@@ -24,7 +24,8 @@ export const dynamic = "force-dynamic";
  * efectivo de un cobro de Norte pagado en el mostrador de Sur entra en el
  * cajón de Sur, que es donde está el billete.
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;
 

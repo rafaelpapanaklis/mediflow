@@ -64,7 +64,8 @@ function parseServices(landingServices: unknown): PublicService[] {
 
 const mxn = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await props.params;
   const clinic = await prisma.clinic.findFirst({
     where: visibilityWhere(params.slug),
     select: { name: true, city: true, state: true, category: true, description: true, landingTagline: true, logoUrl: true, landingCoverUrl: true },
@@ -83,7 +84,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   });
 }
 
-export default async function ClinicProfilePage({ params }: { params: { slug: string } }) {
+export default async function ClinicProfilePage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const clinic = await prisma.clinic.findFirst({
     where: visibilityWhere(params.slug),
     select: {

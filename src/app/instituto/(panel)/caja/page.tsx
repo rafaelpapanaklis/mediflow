@@ -31,11 +31,12 @@ export const metadata: Metadata = {
  * Esa segunda cerradura es la que pediste explícitamente: un alumno no ve
  * ni el precio, ni el cobro, ni el saldo.
  */
-export default async function InstitutoCajaPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoCajaPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

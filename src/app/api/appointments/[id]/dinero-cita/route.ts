@@ -16,7 +16,8 @@ import { dineroDeLaCita } from "@/lib/anticipos/cita-cancelada.server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   const denied = denyIfMissingPermission(session.user, "agenda.delete");

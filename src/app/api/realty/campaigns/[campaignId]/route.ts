@@ -30,7 +30,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-export async function GET(_req: NextRequest, { params }: { params: { campaignId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ campaignId: string }> }) {
+  const params = await props.params;
   const gate = await openRealtyGrowthGate({
     permission: "whatsapp.view",
     feature: REALTY_CAMPAIGNS_FEATURE,
@@ -45,7 +46,8 @@ export async function GET(_req: NextRequest, { params }: { params: { campaignId:
   return NextResponse.json({ recipients });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { campaignId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ campaignId: string }> }) {
+  const params = await props.params;
   const gate = await openRealtyGrowthGate({
     permission: "whatsapp.send",
     feature: REALTY_CAMPAIGNS_FEATURE,
@@ -74,7 +76,8 @@ export async function POST(req: NextRequest, { params }: { params: { campaignId:
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { campaignId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ campaignId: string }> }) {
+  const params = await props.params;
   const gate = await openRealtyGrowthGate({
     permission: "whatsapp.send",
     feature: REALTY_CAMPAIGNS_FEATURE,

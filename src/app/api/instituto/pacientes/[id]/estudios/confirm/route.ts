@@ -34,7 +34,8 @@ export const maxDuration = 60;
  * Es IDEMPOTENTE: un reintento o un doble clic devuelven la fila que ya
  * existe en vez de duplicar el estudio (índice único sobre el path).
  */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("estudios.upload");
   if ("response" in g) return g.response;
 

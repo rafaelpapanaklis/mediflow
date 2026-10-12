@@ -41,7 +41,8 @@ async function papelDeLaCuenta(accountId: string, id: string) {
   });
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // Abrir un papel pide solo pld.view: un oficial de cumplimiento con
   // acceso de lectura tiene que poder revisar el expediente.
   const gate = await gatePld("pld.view");
@@ -81,7 +82,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gatePld("pld.manage");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;
@@ -115,7 +117,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const gate = await gatePld("pld.manage");
   if ("response" in gate) return gate.response;
   const { ctx } = gate;

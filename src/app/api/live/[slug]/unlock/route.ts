@@ -16,7 +16,7 @@ const BodySchema = z.object({
   password: z.string().min(1).max(200),
 });
 
-interface Params { params: { slug: string } }
+interface Params { params: Promise<{ slug: string }> }
 
 function isMissingTable(err: unknown): boolean {
   // P2021/42P01 = tabla faltante; P2022/42703 = columna faltante (drift de migración)
@@ -30,7 +30,8 @@ function isMissingTable(err: unknown): boolean {
  * Verifica el password contra el bcrypt hash de la clínica. Si coincide,
  * setea cookie httpOnly de 12h que el endpoint público lee como llave.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const slug = (params.slug ?? "").toLowerCase();
   try {
     // Endpoint publico (sin auth) que verifica password contra bcrypt hash —

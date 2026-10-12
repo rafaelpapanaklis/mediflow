@@ -25,7 +25,8 @@ import { RealtyAreaDenied } from "@/components/realty/rentals/area-denied";
 
 const AREA = "rentas";
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   if (!ctx) redirect("/login");
 

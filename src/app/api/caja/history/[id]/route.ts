@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 // Detalle de UN corte cerrado (tercera auditoría de uso, F3): lo que su foto no
 // guarda —reembolsos, traspasos a saldo a favor, saldo aplicado y bajas—,
 // calculado de los cobros de su turno. Solo lectura; mismo gate que /history.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "billing.view");

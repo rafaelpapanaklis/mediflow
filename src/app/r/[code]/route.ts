@@ -51,7 +51,8 @@ function redirectHome(req: NextRequest): NextResponse {
   return NextResponse.redirect(urlPublicaDe(req, "/"), 302);
 }
 
-export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ code: string }> }) {
+  const params = await props.params;
   try {
     const code = (params?.code ?? "").trim();
     if (!CODE_RE.test(code)) return redirectHome(req);

@@ -15,7 +15,8 @@ import { getPatientDeleteBlockers } from "@/lib/patient-deletion";
  * NO es la autoridad: la decisión real la vuelve a tomar
  * DELETE ?mode=hard con el mismo precheck, dentro de la request que borra.
  */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

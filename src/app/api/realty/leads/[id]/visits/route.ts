@@ -10,7 +10,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const PostSchema = z.object({
   propertyId: z.string().min(1).max(40),
@@ -25,7 +25,8 @@ const PostSchema = z.object({
  * Además AVANZA el embudo a VISITA si la etapa lo permite: agendar es el
  * hecho, no un botón aparte que alguien se olvide de picar.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const ctx = await getRealtyContext();
   // Agendar visitas es visits.manage, no leads.edit: un ASSISTANT agenda
   // por todos sin poder tocar el embudo de nadie.

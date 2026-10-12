@@ -73,7 +73,8 @@ async function cashOutsideRegisterWarning(
   return open ? null : "Efectivo cobrado sin caja abierta — no entra en ningún corte";
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // LECTURA de una factura (incluye al paciente completo): exige "billing.view"
@@ -94,7 +95,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json(stripNestedPatientSecrets(invoice));
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Registrar pagos exige "billing.charge" — el mismo permiso que ya pide
@@ -214,7 +216,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ success: true, ...(cashWarning ? { warning: cashWarning } : {}) });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Editar la factura (status/notas/conceptos) exige "billing.edit" — el mismo
@@ -386,7 +389,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Borrar borradores / cancelar sin pagos es edición del documento: mismo

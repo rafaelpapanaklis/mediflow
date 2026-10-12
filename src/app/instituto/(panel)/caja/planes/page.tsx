@@ -34,11 +34,12 @@ export const metadata: Metadata = {
  * falta para que estén al día. No hay ningún cron que, si falla, deje la
  * cartera diciendo "al corriente".
  */
-export default async function InstitutoPlanesPage({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined };
-}) {
+export default async function InstitutoPlanesPage(
+  props: {
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 

@@ -27,7 +27,8 @@ export const dynamic = "force-dynamic";
  * pantalla), así que 60/min por slug deja margen de sobra a un display que se
  * reinicie en bucle y frena el scraping de la pantalla de turnos.
  */
-export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const rl = await persistentRateLimit(req, {
     id: `tv:${params.slug}`,
     limit: 60,

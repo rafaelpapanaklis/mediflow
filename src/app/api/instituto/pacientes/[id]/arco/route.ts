@@ -28,7 +28,8 @@ export const dynamic = "force-dynamic";
  */
 
 /** GET — qué pasaría si se anonimiza: qué se sustituye y qué se conserva. */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
   try {
@@ -39,7 +40,8 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 }
 
 /** POST — DA DE BAJA la ficha, con motivo obligatorio. Baja lógica. */
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
   try {
@@ -58,7 +60,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
  * nunca. Deshacer una baja es un PATCH porque es exactamente eso —
  * cambiarle una columna a una fila que sigue viva.
  */
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const g = await eduApiGuard("pacientes.view");
   if ("response" in g) return g.response;
   try {

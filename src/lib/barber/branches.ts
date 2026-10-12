@@ -132,9 +132,9 @@ export interface BarberBranchScope {
 }
 
 /** Sede elegida en la cookie (sin validar todavía: solo la lee). */
-export function readBranchCookie(): string | null {
+export async function readBranchCookie(): Promise<string | null> {
   try {
-    return cookies().get(BARBER_BRANCH_COOKIE)?.value ?? null;
+    return (await cookies()).get(BARBER_BRANCH_COOKIE)?.value ?? null;
   } catch {
     return null;
   }
@@ -184,7 +184,7 @@ export async function resolveBranchScope(
 export async function getBranchScopeFromCookie(
   ctx: BarberContext,
 ): Promise<BarberBranchScope> {
-  return resolveBranchScope(ctx, readBranchCookie());
+  return resolveBranchScope(ctx, await readBranchCookie());
 }
 
 /** id de la matriz de la cadena a la que pertenece la sesión. */

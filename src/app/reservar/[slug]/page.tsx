@@ -30,11 +30,12 @@ const CATEGORY_SERVICES: Record<string, string[]> = {
 };
 
 interface Props {
-  params:      { slug: string };
-  searchParams:{ service?: string };
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ service?: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const clinic = await prisma.clinic.findUnique({
     where:  { slug: params.slug },
     select: { name: true, specialty: true, city: true },
@@ -46,7 +47,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function ReservarPage({ params, searchParams }: Props) {
+export default async function ReservarPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const clinic = await prisma.clinic.findUnique({
     where: { slug: params.slug },
     select: {
