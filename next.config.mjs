@@ -67,6 +67,16 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "30mb",
     },
+    // Caché del router en el cliente. Next 15 bajó `dynamic` de 30 s a 0: cada clic
+    // en un <Link> a una página dinámica del panel volvería a pedir la página (y sus
+    // consultas a la base) aunque se abriera hace 5 s. El pooler ya va justo
+    // (medir-conexiones-base), así que se conservan los valores de Next 14: 30 s
+    // para páginas dinámicas, 180 s para las estáticas. Atrás/adelante y layouts
+    // compartidos no cambian.
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
     // (src/instrumentation.ts —apaga los cargadores HEIF y .vips de sharp— ya
     // no necesita `instrumentationHook`: desde Next 15 corre siempre.)
   },
