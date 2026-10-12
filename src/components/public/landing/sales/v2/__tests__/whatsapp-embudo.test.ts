@@ -4,8 +4,10 @@
  * (= tsx --test --tsconfig tsconfig.test.json: los botones son JSX).
  *
  * Fallan con el código anterior: no existían `enlaceWhatsapp`, los mensajes por
- * origen, `cta-embudo.tsx`, la barra móvil ni su lógica de LiveChat, y la
- * banda mandaba `whatsapp_click` a gtag por su cuenta.
+ * origen, `cta-embudo.tsx` ni la barra móvil, y la banda mandaba
+ * `whatsapp_click` a gtag por su cuenta. (12-oct: la barra dejó de tocar
+ * LiveChat —Rafael lo oculta en celular desde su configuración— y la prueba
+ * vigila que siga sin tocarlo.)
  *
  * Sin navegador: `window`, gtag y storage simulados como en embudo.test.ts.
  * Los componentes de cta-embudo.tsx no usan hooks, así que se llaman como
@@ -18,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, it } from "node:test";
 import { WHATSAPP_CTA, enlaceWhatsapp } from "../landing-data";
 import { BotonWhatsapp, EnlaceEmpezar } from "../cta-embudo";
-import { ANCHO_MOVIL_MAX, accionLiveChat, barraVisible } from "../barra-movil-logica";
+import { ANCHO_MOVIL_MAX, barraVisible } from "../barra-movil-logica";
 import { GA4_MEASUREMENT_ID } from "@/lib/analytics/ga4";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -119,28 +121,17 @@ describe("cada botón llama a registrarPaso (embudo.ts) UNA vez", () => {
   });
 });
 
-describe("barra fija de móvil y LiveChat", () => {
+describe("barra fija de móvil", () => {
   it("se ve cuando el hero sale de pantalla", () => {
     assert.equal(barraVisible(true), false);
     assert.equal(barraVisible(false), true);
   });
 
-  it("en escritorio nunca toca LiveChat", () => {
-    for (const estadoChat of ["minimized", "maximized", "hidden", undefined] as const) {
-      assert.equal(accionLiveChat({ movil: false, barraVisible: true, estadoChat, ocultadoPorLaBarra: true }), null);
+  it("la barra no toca LiveChat: Rafael lo oculta en celular desde su configuración", () => {
+    // Un «minimize» nuestro podría volver a enseñar el lanzador que él ocultó.
+    for (const f of ["barra-movil.tsx", "barra-movil-logica.ts"]) {
+      assert.ok(!/LiveChatWidget|"hide"|"minimize"/.test(leer(f)), `${f} llama a LiveChat`);
     }
-  });
-
-  it("en móvil oculta el lanzador mientras la barra se ve, salvo que esté chateando", () => {
-    assert.equal(accionLiveChat({ movil: true, barraVisible: true, estadoChat: "minimized", ocultadoPorLaBarra: false }), "hide");
-    assert.equal(accionLiveChat({ movil: true, barraVisible: true, estadoChat: undefined, ocultadoPorLaBarra: false }), "hide");
-    assert.equal(accionLiveChat({ movil: true, barraVisible: true, estadoChat: "maximized", ocultadoPorLaBarra: false }), null);
-    assert.equal(accionLiveChat({ movil: true, barraVisible: true, estadoChat: "hidden", ocultadoPorLaBarra: true }), null);
-  });
-
-  it("al irse la barra, solo restaura lo que ella ocultó", () => {
-    assert.equal(accionLiveChat({ movil: true, barraVisible: false, estadoChat: "hidden", ocultadoPorLaBarra: true }), "minimize");
-    assert.equal(accionLiveChat({ movil: true, barraVisible: false, estadoChat: "hidden", ocultadoPorLaBarra: false }), null);
   });
 
   it("el CSS la limita al mismo quiebre de móvil y la tarjeta reserva la pista del enlace", () => {

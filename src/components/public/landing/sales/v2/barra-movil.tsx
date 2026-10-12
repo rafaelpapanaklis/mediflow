@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { WHATSAPP_CTA } from "./landing-data";
 import { BotonWhatsapp, EnlaceEmpezar } from "./cta-embudo";
-import { ANCHO_MOVIL_MAX, accionLiveChat, barraVisible, type VisibilidadLiveChat } from "./barra-movil-logica";
+import { barraVisible } from "./barra-movil-logica";
 
 /**
  * Barra fija al pie en celular (11-oct-2026, ws1-t4, punto 1b del encargo de
@@ -15,31 +15,12 @@ import { ANCHO_MOVIL_MAX, accionLiveChat, barraVisible, type VisibilidadLiveChat
  * mientras el hero se ve, ya tiene sus propios botones. Al pie lleva un
  * espaciador en flujo para que el footer no quede tapado.
  *
- * LiveChat: la decisión y sus razones están en barra-movil-logica.ts
- * (`accionLiveChat`). Resumen: en móvil, mientras la barra se ve, el lanzador
- * del chat se oculta; cuando la barra se va, vuelve minimizado; si la persona
- * está chateando no se toca; en escritorio nada cambia.
+ * LiveChat: la barra NO lo toca (ni hide ni minimize). Rafael lo oculta en
+ * celular desde la configuración de LiveChat; el porqué, en barra-movil-logica.ts.
  */
-
-type Widget = { call: (metodo: string, ...args: unknown[]) => void; get: (q: string) => unknown };
-
-function widget(): Widget | undefined {
-  return (window as unknown as { LiveChatWidget?: Widget }).LiveChatWidget;
-}
-
-/** `get` lanza antes de cargar: entonces no se sabe (undefined). */
-function estadoChat(w: Widget | undefined): VisibilidadLiveChat | undefined {
-  try {
-    const s = w?.get("state") as { visibility?: VisibilidadLiveChat } | undefined;
-    return s?.visibility;
-  } catch {
-    return undefined;
-  }
-}
 
 export function BarraMovil() {
   const [visible, setVisible] = useState(false);
-  const ocultadoPorLaBarra = useRef(false);
 
   useEffect(() => {
     const hero = document.getElementById("inicio");
@@ -48,35 +29,6 @@ export function BarraMovil() {
     io.observe(hero);
     return () => io.disconnect();
   }, []);
-
-  useEffect(() => {
-    const aplicar = () => {
-      const w = widget();
-      if (!w) return;
-      const accion = accionLiveChat({
-        movil: window.innerWidth <= ANCHO_MOVIL_MAX,
-        barraVisible: visible,
-        estadoChat: estadoChat(w),
-        ocultadoPorLaBarra: ocultadoPorLaBarra.current,
-      });
-      if (!accion) return;
-      w.call(accion);
-      ocultadoPorLaBarra.current = accion === "hide";
-    };
-    aplicar();
-    // Girar el teléfono o estirar la ventana cambia «movil»: se vuelve a decidir.
-    window.addEventListener("resize", aplicar);
-    return () => window.removeEventListener("resize", aplicar);
-  }, [visible]);
-
-  // Al salir de la portada se devuelve el lanzador tal como estaba (livechat.tsx
-  // lo esconde después si la ruta nueva no lleva chat).
-  useEffect(
-    () => () => {
-      if (ocultadoPorLaBarra.current) widget()?.call("minimize");
-    },
-    [],
-  );
 
   return (
     <>
