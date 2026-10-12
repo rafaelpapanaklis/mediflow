@@ -131,9 +131,9 @@ before(async () => {
     set.POST(new NextRequest(`http://app.test/api/team/${id}/set-password`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: typeof body === "string" ? body : JSON.stringify(body),
-    }), { params: { id } });
+    }), { params: Promise.resolve({ id }) });
   RESET = (id) =>
-    reset.POST(new NextRequest(`http://app.test/api/team/${id}/reset-password`, { method: "POST" }), { params: { id } });
+    reset.POST(new NextRequest(`http://app.test/api/team/${id}/reset-password`, { method: "POST" }), { params: Promise.resolve({ id }) });
 });
 
 beforeEach(() => {

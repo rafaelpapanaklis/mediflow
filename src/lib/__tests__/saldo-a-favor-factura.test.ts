@@ -501,7 +501,7 @@ test("cancelar una factura con anticipo aplicado devuelve el dinero a favor, con
 
   sesion.userId = "u2";
   try {
-    const r = await leer(await cancelar(req({ reason: "se equivocó de paciente" }), { params: { id } }));
+    const r = await leer(await cancelar(req({ reason: "se equivocó de paciente" }), { params: Promise.resolve({ id }) }));
     assert.equal(r.status, 200);
     assert.equal(r.body.anticipoDevuelto, 200);
   } finally {
@@ -522,7 +522,7 @@ test("cancelar una factura con anticipo aplicado devuelve el dinero a favor, con
   assert.equal(reembolso.amount, 200);
 
   // Segunda cancelación: nada se mueve.
-  const otra = await leer(await cancelar(req({}), { params: { id } }));
+  const otra = await leer(await cancelar(req({}), { params: Promise.resolve({ id }) }));
   assert.equal(otra.status, 400);
   assert.equal(saldo(), 200);
   assert.equal(db.credits.filter((c) => c.source === FUENTE_DEVUELTO).length, 1);
@@ -547,7 +547,7 @@ test("una factura PAGADA solo con el anticipo también se cancela y lo devuelve"
   sembrarCredito(1000);
   const { body } = await leer(await crear(req(cuerpo(1000))));
   assert.equal(body.status, "PAID");
-  const r = await leer(await cancelar(req({}), { params: { id: body.id } }));
+  const r = await leer(await cancelar(req({}), { params: Promise.resolve({ id: body.id }) }));
   assert.equal(r.status, 200);
   assert.equal(saldo(), 1000);
   assertCuadra(1000);
@@ -563,7 +563,7 @@ test("con pagos que NO son anticipo, cancelar sigue pidiendo reembolsar primero 
   inv.paid = 500; inv.balance = 500;
   const antes = clonar({ inv, credits: db.credits, payments: db.payments });
 
-  const r = await leer(await cancelar(req({}), { params: { id: inv.id } }));
+  const r = await leer(await cancelar(req({}), { params: Promise.resolve({ id: inv.id }) }));
   assert.equal(r.status, 400);
   assert.match(r.body.error, /300\.00 pagados además del anticipo/);
   assert.deepEqual(clonar({ inv, credits: db.credits, payments: db.payments }), antes, "nada cambió");
@@ -573,8 +573,8 @@ test("cancelar una factura con pagos y SIN anticipo responde lo mismo que antes"
   const { cancelar } = await rutas();
   const pagada = sembrarFactura({ total: 500, paid: 500, balance: 0, status: "PAID" });
   const parcial = sembrarFactura({ total: 500, paid: 100, balance: 400, status: "PARTIAL" });
-  const a = await leer(await cancelar(req({}), { params: { id: pagada.id } }));
-  const b = await leer(await cancelar(req({}), { params: { id: parcial.id } }));
+  const a = await leer(await cancelar(req({}), { params: Promise.resolve({ id: pagada.id }) }));
+  const b = await leer(await cancelar(req({}), { params: Promise.resolve({ id: parcial.id }) }));
   assert.deepEqual([a.status, a.body.error], [400, "No se puede cancelar una factura pagada — usa Reembolsar"]);
   assert.deepEqual([b.status, b.body.error], [400, "Esta factura tiene pagos registrados — usa Reembolsar primero"]);
 });
@@ -600,7 +600,7 @@ test("las facturas viejas quedan IDÉNTICAS: el crédito de $600 va a la siguien
 
   // Confirmar el borrador VIEJO: pasa a PENDING como siempre, sin saldo a favor.
   sembrarCredito(50, { source: "anticipo_mercadopago" });
-  const conf = await leer(await confirmar(req(), { params: { id: borrador.id } }));
+  const conf = await leer(await confirmar(req(), { params: Promise.resolve({ id: borrador.id }) }));
   assert.equal(conf.status, 200);
   assert.equal(conf.body.anticipoAplicado, 0);
   assert.deepEqual([borrador.status, borrador.paid, borrador.balance], ["PENDING", 0, 900]);
@@ -608,7 +608,7 @@ test("las facturas viejas quedan IDÉNTICAS: el crédito de $600 va a la siguien
 
   // Cancelar una factura vieja sin pagos: el mismo resultado de siempre.
   const sinPagos = sembrarFactura({ total: 300, balance: 300, invoiceNumber: "MF-0103" });
-  const c = await leer(await cancelar(req({ reason: "duplicada" }), { params: { id: sinPagos.id } }));
+  const c = await leer(await cancelar(req({ reason: "duplicada" }), { params: Promise.resolve({ id: sinPagos.id }) }));
   assert.deepEqual([c.status, c.body], [200, { success: true }]);
   assert.deepEqual([sinPagos.status, sinPagos.paid, sinPagos.balance, sinPagos.notes], ["CANCELLED", 0, 300, "[CANCELADA: duplicada]"]);
 
@@ -628,7 +628,7 @@ test("un borrador NUEVO que se confirma sí recibe el saldo a favor (y la pantal
     total: 900, balance: 900, status: "DRAFT",
     createdAt: new Date(APLICAR_SALDO_DESDE.getTime() + 60_000),
   });
-  const r = await leer(await confirmar(req(), { params: { id: borrador.id } }));
+  const r = await leer(await confirmar(req(), { params: Promise.resolve({ id: borrador.id }) }));
   assert.equal(r.status, 200);
   assert.equal(r.body.anticipoAplicado, 250);
   assert.equal(r.body.balance, 650, "lo que queda por cobrar, para no cobrar sobre el total del borrador");
@@ -646,7 +646,7 @@ test("confirmar un borrador que otra persona canceló entre la lectura y el UPDA
   sembrarCredito(300);
   const b = sembrarFactura({ status: "DRAFT", createdAt: new Date(APLICAR_SALDO_DESDE.getTime() + 60_000) });
   opciones.alLeerFactura = (f) => { f.status = "CANCELLED"; };
-  const r = await leer(await confirmar(req(), { params: { id: b.id } }));
+  const r = await leer(await confirmar(req(), { params: Promise.resolve({ id: b.id }) }));
   assert.equal(r.status, 409);
   assert.deepEqual([b.status, b.paid], ["CANCELLED", 0]);
   assert.equal(saldo(), 300);
@@ -659,7 +659,7 @@ test("borrar un borrador que otra persona confirmó (y recibió el saldo) mientr
   const b = sembrarFactura({ status: "DRAFT" });
   // Entre la lectura del DELETE y el borrado, alguien lo confirma y se aplica el anticipo.
   opciones.alLeerFactura = (f) => { Object.assign(f, { status: "PAID", paid: 1000, balance: 0 }); };
-  const r = await leer(await factura.DELETE(req(), { params: { id: b.id } }));
+  const r = await leer(await factura.DELETE(req(), { params: Promise.resolve({ id: b.id }) }));
   assert.equal(r.status, 409);
   assert.ok(db.invoices.includes(b), "la factura sigue ahí: cancelarla devolvería el anticipo");
 });
@@ -669,7 +669,7 @@ test("editar los conceptos de un borrador que se confirmó mientras tanto: 409 y
   const b = sembrarFactura({ status: "DRAFT", total: 1000, balance: 1000 });
   opciones.alLeerFactura = (f) => { Object.assign(f, { status: "PAID", paid: 1000, balance: 0 }); };
   const items = [{ description: "Resina", quantity: 1, unitPrice: 500, total: 500 }];
-  const r = await leer(await factura.PATCH(req({ items }), { params: { id: b.id } }));
+  const r = await leer(await factura.PATCH(req({ items }), { params: Promise.resolve({ id: b.id }) }));
   assert.equal(r.status, 409);
   assert.deepEqual([b.total, b.paid, b.balance], [1000, 1000, 0]);
 });
@@ -677,7 +677,7 @@ test("editar los conceptos de un borrador que se confirmó mientras tanto: 409 y
 test("«anticipo» no se puede teclear como método de pago", async () => {
   const { factura } = await rutas();
   const inv = sembrarFactura({});
-  const r = await leer(await factura.POST(req({ amount: 100, method: METODO_ANTICIPO }), { params: { id: inv.id } }));
+  const r = await leer(await factura.POST(req({ amount: 100, method: METODO_ANTICIPO }), { params: Promise.resolve({ id: inv.id }) }));
   assert.equal(r.status, 400);
   assert.equal(db.payments.length, 0);
 });
@@ -728,7 +728,7 @@ test("sin el SQL aplicado (columnas nuevas inexistentes) las facturas se crean y
   assert.equal(r.body.anticipoAplicado, 0);
   assert.equal(db.payments.length, 0);
   assert.equal(saldo(), 200);
-  const c = await leer(await cancelar(req({}), { params: { id: r.body.id } }));
+  const c = await leer(await cancelar(req({}), { params: Promise.resolve({ id: r.body.id }) }));
   assert.equal(c.status, 200);
 });
 
@@ -859,7 +859,7 @@ test("cancelar una factura con DOS aplicaciones devuelve cada una con su fila es
   assert.equal(inv.paid, 1500);
   assert.equal(saldo(), 0);
 
-  const r = await leer(await cancelar(req({}), { params: { id: inv.id } }));
+  const r = await leer(await cancelar(req({}), { params: Promise.resolve({ id: inv.id }) }));
   assert.equal(r.status, 200);
   assert.equal(r.body.anticipoDevuelto, 1500);
   const devoluciones = db.credits.filter((c) => c.source === FUENTE_DEVUELTO && c.invoiceId === inv.id);

@@ -264,7 +264,7 @@ function sembrar(extra: Row = {}): Row {
   return q;
 }
 
-const P = { params: { id: "q1" } };
+const P = { params: Promise.resolve({ id: "q1" }) };
 
 test("precisión 2: aceptar solo la resina de un presupuesto de $10,000 y «Generar factura» → deuda de $1,500", async () => {
   sembrar();
@@ -553,9 +553,9 @@ test("fallo 3: la liga pública acepta «válido hasta hoy» y rechaza el de aye
   sembrar({ validUntil: new Date(`${diaEnMexico()}T00:00:00.000Z`) });
   sembrar({ id: "q2", folio: "P-0002", acceptToken: "tok2", validUntil: new Date(`${diaEnMexico(1)}T00:00:00.000Z`) });
   const liga = await import("@/app/api/presupuesto/[token]/route");
-  const hoy = await leer(await liga.GET(req(), { params: { token: "tok" } }));
+  const hoy = await leer(await liga.GET(req(), { params: Promise.resolve({ token: "tok" }) }));
   assert.equal(hoy.status, 200, JSON.stringify(hoy.body));
   assert.equal(hoy.body.expired, false);
-  const ayer = await leer(await liga.GET(req(), { params: { token: "tok2" } }));
+  const ayer = await leer(await liga.GET(req(), { params: Promise.resolve({ token: "tok2" }) }));
   assert.equal(ayer.body.expired, true);
 });

@@ -71,7 +71,7 @@ async function cancelar() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     }),
-    { params: { id: FACTURA_ID } },
+    { params: Promise.resolve({ id: FACTURA_ID }) },
   );
   return { status: res.status, body: await res.json() };
 }

@@ -68,7 +68,7 @@ function pedir(qs = "") {
 }
 async function GET(qs = "") {
   const { GET: handler } = await import("../[id]/movimientos/route");
-  return handler(pedir(qs), { params: { id: "pat_1" } });
+  return handler(pedir(qs), { params: Promise.resolve({ id: "pat_1" }) });
 }
 const DOCTOR = { id: "u1", role: "DOCTOR", clinicId: "cli_1", permissionsOverride: [] as string[] };
 

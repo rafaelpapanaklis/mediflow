@@ -54,7 +54,7 @@ function scriptsLd(nodo: any, acc: string[] = []): string[] {
 
 test("la ciudad con una clínica hostil: dos bloques ld+json, sin «<» ni «>» y con el mismo contenido", async () => {
   const { default: Pagina } = await import("@/app/descubre/[categoria]/[ciudad]/page");
-  const arbol = await Pagina({ params: { categoria: "dental", ciudad: "merida" } });
+  const arbol = await Pagina({ params: Promise.resolve({ categoria: "dental", ciudad: "merida" }) });
   const bloques = scriptsLd(arbol);
   assert.equal(bloques.length, 2);
   for (const html of bloques) {

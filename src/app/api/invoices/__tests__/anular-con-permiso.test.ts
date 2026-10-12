@@ -49,7 +49,7 @@ const prismaStub: any = { invoice: invoiceDelegate, $queryRaw: async () => [], $
 });
 
 const req: any = { json: async () => ({}), headers: new Headers(), url: "http://localhost/api/invoices/inv1" };
-const P = { params: { id: "inv1" } };
+const P = { params: Promise.resolve({ id: "inv1" }) };
 
 beforeEach(() => {
   db.invoice = { id: "inv1", clinicId: "c1", patientId: "p1", invoiceNumber: "F-0500", status: "PENDING", total: 5_000, paid: 0, balance: 5_000, cfdiUuid: null };

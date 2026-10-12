@@ -269,7 +269,7 @@ test("batch-validate: tenant — el cambio de estado va condicionado a la clíni
 // ═══════════════════════════════════════════════════════════════════════════
 async function resolver(action: "APPROVE" | "REJECT") {
   const { POST } = await import("@/app/api/appointment-change-requests/[id]/resolve/route");
-  const res = await POST(req({ action }), { params: { id: "r1" } });
+  const res = await POST(req({ action }), { params: Promise.resolve({ id: "r1" }) });
   return { status: res.status, body: await res.json() };
 }
 
@@ -308,7 +308,7 @@ test("resolve: reagendar aprobado dos veces a la vez mueve y notifica UNA vez", 
 test("PATCH /status: cancelar dos veces a la vez avisa la cancelación UNA vez y la segunda es 409", async () => {
   const { PATCH } = await import("@/app/api/appointments/[id]/status/route");
   const go = async () => {
-    const res = await PATCH(req({ status: "CANCELLED" }), { params: { id: "a1" } });
+    const res = await PATCH(req({ status: "CANCELLED" }), { params: Promise.resolve({ id: "a1" }) });
     return { status: res.status, body: await res.json() };
   };
   const rs = await dos(go);
@@ -320,7 +320,7 @@ test("PATCH /status: cancelar dos veces a la vez avisa la cancelación UNA vez y
 test("DELETE: cancelar dos veces a la vez avisa UNA vez (la segunda ya es «ok» sin avisar)", async () => {
   const { DELETE } = await import("@/app/api/appointments/[id]/route");
   const go = async () => {
-    const res = await DELETE(req({}), { params: { id: "a1" } });
+    const res = await DELETE(req({}), { params: Promise.resolve({ id: "a1" }) });
     return { status: res.status, body: await res.json() };
   };
   const rs = await dos(go);
@@ -333,7 +333,7 @@ test("DELETE: cancelar dos veces a la vez avisa UNA vez (la segunda ya es «ok»
 // ═══════════════════════════════════════════════════════════════════════════
 async function solicitud(body: unknown) {
   const { PATCH } = await import("@/app/api/booking-requests/[id]/route");
-  const res = await PATCH(req(body), { params: { id: "b1" } });
+  const res = await PATCH(req(body), { params: Promise.resolve({ id: "b1" }) });
   return { status: res.status, body: await res.json() };
 }
 
@@ -365,7 +365,7 @@ test("booking-requests: aceptar y rechazar a la vez — gana uno, y no queda cit
 // ═══════════════════════════════════════════════════════════════════════════
 async function portal(body: unknown) {
   const { POST } = await import("@/app/api/paciente/appointments/[id]/change-request/route");
-  const res = await POST(req(body), { params: { id: "a1" } });
+  const res = await POST(req(body), { params: Promise.resolve({ id: "a1" }) });
   return { status: res.status, body: await res.json() };
 }
 function citaDelPortal() {

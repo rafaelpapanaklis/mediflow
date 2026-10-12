@@ -189,7 +189,7 @@ function req(body: unknown): any {
 
 async function aprobar() {
   const { POST } = await import("@/app/api/appointment-change-requests/[id]/resolve/route");
-  const res = await POST(req({ action: "APPROVE" }), { params: { id: "cr1" } });
+  const res = await POST(req({ action: "APPROVE" }), { params: Promise.resolve({ id: "cr1" }) });
   return { status: res.status, body: await res.json() };
 }
 
@@ -199,7 +199,7 @@ async function aprobar() {
  */
 async function aceptar(extra: Record<string, unknown> = {}) {
   const { PATCH } = await import("@/app/api/booking-requests/[id]/route");
-  const res = await PATCH(req({ action: "accept", ...extra }), { params: { id: "br1" } });
+  const res = await PATCH(req({ action: "accept", ...extra }), { params: Promise.resolve({ id: "br1" }) });
   return { status: res.status, body: await res.json(), tx: candidatosEnTx !== null };
 }
 

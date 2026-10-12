@@ -155,7 +155,7 @@ before(async () => {
   const { NextRequest } = await import("next/server");
   const equipo = await import("@/app/api/team/[id]/sabina-permissions/route");
   const sabina = await import("@/app/api/sabina/route");
-  GET = (id) => equipo.GET(new NextRequest(`http://app.test/api/team/${id}/sabina-permissions`), { params: { id } });
+  GET = (id) => equipo.GET(new NextRequest(`http://app.test/api/team/${id}/sabina-permissions`), { params: Promise.resolve({ id }) });
   PATCH = (id, body) =>
     equipo.PATCH(
       new NextRequest(`http://app.test/api/team/${id}/sabina-permissions`, {
@@ -163,7 +163,7 @@ before(async () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       }),
-      { params: { id } },
+      { params: Promise.resolve({ id }) },
     );
   preguntar = (texto) =>
     sabina.POST(

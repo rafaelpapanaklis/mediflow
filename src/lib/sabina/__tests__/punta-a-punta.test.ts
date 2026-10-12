@@ -575,7 +575,7 @@ test("GET /api/sabina/conversations/:id — turnos con la forma de la pantalla, 
   const { GET } = await import("@/app/api/sabina/conversations/[id]/route");
 
   const res = await GET(new NextRequestCtor("http://localhost/api/sabina/conversations/conv-sabina"), {
-    params: { id: "conv-sabina" },
+    params: Promise.resolve({ id: "conv-sabina" }),
   });
   assert.equal(res.status, 200);
   const json = await res.json();
@@ -587,13 +587,13 @@ test("GET /api/sabina/conversations/:id — turnos con la forma de la pantalla, 
   }
 
   const ajena = await GET(new NextRequestCtor("http://localhost/api/sabina/conversations/conv-del-asistente"), {
-    params: { id: "conv-del-asistente" },
+    params: Promise.resolve({ id: "conv-del-asistente" }),
   });
   assert.equal(ajena.status, 404);
 
   estado.sesion = null;
   const sinSesion = await GET(new NextRequestCtor("http://localhost/api/sabina/conversations/conv-sabina"), {
-    params: { id: "conv-sabina" },
+    params: Promise.resolve({ id: "conv-sabina" }),
   });
   assert.equal(sinSesion.status, 401);
 });

@@ -277,7 +277,7 @@ async function exportar(filas: any[]) {
   const { GET } = await import("@/app/api/patients/[id]/export-cda/route");
   const { NextRequest } = await import("next/server");
   const req = new NextRequest("https://dalecontrol.test/api/patients/pat_1/export-cda");
-  const res = await GET(req, { params: { id: "pat_1" } });
+  const res = await GET(req, { params: Promise.resolve({ id: "pat_1" }) });
   return { status: res.status, xml: await res.text() };
 }
 

@@ -342,7 +342,7 @@ test("facturar un presupuesto ACEPTADO: nace PENDIENTE, con el total de sus conc
   const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
   const q = sembrarPresupuesto();
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 201, JSON.stringify(res.body));
   assert.equal(db.invoices.length, 1);
@@ -380,7 +380,7 @@ test("del alta al cobro: crear → aceptar → facturar → abonar, sin «confir
 
   const creado = await leer(await quieto(() => alta.POST(req(CUERPO_PRESUPUESTO))));
   assert.equal(creado.status, 201);
-  const P = { params: { id: creado.body.id } };
+  const P = { params: Promise.resolve({ id: creado.body.id }) };
 
   const aceptado = await leer(await estado.POST(req({ action: "accept" }), P));
   assert.equal(aceptado.status, 200, JSON.stringify(aceptado.body));
@@ -399,7 +399,7 @@ test("del alta al cobro: crear → aceptar → facturar → abonar, sin «confir
   // «Confirma la factura antes de registrar pagos».
   const abono = await leer(await cobrar.POST(
     req({ amount: 4250, method: "transfer" }),
-    { params: { id: inv.id } },
+    { params: Promise.resolve({ id: inv.id }) },
   ));
   assert.equal(abono.status, 200, JSON.stringify(abono.body));
   assert.equal(db.invoices[0].status, "PARTIAL");
@@ -411,8 +411,8 @@ test("facturar dos veces el mismo presupuesto no crea otra factura ni gasta otro
   const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
   const q = sembrarPresupuesto();
 
-  const primera = await leer(await POST(req(), { params: { id: q.id } }));
-  const segunda = await leer(await POST(req(), { params: { id: q.id } }));
+  const primera = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
+  const segunda = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(primera.status, 201);
   assert.equal(segunda.status, 200);
@@ -426,8 +426,8 @@ test("🔴 dos «Generar factura» A LA VEZ (Sabina y la pantalla): una sola fac
   const q = sembrarPresupuesto();
 
   const [a, b] = await Promise.all([
-    POST(req(), { params: { id: q.id } }).then(leer),
-    POST(req(), { params: { id: q.id } }).then(leer),
+    POST(req(), { params: Promise.resolve({ id: q.id }) }).then(leer),
+    POST(req(), { params: Promise.resolve({ id: q.id }) }).then(leer),
   ]);
 
   assert.equal(
@@ -444,7 +444,7 @@ test("sin ver al paciente no se le genera la factura", async () => {
   const q = sembrarPresupuesto();
   ocultos.add("p1");
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 404, JSON.stringify(res.body));
   assert.equal(res.body.invoice, undefined, "no devuelve conceptos ni importes");
@@ -456,7 +456,7 @@ test("un presupuesto que el paciente no ha aceptado no se factura", async () => 
   for (const status of ["DRAFT", "PRESENTED", "REJECTED", "EXPIRED"]) {
     db.quotes = [];
     const q = sembrarPresupuesto({ status });
-    const res = await leer(await POST(req(), { params: { id: q.id } }));
+    const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
     assert.equal(res.status, 409, `${status}: ${JSON.stringify(res.body)}`);
   }
   assert.equal(db.invoices.length, 0);
@@ -467,7 +467,7 @@ test("el presupuesto de otra clínica: 404 y ninguna factura", async () => {
   const q = sembrarPresupuesto();
   authCtx.clinicId = "c2";
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 404);
   assert.equal(db.invoices.length, 0);
@@ -489,7 +489,7 @@ test("presupuestos viejos: su factura BORRADOR sigue igual, se re-sincroniza al 
     createdAt: new Date(), updatedAt: new Date(),
   });
   const q = sembrarPresupuesto({ status: "DRAFT", invoiceId: "inv-viejo" });
-  const P = { params: { id: q.id } };
+  const P = { params: Promise.resolve({ id: q.id }) };
 
   // Editar el presupuesto sigue arrastrando a su borrador (FIN-05).
   const editado = await leer(await patch.PATCH(req({
@@ -526,7 +526,7 @@ test("🔴 clínica EXENTA: la factura del presupuesto nace SIN IVA y con el mis
   db.clinics.c1 = "exempt";
   const q = sembrarPresupuesto();
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 201, JSON.stringify(res.body));
   const inv = db.invoices[0];
@@ -546,7 +546,7 @@ test("🔴 clínica CON IVA (iva16): igual que hoy, 16 % incluido y el mismo tot
   db.clinics.c1 = "iva16";
   const q = sembrarPresupuesto();
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 201, JSON.stringify(res.body));
   const inv = db.invoices[0];
@@ -568,9 +568,9 @@ test("el IVA sale de la clínica de la SESIÓN, no de otra", async () => {
   sembrarPresupuesto({ id: "q-c2", clinicId: "c2", folio: "P-0001" });
 
   authCtx.clinicId = "c2";
-  const enC2 = await leer(await POST(req(), { params: { id: "q-c2" } }));
+  const enC2 = await leer(await POST(req(), { params: Promise.resolve({ id: "q-c2" }) }));
   authCtx.clinicId = "c1";
-  const enC1 = await leer(await POST(req(), { params: { id: "q-c1" } }));
+  const enC1 = await leer(await POST(req(), { params: Promise.resolve({ id: "q-c1" }) }));
 
   assert.equal(enC2.status, 201, JSON.stringify(enC2.body));
   assert.equal(enC1.status, 201, JSON.stringify(enC1.body));
@@ -591,7 +591,7 @@ test("una factura YA CREADA con 16 % en una clínica exenta no se toca al volver
   });
   const q = sembrarPresupuesto({ invoiceId: "inv-de-antes" });
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.equal(res.body.already, true);
@@ -606,7 +606,7 @@ test("la factura nace a nombre de quien creó el presupuesto, si es DOCTOR de la
   const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
   const q = sembrarPresupuesto({ createdById: "doc-1" });
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 201, JSON.stringify(res.body));
   assert.equal(db.invoices[0].doctorId, "doc-1");
@@ -617,7 +617,7 @@ test("si lo creó recepción o un administrador, nace sin doctor — y nunca a n
   const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
   const q = sembrarPresupuesto(); // createdById u1 = ADMIN, que además es la sesión
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.status, 201, JSON.stringify(res.body));
   assert.equal(db.invoices[0].doctorId, null);
@@ -628,7 +628,7 @@ test("🔴 un doctor de OTRA clínica, un creador borrado o ninguno: sin doctor"
   for (const createdById of ["doc-de-c2", "ya-no-existe", null]) {
     db.quotes = []; db.invoices = [];
     const q = sembrarPresupuesto({ createdById });
-    const res = await leer(await POST(req(), { params: { id: q.id } }));
+    const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.equal(db.invoices[0].doctorId, null, `createdById=${createdById}`);
   }
@@ -644,7 +644,7 @@ test("⛔ una factura que YA existe no recibe doctor al volver a pulsar «Genera
   });
   const q = sembrarPresupuesto({ createdById: "doc-1", invoiceId: "inv-sin-doctor" });
 
-  const res = await leer(await POST(req(), { params: { id: q.id } }));
+  const res = await leer(await POST(req(), { params: Promise.resolve({ id: q.id }) }));
 
   assert.equal(res.body.already, true);
   assert.equal(db.invoices.length, 1);

@@ -246,17 +246,17 @@ async function post(body: unknown) {
 }
 async function patch(body: unknown) {
   const { PATCH } = await import("@/app/api/appointments/[id]/route");
-  const res = await PATCH(req(body), { params: { id: "a1" } });
+  const res = await PATCH(req(body), { params: Promise.resolve({ id: "a1" }) });
   return { status: res.status, body: await res.json() };
 }
 async function del() {
   const { DELETE } = await import("@/app/api/appointments/[id]/route");
-  const res = await DELETE(req({}), { params: { id: "a1" } });
+  const res = await DELETE(req({}), { params: Promise.resolve({ id: "a1" }) });
   return { status: res.status, body: await res.json() };
 }
 async function patchStatus(body: unknown) {
   const { PATCH } = await import("@/app/api/appointments/[id]/status/route");
-  const res = await PATCH(req(body), { params: { id: "a1" } });
+  const res = await PATCH(req(body), { params: Promise.resolve({ id: "a1" }) });
   return { status: res.status, body: await res.json() };
 }
 
@@ -485,7 +485,7 @@ test("DELETE con `notifyPatient: false` (lo que manda Sabina) no avisa aunque la
   clinicRow.reminderSettings = { eventos: { alCancelar: true } };
   citaExistente();
   const { DELETE } = await import("@/app/api/appointments/[id]/route");
-  const res = await DELETE(req({ reason: "Pidió cambio", notifyPatient: false }), { params: { id: "a1" } });
+  const res = await DELETE(req({ reason: "Pidió cambio", notifyPatient: false }), { params: Promise.resolve({ id: "a1" }) });
   assert.equal(res.status, 200);
   assert.equal(envios.length, 0);
   assert.equal((await res.json()).whatsapp, null);

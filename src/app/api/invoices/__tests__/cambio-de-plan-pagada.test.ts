@@ -77,7 +77,7 @@ beforeEach(() => {
 async function put(condiciones: CondicionesPago) {
   const { PUT } = await import("@/app/api/invoices/[id]/condiciones/route");
   const req: any = { json: async () => ({ condiciones }), headers: new Headers(), url: "http://localhost/api/invoices/inv_1/condiciones" };
-  const res = await PUT(req, { params: { id: FACTURA.id } });
+  const res = await PUT(req, { params: Promise.resolve({ id: FACTURA.id }) });
   return { status: res.status, body: await res.json() };
 }
 

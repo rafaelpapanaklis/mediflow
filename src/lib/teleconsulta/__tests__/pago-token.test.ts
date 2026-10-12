@@ -75,7 +75,7 @@ test("rutaDePago lleva ?t= con el token", () => {
 // ── La página ────────────────────────────────────────────────────────────────
 async function abrirPagina(t?: string) {
   const { default: Pagina } = await import("@/app/pago/[appointmentId]/page");
-  return Pagina({ params: { appointmentId: "cita1" }, searchParams: { t } });
+  return Pagina({ params: Promise.resolve({ appointmentId: "cita1" }), searchParams: Promise.resolve({ t }) });
 }
 
 test("sin token, o con uno falso, /pago/<id> es 404 y ni siquiera consulta la cita", async () => {

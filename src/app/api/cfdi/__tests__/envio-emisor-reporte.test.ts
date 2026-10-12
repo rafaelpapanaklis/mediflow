@@ -133,7 +133,7 @@ beforeEach(() => {
 
 test("enviar por correo: Facturapi recibe el CFDI de ESA clínica y los correos; queda en Movimientos sin el correo completo", async () => {
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
-  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "Maria@Correo.com, conta@despacho.mx" }), { params: { cfdiId: "cfdi1" } });
+  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "Maria@Correo.com, conta@despacho.mx" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   assert.deepEqual(llamadas.correo.map((c) => [c.apiKey, c.facturapiId, c.correos]), [["sk_test_org", "fapi_1", ["maria@correo.com", "conta@despacho.mx"]]]);
   assert.equal(llamadas.bitacora.length, 1);
@@ -146,7 +146,7 @@ test("enviar por correo: Facturapi recibe el CFDI de ESA clínica y los correos;
 test("enviar: el CFDI de OTRA clínica no existe (404) y no se llama a Facturapi", async () => {
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
   authCtx.clinicId = "c2";
-  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: { cfdiId: "cfdi1" } });
+  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(res.status, 404);
   assert.equal(llamadas.correo.length, 0);
 });
@@ -155,7 +155,7 @@ test("enviar: un CFDI cancelado no se manda (409) — ni por correo ni por Whats
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
   db.cfdi.status = "cancelled";
   for (const canal of ["correo", "whatsapp"]) {
-    const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal, correos: "a@b.mx" }), { params: { cfdiId: "cfdi1" } });
+    const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal, correos: "a@b.mx" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
     assert.equal(res.status, 409);
   }
   assert.equal(llamadas.correo.length + llamadas.whatsapp.length, 0);
@@ -163,10 +163,10 @@ test("enviar: un CFDI cancelado no se manda (409) — ni por correo ni por Whats
 
 test("enviar: correo inválido → 400 sin llamar a Facturapi; Facturapi rechaza → su motivo, sin bitácora", async () => {
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
-  const r1 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "maria@" }), { params: { cfdiId: "cfdi1" } });
+  const r1 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "maria@" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(r1.status, 400);
   entorno.correoFalla = { status: 400, msg: "El correo no es válido" };
-  const r2 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: { cfdiId: "cfdi1" } });
+  const r2 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(r2.status, 400);
   // C-57: en humano, con el motivo de Facturapi entre paréntesis.
   assert.equal((await r2.json()).error, "No se pudo mandar el correo. Revisa que la dirección esté bien escrita y vuelve a intentarlo. (El correo no es válido)");
@@ -176,7 +176,7 @@ test("enviar: correo inválido → 400 sin llamar a Facturapi; Facturapi rechaza
 test("enviar por WhatsApp fuera de la ventana de 24 h: 409 y NO sale nada (no hay plantilla del CFDI)", async () => {
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
   entorno.ultimoEntrante = new Date(Date.now() - 25 * 60 * 60 * 1000);
-  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "whatsapp" }), { params: { cfdiId: "cfdi1" } });
+  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "whatsapp" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(res.status, 409);
   assert.equal((await res.json()).code, "CFDI_WA_FUERA_DE_VENTANA");
   assert.equal(llamadas.whatsapp.length, 0);
@@ -185,7 +185,7 @@ test("enviar por WhatsApp fuera de la ventana de 24 h: 409 y NO sale nada (no ha
 test("enviar por WhatsApp con la ventana abierta: tipo «system» (sin plantilla de respaldo), PDF adjunto y enlaces firmados", async () => {
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
   entorno.ultimoEntrante = new Date(Date.now() - 60 * 60 * 1000);
-  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "whatsapp" }), { params: { cfdiId: "cfdi1" } });
+  const res = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "whatsapp" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   assert.equal(llamadas.whatsapp.length, 1);
   const w = llamadas.whatsapp[0];
@@ -201,18 +201,18 @@ test("enviar: sin «Crear facturas» no se manda (403); sin «Enviar WhatsApp» 
   const { POST } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
   authCtx.role = "RECEPTIONIST"; authCtx.isAdmin = false;
   authCtx.permissionsOverride = ["billing.view"];
-  const r1 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: { cfdiId: "cfdi1" } });
+  const r1 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "correo", correos: "a@b.mx" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(r1.status, 403);
   authCtx.permissionsOverride = ["billing.view", "billing.create"];
   entorno.ultimoEntrante = new Date();
-  const r2 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "whatsapp" }), { params: { cfdiId: "cfdi1" } });
+  const r2 = await POST(req("/api/cfdi/cfdi1/enviar", { canal: "whatsapp" }), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   assert.equal(r2.status, 403);
   assert.equal(llamadas.correo.length + llamadas.whatsapp.length, 0);
 });
 
 test("GET enviar: sugiere el correo del receptor del CFDI y dice por qué no sale el WhatsApp", async () => {
   const { GET } = await import("@/app/api/cfdi/[cfdiId]/enviar/route");
-  const res = await GET(req("/api/cfdi/cfdi1/enviar"), { params: { cfdiId: "cfdi1" } });
+  const res = await GET(req("/api/cfdi/cfdi1/enviar"), { params: Promise.resolve({ cfdiId: "cfdi1" }) });
   const d = await res.json();
   assert.equal(d.correo, "maria@correo.com");
   assert.equal(d.whatsapp.modo, "blocked");

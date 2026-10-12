@@ -73,7 +73,7 @@ beforeEach(() => {
 (mock as any).module("@/lib/clinic-secrets", { namedExports: { stripClinicSecrets: (c: any) => c } });
 
 const req = (body: unknown) => ({ json: async () => body, headers: new Headers() }) as any;
-const ctx = (id: string) => ({ params: { id } });
+const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 // ═══ A3 · el dueño de clínica (SUPER_ADMIN) y las anónimas ═════════════════
 

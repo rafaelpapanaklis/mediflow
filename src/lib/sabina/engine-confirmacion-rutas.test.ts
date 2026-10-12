@@ -153,7 +153,7 @@ before(async () => {
   const descartar = await import("@/app/api/sabina/propuestas/[id]/descartar/route");
   const conversacion = await import("@/app/api/sabina/conversations/[id]/route");
   const consulta = await import("@/app/api/sabina/propuestas/[id]/route");
-  consultarRuta = (id) => consulta.GET(new NextRequest(`http://app.test/api/sabina/propuestas/${id}`), { params: { id } });
+  consultarRuta = (id) => consulta.GET(new NextRequest(`http://app.test/api/sabina/propuestas/${id}`), { params: Promise.resolve({ id }) });
 
   preguntar = (texto) =>
     sabina.POST(
@@ -167,14 +167,14 @@ before(async () => {
   confirmarRuta = (id, headers = mismaPagina) =>
     confirmar.POST(
       new NextRequest(`http://app.test/api/sabina/propuestas/${id}/confirmar`, { method: "POST", headers, body: "{}" }),
-      { params: { id } },
+      { params: Promise.resolve({ id }) },
     );
   descartarRuta = (id) =>
     descartar.POST(
       new NextRequest(`http://app.test/api/sabina/propuestas/${id}/descartar`, { method: "POST", headers: mismaPagina, body: "{}" }),
-      { params: { id } },
+      { params: Promise.resolve({ id }) },
     );
-  leerConversacion = (id) => conversacion.GET(new NextRequest(`http://app.test/api/sabina/conversations/${id}`), { params: { id } });
+  leerConversacion = (id) => conversacion.GET(new NextRequest(`http://app.test/api/sabina/conversations/${id}`), { params: Promise.resolve({ id }) });
 });
 
 beforeEach(() => {

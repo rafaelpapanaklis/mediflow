@@ -188,7 +188,7 @@ test("las piezas del hilo: sin `clases` pintan la hoja vieja; con `clases`, la n
     "- Paula Restringida — $7,777\n- Beto Munoz — $3,000 (2 facturas)\n" +
     "| Paciente | Saldo |\n|---|---|\n| Ana | $500 |\n" +
     "Te sugiero llamar primero a Paula.";
-  const pares: Array<[string, JSX.Element, JSX.Element]> = [
+  const pares: Array<[string, React.JSX.Element, React.JSX.Element]> = [
     ["contenido", <SabinaMessageContent content={respuesta} />, <SabinaMessageContent content={respuesta} clases={NUEVA} />],
     ["rastro", <ToolTrace tools={["citas_del_dia", "ingresos_del_mes"]} />, <ToolTrace tools={["citas_del_dia", "ingresos_del_mes"]} clases={NUEVA} />],
     ["aviso apagada", <SabinaErrorNotice kind="apagada" />, <SabinaErrorNotice kind="apagada" clases={NUEVA} />],

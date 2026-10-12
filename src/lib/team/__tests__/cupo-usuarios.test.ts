@@ -79,7 +79,7 @@ before(async () => {
   }));
   PATCH = (id, b) => ruta.PATCH(new NextRequest(`http://app.test/api/team/${id}`, {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(b),
-  }), { params: { id } });
+  }), { params: Promise.resolve({ id }) });
 });
 
 beforeEach(() => {

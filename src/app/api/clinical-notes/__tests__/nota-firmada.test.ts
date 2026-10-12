@@ -93,7 +93,7 @@ let visibilidadDenegada: any = null;
 function req(body?: any): any {
   return { json: async () => (body ?? {}), headers: new Headers(), url: "http://localhost/api/clinical-notes/r1/addendum" };
 }
-const P = { params: { id: "r1" } };
+const P = { params: Promise.resolve({ id: "r1" }) };
 
 /** Todo lo que quedó FIRMADO y por tanto no puede moverse. */
 function loFirmado(r: any) {

@@ -159,7 +159,7 @@ test("hallazgo 30 · tablero de sala de espera: la ventana es el día de la clí
   lastApptWhere = null;
 
   const res = await GET({ url: "http://localhost/api/tv/qa/operational" } as any, {
-    params: { slug: "qa" },
+    params: Promise.resolve({ slug: "qa" }),
   });
   assert.equal(res.status ?? 200, 200);
 

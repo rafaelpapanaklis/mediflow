@@ -120,7 +120,7 @@ before(async () => {
       new NextRequest(`http://app.test/api/team/${id}`, {
         method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
       }),
-      { params: { id } },
+      { params: Promise.resolve({ id }) },
     );
 });
 

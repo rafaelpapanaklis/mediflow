@@ -443,7 +443,7 @@ describe("GET /api/clinical-notes/[id]/pdf baja el logo y no se cae sin él", ()
     const { GET } = await import("@/app/api/clinical-notes/[id]/pdf/route");
     const { NextRequest } = await import("next/server");
     const res = await GET(new NextRequest("https://dalecontrol.test/api/clinical-notes/rec_1/pdf"), {
-      params: { id: "rec_1" },
+      params: Promise.resolve({ id: "rec_1" }),
     });
     const buf = Buffer.from(await res.arrayBuffer());
     return { status: res.status, buf, props: elementoCapturado?.props ?? {} };

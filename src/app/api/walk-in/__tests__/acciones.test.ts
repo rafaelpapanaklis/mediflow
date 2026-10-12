@@ -51,7 +51,7 @@ async function updateFila(a: any) {
 });
 
 const req = (body?: any) => ({ json: async () => body }) as any;
-const idp = { params: { id: "w1" } };
+const idp = { params: Promise.resolve({ id: "w1" }) };
 
 test("asignar: guarda el profesional y pasa a ASSIGNED; el filtro es la regla única + la clínica de la sesión", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");

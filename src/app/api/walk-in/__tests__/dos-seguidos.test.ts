@@ -105,7 +105,7 @@ const tx: any = {
 });
 
 const req = (body?: any) => ({ json: async () => body }) as any;
-const de = (id: string) => ({ params: { id } });
+const de = (id: string) => ({ params: Promise.resolve({ id }) });
 
 test("Iniciar → Completar → Iniciar el siguiente con el MISMO doctor: entra, sin 409", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");

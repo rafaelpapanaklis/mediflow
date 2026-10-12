@@ -217,7 +217,7 @@ async function post(body: unknown) {
 
 async function patch(body: unknown) {
   const { PATCH } = await import("@/app/api/appointments/[id]/route");
-  const res = await PATCH(req(body), { params: { id: "a1" } });
+  const res = await PATCH(req(body), { params: Promise.resolve({ id: "a1" }) });
   return { status: res.status, body: await res.json() };
 }
 

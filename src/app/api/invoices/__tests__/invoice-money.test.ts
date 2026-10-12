@@ -232,7 +232,7 @@ const authCtx: any = { clinicId: "c1", userId: "u1", role: "ADMIN", permissionsO
 function req(body?: any): any {
   return { json: async () => (body ?? {}), headers: new Headers(), url: "http://localhost/api/invoices/inv1" };
 }
-const P = { params: { id: "inv1" } };
+const P = { params: Promise.resolve({ id: "inv1" }) };
 
 /** Silencia el console.error de las rutas (los avisos son parte del arreglo). */
 function quiet<T>(fn: () => Promise<T>): Promise<T> {

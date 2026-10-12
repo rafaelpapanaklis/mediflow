@@ -30,7 +30,7 @@ const prismaStub: any = {
 (mock as any).module("@/lib/patient-visibility", { namedExports: { assertPatientVisible: async () => null } });
 
 const req = (body?: any): any => ({ json: async () => body ?? {}, headers: new Headers(), url: "http://localhost/api/invoices/inv1/anticipo/anular" });
-const P = { params: { id: "inv1" } };
+const P = { params: Promise.resolve({ id: "inv1" }) };
 
 test("C-04 · recepción: el POST de «Anular anticipo» da 403 y el GET no le ofrece nada", async () => {
   const { GET, POST } = await import("@/app/api/invoices/[id]/anticipo/anular/route");

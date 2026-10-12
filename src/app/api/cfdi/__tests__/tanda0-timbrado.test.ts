@@ -173,7 +173,7 @@ async function timbrar(body: Record<string, any>) {
 }
 async function timbrarPago(paymentId: string, body: Record<string, any>) {
   const { POST } = await import("@/app/api/payments/[id]/cfdi/route");
-  return quieto(async () => leer(await POST(req({ taxMode: "exento", ...body }), { params: { id: paymentId } })));
+  return quieto(async () => leer(await POST(req({ taxMode: "exento", ...body }), { params: Promise.resolve({ id: paymentId }) })));
 }
 
 beforeEach(() => {

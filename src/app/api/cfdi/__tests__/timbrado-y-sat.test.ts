@@ -249,7 +249,7 @@ const vis = { espera: null as Promise<void> | null };
 function req(body?: any): any {
   return { json: async () => (body ?? {}), headers: new Headers(), url: "http://localhost/api/x" };
 }
-const P = { params: { id: "inv1" } };
+const P = { params: Promise.resolve({ id: "inv1" }) };
 
 const TIMBRAR = {
   invoiceId: "inv1",

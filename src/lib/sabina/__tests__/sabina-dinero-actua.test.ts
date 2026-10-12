@@ -281,7 +281,7 @@ before(async () => {
         headers: { host: "app.test", origin: "http://app.test", "content-type": "application/json", "user-agent": "prueba" },
         body: "{}",
       }),
-      { params: { id } },
+      { params: Promise.resolve({ id }) },
     );
     return { status: res.status, json: await res.json() };
   };

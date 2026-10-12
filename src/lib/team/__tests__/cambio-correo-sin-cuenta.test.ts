@@ -199,13 +199,13 @@ before(async () => {
       headers: { "content-type": "application/json" },
       ...(body !== undefined && { body: JSON.stringify(body) }),
     });
-  PATCH = (id, body) => ruta.PATCH(req("PATCH", id, body), { params: { id } });
-  DELETE = (id) => ruta.DELETE(req("DELETE", id), { params: { id } });
+  PATCH = (id, body) => ruta.PATCH(req("PATCH", id, body), { params: Promise.resolve({ id }) });
+  DELETE = (id) => ruta.DELETE(req("DELETE", id), { params: Promise.resolve({ id }) });
   ALTA = (body) =>
     alta.POST(new NextRequest("http://app.test/api/team", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
     }));
-  RESET = (id) => reset.POST(req("POST", `${id}/reset-password`), { params: { id } });
+  RESET = (id) => reset.POST(req("POST", `${id}/reset-password`), { params: Promise.resolve({ id }) });
 });
 
 beforeEach(() => {

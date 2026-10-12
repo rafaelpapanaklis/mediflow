@@ -234,7 +234,7 @@ async function pedir(metodo: "POST" | "PATCH", cuerpo: unknown, id?: string) {
     body: JSON.stringify(cuerpo),
   });
   const res = id
-    ? await (await import("../[id]/route")).PATCH(req, { params: { id } })
+    ? await (await import("../[id]/route")).PATCH(req, { params: Promise.resolve({ id }) })
     : await (await import("../route")).POST(req);
   return { status: res.status, json: await res.json() };
 }

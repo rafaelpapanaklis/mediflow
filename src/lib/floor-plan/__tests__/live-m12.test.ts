@@ -155,32 +155,32 @@ test("público: ?date= fuera de ayer/hoy/mañana es 400 y NO consulta la agenda"
   const { GET } = await import("@/app/api/live/[slug]/route");
   const req = (q: string) => ({ nextUrl: { searchParams: new URLSearchParams(q) } }) as any;
   for (const q of ["date=2020-01-01", "date=2031-12-31", "date=basura"]) {
-    const res = await GET(req(q), { params: { slug: "mi-clinica" } });
+    const res = await GET(req(q), { params: Promise.resolve({ slug: "mi-clinica" }) });
     assert.equal(res.status, 400, q);
     assert.equal((await res.json()).error, "date_out_of_range");
   }
   assert.equal(consultasDeAgenda.length, 0);
   // Sin date, o con hoy, funciona.
-  assert.equal((await GET(req(""), { params: { slug: "mi-clinica" } })).status, 200);
+  assert.equal((await GET(req(""), { params: Promise.resolve({ slug: "mi-clinica" }) })).status, 200);
   const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
-  assert.equal((await GET(req(`date=${hoy}`), { params: { slug: "mi-clinica" } })).status, 200);
+  assert.equal((await GET(req(`date=${hoy}`), { params: Promise.resolve({ slug: "mi-clinica" }) })).status, 200);
 });
 
 test("unlock: contraseña mala registra un fallo PERSISTENTE (IP + slug); bloqueado corta antes de la base; buena limpia", async () => {
   clinica.liveModePassword = await bcrypt.hash("la-contraseña-buena", 10);
   const { POST } = await import("@/app/api/live/[slug]/unlock/route");
-  const mala = await POST(jsonReq({ password: "otra-cosa" }), { params: { slug: "mi-clinica" } });
+  const mala = await POST(jsonReq({ password: "otra-cosa" }), { params: Promise.resolve({ slug: "mi-clinica" }) });
   assert.equal(mala.status, 401);
   assert.equal(fallos.length, 1);
   assert.equal(fallos[0].scope, "live-unlock");
   assert.equal(fallos[0].account, "mi-clinica");
 
   bloqueado = true;
-  const bloq = await POST(jsonReq({ password: "la-contraseña-buena" }), { params: { slug: "mi-clinica" } });
+  const bloq = await POST(jsonReq({ password: "la-contraseña-buena" }), { params: Promise.resolve({ slug: "mi-clinica" }) });
   assert.equal(bloq.status, 429, "bloqueado: ni siquiera con la contraseña correcta");
 
   bloqueado = false;
-  const buena = await POST(jsonReq({ password: "la-contraseña-buena" }), { params: { slug: "mi-clinica" } });
+  const buena = await POST(jsonReq({ password: "la-contraseña-buena" }), { params: Promise.resolve({ slug: "mi-clinica" }) });
   assert.equal(buena.status, 200);
   assert.equal(exitos.length, 1);
 });

@@ -156,7 +156,7 @@ async function imprimir(addenda: unknown[] | undefined) {
   const { GET } = await import("@/app/api/clinical-notes/[id]/pdf/route");
   const { NextRequest } = await import("next/server");
   const req = new NextRequest("https://dalecontrol.test/api/clinical-notes/rec_1/pdf");
-  const res = await GET(req, { params: { id: "rec_1" } });
+  const res = await GET(req, { params: Promise.resolve({ id: "rec_1" }) });
   return {
     status: res.status,
     texto: elementoCapturado ? textoDe(elementoCapturado).replace(/\s+/g, " ") : "",

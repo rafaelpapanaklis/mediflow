@@ -280,11 +280,11 @@ test("se crea una carta EN BLANCO (sin templateId), se firma y sale entera en la
   assert.equal(fila.contentHash, createHash("sha256").update(LIBRE, "utf8").digest("hex"));
 
   // El paciente la abre y firma desde su liga.
-  const leida = await json(await leerPublica(req(`/api/consent/public/${fila.token}`), { params: { token: fila.token } }));
+  const leida = await json(await leerPublica(req(`/api/consent/public/${fila.token}`), { params: Promise.resolve({ token: fila.token }) }));
   assert.equal(leida.body.content, LIBRE);
   const firma = await json(await firmar(
     req(`/api/consent/public/${fila.token}`, { signatureDataUrl: "data:image/png;base64,AAAA" }),
-    { params: { token: fila.token } },
+    { params: Promise.resolve({ token: fila.token }) },
   ));
   assert.equal(firma.status, 200, JSON.stringify(firma.body));
   assert.ok(fila.signedAt instanceof Date);

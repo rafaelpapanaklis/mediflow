@@ -107,7 +107,7 @@ async function nuevaRequest(url: string, init: RequestInit = {}) {
 async function abrirPortal(token = TOKEN) {
   const { GET } = await import("@/app/api/portal/[token]/route");
   const req = await nuevaRequest(`https://dalecontrol.test/api/portal/${token}`);
-  const res = await GET(req, { params: { token } });
+  const res = await GET(req, { params: Promise.resolve({ token }) });
   return { status: res.status, body: await res.json() };
 }
 

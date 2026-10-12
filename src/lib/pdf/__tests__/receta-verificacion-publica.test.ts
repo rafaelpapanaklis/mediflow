@@ -156,7 +156,7 @@ async function pdfPublico(id = "rx_1") {
   elementoCapturado = null;
   const { GET } = await import("@/app/api/prescriptions/[id]/verify/pdf/route");
   const res = await GET(await nuevaRequest(`https://dalecontrol.test/api/prescriptions/${id}/verify/pdf`), {
-    params: { id },
+    params: Promise.resolve({ id }),
   });
   return { status: res.status, texto: elementoCapturado ? textoDe(elementoCapturado) : "" };
 }
@@ -165,7 +165,7 @@ async function pdfPublico(id = "rx_1") {
 async function jsonPublico(id = "rx_1") {
   const { GET } = await import("@/app/api/prescriptions/[id]/verify/route");
   const res = await GET(await nuevaRequest(`https://dalecontrol.test/api/prescriptions/${id}/verify`), {
-    params: { id },
+    params: Promise.resolve({ id }),
   });
   return { status: res.status, body: await res.json() };
 }

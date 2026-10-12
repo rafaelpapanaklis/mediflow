@@ -171,13 +171,13 @@ test("PATCH retirado (ws1-t5, F13): marcar una letra como cobrada sin Payment �
   const creado = await leer(await POST(req({ ...base, totalAmount: 300, installments: 3 })));
   const primera = db.letras[0];
   const auditAntes = db.auditRows.length;
-  const r = await leer(await PATCH(req({ installmentId: primera.id, method: "cash" }), { params: { id: creado.body.id } }));
+  const r = await leer(await PATCH(req({ installmentId: primera.id, method: "cash" }), { params: Promise.resolve({ id: creado.body.id }) }));
   assert.equal(r.status, 410, "antes: 200 y la cuota «cobrada» sin que el dinero entrara a Caja");
   assert.equal(r.body.code, "COBRO_VIEJO_RETIRADO");
   assert.equal(primera.paidAt, null, "la letra no se marca pagada");
   assert.equal(db.plans[0].status, "ACTIVE");
   assert.equal(db.auditRows.length, auditAntes);
-  const ajeno = await leer(await PATCH(req({ installmentId: primera.id }), { params: { id: "no-existe" } }));
+  const ajeno = await leer(await PATCH(req({ installmentId: primera.id }), { params: Promise.resolve({ id: "no-existe" }) }));
   assert.equal(ajeno.status, 404);
 });
 
@@ -197,7 +197,7 @@ test("POST y DELETE dejan fila en AuditLog — mismas respuestas de siempre (el 
   assert.equal(db.auditRows[0].clinicId, "c1");
   assert.equal(db.auditRows[0].userId, "u1");
 
-  const P = { params: { id: creado.body.id } };
+  const P = { params: Promise.resolve({ id: creado.body.id }) };
   // ws1-t5 (F13): el PATCH ya no cobra (410) y por eso no deja fila.
   const letra = db.letras[0];
   const cobrado = await leer(await PATCH(req({ installmentId: letra.id, method: "cash" }), P));

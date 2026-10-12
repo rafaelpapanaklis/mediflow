@@ -73,7 +73,7 @@ const coincide = (f: any, w: any) =>
 });
 
 const req = (body: any) => ({ json: async () => body }) as any;
-const par = (id: string) => ({ params: { id } });
+const par = (id: string) => ({ params: Promise.resolve({ id }) });
 
 test("recepción corrige una panorámica subida como periapical: se guarda y queda en Movimientos", async () => {
   const { PATCH } = await import("@/app/api/xrays/[id]/route");

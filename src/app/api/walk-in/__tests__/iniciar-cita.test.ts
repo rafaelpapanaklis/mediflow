@@ -101,7 +101,7 @@ let consultaCitaViva: any = null;
 const req = (body?: any) => ({ json: async () => body }) as any;
 // ws1-t1: el paciente nuevo llega con nombre y apellidos confirmados por separado.
 const NOMBRE = { firstName: "Ana María", lastName: "López" };
-const idp = { params: { id: "w1" } };
+const idp = { params: Promise.resolve({ id: "w1" }) };
 
 test("sin profesional asignado: no inicia, pide elegir uno y no crea nada", async () => {
   const { PATCH } = await import("@/app/api/walk-in/[id]/route");

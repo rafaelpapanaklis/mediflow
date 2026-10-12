@@ -47,7 +47,7 @@ beforeEach(() => {
 });
 
 const req = (body?: any) => ({ json: async () => body }) as any;
-const idp = { params: { id: "w1" } };
+const idp = { params: Promise.resolve({ id: "w1" }) };
 const ROLES = ["ADMIN", "RECEPTIONIST", "DOCTOR"] as const;
 
 test("dueño, recepción y doctor: ven, agregan, avanzan y cancelan", async () => {

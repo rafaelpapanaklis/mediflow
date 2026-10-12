@@ -176,7 +176,7 @@ test("contar «0» a propósito (PATCH quantity=0 sobre un artículo en cero) lo
   db.items = [item("a", 0)];
   const { PATCH } = await import("@/app/api/inventory/[id]/route");
   assert.equal((await idsSinContar("c1", db.items as any, fakePrisma as any)).has("a"), true);
-  const res = await PATCH(req("https://x.test/api/inventory/a", "PATCH", { quantity: 0 }), { params: { id: "a" } });
+  const res = await PATCH(req("https://x.test/api/inventory/a", "PATCH", { quantity: 0 }), { params: Promise.resolve({ id: "a" }) });
   assert.equal(res.status, 200);
   assert.equal((await idsSinContar("c1", db.items as any, fakePrisma as any)).has("a"), false, "ahora está contado: en cero = agotado");
   assert.equal(db.history.length, 1);
@@ -186,8 +186,8 @@ test("contar «0» a propósito (PATCH quantity=0 sobre un artículo en cero) lo
 test("ajustar a una cantidad real también lo saca; el PATCH de otro campo (mínimo) NO", async () => {
   db.items = [item("a", 0), item("b", 0)];
   const { PATCH } = await import("@/app/api/inventory/[id]/route");
-  await PATCH(req("https://x.test/api/inventory/a", "PATCH", { quantity: 8 }), { params: { id: "a" } });
-  await PATCH(req("https://x.test/api/inventory/b", "PATCH", { minQuantity: 2 }), { params: { id: "b" } });
+  await PATCH(req("https://x.test/api/inventory/a", "PATCH", { quantity: 8 }), { params: Promise.resolve({ id: "a" }) });
+  await PATCH(req("https://x.test/api/inventory/b", "PATCH", { minQuantity: 2 }), { params: Promise.resolve({ id: "b" }) });
   const sin = await idsSinContar("c1", db.items as any, fakePrisma as any);
   assert.deepEqual([...sin], ["b"], "cambiar el mínimo no es contar");
 });
@@ -210,7 +210,7 @@ test("sin las columnas nuevas de la bitácora (SQL de ws1-t4 sin pegar) contar �
   };
   try {
     const { PATCH } = await import("@/app/api/inventory/[id]/route");
-    await PATCH(req("https://x.test/api/inventory/a", "PATCH", { quantity: 0 }), { params: { id: "a" } });
+    await PATCH(req("https://x.test/api/inventory/a", "PATCH", { quantity: 0 }), { params: Promise.resolve({ id: "a" }) });
   } finally {
     fakePrisma.inventoryHistory.create = original;
   }

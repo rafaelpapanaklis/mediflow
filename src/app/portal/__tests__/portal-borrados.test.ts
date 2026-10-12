@@ -63,7 +63,7 @@ const aplica = (rows: any[], where: any) =>
 
 async function abrir() {
   const { default: Pagina } = await import("@/app/portal/[token]/page");
-  return Pagina({ params: { token: "tok" } }) as Promise<any>;
+  return Pagina({ params: Promise.resolve({ token: "tok" }) }) as Promise<any>;
 }
 
 test("los archivos y consentimientos que la clínica borró no salen ni se firman", async () => {

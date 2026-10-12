@@ -112,7 +112,7 @@ const tx: any = {
 });
 
 const req = (body?: any) => ({ json: async () => body }) as any;
-const idp = { params: { id: "w1" } };
+const idp = { params: Promise.resolve({ id: "w1" }) };
 const cita = (id: string) => citas.find((c) => c.id === id);
 
 // ── 3. Completar / Cancelar arrastran la cita ───────────────────────────────

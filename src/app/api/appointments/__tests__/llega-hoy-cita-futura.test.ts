@@ -154,7 +154,7 @@ const req = (body: unknown) =>
 
 async function patchStatus(status: string) {
   const { PATCH } = await import("@/app/api/appointments/[id]/status/route");
-  return PATCH(req({ status }) as any, { params: { id: "a1" } });
+  return PATCH(req({ status }) as any, { params: Promise.resolve({ id: "a1" }) });
 }
 
 function ahoraAlMinuto(): number {
@@ -207,7 +207,7 @@ test("POST /check-in de una cita futura la trae a hoy, sin aviso y con Google y 
   session.user.role = "RECEPTIONIST";
   try {
     const { POST } = await import("@/app/api/appointments/[id]/check-in/route");
-    const res = await POST(req({}) as any, { params: { id: "a1" } });
+    const res = await POST(req({}) as any, { params: Promise.resolve({ id: "a1" }) });
     assert.equal(res.status, 200);
     assert.equal(escrito.status, "CHECKED_IN");
     assert.ok(escrito.startsAt instanceof Date, "el check-in mueve la cita");

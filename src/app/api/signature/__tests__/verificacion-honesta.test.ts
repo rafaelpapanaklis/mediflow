@@ -56,7 +56,7 @@ mock.module("@/lib/prisma", {
 
 async function verificar(signatureId: string) {
   const { GET } = await import("@/app/api/signature/verify/[signatureId]/route");
-  const res = await GET({} as any, { params: { signatureId } });
+  const res = await GET({} as any, { params: Promise.resolve({ signatureId }) });
   return { status: res.status, body: await res.json() };
 }
 
