@@ -107,6 +107,17 @@ const nextConfig = {
     }
     return config;
   },
+  // Turbopack (opcional, hoy NO se usa: `npm run build` fija --webpack, ver
+  // scripts/build-con-memoria.cjs). Es el equivalente del `resolve.fallback` de la
+  // función `webpack` de arriba, para poder cambiar de empaquetador quitando solo el
+  // `--webpack` del lanzador. Medido el 12-oct-2026: build en frío 435 s con
+  // Turbopack contra 890 s con webpack (misma máquina de 56 CPU).
+  turbopack: {
+    resolveAlias: {
+      fs: { browser: "./src/lib/modulo-vacio.ts" },
+      path: { browser: "./src/lib/modulo-vacio.ts" },
+    },
+  },
   async headers() {
     return [
       {
