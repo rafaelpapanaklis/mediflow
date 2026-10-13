@@ -1277,3 +1277,19 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-navbar--portada .dcv2-nav-ghost { font-size: 12px !important; padding: 8px 3px !important; }
   .dcv4-navbar--portada .dcv2-btn-primary { font-size: 12px !important; padding: 9px 8px !important; }
 }
+/* CLS de campo 0,46 en celular (13-oct-2026, ws1-t4, encargo de ws7). Medido
+   en producción con red 4G lenta: la portada pinta ANTES de que llegue Inter, y
+   con la fuente de reserva (Arial ajustada, un 8-10 % más ancha) los tres
+   accesos no caben en la fila: la barra se parte en dos (99 px en vez de 65) y,
+   al llegar Inter, todo lo de abajo sube 34 px → layout-shift de 0,14-0,22 en
+   cada visita fría a 360-390 px. Aquí, SOLO en los anchos donde con Inter la
+   barra ya va en una fila (barrido cada 5 px, 350-650: 355-400, 440-480,
+   485-560 y 590+), la fila no se parte: el grupo de accesos puede encoger y
+   recorta unos px de texto mientras dura la reserva. Con Inter cargada no hay
+   nada que encoger y la barra queda exactamente como estaba; en los anchos
+   donde hoy va en dos filas (401-439, 481-484, 561-589) no se toca nada. */
+@media (min-width: 355px) and (max-width: 400px), (min-width: 440px) and (max-width: 480px), (min-width: 485px) and (max-width: 560px), (min-width: 590px) {
+  .dcv4-navbar--portada { flex-wrap: nowrap; }
+  .dcv4-navbar--portada > div:last-child { min-width: 0; flex: 0 1 auto !important; }
+  .dcv4-navbar--portada > div:last-child > a { min-width: 0; flex: 0 1 auto !important; overflow: hidden; }
+}

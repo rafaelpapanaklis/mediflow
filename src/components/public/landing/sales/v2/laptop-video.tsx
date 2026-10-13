@@ -91,6 +91,10 @@ export function LaptopVideo({ videos, label }: { videos: VideoLaptop[]; label: s
 
   return (
     <div ref={raiz} className="dctp-laptop__videos" role="img" aria-label={label}>
+      {/* Los <video> son decorativos y sin audio (la descripción la da el
+          role="img" del contenedor): aria-hidden + tabIndex -1 los sacan del
+          árbol de accesibilidad, como en panel-vivo.tsx, y Lighthouse deja de
+          pedir subtítulos (video-caption). 13-oct-2026, ws1-t4. */}
       {videos.map((v, i) => (
         <video
           key={v.src}
@@ -101,6 +105,8 @@ export function LaptopVideo({ videos, label }: { videos: VideoLaptop[]; label: s
           poster={cerca ? v.poster : undefined}
           muted
           playsInline
+          aria-hidden="true"
+          tabIndex={-1}
           preload={cerca ? "auto" : "none"}
           loop={videos.length === 1}
           disablePictureInPicture
