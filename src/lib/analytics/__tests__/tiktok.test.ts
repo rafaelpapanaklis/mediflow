@@ -31,10 +31,10 @@ test("el Pixel ID es el de «DaleControl Pixel»", () => {
 });
 
 test("lista blanca: solo páginas de DaleControl; nunca clínicas ni reservas", () => {
-  for (const ok of ["/", "/signup", "/precios", "/blog", "/blog/como-elegir", "/software-agenda-dental", "/casos-de-uso/ortodoncia"]) {
+  for (const ok of ["/", "/signup", "/blog", "/blog/como-elegir", "/software-agenda-dental", "/casos-de-uso/ortodoncia"]) {
     assert.equal(esPaginaDaleControl(ok), true, ok);
   }
-  for (const no of ["/clinica-sonrisa", "/reservar/clinica-sonrisa", "/reservar", "/cita/abc", "/resena/x", "/r/abc", "/share/x", "/dashboard", "/paciente", "/blogger", "/clinicas", "/presupuesto/1", "/consentimiento/1"]) {
+  for (const no of ["/clinica-sonrisa", "/reservar/clinica-sonrisa", "/reservar", "/cita/abc", "/resena/x", "/r/abc", "/share/x", "/precios", "/dashboard", "/paciente", "/blogger", "/clinicas", "/presupuesto/1", "/consentimiento/1"]) {
     assert.equal(esPaginaDaleControl(no), false, no);
   }
 });
@@ -53,7 +53,6 @@ test("ClickButton: content_name = origen, content_type product, content_id = pla
       assert.equal(trackTiktokViewContent("a"), false);
     });
   }
-  conWindow("/", {}, () => assert.equal(trackTiktokClickButton("hero", "a"), false));
   assert.equal(llamadas.length, 1);
 });
 
@@ -290,4 +289,31 @@ test("arranque: solo en rutas públicas, una vez, con el SDK async y el pixel id
       assert.deepEqual(ttq.at(-1), ["track", "ViewContent", {}, { event_id: "x" }]);
     } finally { gg.window = antes; }
   } finally { g.document = docAntes; }
+});
+
+test("ViewContent ANTES de cargar el SDK queda en la cola y se suelta al cargar, sin duplicar", () => {
+  const scripts: { src: string }[] = [];
+  const g = globalThis as unknown as { document?: unknown; window?: unknown };
+  const docAntes = g.document;
+  const winAntes = g.window;
+  g.document = { createElement: () => ({}), head: { appendChild: (s: { src: string }) => scripts.push(s) } };
+  g.window = { location: { pathname: "/" } };
+  try {
+    // landing_vista se registra al montar: aún no hay ttq ni SDK
+    assert.equal(trackTiktokViewContent("vc.1"), true);
+    assert.equal(scripts.length, 0);
+    const ttq = (g.window as { ttq: unknown[][] }).ttq;
+    assert.equal(ttq.filter((e) => e[0] === "track" && e[1] === "ViewContent").length, 1);
+    // luego carga el píxel (ocioso): reutiliza la cola, un solo SDK, un solo page()
+    assert.equal(cargarPixelTiktok(), true);
+    assert.equal(cargarPixelTiktok(), true);
+    assert.equal(scripts.length, 1);
+    assert.equal((g.window as { ttq: unknown }).ttq, ttq);
+    assert.equal(ttq.filter((e) => e[0] === "track" && e[1] === "ViewContent").length, 1);
+    assert.equal(ttq.filter((e) => e[0] === "page").length, 1);
+    // y en una ruta de clínica no se encola nada
+    g.window = { location: { pathname: "/mi-clinica" } };
+    assert.equal(trackTiktokViewContent("vc.2"), false);
+    assert.equal((g.window as { ttq?: unknown }).ttq, undefined);
+  } finally { g.document = docAntes; g.window = winAntes; }
 });

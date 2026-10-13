@@ -35,13 +35,14 @@ const METODOS_TTQ = [
 ];
 
 /**
- * Arranque FIEL del snippet oficial de TikTok (ttq es un arreglo con métodos
- * que encolan; el SDK lo drena al llegar), pero cargado a demanda y fuera del
- * layout. `conPage`: mandar el page() inicial (solo rutas públicas).
+ * Cola `ttq` del snippet oficial (arreglo con métodos que encolan; el SDK lo
+ * drena al llegar). NO carga el SDK: así un evento que llega antes de que el
+ * píxel cargue (landing_vista al montar, el SDK entra en ocioso ≤4 s) queda en
+ * la cola en vez de perderse, y `arrancarTtq` la reutiliza sin duplicarla.
  */
-function arrancarTtq(conPage: boolean): boolean {
-  const w = window as unknown as Record<string, unknown>;
-  if (hayTtq()) return true;
+function crearColaTtq(): any {
+  const w = window as unknown as Record<string, any>;
+  if (w.ttq) return w.ttq;
   w.TiktokAnalyticsObject = "ttq";
   const ttq: any = (w.ttq = []);
   ttq.methods = METODOS_TTQ;
@@ -67,8 +68,21 @@ function arrancarTtq(conPage: boolean): boolean {
     s.src = `${TIKTOK_SDK_URL}?sdkid=${encodeURIComponent(id)}&lib=ttq`;
     document.head.appendChild(s);
   };
-  ttq.load(TIKTOK_PIXEL_ID);
-  if (conPage) ttq.page();
+  return ttq;
+}
+
+/**
+ * Carga el SDK sobre la cola (que puede traer eventos ya encolados). Idempotente:
+ * el SDK se pide una sola vez y el page() inicial sale una sola vez.
+ * `conPage`: mandar el page() inicial (solo rutas públicas).
+ */
+function arrancarTtq(conPage: boolean): boolean {
+  const ttq = crearColaTtq();
+  if (!ttq._i || !ttq._i[TIKTOK_PIXEL_ID]) ttq.load(TIKTOK_PIXEL_ID);
+  if (conPage && !ttq._dcPage) {
+    ttq._dcPage = true;
+    ttq.page();
+  }
   return true;
 }
 
@@ -89,6 +103,9 @@ function enviar(evento: string, props: Record<string, unknown>, eventId: string)
     if (typeof window === "undefined") return false;
     const ruta = window.location?.pathname ?? "";
     if (isPrivatePath(ruta) || !esPaginaDaleControl(ruta)) return false;
+    // Sin ttq todavía (el SDK carga en ocioso): se crea la cola y el evento
+    // espera en ella; arrancarTtq la reutiliza al cargar el SDK.
+    if (!ttqDe()) crearColaTtq();
     const t = ttqDe();
     if (!t) return false;
     t.track!(evento, { content_type: "product", ...props }, { event_id: eventId });
