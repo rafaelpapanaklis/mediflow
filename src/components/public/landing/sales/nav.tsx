@@ -73,7 +73,8 @@ export function SalesNav({
             </svg>
           </button>
         )}
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, flex: "0 0 auto", textDecoration: "none", color: "#0f172a" }}>
+        {/* aria-label: en celular el texto «DaleControl» se oculta y el enlace quedaba sin nombre (Lighthouse link-name). */}
+        <Link href="/" aria-label="DaleControl — inicio" style={{ display: "flex", alignItems: "center", gap: 9, flex: "0 0 auto", textDecoration: "none", color: "#0f172a" }}>
           <BrandGlyph size={26} />
           <span className="dcv4-brandtext" style={{ fontFamily: "var(--font-logo, var(--font-sans, system-ui, sans-serif))", fontWeight: 800, fontSize: 17.5, letterSpacing: "-0.025em", whiteSpace: "nowrap" }}>
             <span style={{ color: BRAND.morado }}>Dale</span>Control

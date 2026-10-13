@@ -115,7 +115,7 @@ function Modelos3dFace() {
         <span className="dch3-3d__view">
           <Image
             src="/landing/rx-3d.webp"
-            alt=""
+            alt="Modelo 3D de un CBCT en el visor de DaleControl"
             width={349}
             height={316}
             sizes="240px"

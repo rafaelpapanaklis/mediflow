@@ -35,6 +35,14 @@ export function PanelVivo() {
   const [visible, setVisible] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [elegido, setElegido] = useState(false);
+  // 12-oct-2026 (ws1-t4, velocidad de la portada): los seis .mp4 (3,9 MB) y sus
+  // pósters bajaban en cuanto abría la página —el primero con preload auto—
+  // y le quitaban el ancho de banda al hero en el celular (Lighthouse los
+  // contaba antes del LCP). Ahora nacen con preload="none" y sin póster (el
+  // del activo también pesaba 55 KB con prioridad Medium, antes que las
+  // fuentes); a 600 px de entrar en pantalla (`cerca`) se encienden los
+  // pósters y el preload de todos, así que al llegar ya están como antes.
+  const [cerca, setCerca] = useState(false);
   const ultimoT = useRef(0);
 
   useEffect(() => {
@@ -42,11 +50,24 @@ export function PanelVivo() {
     const el = raiz.current;
     if (!el || typeof IntersectionObserver === "undefined") {
       setVisible(true);
+      setCerca(true);
       return;
     }
     const io = new IntersectionObserver((entries) => setVisible(entries.some((e) => e.isIntersecting)), { threshold: 0.25 });
     io.observe(el);
-    return () => io.disconnect();
+    const ioCerca = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setCerca(true);
+        ioCerca.disconnect();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    ioCerca.observe(el);
+    return () => {
+      io.disconnect();
+      ioCerca.disconnect();
+    };
   }, []);
 
   // Reproduce solo el activo, y solo mientras se ve; los demás quietos al inicio.
@@ -113,11 +134,11 @@ export function PanelVivo() {
               ref={(el) => { videos.current[i] = el; }}
               className={`dcv4-pv__video${i === activo ? " is-on" : ""}`}
               src={`/landing/videos/${fv.id}.mp4`}
-              poster={`/landing/videos/${fv.id}.webp`}
+              poster={cerca ? `/landing/videos/${fv.id}.webp` : undefined}
               muted
               loop
               playsInline
-              preload={i === 0 ? "auto" : "metadata"}
+              preload={cerca ? (i === 0 ? "auto" : "metadata") : "none"}
               disablePictureInPicture
               onTimeUpdate={alAvanzar(i)}
               tabIndex={-1}

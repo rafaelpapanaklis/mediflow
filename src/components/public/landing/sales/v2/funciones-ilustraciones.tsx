@@ -54,20 +54,23 @@ export function IluPaginaWeb() {
           <span className="dcf3-web__url"><IconoPanel nombre="lock" size={11} /> clinica-altabrisa.dalecontrol.com</span>
         </div>
         <div className="dcf3-web__page">
-          {/* `unoptimized` + `loading="eager"`: la ventana se veía NEGRA porque el
-              optimizador de next/image se colgaba generando la versión WebP de
-              esta imagen (1120 × 5991) para ciertos anchos (medido el 26-sep:
+          {/* `unoptimized`: la ventana se veía NEGRA porque el optimizador de
+              next/image se colgaba generando la versión WebP de esta imagen
+              (1120 × 5991) para ciertos anchos (medido el 26-sep:
               `/_next/image?…&w=640` con Accept image/webp no contesta nunca y
               el <img> se queda con `complete: false`). El archivo ya viene
               optimizado (WebP, ~290 KB): se sirve tal cual, sin pasar por el
-              optimizador, y se pide de entrada. */}
+              optimizador.
+              12-oct-2026 (ws1-t4, velocidad): ya NO va `eager`. Con eager,
+              next/image le ponía además <link rel=preload>: 290 KB (y 7 MP
+              que decodificar) bajaban antes que el hero, estando la sección a
+              5 pantallas de distancia. `lazy` la pide al acercarse. */}
           <Image
             src={`/landing/web/altabrisa-${PLANTILLA_EJEMPLO}.webp`}
-            alt=""
+            alt="Página web de ejemplo de una clínica dental creada con DaleControl, vista completa"
             width={1120}
             height={ALTO_WEB}
             sizes="(max-width: 720px) 90vw, 380px"
-            loading="eager"
             unoptimized
             className="dcf3-web__shot"
           />
@@ -76,7 +79,7 @@ export function IluPaginaWeb() {
           <span className="dcf3-web__tlabel">8 plantillas</span>
           <span className="dcf3-web__tlist">
             {PLANTILLAS.map(([id, nombre], i) => (
-              <Image key={id} src={`/landing/web/plantilla-${id}.webp`} alt="" title={nombre} width={284} height={178} sizes="48px" className={id === PLANTILLA_EJEMPLO ? "is-on" : undefined} />
+              <Image key={id} src={`/landing/web/plantilla-${id}.webp`} alt={`Plantilla ${nombre} para la página web de la clínica`} title={nombre} width={284} height={178} sizes="48px" className={id === PLANTILLA_EJEMPLO ? "is-on" : undefined} />
             ))}
           </span>
         </div>
@@ -244,11 +247,10 @@ export function IluCbct() {
           <Image
             key={v.src}
             src={v.src}
-            alt=""
+            alt={`${v.label} de un estudio CBCT en el visor de DaleControl`}
             width={v.w}
             height={v.h}
             sizes="(max-width: 640px) 90vw, 360px"
-            loading="eager"
             className="dcf3-cb__img"
             style={{ animationDelay: `${i * 2.5}s` }}
           />

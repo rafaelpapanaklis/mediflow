@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { SalesNav } from "./sales/nav";
 import { Header } from "./header";
 import { SpecNav } from "./specialty/spec-nav";
@@ -30,10 +29,14 @@ function useHasSupabaseSession(): boolean {
     // La cookie puede estar VENCIDA (quedaba "Ir al panel" fantasma que
     // rebotaba al login). Validamos la sesión real; getSession auto-renueva
     // con el refresh token si puede, y si no, el nav queda como visitante.
+    //
+    // 12-oct-2026 (ws1-t4, velocidad de la portada): supabase-js pesa 150 KB
+    // (43 KB por la red) y el visitante sin sesión —el 99 % de la portada— no
+    // lo necesita. Con `import()` queda en un chunk aparte que SOLO se pide
+    // cuando hay cookie; antes viajaba en el JS inicial de todas las landings.
     let cancelled = false;
-    const supabase = createClient();
-    supabase.auth
-      .getSession()
+    import("@/lib/supabase/client")
+      .then(({ createClient }) => createClient().auth.getSession())
       .then(({ data }) => {
         if (!cancelled && data.session) setIsLoggedIn(true);
       })

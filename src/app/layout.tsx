@@ -13,8 +13,7 @@ import { EmbudoVistas } from "@/components/analytics/embudo-vistas";
 import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
 import { TiktokPixel } from "@/components/analytics/tiktok-pixel";
 import { RecargaPorDespliegue } from "@/components/recarga-por-despliegue";
-import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
-import { META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
+import { scriptEtiquetasDiferidas } from "@/lib/analytics/etiquetas-diferidas";
 import { cargarInsightsDeVercel } from "@/lib/analytics/vercel-insights";
 import "./globals.css";
 
@@ -82,48 +81,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body className={`${sans.variable} ${mono.variable} ${logo.variable} antialiased font-sans bg-background text-foreground`}>
-        {/* Google tag (gtag.js) — Google Ads AW-18276007996 (conversiones) */}
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=AW-18276007996"
-          strategy="afterInteractive"
-        />
-        {/* El mismo gtag.js sirve a varios destinos: GA4 se suma como un config
-            extra DESPUÉS del de Ads, que no cambia. GA4 solo se configura en
-            rutas públicas (PRIVATE_PATH_PATTERN) y con send_page_view:false,
-            porque el page_view lo manda <GaPageview /> en cada navegación. */}
-        <Script id="ga-gtag" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'AW-18276007996');
-            if (!new RegExp(${JSON.stringify(PRIVATE_PATH_PATTERN)}).test(location.pathname)) {
-              gtag('config', ${JSON.stringify(GA4_MEASUREMENT_ID)}, { send_page_view: false });
-            }
-          `}
-        </Script>
-        {/* Píxel de Meta (1692815882024068 — "DaleControl Web"): snippet oficial
-            de arranque de fbq, envuelto en el MISMO guard de rutas privadas que
-            GA4. En el panel no se carga fbevents.js ni se define fbq: /paciente
-            y /portal no mandan señales a Meta.
-            Aquí solo va el init. El PageView lo manda <MetaPixelPageview /> en
-            cada navegación, mismo criterio que el send_page_view:false de GA4.
-            Sin <noscript><img>: este layout es el raíz y ese pixel de respaldo
-            se renderizaría también en las rutas privadas. */}
-        <Script id="meta-pixel" strategy="afterInteractive">
-          {`
-            if (!new RegExp(${JSON.stringify(PRIVATE_PATH_PATTERN)}).test(location.pathname)) {
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window, document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', ${JSON.stringify(META_PIXEL_ID)});
-            }
-          `}
+        {/* Google tag (gtag.js — Ads AW-18276007996 + GA4) y píxel de Meta
+            (1692815882024068 — "DaleControl Web"), DIFERIDOS (12-oct-2026,
+            ws1-t4, encargo de ws7, punto 3a). El stub de gtag (dataLayer) y el
+            stub oficial de fbq (fbq.queue) se definen aquí mismo, como antes;
+            lo único que espera es la red: gtag.js y fbevents.js se piden cuando
+            el navegador queda ocioso tras `load` (tope 4 s) o al primer gesto.
+            Mismo guard de rutas privadas: GA4 y fbq solo en rutas públicas; el
+            PageView/page_view lo mandan <GaPageview/> y <MetaPixelPageview/>.
+            Sin <noscript><img> de Meta: este layout es el raíz y ese pixel de
+            respaldo se renderizaría también en las rutas privadas.
+            Detalle y pruebas: src/lib/analytics/etiquetas-diferidas.ts. */}
+        <Script id="etiquetas-diferidas" strategy="afterInteractive">
+          {scriptEtiquetasDiferidas()}
         </Script>
         {/* Toaster centralizado: única posición (top-right), duraciones
             consistentes (3s success/info, 5s error). Estilos globales

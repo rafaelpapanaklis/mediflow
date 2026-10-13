@@ -368,7 +368,8 @@ export const MODULE_PAGES: { slug: ProductoSlug; glyph: string; color: string; t
  * Sin cifras nuevas, sin certificaciones, sin integraciones que no existan.
  */
 export const SWITCH_REASONS: { icono: string; tono: 'azul' | 'verde' | 'violeta' | 'ambar'; title: string; line: string }[] = [
-  { icono: 'language', tono: 'azul', title: 'Tu página web, gratis', line: '8 plantillas, 100 % personalizable. La cita que piden desde tu web cae en tu agenda.' },
+  // 12-oct-2026 (ws7, punto 3d): era «Tu página web, gratis», el mismo h3 que la tarjeta de Funciones (encabezado duplicado).
+  { icono: 'language', tono: 'azul', title: 'Página web de tu clínica, gratis', line: '8 plantillas, 100 % personalizable. La cita que piden desde tu web cae en tu agenda.' },
   { icono: 'point_of_sale', tono: 'verde', title: 'Cobra por WhatsApp con Mercado Pago', line: 'Tratamientos y mensualidades: el link sale de la factura y el dinero cae en tu cuenta.' },
   { icono: 'auto_awesome', tono: 'violeta', title: 'Sabina, tu asistente en el panel', line: 'Pregúntale por deudas, huecos o ingresos y contesta con los datos reales de tu clínica.' },
   { icono: 'folder', tono: 'ambar', title: 'Importa tu clínica en 1 clic', line: 'Desde Excel o tu panel anterior, con migración asistida gratis por nuestro equipo.' },

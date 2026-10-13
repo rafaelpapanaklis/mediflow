@@ -13,13 +13,28 @@ import { getResolvedPlans } from "@/lib/plans";
 import { TodoElPanel } from "@/components/public/landing/sales/v2/todo-el-panel";
 import "@/components/public/landing/sales/v2/landing-v2.css";
 import { serializeJsonLd } from "@/lib/json-ld";
+import { SAME_AS, TITULO_PORTADA, descripcionPortada } from "@/components/public/landing/sales/v2/portada-seo";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
-export const metadata: Metadata = {
-  title: { absolute: "DaleControl · El software dental más completo de México" },
-  description:
-    "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $419 al mes — y tu primer mes por solo $19.",
+/**
+ * 12-oct-2026 (ws1-t4, encargo de ws7, punto 3c): la descripción pasó de 167 a
+ * 140 caracteres y el precio del primer mes sale de plan_configs (antes iban
+ * dos precios escritos a mano). getResolvedPlans cachea 60 s: la segunda
+ * llamada (la de la página) no vuelve a la base.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const description = descripcionPortada(cheapestFirstMonthLabel(buildPlanCards(await getResolvedPlans())));
+  return {
+    ...metadataFija,
+    description,
+    openGraph: { ...metadataFija.openGraph, description },
+    twitter: { ...metadataFija.twitter, description },
+  };
+}
+
+const metadataFija = {
+  title: { absolute: TITULO_PORTADA },
   keywords: [
     "software dental",
     "software para dentistas",
@@ -36,19 +51,15 @@ export const metadata: Metadata = {
     locale: "es_MX",
     url: SITE_URL,
     siteName: "DaleControl",
-    title: "DaleControl · El software dental más completo de México",
-    description:
-      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $419 al mes — y tu primer mes por solo $19.",
+    title: TITULO_PORTADA,
     images: [{ url: "/og/home", width: 1200, height: 630, alt: "DaleControl — software dental todo-en-uno" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "DaleControl · El software dental más completo de México",
-    description:
-      "Dale control total a tu clínica: 30+ funciones en un solo lugar — agenda, WhatsApp, radiografías con IA y modelos 3D. Desde $419 al mes — y tu primer mes por solo $19.",
+    title: TITULO_PORTADA,
     images: ["/og/home"],
   },
-};
+} satisfies Metadata;
 
 /**
  * La página sigue siendo ESTÁTICA (SSG): la sesión sólo afecta al nav y se
@@ -83,6 +94,8 @@ export default async function HomePage() {
         url: SITE_URL,
         description: "Software de gestión para clínicas dentales en México.",
         areaServed: "MX",
+        // 12-oct-2026 (ws7, punto 3f): perfiles oficiales — portada-seo.ts.
+        sameAs: SAME_AS,
       },
       {
         "@type": "WebSite",

@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
  * terminar: entre el final de uno y el primer cuadro del siguiente la pantalla
  * se quedaba en negro, y si el elemento nuevo no arrancaba solo, ahí se
  * quedaba. Ahora es como el panel en vivo de t1: TODOS los vídeos están
- * montados y apilados desde el principio (`preload="auto"`), solo el activo
+ * montados y apilados desde el principio (preload auto en cuanto se acerca la sección, ver `cerca`), solo el activo
  * se ve (opacity) y al terminar se enciende el siguiente —que ya está cargado
  * y en su primer cuadro— con un fundido; tras el último vuelve al primero.
  * Nunca hay un cuadro negro: debajo siempre está el póster del activo.
@@ -35,17 +35,37 @@ export function LaptopVideo({ videos, label }: { videos: VideoLaptop[]; label: s
   const [activo, setActivo] = useState(0);
   const [visible, setVisible] = useState(false);
   const [reduced, setReduced] = useState(false);
+  // 12-oct-2026 (ws1-t4, velocidad de la portada): con preload auto los dos
+  // .mp4 (2 MB) bajaban al abrir la página y competían con el hero en el
+  // celular. Nacen con preload="none" y sin póster (el del activo, 77 KB, bajaba
+  // con prioridad Medium antes que las fuentes); a 600 px de entrar (`cerca`)
+  // se encienden pósters y preload, y la sección se comporta
+  // igual que antes (todos cargados, sin cuadro negro al cambiar).
+  const [cerca, setCerca] = useState(false);
 
   useEffect(() => {
     setReduced(reducedMotion());
     const el = raiz.current;
     if (!el || typeof IntersectionObserver === "undefined") {
       setVisible(true);
+      setCerca(true);
       return;
     }
     const io = new IntersectionObserver((entries) => setVisible(entries.some((e) => e.isIntersecting)), { threshold: 0.2 });
     io.observe(el);
-    return () => io.disconnect();
+    const ioCerca = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setCerca(true);
+        ioCerca.disconnect();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    ioCerca.observe(el);
+    return () => {
+      io.disconnect();
+      ioCerca.disconnect();
+    };
   }, []);
 
   // Reproduce solo el activo, y solo mientras se ve; los demás quietos en su
@@ -78,10 +98,10 @@ export function LaptopVideo({ videos, label }: { videos: VideoLaptop[]; label: s
           className={`dctp-laptop__video${i === activo ? " is-on" : ""}`}
           style={{ transitionDuration: `${FUNDIDO_MS}ms` }}
           src={v.src}
-          poster={v.poster}
+          poster={cerca ? v.poster : undefined}
           muted
           playsInline
-          preload="auto"
+          preload={cerca ? "auto" : "none"}
           loop={videos.length === 1}
           disablePictureInPicture
           onEnded={siguiente}
