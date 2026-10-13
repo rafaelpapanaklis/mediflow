@@ -9,6 +9,7 @@ import { AvisosVestibles } from "@/components/dashboard/layout-rediseno/avisos";
 import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { GaPageview } from "@/components/analytics/ga-pageview";
 import { AdsClickCapture } from "@/components/analytics/ads-click-capture";
+import { EmbudoVistas } from "@/components/analytics/embudo-vistas";
 import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
 import { TiktokPixel } from "@/components/analytics/tiktok-pixel";
 import { RecargaPorDespliegue } from "@/components/recarga-por-despliegue";
@@ -176,6 +177,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Clic de Google Ads (gclid/gbraid/wbraid) → cookie dc_ads de 90 días; el
             alta la guarda ligada a la clínica. Solo rutas públicas. */}
         <AdsClickCapture />
+        {/* Embudo: landing_vista al abrir la portada (GA4 + analítica propia). */}
+        <EmbudoVistas />
         {/* Tras un despliegue, la pestaña que ya estaba abierta pide fragmentos de
             JS que ya no existen. Esto atrapa los que no llegan a error.tsx y
             recarga UNA vez (o avisa, si hay algo a medio escribir). */}

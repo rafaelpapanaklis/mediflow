@@ -10,8 +10,8 @@
 //
 // Qué hace por llamada (todo en el navegador, nunca lanza, nunca navega):
 //   1. no hace NADA en rutas privadas (isPrivatePath): ni GA4 ni propio;
-//   2. «primera visita»: guarda utm_source/utm_campaign/gclid/fbclid de la
-//      PRIMERA llegada con parámetros (localStorage, una vez, no se pisa);
+//   2. «primera visita»: guarda utm_source/utm_medium/utm_campaign/gclid/fbclid/
+//      ttclid de la PRIMERA llegada con parámetros (localStorage, una vez, no se pisa);
 //   3. manda el evento a GA4 (gtag, con send_to) — registro_ok y pago_ok llevan
 //      además los parámetros de la primera visita;
 //   4. lo cuenta en la analítica propia (tracker, name «paso:<paso>») para que
@@ -23,6 +23,11 @@
 // Pasos que deben salir UNA vez (landing_vista y registro_vista por sesión de
 // navegador; registro_ok, onboarding_completo, checkout_iniciado y pago_ok por
 // `datos.id`) se marcan en sessionStorage/localStorage.
+//
+// Excepción a la regla 1: checkout_iniciado y pago_ok SOLO en las dos pantallas
+// de pago (/dashboard/suspended y /dashboard/suspended/success), que es donde
+// ocurren; ahí no se configura GA4 ni se manda nada que no sea el paso, el plan
+// y el importe (la medición de «Pago completado» ya vive en esa misma pantalla).
 //
 // Sin datos personales: ni correo, ni teléfono, ni nombres. Solo el paso, el
 // origen del botón, el plan, el importe y los parámetros de campaña.
@@ -62,9 +67,23 @@ export interface DatosPaso {
 /** Parámetros de campaña de la PRIMERA visita. */
 export interface PrimeraVisita {
   utm_source?: string;
+  utm_medium?: string;
   utm_campaign?: string;
   gclid?: string;
   fbclid?: string;
+  ttclid?: string;
+}
+
+const CLAVES_PRIMERA_VISITA = ["utm_source", "utm_medium", "utm_campaign", "gclid", "fbclid", "ttclid"] as const;
+
+/** Pantallas de pago (privadas) donde SÍ salen checkout_iniciado y pago_ok. */
+const PANTALLAS_DE_PAGO = new Set(["/dashboard/suspended", "/dashboard/suspended/success"]);
+const PASOS_DE_PAGO = new Set<PasoEmbudo>(["checkout_iniciado", "pago_ok"]);
+
+/** ¿Este paso se mide en esta ruta? Pura. */
+export function pasoPermitidoEn(paso: PasoEmbudo, pathname: string): boolean {
+  if (!isPrivatePath(pathname)) return true;
+  return PASOS_DE_PAGO.has(paso) && PANTALLAS_DE_PAGO.has(pathname.replace(/\/+$/, ""));
 }
 
 export const CLAVE_PRIMERA_VISITA = "dc.primera-visita";
@@ -89,11 +108,11 @@ export function agregarDestinoPaso(fn: DestinoPaso): () => void {
 
 // ── Primera visita ──────────────────────────────────────────────────────────
 
-/** Los 4 parámetros de una query string, limpios y acotados. Puro. */
+/** Los parámetros de campaña de una query string, limpios y acotados. Puro. */
 export function extraerPrimeraVisita(search: string): PrimeraVisita {
   const p = new URLSearchParams(search);
   const out: PrimeraVisita = {};
-  for (const k of ["utm_source", "utm_campaign", "gclid", "fbclid"] as const) {
+  for (const k of CLAVES_PRIMERA_VISITA) {
     const v = limpiarUtm(p.get(k));
     if (v) out[k] = v;
   }
@@ -197,9 +216,11 @@ export type ResultadoPaso = "enviado" | "ya-enviado" | "privada" | "sin-navegado
 export function registrarPaso(paso: PasoEmbudo, datos: DatosPaso = {}): ResultadoPaso {
   try {
     if (typeof window === "undefined") return "sin-navegador";
-    if (isPrivatePath(window.location.pathname)) return "privada";
+    if (!pasoPermitidoEn(paso, window.location.pathname)) return "privada";
 
-    const atribucion = capturarPrimeraVisita();
+    // La «primera visita» solo se captura en rutas públicas: en las pantallas de
+    // pago se lee lo que ya estaba guardado, nunca se guarda lo de esa URL.
+    const atribucion = isPrivatePath(window.location.pathname) ? leerPrimeraVisita() : capturarPrimeraVisita();
     if (yaSalio(paso, datos)) return "ya-enviado";
 
     const gtag = (window as unknown as { gtag?: GtagFn }).gtag;
@@ -226,4 +247,38 @@ export function registrarPaso(paso: PasoEmbudo, datos: DatosPaso = {}): Resultad
   } catch {
     return "sin-navegador";
   }
+}
+
+/**
+ * Como `registrarPaso`, pero espera a que gtag.js exista (el layout lo carga
+ * DESPUÉS de hidratar y la portada puede diferirlo más): sin esto un paso de
+ * apertura de página se marcaría «ya enviado» sin haber llegado a GA4. Reintenta
+ * cada `cadaMs` hasta `maxMs`; si gtag nunca llega (bloqueador) lo registra igual
+ * para la analítica propia y los destinos extra. Devuelve la función que cancela.
+ */
+export function registrarPasoCuandoHayGtag(
+  paso: PasoEmbudo,
+  datos: DatosPaso = {},
+  opciones: { cadaMs?: number; maxMs?: number } = {},
+): () => void {
+  const cadaMs = opciones.cadaMs ?? 150;
+  const maxMs = opciones.maxMs ?? 8000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelado = false;
+  let transcurrido = 0;
+  const intentar = () => {
+    if (cancelado) return;
+    const hayGtag = typeof window !== "undefined" && typeof (window as unknown as { gtag?: unknown }).gtag === "function";
+    if (hayGtag || transcurrido >= maxMs) {
+      registrarPaso(paso, datos);
+      return;
+    }
+    transcurrido += cadaMs;
+    timer = setTimeout(intentar, cadaMs);
+  };
+  intentar();
+  return () => {
+    cancelado = true;
+    if (timer) clearTimeout(timer);
+  };
 }

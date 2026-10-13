@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import {
-  armarEmbudo, leerConteosEmbudo, sinEventosPropios, DIAS_EMBUDO, type FilaEmbudo,
+  armarEmbudo, leerConteosEmbudo, leerEmbudoPorFuente, sinEventosPropios, DIAS_EMBUDO,
+  ORDEN_PASOS, ETIQUETAS_PASO, type FilaEmbudo, type FilaPorFuente,
 } from "@/lib/admin/embudo-captacion";
 
 const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("es-MX"));
@@ -21,6 +22,52 @@ function Fila({ f, max }: { f: FilaEmbudo; max: number }) {
   );
 }
 
+const ENCABEZADOS_CORTOS: Record<(typeof ORDEN_PASOS)[number], string> = {
+  landing_vista: "Portada", clic_empezar: "Empezar", registro_vista: "Registro",
+  registro_enviado: "Enviado", registro_ok: "Clínicas", onboarding_completo: "Activadas",
+  checkout_iniciado: "Pago iniciado", pago_ok: "Pagaron",
+};
+
+function TablaPorFuente({ filas, origenClinica }: { filas: FilaPorFuente[]; origenClinica: boolean }) {
+  if (filas.length === 0) {
+    return <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>Aún no hay datos por fuente en este periodo.</p>;
+  }
+  const celda = { padding: "6px 8px", textAlign: "right" as const, fontSize: 13, color: "var(--text-1)" };
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+        <thead>
+          <tr>
+            <th style={{ ...celda, textAlign: "left", color: "var(--text-3)", fontWeight: 500 }}>Fuente</th>
+            {ORDEN_PASOS.map((c) => (
+              <th key={c} style={{ ...celda, color: "var(--text-3)", fontWeight: 500 }} title={ETIQUETAS_PASO[c]}>
+                {ENCABEZADOS_CORTOS[c]}
+              </th>
+            ))}
+            <th style={{ ...celda, color: "var(--text-3)", fontWeight: 500 }} title="Pagaron ÷ clínicas creadas">% pago</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.fuente} style={{ borderTop: "1px solid var(--border)" }}>
+              <td style={{ ...celda, textAlign: "left", fontWeight: 600 }}>{f.fuente}</td>
+              {ORDEN_PASOS.map((c) => (
+                <td key={c} className="mono" style={celda}>{fmt(f.pasos[c] ?? 0)}</td>
+              ))}
+              <td className="mono" style={celda}>{fmtPct(f.pctPago)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ fontSize: 12, color: "var(--text-3)", margin: "12px 0 0" }}>
+        Portada a «Enviado»: sesiones, por su utm_source (o gclid / sitio de referencia / directo).
+        «Clínicas» en adelante: clínicas creadas en el periodo, por el primer UTM guardado al registrarse.
+        {origenClinica ? "" : " El origen de las clínicas aún no se guarda en la base: todas caen en «sin dato» hasta aplicar sql/ws1-t10-meta-origen.sql."}
+      </p>
+    </div>
+  );
+}
+
 /** Embudo de captación de los últimos 30 días, de la base (ws1-t9). Nunca tumba /admin. */
 export async function TarjetaEmbudo() {
   let conteos;
@@ -30,6 +77,12 @@ export async function TarjetaEmbudo() {
     return null;
   }
   const filas = armarEmbudo(conteos);
+  let porFuente: Awaited<ReturnType<typeof leerEmbudoPorFuente>> | null = null;
+  try {
+    porFuente = await leerEmbudoPorFuente(prisma);
+  } catch {
+    porFuente = null;
+  }
   const max = Math.max(1, ...filas.map((f) => f.total ?? 0));
   const sinPropios = sinEventosPropios(conteos);
   return (
@@ -45,6 +98,13 @@ export async function TarjetaEmbudo() {
           {" "}La columna derecha es el % contra el paso anterior.
         </p>
       </CardNew>
+      {porFuente ? (
+        <div style={{ marginTop: 16 }}>
+          <CardNew title="Embudo por fuente" sub={`Últimos ${DIAS_EMBUDO} días · de dónde llegan (utm_source, anuncios de Google, Meta, TikTok, ChatGPT…)`}>
+            <TablaPorFuente filas={porFuente.filas} origenClinica={porFuente.origenClinica} />
+          </CardNew>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { COOKIE_CONTRATAR, COOKIE_CONTRATAR_MAX_AGE, PERIODO_INICIAL_DEL_ENLACE,
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
+import { registrarPaso, registrarPasoCuandoHayGtag } from "@/lib/analytics/embudo";
 import { trackMetaCompleteRegistration } from "@/lib/analytics/meta-pixel-eventos";
 import { trackTiktokCompleteRegistration } from "@/lib/analytics/tiktok-events";
 import { guardarEleccionAlta } from "@/lib/billing/eleccion-alta";
@@ -146,6 +147,12 @@ export function SignupForm({ planDeEnlace }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialEmail]);
 
+  // Embudo: alguien abrió el registro (una vez por sesión de navegador).
+  useEffect(() => {
+    return registrarPasoCuandoHayGtag("registro_vista", { plan: initialPlan ?? undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // El registro requiere un plan elegido en la home. Sin ?plan válido (y fuera
   // del flujo OAuth, que no arrastra el query) → de vuelta a la sección precios.
   useEffect(() => {
@@ -183,6 +190,8 @@ export function SignupForm({ planDeEnlace }: {
     if (submitLockRef.current) return;
     submitLockRef.current = true;
     setLoading(true);
+    // Embudo: el formulario salió (cuenta intentos, no clínicas: registro_ok es el éxito).
+    registrarPaso("registro_enviado", { plan: form.plan });
     try {
       // Sin slug en el payload: el backend lo autogenera único con sufijo
       // (-1, -2…); mandarlo derivado del nombre bloqueaba nombres comunes
@@ -297,6 +306,9 @@ export function SignupForm({ planDeEnlace }: {
       // los junta. Sin callback: la redirección no espera nada nuevo.
       trackMetaCompleteRegistration(data.metaEventId);
       trackTiktokCompleteRegistration(data.metaEventId); // ws1-t5: mismo event_id (TikTok deduplica con su Events API)
+      // Embudo (ws1-t9): registro_ok con la primera visita (utm/gclid/fbclid/ttclid);
+      // `id` = el eventID del alta (`alta.<clinicId>`), una sola vez por clínica.
+      registrarPaso("registro_ok", { plan: form.plan, id: data.metaEventId });
       // GA4 `sign_up` (WS1-T6): mismo momento, ANTES de la conversión de Ads y sin
       // callback propio → la redirección espera lo mismo que antes. Evento aparte.
       trackGa4SignUp(isOAuthFlow ? "google" : "email");

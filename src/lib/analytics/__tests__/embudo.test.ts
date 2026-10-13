@@ -6,7 +6,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   registrarPaso, agregarDestinoPaso, extraerPrimeraVisita, capturarPrimeraVisita,
-  leerPrimeraVisita, parametrosGa4, PASOS_EMBUDO, CLAVE_PRIMERA_VISITA,
+  leerPrimeraVisita, parametrosGa4, PASOS_EMBUDO, CLAVE_PRIMERA_VISITA, pasoPermitidoEn,
 } from "../embudo";
 import { GA4_MEASUREMENT_ID } from "../ga4";
 
@@ -34,10 +34,10 @@ test("nombres estables y en orden", () => {
   ]);
 });
 
-test("extrae solo utm_source/utm_campaign/gclid/fbclid, limpios", () => {
+test("extrae solo utm_source/medium/campaign, gclid, fbclid y ttclid, limpios", () => {
   assert.deepEqual(
     extraerPrimeraVisita("?utm_source=meta&utm_medium=cpc&utm_campaign=oct%0A&gclid=abc&x=1&fbclid=fb1"),
-    { utm_source: "meta", utm_campaign: "oct", gclid: "abc", fbclid: "fb1" },
+    { utm_source: "meta", utm_medium: "cpc", utm_campaign: "oct", gclid: "abc", fbclid: "fb1" },
   );
 });
 
@@ -85,6 +85,7 @@ test("rutas privadas: nada sale", () => {
   for (const p of ["/dashboard", "/admin/clinics", "/paciente/citas", "/portal/x", "/onboarding"]) {
     navegador(p, "?utm_source=x");
     assert.equal(registrarPaso("clic_empezar"), "privada", p);
+    assert.equal(registrarPaso("pago_ok", { id: "p" }), "privada", p);
     assert.equal(llamadas.length, 0, p);
     assert.equal((globalThis as any).window.localStorage.getItem(CLAVE_PRIMERA_VISITA), null, p);
   }
@@ -109,4 +110,38 @@ test("sin gtag (bloqueador) no lanza y los destinos extra igual avisan", () => {
 test("sin datos personales en los parámetros", () => {
   const p = parametrosGa4("registro_ok", { id: "c1", origen: "hero", plan: "PRO" }, { utm_source: "a" });
   assert.deepEqual(Object.keys(p).sort(), ["origen", "plan", "send_to", "utm_source"]);
+});
+
+test("ttclid y utm_medium entran en la primera visita y viajan en registro_ok / pago_ok", () => {
+  assert.deepEqual(
+    extraerPrimeraVisita("?utm_source=chatgpt&utm_medium=cpc&ttclid=E.C.P.abc123&x=1"),
+    { utm_source: "chatgpt", utm_medium: "cpc", ttclid: "E.C.P.abc123" },
+  );
+  navegador("/signup", "?utm_source=tiktok&ttclid=tt_9");
+  registrarPaso("registro_ok", { id: "c9" });
+  const p = llamadas[0][2] as Record<string, unknown>;
+  assert.equal(p.ttclid, "tt_9");
+  assert.equal(p.utm_source, "tiktok");
+});
+
+test("checkout_iniciado y pago_ok salen en las pantallas de pago; nada más del panel", () => {
+  assert.equal(pasoPermitidoEn("pago_ok", "/dashboard/suspended/success"), true);
+  assert.equal(pasoPermitidoEn("checkout_iniciado", "/dashboard/suspended"), true);
+  assert.equal(pasoPermitidoEn("pago_ok", "/dashboard/patients"), false);
+  assert.equal(pasoPermitidoEn("registro_ok", "/dashboard/suspended"), false);
+  assert.equal(pasoPermitidoEn("landing_vista", "/"), true);
+
+  navegador("/dashboard/suspended/success", "?utm_source=robado&ttclid=zzzzzzzz");
+  (globalThis as any).window.localStorage.setItem(CLAVE_PRIMERA_VISITA, JSON.stringify({ utm_source: "chatgpt" }));
+  assert.equal(registrarPaso("pago_ok", { id: "cs_7", valueMxn: 19 }), "enviado");
+  const p = llamadas[0][2] as Record<string, unknown>;
+  assert.equal(p.utm_source, "chatgpt"); // lo guardado, no lo de esta URL
+  assert.equal(p.ttclid, undefined);
+  assert.equal(registrarPaso("registro_ok", { id: "x" }), "privada");
+});
+
+test("en una pantalla de pago no se guarda una «primera visita» nueva", () => {
+  navegador("/dashboard/suspended", "?utm_source=otro");
+  registrarPaso("checkout_iniciado", { plan: "PRO" });
+  assert.equal((globalThis as any).window.localStorage.getItem(CLAVE_PRIMERA_VISITA), null);
 });

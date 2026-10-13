@@ -1,5 +1,6 @@
 "use client";
 
+import { registrarPaso } from "@/lib/analytics/embudo";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { cuentasDelEnlace, lineasDelEnlace, PERIODO_INICIAL_DEL_ENLACE } from "@/lib/billing/contratar";
 import toast from "react-hot-toast";
@@ -195,6 +196,8 @@ export function SuspendedPlanCards({
         throw new Error(data.error ?? t("pages.suspended.checkoutError"));
       }
       // Pago iniciado: la elección del alta ya cumplió; fuera del navegador.
+      // Embudo (ws1-t9): checkout_iniciado, con el plan y sin datos personales.
+      registrarPaso("checkout_iniciado", { plan });
       borrarEleccionAlta();
       window.location.href = data.url;
     } catch (err) {

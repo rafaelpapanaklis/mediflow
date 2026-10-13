@@ -10,6 +10,7 @@
  */
 
 import { trackPaymentCompletedConversion } from "@/lib/gtag";
+import { registrarPaso } from "@/lib/analytics/embudo";
 import { trackGa4Purchase } from "@/lib/analytics/ga4";
 import { claveMarcaLocal, type ConversionPagoCompletado } from "./conversion-pago";
 
@@ -37,6 +38,10 @@ export function medirPagoCompletado(conversion: ConversionPagoCompletado): Resul
     ...(plan ? { item: { id: plan.id, name: plan.name, variant: plan.billing } } : {}),
   });
   if (!ads && !ga4) return "sin-gtag";
+
+  // Embudo (ws1-t9): pago_ok con la primera visita (utm/gclid/fbclid/ttclid), el
+  // mismo importe sin IVA y transaction_id; una sola vez por id. Nunca lanza.
+  registrarPaso("pago_ok", { id: transactionId, valueMxn, currency, plan: plan?.id });
 
   try {
     window.localStorage.setItem(clave, new Date().toISOString());
