@@ -60,3 +60,12 @@ test("la CSP deja cargar Draco: workers desde blob:, decodificador wasm y wrappe
   assert.match(dir("script-src"), /'self'/);
   assert.match(dir("connect-src"), /'self'/);
 });
+
+test("la CSP deja cargar el píxel de TikTok (ws1-t5): script-src analytics.tiktok.com; connect/img por https:; sin comodín a todo TikTok", async () => {
+  const csp = valor((await cargar()).find((x) => x.source === "/:path*"), "Content-Security-Policy")!;
+  const dir = (n: string) => csp.split("; ").find((d) => d.startsWith(`${n} `)) ?? "";
+  assert.match(dir("script-src"), /(^| )https:\/\/analytics\.tiktok\.com( |$)/);
+  assert.doesNotMatch(dir("script-src"), /\*\.tiktok/);
+  assert.match(dir("connect-src"), / https:( |$)/);
+  assert.match(dir("img-src"), / https:( |$)/);
+});

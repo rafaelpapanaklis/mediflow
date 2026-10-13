@@ -149,7 +149,11 @@ const nextConfig = {
               // (https + wss a api.livechatinc.com) e imágenes ya caben en connect-src / img-src.
               // googleadservices/googleads.g.doubleclick = tag de conversiones de Google Ads (gtag ya permitido vía googletagmanager).
               // connect.facebook.net = SDK JS de Meta (WhatsApp Embedded Signup: botón "Conectar WhatsApp").
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://cdn.livechatinc.com https://*.livechatinc.com https://*.livechat-static.com https://connect.facebook.net",
+              // analytics.tiktok.com = SDK del píxel de TikTok (events.js y sus módulos /i18n/pixel/static/…); lo
+              // pide <TiktokPixel/> solo en páginas de DaleControl. Sus peticiones (analytics.tiktok.com,
+              // analytics-ipv6.tiktokw.com) e imágenes caben ya en connect-src / img-src (https:). Fuente: el
+              // snippet oficial de TikTok Pixel (events.js desde analytics.tiktok.com) y su guía de CSP.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://cdn.livechatinc.com https://*.livechatinc.com https://*.livechat-static.com https://connect.facebook.net https://analytics.tiktok.com",
               // LiveChat también en style-src / font-src: hojas y fuentes del widget.
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.livechatinc.com https://*.livechat-static.com",
               "font-src 'self' https://fonts.gstatic.com data: https://*.livechatinc.com https://*.livechat-static.com",
