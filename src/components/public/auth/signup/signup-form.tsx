@@ -305,7 +305,7 @@ export function SignupForm({ planDeEnlace }: {
       // el alta; el servidor manda el mismo por la API de Conversiones y Meta
       // los junta. Sin callback: la redirección no espera nada nuevo.
       trackMetaCompleteRegistration(data.metaEventId);
-      trackTiktokCompleteRegistration(data.metaEventId); // ws1-t5: mismo event_id (TikTok deduplica con su Events API)
+      trackTiktokCompleteRegistration(data.metaEventId, { email: form.email, plan: form.plan }); // ws1-t5: mismo event_id; identify con correo SHA-256 solo aquí y en el pago
       // Embudo (ws1-t9): registro_ok con la primera visita (utm/gclid/fbclid/ttclid);
       // `id` = el eventID del alta (`alta.<clinicId>`), una sola vez por clínica.
       registrarPaso("registro_ok", { plan: form.plan, id: data.metaEventId });

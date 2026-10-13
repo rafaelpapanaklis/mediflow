@@ -207,6 +207,7 @@ export async function POST(req: NextRequest) {
     });
     // CompleteRegistration de TikTok (ws1-t5): mismo event_id que Meta.
     enviarRegistroTiktokEnSegundoPlano({
+      plan: data.plan,
       clinicId: clinic.id,
       email,
       phone: data.phone,

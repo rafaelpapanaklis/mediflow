@@ -14,11 +14,19 @@ import type { ConversionPagoCompletado } from "./conversion-pago";
 import { medirCompraMeta } from "@/lib/analytics/meta-pixel-eventos";
 import { medirCompraTiktok } from "@/lib/analytics/tiktok-events";
 
-export function ConversionPagoCompletadoMeta({ transactionId, valueMxn, currency }: ConversionPagoCompletado) {
+export function ConversionPagoCompletadoMeta({
+  transactionId,
+  valueMxn,
+  currency,
+  plan,
+  emailSha256,
+}: ConversionPagoCompletado & { emailSha256?: string | null }) {
+  const planId = plan?.id ?? null;
   useEffect(() => {
     medirCompraMeta({ transactionId, valueMxn, currency });
-    medirCompraTiktok({ transactionId, valueMxn, currency }); // ws1-t5: CompletePayment, mismo event_id
-  }, [transactionId, valueMxn, currency]);
+    // ws1-t5: Purchase de TikTok, mismo event_id; identify con el correo en SHA-256 (solo aquí y en el registro)
+    medirCompraTiktok({ transactionId, valueMxn, currency, plan: planId, emailSha256 });
+  }, [transactionId, valueMxn, currency, planId, emailSha256]);
 
   return null;
 }

@@ -2,7 +2,7 @@
 // falso: sin red ni base.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TIKTOK_PIXEL_ID } from "../tiktok-pixel";
+import { TIKTOK_PIXEL_ID, esPaginaDaleControl } from "../tiktok-pixel";
 import {
   construirEventoTiktok,
   enviarEventosTiktok,
@@ -11,7 +11,8 @@ import {
   TIKTOK_EVENTS_URL,
 } from "../tiktok-capi";
 import { sha256 } from "../meta-capi";
-import { cargarPixelTiktok, trackTiktokCompleteRegistration, trackTiktokContactWhatsapp, medirCompraTiktok, claveMarcaTiktok } from "../tiktok-events";
+import { cargarPixelTiktok, trackTiktokCompleteRegistration, trackTiktokClickButton, trackTiktokViewContent, hashCorreoNavegador, identificarTiktok, medirCompraTiktok, claveMarcaTiktok } from "../tiktok-events";
+import { destinoTiktokYWhatsapp } from "../tiktok-embudo";
 import { cookieParaTiktok, extraerTtclid, ttclidDeCookies, ttpDeCookies } from "../../ads/tiktok-click";
 import { enviarCompraTiktokDeSesion, enviarCompraTiktokSpei, enviarRegistroTiktok, metadataTiktokDePeticion, type PuertosTiktok } from "../tiktok-capi.server";
 import type { EventoTiktok } from "../tiktok-capi";
@@ -29,40 +30,94 @@ test("el Pixel ID es el de «DaleControl Pixel»", () => {
   assert.equal(TIKTOK_PIXEL_ID, "DB6NHKJC77UDJT303SAG");
 });
 
-test("Contact: ttq.track con event_id y solo el origen; ni en rutas privadas ni sin ttq", () => {
+test("lista blanca: solo páginas de DaleControl; nunca clínicas ni reservas", () => {
+  for (const ok of ["/", "/signup", "/precios", "/blog", "/blog/como-elegir", "/software-agenda-dental", "/casos-de-uso/ortodoncia"]) {
+    assert.equal(esPaginaDaleControl(ok), true, ok);
+  }
+  for (const no of ["/clinica-sonrisa", "/reservar/clinica-sonrisa", "/reservar", "/cita/abc", "/resena/x", "/r/abc", "/share/x", "/dashboard", "/paciente", "/blogger", "/clinicas", "/presupuesto/1", "/consentimiento/1"]) {
+    assert.equal(esPaginaDaleControl(no), false, no);
+  }
+});
+
+test("ClickButton: content_name = origen, content_type product, content_id = plan; no en clínicas ni privadas", () => {
   const llamadas: unknown[][] = [];
   const ttq = { track: (...a: unknown[]) => llamadas.push(a) };
-  conWindow("/", { ttq }, () => assert.equal(trackTiktokContactWhatsapp("hero", "wa.hero.x"), true));
-  assert.deepEqual(llamadas[0], ["Contact", { content_name: "whatsapp_hero" }, { event_id: "wa.hero.x" }]);
-  for (const ruta of ["/dashboard/pacientes", "/paciente/citas", "/portal/x", "/admin"]) {
-    conWindow(ruta, { ttq }, () => assert.equal(trackTiktokContactWhatsapp("hero", "a"), false));
+  conWindow("/", { ttq }, () => {
+    assert.equal(trackTiktokClickButton("hero", "ce.hero.1", "PRO"), true);
+    assert.equal(trackTiktokClickButton("juan@x.com", "x"), false);
+  });
+  assert.deepEqual(llamadas[0], ["ClickButton", { content_type: "product", content_name: "hero", content_id: "PRO" }, { event_id: "ce.hero.1" }]);
+  for (const ruta of ["/dashboard/pacientes", "/paciente/citas", "/admin", "/mi-clinica", "/reservar/mi-clinica"]) {
+    conWindow(ruta, { ttq }, () => {
+      assert.equal(trackTiktokClickButton("hero", "a"), false);
+      assert.equal(trackTiktokViewContent("a"), false);
+    });
   }
-  conWindow("/", {}, () => assert.equal(trackTiktokContactWhatsapp("hero", "a"), false));
+  conWindow("/", {}, () => assert.equal(trackTiktokClickButton("hero", "a"), false));
   assert.equal(llamadas.length, 1);
 });
 
-test("CompleteRegistration: con event_id manda; sin id no", () => {
+test("ViewContent en la portada", () => {
   const llamadas: unknown[][] = [];
-  const ttq = { track: (...a: unknown[]) => llamadas.push(a) };
-  conWindow("/signup", { ttq }, () => {
-    assert.equal(trackTiktokCompleteRegistration("alta.c1"), true);
-    assert.equal(trackTiktokCompleteRegistration(null), false);
-  });
-  assert.deepEqual(llamadas, [["CompleteRegistration", {}, { event_id: "alta.c1" }]]);
+  conWindow("/", { ttq: { track: (...a: unknown[]) => llamadas.push(a) } }, () => assert.equal(trackTiktokViewContent("vc.1"), true));
+  assert.deepEqual(llamadas[0], ["ViewContent", { content_type: "product", content_name: "portada" }, { event_id: "vc.1" }]);
 });
 
-test("CompletePayment: valor sin IVA, event_id = sesión, una sola vez por navegador", () => {
+test("destino del embudo: landing_vista→ViewContent, clic_empezar y whatsapp_clic→ClickButton; Lead de TikTok nunca", () => {
+  const llamadas: unknown[][] = [];
+  conWindow("/", { ttq: { track: (...a: unknown[]) => llamadas.push(a) } }, () => {
+    destinoTiktokYWhatsapp("landing_vista", {}, {});
+    destinoTiktokYWhatsapp("clic_empezar", { origen: "precio", plan: "PRO" }, {});
+    destinoTiktokYWhatsapp("whatsapp_clic", { origen: "banda" }, {});
+    destinoTiktokYWhatsapp("registro_ok", { id: "alta.c" }, {});
+    destinoTiktokYWhatsapp("pago_ok", { id: "cs_1" }, {});
+  });
+  assert.deepEqual(llamadas.map((l) => [l[0], (l[1] as Record<string, unknown>).content_name, (l[1] as Record<string, unknown>).content_id]), [
+    ["ViewContent", "portada", undefined],
+    ["ClickButton", "precio", "PRO"],
+    ["ClickButton", "banda", undefined],
+  ]);
+  assert.ok(llamadas.every((l) => l[0] !== "Lead"));
+});
+
+test("CompleteRegistration: con event_id y plan; sin id no; identify solo con el hash (nunca el correo en claro)", async () => {
+  const llamadas: unknown[][] = [];
+  const identifies: unknown[] = [];
+  const ttq = { track: (...a: unknown[]) => llamadas.push(a), identify: (d: unknown) => identifies.push(d) };
+  const g = globalThis as unknown as { window?: unknown };
+  const antes = g.window;
+  g.window = { location: { pathname: "/signup" }, ttq };
+  try {
+    assert.equal(trackTiktokCompleteRegistration(null), false);
+    assert.equal(trackTiktokCompleteRegistration("alta.c1", { email: " Dr@Clinica.MX ", plan: "PRO" }), true);
+    await new Promise((r) => setTimeout(r, 20));
+  } finally { g.window = antes; }
+  assert.deepEqual(llamadas, [["CompleteRegistration", { content_type: "product", content_id: "PRO" }, { event_id: "alta.c1" }]]);
+  assert.equal(identifies.length, 1);
+  assert.deepEqual(identifies[0], { email: sha256("dr@clinica.mx") });
+  assert.ok(!JSON.stringify([llamadas, identifies]).includes("clinica.mx"));
+});
+
+test("hash del navegador = SHA-256 del correo normalizado; inválidos no hacen identify", async () => {
+  assert.equal(await hashCorreoNavegador("  Dr@Clinica.MX "), sha256("dr@clinica.mx"));
+  assert.equal(await hashCorreoNavegador("no-es-correo"), null);
+  assert.equal(identificarTiktok("dr@clinica.mx"), false); // el correo en claro jamás pasa
+});
+
+test("Purchase: valor sin IVA, plan, identify con hash, event_id = sesión, una sola vez por navegador", () => {
   const llamadas: unknown[][] = [];
   const guardado = new Map<string, string>();
+  const identifies: unknown[] = [];
   const ext = {
-    ttq: { track: (...a: unknown[]) => llamadas.push(a) },
+    ttq: { track: (...a: unknown[]) => llamadas.push(a), identify: (d: unknown) => identifies.push(d) },
     localStorage: { getItem: (k: string) => guardado.get(k) ?? null, setItem: (k: string, v: string) => void guardado.set(k, v) },
   };
   conWindow("/dashboard/suspended/success", ext, () => {
-    assert.equal(medirCompraTiktok({ transactionId: "cs_live_1", valueMxn: 449.14, currency: "mxn" }), "enviada");
+    assert.equal(medirCompraTiktok({ transactionId: "cs_live_1", valueMxn: 449.14, currency: "mxn", plan: "PRO", emailSha256: sha256("dr@clinica.mx") }), "enviada");
     assert.equal(medirCompraTiktok({ transactionId: "cs_live_1", valueMxn: 449.14, currency: "mxn" }), "ya-enviada");
   });
-  assert.deepEqual(llamadas, [["CompletePayment", { value: 449.14, currency: "MXN" }, { event_id: "cs_live_1" }]]);
+  assert.deepEqual(llamadas, [["Purchase", { content_type: "product", value: 449.14, currency: "MXN", content_id: "PRO" }, { event_id: "cs_live_1" }]]);
+  assert.deepEqual(identifies, [{ email: sha256("dr@clinica.mx") }]);
   assert.ok(guardado.has(claveMarcaTiktok("cs_live_1")));
 });
 
@@ -97,14 +152,14 @@ test("evento CompleteRegistration: correo y teléfono solo en SHA-256, sin datos
   assert.equal(ev.user.email, sha256("juan@clinica.mx"));
   assert.equal(ev.user.phone_number, sha256("+525512345678"));
   assert.equal(ev.user.ttclid, TTCLID);
-  assert.equal(ev.properties, undefined);
+  assert.deepEqual(ev.properties, { content_type: "product" });
   assert.ok(!JSON.stringify(ev).includes("juan@clinica.mx"));
   assert.ok(!JSON.stringify(ev).includes("5512345678"));
 });
 
-test("evento CompletePayment: valor redondeado a centavos, MXN; inválidos se descartan", () => {
+test("evento Purchase: valor redondeado a centavos, MXN; inválidos se descartan", () => {
   const ev = construirEventoTiktok({
-    eventName: "CompletePayment",
+    eventName: "Purchase",
     eventId: "cs_live_1",
     eventTime: 1,
     value: 449.1399,
@@ -112,7 +167,7 @@ test("evento CompletePayment: valor redondeado a centavos, MXN; inválidos se de
     phone: "123",
     ttclid: "<x>",
   });
-  assert.deepEqual(ev.properties, { value: 449.14, currency: "MXN", content_type: "product" });
+  assert.deepEqual(ev.properties, { content_type: "product", value: 449.14, currency: "MXN" });
   assert.deepEqual(ev.user, {});
   assert.equal(telefonoE164("5215512345678"), "+525512345678");
 });
@@ -120,7 +175,7 @@ test("evento CompletePayment: valor redondeado a centavos, MXN; inválidos se de
 test("Events API: token en cabecera (no en URL ni en cuerpo), pixel como event_source_id", async () => {
   let visto: { url: string; init: { headers: Record<string, string>; body: string } } | null = null;
   const r = await enviarEventosTiktok(
-    [construirEventoTiktok({ eventName: "CompletePayment", eventId: "cs_1", eventTime: 1, value: 10 })],
+    [construirEventoTiktok({ eventName: "Purchase", eventId: "cs_1", eventTime: 1, value: 10 })],
     { token: "SECRETO", testEventCode: "TEST1" },
     async (url, init) => { visto = { url, init }; return { ok: true, status: 200, text: async () => '{"code":0,"message":"OK"}' }; },
   );
@@ -173,7 +228,7 @@ test("servidor: registro usa alta.<clinicId>; sin clínica no manda", async () =
   assert.equal(out[0].user.ttclid, TTCLID);
 });
 
-test("servidor: CompletePayment solo de la primera contratación pagada; valor sin IVA", async () => {
+test("servidor: Purchase solo de la primera contratación pagada; valor sin IVA", async () => {
   const out: EventoTiktok[] = [];
   const p = puertosFalsos(out);
   const sesion = {
@@ -182,12 +237,13 @@ test("servidor: CompletePayment solo de la primera contratación pagada; valor s
     amount_total: 52100,
     total_details: { amount_tax: 7186 },
     currency: "mxn",
-    metadata: { clinicId: "c1", kind: "platform-subscription", firstContract: "1", meta_ip: "1.2.3.4", meta_ua: "UA", tt_ttclid: TTCLID },
+    metadata: { clinicId: "c1", kind: "platform-subscription", firstContract: "1", plan: "PRO", meta_ip: "1.2.3.4", meta_ua: "UA", tt_ttclid: TTCLID },
   };
   assert.equal(await enviarCompraTiktokDeSesion(sesion, p), "enviado");
-  assert.equal(out[0].event, "CompletePayment");
+  assert.equal(out[0].event, "Purchase");
   assert.equal(out[0].event_id, "cs_live_abc");
   assert.equal(out[0].properties?.value, 449.14);
+  assert.equal(out[0].properties?.content_id, "PRO");
   assert.equal(out[0].user.ttclid, TTCLID);
   assert.equal(out[0].user.ip, "1.2.3.4");
   // renovación: no cuenta
@@ -216,6 +272,8 @@ test("arranque: solo en rutas públicas, una vez, con el SDK async y el pixel id
   g.document = { createElement: () => ({}), head: { appendChild: (s: { src: string; async: boolean }) => scripts.push(s) } };
   try {
     conWindow("/dashboard", {}, () => assert.equal(cargarPixelTiktok(), false));
+    conWindow("/clinica-sonrisa", {}, () => assert.equal(cargarPixelTiktok(), false));
+    conWindow("/reservar/clinica-sonrisa", {}, () => assert.equal(cargarPixelTiktok(), false));
     assert.equal(scripts.length, 0);
     const w: Record<string, unknown> = {};
     const gg = globalThis as unknown as { window?: unknown };
@@ -228,8 +286,8 @@ test("arranque: solo en rutas públicas, una vez, con el SDK async y el pixel id
       assert.equal(scripts[0].async, true);
       assert.match(scripts[0].src, /^https:\/\/analytics\.tiktok\.com\/i18n\/pixel\/events\.js\?sdkid=DB6NHKJC77UDJT303SAG&lib=ttq$/);
       const ttq = (gg.window as { ttq: unknown[] & { track: (...a: unknown[]) => void } }).ttq;
-      ttq.track("Contact", {}, { event_id: "x" });
-      assert.deepEqual(ttq.at(-1), ["track", "Contact", {}, { event_id: "x" }]);
+      ttq.track("ViewContent", {}, { event_id: "x" });
+      assert.deepEqual(ttq.at(-1), ["track", "ViewContent", {}, { event_id: "x" }]);
     } finally { gg.window = antes; }
   } finally { g.document = docAntes; }
 });

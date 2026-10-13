@@ -3,7 +3,7 @@
 // Lo que el píxel pierde (bloqueadores, Safari/ITP, SPEI de Stripe, SPEI directo)
 // sale también del servidor con el MISMO event_id que el píxel:
 //   · CompleteRegistration → `alta.<clinicId>`
-//   · CompletePayment      → id de la sesión de Checkout (cs_…) o `spei.<id>`
+//   · Purchase      → id de la sesión de Checkout (cs_…) o `spei.<id>`
 // TikTok junta navegador+servidor si coinciden event + event_id.
 //
 // Datos de coincidencia (user): correo y teléfono SOLO en SHA-256 (correo en
@@ -24,7 +24,7 @@ export const TIKTOK_EVENTS_URL = "https://business-api.tiktok.com/open_api/v1.3/
 /** Más de esto y se abandona: medir nunca alarga un alta ni un webhook. */
 export const TIKTOK_CAPI_TIMEOUT_MS = 4000;
 
-export type NombreEventoTiktok = "CompleteRegistration" | "CompletePayment";
+export type NombreEventoTiktok = "CompleteRegistration" | "Purchase";
 
 export interface SenalesTiktok {
   ip?: string | null;
@@ -42,9 +42,11 @@ export interface DatosEventoTiktok extends SenalesTiktok {
   eventSourceUrl?: string | null;
   email?: string | null;
   phone?: string | null;
-  /** Solo CompletePayment: pesos SIN IVA con el cupón descontado. */
+  /** Solo Purchase: pesos SIN IVA con el cupón descontado. */
   value?: number;
   currency?: string;
+  /** Plan (content_id). */
+  plan?: string | null;
 }
 
 export interface EventoTiktok {
@@ -60,7 +62,7 @@ export interface EventoTiktok {
     ttp?: string;
   };
   page?: { url: string };
-  properties?: { value: number; currency: string; content_type?: string };
+  properties?: { value?: number; currency?: string; content_type: string; content_id?: string };
 }
 
 const ID_RE = /^[A-Za-z0-9_.-]{8,512}$/;
@@ -100,9 +102,12 @@ export function construirEventoTiktok(d: DatosEventoTiktok): EventoTiktok {
   };
   const url = limpio(d.eventSourceUrl, 1000);
   if (url) evento.page = { url };
-  if (d.eventName === "CompletePayment") {
+  const plan = /^[A-Za-z0-9_-]{1,32}$/.test(d.plan ?? "") ? (d.plan as string) : undefined;
+  evento.properties = { content_type: "product", ...(plan ? { content_id: plan } : {}) };
+  if (d.eventName === "Purchase") {
     const value = Number.isFinite(d.value) && (d.value as number) > 0 ? Math.round((d.value as number) * 100) / 100 : 0;
-    evento.properties = { value, currency: (d.currency || "MXN").toUpperCase(), content_type: "product" };
+    evento.properties.value = value;
+    evento.properties.currency = (d.currency || "MXN").toUpperCase();
   }
   return evento;
 }

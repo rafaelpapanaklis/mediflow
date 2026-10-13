@@ -3,8 +3,8 @@
 // lanza ni cambia la respuesta de quien llama).
 //
 //   · /api/auth/register y /register-oauth → CompleteRegistration (segundo plano)
-//   · webhook de Stripe → CompletePayment de la PRIMERA contratación
-//   · /api/admin/spei-transferencias/[id]/confirmar → CompletePayment del SPEI directo
+//   · webhook de Stripe → Purchase de la PRIMERA contratación
+//   · /api/admin/spei-transferencias/[id]/confirmar → Purchase del SPEI directo
 //
 // Reutiliza de Meta: la regla «¿primera contratación?» (esCompraMeta), el valor
 // sin IVA, los puertos de base y la IP/UA que el checkout ya estampa en la
@@ -92,7 +92,7 @@ async function enviarUno(datos: DatosEventoTiktok, puertos: PuertosTiktok): Prom
 // ── CompleteRegistration ────────────────────────────────────────────────────
 
 export async function enviarRegistroTiktok(
-  input: { clinicId: string; email: string | null; phone: string | null; senales: SenalesTiktok; url?: string | null },
+  input: { clinicId: string; email: string | null; phone: string | null; senales: SenalesTiktok; url?: string | null; plan?: string | null },
   puertos: PuertosTiktok = puertosTiktokReales,
 ): Promise<ResultadoTiktok> {
   if (!input.clinicId) return "sin-datos";
@@ -104,6 +104,7 @@ export async function enviarRegistroTiktok(
       eventSourceUrl: input.url || `${SITE_URL}/signup`,
       email: input.email,
       phone: input.phone,
+      plan: input.plan,
       ...input.senales,
     },
     puertos,
@@ -117,6 +118,7 @@ export function enviarRegistroTiktokEnSegundoPlano(input: {
   phone: string | null;
   req: ConCabeceras;
   leerCookie: LeerCookie;
+  plan?: string | null;
 }): void {
   try {
     const referer = input.req.headers.get("referer");
@@ -128,6 +130,7 @@ export function enviarRegistroTiktokEnSegundoPlano(input: {
         phone: input.phone,
         senales: senalesTiktokDePeticion(input.req, input.leerCookie),
         url,
+        plan: input.plan,
       }),
     );
   } catch {
@@ -135,9 +138,9 @@ export function enviarRegistroTiktokEnSegundoPlano(input: {
   }
 }
 
-// ── CompletePayment ─────────────────────────────────────────────────────────
+// ── Purchase ─────────────────────────────────────────────────────────
 
-/** CompletePayment desde el webhook de Stripe (misma regla de «primera contratación» que Meta). Nunca lanza. */
+/** Purchase desde el webhook de Stripe (misma regla de «primera contratación» que Meta). Nunca lanza. */
 export async function enviarCompraTiktokDeSesion(
   sesion: SesionCompraMeta,
   puertos: PuertosTiktok = puertosTiktokReales,
@@ -148,7 +151,7 @@ export async function enviarCompraTiktokDeSesion(
     const contacto = await puertos.contactoClinica(meta.clinicId).catch(() => null);
     return await enviarUno(
       {
-        eventName: "CompletePayment",
+        eventName: "Purchase",
         eventId: sesion.id,
         eventTime: Math.floor(puertos.ahora() / 1000),
         eventSourceUrl: `${SITE_URL}/dashboard/suspended/success`,
@@ -158,6 +161,7 @@ export async function enviarCompraTiktokDeSesion(
         userAgent: meta[META_METADATA.ua] || null,
         ttclid: meta[TIKTOK_METADATA.ttclid] || null,
         ttp: meta[TIKTOK_METADATA.ttp] || null,
+        plan: meta.plan || null,
         value: centavosAPesos(centavosSinImpuesto(sesion)),
         currency: (sesion.currency ?? "mxn").toUpperCase(),
       },
@@ -168,7 +172,7 @@ export async function enviarCompraTiktokDeSesion(
   }
 }
 
-/** CompletePayment del SPEI directo, DESPUÉS de confirmar. Solo la primera contratación. Nunca lanza. */
+/** Purchase del SPEI directo, DESPUÉS de confirmar. Solo la primera contratación. Nunca lanza. */
 export async function enviarCompraTiktokSpei(
   previa: CompraSpeiPendiente | null,
   puertos: PuertosTiktok = puertosTiktokReales,
@@ -182,7 +186,7 @@ export async function enviarCompraTiktokSpei(
     ]);
     return await enviarUno(
       {
-        eventName: "CompletePayment",
+        eventName: "Purchase",
         eventId: eventIdSpeiDirecto(previa.solicitudId),
         eventTime: Math.floor(puertos.ahora() / 1000),
         eventSourceUrl: `${SITE_URL}/dashboard/suspended`,

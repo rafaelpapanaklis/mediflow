@@ -6,6 +6,7 @@ import { ConfirmingPoll } from "./confirming-poll";
 import { conversionPagoConfirmada } from "./conversion-pago.server";
 import { ConversionPagoCompletadoGads } from "./conversion-pago-cliente";
 import { ConversionPagoCompletadoMeta } from "./conversion-pago-meta";
+import { normalizarCorreo, sha256 } from "@/lib/analytics/meta-capi";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
 import {
@@ -61,7 +62,10 @@ export default async function SuspendedSuccessPage(props: PageProps) {
   const conversionGads = conversion ? (
     <>
       <ConversionPagoCompletadoGads {...conversion} />
-      <ConversionPagoCompletadoMeta {...conversion} />
+      <ConversionPagoCompletadoMeta
+        {...conversion}
+        emailSha256={(() => { const c = normalizarCorreo(user.email); return c ? sha256(c) : null; })()}
+      />
     </>
   ) : null;
 
