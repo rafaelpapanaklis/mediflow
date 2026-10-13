@@ -4,7 +4,8 @@
 
 import { GADS_WHATSAPP_CLIC_LABEL, whatsappClickSendTo } from "@/lib/gtag";
 import { isPrivatePath } from "./ga4";
-import { trackMetaLeadWhatsapp, type OrigenLeadWhatsapp } from "./meta-pixel-eventos";
+import { eventIdLeadWhatsapp, trackMetaLeadWhatsapp, type OrigenLeadWhatsapp } from "./meta-pixel-eventos";
+import { trackTiktokContactWhatsapp } from "./tiktok-events";
 
 type GtagFn = (...args: unknown[]) => void;
 
@@ -30,6 +31,10 @@ export function trackWhatsappClickConversion(label: string = GADS_WHATSAPP_CLIC_
  * de Google Ads. Devuelve qué salió, para pruebas y diagnóstico. GA4
  * (whatsapp_clic) lo manda embudo.ts aparte.
  */
-export function medirClicWhatsapp(origen: OrigenLeadWhatsapp): { metaEventId: string | null; ads: boolean } {
-  return { metaEventId: trackMetaLeadWhatsapp(origen), ads: trackWhatsappClickConversion() };
+export function medirClicWhatsapp(origen: OrigenLeadWhatsapp): { metaEventId: string | null; ads: boolean; tiktok: boolean } {
+  const metaEventId = trackMetaLeadWhatsapp(origen);
+  // TikTok: Contact con el MISMO event_id del Lead (único por clic). Si Meta no
+  // salió (sin fbq/bloqueador) TikTok genera el suyo.
+  const tiktok = trackTiktokContactWhatsapp(origen, metaEventId ?? eventIdLeadWhatsapp(origen));
+  return { metaEventId, ads: trackWhatsappClickConversion(), tiktok };
 }

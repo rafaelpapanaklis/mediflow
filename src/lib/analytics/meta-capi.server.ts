@@ -82,7 +82,7 @@ export interface PuertosMeta {
   ahora: () => number;
 }
 
-const puertosReales: PuertosMeta = {
+export const puertosReales: PuertosMeta = {
   enviar: (eventos) =>
     enviarEventosCapi(
       eventos,
@@ -145,7 +145,7 @@ export async function enviarRegistroMeta(
 }
 
 /** Mantiene viva la función de Vercel hasta que termine `tarea` (igual que google-sync.ts). */
-function mantenerVivo(tarea: Promise<unknown>): void {
+export function mantenerVivo(tarea: Promise<unknown>): void {
   try {
     const ctx = (globalThis as any)[Symbol.for("@vercel/request-context")]?.get?.();
     ctx?.waitUntil?.(tarea);
@@ -276,7 +276,7 @@ export interface PuertosSpei extends PuertosMeta {
   senalesDeSolicitud: (clinicId: string, solicitudId: string) => Promise<{ ip: string | null; userAgent: string | null } | null>;
 }
 
-const puertosSpeiReales: PuertosSpei = {
+export const puertosSpeiReales: PuertosSpei = {
   ...puertosReales,
   leerSolicitud: async (solicitudId) => {
     const { prisma } = await import("@/lib/prisma");

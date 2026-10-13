@@ -18,6 +18,7 @@ import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import { trackSignupConversionAndRedirect } from "@/lib/gtag";
 import { trackGa4SignUp } from "@/lib/analytics/ga4";
 import { trackMetaCompleteRegistration } from "@/lib/analytics/meta-pixel-eventos";
+import { trackTiktokCompleteRegistration } from "@/lib/analytics/tiktok-events";
 import { guardarEleccionAlta } from "@/lib/billing/eleccion-alta";
 import { MENSAJE_CONTRASENA_FILTRADA } from "@/lib/auth/errores-contrasena";
 
@@ -295,6 +296,7 @@ export function SignupForm({ planDeEnlace }: {
       // el alta; el servidor manda el mismo por la API de Conversiones y Meta
       // los junta. Sin callback: la redirección no espera nada nuevo.
       trackMetaCompleteRegistration(data.metaEventId);
+      trackTiktokCompleteRegistration(data.metaEventId); // ws1-t5: mismo event_id (TikTok deduplica con su Events API)
       // GA4 `sign_up` (WS1-T6): mismo momento, ANTES de la conversión de Ads y sin
       // callback propio → la redirección espera lo mismo que antes. Evento aparte.
       trackGa4SignUp(isOAuthFlow ? "google" : "email");

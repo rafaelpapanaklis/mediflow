@@ -12,10 +12,12 @@
 import { useEffect } from "react";
 import type { ConversionPagoCompletado } from "./conversion-pago";
 import { medirCompraMeta } from "@/lib/analytics/meta-pixel-eventos";
+import { medirCompraTiktok } from "@/lib/analytics/tiktok-events";
 
 export function ConversionPagoCompletadoMeta({ transactionId, valueMxn, currency }: ConversionPagoCompletado) {
   useEffect(() => {
     medirCompraMeta({ transactionId, valueMxn, currency });
+    medirCompraTiktok({ transactionId, valueMxn, currency }); // ws1-t5: CompletePayment, mismo event_id
   }, [transactionId, valueMxn, currency]);
 
   return null;

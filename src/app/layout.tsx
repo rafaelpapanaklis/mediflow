@@ -10,6 +10,7 @@ import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { GaPageview } from "@/components/analytics/ga-pageview";
 import { AdsClickCapture } from "@/components/analytics/ads-click-capture";
 import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
+import { TiktokPixel } from "@/components/analytics/tiktok-pixel";
 import { RecargaPorDespliegue } from "@/components/recarga-por-despliegue";
 import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
 import { META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
@@ -171,6 +172,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GaPageview />
         {/* Píxel de Meta — PageView por navegación, solo rutas públicas. */}
         <MetaPixelPageview />
+        <TiktokPixel />
         {/* Clic de Google Ads (gclid/gbraid/wbraid) → cookie dc_ads de 90 días; el
             alta la guarda ligada a la clínica. Solo rutas públicas. */}
         <AdsClickCapture />

@@ -9,6 +9,7 @@ import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
+import { enviarRegistroTiktokEnSegundoPlano } from "@/lib/analytics/tiktok-capi.server";
 import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 import { COOKIE_CONTRATAR, esSlugReservadoDeContratar, planDelEnlaceDeAlta } from "@/lib/billing/contratar";
 import { marcarEnlaceDeContratacion } from "@/lib/billing/sin-promo.server";
@@ -198,6 +199,14 @@ export async function POST(req: NextRequest) {
 
     // CompleteRegistration de Meta (WS1-T4): igual que /api/auth/register.
     const metaEventId = enviarRegistroMetaEnSegundoPlano({
+      clinicId: clinic.id,
+      email,
+      phone: data.phone,
+      req,
+      leerCookie: (n) => req.cookies.get(n)?.value,
+    });
+    // CompleteRegistration de TikTok (ws1-t5): mismo event_id que Meta.
+    enviarRegistroTiktokEnSegundoPlano({
       clinicId: clinic.id,
       email,
       phone: data.phone,

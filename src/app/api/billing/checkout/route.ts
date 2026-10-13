@@ -4,6 +4,7 @@ import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { metadataMetaDePeticion } from "@/lib/analytics/meta-capi.server";
+import { metadataTiktokDePeticion } from "@/lib/analytics/tiktok-capi.server";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
@@ -239,7 +240,11 @@ export async function POST(req: NextRequest) {
   // Señales del navegador para el Purchase de Meta del webhook (WS1-T4): IP, user
   // agent, fbp y fbc de quien inicia el pago. Solo en la metadata de la SESIÓN
   // (la lee el webhook), no en la de la suscripción ni la del cobro.
-  const sessionMeta = { ...meta, ...metadataMetaDePeticion(req, (n) => req.cookies.get(n)?.value) };
+  const sessionMeta = {
+    ...meta,
+    ...metadataMetaDePeticion(req, (n) => req.cookies.get(n)?.value),
+    ...metadataTiktokDePeticion((n) => req.cookies.get(n)?.value), // ws1-t5
+  };
 
   let session;
   if (method === "card") {

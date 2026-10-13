@@ -58,6 +58,7 @@ import {
 import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { notifyModuleActivated } from "@/lib/marketplace/module-activated-email";
 import { enviarCompraMetaDeSesion } from "@/lib/analytics/meta-capi.server";
+import { enviarCompraTiktokDeSesion } from "@/lib/analytics/tiktok-capi.server";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -206,6 +207,7 @@ export async function POST(req: NextRequest) {
         // contratación pagada, event_id = session.id (el mismo del píxel en la
         // página de éxito). Nunca lanza ni cambia la respuesta del webhook.
         await enviarCompraMetaDeSesion(session);
+        await enviarCompraTiktokDeSesion(session); // ws1-t5: CompletePayment de TikTok, mismo criterio
         break;
       }
 
@@ -255,6 +257,7 @@ export async function POST(req: NextRequest) {
         // SPEI/OXXO de Stripe nunca pasan por la página de éxito: este Purchase
         // del servidor es el único que los cuenta en Meta (WS1-T4).
         await enviarCompraMetaDeSesion(session);
+        await enviarCompraTiktokDeSesion(session); // ws1-t5: CompletePayment de TikTok, mismo criterio
         break;
       }
 

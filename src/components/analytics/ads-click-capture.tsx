@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { isPrivatePath } from "@/lib/analytics/ga4";
 import { extraerClickIds, tieneClickId } from "@/lib/ads/click-ids";
 import { extraerFbclid } from "@/lib/ads/meta-click";
+import { extraerTtclid } from "@/lib/ads/tiktok-click";
 import { extraerUtm, tieneUtm } from "@/lib/ads/utm";
 
 export function AdsClickCapture() {
@@ -28,13 +29,18 @@ export function AdsClickCapture() {
     const params = new URLSearchParams(window.location.search);
     const ids = extraerClickIds(params);
     const fbclid = extraerFbclid(params);
+    const ttclid = extraerTtclid(params);
     const utm = extraerUtm(params);
-    if (!tieneClickId(ids) && !fbclid && !tieneUtm(utm)) return;
+    if (!tieneClickId(ids) && !fbclid && !ttclid && !tieneUtm(utm)) return;
 
     // Solo Google: la misma marca y el mismo cuerpo de siempre.
     let marca = `dc.ads-click.${ids.gclid ?? ""}.${ids.gbraid ?? ""}.${ids.wbraid ?? ""}`;
     const cuerpo: Record<string, string | undefined> = { ...ids };
     if (fbclid) cuerpo.fbclid = fbclid;
+    if (ttclid) {
+      cuerpo.ttclid = ttclid;
+      marca += `.tt.${ttclid}`;
+    }
     if (tieneUtm(utm)) {
       cuerpo.utm_source = utm.source;
       cuerpo.utm_medium = utm.medium;

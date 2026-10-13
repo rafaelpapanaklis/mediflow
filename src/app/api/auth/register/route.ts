@@ -15,6 +15,7 @@ import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
 import { normalizeMxWhatsAppPhone } from "@/lib/whatsapp";
 import { guardarClickAdsDeLaAlta } from "@/lib/ads/click-store";
 import { enviarRegistroMetaEnSegundoPlano } from "@/lib/analytics/meta-capi.server";
+import { enviarRegistroTiktokEnSegundoPlano } from "@/lib/analytics/tiktok-capi.server";
 import { leerErrorContrasena, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 import { COOKIE_CONTRATAR, esSlugReservadoDeContratar, planDelEnlaceDeAlta } from "@/lib/billing/contratar";
@@ -307,6 +308,14 @@ export async function POST(req: NextRequest) {
     // plano: no alarga el alta y nunca lanza. El eventId vuelve al navegador para
     // que el píxel mande el mismo y Meta los deduplique.
     const metaEventId = enviarRegistroMetaEnSegundoPlano({
+      clinicId: clinic.id,
+      email: data.email,
+      phone: data.phone,
+      req,
+      leerCookie: (n) => req.cookies.get(n)?.value,
+    });
+    // CompleteRegistration de TikTok (ws1-t5): mismo event_id que Meta.
+    enviarRegistroTiktokEnSegundoPlano({
       clinicId: clinic.id,
       email: data.email,
       phone: data.phone,

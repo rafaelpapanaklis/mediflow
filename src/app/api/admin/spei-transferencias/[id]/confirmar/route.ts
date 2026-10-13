@@ -3,6 +3,7 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { SpeiError, confirmarSolicitudSpei } from "@/lib/billing/spei-directo";
 import { enviarCompraMetaSpei, prepararCompraMetaSpei } from "@/lib/analytics/meta-capi.server";
+import { enviarCompraTiktokSpei } from "@/lib/analytics/tiktok-capi.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     });
     // El SPEI directo no pasa por ninguna página con píxel: solo lo cuenta el servidor.
     await enviarCompraMetaSpei(compraMeta && compraMeta.clinicId === r.clinicId ? compraMeta : null);
+    await enviarCompraTiktokSpei(compraMeta && compraMeta.clinicId === r.clinicId ? compraMeta : null); // ws1-t5
     return NextResponse.json({ success: true, periodEnd: r.periodEnd.toISOString() });
   } catch (err) {
     if (err instanceof SpeiError) {

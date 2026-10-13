@@ -299,6 +299,7 @@
     "test:click-ids": "tsx --test src/lib/ads/__tests__/click-ids.test.ts",
     "test:lead-whatsapp": "tsx --test src/lib/analytics/__tests__/lead-whatsapp.test.ts",
     "test:meta-capi": "tsx --test src/lib/analytics/__tests__/meta-capi.test.ts",
+    "test:tiktok": "tsx --test src/lib/analytics/__tests__/tiktok.test.ts",
     "test:embudo": "tsx --test src/lib/analytics/__tests__/embudo.test.ts",
     "test:embudo-admin": "tsx --test src/lib/admin/__tests__/embudo-captacion.test.ts",
     "//test:whatsapp-portada": "ws1-t4: WhatsApp desde arriba (hero, tarjetas, barra móvil, banda): número en un solo sitio, mensaje por origen, registrarPaso una vez por clic y la decisión LiveChat/barra en móvil. Con el tsconfig de pruebas porque los botones son JSX.",

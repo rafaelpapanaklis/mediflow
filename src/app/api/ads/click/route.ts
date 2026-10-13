@@ -11,6 +11,7 @@ import {
   cookieParaMeta,
   extraerFbclid,
 } from "@/lib/ads/meta-click";
+import { TIKTOK_CLICK_COOKIE, TIKTOK_CLICK_COOKIE_MAX_AGE, cookieParaTiktok, extraerTtclid } from "@/lib/ads/tiktok-click";
 import {
   UTM_COOKIE_MAX_AGE,
   UTM_PRIMERO_COOKIE,
@@ -72,6 +73,8 @@ export async function POST(req: NextRequest) {
       res.cookies.set({ name, value, httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge });
     };
     sembrar(META_CLICK_COOKIE, valorMeta, META_CLICK_COOKIE_MAX_AGE);
+    // ws1-t5: ttclid de TikTok, mismo patrón.
+    sembrar(TIKTOK_CLICK_COOKIE, cookieParaTiktok(extraerTtclid(crudo), req.cookies.get(TIKTOK_CLICK_COOKIE)?.value), TIKTOK_CLICK_COOKIE_MAX_AGE);
     sembrar(UTM_PRIMERO_COOKIE, valoresUtm.primero, UTM_COOKIE_MAX_AGE);
     sembrar(UTM_ULTIMO_COOKIE, valoresUtm.ultimo, UTM_COOKIE_MAX_AGE);
     return res;
