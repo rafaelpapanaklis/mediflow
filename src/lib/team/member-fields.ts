@@ -89,6 +89,26 @@ export const MIEMBRO_SELECT = {
 export const MIEMBRO_CAMPOS = Object.keys(MIEMBRO_SELECT) as Array<keyof typeof MIEMBRO_SELECT>;
 
 /**
+ * ¿Este miembro ya creó su PIN de Caja? Lo único del PIN que viaja: un
+ * booleano. El hash lo lee el servidor para derivarlo y se queda aquí.
+ */
+export function tieneCajaPin(fila: { cajaPinHash?: string | null }): boolean {
+  return typeof fila.cajaPinHash === "string" && fila.cajaPinHash.length > 0;
+}
+
+/**
+ * Para las lecturas con `select`: la fila trae `cajaPinHash` (se pidió solo
+ * para esto) y sale SIN él, con `tieneCajaPin` en su lugar. Copia el resto
+ * tal cual; no es la lista blanca (esa es el `select`), es quitar el hash.
+ */
+export function conIndicadorDePin<T extends { cajaPinHash?: string | null }>(
+  fila: T,
+): Omit<T, "cajaPinHash"> & { tieneCajaPin: boolean } {
+  const { cajaPinHash, ...resto } = fila;
+  return { ...resto, tieneCajaPin: tieneCajaPin({ cajaPinHash }) };
+}
+
+/**
  * Deja de una fila de `User` solo lo que puede salir al navegador.
  *
  * Para cuando la fila completa hizo falta en el servidor (la bitácora del
@@ -104,6 +124,11 @@ export function camposPublicosDeMiembro<T extends Record<string, unknown>>(
   const fuera: Record<string, unknown> = {};
   for (const campo of MIEMBRO_CAMPOS) {
     if (campo in fila) fuera[campo] = fila[campo];
+  }
+  // Del PIN de Caja sale solo si existe, nunca el hash. Solo cuando la fila
+  // lo trajo: una lectura recortada no inventa un «sin crear».
+  if ("cajaPinHash" in fila) {
+    fuera.tieneCajaPin = tieneCajaPin({ cajaPinHash: fila.cajaPinHash as string | null | undefined });
   }
   return fuera as Partial<T>;
 }

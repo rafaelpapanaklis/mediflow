@@ -76,6 +76,24 @@ const es = {
   incluyeInactivos: (n: number) => (n === 1 ? "Hay 1 inactivo más (filtro «Inactivos»)" : `Hay ${n} inactivos más (filtro «Inactivos»)`),
   insigniaOrtodoncia: "Ortodoncia",
   kpiRecepcion: "Recepción y solo lectura",
+  // Caja por miembro (ws1-t1): la casilla «Puede usar Caja», el estado del PIN y «Restablecer PIN de Caja»
+  cajaSeccion: "Caja",
+  cajaPuedeUsar: "Puede usar Caja",
+  cajaPuedeUsarDesc: "Puede abrir y cerrar la Caja y registrar retiros, con su propio PIN de 6 dígitos.",
+  cajaSiempreSuper: "Siempre, por ser Super Admin",
+  cajaYoNoCambia: "No puedes cambiarte tu propio acceso a Caja. Pídeselo al dueño de la clínica.",
+  cajaPinEtiqueta: "PIN de Caja",
+  cajaPinCreado: "creado",
+  cajaPinSinCrear: "sin crear",
+  cajaPinSinCrearHint: "La primera vez que abra Caja le pedirá crear su PIN, escribiéndolo dos veces.",
+  restablecerPinBtn: "Restablecer PIN de Caja",
+  restablecerPinHint: "Borra su PIN actual. La próxima vez que abra Caja tendrá que crear uno nuevo, escribiéndolo dos veces.",
+  restablecerPinConfirmTitulo: (nombre: string) => `¿Restablecer el PIN de Caja de ${nombre}?`,
+  restablecerPinConfirmDesc:
+    "Su PIN actual deja de funcionar al instante. La próxima vez que abra Caja le pedirá crear uno nuevo. No cambia su contraseña ni su acceso a Caja.",
+  restablecerPinListo: (nombre: string) => `PIN de Caja restablecido: ${nombre} creará uno nuevo al abrir Caja`,
+  restablecerPinError: "No se pudo restablecer el PIN de Caja",
+  restablecerPinSinPin: (nombre: string) => `${nombre} aún no había creado su PIN de Caja: no hay nada que restablecer`,
 };
 
 const en: typeof es = {
@@ -135,6 +153,23 @@ const en: typeof es = {
   incluyeInactivos: (n: number) => (n === 1 ? "Plus 1 inactive (“Inactive” filter)" : `Plus ${n} inactive (“Inactive” filter)`),
   insigniaOrtodoncia: "Orthodontics",
   kpiRecepcion: "Reception and read-only",
+  cajaSeccion: "Cash register",
+  cajaPuedeUsar: "Can use the cash register",
+  cajaPuedeUsarDesc: "Can open and close the cash register and record withdrawals, with their own 6-digit PIN.",
+  cajaSiempreSuper: "Always, as Super Admin",
+  cajaYoNoCambia: "You can't change your own cash register access. Ask the clinic owner.",
+  cajaPinEtiqueta: "Cash register PIN",
+  cajaPinCreado: "created",
+  cajaPinSinCrear: "not created",
+  cajaPinSinCrearHint: "The first time they open the cash register they will be asked to create their PIN, typing it twice.",
+  restablecerPinBtn: "Reset cash register PIN",
+  restablecerPinHint: "Clears their current PIN. The next time they open the cash register they will have to create a new one, typing it twice.",
+  restablecerPinConfirmTitulo: (nombre) => `Reset ${nombre}'s cash register PIN?`,
+  restablecerPinConfirmDesc:
+    "Their current PIN stops working instantly. The next time they open the cash register they will be asked to create a new one. It doesn't change their password or their cash register access.",
+  restablecerPinListo: (nombre) => `Cash register PIN reset: ${nombre} will create a new one when opening the cash register`,
+  restablecerPinError: "Could not reset the cash register PIN",
+  restablecerPinSinPin: (nombre) => `${nombre} hasn't created a cash register PIN yet: there is nothing to reset`,
 };
 
 export const TEXTOS_EQUIPO = { es, en } as const;

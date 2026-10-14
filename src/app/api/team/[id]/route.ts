@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { MIEMBRO_SELECT, camposPublicosDeMiembro } from "@/lib/team/member-fields";
+import { MIEMBRO_SELECT, camposPublicosDeMiembro, conIndicadorDePin } from "@/lib/team/member-fields";
 import { clasificarErrorAuth, esUuid, ERROR_SIN_CUENTA } from "@/lib/team/auth-errors";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { esAccesoOrtodoncia, overrideConAcceso } from "@/lib/orthodontics/acceso-doctor";
@@ -44,6 +44,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     where: { id: params.id, clinicId: ctx!.clinicId }, // cross-clinic protection
     select: {
       ...MIEMBRO_SELECT,
+      // Solo para derivar `tieneCajaPin`: el hash no sale (conIndicadorDePin).
+      cajaPinHash: true,
       _count: {
         select: {
           appointments: true,
@@ -55,7 +57,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   });
 
   if (!member) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-  return NextResponse.json(member);
+  return NextResponse.json(conIndicadorDePin(member));
 }
 
 // PATCH /api/team/[id] — update doctor info
@@ -284,8 +286,24 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     }
   }
 
+  // «Puede usar Caja» (User.canAccessCaja). Solo un booleano de verdad. El
+  // SUPER_ADMIN entra a Caja por rol (canUseCaja), así que su casilla no se
+  // escribe. Quien edita no se la cambia a sí mismo (un ADMIN no se abre la
+  // Caja él solo): se la da el dueño u otra persona con «Editar equipo».
+  let canAccessCajaNuevo: boolean | undefined;
+  if (typeof body.canAccessCaja === "boolean" && member.role !== "SUPER_ADMIN") {
+    if (params.id === ctx!.userId && !ctx!.isSuperAdmin && body.canAccessCaja !== member.canAccessCaja) {
+      return NextResponse.json(
+        { error: "No puedes cambiarte tu propio acceso a Caja. Pídeselo al dueño de la clínica." },
+        { status: 403 },
+      );
+    }
+    canAccessCajaNuevo = body.canAccessCaja;
+  }
+
   const data = {
     ...(overrideOrto !== undefined && { permissionsOverride: overrideOrto }),
+    ...(canAccessCajaNuevo !== undefined && { canAccessCaja: canAccessCajaNuevo }),
     ...(body.firstName  !== undefined && { firstName:  body.firstName  }),
     ...(body.lastName   !== undefined && { lastName:   body.lastName   }),
     ...(body.specialty  !== undefined && { specialty:  body.specialty  }),
