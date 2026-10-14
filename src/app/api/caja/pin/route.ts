@@ -7,9 +7,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Gestión del PIN de Caja del usuario autenticado. Body: { action, pin?, currentPin? }.
+ * Gestión del PIN de Caja del usuario autenticado. Body: { action, pin?, pinConfirm?, currentPin? }.
  *  - status: ¿el usuario ya tiene PIN configurado?  → { hasPin }
- *  - set:    fija/cambia el PIN. Si ya tiene, exige currentPin correcto.
+ *  - set:    fija/cambia el PIN. Si ya tiene, exige currentPin correcto. Si viene
+ *            pinConfirm (la pantalla siempre lo manda: el PIN nuevo se teclea dos
+ *            veces), tiene que ser igual a pin o contesta 400.
  *  - verify: valida un PIN contra el hash guardado   → { valid }
  *
  * Exige canUseCaja PRIMERO (403 si no). El PIN vive en el usuario de la sesión
@@ -44,6 +46,14 @@ export async function POST(req: NextRequest) {
     const pin = String(body?.pin ?? "");
     if (!isValidCajaPin(pin)) {
       return NextResponse.json({ error: "El PIN debe ser exactamente 6 dígitos." }, { status: 400 });
+    }
+    // El PIN nuevo se teclea dos veces. La pantalla ya lo valida; aquí no se
+    // confía en ella: si viene la confirmación y no es idéntica, no se guarda.
+    if (body?.pinConfirm !== undefined && String(body.pinConfirm) !== pin) {
+      return NextResponse.json(
+        { error: "Los PIN no coinciden, escríbelo igual las dos veces.", code: "CAJA_PIN_NO_COINCIDE" },
+        { status: 400 },
+      );
     }
     // Si ya hay PIN, exige el actual para cambiarlo (no cambios silenciosos).
     if (hasPin) {

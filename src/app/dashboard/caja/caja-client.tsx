@@ -29,6 +29,8 @@ import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-a
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
 import { AvisoCobrosAutomaticos } from "@/components/cobro-automatico/AvisoCobrosAutomaticos";
 import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
+import { ModalCambiarPin, OlvidePin } from "./pin-caja";
+import { cuerpoDePinNuevo, validarPinDoble } from "./pin-doble";
 
 interface BillingProps {
   invoices:      any[];
@@ -120,6 +122,10 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
 
   // ¿El usuario ya configuró su PIN de Caja? Puede volverse true tras crearlo.
   const [hasPin, setHasPin] = useState(hasPinInitial);
+  // «Cambiar mi PIN» (o «Crear mi PIN» si todavía no tiene): modal propio.
+  const [showCambiarPin, setShowCambiarPin] = useState(false);
+  // El motivo por el que el PIN nuevo de la apertura no se aceptó (no coinciden / no son 6 dígitos).
+  const [errorPinApertura, setErrorPinApertura] = useState<string | null>(null);
 
   // Modals
   const [showOpen, setShowOpen]             = useState(false);
@@ -319,7 +325,18 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
     }
   }
 
+  // El servidor dice que no hay PIN (se lo restablecieron con la Caja abierta):
+  // se vuelve a pedir crearlo, dos veces, en vez de quedarse en «PIN incorrecto».
+  function pinFaltaEnServidor(data: any): boolean {
+    if (data?.code !== "CAJA_PIN_REQUIRED") return false;
+    setHasPin(false);
+    setOpenPin(""); setOpenPinConfirm("");
+    toast.error(t("cashRegister.pin.restablecido"));
+    return true;
+  }
+
   function startOpen() {
+    setErrorPinApertura(null);
     // Prefija la apertura con el efectivo de hoy aún no cuadrado (editable).
     setOpeningBalance(caja.suggestedOpening > 0 ? String(caja.suggestedOpening) : "");
     setOpenPin(""); setOpenPinConfirm(""); setOpenWAmount(""); setOpenWReason("");
@@ -329,24 +346,31 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
   async function openRegister() {
     const bal = parseFloat(openingBalance);
     if (Number.isNaN(bal) || bal < 0) { toast.error(t("cashRegister.amountInvalid")); return; }
-    if (!PIN_RE.test(openPin)) { toast.error("El PIN debe ser de 6 dígitos."); return; }
-
-    // Si el usuario aún no tiene PIN, lo crea antes de abrir (open exige PIN).
+    // Si el usuario aún no tiene PIN, lo crea antes de abrir (open exige PIN) y
+    // SIEMPRE dos veces: sin las dos idénticas y de 6 dígitos no se hace nada.
     if (!hasPin) {
-      if (openPin !== openPinConfirm) { toast.error("Los PIN no coinciden."); return; }
-      const setRes = await post("/api/caja/pin", { action: "set", pin: openPin });
+      const doble = validarPinDoble(openPin, openPinConfirm);
+      if (doble.ok === false) {
+        setErrorPinApertura(doble.motivo === "no-coinciden" ? t("cashRegister.pin.noCoinciden") : t("cashRegister.pin.seisDigitos"));
+        return;
+      }
+      setErrorPinApertura(null);
+      const setRes = await post("/api/caja/pin", cuerpoDePinNuevo({ pin: openPin, confirmacion: openPinConfirm }));
       if (!setRes) return;
       setHasPin(true);
+    } else if (!PIN_RE.test(openPin)) {
+      toast.error(t("cashRegister.pin.seisDigitos"));
+      return;
     }
 
-    const ok = await post("/api/caja/open", { openingBalance: bal, pin: openPin });
+    const ok = await post("/api/caja/open", { openingBalance: bal, pin: openPin }, pinFaltaEnServidor);
     if (!ok) return;
 
     // Retiro inicial opcional en la misma apertura. El PIN es el que se acaba
     // de teclear para abrir: no se le pide dos veces en la misma pantalla.
     const amt = parseFloat(openWAmount);
     if (!Number.isNaN(amt) && amt > 0) {
-      await post("/api/caja/withdrawal", { amount: amt, reason: openWReason.trim() || "Retiro de apertura", pin: openPin });
+      await post("/api/caja/withdrawal", { amount: amt, reason: openWReason.trim() || "Retiro de apertura", pin: openPin }, pinFaltaEnServidor);
     }
 
     toast.success(t("cashRegister.toastOpened"));
@@ -359,8 +383,10 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
     const amt = parseFloat(wAmount);
     if (Number.isNaN(amt) || amt <= 0) { toast.error(t("cashRegister.amountInvalid")); return; }
     if (!wReason.trim()) { toast.error(t("cashRegister.reasonRequired")); return; }
-    if (!PIN_RE.test(wPin)) { toast.error("El PIN debe ser de 6 dígitos."); return; }
-    const ok = await post("/api/caja/withdrawal", { amount: amt, reason: wReason.trim(), pin: wPin });
+    // Sin PIN no hay retiro: primero lo crea (dos veces), en su propio modal.
+    if (!hasPin) { setShowWithdrawal(false); setShowCambiarPin(true); return; }
+    if (!PIN_RE.test(wPin)) { toast.error(t("cashRegister.pin.seisDigitos")); return; }
+    const ok = await post("/api/caja/withdrawal", { amount: amt, reason: wReason.trim(), pin: wPin }, pinFaltaEnServidor);
     if (!ok) return;
     toast.success(t("cashRegister.toastWithdrawal"));
     setShowWithdrawal(false);
@@ -371,7 +397,8 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
   async function closeRegister() {
     const cnt = parseFloat(counted);
     if (Number.isNaN(cnt) || cnt < 0) { toast.error(t("cashRegister.amountInvalid")); return; }
-    if (!PIN_RE.test(closePin)) { toast.error("El PIN debe ser de 6 dígitos."); return; }
+    if (!hasPin) { setShowClose(false); setShowCambiarPin(true); return; }
+    if (!PIN_RE.test(closePin)) { toast.error(t("cashRegister.pin.seisDigitos")); return; }
     if (!totals || !reg) return;
     setAvisoCierre(null);
     const res = await post("/api/caja/close", {
@@ -382,6 +409,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
       // contaba, el servidor no cierra y aquí se refresca y se pide recontar.
       esperadoVisto: totals.expectedCash,
     }, (data) => {
+      if (pinFaltaEnServidor(data)) return true;
       if (data?.code !== "CAJA_ESPERADO_CAMBIO") return false;
       setAvisoCierre(String(data.error ?? ""));
       // El esperado del servidor manda YA (aunque la lectura fresca tarde o falle).
@@ -597,6 +625,14 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
         {/* ws1-t6 — cobros automáticos con tarjeta rechazados por Mercado Pago. Se calla sola. */}
         <AvisoCobrosAutomaticos />
         <ListaMensualidades />
+        {/* ws1-t1 — «Cambiar mi PIN» (o «Crear mi PIN»). Fuera de las dos ramas a
+            propósito: con el interruptor encendido o apagado, la misma fila. */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button type="button" className="btn-new btn-new--ghost btn-new--sm" data-cambiar-pin
+            onClick={() => setShowCambiarPin(true)}>
+            <KeyRound size={14} strokeWidth={1.75} /> {hasPin ? t("cashRegister.pin.cambiar") : t("cashRegister.pin.crear")}
+          </button>
+        </div>
       </div>
       {rediseno ? (
         /* CAJA REESTRUCTURADA (ws1-t6): la misma pantalla con cinco bloques en
@@ -959,29 +995,33 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
               <div className="modal__body">
                 {/* PIN de Caja */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: "var(--text-2)", fontSize: 13, fontWeight: 600 }}>
-                  <KeyRound size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {hasPin ? "Ingresa tu PIN de Caja" : "Crea tu PIN de 6 dígitos"}
+                  <KeyRound size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} /> {hasPin ? t("cashRegister.pin.ingresaTitulo") : t("cashRegister.pin.crearTitulo")}
                 </div>
                 {!hasPin && (
                   <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 12px" }}>
-                    Este PIN protege la apertura y el cierre de Caja. Guárdalo: lo pediremos en cada corte.
+                    {t("cashRegister.pin.crearAyuda")}
                   </p>
                 )}
                 <div className="field-new" style={{ marginBottom: 14 }}>
-                  <label className="field-new__label">PIN <span className="req">*</span></label>
+                  <label className="field-new__label">{t("cashRegister.pin.etiqueta")} <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new" autoFocus
                     style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={openPin}
-                    onChange={e => setOpenPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                    onChange={e => { setOpenPin(e.target.value.replace(/\D/g, "").slice(0, 6)); setErrorPinApertura(null); }} />
                 </div>
                 {!hasPin && (
                   <div className="field-new" style={{ marginBottom: 14 }}>
-                    <label className="field-new__label">Confirma tu PIN <span className="req">*</span></label>
+                    <label className="field-new__label">{t("cashRegister.pin.confirmar")} <span className="req">*</span></label>
                     <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
                       style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                       placeholder="••••••" value={openPinConfirm}
-                      onChange={e => setOpenPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                      onChange={e => { setOpenPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6)); setErrorPinApertura(null); }} />
                   </div>
                 )}
+                {!hasPin && errorPinApertura && (
+                  <p role="alert" data-pin-error style={{ color: "var(--danger)", fontSize: 12.5, margin: "-6px 0 14px" }}>{errorPinApertura}</p>
+                )}
+                {hasPin && <OlvidePin />}
 
                 <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">{t("cashRegister.openingBalanceLabel")}</label>
@@ -1038,13 +1078,20 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
                 </div>
                 {/* FIN-07: el mismo PIN que pide el cierre. Sacar efectivo de la
                     caja tiene que costar lo mismo que cuadrarla. */}
-                <div className="field-new">
-                  <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
-                  <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                    style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
-                    placeholder="••••••" value={wPin}
-                    onChange={e => setWPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-                </div>
+                {hasPin ? (
+                  <>
+                    <div className="field-new" style={{ marginBottom: 14 }}>
+                      <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> {t("cashRegister.pin.etiquetaCaja")} <span className="req">*</span></label>
+                      <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
+                        style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                        placeholder="••••••" value={wPin}
+                        onChange={e => setWPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                    </div>
+                    <OlvidePin />
+                  </>
+                ) : (
+                  <p role="status" style={{ color: "var(--text-2)", fontSize: 12.5, margin: 0 }}>{t("cashRegister.pin.sinPin")}</p>
+                )}
               </div>
               <div className="modal__footer">
                 <ButtonNew variant="ghost" type="button" onClick={() => setShowWithdrawal(false)}>{t("common.cancel")}</ButtonNew>
@@ -1115,13 +1162,20 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
                   <input className="input-new" placeholder={t("cashRegister.notesPlaceholder")}
                     value={closingNotes} onChange={e => setClosingNotes(e.target.value)} />
                 </div>
-                <div className="field-new">
-                  <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
-                  <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                    style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
-                    placeholder="••••••" value={closePin}
-                    onChange={e => setClosePin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-                </div>
+                {hasPin ? (
+                  <>
+                    <div className="field-new" style={{ marginBottom: 14 }}>
+                      <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> {t("cashRegister.pin.etiquetaCaja")} <span className="req">*</span></label>
+                      <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
+                        style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                        placeholder="••••••" value={closePin}
+                        onChange={e => setClosePin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                    </div>
+                    <OlvidePin />
+                  </>
+                ) : (
+                  <p role="status" style={{ color: "var(--text-2)", fontSize: 12.5, margin: 0 }}>{t("cashRegister.pin.sinPin")}</p>
+                )}
               </div>
               <div className="modal__footer">
                 <ButtonNew variant="ghost" type="button" onClick={() => setShowClose(false)}>{t("common.cancel")}</ButtonNew>
@@ -1266,6 +1320,16 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal: Cambiar mi PIN / Crear mi PIN (el nuevo, dos veces) ── */}
+      {showCambiarPin && (
+        <ModalCambiarPin
+          tienePin={hasPin}
+          rediseno={rediseno}
+          onClose={() => setShowCambiarPin(false)}
+          onGuardado={() => { setHasPin(true); setShowCambiarPin(false); }}
+        />
       )}
     </div>
   );
