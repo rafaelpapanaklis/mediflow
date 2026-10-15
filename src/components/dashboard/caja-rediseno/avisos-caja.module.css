@@ -1,0 +1,28 @@
+/* Caja — dónde van los avisos (ws1-t1).
+   Hoja aparte de `caja-rediseno.module.css` a propósito: aquella solo se
+   aplica colgada de `.pagina` (rediseño encendido) y esto vale igual con él
+   apagado. No usa tokens de ninguna raíz: solo márgenes y flujo. */
+
+/* Los avisos que se piden a la red DESPUÉS del primer pintado van al FINAL de
+   la pantalla: al llegar no tienen nada debajo que empujar. Con todos callados
+   el contenedor no tiene hijos y no ocupa ni el relleno. */
+.tardios {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px);
+}
+
+.tardios:empty {
+  display: none;
+}
+
+/* «Efectivo fuera de corte» (viene con la página) arriba de todo en la Caja de
+   siempre: el mismo margen de antes, y sin relleno si se calla. */
+.superior {
+  padding: 12px clamp(14px, 1.6vw, 28px) 0;
+}
+
+.superior:empty {
+  display: none;
+}

@@ -3364,6 +3364,7 @@
       "creado": "Your cash register PIN was created",
       "olvidaste": "Forgot your PIN?",
       "olvidasteTexto": "Ask the clinic owner to reset it in Team.",
+      "olvidasteTextoDueno": "Reset it in Team, from your own profile.",
       "sinPin": "You don't have a cash register PIN yet (it was reset or you haven't created it). Create it to continue.",
       "restablecido": "Your cash register PIN was reset. Create a new one to continue."
     },

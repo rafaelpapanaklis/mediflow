@@ -124,6 +124,9 @@ export default async function CajaPage() {
       history={history}
       timezone={clinic?.timezone ?? "America/Mexico_City"}
       hasPin={!!user.cajaPinHash}
+      // «¿Olvidaste tu PIN?»: al dueño le dice que lo restablezca él mismo en Equipo.
+      // Sale de la sesión del servidor, no del cliente.
+      esSuperAdmin={user.role === "SUPER_ADMIN"}
       rediseno={rediseno}
       puedeAjustarCierre={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "settings.edit")}
       billing={{

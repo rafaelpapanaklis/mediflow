@@ -54,3 +54,12 @@ export function cuerpoDePinNuevo(o: { pin: string; confirmacion: string; current
     ...(o.currentPin !== undefined && { currentPin: o.currentPin }),
   };
 }
+
+/**
+ * El texto de «¿Olvidaste tu PIN?». El dueño (SUPER_ADMIN) no tiene a quién
+ * pedírselo: lo restablece él, en su propia ficha de Equipo. Cualquier otro rol
+ * sigue leyendo «Pídele al dueño…». El rol llega del servidor (page.tsx).
+ */
+export function claveDelTextoOlvidePin(esSuperAdmin: boolean): string {
+  return esSuperAdmin ? "cashRegister.pin.olvidasteTextoDueno" : "cashRegister.pin.olvidasteTexto";
+}

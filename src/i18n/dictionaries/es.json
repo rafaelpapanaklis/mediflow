@@ -3364,6 +3364,7 @@
       "creado": "Tu PIN de Caja quedó creado",
       "olvidaste": "¿Olvidaste tu PIN?",
       "olvidasteTexto": "Pídele al dueño de la clínica que lo restablezca en Equipo.",
+      "olvidasteTextoDueno": "Restablécelo en Equipo, en tu propia ficha.",
       "sinPin": "Aún no tienes PIN de Caja (te lo restablecieron o no lo has creado). Créalo para continuar.",
       "restablecido": "Tu PIN de Caja se restableció. Crea uno nuevo para continuar."
     },

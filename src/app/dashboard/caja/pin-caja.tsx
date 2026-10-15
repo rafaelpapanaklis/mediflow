@@ -9,7 +9,7 @@ import { KeyRound, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useT } from "@/i18n/i18n-provider";
-import { cuerpoDePinNuevo, soloDigitosDelPin, validarCambioDePin, type MotivoPinRechazado } from "./pin-doble";
+import { claveDelTextoOlvidePin, cuerpoDePinNuevo, soloDigitosDelPin, validarCambioDePin, type MotivoPinRechazado } from "./pin-doble";
 
 export function CampoPin({
   etiqueta, value, onChange, autoFocus, fuente, requerido = true, icono = false,
@@ -37,8 +37,11 @@ export function CampoPin({
   );
 }
 
-/** «¿Olvidaste tu PIN?» — junto a donde se pide el PIN. Solo explica; no llama a nada. */
-export function OlvidePin() {
+/**
+ * «¿Olvidaste tu PIN?» — junto a donde se pide el PIN. Solo explica; no llama a nada.
+ * `esSuperAdmin` viene del servidor: al dueño le dice que lo restablezca él mismo.
+ */
+export function OlvidePin({ esSuperAdmin = false }: { esSuperAdmin?: boolean }) {
   const t = useT();
   const [abierto, setAbierto] = useState(false);
   return (
@@ -49,7 +52,7 @@ export function OlvidePin() {
       </button>
       {abierto && (
         <p role="status" style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-2)" }}>
-          {t("cashRegister.pin.olvidasteTexto")}
+          {t(claveDelTextoOlvidePin(esSuperAdmin))}
         </p>
       )}
     </div>
@@ -64,10 +67,12 @@ export function useMensajePin() {
 }
 
 export function ModalCambiarPin({
-  tienePin, rediseno, onClose, onGuardado,
+  tienePin, rediseno, esSuperAdmin = false, onClose, onGuardado,
 }: {
   tienePin: boolean;
   rediseno?: boolean;
+  /** Quien lo abre es el dueño (SUPER_ADMIN): cambia el texto de «¿Olvidaste tu PIN?». */
+  esSuperAdmin?: boolean;
   onClose: () => void;
   /** El servidor aceptó el PIN nuevo. */
   onGuardado: () => void;
@@ -121,7 +126,7 @@ export function ModalCambiarPin({
               <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 12px" }}>{t("cashRegister.pin.crearAyuda")}</p>
             )}
             {tienePin && <CampoPin etiqueta={t("cashRegister.pin.actual")} value={actual} onChange={setActual} autoFocus fuente={fuente} />}
-            {tienePin && <OlvidePin />}
+            {tienePin && <OlvidePin esSuperAdmin={esSuperAdmin} />}
             <CampoPin etiqueta={t("cashRegister.pin.nuevo")} value={nuevo} onChange={setNuevo} autoFocus={!tienePin} fuente={fuente} />
             <CampoPin etiqueta={t("cashRegister.pin.confirmarNuevo")} value={confirmacion} onChange={setConfirmacion} fuente={fuente} />
             {error && (

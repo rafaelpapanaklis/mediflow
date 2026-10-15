@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wallet, TrendingUp, Percent, Receipt, ArrowDownCircle, Banknote,
@@ -29,6 +29,7 @@ import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-a
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
 import { AvisoCobrosAutomaticos } from "@/components/cobro-automatico/AvisoCobrosAutomaticos";
 import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
+import avisosCaja from "@/components/dashboard/caja-rediseno/avisos-caja.module.css";
 import { ModalCambiarPin, OlvidePin } from "./pin-caja";
 import { cuerpoDePinNuevo, validarPinDoble } from "./pin-doble";
 
@@ -60,6 +61,8 @@ interface Props {
   history:  CajaHistoryRow[];
   timezone: string;
   hasPin:   boolean;
+  /** La sesión es el dueño (SUPER_ADMIN): «¿Olvidaste tu PIN?» le dice que lo restablezca él, en su ficha. */
+  esSuperAdmin?: boolean;
   billing:  BillingProps;
   /**
    * REDISEÑO DE CAJA — el mismo interruptor por clínica que enciende el menú
@@ -108,7 +111,7 @@ const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) 
 const netoDelTurno = (x: { netIncome?: number; totalIncome: number; refunds: number }) =>
   x.netIncome ?? Math.round((x.totalIncome - x.refunds) * 100) / 100;
 
-export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, billing, rediseno = false, puedeAjustarCierre = false }: Props) {
+export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, esSuperAdmin = false, billing, rediseno = false, puedeAjustarCierre = false }: Props) {
   const t = useT();
   const qc = useQueCuenta();
   const locale = useLocale();
@@ -124,6 +127,27 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
   const [hasPin, setHasPin] = useState(hasPinInitial);
   // «Cambiar mi PIN» (o «Crear mi PIN» si todavía no tiene): modal propio.
   const [showCambiarPin, setShowCambiarPin] = useState(false);
+  // Contenedor de los avisos que cargan en cliente (van al final de la pantalla).
+  const avisosTardiosRef = useRef<HTMLDivElement | null>(null);
+  // El aviso de Hoy lleva aquí con `#mensualidades-ortodoncia`. La lista llega
+  // después del primer pintado y ahora está al final de la pantalla: sin esto el
+  // navegador (que ya buscó el ancla y no la encontró) no bajaría a ella.
+  useEffect(() => {
+    if (window.location.hash !== "#mensualidades-ortodoncia") return;
+    const contenedor = avisosTardiosRef.current;
+    if (!contenedor) return;
+    const ir = () => {
+      const el = document.getElementById("mensualidades-ortodoncia");
+      if (!el) return false;
+      el.scrollIntoView({ block: "start" });
+      return true;
+    };
+    if (ir()) return;
+    const observador = new MutationObserver(() => { if (ir()) observador.disconnect(); });
+    observador.observe(contenedor, { childList: true, subtree: true });
+    const limite = window.setTimeout(() => observador.disconnect(), 15000);
+    return () => { observador.disconnect(); window.clearTimeout(limite); };
+  }, []);
   // El motivo por el que el PIN nuevo de la apertura no se aceptó (no coinciden / no son 6 dígitos).
   const [errorPinApertura, setErrorPinApertura] = useState<string | null>(null);
 
@@ -613,26 +637,22 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
     // Con el interruptor encendido la raíz lleva los tokens y las clases del
     // rediseño (caja-rediseno/); apagado, ni una clase: el árbol es el de hoy.
     <div className={rediseno ? CLASES_CAJA_REDISENO : undefined} style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
-      {/* ws1-t3 fase 1 — anticipos pedidos desde el panel que quedaron
-          marcados para revisar. Se calla sola si no hay ninguno.
-          ws1-t5 — mensualidades de ortodoncia por cobrar (R2/R5). Se calla
-          sola si no hay ninguna. */}
-      <div style={{ padding: rediseno ? undefined : "clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0", display: "flex", flexDirection: "column", gap: 12 }}>
-        <AvisoAnticiposPorRevisar />
-        {/* ws1-t5 (F7) — efectivo cobrado fuera de todo corte; se calla si no hay. */}
+      {/* ws1-t1 — «Cambiar mi PIN» (o «Crear mi PIN»): lo PRIMERO de la pantalla,
+          alineado con los márgenes del encabezado, y fuera de las dos ramas a
+          propósito: con el interruptor encendido o apagado, la misma fila. Su alto
+          no depende de nada que cargue después, así que no mueve lo de abajo. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px clamp(14px, 1.6vw, 28px) 0" }}>
+        <button type="button" className="btn-new btn-new--ghost btn-new--sm" data-cambiar-pin
+          style={{ color: "var(--text-1)" }}
+          onClick={() => setShowCambiarPin(true)}>
+          <KeyRound size={14} strokeWidth={1.75} /> {hasPin ? t("cashRegister.pin.cambiar") : t("cashRegister.pin.crear")}
+        </button>
+      </div>
+      {/* ws1-t5 (F7) — efectivo cobrado fuera de todo corte; se calla si no hay.
+          Viene del servidor con la página (props), así que ya está en el primer
+          pintado: no aparece después ni empuja nada. */}
+      <div className={rediseno ? undefined : avisosCaja.superior}>
         <CobrosFueraDeCorte cobros={caja.fueraDeCorte} cajaAbierta={!!reg} timezone={timezone} />
-        <AjustesDineroCaja puedeCierre={puedeAjustarCierre} />
-        {/* ws1-t6 — cobros automáticos con tarjeta rechazados por Mercado Pago. Se calla sola. */}
-        <AvisoCobrosAutomaticos />
-        <ListaMensualidades />
-        {/* ws1-t1 — «Cambiar mi PIN» (o «Crear mi PIN»). Fuera de las dos ramas a
-            propósito: con el interruptor encendido o apagado, la misma fila. */}
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button type="button" className="btn-new btn-new--ghost btn-new--sm" data-cambiar-pin
-            onClick={() => setShowCambiarPin(true)}>
-            <KeyRound size={14} strokeWidth={1.75} /> {hasPin ? t("cashRegister.pin.cambiar") : t("cashRegister.pin.crear")}
-          </button>
-        </div>
       </div>
       {rediseno ? (
         /* CAJA REESTRUCTURADA (ws1-t6): la misma pantalla con cinco bloques en
@@ -983,6 +1003,21 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
       </>
       )}
 
+      {/* Avisos que se piden a la red DESPUÉS del primer pintado (ws1-t1): anticipos
+          por revisar, cierre automático, cobros automáticos rechazados y mensualidades
+          de ortodoncia. Estaban arriba de todo y, al llegar, empujaban hacia abajo el
+          encabezado y «Abrir caja» (un clic rápido caía en vacío). Al FINAL de la
+          pantalla no tienen nada debajo que mover; cada una se calla sola si no hay
+          nada y el contenedor desaparece vacío (`:empty`), sin dejar hueco. */}
+      <div ref={avisosTardiosRef} className={avisosCaja.tardios} data-avisos-tardios>
+        <AvisoAnticiposPorRevisar />
+        <AjustesDineroCaja puedeCierre={puedeAjustarCierre} />
+        {/* ws1-t6 — cobros automáticos con tarjeta rechazados por Mercado Pago. Se calla sola. */}
+        <AvisoCobrosAutomaticos />
+        {/* ws1-t5 — mensualidades de ortodoncia por cobrar (R2/R5). */}
+        <ListaMensualidades />
+      </div>
+
       {/* ── Modal: Abrir caja (PIN + apertura sugerida + retiro inicial) ── */}
       {showOpen && (
         <div className="modal-overlay" onClick={() => setShowOpen(false)}>
@@ -1021,7 +1056,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
                 {!hasPin && errorPinApertura && (
                   <p role="alert" data-pin-error style={{ color: "var(--danger)", fontSize: 12.5, margin: "-6px 0 14px" }}>{errorPinApertura}</p>
                 )}
-                {hasPin && <OlvidePin />}
+                {hasPin && <OlvidePin esSuperAdmin={esSuperAdmin} />}
 
                 <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">{t("cashRegister.openingBalanceLabel")}</label>
@@ -1087,7 +1122,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
                         placeholder="••••••" value={wPin}
                         onChange={e => setWPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                     </div>
-                    <OlvidePin />
+                    <OlvidePin esSuperAdmin={esSuperAdmin} />
                   </>
                 ) : (
                   <p role="status" style={{ color: "var(--text-2)", fontSize: 12.5, margin: 0 }}>{t("cashRegister.pin.sinPin")}</p>
@@ -1171,7 +1206,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
                         placeholder="••••••" value={closePin}
                         onChange={e => setClosePin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                     </div>
-                    <OlvidePin />
+                    <OlvidePin esSuperAdmin={esSuperAdmin} />
                   </>
                 ) : (
                   <p role="status" style={{ color: "var(--text-2)", fontSize: 12.5, margin: 0 }}>{t("cashRegister.pin.sinPin")}</p>
@@ -1327,6 +1362,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
         <ModalCambiarPin
           tienePin={hasPin}
           rediseno={rediseno}
+          esSuperAdmin={esSuperAdmin}
           onClose={() => setShowCambiarPin(false)}
           onGuardado={() => { setHasPin(true); setShowCambiarPin(false); }}
         />
