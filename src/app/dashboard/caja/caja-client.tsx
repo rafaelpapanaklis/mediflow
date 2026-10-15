@@ -25,10 +25,11 @@ import { fechaHoraPanel, fechaPanel } from "@/lib/formato-fecha-panel";
 import { metodoCanonico } from "@/lib/dinero/metodo-pago";
 import { netoDelDia } from "@/lib/dinero/caja-dia";
 import { reembolsosEnEfectivoDelCorte, type MovimientosDelCorte } from "@/lib/dinero/corte-del-historial";
-import { AvisoAnticiposPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
+import { AvisoAnticiposPorRevisar, type Item as AnticipoPorRevisar } from "@/components/dashboard/billing/aviso-anticipos-por-revisar";
 import { AjustesDineroCaja, CobrosFueraDeCorte } from "@/components/dashboard/billing/caja-fuera-de-corte";
 import { AvisoCobrosAutomaticos } from "@/components/cobro-automatico/AvisoCobrosAutomaticos";
 import { ListaMensualidades } from "@/components/specialties/orthodontics/cobranza/ListaMensualidades";
+import type { CobroPorRevisar } from "@/lib/cobro-automatico/servicio.server";
 import avisosCaja from "@/components/dashboard/caja-rediseno/avisos-caja.module.css";
 import { ModalCambiarPin, OlvidePin } from "./pin-caja";
 import { cuerpoDePinNuevo, validarPinDoble } from "./pin-doble";
@@ -74,6 +75,11 @@ interface Props {
   rediseno?: boolean;
   /** ws1-t5: la sesión tiene settings.edit — puede encender el cierre automático. */
   puedeAjustarCierre?: boolean;
+  /**
+   * ws1-t2 — las alertas de dinero, traídas en el servidor con la página (las
+   * mismas funciones que sus rutas): salen ARRIBA en el primer pintado.
+   */
+  avisosDeDinero: { anticipos: AnticipoPorRevisar[]; cobrosAutomaticos: CobroPorRevisar[] };
 }
 
 interface CloseSummary {
@@ -111,7 +117,7 @@ const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) 
 const netoDelTurno = (x: { netIncome?: number; totalIncome: number; refunds: number }) =>
   x.netIncome ?? Math.round((x.totalIncome - x.refunds) * 100) / 100;
 
-export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, esSuperAdmin = false, billing, rediseno = false, puedeAjustarCierre = false }: Props) {
+export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinInitial, esSuperAdmin = false, billing, rediseno = false, puedeAjustarCierre = false, avisosDeDinero }: Props) {
   const t = useT();
   const qc = useQueCuenta();
   const locale = useLocale();
@@ -127,7 +133,7 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
   const [hasPin, setHasPin] = useState(hasPinInitial);
   // «Cambiar mi PIN» (o «Crear mi PIN» si todavía no tiene): modal propio.
   const [showCambiarPin, setShowCambiarPin] = useState(false);
-  // Contenedor de los avisos que cargan en cliente (van al final de la pantalla).
+  // Contenedor de lo que carga en cliente (cierre automático y mensualidades, al final).
   const avisosTardiosRef = useRef<HTMLDivElement | null>(null);
   // El aviso de Hoy lleva aquí con `#mensualidades-ortodoncia`. La lista llega
   // después del primer pintado y ahora está al final de la pantalla: sin esto el
@@ -648,11 +654,17 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
           <KeyRound size={14} strokeWidth={1.75} /> {hasPin ? t("cashRegister.pin.cambiar") : t("cashRegister.pin.crear")}
         </button>
       </div>
-      {/* ws1-t5 (F7) — efectivo cobrado fuera de todo corte; se calla si no hay.
-          Viene del servidor con la página (props), así que ya está en el primer
-          pintado: no aparece después ni empuja nada. */}
-      <div className={rediseno ? undefined : avisosCaja.superior}>
+      {/* Alertas de DINERO, arriba (ws1-t2): anticipos por revisar (ws1-t3),
+          efectivo cobrado fuera de todo corte (ws1-t5, F7) y cobros automáticos
+          con tarjeta rechazados por Mercado Pago (ws1-t6). Las tres vienen del
+          servidor con la página (props), así que ya están en el primer pintado:
+          no aparecen después ni empujan «Abrir caja». Cada una se calla si no hay
+          nada; con las tres calladas el contenedor no tiene hijos (`:empty`) y no
+          deja hueco. La misma fila y los mismos márgenes con el rediseño y sin él. */}
+      <div className={avisosCaja.superior} data-avisos-dinero>
+        <AvisoAnticiposPorRevisar items={avisosDeDinero.anticipos} />
         <CobrosFueraDeCorte cobros={caja.fueraDeCorte} cajaAbierta={!!reg} timezone={timezone} />
+        <AvisoCobrosAutomaticos items={avisosDeDinero.cobrosAutomaticos} />
       </div>
       {rediseno ? (
         /* CAJA REESTRUCTURADA (ws1-t6): la misma pantalla con cinco bloques en
@@ -1003,18 +1015,14 @@ export function CajaClient({ caja: cajaProp, history, timezone, hasPin: hasPinIn
       </>
       )}
 
-      {/* Avisos que se piden a la red DESPUÉS del primer pintado (ws1-t1): anticipos
-          por revisar, cierre automático, cobros automáticos rechazados y mensualidades
-          de ortodoncia. Estaban arriba de todo y, al llegar, empujaban hacia abajo el
-          encabezado y «Abrir caja» (un clic rápido caía en vacío). Al FINAL de la
-          pantalla no tienen nada debajo que mover; cada una se calla sola si no hay
-          nada y el contenedor desaparece vacío (`:empty`), sin dejar hueco. */}
+      {/* Lo que se pide a la red DESPUÉS del primer pintado (ws1-t1) y no es una
+          alerta de dinero: el ajuste de cierre automático (ws1-t5) y las
+          mensualidades de ortodoncia (ws1-t5, R2/R5). Al FINAL de la pantalla no
+          tienen nada debajo que mover; cada uno se calla solo si no hay nada y el
+          contenedor desaparece vacío (`:empty`), sin dejar hueco. Las alertas de
+          dinero ya no están aquí: vienen del servidor y salen arriba (ws1-t2). */}
       <div ref={avisosTardiosRef} className={avisosCaja.tardios} data-avisos-tardios>
-        <AvisoAnticiposPorRevisar />
         <AjustesDineroCaja puedeCierre={puedeAjustarCierre} />
-        {/* ws1-t6 — cobros automáticos con tarjeta rechazados por Mercado Pago. Se calla sola. */}
-        <AvisoCobrosAutomaticos />
-        {/* ws1-t5 — mensualidades de ortodoncia por cobrar (R2/R5). */}
         <ListaMensualidades />
       </div>
 

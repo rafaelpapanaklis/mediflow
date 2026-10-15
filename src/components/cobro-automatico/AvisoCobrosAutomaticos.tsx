@@ -4,6 +4,9 @@
 // suscripciones que MP canceló por su lado. Nunca manda nada al paciente.
 // Se calla sola si no hay ninguno, si la clínica no usa el cobro automático o si
 // la ruta falla. Misma ropa que «Anticipos por revisar» (tokens del panel).
+// ws1-t2: Caja le pasa `items` desde el servidor (page.tsx, la misma función que
+// la ruta) para que salga arriba en el primer pintado sin empujar nada. Sin
+// `items` se los pide a la ruta, como siempre.
 
 import { useEffect, useState } from "react";
 import { CreditCard } from "lucide-react";
@@ -11,11 +14,13 @@ import s from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.c
 import type { CobroPorRevisar } from "@/lib/cobro-automatico/servicio.server";
 import { pesos, useTextosCobroAutomatico } from "./textos";
 
-export function AvisoCobrosAutomaticos() {
+export function AvisoCobrosAutomaticos({ items: delServidor }: { items?: CobroPorRevisar[] } = {}) {
   const t = useTextosCobroAutomatico();
-  const [items, setItems] = useState<CobroPorRevisar[] | null>(null);
+  const [items, setItems] = useState<CobroPorRevisar[] | null>(delServidor ?? null);
 
   useEffect(() => {
+    // Con datos del servidor no hay viaje; un router.refresh() trae los nuevos.
+    if (delServidor) { setItems(delServidor); return; }
     let vivo = true;
     fetch("/api/cobro-automatico/por-revisar")
       .then((r) => (r.ok ? r.json() : { items: [] }))
@@ -24,7 +29,7 @@ export function AvisoCobrosAutomaticos() {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [delServidor]);
 
   async function revisado(id: string) {
     setItems((l) => (l ? l.filter((x) => x.id !== id) : l));

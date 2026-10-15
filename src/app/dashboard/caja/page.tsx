@@ -16,6 +16,8 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { anticiposPorRevisar } from "@/lib/anticipos/avisos-recepcion.server";
+import { porRevisar as cobrosAutomaticosPorRevisar } from "@/lib/cobro-automatico/servicio.server";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -42,6 +44,20 @@ export default async function CajaPage() {
     );
     return <CajaSinPermiso t={t} equipoHref={puedeEditarEquipo ? "/dashboard/team" : undefined} />;
   }
+
+  // ws1-t2 — las dos ALERTAS DE DINERO de Caja (anticipos por revisar y cobros
+  // automáticos rechazados) vienen con la página y salen arriba en el primer
+  // pintado: ya no se piden a la red después ni empujan «Abrir caja». Son las
+  // MISMAS funciones que usan GET /api/anticipos/por-revisar y
+  // GET /api/cobro-automatico/por-revisar (mismo número que antes), con el
+  // clinicId de la sesión (las dos cortan con [] si falta). Su propia tanda (2),
+  // lanzada YA y esperada al final: corre junto a las dos de abajo, no después
+  // (getCajaState hace varias vueltas seguidas; éstas caben en ese tiempo).
+  // Si una falla se calla, como hacía el aviso cuando su ruta no respondía.
+  const avisosDeDinero = Promise.all([
+    anticiposPorRevisar(user.clinicId).catch((e) => { console.error("[caja] anticipos por revisar", e); return []; }),
+    cobrosAutomaticosPorRevisar(user.clinicId).catch((e) => { console.error("[caja] cobros automáticos por revisar", e); return []; }),
+  ]);
 
   const [caja, history, invoices, patients, clinic, creditTotal] = await Promise.all([
     // ws1-t5 (F16): «hoy» en la zona de la clínica.
@@ -110,6 +126,7 @@ export default async function CajaPage() {
     // con este sistema (en una clínica fueron $592,798 sumados de más).
     historiaMigradaDeFacturas(user.clinicId),
   ]);
+  const [anticiposAlerta, cobrosAutomaticosAlerta] = await avisosDeDinero;
   const totalPaid    = money(Math.max(0, (paidAgg._sum.paid ?? 0) - historiaMigrada));
   // «Por cobrar» y «Vencido» NO se vuelven a calcular aquí (fila 87 de la
   // revisión de lógica de uso): son los de `computeReceivables`, que ya vienen
@@ -128,6 +145,7 @@ export default async function CajaPage() {
       // Sale de la sesión del servidor, no del cliente.
       esSuperAdmin={user.role === "SUPER_ADMIN"}
       rediseno={rediseno}
+      avisosDeDinero={{ anticipos: anticiposAlerta, cobrosAutomaticos: cobrosAutomaticosAlerta }}
       puedeAjustarCierre={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "settings.edit")}
       billing={{
         invoices: visibleInvoices as any,

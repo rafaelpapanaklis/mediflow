@@ -139,16 +139,82 @@ test("lo que carga en cliente va al FINAL y nada vive debajo: no empuja Abrir ca
   const bloque = c.indexOf("data-avisos-tardios");
   const modalAbrir = c.indexOf("{/* ── Modal: Abrir caja");
   assert.ok(inicioRoot > 0 && bloque > inicioRoot && modalAbrir > bloque, "tras las dos ramas y antes de los modales (que flotan)");
-  // Los cuatro avisos que se piden a la red están en ese bloque, y ya no arriba.
+  // ws1-t2: abajo solo quedan los dos que se piden a la red y no son alertas de dinero.
   const cierreBloque = c.indexOf("</div>", bloque);
   const dentro = c.slice(bloque, cierreBloque);
-  for (const a of ["<AvisoAnticiposPorRevisar />", "<AjustesDineroCaja", "<AvisoCobrosAutomaticos />", "<ListaMensualidades />"]) {
+  for (const a of ["<AjustesDineroCaja", "<ListaMensualidades />"]) {
     assert.ok(dentro.includes(a), a);
     assert.equal(c.split(a).length - 1, 1, `${a} aparece una sola vez`);
   }
+  assert.ok(!dentro.includes("<AvisoAnticiposPorRevisar") && !dentro.includes("<AvisoCobrosAutomaticos"), "las alertas de dinero ya no van abajo");
   // Y el contenedor vacío no deja hueco.
   const css = readFileSync(join(AQUI, "..", "..", "..", "components", "dashboard", "caja-rediseno", "avisos-caja.module.css"), "utf8");
   assert.match(css, /\.tardios:empty\s*\{\s*display:\s*none;/);
+});
+
+// ── ws1-t2: las alertas de dinero, ARRIBA y con la página ───────────────────
+
+test("las alertas de dinero van arriba (tras «Cambiar mi PIN», antes del encabezado), una vez cada una y con datos del servidor", () => {
+  const c = leer("caja-client.tsx");
+  const pin = c.indexOf("data-cambiar-pin");
+  const bloque = c.indexOf("data-avisos-dinero");
+  const rama = c.indexOf("{rediseno ? (\n        /* CAJA REESTRUCTURADA");
+  assert.ok(pin > 0 && bloque > pin && rama > bloque, "PIN → alertas de dinero → encabezado");
+  const dentro = c.slice(bloque, c.indexOf("</div>", bloque));
+  const orden = [
+    "<AvisoAnticiposPorRevisar items={avisosDeDinero.anticipos} />",
+    "<CobrosFueraDeCorte cobros={caja.fueraDeCorte}",
+    "<AvisoCobrosAutomaticos items={avisosDeDinero.cobrosAutomaticos} />",
+  ];
+  let antes = -1;
+  for (const a of orden) {
+    const i = dentro.indexOf(a);
+    assert.ok(i > antes, `${a} dentro del bloque y en orden`);
+    antes = i;
+    assert.equal(c.split(a).length - 1, 1, `${a} aparece una sola vez`);
+  }
+  // El mismo contenedor con el rediseño y sin él: nada de clase según la rama.
+  assert.match(c, /<div className=\{avisosCaja\.superior\} data-avisos-dinero>/);
+  // Con las tres calladas no deja hueco.
+  const css = readFileSync(join(AQUI, "..", "..", "..", "components", "dashboard", "caja-rediseno", "avisos-caja.module.css"), "utf8");
+  assert.match(css, /\.superior:empty\s*\{\s*display:\s*none;/);
+  assert.doesNotMatch(css, /#[0-9a-fA-F]{3,8}\b/, "sin hex");
+});
+
+test("page.tsx trae las alertas con las MISMAS funciones que sus rutas, por clinicId de la sesión y en paralelo", () => {
+  const p = leer("page.tsx");
+  // Las mismas funciones que GET /api/anticipos/por-revisar y GET /api/cobro-automatico/por-revisar.
+  assert.match(p, /import \{ anticiposPorRevisar \} from "@\/lib\/anticipos\/avisos-recepcion\.server"/);
+  assert.match(p, /import \{ porRevisar as cobrosAutomaticosPorRevisar \} from "@\/lib\/cobro-automatico\/servicio\.server"/);
+  const rutaA = readFileSync(join(AQUI, "..", "..", "api", "anticipos", "por-revisar", "route.ts"), "utf8");
+  const rutaC = readFileSync(join(AQUI, "..", "..", "api", "cobro-automatico", "por-revisar", "route.ts"), "utf8");
+  assert.match(rutaA, /anticiposPorRevisar\(ctx\.clinicId\)/);
+  assert.match(rutaC, /porRevisar\(ctx\.clinicId\)/);
+  // Tenant de la sesión, nunca del cliente.
+  assert.match(p, /anticiposPorRevisar\(user\.clinicId\)/);
+  assert.match(p, /cobrosAutomaticosPorRevisar\(user\.clinicId\)/);
+  // Se lanzan ANTES de la primera tanda y se esperan después de la segunda: no en serie.
+  const lanza = p.indexOf("const avisosDeDinero = Promise.all([");
+  const tanda1 = p.indexOf("const [caja, history, invoices, patients, clinic, creditTotal] = await Promise.all([");
+  const tanda2 = p.indexOf("const [paidAgg, totalInvoices, monthInvoices, rediseno, historiaMigrada] = await Promise.all([");
+  const espera = p.indexOf("= await avisosDeDinero;");
+  assert.ok(lanza > 0 && tanda1 > lanza && tanda2 > tanda1 && espera > tanda2, "lanza → tanda 1 → tanda 2 → espera");
+  // Después del portón de Caja: quien no puede usar Caja no las consulta.
+  assert.ok(p.indexOf("if (!canUseCaja(user))") < lanza);
+  // Si una falla, se calla (no tumba Caja).
+  const tanda = p.slice(lanza, tanda1);
+  assert.equal((tanda.match(/\.catch\(/g) ?? []).length, 2);
+  assert.match(p, /avisosDeDinero=\{\{ anticipos: anticiposAlerta, cobrosAutomaticos: cobrosAutomaticosAlerta \}\}/);
+});
+
+test("los avisos con `items` del servidor no se piden a la red; sin `items`, como siempre", () => {
+  const raiz = join(AQUI, "..", "..", "..", "components");
+  for (const f of [join(raiz, "dashboard", "billing", "aviso-anticipos-por-revisar.tsx"), join(raiz, "cobro-automatico", "AvisoCobrosAutomaticos.tsx")]) {
+    const c = readFileSync(f, "utf8");
+    assert.match(c, /\{ items: delServidor \}: \{ items\?: /, f);
+    assert.match(c, /useState<[^>]+>\(delServidor \?\? null\)/, f);
+    assert.match(c, /if \(delServidor\) \{ setItems\(delServidor\); return; \}\n\s+let vivo = true;\n\s+fetch\(/, f);
+  }
 });
 
 test("CobrosFueraDeCorte es del servidor (props): se queda arriba sin ningún viaje", () => {

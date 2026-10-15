@@ -9,12 +9,16 @@
 // Diseño (ws1-t5): la ropa vive en `cobros-inventario-rediseno/avisos.module.css`
 // y solo lee tokens del panel. Antes pedía `--warning-bg`, que no existe, y
 // caía en un crema fijo: en oscuro era una mancha clara con letra clara.
+//
+// ws1-t2: Caja le pasa `items` desde el servidor (page.tsx, la misma función
+// que la ruta) para que salga arriba en el primer pintado sin empujar nada.
+// Sin `items` se los pide a la ruta, como siempre.
 
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import s from "@/components/dashboard/cobros-inventario-rediseno/avisos.module.css";
 
-interface Item {
+export interface Item {
   depositId: string;
   paciente: string;
   monto: number;
@@ -24,10 +28,12 @@ interface Item {
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
-export function AvisoAnticiposPorRevisar() {
-  const [items, setItems] = useState<Item[] | null>(null);
+export function AvisoAnticiposPorRevisar({ items: delServidor }: { items?: Item[] } = {}) {
+  const [items, setItems] = useState<Item[] | null>(delServidor ?? null);
 
   useEffect(() => {
+    // Con datos del servidor no hay viaje; un router.refresh() trae los nuevos.
+    if (delServidor) { setItems(delServidor); return; }
     let vivo = true;
     fetch("/api/anticipos/por-revisar")
       .then((r) => (r.ok ? r.json() : { items: [] }))
@@ -40,7 +46,7 @@ export function AvisoAnticiposPorRevisar() {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [delServidor]);
 
   if (!items || items.length === 0) return null;
 

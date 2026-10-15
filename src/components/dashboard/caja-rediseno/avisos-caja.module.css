@@ -17,9 +17,14 @@
   display: none;
 }
 
-/* «Efectivo fuera de corte» (viene con la página) arriba de todo en la Caja de
-   siempre: el mismo margen de antes, y sin relleno si se calla. */
+/* Las alertas de dinero (vienen con la página: anticipos por revisar, efectivo
+   fuera de corte, cobros automáticos rechazados) arriba de todo, con los
+   márgenes del encabezado, igual con el rediseño y sin él (ws1-t2). Apiladas
+   como al final; sin relleno si se callan todas. */
 .superior {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 12px clamp(14px, 1.6vw, 28px) 0;
 }
 
