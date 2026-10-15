@@ -31,6 +31,8 @@ import {
   type DatosEditablesDeMiembro,
 } from "@/lib/team/parche-miembro";
 import { SelectorDeRol } from "./selector-de-rol";
+import { AccesoCaja } from "./acceso-caja";
+import { cajaQueViaja, motivoCajaFija, seccionCajaVisible, type MotivoCajaFija } from "./caja-miembro";
 import { especialidadParaElSelector, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
 import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
@@ -99,6 +101,9 @@ interface TeamMember {
   especialidad?: string | null;
   cedulaEspecialidad?: string | null;
   agendaActive?: boolean | null;
+  // Caja (ws1-t1): el interruptor y SI tiene PIN. El hash nunca llega aquí.
+  canAccessCaja?: boolean | null;
+  tieneCajaPin?: boolean;
   permissionsOverride?: string[];
   tambienEn?: string[];
   _count: { appointments: number; records: number };
@@ -216,7 +221,7 @@ function EstablecerContrasena({
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, onSetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso, esYo,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, onSetPassword, rediseno, sedeDental, ortoModulo, puedeCambiarAcceso, esYo, caja,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -244,6 +249,14 @@ function MemberForm({
   puedeCambiarAcceso: boolean;
   // Edición: el miembro que se edita es quien tiene la sesión. Su rol no se toca.
   esYo: boolean;
+  // «Caja» (ws1-t1). Sin él (quien no tiene «Editar equipo») la sección no se pinta.
+  caja?: {
+    marcada: boolean;
+    onCambiar: (v: boolean) => void;
+    fija: MotivoCajaFija;
+    tieneCajaPin: boolean;
+    onRestablecerPin?: () => void;
+  };
 }) {
   const t = useT();
   const x = useTextosEquipo();
@@ -388,6 +401,19 @@ function MemberForm({
             <span className="text-xs text-muted-foreground leading-tight">{x.atiendeDesc}</span>
           </span>
         </label>
+      )}
+
+      {/* Caja (ws1-t1): «Puede usar Caja» (User.canAccessCaja), si ya creó su PIN y, para
+          el dueño, «Restablecer PIN de Caja». El servidor repite cada regla. */}
+      {caja && (
+        <div className="pt-1">
+          <div className="form-section__title" style={{ marginBottom: 8 }}>{x.cajaSeccion}<span className="form-section__rule" aria-hidden /></div>
+          <AccesoCaja
+            marcada={caja.marcada} onCambiar={caja.onCambiar} fija={caja.fija}
+            tieneCajaPin={caja.tieneCajaPin} onRestablecerPin={caja.onRestablecerPin}
+            deshabilitado={loading} acento={acento} bordeSuave={bordeSuave}
+          />
+        </div>
       )}
 
       {/* Services */}
@@ -754,9 +780,11 @@ interface Props {
   cupo?: CupoUsuarios;
   /** ws1-t8: datos del aviso de tope — plan actual, planes a los que subir y si esta persona puede pagar. */
   subida?: { planNombre: string; opciones: PlanSubida[]; puedeSubir: boolean };
+  /** ws1-t1: la sesión tiene `team.edit`: ve la casilla «Puede usar Caja» en la ficha. */
+  puedeEditarEquipo?: boolean;
 }
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false, cupo, subida }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false, cupo, subida, puedeEditarEquipo = false }: Props) {
   const t = useT();
   // «dental» → «Odontología general» en la lista, como en el selector; lo desconocido, tal cual.
   const nombreDeEspecialidad = (guardada: string) => {
@@ -823,6 +851,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   });
 
   const [form, setForm] = useState<FormState>(emptyForm);
+  // «Puede usar Caja» de la ficha abierta. Aparte de `form` a propósito: no es un
+  // dato de ficha como los demás y solo viaja si la persona lo cambió.
+  const [cajaAcceso, setCajaAcceso] = useState(false);
   // Con qué datos ABRIÓ el modal de edición. Al guardar solo viaja lo que cambió
   // contra esto: un campo que nadie tocó nunca se manda (y nunca se pisa).
   const [formInicial, setFormInicial] = useState<DatosEditablesDeMiembro | null>(null);
@@ -841,6 +872,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   function abrirAlta() {
     if (cupoVivo.lleno) { setTopeAbierto("alta"); return; }
     setForm(emptyForm());
+    setCajaAcceso(false);
     setShowNew(true);
   }
 
@@ -866,7 +898,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       };
       const res = await fetch("/api/team", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(cuerpo),
+        // El alta nace sin acceso a Caja salvo que quien la da lo marque.
+        body: JSON.stringify(seccionCajaVisible({ puedeEditarEquipo }) ? { ...cuerpo, canAccessCaja: cajaAcceso } : cuerpo),
       });
       if (res.status === 402) { setShowNew(false); setTopeAbierto("alta"); return; }
       const data = await leerRespuestaEquipo(res);
@@ -900,7 +933,15 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     const rolFijo = motivoRolFijo({ esEdicion: true, rol: editMember.role, esYo: editMember.id === currentUserId }) !== null;
     const parche = formInicial ? parcheDeCambios(formInicial, datosActuales, { rolFijo }) : (datosActuales as Partial<DatosEditablesDeMiembro>);
     const acceso = accesoQueViaja({ inicial: accesoInicial(editMember, ortoModulo), actual: form.accesoOrtodoncia });
-    if (Object.keys(parche).length === 0 && !acceso) {
+    // «Puede usar Caja»: solo viaja si la persona la cambió (y no está fija).
+    const cajaNueva = seccionCajaVisible({ puedeEditarEquipo })
+      ? cajaQueViaja({
+          inicial: editMember.canAccessCaja === true,
+          actual: cajaAcceso,
+          fija: motivoCajaFija({ rolDelMiembro: editMember.role, esYo: editMember.id === currentUserId, actorEsDueno: isSuperAdmin, puedeEditarEquipo }),
+        })
+      : undefined;
+    if (Object.keys(parche).length === 0 && !acceso && cajaNueva === undefined) {
       setEditMember(null);
       toast(x.sinCambios);
       return;
@@ -914,6 +955,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         body: JSON.stringify({
           ...parche,
           accesoOrtodoncia: acceso,
+          ...(cajaNueva !== undefined && { canAccessCaja: cajaNueva }),
         }),
       });
       const data = await leerRespuestaEquipo(res);
@@ -924,6 +966,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setTeam(prev => prev.map(m => m.id === editMember.id
         ? {
             ...m, ...parche, email: savedEmail,
+            ...(cajaNueva !== undefined && { canAccessCaja: cajaNueva }),
             permissionsOverride: data.permissionsOverride ?? m.permissionsOverride,
           }
         : m));
@@ -1010,6 +1053,33 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     }
   }
 
+  // «Restablecer PIN de Caja» (ws1-t1). Solo SUPER_ADMIN; el servidor repite la
+  // regla (rol + misma clínica) y no devuelve ningún PIN: la persona crea el
+  // suyo, dos veces, la próxima vez que abra Caja. La ficha se queda abierta.
+  async function restablecerPinDeCaja(m: TeamMember) {
+    if (!isSuperAdmin) return;
+    const nombre = `${m.firstName} ${m.lastName}`;
+    if (!(await askConfirm({
+      title: x.restablecerPinConfirmTitulo(nombre),
+      description: x.restablecerPinConfirmDesc,
+      variant: "danger",
+      confirmText: x.restablecerPinBtn,
+    }))) return;
+    try {
+      const res = await fetch(`/api/team/${m.id}/caja-pin`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
+      const data = await leerRespuestaEquipo(res);
+      if (!res.ok) throw new Error(data.error ?? x.restablecerPinError);
+      setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, tieneCajaPin: false } : mem));
+      if (data.teniaPin === false) toast(x.restablecerPinSinPin(nombre), { icon: "ℹ️" });
+      else toast.success(x.restablecerPinListo(nombre), { duration: 6000 });
+    } catch (err: any) {
+      toast.error(err.message ?? x.restablecerPinError);
+    }
+  }
+
   // «Establecer contraseña nueva» (ws1-t4). Mismo gate que resetPassword; la
   // regla real (dueño de ESTA clínica, no a sí mismo, no a otro dueño) vive en
   // POST /api/team/[id]/set-password. Devuelve true para que el formulario
@@ -1061,6 +1131,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     // el color y los servicios (ws1-t5, T1: antes arrancaban vacíos).
     const datos = formDeMiembro(m, nextColor);
     setForm({ ...datos, accesoOrtodoncia: accesoInicial(m, ortoModulo) });
+    setCajaAcceso(m.canAccessCaja === true);
     setFormInicial(datos);
     setEditMember(m);
   }
@@ -1398,6 +1469,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               loading={loading} isEdit={false} rediseno={rediseno}
               sedeDental={sedeDental} ortoModulo={ortoModulo} puedeCambiarAcceso
               esYo={false}
+              caja={seccionCajaVisible({ puedeEditarEquipo }) ? {
+                marcada: cajaAcceso, onCambiar: setCajaAcceso, tieneCajaPin: false,
+                fija: motivoCajaFija({ rolDelMiembro: form.role, esYo: false, actorEsDueno: isSuperAdmin, puedeEditarEquipo }),
+              } : undefined}
             />
           </div>
         </div>
@@ -1420,6 +1495,14 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               loading={loading} isEdit={true} rediseno={rediseno}
               sedeDental={sedeDental} ortoModulo={ortoModulo} puedeCambiarAcceso={isSuperAdmin}
               esYo={editMember.id === currentUserId}
+              // «Caja»: la casilla para quien tiene `team.edit`; «Restablecer PIN» solo
+              // para el dueño. El estado del PIN se lee de `team` (se actualiza al restablecer).
+              caja={seccionCajaVisible({ puedeEditarEquipo }) ? {
+                marcada: cajaAcceso, onCambiar: setCajaAcceso,
+                fija: motivoCajaFija({ rolDelMiembro: editMember.role, esYo: editMember.id === currentUserId, actorEsDueno: isSuperAdmin, puedeEditarEquipo }),
+                tieneCajaPin: team.find(mem => mem.id === editMember.id)?.tieneCajaPin === true,
+                onRestablecerPin: isSuperAdmin ? () => restablecerPinDeCaja(editMember) : undefined,
+              } : undefined}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={

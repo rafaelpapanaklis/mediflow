@@ -12,6 +12,8 @@ import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
 import { sedesDeMiembros } from "@/lib/team/tambien-en";
 import { getOpcionesSubida } from "@/lib/team/opciones-subida";
 import { isClinicBillingAdmin } from "@/lib/billing/authz";
+import { hasPermission } from "@/lib/auth/permissions";
+import { conIndicadorDePin } from "@/lib/team/member-fields";
 
 export const metadata: Metadata = { title: "Equipo — DaleControl" };
 
@@ -52,6 +54,10 @@ export default async function TeamPage() {
         // Override granular del set default del role — visible solo en el
         // modal de Permisos del SUPER_ADMIN.
         permissionsOverride: true,
+        // Caja (ws1-t1): el interruptor, y el hash SOLO para saber si hay PIN:
+        // conIndicadorDePin lo quita antes de que la fila llegue al navegador.
+        canAccessCaja: true,
+        cajaPinHash: true,
         _count: {
           select: {
             appointments: { where: { status: { not: "CANCELLED" } } },
@@ -75,7 +81,7 @@ export default async function TeamPage() {
   ]);
 
   const tambienEn = await sedesDeMiembros(user.clinicId, team.map((m) => m.supabaseId));
-  const equipo = team.map(({ supabaseId, ...m }) => ({ ...m, tambienEn: tambienEn.get(supabaseId) ?? [] }));
+  const equipo = team.map(({ supabaseId, ...m }) => ({ ...conIndicadorDePin(m), tambienEn: tambienEn.get(supabaseId) ?? [] }));
 
   return (
     <TeamClient
@@ -90,6 +96,7 @@ export default async function TeamPage() {
       ortoModulo={ortoModulo}
       cupo={cupo}
       subida={{ ...subida, puedeSubir: isClinicBillingAdmin(user.role) }}
+      puedeEditarEquipo={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "team.edit")}
     />
   );
 }

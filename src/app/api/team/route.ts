@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { camposPublicosDeMiembro } from "@/lib/team/member-fields";
+import { camposPublicosDeMiembro, conIndicadorDePin } from "@/lib/team/member-fields";
 import { traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { esAccesoOrtodoncia, overrideConAcceso, type AccesoOrtodoncia } from "@/lib/orthodontics/acceso-doctor";
@@ -49,6 +49,10 @@ export async function GET(req: NextRequest) {
       avatarUrl: true, phone: true, isActive: true, createdAt: true,
       cedulaProfesional: true, especialidad: true, cedulaEspecialidad: true,
       permissionsOverride: true,
+      // Caja: el interruptor y SI tiene PIN. El hash se lee solo para derivar
+      // `tieneCajaPin` y se quita antes de responder (conIndicadorDePin).
+      canAccessCaja: true,
+      cajaPinHash: true,
       _count: {
         select: {
           appointments: { where: { status: { not: "CANCELLED" } } },
@@ -61,7 +65,7 @@ export async function GET(req: NextRequest) {
 
   const tambienEn = await sedesDeMiembros(ctx!.clinicId, team.map((m) => m.supabaseId));
 
-  return NextResponse.json(team.map(({ supabaseId, ...m }) => ({ ...m, tambienEn: tambienEn.get(supabaseId) ?? [] })), {
+  return NextResponse.json(team.map(({ supabaseId, ...m }) => ({ ...conIndicadorDePin(m), tambienEn: tambienEn.get(supabaseId) ?? [] })), {
     headers: { "Cache-Control": "no-store, must-revalidate" },
   });
 }

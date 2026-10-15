@@ -121,6 +121,7 @@
     "test:team-sedes": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/team/__tests__/sedes-equipo.test.ts",
     "test:team-cupo": "tsx --test --experimental-test-module-mocks src/lib/team/__tests__/cupo-usuarios.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
+    "test:caja-pin-equipo": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/app/api/team/__tests__/caja-pin-equipo.test.ts src/app/api/caja/pin/__tests__/pin-confirm.test.ts src/app/dashboard/team/__tests__/caja-miembro.test.ts src/app/dashboard/caja/__tests__/pin-doble.test.ts",
     "test:team-dueno-edita": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/team/__tests__/dueno-edita-su-ficha.test.ts src/components/dashboard/team/__tests__/selector-de-rol.test.tsx",
     "test:permissions-modal-titulo": "tsx --test src/components/dashboard/team/__tests__/permissions-modal-titulo.test.ts",
     "test:vendor-fields": "tsx --test src/lib/b2b/__tests__/vendor-fields.test.ts",
