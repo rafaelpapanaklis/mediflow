@@ -169,7 +169,12 @@ test("18c · el efectivo sugerido para abrir excluye las facturas CANCELADAS", (
   const to   = new Date("2026-01-20T18:00:00Z");
   const w: any = cashOnHandPaymentWhere("clinic-1", from, to);
 
-  assert.equal(w.method, "cash", "solo efectivo: lo demás no está en el cajón");
+  // Solo efectivo: lo demás no está en el cajón. Desde la QA de Rafael #2
+  // (3eb41fd9, 5-oct-2026) son las formas en que el efectivo está ESCRITO en la
+  // base (había un pago «CASH» real que el corte ya sumaba y la apertura no):
+  // exactamente estas cuatro, ni tarjeta, ni reembolso, ni anticipo.
+  assert.deepEqual([...w.method.in].sort(), ["CASH", "EFECTIVO", "cash", "efectivo"], "solo efectivo: lo demás no está en el cajón");
+  assert.equal(Object.keys(w.method).length, 1, "un `in` y nada más");
   assert.equal(w.invoice.clinicId, "clinic-1", "aislado por tenant, siempre");
   // C-01 (auditoría de uso, 4-oct-2026): una factura anulada SIN movimiento de
   // dinero no deja billetes en el cajón; la cancelada cuyo efectivo pasó a

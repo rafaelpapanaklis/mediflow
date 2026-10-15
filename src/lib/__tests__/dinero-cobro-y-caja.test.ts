@@ -37,6 +37,11 @@ const FACTURA = {
  */
 function base(pagos: Pago[], creditos: Credito[] = []): CajaDb {
   const enVentana = (d: Date, w: any) => (!w?.gte || d >= w.gte) && (!w?.lte || d <= w.lte);
+  // `method` como Prisma: texto exacto o `{ in }` (el efectivo y sus alias, QA de
+  // Rafael #2). Antes el doble solo entendía texto y con `{ in }` dejaba pasar
+  // el reembolso como si fuera un cobro en efectivo.
+  const metodoCumple = (m: string, f: any) =>
+    typeof f === "string" ? m === f : Array.isArray(f?.in) ? f.in.includes(m) : true;
   return ({
     // Las condiciones de pago (facturas a plazos) se leen con SQL crudo: aquí no hay ninguna.
     $queryRaw: async () => [],
@@ -46,7 +51,7 @@ function base(pagos: Pago[], creditos: Credito[] = []): CajaDb {
         return pagos
           .filter((p) => enVentana(p.paidAt, w.paidAt))
           .filter((p) => (w.refundMethod ? p.method === "refund" && p.refundMethod === w.refundMethod : true))
-          .filter((p) => (typeof w.method === "string" ? p.method === w.method : true))
+          .filter((p) => metodoCumple(p.method, w.method))
           .map((p) => ({ ...p, invoice: FACTURA }));
       }) as any,
     },
@@ -176,6 +181,18 @@ test("F5 · la apertura sugerida resta lo reembolsado en efectivo hoy", async ()
   assert.equal(sug, 2_500);
   const sinMetodo = await computeSuggestedOpening("c1", dia("2026-10-03").from, dia("2026-10-03").to, turno(null));
   assert.equal(sinMetodo, 3_000);
+});
+
+test("F5 · la apertura sugerida cuenta el efectivo escrito «CASH» y deja fuera la tarjeta", async () => {
+  const at = new Date("2026-10-03T16:00:00Z");
+  const db = base([
+    { id: "p1", invoiceId: "f1", amount: 1_000, method: "cash", paidAt: at },
+    { id: "p2", invoiceId: "f1", amount: 200, method: "CASH", paidAt: at },
+    { id: "p3", invoiceId: "f1", amount: 800, method: "debit", paidAt: at },
+    { id: "r1", invoiceId: "f1", amount: 300, method: "refund", refundMethod: "cash", paidAt: at },
+  ]);
+  const sug = await computeSuggestedOpening("c1", dia("2026-10-03").from, dia("2026-10-03").to, db);
+  assert.equal(sug, 900, "$1,000 + $200 «CASH» − $300 devueltos en efectivo; los $800 de débito no están en el cajón");
 });
 
 // ── F3: los tres traspasos llevan su marca ────────────────────────────────
