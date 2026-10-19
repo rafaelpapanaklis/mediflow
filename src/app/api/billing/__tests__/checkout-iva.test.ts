@@ -31,6 +31,7 @@ let sesiones: any[];
 let cupones: any[];
 let llamadasProhibidas: string[];
 let suscripcionViva: any;
+let errorAlComprobar: any = null; // si no es null, subscriptions.retrieve lanza esto
 
 const stripeDoble: any = {
   customers: { create: async () => ({ id: "cus_falso" }) },
@@ -43,7 +44,7 @@ const stripeDoble: any = {
     },
   },
   subscriptions: {
-    retrieve: async () => suscripcionViva,
+    retrieve: async () => { if (errorAlComprobar) throw errorAlComprobar; return suscripcionViva; },
     update: async () => { llamadasProhibidas.push("subscriptions.update"); return {}; },
     cancel: async () => { llamadasProhibidas.push("subscriptions.cancel"); return {}; },
     create: async () => { llamadasProhibidas.push("subscriptions.create"); return {}; },
@@ -127,6 +128,7 @@ beforeEach(() => {
   auditorias = [];
   llamadasProhibidas = [];
   suscripcionViva = null;
+  errorAlComprobar = null;
   facturasStripe = [];
   consultasFacturas = [];
   // Clínica NUEVA (registrada después del corte de IVA, 26-sep-2026): todo lleva IVA.
@@ -435,6 +437,34 @@ test("una clínica de antes con suscripción de tarjeta VIVA va al portal, como 
   assert.equal(json.portal, true);
   assert.equal(sesiones.length, 0);
   assert.deepEqual(llamadasProhibidas, []);
+});
+
+/* ── ws1-t2 (revisión t4 #6): comprobar la suscripción existente no se da por perdida si Stripe falla ── */
+
+test("tarjeta con suscripción guardada y Stripe falla al comprobarla (timeout/5xx) → 502, NO se abre un Checkout nuevo", async () => {
+  clinica.stripeSubscriptionId = "sub_vieja";
+  for (const err of [
+    Object.assign(new Error("timeout"), { type: "StripeConnectionError" }),
+    Object.assign(new Error("boom"), { type: "StripeAPIError", statusCode: 503 }),
+    new Error("sin código"),
+  ]) {
+    errorAlComprobar = err;
+    sesiones = [];
+    const { res, json } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+    assert.equal(res.status, 502);
+    assert.equal(json.error, "No pudimos comprobar tu suscripción. Intenta de nuevo en un momento.");
+    assert.equal(sesiones.length, 0, "ni sesión de Checkout ni cupón: quizá la suscripción existe");
+    assert.equal(cupones.length, 0);
+  }
+  assert.deepEqual(llamadasProhibidas, []);
+});
+
+test("tarjeta con suscripción guardada que Stripe ya no tiene (resource_missing) → sigue con el alta normal", async () => {
+  clinica.stripeSubscriptionId = "sub_borrada";
+  errorAlComprobar = Object.assign(new Error("No such subscription"), { code: "resource_missing", statusCode: 404 });
+  const { res } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(res.status, 200);
+  assert.equal(sesiones.length, 1);
 });
 
 /* ── contratos de código: ninguna renovación ni suscripción existente pasa por lo nuevo ── */

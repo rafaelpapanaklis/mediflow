@@ -161,8 +161,18 @@ export async function POST(req: NextRequest) {
     let existing: any = null;
     try {
       existing = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
-    } catch {
-      existing = null; // la suscripción ya no existe en Stripe → seguir con alta normal
+    } catch (err: any) {
+      // SOLO «ya no existe en Stripe» sigue con el alta normal. Con cualquier otro error (timeout, 5xx,
+      // red) la suscripción quizá SÍ existe: abrir un Checkout nuevo dejaría dos suscripciones y la vieja
+      // (p. ej. past_due) seguiría reintentando su cobro → doble cobro. Se pide reintentar.
+      if ((err?.code ?? err?.raw?.code) !== "resource_missing") {
+        console.error("[billing/checkout] no se pudo comprobar la suscripción existente:", err?.message ?? err);
+        return NextResponse.json(
+          { code: "SUBSCRIPTION_CHECK_FAILED", error: "No pudimos comprobar tu suscripción. Intenta de nuevo en un momento." },
+          { status: 502 },
+        );
+      }
+      existing = null;
     }
     const liveStatuses = ["active", "trialing", "past_due", "unpaid"];
     if (existing && liveStatuses.indexOf(existing.status) >= 0) {
