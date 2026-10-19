@@ -16,19 +16,7 @@
 
 import { z } from "zod";
 import { PLAN_IDS, isPlanId, type PlanId } from "./plans";
-import {
-  desgloseConIva,
-  ivaAplica,
-  type ExencionIva,
-  type IvaParaCobro,
-} from "./iva-cobro";
-import {
-  isPlanTierUpgrade,
-  planAmountCents,
-  subscriptionItemInterval,
-  type BillingInterval,
-  type PlanPricing,
-} from "./proration";
+import { isPlanTierUpgrade, subscriptionItemInterval, type BillingInterval } from "./proration";
 
 /** Moneda del contrato: todos los planes se cobran en pesos. */
 export const MONEDA_PAGO = "MXN" as const;
@@ -214,29 +202,6 @@ export function esPlanMasGrande(planActual: string | null | undefined, plan: str
   return (PLAN_IDS as readonly string[]).includes(plan) && isPlanTierUpgrade(planActual, plan);
 }
 
-export interface OpcionSubir {
-  plan: PlanId;
-  nombre: string;
-  /** Pesos, exactos: lo que se cobra HOY por el plan nuevo completo (con IVA si `ivaIncluido`). */
-  monto: number;
-  ivaIncluido: boolean;
-}
-
-/**
- * Lo que costaría el plan nuevo hoy: precio de lista del plan en el intervalo de la suscripción
- * (nunca la promo del primer mes ni los precios conservados de la clínica) más el IVA que corresponde.
- */
-export function opcionDeSubida(args: {
-  plan: PlanPricing & { id: PlanId };
-  interval: BillingInterval;
-  exencion: ExencionIva | null | undefined;
-}): OpcionSubir {
-  const subtotalCents = planAmountCents(args.plan, args.interval);
-  const conIva = ivaAplica({ metodo: "card", plan: args.plan.id, exencion: args.exencion });
-  const totalCents = conIva ? desgloseConIva(subtotalCents).totalCents : subtotalCents;
-  return { plan: args.plan.id, nombre: args.plan.name, monto: totalCents / 100, ivaIncluido: conIva };
-}
-
 // ── Parámetros de Stripe de «subir» ─────────────────────────────────────────
 
 /**
@@ -262,45 +227,6 @@ export function descuentosParaSubir(sub: Pick<SuscripcionPago, "discount" | "dis
   if (!hayPromo) return undefined;
   const quedan = [...todos.entries()].filter(([, promo]) => !promo).map(([id]) => ({ discount: id }));
   return quedan.length > 0 ? quedan : "";
-}
-
-export interface ParamsSubir {
-  items: Array<{ id: string; price: string; tax_rates?: string[] }>;
-  proration_behavior: "none";
-  billing_cycle_anchor: "now";
-  metadata: Record<string, string>;
-  expand: string[];
-  automatic_tax?: { enabled: true };
-  discounts?: "" | Array<{ discount: string }>;
-}
-
-/**
- * Arma el `subscriptions.update` de «subir». INVARIANTES (los fija la prueba):
- *   · `billing_cycle_anchor: "now"` + `proration_behavior: "none"`: ciclo nuevo desde hoy, plan nuevo
- *     COMPLETO, sin prorrateo ni crédito del viejo.
- *   · SIN `payment_behavior: "error_if_incomplete"`: la factura vieja ya está anulada; si la tarjeta
- *     vuelve a fallar la actualización debe quedar hecha y la factura nueva abierta (para pagarla por
- *     la URL), no revertida dejando a la clínica sin ninguna factura que pagar.
- *   · el plan va en la metadata de la suscripción (convención de change-plan: el webhook la usa).
- */
-export function armarUpdateSubir(args: {
-  sub: SuscripcionPago;
-  itemId: string;
-  priceId: string;
-  plan: PlanId;
-  clinicId: string;
-  iva: Extract<IvaParaCobro, { ok: true }>;
-}): ParamsSubir {
-  const descuentos = descuentosParaSubir(args.sub);
-  return {
-    items: [{ id: args.itemId, price: args.priceId, ...(args.iva.linea.tax_rates ? { tax_rates: args.iva.linea.tax_rates } : {}) }],
-    proration_behavior: "none",
-    billing_cycle_anchor: "now",
-    metadata: { ...(args.sub.metadata ?? {}), clinicId: args.clinicId, plan: args.plan, kind: "platform-subscription" },
-    expand: ["latest_invoice"],
-    ...(args.iva.modo === "automatico" ? { automatic_tax: { enabled: true as const } } : {}),
-    ...(descuentos !== undefined ? { discounts: descuentos } : {}),
-  };
 }
 
 export { subscriptionItemInterval };
