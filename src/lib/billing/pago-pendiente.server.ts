@@ -1,0 +1,322 @@
+/**
+ * «Pagar mi plan» y «Subir de plan y pagar» — lo que habla con Stripe.
+ *
+ * Todo lo de fuera entra por `DepsPago` (Stripe, la clínica de la SESIÓN, los precios de `plan_configs`,
+ * el IVA, las sedes, la bitácora y el cambio local de plan): la ruta `/api/billing/pago-pendiente` los
+ * cablea con prisma y `getStripeSafe()`, y las pruebas con dobles, sin base ni red.
+ *
+ * NUNCA se borra nada: la factura vieja se ANULA (void) en Stripe y queda ahí. La reactivación de la clínica
+ * la hace el webhook existente (invoice.paid / customer.subscription.updated); aquí no se escribe
+ * `subscriptionStatus`.
+ */
+
+import { isClinicBillingAdmin } from "./authz";
+import { ivaParaPagoDeClinica, type ExencionIva } from "./iva-cobro";
+import type { PlanId } from "./plans";
+import {
+  buildTargetPriceParams,
+  chargeFailureMessage,
+  isLiveSubscriptionStatus,
+  isStripeChargeFailure,
+  planAmountCents,
+  subscriptionItemInterval,
+  type PlanPricing,
+} from "./proration";
+import {
+  MENSAJES,
+  MONEDA_PAGO,
+  armarUpdateSubir,
+  claves,
+  esPlanMasGrande,
+  facturaAbiertaMasReciente,
+  facturaTienePromo,
+  opcionDeSubida,
+  planesMasGrandes,
+  respuesta,
+  type FacturaPago,
+  type OpcionSubir,
+  type RespuestaPago,
+  type SuscripcionPago,
+} from "./pago-pendiente";
+
+// ── Lo que se usa de Stripe (el cliente real lo cumple; las pruebas lo doblan) ──
+
+export interface StripePago {
+  subscriptions: {
+    retrieve(id: string, params?: Record<string, unknown>): Promise<SuscripcionPago>;
+    update(id: string, params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<SuscripcionPago & { latest_invoice?: string | FacturaPago | null }>;
+  };
+  invoices: {
+    list(params: Record<string, unknown>): Promise<{ data: FacturaPago[] }>;
+    retrieve(id: string): Promise<FacturaPago>;
+    pay(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
+    voidInvoice(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
+  };
+  prices: {
+    create(params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<{ id: string }>;
+  };
+}
+
+export interface ClinicaPago {
+  id: string;
+  plan: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+}
+
+export interface DepsPago {
+  /** `null` = Stripe no está configurado en este entorno. */
+  stripe: StripePago | null;
+  /** Rol del usuario de la SESIÓN. */
+  role: string | null | undefined;
+  /** La clínica de la SESIÓN (nunca del body). */
+  clinica: ClinicaPago;
+  env: Record<string, string | undefined>;
+  /** Plan con precio de lista (`plan_configs`), sin promo ni precios conservados de la clínica. */
+  plan: (id: PlanId) => Promise<PlanPricing & { id: PlanId }>;
+  /** Mensaje si las sedes impiden ese plan (`bloqueoDeSedesParaPlan`), o null. */
+  bloqueoDeSedes: (id: PlanId) => Promise<string | null>;
+  /** Sede incluida (no paga ni tiene plan propio) → nombre de quien paga; null si la clínica paga ella. */
+  sedeIncluida: () => Promise<{ pagadoraId: string; pagadoraNombre: string | null } | null>;
+  /** Exención de IVA de la clínica (`exencionIvaDeClinica`). */
+  exencionIva: () => Promise<ExencionIva | null>;
+  /** Escribe el plan nuevo en la clínica (plan, tope de IA, condiciones viejas fuera, sedes). Sin tocar el status. */
+  aplicarPlanLocal: (plan: PlanId) => Promise<void>;
+  /** Una fila en la bitácora de la clínica por acción. */
+  auditar: (evento: Record<string, unknown>) => Promise<void>;
+  /** Mensaje cuando una sede incluida intenta pagar (`avisoSedeIncluida`). */
+  avisoSedeIncluida: (pagadoraNombre: string | null) => string;
+}
+
+// ── Utilidades ──────────────────────────────────────────────────────────────
+
+const codigoDe = (err: unknown): string | undefined => {
+  const e = err as { code?: string; raw?: { code?: string } } | null;
+  return e?.code ?? e?.raw?.code;
+};
+
+const falloDeStripe = (err: unknown): RespuestaPago =>
+  respuesta(502, { code: "STRIPE_ERROR", error: (err as { message?: string } | null)?.message ?? MENSAJES.stripeNoContesto });
+
+const resultadoDeFactura = (f: FacturaPago | null | undefined): RespuestaPago => {
+  if (f?.status === "paid") return respuesta(200, { ok: true, pagado: true });
+  if (f?.hosted_invoice_url) return respuesta(200, { ok: true, pagado: false, url: f.hosted_invoice_url });
+  return respuesta(502, { code: "SIN_URL_DE_PAGO", error: MENSAJES.noHayUrl });
+};
+
+type Contexto =
+  | { ok: false; respuesta: RespuestaPago }
+  | { ok: true; stripe: StripePago; sub: SuscripcionPago; factura: FacturaPago };
+
+/**
+ * Lo común de las tres operaciones: permiso, suscripción de tarjeta VIVA de la clínica de la sesión y su
+ * factura abierta. Los códigos del contrato: 403 sin permiso · 409 sin pendiente · 502 Stripe no contestó.
+ * `soloLectura` (GET): lo que no hay que pagar no es un error, es `sin_pendiente`.
+ */
+async function cargarPendiente(deps: DepsPago, soloLectura: boolean): Promise<Contexto | { ok: false; sinPendiente: true }> {
+  const sinPendiente = soloLectura
+    ? ({ ok: false, sinPendiente: true } as const)
+    : ({ ok: false, respuesta: respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente }) } as const);
+
+  if (!isClinicBillingAdmin(deps.role)) {
+    return { ok: false, respuesta: respuesta(403, { code: "FORBIDDEN_NOT_CLINIC_ADMIN", error: MENSAJES.sinPermiso }) };
+  }
+  const { clinica } = deps;
+  if (!clinica.id) return { ok: false, respuesta: respuesta(401, { error: "Sin sesión de clínica" }) };
+
+  const sede = await deps.sedeIncluida();
+  if (sede) {
+    return soloLectura
+      ? { ok: false, sinPendiente: true }
+      : {
+          ok: false,
+          respuesta: respuesta(409, { code: "SEDE_INCLUIDA", error: deps.avisoSedeIncluida(sede.pagadoraNombre), pagadoraId: sede.pagadoraId }),
+        };
+  }
+  if (!clinica.stripeSubscriptionId) return sinPendiente;
+  if (!deps.stripe) {
+    return { ok: false, respuesta: respuesta(503, { code: "STRIPE_NO_CONFIGURADO", error: "Los pagos con tarjeta no están disponibles por ahora. Escríbenos a soporte@dalecontrol.com." }) };
+  }
+  const stripe = deps.stripe;
+
+  let sub: SuscripcionPago;
+  try {
+    sub = await stripe.subscriptions.retrieve(clinica.stripeSubscriptionId, { expand: ["items.data"] });
+  } catch (err) {
+    if (codigoDe(err) === "resource_missing") return sinPendiente;
+    return { ok: false, respuesta: falloDeStripe(err) };
+  }
+  if (!isLiveSubscriptionStatus(sub.status)) return sinPendiente;
+
+  let facturas: FacturaPago[];
+  try {
+    facturas = (await stripe.invoices.list({ subscription: clinica.stripeSubscriptionId, status: "open", limit: 10 })).data;
+  } catch (err) {
+    return { ok: false, respuesta: falloDeStripe(err) };
+  }
+  const factura = facturaAbiertaMasReciente(facturas, clinica.stripeCustomerId);
+  if (!factura) return sinPendiente;
+  return { ok: true, stripe, sub, factura };
+}
+
+// ── GET ─────────────────────────────────────────────────────────────────────
+
+export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago> {
+  const ctx = await cargarPendiente(deps, true);
+  if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(200, { estado: "sin_pendiente" });
+
+  const interval = subscriptionItemInterval(ctx.sub.items.data[0]);
+  const exencion = await deps.exencionIva();
+  const opciones: OpcionSubir[] = [];
+  for (const id of planesMasGrandes(deps.clinica.plan)) {
+    if (await deps.bloqueoDeSedes(id)) continue; // un plan que las sedes no admiten no se ofrece
+    opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion }));
+  }
+  return respuesta(200, {
+    estado: "pendiente",
+    planActual: deps.clinica.plan,
+    montoPendiente: ctx.factura.amount_due / 100,
+    moneda: MONEDA_PAGO,
+    opcionesSubir: opciones,
+  });
+}
+
+// ── POST { accion: "pagar" } ────────────────────────────────────────────────
+
+export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
+  const ctx = await cargarPendiente(deps, false);
+  if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+  const { stripe, factura } = ctx;
+  const clinicId = deps.clinica.id;
+
+  let pagada: FacturaPago | null = null;
+  let rechazo: unknown = null;
+  try {
+    // Con el método guardado, sin pasar otro: es la factura del plan actual, tal cual está.
+    pagada = await stripe.invoices.pay(factura.id, {}, { idempotencyKey: claves.pagar(clinicId, factura.id, factura.attempt_count) });
+  } catch (err) {
+    if (!isStripeChargeFailure(err)) return falloDeStripe(err);
+    rechazo = err;
+  }
+
+  const final: FacturaPago = pagada ?? factura;
+  await deps.auditar({
+    event: "pago-pendiente-pagar",
+    facturaId: factura.id,
+    montoMxn: factura.amount_due / 100,
+    pagado: final.status === "paid",
+    // Informativo: la factura puede venir del primer cobro con la promo; aquí no se cambia su monto.
+    facturaConPromo: facturaTienePromo(factura),
+    ...(rechazo ? { code: codigoDe(rechazo) ?? null, error: chargeFailureMessage(rechazo) } : {}),
+  });
+  return resultadoDeFactura(final);
+}
+
+// ── POST { accion: "subir", plan } ──────────────────────────────────────────
+
+export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<RespuestaPago> {
+  // Lo barato primero, y TODO antes de anular nada: la factura vieja solo se anula cuando el resto ya
+  // se sabe que va a poder hacerse.
+  if (!isClinicBillingAdmin(deps.role)) {
+    return respuesta(403, { code: "FORBIDDEN_NOT_CLINIC_ADMIN", error: MENSAJES.sinPermiso });
+  }
+  if (!esPlanMasGrande(deps.clinica.plan, destino)) {
+    return respuesta(400, { code: "PLAN_NO_MAS_GRANDE", error: MENSAJES.planNoMasGrande });
+  }
+  const sedesBloquean = await deps.bloqueoDeSedes(destino);
+  if (sedesBloquean) return respuesta(409, { code: "SEDES_ACTIVAS", error: sedesBloquean });
+
+  const ctx = await cargarPendiente(deps, false);
+  if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+  const { stripe, sub, factura } = ctx;
+  const clinicId = deps.clinica.id;
+
+  const item = sub.items.data[0];
+  if (!item) return respuesta(502, { code: "SUSCRIPCION_SIN_ITEMS", error: "Tu suscripción no tiene un plan asociado en Stripe." });
+
+  // IVA del cambio de plan (Ajuste 1c). Sin IVA configurado NO se cobra sin IVA en silencio.
+  const exencion = await deps.exencionIva();
+  const iva = ivaParaPagoDeClinica(deps.env, { metodo: "card", plan: destino, exencion });
+  if (iva.ok === false) return respuesta(503, { code: iva.codigo, error: iva.error });
+
+  // Precio de LISTA del plan nuevo, en el intervalo de la suscripción (anual sigue anual). Nada de promo.
+  const plan = await deps.plan(destino);
+  const interval = subscriptionItemInterval(item);
+  const cents = planAmountCents(plan, interval);
+
+  let precioId: string;
+  try {
+    precioId = (
+      await stripe.prices.create(buildTargetPriceParams(plan, interval), { idempotencyKey: claves.precio(clinicId, destino, interval, cents) })
+    ).id;
+  } catch (err) {
+    return falloDeStripe(err);
+  }
+
+  // 1) Se ANULA la factura abierta del plan viejo (nunca se borra). Si otro POST ya la anuló, se sigue.
+  try {
+    await stripe.invoices.voidInvoice(factura.id, {}, { idempotencyKey: claves.anular(clinicId, factura.id) });
+  } catch (err) {
+    let yaAnulada = false;
+    try {
+      yaAnulada = (await stripe.invoices.retrieve(factura.id)).status === "void";
+    } catch {
+      yaAnulada = false;
+    }
+    if (!yaAnulada) return falloDeStripe(err);
+  }
+
+  // 2) La MISMA suscripción pasa al plan nuevo y se cobra completo ahora.
+  let nueva: SuscripcionPago & { latest_invoice?: string | FacturaPago | null };
+  try {
+    nueva = await stripe.subscriptions.update(
+      sub.id,
+      armarUpdateSubir({ sub, itemId: item.id, priceId: precioId, plan: destino, clinicId, iva }) as unknown as Record<string, unknown>,
+      { idempotencyKey: claves.subir(clinicId, factura.id, destino) },
+    );
+  } catch (err) {
+    // Si la tarjeta falló en este paso la factura nueva puede haber quedado abierta: se da su enlace.
+    let abierta: FacturaPago | null = null;
+    try {
+      abierta = facturaAbiertaMasReciente((await stripe.invoices.list({ subscription: sub.id, status: "open", limit: 10 })).data, deps.clinica.stripeCustomerId);
+    } catch {
+      abierta = null;
+    }
+    await deps.auditar({
+      event: "pago-pendiente-subir-fallo",
+      facturaAnuladaId: factura.id,
+      planDestino: destino,
+      code: codigoDe(err) ?? null,
+    });
+    if (abierta?.hosted_invoice_url && isStripeChargeFailure(err)) return resultadoDeFactura(abierta);
+    return falloDeStripe(err);
+  }
+
+  // La suscripción ya está en el plan nuevo: lo mismo que reflejará el webhook con su metadata.plan.
+  await deps.aplicarPlanLocal(destino);
+
+  let nuevaFactura: FacturaPago | null = null;
+  const li = nueva.latest_invoice;
+  if (li && typeof li === "object") nuevaFactura = li;
+  else if (typeof li === "string") {
+    try {
+      nuevaFactura = await stripe.invoices.retrieve(li);
+    } catch {
+      nuevaFactura = null;
+    }
+  }
+
+  await deps.auditar({
+    event: "pago-pendiente-subir",
+    planAntes: deps.clinica.plan,
+    planDestino: destino,
+    facturaAnuladaId: factura.id,
+    facturaNuevaId: nuevaFactura?.id ?? null,
+    subtotalMxn: cents / 100,
+    ivaModo: iva.modo,
+    montoCobradoMxn: nuevaFactura ? nuevaFactura.amount_due / 100 : null,
+    pagado: nuevaFactura?.status === "paid",
+    intervalo: interval,
+  });
+  return resultadoDeFactura(nuevaFactura);
+}
