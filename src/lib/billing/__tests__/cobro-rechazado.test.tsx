@@ -33,6 +33,7 @@ import {
 } from "../../plan-status";
 import { planStatusLabel } from "../../plan-status-label";
 import { datosDeSedeDesdeMadre } from "../sedes-incluidas-core";
+import { fechaHoraPanel } from "../../formato-fecha-panel";
 import { cobrarPendiente, formatoMonto, leerPagoPendiente, tarjetaRechazadaViva } from "../pago-pendiente-cliente";
 import { buildPaymentFailedEmail } from "../../email";
 import { I18nProvider } from "../../../i18n/i18n-provider";
@@ -203,7 +204,7 @@ test("aviso rojo: solo con cobro rechazado y acceso vivo; el botón es solo del 
 function pintar(puedePagar: boolean, idioma: "es" | "en" = "es") {
   return renderToStaticMarkup(
     <I18nProvider locale={idioma} dict={getDict(idioma)}>
-      <AvisoPagoRechazado accesoHasta="20 de octubre de 2026, 12:00" puedePagar={puedePagar} plan="PRO" />
+      <AvisoPagoRechazado accesoHasta="20 oct 2026, 12:00 p.m." puedePagar={puedePagar} plan="PRO" />
     </I18nProvider>,
   );
 }
@@ -211,16 +212,16 @@ function pintar(puedePagar: boolean, idioma: "es" | "en" = "es") {
 test("el aviso pintado: dueño ve fecha y botón; los demás ven «Avisa al dueño de la clínica» y ningún botón", () => {
   const dueno = pintar(true);
   assert.match(dueno, /role="alert"/);
-  assert.match(dueno, /No pudimos cobrar tu plan\. Tu acceso se suspende el 20 de octubre de 2026, 12:00\./);
+  assert.match(dueno, /No pudimos cobrar tu plan\. Tu acceso se suspende el 20 oct 2026, 12:00 p.m.\./);
   assert.match(dueno, /<button[^>]*>.*Actualizar tarjeta \/ pagar/s);
   assert.doesNotMatch(dueno, /Avisa al dueño/);
 
   const otro = pintar(false);
-  assert.match(otro, /20 de octubre de 2026, 12:00/);
+  assert.match(otro, /20 oct 2026, 12:00 p.m./);
   assert.match(otro, /Avisa al dueño de la clínica/);
   assert.doesNotMatch(otro, /<button/, "sin botón");
 
-  assert.match(pintar(true, "en"), /We couldn&#x27;t charge your plan\. Your access will be suspended on 20 de octubre de 2026, 12:00\./);
+  assert.match(pintar(true, "en"), /We couldn&#x27;t charge your plan\. Your access will be suspended on 20 oct 2026, 12:00 p.m.\./);
 });
 
 test("el layout monta el aviso en TODAS las pantallas del panel: una sola vez, fuera del ternario de los dos menús, y con móvil (la fila se parte)", () => {
@@ -304,25 +305,44 @@ test("el correo: dice la hora de suspensión, enlaza a Configuración › Suscri
     firstName: "Ana",
     clinicName: "Dental <b>Sur</b> & Co",
     planName: "Profesional",
-    suspensionLabel: "20 de octubre de 2026, 12:00",
+    suspensionLabel: "20 oct 2026, 12:00 p.m.",
     payUrl: "https://www.dalecontrol.com/dashboard/settings?tab=subscription",
   });
   assert.equal(c.subject, "No pudimos cobrar tu plan · DaleControl");
-  assert.match(c.html, /20 de octubre de 2026, 12:00/);
+  assert.match(c.html, /20 oct 2026, 12:00 p.m./);
   assert.match(c.html, /href="https:\/\/www\.dalecontrol\.com\/dashboard\/settings\?tab=subscription"/);
   assert.match(c.html, /datos quedan completos y a salvo/);
   assert.doesNotMatch(c.html, /<b>Sur<\/b>/, "el nombre de la clínica no inyecta HTML");
   assert.match(c.html, /Dental &lt;b&gt;Sur&lt;\/b&gt; &amp; Co/);
-  assert.match(c.text, /Tu acceso se suspende el 20 de octubre de 2026, 12:00\./);
+  assert.match(c.text, /Tu acceso se suspende el 20 oct 2026, 12:00 p.m.\./);
   assert.doesNotMatch(c.html + c.text, /\b(vos|tenés|podés|pagá|actualizá)\b/i);
 });
 
-test("la hora de suspensión se dice en la zona de la clínica (no en la del servidor)", () => {
-  const f = new Date("2026-10-20T18:00:00.000Z");
-  assert.match(fechaHoraDeLaClinica(f, "America/Mexico_City"), /12:00/);
-  assert.match(fechaHoraDeLaClinica(f, "America/Tijuana"), /11:00/);
-  assert.match(fechaHoraDeLaClinica(f, "zona/inventada"), /12:00/, "zona inválida → Ciudad de México");
-  assert.match(fechaHoraDeLaClinica(f, null), /12:00/);
+test("la hora de suspensión usa el formato de Caja, con a.m./p.m., en la zona de la clínica (medianoche, mediodía y 23:30)", () => {
+  const CDMX = "America/Mexico_City"; // UTC−6 en octubre de 2026
+  assert.equal(fechaHoraDeLaClinica(new Date("2026-10-20T06:00:00.000Z"), CDMX), "20 oct 2026, 12:00 a.m.", "00:00 → medianoche, sin ambigüedad");
+  assert.equal(fechaHoraDeLaClinica(new Date("2026-10-20T18:00:00.000Z"), CDMX), "20 oct 2026, 12:00 p.m.", "12:00 → mediodía");
+  assert.equal(fechaHoraDeLaClinica(new Date("2026-10-21T05:30:00.000Z"), CDMX), "20 oct 2026, 11:30 p.m.", "23:30");
+  // Es EXACTAMENTE el formato de Caja (fechaHoraPanel), no otro.
+  const f = new Date("2026-10-07T05:49:00.000Z");
+  assert.equal(fechaHoraDeLaClinica(f, CDMX), fechaHoraPanel(f, CDMX));
+  assert.equal(fechaHoraDeLaClinica(f, CDMX), "6 oct 2026, 11:49 p.m.");
+  // Otra zona: la hora de ESA zona; zona inválida o ausente → Ciudad de México.
+  assert.equal(fechaHoraDeLaClinica(new Date("2026-10-20T18:00:00.000Z"), "America/Tijuana"), "20 oct 2026, 11:00 a.m.");
+  assert.equal(fechaHoraDeLaClinica(new Date("2026-10-20T18:00:00.000Z"), "zona/inventada"), "20 oct 2026, 12:00 p.m.");
+  assert.equal(fechaHoraDeLaClinica(new Date("2026-10-20T18:00:00.000Z"), null), "20 oct 2026, 12:00 p.m.");
+  // Ningún sitio vuelve al formato largo sin a.m./p.m.
+  assert.doesNotMatch(fechaHoraDeLaClinica(new Date("2026-10-20T06:00:00.000Z"), CDMX), /de octubre|^\d+ de /);
+  assert.match(fechaHoraDeLaClinica(new Date("2026-10-20T06:00:00.000Z"), CDMX, "en"), /12:00 AM$/);
+});
+
+test("banner, Suscripción y correo dicen la hora con ese mismo formato (una sola función)", () => {
+  for (const f of ["src/app/dashboard/layout.tsx", "src/components/dashboard/subscription-tab.tsx", "src/lib/billing/aviso-cobro-rechazado.server.ts"]) {
+    assert.match(sinComentarios(leer(f)), /fechaHoraDeLaClinica\(/, f);
+  }
+  assert.doesNotMatch(sinComentarios(leer("src/lib/billing/cobro-rechazado.ts")), /hour12|dateStyle|month: "long"/);
+  // /admin dice solo el día («Cobro fallido · acceso hasta 20 oct»): no muestra hora.
+  assert.doesNotMatch(sinComentarios(leer("src/lib/plan-status-label.ts")), /hour|toLocaleTimeString/);
 });
 
 /* ── Sedes ─────────────────────────────────────────────────────────────── */

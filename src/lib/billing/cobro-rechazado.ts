@@ -1,4 +1,5 @@
 import { ACTIVE_SUBSCRIPTION_STATUSES, PAYMENT_FAILED_STATUSES } from "@/lib/plan-status";
+import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 
 /**
  * COBRO RECHAZADO DEL PLAN — reglas puras (ws1-t1, 19-oct-2026).
@@ -153,24 +154,20 @@ export function avisoDePagoRechazado(args: {
   return { visible: true, accesoHasta: acceso, puedePagar: args.rol === "ADMIN" || args.rol === "SUPER_ADMIN" };
 }
 
-/** «20 de octubre de 2026, 14:35» en la zona de la clínica. Sin zona válida cae a Ciudad de México. */
+/**
+ * La hora de suspensión, en el MISMO formato del panel (el de Caja: `fechaHoraPanel`, «6 oct 2026, 11:49 p.m.»)
+ * y en la zona de la clínica. Con a.m./p.m. siempre: medianoche se lee «20 oct 2026, 12:00 a.m.» y mediodía
+ * «20 oct 2026, 12:00 p.m.». Sin zona válida cae a Ciudad de México.
+ */
 export function fechaHoraDeLaClinica(fecha: Date, zona: string | null | undefined, locale: "es" | "en" = "es"): string {
-  const opciones: Intl.DateTimeFormatOptions = {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: locale === "en",
-  };
-  const etiqueta = locale === "en" ? "en-US" : "es-MX";
   for (const tz of [zona, "America/Mexico_City"]) {
     if (!tz) continue;
     try {
-      return new Intl.DateTimeFormat(etiqueta, { ...opciones, timeZone: tz }).format(fecha);
+      new Intl.DateTimeFormat("es-MX", { timeZone: tz });
     } catch {
-      /* zona inválida: se intenta la siguiente */
+      continue; // zona inválida: se intenta la siguiente
     }
+    return fechaHoraPanel(fecha, tz, locale);
   }
   return fecha.toISOString();
 }

@@ -20,7 +20,7 @@ export function AvisoPagoRechazado({
   puedePagar,
   plan,
 }: {
-  /** «20 de octubre de 2026, 14:35», ya en la zona de la clínica. */
+  /** «20 oct 2026, 2:35 p.m.» (formato de Caja), ya en la zona de la clínica. */
   accesoHasta: string;
   puedePagar: boolean;
   plan: string | null;
