@@ -1624,7 +1624,8 @@
       "mensajeOtros": "No pudimos cobrar el plan de la clínica. El {fecha} se suspende el acceso. Avisa al dueño de la clínica.",
       "cta": "Actualizar tarjeta / pagar",
       "abriendo": "Abriendo…",
-      "errorAbrir": "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte."
+      "errorAbrir": "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte.",
+      "mensajeSede": "No pudimos cobrar el plan de la clínica. El {fecha} se suspende el acceso. La clínica principal debe pagar el plan."
     },
     "pagoPendiente": {
       "titulo": "Paga lo pendiente de tu plan",
@@ -1646,7 +1647,9 @@
       "errorLectura": "No pudimos calcular lo pendiente. Inténtalo de nuevo o escribe a soporte.",
       "pagoRecibido": "Pago recibido. Estamos reactivando tu acceso…",
       "errorCobro": "No pudimos hacer el cobro. Inténtalo de nuevo o escribe a soporte.",
-      "soloDueno": "Pídele al dueño o administrador de la clínica que pague el plan."
+      "soloDueno": "Pídele al dueño o administrador de la clínica que pague el plan.",
+      "terminarCambio": "Terminar el cambio a {plan} y pagar",
+      "cambioNoDisponible": "No pudimos preparar el cambio de plan. Usa «Actualizar tarjeta / pagar» o escribe a soporte."
     }
   },
   "agenda": {

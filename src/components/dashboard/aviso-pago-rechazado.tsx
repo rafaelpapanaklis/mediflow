@@ -19,11 +19,14 @@ export function AvisoPagoRechazado({
   accesoHasta,
   puedePagar,
   plan,
+  sedeIncluida = false,
 }: {
   /** «20 oct 2026, 2:35 p.m.» (formato de Caja), ya en la zona de la clínica. */
   accesoHasta: string;
   puedePagar: boolean;
   plan: string | null;
+  /** Sede incluida en el plan de otra clínica: no paga ni tiene qué pagar aquí, así que no hay botón. */
+  sedeIncluida?: boolean;
 }) {
   const t = useT();
   const { pagar, pagando } = usePagarAhora(plan);
@@ -41,9 +44,9 @@ export function AvisoPagoRechazado({
     >
       <AlertTriangle className="h-4 w-4 flex-shrink-0" aria-hidden />
       <div className="min-w-0 flex-1" style={{ minWidth: "min(100%, 16rem)" }}>
-        {t(puedePagar ? "shell.pagoRechazado.mensaje" : "shell.pagoRechazado.mensajeOtros", { fecha: accesoHasta })}
+        {t(sedeIncluida ? "shell.pagoRechazado.mensajeSede" : puedePagar ? "shell.pagoRechazado.mensaje" : "shell.pagoRechazado.mensajeOtros", { fecha: accesoHasta })}
       </div>
-      {puedePagar && (
+      {puedePagar && !sedeIncluida && (
         <button
           type="button"
           onClick={pagar}

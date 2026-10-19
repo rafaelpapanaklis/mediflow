@@ -1624,7 +1624,8 @@
       "mensajeOtros": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}: let the clinic owner know.",
       "cta": "Update card / pay",
       "abriendo": "Opening…",
-      "errorAbrir": "We couldn't open the payment page. Try again or contact support."
+      "errorAbrir": "We couldn't open the payment page. Try again or contact support.",
+      "mensajeSede": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}: the main clinic must pay the plan."
     },
     "pagoPendiente": {
       "titulo": "Pay what's pending on your plan",
@@ -1646,7 +1647,9 @@
       "errorLectura": "We couldn't calculate what's pending. Try again or contact support.",
       "pagoRecibido": "Payment received. We're reactivating your access…",
       "errorCobro": "We couldn't process the charge. Try again or contact support.",
-      "soloDueno": "Ask the clinic owner or an administrator to pay the plan."
+      "soloDueno": "Ask the clinic owner or an administrator to pay the plan.",
+      "terminarCambio": "Finish the change to {plan} and pay",
+      "cambioNoDisponible": "We couldn't prepare the plan change. Use \"Update card / pay\" or contact support."
     }
   },
   "agenda": {

@@ -151,10 +151,34 @@ export default async function SuspendedPage(
   // con los dos botones de PagoPendiente. Las tarjetas de plan de hoy mandarían al portal sin respetar el
   // plan, así que NO se pintan; sin suscripción viva (cuenta nueva o cancelada) siguen como siempre.
   const conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva(clinic);
+  const sinAcceso = isPlanExpired(clinic);
+  // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
+  // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
+  const cobroConIvaListo = ivaParaCobro(process.env).ok;
+  // Respaldo (revisión t4): si la lectura del pago pendiente da «sin pendiente», «no disponible» o error, las tarjetas
+  // de plan de siempre salen debajo de los dos botones; la clínica nunca se queda sin manera de pagar.
+  const tarjetasDeRespaldo = conDosBotones ? (
+    <SuspendedPlanCards
+      plans={planesAMostrar}
+      currentPlan={enlace ? enlace.plan : currentPlan}
+      firstMonthEligible={firstMonthEligible}
+      soloTarjeta={enlace !== null}
+      {...(rediseno
+        ? {
+            rediseno: true,
+            resumenInicial: false,
+            cuentaSpei,
+            referenciaSpei: cuentaSpei ? referenciaDeClinica(user.clinicId) : null,
+            cobroConIvaListo,
+            exencionIva,
+          }
+        : {})}
+    />
+  ) : null;
   const acciones = suspendidaPorFalta ? (
     <>
       {conDosBotones && (
-        <PagoPendiente puedePagar={isClinicBillingAdmin(user.role)} plan={clinic.plan} suspendida />
+        <PagoPendiente puedePagar={isClinicBillingAdmin(user.role)} plan={clinic.plan} suspendida tarjetas={tarjetasDeRespaldo} />
       )}
       <AccionesSuspendida
         plan={clinic.plan}
@@ -164,10 +188,6 @@ export default async function SuspendedPage(
       />
     </>
   ) : null;
-  const sinAcceso = isPlanExpired(clinic);
-  // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
-  // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
-  const cobroConIvaListo = ivaParaCobro(process.env).ok;
   // Subtítulo de una compra nueva: en el rediseño dice SOLO lo que existe (tarjeta/OXXO con Stripe; SPEI es
   // transferencia directa y solo si hay cuenta). La pantalla de siempre conserva su texto.
   const subtitulo = rediseno

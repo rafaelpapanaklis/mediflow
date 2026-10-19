@@ -38,6 +38,8 @@ let suscripcionesVivas: Map<string, any>;
 let facturasVivas: Map<string, any>;
 let stripeRespondeSuscripciones = true;
 let correoFalla = false;
+let correosSuspendida: any[];
+let pagosDeSubscripcion: any[];
 
 const prismaBase: any = {
   clinic: {
@@ -55,6 +57,17 @@ const prismaBase: any = {
     updateMany: async () => ({ count: 0 }),
   },
   clinicModule: { findUnique: async () => null },
+  subscriptionInvoice: {
+    // Lo justo del `where` que usa el webhook: clínica, pagada, pagada DESPUÉS de, y método null o distinto de «stripe».
+    findFirst: async ({ where }: any) =>
+      pagosDeSubscripcion.find(
+        (p) =>
+          p.clinicId === where.clinicId &&
+          p.status === where.status &&
+          p.paidAt > where.paidAt.gt &&
+          (p.method == null || p.method !== "stripe"),
+      ) ?? null,
+  },
   billingEmailLog: {
     create: async ({ data }: any) => {
       if (logsCorreo.some((l) => l.invoiceId === data.invoiceId)) throw Object.assign(new Error("dup"), { code: "P2002" });
@@ -132,6 +145,9 @@ before(async () => {
     sendEmail: async () => ({ delivered: true }),
     sendPlanActivatedEmail: async () => {},
     sendPlanRenewedEmail: async () => {},
+    sendPlanSuspendedEmail: async (m: any) => {
+      correosSuspendida.push(m);
+    },
     sendPaymentFailedEmail: async (m: any) => {
       if (correoFalla) throw new Error("Resend caído");
       correos.push(m);
@@ -191,6 +207,8 @@ function reiniciar(sobre: Record<string, unknown> = {}) {
   ]);
   logsCorreo = [];
   correos = [];
+  correosSuspendida = [];
+  pagosDeSubscripcion = [];
   bitacora = [];
   sedesSincronizadas = [];
   facturasRegistradas = [];
@@ -524,4 +542,116 @@ test("customer.subscription.deleted: la clínica queda «cancelled» y NO se bor
   assert.equal(clinica().plan, antes.plan);
   assert.equal(clinica().email, antes.email);
   assert.ok(sedesSincronizadas.includes(CLINIC));
+});
+
+/* ── Arreglos de la revisión (ws1-t4) ──────────────────────────────────── */
+
+const sinSuspender = () => bitacora.find((b) => b.changes?._source?.after?.sinSuspender)?.changes._source.after.sinSuspender;
+const conPeriodo = (finMs: number, creadaMs = Date.now() - DIA) => ({
+  created: aSegundos(creadaMs),
+  lines: { data: [{ metadata: {}, period: { end: aSegundos(finMs) } }] },
+});
+
+test("#1 pago manual POSTERIOR a la factura que falla (SPEI confirmado): el reintento viejo NO la suspende ni manda correo", async () => {
+  const hoy = Date.now();
+  reiniciar({ trialEndsAt: new Date(hoy + 30 * DIA), nextBillingDate: new Date(hoy + 30 * DIA) });
+  pagosDeSubscripcion = [{ clinicId: CLINIC, status: "paid", method: "transfer", paidAt: new Date(hoy - HORA) }];
+  const antes = clinica().trialEndsAt.getTime();
+  assert.equal(await entregar(evento("invoice.payment_failed", facturaFallida({ created: aSegundos(hoy - 2 * DIA) }))), 200);
+  assert.equal(clinica().subscriptionStatus, "active", "sigue al corriente");
+  assert.equal(clinica().trialEndsAt.getTime(), antes, "sin recorte a 24 h");
+  assert.equal(escrituras.length, 0, "no se escribió nada en la clínica");
+  await nada();
+  assert.equal(correos.length + correosSuspendida.length, 0, "ni correo");
+  assert.equal(sinSuspender(), "pago_manual", "solo bitácora");
+  assert.equal(facturasRegistradas.length, 1, "el cobro fallido sí queda registrado");
+});
+
+test("#1 activación del admin (sin fila de pago) que ya pasa del periodo de la factura: tampoco suspende", async () => {
+  const hoy = Date.now();
+  // La factura vieja cubría hasta dentro de 5 días; el admin dejó a la clínica pagada 2 meses.
+  reiniciar({ trialEndsAt: new Date(hoy + 60 * DIA), nextBillingDate: new Date(hoy + 60 * DIA) });
+  await entregar(evento("invoice.payment_failed", facturaFallida(conPeriodo(hoy + 5 * DIA))));
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(escrituras.length, 0);
+  assert.equal(sinSuspender(), "pago_manual");
+  await nada();
+  assert.equal(correos.length, 0);
+});
+
+test("#1 contraste: renovación NORMAL de tarjeta (acceso = fin del periodo facturado) y pago manual ANTERIOR / de Stripe sí suspenden", async () => {
+  const hoy = Date.now();
+  const fin = hoy + 30 * DIA;
+  reiniciar({ trialEndsAt: new Date(fin), nextBillingDate: new Date(fin) });
+  await entregar(evento("invoice.payment_failed", facturaFallida(conPeriodo(fin)), hoy));
+  assert.equal(clinica().subscriptionStatus, "past_due", "renovación normal: gracia de 24 h como siempre");
+  // Un pago manual de ANTES de crearse la factura no la cubre; uno de Stripe tampoco cuenta como manual.
+  reiniciar({ trialEndsAt: new Date(fin), nextBillingDate: new Date(fin) });
+  pagosDeSubscripcion = [
+    { clinicId: CLINIC, status: "paid", method: "transfer", paidAt: new Date(hoy - 10 * DIA) },
+    { clinicId: CLINIC, status: "paid", method: "stripe", paidAt: new Date(hoy) },
+  ];
+  await entregar(evento("invoice.payment_failed", facturaFallida(conPeriodo(fin, hoy - DIA)), hoy));
+  assert.equal(clinica().subscriptionStatus, "past_due");
+});
+
+test("#2 Stripe caído al preguntar por la factura: 5xx (Stripe reintenta) y la clínica NO se toca", async () => {
+  facturasVivas.delete(FACTURA); // retrieve lanza «No such invoice», como un Stripe que no contesta
+  const antes = clinica().trialEndsAt.getTime();
+  assert.equal(await entregar(evento("invoice.payment_failed", facturaFallida())), 500);
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(clinica().trialEndsAt.getTime(), antes);
+  assert.equal(escrituras.length, 0);
+  await nada();
+  assert.equal(correos.length, 0);
+});
+
+test("#2 solo suspende si la factura viva está «open»: paid / void / uncollectible no", async () => {
+  for (const estado of ["paid", "void", "uncollectible"]) {
+    reiniciar();
+    facturasVivas.set(FACTURA, { id: FACTURA, status: estado });
+    assert.equal(await entregar(evento("invoice.payment_failed", facturaFallida())), 200, estado);
+    assert.equal(clinica().subscriptionStatus, "active", estado);
+    assert.equal(escrituras.length, 0, estado);
+    assert.equal(sinSuspender(), "factura_no_abierta", estado);
+  }
+  reiniciar();
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "open" });
+  await entregar(evento("invoice.payment_failed", facturaFallida()));
+  assert.equal(clinica().subscriptionStatus, "past_due", "open sí");
+});
+
+test("#3 factura de OTRA suscripción de la misma cuenta de Stripe: solo bitácora, el plan no se recorta", async () => {
+  const antes = clinica().trialEndsAt.getTime();
+  await entregar(evento("invoice.payment_failed", facturaFallida({ parent: { subscription_details: { subscription: "sub_duplicada", metadata: {} } } })));
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(clinica().trialEndsAt.getTime(), antes);
+  assert.equal(sinSuspender(), "otra_suscripcion");
+  await nada();
+  assert.equal(correos.length, 0);
+  assert.equal(facturasRegistradas.length, 1, "el rechazo igual queda registrado como cobro fallido");
+});
+
+test("#9 el aviso llega con la gracia VENCIDA: un correo distinto («suspendido por falta de pago»), con el mismo candado, una sola vez", async () => {
+  const rechazo = Date.now() - 30 * HORA; // el webhook estuvo caído
+  await entregar(evento("invoice.payment_failed", facturaFallida(), rechazo));
+  assert.equal(clinica().subscriptionStatus, "past_due");
+  assert.equal(isPlanExpired(clinica(), new Date()), true, "ya suspendida");
+  await nada();
+  assert.equal(correos.length, 0, "no el de «no pudimos cobrar»");
+  assert.equal(correosSuspendida.length, 1);
+  assert.equal(correosSuspendida[0].email, "dueno@bevadent.mx");
+  assert.ok(correosSuspendida[0].payUrl.endsWith("/dashboard/suspended"));
+  assert.equal(logsCorreo[0].invoiceId, `${FACTURA}:payment_failed`, "el MISMO candado");
+  // El reintento siguiente (o el mismo evento) no manda ni uno ni otro.
+  await entregar(evento("invoice.payment_failed", facturaFallida({ attempt_count: 2 }), Date.now()));
+  await nada();
+  assert.equal(correosSuspendida.length + correos.length, 1);
+});
+
+test("#9 una cuenta NUEVA cuyo primer pago falló no recibe el de «suspendido por falta de pago»", async () => {
+  reiniciar({ subscriptionStatus: "pending_payment", trialEndsAt: new Date(Date.now() - DIA), nextBillingDate: null });
+  await entregar(evento("invoice.payment_failed", facturaFallida({ billing_reason: "subscription_create" })));
+  await nada();
+  assert.equal(correosSuspendida.length + correos.length, 0);
 });
