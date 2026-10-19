@@ -63,7 +63,9 @@ export function parsearCuerpo(body: unknown): { ok: true; cuerpo: CuerpoPago } |
 
 interface DescuentoStripe {
   id: string;
-  coupon?: { id?: string | null } | null;
+  coupon?: { id?: string | null; percent_off?: number | null; amount_off?: number | null } | null;
+  /** Epoch en segundos en que deja de aplicar (cupones «repeating»); null = sin fin. */
+  end?: number | null;
 }
 
 export interface SuscripcionPago {
@@ -94,24 +96,29 @@ export interface FacturaPago {
 const idDe = (v: string | { id: string } | null | undefined): string | null =>
   typeof v === "string" ? v : v?.id ?? null;
 
-// ── Factura abierta ─────────────────────────────────────────────────────────
+// ── Factura pendiente ───────────────────────────────────────────────────────
+
+/** Estados de una factura que `invoices.pay` cobra: abierta, o incobrable (Stripe la deja así al acabar los reintentos). */
+const ESTADOS_PAGABLES = ["open", "uncollectible"];
 
 /**
- * La factura ABIERTA del plan: la más reciente con saldo. Ignora las que no son de este cliente de
- * Stripe (defensa en profundidad: la lista ya se pide por la suscripción de la clínica de la sesión) y
- * las de saldo 0 (nada que cobrar).
+ * La factura PAGABLE del plan: la más reciente con saldo. Una `open` siempre gana a una `uncollectible`
+ * (que es la que Stripe marca al agotar los reintentos y que `invoices.pay` también acepta: sin esto la
+ * clínica quedaba sin ningún botón para pagar). Ignora las que no son de este cliente de Stripe (defensa
+ * en profundidad: la lista ya se pide por la suscripción de la clínica de la sesión) y las de saldo 0.
  */
 export function facturaAbiertaMasReciente(
   facturas: FacturaPago[] | null | undefined,
   customerId: string | null | undefined,
 ): FacturaPago | null {
   const candidatas = (facturas ?? []).filter((f) => {
-    if (f.status !== "open" || !(f.amount_due > 0)) return false;
+    if (!ESTADOS_PAGABLES.includes(f.status ?? "") || !(f.amount_due > 0)) return false;
     const cliente = idDe(f.customer);
     return !customerId || !cliente || cliente === customerId;
   });
   if (candidatas.length === 0) return null;
-  return candidatas.reduce((a, b) => ((b.created ?? 0) > (a.created ?? 0) ? b : a));
+  const rango = (f: FacturaPago) => (f.status === "open" ? 1 : 0);
+  return candidatas.reduce((a, b) => (rango(b) !== rango(a) ? (rango(b) > rango(a) ? b : a) : (b.created ?? 0) > (a.created ?? 0) ? b : a));
 }
 
 /** ¿La factura trae el descuento de la promo del primer mes? (informativo: no se altera su monto). */
@@ -139,11 +146,14 @@ export const MARCA = {
 /** Cuánto tiempo, desde la marca, un reintento puede terminar el cambio. */
 export const VENTANA_RECUPERACION_MS = 24 * 60 * 60 * 1000;
 
+/** La hora de la marca, en segundos (también entra en la clave de idempotencia de marcar). */
+export const segundosDe = (d: Date): number => Math.floor(d.getTime() / 1000);
+
 export function armarMarca(args: { destino: PlanId; desde: string | null | undefined; clave: string; ahora?: Date }): Record<string, string> {
   return {
     [MARCA.plan]: args.destino,
     [MARCA.desde]: args.desde ?? "",
-    [MARCA.ts]: String(Math.floor((args.ahora ?? new Date()).getTime() / 1000)),
+    [MARCA.ts]: String(segundosDe(args.ahora ?? new Date())),
     [MARCA.clave]: args.clave,
   };
 }
@@ -204,29 +214,81 @@ export function esPlanMasGrande(planActual: string | null | undefined, plan: str
 
 // ── Parámetros de Stripe de «subir» ─────────────────────────────────────────
 
-/**
- * Los descuentos que quedan al subir de plan. `undefined` = no tocar los descuentos de la suscripción
- * (no traía la promo). Si traía la promo del primer mes se quita SOLO esa: un descuento que el admin le
- * puso a mano (otro cupón) se conserva. `""` = ya no queda ninguno (así lo pide Stripe para vaciarlos).
- */
-export function descuentosParaSubir(sub: Pick<SuscripcionPago, "discount" | "discounts">): "" | Array<{ discount: string }> | undefined {
-  const todos = new Map<string, boolean>(); // id → ¿es la promo?
+interface DescuentoListado {
+  id: string;
+  esPromo: boolean;
+  /** Solo si se conoce el cupón (suscripción pedida con `expand: ["discounts"]`). */
+  percentOff: number | null;
+  amountOffCents: number | null;
+  end: number | null;
+}
+
+/** Todos los descuentos de la suscripción, sin repetir (el principal y los de `discounts`). */
+function listarDescuentos(sub: Pick<SuscripcionPago, "discount" | "discounts">): DescuentoListado[] {
+  const todos = new Map<string, DescuentoListado>();
   const anota = (d: DescuentoStripe) => {
+    const previo = todos.get(d.id);
     const esPromo = !!d.coupon?.id?.startsWith(PREFIJO_CUPON_PROMO);
-    todos.set(d.id, (todos.get(d.id) ?? false) || esPromo);
+    todos.set(d.id, {
+      id: d.id,
+      esPromo: (previo?.esPromo ?? false) || esPromo,
+      percentOff: d.coupon?.percent_off ?? previo?.percentOff ?? null,
+      amountOffCents: d.coupon?.amount_off ?? previo?.amountOffCents ?? null,
+      end: d.end ?? previo?.end ?? null,
+    });
   };
   if (sub.discount?.id) anota(sub.discount);
   for (const d of sub.discounts ?? []) {
     if (typeof d === "string") {
-      if (!todos.has(d)) todos.set(d, false);
+      if (!todos.has(d)) todos.set(d, { id: d, esPromo: false, percentOff: null, amountOffCents: null, end: null });
     } else if (d?.id) {
       anota(d);
     }
   }
-  const hayPromo = [...todos.values()].some(Boolean);
-  if (!hayPromo) return undefined;
-  const quedan = [...todos.entries()].filter(([, promo]) => !promo).map(([id]) => ({ discount: id }));
+  return [...todos.values()];
+}
+
+/**
+ * Los descuentos que quedan al subir de plan. `undefined` = no tocar los descuentos de la suscripción
+ * (no traía la promo). Si traía la promo del primer mes se quita SOLO esa: un descuento que el admin le
+ * puso a mano (otro cupón) se conserva. `""` = ya no queda ninguno (así lo pide Stripe para vaciarlos).
+ *
+ * ⚠️ Decisión pendiente de Rafael (revisión t4 #10): si al subir se quitan TODOS los cupones o se conservan.
+ * Hoy se conservan; `descuentosConservados` + `aplicarDescuentos` hacen que el monto que se muestra
+ * descuente lo mismo que Stripe va a descontar.
+ */
+export function descuentosParaSubir(sub: Pick<SuscripcionPago, "discount" | "discounts">): "" | Array<{ discount: string }> | undefined {
+  const todos = listarDescuentos(sub);
+  if (!todos.some((d) => d.esPromo)) return undefined;
+  const quedan = todos.filter((d) => !d.esPromo).map((d) => ({ discount: d.id }));
   return quedan.length > 0 ? quedan : "";
+}
+
+/** Los descuentos que SIGUEN aplicando en la factura nueva de «subir» (todos menos la promo; sin los ya vencidos). */
+export function descuentosConservados(sub: Pick<SuscripcionPago, "discount" | "discounts">, ahora: Date = new Date()): DescuentoListado[] {
+  const todos = listarDescuentos(sub);
+  // Sin promo, `descuentosParaSubir` no toca nada: se conserva TODO lo que traiga la suscripción.
+  const ahoraS = Math.floor(ahora.getTime() / 1000);
+  return todos.filter((d) => !d.esPromo && (d.end === null || d.end > ahoraS));
+}
+
+/**
+ * Subtotal (centavos, antes de IVA) tras los descuentos conservados, en el orden en que Stripe los aplica a
+ * un mismo cobro: porcentaje sobre el importe y monto fijo restado, nunca por debajo de 0. Un descuento cuyo
+ * cupón no se conoce no se puede valorar: se ignora (el llamador lo sabe con `descuentoSinValorar`).
+ */
+export function aplicarDescuentos(subtotalCents: number, descuentos: DescuentoListado[]): number {
+  let t = Math.round(subtotalCents);
+  for (const d of descuentos) {
+    if (d.percentOff) t = Math.round(t * (1 - d.percentOff / 100));
+    if (d.amountOffCents) t = Math.max(0, t - d.amountOffCents);
+  }
+  return t;
+}
+
+/** ¿Hay un descuento conservado que no se pudo valorar (no vino su cupón)? */
+export function descuentoSinValorar(descuentos: DescuentoListado[]): boolean {
+  return descuentos.some((d) => d.percentOff === null && d.amountOffCents === null);
 }
 
 export { subscriptionItemInterval };
@@ -244,7 +306,9 @@ export { subscriptionItemInterval };
 export const claves = {
   pagar: (clinicId: string, facturaId: string, intentos: number | null | undefined) =>
     `pago-pendiente:pagar:${clinicId}:${facturaId}:${intentos ?? 0}`,
-  marcar: (clinicId: string, facturaId: string, plan: string) => `pago-pendiente:marcar:${clinicId}:${facturaId}:${plan}`,
+  // La hora (`ts`) va en la clave porque es un PARÁMETRO de la llamada: la misma clave con otros parámetros
+  // la rechaza Stripe (idempotency_error) durante 24 h.
+  marcar: (clinicId: string, facturaId: string, plan: string, ts: number) => `pago-pendiente:marcar:${clinicId}:${facturaId}:${plan}:${ts}`,
   anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
   subir: (clinicId: string, facturaId: string, plan: string) => `pago-pendiente:subir:${clinicId}:${facturaId}:${plan}`,
   precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number) =>
@@ -257,6 +321,7 @@ export const MENSAJES = {
   sinPendiente: "No tienes ningún pago pendiente.",
   sinPermiso: "Solo el dueño o un administrador de la clínica puede pagar o cambiar el plan.",
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
-  stripeNoContesto: "Stripe no respondió. Intenta de nuevo en unos minutos.",
+  stripeNoContesto: "No pudimos completar la operación con el proveedor de pagos. Intenta de nuevo en unos minutos.",
+  facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: "Stripe no devolvió el enlace para pagar. Intenta de nuevo o abre el portal de facturación.",
 } as const;

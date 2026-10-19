@@ -7,11 +7,15 @@
  * se crea otra suscripción; repetir no cobra dos veces; plan más chico → 400; sin permiso → 403;
  * tarjeta que falla → url; sin pendiente → 409.
  */
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
+  MENSAJES,
   PREFIJO_CUPON_PROMO,
+  aplicarDescuentos,
   claves,
+  descuentoSinValorar,
+  descuentosConservados,
   descuentosParaSubir,
   parsearCuerpo,
   planesMasGrandes,
@@ -42,6 +46,10 @@ interface Escenario {
   /** El cobro (pay o factura nueva) falla con la tarjeta. */
   tarjetaFalla?: boolean;
   descuento?: any;
+  /** Varios descuentos en la suscripción (el primero es el principal). */
+  descuentos?: any[];
+  /** Cuántos `invoices.voidInvoice` fallan de red. */
+  voidFalla?: number;
   stripeCaido?: boolean;
   /** Cuántos `subscriptions.update` fallan de red ANTES de llegar a Stripe (el cambio no se aplica). */
   updateFallaAntes?: number;
@@ -63,6 +71,8 @@ function montar(e: Escenario = {}) {
   let planLocal: string | null = null;
   let planSub = e.plan ?? "BASIC"; // el plan que Stripe tiene en la metadata de la suscripción
   let fallasAntes = e.updateFallaAntes ?? 0;
+  let fallasVoid = e.voidFalla ?? 0;
+  const parametrosPorClave = new Map<string, string>(); // idempotencia de invoices.update, como Stripe
   let respuestasPerdidas = e.updateRespuestaPerdida ?? 0;
   const auditorias: any[] = [];
   const cobrosPorClave = new Map<string, any>();
@@ -84,8 +94,9 @@ function montar(e: Escenario = {}) {
           customer: "cus_1",
           metadata: { clinicId: "clin_1", plan: planSub, kind: "platform-subscription" },
           items: { data: [{ id: "si_1", price: { unit_amount: 41900, recurring: { interval: e.interval ?? "month" } } }] },
-          discount: e.descuento ?? null,
-          discounts: e.descuento ? [e.descuento.id] : [],
+          // `discounts` viene EXPANDIDO (con su cupón), como lo pide el servicio.
+          discount: (e.descuentos ?? (e.descuento ? [e.descuento] : []))[0] ?? null,
+          discounts: e.descuentos ?? (e.descuento ? [e.descuento] : []),
         };
       },
       update: async (id: string, params: any, opts: any) => {
@@ -123,6 +134,15 @@ function montar(e: Escenario = {}) {
       update: async (id: string, p: any, opts: any) => {
         registra("invoices.update", id, p, opts);
         cuestaCaer();
+        // Stripe: la misma clave con OTROS parámetros se rechaza (idempotency_error) durante 24 h.
+        const huella = JSON.stringify([id, p]);
+        const previa = parametrosPorClave.get(opts.idempotencyKey);
+        if (previa !== undefined && previa !== huella) {
+          throw Object.assign(new Error("Keys for idempotent requests can only be used with the same parameters they were first used with."), {
+            type: "StripeIdempotencyError", code: "idempotency_error",
+          });
+        }
+        parametrosPorClave.set(opts.idempotencyKey, huella);
         facturas.get(id).metadata = { ...(facturas.get(id).metadata ?? {}), ...p.metadata };
         return facturas.get(id);
       },
@@ -152,6 +172,10 @@ function montar(e: Escenario = {}) {
       voidInvoice: async (id: string, _p: any, opts: any) => {
         registra("invoices.voidInvoice", id, opts);
         cuestaCaer();
+        if (fallasVoid > 0) {
+          fallasVoid--;
+          throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        }
         facturas.get(id).status = "void";
         return facturas.get(id);
       },
@@ -602,6 +626,162 @@ test("subir: el reintento que vuelve a fallar sigue siendo recuperable (nunca qu
   const r = await subirYPagar(m.deps, "PRO");
   assert.equal(r.body.pagado, true);
   assert.equal(m.cobros(), 1);
+});
+
+// ── Revisión t4 ─────────────────────────────────────────────────────────────
+
+// #4 — una factura «uncollectible» (Stripe la deja así al agotar los reintentos) también se cobra.
+const INCOBRABLE = { ...FACTURA_VIEJA, status: "uncollectible" };
+
+test("t4 #4: sin facturas abiertas pero con una INCOBRABLE → pendiente (no sin_pendiente), y se puede pagar", async () => {
+  const m = montar({ abiertas: [INCOBRABLE] });
+  const g = await consultarPendiente(m.deps);
+  assert.equal(g.body.estado, "pendiente");
+  assert.equal(g.body.montoPendiente, 48.61);
+  assert.equal(g.body.cambioEnCurso, undefined);
+  const r = await pagarPendiente(m.deps);
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.ops("invoices.pay")[0].args[0], "in_vieja");
+  assert.equal(m.facturas.get("in_vieja").status, "paid");
+});
+
+test("t4 #4: con una abierta y una incobrable gana la ABIERTA (aunque la incobrable sea más nueva); sube sobre la incobrable si es la única", async () => {
+  const abierta = { ...FACTURA_VIEJA, id: "in_abierta", created: 100 };
+  const incobrable = { ...INCOBRABLE, id: "in_incobrable", created: 900 };
+  const m = montar({ abiertas: [abierta, incobrable] });
+  await pagarPendiente(m.deps);
+  assert.equal(m.ops("invoices.pay")[0].args[0], "in_abierta");
+
+  const solo = montar({ abiertas: [INCOBRABLE] });
+  const r = await subirYPagar(solo.deps, "PRO");
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.deepEqual(solo.ops("invoices.voidInvoice").map((l) => l.args[0]), ["in_vieja"]);
+  assert.equal(solo.ops("subscriptions.update").length, 1);
+});
+
+test("t4 #4: «sin_pendiente» solo sale cuando de verdad no hay nada que cobrar (ni abierta, ni incobrable, ni saldo 0, ni de otro cliente)", async () => {
+  for (const abiertas of [
+    [],
+    [{ ...INCOBRABLE, amount_due: 0 }],
+    [{ ...INCOBRABLE, customer: "cus_otro" }],
+    [{ ...FACTURA_VIEJA, status: "paid" }],
+    [{ ...FACTURA_VIEJA, status: "void" }],
+    [{ ...FACTURA_VIEJA, status: "draft" }],
+  ]) {
+    assert.deepEqual(await consultarPendiente(montar({ abiertas }).deps), { status: 200, body: { estado: "sin_pendiente" } });
+  }
+});
+
+// #7 — la clave de «marcar» no puede chocar con una anterior de otros parámetros.
+test("t4 #7: la clave de marcar lleva la hora de la marca (un parámetro); un reintento posterior marca con clave nueva y no choca", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-20T12:00:00Z") });
+  const m = montar({ voidFalla: 1 });
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // marcó, y anular falló: la vieja sigue abierta
+  assert.equal(m.facturas.get("in_vieja").status, "open");
+  const k1 = m.ops("invoices.update")[0].args[2].idempotencyKey;
+  const ts1 = m.ops("invoices.update")[0].args[1].metadata.pago_pendiente_subir_ts;
+  assert.equal(k1, claves.marcar("clin_1", "in_vieja", "PRO", Number(ts1)));
+
+  // Más tarde: el reintento manda OTRA hora → otra clave. Antes: misma clave + otros parámetros → idempotency_error.
+  t.mock.timers.setTime(new Date("2026-10-20T12:00:07Z").getTime());
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  const marcas = m.ops("invoices.update");
+  assert.equal(marcas.length, 2);
+  assert.notEqual(marcas[1].args[2].idempotencyKey, k1);
+  assert.equal(m.cobros(), 1);
+});
+
+test("t4 #7: si Stripe aun así responde idempotency_error y la factura ya está marcada para ese plan, se sigue; si no, 502 sin anular nada", async () => {
+  const marcada = montar();
+  (marcada.deps.stripe as any).invoices.update = async (id: string) => {
+    marcada.facturas.get(id).metadata = { pago_pendiente_subir: "PRO" };
+    throw Object.assign(new Error("Keys for idempotent requests can only be used with the same parameters"), { type: "StripeIdempotencyError", code: "idempotency_error" });
+  };
+  assert.equal((await subirYPagar(marcada.deps, "PRO")).status, 200);
+  assert.equal(marcada.cobros(), 1);
+
+  const sinMarca = montar();
+  (sinMarca.deps.stripe as any).invoices.update = async () => {
+    throw Object.assign(new Error("Keys for idempotent requests"), { type: "StripeIdempotencyError", code: "idempotency_error" });
+  };
+  const r = await subirYPagar(sinMarca.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(sinMarca.facturas.get("in_vieja").status, "open");
+  assert.equal(sinMarca.ops("invoices.voidInvoice").length, 0);
+  assert.equal(sinMarca.cobros(), 0);
+});
+
+// #8 — la clínica nunca ve el texto de Stripe.
+test("t4 #8: ningún error de Stripe llega a la clínica en inglés; el mensaje de Stripe va solo a la bitácora", async () => {
+  const INGLES = /connection reset|Keys for idempotent|can no longer be paid|No such|declined/i;
+  const casos: Array<[string, (m: ReturnType<typeof montar>) => Promise<{ status: number; body: any }>]> = [
+    ["GET", (m) => consultarPendiente(m.deps)],
+    ["pagar", (m) => pagarPendiente(m.deps)],
+    ["subir", (m) => subirYPagar(m.deps, "PRO")],
+  ];
+  for (const [nombre, llama] of casos) {
+    const m = montar({ stripeCaido: true });
+    const r = await llama(m);
+    assert.equal(r.status, 502, nombre);
+    assert.equal(r.body.error, MENSAJES.stripeNoContesto, nombre);
+    assert.doesNotMatch(JSON.stringify(r.body), INGLES, nombre);
+    assert.match(r.body.error, /Intenta de nuevo/);
+    // El texto de Stripe sí queda en la bitácora.
+    assert.ok(m.auditorias.some((a) => a.event === "pago-pendiente-error-stripe" && /connection reset/.test(a.mensajeStripe)), nombre);
+  }
+  // Un error que no es de red (invoices.pay falla con texto en inglés) tampoco se filtra.
+  const m = montar();
+  (m.deps.stripe as any).invoices.pay = async () => { throw Object.assign(new Error("This invoice can no longer be paid."), { type: "StripeInvalidRequestError", code: "invoice_not_payable" }); };
+  const r = await pagarPendiente(m.deps);
+  assert.equal(r.status, 502);
+  assert.doesNotMatch(JSON.stringify(r.body), INGLES);
+  assert.ok(m.auditorias.some((a) => /no longer be paid/.test(a.mensajeStripe ?? "")));
+  // Y en los pasos de «subir»: marcar y cambiar de plan.
+  const mm = montar();
+  (mm.deps.stripe as any).invoices.update = async () => { throw new Error("Invalid request: something in English"); };
+  const rm = await subirYPagar(mm.deps, "PRO");
+  assert.equal(rm.body.error, MENSAJES.stripeNoContesto);
+});
+
+// #10 — el «Vas a pagar $X» es lo que Stripe cobra.
+test("t4 #10: con un cupón conservado, el monto mostrado lo descuenta antes del IVA (porcentaje y monto fijo)", async () => {
+  const pct = montar({ descuento: { id: "di_pct", coupon: { id: "REGALO20", percent_off: 20 } } });
+  const g = await consultarPendiente(pct.deps);
+  // PRO: 689 − 20 % = 551.20 → +16 % = 639.39 (IVA sobre el subtotal ya descontado)
+  assert.equal((g.body.opcionesSubir as any[])[0].monto, 639.39);
+  // CLINIC: 1719 − 20 % = 1375.20 → 1595.23
+  assert.equal((g.body.opcionesSubir as any[])[1].monto, 1595.23);
+
+  const fijo = montar({ descuento: { id: "di_fijo", coupon: { id: "MENOS100", amount_off: 10000 } } });
+  const gf = await consultarPendiente(fijo.deps);
+  assert.equal((gf.body.opcionesSubir as any[])[0].monto, 683.24); // (689 − 100) × 1.16
+  assert.equal(descuentosParaSubir({ discount: { id: "di_fijo", coupon: { id: "MENOS100", amount_off: 10000 } }, discounts: ["di_fijo"] }), undefined);
+});
+
+test("t4 #10: la promo del primer mes NO se resta (se quita al subir); lo demás sí; un cupón vencido tampoco", async () => {
+  const promo = { id: "di_promo", coupon: { id: `${PREFIJO_CUPON_PROMO}iva-basic-39000`, amount_off: 36000 } };
+  const otro = { id: "di_otro", coupon: { id: "REGALO10", percent_off: 10 } };
+  const m = montar({ descuentos: [promo, otro] });
+  const g = await consultarPendiente(m.deps);
+  assert.equal((g.body.opcionesSubir as any[])[0].monto, 719.32); // 689 − 10 % = 620.10 → ×1.16
+  await subirYPagar(m.deps, "PRO");
+  assert.deepEqual(m.ops("subscriptions.update")[0].args[1].discounts, [{ discount: "di_otro" }]); // se conserva solo ese
+  // Lo que se mostró es lo que se registra como esperado en la bitácora.
+  assert.equal(m.auditorias.at(-1).montoEsperadoMxn, 719.32);
+  assert.deepEqual(m.auditorias.at(-1).descuentosConservados, ["di_otro"]);
+
+  const vencido = montar({ descuento: { id: "di_viejo", end: Math.floor(Date.now() / 1000) - 3600, coupon: { id: "X", percent_off: 50 } } });
+  assert.equal(((await consultarPendiente(vencido.deps)).body.opcionesSubir as any[])[0].monto, 799.24); // sin descuento
+});
+
+test("t4 #10: sin descuentos el monto sigue siendo lista + IVA; y un cupón sin datos se avisa en la bitácora", async () => {
+  assert.equal(((await consultarPendiente(montar().deps)).body.opcionesSubir as any[])[0].monto, 799.24);
+  const m = montar({ descuentos: [{ id: "di_raro" }] });
+  await subirYPagar(m.deps, "PRO");
+  assert.equal(m.auditorias.at(-1).descuentoSinValorar, true);
+  assert.equal(descuentoSinValorar(descuentosConservados({ discount: null, discounts: ["di_x"] })), true);
+  assert.equal(aplicarDescuentos(68900, descuentosConservados({ discount: { id: "d", coupon: { id: "c", percent_off: 100 } }, discounts: [] })), 0);
 });
 
 // ── cuerpo y utilidades ─────────────────────────────────────────────────────
