@@ -33,6 +33,7 @@ import {
 } from "../../plan-status";
 import { planStatusLabel } from "../../plan-status-label";
 import { datosDeSedeDesdeMadre } from "../sedes-incluidas-core";
+import { cobrarPendiente, formatoMonto, leerPagoPendiente, tarjetaRechazadaViva } from "../pago-pendiente-cliente";
 import { buildPaymentFailedEmail } from "../../email";
 import { I18nProvider } from "../../../i18n/i18n-provider";
 import { getDict } from "../../../i18n/dictionaries";
@@ -52,6 +53,7 @@ Mod._load = function (req, parent, isMain) {
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { AccionesSuspendida } = require("../../../app/dashboard/suspended/acciones-suspendida");
 const { AvisoPagoRechazado } = require("../../../components/dashboard/aviso-pago-rechazado");
+const { PagoPendienteVista } = require("../../../components/dashboard/pago-pendiente");
 /* eslint-enable @typescript-eslint/no-require-imports */
 function Acciones() {
   return <AccionesSuspendida plan="PRO" clinicName="BEVADENT" managerWhatsapp="529990000000" />;
@@ -170,12 +172,12 @@ test("Configuración › Suscripción: «Pago rechazado» sale antes que «En pr
   const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
   assert.match(tab, /const pagoRechazado = isPaymentFailed\(clinic\.subscriptionStatus\) && !trialExpired/);
   assert.ok(tab.indexOf("statusPaymentFailed") < tab.indexOf("statusTrial"), "«Pago rechazado» se evalúa antes que «En prueba»");
-  assert.match(tab, /usePagarAhora\(clinic\.plan\)/);
+  assert.match(tab, /<PagoPendiente puedePagar plan=\{clinic\.plan\}/);
   assert.match(tab, /\(!subscriptionActive \|\| manualPeriodExpired\) && !pagoRechazado/, "el «Activa tu plan» de siempre no se pinta encima");
   assert.match(tab, /mostrarActivar: \(!subscriptionActive \|\| manualPeriodExpired\) && !pagoRechazado/);
   const redis = sinComentarios(leer("src/components/dashboard/bloques-rediseno/suscripcion.tsx"));
   assert.match(redis, /m\.pagoRechazado && \(/);
-  assert.match(redis, /onClick=\{m\.pagoRechazado\.onPagar\}/);
+  assert.match(redis, /\{m\.pagoRechazado\.panel\}/);
 });
 
 /* ── Aviso rojo por rol ────────────────────────────────────────────────── */
@@ -245,6 +247,7 @@ test("el candado de suspendida deja abiertos pagar, ticket y manager, y cierra e
   // APIs que usan los tres caminos
   for (const ok of [
     "/api/billing/checkout", "/api/billing/portal", "/api/billing/invoices", "/api/billing/spei-transferencia", // pagar
+    "/api/billing/pago-pendiente", // los dos botones del cobro rechazado (ws1-t2): entra por el prefijo /api/billing
     "/api/support/tickets", "/api/support/tickets/t1", "/api/support/tickets/t1/messages", "/api/support/attachments", // ticket
     "/api/auth/logout", "/api/switch-clinic",
   ]) {
@@ -263,6 +266,8 @@ test("las pantallas de los tres caminos solo llaman a APIs exentas", () => {
     "src/app/dashboard/soporte/[id]/ticket-client.tsx",
     "src/app/dashboard/suspended/acciones-suspendida.tsx",
     "src/components/dashboard/pagar-ahora.tsx",
+    "src/components/dashboard/pago-pendiente.tsx",
+    "src/lib/billing/pago-pendiente-cliente.ts",
   ];
   for (const f of archivos) {
     const fuente = sinComentarios(leer(f));
@@ -394,4 +399,149 @@ test("NUNCA BORRAR: ningún cron borra datos de clínicas por su estado de suscr
   const todo = archivosTs(join(process.cwd(), "src"));
   const borranClinica = todo.filter((f) => /\bclinic\.(delete|deleteMany)\(|\bclinics\.(delete|deleteMany)\(/.test(sinComentarios(readFileSync(f, "utf8"))));
   assert.deepEqual(borranClinica, []);
+});
+
+/* ── Los dos botones del cobro rechazado (agregado al punto 5) ─────────── */
+
+const respuesta = (status: number, cuerpo: unknown) => async () =>
+  ({ ok: status >= 200 && status < 300, status, json: async () => cuerpo }) as unknown as Response;
+
+const PENDIENTE = {
+  estado: "pendiente",
+  planActual: "PRO",
+  montoPendiente: 689,
+  moneda: "MXN",
+  opcionesSubir: [{ plan: "CLINIC", nombre: "Clínica", monto: 1489, ivaIncluido: true }],
+};
+
+test("contrato GET: pendiente, sin pendiente, 404 (la ruta de ws1-t2 aún no está unida), error en español y respuesta rara", async () => {
+  const ok = await leerPagoPendiente(respuesta(200, PENDIENTE));
+  assert.deepEqual(ok, { tipo: "listo", datos: PENDIENTE });
+  assert.deepEqual(await leerPagoPendiente(respuesta(200, { estado: "sin_pendiente" })), { tipo: "listo", datos: { estado: "sin_pendiente" } });
+  assert.deepEqual(await leerPagoPendiente(respuesta(404, {})), { tipo: "no_disponible" }, "404 → «no disponible»");
+  assert.deepEqual(await leerPagoPendiente(async () => { throw new Error("red"); }), { tipo: "no_disponible" });
+  assert.deepEqual(await leerPagoPendiente(respuesta(403, { error: "Solo el dueño o un administrador puede ver esto." })), { tipo: "error", mensaje: "Solo el dueño o un administrador puede ver esto." });
+  assert.deepEqual(await leerPagoPendiente(respuesta(200, { algo: "raro" })), { tipo: "error", mensaje: "" });
+  // Una opción mal formada se descarta; la lista nunca revienta.
+  const raro = await leerPagoPendiente(respuesta(200, { ...PENDIENTE, opcionesSubir: [null, { plan: "X" }, PENDIENTE.opcionesSubir[0]] }));
+  assert.equal(raro.tipo === "listo" && raro.datos.estado === "pendiente" && raro.datos.opcionesSubir.length, 1);
+});
+
+test("contrato POST: pagar / subir, pagado, url de Stripe, errores tal cual y 404", async () => {
+  const llamadas: Array<{ url: string; init: RequestInit }> = [];
+  const f = (status: number, cuerpo: unknown) => async (url: string, init?: RequestInit) => {
+    llamadas.push({ url, init: init ?? {} });
+    return respuesta(status, cuerpo)();
+  };
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(200, { ok: true, pagado: true })), { tipo: "pagado" });
+  assert.deepEqual(await cobrarPendiente({ accion: "subir", plan: "CLINIC" }, f(200, { ok: true, pagado: false, url: "https://checkout.stripe.com/c/pay/x" })), { tipo: "url", url: "https://checkout.stripe.com/c/pay/x" });
+  assert.equal(llamadas[0].url, "/api/billing/pago-pendiente");
+  assert.equal(llamadas[0].init.method, "POST");
+  assert.equal(llamadas[0].init.body, JSON.stringify({ accion: "pagar" }));
+  assert.equal(llamadas[1].init.body, JSON.stringify({ accion: "subir", plan: "CLINIC" }));
+  for (const status of [400, 403, 409, 502, 503]) {
+    assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(status, { error: `Error ${status} en español` })), { tipo: "error", mensaje: `Error ${status} en español` }, String(status));
+  }
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(404, {})), { tipo: "no_disponible" });
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(200, { ok: true, pagado: false })), { tipo: "error", mensaje: "" }, "sin url ni pagado: no se inventa nada");
+});
+
+test("monto exacto y cuándo aplican los dos botones", () => {
+  assert.equal(formatoMonto(689, "MXN", "es"), "$689.00 MXN");
+  assert.equal(formatoMonto(1489.5, "MXN", "es"), "$1,489.50 MXN");
+  assert.equal(tarjetaRechazadaViva({ subscriptionStatus: "past_due", stripeSubscriptionId: "sub_1" }), true);
+  assert.equal(tarjetaRechazadaViva({ subscriptionStatus: "unpaid", stripeSubscriptionId: "sub_1" }), true);
+  assert.equal(tarjetaRechazadaViva({ subscriptionStatus: "past_due", stripeSubscriptionId: null }), false, "pagador a mano: sin suscripción de tarjeta");
+  assert.equal(tarjetaRechazadaViva({ subscriptionStatus: "cancelled", stripeSubscriptionId: "sub_1" }), false, "cancelada: las tarjetas de siempre");
+  assert.equal(tarjetaRechazadaViva({ subscriptionStatus: "pending_payment", stripeSubscriptionId: null }), false);
+  assert.equal(tarjetaRechazadaViva({ subscriptionStatus: "active", stripeSubscriptionId: "sub_1" }), false);
+});
+
+const noop = () => {};
+function vista(sobre: Record<string, unknown> = {}, idioma: "es" | "en" = "es") {
+  return renderToStaticMarkup(
+    <I18nProvider locale={idioma} dict={getDict(idioma)}>
+      <PagoPendienteVista
+        lectura={{ tipo: "listo", datos: PENDIENTE }}
+        puedePagar
+        eleccion={null}
+        eligiendoPlan={false}
+        cobrando={false}
+        idioma={idioma}
+        respaldo={<button data-accion="portal">Actualizar tarjeta / pagar</button>}
+        onPagarPlan={noop} onVerPlanes={noop} onElegirPlan={noop} onConfirmar={noop} onCancelar={noop} onRecargar={noop}
+        {...sobre}
+      />
+    </I18nProvider>,
+  );
+}
+
+test("botones por rol: dueño/admin ven los dos; los demás no ven ninguno ni se les pide nada", () => {
+  const admin = vista();
+  assert.match(admin, /data-accion="pagar-plan"[^>]*>.*Pagar mi plan/s);
+  assert.match(admin, /data-accion="subir-plan"[^>]*>.*Cambiar a un plan más grande y pagar/s);
+  assert.match(admin, /\$689\.00 MXN/);
+  const otro = vista({ puedePagar: false });
+  assert.doesNotMatch(otro, /<button/);
+  assert.match(otro, /Pídele al dueño o administrador de la clínica que pague el plan\./);
+  // Sin un plan más grande al cual subir, solo «Pagar mi plan».
+  const tope = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, opcionesSubir: [] } } });
+  assert.match(tope, /Pagar mi plan/);
+  assert.doesNotMatch(tope, /plan más grande/);
+  // La pantalla server solo monta el componente con el rol real de la sesión, y el componente no consulta si no puede pagar.
+  const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
+  assert.match(pagina, /puedePagar=\{isClinicBillingAdmin\(user\.role\)\}/);
+  assert.match(sinComentarios(leer("src/components/dashboard/pago-pendiente.tsx")), /if \(!puedePagar\) return;/);
+});
+
+test("antes de cobrar se dice el monto exacto: «Vas a pagar $X» (pagar y subir) y se pide confirmar", () => {
+  const pagar = vista({ eleccion: { accion: "pagar" } });
+  assert.match(pagar, /Vas a pagar \$689\.00 MXN/);
+  assert.match(pagar, /data-accion="confirmar"[^>]*>.*Confirmar y pagar/s);
+  assert.match(pagar, /data-accion="cancelar"/);
+  const lista = vista({ eligiendoPlan: true });
+  assert.match(lista, /Clínica/);
+  assert.match(lista, /\$1,489\.00 MXN · IVA incluido/);
+  assert.match(lista, /precio de lista \(sin la promoción del primer mes\)/);
+  const subir = vista({ eligiendoPlan: true, eleccion: { accion: "subir", plan: "CLINIC" } });
+  assert.match(subir, /Vas a pagar \$1,489\.00 MXN por el plan Clínica/);
+  assert.match(vista({ eleccion: { accion: "pagar" }, cobrando: true }), /Procesando…/);
+  assert.match(vista({ eleccion: { accion: "pagar" } }, "en"), /You will pay \$689\.00 MXN/);
+});
+
+test("404 / error / cargando / sin pendiente: aviso «no disponible» con el pago de siempre a la mano, nunca una pantalla muerta", () => {
+  const nodisp = vista({ lectura: { tipo: "no_disponible" } });
+  assert.match(nodisp, /El pago directo no está disponible por ahora/);
+  assert.match(nodisp, /data-accion="portal"/, "queda «Actualizar tarjeta / pagar»");
+  assert.doesNotMatch(nodisp, /Pagar mi plan/);
+  const err = vista({ lectura: { tipo: "error", mensaje: "No hay un cobro pendiente para este plan." } });
+  assert.match(err, /No hay un cobro pendiente para este plan\./, "el error del servidor, tal cual");
+  assert.match(vista({ lectura: { tipo: "error", mensaje: "" } }), /No pudimos calcular lo pendiente/);
+  assert.match(vista({ lectura: null }), /Calculando lo pendiente/);
+  const sin = vista({ lectura: { tipo: "listo", datos: { estado: "sin_pendiente" } } });
+  assert.match(sin, /No tenemos un pago pendiente/);
+  assert.doesNotMatch(sin, /Pagar mi plan/);
+});
+
+test("pantallas: en suspendida con tarjeta viva las tarjetas de plan se esconden y entran los dos botones; en Suscripción van en el aviso rojo", () => {
+  const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
+  assert.match(pagina, /conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva\(clinic\)/);
+  assert.equal((pagina.match(/\{!conDosBotones && \(|\{conDosBotones \? null : \(/g) ?? []).length, 2, "las tarjetas de plan, en los dos diseños");
+  assert.match(pagina, /<PagoPendiente puedePagar=\{isClinicBillingAdmin\(user\.role\)\} plan=\{clinic\.plan\} suspendida \/>/);
+  assert.match(pagina, /sinPagar=\{conDosBotones\}/);
+  const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
+  assert.equal((tab.match(/<PagoPendiente puedePagar plan=\{clinic\.plan\} suspendida=\{false\} \/>/g) ?? []).length, 2, "diseño nuevo y de siempre");
+  assert.match(sinComentarios(leer("src/components/dashboard/bloques-rediseno/suscripcion.tsx")), /\{m\.pagoRechazado\.panel\}/);
+  // Y las tarjetas no se tocan: sin suscripción viva (nueva o cancelada) siguen mandando al checkout de siempre.
+  assert.match(sinComentarios(leer("src/app/dashboard/suspended/suspended-client.tsx")), /"\/api\/billing\/checkout"/);
+});
+
+test("textos nuevos: es y en con las mismas claves, y el botón/aviso dicen lo pedido", () => {
+  const es = getDict("es") as any;
+  const en = getDict("en") as any;
+  assert.deepEqual(Object.keys(en.shell.pagoPendiente).sort(), Object.keys(es.shell.pagoPendiente).sort());
+  assert.equal(es.shell.pagoPendiente.pagarPlan, "Pagar mi plan");
+  assert.equal(es.shell.pagoPendiente.subir, "Cambiar a un plan más grande y pagar");
+  assert.equal(es.shell.pagoPendiente.vasAPagar, "Vas a pagar {monto}");
+  assert.doesNotMatch(JSON.stringify(es.shell.pagoPendiente), /\b(vos|tenés|podés|pagá|elegí)\b/i);
 });

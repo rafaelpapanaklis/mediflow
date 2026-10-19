@@ -1625,6 +1625,28 @@
       "cta": "Update card / pay",
       "abriendo": "Opening…",
       "errorAbrir": "We couldn't open the payment page. Try again or contact support."
+    },
+    "pagoPendiente": {
+      "titulo": "Pay what's pending on your plan",
+      "pendiente": "Pending on your plan:",
+      "pagarPlan": "Pay my plan",
+      "subir": "Switch to a bigger plan and pay",
+      "elegirPlan": "Choose the plan you want to move up to. What's pending is cancelled and the new plan is charged in full, at list price (no first-month promotion).",
+      "ivaIncluido": "VAT included",
+      "elegir": "Choose",
+      "vasAPagar": "You will pay {monto}",
+      "vasAPagarPlan": "You will pay {monto} for the {plan} plan",
+      "confirmar": "Confirm and pay",
+      "cancelar": "Cancel",
+      "pagando": "Processing…",
+      "cargando": "Calculating what's pending…",
+      "sinPendiente": "We have no pending payment. If you already paid, your access comes back in a moment: reload the page.",
+      "recargar": "Reload",
+      "noDisponible": "Direct payment isn't available right now. You can use \"Update card / pay\" or contact support.",
+      "errorLectura": "We couldn't calculate what's pending. Try again or contact support.",
+      "pagoRecibido": "Payment received. We're reactivating your access…",
+      "errorCobro": "We couldn't process the charge. Try again or contact support.",
+      "soloDueno": "Ask the clinic owner or an administrator to pay the plan."
     }
   },
   "agenda": {

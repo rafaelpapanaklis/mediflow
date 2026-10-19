@@ -50,8 +50,8 @@ export interface ModeloSuscripcion {
   porcentajePrueba: number;
   pruebaVencida: boolean;
   mostrarActivar: boolean;
-  /** Cobro del plan rechazado con el acceso aún vivo: aviso rojo con la hora de suspensión y el botón de pagar. */
-  pagoRechazado: { titulo: string; texto: string; cta: string; pagando: boolean; onPagar: () => void } | null;
+  /** Cobro del plan rechazado con el acceso aún vivo: aviso rojo con la hora de suspensión y los dos botones de pago (`panel`). */
+  pagoRechazado: { titulo: string; texto: string; panel: ReactNode } | null;
   /** El subtítulo de «Activa tu plan»: solo los métodos de pago que existen. */
   subtituloActivar: string;
   onActivar: () => void;
@@ -182,10 +182,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
               <div className={s.activarTitulo}>{m.pagoRechazado.titulo}</div>
               <div className={s.activarSub}>{m.pagoRechazado.texto}</div>
             </div>
-            <Boton variante="principal" onClick={m.pagoRechazado.onPagar} disabled={m.pagoRechazado.pagando}>
-              {m.pagoRechazado.pagando ? <Loader2 size={14} className={s.girando} aria-hidden /> : <CreditCard size={14} aria-hidden />}
-              {m.pagoRechazado.cta}
-            </Boton>
+            {m.pagoRechazado.panel}
           </div>
         )}
 

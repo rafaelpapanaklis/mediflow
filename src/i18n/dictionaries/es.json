@@ -1625,6 +1625,28 @@
       "cta": "Actualizar tarjeta / pagar",
       "abriendo": "Abriendo…",
       "errorAbrir": "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte."
+    },
+    "pagoPendiente": {
+      "titulo": "Paga lo pendiente de tu plan",
+      "pendiente": "Pendiente de tu plan:",
+      "pagarPlan": "Pagar mi plan",
+      "subir": "Cambiar a un plan más grande y pagar",
+      "elegirPlan": "Elige el plan al que quieres subir. Se anula lo pendiente y se cobra el plan nuevo completo, a precio de lista (sin la promoción del primer mes).",
+      "ivaIncluido": "IVA incluido",
+      "elegir": "Elegir",
+      "vasAPagar": "Vas a pagar {monto}",
+      "vasAPagarPlan": "Vas a pagar {monto} por el plan {plan}",
+      "confirmar": "Confirmar y pagar",
+      "cancelar": "Cancelar",
+      "pagando": "Procesando…",
+      "cargando": "Calculando lo pendiente…",
+      "sinPendiente": "No tenemos un pago pendiente. Si ya pagaste, tu acceso se reactiva en un momento: recarga la página.",
+      "recargar": "Recargar",
+      "noDisponible": "El pago directo no está disponible por ahora. Puedes usar «Actualizar tarjeta / pagar» o escribir a soporte.",
+      "errorLectura": "No pudimos calcular lo pendiente. Inténtalo de nuevo o escribe a soporte.",
+      "pagoRecibido": "Pago recibido. Estamos reactivando tu acceso…",
+      "errorCobro": "No pudimos hacer el cobro. Inténtalo de nuevo o escribe a soporte.",
+      "soloDueno": "Pídele al dueño o administrador de la clínica que pague el plan."
     }
   },
   "agenda": {

@@ -19,11 +19,14 @@ export function AccionesSuspendida({
   plan,
   clinicName,
   managerWhatsapp,
+  sinPagar = false,
 }: {
   plan: string | null;
   clinicName: string;
   /** E.164 sin «+» del manager asignado, o null si no tiene. */
   managerWhatsapp: string | null;
+  /** Con la tarjeta rechazada, «Pagar mi plan» y «Cambiar a un plan más grande y pagar» (PagoPendiente) ya cubren el pago. */
+  sinPagar?: boolean;
 }) {
   const t = useT();
   const { pagar, pagando } = usePagarAhora(plan);
@@ -31,10 +34,12 @@ export function AccionesSuspendida({
 
   return (
     <div className={s.fila} role="group" aria-label={t("pages.suspended.actions.label")}>
-      <button type="button" className={`${s.boton} ${s.principal}`} onClick={pagar} disabled={pagando} data-accion="pagar">
-        {pagando ? <Loader2 size={16} className={s.girar} aria-hidden /> : <CreditCard size={16} aria-hidden />}
-        {pagando ? t("shell.pagoRechazado.abriendo") : t("pages.suspended.actions.payNow")}
-      </button>
+      {!sinPagar && (
+        <button type="button" className={`${s.boton} ${s.principal}`} onClick={pagar} disabled={pagando} data-accion="pagar">
+          {pagando ? <Loader2 size={16} className={s.girar} aria-hidden /> : <CreditCard size={16} aria-hidden />}
+          {pagando ? t("shell.pagoRechazado.abriendo") : t("pages.suspended.actions.payNow")}
+        </button>
+      )}
       <Link href="/dashboard/soporte" className={s.boton} data-accion="ticket">
         <LifeBuoy size={16} aria-hidden />
         {t("pages.suspended.actions.openTicket")}

@@ -15,6 +15,9 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { isPlanExpired } from "@/lib/plan-status";
 import { getAccountManagerForClinic } from "@/lib/account-manager/get-for-clinic";
 import { AccionesSuspendida } from "./acciones-suspendida";
+import { PagoPendiente } from "@/components/dashboard/pago-pendiente";
+import { tarjetaRechazadaViva } from "@/lib/billing/pago-pendiente-cliente";
+import { isClinicBillingAdmin } from "@/lib/billing/authz";
 import {
   leerCuentaSpei,
   rechazoReciente,
@@ -144,12 +147,22 @@ export default async function SuspendedPage(
       ? getAccountManagerForClinic(user.clinicId, { locale: localeFromClinic(clinic) })
       : Promise.resolve(null),
   ]);
+  // Tarjeta rechazada con la suscripción de Stripe viva: se paga lo pendiente (o se sube a un plan más grande)
+  // con los dos botones de PagoPendiente. Las tarjetas de plan de hoy mandarían al portal sin respetar el
+  // plan, así que NO se pintan; sin suscripción viva (cuenta nueva o cancelada) siguen como siempre.
+  const conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva(clinic);
   const acciones = suspendidaPorFalta ? (
-    <AccionesSuspendida
-      plan={clinic.plan}
-      clinicName={clinic.name}
-      managerWhatsapp={managerAsignado?.manager.whatsappE164 ?? null}
-    />
+    <>
+      {conDosBotones && (
+        <PagoPendiente puedePagar={isClinicBillingAdmin(user.role)} plan={clinic.plan} suspendida />
+      )}
+      <AccionesSuspendida
+        plan={clinic.plan}
+        clinicName={clinic.name}
+        managerWhatsapp={managerAsignado?.manager.whatsappE164 ?? null}
+        sinPagar={conDosBotones}
+      />
+    </>
   ) : null;
   const sinAcceso = isPlanExpired(clinic);
   // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
@@ -211,18 +224,20 @@ export default async function SuspendedPage(
             texto={isReactivation ? subcopy : subtitulo}
           />
           {acciones}
-          <SuspendedPlanCards
-            plans={planesAMostrar}
-            currentPlan={enlace ? enlace.plan : currentPlan}
-            firstMonthEligible={firstMonthEligible}
-            soloTarjeta={enlace !== null}
-            rediseno
-            resumenInicial={!isReactivation && currentPlan !== null}
-            cuentaSpei={cuentaSpei}
-            referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
-            cobroConIvaListo={cobroConIvaListo}
-            exencionIva={exencionIva}
-          />
+          {!conDosBotones && (
+            <SuspendedPlanCards
+              plans={planesAMostrar}
+              currentPlan={enlace ? enlace.plan : currentPlan}
+              firstMonthEligible={firstMonthEligible}
+              soloTarjeta={enlace !== null}
+              rediseno
+              resumenInicial={!isReactivation && currentPlan !== null}
+              cuentaSpei={cuentaSpei}
+              referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
+              cobroConIvaListo={cobroConIvaListo}
+              exencionIva={exencionIva}
+            />
+          )}
           <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
         </PaginaSuspendida>
       </RaizCuenta>
@@ -274,12 +289,15 @@ export default async function SuspendedPage(
         </div>
 
         {acciones}
+        {/* Con la tarjeta rechazada y viva, los dos botones de arriba ocupan su lugar. */}
+        {conDosBotones ? null : (
         <SuspendedPlanCards
           plans={planesAMostrar}
           currentPlan={enlace ? enlace.plan : currentPlan}
           firstMonthEligible={firstMonthEligible}
           soloTarjeta={enlace !== null}
         />
+        )}
 
         <p className="mt-6 text-center text-[12.5px] text-muted-foreground">
           <Link href="/login" className="transition hover:text-foreground">

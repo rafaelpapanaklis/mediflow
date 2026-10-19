@@ -11,7 +11,7 @@ import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
 import { varianteMetodos, type MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { daysUntil, isInTrial as inTrialNow, isPaymentFailed, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
 import { fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
-import { usePagarAhora } from "./pagar-ahora";
+import { PagoPendiente } from "./pago-pendiente";
 import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { resolverMetodoPago, textosMetodoPago, avisoMetodoPago } from "@/lib/billing/metodo-de-pago-vista";
@@ -159,7 +159,6 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
   // decide el servidor). Pasada la hora, la clínica ni llega a esta pestaña (layout → /dashboard/suspended).
   const pagoRechazado = isPaymentFailed(clinic.subscriptionStatus) && !trialExpired && !!trialEndsAt;
   const suspensionLabel = pagoRechazado && trialEndsAt ? fechaHoraDeLaClinica(trialEndsAt, clinic.timezone, locale === "en" ? "en" : "es") : "";
-  const { pagar: pagarAhora, pagando: pagandoAhora } = usePagarAhora(clinic.plan);
 
   // Clínica que paga a mano (SPEI/OXXO o activada por un admin) cuyo periodo YA
   // venció. Su `subscriptionStatus` se queda en "active" para siempre —nada la
@@ -531,17 +530,15 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           porcentajePrueba: pct,
           pruebaVencida: trialExpired,
           mostrarActivar: (!subscriptionActive || manualPeriodExpired) && !pagoRechazado,
+          subtituloActivar,
+          onActivar: () => router.push("/dashboard/suspended"),
           pagoRechazado: pagoRechazado
             ? {
                 titulo: t("shell.subscriptionTab.paymentFailedTitle"),
                 texto: t("shell.subscriptionTab.paymentFailedNotice", { fecha: suspensionLabel }),
-                cta: t("shell.pagoRechazado.cta"),
-                pagando: pagandoAhora,
-                onPagar: pagarAhora,
+                panel: <PagoPendiente puedePagar plan={clinic.plan} suspendida={false} />,
               }
             : null,
-          subtituloActivar,
-          onActivar: () => router.push("/dashboard/suspended"),
           tieneSuscripcionStripe: hasStripeSubscription,
           tieneClienteStripe: hasStripeCustomer,
           planes: plans ?? [],
@@ -661,8 +658,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           <div
             role="alert"
             style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              flexWrap: "wrap", gap: 12, padding: "14px 16px", borderRadius: 12,
+              display: "flex", flexDirection: "column", gap: 12, padding: "14px 16px", borderRadius: 12,
               background: "var(--danger-soft-strong, rgba(239,68,68,0.12))",
               border: "1px solid var(--danger-border-strong, rgba(239,68,68,0.4))",
             }}
@@ -675,16 +671,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                 {t("shell.subscriptionTab.paymentFailedNotice", { fecha: suspensionLabel })}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={pagarAhora}
-              disabled={pagandoAhora}
-              className="btn-new btn-new--primary btn-new--sm"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}
-            >
-              {pagandoAhora ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <CreditCard size={14} aria-hidden />}
-              {pagandoAhora ? t("shell.pagoRechazado.abriendo") : t("shell.pagoRechazado.cta")}
-            </button>
+            <PagoPendiente puedePagar plan={clinic.plan} suspendida={false} />
           </div>
         )}
 
