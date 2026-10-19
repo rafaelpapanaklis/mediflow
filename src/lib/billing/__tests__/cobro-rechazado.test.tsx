@@ -37,6 +37,7 @@ import { fechaHoraPanel } from "../../formato-fecha-panel";
 import { cobrarPendiente, formatoMonto, leerPagoPendiente, tarjetaRechazadaViva } from "../pago-pendiente-cliente";
 import { buildPaymentFailedEmail } from "../../email";
 import { I18nProvider } from "../../../i18n/i18n-provider";
+import { makeT } from "../../../i18n/t";
 import { getDict } from "../../../i18n/dictionaries";
 import Module from "node:module";
 
@@ -212,16 +213,16 @@ function pintar(puedePagar: boolean, idioma: "es" | "en" = "es") {
 test("el aviso pintado: dueño ve fecha y botón; los demás ven «Avisa al dueño de la clínica» y ningún botón", () => {
   const dueno = pintar(true);
   assert.match(dueno, /role="alert"/);
-  assert.match(dueno, /No pudimos cobrar tu plan\. Tu acceso se suspende el 20 oct 2026, 12:00 p.m.\./);
+  assert.match(dueno, /No pudimos cobrar tu plan\. Tu acceso se suspende el 20 oct 2026, 12:00 p\.m\.: actualiza tu tarjeta o paga para no perderlo\./);
   assert.match(dueno, /<button[^>]*>.*Actualizar tarjeta \/ pagar/s);
   assert.doesNotMatch(dueno, /Avisa al dueño/);
 
   const otro = pintar(false);
-  assert.match(otro, /20 oct 2026, 12:00 p.m./);
+  assert.match(otro, /20 oct 2026, 12:00 p\.m\./);
   assert.match(otro, /Avisa al dueño de la clínica/);
   assert.doesNotMatch(otro, /<button/, "sin botón");
 
-  assert.match(pintar(true, "en"), /We couldn&#x27;t charge your plan\. Your access will be suspended on 20 oct 2026, 12:00 p.m.\./);
+  assert.match(pintar(true, "en"), /We couldn&#x27;t charge your plan\. Your access will be suspended on 20 oct 2026, 12:00 p\.m\.: update your card or pay to keep it\./);
 });
 
 test("el layout monta el aviso en TODAS las pantallas del panel: una sola vez, fuera del ternario de los dos menús, y con móvil (la fila se parte)", () => {
@@ -314,7 +315,7 @@ test("el correo: dice la hora de suspensión, enlaza a Configuración › Suscri
   assert.match(c.html, /datos quedan completos y a salvo/);
   assert.doesNotMatch(c.html, /<b>Sur<\/b>/, "el nombre de la clínica no inyecta HTML");
   assert.match(c.html, /Dental &lt;b&gt;Sur&lt;\/b&gt; &amp; Co/);
-  assert.match(c.text, /Tu acceso se suspende el 20 oct 2026, 12:00 p.m.\./);
+  assert.match(c.text, /Fecha y hora de suspensión: 20 oct 2026, 12:00 p\.m\.\n/);
   assert.doesNotMatch(c.html + c.text, /\b(vos|tenés|podés|pagá|actualizá)\b/i);
 });
 
@@ -564,4 +565,56 @@ test("textos nuevos: es y en con las mismas claves, y el botón/aviso dicen lo p
   assert.equal(es.shell.pagoPendiente.subir, "Cambiar a un plan más grande y pagar");
   assert.equal(es.shell.pagoPendiente.vasAPagar, "Vas a pagar {monto}");
   assert.doesNotMatch(JSON.stringify(es.shell.pagoPendiente), /\b(vos|tenés|podés|pagá|elegí)\b/i);
+});
+
+/* ── La fecha nunca va pegada a un punto («12:00 p.m..») ───────────────── */
+
+test("ningún texto ya armado con la hora de suspensión lleva «m..» ni doble punto (es y en, todos los sitios)", () => {
+  const horas = [
+    new Date("2026-10-20T06:00:00.000Z"), // 12:00 a.m.
+    new Date("2026-10-20T18:00:00.000Z"), // 12:00 p.m.
+    new Date("2026-10-21T05:30:00.000Z"), // 11:30 p.m.
+  ];
+  const sinPunto = (texto: string, donde: string) => {
+    assert.doesNotMatch(texto, /m\.\./, `${donde}: «m..»`);
+    assert.doesNotMatch(texto, /(?<!\.)\.\.(?!\.)/, `${donde}: doble punto`);
+    assert.doesNotMatch(texto, /\b[AP]M\.(?!\w)/, `${donde}: «AM.»/«PM.» pegado`);
+  };
+  for (const idioma of ["es", "en"] as const) {
+    const dict = getDict(idioma) as any;
+    // Los textos NUNCA ponen un punto justo después de {fecha}.
+    for (const clave of [dict.shell.pagoRechazado.mensaje, dict.shell.pagoRechazado.mensajeOtros, dict.shell.subscriptionTab.paymentFailedNotice]) {
+      assert.doesNotMatch(clave, /\{fecha\}\s*[.]/, `${idioma}: «{fecha}.» en «${clave}»`);
+    }
+    for (const h of horas) {
+      const fecha = fechaHoraDeLaClinica(h, "America/Mexico_City", idioma);
+      // Banner (dueño/admin y demás roles), tal como se pinta.
+      for (const puede of [true, false]) {
+        const html = renderToStaticMarkup(
+          <I18nProvider locale={idioma} dict={getDict(idioma)}>
+            <AvisoPagoRechazado accesoHasta={fecha} puedePagar={puede} plan="PRO" />
+          </I18nProvider>,
+        );
+        sinPunto(html.replace(/<[^>]+>/g, " "), `banner ${idioma} ${puede ? "admin" : "otros"} ${fecha}`);
+      }
+      // Configuración › Suscripción (los dos diseños usan la misma clave).
+      sinPunto(makeT(dict)("shell.subscriptionTab.paymentFailedNotice", { fecha }), `suscripción ${idioma} ${fecha}`);
+    }
+  }
+  // Correo: html y texto plano (solo en español: es el idioma del correo).
+  for (const h of horas) {
+    const c = buildPaymentFailedEmail({
+      firstName: "Ana", clinicName: "BEVADENT", planName: "Profesional",
+      suspensionLabel: fechaHoraDeLaClinica(h, "America/Mexico_City"),
+      payUrl: "https://www.dalecontrol.com/dashboard/settings?tab=subscription",
+    });
+    sinPunto(c.text, "correo (texto)");
+    sinPunto(c.html.replace(/<[^>]+>/g, " "), "correo (html)");
+  }
+  // /admin dice solo el día, sin hora ni punto pegado.
+  const admin = planStatusLabel(getPlanStatus({ subscriptionStatus: "past_due", trialEndsAt: new Date("2026-10-21T00:00:00.000Z") }, new Date("2026-10-20T00:00:00.000Z")), new Date("2026-10-20T00:00:00.000Z"));
+  sinPunto(admin.label, "/admin etiqueta");
+  sinPunto(admin.detail, "/admin detalle");
+  // La pantalla de suspendida no interpola la fecha.
+  assert.doesNotMatch(sinComentarios(leer("src/app/dashboard/suspended/page.tsx")), /fechaHoraDeLaClinica|\{fecha\}/);
 });

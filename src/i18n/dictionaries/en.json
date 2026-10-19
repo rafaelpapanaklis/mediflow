@@ -1542,7 +1542,7 @@
       "viewReceipt": "View the Stripe receipt",
       "statusPaymentFailed": "Payment declined",
       "paymentFailedTitle": "We couldn't charge your plan",
-      "paymentFailedNotice": "Your access will be suspended on {fecha}. Update your card or pay now to keep it: your data is complete and safe."
+      "paymentFailedNotice": "Your access will be suspended on {fecha}: update your card or pay now to keep it. Your data is complete and safe."
     },
     "onboardingChecklist": {
       "title": "First steps",
@@ -1620,8 +1620,8 @@
       "endAria": "End consultation"
     },
     "pagoRechazado": {
-      "mensaje": "We couldn't charge your plan. Your access will be suspended on {fecha}.",
-      "mensajeOtros": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}. Let the clinic owner know.",
+      "mensaje": "We couldn't charge your plan. Your access will be suspended on {fecha}: update your card or pay to keep it.",
+      "mensajeOtros": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}: let the clinic owner know.",
       "cta": "Update card / pay",
       "abriendo": "Opening…",
       "errorAbrir": "We couldn't open the payment page. Try again or contact support."

@@ -562,7 +562,7 @@ export function buildPaymentFailedEmail(opts: {
   const text =
     `No pudimos cobrar tu plan\n\n` +
     `Hola${opts.firstName ? `, ${opts.firstName}` : ""}, tu banco rechazó el cobro del plan ${opts.planName} de "${opts.clinicName}".\n\n` +
-    `Tu acceso se suspende el ${opts.suspensionLabel}.\n\n` +
+    `Fecha y hora de suspensión: ${opts.suspensionLabel}\n\n` +
     `Hasta entonces puedes seguir trabajando con normalidad. Actualiza tu tarjeta o paga desde tu panel para que no se interrumpa el servicio. ` +
     `Si pasa la hora, tu acceso se suspende, pero tus datos quedan completos y a salvo: en cuanto pagues, todo vuelve como estaba.\n\n` +
     `Actualizar mi tarjeta: ${opts.payUrl}\n\n` +

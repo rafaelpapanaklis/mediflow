@@ -1542,7 +1542,7 @@
       "viewReceipt": "Ver el recibo de Stripe",
       "statusPaymentFailed": "Pago rechazado",
       "paymentFailedTitle": "No pudimos cobrar tu plan",
-      "paymentFailedNotice": "Tu acceso se suspende el {fecha}. Actualiza tu tarjeta o paga ahora para no perderlo: tus datos están completos y a salvo."
+      "paymentFailedNotice": "Tu acceso se suspende el {fecha}: actualiza tu tarjeta o paga ahora para no perderlo. Tus datos están completos y a salvo."
     },
     "onboardingChecklist": {
       "title": "Primeros pasos",
@@ -1620,8 +1620,8 @@
       "endAria": "Terminar consulta"
     },
     "pagoRechazado": {
-      "mensaje": "No pudimos cobrar tu plan. Tu acceso se suspende el {fecha}.",
-      "mensajeOtros": "No pudimos cobrar el plan de la clínica. El acceso se suspende el {fecha}. Avisa al dueño de la clínica.",
+      "mensaje": "No pudimos cobrar tu plan. Tu acceso se suspende el {fecha}: actualiza tu tarjeta o paga para no perderlo.",
+      "mensajeOtros": "No pudimos cobrar el plan de la clínica. El {fecha} se suspende el acceso. Avisa al dueño de la clínica.",
       "cta": "Actualizar tarjeta / pagar",
       "abriendo": "Abriendo…",
       "errorAbrir": "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte."
