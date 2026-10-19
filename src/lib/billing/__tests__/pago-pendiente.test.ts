@@ -43,6 +43,10 @@ interface Escenario {
   tarjetaFalla?: boolean;
   descuento?: any;
   stripeCaido?: boolean;
+  /** Cuántos `subscriptions.update` fallan de red ANTES de llegar a Stripe (el cambio no se aplica). */
+  updateFallaAntes?: number;
+  /** Cuántos `subscriptions.update` SÍ se aplican en Stripe pero la respuesta se pierde (error de red). */
+  updateRespuestaPerdida?: number;
   sinSub?: boolean;
   sedeIncluida?: boolean;
   sedesBloquean?: string | null;
@@ -57,8 +61,12 @@ function montar(e: Escenario = {}) {
   const registra = (op: string, ...args: any[]) => llamadas.push({ op, args });
   const facturas = new Map<string, any>((e.abiertas ?? [FACTURA_VIEJA]).map((f) => [f.id, { ...f }]));
   let planLocal: string | null = null;
+  let planSub = e.plan ?? "BASIC"; // el plan que Stripe tiene en la metadata de la suscripción
+  let fallasAntes = e.updateFallaAntes ?? 0;
+  let respuestasPerdidas = e.updateRespuestaPerdida ?? 0;
   const auditorias: any[] = [];
   const cobrosPorClave = new Map<string, any>();
+  let cobrosAplicados = 0; // cuántas veces Stripe aplicó de verdad el cambio (= cuántas facturas nuevas)
 
   const cuestaCaer = () => {
     if (e.stripeCaido) throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
@@ -74,7 +82,7 @@ function montar(e: Escenario = {}) {
           id,
           status: e.subStatus ?? "past_due",
           customer: "cus_1",
-          metadata: { clinicId: "clin_1", plan: e.plan ?? "BASIC", kind: "platform-subscription" },
+          metadata: { clinicId: "clin_1", plan: planSub, kind: "platform-subscription" },
           items: { data: [{ id: "si_1", price: { unit_amount: 41900, recurring: { interval: e.interval ?? "month" } } }] },
           discount: e.descuento ?? null,
           discounts: e.descuento ? [e.descuento.id] : [],
@@ -86,6 +94,10 @@ function montar(e: Escenario = {}) {
         // Mismo idempotencyKey → misma respuesta (como Stripe): no genera otra factura.
         const previa = cobrosPorClave.get(opts.idempotencyKey);
         if (previa) return previa;
+        if (fallasAntes > 0) {
+          fallasAntes--;
+          throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        }
         const nueva = {
           id: "in_nueva",
           status: e.tarjetaFalla ? "open" : "paid",
@@ -98,10 +110,22 @@ function montar(e: Escenario = {}) {
         facturas.set(nueva.id, nueva);
         const r = { id, status: e.tarjetaFalla ? "past_due" : "active", items: { data: [] }, latest_invoice: nueva };
         cobrosPorClave.set(opts.idempotencyKey, r);
+        planSub = params.metadata.plan;
+        cobrosAplicados++;
+        if (respuestasPerdidas > 0) {
+          respuestasPerdidas--;
+          throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        }
         return r;
       },
     },
     invoices: {
+      update: async (id: string, p: any, opts: any) => {
+        registra("invoices.update", id, p, opts);
+        cuestaCaer();
+        facturas.get(id).metadata = { ...(facturas.get(id).metadata ?? {}), ...p.metadata };
+        return facturas.get(id);
+      },
       list: async (p: any) => {
         registra("invoices.list", p);
         cuestaCaer();
@@ -170,7 +194,12 @@ function montar(e: Escenario = {}) {
     avisoSedeIncluida: (n) => `paga ${n}`,
   };
   const ops = (op: string) => llamadas.filter((l) => l.op === op);
-  return { deps, llamadas, ops, auditorias, facturas, planLocal: () => planLocal };
+  return {
+    deps, llamadas, ops, auditorias, facturas,
+    planLocal: () => planLocal,
+    cobros: () => cobrosAplicados,
+    planSub: () => planSub,
+  };
 }
 
 // ── GET ─────────────────────────────────────────────────────────────────────
@@ -441,6 +470,138 @@ test("subir: la suscripción de OTRO cliente de Stripe no se toma como pendiente
   const m = montar({ abiertas: [{ ...FACTURA_VIEJA, customer: "cus_otro" }] });
   assert.equal((await subirYPagar(m.deps, "PRO")).status, 409);
   assert.equal(m.ops("invoices.voidInvoice").length, 0);
+});
+
+// ── subir: cambio a medias (void OK + update falla) ────────────────────────
+
+test("subir: void OK + update falla de red → 502, la factura vieja queda marcada y anulada; el reintento termina el cambio y cobra UNA vez", async () => {
+  const m = montar({ updateFallaAntes: 1 });
+  const r1 = await subirYPagar(m.deps, "PRO");
+  assert.equal(r1.status, 502);
+  const vieja = m.facturas.get("in_vieja");
+  assert.equal(vieja.status, "void");
+  assert.equal(vieja.metadata.pago_pendiente_subir, "PRO");
+  assert.equal(vieja.metadata.pago_pendiente_subir_desde, "BASIC");
+  assert.equal(vieja.metadata.pago_pendiente_subir_clave, claves.subir("clin_1", "in_vieja", "PRO"));
+  assert.equal(m.cobros(), 0);
+
+  // El GET lo refleja: pendiente, con la opción de terminar el cambio y SIN factura que «pagar».
+  const g = await consultarPendiente(m.deps);
+  assert.equal(g.body.estado, "pendiente");
+  assert.deepEqual(g.body.cambioEnCurso, { plan: "PRO" });
+  assert.equal(g.body.montoPendiente, 48.61);
+  assert.ok((g.body.opcionesSubir as any[]).some((o) => o.plan === "PRO"));
+  assert.equal((await pagarPendiente(m.deps)).status, 409); // no hay factura abierta que pagar
+
+  // Reintento: no vuelve a anular ni a marcar; hace el update y cobra.
+  const r2 = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual(r2, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.ops("invoices.voidInvoice").length, 1);
+  assert.equal(m.ops("invoices.update").length, 1);
+  assert.equal(m.ops("subscriptions.update").length, 2);
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.planSub(), "PRO");
+  assert.equal(m.planLocal(), "PRO");
+  assert.equal(m.auditorias.at(-1).reintento, true);
+  assert.equal(m.ops("subscriptions.create").length, 0);
+});
+
+test("subir: el reintento puede elegir otro plan más grande mientras la suscripción no se haya movido", async () => {
+  const m = montar({ updateFallaAntes: 1 });
+  await subirYPagar(m.deps, "PRO");
+  const r = await subirYPagar(m.deps, "CLINIC");
+  assert.equal(r.body.pagado, true);
+  assert.equal(m.planSub(), "CLINIC");
+  assert.equal(m.cobros(), 1);
+});
+
+test("subir: el update SÍ llegó a Stripe pero la respuesta se perdió → el reintento NO cobra de nuevo", async () => {
+  const m = montar({ updateRespuestaPerdida: 1 });
+  const r1 = await subirYPagar(m.deps, "PRO");
+  assert.equal(r1.status, 502); // la factura nueva (pagada) ya existe en Stripe; la clínica aún no lo sabe
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.planSub(), "PRO");
+
+  // La suscripción ya está en PRO: ni la anulada se recupera (GET → sin_pendiente) ni subir vuelve a cobrar.
+  assert.deepEqual(await consultarPendiente(m.deps), { status: 200, body: { estado: "sin_pendiente" } });
+  const r2 = await subirYPagar(m.deps, "PRO");
+  assert.equal(r2.status, 409);
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.ops("subscriptions.update").length, 1);
+});
+
+test("subir: ya quedó hecho (pagado y plan local al día) → un reintento no cobra de nuevo ni reabre nada", async () => {
+  const m = montar();
+  await subirYPagar(m.deps, "PRO");
+  assert.equal(m.cobros(), 1);
+  m.deps.clinica.plan = "PRO"; // la ruta lee el plan local ya actualizado
+  for (const destino of ["PRO", "CLINIC"] as const) {
+    const r = await subirYPagar(m.deps, destino);
+    assert.notEqual(r.status, 200, destino);
+  }
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.ops("subscriptions.update").length, 1);
+  assert.deepEqual(await consultarPendiente(m.deps), { status: 200, body: { estado: "sin_pendiente" } });
+});
+
+test("subir: el update llegó a Stripe, la tarjeta falló y no se escribió el plan local → el reintento no anula la factura nueva ni cobra otra vez", async () => {
+  const m = montar({ tarjetaFalla: true });
+  await subirYPagar(m.deps, "PRO");
+  m.deps.clinica.plan = "BASIC"; // el plan local no se alcanzó a escribir
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: false, url: "https://pay.stripe.test/in_nueva" } });
+  assert.equal(m.ops("invoices.voidInvoice").length, 1); // solo la vieja
+  assert.equal(m.ops("subscriptions.update").length, 1);
+  assert.equal(m.facturas.get("in_nueva").status, "open");
+  assert.equal(m.planLocal(), "PRO");
+});
+
+test("subir: una anulada de hace más de 24 h, de otro flujo o de otro cliente NO se recupera", async () => {
+  // Más de 24 h
+  const vieja = montar({ updateFallaAntes: 1 });
+  await subirYPagar(vieja.deps, "PRO");
+  vieja.facturas.get("in_vieja").metadata.pago_pendiente_subir_ts = String(Math.floor(Date.now() / 1000) - 25 * 3600);
+  assert.equal((await subirYPagar(vieja.deps, "PRO")).status, 409);
+  assert.equal(vieja.ops("subscriptions.update").length, 1);
+  assert.deepEqual(await consultarPendiente(vieja.deps), { status: 200, body: { estado: "sin_pendiente" } });
+
+  // Anulada que no es de este flujo (sin marca): p. ej. la anuló un admin a mano.
+  const ajena = montar({ abiertas: [{ ...FACTURA_VIEJA, status: "void" }] });
+  assert.equal((await subirYPagar(ajena.deps, "PRO")).status, 409);
+  assert.equal(ajena.ops("subscriptions.update").length, 0);
+
+  // Marca de otro cliente de Stripe.
+  const otroCliente = montar({ updateFallaAntes: 1 });
+  await subirYPagar(otroCliente.deps, "PRO");
+  otroCliente.facturas.get("in_vieja").customer = "cus_otro";
+  assert.equal((await subirYPagar(otroCliente.deps, "PRO")).status, 409);
+
+  // Sin permiso: el GET y subir siguen cerrados aunque haya cambio a medias.
+  const sinPermiso = montar({ updateFallaAntes: 1 });
+  await subirYPagar(sinPermiso.deps, "PRO");
+  sinPermiso.deps.role = "RECEPTIONIST";
+  assert.equal((await subirYPagar(sinPermiso.deps, "PRO")).status, 403);
+  assert.equal((await consultarPendiente(sinPermiso.deps)).status, 403);
+});
+
+test("subir: si marcar la factura falla, NO se anula nada (la vieja sigue abierta y pagable)", async () => {
+  const m = montar();
+  (m.deps.stripe as any).invoices.update = async () => { throw new Error("red"); };
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(m.facturas.get("in_vieja").status, "open");
+  assert.equal(m.ops("invoices.voidInvoice").length, 0);
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+});
+
+test("subir: el reintento que vuelve a fallar sigue siendo recuperable (nunca queda atorada)", async () => {
+  const m = montar({ updateFallaAntes: 2 });
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502);
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502);
+  assert.equal((await consultarPendiente(m.deps)).body.cambioEnCurso !== undefined, true);
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, true);
+  assert.equal(m.cobros(), 1);
 });
 
 // ── cuerpo y utilidades ─────────────────────────────────────────────────────

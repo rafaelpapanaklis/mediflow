@@ -25,6 +25,8 @@ import {
 import {
   MENSAJES,
   MONEDA_PAGO,
+  anuladaRecuperable,
+  armarMarca,
   armarUpdateSubir,
   claves,
   esPlanMasGrande,
@@ -33,6 +35,7 @@ import {
   opcionDeSubida,
   planesMasGrandes,
   respuesta,
+  type AnuladaRecuperable,
   type FacturaPago,
   type OpcionSubir,
   type RespuestaPago,
@@ -49,6 +52,7 @@ export interface StripePago {
   invoices: {
     list(params: Record<string, unknown>): Promise<{ data: FacturaPago[] }>;
     retrieve(id: string): Promise<FacturaPago>;
+    update(id: string, params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
     pay(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
     voidInvoice(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
   };
@@ -106,14 +110,24 @@ const resultadoDeFactura = (f: FacturaPago | null | undefined): RespuestaPago =>
 
 type Contexto =
   | { ok: false; respuesta: RespuestaPago }
-  | { ok: true; stripe: StripePago; sub: SuscripcionPago; factura: FacturaPago };
+  | {
+      ok: true;
+      stripe: StripePago;
+      sub: SuscripcionPago;
+      /** La factura abierta; null solo cuando hay un cambio de plan a medias (`anulada`). */
+      factura: FacturaPago | null;
+      /** Factura anulada por «subir» cuyo cambio no se completó (ver `anuladaRecuperable`). */
+      anulada: AnuladaRecuperable | null;
+    };
 
 /**
  * Lo común de las tres operaciones: permiso, suscripción de tarjeta VIVA de la clínica de la sesión y su
  * factura abierta. Los códigos del contrato: 403 sin permiso · 409 sin pendiente · 502 Stripe no contestó.
  * `soloLectura` (GET): lo que no hay que pagar no es un error, es `sin_pendiente`.
+ * `conRecuperacion` (GET y «subir»): sin factura abierta, busca la anulada por «subir» cuyo cambio quedó a
+ * medias; si la hay, es un pendiente (hay que terminar el cambio) en vez de «sin pendiente».
  */
-async function cargarPendiente(deps: DepsPago, soloLectura: boolean): Promise<Contexto | { ok: false; sinPendiente: true }> {
+async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecuperacion = false): Promise<Contexto | { ok: false; sinPendiente: true }> {
   const sinPendiente = soloLectura
     ? ({ ok: false, sinPendiente: true } as const)
     : ({ ok: false, respuesta: respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente }) } as const);
@@ -155,15 +169,32 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean): Promise<Co
     return { ok: false, respuesta: falloDeStripe(err) };
   }
   const factura = facturaAbiertaMasReciente(facturas, clinica.stripeCustomerId);
-  if (!factura) return sinPendiente;
-  return { ok: true, stripe, sub, factura };
+  if (factura) return { ok: true, stripe, sub, factura, anulada: null };
+  if (!conRecuperacion) return sinPendiente;
+
+  let anuladas: FacturaPago[];
+  try {
+    anuladas = (await stripe.invoices.list({ subscription: clinica.stripeSubscriptionId, status: "void", limit: 10 })).data;
+  } catch (err) {
+    return { ok: false, respuesta: falloDeStripe(err) };
+  }
+  const anulada = anuladaRecuperable({
+    facturas: anuladas,
+    customerId: clinica.stripeCustomerId,
+    planSuscripcion: sub.metadata?.plan,
+    planClinica: clinica.plan,
+  });
+  if (!anulada) return sinPendiente;
+  return { ok: true, stripe, sub, factura: null, anulada };
 }
 
 // ── GET ─────────────────────────────────────────────────────────────────────
 
 export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago> {
-  const ctx = await cargarPendiente(deps, true);
+  const ctx = await cargarPendiente(deps, true, true);
   if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(200, { estado: "sin_pendiente" });
+  const deuda = ctx.factura ?? ctx.anulada?.factura;
+  if (!deuda) return respuesta(200, { estado: "sin_pendiente" });
 
   const interval = subscriptionItemInterval(ctx.sub.items.data[0]);
   const exencion = await deps.exencionIva();
@@ -175,9 +206,12 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
   return respuesta(200, {
     estado: "pendiente",
     planActual: deps.clinica.plan,
-    montoPendiente: ctx.factura.amount_due / 100,
+    montoPendiente: deuda.amount_due / 100,
     moneda: MONEDA_PAGO,
     opcionesSubir: opciones,
+    // Solo cuando un cambio de plan quedó a medias: no hay factura que «pagar», solo terminar la subida
+    // (POST subir). Con esto presente, «Pagar mi plan» no aplica.
+    ...(ctx.anulada ? { cambioEnCurso: { plan: ctx.anulada.planMarcado } } : {}),
   });
 }
 
@@ -187,6 +221,7 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   const ctx = await cargarPendiente(deps, false);
   if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
   const { stripe, factura } = ctx;
+  if (!factura) return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
   const clinicId = deps.clinica.id;
 
   let pagada: FacturaPago | null = null;
@@ -226,10 +261,20 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
   const sedesBloquean = await deps.bloqueoDeSedes(destino);
   if (sedesBloquean) return respuesta(409, { code: "SEDES_ACTIVAS", error: sedesBloquean });
 
-  const ctx = await cargarPendiente(deps, false);
+  const ctx = await cargarPendiente(deps, false, true);
   if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
-  const { stripe, sub, factura } = ctx;
+  const { stripe, sub, anulada } = ctx;
+  // La factura que ancla las claves de idempotencia: la abierta o, en un reintento, la ya anulada.
+  const factura = ctx.factura ?? anulada?.factura;
+  if (!factura) return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
   const clinicId = deps.clinica.id;
+
+  // La suscripción YA está en el plan destino (el update llegó a Stripe y solo faltó reflejarlo aquí): no se
+  // anula ni se cambia nada, para no cobrar dos veces. Se refleja el plan y se devuelve el estado de la factura.
+  if (ctx.factura && sub.metadata?.plan === destino) {
+    await deps.aplicarPlanLocal(destino);
+    return resultadoDeFactura(ctx.factura);
+  }
 
   const item = sub.items.data[0];
   if (!item) return respuesta(502, { code: "SUSCRIPCION_SIN_ITEMS", error: "Tu suscripción no tiene un plan asociado en Stripe." });
@@ -253,17 +298,30 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     return falloDeStripe(err);
   }
 
-  // 1) Se ANULA la factura abierta del plan viejo (nunca se borra). Si otro POST ya la anuló, se sigue.
-  try {
-    await stripe.invoices.voidInvoice(factura.id, {}, { idempotencyKey: claves.anular(clinicId, factura.id) });
-  } catch (err) {
-    let yaAnulada = false;
+  // 1) Se ANULA la factura abierta del plan viejo (nunca se borra), DESPUÉS de marcarla: si el cambio de
+  // abajo falla de red, el reintento encuentra la marca y lo termina en vez de responder «sin pendiente».
+  // Si otro POST ya la anuló, se sigue. En un reintento (`anulada`) ya está marcada y anulada: se salta.
+  if (!anulada) {
     try {
-      yaAnulada = (await stripe.invoices.retrieve(factura.id)).status === "void";
-    } catch {
-      yaAnulada = false;
+      await stripe.invoices.update(
+        factura.id,
+        { metadata: armarMarca({ destino, desde: deps.clinica.plan, clave: claves.subir(clinicId, factura.id, destino) }) },
+        { idempotencyKey: claves.marcar(clinicId, factura.id, destino) },
+      );
+    } catch (err) {
+      return falloDeStripe(err); // nada cambió todavía: la factura sigue abierta
     }
-    if (!yaAnulada) return falloDeStripe(err);
+    try {
+      await stripe.invoices.voidInvoice(factura.id, {}, { idempotencyKey: claves.anular(clinicId, factura.id) });
+    } catch (err) {
+      let yaAnulada = false;
+      try {
+        yaAnulada = (await stripe.invoices.retrieve(factura.id)).status === "void";
+      } catch {
+        yaAnulada = false;
+      }
+      if (!yaAnulada) return falloDeStripe(err);
+    }
   }
 
   // 2) La MISMA suscripción pasa al plan nuevo y se cobra completo ahora.
@@ -284,6 +342,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     }
     await deps.auditar({
       event: "pago-pendiente-subir-fallo",
+      reintento: !!anulada,
       facturaAnuladaId: factura.id,
       planDestino: destino,
       code: codigoDe(err) ?? null,
@@ -310,6 +369,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     event: "pago-pendiente-subir",
     planAntes: deps.clinica.plan,
     planDestino: destino,
+    reintento: !!anulada,
     facturaAnuladaId: factura.id,
     facturaNuevaId: nuevaFactura?.id ?? null,
     subtotalMxn: cents / 100,

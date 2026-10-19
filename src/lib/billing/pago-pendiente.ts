@@ -15,7 +15,7 @@
  */
 
 import { z } from "zod";
-import { PLAN_IDS, type PlanId } from "./plans";
+import { PLAN_IDS, isPlanId, type PlanId } from "./plans";
 import {
   desgloseConIva,
   ivaAplica,
@@ -100,6 +100,7 @@ export interface FacturaPago {
   created?: number | null;
   attempt_count?: number | null;
   discount?: DescuentoStripe | null;
+  metadata?: Record<string, string> | null;
 }
 
 const idDe = (v: string | { id: string } | null | undefined): string | null =>
@@ -128,6 +129,77 @@ export function facturaAbiertaMasReciente(
 /** ¿La factura trae el descuento de la promo del primer mes? (informativo: no se altera su monto). */
 export function facturaTienePromo(f: Pick<FacturaPago, "discount">): boolean {
   return !!f.discount?.coupon?.id?.startsWith(PREFIJO_CUPON_PROMO);
+}
+
+// ── Marca de «subir» en la factura anulada (para terminar un cambio a medias) ──
+
+/**
+ * «Subir» anula la factura vieja y DESPUÉS cambia la suscripción. Si el cambio falla de red, la clínica
+ * quedaría sin factura abierta. Por eso, ANTES de anular, la factura se marca (metadata de Stripe) con lo
+ * que hace falta para que un reintento termine el cambio sin cobrar dos veces:
+ *   · plan destino y plan de origen (el de la suscripción al marcar),
+ *   · la hora de la marca (epoch en segundos),
+ *   · la clave de idempotencia del cambio.
+ */
+export const MARCA = {
+  plan: "pago_pendiente_subir",
+  desde: "pago_pendiente_subir_desde",
+  ts: "pago_pendiente_subir_ts",
+  clave: "pago_pendiente_subir_clave",
+} as const;
+
+/** Cuánto tiempo, desde la marca, un reintento puede terminar el cambio. */
+export const VENTANA_RECUPERACION_MS = 24 * 60 * 60 * 1000;
+
+export function armarMarca(args: { destino: PlanId; desde: string | null | undefined; clave: string; ahora?: Date }): Record<string, string> {
+  return {
+    [MARCA.plan]: args.destino,
+    [MARCA.desde]: args.desde ?? "",
+    [MARCA.ts]: String(Math.floor((args.ahora ?? new Date()).getTime() / 1000)),
+    [MARCA.clave]: args.clave,
+  };
+}
+
+export interface AnuladaRecuperable {
+  factura: FacturaPago;
+  /** Plan al que se iba a subir cuando se anuló. */
+  planMarcado: PlanId;
+}
+
+/**
+ * La factura anulada por este mismo flujo cuyo cambio quedó a medias, o null. Para que cuente:
+ *   1. está anulada (`void`), es de este cliente de Stripe y lleva la marca de arriba;
+ *   2. la marca tiene menos de 24 h;
+ *   3. la suscripción TODAVÍA no se movió: el plan de su metadata es el de origen de la marca y es el que
+ *      la clínica tiene. Si el update llegó a Stripe (aunque la respuesta se perdiera) la metadata ya trae
+ *      el plan nuevo y esto da null: no se vuelve a cobrar.
+ */
+export function anuladaRecuperable(args: {
+  facturas: FacturaPago[] | null | undefined;
+  customerId: string | null | undefined;
+  planSuscripcion: string | null | undefined;
+  planClinica: string | null | undefined;
+  ahora?: Date;
+}): AnuladaRecuperable | null {
+  const ahoraS = Math.floor((args.ahora ?? new Date()).getTime() / 1000);
+  const candidatas: Array<AnuladaRecuperable & { ts: number }> = [];
+  for (const f of args.facturas ?? []) {
+    if (f.status !== "void") continue;
+    const cliente = idDe(f.customer);
+    if (args.customerId && cliente && cliente !== args.customerId) continue;
+    const m = f.metadata ?? {};
+    const planMarcado = m[MARCA.plan];
+    const ts = Number(m[MARCA.ts]);
+    if (!isPlanId(planMarcado) || !Number.isFinite(ts)) continue;
+    if (ahoraS - ts > VENTANA_RECUPERACION_MS / 1000 || ts > ahoraS + 300) continue;
+    const desde = m[MARCA.desde] ?? "";
+    if (!desde || desde !== args.planClinica) continue;
+    if (args.planSuscripcion && args.planSuscripcion !== desde) continue; // la suscripción ya se movió
+    candidatas.push({ factura: f, planMarcado, ts });
+  }
+  if (candidatas.length === 0) return null;
+  const mejor = candidatas.reduce((a, b) => (b.ts > a.ts ? b : a));
+  return { factura: mejor.factura, planMarcado: mejor.planMarcado };
 }
 
 // ── Opciones de subida (GET) ────────────────────────────────────────────────
@@ -246,6 +318,7 @@ export { subscriptionItemInterval };
 export const claves = {
   pagar: (clinicId: string, facturaId: string, intentos: number | null | undefined) =>
     `pago-pendiente:pagar:${clinicId}:${facturaId}:${intentos ?? 0}`,
+  marcar: (clinicId: string, facturaId: string, plan: string) => `pago-pendiente:marcar:${clinicId}:${facturaId}:${plan}`,
   anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
   subir: (clinicId: string, facturaId: string, plan: string) => `pago-pendiente:subir:${clinicId}:${facturaId}:${plan}`,
   precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number) =>
