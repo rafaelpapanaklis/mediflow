@@ -418,6 +418,49 @@ test("paga durante la gracia (tarjeta nueva en el portal): active y el acceso ll
   assert.equal(isPlanExpired(clinica(), new Date()), false);
 });
 
+function facturaPagada(extra: Record<string, unknown> = {}) {
+  return { ...facturaFallida(), status: "paid", amount_paid: 68900, currency: "mxn", ...extra };
+}
+
+test("`invoice.paid` reactiva por sí solo (aunque el `updated` se pierda), con el estado VIVO de Stripe", async () => {
+  const rechazo = Date.now();
+  await entregar(evento("invoice.payment_failed", facturaFallida(), rechazo));
+  assert.equal(clinica().subscriptionStatus, "past_due");
+  const finPagado = Date.now() + 30 * DIA;
+  suscripcionesVivas.set(SUB, suscripcion("active", finPagado));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  assert.equal(await entregar(evento("invoice.paid", facturaPagada())), 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(clinica().trialEndsAt.getTime(), aSegundos(finPagado) * 1000, "al fin del periodo pagado");
+  // `invoice.payment_succeeded` llega para la misma factura: no cambia nada más.
+  const escrituras1 = escrituras.length;
+  await entregar(evento("invoice.payment_succeeded", facturaPagada()));
+  assert.equal(escrituras.length, escrituras1, "idempotente");
+  assert.equal(clinica().subscriptionStatus, "active");
+});
+
+test("`invoice.paid` con la suscripción viva todavía en past_due (aviso viejo) NO reactiva", async () => {
+  await entregar(evento("invoice.payment_failed", facturaFallida()));
+  const limite = clinica().trialEndsAt.getTime();
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 30 * DIA));
+  await entregar(evento("invoice.paid", facturaPagada()));
+  assert.equal(clinica().subscriptionStatus, "past_due");
+  assert.equal(clinica().trialEndsAt.getTime(), limite);
+  // Y si Stripe no responde, tampoco: queda el `customer.subscription.updated`.
+  stripeRespondeSuscripciones = false;
+  assert.equal(await entregar(evento("invoice.paid", facturaPagada())), 200);
+  assert.equal(clinica().subscriptionStatus, "past_due");
+});
+
+test("`invoice.paid` de OTRA suscripción (un módulo) no reactiva el plan", async () => {
+  await entregar(evento("invoice.payment_failed", facturaFallida()));
+  suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 30 * DIA));
+  await entregar(
+    evento("invoice.paid", facturaPagada({ id: "in_modulo", parent: { subscription_details: { subscription: "sub_mod", metadata: { kind: "module-subscription", moduleKey: "orthodontics" } } } })),
+  );
+  assert.equal(clinica().subscriptionStatus, "past_due");
+});
+
 test("SUSPENDIDA (pasó la gracia) con la suscripción de Stripe viva: paga y entra con todo", async () => {
   const rechazo = Date.now() - 3 * DIA;
   reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(rechazo + 24 * HORA) });

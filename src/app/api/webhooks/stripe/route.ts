@@ -53,6 +53,7 @@ import {
   inicioDeNuevoPeriodo,
 } from "@/lib/billing/cobro-rechazado";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
+import { isPaymentFailed } from "@/lib/plan-status";
 import {
   MODULE_SUBSCRIPTION_KIND,
   buildActivateModuleWrite,
@@ -593,6 +594,8 @@ export async function POST(req: NextRequest) {
             email: true,
             plan: true,
             nextBillingDate: true,
+            subscriptionStatus: true,
+            stripeSubscriptionId: true,
             // Dueño de la clínica (SUPER_ADMIN más antiguo activo) → destinatario
             // preferente de los correos de billing; cae a clinic.email si no hay.
             users: {
@@ -623,6 +626,13 @@ export async function POST(req: NextRequest) {
         // afiliado, que se calcula con las reglas del PLAN y pagaría por una
         // mensualidad de módulo lo mismo que por una de plan.
         if ((await moduloDeFactura(invoice)) !== null) break;
+
+        // REACTIVACIÓN POR PAGO (ws1-t1): una clínica en cobro rechazado cuya suscripción de Stripe ya está
+        // cobrada vuelve a active con el periodo pagado, aunque el `customer.subscription.updated` de la
+        // recuperación se retrase o no llegue. Solo con el estado VIVO de Stripe (nunca por el evento).
+        if (clinic) {
+          await reactivarSiStripeYaCobro(stripe, invoice, clinic);
+        }
 
         // Primer cobro de la suscripción del PLAN pagado: si la clínica quedó en «incomplete» (el
         // «created» de Stripe llegó después de otro evento), este pago la deja activa. Solo toca
@@ -972,6 +982,46 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Clínica en past_due / unpaid + factura del plan pagada + suscripción VIVA en active/trialing → active y
+ * el acceso al fin del periodo pagado. Idempotente (la segunda vez la clínica ya no está rechazada) y
+ * tolerante: sin respuesta de Stripe no toca nada y queda el `customer.subscription.updated`.
+ */
+async function reactivarSiStripeYaCobro(
+  stripe: Stripe,
+  invoice: Stripe.Invoice,
+  clinic: { id: string; subscriptionStatus: string | null; stripeSubscriptionId: string | null },
+): Promise<void> {
+  if (!isPaymentFailed(clinic.subscriptionStatus) || !clinic.stripeSubscriptionId) return;
+  // Solo la suscripción del PLAN de esta clínica: la factura de otra (un módulo ya se cortó arriba) no cuenta.
+  if (referenciaDeFactura(invoice as unknown as Parameters<typeof referenciaDeFactura>[0]).stripeSubscriptionId !== clinic.stripeSubscriptionId) return;
+  let viva: Stripe.Subscription;
+  try {
+    viva = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
+  } catch {
+    return;
+  }
+  if (viva.status !== "active" && viva.status !== "trialing") return;
+  const periodFields = subscriptionPeriodFields(viva);
+  await prisma.clinic.update({
+    where: { id: clinic.id },
+    data: { subscriptionStatus: "active", ...periodFields },
+  });
+  await sincronizarSedesIncluidas(clinic.id);
+  await logAudit({
+    clinicId: clinic.id,
+    userId: clinic.id,
+    entityType: "subscription",
+    entityId: invoice.id ?? viva.id,
+    action: "update",
+    changes: {
+      subscriptionStatus: { before: clinic.subscriptionStatus, after: "active" },
+      ...(periodFields.trialEndsAt ? { trialEndsAt: { before: null, after: periodFields.trialEndsAt } } : {}),
+      _source: { before: null, after: { event: "invoice.paid", invoiceId: invoice.id, subscriptionId: viva.id } },
+    },
+  });
 }
 
 /**
