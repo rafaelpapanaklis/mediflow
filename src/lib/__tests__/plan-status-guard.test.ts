@@ -251,7 +251,8 @@ test("todo prisma.clinic.update/updateMany/upsert que escribe nextBillingDate es
 
 test("hay escritores con las dos fechas (si no, el test de arriba no está viendo nada)", () => {
   const webhook = sinComentarios(readFileSync(join(process.cwd(), "src/app/api/webhooks/stripe/route.ts"), "utf8"));
-  assert.match(webhook, /const periodFields = subscriptionPeriodFields\(sub\);/);
+  // Las fechas salen de la suscripción VIVA y de su estado real (ws1-t1), no del `sub` del evento a secas.
+  assert.match(webhook, /const periodFields = subscriptionPeriodFields\(\{\s*\.\.\.\(suscripcionViva \?\? sub\),/);
   assert.match(webhook, /\.\.\.periodFields,/);
   assert.match(webhook, /trialEndsAt:\s*next,\s*\r?\n\s*nextBillingDate:\s*next,/);
   const admin = sinComentarios(readFileSync(join(process.cwd(), "src/app/api/admin/billing/route.ts"), "utf8"));

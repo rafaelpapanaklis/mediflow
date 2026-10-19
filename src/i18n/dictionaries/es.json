@@ -1539,7 +1539,10 @@
       "topupViaSpei": "Transferencia SPEI",
       "topupViaManual": "Abono registrado por DaleControl",
       "receipt": "Recibo",
-      "viewReceipt": "Ver el recibo de Stripe"
+      "viewReceipt": "Ver el recibo de Stripe",
+      "statusPaymentFailed": "Pago rechazado",
+      "paymentFailedTitle": "No pudimos cobrar tu plan",
+      "paymentFailedNotice": "Tu acceso se suspende el {fecha}. Actualiza tu tarjeta o paga ahora para no perderlo: tus datos están completos y a salvo."
     },
     "onboardingChecklist": {
       "title": "Primeros pasos",
@@ -1615,6 +1618,13 @@
       "aiAria": "Consultar IA con contexto",
       "endLabel": "Terminar consulta",
       "endAria": "Terminar consulta"
+    },
+    "pagoRechazado": {
+      "mensaje": "No pudimos cobrar tu plan. Tu acceso se suspende el {fecha}.",
+      "mensajeOtros": "No pudimos cobrar el plan de la clínica. El acceso se suspende el {fecha}. Avisa al dueño de la clínica.",
+      "cta": "Actualizar tarjeta / pagar",
+      "abriendo": "Abriendo…",
+      "errorAbrir": "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte."
     }
   },
   "agenda": {
@@ -9689,7 +9699,18 @@
       "upsellLine": "Por ${amount} más al mes: {benefit}",
       "upsellBenefitPro": "pacientes ilimitados y 3 profesionales",
       "upsellBenefitClinic": "multi-sucursal, API y manager dedicado",
-      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o escríbenos a soporte@dalecontrol.com."
+      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o escríbenos a soporte@dalecontrol.com.",
+      "pillSuspended": "Acceso suspendido",
+      "suspendedTitle": "Tu acceso está suspendido por falta de pago",
+      "suspendedBody": "Tus datos están completos y a salvo: en cuanto pagues, todo vuelve como estaba.",
+      "actions": {
+        "label": "Qué puedes hacer mientras tanto",
+        "payNow": "Pagar ahora",
+        "openTicket": "Abrir ticket de soporte",
+        "contactManager": "Contactar a mi manager",
+        "managerMessage": "Hola, soy de {clinic}. Mi acceso está suspendido por un pago pendiente y quiero ponerme al corriente.",
+        "payError": "No pudimos abrir el pago. Inténtalo de nuevo o abre un ticket de soporte."
+      }
     },
     "teleconsulta": {
       "title": "Teleconsultas",

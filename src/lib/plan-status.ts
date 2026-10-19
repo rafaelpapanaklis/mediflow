@@ -41,6 +41,15 @@ export function isSubscriptionActive(status: string | null | undefined): boolean
   return status !== null && status !== undefined && ACTIVE_SUBSCRIPTION_STATUSES.has(status);
 }
 
+/**
+ * Cobro rechazado (past_due / unpaid): la clínica TIENE (o tuvo) una suscripción de pago y el banco no
+ * dejó cobrarla. No es un trial aunque le quede periodo con acceso: ese margen es la gracia de 24 h del
+ * cobro rechazado (ver @/lib/billing/cobro-rechazado), no una prueba gratuita.
+ */
+export function isPaymentFailed(status: string | null | undefined): boolean {
+  return status !== null && status !== undefined && PAYMENT_FAILED_STATUSES.has(status);
+}
+
 function toDate(value: Date | string | null | undefined): Date | null {
   if (value === null || value === undefined) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -73,11 +82,19 @@ export function isPlanExpired(clinic: PlanClinic, now: Date = new Date()): boole
  * Misma regla que usaba el layout de /dashboard para el banner y el sidebar.
  * Una clínica con suscripción activa devuelve false aunque su periodo pagado
  * esté en el futuro (para ella trialEndsAt es el fin del periodo, no un trial).
+ * Tampoco lo es la de cobro rechazado (past_due / unpaid): paga con tarjeta y
+ * el banco rechazó el cobro; antes salía «En prueba» y con TODOS los módulos
+ * abiertos durante el margen que le quedaba (BEVADENT, 19-oct-2026).
  */
 export function isInTrial(clinic: PlanClinic, now: Date = new Date()): boolean {
   if (!clinic) return false;
   const trialEndsAt = toDate(clinic.trialEndsAt);
-  return !!trialEndsAt && trialEndsAt > now && !isSubscriptionActive(clinic.subscriptionStatus);
+  return (
+    !!trialEndsAt &&
+    trialEndsAt > now &&
+    !isSubscriptionActive(clinic.subscriptionStatus) &&
+    !isPaymentFailed(clinic.subscriptionStatus)
+  );
 }
 
 /**

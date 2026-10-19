@@ -85,7 +85,9 @@ test("isPlanExpired: `now` es inyectable y por defecto es hoy", () => {
 test("isInTrial: una clínica que paga nunca está en trial, tenga la fecha que tenga", () => {
   for (const subscriptionStatus of STATUSES) {
     const live = isSubscriptionActive(subscriptionStatus);
-    assert.equal(isInTrial({ subscriptionStatus, trialEndsAt: day(+10) }, NOW), !live, `futuro · ${subscriptionStatus}`);
+    // El cobro rechazado (past_due / unpaid) tampoco es una prueba: ver el bloque «Pago rechazado ≠ En prueba».
+    const rechazado = subscriptionStatus === "past_due" || subscriptionStatus === "unpaid";
+    assert.equal(isInTrial({ subscriptionStatus, trialEndsAt: day(+10) }, NOW), !live && !rechazado, `futuro · ${subscriptionStatus}`);
     assert.equal(isInTrial({ subscriptionStatus, trialEndsAt: day(-10) }, NOW), false, `pasado · ${subscriptionStatus}`);
   }
   assert.equal(isInTrial(null, NOW), false);
@@ -169,7 +171,7 @@ test("las etiquetas distinguen cobro fallido de vencida y explican el por qué",
   const failing = planStatusLabel(getPlanStatus({ subscriptionStatus: "past_due", trialEndsAt: day(+12) }, NOW), NOW);
   assert.match(failing.label, /^Cobro fallido/);
   assert.equal(failing.tone, "warning");
-  assert.match(failing.detail, /reintenta/);
+  assert.match(failing.detail, /24 h de gracia/);
 
   const dead = planStatusLabel(getPlanStatus({ subscriptionStatus: "past_due", trialEndsAt: day(-3) }, NOW), NOW);
   assert.equal(dead.label, "Vencida · cobro fallido");

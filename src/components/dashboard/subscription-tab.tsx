@@ -9,13 +9,15 @@ import { cfdiBullet, PLAN_MARKETING } from "@/lib/plan-shared";
 import { exencionDeIva, ivaAplica } from "@/lib/billing/iva-cobro";
 import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
 import { varianteMetodos, type MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
-import { daysUntil, isInTrial as inTrialNow, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
+import { daysUntil, isInTrial as inTrialNow, isPaymentFailed, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
+import { fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
+import { usePagarAhora } from "./pagar-ahora";
 import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 import { resolverMetodoPago, textosMetodoPago, avisoMetodoPago } from "@/lib/billing/metodo-de-pago-vista";
 import { CfdiUsageCard } from "./cfdi-usage-card";
 import { StorageUsageCard } from "./storage-usage-card";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDeFila, type BillingInvoiceRow } from "@/lib/billing/historial-facturas";
 import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
@@ -26,6 +28,8 @@ export interface ClinicData {
   /** Para la exención de IVA de las clínicas de antes del 26-sep-2026 (iva-cobro.ts). */
   createdAt?: string | Date | null;
   trialEndsAt?: string | Date | null;
+  /** Zona de la clínica: la hora de suspensión del cobro rechazado se dice en ella. */
+  timezone?: string | null;
   subscriptionStatus?: string | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
@@ -120,6 +124,7 @@ function paypalLinkFor(plan: PlanId): string | null {
 
 export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -148,6 +153,13 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
   const subscriptionActive = isSubscriptionActive(clinic.subscriptionStatus);
   const isInTrial = inTrialNow(clinic, now);
   const trialExpired = isPlanExpired(clinic, now);
+
+  // COBRO RECHAZADO con el acceso aún vivo (gracia de 24 h): NO es una prueba. Se dice «Pago rechazado»
+  // en rojo, con la hora de suspensión y el botón de pagar destacado (portal de Stripe o checkout, lo
+  // decide el servidor). Pasada la hora, la clínica ni llega a esta pestaña (layout → /dashboard/suspended).
+  const pagoRechazado = isPaymentFailed(clinic.subscriptionStatus) && !trialExpired && !!trialEndsAt;
+  const suspensionLabel = pagoRechazado && trialEndsAt ? fechaHoraDeLaClinica(trialEndsAt, clinic.timezone, locale === "en" ? "en" : "es") : "";
+  const { pagar: pagarAhora, pagando: pagandoAhora } = usePagarAhora(clinic.plan);
 
   // Clínica que paga a mano (SPEI/OXXO o activada por un admin) cuyo periodo YA
   // venció. Su `subscriptionStatus` se queda en "active" para siempre —nada la
@@ -360,11 +372,13 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
 
   const statusLabel = subscriptionActive
     ? t("shell.subscriptionTab.statusActive")
-    : isInTrial
-      ? t("shell.subscriptionTab.statusTrial")
-      : trialExpired
-        ? t("shell.subscriptionTab.statusTrialExpired")
-        : t("shell.subscriptionTab.statusNone");
+    : pagoRechazado
+      ? t("shell.subscriptionTab.statusPaymentFailed")
+      : isInTrial
+        ? t("shell.subscriptionTab.statusTrial")
+        : trialExpired
+          ? t("shell.subscriptionTab.statusTrialExpired")
+          : t("shell.subscriptionTab.statusNone");
 
   const statusTone = subscriptionActive
     ? { bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.3)", fg: "#34d399" }
@@ -516,7 +530,16 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           ivaDe: (id: PlanId) => sufijoIva(id) !== "",
           porcentajePrueba: pct,
           pruebaVencida: trialExpired,
-          mostrarActivar: !subscriptionActive || manualPeriodExpired,
+          mostrarActivar: (!subscriptionActive || manualPeriodExpired) && !pagoRechazado,
+          pagoRechazado: pagoRechazado
+            ? {
+                titulo: t("shell.subscriptionTab.paymentFailedTitle"),
+                texto: t("shell.subscriptionTab.paymentFailedNotice", { fecha: suspensionLabel }),
+                cta: t("shell.pagoRechazado.cta"),
+                pagando: pagandoAhora,
+                onPagar: pagarAhora,
+              }
+            : null,
           subtituloActivar,
           onActivar: () => router.push("/dashboard/suspended"),
           tieneSuscripcionStripe: hasStripeSubscription,
@@ -634,6 +657,37 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           </div>
         )}
 
+        {pagoRechazado && (
+          <div
+            role="alert"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              flexWrap: "wrap", gap: 12, padding: "14px 16px", borderRadius: 12,
+              background: "var(--danger-soft-strong, rgba(239,68,68,0.12))",
+              border: "1px solid var(--danger-border-strong, rgba(239,68,68,0.4))",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-1)" }}>
+                {t("shell.subscriptionTab.paymentFailedTitle")}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>
+                {t("shell.subscriptionTab.paymentFailedNotice", { fecha: suspensionLabel })}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={pagarAhora}
+              disabled={pagandoAhora}
+              className="btn-new btn-new--primary btn-new--sm"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}
+            >
+              {pagandoAhora ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <CreditCard size={14} aria-hidden />}
+              {pagandoAhora ? t("shell.pagoRechazado.abriendo") : t("shell.pagoRechazado.cta")}
+            </button>
+          </div>
+        )}
+
         {trialExpired && (
           <div style={{ padding: "12px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 13, color: "#fca5a5" }}>
             {t("shell.subscriptionTab.trialExpiredNotice", { date: trialEndsAt ? formatFecha(trialEndsAt) : "" })}
@@ -646,7 +700,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
             dónde renovar). Lleva a la pantalla de pago existente
             (/dashboard/suspended) con tarjeta/SPEI/OXXO, preseleccionando el
             plan actual de la clínica. Permite pagar ANTES de expirar. */}
-        {(!subscriptionActive || manualPeriodExpired) && (
+        {(!subscriptionActive || manualPeriodExpired) && !pagoRechazado && (
           <div
             style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",

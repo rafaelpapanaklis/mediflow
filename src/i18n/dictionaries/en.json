@@ -1539,7 +1539,10 @@
       "topupViaSpei": "SPEI transfer",
       "topupViaManual": "Credit recorded by DaleControl",
       "receipt": "Receipt",
-      "viewReceipt": "View the Stripe receipt"
+      "viewReceipt": "View the Stripe receipt",
+      "statusPaymentFailed": "Payment declined",
+      "paymentFailedTitle": "We couldn't charge your plan",
+      "paymentFailedNotice": "Your access will be suspended on {fecha}. Update your card or pay now to keep it: your data is complete and safe."
     },
     "onboardingChecklist": {
       "title": "First steps",
@@ -1615,6 +1618,13 @@
       "aiAria": "Ask AI with context",
       "endLabel": "End consultation",
       "endAria": "End consultation"
+    },
+    "pagoRechazado": {
+      "mensaje": "We couldn't charge your plan. Your access will be suspended on {fecha}.",
+      "mensajeOtros": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}. Let the clinic owner know.",
+      "cta": "Update card / pay",
+      "abriendo": "Opening…",
+      "errorAbrir": "We couldn't open the payment page. Try again or contact support."
     }
   },
   "agenda": {
@@ -9689,7 +9699,18 @@
       "upsellLine": "For ${amount} more per month: {benefit}",
       "upsellBenefitPro": "unlimited patients and 3 providers",
       "upsellBenefitClinic": "multi-location, API, and a dedicated manager",
-      "paymentsUnavailable": "Payments temporarily unavailable. Try again later or write to soporte@dalecontrol.com."
+      "paymentsUnavailable": "Payments temporarily unavailable. Try again later or write to soporte@dalecontrol.com.",
+      "pillSuspended": "Access suspended",
+      "suspendedTitle": "Your access is suspended for non-payment",
+      "suspendedBody": "Your data is complete and safe: as soon as you pay, everything comes back as it was.",
+      "actions": {
+        "label": "What you can do in the meantime",
+        "payNow": "Pay now",
+        "openTicket": "Open a support ticket",
+        "contactManager": "Contact my manager",
+        "managerMessage": "Hi, I'm from {clinic}. My access is suspended because of a pending payment and I'd like to get up to date.",
+        "payError": "We couldn't open the payment page. Try again or open a support ticket."
+      }
     },
     "teleconsulta": {
       "title": "Teleconsultations",
