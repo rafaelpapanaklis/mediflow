@@ -44,7 +44,16 @@ import {
 import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
+import { avisarCobroRechazado, type ClinicaParaAvisoDeCobro } from "@/lib/billing/aviso-cobro-rechazado.server";
+import {
+  accesoTrasCobroRechazado,
+  debeReintentarPorEstadoVivo,
+  esperaAlRechazoDeFactura,
+  estadoEfectivoDeSuscripcion,
+  inicioDeNuevoPeriodo,
+} from "@/lib/billing/cobro-rechazado";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
+import { isPaymentFailed } from "@/lib/plan-status";
 import {
   MODULE_SUBSCRIPTION_KIND,
   buildActivateModuleWrite,
@@ -329,24 +338,51 @@ export async function POST(req: NextRequest) {
           // toca ninguna fecha (`subscriptionPeriodFields` devuelve {}); antes
           // se escribía `null` y el dato se BORRABA. En las versiones nuevas de
           // la API el fin de periodo vive en el item, no en la suscripción.
-          const periodFields = subscriptionPeriodFields(sub);
           // El orden de los eventos no está garantizado: se lee el estado VIVO de la suscripción (un
           // «created» viejo no debe pisar el «active») y un «incomplete» nunca baja a una clínica que
           // ya está activa. Ver estado-suscripcion.ts.
-          let estadoVivo: string | null = null;
+          let suscripcionViva: Stripe.Subscription | null = null;
           try {
-            estadoVivo = (await stripe.subscriptions.retrieve(sub.id)).status;
+            suscripcionViva = await stripe.subscriptions.retrieve(sub.id);
           } catch {
-            estadoVivo = null;
+            suscripcionViva = null;
           }
+          const estadoVivo: string | null = suscripcionViva?.status ?? null;
           const antes = await prisma.clinic.findUnique({
             where: { id: clinicId },
             select: { subscriptionStatus: true, stripeSubscriptionId: true },
           });
-          const estadoNuevo = estadoDeSuscripcionAEscribir({
+          // Cobro rechazado + un «active» del evento que no se pudo contrastar con Stripe: no se adivina.
+          // Se responde 5xx y Stripe reintenta el evento (si no, un «active» viejo regalaría el periodo).
+          if (
+            debeReintentarPorEstadoVivo({
+              estadoActual: antes?.subscriptionStatus,
+              eventoStatus: sub.status,
+              vivo: estadoVivo,
+            })
+          ) {
+            throw new Error("No se pudo leer el estado vivo de la suscripción; Stripe debe reintentar el evento");
+          }
+          const estadoCalculado = estadoDeSuscripcionAEscribir({
             actual: { status: antes?.subscriptionStatus ?? null, subscriptionId: antes?.stripeSubscriptionId ?? null },
             evento: { id: sub.id, status: sub.status },
             vivo: estadoVivo,
+          });
+          // El paso al past_due y la gracia de 24 h son del `invoice.payment_failed` (ver abajo): si este
+          // `updated` llegó primero, la clínica sigue como estaba hasta que ese evento se procese.
+          const estadoNuevo = esperaAlRechazoDeFactura({
+            estadoActual: antes?.subscriptionStatus,
+            estadoNuevo: estadoCalculado,
+          })
+            ? undefined
+            : estadoCalculado;
+          // Las fechas salen de la suscripción VIVA y de su estado real: un `updated` «active» que llega
+          // DESPUÉS del `payment_failed` del mismo ciclo (Stripe ya la tiene en past_due) solo mueve
+          // nextBillingDate; el «acceso hasta» (trialEndsAt) se queda en la gracia de 24 h. Sin lectura
+          // viva (la clínica no estaba rechazada) se usa el evento, como siempre.
+          const periodFields = subscriptionPeriodFields({
+            ...(suscripcionViva ?? sub),
+            status: estadoEfectivoDeSuscripcion({ evento: sub.status, vivo: estadoVivo }),
           });
           await prisma.clinic.update({
             where: { id: clinicId },
@@ -430,16 +466,54 @@ export async function POST(req: NextRequest) {
           // `customer.subscription.updated` (syncModuleSubscription).
           const moduloDeLaFactura = await moduloDeFactura(invoice);
           const canSuspend = moduloDeLaFactura === null && canSuspendForFailedInvoice(reason);
-          if (canSuspend) {
+          // Un aviso RETRASADO de una factura que entretanto ya se pagó no puede suspender a nadie: Stripe
+          // reenvía eventos viejos, y `invoice.paid` no baja el estado. Se contrasta con la factura viva.
+          const facturaYaPagada = canSuspend ? await facturaPagadaEnStripe(stripe, invoice) : false;
+          const suspende = canSuspend && !facturaYaPagada;
+          // GRACIA DE 24 H (ws1-t1): el acceso baja a (primer rechazo + 24 h) y los reintentos no lo alargan.
+          // El momento del rechazo es el del evento (no el de su procesamiento): un reenvío del mismo evento
+          // da la misma hora y no cambia nada (ver accesoTrasCobroRechazado).
+          let accesoFinal: Date | null = null;
+          let correoDestino: ClinicaParaAvisoDeCobro | null = null;
+          if (suspende) {
+            const antes = await prisma.clinic.findUnique({
+              where: { id: clinicId },
+              select: {
+                subscriptionStatus: true,
+                trialEndsAt: true,
+                name: true,
+                email: true,
+                plan: true,
+                timezone: true,
+                users: {
+                  where: { role: "SUPER_ADMIN", isActive: true },
+                  orderBy: { createdAt: "asc" },
+                  take: 1,
+                  select: { email: true, firstName: true },
+                },
+              },
+            });
+            const acceso = accesoTrasCobroRechazado({
+              estadoActual: antes?.subscriptionStatus,
+              accesoActual: antes?.trialEndsAt,
+              rechazoEn: new Date(event.created * 1000),
+            });
             await prisma.clinic.update({
               where: { id: clinicId },
-              data: { subscriptionStatus: "past_due" },
+              data: { subscriptionStatus: "past_due", ...(acceso ? { trialEndsAt: acceso } : {}) },
             });
             await sincronizarSedesIncluidas(clinicId);
+            accesoFinal = acceso ?? (antes?.trialEndsAt ? new Date(antes.trialEndsAt) : null);
+            correoDestino = antes;
           } else {
             console.warn(
               "[stripe webhook] invoice.payment_failed sin suspender:",
-              JSON.stringify({ clinicId, invoiceId: invoice.id, billingReason: reason ?? null }),
+              JSON.stringify({
+                clinicId,
+                invoiceId: invoice.id,
+                billingReason: reason ?? null,
+                facturaYaPagada,
+              }),
             );
           }
           await logAudit({
@@ -449,8 +523,11 @@ export async function POST(req: NextRequest) {
             entityId: invoice.id ?? customerId ?? clinicId,
             action: "update",
             changes: {
-              ...(canSuspend
-                ? { subscriptionStatus: { before: null, after: "past_due" } }
+              ...(suspende
+                ? {
+                    subscriptionStatus: { before: null, after: "past_due" },
+                    ...(accesoFinal ? { trialEndsAt: { before: null, after: accesoFinal } } : {}),
+                  }
                 : {}),
               _source: {
                 before: null,
@@ -458,7 +535,7 @@ export async function POST(req: NextRequest) {
                   event: event.type,
                   invoiceId: invoice.id,
                   billingReason: reason ?? null,
-                  suspended: canSuspend,
+                  suspended: suspende,
                   ...(moduloDeLaFactura !== null
                     ? { kind: MODULE_SUBSCRIPTION_KIND, moduleKey: moduloDeLaFactura.moduleKey }
                     : {}),
@@ -477,6 +554,19 @@ export async function POST(req: NextRequest) {
             await recordStripeInvoice(invoice, clinicId, "failed");
           } catch (e) {
             console.error("[stripe webhook] no se pudo registrar el cobro fallido:", e);
+          }
+
+          // AVISO A LA CLÍNICA — una sola vez por cobro rechazado (candado en billing_email_logs). Solo
+          // mientras la gracia sigue viva: pasada la hora, la pantalla de pago ya se lo dice. Si el envío
+          // falla, el webhook NO falla (avisarCobroRechazado no lanza).
+          if (suspende && correoDestino && invoice.id && accesoFinal && accesoFinal.getTime() > Date.now()) {
+            await avisarCobroRechazado({
+              clinicId,
+              invoiceId: invoice.id,
+              clinica: correoDestino,
+              accesoHasta: accesoFinal,
+              siteUrl: SITE_URL,
+            });
           }
         }
         break;
@@ -504,6 +594,8 @@ export async function POST(req: NextRequest) {
             email: true,
             plan: true,
             nextBillingDate: true,
+            subscriptionStatus: true,
+            stripeSubscriptionId: true,
             // Dueño de la clínica (SUPER_ADMIN más antiguo activo) → destinatario
             // preferente de los correos de billing; cae a clinic.email si no hay.
             users: {
@@ -534,6 +626,13 @@ export async function POST(req: NextRequest) {
         // afiliado, que se calcula con las reglas del PLAN y pagaría por una
         // mensualidad de módulo lo mismo que por una de plan.
         if ((await moduloDeFactura(invoice)) !== null) break;
+
+        // REACTIVACIÓN POR PAGO (ws1-t1): una clínica en cobro rechazado cuya suscripción de Stripe ya está
+        // cobrada vuelve a active con el periodo pagado, aunque el `customer.subscription.updated` de la
+        // recuperación se retrase o no llegue. Solo con el estado VIVO de Stripe (nunca por el evento).
+        if (clinic) {
+          await reactivarSiStripeYaCobro(stripe, invoice, clinic);
+        }
 
         // Primer cobro de la suscripción del PLAN pagado: si la clínica quedó en «incomplete» (el
         // «created» de Stripe llegó después de otro evento), este pago la deja activa. Solo toca
@@ -885,6 +984,60 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ received: true });
 }
 
+/**
+ * Clínica en past_due / unpaid + factura del plan pagada + suscripción VIVA en active/trialing → active y
+ * el acceso al fin del periodo pagado. Idempotente (la segunda vez la clínica ya no está rechazada) y
+ * tolerante: sin respuesta de Stripe no toca nada y queda el `customer.subscription.updated`.
+ */
+async function reactivarSiStripeYaCobro(
+  stripe: Stripe,
+  invoice: Stripe.Invoice,
+  clinic: { id: string; subscriptionStatus: string | null; stripeSubscriptionId: string | null },
+): Promise<void> {
+  if (!isPaymentFailed(clinic.subscriptionStatus) || !clinic.stripeSubscriptionId) return;
+  // Solo la suscripción del PLAN de esta clínica: la factura de otra (un módulo ya se cortó arriba) no cuenta.
+  if (referenciaDeFactura(invoice as unknown as Parameters<typeof referenciaDeFactura>[0]).stripeSubscriptionId !== clinic.stripeSubscriptionId) return;
+  let viva: Stripe.Subscription;
+  try {
+    viva = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
+  } catch {
+    return;
+  }
+  if (viva.status !== "active" && viva.status !== "trialing") return;
+  const periodFields = subscriptionPeriodFields(viva);
+  await prisma.clinic.update({
+    where: { id: clinic.id },
+    data: { subscriptionStatus: "active", ...periodFields },
+  });
+  await sincronizarSedesIncluidas(clinic.id);
+  await logAudit({
+    clinicId: clinic.id,
+    userId: clinic.id,
+    entityType: "subscription",
+    entityId: invoice.id ?? viva.id,
+    action: "update",
+    changes: {
+      subscriptionStatus: { before: clinic.subscriptionStatus, after: "active" },
+      ...(periodFields.trialEndsAt ? { trialEndsAt: { before: null, after: periodFields.trialEndsAt } } : {}),
+      _source: { before: null, after: { event: "invoice.paid", invoiceId: invoice.id, subscriptionId: viva.id } },
+    },
+  });
+}
+
+/**
+ * ¿La factura de este `invoice.payment_failed` ya está pagada en Stripe? Un aviso retrasado (reenvío
+ * manual, reintento de entrega) de una factura que entretanto se cobró NO debe volver a suspender a la
+ * clínica. Si Stripe no responde, se asume que no: el evento se procesa como siempre.
+ */
+async function facturaPagadaEnStripe(stripe: Stripe, invoice: Stripe.Invoice): Promise<boolean> {
+  if (!invoice.id) return false;
+  try {
+    return (await stripe.invoices.retrieve(invoice.id)).status === "paid";
+  } catch {
+    return false;
+  }
+}
+
 async function resolveClinicIdByCustomer(customerId: string): Promise<string | null> {
   const clinic = await prisma.clinic.findFirst({
     where: { stripeCustomerId: customerId },
@@ -1037,10 +1190,14 @@ async function activatePlatformSubscription(
   // así que trialEndsAt es el que cuenta). Para tarjeta, customer.subscription.*
   // fijará luego el current_period_end REAL de Stripe; este es el valor
   // inmediato/placeholder y el definitivo para SPEI/OXXO (pago único).
-  const now = new Date();
-  let base = now;
-  if (before?.nextBillingDate && new Date(before.nextBillingDate) > base) base = new Date(before.nextBillingDate);
-  if (before?.trialEndsAt && new Date(before.trialEndsAt) > base) base = new Date(before.trialEndsAt);
+  // Con el cobro rechazado o cancelada, `nextBillingDate` es el periodo que Stripe abrió y NO se pagó:
+  // no cuenta para el nuevo (ver inicioDeNuevoPeriodo); si no, reactivar regalaba un mes.
+  const base = inicioDeNuevoPeriodo({
+    ahora: new Date(),
+    estadoAntes: before?.subscriptionStatus,
+    trialEndsAt: before?.trialEndsAt,
+    nextBillingDate: before?.nextBillingDate,
+  });
   const next = billing === "annual" ? addYears(base, 1) : addMonths(base, 1);
 
   // Plan elegido en el checkout (source.plan, viene de session.metadata.plan).

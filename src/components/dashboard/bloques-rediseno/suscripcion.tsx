@@ -50,6 +50,8 @@ export interface ModeloSuscripcion {
   porcentajePrueba: number;
   pruebaVencida: boolean;
   mostrarActivar: boolean;
+  /** Cobro del plan rechazado con el acceso aún vivo: aviso rojo con la hora de suspensión y los dos botones de pago (`panel`). */
+  pagoRechazado: { titulo: string; texto: string; panel: ReactNode } | null;
   /** El subtítulo de «Activa tu plan»: solo los métodos de pago que existen. */
   subtituloActivar: string;
   onActivar: () => void;
@@ -172,6 +174,16 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
           <Aviso tono="peligro" icono={<AlertTriangle size={14} strokeWidth={1.75} aria-hidden />}>
             {t("shell.subscriptionTab.trialExpiredNotice", { date: m.finPrueba ? m.formatFecha(m.finPrueba) : "" })}
           </Aviso>
+        )}
+
+        {m.pagoRechazado && (
+          <div className={s.activar} role="alert" data-tono="peligro">
+            <div className={s.activarTextos}>
+              <div className={s.activarTitulo}>{m.pagoRechazado.titulo}</div>
+              <div className={s.activarSub}>{m.pagoRechazado.texto}</div>
+            </div>
+            {m.pagoRechazado.panel}
+          </div>
         )}
 
         {m.mostrarActivar && (

@@ -5,8 +5,8 @@
  *
  * Cuatro lecturas de UNA regla (src/lib/plan-status.ts → getPlanStatus):
  *   • Al corriente  → suscripción viva (active / trialing / paid)
- *   • Cobro fallido → Stripe no pudo cobrar (past_due / unpaid) pero el
- *                     periodo con acceso no ha terminado; Stripe reintenta
+ *   • Cobro fallido → Stripe no pudo cobrar (past_due / unpaid) pero la gracia
+ *                     de 24 h desde el primer rechazo no ha terminado
  *   • Trial         → trial / cortesía vigente sin suscripción viva
  *                     (o cancelada a la que aún le queda periodo)
  *   • Vencida       → isPlanExpired: la clínica NO entra al panel
@@ -75,8 +75,8 @@ export function planStatusLabel(status: PlanStatus, now: Date = new Date()): Pla
     return {
       label: `Cobro fallido · acceso hasta ${fmtDay(status.periodEnd)}`,
       detail:
-        `Stripe no pudo cobrar (${s}) y reintenta. Conserva acceso hasta el ${fmtLong(status.periodEnd)}` +
-        `${days !== null ? ` (${plural(days, "día", "días")})` : ""}; si ningún reintento cobra, ese día queda vencida.`,
+        `El cobro del plan se rechazó (${s}). Tiene 24 h de gracia desde el primer rechazo: conserva acceso hasta el ${fmtLong(status.periodEnd)}` +
+        `${days !== null ? ` (${plural(days, "día", "días")})` : ""}; pasada esa hora queda suspendida hasta que pague. No se borra nada.`,
       tone: TONE.past_due,
     };
   }

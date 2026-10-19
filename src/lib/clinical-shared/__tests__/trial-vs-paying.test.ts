@@ -44,7 +44,7 @@ test("clínica que paga con un módulo comprado y vigente: acceso por compra, no
 });
 
 test("sin suscripción viva y con periodo por delante SÍ es trial (comportamiento legado intacto)", () => {
-  for (const subscriptionStatus of [null, undefined, "pending_payment", "cancelled", "past_due"]) {
+  for (const subscriptionStatus of [null, undefined, "pending_payment", "cancelled"]) {
     const snap = { trialEndsAt: day(+20), subscriptionStatus, modules: [] };
     assert.equal(evaluateAccess(snap, "orthodontics", NOW).reason, "trial", String(subscriptionStatus));
     assert.deepEqual([...deriveActiveClinicModuleKeys(snap, NOW)].sort(), [...SPECIALTY_MODULE_KEYS].sort(), String(subscriptionStatus));
@@ -55,4 +55,19 @@ test("snapshot sin subscriptionStatus (llamadores viejos): la fecha decide como 
   const snap = { trialEndsAt: day(+20), modules: [] };
   assert.equal(evaluateAccess(snap, "orthodontics", NOW).reason, "trial");
   assert.equal(evaluateAccess({ ...snap, trialEndsAt: day(-1) }, "orthodontics", NOW).reason, "not_purchased");
+});
+
+test("cobro rechazado (past_due / unpaid) con periodo por delante NO es trial: no abre todos los módulos", () => {
+  for (const subscriptionStatus of ["past_due", "unpaid"]) {
+    const sinCompra = { trialEndsAt: day(+1), subscriptionStatus, modules: [] };
+    assert.equal(evaluateAccess(sinCompra, "orthodontics", NOW).hasAccess, false, `${subscriptionStatus}: sin compra`);
+    assert.deepEqual(deriveActiveClinicModuleKeys(sinCompra, NOW), [], `${subscriptionStatus}: ninguna especialidad regalada`);
+    // Lo que SÍ compró sigue funcionando durante la gracia.
+    const comprado = {
+      trialEndsAt: day(+1),
+      subscriptionStatus,
+      modules: [{ moduleKey: "orthodontics", status: "active", currentPeriodEnd: day(+20) }],
+    };
+    assert.equal(evaluateAccess(comprado, "orthodontics", NOW).reason, "purchased", `${subscriptionStatus}: comprado`);
+  }
 });

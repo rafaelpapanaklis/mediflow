@@ -77,7 +77,7 @@ test("A1: la sede sigue reconociéndose como incluida con la madre en past_due/c
 
 test("A1: el estado de la madre se propaga en TODOS los sitios que lo escriben", () => {
   const cuenta = (r: string) => (fuente(r).match(/sincronizarSedesIncluidas\(/g) ?? []).length;
-  assert.equal(cuenta("src/app/api/webhooks/stripe/route.ts"), 6, "subscription.updated, deleted, payment_failed, invoice.paid, plan diferencial y activación");
+  assert.equal(cuenta("src/app/api/webhooks/stripe/route.ts"), 7, "subscription.updated, deleted, payment_failed, invoice.paid, reactivación por invoice.paid, plan diferencial y activación");
   assert.ok(cuenta("src/app/api/admin/billing/route.ts") >= 3, "verify_payment, activate_clinic, suspend_clinic");
   assert.ok(cuenta("src/app/api/admin/billing/stripe/route.ts") >= 3, "cancelar, pausar, reanudar");
   assert.ok(cuenta("src/app/api/admin/subscriptions/route.ts") >= 1);

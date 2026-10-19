@@ -13,6 +13,11 @@ import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { isPlanExpired } from "@/lib/plan-status";
+import { getAccountManagerForClinic } from "@/lib/account-manager/get-for-clinic";
+import { AccionesSuspendida } from "./acciones-suspendida";
+import { PagoPendiente } from "@/components/dashboard/pago-pendiente";
+import { tarjetaRechazadaViva } from "@/lib/billing/pago-pendiente-cliente";
+import { isClinicBillingAdmin } from "@/lib/billing/authz";
 import {
   leerCuentaSpei,
   rechazoReciente,
@@ -99,11 +104,21 @@ export default async function SuspendedPage(
   //    recién creada en el wizard → tono "último paso", SIN "bloqueado".
   const status = clinic.subscriptionStatus ?? null;
   const isReactivation = !!status && ["past_due", "cancelled", "unpaid"].includes(status);
-  const pillText = isReactivation ? "Tu panel está en pausa" : "Último paso";
-  const heading = isReactivation ? "Reactiva tu plan" : "Último paso: activa tu cuenta";
-  const subcopy = isReactivation
-    ? "Tu acceso se pausó por un pago pendiente. Reactívalo para continuar."
-    : "";
+  // Suspendida POR FALTA DE PAGO (ya pagó alguna vez y el acceso se cerró): mensaje claro, datos a salvo y
+  // tres salidas que funcionan sin acceso (pagar, ticket de soporte, manager). Una cuenta que aún tiene
+  // acceso y llegó aquí por su cuenta (para renovar) conserva el copy de siempre.
+  const suspendidaPorFalta = isReactivation && isPlanExpired(clinic);
+  const pillText = suspendidaPorFalta
+    ? t("pages.suspended.pillSuspended")
+    : isReactivation ? "Tu panel está en pausa" : "Último paso";
+  const heading = suspendidaPorFalta
+    ? t("pages.suspended.suspendedTitle")
+    : isReactivation ? "Reactiva tu plan" : "Último paso: activa tu cuenta";
+  const subcopy = suspendidaPorFalta
+    ? t("pages.suspended.suspendedBody")
+    : isReactivation
+      ? "Tu acceso se pausó por un pago pendiente. Reactívalo para continuar."
+      : "";
 
   // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
   // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno propio.
@@ -117,7 +132,7 @@ export default async function SuspendedPage(
   // el admin configuró y el último rechazo reciente. Los tres por el clinicId
   // de la sesión. Con una pendiente y la clínica aún sin acceso, se enseña la
   // pantalla de espera en vez de la de pago (`?ver=pago` deja pagar con tarjeta).
-  const [rediseno, pendienteSpei, cuentaSpei, rechazoSpei, exencionIva] = await Promise.all([
+  const [rediseno, pendienteSpei, cuentaSpei, rechazoSpei, exencionIva, managerAsignado] = await Promise.all([
     menuDosNivelesEncendido(user.clinicId),
     // Un fallo de estas tres lecturas (timeout del pooler) NO puede tumbar la única pantalla de pago:
     // sin ellas se ve la pantalla de siempre, con tarjeta y OXXO.
@@ -127,7 +142,28 @@ export default async function SuspendedPage(
     // Exención de IVA de una clínica creada antes del corte (Ajuste 1c). El servidor la vuelve a decidir
     // al cobrar; aquí solo se refleja en pantalla (si falla la lectura, se muestra con IVA: lo prudente).
     exencionIvaDeClinica(clinic).catch(() => null),
+    // El manager asignado a ESTA clínica (nunca el catálogo): getAccountManagerForClinic no lanza.
+    suspendidaPorFalta
+      ? getAccountManagerForClinic(user.clinicId, { locale: localeFromClinic(clinic) })
+      : Promise.resolve(null),
   ]);
+  // Tarjeta rechazada con la suscripción de Stripe viva: se paga lo pendiente (o se sube a un plan más grande)
+  // con los dos botones de PagoPendiente. Las tarjetas de plan de hoy mandarían al portal sin respetar el
+  // plan, así que NO se pintan; sin suscripción viva (cuenta nueva o cancelada) siguen como siempre.
+  const conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva(clinic);
+  const acciones = suspendidaPorFalta ? (
+    <>
+      {conDosBotones && (
+        <PagoPendiente puedePagar={isClinicBillingAdmin(user.role)} plan={clinic.plan} suspendida />
+      )}
+      <AccionesSuspendida
+        plan={clinic.plan}
+        clinicName={clinic.name}
+        managerWhatsapp={managerAsignado?.manager.whatsappE164 ?? null}
+        sinPagar={conDosBotones}
+      />
+    </>
+  ) : null;
   const sinAcceso = isPlanExpired(clinic);
   // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
   // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
@@ -187,18 +223,21 @@ export default async function SuspendedPage(
             titulo={heading}
             texto={isReactivation ? subcopy : subtitulo}
           />
-          <SuspendedPlanCards
-            plans={planesAMostrar}
-            currentPlan={enlace ? enlace.plan : currentPlan}
-            firstMonthEligible={firstMonthEligible}
-            soloTarjeta={enlace !== null}
-            rediseno
-            resumenInicial={!isReactivation && currentPlan !== null}
-            cuentaSpei={cuentaSpei}
-            referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
-            cobroConIvaListo={cobroConIvaListo}
-            exencionIva={exencionIva}
-          />
+          {acciones}
+          {!conDosBotones && (
+            <SuspendedPlanCards
+              plans={planesAMostrar}
+              currentPlan={enlace ? enlace.plan : currentPlan}
+              firstMonthEligible={firstMonthEligible}
+              soloTarjeta={enlace !== null}
+              rediseno
+              resumenInicial={!isReactivation && currentPlan !== null}
+              cuentaSpei={cuentaSpei}
+              referenciaSpei={cuentaSpei ? referenciaDeClinica(user.clinicId) : null}
+              cobroConIvaListo={cobroConIvaListo}
+              exencionIva={exencionIva}
+            />
+          )}
           <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
         </PaginaSuspendida>
       </RaizCuenta>
@@ -249,12 +288,16 @@ export default async function SuspendedPage(
           </p>
         </div>
 
+        {acciones}
+        {/* Con la tarjeta rechazada y viva, los dos botones de arriba ocupan su lugar. */}
+        {conDosBotones ? null : (
         <SuspendedPlanCards
           plans={planesAMostrar}
           currentPlan={enlace ? enlace.plan : currentPlan}
           firstMonthEligible={firstMonthEligible}
           soloTarjeta={enlace !== null}
         />
+        )}
 
         <p className="mt-6 text-center text-[12.5px] text-muted-foreground">
           <Link href="/login" className="transition hover:text-foreground">

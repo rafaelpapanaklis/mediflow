@@ -1,0 +1,74 @@
+/* Las tres salidas de una clínica suspendida por falta de pago: pagar, abrir un ticket y escribirle a su
+   manager. Sirve igual dentro de la pantalla rediseñada (--pg-*) que de la clásica (tokens de siempre). */
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 28px;
+  max-width: 760px;
+}
+
+.boton {
+  display: inline-flex;
+  flex: 1 1 200px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--pg-borde, var(--border-soft, hsl(var(--border))));
+  border-radius: 12px;
+  background: var(--pg-tarjeta, hsl(var(--card)));
+  color: var(--pg-texto, var(--text-1));
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.boton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.boton:focus-visible {
+  outline: 3px solid var(--pg-azul-borde, var(--ring, currentColor));
+  outline-offset: 2px;
+}
+
+.boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.principal {
+  border-color: transparent;
+  background: var(--pg-azul, var(--brand));
+  color: var(--pg-sobre-azul, white);
+}
+
+.girar {
+  animation: acciones-giro 0.9s linear infinite;
+}
+
+@keyframes acciones-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girar {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .boton {
+    flex-basis: 100%;
+  }
+}

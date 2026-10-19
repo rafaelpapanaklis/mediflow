@@ -376,6 +376,15 @@
   background: var(--m2-iniciales-fondo);
 }
 
+.activar[data-tono="peligro"] {
+  border-color: var(--danger-border-strong, rgba(220, 38, 38, 0.35));
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+}
+
+.activar[data-tono="peligro"] .activarTitulo {
+  color: var(--danger, #dc2626);
+}
+
 .activarTextos {
   min-width: 0;
 }

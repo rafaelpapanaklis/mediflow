@@ -50,6 +50,8 @@ import {
 } from "@/lib/auth/two-factor-constants";
 import { MUST_CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
 import { isPlanExpired, isAllowedWhileSuspended, isInTrial as inTrialNow } from "@/lib/plan-status";
+import { avisoDePagoRechazado, fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
+import { AvisoPagoRechazado } from "@/components/dashboard/aviso-pago-rechazado";
 import { getBranchQuota } from "@/lib/branches";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
 
@@ -160,6 +162,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Trial/cortesía vigente = periodo por delante SIN suscripción viva. Misma
   // fuente única (plan-status) que el gate; alimenta el banner y el sidebar.
   const isInTrial = inTrialNow(clinic, now);
+  // Cobro del plan rechazado con el acceso aún vivo (gracia de 24 h): aviso rojo arriba de todo el panel.
+  // Misma fuente única (plan-status) que el gate; pasada la hora la clínica ya no llega al panel.
+  const avisoCobro = avisoDePagoRechazado({
+    subscriptionStatus: clinic.subscriptionStatus,
+    trialEndsAt: clinic.trialEndsAt,
+    rol: user.role,
+    ahora: now,
+  });
 
   // Redirect server-side a la pantalla de pago. Excepciones: la propia
   // /dashboard/suspended (ahí se completa el pago) y /dashboard/soporte(/*)
@@ -347,6 +357,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         {/* «Ver como clínica»: solo en el navegador del admin de plataforma. */}
         <AvisoSuplantacion clinicName={clinic.name} />
+        {avisoCobro.visible && (
+          <AvisoPagoRechazado
+            accesoHasta={fechaHoraDeLaClinica(avisoCobro.accesoHasta, (clinic as { timezone?: string | null }).timezone, locale === "en" ? "en" : "es")}
+            puedePagar={avisoCobro.puedePagar}
+            plan={clinic.plan}
+          />
+        )}
         <GlobalAnnouncementBanner />
         {/* Google Calendar perdió la conexión: solo lo ve quien puede reconectar. */}
         <AvisoGoogleCaido esAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"} />
