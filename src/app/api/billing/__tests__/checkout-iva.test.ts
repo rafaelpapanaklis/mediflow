@@ -476,6 +476,12 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     "src/lib/billing/contratar.ts",
     "src/lib/billing/first-month-promo.ts", // el cupón del primer mes deja el total exacto con el IVA dentro
     "src/lib/billing/iva-clinica.ts",
+    // ws1-t2 (cobro rechazado): «Subir de plan y pagar» es un cambio de plan con cobro inmediato, el mismo caso
+    // que el diferencial de change-plan, así que lleva el IVA de cambio de plan (`ivaParaPagoDeClinica` +
+    // `desgloseConIva` para el precio que enseña el GET). No hay un helper de más alto nivel que lo dé: los
+    // sitios de arriba tampoco lo tienen. Es el ÚNICO archivo de esa función que conoce iva-cobro (el núcleo
+    // puro `pago-pendiente.ts` no lo importa) y no escribe ninguna tasa: usa solo los trozos del helper.
+    "src/lib/billing/pago-pendiente.server.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
 });
@@ -519,10 +525,16 @@ test("ningún camino de renovación crea sesiones: `subscriptions.update` solo e
   // ws1-t5: toggle-clinic-module.ts (el interruptor de /admin) hace lo mismo
   // sobre la suscripción de un módulo: `cancel_at_period_end: true` al
   // apagarlo y `false` al deshacer la baja. Tampoco toca precio ni tasa.
+  // ws1-t2 (cobro rechazado): pago-pendiente.server.ts cambia el plan de la MISMA suscripción de tarjeta
+  // de una clínica con un cobro rechazado («Subir de plan y pagar»), cobrándolo completo en un ciclo nuevo
+  // (`billing_cycle_anchor: "now"`, sin prorrateo). No crea sesiones ni otra suscripción. No hay helper en
+  // stripe-subscriptions.ts para cambiar de plan (solo pausar/reanudar), y change-plan lo hace inline; el
+  // IVA y los descuentos de ese update salen de `ivaParaPagoDeClinica` y de `descuentosParaSubir`, no a mano.
   assert.deepEqual(con, [
     "src/app/actions/admin/toggle-clinic-module.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/marketplace/module-cancel/route.ts",
+    "src/lib/billing/pago-pendiente.server.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
 });

@@ -11,7 +11,7 @@
  */
 
 import { isClinicBillingAdmin } from "./authz";
-import { ivaParaPagoDeClinica, type ExencionIva } from "./iva-cobro";
+import { desgloseConIva, ivaAplica, ivaParaPagoDeClinica, type ExencionIva, type IvaParaCobro } from "./iva-cobro";
 import type { PlanId } from "./plans";
 import {
   buildTargetPriceParams,
@@ -20,6 +20,7 @@ import {
   isStripeChargeFailure,
   planAmountCents,
   subscriptionItemInterval,
+  type BillingInterval,
   type PlanPricing,
 } from "./proration";
 import {
@@ -27,17 +28,15 @@ import {
   MONEDA_PAGO,
   anuladaRecuperable,
   armarMarca,
-  armarUpdateSubir,
   claves,
+  descuentosParaSubir,
   esPlanMasGrande,
   facturaAbiertaMasReciente,
   facturaTienePromo,
-  opcionDeSubida,
   planesMasGrandes,
   respuesta,
   type AnuladaRecuperable,
   type FacturaPago,
-  type OpcionSubir,
   type RespuestaPago,
   type SuscripcionPago,
 } from "./pago-pendiente";
@@ -90,6 +89,74 @@ export interface DepsPago {
   auditar: (evento: Record<string, unknown>) => Promise<void>;
   /** Mensaje cuando una sede incluida intenta pagar (`avisoSedeIncluida`). */
   avisoSedeIncluida: (pagadoraNombre: string | null) => string;
+}
+
+// ── Lo que lleva IVA (el ÚNICO archivo de esta función que conoce iva-cobro) ──
+
+export interface OpcionSubir {
+  plan: PlanId;
+  nombre: string;
+  /** Pesos, exactos: lo que se cobra HOY por el plan nuevo completo (con IVA si `ivaIncluido`). */
+  monto: number;
+  ivaIncluido: boolean;
+}
+
+/**
+ * Lo que costaría el plan nuevo hoy: precio de lista del plan en el intervalo de la suscripción
+ * (nunca la promo del primer mes ni los precios conservados de la clínica) más el IVA que corresponde.
+ */
+export function opcionDeSubida(args: {
+  plan: PlanPricing & { id: PlanId };
+  interval: BillingInterval;
+  exencion: ExencionIva | null | undefined;
+}): OpcionSubir {
+  const subtotalCents = planAmountCents(args.plan, args.interval);
+  const conIva = ivaAplica({ metodo: "card", plan: args.plan.id, exencion: args.exencion });
+  const totalCents = conIva ? desgloseConIva(subtotalCents).totalCents : subtotalCents;
+  return { plan: args.plan.id, nombre: args.plan.name, monto: totalCents / 100, ivaIncluido: conIva };
+}
+
+type IvaOk = Extract<IvaParaCobro, { ok: true }>;
+
+export interface ParamsSubir {
+  items: Array<{ id: string; price: string } & IvaOk["linea"]>;
+  proration_behavior: "none";
+  billing_cycle_anchor: "now";
+  metadata: Record<string, string>;
+  expand: string[];
+  automatic_tax?: NonNullable<IvaOk["sesion"]["automatic_tax"]>;
+  discounts?: "" | Array<{ discount: string }>;
+}
+
+/**
+ * Arma el `subscriptions.update` de «subir». INVARIANTES (los fija la prueba):
+ *   · `billing_cycle_anchor: "now"` + `proration_behavior: "none"`: ciclo nuevo desde hoy, plan nuevo
+ *     COMPLETO, sin prorrateo ni crédito del viejo.
+ *   · SIN `payment_behavior: "error_if_incomplete"`: la factura vieja ya está anulada; si la tarjeta
+ *     vuelve a fallar la actualización debe quedar hecha y la factura nueva abierta (para pagarla por
+ *     la URL), no revertida dejando a la clínica sin ninguna factura que pagar.
+ *   · el plan va en la metadata de la suscripción (convención de change-plan: el webhook la usa).
+ *   · el IVA lo ponen EXCLUSIVAMENTE los trozos que devuelve `ivaParaPagoDeClinica` (`linea` en el item,
+ *     `sesion.automatic_tax` si es Stripe Tax): aquí no se escribe ninguna tasa a mano.
+ */
+export function armarUpdateSubir(args: {
+  sub: SuscripcionPago;
+  itemId: string;
+  priceId: string;
+  plan: PlanId;
+  clinicId: string;
+  iva: IvaOk;
+}): ParamsSubir {
+  const descuentos = descuentosParaSubir(args.sub);
+  return {
+    items: [{ id: args.itemId, price: args.priceId, ...args.iva.linea }],
+    proration_behavior: "none",
+    billing_cycle_anchor: "now",
+    metadata: { ...(args.sub.metadata ?? {}), clinicId: args.clinicId, plan: args.plan, kind: "platform-subscription" },
+    expand: ["latest_invoice"],
+    ...(args.iva.sesion.automatic_tax ? { automatic_tax: args.iva.sesion.automatic_tax } : {}),
+    ...(descuentos !== undefined ? { discounts: descuentos } : {}),
+  };
 }
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
