@@ -22,7 +22,11 @@ import {
   esperaAlRechazoDeFactura,
   fechaHoraDeLaClinica,
   finDeGracia,
+  eraClinicaPagadora,
+  esDeLaSuscripcionDelPlan,
   inicioDeNuevoPeriodo,
+  motivoParaNoSuspender,
+  pagoManualCubreLaFactura,
 } from "../cobro-rechazado";
 import {
   getPlanStatus,
@@ -35,7 +39,7 @@ import { planStatusLabel } from "../../plan-status-label";
 import { datosDeSedeDesdeMadre } from "../sedes-incluidas-core";
 import { fechaHoraPanel } from "../../formato-fecha-panel";
 import { cobrarPendiente, formatoMonto, leerPagoPendiente, tarjetaRechazadaViva } from "../pago-pendiente-cliente";
-import { buildPaymentFailedEmail } from "../../email";
+import { buildPaymentFailedEmail, buildPlanSuspendedEmail } from "../../email";
 import { I18nProvider } from "../../../i18n/i18n-provider";
 import { makeT } from "../../../i18n/t";
 import { getDict } from "../../../i18n/dictionaries";
@@ -548,7 +552,7 @@ test("pantallas: en suspendida con tarjeta viva las tarjetas de plan se esconden
   const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
   assert.match(pagina, /conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva\(clinic\)/);
   assert.equal((pagina.match(/\{!conDosBotones && \(|\{conDosBotones \? null : \(/g) ?? []).length, 2, "las tarjetas de plan, en los dos diseños");
-  assert.match(pagina, /<PagoPendiente puedePagar=\{isClinicBillingAdmin\(user\.role\)\} plan=\{clinic\.plan\} suspendida \/>/);
+  assert.match(pagina, /<PagoPendiente puedePagar=\{isClinicBillingAdmin\(user\.role\)\} plan=\{clinic\.plan\} suspendida tarjetas=\{tarjetasDeRespaldo\} \/>/);
   assert.match(pagina, /sinPagar=\{conDosBotones\}/);
   const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
   assert.equal((tab.match(/<PagoPendiente puedePagar plan=\{clinic\.plan\} suspendida=\{false\} \/>/g) ?? []).length, 2, "diseño nuevo y de siempre");
@@ -617,4 +621,115 @@ test("ningún texto ya armado con la hora de suspensión lleva «m..» ni doble 
   sinPunto(admin.detail, "/admin detalle");
   // La pantalla de suspendida no interpola la fecha.
   assert.doesNotMatch(sinComentarios(leer("src/app/dashboard/suspended/page.tsx")), /fechaHoraDeLaClinica|\{fecha\}/);
+});
+
+/* ── Arreglos de la revisión (ws1-t4) ──────────────────────────────────── */
+
+test("#1 reglas puras: pago manual posterior o periodo pagado más allá de la factura cubren; la renovación normal no", () => {
+  const fin = new Date("2026-11-19T00:00:00.000Z");
+  const dentroDe = (d: number) => new Date(fin.getTime() + d * DIA);
+  assert.equal(pagoManualCubreLaFactura({ hayPagoManualPosterior: true, finPeriodoFacturado: null, accesoActual: null, proximoCobro: null }), true);
+  assert.equal(pagoManualCubreLaFactura({ hayPagoManualPosterior: false, finPeriodoFacturado: fin, accesoActual: dentroDe(30), proximoCobro: dentroDe(30) }), true, "activación del admin: +1 mes");
+  assert.equal(pagoManualCubreLaFactura({ hayPagoManualPosterior: false, finPeriodoFacturado: fin, accesoActual: fin, proximoCobro: fin }), false, "renovación normal: acceso = fin facturado");
+  assert.equal(pagoManualCubreLaFactura({ hayPagoManualPosterior: false, finPeriodoFacturado: fin, accesoActual: dentroDe(0.5), proximoCobro: null }), false, "dentro de la tolerancia de 1 día");
+  assert.equal(pagoManualCubreLaFactura({ hayPagoManualPosterior: false, finPeriodoFacturado: null, accesoActual: dentroDe(90), proximoCobro: dentroDe(90) }), false, "sin periodo de la factura no se adivina");
+});
+
+test("#2/#3 por qué NO se suspende: otra suscripción, factura no abierta (paid/void/uncollectible/sin id) o pago manual", () => {
+  assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: "open", cubiertaPorPagoManual: false }), null);
+  assert.equal(motivoParaNoSuspender({ esDelPlan: false, estadoVivoFactura: "open", cubiertaPorPagoManual: false }), "otra_suscripcion");
+  for (const e of ["paid", "void", "uncollectible", "draft", null]) {
+    assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: e, cubiertaPorPagoManual: false }), "factura_no_abierta", String(e));
+  }
+  assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: "open", cubiertaPorPagoManual: true }), "pago_manual");
+  assert.equal(esDeLaSuscripcionDelPlan("sub_a", "sub_a"), true);
+  assert.equal(esDeLaSuscripcionDelPlan("sub_b", "sub_a"), false);
+  assert.equal(esDeLaSuscripcionDelPlan(null, "sub_a"), true, "si no se conoce una de las dos, no se discute");
+  assert.equal(eraClinicaPagadora("active"), true);
+  assert.equal(eraClinicaPagadora("past_due"), true);
+  assert.equal(eraClinicaPagadora("pending_payment"), false);
+  assert.equal(eraClinicaPagadora(null), false);
+});
+
+test("#2 el webhook lanza si Stripe no contesta por la factura, y solo suspende con «open» (forma del código)", () => {
+  const w = sinComentarios(leer("src/app/api/webhooks/stripe/route.ts"));
+  const fn = w.slice(w.indexOf("async function estadoVivoDeFactura"), w.indexOf("async function cargarClinicaParaRechazo"));
+  assert.doesNotMatch(fn, /catch/, "no se traga el error de Stripe");
+  assert.match(w, /motivoParaNoSuspender\(\{ esDelPlan, estadoVivoFactura, cubiertaPorPagoManual: cubierta \}\)/);
+  assert.match(w, /esDeLaSuscripcionDelPlan\(\s*referenciaDeFactura\(invoice/);
+  assert.doesNotMatch(w, /facturaPagadaEnStripe|facturaYaPagada/);
+});
+
+test("#9 correo de «suspendido por falta de pago»: datos a salvo, cómo volver a entrar, sin voseo ni punto doble", () => {
+  const c = buildPlanSuspendedEmail({ firstName: "Ana", clinicName: "Dental <b>Sur</b>", planName: "Profesional", payUrl: "https://www.dalecontrol.com/dashboard/suspended" });
+  assert.equal(c.subject, "Tu acceso está suspendido por falta de pago · DaleControl");
+  assert.match(c.html, /Tu acceso está suspendido por falta de pago/);
+  assert.match(c.html, /Tus datos están completos y a salvo/);
+  assert.match(c.html, /href="https:\/\/www\.dalecontrol\.com\/dashboard\/suspended"/);
+  assert.match(c.html, /Pagar y volver a entrar/);
+  assert.doesNotMatch(c.html, /<b>Sur<\/b>/);
+  assert.match(c.text, /En cuanto pagues, todo vuelve como estaba\./);
+  assert.doesNotMatch(c.html + c.text, /\b(vos|tenés|podés|pagá)\b|\.\./i);
+});
+
+test("#12 una sede incluida: el aviso rojo no ofrece pagar y dice que la clínica principal debe hacerlo", () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider locale="es" dict={getDict("es")}>
+      <AvisoPagoRechazado accesoHasta="20 oct 2026, 12:00 p.m." puedePagar sedeIncluida plan="CLINIC" />
+    </I18nProvider>,
+  );
+  assert.match(html, /La clínica principal debe pagar el plan\./);
+  assert.match(html, /20 oct 2026, 12:00 p\.m\./);
+  assert.doesNotMatch(html, /<button/, "ni siquiera al dueño de la sede");
+  const en = renderToStaticMarkup(
+    <I18nProvider locale="en" dict={getDict("en")}>
+      <AvisoPagoRechazado accesoHasta="Oct 20, 2026, 12:00 PM" puedePagar sedeIncluida plan="CLINIC" />
+    </I18nProvider>,
+  );
+  assert.doesNotMatch(en, /<button/);
+  assert.doesNotMatch(html + en, /m\.\.|(?<!\.)\.\.(?!\.)/);
+  const layout = sinComentarios(leer("src/app/dashboard/layout.tsx"));
+  assert.match(layout, /leerGrupoDePago\(clinic\.id\)\.then\(\(g\) => g\.esSedeIncluida\)/);
+  assert.match(layout, /sedeIncluida=\{sedeIncluidaConCobroRechazado\}/);
+});
+
+test("#5 el cliente lee `cambioEnCurso` del GET y la vista cambia «Pagar mi plan» por «Terminar el cambio a <plan> y pagar»", async () => {
+  const lectura = await leerPagoPendiente(respuesta(200, { ...PENDIENTE, cambioEnCurso: { plan: "CLINIC" } }));
+  assert.equal(lectura.tipo === "listo" && lectura.datos.estado === "pendiente" && lectura.datos.cambioEnCurso?.plan, "CLINIC");
+  const sin = await leerPagoPendiente(respuesta(200, PENDIENTE));
+  assert.equal(sin.tipo === "listo" && sin.datos.estado === "pendiente" && "cambioEnCurso" in sin.datos, false, "sin el campo, nada cambia");
+  assert.equal(((await leerPagoPendiente(respuesta(200, { ...PENDIENTE, cambioEnCurso: { plan: 3 } }))) as any).datos.cambioEnCurso, undefined, "forma rara: se ignora");
+
+  const conCambio = vista({ lectura });
+  assert.doesNotMatch(conCambio, /Pagar mi plan/, "no hay factura abierta que pagar (el servidor respondería 409)");
+  assert.doesNotMatch(conCambio, /plan más grande y pagar/);
+  assert.match(conCambio, /data-accion="terminar-cambio"[^>]*>.*Terminar el cambio a Clínica y pagar/s);
+  // Al pulsarlo se confirma con el monto de ESE plan, y el cobro es el POST «subir».
+  const confirmando = vista({ lectura, eleccion: { accion: "subir", plan: "CLINIC" } });
+  assert.match(confirmando, /Vas a pagar \$1,489\.00 MXN por el plan Clínica/);
+  // Si el plan del cambio ya no está entre las opciones: aviso y respaldo, nunca un botón que no sirve.
+  const sinOpcion = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, opcionesSubir: [], cambioEnCurso: { plan: "CLINIC" } } } });
+  assert.doesNotMatch(sinOpcion, /Pagar mi plan|terminar-cambio/);
+  assert.match(sinOpcion, /No pudimos preparar el cambio de plan/);
+  assert.match(sinOpcion, /data-accion="portal"/);
+  const es = getDict("es") as any;
+  assert.equal(es.shell.pagoPendiente.terminarCambio, "Terminar el cambio a {plan} y pagar");
+});
+
+test("#4 con «sin pendiente» o error SIEMPRE queda cómo pagar: el respaldo (portal) y, en suspendida, las tarjetas de plan", () => {
+  const sin = vista({ lectura: { tipo: "listo", datos: { estado: "sin_pendiente" } } });
+  assert.match(sin, /data-accion="portal"/, "respaldo con «sin pendiente»");
+  assert.match(vista({ lectura: { tipo: "error", mensaje: "" } }), /data-accion="portal"/);
+  assert.match(vista({ lectura: { tipo: "no_disponible" } }), /data-accion="portal"/);
+  // Con el pendiente a la vista, los dos botones; el respaldo no estorba.
+  assert.doesNotMatch(vista(), /data-accion="portal"/);
+  // Las tarjetas de plan las muestra el componente cuando la lectura NO es «pendiente», y la página se las pasa.
+  const c = sinComentarios(leer("src/components/dashboard/pago-pendiente.tsx"));
+  assert.match(c, /sinDosBotones = lectura !== null && !\(lectura\.tipo === "listo" && lectura\.datos\.estado === "pendiente"\)/);
+  assert.match(c, /\{puedePagar && sinDosBotones && tarjetas\}/);
+  const p = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
+  assert.match(p, /suspendida tarjetas=\{tarjetasDeRespaldo\}/);
+  assert.match(p, /const tarjetasDeRespaldo = conDosBotones \? \(\s*<SuspendedPlanCards/);
+  // Y la pestaña Suscripción nunca esconde su sección «Cambiar plan» ni el respaldo.
+  assert.doesNotMatch(sinComentarios(leer("src/components/dashboard/subscription-tab.tsx")), /<PagoPendiente[^>]*tarjetas=/);
 });

@@ -53,6 +53,7 @@ import { isPlanExpired, isAllowedWhileSuspended, isInTrial as inTrialNow } from 
 import { avisoDePagoRechazado, fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
 import { AvisoPagoRechazado } from "@/components/dashboard/aviso-pago-rechazado";
 import { getBranchQuota } from "@/lib/branches";
+import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -170,6 +171,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     rol: user.role,
     ahora: now,
   });
+  // Una sede incluida no paga: su aviso no ofrece el botón (la clínica principal debe pagar). Las 3 consultas
+  // de leerGrupoDePago solo corren mientras hay un cobro rechazado con gracia viva.
+  const sedeIncluidaConCobroRechazado = avisoCobro.visible
+    ? await leerGrupoDePago(clinic.id).then((g) => g.esSedeIncluida).catch(() => false)
+    : false;
 
   // Redirect server-side a la pantalla de pago. Excepciones: la propia
   // /dashboard/suspended (ahí se completa el pago) y /dashboard/soporte(/*)
@@ -362,6 +368,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             accesoHasta={fechaHoraDeLaClinica(avisoCobro.accesoHasta, (clinic as { timezone?: string | null }).timezone, locale === "en" ? "en" : "es")}
             puedePagar={avisoCobro.puedePagar}
             plan={clinic.plan}
+            sedeIncluida={sedeIncluidaConCobroRechazado}
           />
         )}
         <GlobalAnnouncementBanner />

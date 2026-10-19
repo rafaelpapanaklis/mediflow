@@ -23,7 +23,18 @@ export interface OpcionSubir {
 
 export type PagoPendiente =
   | { estado: "sin_pendiente" }
-  | { estado: "pendiente"; planActual: string; montoPendiente: number; moneda: string; opcionesSubir: OpcionSubir[] };
+  | {
+      estado: "pendiente";
+      planActual: string;
+      montoPendiente: number;
+      moneda: string;
+      opcionesSubir: OpcionSubir[];
+      /**
+       * Solo cuando un «subir de plan» quedó a medias (la factura vieja ya se anuló): no hay nada que «pagar»,
+       * solo terminar el cambio a este plan. Con esto presente «Pagar mi plan» no aplica (el servidor respondería 409).
+       */
+      cambioEnCurso?: { plan: string };
+    };
 
 export type LecturaPago =
   | { tipo: "listo"; datos: PagoPendiente }
@@ -62,6 +73,11 @@ function opciones(v: unknown): OpcionSubir[] {
   });
 }
 
+function cambioEnCurso(v: unknown): { plan: string } | null {
+  const x = v as { plan?: unknown } | null;
+  return x && typeof x.plan === "string" && x.plan ? { plan: x.plan } : null;
+}
+
 export async function leerPagoPendiente(f: Fetch = fetch): Promise<LecturaPago> {
   let res: Response;
   try {
@@ -82,6 +98,7 @@ export async function leerPagoPendiente(f: Fetch = fetch): Promise<LecturaPago> 
         montoPendiente: d.montoPendiente,
         moneda: typeof d.moneda === "string" && d.moneda ? d.moneda : "MXN",
         opcionesSubir: opciones(d.opcionesSubir),
+        ...(cambioEnCurso(d.cambioEnCurso) ? { cambioEnCurso: cambioEnCurso(d.cambioEnCurso)! } : {}),
       },
     };
   }

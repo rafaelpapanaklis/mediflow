@@ -19,6 +19,7 @@ import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 export const GRACIA_COBRO_RECHAZADO_HORAS = 24;
 
 const HORA_MS = 3_600_000;
+const DIA_MS = 86_400_000;
 
 function aFecha(valor: Date | string | null | undefined): Date | null {
   if (valor === null || valor === undefined) return null;
@@ -130,6 +131,64 @@ export function inicioDeNuevoPeriodo(args: {
     if (d && d.getTime() > base.getTime()) base = d;
   }
   return base;
+}
+
+/**
+ * ¿Una clínica que pagó a mano (SPEI confirmado o activación del admin) queda cubierta frente a la factura
+ * vieja de Stripe que sigue fallando? Sí si hay un pago manual registrado POSTERIOR a la creación de esa factura
+ * (`subscription_invoices` pagada que no es de Stripe), o si su periodo pagado ya pasa del fin del periodo que
+ * esa factura cubre (la activación del admin no deja fila, pero sí mueve las fechas más allá). Con un renovación
+ * normal de tarjeta el acceso es IGUAL al fin del periodo facturado, nunca mayor: no cuenta como cubierta.
+ * En ese caso el rechazo solo va a la bitácora: ni se recorta a 24 h ni se manda correo.
+ */
+export function pagoManualCubreLaFactura(args: {
+  /** ¿Hay un pago manual (no Stripe) pagado después de crearse la factura que falla? */
+  hayPagoManualPosterior: boolean;
+  /** Fin del periodo que cubre la factura que falla; null si no se sabe. */
+  finPeriodoFacturado: Date | null;
+  accesoActual: Date | string | null | undefined;
+  proximoCobro: Date | string | null | undefined;
+}): boolean {
+  if (args.hayPagoManualPosterior) return true;
+  const fin = args.finPeriodoFacturado;
+  if (!fin) return false;
+  const limite = fin.getTime() + DIA_MS;
+  return [args.accesoActual, args.proximoCobro].some((f) => {
+    const d = aFecha(f);
+    return !!d && d.getTime() > limite;
+  });
+}
+
+/** ¿La factura es de la suscripción del PLAN de la clínica? Si alguna de las dos no se conoce, no se discute. */
+export function esDeLaSuscripcionDelPlan(facturaSub: string | null | undefined, clinicaSub: string | null | undefined): boolean {
+  if (!facturaSub || !clinicaSub) return true;
+  return facturaSub === clinicaSub;
+}
+
+/**
+ * Por qué un `invoice.payment_failed` del plan NO debe suspender (null = suspende). Solo suspende la factura
+ * del plan que sigue ABIERTA en Stripe: pagada, anulada (void) o incobrable no; y tampoco si un pago manual
+ * ya cubre a la clínica o si la factura es de otra suscripción.
+ */
+export function motivoParaNoSuspender(args: {
+  esDelPlan: boolean;
+  estadoVivoFactura: string | null;
+  cubiertaPorPagoManual: boolean;
+}): "otra_suscripcion" | "factura_no_abierta" | "pago_manual" | null {
+  if (!args.esDelPlan) return "otra_suscripcion";
+  if (args.estadoVivoFactura !== "open") return "factura_no_abierta";
+  if (args.cubiertaPorPagoManual) return "pago_manual";
+  return null;
+}
+
+/**
+ * ¿La clínica ya era de las que pagan (al corriente o con un cobro rechazado antes)? Solo a esas se les manda el
+ * aviso de «suspendida» cuando el rechazo llega con la gracia vencida; una cuenta nueva cuyo primer pago falló
+ * no estuvo «suspendida por falta de pago».
+ */
+export function eraClinicaPagadora(estadoAntes: string | null | undefined): boolean {
+  const e = estadoAntes ?? null;
+  return e !== null && (ACTIVE_SUBSCRIPTION_STATUSES.has(e) || PAYMENT_FAILED_STATUSES.has(e));
 }
 
 /** Quién ve el botón de pagar en el aviso: dueño o administrador (misma regla que el cambio de plan). */

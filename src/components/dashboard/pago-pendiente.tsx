@@ -95,6 +95,8 @@ export function PagoPendienteVista({
       <section className={s.panel} data-pago-pendiente="sin-pendiente">
         <p className={s.nota}>{t("shell.pagoPendiente.sinPendiente")}</p>
         <div className={s.fila}>
+          {/* Nunca sin manera de pagar: el portal / checkout de siempre queda a la mano. */}
+          {respaldo}
           <button type="button" className={s.boton} onClick={onRecargar}>
             {t("shell.pagoPendiente.recargar")}
           </button>
@@ -105,6 +107,8 @@ export function PagoPendienteVista({
 
   const d = lectura.datos;
   const montoPendiente = formatoMonto(d.montoPendiente, d.moneda, idioma);
+  // Un «subir de plan» a medias: no hay factura que pagar; se termina el cambio (POST subir) y «Pagar mi plan» no aplica.
+  const cambio = d.cambioEnCurso ? d.opcionesSubir.find((o) => o.plan === d.cambioEnCurso!.plan) ?? null : null;
   const elegida = eleccion?.accion === "subir" ? d.opcionesSubir.find((o) => o.plan === eleccion.plan) ?? null : null;
 
   return (
@@ -115,11 +119,20 @@ export function PagoPendienteVista({
       </p>
 
       <div className={s.fila}>
-        <button type="button" className={`${s.boton} ${s.principal}`} data-accion="pagar-plan" onClick={onPagarPlan} disabled={cobrando}>
-          <CreditCard size={16} aria-hidden />
-          {t("shell.pagoPendiente.pagarPlan")}
-        </button>
-        {d.opcionesSubir.length > 0 && (
+        {d.cambioEnCurso ? (
+          cambio && (
+            <button type="button" className={`${s.boton} ${s.principal}`} data-accion="terminar-cambio" onClick={() => onElegirPlan(cambio.plan)} disabled={cobrando}>
+              <TrendingUp size={16} aria-hidden />
+              {t("shell.pagoPendiente.terminarCambio", { plan: cambio.nombre })}
+            </button>
+          )
+        ) : (
+          <button type="button" className={`${s.boton} ${s.principal}`} data-accion="pagar-plan" onClick={onPagarPlan} disabled={cobrando}>
+            <CreditCard size={16} aria-hidden />
+            {t("shell.pagoPendiente.pagarPlan")}
+          </button>
+        )}
+        {!d.cambioEnCurso && d.opcionesSubir.length > 0 && (
           <button type="button" className={s.boton} data-accion="subir-plan" onClick={onVerPlanes} disabled={cobrando} aria-expanded={eligiendoPlan}>
             <TrendingUp size={16} aria-hidden />
             {t("shell.pagoPendiente.subir")}
@@ -127,7 +140,14 @@ export function PagoPendienteVista({
         )}
       </div>
 
-      {eligiendoPlan && d.opcionesSubir.length > 0 && (
+      {d.cambioEnCurso && !cambio && (
+        <>
+          <p className={s.aviso} role="alert">{t("shell.pagoPendiente.cambioNoDisponible")}</p>
+          <div className={s.fila}>{respaldo}</div>
+        </>
+      )}
+
+      {eligiendoPlan && !d.cambioEnCurso && d.opcionesSubir.length > 0 && (
         <>
           <p className={s.nota}>{t("shell.pagoPendiente.elegirPlan")}</p>
           <ul className={s.opciones}>
@@ -176,11 +196,17 @@ export function PagoPendiente({
   puedePagar,
   plan,
   suspendida,
+  tarjetas,
 }: {
   puedePagar: boolean;
   plan: string | null;
   /** true en /dashboard/suspended: al pagar se va a la pantalla que espera la reactivación. */
   suspendida: boolean;
+  /**
+   * Las tarjetas de plan de siempre (checkout / SPEI / OXXO). Se esconden mientras los dos botones aplican; si la
+   * lectura da «sin pendiente», «no disponible» o error, se muestran: nunca se queda la clínica sin manera de pagar.
+   */
+  tarjetas?: ReactNode;
 }) {
   const t = useT();
   const idioma = useLocale();
@@ -225,7 +251,9 @@ export function PagoPendiente({
     setCobrando(false);
   }
 
+  const sinDosBotones = lectura !== null && !(lectura.tipo === "listo" && lectura.datos.estado === "pendiente");
   return (
+    <>
     <PagoPendienteVista
       lectura={lectura}
       puedePagar={puedePagar}
@@ -249,5 +277,7 @@ export function PagoPendiente({
       onCancelar={() => setEleccion(null)}
       onRecargar={() => router.refresh()}
     />
+    {puedePagar && sinDosBotones && tarjetas}
+    </>
   );
 }

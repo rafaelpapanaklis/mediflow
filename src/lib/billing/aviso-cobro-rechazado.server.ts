@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendPaymentFailedEmail } from "@/lib/email";
+import { sendPaymentFailedEmail, sendPlanSuspendedEmail } from "@/lib/email";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
 import { fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
 
@@ -38,6 +38,12 @@ export async function avisarCobroRechazado(args: {
   /** Hasta cuándo sigue el acceso (la hora de suspensión que se le dice a la clínica). */
   accesoHasta: Date;
   siteUrl: string;
+  /**
+   * «gracia»: «No pudimos cobrar tu plan…» con la hora de suspensión. «suspendida»: el aviso llegó con la gracia
+   * ya vencida (webhook caído, entrega reintentada) y se le dice que ya está suspendida. Mismo candado: solo UNO
+   * de los dos sale por cobro rechazado.
+   */
+  tipo?: "gracia" | "suspendida";
 }): Promise<ResultadoAvisoCobro> {
   try {
     const dueno = args.clinica.users[0];
@@ -60,6 +66,16 @@ export async function avisarCobroRechazado(args: {
     }
 
     const planName = PLAN_MARKETING[args.clinica.plan as keyof typeof PLAN_MARKETING]?.name ?? String(args.clinica.plan ?? "");
+    if (args.tipo === "suspendida") {
+      await sendPlanSuspendedEmail({
+        email: to,
+        firstName: dueno?.firstName,
+        clinicName: args.clinica.name,
+        planName,
+        payUrl: `${args.siteUrl}/dashboard/suspended`,
+      });
+      return "enviado";
+    }
     await sendPaymentFailedEmail({
       email: to,
       firstName: dueno?.firstName,
