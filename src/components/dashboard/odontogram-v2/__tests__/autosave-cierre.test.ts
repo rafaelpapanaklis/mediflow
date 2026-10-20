@@ -1,18 +1,22 @@
 /**
- * ws1-t11 · revisiones t4 y t8 — lo pendiente del odontograma, ejecutando el caso.
+ * ws1-t11 · revisiones t4 y t8 — el autoguardado en vivo, ejecutando el caso.
  *
- * t4 O1 / t8 (segunda vuelta):
- *  - N-O1: lo pendiente es del USUARIO que lo hizo (llave = clínica + usuario
- *    de la sesión): otro usuario en el mismo navegador nunca lo ve ni lo manda;
- *    tras un 401 solo se reintenta si vuelve el mismo usuario.
- *  - N-O2: lo recuperado NO se manda solo: se ofrece «Guardar / Descartar» y al
- *    guardar se aplica diente por diente sobre lo que hay HOY (un «Limpiar
- *    todo» viejo no borra lo registrado después).
- *  - N-O3: la llave sale de la sesión actual, nunca de «la última conocida».
- *  - N-O4: al enganchar se barren las copias caducadas (48 h) y corruptas de
- *    cualquier paciente.
- *  - O3: abrir sin red da un mensaje en español (se ejecuta la carga real,
- *    `cargarOdontograma`, con el `fetchOdontogram` real y `fetch` sin red).
+ * Tercera vuelta (decisión del gerente): se guarda al instante y se reintenta
+ * MIENTRAS la pestaña siga abierta, con un aviso fijo «No se guardó: sin
+ * conexión, reintentando» mientras haya algo pendiente; al cerrar u ocultar,
+ * `beforeunload` avisa y `pagehide`/`visibilitychange` mandan con keepalive.
+ * NO hay copia en el navegador entre sesiones: al cargar se borran las llaves
+ * `dc:odo-pendiente:*` de versiones anteriores.
+ *
+ * Lo que queda de la revisión, cada caso ejecutado:
+ *  - N3-O1: el 403 del reto de dos pasos NO descarta: se aparta y sale al
+ *    volver el mismo usuario.
+ *  - N3-O2: «Reintentar» y el evento `online` no mandan nada si la sesión es
+ *    de otro usuario.
+ *  - N3-O3: lo que lleva más de 15 min fallando no sale solo al volver la red.
+ *  - N3-O4: un 404 porque la sede activa cambió en otra pestaña no se tira:
+ *    se aparta con aviso claro; un 404 de verdad se descarta y sale del dibujo.
+ *  - O3: abrir sin red da un mensaje en español (carga real con fetch real).
  * t4 O2/O3: rótulo «Incisal» y errores en español.
  *
  * Los eventos de la página son `EventTarget`/`Event` reales de Node.
@@ -24,15 +28,15 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  SaveQueue, saveQueueFor, installPageHandlers, renderPendingNotice, textoAvisoPendiente, pendienteKey, sweepPendientes,
-  _resetQueuesForTests, PENDIENTE_CADUCA_MS, PENDIENTE_PREFIJO, NOTICE_ID, bindBrowserCopy,
-  type KeyValueStore, type SaveOp, type NoticeDoc, type NoticeEl,
+  SaveQueue, saveQueueFor, installPageHandlers, renderPendingNotice, textoAvisoPendiente, limpiarCopiasViejas,
+  _resetQueuesForTests, NOTICE_ID, OTRA_SESION, STALE_AFTER_MS,
+  type KeyValueStore, type SaveOp, type NoticeDoc, type NoticeEl, type SessionInfo,
 } from "../autosave";
-import { putFinding, setNote, fetchOdontogram, rotuloCara, OdontogramHttpError, SESION_VENCIDA, type OdontogramRead } from "../adapter";
-import { cargarOdontograma, aplicarRecuperado, planRecovery } from "../recuperar";
+import { putFinding, setNote, fetchOdontogram, rotuloCara, OdontogramHttpError, SESION_VENCIDA } from "../adapter";
+import { cargarOdontograma, quitarDelDibujo } from "../recuperar";
 
 const settle = () => new Promise((r) => setImmediate(r));
-const tick = async (n = 5) => { for (let i = 0; i < n; i++) await settle(); };
+const tick = async (n = 6) => { for (let i = 0; i < n; i++) await settle(); };
 
 /** localStorage en memoria (misma API mínima). */
 function memStore(): KeyValueStore & { data: Map<string, string> } {
@@ -53,18 +57,20 @@ const timers = {
   clearTimer: (id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>),
 };
 
-class HttpErr extends Error { constructor(public status: number) { super(`HTTP ${status}`); } }
+/** Error como los del adaptador (status + código de la API). */
+class HttpErr extends Error { constructor(public status: number, public code: string | null = null) { super(`HTTP ${status}`); } }
 
-/** Servidor de mentira con red que se puede cortar. */
+/** Servidor de mentira: red que se puede cortar o respuestas de error con código. */
 function server() {
   const sent: { op: SaveOp; keepalive: boolean }[] = [];
-  let status: number | null = null;
+  let fallo: HttpErr | null = null;
   return {
     sent,
-    offline() { status = 0; }, online() { status = null; }, fail(s: number) { status = s; },
+    offline() { fallo = new HttpErr(0); }, online() { fallo = null; },
+    fail(status: number, code: string | null = null) { fallo = new HttpErr(status, code); },
     send: (op: SaveOp, o: { keepalive: boolean }) => {
       sent.push({ op, keepalive: o.keepalive });
-      return status === null ? Promise.resolve() : Promise.reject(new HttpErr(status));
+      return fallo === null ? Promise.resolve() : Promise.reject(fallo);
     },
   };
 }
@@ -75,283 +81,64 @@ function page() {
   return { win, doc };
 }
 
-const DRA_A = { clinicId: "cli_1", userId: "u_a" };
-const DR_B = { clinicId: "cli_1", userId: "u_b" };
-const SEDE_2 = { clinicId: "cli_2", userId: "u_a" };
+const DRA_A: SessionInfo = { clinicId: "cli_1", userId: "u_a" };
+const DR_B: SessionInfo = { clinicId: "cli_1", userId: "u_b" };
+const A_EN_SEDE_2: SessionInfo = { clinicId: "cli_2", userId: "u_a" };
 const put = (n: number, s: string | null, c: string): SaveOp => ({ kind: "put", toothNumber: n, surface: s, conditionId: c });
-
-/** Lectura de mentira del servidor (lo que devolvería fetchOdontogram). */
-function hoy(entries: { toothNumber: number; surface: string | null; conditionId: string; updatedAt: string }[], notas: Record<number, [string, string]> = {}): OdontogramRead {
-  const records: OdontogramRead["records"] = {};
-  for (const e of entries) {
-    const r = (records[e.toothNumber] ??= { surfaces: {}, tooth: [] });
-    if (e.surface) (r.surfaces[e.surface] ??= []).push(e.conditionId); else r.tooth.push(e.conditionId);
-  }
-  const noteTimes: Record<number, string> = {};
-  for (const [n, [text, t]] of Object.entries(notas)) {
-    (records[Number(n)] ??= { surfaces: {}, tooth: [] }).note = text; noteTimes[Number(n)] = t;
-  }
-  return { records, clinicId: "cli_1", userId: "u_a", entries, noteTimes };
-}
 
 let uninstall: (() => void) | null = null;
 beforeEach(() => { _resetQueuesForTests(); });
 afterEach(() => { uninstall?.(); uninstall = null; _resetQueuesForTests(); });
 
-/** Una «carga de la página» de la Dra. A que se queda sin red con cambios pendientes. */
-async function dejarPendiente(store: KeyValueStore, sesion: { clinicId: string; userId: string }, tab: string, ops: SaveOp[], now?: () => number) {
-  const srv = server(); srv.offline();
-  const q = new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers, ...(now ? { now } : {}) });
-  bindBrowserCopy(q, store, sesion, "pat_1", tab);
-  ops.forEach((o) => q.enqueue(o));
-  await tick();
-  return q;
-}
-
-test("t8 N-O1: lo pendiente de la Dra. A NO lo ve ni lo manda el Dr. B en el mismo navegador", async () => {
+test("t8 (3.ª): al cargar se borran las copias de versiones anteriores, y ya no se escribe nada en el navegador", async () => {
   const store = memStore();
-  await dejarPendiente(store, DRA_A, "pestana1", [{ kind: "reset" }, put(16, "O", "caries")]);
-  // cierra; entra el Dr. B en la misma PC y abre al mismo paciente
-  const srvB = server();
-  const qB = new SaveQueue({ send: srvB.send, ...timers });
-  assert.equal(bindBrowserCopy(qB, store, DR_B, "pat_1", "pestana2"), 0, "B no encuentra nada");
-  await tick();
-  assert.equal(srvB.sent.length, 0, "B no manda nada de A");
-  assert.equal(qB.getStatus().recovered, null);
-  // la copia de A sigue ahí, para A
-  const qA = new SaveQueue({ send: server().send, ...timers });
-  assert.equal(bindBrowserCopy(qA, store, DRA_A, "pat_1", "pestana3"), 2);
-});
-
-test("t8 N-O1: en la MISMA pestaña, si entra otra sesión, lo de la anterior no se manda con la nueva", async () => {
-  const store = memStore();
-  const srv = server(); srv.offline();
-  const q = new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers });
-  bindBrowserCopy(q, store, DRA_A, "pat_1", "t");
-  q.enqueue(put(21, "V", "caries"));
-  await tick();
-  const intentosDeA = srv.sent.length; // el intento sin red, con la sesión de A
-  srv.online();
-  bindBrowserCopy(q, store, DR_B, "pat_1", "t"); // otra sesión en la pestaña
-  q.retryNow();
-  await tick();
-  assert.equal(srv.sent.length, intentosDeA, "no se reintenta con la sesión de B");
-  assert.equal(q.hasPending(), false, "la cola de B empieza vacía");
-  assert.ok(store.getItem(`${pendienteKey(DRA_A.clinicId, DRA_A.userId, "pat_1")}:t`), "lo de A se queda en su copia");
-});
-
-test("t8 N-O1: tras un 401, al volver solo se reintenta si la sesión es del MISMO usuario", async () => {
-  const srv = server(); srv.fail(401);
-  let quien: string | null = "u_b";
-  const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, whoAmI: async () => quien, ...timers }));
-  bindBrowserCopy(q, memStore(), DRA_A, "pat_1", "t");
-  q.enqueue(put(11, "V", "caries"));
-  await tick();
-  assert.equal(q.failedBySession(), true);
-  srv.online();
-  const { win, doc } = page();
-  uninstall = installPageHandlers(win as any, doc as any);
-  win.dispatchEvent(new Event("focus")); // entró el Dr. B en otra pestaña
-  await tick();
-  assert.equal(srv.sent.length, 1, "con B no se manda");
-  assert.equal(q.hasPending(), true);
-  quien = "u_a"; // vuelve a entrar la Dra. A
-  win.dispatchEvent(new Event("focus"));
-  await tick();
-  assert.equal(srv.sent.length, 2);
-  assert.equal(q.hasPending(), false);
-});
-
-test("t8 N-O2: lo recuperado NO se manda solo; se ofrece con fecha y «Descartar» lo borra", async () => {
-  const store = memStore();
-  const t0 = Date.parse("2026-10-18T14:32:00Z");
-  await dejarPendiente(store, DRA_A, "ayer", [put(16, "O", "caries")], () => t0);
-  const srv = server();
-  const q = new SaveQueue({ send: srv.send, ...timers, now: () => t0 + 3600_000 });
-  assert.equal(bindBrowserCopy(q, store, DRA_A, "pat_1", "hoy"), 1);
-  await tick();
-  assert.equal(srv.sent.length, 0, "nada sale sin que la doctora diga «Guardar»");
-  assert.deepEqual(q.getStatus().recovered, { count: 1, at: t0 });
-  assert.deepEqual(q.overlay({}), {}, "tampoco se pinta como si ya estuviera");
-  q.discardRecovered();
-  assert.equal(q.getStatus().recovered, null);
-  assert.equal([...store.data.keys()].filter((k) => k.endsWith(":ayer")).length, 0, "la copia vieja se borró");
-});
-
-test("t8 N-O2: «Guardar» aplica sobre lo de HOY — un «Limpiar todo» viejo no borra lo registrado después", async () => {
-  const store = memStore();
-  const t0 = Date.parse("2026-10-18T14:32:00Z");
-  // sin red, en el iPad: «Limpiar todo», luego una caries en el 16, quita la
-  // corona del 26 y escribe una nota en el 11 (que antes decía «sensible»)
-  await dejarPendiente(store, DRA_A, "ipad", [
-    { kind: "reset" },
-    put(16, "O", "caries"),
-    { kind: "delete", toothNumber: 26, surface: null, conditionId: "crown" },
-    { kind: "note", toothNumber: 11, text: "fractura", prev: "sensible" },
-  ], (() => { let i = 0; return () => t0 + 1000 * i++; })());
-  const srv = server();
-  const q = new SaveQueue({ send: srv.send, ...timers, now: () => t0 + 86_400_000 });
-  bindBrowserCopy(q, store, DRA_A, "pat_1", "pc");
-  // HOY en la base: lo de antes del reset (36 rct), lo que el equipo registró
-  // DESPUÉS en otra PC (46 caries, y la corona del 26 vuelta a poner) y la
-  // nota del 11 cambiada después por otro doctor
-  const antes = "2026-10-17T10:00:00Z", despues = "2026-10-19T09:00:00Z";
-  const base = hoy([
-    { toothNumber: 36, surface: null, conditionId: "rct", updatedAt: antes },
-    { toothNumber: 46, surface: "O", conditionId: "caries", updatedAt: despues },
-    { toothNumber: 26, surface: null, conditionId: "crown", updatedAt: despues },
-  ], { 11: ["movilidad grado 1", despues] });
-  const plan = await aplicarRecuperado(q, async () => base);
-  await tick();
-  const enviado = srv.sent.map((x) => x.op);
-  assert.deepEqual(enviado.filter((o) => o.kind === "reset"), [], "el «Limpiar todo» NUNCA se repite");
-  assert.ok(enviado.some((o) => o.kind === "delete" && o.toothNumber === 36), "lo que existía al limpiar sí se quita");
-  assert.ok(!enviado.some((o) => (o.kind === "delete" || o.kind === "put") && o.toothNumber === 46), "lo registrado después se queda");
-  assert.ok(!enviado.some((o) => o.kind === "delete" && o.toothNumber === 26), "la corona puesta después no se quita");
-  assert.ok(enviado.some((o) => o.kind === "put" && o.toothNumber === 16), "la caries recuperada se añade");
-  const nota = enviado.find((o) => o.kind === "note" && o.toothNumber === 11) as { text: string } | undefined;
-  assert.ok(nota && nota.text.startsWith("movilidad grado 1") && /\[Recuperado del .+\] fractura$/.test(nota.text), "la nota nueva no se pisa: se conservan las dos");
-  assert.ok(plan.omitidos >= 2);
-  assert.equal(q.getStatus().recovered, null);
-});
-
-test("t8 N-O2: planRecovery — quitar una marca solo si nadie la tocó después; la nota se escribe si no cambió", () => {
-  const t = Date.parse("2026-10-18T12:00:00Z");
-  const base = hoy([
-    { toothNumber: 21, surface: "O", conditionId: "caries", updatedAt: "2026-10-18T11:00:00Z" }, // incisal del 21 (base «O»)
-    { toothNumber: 31, surface: null, conditionId: "rct", updatedAt: "2026-10-18T13:00:00Z" },
-  ], { 12: ["sensible", "2026-10-17T00:00:00Z"] });
-  const plan = planRecovery([
-    { op: { kind: "delete", toothNumber: 21, surface: "I", conditionId: "caries" }, at: t },
-    { op: { kind: "delete", toothNumber: 31, surface: null, conditionId: "rct" }, at: t },
-    { op: { kind: "note", toothNumber: 12, text: "fractura", prev: "sensible" }, at: t },
-  ], base);
-  assert.deepEqual(plan.ops, [
-    { kind: "delete", toothNumber: 21, surface: "I", conditionId: "caries" },
-    { kind: "note", toothNumber: 12, text: "fractura" },
-  ]);
-  assert.equal(plan.omitidos, 1, "el rct se volvió a tocar después: no se quita");
-});
-
-test("t8 N-O3 y O3: abrir SIN red — llave de la sesión de la página, mensaje en español, nunca «la última conocida»", async () => {
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async () => { throw new TypeError("Failed to fetch"); }) as typeof fetch;
-  try {
-    // con la sesión que pintó la página (sede 2 tras cambiar de sede)
-    const store = memStore();
-    const srv = server(); srv.offline();
-    const q = new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers });
-    const r = await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: SEDE_2, store, leer: fetchOdontogram, force: true, tabId: "t" });
-    assert.match(r.error ?? "", /^No se pudo cargar el odontograma: sin conexión/);
-    assert.doesNotMatch(r.error ?? "", /Failed to fetch|Load failed/);
-    q.enqueue(put(16, "O", "caries"));
-    await tick();
-    const llaves = [...store.data.keys()];
-    assert.deepEqual(llaves, [`${pendienteKey("cli_2", "u_a", "pat_1")}:t`], "la copia va con la clínica de la SESIÓN (sede 2)");
-    // sin sesión de la página y sin red: no se inventa llave
-    const store2 = memStore();
-    store2.setItem("dc:odo-ultima-clinica", "cli_1"); // lo que antes se usaba
-    const q2 = new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers });
-    await cargarOdontograma({ patientId: "pat_1", queue: q2, sesion: null, store: store2, leer: fetchOdontogram, force: true, tabId: "t" });
-    q2.enqueue(put(17, "O", "caries"));
-    await tick();
-    assert.equal([...store2.data.keys()].filter((k) => k.startsWith(PENDIENTE_PREFIJO)).length, 0);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-});
-
-test("t8 cargarOdontograma con red: sin sesión de la página engancha con la sesión del GET y pinta lo pendiente", async () => {
-  const store = memStore();
-  await dejarPendiente(store, DRA_A, "vieja", [put(16, "O", "caries")]);
-  const q = new SaveQueue({ send: server().send, ...timers });
-  const r = await cargarOdontograma({
-    patientId: "pat_1", queue: q, sesion: null, store, force: true, tabId: "nueva",
-    leer: async () => hoy([{ toothNumber: 36, surface: null, conditionId: "rct", updatedAt: "2026-10-17T10:00:00Z" }]),
-  });
-  assert.equal(r.error, null);
-  assert.deepEqual(r.records?.[36].tooth, ["rct"]);
-  assert.equal(q.getStatus().recovered?.count, 1, "lo de la carga anterior se ofrece (no se manda)");
-});
-
-test("t8 N-O4: al enganchar se barren las copias caducadas (48 h) y corruptas de CUALQUIER paciente", async () => {
-  assert.equal(PENDIENTE_CADUCA_MS, 48 * 3600 * 1000);
-  const store = memStore();
-  const ahora = Date.parse("2026-10-20T12:00:00Z");
-  const k = (pat: string) => `${pendienteKey("cli_1", "u_a", pat)}:x`;
-  store.setItem(k("viejo"), JSON.stringify({ v: 2, savedAt: ahora, ops: [{ op: put(11, null, "rct"), at: ahora - PENDIENTE_CADUCA_MS - 1 }] }));
-  store.setItem(k("mixto"), JSON.stringify({ v: 2, savedAt: ahora, ops: [
-    { op: put(12, null, "rct"), at: ahora - PENDIENTE_CADUCA_MS - 1 }, { op: put(13, null, "rct"), at: ahora - 1000 }] }));
-  store.setItem(k("roto"), "{no es json");
-  store.setItem(`${PENDIENTE_PREFIJO}cli_1:pat_v1:x`, JSON.stringify({ v: 1, savedAt: ahora, ops: [put(14, null, "rct")] }));
+  store.setItem("dc:odo-pendiente:v2:cli_1:u_a:pat_1:x", JSON.stringify({ v: 2, ops: [] }));
+  store.setItem("dc:odo-pendiente:cli_1:pat_9:y", "{roto");
+  store.setItem("dc:odo-ultima-clinica", "cli_1");
+  store.setItem("dc:dental-draft:pat_1", "{\"v\":1}"); // el borrador del SOAP: no es nuestro
   store.setItem("otra-cosa", "se respeta");
-  assert.equal(sweepPendientes(store, ahora), 3);
-  assert.deepEqual([...store.data.keys()].sort(), [k("mixto"), "otra-cosa"].sort());
-  assert.equal(JSON.parse(store.getItem(k("mixto"))!).ops.length, 1, "del mixto solo queda lo de menos de 48 h");
-  // y lo hace solo al enganchar a cualquier paciente
-  store.setItem(k("viejo2"), JSON.stringify({ v: 2, savedAt: ahora, ops: [{ op: put(11, null, "rct"), at: ahora - PENDIENTE_CADUCA_MS - 1 }] }));
-  bindBrowserCopy(new SaveQueue({ send: server().send, ...timers, now: () => ahora }), store, DRA_A, "otro_paciente", "t");
-  assert.equal(store.getItem(k("viejo2")), null);
-});
-
-test("t8 N-O5: lo rechazado con 403/404 no queda en la copia del navegador", async () => {
-  const store = memStore();
-  const srv = server(); srv.fail(403);
-  const q = new SaveQueue({ send: srv.send, ...timers });
-  bindBrowserCopy(q, store, DRA_A, "pat_1", "t");
-  q.enqueue(put(11, "V", "caries"));
-  await tick();
-  assert.equal(q.getStatus().state, "discarded");
-  assert.equal(store.length, 0, "no vuelve al abrir");
-});
-
-test("O1: sin red, desmontado e iOS mata la pestaña → la copia queda (con la nota a medias) y se ofrece al volver", async () => {
-  const store = memStore();
   const srv = server(); srv.offline();
   const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers }));
-  bindBrowserCopy(q, store, DRA_A, "pat_1", "A");
-  const detach = q.attach();
+  const { win, doc } = page();
+  uninstall = installPageHandlers(win as any, doc as any, store);
+  assert.deepEqual([...store.data.keys()].sort(), ["dc:dental-draft:pat_1", "otra-cosa"]);
+  // sin red, se marca, se oculta y se cierra: NADA se guarda en el navegador
   q.enqueue(put(16, "O", "caries"));
-  q.noteChanged(16, "dolor al frío", "");
+  q.noteChanged(16, "dolor al frío");
   await tick();
-  detach();
+  doc.visibilityState = "hidden";
+  doc.dispatchEvent(new Event("visibilitychange"));
+  win.dispatchEvent(new Event("pagehide"));
+  assert.deepEqual([...store.data.keys()].sort(), ["dc:dental-draft:pat_1", "otra-cosa"]);
+  assert.equal(limpiarCopiasViejas(null), 0, "sin almacenamiento no truena");
+});
+
+test("t8 (3.ª): ocultar o cerrar con algo pendiente → sale con keepalive (también la nota a medias) y la cola no se vacía", async () => {
+  const srv = server(); srv.offline();
+  const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers }));
+  q.enqueue(put(16, "O", "caries"));
+  q.noteChanged(16, "dolor al frío");
+  await tick();
   const { win, doc } = page();
   uninstall = installPageHandlers(win as any, doc as any);
   doc.visibilityState = "hidden";
-  doc.dispatchEvent(new Event("visibilitychange"));
-  const copia = JSON.parse(store.getItem(`${pendienteKey("cli_1", "u_a", "pat_1")}:A`)!);
-  assert.deepEqual(copia.ops.map((g: any) => g.op.kind).sort(), ["note", "put"]);
-  assert.ok(copia.ops.every((g: any) => typeof g.at === "number"), "cada cambio lleva su fecha");
-  uninstall(); uninstall = null;
-  _resetQueuesForTests();
-  const q2 = new SaveQueue({ send: server().send, ...timers });
-  assert.equal(bindBrowserCopy(q2, store, DRA_A, "pat_1", "B"), 2);
-});
-
-test("O1: cerrar en escritorio con algo pendiente → el navegador pregunta, aunque el odontograma ya no esté montado", async () => {
-  const srv = server();
-  srv.offline();
-  const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers }));
-  const detach = q.attach();
-  q.enqueue(put(26, null, "crown"));
-  await tick();
-  detach();
-  const { win, doc } = page();
-  uninstall = installPageHandlers(win as any, doc as any);
+  doc.dispatchEvent(new Event("visibilitychange")); // iOS: puede ser el último aviso
+  const ka = srv.sent.filter((x) => x.keepalive).map((x) => x.op.kind).sort();
+  assert.deepEqual(ka, ["note", "put"]);
+  assert.equal(q.hasPending(), true, "si la pestaña sigue viva, sigue intentándolo");
   const e = new Event("beforeunload", { cancelable: true });
   win.dispatchEvent(e);
-  assert.equal(e.defaultPrevented, true);
-  win.dispatchEvent(new Event("pagehide"));
-  assert.ok(srv.sent.some((x) => x.keepalive && x.op.kind === "put"));
+  assert.equal(e.defaultPrevented, true, "el navegador pregunta antes de cerrar");
   srv.online();
   win.dispatchEvent(new Event("online"));
   await tick();
+  assert.equal(q.hasPending(), false);
   const e2 = new Event("beforeunload", { cancelable: true });
   win.dispatchEvent(e2);
   assert.equal(e2.defaultPrevented, false);
 });
 
-test("O1: aviso fijo «sin guardar» fuera de pantalla, con «Reintentar» y «Descartar»", async () => {
+test("t8 (3.ª): aviso fijo «No se guardó: sin conexión, reintentando» mientras haya algo pendiente, esté o no en pantalla", async () => {
   const els = new Map<string, NoticeEl>();
   const mk = (): NoticeEl => {
     const el: any = {
@@ -366,33 +153,165 @@ test("O1: aviso fijo «sin guardar» fuera de pantalla, con «Reintentar» y «D
     createElement: () => mk(),
     body: { appendChild: (el: NoticeEl) => { els.set(el.id, el); } },
   };
-  const srv = server();
-  srv.offline();
+  const srv = server(); srv.offline();
   const q = new SaveQueue({ send: srv.send, retryDelays: [60_000], ...timers });
   const qs = () => [q];
-  const detach = q.attach();
+  const detach = q.attach(); // EN pantalla
   q.enqueue(put(11, "V", "caries"));
   await tick();
   renderPendingNotice(doc, qs);
-  assert.equal(els.get(NOTICE_ID), undefined, "en pantalla avisa su propio indicador");
+  const aviso: any = els.get(NOTICE_ID);
+  assert.ok(aviso, "con el odontograma en pantalla también se ve");
+  assert.match(aviso.children[0].textContent, /^No se guardó: sin conexión, reintentando\. Odontograma: 1 cambio sin guardar; no cierres esta pestaña\.$/);
   detach();
   renderPendingNotice(doc, qs);
-  const aviso: any = els.get(NOTICE_ID);
-  assert.match(aviso.children[0].textContent, /1 cambio sin guardar \(sin conexión\)/);
+  assert.ok(els.get(NOTICE_ID), "fuera de pantalla, igual");
   srv.online();
   aviso.children[1].listeners.click(); // Reintentar
   await tick();
   renderPendingNotice(doc, qs);
   assert.equal(els.get(NOTICE_ID), undefined, "todo guardado → el aviso desaparece");
-  // un 400 rechazado fuera de pantalla: «Descartar» lo tira
-  srv.fail(400);
+  // un rechazo apartado: «Descartar» del aviso lo tira
+  srv.fail(400, "invalid_payload");
   q.enqueue(put(12, "V", "caries"));
   await tick();
   renderPendingNotice(doc, qs);
-  const aviso2: any = els.get(NOTICE_ID);
-  aviso2.children[2].listeners.click(); // Descartar
+  (els.get(NOTICE_ID) as any).children[2].listeners.click();
   assert.equal(q.hasPending(), false);
   assert.equal(textoAvisoPendiente([q]), null);
+  assert.deepEqual(q.takeDiscarded(), [put(12, "V", "caries")], "lo descartado se le entrega a la pantalla para quitarlo del dibujo");
+});
+
+test("t8 N3-O1: el 403 del reto de dos pasos NO descarta: se aparta y sale al volver el MISMO usuario", async () => {
+  const srv = server();
+  srv.fail(403, "two_factor_required");
+  let quien: SessionInfo | null = DRA_A;
+  const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, whoAmI: async () => quien, ...timers }));
+  q.setOwner(DRA_A);
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  assert.equal(q.getStatus().state, "error", "apartado, no «discarded»");
+  assert.equal(q.getStatus().discarded, 0);
+  assert.equal(q.failedBySession(), true);
+  assert.deepEqual(q.overlay({})[16].surfaces, { O: ["caries"] }, "se sigue viendo");
+  // teclea el código y vuelve a la pestaña
+  srv.online();
+  const { win, doc } = page();
+  uninstall = installPageHandlers(win as any, doc as any);
+  win.dispatchEvent(new Event("focus"));
+  await tick();
+  assert.equal(q.hasPending(), false);
+  assert.equal(srv.sent.length, 2);
+  quien = null;
+});
+
+test("t8 N3-O2: «Reintentar» y `online` NO mandan lo de la Dra. A si la sesión ahora es del Dr. B", async () => {
+  const srv = server();
+  srv.fail(401, "unauthorized");
+  let quien: SessionInfo | null = DR_B;
+  const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, retryDelays: [60_000], whoAmI: async () => quien, ...timers }));
+  q.setOwner(DRA_A);
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  srv.online();
+  // «Reintentar» (indicador o aviso fijo)
+  assert.equal(await q.retryNow(), false);
+  await tick();
+  assert.equal(srv.sent.length, 1, "no sale firmado por B");
+  assert.equal(q.getStatus().error, OTRA_SESION);
+  // algo esperando reintento por la red + `online` con la sesión de B
+  srv.offline();
+  q.enqueue(put(17, "O", "caries"));
+  await tick();
+  srv.online();
+  const { win, doc } = page();
+  uninstall = installPageHandlers(win as any, doc as any);
+  win.dispatchEvent(new Event("online"));
+  await tick();
+  assert.ok(!srv.sent.slice(2).some((x) => !x.keepalive), "tampoco al volver la red");
+  assert.equal(q.hasPending(), true);
+  // vuelve la Dra. A
+  quien = DRA_A;
+  assert.equal(await q.retryNow(), true);
+  await tick();
+  assert.equal(q.hasPending(), false);
+});
+
+test("t8 N3-O3: lo que lleva más de 15 min fallando NO sale solo al volver la red; con «Reintentar», sí", async () => {
+  assert.equal(STALE_AFTER_MS, 15 * 60 * 1000);
+  let ahora = Date.parse("2026-10-20T20:00:00Z");
+  const fired: (() => void)[] = [];
+  const srv = server(); srv.offline();
+  const q = new SaveQueue({
+    send: srv.send, now: () => ahora,
+    setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {},
+  });
+  q.enqueue({ kind: "reset" }); // «Limpiar todo» sin red, y se cierra la tapa
+  await tick();
+  assert.equal(q.getStatus().state, "retrying");
+  // a la mañana siguiente, ya con red, vence el temporizador del reintento
+  ahora += 12 * 3600 * 1000;
+  srv.online();
+  fired.shift()!();
+  await tick();
+  assert.equal(srv.sent.length, 1, "el reset viejo no se manda solo");
+  assert.equal(q.getStatus().state, "error");
+  assert.match(q.getStatus().error ?? "", /más de 15 min sin poder guardarse/);
+  assert.equal(await q.retryNow(), true); // la doctora lo revisa y decide
+  await tick();
+  assert.equal(srv.sent.length, 2);
+  assert.equal(q.hasPending(), false);
+});
+
+test("t8 N3-O4: cambiar de sede en otra pestaña NO tira lo que se marca: se aparta con aviso claro", async () => {
+  const srv = server();
+  srv.fail(404, "patient_not_found");
+  let quien: SessionInfo | null = A_EN_SEDE_2; // en otra pestaña cambió a la sede 2
+  const q = new SaveQueue({ send: srv.send, whoAmI: async () => quien, ...timers });
+  q.setOwner(DRA_A); // abrió al paciente en la sede 1
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  assert.equal(q.getStatus().state, "error");
+  assert.equal(q.getStatus().error, OTRA_SESION);
+  assert.equal(q.getStatus().discarded, 0, "no se descartó");
+  assert.deepEqual(q.overlay({})[16].surfaces, { O: ["caries"] });
+  // vuelve a la sede 1 y reintenta
+  quien = DRA_A; srv.online();
+  assert.equal(await q.retryNow(), true);
+  await tick();
+  assert.equal(q.hasPending(), false);
+  // un 404 DE VERDAD (misma sede): se descarta y la pantalla lo quita del dibujo
+  srv.fail(404, "patient_not_found");
+  q.enqueue(put(26, null, "crown"));
+  await tick();
+  assert.equal(q.getStatus().state, "discarded");
+  assert.match(q.getStatus().error ?? "", /Ese cambio se descartó\.$/);
+  const dibujo = { 26: { surfaces: {}, tooth: ["crown"] }, 36: { surfaces: {}, tooth: ["rct"] } };
+  assert.deepEqual(quitarDelDibujo(dibujo, q.takeDiscarded()), { 26: { surfaces: {}, tooth: [] }, 36: { surfaces: {}, tooth: ["rct"] } },
+    "aunque la relectura falle (sedes sin vincular), la marca no se queda pintada");
+});
+
+test("t8 O3: abrir SIN red — mensaje en español (carga real) y la cola anota de qué sesión es", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new TypeError("Failed to fetch"); }) as typeof fetch;
+  try {
+    const q = new SaveQueue({ send: server().send, ...timers });
+    const r = await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: A_EN_SEDE_2, leer: fetchOdontogram, force: true });
+    assert.match(r.error ?? "", /^No se pudo cargar el odontograma: sin conexión/);
+    assert.doesNotMatch(r.error ?? "", /Failed to fetch|Load failed|navegador/);
+    assert.deepEqual(q.getOwner(), A_EN_SEDE_2);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  // con red y sin sesión de la página: la toma del GET
+  const q2 = new SaveQueue({ send: server().send, ...timers });
+  const r2 = await cargarOdontograma({
+    patientId: "pat_1", queue: q2, sesion: null, force: true,
+    leer: async () => ({ records: { 36: { surfaces: {}, tooth: ["rct"] } }, clinicId: "cli_1", userId: "u_a", entries: [] }),
+  });
+  assert.equal(r2.error, null);
+  assert.deepEqual(r2.records?.[36].tooth, ["rct"]);
+  assert.deepEqual(q2.getOwner(), DRA_A);
 });
 
 test("O3: el adaptador habla español — 401, 403, 400, 500 y sin red; nunca el código crudo de la API", async () => {

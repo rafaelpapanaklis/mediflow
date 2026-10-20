@@ -31,7 +31,12 @@ const CONDITION_ID = z
   .max(64)
   .regex(/^[a-z0-9_]+$/, "conditionId inválido");
 
-const SURFACE = z.enum(["M", "D", "V", "L", "O"]);
+/** La base solo conoce M|D|V|L|O; una pestaña con el JS de antes manda la incisal como «I» (se guarda como «O»). */
+const SURFACE = z.enum(["M", "D", "V", "L", "O", "I"]);
+const aBase = (s: string) => (s === "I" ? "O" : s);
+
+/** Hasta cuándo se acepta el modo viejo `records` (pestañas con el JS de antes del despliegue). */
+const RECORDS_COMPAT_HASTA = Date.parse("2026-12-01T00:00:00-06:00");
 
 /** Dientes FDI reales: permanentes 11-18 / 21-28 / 31-38 / 41-48 y temporales
  *  51-55 / 61-65 / 71-75 / 81-85. El rango plano 11..85 aceptaba huecos
@@ -54,7 +59,7 @@ const CambioSchema = z.object({ base: RecSchema, now: RecSchema });
 const SyncSchema = z
   .object({
     patientId: z.string().min(1),
-    /** Modo viejo: el odontograma ENTERO, que reemplaza al vivo. */
+    /** Modo viejo (JS de antes del despliegue): el odontograma ENTERO. Ya no reemplaza: solo añade (compat hasta RECORDS_COMPAT_HASTA). */
     records: z.record(RecSchema).optional(),
     /** Modo «Guardar consulta» (ws1-t11, revisión t4 O4): solo los dientes tocados. */
     cambios: z.record(CambioSchema).optional(),
@@ -67,14 +72,16 @@ type Rec = z.infer<typeof RecSchema>;
 const menos = (a: string[] = [], b: string[] = []) => a.filter((id) => !b.includes(id) && id !== NOTE_CONDITION);
 
 /**
- * POST /api/odontogram/sync — REEMPLAZA todo el odontograma vivo del paciente
- * con el `records` recibido (borra + reinserta, atómico).
+ * POST /api/odontogram/sync — «Guardar consulta» hace avanzar el odontograma
+ * vivo del paciente (modelo «un odontograma que evoluciona»), mientras la
+ * consulta guarda además su propia foto inmutable en specialtyData.odontogram.
  *
- * Lo usa "Guardar consulta": el odontograma del paciente AVANZA con cada
- * consulta (modelo "un odontograma que evoluciona"), mientras la consulta
- * guarda además su propia foto inmutable en specialtyData.odontogram. Así la
- * siguiente consulta arranca del estado más reciente y la pestaña "Odontograma"
- * queda coherente.
+ * Ya NO reemplaza el odontograma entero (podía borrar lo que otra pestaña
+ * autoguardó). Dos modos:
+ *  - `cambios` (el de hoy): solo lo que el doctor añadió y quitó en cada diente
+ *    que tocó, aplicado dentro de la transacción sobre la base actual;
+ *  - `records` (pestañas con el JS de antes del despliegue): solo añade lo que
+ *    falta, nunca borra; responde 410 desde RECORDS_COMPAT_HASTA.
  */
 /**
  * Modo `cambios`: aplica, DENTRO de una transacción y sobre lo que haya en la
@@ -119,9 +126,10 @@ async function aplicarCambios(
       const base = c.base ?? VACIO, now = c.now ?? VACIO;
       const toothNumber = Number(fdiStr);
       const caras = new Set([...Object.keys(base.surfaces ?? {}), ...Object.keys(now.surfaces ?? {})]);
-      for (const surface of caras) {
-        const quitar = menos(base.surfaces?.[surface as keyof typeof base.surfaces], now.surfaces?.[surface as keyof typeof now.surfaces]);
-        const poner = menos(now.surfaces?.[surface as keyof typeof now.surfaces], base.surfaces?.[surface as keyof typeof base.surfaces]);
+      for (const letra of caras) {
+        const surface = aBase(letra); // la «I» de una pestaña vieja se guarda como «O»
+        const quitar = menos(base.surfaces?.[letra as keyof typeof base.surfaces], now.surfaces?.[letra as keyof typeof now.surfaces]);
+        const poner = menos(now.surfaces?.[letra as keyof typeof now.surfaces], base.surfaces?.[letra as keyof typeof base.surfaces]);
         if (quitar.length) {
           borradas += (await tx.odontogramEntry.deleteMany({ where: { patientId, toothNumber, surface, conditionId: { in: quitar } } })).count;
         }
@@ -177,6 +185,93 @@ async function aplicarCambios(
   return NextResponse.json({ ok: true, dientes: dientes.length });
 }
 
+/**
+ * Modo viejo `records` con la regla segura (N3-O8): dentro de una transacción
+ * y sobre lo que haya en la base, añade los hallazgos y la nota que falten
+ * (la nota solo si el diente no tiene otra distinta). Nunca borra ni pisa.
+ */
+async function aplicarRecordsCompat(
+  req: NextRequest,
+  dbUser: { id: string; clinicId: string },
+  patientId: string,
+  records: Record<string, Rec>,
+) {
+  let total = 0;
+  for (const [fdiStr, rec] of Object.entries(records)) {
+    if (!FDI_TEETH.has(Number(fdiStr))) {
+      return NextResponse.json({ error: "invalid_tooth", tooth: fdiStr }, { status: 400 });
+    }
+    for (const ids of Object.values(rec.surfaces ?? {})) total += (ids ?? []).length;
+    total += (rec.tooth ?? []).length + 1;
+    if (total > MAX_SYNC_ROWS) return NextResponse.json({ error: "payload_too_large", limit: MAX_SYNC_ROWS }, { status: 413 });
+  }
+  const { ipAddress, userAgent } = extractAuditMeta(req);
+  const suplantacion = await suplantacionDeEstaPeticion();
+  let detalle: unknown = null;
+  let creadas = 0, sinQuitar = 0, notasSinPisar = 0;
+  await prisma.$transaction(async (tx) => {
+    const antes = await tx.odontogramEntry.findMany({
+      where: { patientId },
+      select: { toothNumber: true, surface: true, conditionId: true, notes: true },
+    });
+    const clave = (t: number, s: string | null, c: string) => `${t}:${s ?? "-"}:${c}`;
+    const hay = new Set(antes.map((r) => clave(r.toothNumber, r.surface, r.conditionId)));
+    const pedidas = new Set<string>();
+    for (const [fdiStr, rec] of Object.entries(records)) {
+      const toothNumber = Number(fdiStr);
+      for (const [letra, ids] of Object.entries(rec.surfaces ?? {})) {
+        const surface = aBase(letra);
+        for (const conditionId of ids ?? []) {
+          if (conditionId === NOTE_CONDITION) continue;
+          pedidas.add(clave(toothNumber, surface, conditionId));
+          if (hay.has(clave(toothNumber, surface, conditionId))) continue;
+          creadas += (await tx.odontogramEntry.createMany({
+            data: [{ patientId, toothNumber, surface, conditionId, notes: null }], skipDuplicates: true,
+          })).count;
+        }
+      }
+      for (const conditionId of rec.tooth ?? []) {
+        if (conditionId === NOTE_CONDITION) continue;
+        pedidas.add(clave(toothNumber, null, conditionId));
+        if (hay.has(clave(toothNumber, null, conditionId))) continue;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${toothNumber}:${conditionId}`}))`;
+        const ya = await tx.odontogramEntry.findFirst({ where: { patientId, toothNumber, surface: null, conditionId }, select: { id: true } });
+        if (!ya) { await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId, notes: null } }); creadas++; }
+      }
+      const nota = (rec.note ?? "").trim();
+      if (nota) {
+        const actual = antes.find((r) => r.toothNumber === toothNumber && r.conditionId === NOTE_CONDITION);
+        if (!actual) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${toothNumber}:${NOTE_CONDITION}`}))`;
+          const ya = await tx.odontogramEntry.findFirst({ where: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION }, select: { id: true } });
+          if (!ya) { await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION, notes: nota } }); creadas++; }
+        } else if ((actual.notes ?? "").trim() !== nota) {
+          notasSinPisar++;
+        }
+      }
+    }
+    // lo que hay y la consulta no trae: antes se borraba; ahora se deja
+    sinQuitar = antes.filter((r) => r.conditionId !== NOTE_CONDITION && !pedidas.has(clave(r.toothNumber, r.surface, r.conditionId))).length;
+    const changes = { _odontogram: { modo: "records-compat", after: { creadas, sinQuitar, notasSinPisar } } };
+    if (suplantacion) detalle = changes;
+    else {
+      await tx.auditLog.create({
+        data: {
+          clinicId: dbUser.clinicId, userId: dbUser.id, entityType: "patient", entityId: patientId,
+          action: "odontogram_sync", changes, ipAddress: ipAddress ?? null, userAgent: userAgent ?? null,
+        },
+      });
+    }
+  }, { timeout: 20_000, maxWait: 10_000 });
+  if (suplantacion) {
+    await anotarAccionDeSuplantacion(suplantacion, {
+      clinicId: dbUser.clinicId, entityType: "patient", entityId: patientId, action: "odontogram_sync",
+      changes: detalle, patientId, ipAddress, userAgent,
+    });
+  }
+  return NextResponse.json({ ok: true, modo: "compat", creadas, sinQuitar, notasSinPisar });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
@@ -204,121 +299,23 @@ export async function POST(req: NextRequest) {
     if (parsed.data.cambios) {
       return aplicarCambios(req, dbUser, patientId, parsed.data.cambios);
     }
-    // Modo viejo (`records`): REEMPLAZABA el odontograma entero y podía borrar
-    // lo que otra pestaña autoguardó. Nadie lo usa desde la revisión t4 (O4):
-    // se cierra (revisión t8, N-O6). El código de abajo queda solo como
-    // referencia de lo que hacía; no se ejecuta.
+    // Modo viejo (`records`): lo manda «Guardar consulta» de una pestaña que
+    // sigue con el JS de antes del despliegue (revisión t8, N3-O8). Antes
+    // REEMPLAZABA el odontograma entero; ahora, durante una temporada, se acepta
+    // con la regla segura: solo AÑADE lo que falta. Sin la base de la consulta no
+    // se sabe si algo que falta en `records` lo quitó el doctor o lo puso otra
+    // pestaña después, así que no se borra nada (y se dice cuántas cosas no se
+    // quitaron). La consulta guarda además su propia foto completa.
     if (parsed.data.records) {
-      return NextResponse.json(
-        { error: "gone", hint: "El reemplazo completo del odontograma ya no existe: manda `cambios` (solo los dientes tocados)." },
-        { status: 410 },
-      );
-    }
-    const records = parsed.data.records!;
-
-    // Tope ANTES de aplanar: cuenta longitudes sin materializar objetos-fila,
-    // con salida temprana (una bomba de 10^6 ids no llega a construir rows).
-    let flatCount = 0;
-    for (const rec of Object.values(records)) {
-      for (const ids of Object.values(rec.surfaces ?? {})) flatCount += ids.length;
-      flatCount += (rec.tooth ?? []).length;
-      if (rec.note) flatCount += 1;
-      if (flatCount > MAX_SYNC_ROWS) {
+      if (Date.now() >= RECORDS_COMPAT_HASTA) {
         return NextResponse.json(
-          { error: "payload_too_large", limit: MAX_SYNC_ROWS },
-          { status: 413 },
+          { error: "gone", hint: "El reemplazo completo del odontograma ya no existe: recarga la página para guardar solo los dientes tocados." },
+          { status: 410 },
         );
       }
+      return aplicarRecordsCompat(req, dbUser, patientId, parsed.data.records);
     }
-
-    // Aplanar `records` -> filas de odontogram_entries.
-    const rows: {
-      patientId: string;
-      toothNumber: number;
-      surface: string | null;
-      conditionId: string;
-      notes: string | null;
-    }[] = [];
-    for (const [fdiStr, rec] of Object.entries(records)) {
-      const toothNumber = Number(fdiStr);
-      // Rechazo explícito (no skip silencioso): este endpoint REEMPLAZA el
-      // odontograma completo; descartar dientes en silencio = pérdida de datos.
-      if (!FDI_TEETH.has(toothNumber)) {
-        return NextResponse.json(
-          { error: "invalid_tooth", tooth: fdiStr },
-          { status: 400 },
-        );
-      }
-      for (const [surface, ids] of Object.entries(rec.surfaces ?? {})) {
-        for (const conditionId of ids) {
-          if (conditionId === NOTE_CONDITION) continue;
-          rows.push({ patientId, toothNumber, surface, conditionId, notes: null });
-        }
-      }
-      for (const conditionId of rec.tooth ?? []) {
-        if (conditionId === NOTE_CONDITION) continue;
-        rows.push({ patientId, toothNumber, surface: null, conditionId, notes: null });
-      }
-      if (rec.note && rec.note.trim()) {
-        rows.push({ patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION, notes: rec.note });
-      }
-    }
-
-    const { ipAddress, userAgent } = extractAuditMeta(req);
-    // Reemplazo atómico del odontograma del paciente (solo de ESTE paciente),
-    // con snapshot defensivo: las filas previas quedan serializadas en
-    // audit_logs.changes (Json) dentro de la MISMA transacción — si algo
-    // falla no hay ni borrado ni snapshot; si commitea, el estado anterior es
-    // restaurable a mano. (Sin tabla de versiones en el schema, audit es el
-    // lugar natural.)
-    // «Ver como clínica» (decisión A): la foto de antes va a la bitácora de admin, no a la de la clínica.
-    const suplantacion = await suplantacionDeEstaPeticion();
-    let cambiosParaAdmin: unknown = null;
-    await prisma.$transaction(async (tx) => {
-      const prevRows = await tx.odontogramEntry.findMany({
-        where: { patientId },
-        select: { toothNumber: true, surface: true, conditionId: true, notes: true },
-        orderBy: { toothNumber: "asc" },
-      });
-      const del = await tx.odontogramEntry.deleteMany({ where: { patientId } });
-      const created = rows.length
-        ? await tx.odontogramEntry.createMany({ data: rows, skipDuplicates: true })
-        : { count: 0 };
-      if (suplantacion) {
-        cambiosParaAdmin = {
-          _odontogram: {
-            before: { count: del.count, rows: prevRows },
-            after: { count: created.count },
-          },
-        };
-      } else {
-        await tx.auditLog.create({
-          data: {
-            clinicId: dbUser.clinicId,
-            userId: dbUser.id,
-            entityType: "patient",
-            entityId: patientId,
-            action: "odontogram_sync",
-            changes: {
-              _odontogram: {
-                before: { count: del.count, rows: prevRows },
-                after: { count: created.count },
-              },
-            },
-            ipAddress: ipAddress ?? null,
-            userAgent: userAgent ?? null,
-          },
-        });
-      }
-    });
-    if (suplantacion) {
-      await anotarAccionDeSuplantacion(suplantacion, {
-        clinicId: dbUser.clinicId, entityType: "patient", entityId: patientId, action: "odontogram_sync",
-        changes: cambiosParaAdmin, patientId, ipAddress, userAgent,
-      });
-    }
-
-    return NextResponse.json({ ok: true, count: rows.length });
+    return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   } catch (err) {
     if (isMissingTableError(err)) {
       return NextResponse.json(

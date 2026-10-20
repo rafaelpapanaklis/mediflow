@@ -108,14 +108,13 @@ export async function GET(req: NextRequest) {
 
     const entries = rows.filter((r) => r.conditionId !== NOTE_CONDITION);
     const notes: Record<number, string> = {};
-    const noteTimes: Record<number, Date> = {};
     for (const r of rows) {
-      if (r.conditionId === NOTE_CONDITION && r.notes) { notes[r.toothNumber] = r.notes; noteTimes[r.toothNumber] = r.updatedAt; }
+      if (r.conditionId === NOTE_CONDITION && r.notes) notes[r.toothNumber] = r.notes;
     }
-    // clinicId y userId de la SESIÓN (no del paciente): el panel comprueba con
-    // ellos de quién es lo pendiente guardado en el navegador (autoguardado), y
-    // `noteTimes` le dice si una nota cambió después de un cambio recuperado.
-    return NextResponse.json({ entries, notes, noteTimes, clinicId: dbUser.clinicId, userId: dbUser.id });
+    // clinicId y userId de la SESIÓN (no del paciente): el autoguardado del
+    // panel comprueba con ellos, antes de reintentar algo que falló, que la
+    // sesión siga siendo la misma (nada sale firmado por otro ni a otra sede).
+    return NextResponse.json({ entries, notes, clinicId: dbUser.clinicId, userId: dbUser.id });
   } catch (err) {
     return unexpectedError(err);
   }

@@ -81,7 +81,7 @@ test("el marco del odontograma no pone ni una regla sobre el dibujo", () => {
   // Cada selector lleva `.odo-app` dentro para pesar más que la hoja original sin !important.
   assert.ok(!css.includes("!important"), "sin !important");
   const odo = leer("components/dashboard/expediente-rediseno/odontograma.tsx");
-  // ws1-t11 (revisión t8): además lleva la sesión de la página (llave de lo pendiente en el navegador)
+  // ws1-t11 (revisión t8): además lleva la sesión de la página (de quién es lo pendiente)
   assert.match(odo, /<OdontogramV2 patientId=\{patientId\} sesion=\{sesion\} dedupeLegend edgeScrollHint \/>/, "monta el mismo OdontogramV2 con las dos señales que ya llevaba con la bandera");
 });
 

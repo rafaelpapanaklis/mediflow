@@ -69,10 +69,13 @@ async function safeJson<T>(res: Response): Promise<T | null> {
  */
 export class OdontogramHttpError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** código de la respuesta (`forbidden`, `patient_not_found`, `two_factor_required`…), si lo hubo */
+  code: string | null;
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.name = "OdontogramHttpError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -95,11 +98,11 @@ async function send(url: string, init: RequestInit, opts: WriteOptions | undefin
     clearTimeout(timer);
   }
   // una redirección seguida (al login) no es un guardado: se trata como sesión vencida
-  if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401);
-  if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, fallback), res.status);
+  if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401, "unauthorized");
+  if (!res.ok) throw await httpError(res, fallback);
 }
 
-export const SESION_VENCIDA = "Tu sesión venció, vuelve a entrar. Lo que marcaste sigue pendiente y se guardará al volver.";
+export const SESION_VENCIDA = "Tu sesión venció, vuelve a entrar. Lo que marcaste sigue pendiente en esta pestaña (no la cierres) y se guardará al volver.";
 
 /** Códigos de la API del odontograma → lo que entiende la clínica. */
 const MENSAJES: Record<string, string> = {
@@ -114,15 +117,16 @@ const MENSAJES: Record<string, string> = {
   internal_error: "Falló el servidor.",
 };
 
-async function readErrorMessage(res: Response, fallback: string): Promise<string> {
-  if (res.status === 401) return SESION_VENCIDA;
+/** La respuesta de error, en español y con su código (la cola decide con él). */
+async function httpError(res: Response, fallback: string): Promise<OdontogramHttpError> {
+  if (res.status === 401) return new OdontogramHttpError(SESION_VENCIDA, 401, "unauthorized");
   const data = await safeJson<{ error?: string; code?: string }>(res);
   const code = data?.error ?? "";
-  if (MENSAJES[code]) return `${fallback}: ${MENSAJES[code]}`;
+  if (MENSAJES[code]) return new OdontogramHttpError(`${fallback}: ${MENSAJES[code]}`, res.status, code);
   // el 403 del reto 2FA (middleware) ya trae su texto en español y un `code` propio
-  if (data?.code && data.error) return data.error;
-  if (res.status >= 500) return `${fallback}: falló el servidor (${res.status}).`;
-  return `${fallback} (error ${res.status}).`;
+  if (data?.code && data.error) return new OdontogramHttpError(data.error, res.status, data.code);
+  if (res.status >= 500) return new OdontogramHttpError(`${fallback}: falló el servidor (${res.status}).`, res.status, code || null);
+  return new OdontogramHttpError(`${fallback} (error ${res.status}).`, res.status, code || null);
 }
 
 /* ============================================================
@@ -165,13 +169,11 @@ export async function fetchRecords(patientId: string): Promise<Records> {
 /** Lo que devuelve la lectura: el odontograma y de quién es la sesión que lo pidió. */
 export interface OdontogramRead {
   records: Records;
-  /** clínica y usuario de la SESIÓN (no del paciente): de quién es lo pendiente en el navegador */
+  /** clínica y usuario de la SESIÓN (no del paciente): de quién es lo pendiente del autoguardado */
   clinicId: string | null;
   userId: string | null;
-  /** filas tal cual (letras de la base) con su `updatedAt`, para aplicar cambios recuperados */
+  /** filas tal cual (letras de la base) */
   entries: OdontogramEntry[];
-  /** cuándo se tocó por última vez la nota de cada diente */
-  noteTimes: Record<number, string>;
 }
 
 /** Lee el odontograma. Sin red, el error sale en español (revisión t8, O3). */
@@ -182,12 +184,12 @@ export async function fetchOdontogram(patientId: string): Promise<OdontogramRead
     res = await fetch(`${BASE}?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
   } catch {
     // el «Failed to fetch» / «Load failed» del navegador no le dice nada a la clínica
-    throw new OdontogramHttpError(`${fallback}: sin conexión. Lo que marques se guarda en este navegador y se enviará al volver la red.`, 0);
+    throw new OdontogramHttpError(`${fallback}: sin conexión. Lo que marques se enviará en cuanto vuelva la red; no cierres esta pestaña.`, 0);
   }
-  if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401);
-  if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, fallback), res.status);
+  if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401, "unauthorized");
+  if (!res.ok) throw await httpError(res, fallback);
   const data = await safeJson<{
-    entries: OdontogramEntry[]; notes?: Record<string, string>; noteTimes?: Record<string, string>;
+    entries: OdontogramEntry[]; notes?: Record<string, string>;
     clinicId?: string; userId?: string;
   }>(res);
   const records = entriesToRecords(data?.entries ?? []);
@@ -200,14 +202,11 @@ export async function fetchOdontogram(patientId: string): Promise<OdontogramRead
     if (!records[fdi]) records[fdi] = { surfaces: {}, tooth: [] };
     records[fdi].note = note;
   }
-  const noteTimes: Record<number, string> = {};
-  for (const [tooth, t] of Object.entries(data?.noteTimes ?? {})) noteTimes[Number(tooth)] = String(t);
   return {
     records,
     clinicId: typeof data?.clinicId === "string" ? data.clinicId : null,
     userId: typeof data?.userId === "string" ? data.userId : null,
     entries: data?.entries ?? [],
-    noteTimes,
   };
 }
 
@@ -298,7 +297,7 @@ export async function syncCambios(patientId: string, cambios: Record<number, Cam
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ patientId, cambios: out }),
   });
-  if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, "No se pudo actualizar el odontograma"), res.status);
+  if (!res.ok) throw await httpError(res, "No se pudo actualizar el odontograma");
 }
 
 /** Las caras con la letra de la base (la «I» de los anteriores viaja como «O»). */
@@ -316,11 +315,11 @@ export function recordsForServer(records: Records): Records {
 }
 
 /**
- * @deprecated Revisión t8 (N-O6): sin uso. El reemplazo completo del
- * odontograma (`records` en /api/odontogram/sync) ahora responde 410 Gone,
- * porque podía borrar lo que otra pestaña autoguardó. «Guardar consulta» usa
- * `syncCambios` (solo los dientes tocados). Se deja la función, sin uso, para
- * no borrar nada; llamarla falla con 410.
+ * @deprecated Revisión t8 (N-O6): sin uso. El modo `records` de
+ * /api/odontogram/sync ya no reemplaza el odontograma (podía borrar lo que otra
+ * pestaña autoguardó): hasta el 1-dic-2026 solo AÑADE lo que falta (pestañas
+ * con el JS de antes del despliegue) y después responde 410. «Guardar consulta»
+ * usa `syncCambios` (solo los dientes tocados). Se deja la función, sin uso.
  */
 export async function syncOdontogram(patientId: string, records: Records): Promise<void> {
   const res = await fetch(`${BASE}/sync`, {
@@ -328,5 +327,5 @@ export async function syncOdontogram(patientId: string, records: Records): Promi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ patientId, records: recordsForServer(records) }),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo sincronizar el odontograma"));
+  if (!res.ok) throw await httpError(res, "No se pudo sincronizar el odontograma");
 }

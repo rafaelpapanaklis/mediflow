@@ -40,7 +40,14 @@ function clock() {
 }
 const settle = () => new Promise((r) => setImmediate(r));
 
-class HttpErr extends Error { constructor(public status: number) { super(`HTTP ${status}`); } }
+/** Error como los del adaptador: 403/404 llevan el código de la API (`forbidden` / `patient_not_found`). */
+class HttpErr extends Error {
+  code: string | null;
+  constructor(public status: number) {
+    super(`HTTP ${status}`);
+    this.code = status === 403 ? "forbidden" : status === 404 ? "patient_not_found" : null;
+  }
+}
 
 /** Servidor de mentira: guarda lo recibido; `fail` decide si una petición falla. */
 function server() {

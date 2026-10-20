@@ -124,14 +124,50 @@ test("O4: «Guardar consulta» aplica solo el cambio del doctor y NO pisa lo que
   assert.equal(TX_OPTS[0]?.timeout, 20_000, "tope de la transacción por encima de los 5 s por defecto (t8)");
 });
 
-test("t8 N-O6: el modo viejo (`records`, reemplazo total) responde 410 y no toca nada", async () => {
+test("t8 N3-O8: una pestaña con el JS de ANTES del despliegue («records») no se rechaza: se aplica con la regla segura (solo añade)", async () => {
+  // El JS viejo manda el odontograma entero de la consulta. Mientras, otra
+  // pestaña autoguardó una corona en el 16 y una caries en el 26, que la foto
+  // de la consulta no trae. Antes: se borraban. Con 410: «Guardar consulta»
+  // avisaba que el odontograma no se actualizó. Ahora: se añade lo que falta
+  // (la restauración y la incisal del 11, que el JS viejo manda como «I») y
+  // NO se borra nada.
   FILAS.push(fila(16, null, "crown"), fila(26, "O", "caries"));
+  const res = await post({
+    patientId: PACIENTE,
+    records: {
+      16: { surfaces: { O: ["caries"], M: ["restoration"] }, tooth: [] },
+      11: { surfaces: { I: ["caries"] }, tooth: [], note: "otra nota" },
+    },
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.modo, "compat");
+  assert.deepEqual(estado(), [
+    "11:-:__note__=sensible",   // la nota que había no se pisa
+    "11:O:caries",              // la «I» del JS viejo, guardada como «O»
+    "16:-:crown",               // autoguardado de otra pestaña: se queda
+    "16:M:restoration",         // lo que añadió la consulta
+    "16:O:caries",
+    "26:O:caries",              // se queda
+    "36:-:rct",                 // se queda
+  ]);
+  assert.equal(body.sinQuitar, 3, "corona del 16, caries del 26 y rct del 36: antes se borraban");
+  assert.equal(body.notasSinPisar, 1);
+  assert.equal(AUDIT[0].changes._odontogram.modo, "records-compat");
+});
+
+test("t8 N3-O8: pasada la temporada (1-dic-2026) el modo viejo responde 410 sin tocar nada", async () => {
   const antes = estado();
-  const res = await post({ patientId: PACIENTE, records: { 16: { surfaces: { M: ["restoration"] }, tooth: [] } } });
-  assert.equal(res.status, 410);
-  assert.equal((await res.json()).error, "gone");
-  assert.deepEqual(estado(), antes, "antes borraba la corona, la caries del 26, la endodoncia y la nota");
-  assert.equal(AUDIT.length, 0);
+  const real = Date.now;
+  Date.now = () => Date.parse("2026-12-01T06:00:01Z");
+  try {
+    const res = await post({ patientId: PACIENTE, records: { 16: { surfaces: { M: ["restoration"] }, tooth: [] } } });
+    assert.equal(res.status, 410);
+    assert.match((await res.json()).hint, /recarga la página/);
+  } finally {
+    Date.now = real;
+  }
+  assert.deepEqual(estado(), antes);
 });
 
 test("O4: diente completo y nota con el mismo candado que el autoguardado; sin duplicar lo que ya está", async () => {
@@ -159,14 +195,13 @@ test("O4: un diente que no existe o mandar los dos modos se rechaza sin tocar na
   assert.deepEqual(estado(), antes);
 });
 
-test("O1: GET /api/odontogram devuelve la clínica de la SESIÓN (llave de la copia del navegador)", async () => {
+test("GET /api/odontogram devuelve la clínica y el usuario de la SESIÓN (de quién es lo pendiente del autoguardado)", async () => {
   const { NextRequest } = await import("next/server");
   const { GET } = await import("../route");
   const res = await GET(new NextRequest(`http://localhost/api/odontogram?patientId=${PACIENTE}`));
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.clinicId, CLINICA);
-  assert.equal(body.userId, "u_dr", "el usuario de la sesión: de quién es lo pendiente en el navegador (t8 N-O1)");
+  assert.equal(body.userId, "u_dr", "antes de reintentar, la cola comprueba que la sesión siga siendo la misma (t8 N3-O2)");
   assert.deepEqual(body.notes, { 11: "sensible" });
-  assert.ok(body.noteTimes[11], "cuándo se tocó la nota (para no pisar una más nueva al recuperar)");
 });

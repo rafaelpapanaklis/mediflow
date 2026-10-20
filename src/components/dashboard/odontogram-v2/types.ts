@@ -223,9 +223,10 @@ export interface OdontogramV2Props {
   value?: Records;
   onChange?: (records: Records) => void;
   /**
-   * Clínica y usuario de la SESIÓN con que el servidor pintó la página (revisión
-   * t8, N-O1/N-O3): llave de lo pendiente guardado en el navegador. Sin esto, la
-   * llave sale de la sesión que devuelve el GET (y hasta entonces no hay copia).
+   * Clínica y usuario de la SESIÓN con que el servidor pintó la página: de quién
+   * es la cola de autoguardado. Antes de reintentar algo que falló se comprueba
+   * que la sesión siga siendo esta (nada sale firmado por otro usuario ni a otra
+   * sede). Sin esto, se toma la sesión que devuelve el primer GET.
    */
   sesion?: { clinicId: string; userId: string };
   /**

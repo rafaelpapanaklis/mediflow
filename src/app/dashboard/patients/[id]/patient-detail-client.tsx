@@ -1084,7 +1084,7 @@ export function PatientDetailClient({
   // para el resto, ver PUT/PATCH de /api/patients/[id]). [] = todos lo ven.
   const isVisibilityAdmin = currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
   // Sesión con que se pintó la página: de quién es lo pendiente del odontograma
-  // en el navegador (ws1-t11, revisión t8). Memo: misma identidad entre renders.
+  // (ws1-t11, revisión t8). Memo: misma identidad entre renders.
   const sesionOdontograma = useMemo(
     () => (currentUser.clinicId ? { clinicId: currentUser.clinicId, userId: currentUser.id } : undefined),
     [currentUser.clinicId, currentUser.id],

@@ -1,58 +1,62 @@
 /* ============================================================
    autosave — cola de guardado del odontograma VIVO (ws1-t11).
 
-   Cada cambio (marcar/quitar un hallazgo, la nota del diente, limpiar un
-   diente o todo) se pinta al instante y se encola aquí. La cola:
-   - manda las escrituras de UNA en UNA y en orden, así marcar y desmarcar
-     deprisa nunca llega al revés;
-   - junta las que tocan lo mismo (mismo diente+cara+hallazgo, o la nota del
-     mismo diente) mientras esperan: solo viaja la última, nada se manda dos
-     veces;
+   Rafael pidió «que se guarde solo, sin poner Guardar». Así funciona:
+   - cada cambio (marcar/quitar un hallazgo, la nota del diente, limpiar un
+     diente o todo) se pinta al instante y se encola aquí;
+   - la cola manda las escrituras de UNA en UNA y en orden, así marcar y
+     desmarcar deprisa nunca llega al revés, y junta las que tocan lo mismo
+     mientras esperan: solo viaja la última, nada se manda dos veces;
    - la nota se guarda sola tras una pausa al teclear (debounce) y al salir
      del cuadro, cerrar el panel, cambiar de pestaña o cerrar la página;
-   - si falla por red o por el servidor (0, 408, 429, 5xx) reintenta sola con
-     espera creciente y NO revierte lo que el doctor marcó; si el servidor dice
-     que no (403, 404, 400…) aparta ESA escritura, avisa con «Reintentar» y
-     «Descartar», y sigue guardando lo demás;
-   - vive por paciente y por pestaña del navegador (registro de módulo): si el
-     odontograma se desmonta con algo pendiente (cambio de pestaña de la
-     ficha), lo pendiente se sigue mandando y al volver se pinta encima de lo
-     que diga el servidor;
-   - (revisión t4, O1) copia lo pendiente en el navegador (localStorage, por
-     clínica y paciente) en cada cambio: si se cierra el navegador sin red —o
-     iOS mata la pestaña, donde no hay `beforeunload`— lo pendiente sale solo
-     la próxima vez que se abra a ese paciente. Los avisos de cierre
-     (`pagehide`, `visibilitychange`, `beforeunload`, `online`) se registran
-     aquí, no en el componente, y un aviso fijo «sin guardar» se ve aunque el
-     odontograma ya no esté en pantalla.
+   - si falla la red o el servidor (0, 408, 429, 5xx) reintenta sola MIENTRAS
+     la pestaña siga abierta, sin revertir lo que el doctor marcó, y un aviso
+     fijo («No se guardó: sin conexión, reintentando…») se queda a la vista
+     mientras haya algo pendiente, esté o no el odontograma en pantalla;
+   - al cerrar u ocultar la pestaña con algo pendiente: `beforeunload` avisa y
+     `pagehide` / `visibilitychange` mandan lo pendiente con keepalive. Si aun
+     así no sale, eso se pierde — pero el aviso estuvo a la vista todo el
+     tiempo.
 
-   Las escrituras son idempotentes en el servidor (upsert / deleteMany), así
-   que un reintento de algo que sí llegó no duplica nada.
+   NO hay copia en el navegador entre sesiones (revisión t8, tercera vuelta:
+   decisión del gerente). Al cargar se borran las llaves `dc:odo-pendiente:*`
+   y `dc:odo-ultima-clinica` que dejaron versiones anteriores de esta rama
+   (memoria del navegador, no datos de la clínica).
+
+   Quién manda: cada cola sabe de qué sesión es (usuario y clínica que pintó la
+   página). Antes de reintentar algo que falló —«Reintentar», vuelve la red,
+   vuelve el foco— se pregunta quién tiene la sesión ahora: si es otro usuario
+   u otra sede, NO se manda (no sale firmado por otro ni a otra sede) y se
+   dice qué hacer.
+
+   Las escrituras son idempotentes en el servidor (upsert / deleteMany y el
+   candado de las filas de diente completo), así que un reintento de algo que
+   sí llegó no duplica nada.
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
 
 export type SaveOp =
   | { kind: "put"; toothNumber: number; surface: string | null; conditionId: string }
   | { kind: "delete"; toothNumber: number; surface: string | null; conditionId: string }
-  /** `prev`: la nota tal como estaba antes de que el doctor la tocara (para no pisar una nota más nueva al recuperar) */
-  | { kind: "note"; toothNumber: number; text: string; prev?: string }
+  | { kind: "note"; toothNumber: number; text: string }
   | { kind: "reset" };
 
 export type SaveState = "idle" | "saving" | "saved" | "retrying" | "error" | "discarded";
 
 export interface SaveStatus {
   state: SaveState;
-  /** escrituras que faltan por confirmar (incluida la nota que se está tecleando) */
+  /** escrituras que faltan por confirmar (incluida la nota que se está tecleando y lo apartado) */
   pending: number;
   /** mensaje del último fallo (retrying / error / discarded) */
   error?: string;
-  /** cuántas escrituras descartó el servidor (403/404) desde que se creó la cola */
+  /** cuántas escrituras descartó el servidor (403/404 de verdad) desde que se creó la cola */
   discarded: number;
-  /** cambios de una sesión anterior de ESTE usuario en este navegador, esperando «Guardar / Descartar» */
-  recovered: { count: number; at: number } | null;
 }
 
-/** Lo que manda cada operación al servidor. Lanza un error con `status` (0 = sin respuesta). */
+/** Quién tiene la sesión: usuario y clínica (sede) activa. */
+export interface SessionInfo { userId: string; clinicId: string }
+
+/** Lo que manda cada operación al servidor. Lanza un error con `status` (0 = sin respuesta) y `code`. */
 export type SendFn = (op: SaveOp, opts: { keepalive: boolean }) => Promise<void>;
 
 export interface QueueOptions {
@@ -61,14 +65,16 @@ export interface QueueOptions {
   noteDelay?: number;
   /** esperas entre reintentos automáticos (ms); el último se repite */
   retryDelays?: number[];
+  /** lo que lleve este tiempo fallando ya no se reintenta solo: se aparta y se pregunta */
+  staleAfterMs?: number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (id: unknown) => void;
   now?: () => number;
-  /** ¿Quién tiene la sesión ahora? (userId) — antes de reintentar lo que falló por 401 */
-  whoAmI?: () => Promise<string | null>;
+  /** ¿Quién tiene la sesión ahora? — antes de reintentar lo que falló */
+  whoAmI?: () => Promise<SessionInfo | null>;
 }
 
-/** Lo mínimo de localStorage que se usa (inyectable en las pruebas). */
+/** Lo mínimo de localStorage para borrar lo que dejaron versiones anteriores. */
 export interface KeyValueStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -77,81 +83,26 @@ export interface KeyValueStore {
   readonly length: number;
 }
 
-/** Cada pestaña escribe su propia copia: dos pestañas del mismo paciente no se borran la una a la otra. */
-const TAB_ID = Math.random().toString(36).slice(2, 10);
+/** Llaves que dejaron en el navegador versiones anteriores de esta rama (copia entre sesiones, ya quitada). */
+export const LLAVES_VIEJAS = ["dc:odo-pendiente:", "dc:odo-ultima-clinica"];
 
-/**
- * Lo pendiente guardado en el navegador caduca a las 48 h de hecho cada
- * cambio (revisión t8, N-O4): pasado eso no se ofrece recuperarlo y la copia se
- * borra del disco, sea del paciente que sea.
- */
-export const PENDIENTE_CADUCA_MS = 48 * 60 * 60 * 1000;
-
-/** Todas las copias empiezan así (el barrido de caducadas las busca por este prefijo). */
-export const PENDIENTE_PREFIJO = "dc:odo-pendiente:";
-
-/**
- * Prefijo de lo pendiente de un paciente: por clínica y USUARIO de la SESIÓN
- * (revisión t8, N-O1 y N-O3); cada pestaña añade `:<pestaña>`. Otro usuario en
- * el mismo navegador tiene otra llave: nunca ve ni manda lo de este.
- */
-export function pendienteKey(clinicId: string, userId: string, patientId: string): string {
-  return `${PENDIENTE_PREFIJO}v2:${clinicId}:${userId}:${patientId}`;
-}
-
-/** Una escritura guardada en la copia, con cuándo la hizo el doctor. */
-export interface OpGuardada { op: SaveOp; at: number }
-
-function esOpValida(o: unknown): o is SaveOp {
-  const op = o as Record<string, unknown> | null;
-  if (!op || typeof op !== "object") return false;
-  if (op.kind === "reset") return true;
-  if (typeof op.toothNumber !== "number" || !Number.isInteger(op.toothNumber)) return false;
-  if (op.kind === "note") return typeof op.text === "string" && (op.prev === undefined || typeof op.prev === "string");
-  return (op.kind === "put" || op.kind === "delete")
-    && typeof op.conditionId === "string"
-    && (op.surface === null || typeof op.surface === "string");
-}
-
-/** Lee una copia; null si está corrupta o no es del formato actual. */
-function leerCopia(raw: string | null): { savedAt: number; ops: OpGuardada[] } | null {
-  try {
-    const d = JSON.parse(raw ?? "null");
-    if (!d || d.v !== 2 || typeof d.savedAt !== "number" || !Array.isArray(d.ops)) return null;
-    const ops = (d.ops as unknown[]).filter((x): x is OpGuardada => {
-      const g = x as OpGuardada;
-      return !!g && typeof g.at === "number" && esOpValida(g.op);
-    });
-    return ops.length === d.ops.length ? { savedAt: d.savedAt, ops } : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Barre TODAS las copias de lo pendiente del navegador (de cualquier paciente,
- * usuario o clínica): borra las corruptas o de un formato viejo y quita los
- * cambios de más de 48 h; si no queda nada, borra la copia (revisión t8,
- * N-O4). Devuelve cuántas copias borró. Nunca lanza.
- */
-export function sweepPendientes(store: KeyValueStore | null, now: number): number {
+/** Borra del navegador las copias de versiones anteriores. Devuelve cuántas borró. Nunca lanza. */
+export function limpiarCopiasViejas(store: KeyValueStore | null): number {
   if (!store) return 0;
-  let borradas = 0;
+  let n = 0;
   try {
     const keys: string[] = [];
     for (let i = 0; i < store.length; i++) {
       const k = store.key(i);
-      if (k && k.startsWith(PENDIENTE_PREFIJO)) keys.push(k);
+      if (k && LLAVES_VIEJAS.some((p) => k.startsWith(p))) keys.push(k);
     }
-    for (const k of keys) {
-      const c = leerCopia(store.getItem(k));
-      const vivos = c ? c.ops.filter((g) => now - g.at < PENDIENTE_CADUCA_MS) : [];
-      if (!c || !vivos.length) { store.removeItem(k); borradas++; continue; }
-      if (vivos.length !== c.ops.length) store.setItem(k, JSON.stringify({ v: 2, savedAt: c.savedAt, ops: vivos }));
-    }
+    keys.forEach((k) => { store.removeItem(k); n++; });
   } catch { /* bloqueado */ }
-  return borradas;
+  return n;
 }
+
+/** Lo que lleva más de esto fallando ya no se reintenta solo (revisión t8, N3-O3). */
+export const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export function opKey(op: SaveOp): string {
   if (op.kind === "reset") return "reset";
@@ -159,163 +110,100 @@ export function opKey(op: SaveOp): string {
   return `f:${op.toothNumber}:${op.surface ?? "-"}:${op.conditionId}`;
 }
 
-/** ¿Vale la pena reintentar? Sin respuesta, tiempo agotado, demasiadas peticiones o fallo del servidor. */
+/**
+ * Qué hacer con un fallo:
+ *  - red: sin respuesta, tiempo agotado, demasiadas peticiones o fallo del
+ *    servidor → reintentar solo;
+ *  - sesion: sesión vencida (401) o el reto de dos pasos pendiente (403
+ *    `two_factor_required` del middleware) → apartar y reintentar cuando
+ *    vuelva el MISMO usuario (revisión t8, N3-O1: ya no se descarta);
+ *  - descartar: la API dice que ese usuario no puede o que el paciente no es
+ *    de esta clínica (`forbidden`, `patient_not_found`) → reintentar no lo
+ *    arreglará (salvo que la sede activa haya cambiado: se comprueba antes);
+ *  - rechazo: cualquier otro 4xx → apartar con «Reintentar / Descartar».
+ */
+export type TipoDeFallo = "red" | "sesion" | "descartar" | "rechazo";
+
+export function tipoDeFallo(err: unknown): TipoDeFallo {
+  const e = err as { status?: unknown; code?: unknown } | null;
+  const status = typeof e?.status === "number" ? e.status : null;
+  const code = typeof e?.code === "string" ? e.code : null;
+  if (status === null || status === 0 || status === 408 || status === 429 || status >= 500) return "red";
+  if (status === 401 || code === "two_factor_required") return "sesion";
+  if ((status === 403 && code === "forbidden") || (status === 404 && code === "patient_not_found")) return "descartar";
+  return "rechazo";
+}
+
+/** ¿Vale la pena reintentar solo? */
 export function isTransient(err: unknown): boolean {
-  const status = (err as { status?: unknown })?.status;
-  if (typeof status !== "number") return true;
-  return status === 0 || status === 408 || status === 429 || status >= 500;
+  return tipoDeFallo(err) === "red";
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error && err.message ? err.message : "No se pudo guardar";
 }
 
+export const OTRA_SESION =
+  "La sesión de esta pestaña cambió (otro usuario u otra sede en otra pestaña). Vuelve a la sede y al usuario con que abriste a este paciente y pulsa «Reintentar»; no cierres esta pestaña.";
+
 export class SaveQueue {
   private queue: SaveOp[] = [];
   private inflight: SaveOp | null = null;
-  /** lo que el servidor rechazó (4xx): no se reintenta solo ni detiene a lo demás */
+  /** lo apartado (rechazo, sesión, otra sede, demasiado viejo): no se reintenta solo ni detiene a lo demás */
   private failed: SaveOp[] = [];
   private failError: string | undefined;
   private transientError: string | undefined;
+  private lastFailKind: TipoDeFallo | null = null;
   private noteDrafts = new Map<number, string>();
   private noteTimers = new Map<number, unknown>();
   private retryTimer: unknown = null;
   private attempt = 0;
   private version = 0;
   private touched = false;
-  private status: SaveStatus = { state: "idle", pending: 0, discarded: 0, recovered: null };
+  private status: SaveStatus = { state: "idle", pending: 0, discarded: 0 };
   private listeners = new Set<(s: SaveStatus) => void>();
+  /** cuándo hizo el doctor cada escritura pendiente (por opKey) */
+  private opAt = new Map<string, number>();
+  /** escrituras que ya fallaron por la red al menos una vez */
+  private retried = new Set<string>();
+  private owner: SessionInfo | null = null;
+  private attachedCount = 0;
+  private discardedCount = 0;
+  private discardError: string | undefined;
+  private discardedOps: SaveOp[] = [];
   private readonly send: SendFn;
   private readonly noteDelay: number;
   private readonly retryDelays: number[];
+  private readonly staleAfterMs: number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (id: unknown) => void;
   private readonly now: () => number;
-  private store: KeyValueStore | null = null;
-  private storeKey: string | null = null;
-  private storePrefix: string | null = null;
-  private ownerUser: string | null = null;
-  private attachedCount = 0;
-  private lastFailStatus: number | null = null;
-  /** cuándo hizo el doctor cada escritura pendiente (por opKey) — viaja en la copia */
-  private opAt = new Map<string, number>();
-  /** la nota antes de empezar a teclear, por diente */
-  private noteBase = new Map<number, string>();
-  private discardedCount = 0;
-  private discardError: string | undefined;
-  /** copias de una carga anterior (o de otra pestaña) de este usuario: esperan «Guardar / Descartar» */
-  private recovered: OpGuardada[] = [];
-  private recoveredKeys: string[] = [];
-  private readonly whoAmI: (() => Promise<string | null>) | null;
+  private readonly whoAmI: (() => Promise<SessionInfo | null>) | null;
 
   constructor(opts: QueueOptions) {
     this.send = opts.send;
     this.noteDelay = opts.noteDelay ?? 1500;
     this.retryDelays = opts.retryDelays ?? [1000, 3000, 8000, 20000, 30000];
+    this.staleAfterMs = opts.staleAfterMs ?? STALE_AFTER_MS;
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
     this.now = opts.now ?? (() => Date.now());
     this.whoAmI = opts.whoAmI ?? null;
   }
 
-  /* ---------------- copia en el navegador (O1, revisión t8) ---------------- */
-  /**
-   * Engancha la copia del navegador con la llave de la SESIÓN (clínica +
-   * usuario + paciente). Lo que quedó de una carga anterior de ESTE usuario
-   * NO se manda solo (revisión t8, N-O2): queda en `recovered` y la pantalla
-   * pregunta «Guardar / Descartar». Si la cola estaba enganchada a OTRA sesión
-   * (otro usuario o clínica en la misma pestaña), lo de esa sesión se deja en
-   * su copia —sin mandarlo con la sesión nueva— y la cola empieza vacía.
-   * Devuelve cuántos cambios recuperables encontró.
-   */
-  bindStorage(store: KeyValueStore | null, prefix: string, userId: string, tabId: string = TAB_ID): number {
-    if (!store) return 0;
-    const own = `${prefix}:${tabId}`;
-    if (this.storeKey === own) return this.recovered.length;
-    if (this.storePrefix && this.storePrefix !== prefix) this.abandonarSesion();
-    this.store = store;
-    this.storeKey = own;
-    this.storePrefix = prefix;
-    this.ownerUser = userId;
-    sweepPendientes(store, this.now());
-    const ajenas: string[] = [];
-    try {
-      for (let i = 0; i < store.length; i++) {
-        const k = store.key(i);
-        if (k && k !== own && k.startsWith(`${prefix}:`)) ajenas.push(k);
-      }
-    } catch { /* bloqueado */ }
-    const recuperadas: OpGuardada[] = [];
-    for (const k of ajenas) {
-      const c = leerCopia(store.getItem(k));
-      if (!c) continue;
-      recuperadas.push(...c.ops.filter((g) => this.now() - g.at < PENDIENTE_CADUCA_MS));
-      this.recoveredKeys.push(k);
-    }
-    // por fecha del cambio, no por el orden de las llaves
-    this.recovered = recuperadas.sort((x, y) => x.at - y.at);
-    this.persist();
-    this.refresh();
-    return this.recovered.length;
+  /* ---------------- de quién es ---------------- */
+  /** La sesión con que se abrió al paciente (la pinta el servidor, o la devuelve el primer GET). */
+  setOwner(owner: SessionInfo | null) {
+    if (owner && !this.owner) this.owner = owner;
   }
 
-  /** La pestaña cambió de sesión: lo de la anterior se queda en su copia y no se manda. */
-  private abandonarSesion() {
-    this.persist();
-    this.noteTimers.forEach((id) => this.clearTimer(id));
-    this.noteTimers.clear();
-    this.noteDrafts.clear();
-    this.noteBase.clear();
-    this.queue = [];
-    this.failed = [];
-    this.opAt.clear();
-    this.recovered = [];
-    this.recoveredKeys = [];
-    if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
-    this.store = null; this.storeKey = null; this.storePrefix = null; this.ownerUser = null;
-  }
+  getOwner(): SessionInfo | null { return this.owner; }
 
-  /** Lo recuperado de una carga anterior (en orden de fecha). */
-  getRecovered(): OpGuardada[] { return [...this.recovered]; }
-
-  /** «Descartar» lo recuperado: se borra del navegador y no se manda. */
-  discardRecovered() {
-    try { this.recoveredKeys.forEach((k) => this.store?.removeItem(k)); } catch { /* bloqueado */ }
-    this.recovered = [];
-    this.recoveredKeys = [];
-    this.refresh();
-  }
-
-  /**
-   * «Guardar» lo recuperado: encola lo que `planRecovery` decidió aplicar
-   * sobre lo que hay HOY (ya no es una repetición ciega) y suelta las copias
-   * viejas — lo encolado vive ya en la copia propia.
-   */
-  applyRecovered(ops: SaveOp[]) {
-    ops.forEach((op) => this.enqueue(op));
-    this.discardRecovered();
-  }
-
-  /** Todo lo que aún no está confirmado, en orden, con la nota a medias como nota. */
-  private pendingOps(): OpGuardada[] {
-    const at = (op: SaveOp) => this.opAt.get(opKey(op)) ?? this.now();
-    const notes: OpGuardada[] = [...this.noteDrafts].map(([toothNumber, text]) => {
-      const op: SaveOp = { kind: "note", toothNumber, text, prev: this.noteBase.get(toothNumber) };
-      return { op, at: at(op) };
-    });
-    return [...(this.inflight ? [this.inflight] : []), ...this.failed, ...this.queue]
-      .map((op) => ({ op, at: at(op) }))
-      .concat(notes);
-  }
-
-  /** Escribe (o borra) la copia del navegador. Nunca lanza. */
-  persist() {
-    if (!this.store || !this.storeKey) return;
-    try {
-      const ops = this.pendingOps();
-      if (!ops.length) this.store.removeItem(this.storeKey);
-      else this.store.setItem(this.storeKey, JSON.stringify({ v: 2, savedAt: this.now(), ops }));
-    } catch { /* lleno o bloqueado: queda la cola en memoria */ }
+  /** ¿La sesión de ahora es la misma con que se abrió? Sin forma de saberlo, sí. */
+  private async sameSession(): Promise<boolean> {
+    if (!this.whoAmI || !this.owner) return true;
+    const now = await this.whoAmI().catch(() => null);
+    return !!now && now.userId === this.owner.userId && now.clinicId === this.owner.clinicId;
   }
 
   /** El odontograma de este paciente está en pantalla (su indicador ya avisa). */
@@ -328,23 +216,8 @@ export class SaveQueue {
 
   isAttached(): boolean { return this.attachedCount > 0; }
 
-  /** ¿Lo último que falló fue la sesión vencida? (al volver a la pestaña se reintenta) */
-  failedBySession(): boolean { return this.failed.length > 0 && this.lastFailStatus === 401; }
-
-  /**
-   * Tras un 401: al volver a la pestaña se reintenta, pero SOLO si la sesión
-   * que hay ahora es del mismo usuario (revisión t8, N-O1). Si entró otro, lo
-   * pendiente se queda en la copia del dueño y no se manda.
-   */
-  async retryAfterSession(): Promise<boolean> {
-    if (!this.failedBySession()) return false;
-    if (this.whoAmI) {
-      const quien = await this.whoAmI().catch(() => null);
-      if (!quien || (this.ownerUser && quien !== this.ownerUser)) return false;
-    }
-    this.retryNow();
-    return true;
-  }
+  /** ¿Lo último apartado fue por la sesión (vencida, reto de dos pasos u otra sede)? */
+  failedBySession(): boolean { return this.failed.length > 0 && this.lastFailKind === "sesion"; }
 
   /* ---------------- estado ---------------- */
   getStatus(): SaveStatus { return this.status; }
@@ -361,9 +234,16 @@ export class SaveQueue {
    */
   getVersion(): number { return this.version; }
 
-  /** ¿Queda algo sin confirmar (en cola, en vuelo, tecleándose o rechazado)? */
+  /** ¿Queda algo sin confirmar (en cola, en vuelo, tecleándose o apartado)? */
   hasPending(): boolean {
     return this.queue.length > 0 || this.inflight !== null || this.noteDrafts.size > 0 || this.failed.length > 0;
+  }
+
+  /** Lo que el servidor descartó (o el doctor tiró) desde la última vez: la pantalla lo quita del dibujo. */
+  takeDiscarded(): SaveOp[] {
+    const out = this.discardedOps;
+    this.discardedOps = [];
+    return out;
   }
 
   /** Recalcula el estado visible a partir de lo que hay (nunca a parches). */
@@ -377,19 +257,16 @@ export class SaveQueue {
     else if (this.failed.length) { state = "error"; error = this.failError; }
     else if (this.discardError) { state = "discarded"; error = this.discardError; }
     else state = this.touched ? "saved" : "idle";
-    const last = this.recovered.length ? this.recovered[this.recovered.length - 1].at : 0;
     this.status = {
       state, error,
       pending: this.queue.length + (this.inflight ? 1 : 0) + this.noteDrafts.size + this.failed.length,
       discarded: this.discardedCount,
-      recovered: this.recovered.length ? { count: this.recovered.length, at: last } : null,
     };
-    this.persist();
     this.listeners.forEach((fn) => fn(this.status));
   }
 
   /* ---------------- entrada ---------------- */
-  /** Encola una escritura. Si había otra de lo mismo esperando (o rechazada), la sustituye. */
+  /** Encola una escritura. Si había otra de lo mismo esperando (o apartada), la sustituye. */
   enqueue(op: SaveOp) {
     this.touched = true;
     this.discardError = undefined;
@@ -400,37 +277,28 @@ export class SaveQueue {
       this.noteTimers.forEach((id) => this.clearTimer(id));
       this.noteTimers.clear();
       this.noteDrafts.clear();
-      this.noteBase.clear();
     } else if (op.kind === "note") {
-      // una nota firme sustituye a la que se estaba tecleando de ese diente;
-      // conserva la nota de ANTES de la primera tecla (o de la nota que sustituye)
+      // una nota firme sustituye a la que se estaba tecleando de ese diente
       const t = this.noteTimers.get(op.toothNumber);
       if (t !== undefined) this.clearTimer(t);
       this.noteTimers.delete(op.toothNumber);
       this.noteDrafts.delete(op.toothNumber);
-      const diente = op.toothNumber;
-      const anterior = [...this.queue, ...this.failed].find((q) => q.kind === "note" && q.toothNumber === diente) as
-        { prev?: string } | undefined;
-      const prev = anterior?.prev ?? this.noteBase.get(op.toothNumber) ?? op.prev;
-      this.noteBase.delete(op.toothNumber);
-      op = prev === undefined ? op : { ...op, prev };
     }
     const k = opKey(op);
-    this.opAt.set(k, this.now());
     this.queue = this.queue.filter((q) => opKey(q) !== k);
     this.failed = this.failed.filter((q) => opKey(q) !== k);
     this.queue.push(op);
+    this.opAt.set(k, this.now());
+    this.retried.delete(k);
     this.refresh();
     this.pump();
   }
 
   /** La nota de un diente cambió al teclear: se guarda sola tras una pausa. */
-  noteChanged(toothNumber: number, text: string, prev?: string) {
+  noteChanged(toothNumber: number, text: string) {
     this.touched = true;
     this.discardError = undefined;
-    if (!this.noteBase.has(toothNumber) && prev !== undefined) this.noteBase.set(toothNumber, prev);
     this.noteDrafts.set(toothNumber, text);
-    this.opAt.set(`n:${toothNumber}`, this.now());
     const timer = this.noteTimers.get(toothNumber);
     if (timer !== undefined) this.clearTimer(timer);
     this.noteTimers.set(toothNumber, this.setTimer(() => this.flushNote(toothNumber), this.noteDelay));
@@ -445,8 +313,7 @@ export class SaveQueue {
     if (!this.noteDrafts.has(toothNumber)) return;
     const text = this.noteDrafts.get(toothNumber)!;
     this.noteDrafts.delete(toothNumber);
-    const prev = this.noteBase.get(toothNumber);
-    this.enqueue(prev === undefined ? { kind: "note", toothNumber, text } : { kind: "note", toothNumber, text, prev });
+    this.enqueue({ kind: "note", toothNumber, text });
   }
 
   /** Manda ya todo lo que se estaba tecleando. */
@@ -455,16 +322,15 @@ export class SaveQueue {
   }
 
   /**
-   * La página se cierra: una copia de lo pendiente sale ya con keepalive (no
-   * da tiempo a ir de una en una). La cola NO se vacía: si la página vuelve
-   * (bfcache), sigue mandando lo suyo, y repetir es inocuo (idempotente).
+   * La página se cierra u oculta: una copia de lo pendiente sale ya con
+   * keepalive (no da tiempo a ir de una en una). La cola NO se vacía: si la
+   * página sigue (pestaña oculta, bfcache), sigue mandando lo suyo, y repetir
+   * es inocuo (idempotente). Lo apartado no sale: espera a que alguien diga.
    */
   flushForUnload() {
     this.flush();
     // lo que va en vuelo puede no llegar si la página muere: se repite, salvo
-    // que detrás espere otra de lo mismo (mandarlas en paralelo podría
-    // invertirlas; la de detrás es la buena)
-    // (ni tras un «limpiar todo» en cola: lo de antes ya no cuenta)
+    // que detrás espere otra de lo mismo o un «limpiar todo»
     const repeatInflight = this.inflight
       && !this.queue.some((q) => q.kind === "reset" || opKey(q) === opKey(this.inflight!));
     const ops = repeatInflight ? [this.inflight!, ...this.queue] : [...this.queue];
@@ -475,29 +341,66 @@ export class SaveQueue {
     else this.send(ops[r], { keepalive: true }).then(() => fire(ops.filter((_, i) => i !== r)), () => {});
   }
 
-  /** «Reintentar»: lo rechazado vuelve a la cola y no se espera a la próxima vuelta automática. */
-  retryNow() {
+  /**
+   * «Reintentar» (y lo que pasa al volver la sesión): lo apartado vuelve a la
+   * cola, pero SOLO si la sesión de ahora es la misma con que se abrió (N3-O2:
+   * nada sale firmado por otro usuario ni a otra sede). Devuelve si se reanudó.
+   */
+  async retryNow(): Promise<boolean> {
+    if (!(await this.sameSession())) {
+      if (this.hasPending()) { this.lastFailKind = "sesion"; this.failError = OTRA_SESION; this.moveQueueToFailed(); }
+      return false;
+    }
     if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
     this.attempt = 0;
+    this.failed.forEach((op) => this.retried.delete(opKey(op)));
     this.queue = [...this.failed, ...this.queue];
     this.failed = [];
     this.failError = undefined;
+    this.lastFailKind = null;
     this.refresh();
     this.pump();
+    return true;
   }
 
-  /** «Descartar»: tira lo que el servidor rechazó (el llamador recarga del servidor). */
+  /** Volvió la red: se reanuda lo que esperaba su reintento (no lo apartado), con la misma comprobación de sesión. */
+  async resume(): Promise<boolean> {
+    if (this.retryTimer === null) return false;
+    if (!(await this.sameSession())) {
+      if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
+      this.lastFailKind = "sesion"; this.failError = OTRA_SESION;
+      this.moveQueueToFailed();
+      return false;
+    }
+    if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
+    this.attempt = 0;
+    this.refresh();
+    this.pump();
+    return true;
+  }
+
+  /** Aparta lo que esperaba en la cola (otra sesión): nada sale hasta que alguien diga. */
+  private moveQueueToFailed() {
+    this.failed = [...this.failed, ...this.queue];
+    this.queue = [];
+    this.refresh();
+  }
+
+  /** «Descartar»: tira lo apartado (la pantalla lo quita del dibujo y recarga del servidor). */
   discard() {
-    this.failed.forEach((op) => this.opAt.delete(opKey(op)));
+    this.failed.forEach((op) => { this.opAt.delete(opKey(op)); this.retried.delete(opKey(op)); });
+    this.discardedOps.push(...this.failed);
     this.failed = [];
     this.failError = undefined;
     this.discardError = undefined;
+    this.lastFailKind = null;
+    this.discardedCount++;
     this.refresh();
   }
 
   /**
    * Pinta lo pendiente encima de lo que devolvió el servidor: al volver a
-   * montar el odontograma con escrituras sin confirmar (o rechazadas y aún sin
+   * montar el odontograma con escrituras sin confirmar (o apartadas y aún sin
    * descartar), el doctor sigue viendo lo que marcó.
    */
   overlay(server: Records): Records {
@@ -523,64 +426,71 @@ export class SaveQueue {
     if (this.inflight || this.retryTimer !== null) return;
     const op = this.queue.shift();
     if (!op) return;
+    const k = opKey(op);
+    // N3-O3: lo que ya falló por la red y lleva demasiado (la laptop cerrada
+    // toda la noche) no sale solo al volver la red: se aparta y se pregunta
+    if (this.retried.has(k) && this.now() - (this.opAt.get(k) ?? this.now()) > this.staleAfterMs) {
+      this.failed.push(op);
+      this.lastFailKind = "rechazo";
+      const min = Math.round(this.staleAfterMs / 60000);
+      this.failError = `Hay cambios que llevan más de ${min} min sin poder guardarse. Revisa el odontograma y pulsa «Reintentar» para mandarlos o «Descartar».`;
+      this.refresh();
+      this.pump();
+      return;
+    }
     this.inflight = op;
     this.send(op, { keepalive: false }).then(
       () => {
         this.inflight = null;
         this.attempt = 0;
         this.transientError = undefined;
-        this.lastFailStatus = null;
-        if (!this.queue.some((q) => opKey(q) === opKey(op))) this.opAt.delete(opKey(op));
+        if (!this.queue.some((q) => opKey(q) === k)) { this.opAt.delete(k); this.retried.delete(k); }
         this.refresh();
         this.pump();
       },
-      (err) => {
-        this.inflight = null;
-        // si mientras tanto llegó otra de lo mismo, esa manda y esta sobra
-        const superseded = op.kind !== "reset" && this.queue.some((q) => opKey(q) === opKey(op));
-        const status = (err as { status?: unknown })?.status;
-        this.lastFailStatus = typeof status === "number" ? status : null;
-        if (status === 403 || status === 404) {
-          // Sin permiso o paciente que no es de esta clínica (revisión t8,
-          // N-O5): reintentarlo no lo arreglará nunca. Se descarta —no queda en
-          // la copia ni vuelve al abrir— y se dice; la pantalla recarga del
-          // servidor para enseñar lo que de verdad hay.
-          if (!superseded) this.opAt.delete(opKey(op));
-          this.discardedCount++;
-          this.discardError = `${errorMessage(err)} Ese cambio se descartó.`;
-          this.refresh();
-          this.pump();
-          return;
-        }
-        if (!isTransient(err)) {
-          // el servidor dijo que no: repetirla igual no sirve. Se aparta, se
-          // avisa, y lo demás sigue guardándose (no se queda como rehén)
-          if (!superseded) this.failed.push(op);
-          this.failError = errorMessage(err);
-          this.refresh();
-          this.pump();
-          return;
-        }
-        if (!superseded) this.queue.unshift(op);
-        const delay = this.retryDelays[Math.min(this.attempt, this.retryDelays.length - 1)];
-        this.attempt++;
-        this.transientError = errorMessage(err);
-        this.retryTimer = this.setTimer(() => { this.retryTimer = null; this.refresh(); this.pump(); }, delay);
-        this.refresh();
-      },
+      (err) => { void this.onFail(op, err); },
     );
   }
-}
 
-/**
- * Engancha la copia de lo pendiente con la SESIÓN: clínica y usuario de quien
- * tiene la sesión ahora (los manda la página desde el servidor, o los devuelve
- * el GET). Nunca «la última clínica conocida» del navegador (revisión t8, N-O3).
- */
-export function bindBrowserCopy(
-  queue: SaveQueue, store: KeyValueStore | null, sesion: { clinicId: string; userId: string }, patientId: string, tabId?: string,
-): number {
-  return queue.bindStorage(store, pendienteKey(sesion.clinicId, sesion.userId, patientId), sesion.userId, tabId);
+  private async onFail(op: SaveOp, err: unknown) {
+    const k = opKey(op);
+    // si mientras tanto llegó otra de lo mismo, esa manda y esta sobra
+    const superseded = () => op.kind !== "reset" && this.queue.some((q) => opKey(q) === k);
+    let tipo = tipoDeFallo(err);
+    let mensaje = errorMessage(err);
+    if (tipo === "descartar" && !(await this.sameSession())) {
+      // N3-O4: un 403/404 porque la sede activa (o el usuario) cambió en otra
+      // pestaña no es un «no» del servidor: se aparta con un aviso claro
+      tipo = "sesion";
+      mensaje = OTRA_SESION;
+    }
+    this.inflight = null;
+    if (tipo === "descartar") {
+      // sin permiso o paciente de otra clínica (revisión t8, N-O5): reintentar
+      // no lo arreglará nunca. Se descarta, se dice y la pantalla lo quita
+      if (!superseded()) { this.opAt.delete(k); this.retried.delete(k); this.discardedOps.push(op); }
+      this.discardedCount++;
+      this.discardError = `${mensaje} Ese cambio se descartó.`;
+      this.refresh();
+      this.pump();
+      return;
+    }
+    if (tipo === "sesion" || tipo === "rechazo") {
+      // apartado: lo demás sigue guardándose (no se queda como rehén)
+      if (!superseded()) this.failed.push(op);
+      this.lastFailKind = tipo;
+      this.failError = mensaje;
+      this.refresh();
+      this.pump();
+      return;
+    }
+    if (!superseded()) { this.queue.unshift(op); this.retried.add(k); }
+    const delay = this.retryDelays[Math.min(this.attempt, this.retryDelays.length - 1)];
+    this.attempt++;
+    this.transientError = mensaje;
+    this.retryTimer = this.setTimer(() => { this.retryTimer = null; this.refresh(); this.pump(); }, delay);
+    this.refresh();
+  }
 }
 
 /* Una cola por paciente y por pestaña: sobrevive a que el odontograma se desmonte. */
@@ -592,7 +502,11 @@ export function saveQueueFor(patientId: string, make: () => SaveQueue): SaveQueu
     q = make();
     queues.set(patientId, q);
     q.subscribe(() => scheduleNotice());
-    if (typeof window !== "undefined" && typeof document !== "undefined") installPageHandlers(window, document);
+    if (typeof window !== "undefined" && typeof document !== "undefined") {
+      let store: KeyValueStore | null = null;
+      try { store = window.localStorage; } catch { /* bloqueado */ }
+      installPageHandlers(window, document, store);
+    }
   }
   return q;
 }
@@ -600,7 +514,7 @@ export function saveQueueFor(patientId: string, make: () => SaveQueue): SaveQueu
 /** Solo pruebas: vacía el registro de colas. */
 export function _resetQueuesForTests() { queues.clear(); handlersInstalled = null; }
 
-/* ---------------- avisos de la página (O1) ----------------
+/* ---------------- avisos de la página ----------------
    Viven con las colas, no con el componente: siguen activos aunque el
    odontograma se haya desmontado (otra pestaña de la ficha). */
 interface PageTarget {
@@ -611,28 +525,30 @@ interface DocTarget extends PageTarget { visibilityState: string }
 
 let handlersInstalled: (() => void) | null = null;
 
-export function installPageHandlers(win: PageTarget, doc: DocTarget): () => void {
+export function installPageHandlers(win: PageTarget, doc: DocTarget, store: KeyValueStore | null = null): () => void {
   if (handlersInstalled) return handlersInstalled;
+  // lo que dejaron en el navegador versiones anteriores (copia entre sesiones, ya quitada)
+  limpiarCopiasViejas(store);
   const all = () => [...queues.values()];
-  // la pestaña se oculta (cambiar de app en iPad, bloquear el teléfono): en iOS
-  // puede ser el último aviso antes de que la maten → copia al navegador ya
+  // la pestaña se oculta (cambiar de app en iPad, bloquear el teléfono): puede
+  // ser el último aviso antes de que la maten → lo pendiente sale con keepalive.
+  // Al volver: lo apartado por la sesión se reintenta (si es el mismo usuario).
   const onVisibility = () => {
-    if (doc.visibilityState === "hidden") all().forEach((q) => { q.flush(); q.persist(); });
-    else all().forEach((q) => { void q.retryAfterSession(); });
+    if (doc.visibilityState === "hidden") all().forEach((q) => q.flushForUnload());
+    else all().forEach((q) => { if (q.failedBySession()) void q.retryNow(); });
   };
-  // la página se va: copia al navegador y, por si hay red, sale con keepalive
-  const onPageHide = () => all().forEach((q) => { q.flush(); q.persist(); q.flushForUnload(); });
+  const onPageHide = () => all().forEach((q) => q.flushForUnload());
   // cerrar o recargar en escritorio: el navegador pregunta si queda algo
   const onBeforeUnload = (e: Event) => {
     const qs = all();
-    qs.forEach((q) => { q.flush(); q.persist(); });
+    qs.forEach((q) => q.flush());
     if (!qs.some((q) => q.hasPending())) return;
     e.preventDefault();
     (e as BeforeUnloadEvent).returnValue = "";
   };
-  const onOnline = () => all().forEach((q) => q.retryNow());
-  // volver a la pestaña tras iniciar sesión en otra: lo que falló por 401 sale
-  const onFocus = () => all().forEach((q) => { void q.retryAfterSession(); });
+  // volvió la red: se reanuda lo que esperaba (con la comprobación de sesión)
+  const onOnline = () => all().forEach((q) => { void q.resume(); });
+  const onFocus = () => all().forEach((q) => { if (q.failedBySession()) void q.retryNow(); });
   doc.addEventListener("visibilitychange", onVisibility);
   win.addEventListener("pagehide", onPageHide);
   win.addEventListener("beforeunload", onBeforeUnload);
@@ -649,10 +565,10 @@ export function installPageHandlers(win: PageTarget, doc: DocTarget): () => void
   return handlersInstalled;
 }
 
-/* ---------------- aviso fijo «sin guardar» (O1) ----------------
-   Cuando el odontograma de un paciente con algo pendiente ya no está en
-   pantalla, su indicador no se ve: este aviso, fuera de React y pegado al
-   <body>, sí. Desaparece en cuanto todo se confirma o se vuelve a abrir. */
+/* ---------------- aviso fijo «sin guardar» ----------------
+   Mientras haya algo sin guardar por la red o apartado, este aviso, fuera de
+   React y pegado al <body>, se queda a la vista — esté o no el odontograma en
+   pantalla. Desaparece en cuanto todo se confirma o se descarta. */
 export interface NoticeDoc {
   getElementById(id: string): NoticeEl | null;
   createElement(tag: string): NoticeEl;
@@ -672,14 +588,16 @@ export const NOTICE_ID = "odo-aviso-pendiente";
 
 /** Texto del aviso fijo; null si no hay nada que avisar. */
 export function textoAvisoPendiente(qs: SaveQueue[]): string | null {
+  const conProblema = qs.filter((q) => q.hasPending() && (q.getStatus().state === "retrying" || q.getStatus().state === "error"));
   const fuera = qs.filter((q) => !q.isAttached() && q.hasPending());
-  if (!fuera.length) return null;
-  const n = fuera.reduce((acc, q) => acc + q.getStatus().pending, 0);
+  if (!conProblema.length && !fuera.length) return null;
+  const lista = conProblema.length ? conProblema : fuera;
+  const n = lista.reduce((acc, q) => acc + q.getStatus().pending, 0);
   const cambios = n === 1 ? "1 cambio" : `${n} cambios`;
-  const err = fuera.find((q) => q.getStatus().state === "error");
-  if (err) return `Odontograma: ${cambios} sin guardar. ${err.getStatus().error ?? "El servidor no lo aceptó."}`;
-  if (fuera.some((q) => q.getStatus().state === "retrying")) {
-    return `Odontograma: ${cambios} sin guardar (sin conexión). Se reintenta solo y queda guardado en este navegador.`;
+  const err = lista.find((q) => q.getStatus().state === "error");
+  if (err) return `No se guardó: Odontograma, ${cambios} pendiente${n === 1 ? "" : "s"}. ${err.getStatus().error ?? "El servidor no lo aceptó."}`;
+  if (lista.some((q) => q.getStatus().state === "retrying")) {
+    return `No se guardó: sin conexión, reintentando. Odontograma: ${cambios} sin guardar; no cierres esta pestaña.`;
   }
   return `Odontograma: guardando ${cambios}…`;
 }
@@ -705,15 +623,15 @@ export function renderPendingNotice(doc: NoticeDoc, getQs: () => SaveQueue[] = (
     btn.setAttribute("type", "button");
     btn.textContent = "Reintentar";
     Object.assign(btn.style, { border: "1px solid #f0b4b4", background: "#fff", color: "#b3403f", borderRadius: "6px", padding: "2px 8px", fontWeight: "700", cursor: "pointer" });
-    btn.addEventListener("click", () => getQs().forEach((q) => q.retryNow()));
+    btn.addEventListener("click", () => getQs().forEach((q) => { void q.retryNow(); }));
     el.appendChild(btn);
-    // lo que el servidor rechazó (400, sesión vencida) se puede tirar desde aquí
+    // lo apartado (rechazo, sesión de otro, demasiado viejo) se puede tirar desde aquí
     const tirar = doc.createElement("button");
     tirar.setAttribute("type", "button");
     tirar.setAttribute("data-descartar", "1");
     tirar.textContent = "Descartar";
     Object.assign(tirar.style, btn.style);
-    tirar.addEventListener("click", () => getQs().forEach((q) => { if (!q.isAttached()) q.discard(); }));
+    tirar.addEventListener("click", () => getQs().forEach((q) => q.discard()));
     el.appendChild(tirar);
     doc.body.appendChild(el);
     (el as unknown as { _texto: NoticeEl })._texto = span;
