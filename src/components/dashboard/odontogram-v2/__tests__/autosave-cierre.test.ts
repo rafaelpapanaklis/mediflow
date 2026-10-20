@@ -28,6 +28,14 @@
  *    al dibujo después.
  *  - N3-O3 (todo lo de la noche, no solo el primero) y N3-O1 (el guardia
  *    del reto de dos pasos no se lleva la pestaña con algo pendiente).
+ * Verificación final (t8):
+ *  - V-O1: «Reintentar» sobre un «Limpiar todo» apartado nunca borra lo que
+ *    se guardó después: el reset apartado se descarta con aviso.
+ *  - V-O2: lo apartado por la sesión pasa por la regla de 15 min al volver a
+ *    la pestaña; solo el botón «Reintentar» lo manda.
+ *  - V-O3: con `?quien=1` en 401 o con el reto de dos pasos, el aviso lo dice
+ *    (no «sin conexión») y lo pendiente se queda.
+ *  - V-O5, V-O6 y V-O7.
  * t4 O2/O3: rótulo «Incisal» y errores en español.
  *
  * Los eventos de la página son `EventTarget`/`Event` reales de Node.
@@ -258,7 +266,8 @@ test("t8 N3-O3: lo que lleva más de 15 min fallando NO sale solo al volver la r
     send: srv.send, now: () => ahora,
     setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {},
   });
-  q.enqueue({ kind: "reset" }); // «Limpiar todo» sin red, y se cierra la tapa
+  // (con un «Limpiar todo» viejo es otra regla: se descarta con aviso, V-O1)
+  q.enqueue({ kind: "delete", toothNumber: 36, surface: null, conditionId: "rct" }); // sin red, y se cierra la tapa
   await tick();
   assert.equal(q.getStatus().state, "retrying");
   // a la mañana siguiente, ya con red, vence el temporizador del reintento
@@ -266,7 +275,7 @@ test("t8 N3-O3: lo que lleva más de 15 min fallando NO sale solo al volver la r
   srv.online();
   fired.shift()!();
   await tick();
-  assert.equal(srv.sent.length, 1, "el reset viejo no se manda solo");
+  assert.equal(srv.sent.length, 1, "el cambio viejo no se manda solo");
   assert.equal(q.getStatus().state, "error");
   assert.match(q.getStatus().error ?? "", /más de 15 min sin poder guardarse/);
   assert.equal(await q.retryNow(), true); // la doctora lo revisa y decide
@@ -624,4 +633,267 @@ test("t8 N3-O1 (cuarta vuelta): el guardia del reto de dos pasos NO se lleva la 
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+/* ======================= verificación final (t8) ======================= */
+
+/** Servidor de mentira CON datos: aplica cada escritura (para ver qué queda). */
+function servidorConDatos(inicial: string[]) {
+  const filas = new Set(inicial);
+  const notas = new Map<number, string>();
+  let fallo: HttpErr | null = null;
+  const enviados: string[] = [];
+  const aplicar = (op: SaveOp) => {
+    if (op.kind === "reset") { filas.clear(); notas.clear(); return; }
+    if (op.kind === "note") { notas.set(op.toothNumber, op.text); return; }
+    const k = `${op.toothNumber}:${op.surface ?? "-"}:${op.conditionId}`;
+    if (op.kind === "put") filas.add(k); else filas.delete(k);
+  };
+  return {
+    filas, notas, enviados,
+    offline() { fallo = new HttpErr(0); }, online() { fallo = null; },
+    fail(status: number, code: string | null = null) { fallo = new HttpErr(status, code); },
+    send: (op: SaveOp, _o: { keepalive: boolean }) => {
+      enviados.push(op.kind === "reset" ? "reset" : `${op.kind}:${op.toothNumber}`);
+      if (fallo) return Promise.reject(fallo);
+      aplicar(op);
+      return Promise.resolve();
+    },
+  };
+}
+
+test("t8 V-O1: «Reintentar» sobre un «Limpiar todo» apartado NUNCA borra lo marcado y guardado después", async () => {
+  // La sonda del revisor: sin red, «Limpiar todo»; a los 10 min, caries en el
+  // 16; la red vuelve a los 16 min.
+  let ahora = Date.parse("2026-10-20T10:00:00Z");
+  const fired: (() => void)[] = [];
+  const srv = servidorConDatos(["36:-:rct", "21:-:crown"]); srv.offline();
+  const q = new SaveQueue({ send: srv.send, now: () => ahora, setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {} });
+  q.enqueue({ kind: "reset" });
+  await tick();
+  ahora += 10 * 60_000;
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  ahora += 6 * 60_000;
+  srv.online();
+  fired.shift()!();
+  await tick();
+  // el reset viejo no salió; la caries (6 min) sí, sobre lo que había
+  assert.deepEqual([...srv.filas].sort(), ["16:O:caries", "21:-:crown", "36:-:rct"]);
+  assert.equal(q.hasPending(), false, "el reset no queda apartado esperando a «Reintentar»");
+  assert.equal(q.getStatus().state, "discarded");
+  assert.equal(q.getStatus().error, "El «Limpiar todo» de hace 16 min no se aplicó; si lo quieres, vuelve a pulsarlo.");
+  // la pantalla lo recibe como descartado (quita lo optimista y relee del servidor)
+  assert.deepEqual(q.descartadosDesde(0), [{ kind: "reset" }]);
+  // la doctora pulsa «Reintentar» (el botón del indicador sigue a mano): no borra nada
+  await q.retryNow();
+  await tick();
+  assert.deepEqual([...srv.filas].sort(), ["16:O:caries", "21:-:crown", "36:-:rct"], "la caries guardada sigue");
+  assert.equal(srv.enviados.filter((e) => e === "reset").length, 1, "el reset solo se intentó aquella vez, sin red");
+  // si de verdad quiere limpiar, lo vuelve a pulsar y sale (ya con red)
+  q.enqueue({ kind: "reset" });
+  await tick();
+  assert.deepEqual([...srv.filas], []);
+
+  // También si lo apartó la sesión (vencida a media mañana): al volver, lo de
+  // después se guarda y el «Limpiar todo» no se repite
+  const srv2 = servidorConDatos(["36:-:rct"]);
+  const q2 = new SaveQueue({ send: srv2.send, whoAmI: async () => DRA_A, ...timers });
+  q2.setOwner(DRA_A);
+  srv2.fail(401, "unauthorized");
+  q2.enqueue({ kind: "reset" });
+  await tick();
+  assert.equal(q2.hasFailed(), false, "el reset no se aparta");
+  assert.match(q2.getStatus().error ?? "", /El «Limpiar todo» de hace un momento no se aplicó/);
+  srv2.online(); // vuelve a entrar en otra pestaña
+  q2.enqueue(put(16, "O", "caries"));
+  await tick();
+  await q2.retryNow();
+  await tick();
+  assert.deepEqual([...srv2.filas].sort(), ["16:O:caries", "36:-:rct"]);
+});
+
+test("t8 V-O2: lo apartado por la sesión NO sale solo al volver a la pestaña si lleva más de 15 min; con «Reintentar», sí", async () => {
+  let ahora = Date.parse("2026-10-20T20:05:00Z");
+  const srv = servidorConDatos([]);
+  const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, now: () => ahora, whoAmI: async () => DRA_A, ...timers }));
+  q.setOwner(DRA_A);
+  const { win, doc } = page();
+  uninstall = installPageHandlers(win as any, doc as any);
+  // 20:05: vence la sesión de la Dra. A y su nota del 11 se aparta
+  srv.fail(401, "unauthorized");
+  q.enqueue({ kind: "note", toothNumber: 11, text: "nota de anoche de A" });
+  await tick();
+  assert.equal(q.failedBySession(), true);
+  // 9:00: el Dr. C escribe la nota del 11 desde su equipo
+  srv.online();
+  srv.notas.set(11, "nota del Dr. C");
+  // 9:30: A entra en otra pestaña y vuelve a la vieja
+  ahora = Date.parse("2026-10-21T09:30:00Z");
+  win.dispatchEvent(new Event("focus"));
+  doc.dispatchEvent(new Event("visibilitychange"));
+  await tick();
+  assert.equal(srv.notas.get(11), "nota del Dr. C", "la nota de anoche no pisa la de C");
+  assert.equal(q.getStatus().state, "error");
+  assert.match(q.getStatus().error ?? "", /más de 15 min sin poder guardarse/);
+  assert.equal(q.failedBySession(), false, "ya no se reintenta solo en cada foco");
+  win.dispatchEvent(new Event("focus"));
+  await tick();
+  assert.equal(srv.notas.get(11), "nota del Dr. C");
+  // la doctora lo revisa y decide: el botón «Reintentar» sí lo manda
+  assert.equal(await q.retryNow(), true);
+  await tick();
+  assert.equal(srv.notas.get(11), "nota de anoche de A");
+
+  // un corte corto (2 min) sigue saliendo solo al volver a la pestaña
+  srv.fail(401, "unauthorized");
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  srv.online();
+  ahora += 2 * 60_000;
+  win.dispatchEvent(new Event("focus"));
+  await tick();
+  assert.ok(srv.filas.has("16:O:caries"));
+  assert.equal(q.hasPending(), false);
+});
+
+/** `fetch` para «¿quién soy?» con cualquier respuesta. */
+function quienResponde(r: () => Response) {
+  return (async (url: string) => { assert.match(String(url), /\?quien=1$/); return r(); }) as unknown as typeof fetch;
+}
+
+test("t8 V-O3: con la sesión vencida (401 en ?quien=1) o el reto de dos pasos, el aviso lo dice —no «sin conexión»— y lo pendiente se queda", async () => {
+  const realFetch = globalThis.fetch;
+  let respuesta = () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+  globalThis.fetch = quienResponde(() => respuesta());
+  try {
+    const fired: (() => void)[] = [];
+    const srv = server(); srv.fail(503);
+    const q = saveQueueFor("pat_1", () => new SaveQueue({ send: srv.send, whoAmI: fetchQuienSoy, setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {} }));
+    q.setOwner(DRA_A);
+    const { win, doc } = page();
+    uninstall = installPageHandlers(win as any, doc as any);
+    q.enqueue(put(16, "O", "caries"));
+    await tick();
+    assert.equal(q.getStatus().state, "retrying");
+    // vuelve el servidor, pero la sesión venció: vence el temporizador
+    srv.online();
+    fired.shift()!();
+    await tick();
+    assert.equal(srv.sent.length, 1, "no se manda nada sin sesión");
+    assert.equal(fired.length, 0, "no se queda esperando para siempre");
+    assert.equal(q.getStatus().state, "error");
+    assert.equal(q.getStatus().error, SESION_VENCIDA);
+    const aviso = textoAvisoPendiente([q]) ?? "";
+    assert.match(aviso, /Tu sesión venció, vuelve a entrar/);
+    assert.doesNotMatch(aviso, /sin conexión/);
+    // «Reintentar» con la sesión aún vencida: lo mismo, sin perder nada
+    assert.equal(await q.retryNow(), false);
+    assert.equal(q.getStatus().error, SESION_VENCIDA);
+    assert.equal(q.hasPending(), true);
+    const cerrar = new Event("beforeunload", { cancelable: true });
+    win.dispatchEvent(cerrar);
+    assert.equal(cerrar.defaultPrevented, true, "si recarga, el navegador avisa");
+    // ahora falta el reto de dos pasos (el middleware responde 403 two_factor_required)
+    respuesta = () => new Response(JSON.stringify({ error: "Completa la verificación en dos pasos.", code: "two_factor_required" }), { status: 403 });
+    win.dispatchEvent(new Event("focus"));
+    await tick();
+    assert.equal(q.getStatus().error, FALTA_DOS_PASOS);
+    assert.doesNotMatch(textoAvisoPendiente([q]) ?? "", /sin conexión/);
+    assert.equal(q.hasPending(), true);
+    // completa el reto en otra pestaña y vuelve: sale solo
+    respuesta = () => new Response(JSON.stringify(DRA_A), { status: 200 });
+    win.dispatchEvent(new Event("focus"));
+    await tick();
+    assert.equal(q.hasPending(), false);
+    assert.equal(srv.sent.length, 2);
+    // sin red sigue siendo «no se sabe» (N4-O1): nada se aparta
+    const realFetch2 = globalThis.fetch;
+    globalThis.fetch = (async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch;
+    srv.fail(503);
+    q.enqueue(put(17, "O", "caries"));
+    await tick();
+    fired.shift()!();
+    await tick();
+    assert.equal(q.getStatus().state, "retrying");
+    assert.equal(q.hasFailed(), false);
+    globalThis.fetch = realFetch2;
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("t8 V-O6: un 200 que no es nuestro (portal de un Wi-Fi de hotel) es «no se sabe», no «otra sesión»", async () => {
+  const realFetch = globalThis.fetch;
+  let respuesta = () => new Response("<html><body>Acepta los términos del Wi-Fi</body></html>", { status: 200, headers: { "content-type": "text/html" } });
+  globalThis.fetch = quienResponde(() => respuesta());
+  try {
+    await assert.rejects(fetchQuienSoy(), (e: any) => e instanceof OdontogramHttpError && e.status === 0);
+    const srv = server(); srv.offline();
+    const q = new SaveQueue({ send: srv.send, retryDelays: [60_000], whoAmI: fetchQuienSoy, ...timers });
+    q.setOwner(DRA_A);
+    q.enqueue(put(16, "O", "caries"));
+    await tick();
+    assert.equal(await q.retryNow(), false);
+    assert.equal(q.getStatus().state, "retrying");
+    assert.notEqual(q.getStatus().error, OTRA_SESION);
+    assert.equal(q.hasFailed(), false, "nada apartado");
+    // un JSON nuestro sin sede activa sí es otra sesión
+    respuesta = () => new Response(JSON.stringify({ userId: "u_a", clinicId: null }), { status: 200 });
+    assert.deepEqual(await fetchQuienSoy(), { userId: "u_a", clinicId: "" });
+    assert.equal(await q.retryNow(), false);
+    assert.equal(q.getStatus().error, OTRA_SESION);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("t8 V-O5: sin nada pendiente, la cola acepta la sesión nueva; con algo pendiente, se queda con la de quien lo marcó", async () => {
+  const srv = server();
+  const q = new SaveQueue({ send: srv.send, whoAmI: async () => DR_B, ...timers });
+  q.setOwner(DRA_A);
+  q.setOwner(DR_B); // el Dr. B vuelve al paciente en esta pestaña sin recargar
+  assert.deepEqual(q.getOwner(), DR_B);
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  assert.equal(q.hasPending(), false, "lo de B se guarda (antes: 409 y apartado hasta recargar)");
+  // con algo pendiente de B, otra sesión no se queda con ello
+  srv.offline();
+  q.enqueue(put(17, "O", "caries"));
+  await tick();
+  q.setOwner(DRA_A);
+  assert.deepEqual(q.getOwner(), DR_B);
+});
+
+test("t8 V-O7: con algo apartado y otra cosa esperando la red, «Descartar» no se ve hasta que deja de decir «reintentando»", async () => {
+  const els = new Map<string, NoticeEl>();
+  const mk = (): NoticeEl => {
+    const el: any = {
+      id: "", textContent: null, style: {}, children: [] as NoticeEl[],
+      setAttribute() {}, appendChild(c: NoticeEl) { el.children.push(c); },
+      remove() { els.delete(el.id); }, addEventListener() {},
+    };
+    return el;
+  };
+  const doc: NoticeDoc = { getElementById: (id) => els.get(id) ?? null, createElement: () => mk(), body: { appendChild: (el: NoticeEl) => { els.set(el.id, el); } } };
+  const fired: (() => void)[] = [];
+  const srv = server(); srv.fail(400, "invalid_payload");
+  const q = new SaveQueue({ send: srv.send, setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {} });
+  q.enqueue(put(11, "V", "caries"));
+  await tick();
+  assert.equal(q.hasFailed(), true);
+  srv.offline();
+  q.enqueue(put(21, null, "crown"));
+  await tick();
+  assert.equal(q.getStatus().state, "retrying");
+  renderPendingNotice(doc, () => [q]);
+  const aviso: any = els.get(NOTICE_ID);
+  assert.match(aviso.children[0].textContent, /reintentando/);
+  assert.equal(aviso.children[2].style.display, "none");
+  srv.online();
+  fired.shift()!();
+  await tick();
+  assert.equal(q.getStatus().state, "error");
+  renderPendingNotice(doc, () => [q]);
+  assert.equal(aviso.children[2].style.display, "");
 });

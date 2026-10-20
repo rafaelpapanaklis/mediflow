@@ -193,7 +193,10 @@ export interface OdontogramRead {
 /**
  * ¿Quién tiene la sesión ahora? (usuario y sede activa; no mira al paciente,
  * así un 404 de un paciente borrado no se confunde con «no se pudo saber»).
- * Lanza si no se pudo saber: sin red, sesión vencida, reto de dos pasos.
+ * Lanza si no se pudo saber: sin red (status 0) o una respuesta que no es la
+ * nuestra, como el portal de un Wi-Fi de hotel (V-O6); con la sesión vencida
+ * (401) o el reto de dos pasos, lanza con ese aviso para que la cola lo diga
+ * (V-O3).
  */
 export async function fetchQuienSoy(): Promise<SessionInfo | null> {
   // con tope: mientras se pregunta no sale nada de la cola
@@ -208,11 +211,15 @@ export async function fetchQuienSoy(): Promise<SessionInfo | null> {
     clearTimeout(timer);
   }
   if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401, "unauthorized");
-  if (!res.ok) throw await httpError(res, "No se pudo comprobar la sesión");
+  if (!res.ok) {
+    const err = await httpError(res, "No se pudo comprobar la sesión");
+    if (err.code === "two_factor_required") err.message = FALTA_DOS_PASOS;
+    throw err;
+  }
   const data = await safeJson<{ clinicId?: unknown; userId?: unknown }>(res);
-  return typeof data?.userId === "string" && typeof data?.clinicId === "string"
-    ? { userId: data.userId, clinicId: data.clinicId }
-    : null;
+  if (typeof data?.userId !== "string") throw new OdontogramHttpError("No se pudo comprobar la sesión: respuesta inesperada.", 0);
+  // usuario sin sede activa: es otra sesión (no coincide con la de la cola)
+  return { userId: data.userId, clinicId: typeof data.clinicId === "string" ? data.clinicId : "" };
 }
 
 /** Lee el odontograma. Sin red, el error sale en español (revisión t8, O3). */

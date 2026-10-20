@@ -20,6 +20,10 @@
  * y rutas reales—: lo que la Dra. A marca o deja pendiente nunca sale firmado
  * por el Dr. B (la cabecera `x-odontograma-sesion` y el 409 del servidor),
  * tampoco por keepalive. N4-O5 / N4-O6 en el modo viejo de /sync.
+ *
+ * Verificación final (t8), con la misma cadena: V-O1 (un «Limpiar todo» viejo
+ * no borra lo guardado después) y V-O3 (con la sesión vencida, el 401 real de
+ * `?quien=1` aparta con «Tu sesión venció», no «sin conexión»).
  */
 import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -329,13 +333,21 @@ test("t8 N4-O2: con la sesión del Dr. B en otra pestaña, NADA de la Dra. A sal
     assert.deepEqual(estado(), antes, "ni el «Limpiar todo» ni la caries se escribieron con B");
     assert.equal(AUDIT.length, 0);
 
+    // el «Limpiar todo» rechazado no se aparta para después: se descarta con
+    // aviso (verificación final, V-O1)
+    assert.equal(q.getStatus().discarded, 1);
+    assert.match(q.getStatus().error ?? "", /La sesión de esta pestaña cambió/);
+
     // 4) vuelve la Dra. A y pulsa «Reintentar»: ahora sí, con su sesión
     COOKIE = DR_DE_LA_COOKIE;
     assert.equal(await q.retryNow(), true);
     for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
     assert.equal(q.hasPending(), false);
     assert.ok(nav.vistos.filter((v) => v.metodo !== "GET").every((v) => v.cabecera === "u_dr|cli_1"));
-    assert.deepEqual(estado(), ["26:O:caries"], "el «Limpiar todo» de A (que deja sin efecto lo que esperaba) y lo que marcó después");
+    assert.ok(!nav.vistos.some((v) => v.ruta.endsWith("/reset") && v.status !== 409), "el «Limpiar todo» no se reintenta");
+    assert.deepEqual(estado(), [...antes, "26:O:caries"].sort(), "lo que marcó después, sin borrar nada");
+    assert.equal(q.getStatus().state, "discarded");
+    assert.match(q.getStatus().error ?? "", /El «Limpiar todo» de hace un momento no se aplicó; si lo quieres, vuelve a pulsarlo\./);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -360,4 +372,67 @@ test("t8 N4-O2: sin cabecera (otras pantallas, JS de antes) no se compara; una c
   assert.deepEqual(await r.json(), { clinicId: CLINICA, userId: "u_dr" });
   COOKIE = null;
   assert.equal((await GET(new NextRequest("http://localhost/api/odontogram?quien=1"))).status, 401);
+});
+
+test("t8 V-O1 y V-O3 (verificación final), con la cadena completa: el «Limpiar todo» viejo no borra lo de después; la sesión vencida se dice", async () => {
+  const { SaveQueue } = await import("@/components/dashboard/odontogram-v2/autosave");
+  const adapter = await import("@/components/dashboard/odontogram-v2/adapter");
+  const nav = await navegador();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = nav.fetchFalso as unknown as typeof fetch;
+  const fired: (() => void)[] = [];
+  let ahora = Date.parse("2026-10-20T10:00:00Z");
+  try {
+    const q = new SaveQueue({
+      send: (op, o) => op.kind === "put"
+        ? adapter.putFinding({ patientId: PACIENTE, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, o)
+        : op.kind === "note" ? adapter.setNote(PACIENTE, op.toothNumber, op.text, o)
+        : op.kind === "reset" ? adapter.resetOdontogram(PACIENTE, o)
+        : adapter.deleteFinding({ patientId: PACIENTE, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, o),
+      whoAmI: adapter.fetchQuienSoy,
+      now: () => ahora,
+      setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {},
+    });
+    q.setOwner(DRA_A);
+    const antes = estado();
+    // V-O1: sin red, «Limpiar todo»; a los 10 min, una corona en el 46; la red vuelve a los 16
+    nav.cortarRed(true);
+    q.enqueue({ kind: "reset" });
+    for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r));
+    ahora += 10 * 60_000;
+    q.enqueue({ kind: "put", toothNumber: 46, surface: null, conditionId: "crown" });
+    ahora += 6 * 60_000;
+    nav.cortarRed(false);
+    fired.shift()!();
+    for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
+    assert.deepEqual(estado(), [...antes, "46:-:crown"].sort());
+    assert.match(q.getStatus().error ?? "", /El «Limpiar todo» de hace 16 min no se aplicó; si lo quieres, vuelve a pulsarlo\./);
+    await q.retryNow();
+    for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
+    assert.ok(!nav.vistos.some((v) => v.ruta.endsWith("/reset")), "el «Limpiar todo» viejo nunca llegó al servidor");
+    assert.deepEqual(estado(), [...antes, "46:-:crown"].sort(), "la corona guardada sigue");
+
+    // V-O3: un fallo del servidor y, mientras, vence la sesión (la ruta real da 401 a ?quien=1)
+    nav.cortarRed(true);
+    q.enqueue({ kind: "put", toothNumber: 26, surface: "O", conditionId: "caries" });
+    for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r));
+    nav.cortarRed(false);
+    COOKIE = null;
+    fired.shift()!();
+    for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
+    const quien = nav.vistos.filter((v) => v.ruta === "/api/odontogram" && v.metodo === "GET").at(-1);
+    assert.equal(quien?.status, 401);
+    assert.equal(q.getStatus().state, "error");
+    assert.equal(q.getStatus().error, adapter.SESION_VENCIDA);
+    assert.equal(fired.length, 0, "no se queda «reintentando» para siempre");
+    assert.equal(q.hasPending(), true, "lo pendiente se queda");
+    // vuelve a entrar y pulsa «Reintentar»: se guarda con su sesión
+    COOKIE = DR_DE_LA_COOKIE;
+    assert.equal(await q.retryNow(), true);
+    for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(q.hasPending(), false);
+    assert.deepEqual(estado(), [...antes, "26:O:caries", "46:-:crown"].sort());
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

@@ -31,7 +31,13 @@
    manda nada ni se cambia el aviso. Además cada escritura lleva esa sesión en
    la cabecera `x-odontograma-sesion` y el servidor responde 409 sin escribir
    si la cookie es de otra (revisión t8, cuarta vuelta, N4-O2): así se cubren
-   también el keepalive al cerrar y las marcas nuevas.
+   también el keepalive al cerrar y las marcas nuevas. Si al preguntar la
+   sesión venció (401) o falta el reto de dos pasos, lo pendiente se aparta con
+   ese aviso, no con «sin conexión» (verificación final, V-O3).
+
+   Un «Limpiar todo» que se aparta (viejo, sesión, rechazo) no se reintenta
+   nunca: se descarta con aviso y el doctor lo vuelve a pulsar si lo quiere.
+   Reintentarlo después borraría lo que se marcó y guardó detrás (V-O1).
 
    Las escrituras son idempotentes en el servidor (upsert / deleteMany y el
    candado de las filas de diente completo), así que un reintento de algo que
@@ -152,8 +158,12 @@ function errorMessage(err: unknown): string {
   return err instanceof Error && err.message ? err.message : "No se pudo guardar";
 }
 
-/** Resultado de comparar la sesión de ahora con la de la cola. */
-export type MismaSesion = "misma" | "otra" | "nose";
+/**
+ * Resultado de comparar la sesión de ahora con la de la cola. «sinsesion»: al
+ * preguntar, la sesión venció o falta el reto de dos pasos (V-O3); el aviso es
+ * el de esa respuesta.
+ */
+export type MismaSesion = "misma" | "otra" | "nose" | "sinsesion";
 
 export const OTRA_SESION =
   "La sesión de esta pestaña cambió (otro usuario u otra sede en otra pestaña). Vuelve a la sede y al usuario con que abriste a este paciente y pulsa «Reintentar»; no cierres esta pestaña.";
@@ -179,6 +189,8 @@ export class SaveQueue {
   /** comprobando la sesión antes de un reintento: no sale nada mientras */
   private checking = false;
   private owner: SessionInfo | null = null;
+  /** el aviso de la última «sinsesion» (sesión vencida, reto de dos pasos) */
+  private sinSesionMsg = "";
   private attachedCount = 0;
   private discardedCount = 0;
   private discardError: string | undefined;
@@ -205,25 +217,33 @@ export class SaveQueue {
   }
 
   /* ---------------- de quién es ---------------- */
-  /** La sesión con que se abrió al paciente (la pinta el servidor, o la devuelve el primer GET). */
+  /**
+   * La sesión con que se abrió al paciente (la pinta el servidor, o la devuelve
+   * el GET). Sin nada pendiente que proteger se acepta la nueva (V-O5).
+   */
   setOwner(owner: SessionInfo | null) {
-    if (owner && !this.owner) this.owner = owner;
+    if (owner && (!this.owner || !this.hasPending())) this.owner = owner;
   }
 
   getOwner(): SessionInfo | null { return this.owner; }
 
   /**
    * ¿La sesión de ahora es la misma con que se abrió? (N4-O1) Tres respuestas:
-   * «misma», «otra» (otro usuario, otra sede o sin sesión) y «nose» (no se pudo
-   * preguntar: sin red, sesión vencida, reto de dos pasos, o la cola no sabe
-   * de quién es). Con «nose» no se manda nada ni se aparta nada. Una cola sin
-   * `whoAmI` (sin forma de preguntar) se da por la misma.
+   * «misma», «otra» (otro usuario u otra sede), «nose» (no se pudo preguntar:
+   * sin red, tiempo agotado, servidor caído, o la cola no sabe de quién es) y,
+   * desde la verificación final (V-O3), «sinsesion» (la sesión venció o falta
+   * el reto de dos pasos). Con «nose» no se manda nada ni se aparta nada. Una
+   * cola sin `whoAmI` (sin forma de preguntar) se da por la misma.
    */
   private async sameSession(): Promise<MismaSesion> {
     if (!this.whoAmI) return "misma";
     if (!this.owner) return "nose";
     let now: SessionInfo | null;
-    try { now = await this.whoAmI(); } catch { return "nose"; }
+    try { now = await this.whoAmI(); } catch (err) {
+      if (tipoDeFallo(err) === "red") return "nose";
+      this.sinSesionMsg = errorMessage(err);
+      return "sinsesion";
+    }
     return now && now.userId === this.owner.userId && now.clinicId === this.owner.clinicId ? "misma" : "otra";
   }
 
@@ -393,18 +413,22 @@ export class SaveQueue {
    * nada sale firmado por otro usuario ni a otra sede). Si no se pudo
    * preguntar (sin red), todo se queda como estaba: ni sale ni se aparta, y el
    * aviso no cambia (N4-O1). Devuelve si se reanudó.
+   *
+   * `auto` (volver a la pestaña: focus / visible): no lo decidió el doctor, así
+   * que no renueva la hora y lo de más de 15 min vuelve a quedar apartado con
+   * su aviso (V-O2). Solo el botón «Reintentar» lo cuenta como hecho ahora.
    */
-  async retryNow(): Promise<boolean> {
+  async retryNow(opts: { auto?: boolean } = {}): Promise<boolean> {
     const s = await this.sameSession();
     if (s === "nose") return false;
-    if (s === "otra") {
-      if (this.hasPending()) { this.lastFailKind = "sesion"; this.failError = OTRA_SESION; this.moveQueueToFailed(); }
+    if (s === "otra" || s === "sinsesion") {
+      if (this.hasPending()) this.apartarPorSesion(s === "otra" ? OTRA_SESION : this.sinSesionMsg);
       return false;
     }
     if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
     this.attempt = 0;
     // el doctor decidió mandarlo ahora: cuenta como hecho ahora (N3-O3)
-    this.failed.forEach((op) => this.opAt.set(opKey(op), this.now()));
+    if (!opts.auto) this.failed.forEach((op) => this.opAt.set(opKey(op), this.now()));
     this.queue = [...this.failed, ...this.queue];
     this.failed = [];
     this.failError = undefined;
@@ -419,10 +443,8 @@ export class SaveQueue {
     if (this.retryTimer === null) return false;
     const s = await this.sameSession();
     if (s === "nose") return false; // el temporizador sigue puesto
-    if (s === "otra") {
-      if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
-      this.lastFailKind = "sesion"; this.failError = OTRA_SESION;
-      this.moveQueueToFailed();
+    if (s === "otra" || s === "sinsesion") {
+      this.apartarPorSesion(s === "otra" ? OTRA_SESION : this.sinSesionMsg);
       return false;
     }
     if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
@@ -432,11 +454,33 @@ export class SaveQueue {
     return true;
   }
 
-  /** Aparta lo que esperaba en la cola (otra sesión): nada sale hasta que alguien diga. */
-  private moveQueueToFailed() {
-    this.failed = [...this.failed, ...this.queue];
+  /**
+   * Otra sesión, o la sesión venció: se aparta lo que esperaba en la cola (y lo
+   * que esperaba su reintento) con ese aviso; nada sale hasta que alguien diga.
+   */
+  private apartarPorSesion(mensaje: string) {
+    if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
+    this.lastFailKind = "sesion";
+    this.failError = mensaje;
+    const q = this.queue;
     this.queue = [];
+    q.forEach((op) => this.apartar(op));
     this.refresh();
+  }
+
+  /**
+   * Aparta una escritura. Un «Limpiar todo» no se aparta: se descarta con aviso
+   * (V-O1). Reintentarlo después lo mandaría antes que lo que se marcó y guardó
+   * detrás, y lo borraría; el doctor lo vuelve a pulsar si aún lo quiere.
+   */
+  private apartar(op: SaveOp) {
+    if (op.kind !== "reset") { this.failed.push(op); return; }
+    const at = this.opAt.get(opKey(op));
+    const min = at === undefined ? 0 : Math.round((this.now() - at) / 60000);
+    this.opAt.delete(opKey(op));
+    this.discardedCount++;
+    this.pushDiscarded([op]);
+    this.discardError = `El «Limpiar todo» de ${min >= 1 ? `hace ${min} min` : "hace un momento"} no se aplicó; si lo quieres, vuelve a pulsarlo.`;
   }
 
   /** «Descartar»: tira lo apartado (la pantalla lo quita del dibujo y recarga del servidor). */
@@ -484,7 +528,8 @@ export class SaveQueue {
     // noche) no sale solo al volver la red: se aparta y se pregunta. TODO lo
     // que esperaba, no solo el primero que falló (cuarta vuelta)
     if (this.isStale(op)) {
-      this.failed.push(op);
+      this.apartar(op);
+      if (op.kind === "reset") { this.refresh(); this.pump(); return; }
       this.lastFailKind = "rechazo";
       const min = Math.round(this.staleAfterMs / 60000);
       this.failError = `Hay cambios que llevan más de ${min} min sin poder guardarse. Revisa el odontograma y pulsa «Reintentar» para mandarlos o «Descartar».`;
@@ -514,11 +559,11 @@ export class SaveQueue {
     let mensaje = errorMessage(err);
     if (tipo === "descartar") {
       const s = await this.sameSession();
-      if (s === "otra") {
+      if (s === "otra" || s === "sinsesion") {
         // N3-O4: un 403/404 porque la sede activa (o el usuario) cambió en otra
         // pestaña no es un «no» del servidor: se aparta con un aviso claro
         tipo = "sesion";
-        mensaje = OTRA_SESION;
+        mensaje = s === "otra" ? OTRA_SESION : this.sinSesionMsg;
       } else if (s === "nose") {
         // N4-O1: sin poder preguntar no se tira nada: se reintenta como un
         // fallo de red (y antes de mandar se vuelve a preguntar)
@@ -538,10 +583,10 @@ export class SaveQueue {
       return;
     }
     if (tipo === "sesion" || tipo === "rechazo") {
-      // apartado: lo demás sigue guardándose (no se queda como rehén)
-      if (!superseded()) this.failed.push(op);
-      this.lastFailKind = tipo;
-      this.failError = mensaje;
+      // apartado: lo demás sigue guardándose (no se queda como rehén); un
+      // «Limpiar todo» se descarta con aviso (V-O1)
+      if (!superseded()) this.apartar(op);
+      if (op.kind !== "reset") { this.lastFailKind = tipo; this.failError = mensaje; }
       this.refresh();
       this.pump();
       return;
@@ -570,7 +615,7 @@ export class SaveQueue {
     const s = await this.sameSession();
     this.checking = false;
     if (s === "misma") { this.refresh(); this.pump(); return; }
-    if (s === "otra") { this.lastFailKind = "sesion"; this.failError = OTRA_SESION; this.moveQueueToFailed(); return; }
+    if (s === "otra" || s === "sinsesion") { this.apartarPorSesion(s === "otra" ? OTRA_SESION : this.sinSesionMsg); return; }
     if (this.retryTimer === null) this.armRetry();
   }
 }
@@ -623,10 +668,11 @@ export function installPageHandlers(win: PageTarget, doc: DocTarget, store: KeyV
   const all = () => [...queues.values()];
   // la pestaña se oculta (cambiar de app en iPad, bloquear el teléfono): puede
   // ser el último aviso antes de que la maten → lo pendiente sale con keepalive.
-  // Al volver: lo apartado por la sesión se reintenta (si es el mismo usuario).
+  // Al volver: lo apartado por la sesión se reintenta (si es el mismo usuario),
+  // sin renovar la hora: lo de más de 15 min sigue esperando a «Reintentar» (V-O2).
   const onVisibility = () => {
     if (doc.visibilityState === "hidden") all().forEach((q) => q.flushForUnload());
-    else all().forEach((q) => { if (q.failedBySession()) void q.retryNow(); });
+    else all().forEach((q) => { if (q.failedBySession()) void q.retryNow({ auto: true }); });
   };
   const onPageHide = () => all().forEach((q) => q.flushForUnload());
   // cerrar o recargar en escritorio: el navegador pregunta si queda algo
@@ -639,7 +685,7 @@ export function installPageHandlers(win: PageTarget, doc: DocTarget, store: KeyV
   };
   // volvió la red: se reanuda lo que esperaba (con la comprobación de sesión)
   const onOnline = () => all().forEach((q) => { void q.resume(); });
-  const onFocus = () => all().forEach((q) => { if (q.failedBySession()) void q.retryNow(); });
+  const onFocus = () => all().forEach((q) => { if (q.failedBySession()) void q.retryNow({ auto: true }); });
   doc.addEventListener("visibilitychange", onVisibility);
   win.addEventListener("pagehide", onPageHide);
   win.addEventListener("beforeunload", onBeforeUnload);
@@ -730,10 +776,11 @@ export function renderPendingNotice(doc: NoticeDoc, getQs: () => SaveQueue[] = (
   }
   const span = (el as unknown as { _texto?: NoticeEl })._texto;
   if (span) span.textContent = texto; else el.textContent = texto;
-  // «Descartar» solo tira lo apartado: mientras solo hay «reintentando», no se
-  // enseña (no haría nada y lo que se quería tirar se guardaría igual, N4-O3)
+  // «Descartar» solo tira lo apartado: mientras dice «reintentando», no se
+  // enseña (no haría nada y lo que se quería tirar se guardaría igual, N4-O3;
+  // tampoco con algo apartado y otra cosa esperando la red, V-O7)
   const tirar = (el as unknown as { _tirar?: NoticeEl })._tirar;
-  if (tirar) (tirar.style as Record<string, string>).display = getQs().some((q) => q.hasFailed()) ? "" : "none";
+  if (tirar) (tirar.style as Record<string, string>).display = getQs().some((q) => q.hasFailed() && q.getStatus().state === "error") ? "" : "none";
 }
 
 let noticeQueued = false;
