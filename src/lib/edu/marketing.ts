@@ -90,7 +90,7 @@ export const EDU_LANDING_ANCHORS = {
  */
 export const EDU_MANAGER = {
   nombre: "Rafael",
-  numeroE164: "529992602093",
+  numeroE164: "529994387769",
   textoPrevio:
     "Hola Rafael, soy de <escuela> y quiero una demo de DaleControl Institucional.",
 } as const;
@@ -103,7 +103,7 @@ export function eduManagerWaHref(): string {
 }
 
 /**
- * El número tal como se lee: "+52 999 260 2093". Se DERIVA del E.164, no
+ * El número tal como se lee: "+52 999 438 7769". Se DERIVA del E.164, no
  * se escribe otra vez — dos copias de un teléfono es como se llega a que
  * el botón marque a un número y la letra chica enseñe otro.
  *
