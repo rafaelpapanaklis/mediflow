@@ -24,6 +24,16 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chargeFailureMessage } from "../proration";
 import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
+import { cobrarPendiente } from "../pago-pendiente-cliente";
+import {
+  ENTIDAD_CANDADO_COBRO,
+  crearCandadoDeCobro,
+  duenoDelCandadoEnBase,
+  soltarCandadoEnBase,
+  tomarCandadoEnBase,
+  type DbCandado,
+  type CapaRapida,
+} from "../candado-cobro.server";
 import {
   MENSAJE_PLAN_PREPAGADO,
   NOTA_SERVICIO_SUSPENDIDO,
@@ -395,6 +405,10 @@ function montar(e: Escenario = {}) {
             registra("candado.soltar", clave, dueno);
             if (candados.get(clave)?.dueno === dueno) candados.delete(clave);
           },
+          quien: async (clave) => {
+            const c = candados.get(clave);
+            return c && c.hasta > Date.now() ? c.dueno : null;
+          },
         }
       : { tomar: async () => true, soltar: async () => {} },
   };
@@ -753,16 +767,31 @@ test("subir: ya quedó hecho (pagado y plan local al día) → un reintento no c
   assert.deepEqual(await consultarPendiente(m.deps), { status: 200, body: { estado: "sin_pendiente" } });
 });
 
-test("subir: el update llegó a Stripe, la tarjeta falló y no se escribió el plan local → el reintento no anula la factura nueva ni cobra otra vez", async () => {
+test("subir (Y17): el update llegó a Stripe y la tarjeta falló → el plan NO se aplica en la base mientras no se pague; el reintento no anula la factura nueva ni cobra otra vez", async () => {
   const m = montar({ tarjetaFalla: true });
-  await subirYPagar(m.deps, "PRO");
-  m.deps.clinica.plan = "BASIC"; // el plan local no se alcanzó a escribir
+  const r1 = await subirYPagar(m.deps, "PRO");
+  assert.equal(r1.body.pagado, false);
+  assert.equal(m.planLocal(), null, "con la tarjeta rechazada la clínica no usa el plan nuevo sin haberlo pagado");
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir").planAplicadoEnBase, false);
   const r = await subirYPagar(m.deps, "PRO");
   assert.deepEqual(r, { status: 200, body: { ok: true, pagado: false, url: "https://pay.stripe.test/in_nueva" } });
   assert.equal(m.ops("invoices.voidInvoice").length, 1); // solo la vieja
   assert.equal(m.ops("subscriptions.update").length, 1);
   assert.equal(m.facturas.get("in_nueva").status, "open");
+  assert.equal(m.planLocal(), null, "el reintento tampoco lo aplica: sigue sin pagarse");
+});
+
+test("subir (Y17): con el cobro pagado SÍ se aplica el plan en la base", async () => {
+  const m = montar();
+  assert.equal((await subirYPagar(m.deps, "PRO")).body.pagado, true);
   assert.equal(m.planLocal(), "PRO");
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir").planAplicadoEnBase, true);
+  // Suspendida y con la tarjeta rechazada: tampoco se aplica (y los meses sin servicio sí se anulan).
+  const susp = montar({ suspendida: true, abiertas: MESES, tarjetaFalla: true });
+  const r = await subirYPagar(susp.deps, "PRO");
+  assert.equal(r.body.pagado, false);
+  assert.equal(susp.planLocal(), null);
+  for (const f of MESES) assert.equal(susp.facturas.get(f.id).status, "void", f.id);
 });
 
 test("subir: una anulada de hace más de 24 h, de otro flujo o de otro cliente NO se recupera", async () => {
@@ -1323,7 +1352,7 @@ test("candado con dueño: una petición lenta cuyo candado ya caducó y tomó ot
   const tomar = m.ops("candado.tomar")[0];
   const soltar = m.ops("candado.soltar")[0];
   assert.equal(soltar.args[1], tomar.args[2]); // soltó con SU dueño
-  assert.match(tomar.args[2], /^[0-9a-f-]{36}$/); // un dueño único por petición
+  assert.match(tomar.args[2], /^subir:[0-9a-f-]{36}$/); // un dueño único por petición, que dice QUÉ acción es
   // Cada petición usa un dueño distinto.
   const dos = montar({ candadoReal: true });
   await subirYPagar(dos.deps, "PRO");
@@ -1615,13 +1644,13 @@ test("X2 — «Subir» en una pestaña y «Pagar» en otra a la vez: UN solo cob
   assert.equal(m.candados.size, 0);
 });
 
-test("X2 — «Pagar» en una pestaña y «Subir» en otra: «Subir» recibe «ya hay un cambio en curso» sin tocar nada; un solo cobro y el plan no sube gratis", async () => {
+test("X2 — «Pagar» en una pestaña y «Subir» en otra: «Subir» recibe «tu pago está en proceso» (no «cambio de plan») sin tocar nada; un solo cobro y el plan no sube gratis", async () => {
   filasFactura.length = 0;
   const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
   const [pagar, subir] = await Promise.all([pagarPendiente(m.deps), subirYPagar(m.deps, "PRO")]);
   assert.deepEqual(pagar, { status: 200, body: { ok: true, pagado: true } });
   assert.equal(subir.status, 409);
-  assert.equal(subir.body.code, "CAMBIO_EN_CURSO");
+  assert.equal(subir.body.code, "PAGO_EN_CURSO");
   assert.equal(m.cobrosDeTarjeta(), 1); // el de «Pagar»
   assert.equal(m.cobros(), 0); // «Subir» no cambió el plan ni cobró el plan nuevo
   assert.equal(m.planSub(), "BASIC");
@@ -1648,7 +1677,7 @@ test("B2 — dos «Pagar» a la vez: un solo cobro y la segunda pestaña ve «Tu
   assert.deepEqual([r.status, r.body.code], [409, "SIN_PENDIENTE"]);
 });
 
-test("X2 — el candado de «Pagar»: se suelta siempre, no deja pasar a un rol sin permiso, y si sigue tomado tras esperar responde «cambio en curso» sin tocar nada", async () => {
+test("X2 — el candado de «Pagar»: se suelta siempre, no deja pasar a un rol sin permiso, y si sigue tomado tras esperar responde «cobro en curso» sin tocar nada", async () => {
   const falla = montar({ candadoReal: true, tarjetaFalla: true });
   assert.equal((await pagarPendiente(falla.deps)).body.pagado, false);
   assert.equal(falla.candados.size, 0);
@@ -1660,7 +1689,7 @@ test("X2 — el candado de «Pagar»: se suelta siempre, no deja pasar a un rol 
   const ocupado = montar({ candadoReal: true });
   ocupado.candados.set(claves.candadoSubir("clin_1"), { hasta: Date.now() + 60_000, dueno: "otro-proceso" });
   const r = await pagarPendiente(ocupado.deps);
-  assert.deepEqual([r.status, r.body.code], [409, "CAMBIO_EN_CURSO"]);
+  assert.deepEqual([r.status, r.body.code], [409, "COBRO_EN_CURSO"]);
   assert.ok(ocupado.ops("esperar").length >= 10, "esperó varios intentos antes de rendirse");
   assert.equal(ocupado.ops("invoices.pay").length + ocupado.ops("subscriptions.retrieve").length, 0);
   assert.equal(ocupado.candados.get(claves.candadoSubir("clin_1"))?.dueno, "otro-proceso"); // no soltó el del otro
@@ -1704,7 +1733,7 @@ test("B1 — «Subir» con el cobro en pausa: el bloqueo va ANTES del atajo «ya
   const sinPausa = montar({ planEnSuscripcion: "PRO", abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio" }] });
   const ok = await subirYPagar(sinPausa.deps, "PRO");
   assert.equal(ok.status, 200);
-  assert.equal(sinPausa.planLocal(), "PRO");
+  assert.equal(sinPausa.planLocal(), null, "Y17: la factura sigue abierta (sin cobrar): el plan no se aplica en la base");
 });
 
 test("M7 — el periodo pagado que deja reactivar con UN mes (trial_end + marca, no es un prepago) no se explica con «meses pagados por adelantado»: el texto es verdadero", async () => {
@@ -1790,7 +1819,7 @@ test("TRIAL_END — X2 de verdad: «Pagar» (que deja trial_end) y «Subir» en 
   const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
   const [pagar, subir] = await Promise.all([pagarPendiente(m.deps), subirYPagar(m.deps, "PRO")]);
   assert.deepEqual(pagar, { status: 200, body: { ok: true, pagado: true } });
-  assert.deepEqual([subir.status, subir.body.code], [409, "CAMBIO_EN_CURSO"]);
+  assert.deepEqual([subir.status, subir.body.code], [409, "PAGO_EN_CURSO"]);
   assert.equal(m.cobrosDeTarjeta() + m.cobros(), 1, "un solo cobro entre las dos pestañas");
   assert.equal(m.planSub(), "BASIC");
   assert.ok(m.periodoPagado(), "el ciclo quedó movido por trial_end");
@@ -1828,6 +1857,152 @@ test("TRIAL_END — B2 de verdad: dos «Pagar» a la vez con trial_end: un cobro
   assert.equal(m.reinicios(), 1);
   const claveCiclo = m.ops("subscriptions.update")[0].args[2].idempotencyKey as string;
   assert.match(claveCiclo, /^periodo-pagado:sub_1:\d+$/);
+});
+
+// ── Duodécima vuelta t4: Y18, Y19 y X2 (candado entre instancias) ─────────────────────────────────────
+
+test("Y18 — «Subir» dentro de las 24 h de gracia inicia un ciclo NUEVO desde el pago y cobra el plan nuevo completo; «Pagar» en la gracia NO cambia el ciclo (la diferencia es a propósito)", async () => {
+  const subir = montar({ abiertas: [FACTURA_VIEJA] }); // past_due con acceso por delante = gracia
+  assert.equal(subir.auditorias.length, 0);
+  assert.equal((await subirYPagar(subir.deps, "PRO")).body.pagado, true);
+  const u = subir.ops("subscriptions.update")[0].args[1];
+  assert.equal(u.billing_cycle_anchor, "now", "ciclo nuevo desde hoy");
+  assert.equal(u.proration_behavior, "none", "sin prorrateo: el plan nuevo completo");
+  assert.equal(subir.ops("prices.create")[0].args[0].unit_amount, 68900); // lista completa de PRO
+  assert.equal(subir.auditorias.find((x) => x.event === "pago-pendiente-subir").estabaSuspendida, false);
+  assert.equal(subir.auditorias.find((x) => x.event === "pago-pendiente-subir").montoCobradoMxn, 799.24);
+
+  const pagar = montar({ abiertas: [FACTURA_VIEJA] });
+  assert.equal((await pagarPendiente(pagar.deps)).body.pagado, true);
+  assert.equal(pagar.ops("subscriptions.update").length, 0, "«Pagar» en la gracia: el ciclo sigue igual");
+  // El porqué queda escrito en el código.
+  const fuente = readFileSync(path.resolve(__dirname, "../pago-pendiente.server.ts"), "utf8");
+  assert.match(fuente, /POR QUÉ «Subir de plan» ES DISTINTO DE «Pagar mi plan»/);
+});
+
+test("Y19 — el mensaje de «hay otra operación de cobro en curso» dice QUÉ es: un «Pagar» que espera a otro «Pagar» no habla de un cambio de plan", async () => {
+  const clave = claves.candadoSubir("clin_1");
+  const caso = async (dueno: string, accion: "pagar" | "subir") => {
+    const m = montar({ candadoReal: true });
+    m.candados.set(clave, { hasta: Date.now() + 60_000, dueno });
+    const r = accion === "pagar" ? await pagarPendiente(m.deps) : await subirYPagar(m.deps, "PRO");
+    return [r.status, r.body.code, r.body.error] as const;
+  };
+  assert.deepEqual(await caso("pagar:abc", "pagar"), [409, "PAGO_EN_CURSO", MENSAJES.pagoEnCurso]);
+  assert.deepEqual(await caso("subir:abc", "pagar"), [409, "CAMBIO_EN_CURSO", MENSAJES.cambioEnCurso]);
+  assert.deepEqual(await caso("pagar:abc", "subir"), [409, "PAGO_EN_CURSO", MENSAJES.pagoEnCurso]);
+  assert.deepEqual(await caso("subir:abc", "subir"), [409, "CAMBIO_EN_CURSO", MENSAJES.cambioEnCurso]);
+  assert.deepEqual(await caso("desconocido", "pagar"), [409, "COBRO_EN_CURSO", MENSAJES.cobroEnCurso]);
+  assert.doesNotMatch(MENSAJES.pagoEnCurso, /cambio de plan/i);
+  assert.doesNotMatch(MENSAJES.cobroEnCurso, /cambio de plan/i);
+  assert.match(MENSAJES.pagoEnCurso, /Tu pago está en proceso/);
+});
+
+test("Y19 — el cliente trata 409 PAGO_YA_REGISTRADO como ÉXITO («Tu pago ya se registró»), no como error; los demás 409 siguen siendo errores", async () => {
+  const f = (status: number, body: unknown) => async () => ({ status, ok: status >= 200 && status < 300, json: async () => body }) as unknown as Response;
+  assert.deepEqual(
+    await cobrarPendiente({ accion: "pagar" }, f(409, { code: "PAGO_YA_REGISTRADO", error: "Tu pago ya se registró." })),
+    { tipo: "ya_registrado", mensaje: "Tu pago ya se registró." },
+  );
+  for (const code of ["SIN_PENDIENTE", "CAMBIO_EN_CURSO", "PAGO_EN_CURSO", "COBRO_EN_CURSO", "COBRO_EN_PAUSA"]) {
+    const r = await cobrarPendiente({ accion: "pagar" }, f(409, { code, error: `texto ${code}` }));
+    assert.deepEqual(r, { tipo: "error", mensaje: `texto ${code}` }, code);
+  }
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(200, { ok: true, pagado: true })), { tipo: "pagado" });
+  // Y la pantalla: el éxito (toast verde y panel), no el toast rojo de error.
+  const comp = readFileSync(path.resolve(__dirname, "../../../components/dashboard/pago-pendiente.tsx"), "utf8");
+  assert.match(comp, /r\.tipo === "pagado" \|\| r\.tipo === "ya_registrado"/);
+  const bloque = comp.slice(comp.indexOf('r.tipo === "pagado" || r.tipo === "ya_registrado"'), comp.indexOf('r.tipo === "no_disponible"'));
+  assert.match(bloque, /toast\.success\(/);
+  assert.match(bloque, /router\.push\("\/dashboard\/suspended\/success"\)/);
+  assert.doesNotMatch(bloque, /toast\.error/);
+});
+
+// X2 — candado en la BASE (entre instancias), simulado con una base compartida
+function baseDoble() {
+  const filas: Array<{ clinicId: string; entityType: string; action: string; createdAt: Date; changes: any }> = [];
+  const bloqueos: string[] = [];
+  let falla = false;
+  const tx = {
+    $executeRaw: async (q: TemplateStringsArray, ...v: unknown[]) => { bloqueos.push(`${q.join("?")}|${v.join(",")}`); },
+    auditLog: {
+      findFirst: async ({ where }: any) => {
+        const mias = filas.filter((f) => f.clinicId === where.clinicId && f.entityType === where.entityType);
+        return mias.length ? mias[mias.length - 1] : null;
+      },
+      create: async ({ data }: any) => { filas.push({ ...data, createdAt: relojBase.ahora }); },
+    },
+  };
+  const relojBase = { ahora: new Date("2026-10-20T12:00:00Z") };
+  const db: DbCandado = {
+    $transaction: async (fn) => {
+      if (falla) throw new Error("base caída");
+      return fn(tx as any);
+    },
+  };
+  return { db, filas, bloqueos, reloj: relojBase, romper: () => { falla = true; } };
+}
+
+test("X2 — candado en la base: dos instancias (sin Upstash) no cobran a la vez; caduca solo; con dueño; no bloquea otra clínica; fail-open si la base cae", async () => {
+  const b = baseDoble();
+  const ttl = 90;
+  const ahora = () => b.reloj.ahora;
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "pagar:A", ttlSec: ttl, ahora: ahora() }, b.db), true);
+  // Otra instancia (otra petición) de la MISMA clínica: ocupado. Otra clínica: libre.
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), false);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c2", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), true);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: ahora() }, b.db), "pagar:A");
+  // Usa el candado de Postgres por clínica (transacción corta) y la bitácora, sin tabla nueva.
+  assert.ok(b.bloqueos.every((q) => q.includes("pg_advisory_xact_lock")));
+  assert.ok(b.filas.every((f) => f.entityType === ENTIDAD_CANDADO_COBRO));
+  // Soltar con otro dueño no suelta; con el suyo sí.
+  await soltarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), false);
+  await soltarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "pagar:A", ttlSec: ttl, ahora: ahora() }, b.db);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: ahora() }, b.db), null);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), true);
+  // Caduca solo si el proceso muere sin soltarlo.
+  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 91_000);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: ahora() }, b.db), null);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "pagar:C", ttlSec: ttl, ahora: ahora() }, b.db), true);
+  // Nunca se borra nada: solo se agregan filas.
+  assert.equal(b.filas.length, 5); // 4 reservas + 1 «libre»; ninguna se borra
+  // Fail-open: si la base cae, el cobro no se bloquea.
+  b.romper();
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c9", userId: "u", dueno: "pagar:Z", ttlSec: ttl, ahora: ahora() }, b.db), true);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c9", ttlSec: ttl }, b.db), null);
+});
+
+test("X2 — las dos capas juntas: la capa rápida es de CADA instancia (sin Upstash no se ven), pero la base las ve a las dos; suelta las dos", async () => {
+  const b = baseDoble();
+  const instancia = () => {
+    const mem = new Map<string, string>(); // la memoria de ESA instancia
+    const rapida: CapaRapida = {
+      adquirir: async (k, _t, d) => { if (mem.has(k)) return false; mem.set(k, d); return true; },
+      liberar: async (k, d) => { if (mem.get(k) === d) mem.delete(k); },
+    };
+    return { mem, candado: crearCandadoDeCobro({ clinicId: "c1", userId: "u" }, { rapida, db: b.db, ahora: () => b.reloj.ahora }) };
+  };
+  const A = instancia();
+  const B = instancia(); // otra instancia serverless: su memoria NO ve la de A
+  assert.equal(await A.candado.tomar("k", 90, "pagar:A"), true);
+  assert.equal(await B.candado.tomar("k", 90, "subir:B"), false, "la capa rápida de B está libre, pero la base la frena");
+  assert.equal(B.mem.size, 0, "y B no se queda con su capa rápida tomada");
+  assert.equal(await B.candado.quien(), "pagar:A");
+  await A.candado.soltar("k", "pagar:A");
+  assert.equal(A.mem.size, 0);
+  assert.equal(await B.candado.tomar("k", 90, "subir:B"), true);
+  await B.candado.soltar("k", "subir:B");
+  assert.equal(await A.candado.tomar("k", 90, "pagar:A2"), true);
+});
+
+test("X2 — el código NO exige UPSTASH_REDIS_REST_URL/TOKEN: sin ellas la capa rápida cae a memoria y la base cubre entre instancias", () => {
+  const raiz = path.resolve(__dirname, "../../../..");
+  const failban = readFileSync(path.join(raiz, "src/lib/failban.ts"), "utf8");
+  assert.match(failban, /Si NO existen → cae al rate-limit EN MEMORIA/);
+  assert.match(failban, /if \(!url \|\| !token\) \{/); // sin las variables: aviso y memoria, no error
+  const candado = readFileSync(path.join(raiz, "src/lib/billing/candado-cobro.server.ts"), "utf8");
+  assert.doesNotMatch(candado.replace(/\/\*[\s\S]*?\*\//g, ""), /UPSTASH/);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──

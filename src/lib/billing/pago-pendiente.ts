@@ -299,6 +299,9 @@ export const MENSAJES = {
   // en que el siguiente cobro ya está movido (meses pagados por adelantado, o el mes pagado al reactivarse tras una suspensión).
   cobroEnPausa: MENSAJE_PLAN_PREPAGADO,
   pagoYaRegistrado: "Tu pago ya se registró.",
+  // Mensajes de «hay otra operación de cobro de esta clínica en curso» según quién tiene el candado (revisión t4, Y19).
+  pagoEnCurso: "Tu pago está en proceso, espera unos segundos.",
+  cobroEnCurso: "Ya hay un cobro en curso, espera unos segundos.",
   subidaSinCobro: "No pudimos completar el cobro del cambio de plan. Escríbenos a soporte y lo revisamos contigo.",
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
