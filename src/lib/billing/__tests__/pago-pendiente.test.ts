@@ -24,7 +24,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chargeFailureMessage } from "../proration";
 import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
-import { finDeLoPagado, NOTA_SERVICIO_SUSPENDIDO } from "../cobro-rechazado";
+import {
+  MENSAJE_PLAN_PREPAGADO,
+  NOTA_SERVICIO_SUSPENDIDO,
+  cobroPausado,
+  enPeriodoPagado,
+  estadoVisibleDeSuscripcion,
+  finDeLoPagado,
+  periodoPagadoHasta,
+} from "../cobro-rechazado";
 import { aplicarReglaDeSuspension, facturasAbiertasDelPlan } from "../reactivacion-tras-suspension.server";
 import { MENSAJES_CHECKOUT } from "../mensajes-pago";
 import { ensureFirstMonthCoupon } from "../first-month-promo";
@@ -78,6 +86,8 @@ interface Escenario {
   suspendida?: boolean;
   /** El cobro de la suscripción está EN PAUSA en Stripe (prepago de varios meses, o ciclo re-alineado). */
   pausaCobro?: { behavior: string; resumes_at: number };
+  /** La suscripción ya está en un periodo pagado a mano (`trial_end` + la marca de t1), como la deja la regla de la suspensión. */
+  periodoPagado?: { trial_end: number; metadata: Record<string, string> };
   /** La factura del cambio de plan nace ANULADA (cobro en pausa que no se vio). */
   facturaNuevaAnulada?: boolean;
   /** Estado de cobro que `releerEstadoClinica` devuelve (la clínica cambió mientras «Pagar» esperaba el candado). */
@@ -86,6 +96,8 @@ interface Escenario {
   alEsperar?: () => void | Promise<void>;
   /** La suscripción ya trae este plan en su metadata (el cambio llegó a Stripe antes). */
   planEnSuscripcion?: string;
+  /** El cambio de ciclo genera un cobro REAL (no debería): `latest_invoice` es una factura nueva y pagada. */
+  reinicioCobra?: boolean;
   /** Excedente de CFDI ya sumado «a la próxima mensualidad» (items pendientes del cliente). */
   excedentePendiente?: boolean;
   /** `invoiceItems.list` falla de red. */
@@ -121,10 +133,11 @@ function montar(e: Escenario = {}) {
   let retrieves = 0;
   let otraPestanaActuo = false;
   let pausa: any = e.pausaCobro ?? null; // pause_collection de la suscripción en Stripe
-  let periodoPagado: { trial_end: number; metadata: Record<string, string> } | null = null; // trial_end + marca puestos por la regla de la suspensión
+  let periodoPagado: { trial_end: number; metadata: Record<string, string> } | null = e.periodoPagado ?? null; // trial_end + marca puestos por la regla de la suspensión
   let reinicios = 0; // cuántas veces Stripe aplicó DE VERDAD un reinicio de ciclo (las repeticiones con la misma clave no cuentan)
   const reiniciosPorClave = new Map<string, any>();
-  const PAGADO_EN = Math.floor(new Date("2026-10-20T15:00:00Z").getTime() / 1000);
+  // El pago ocurre «hace un minuto»: `realinearCiclo` exige un fin de lo pagado futuro (no se puede fijar a una fecha fija).
+  const PAGADO_EN = Math.floor(Date.now() / 1000) - 60;
   const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
   /** La otra pestaña termina la subida (anula/cambia el plan y se cobra) mientras esta petición choca con su clave. */
   const otraPestanaTermina = (plan: string) => {
@@ -184,7 +197,15 @@ function montar(e: Escenario = {}) {
           if (previaR) return previaR;
           reinicios++;
           periodoPagado = { trial_end: params.trial_end, metadata: params.metadata ?? {} };
-          const r = { id, status: "trialing", trial_end: params.trial_end, metadata: params.metadata, latest_invoice: { id: `in_reinicio_${reinicios}`, status: "paid", amount_paid: 0, amount_due: 0 } };
+          // Como Stripe: `latest_invoice` es la ÚLTIMA factura de la suscripción (aquí, el mes que acaba de cobrar «Pagar»), no
+          // una nueva: cambiar `trial_end` no genera ninguna factura.
+          const ultima = [...facturas.values()].filter((f) => f.status === "paid").sort((a, b) => (b.created ?? 0) - (a.created ?? 0))[0];
+          const r = {
+            id, status: "trialing", trial_end: params.trial_end, metadata: params.metadata,
+            latest_invoice: e.reinicioCobra
+              ? { id: "in_cobro_raro", status: "paid", amount_paid: 48_610, amount_due: 48_610 }
+              : ultima ? { ...ultima, amount_paid: ultima.amount_due } : null,
+          };
           reiniciosPorClave.set(opts.idempotencyKey, r);
           return r;
         }
@@ -385,6 +406,7 @@ function montar(e: Escenario = {}) {
     reinicios: () => reinicios,
     cobrosDeTarjeta: () => cobrosDeTarjeta,
     pausa: () => pausa,
+    periodoPagado: () => periodoPagado,
     stripe,
     PAGADO_EN,
     avisos,
@@ -1604,7 +1626,7 @@ test("X2 — «Pagar» en una pestaña y «Subir» en otra: «Subir» recibe «y
   assert.equal(m.cobros(), 0); // «Subir» no cambió el plan ni cobró el plan nuevo
   assert.equal(m.planSub(), "BASIC");
   assert.equal(m.planLocal(), null);
-  assert.equal(m.ops("subscriptions.update").filter((l) => l.args[1].metadata).length, 0);
+  assert.equal(m.ops("subscriptions.update").filter((l) => l.args[1].metadata?.plan).length, 0);
   assert.equal(m.ops("customers.deleteDiscount").length, 0);
   assert.equal(m.candados.size, 0);
 });
@@ -1685,26 +1707,127 @@ test("B1 — «Subir» con el cobro en pausa: el bloqueo va ANTES del atajo «ya
   assert.equal(sinPausa.planLocal(), "PRO");
 });
 
-test("M7 — la pausa que deja reactivar con UN mes (no es un prepago) no se explica con «meses pagados por adelantado»: el texto es verdadero en los dos casos", async () => {
-  // La pausa de un solo mes tras una suspensión: ~26 días, la deja la propia regla de la suspensión.
+test("M7 — el periodo pagado que deja reactivar con UN mes (trial_end + marca, no es un prepago) no se explica con «meses pagados por adelantado»: el texto es verdadero", async () => {
+  // El periodo de un solo mes tras una suspensión: lo deja la propia regla de la suspensión (trial_end + marca de t1).
   const m = montar({ suspendida: true, abiertas: MESES });
   assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
-  const pausaReal = m.pausa();
-  assert.equal(pausaReal.behavior, "void");
-  // Un cobro rechazado posterior con esa pausa puesta: «Subir» se bloquea y lo dice sin falsedades.
-  const despues = montar({ pausaCobro: pausaReal });
+  const periodo = m.periodoPagado();
+  assert.ok(periodo, "la regla dejó el periodo pagado");
+  // Un cobro rechazado posterior con ese periodo puesto: «Subir» se bloquea y lo dice sin falsedades.
+  const despues = montar({ periodoPagado: periodo! });
   const r = await subirYPagar(despues.deps, "PRO");
   assert.equal(r.status, 409);
+  assert.equal(r.body.code, "COBRO_EN_PAUSA");
   const texto = r.body.error as string;
   assert.doesNotMatch(texto, /adelantado|prepag/i);
   assert.match(texto, /ya está pagado/);
   assert.match(texto, /soporte/);
-  assert.doesNotMatch(texto, /stripe/i);
+  assert.doesNotMatch(texto, /stripe|prueba/i);
   // El GET no ofrece planes y da el mismo texto.
   const g = await consultarPendiente(despues.deps);
   assert.deepEqual(g.body.opcionesSubir, []);
   assert.equal(g.body.subirNoDisponible, texto);
   assert.doesNotMatch(MENSAJES.cobroEnPausa, /adelantado|prepag/i);
+  assert.equal(MENSAJES.cobroEnPausa, MENSAJE_PLAN_PREPAGADO, "un solo texto para «Subir» y para cambiar de plan");
+});
+
+// ── Mecanismo nuevo de t1 (98a8bfb6): `trial_end` + marca `periodo_pagado_hasta` ─────────────────────────
+
+test("TRIAL_END — «Pagar» suspendida: el ciclo se mueve con trial_end (sin pausa ni ancla), la clínica NUNCA queda «En prueba» y NO hay falsa alarma de cobro inesperado", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES });
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+  const p = m.ops("subscriptions.update")[0].args[1];
+  assert.ok(p.trial_end > m.PAGADO_EN);
+  assert.equal(p.pause_collection, undefined);
+  assert.equal(p.billing_cycle_anchor, undefined);
+  // Stripe la reporta «trialing», pero con la marca de t1 NUESTRA app la trata como periodo pagado y la guarda `active`.
+  const viva = await (m.stripe as any).subscriptions.retrieve("sub_1");
+  assert.equal(viva.status, "trialing");
+  assert.equal(enPeriodoPagado(viva), true);
+  assert.equal(estadoVisibleDeSuscripcion(viva.status, viva), "active", "se escribe active: nunca «En prueba»");
+  assert.equal(cobroPausado(viva), true);
+  assert.equal(periodoPagadoHasta(viva)?.toISOString(), new Date(p.trial_end * 1000).toISOString());
+  // Lo que ve la clínica en estas respuestas no dice «prueba».
+  const g = await consultarPendiente(m.deps);
+  assert.doesNotMatch(JSON.stringify(g.body), /prueba|trial/i);
+  // La `latest_invoice` que devuelve el cambio de ciclo es el MES RECIÉN COBRADO (Stripe no crea factura al mover
+  // trial_end): no es un cobro inesperado y NO debe avisar al admin ni dejar fallos.
+  const a = m.auditorias.find((x) => x.event === "pago-pendiente-regla-suspension");
+  assert.equal(a.realineo, "hecho");
+  assert.deepEqual(a.fallos, []);
+  assert.deepEqual(m.avisos, []);
+});
+
+test("TRIAL_END — un cobro REAL generado por el cambio de ciclo (otra factura distinta del mes pagado) SÍ se reporta al admin", async () => {
+  const m = montar({ suspendida: true, abiertas: MESES, reinicioCobra: true });
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+  const a = m.auditorias.find((x) => x.event === "pago-pendiente-regla-suspension");
+  assert.equal(a.realineo, "cobro_inesperado");
+  assert.equal(a.fallos.length, 1);
+  assert.match(a.fallos[0], /in_cobro_raro/);
+  assert.equal(m.avisos.length, 1);
+});
+
+test("TRIAL_END — «Subir» en un periodo pagado (trial_end + marca): bloqueado con texto verdadero, sin tocar nada; sin la marca (una prueba normal) NO se bloquea", async () => {
+  const hasta = new Date(Date.now() + 25 * 86_400_000);
+  const periodo = { trial_end: Math.floor(hasta.getTime() / 1000), metadata: { periodo_pagado_hasta: hasta.toISOString() } };
+  const m = montar({ periodoPagado: periodo, descuentoCliente: CUPON_CLIENTE, candadoReal: true });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual([r.status, r.body.code, r.body.error], [409, "COBRO_EN_PAUSA", MENSAJES.cobroEnPausa]);
+  for (const op of ["customers.deleteDiscount", "prices.create", "invoices.update", "invoices.voidInvoice", "subscriptions.update"]) {
+    assert.equal(m.ops(op).length, 0, op);
+  }
+  assert.equal(m.planLocal(), null);
+  assert.equal(m.candados.size, 0);
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir-bloqueado-por-pausa").planDestino, "PRO");
+  // «Pagar mi plan» sigue funcionando en ese periodo.
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+});
+
+test("TRIAL_END — X2 de verdad: «Pagar» (que deja trial_end) y «Subir» en dos pestañas a la vez cobran UNA vez y el plan no sube gratis; si «Subir» llegara después, ve el periodo pagado y se bloquea", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
+  const [pagar, subir] = await Promise.all([pagarPendiente(m.deps), subirYPagar(m.deps, "PRO")]);
+  assert.deepEqual(pagar, { status: 200, body: { ok: true, pagado: true } });
+  assert.deepEqual([subir.status, subir.body.code], [409, "CAMBIO_EN_CURSO"]);
+  assert.equal(m.cobrosDeTarjeta() + m.cobros(), 1, "un solo cobro entre las dos pestañas");
+  assert.equal(m.planSub(), "BASIC");
+  assert.ok(m.periodoPagado(), "el ciclo quedó movido por trial_end");
+  // La segunda pestaña reintenta DESPUÉS: ya no hay nada pendiente (los meses se anularon y el mes se pagó).
+  const otra = await subirYPagar(m.deps, "PRO");
+  assert.equal(otra.status, 409);
+  assert.equal(m.cobrosDeTarjeta() + m.cobros(), 1);
+  // Y si quedara una factura abierta (p. ej. un cobro posterior rechazado) con el periodo pagado puesto, «Subir» se bloquea.
+  const con = montar({ periodoPagado: m.periodoPagado()!, abiertas: [{ ...FACTURA_VIEJA, id: "in_nuevo_rechazo" }], candadoReal: true });
+  const bloqueada = await subirYPagar(con.deps, "PRO");
+  assert.deepEqual([bloqueada.status, bloqueada.body.code], [409, "COBRO_EN_PAUSA"]);
+  assert.equal(con.cobros() + con.cobrosDeTarjeta(), 0);
+});
+
+test("TRIAL_END — B1 de verdad: periodo pagado + «ya está en el plan destino» → el bloqueo va antes del atajo (no aplica el plan ni quita cupones)", async () => {
+  const hasta = new Date(Date.now() + 25 * 86_400_000);
+  const m = montar({
+    planEnSuscripcion: "PRO",
+    periodoPagado: { trial_end: Math.floor(hasta.getTime() / 1000), metadata: { periodo_pagado_hasta: hasta.toISOString() } },
+    descuentoCliente: CUPON_CLIENTE,
+    abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio", billing_reason: "subscription_update" }],
+  });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual([r.status, r.body.code], [409, "COBRO_EN_PAUSA"]);
+  assert.equal(m.planLocal(), null);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0);
+});
+
+test("TRIAL_END — B2 de verdad: dos «Pagar» a la vez con trial_end: un cobro, UN solo cambio de ciclo (misma clave) y la segunda ve «Tu pago ya se registró»", async () => {
+  const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
+  const [a, b] = await Promise.all([pagarPendiente(m.deps), pagarPendiente(m.deps)]);
+  assert.equal(a.body.pagado, true);
+  assert.equal(b.body.code, "PAGO_YA_REGISTRADO");
+  assert.equal(m.cobrosDeTarjeta(), 1);
+  assert.equal(m.reinicios(), 1);
+  const claveCiclo = m.ops("subscriptions.update")[0].args[2].idempotencyKey as string;
+  assert.match(claveCiclo, /^periodo-pagado:sub_1:\d+$/);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──

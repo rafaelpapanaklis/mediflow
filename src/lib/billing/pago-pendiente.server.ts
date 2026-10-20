@@ -17,6 +17,7 @@ import {
   aplicarReglaDeSuspension,
   anularFacturasDeMesesSuspendidos,
   facturasAbiertasDelPlan,
+  mensajeCobroInesperado,
   type StripeParaSuspension,
 } from "./reactivacion-tras-suspension.server";
 import { FALLO_LECTURA_REGLA, avisoFalloReglaSuspension, avisoSubidaSinCobro, avisoCobroMenorQueLoMostrado, avisoReposicionSinVerificar, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
@@ -460,15 +461,22 @@ async function reglaTrasPagar(deps: DepsPago, stripe: StripePago, facturaPagada:
     const otras = (await facturasAbiertasDelPlan(real, subId)).filter((f) => f.id !== facturaPagada.id);
     // Se paga UN mes (la factura más reciente); los meses suspendidos se anulan y el ciclo pasa a «hoy + 30 días».
     const r = await aplicarReglaDeSuspension({ stripe: real, clinicId: deps.clinica.id, sub: viva, pagadoEn, finDeLoPagado: finDeLoPagado(pagadoEn, 1), facturas: otras });
+    // Falso positivo del helper: `trial_end` no genera factura, así que la `latest_invoice` que devuelve el cambio de ciclo
+    // es el MES QUE ACABAMOS DE COBRAR. El helper la toma por «cobro inesperado» y pediría al admin reembolsar un pago
+    // legítimo. Si esa factura es la que pagó este botón, no es inesperada: se descarta ese aviso (cualquier OTRO cobro
+    // sí se sigue reportando).
+    const eraElMesPagado = r.realineo.tipo === "cobro_inesperado" && r.realineo.facturaId === facturaPagada.id;
+    const fallos = eraElMesPagado ? r.fallos.filter((f) => f !== mensajeCobroInesperado(facturaPagada.id)) : r.fallos;
     await deps.auditar({
       event: "pago-pendiente-regla-suspension",
       accion: "pagar",
       facturaPagadaId: facturaPagada.id,
       anuladas: r.anuladas,
-      realineo: r.realineo.tipo,
-      fallos: r.fallos,
+      realineo: eraElMesPagado ? "hecho" : r.realineo.tipo,
+      ...(eraElMesPagado ? { latestInvoiceEsElMesPagado: true } : {}),
+      fallos,
     });
-    if (r.fallos.length > 0) await avisarFalloDeRegla(deps, "pagar", r.fallos);
+    if (fallos.length > 0) await avisarFalloDeRegla(deps, "pagar", fallos);
   } catch (err) {
     await falloDeReglaInesperado(deps, "pagar", err);
   }
