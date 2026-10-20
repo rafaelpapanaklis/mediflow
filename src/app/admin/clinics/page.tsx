@@ -10,6 +10,7 @@ import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import { loadModulosContratados, computeMrrModulos, modulosDeClinica, type FilaModulo } from "@/lib/admin/modulos";
 import { cargarOrigenes } from "@/lib/admin/origen-clinica";
 import { AdminClinicsClient, type FilaClinica } from "./clinics-client";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
 
@@ -139,7 +140,7 @@ export default async function AdminClinicsPage() {
     // "una prueba".
     prisma.subscriptionInvoice.groupBy({
       by: ["clinicId"],
-      where: { status: "paid" },
+      where: sinActivacionManual({ status: "paid" }),
       _count: { _all: true },
       _max: { paidAt: true },
       _sum: { amount: true },

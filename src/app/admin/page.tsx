@@ -23,6 +23,7 @@ import { listarPendientesAdmin } from "@/lib/billing/spei-directo";
 import {
   fechaConDiaSemanaAdmin, inicioDeHaceDias, inicioDelAnio, inicioDelDia, inicioDelMes, inicioDelMesAnterior,
 } from "@/lib/admin/zona-horaria";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
@@ -152,7 +153,7 @@ async function renderAdminDashboard() {
     // OR createdAt/paidAt: una factura CREADA el mes pasado pero PAGADA este
     // mes cuenta para «por cobrar» y para «últimos pagos».
     prisma.subscriptionInvoice.findMany({
-      where:   { OR: [{ createdAt: { gte: prev1 } }, { paidAt: { gte: prev1 } }] },
+      where:   sinActivacionManual({ OR: [{ createdAt: { gte: prev1 } }, { paidAt: { gte: prev1 } }] }),
       include: { clinic: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -166,14 +167,14 @@ async function renderAdminDashboard() {
       .groupBy({ by: ["clinicId"], where: { startsAt: { lte: now } }, _max: { startsAt: true } })
       .catch((e) => { console.error("[admin] última cita por clínica:", e); return null; }),
     prisma.subscriptionInvoice
-      .groupBy({ by: ["clinicId"], where: { status: "paid" }, _count: { _all: true }, _max: { paidAt: true } })
+      .groupBy({ by: ["clinicId"], where: sinActivacionManual({ status: "paid" }), _count: { _all: true }, _max: { paidAt: true } })
       .catch((e) => { console.error("[admin] pagos históricos por clínica:", e); return null; }),
     prisma.subscriptionInvoice
       .findMany({
-        where: {
+        where: sinActivacionManual({
           status: "paid",
           OR: [{ paidAt: { gte: desde12m } }, { AND: [{ paidAt: null }, { createdAt: { gte: desde12m } }] }],
-        },
+        }),
         select: { amount: true, paidAt: true, createdAt: true },
       })
       .catch((e) => { console.error("[admin] cobros del año:", e); return null; }),

@@ -46,9 +46,11 @@ test("cobro fallido: una factura de módulo no suspende a la clínica", () => {
     "la suspensión ya no depende de que la factura sea del plan",
   );
   // Y el `past_due` sigue colgando de esa decisión, no escrito por fuera.
+  // ws1-t1: además, un aviso retrasado de una factura ya pagada no suspende (`suspende = canSuspend && …`).
+  assert.match(cuerpo, /const suspende\s*=\s*canSuspend\s*&&\s*motivoSinSuspender === null/, "la suspensión ya no cuelga de canSuspend");
   const iSuspende = cuerpo.indexOf(`subscriptionStatus: "past_due"`);
-  const iDecision = cuerpo.indexOf("if (canSuspend)");
-  assert.ok(iDecision !== -1 && iSuspende > iDecision, "past_due se escribe fuera de `if (canSuspend)`");
+  const iDecision = cuerpo.indexOf("if (suspende && antes)");
+  assert.ok(iDecision !== -1 && iSuspende > iDecision, "past_due se escribe fuera de `if (suspende && antes)`");
 });
 
 test("cobro fallido de módulo: igual se registra, para que salga en «por cobrar»", () => {

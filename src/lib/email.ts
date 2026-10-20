@@ -484,3 +484,177 @@ export async function sendPlanRenewedEmail(opts: {
     text,
   });
 }
+
+function escaparHtml(valor: string): string {
+  return valor
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Correo "No pudimos cobrar tu plan" — se manda UNA vez por cobro rechazado (el primer
+ * `invoice.payment_failed` de la renovación; ver webhooks/stripe). Dice lo que pasó, hasta cuándo sigue
+ * el acceso (hora de la clínica, ya formateada por quien llama) y que nada se pierde: en cuanto se paga,
+ * todo vuelve como estaba. Español neutro, tuteo.
+ */
+export function buildPaymentFailedEmail(opts: {
+  firstName?: string | null;
+  clinicName: string;
+  planName: string;
+  /** Fecha y hora de suspensión YA formateada en la zona de la clínica. */
+  suspensionLabel: string;
+  payUrl: string;
+}): { subject: string; html: string; text: string } {
+  const hi = opts.firstName ? `, ${escaparHtml(opts.firstName)}` : "";
+  const clinica = escaparHtml(opts.clinicName);
+  const plan = escaparHtml(opts.planName);
+  const cuando = escaparHtml(opts.suspensionLabel);
+  const url = escaparHtml(opts.payUrl);
+
+  const html = `
+<!doctype html>
+<html lang="es">
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #0b0815; color: #f5f5f7; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #121020; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 40px 32px;">
+    <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #a78bfa; margin-bottom: 20px;">
+      DaleControl
+    </div>
+    <h1 style="font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px 0; color: #f5f5f7;">
+      No pudimos cobrar tu plan
+    </h1>
+    <p style="font-size: 15px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
+      Hola${hi}, tu banco rechazó el cobro del plan <strong style="color: #f5f5f7;">${plan}</strong> de <strong style="color: #f5f5f7;">${clinica}</strong>.
+    </p>
+
+    <div style="padding: 18px 20px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); border-radius: 10px; margin: 24px 0;">
+      <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #fca5a5; font-weight: 600; margin-bottom: 6px;">
+        Tu acceso se suspende
+      </div>
+      <div style="font-size: 15px; color: #f5f5f7; line-height: 1.5; font-weight: 600;">
+        ${cuando}
+      </div>
+    </div>
+
+    <p style="font-size: 14px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
+      Hasta entonces puedes seguir trabajando con normalidad. Actualiza tu tarjeta o paga desde tu panel
+      para que no se interrumpa el servicio. Si pasa la hora, tu acceso se suspende, pero
+      <strong style="color: #f5f5f7;">tus datos quedan completos y a salvo</strong>: en cuanto pagues, todo vuelve como estaba.
+    </p>
+
+    <a href="${url}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(180deg, #8b5cf6, #7c3aed); color: #fff; font-weight: 600; text-decoration: none; border-radius: 10px; font-size: 15px; margin: 8px 0 32px 0;">
+      Actualizar mi tarjeta →
+    </a>
+
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 28px 0;" />
+
+    <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
+      ¿Dudas? Responde este correo o escríbenos a
+      <a href="mailto:soporte@dalecontrol.com" style="color: #a78bfa;">soporte@dalecontrol.com</a>.
+      <br /><br />
+      DaleControl — Software médico 🇲🇽
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text =
+    `No pudimos cobrar tu plan\n\n` +
+    `Hola${opts.firstName ? `, ${opts.firstName}` : ""}, tu banco rechazó el cobro del plan ${opts.planName} de "${opts.clinicName}".\n\n` +
+    `Fecha y hora de suspensión: ${opts.suspensionLabel}\n\n` +
+    `Hasta entonces puedes seguir trabajando con normalidad. Actualiza tu tarjeta o paga desde tu panel para que no se interrumpa el servicio. ` +
+    `Si pasa la hora, tu acceso se suspende, pero tus datos quedan completos y a salvo: en cuanto pagues, todo vuelve como estaba.\n\n` +
+    `Actualizar mi tarjeta: ${opts.payUrl}\n\n` +
+    `¿Dudas? soporte@dalecontrol.com\n` +
+    `DaleControl — Software médico MX`;
+
+  return { subject: "No pudimos cobrar tu plan · DaleControl", html, text };
+}
+
+export async function sendPaymentFailedEmail(opts: {
+  email: string;
+  firstName?: string | null;
+  clinicName: string;
+  planName: string;
+  suspensionLabel: string;
+  payUrl: string;
+}): Promise<void> {
+  const { subject, html, text } = buildPaymentFailedEmail(opts);
+  await sendEmail({ to: opts.email, subject, html, text });
+}
+
+/**
+ * Correo «Tu acceso está suspendido por falta de pago» — el cobro rechazado se avisó cuando la gracia de 24 h ya
+ * había vencido (webhook caído o entrega reintentada). Mismo candado que «No pudimos cobrar tu plan»: nunca los dos.
+ * Dice que los datos están a salvo y qué hacer para volver a entrar. Español neutro, tuteo.
+ */
+export function buildPlanSuspendedEmail(opts: {
+  firstName?: string | null;
+  clinicName: string;
+  planName: string;
+  payUrl: string;
+}): { subject: string; html: string; text: string } {
+  const hi = opts.firstName ? `, ${escaparHtml(opts.firstName)}` : "";
+  const clinica = escaparHtml(opts.clinicName);
+  const plan = escaparHtml(opts.planName);
+  const url = escaparHtml(opts.payUrl);
+
+  const html = `
+<!doctype html>
+<html lang="es">
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #0b0815; color: #f5f5f7; margin: 0; padding: 40px 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #121020; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 40px 32px;">
+    <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #a78bfa; margin-bottom: 20px;">
+      DaleControl
+    </div>
+    <h1 style="font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px 0; color: #f5f5f7;">
+      Tu acceso está suspendido por falta de pago
+    </h1>
+    <p style="font-size: 15px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
+      Hola${hi}, tu banco rechazó el cobro del plan <strong style="color: #f5f5f7;">${plan}</strong> de <strong style="color: #f5f5f7;">${clinica}</strong> y el acceso a tu panel quedó suspendido.
+    </p>
+
+    <div style="padding: 18px 20px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); border-radius: 10px; margin: 24px 0;">
+      <div style="font-size: 15px; color: #f5f5f7; line-height: 1.5;">
+        <strong>Tus datos están completos y a salvo.</strong> En cuanto pagues, todo vuelve como estaba.
+      </div>
+    </div>
+
+    <a href="${url}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(180deg, #8b5cf6, #7c3aed); color: #fff; font-weight: 600; text-decoration: none; border-radius: 10px; font-size: 15px; margin: 8px 0 32px 0;">
+      Pagar y volver a entrar →
+    </a>
+
+    <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 28px 0;" />
+
+    <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
+      ¿Dudas o necesitas ayuda? Responde este correo o escríbenos a
+      <a href="mailto:soporte@dalecontrol.com" style="color: #a78bfa;">soporte@dalecontrol.com</a>.
+      <br /><br />
+      DaleControl — Software médico 🇲🇽
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text =
+    `Tu acceso está suspendido por falta de pago\n\n` +
+    `Hola${opts.firstName ? `, ${opts.firstName}` : ""}, tu banco rechazó el cobro del plan ${opts.planName} de "${opts.clinicName}" y el acceso a tu panel quedó suspendido.\n\n` +
+    `Tus datos están completos y a salvo. En cuanto pagues, todo vuelve como estaba.\n\n` +
+    `Pagar y volver a entrar: ${opts.payUrl}\n\n` +
+    `¿Dudas? soporte@dalecontrol.com\n` +
+    `DaleControl — Software médico MX`;
+
+  return { subject: "Tu acceso está suspendido por falta de pago · DaleControl", html, text };
+}
+
+export async function sendPlanSuspendedEmail(opts: {
+  email: string;
+  firstName?: string | null;
+  clinicName: string;
+  planName: string;
+  payUrl: string;
+}): Promise<void> {
+  const { subject, html, text } = buildPlanSuspendedEmail(opts);
+  await sendEmail({ to: opts.email, subject, html, text });
+}

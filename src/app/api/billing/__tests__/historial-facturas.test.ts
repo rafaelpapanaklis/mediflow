@@ -31,9 +31,15 @@ function cumple(fila: Fila, where: any): boolean {
       if (!(cond as any[]).some((w) => cumple(fila, w))) return false;
       continue;
     }
+    if (clave === "AND") {
+      if (!(cond as any[]).every((w) => cumple(fila, w))) return false;
+      continue;
+    }
+    if (cond === null) { if (fila[clave] != null) return false; continue; }
     if (cond !== null && typeof cond === "object" && !(cond instanceof Date)) {
       for (const [op, v] of Object.entries(cond as Record<string, any>)) {
         if (op === "gt") { if (!(fila[clave] > v)) return false; }
+        else if (op === "not") { if (!(fila[clave] != null && fila[clave] !== v)) return false; } // SQL: <> excluye NULL
         else if (op === "in") { if (!(v as any[]).includes(fila[clave])) return false; }
         else throw new Error(`operador sin doble: ${op}`); // nada de falsos verdes
       }
@@ -218,6 +224,15 @@ test("A · una fila local que NO es una factura de Stripe se queda (pago manual,
   assert.ok(ids.includes(`stripe:${IN_29}`));
 });
 
+test("A · la activación manual de /admin (fila de $0, método «admin») no sale en el historial de la clínica: no hubo cobro", async () => {
+  tablas.subscriptionInvoice.push(
+    { ...filaLocal29, id: "si_activacion", reference: null, method: "admin", amount: 0, notes: "Activación manual desde /admin (sin cobro registrado)", paidAt: new Date("2026-09-12T15:00:00Z"), createdAt: new Date("2026-09-12T15:00:00Z") },
+  );
+  const { body } = await historial();
+  assert.ok(!body.invoices.some((f) => f.id === "local:si_activacion"), "ni un renglón «Pagado $0.00»");
+  assert.ok(body.invoices.some((f) => f.id === `stripe:${IN_29}`), "los cobros reales siguen");
+});
+
 test("A · pagada a mano y abierta en Stripe: un renglón, el PAGADO (sin botón «Pagar»)", async () => {
   // La tarjeta falló, la clínica pagó por SPEI y administración lo registró
   // con el número de la factura; en Stripe sigue abierta.
@@ -324,7 +339,8 @@ test("B · consumo, cargos del admin y recargas de otra clínica NO salen", asyn
     ["wallet:tx_topup_200"],
   );
   for (const c of consultas) {
-    const clinicId = c.modelo === "clinic" ? c.where.id : c.where.clinicId;
+    // El `where` puede venir envuelto en AND por el filtro de pagos reales (sinActivacionManual).
+    const clinicId = c.modelo === "clinic" ? c.where.id : c.where.clinicId ?? c.where.AND?.find((w: any) => w.clinicId)?.clinicId;
     assert.equal(clinicId, "c1", `${c.modelo} se consultó sin el tenant de la sesión`);
   }
 });

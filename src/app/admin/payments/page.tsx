@@ -9,9 +9,12 @@ import { comparePaymentDateDesc } from "@/lib/admin/payment-date";
 import { isInTrial, isPlanExpired } from "@/lib/plan-status";
 import { PaymentsClient } from "./payments-client";
 import { SpeiPendientes } from "./spei-pendientes";
+import { FacturasTarjetaPendientes } from "./facturas-tarjeta-pendientes";
+import { clinicasConFacturaPendienteTrasPagoManual } from "@/lib/billing/facturas-tarjeta-pendientes.server";
 import { listarPendientesAdmin, type PendienteAdminDTO } from "@/lib/billing/spei-directo";
 import { inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
 import { leerPagosSaldoIaRecientes, type PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 /** Tope de la pestaña "Todos los pagos". */
 const RECENT_PAYMENTS_LIMIT = 100;
@@ -168,12 +171,12 @@ async function renderPaymentsPage() {
   const [thisMonthRev, prevMonthRev, aiTopups] =
     await Promise.all([
       safe(prisma.subscriptionInvoice.aggregate({
-        where: { status: "paid", paidAt: { gte: firstOfMonth } },
+        where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfMonth } }),
         _sum: { amount: true },
         _count: true,
       }), { _sum: { amount: 0 }, _count: 0 } as any),
       safe(prisma.subscriptionInvoice.aggregate({
-        where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lt: firstOfMonth } },
+        where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfPrevMonth, lt: firstOfMonth } }),
         _sum: { amount: true },
       }), { _sum: { amount: 0 } } as any),
       safe(leerPagosSaldoIaRecientes(), [] as PagoSaldoIaGlobalDTO[]),
@@ -245,10 +248,14 @@ async function renderPaymentsPage() {
   // Transferencias SPEI directas por confirmar: van ARRIBA y destacadas. Con su
   // propio try/catch: sin el SQL aplicado la lista queda vacía y la página sigue.
   const speiPendientes = await safe(listarPendientesAdmin(), [] as PendienteAdminDTO[]);
+  // Aviso persistente: clínicas con la tarjeta viva y una factura del plan abierta después de un pago manual (se
+  // calcula contra Stripe en cada carga; sin Stripe o si falla, la lista queda vacía y la página sigue).
+  const facturasTarjetaPendientes = await safe(clinicasConFacturaPendienteTrasPagoManual(), []);
 
   return (
     <>
     <SpeiPendientes items={JSON.parse(JSON.stringify(speiPendientes))} />
+    <FacturasTarjetaPendientes items={JSON.parse(JSON.stringify(facturasTarjetaPendientes))} />
     <PaymentsClient
       metrics={{
         totalClinics,

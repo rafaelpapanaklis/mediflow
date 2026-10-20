@@ -155,7 +155,8 @@ test("customer.subscription.updated escribe las dos fechas con subscriptionPerio
   const caseAt = source.indexOf('case "customer.subscription.updated"');
   assert.ok(caseAt > 0, "no se encontró el handler");
   const body = source.slice(caseAt, source.indexOf('case "customer.subscription.deleted"', caseAt));
-  assert.match(body, /const periodFields = subscriptionPeriodFields\(sub\);/, "la renovación debe mover trialEndsAt junto con nextBillingDate");
+  // ws1-t1: sobre la suscripción VIVA y su estado real (un `updated` «active» tardío no regala el periodo).
+  assert.match(body, /const periodFields = subscriptionPeriodFields\(\{\s*\.\.\.\(suscripcionViva \?\? sub\),/, "la renovación debe mover trialEndsAt junto con nextBillingDate");
   assert.match(body, /\.\.\.periodFields,/, "el resultado del helper tiene que ir al update");
   assert.doesNotMatch(body, /nextBillingDateFields\(/, "el helper viejo solo movía nextBillingDate");
 });

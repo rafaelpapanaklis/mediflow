@@ -7,6 +7,7 @@ import { diaAdmin } from "@/lib/admin/zona-horaria";
 import { diaDePeriodo } from "@/lib/admin/dia-de-periodo";
 import { getAdminMrr } from "@/lib/admin/mrr";
 import { computeMrrModulos, loadModulosContratados } from "@/lib/admin/modulos";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 
 export const runtime = "nodejs";
@@ -49,12 +50,12 @@ async function computeMetrics(from: Date, to: Date) {
     safe(prisma.clinic.findMany({ select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, createdAt: true, trialEndsAt: true, archivedAt: true } }), [] as any[]),
     safe(prisma.clinic.findMany({ where: { subscriptionStatus: "active" }, select: { monthlyPrice: true, plan: true } }), [] as any[]),
     safe(prisma.subscriptionInvoice.findMany({
-      where: { createdAt: { gte: from, lte: to } },
+      where: sinActivacionManual({ createdAt: { gte: from, lte: to } }),
       include: { clinic: { select: { name: true, plan: true } } },
       orderBy: { createdAt: "desc" },
     }), [] as any[]),
     safe(prisma.subscriptionInvoice.aggregate({
-      where: { status: "paid", paidAt: { gte: from, lte: to } },
+      where: sinActivacionManual({ status: "paid", paidAt: { gte: from, lte: to } }),
       _sum: { amount: true }, _count: true,
     }), { _sum: { amount: 0 }, _count: 0 } as any),
     safe(prisma.clinic.count({ where: { createdAt: { gte: from, lte: to } } }), 0),
@@ -105,7 +106,7 @@ async function computeMetrics(from: Date, to: Date) {
     const monthKey   = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
     const [paidAgg, newC, churned] = await Promise.all([
       safe(prisma.subscriptionInvoice.aggregate({
-        where: { status: "paid", paidAt: { gte: monthStart, lte: monthEnd } },
+        where: sinActivacionManual({ status: "paid", paidAt: { gte: monthStart, lte: monthEnd } }),
         _sum: { amount: true }, _count: true,
       }), { _sum: { amount: 0 }, _count: 0 } as any),
       safe(prisma.clinic.count({ where: { createdAt: { gte: monthStart, lte: monthEnd } } }), 0),

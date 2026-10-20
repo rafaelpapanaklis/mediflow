@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
+import { reintentarMarcadoPendiente } from "@/lib/billing/facturas-tarjeta-pendientes.server";
 import {
   MANUAL_LAPSE_STATUS,
   manualLapseWhere,
@@ -48,6 +49,12 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date();
+
+  // Reintento automático del marcado «factura de tarjeta pagada fuera de Stripe» (decisión #1(a) de Rafael): si al
+  // confirmar un pago manual Stripe no contestó, la factura sigue abierta y Stripe la reintentaría. Se cuelga de este
+  // cron diario (el de cobros que ya existe). Nunca lanza ni cambia lo demás que hace el cron.
+  const facturasTarjeta = await reintentarMarcadoPendiente();
+
   // Tope explícito. Si algún día se llena, el log lo dice en vez de dejar
   // creer que se barrió todo: al día siguiente el cron toma las siguientes.
   const TOPE = 500;
@@ -81,7 +88,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (aVencer.length === 0) {
-    return NextResponse.json({ lapsed: 0, clinics: [], truncated: false });
+    return NextResponse.json({ lapsed: 0, clinics: [], truncated: false, facturasTarjeta });
   }
 
   const ids = aVencer.map((c) => c.id);
@@ -132,5 +139,6 @@ export async function GET(req: NextRequest) {
     lapsed: result.count,
     clinics: aVencer.map((c) => ({ id: c.id, name: c.name, nextBillingDate: c.nextBillingDate })),
     truncated,
+    facturasTarjeta,
   });
 }

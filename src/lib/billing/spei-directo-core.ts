@@ -20,6 +20,7 @@
  */
 
 import { desgloseConIva, desgloseSinIva } from "./iva-cobro";
+import { inicioDeNuevoPeriodo } from "./cobro-rechazado";
 
 export type PeriodoPago = "monthly" | "annual";
 
@@ -166,15 +167,24 @@ export function sumarAnios(date: Date, n: number): Date {
  */
 export function periodoPagado(
   ahora: Date,
-  clinica: { nextBillingDate?: Date | string | null; trialEndsAt?: Date | string | null } | null | undefined,
+  clinica:
+    | {
+        nextBillingDate?: Date | string | null;
+        trialEndsAt?: Date | string | null;
+        subscriptionStatus?: string | null;
+      }
+    | null
+    | undefined,
   billing: PeriodoPago,
 ): { desde: Date; hasta: Date } {
-  let desde = ahora;
-  for (const f of [clinica?.nextBillingDate, clinica?.trialEndsAt]) {
-    if (!f) continue;
-    const d = new Date(f);
-    if (!Number.isNaN(d.getTime()) && d > desde) desde = d;
-  }
+  // Misma regla que la activación de Stripe: con el cobro rechazado o cancelada, `nextBillingDate` es un
+  // periodo que se abrió y NO se pagó, y no cuenta (ver inicioDeNuevoPeriodo).
+  const desde = inicioDeNuevoPeriodo({
+    ahora,
+    estadoAntes: clinica?.subscriptionStatus,
+    trialEndsAt: clinica?.trialEndsAt,
+    nextBillingDate: clinica?.nextBillingDate,
+  });
   return { desde, hasta: billing === "annual" ? sumarAnios(desde, 1) : sumarMeses(desde, 1) };
 }
 

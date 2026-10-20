@@ -1,4 +1,6 @@
 import "server-only";
+import { clinicaEstabaSuspendida } from "@/lib/billing/cobro-rechazado";
+import { marcarFacturasDeLaClinica, type ResultadoMarcado } from "@/lib/billing/factura-fuera-de-stripe.server";
 import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
@@ -336,7 +338,7 @@ export interface PendienteAdminDTO extends SolicitudSpeiDTO {
   clinicEmail: string | null;
   /** La clínica ya está activa (pagó por otro medio): confirmar sería un segundo periodo. */
   clinicaYaActiva: boolean;
-  /** Tiene una suscripción de tarjeta que Stripe sigue cobrando: confirmar no la cancela (riesgo de doble cobro). */
+  /** Tiene una suscripción de tarjeta viva: al confirmar, su factura abierta del plan se marca pagada fuera de Stripe (no se cancela). */
   suscripcionTarjetaViva: boolean;
 }
 
@@ -374,6 +376,8 @@ export interface ResultadoConfirmacion {
   amountCents: number;
   periodStart: Date;
   periodEnd: Date;
+  /** Qué pasó con la factura de tarjeta abierta del plan (pagada fuera de Stripe) al confirmar. Nunca deshace la activación. */
+  facturaTarjeta: ResultadoMarcado;
 }
 
 /**
@@ -408,6 +412,8 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
   const suscripcionMuerta = !!clinica.stripeSubscriptionId && ["cancelled", "canceled"].includes(clinica.subscriptionStatus ?? "");
 
   const ahora = new Date();
+  // Estado de ANTES de registrar el pago (octava vuelta): si estaba suspendida, los meses sin servicio no se deben.
+  const estabaSuspendida = clinicaEstabaSuspendida(clinica, ahora);
   const { desde, hasta } = periodoPagado(ahora, clinica, billing);
   const { aiTokensDefault } = await getPlanLimits(plan);
 
@@ -464,7 +470,12 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
   await sincronizarSedesIncluidas(sol.clinicId);
   await avisarActivacion(sol.clinicId, plan);
 
-  return { clinicId: sol.clinicId, invoiceId: factura.id, plan, billing, amountCents: sol.amountCents, periodStart: desde, periodEnd: hasta };
+  // Pago manual CONFIRMADO: si la clínica tiene una suscripción de tarjeta viva con la factura del plan abierta o
+  // incobrable, esa factura queda pagada FUERA de Stripe (la suscripción no se cancela; el mes siguiente Stripe cobra
+  // la tarjeta normal). Si Stripe no contesta, la confirmación sigue en pie y el admin ve el aviso con «Reintentar».
+  const facturaTarjeta = await marcarFacturasDeLaClinica(sol.clinicId, { estabaSuspendida });
+
+  return { clinicId: sol.clinicId, invoiceId: factura.id, plan, billing, amountCents: sol.amountCents, periodStart: desde, periodEnd: hasta, facturaTarjeta };
 }
 
 export async function rechazarSolicitudSpei(

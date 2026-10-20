@@ -1396,8 +1396,8 @@
       }
     },
     "paymentMethodModal": {
-      "errOpenStripe": "Couldn't open Stripe",
-      "errStripe": "Stripe error",
+      "errOpenStripe": "Couldn't open the payment page",
+      "errStripe": "There was a problem with the payment",
       "title": "Change payment method",
       "cardTitle": "Credit/debit card",
       "cardSubtitle": "Automatic monthly payment by card",
@@ -1431,8 +1431,8 @@
       "planLineAnnual": "{name} plan — ${price} MXN/yr",
       "activateTitle": "Activate or renew your plan",
       "activateSubtitle": "Activate your plan to keep your access. Card, SPEI or OXXO.",
-      "activateSubtitleTodos": "Activate your plan to keep your access. Card or OXXO with Stripe, or direct SPEI transfer.",
-      "activateSubtitleTarjetaOxxo": "Activate your plan to keep your access. Card or OXXO with Stripe.",
+      "activateSubtitleTodos": "Activate your plan to keep your access. Card or OXXO, or direct SPEI transfer.",
+      "activateSubtitleTarjetaOxxo": "Activate your plan to keep your access. Card or OXXO.",
       "activateSubtitleSpei": "Activate your plan to keep your access. Direct SPEI transfer.",
       "activateSubtitleNinguno": "Activate your plan to keep your access. Write to soporte@dalecontrol.com and we will help.",
       "activateCta": "Activate / pay my plan",
@@ -1474,10 +1474,10 @@
       "cancelSubscription": "Cancel subscription",
       "cancellationRequestedBadge": "⚠ Cancellation requested — no charges when the period ends",
       "invoiceHistory": "Invoice history",
-      "stripePortal": "Stripe portal",
+      "stripePortal": "Billing portal",
       "loadingInvoices": "Loading invoices…",
       "noInvoices": "You don't have any invoices yet. Your first invoice will be generated after your first payment.",
-      "stripeNotConfigured": "(Stripe is not configured — only local invoices are shown.)",
+      "stripeNotConfigured": "(Online payments aren't available right now: only registered invoices are shown.)",
       "colConcept": "Concept",
       "colAmount": "Amount",
       "downloadInvoice": "Download invoice",
@@ -1510,7 +1510,7 @@
       "payAndChange": "Pay and switch",
       "upgradePendingToast": "We're confirming your payment. Your plan moves up as soon as it clears.",
       "errUpgradePayment": "We couldn't charge the difference: your plan did NOT change. Check your payment method and try again.",
-      "errSubscriptionNotLive": "Your subscription isn't active in Stripe. Use “Activate / pay my plan” to reactivate it and pick your plan.",
+      "errSubscriptionNotLive": "Your subscription isn't active. Reactivate it with “Activate / pay my plan” and pick the plan you want.",
       "errManualDowngrade": "You already paid the current period, so we don't downgrade the plan mid-period. Pick the lower plan when you pay your next period.",
       "errManualPeriodExpired": "Your paid period already ended, so there are no days left to prorate. Use \"Activate / pay my plan\" to buy the new period with the plan you want.",
       "continue": "Continue",
@@ -1539,7 +1539,11 @@
       "topupViaSpei": "SPEI transfer",
       "topupViaManual": "Credit recorded by DaleControl",
       "receipt": "Receipt",
-      "viewReceipt": "View the Stripe receipt"
+      "viewReceipt": "View the receipt",
+      "statusPaymentFailed": "Payment declined",
+      "paymentFailedTitle": "We couldn't charge your plan",
+      "paymentFailedNotice": "Your access will be suspended on {fecha}: update your card or pay now to keep it. Your data is complete and safe.",
+      "paidUntil": "Paid through {fecha}"
     },
     "onboardingChecklist": {
       "title": "First steps",
@@ -1615,6 +1619,39 @@
       "aiAria": "Ask AI with context",
       "endLabel": "End consultation",
       "endAria": "End consultation"
+    },
+    "pagoRechazado": {
+      "mensaje": "We couldn't charge your plan. Your access will be suspended on {fecha}: update your card or pay to keep it.",
+      "mensajeOtros": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}: let the clinic owner know.",
+      "cta": "Update card / pay",
+      "abriendo": "Opening…",
+      "errorAbrir": "We couldn't open the payment page. Try again or contact support.",
+      "mensajeSede": "We couldn't charge the clinic's plan. Access will be suspended on {fecha}: the main clinic must pay the plan."
+    },
+    "pagoPendiente": {
+      "titulo": "Pay what's pending on your plan",
+      "pendiente": "Pending on your plan:",
+      "pagarPlan": "Pay my plan",
+      "subir": "Switch to a bigger plan and pay",
+      "elegirPlan": "Choose the plan you want to move up to. What's pending is cancelled and the new plan is charged in full, at list price (no first-month promotion).",
+      "ivaIncluido": "VAT included",
+      "elegir": "Choose",
+      "vasAPagar": "You will pay {monto}",
+      "vasAPagarPlan": "You will pay {monto} for the {plan} plan",
+      "confirmar": "Confirm and pay",
+      "cancelar": "Cancel",
+      "pagando": "Processing…",
+      "cargando": "Calculating what's pending…",
+      "sinPendiente": "We have no pending payment. If you already paid, your access comes back in a moment: reload the page.",
+      "recargar": "Reload",
+      "noDisponible": "Direct payment isn't available right now. You can use \"Update card / pay\" or contact support.",
+      "errorLectura": "We couldn't calculate what's pending. Try again or contact support.",
+      "pagoRecibido": "Payment received. We're reactivating your access…",
+      "errorCobro": "We couldn't process the charge. Try again or contact support.",
+      "soloDueno": "Ask the clinic owner or an administrator to pay the plan.",
+      "terminarCambio": "Finish the change to {plan} and pay",
+      "cambioNoDisponible": "We couldn't prepare the plan change. Use \"Update card / pay\" or contact support.",
+      "cambioEnCursoMonto": "You still need to finish the change to {plan}: {monto}"
     }
   },
   "agenda": {
@@ -9689,7 +9726,18 @@
       "upsellLine": "For ${amount} more per month: {benefit}",
       "upsellBenefitPro": "unlimited patients and 3 providers",
       "upsellBenefitClinic": "multi-location, API, and a dedicated manager",
-      "paymentsUnavailable": "Payments temporarily unavailable. Try again later or write to soporte@dalecontrol.com."
+      "paymentsUnavailable": "Payments temporarily unavailable. Try again later or write to soporte@dalecontrol.com.",
+      "pillSuspended": "Access suspended",
+      "suspendedTitle": "Your access is suspended for non-payment",
+      "suspendedBody": "Your data is complete and safe: as soon as you pay, everything comes back as it was.",
+      "actions": {
+        "label": "What you can do in the meantime",
+        "payNow": "Pay now",
+        "openTicket": "Open a support ticket",
+        "contactManager": "Contact my manager",
+        "managerMessage": "Hi, I'm from {clinic}. My access is suspended because of a pending payment and I'd like to get up to date.",
+        "payError": "We couldn't open the payment page. Try again or open a support ticket."
+      }
     },
     "teleconsulta": {
       "title": "Teleconsultations",

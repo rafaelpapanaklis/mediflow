@@ -1396,8 +1396,8 @@
       }
     },
     "paymentMethodModal": {
-      "errOpenStripe": "No se pudo abrir Stripe",
-      "errStripe": "Error con Stripe",
+      "errOpenStripe": "No se pudo abrir el pago",
+      "errStripe": "Hubo un problema con el pago",
       "title": "Cambiar método de pago",
       "cardTitle": "Tarjeta crédito/débito",
       "cardSubtitle": "Pago automático mensual con tarjeta",
@@ -1431,8 +1431,8 @@
       "planLineAnnual": "Plan {name} — ${price} MXN/año",
       "activateTitle": "Activa o renueva tu plan",
       "activateSubtitle": "Activa tu plan para asegurar el acceso. Tarjeta, SPEI u OXXO.",
-      "activateSubtitleTodos": "Activa tu plan para asegurar el acceso. Tarjeta u OXXO con Stripe, o transferencia SPEI directa.",
-      "activateSubtitleTarjetaOxxo": "Activa tu plan para asegurar el acceso. Tarjeta u OXXO con Stripe.",
+      "activateSubtitleTodos": "Activa tu plan para asegurar el acceso. Tarjeta u OXXO, o transferencia SPEI directa.",
+      "activateSubtitleTarjetaOxxo": "Activa tu plan para asegurar el acceso. Tarjeta u OXXO.",
       "activateSubtitleSpei": "Activa tu plan para asegurar el acceso. Transferencia SPEI directa.",
       "activateSubtitleNinguno": "Activa tu plan para asegurar el acceso. Escríbenos a soporte@dalecontrol.com y te ayudamos.",
       "activateCta": "Activar / pagar mi plan",
@@ -1474,10 +1474,10 @@
       "cancelSubscription": "Cancelar suscripción",
       "cancellationRequestedBadge": "⚠ Cancelación solicitada — sin cargos al terminar el periodo",
       "invoiceHistory": "Historial de facturas",
-      "stripePortal": "Portal Stripe",
+      "stripePortal": "Portal de facturación",
       "loadingInvoices": "Cargando facturas…",
       "noInvoices": "Aún no tienes facturas. Tu primera factura se generará tras tu primer pago.",
-      "stripeNotConfigured": "(Stripe no está configurado — solo se muestran facturas locales.)",
+      "stripeNotConfigured": "(Los pagos en línea no están disponibles por ahora: solo se muestran las facturas registradas.)",
       "colConcept": "Concepto",
       "colAmount": "Monto",
       "downloadInvoice": "Descargar factura",
@@ -1510,7 +1510,7 @@
       "payAndChange": "Pagar y cambiar",
       "upgradePendingToast": "Estamos confirmando tu pago. Tu plan sube en cuanto se acredite.",
       "errUpgradePayment": "No se pudo cobrar la diferencia: tu plan NO cambió. Revisa tu método de pago e inténtalo de nuevo.",
-      "errSubscriptionNotLive": "Tu suscripción no está activa en Stripe. Usa “Activar / pagar mi plan” para reactivarla y elegir tu plan.",
+      "errSubscriptionNotLive": "Tu suscripción no está activa. Reactívala con “Activar / pagar mi plan” y elige el plan que quieres.",
       "errManualDowngrade": "Ya pagaste el periodo en curso, así que no bajamos el plan a medio periodo. Elige el plan menor al pagar tu próximo periodo.",
       "errManualPeriodExpired": "Tu periodo pagado ya venció, así que no hay días que prorratear. Usa \"Activar / pagar mi plan\" para contratar el periodo nuevo con el plan que quieres.",
       "continue": "Continuar",
@@ -1539,7 +1539,11 @@
       "topupViaSpei": "Transferencia SPEI",
       "topupViaManual": "Abono registrado por DaleControl",
       "receipt": "Recibo",
-      "viewReceipt": "Ver el recibo de Stripe"
+      "viewReceipt": "Ver el recibo",
+      "statusPaymentFailed": "Pago rechazado",
+      "paymentFailedTitle": "No pudimos cobrar tu plan",
+      "paymentFailedNotice": "Tu acceso se suspende el {fecha}: actualiza tu tarjeta o paga ahora para no perderlo. Tus datos están completos y a salvo.",
+      "paidUntil": "Pagado hasta {fecha}"
     },
     "onboardingChecklist": {
       "title": "Primeros pasos",
@@ -1615,6 +1619,39 @@
       "aiAria": "Consultar IA con contexto",
       "endLabel": "Terminar consulta",
       "endAria": "Terminar consulta"
+    },
+    "pagoRechazado": {
+      "mensaje": "No pudimos cobrar tu plan. Tu acceso se suspende el {fecha}: actualiza tu tarjeta o paga para no perderlo.",
+      "mensajeOtros": "No pudimos cobrar el plan de la clínica. El {fecha} se suspende el acceso. Avisa al dueño de la clínica.",
+      "cta": "Actualizar tarjeta / pagar",
+      "abriendo": "Abriendo…",
+      "errorAbrir": "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte.",
+      "mensajeSede": "No pudimos cobrar el plan de la clínica. El {fecha} se suspende el acceso. La clínica principal debe pagar el plan."
+    },
+    "pagoPendiente": {
+      "titulo": "Paga lo pendiente de tu plan",
+      "pendiente": "Pendiente de tu plan:",
+      "pagarPlan": "Pagar mi plan",
+      "subir": "Cambiar a un plan más grande y pagar",
+      "elegirPlan": "Elige el plan al que quieres subir. Se anula lo pendiente y se cobra el plan nuevo completo, a precio de lista (sin la promoción del primer mes).",
+      "ivaIncluido": "IVA incluido",
+      "elegir": "Elegir",
+      "vasAPagar": "Vas a pagar {monto}",
+      "vasAPagarPlan": "Vas a pagar {monto} por el plan {plan}",
+      "confirmar": "Confirmar y pagar",
+      "cancelar": "Cancelar",
+      "pagando": "Procesando…",
+      "cargando": "Calculando lo pendiente…",
+      "sinPendiente": "No tenemos un pago pendiente. Si ya pagaste, tu acceso se reactiva en un momento: recarga la página.",
+      "recargar": "Recargar",
+      "noDisponible": "El pago directo no está disponible por ahora. Puedes usar «Actualizar tarjeta / pagar» o escribir a soporte.",
+      "errorLectura": "No pudimos calcular lo pendiente. Inténtalo de nuevo o escribe a soporte.",
+      "pagoRecibido": "Pago recibido. Estamos reactivando tu acceso…",
+      "errorCobro": "No pudimos hacer el cobro. Inténtalo de nuevo o escribe a soporte.",
+      "soloDueno": "Pídele al dueño o administrador de la clínica que pague el plan.",
+      "terminarCambio": "Terminar el cambio a {plan} y pagar",
+      "cambioNoDisponible": "No pudimos preparar el cambio de plan. Usa «Actualizar tarjeta / pagar» o escribe a soporte.",
+      "cambioEnCursoMonto": "Te falta terminar el cambio a {plan}: {monto}"
     }
   },
   "agenda": {
@@ -9689,7 +9726,18 @@
       "upsellLine": "Por ${amount} más al mes: {benefit}",
       "upsellBenefitPro": "pacientes ilimitados y 3 profesionales",
       "upsellBenefitClinic": "multi-sucursal, API y manager dedicado",
-      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o escríbenos a soporte@dalecontrol.com."
+      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o escríbenos a soporte@dalecontrol.com.",
+      "pillSuspended": "Acceso suspendido",
+      "suspendedTitle": "Tu acceso está suspendido por falta de pago",
+      "suspendedBody": "Tus datos están completos y a salvo: en cuanto pagues, todo vuelve como estaba.",
+      "actions": {
+        "label": "Qué puedes hacer mientras tanto",
+        "payNow": "Pagar ahora",
+        "openTicket": "Abrir ticket de soporte",
+        "contactManager": "Contactar a mi manager",
+        "managerMessage": "Hola, soy de {clinic}. Mi acceso está suspendido por un pago pendiente y quiero ponerme al corriente.",
+        "payError": "No pudimos abrir el pago. Inténtalo de nuevo o abre un ticket de soporte."
+      }
     },
     "teleconsulta": {
       "title": "Teleconsultas",

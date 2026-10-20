@@ -11,6 +11,13 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { centavosAMxn } from "@/lib/billing/spei-directo-core";
 import type { PendienteAdminDTO } from "@/lib/billing/spei-directo";
+import {
+  AvisoFacturaTarjeta,
+  avisarSiSeMarcoLaFacturaTarjeta,
+  datosDelAviso,
+  fallóElMarcadoDeLaFacturaTarjeta,
+  type AvisoFacturaTarjetaDatos,
+} from "./aviso-factura-tarjeta";
 
 /**
  * Transferencias SPEI (directas a la cuenta de la plataforma) que las clínicas
@@ -23,6 +30,20 @@ import type { PendienteAdminDTO } from "@/lib/billing/spei-directo";
  * verá. Una vez resuelta, la fila desaparece de aquí; el cobro queda en la
  * pestaña «Todos los pagos» y la bitácora de la clínica.
  */
+/**
+ * Lo que pasa con la tarjeta al confirmar (decisión de Rafael): dentro de las 24 h de gracia, la factura abierta del mes
+ * queda pagada fuera de Stripe y el mes siguiente se cobra la tarjeta como siempre; con un año el cobro de la tarjeta se
+ * PAUSA hasta que termine lo prepagado. Si la clínica ya estaba SUSPENDIDA, los meses sin servicio no se deben: sus
+ * facturas se anulan y el acceso son 30 días desde el momento de confirmar. La suscripción nunca se cancela.
+ */
+export function textoTarjetaViva(anual: boolean): string {
+  const base = " Tiene una suscripción de TARJETA viva en Stripe: la suscripción NO se cancela.";
+  const suspendida = " Si ya estaba suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan y el acceso corre desde este momento.";
+  return anual
+    ? `${base}${suspendida} Como paga un año, el cobro de la tarjeta se PAUSA hasta que termine lo prepagado y después Stripe vuelve a cobrar solo.`
+    : `${base}${suspendida} Si estaba al corriente, el mes siguiente se cobra la tarjeta como siempre.`;
+}
+
 export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -32,6 +53,8 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
   const [cargando, setCargando] = useState<string | null>(null);
   const [rechazando, setRechazando] = useState<PendienteAdminDTO | null>(null);
   const [motivo, setMotivo] = useState("");
+  // Al confirmar: la activación quedó, pero Stripe no dejó marcar la factura de tarjeta como pagada.
+  const [avisoTarjeta, setAvisoTarjeta] = useState<AvisoFacturaTarjetaDatos | null>(null);
 
   async function llamar(id: string, accion: "confirmar" | "rechazar", cuerpo?: object): Promise<boolean> {
     setCargando(id);
@@ -41,8 +64,13 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cuerpo ?? {}),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; clinicId?: string; facturaTarjeta?: { tipo?: string } };
       if (!res.ok) throw new Error(data.error ?? "No se pudo completar");
+      if (accion === "confirmar") {
+        const fila = filas.find((f) => f.id === id);
+        if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta(datosDelAviso(data, data.clinicId ?? fila?.clinicId ?? "", fila?.clinicName));
+        else avisarSiSeMarcoLaFacturaTarjeta(data);
+      }
       setFilas((prev) => prev.filter((f) => f.id !== id));
       router.refresh();
       return true;
@@ -62,7 +90,7 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
         `Confirma solo si ya ves ${centavosAMxn(f.amountCents)} MXN de ${f.clinicName} en tu banco ` +
         `(referencia ${f.reference}). Se activará su plan ${f.plan} por ${periodo}.` +
         (f.clinicaYaActiva ? " OJO: esta clínica ya está activa; se sumará otro periodo (verifica que no sea un doble pago)." : "") +
-        (f.suscripcionTarjetaViva ? " OJO: tiene una suscripción de TARJETA viva en Stripe; confirmar NO la cancela y podría cobrarle también (cancélala en Stripe si va a pagar por transferencia)." : ""),
+        (f.suscripcionTarjetaViva ? textoTarjetaViva(f.billing === "annual") : ""),
       confirmText: "Confirmar pago",
     });
     if (!ok) return;
@@ -82,6 +110,11 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
 
   return (
     <div style={{ maxWidth: 1800, margin: "0 auto", padding: "24px 24px 0" }} id="transferencias-spei">
+      {avisoTarjeta && (
+        <div style={{ marginBottom: 12 }}>
+          <AvisoFacturaTarjeta aviso={avisoTarjeta} onResuelto={() => setAvisoTarjeta(null)} onCerrar={() => setAvisoTarjeta(null)} />
+        </div>
+      )}
       <div
         style={{
           borderRadius: 14,

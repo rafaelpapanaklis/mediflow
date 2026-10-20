@@ -1,5 +1,6 @@
 "use client";
 
+import { NOTA_SERVICIO_SUSPENDIDO } from "@/lib/billing/cobro-rechazado";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,6 +17,14 @@ import { fmtMXNdec } from "@/lib/format";
 import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { ETIQUETA_VIA_RECARGA } from "@/lib/ai-billing/recargas";
 import type { PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
+import { esActivacionManual, esRastroDePagoUnicoStripe, rotuloDeFilaSinCobro } from "@/lib/billing/pagos-reales";
+import {
+  AvisoFacturaTarjeta,
+  avisarSiSeMarcoLaFacturaTarjeta,
+  datosDelAviso,
+  fallóElMarcadoDeLaFacturaTarjeta,
+  type AvisoFacturaTarjetaDatos,
+} from "./aviso-factura-tarjeta";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
@@ -27,15 +36,22 @@ const PAYMENT_METHODS = [
   { value: "cash",     label: "Efectivo",       icon: "\uD83D\uDCB5" },
 ] as const;
 
-function methodBadge(method: string | null | undefined) {
+function methodBadge(method: string | null | undefined, fila?: { reference?: string | null } | null) {
+  if (method === "admin") return esRastroDePagoUnicoStripe(fila) ? "\uD83C\uDFEA Stripe (SPEI/OXXO)" : "\uD83D\uDEE0\uFE0F Admin";
   const m = PAYMENT_METHODS.find(pm => pm.value === method);
   return m ? `${m.icon} ${m.label}` : method ?? "\u2014";
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null; reference?: string | null; notes?: string | null }) {
+  // Una fila de $0 que es solo un rastro (activación manual de /admin, o el SPEI/OXXO que cobró Stripe) se VE, pero no
+  // es un cobro: se rotula distinto de «Pagado».
+  const rotulo = rotuloDeFilaSinCobro(fila);
+  if (rotulo) return <BadgeNew tone="neutral" dot>{rotulo}</BadgeNew>;
   if (status === "paid")    return <BadgeNew tone="success" dot>Pagado</BadgeNew>;
   if (status === "pending") return <BadgeNew tone="warning" dot>Pendiente</BadgeNew>;
   if (status === "failed")  return <BadgeNew tone="danger"  dot>Fallido</BadgeNew>;
+  // Anulada en Stripe: o se pagó fuera de Stripe, o fue un mes sin servicio (suspendida) que no se cobra ni se debe.
+  if (status === "void")    return <BadgeNew tone="neutral" dot>{fila?.notes?.startsWith(NOTA_SERVICIO_SUSPENDIDO) ? NOTA_SERVICIO_SUSPENDIDO : "Anulada"}</BadgeNew>;
   return <BadgeNew tone="neutral" dot>{status}</BadgeNew>;
 }
 
@@ -117,6 +133,8 @@ export function PaymentsClient({
 
   // Activate clinic form
   const [activateClinicId, setActivateClinicId] = useState<string | null>(null);
+  // Si al confirmar un pago manual no se pudo marcar la factura de tarjeta como pagada (Stripe no contestó).
+  const [avisoTarjeta, setAvisoTarjeta] = useState<AvisoFacturaTarjetaDatos | null>(null);
   const [activatePlan, setActivatePlan] = useState("PRO");
   const [activateMonths, setActivateMonths] = useState(1);
 
@@ -163,6 +181,8 @@ export function PaymentsClient({
   const filteredPayments = useMemo(() => {
     return payments.filter((p: any) => {
       if (filterStatus !== "all" && p.status !== filterStatus) return false;
+      // «Pagados» son cobros: las activaciones manuales (fila de $0, rastro del webhook) no se mezclan ahí.
+      if (filterStatus === "paid" && esActivacionManual(p)) return false;
       if (filterMethod !== "all" && p.method !== filterMethod) return false;
       return true;
     });
@@ -178,7 +198,11 @@ export function PaymentsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "verify_payment", invoiceId }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Error al verificar");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Error al verificar");
+      const fila = pending.find((p: any) => p.id === invoiceId);
+      if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta(datosDelAviso(data, fila?.clinicId ?? fila?.clinic?.id, fila?.clinic?.name));
+      else avisarSiSeMarcoLaFacturaTarjeta(data);
       setPending(prev => prev.filter((p: any) => p.id !== invoiceId));
       setPayments(prev =>
         prev.map((p: any) => (p.id === invoiceId ? { ...p, status: "paid", paidAt: new Date().toISOString() } : p))
@@ -222,7 +246,11 @@ export function PaymentsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "activate_clinic", clinicId, plan: activatePlan, months: activateMonths }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Error al activar");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Error al activar");
+      if (fallóElMarcadoDeLaFacturaTarjeta(data)) {
+        setAvisoTarjeta(datosDelAviso(data, clinicId, overdue.find((c: any) => c.id === clinicId)?.name));
+      } else avisarSiSeMarcoLaFacturaTarjeta(data);
       setOverdue(prev => prev.filter((c: any) => c.id !== clinicId));
       setActivateClinicId(null);
       toast.success("Clinica activada correctamente");
@@ -298,7 +326,9 @@ export function PaymentsClient({
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      const inv = await res.json();
+      const { facturaTarjeta, ...inv } = await res.json();
+      if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta(datosDelAviso({ facturaTarjeta }, form.clinicId, inv.clinic?.name));
+      else avisarSiSeMarcoLaFacturaTarjeta({ facturaTarjeta });
       setPayments(prev => [inv, ...prev]);
       setShowNewPayment(false);
       setForm({ clinicId: "", amount: "", method: "transfer", reference: "", periodStart: "", periodEnd: "", notes: "", paypalEmail: "", paypalRecurring: false });
@@ -430,6 +460,13 @@ export function PaymentsClient({
           </ButtonNew>
         </div>
       </div>
+
+      {/* Aviso: no se pudo marcar la factura de tarjeta como pagada fuera de Stripe (la activación sigue en pie). */}
+      {avisoTarjeta && (
+        <div style={{ marginBottom: 16 }}>
+          <AvisoFacturaTarjeta aviso={avisoTarjeta} onResuelto={() => setAvisoTarjeta(null)} onCerrar={() => setAvisoTarjeta(null)} />
+        </div>
+      )}
 
       {/* ── KPI row ─────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
@@ -720,7 +757,7 @@ export function PaymentsClient({
                     <td className="mono" style={{ color: "var(--success)", fontWeight: 600 }}>
                       {fmtMXN(inv.amount)}
                     </td>
-                    <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
+                    <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method, inv)}</td>
                     <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
                       {inv.reference || "—"}
                     </td>
@@ -867,20 +904,23 @@ export function PaymentsClient({
                       <td className="mono" style={{ color: "var(--success)", fontWeight: 600 }}>
                         {fmtMXN(inv.amount)}
                       </td>
-                      <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
-                      <td>{statusBadge(inv.status)}</td>
+                      <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method, inv)}</td>
+                      <td>{statusBadge(inv.status, inv)}</td>
                       <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
                         {inv.reference || "—"}
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <PaymentDateCell inv={inv} />
-                          <Link
-                            href={`/admin/payments/${inv.id}/cfdi`}
-                            style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}
-                          >
-                            CFDI
-                          </Link>
+                          {/* Una activación manual no es un cobro: no hay nada que facturar. */}
+                          {!esActivacionManual(inv) && (
+                            <Link
+                              href={`/admin/payments/${inv.id}/cfdi`}
+                              style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}
+                            >
+                              CFDI
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -23,6 +23,7 @@ import {
   type PayoutConfig,
   type PayoutMode,
 } from "./payout-core";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 export * from "./payout-core";
 
@@ -179,7 +180,8 @@ export async function getInvoiceNo(
       filters.push({ OR: [{ reference: null }, { reference: { not: currentInvoiceRef } }] });
     }
     const previous = await prisma.subscriptionInvoice.count({
-      where: { clinicId, status: "paid", AND: filters },
+      // Una activación manual de /admin (fila de $0, método «admin») no es un cobro: no cuenta como factura.
+      where: sinActivacionManual({ clinicId, status: "paid", AND: filters }),
     });
     return previous + 1;
   } catch {

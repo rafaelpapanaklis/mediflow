@@ -37,6 +37,12 @@ let facturas: any[];
 let correos: any[];
 let consultasSinClinica: number;
 let siguienteId = 1;
+// Stripe de mentira para la factura de tarjeta que queda pagada fuera de Stripe al confirmar (decisión #1(a) de Rafael).
+let facturasStripe: any[] = [];
+let anuladasStripe: any[] = [];
+let actualizacionesStripe: any[] = [];
+let pagosStripe: any[] = [];
+let stripeFalla = false;
 
 const PLANES: Record<string, any> = {
   // Como el ResolvedPlan real: `priceMxn` y `priceMxnMonthly` van juntos (applyClinicOverrides los reescribe).
@@ -146,6 +152,38 @@ before(async () => {
     getResolvedPlan: async (id: string) => PLANES[id] ?? PLANES.PRO,
     getPlanLimits: async (id: string) => ({ aiTokensDefault: (PLANES[id] ?? PLANES.PRO).aiTokensDefault }),
   });
+  dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
+    getStripeSafe: () => ({
+      subscriptions: {
+        retrieve: async (id: string) => ({ id, status: "past_due", items: { data: [{ current_period_end: Math.floor((Date.now() + 30 * 86_400_000) / 1000) }] } }),
+        update: async (id: string, params: any, opciones: any) => {
+          if (stripeFalla) throw new Error("Stripe no contesta");
+          actualizacionesStripe.push({ id, params, opciones });
+          return { id, status: "active", latest_invoice: { id: "in_reset", status: "void", amount_paid: 0 } };
+        },
+      },
+      invoices: {
+        list: async ({ subscription, status }: any) => {
+          if (stripeFalla) throw new Error("Stripe no contesta");
+          return { data: facturasStripe.filter((f) => f.subscription === subscription && f.status === status) };
+        },
+        voidInvoice: async (id: string, _p: any, opciones: any) => {
+          if (stripeFalla) throw new Error("Stripe no contesta");
+          anuladasStripe.push({ id, opciones });
+          const f = facturasStripe.find((x) => x.id === id);
+          if (f) f.status = "void";
+          return f;
+        },
+        pay: async (id: string, params: any, opciones: any) => {
+          if (stripeFalla) throw new Error("Stripe no contesta");
+          pagosStripe.push({ id, params, opciones });
+          const f = facturasStripe.find((x) => x.id === id);
+          if (f) f.status = "paid";
+          return f;
+        },
+      },
+    }),
+  });
   dobles.set(path.join(RAIZ, "src/lib/email.ts"), {
     sendEmail: async (m: any) => {
       correos.push({ tipo: "admin", ...m });
@@ -164,6 +202,11 @@ beforeEach(() => {
   solicitudes = [];
   facturas = [];
   correos = [];
+  facturasStripe = [];
+  pagosStripe = [];
+  anuladasStripe = [];
+  actualizacionesStripe = [];
+  stripeFalla = false;
   consultasSinClinica = 0;
   siguienteId = 1;
   clinicas = new Map([
@@ -527,4 +570,61 @@ test("integración #425: confirmar un SPEI de OTRO plan limpia las condiciones c
     [b.planOverrideFor, b.maxUsersOverride, b.maxClinicsOverride, b.priceMxnMonthlyOverride, b.priceMxnAnnualOverride],
     [null, null, null, null, null],
   );
+});
+
+test("confirmar con una suscripción de TARJETA viva y su factura abierta DENTRO de la gracia: queda pagada fuera de Stripe, una sola vez, y la suscripción no se cancela", async () => {
+  const { crearSolicitudSpei, confirmarSolicitudSpei } = lib;
+  clinicas.get("cA").stripeSubscriptionId = "sub_tarjeta";
+  clinicas.get("cA").subscriptionStatus = "past_due";
+  clinicas.get("cA").trialEndsAt = new Date(Date.now() + 10 * 3_600_000); // aún le quedan horas de gracia: NO suspendida
+  facturasStripe = [{ id: "in_abierta", subscription: "sub_tarjeta", status: "open", billing_reason: "subscription_cycle", created: Math.floor((Date.now() - 3_600_000) / 1000) }];
+  const { solicitud } = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
+  const r = await confirmarSolicitudSpei(solicitud.id, "admin1");
+  assert.deepEqual(r.facturaTarjeta, { tipo: "marcadas", facturas: ["in_abierta"] });
+  assert.equal(pagosStripe.length, 1);
+  assert.deepEqual(pagosStripe[0].params, { paid_out_of_band: true });
+  assert.equal(pagosStripe[0].opciones.idempotencyKey, "fuera-de-stripe:in_abierta");
+  assert.equal(anuladasStripe.length, 0);
+  assert.equal(actualizacionesStripe.length, 0, "el ciclo no se toca");
+  assert.equal(clinicas.get("cA").subscriptionStatus, "active");
+  assert.equal(clinicas.get("cA").stripeSubscriptionId, "sub_tarjeta", "la suscripción de tarjeta sigue viva");
+});
+
+test("confirmar a una clínica SUSPENDIDA (octava vuelta): la factura del mes sin servicio se anula, no se paga; acceso 30 días desde la confirmación y el ciclo se re-alinea", async () => {
+  const { crearSolicitudSpei, confirmarSolicitudSpei } = lib;
+  clinicas.get("cA").stripeSubscriptionId = "sub_tarjeta";
+  clinicas.get("cA").subscriptionStatus = "past_due"; // y trialEndsAt de hace 6 días: la gracia venció
+  facturasStripe = [{ id: "in_abierta", subscription: "sub_tarjeta", status: "open", billing_reason: "subscription_cycle", created: Math.floor((Date.now() - 6 * 86_400_000) / 1000) }];
+  const { solicitud } = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
+  const antes = Date.now();
+  const r = await confirmarSolicitudSpei(solicitud.id, "admin1");
+  assert.deepEqual(r.facturaTarjeta.tipo, "marcadas");
+  assert.deepEqual((r.facturaTarjeta as any).anuladas, ["in_abierta"]);
+  assert.equal(pagosStripe.length, 0, "un mes suspendido no se «paga»: se anula");
+  assert.deepEqual(anuladasStripe.map((a) => a.id), ["in_abierta"]);
+  assert.equal(actualizacionesStripe.length, 1);
+  assert.equal(actualizacionesStripe[0].params.billing_cycle_anchor, "now");
+  assert.equal(actualizacionesStripe[0].params.pause_collection.behavior, "void");
+  const fin = new Date(antes);
+  fin.setMonth(fin.getMonth() + 1);
+  assert.ok(Math.abs(clinicas.get("cA").trialEndsAt.getTime() - fin.getTime()) < 120_000, "acceso = confirmación + 1 mes");
+  assert.equal(clinicas.get("cA").subscriptionStatus, "active");
+  assert.equal(clinicas.get("cA").stripeSubscriptionId, "sub_tarjeta");
+});
+
+test("confirmar: sin suscripción de tarjeta no toca Stripe; con Stripe caído la confirmación sigue en pie y devuelve el aviso", async () => {
+  const { crearSolicitudSpei, confirmarSolicitudSpei } = lib;
+  const { solicitud: s1 } = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
+  const r1 = await confirmarSolicitudSpei(s1.id, "admin1");
+  assert.deepEqual(r1.facturaTarjeta, { tipo: "sin_tarjeta" });
+  assert.equal(pagosStripe.length, 0);
+
+  clinicas.get("cB").stripeSubscriptionId = "sub_b";
+  facturasStripe = [{ id: "in_b", subscription: "sub_b", status: "open", billing_reason: "subscription_cycle" }];
+  stripeFalla = true;
+  const { solicitud: s2 } = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
+  const r2 = await confirmarSolicitudSpei(s2.id, "admin1");
+  assert.equal(r2.facturaTarjeta.tipo, "fallo");
+  assert.equal(clinicas.get("cB").subscriptionStatus, "active", "la activación no se deshace");
+  assert.equal(facturas.length >= 1, true);
 });
