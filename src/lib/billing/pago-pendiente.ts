@@ -74,6 +74,8 @@ export interface SuscripcionPago {
   status: string;
   customer?: string | { id: string; discount?: { id: string; coupon?: { id?: string | null } | null; promotion_code?: string | { id: string } | null; start?: number | null; end?: number | null } | null } | null;
   metadata?: Record<string, string> | null;
+  /** Cobro en pausa (prepago de varios meses, o ciclo re-alineado tras una suspensión). */
+  pause_collection?: { behavior?: string | null; resumes_at?: number | null } | null;
   items: { data: Array<{ id: string; price?: { unit_amount?: number | null; recurring?: { interval?: string | null } | null } | null }> };
   /** API 2024-06-20: el descuento principal viene con su cupón. */
   discount?: DescuentoStripe | null;
@@ -92,6 +94,7 @@ export interface FacturaPago {
   customer?: string | { id: string } | null;
   created?: number | null;
   attempt_count?: number | null;
+  status_transitions?: { paid_at?: number | null } | null;
   discount?: DescuentoStripe | null;
   metadata?: Record<string, string> | null;
 }
@@ -289,6 +292,8 @@ export const MENSAJES = {
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
   stripeNoContesto: MENSAJES_CHECKOUT.proveedorNoContesto,
   cambioEnCurso: "Ya hay un cambio de plan en curso, espera unos segundos.",
+  pagadoPorAdelantado: "Tienes meses pagados por adelantado, así que no podemos cambiarte de plan desde aquí. Escríbenos a soporte y lo hacemos contigo.",
+  subidaSinCobro: "No pudimos completar el cobro del cambio de plan. Escríbenos a soporte y lo revisamos contigo.",
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
   pagosNoDisponibles: MENSAJES_CHECKOUT.pagosNoDisponibles,

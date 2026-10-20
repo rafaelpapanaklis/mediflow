@@ -12,7 +12,14 @@
 
 import { randomUUID } from "node:crypto";
 import { isClinicBillingAdmin } from "./authz";
-import { avisoCobroMenorQueLoMostrado, avisoReposicionSinVerificar, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
+import { clinicaEstabaSuspendida, finDeLoPagado } from "./cobro-rechazado";
+import {
+  aplicarReglaDeSuspension,
+  anularFacturasDeMesesSuspendidos,
+  facturasAbiertasDelPlan,
+  type StripeParaSuspension,
+} from "./reactivacion-tras-suspension.server";
+import { FALLO_LECTURA_REGLA, avisoFalloReglaSuspension, avisoSubidaSinCobro, avisoCobroMenorQueLoMostrado, avisoReposicionSinVerificar, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
 import { desgloseConIva, ivaAplica, ivaParaPagoDeClinica, type ExencionIva, type IvaParaCobro } from "./iva-cobro";
 import type { PlanId } from "./plans";
 import {
@@ -77,6 +84,9 @@ export interface ClinicaPago {
   id: string;
   /** Nombre de la clínica (solo para el aviso al admin). */
   nombre?: string | null;
+  /** Estado de cobro de la clínica y hasta cuándo tiene acceso: deciden si estaba SUSPENDIDA al pagar. */
+  subscriptionStatus?: string | null;
+  trialEndsAt?: Date | string | null;
   plan: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
@@ -416,6 +426,65 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
   return { ok: true, stripe, sub, factura: null, anulada };
 }
 
+// ── Regla de la suspensión (ws1-t1 af1a76cc) ───────────────────────────────
+
+/**
+ * Rafael: una clínica suspendida por falta de pago NO debe los meses que estuvo sin servicio; al volver a pagar se
+ * le dan 30 días contados desde el día y la hora del pago. Dentro de las 24 h de gracia (aún con acceso) no hay
+ * meses suspendidos y el ciclo no cambia. Estas dos funciones aplican la regla a los dos botones; ambas son
+ * idempotentes (las claves de Stripe salen de la factura y del momento del pago, el mismo que usa el webhook
+ * `invoice.paid`, así que si los dos corren a la vez no se duplica ni se salta nada) y NUNCA lanzan: la clínica ya
+ * pagó. Si algo falla queda en la bitácora y se avisa al admin; el webhook y «Reintentar» lo completan.
+ */
+async function reglaTrasPagar(deps: DepsPago, stripe: StripePago, facturaPagada: FacturaPago): Promise<void> {
+  const subId = deps.clinica.stripeSubscriptionId;
+  if (!subId) return;
+  const real = stripe as unknown as StripeParaSuspension;
+  // El mismo instante de pago que usa el webhook (`status_transitions.paid_at`): mismas claves de idempotencia.
+  const pagadoEn = facturaPagada.status_transitions?.paid_at ? new Date(facturaPagada.status_transitions.paid_at * 1000) : new Date();
+  try {
+    const viva = await real.subscriptions.retrieve(subId);
+    const otras = (await facturasAbiertasDelPlan(real, subId)).filter((f) => f.id !== facturaPagada.id);
+    // Se paga UN mes (la factura más reciente); los meses suspendidos se anulan y el ciclo pasa a «hoy + 30 días».
+    const r = await aplicarReglaDeSuspension({ stripe: real, clinicId: deps.clinica.id, sub: viva, pagadoEn, finDeLoPagado: finDeLoPagado(pagadoEn, 1), facturas: otras });
+    await deps.auditar({
+      event: "pago-pendiente-regla-suspension",
+      accion: "pagar",
+      facturaPagadaId: facturaPagada.id,
+      anuladas: r.anuladas,
+      realineo: r.realineo.tipo,
+      fallos: r.fallos,
+    });
+    if (r.fallos.length > 0) await avisarFalloDeRegla(deps, "pagar", r.fallos);
+  } catch (err) {
+    await falloDeReglaInesperado(deps, "pagar", err);
+  }
+}
+
+async function reglaTrasSubir(deps: DepsPago, stripe: StripePago, subId: string): Promise<void> {
+  const real = stripe as unknown as StripeParaSuspension;
+  try {
+    // El `update` con `billing_cycle_anchor: "now"` ya dejó el ciclo en «hoy»: NO se re-alinea. Solo se anulan las
+    // demás facturas abiertas de meses sin servicio (la de la subida es `subscription_update` y no entra en la lista).
+    const abiertas = await facturasAbiertasDelPlan(real, subId);
+    const { anuladas, fallos } = await anularFacturasDeMesesSuspendidos(real, deps.clinica.id, abiertas);
+    await deps.auditar({ event: "pago-pendiente-regla-suspension", accion: "subir", anuladas, fallos });
+    if (fallos.length > 0) await avisarFalloDeRegla(deps, "subir", ["No se pudieron anular todas las facturas abiertas de meses sin servicio."]);
+  } catch (err) {
+    await falloDeReglaInesperado(deps, "subir", err);
+  }
+}
+
+async function avisarFalloDeRegla(deps: DepsPago, accion: string, fallos: string[]): Promise<void> {
+  await deps.avisarAlAdmin(avisoFalloReglaSuspension({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, accion, fallos })).catch(() => {});
+}
+
+async function falloDeReglaInesperado(deps: DepsPago, accion: string, err: unknown): Promise<void> {
+  const e = err as { message?: string } | null;
+  await deps.auditar({ event: "pago-pendiente-regla-suspension-fallo", accion, mensajeStripe: e?.message ?? null }).catch(() => {});
+  await avisarFalloDeRegla(deps, accion, [FALLO_LECTURA_REGLA]);
+}
+
 // ── GET ─────────────────────────────────────────────────────────────────────
 
 export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago> {
@@ -427,7 +496,9 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
   const interval = subscriptionItemInterval(ctx.sub.items.data[0]);
   const exencion = await deps.exencionIva();
   const opciones: OpcionSubir[] = [];
-  for (const id of planesMasGrandes(deps.clinica.plan)) {
+  // Con el cobro en pausa («Subir» respondería 409 PAGADO_POR_ADELANTADO) no se ofrece ningún plan.
+  const enPausa = !!ctx.sub.pause_collection;
+  for (const id of enPausa ? [] : planesMasGrandes(deps.clinica.plan)) {
     if (await deps.bloqueoDeSedes(id)) continue; // un plan que las sedes no admiten no se ofrece
     opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion }));
   }
@@ -437,6 +508,7 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
     montoPendiente: deuda.amount_due / 100,
     moneda: MONEDA_PAGO,
     opcionesSubir: opciones,
+    ...(enPausa ? { subirNoDisponible: MENSAJES.pagadoPorAdelantado } : {}),
     // Solo cuando un cambio de plan quedó a medias: no hay factura que «pagar», solo terminar la subida
     // (POST subir). Con esto presente, «Pagar mi plan» no aplica.
     ...(ctx.anulada ? { cambioEnCurso: { plan: ctx.anulada.planMarcado } } : {}),
@@ -446,6 +518,9 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 // ── POST { accion: "pagar" } ────────────────────────────────────────────────
 
 export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
+  // ANTES de tocar nada: ¿estaba SUSPENDIDA (sin acceso)? Después de pagar ya no hay forma de saberlo. Dentro de las
+  // 24 h de gracia no lo está y el ciclo no cambia.
+  const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   const ctx = await cargarPendiente(deps, false);
   if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
   const { stripe, factura } = ctx;
@@ -463,8 +538,11 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   }
 
   const final: FacturaPago = pagada ?? factura;
+  // Cobrada una clínica que estaba suspendida: los meses sin servicio se anulan y el ciclo pasa a «hoy + 30 días».
+  if (final.status === "paid" && estabaSuspendida) await reglaTrasPagar(deps, stripe, final);
   await deps.auditar({
     event: "pago-pendiente-pagar",
+    estabaSuspendida,
     facturaId: factura.id,
     montoMxn: factura.amount_due / 100,
     pagado: final.status === "paid",
@@ -502,6 +580,8 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
 const TTL_CANDADO_SUBIR_SEG = 90;
 
 async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<RespuestaPago> {
+  // ANTES de tocar nada: ¿estaba suspendida? (ver `reglaTrasSubir`).
+  const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   // Lo barato primero, y TODO antes de anular nada: la factura vieja solo se anula cuando el resto ya
   // se sabe que va a poder hacerse.
   if (!isClinicBillingAdmin(deps.role)) {
@@ -527,6 +607,14 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     await deps.aplicarPlanLocal(destino);
     await quitarDescuentoDelCliente(deps, stripe, sub, destino); // el cambio ya está hecho: no hay nada que reponer
     return resultadoDeFactura(ctx.factura);
+  }
+
+  // V2(a): con el cobro de la suscripción EN PAUSA (meses pagados por adelantado, o ciclo re-alineado tras una
+  // suspensión) Stripe anula todas las facturas que nacen durante la pausa: el cambio de plan saldría GRATIS y
+  // además se anularía la factura vieja. No se sube de plan en autoservicio; se manda a soporte, sin tocar nada.
+  if (sub.pause_collection) {
+    await deps.auditar({ event: "pago-pendiente-subir-bloqueado-por-pausa", planDestino: destino, reanudaEn: sub.pause_collection.resumes_at ?? null });
+    return respuesta(409, { code: "PAGADO_POR_ADELANTADO", error: MENSAJES.pagadoPorAdelantado });
   }
 
   const item = sub.items.data[0];
@@ -677,9 +765,6 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     return fallar(await falloDeStripe(deps, "cambiar-plan", err), "cambiar-plan", err);
   }
 
-  // La suscripción ya está en el plan nuevo: lo mismo que reflejará el webhook con su metadata.plan.
-  await deps.aplicarPlanLocal(destino);
-
   let nuevaFactura: FacturaPago | null = null;
   const li = nueva.latest_invoice;
   if (li && typeof li === "object") nuevaFactura = li;
@@ -691,8 +776,26 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     }
   }
 
+  // V2 (red de seguridad): si la factura del cambio NACIÓ ANULADA (cobro en pausa que no se vio antes), la subida
+  // saldría gratis. No se da por cobrada ni se refleja el plan como pagado: queda en la bitácora, se avisa al admin
+  // y la clínica recibe un mensaje claro sin nombrar al proveedor.
+  if (nuevaFactura?.status === "void") {
+    await deps.auditar({ event: "pago-pendiente-subir-sin-cobro", facturaNuevaId: nuevaFactura.id, planDestino: destino }).catch(() => {});
+    await deps
+      .avisarAlAdmin(avisoSubidaSinCobro({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, facturaId: nuevaFactura.id, planDestino: destino }))
+      .catch(() => {});
+    return respuesta(502, { code: "SUBIDA_SIN_COBRO", error: MENSAJES.subidaSinCobro });
+  }
+
+  // La suscripción ya está en el plan nuevo: lo mismo que reflejará el webhook con su metadata.plan.
+  await deps.aplicarPlanLocal(destino);
+
+  // Regla de la suspensión: los demás meses abiertos de la clínica suspendida no se deben (se anulan, nada se borra).
+  if (estabaSuspendida) await reglaTrasSubir(deps, stripe, sub.id);
+
   await deps.auditar({
     event: "pago-pendiente-subir",
+    estabaSuspendida,
     planAntes: deps.clinica.plan,
     planDestino: destino,
     reintento: !!anulada,

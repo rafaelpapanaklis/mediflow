@@ -49,6 +49,8 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
       id: true,
       name: true,
       plan: true,
+      subscriptionStatus: true,
+      trialEndsAt: true,
       createdAt: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
@@ -64,6 +66,8 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
     clinica: {
       id: clinic.id,
       nombre: clinic.name,
+      subscriptionStatus: clinic.subscriptionStatus,
+      trialEndsAt: clinic.trialEndsAt,
       plan: clinic.plan,
       stripeCustomerId: clinic.stripeCustomerId,
       stripeSubscriptionId: clinic.stripeSubscriptionId,

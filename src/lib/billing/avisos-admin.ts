@@ -149,3 +149,43 @@ export function avisoReposicionSinVerificar(a: {
     ],
   };
 }
+
+/** La factura de una subida de plan nació anulada (cobro en pausa): el plan cambió en Stripe sin cobrarse. */
+export function avisoSubidaSinCobro(a: {
+  clinicaId: string;
+  clinicaNombre: string | null | undefined;
+  facturaId: string | null;
+  planDestino: string;
+}): AvisoAdmin {
+  const nombre = a.clinicaNombre ?? a.clinicaId;
+  return {
+    asunto: `Subida de plan SIN cobro (factura anulada): ${nombre}`,
+    lineas: [
+      `La suscripción pasó a ${a.planDestino} pero la factura del cambio (${a.facturaId ?? "sin id"}) nació anulada, probablemente porque el cobro de la suscripción está en pausa. No se cobró nada.`,
+      `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
+      "Qué hacer: en Stripe, revisa la pausa de cobro de esa suscripción y cobra la diferencia, o regrésala al plan anterior. La clínica no vio el plan nuevo como pagado (se le pidió escribir a soporte).",
+    ],
+  };
+}
+
+/** La clínica pagó tras una suspensión y la regla de «los meses suspendidos no se deben» no se completó. */
+export function avisoFalloReglaSuspension(a: {
+  clinicaId: string;
+  clinicaNombre: string | null | undefined;
+  accion: string;
+  fallos: string[];
+}): AvisoAdmin {
+  const nombre = a.clinicaNombre ?? a.clinicaId;
+  return {
+    asunto: `Revisa una clínica reactivada tras suspensión: ${nombre}`,
+    lineas: [
+      `La clínica pagó (${a.accion}) después de estar suspendida y la regla de «los meses suspendidos no se deben» no se completó.`,
+      `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
+      ...a.fallos,
+      "El webhook de Stripe y «Reintentar» en /admin → Pagos vuelven a intentarlo; si no, anula a mano en Stripe las facturas abiertas de los meses sin servicio.",
+    ],
+  };
+}
+
+/** Texto (para el admin) cuando la regla de la suspensión no pudo ni leer la suscripción o sus facturas. */
+export const FALLO_LECTURA_REGLA = "No se pudo leer la suscripción o sus facturas en Stripe.";

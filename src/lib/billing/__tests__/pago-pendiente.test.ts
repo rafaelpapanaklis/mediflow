@@ -7,6 +7,8 @@
  * se crea otra suscripción; repetir no cobra dos veces; plan más chico → 400; sin permiso → 403;
  * tarjeta que falla → url; sin pendiente → 409.
  */
+import "./_prisma-doble"; // PRIMERO: sustituye @/lib/prisma antes de cargar el código de la regla de suspensión
+import { filasFactura } from "./_prisma-doble";
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -22,6 +24,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chargeFailureMessage } from "../proration";
 import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
+import { finDeLoPagado, reanudarCobroTrasRealinear, NOTA_SERVICIO_SUSPENDIDO } from "../cobro-rechazado";
+import { aplicarReglaDeSuspension, facturasAbiertasDelPlan } from "../reactivacion-tras-suspension.server";
 import { MENSAJES_CHECKOUT } from "../mensajes-pago";
 import { ensureFirstMonthCoupon } from "../first-month-promo";
 import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
@@ -70,6 +74,12 @@ interface Escenario {
   clavePropiaEnCurso?: "anular" | "cambiar";
   /** `subscriptions.retrieve` falla a partir de la N-ésima llamada (para «no se pudo comprobar»). */
   retrieveFallaDesde?: number;
+  /** La clínica estaba SUSPENDIDA al pagar (periodo vencido y cobro rechazado); por defecto está en la gracia de 24 h. */
+  suspendida?: boolean;
+  /** El cobro de la suscripción está EN PAUSA en Stripe (prepago de varios meses, o ciclo re-alineado). */
+  pausaCobro?: { behavior: string; resumes_at: number };
+  /** La factura del cambio de plan nace ANULADA (cobro en pausa que no se vio). */
+  facturaNuevaAnulada?: boolean;
   /** El cliente de la suscripción es OTRO cliente de Stripe. */
   clienteAjeno?: boolean;
   stripeCaido?: boolean;
@@ -84,7 +94,7 @@ interface Escenario {
   exencion?: any;
 }
 
-const FACTURA_VIEJA = { id: "in_vieja", status: "open", amount_due: 4861, currency: "mxn", hosted_invoice_url: "https://pay.stripe.test/in_vieja", customer: "cus_1", created: 100, attempt_count: 2 };
+const FACTURA_VIEJA = { id: "in_vieja", status: "open", amount_due: 4861, currency: "mxn", hosted_invoice_url: "https://pay.stripe.test/in_vieja", customer: "cus_1", created: 100, attempt_count: 2, billing_reason: "subscription_cycle" };
 
 function montar(e: Escenario = {}) {
   const llamadas: { op: string; args: any[] }[] = [];
@@ -100,6 +110,10 @@ function montar(e: Escenario = {}) {
   const candados = new Map<string, { hasta: number; dueno: string }>();
   let retrieves = 0;
   let otraPestanaActuo = false;
+  let pausa: any = e.pausaCobro ?? null; // pause_collection de la suscripción en Stripe
+  let reinicios = 0; // cuántas veces Stripe aplicó DE VERDAD un reinicio de ciclo (las repeticiones con la misma clave no cuentan)
+  const reiniciosPorClave = new Map<string, any>();
+  const PAGADO_EN = Math.floor(new Date("2026-10-20T15:00:00Z").getTime() / 1000);
   const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
   /** La otra pestaña termina la subida (anula/cambia el plan y se cobra) mientras esta petición choca con su clave. */
   const otraPestanaTermina = (plan: string) => {
@@ -118,6 +132,7 @@ function montar(e: Escenario = {}) {
   let respuestasPerdidas = e.updateRespuestaPerdida ?? 0;
   const auditorias: any[] = [];
   const cobrosPorClave = new Map<string, any>();
+  let cobrosDeTarjeta = 0; // cuántas veces se cobró la tarjeta con invoices.pay (cada factura una sola vez)
   let cobrosAplicados = 0; // cuántas veces Stripe aplicó de verdad el cambio (= cuántas facturas nuevas)
 
   const cuestaCaer = () => {
@@ -140,6 +155,7 @@ function montar(e: Escenario = {}) {
           // `customer` viene EXPANDIDO (con su descuento), como lo pide el servicio.
           customer: { id: e.clienteAjeno ? "cus_otro" : "cus_1", discount: descuentoCliente },
           metadata: { clinicId: "clin_1", plan: planSub, kind: "platform-subscription" },
+          pause_collection: pausa,
           items: { data: [{ id: "si_1", price: { unit_amount: 41900, recurring: { interval: e.interval ?? "month" } } }] },
           // `discounts` viene EXPANDIDO (con su cupón), como lo pide el servicio.
           discount: (e.descuentos ?? (e.descuento ? [e.descuento] : []))[0] ?? null,
@@ -149,6 +165,17 @@ function montar(e: Escenario = {}) {
       update: async (id: string, params: any, opts: any) => {
         registra("subscriptions.update", id, params, opts);
         cuestaCaer();
+        // Reinicio de ciclo de la regla de la suspensión (billing_cycle_anchor "now" + pausa con void): la factura que
+        // nace durante la pausa se anula. Misma clave → misma respuesta (como Stripe).
+        if (params.pause_collection) {
+          const previaR = reiniciosPorClave.get(opts.idempotencyKey);
+          if (previaR) return previaR;
+          reinicios++;
+          pausa = params.pause_collection;
+          const r = { id, status: "active", pause_collection: pausa, latest_invoice: { id: `in_reinicio_${reinicios}`, status: "void", amount_paid: 0 } };
+          reiniciosPorClave.set(opts.idempotencyKey, r);
+          return r;
+        }
         // Mismo idempotencyKey → misma respuesta (como Stripe): no genera otra factura.
         const previa = cobrosPorClave.get(opts.idempotencyKey);
         if (previa) return previa;
@@ -162,7 +189,8 @@ function montar(e: Escenario = {}) {
         }
         const nueva = {
           id: "in_nueva",
-          status: e.tarjetaFalla ? "open" : "paid",
+          status: e.facturaNuevaAnulada ? "void" : e.tarjetaFalla ? "open" : "paid",
+          billing_reason: "subscription_update",
           // Lo que Stripe cobraría: lista + IVA de PRO (799.24), con el descuento del cliente si siguiera puesto.
           amount_due: descuentoCliente ? 63939 : 79924,
           total: descuentoCliente ? 63939 : 79924,
@@ -220,7 +248,9 @@ function montar(e: Escenario = {}) {
           throw rechazo();
         }
         f.status = "paid";
+        f.status_transitions = { paid_at: PAGADO_EN };
         cobrosPorClave.set(opts.idempotencyKey, { ...f });
+        cobrosDeTarjeta++;
         return { ...f };
       },
       voidInvoice: async (id: string, _p: any, opts: any) => {
@@ -282,6 +312,9 @@ function montar(e: Escenario = {}) {
     clinica: {
       id: "clin_1",
       nombre: "Clínica Prueba",
+      // Gracia de 24 h (past_due con acceso por delante) salvo que la prueba pida «suspendida» (periodo vencido).
+      subscriptionStatus: "past_due",
+      trialEndsAt: e.suspendida ? new Date("2026-09-01T00:00:00Z") : new Date(Date.now() + 20 * 3_600_000),
       plan: e.plan ?? "BASIC",
       stripeCustomerId: "cus_1",
       stripeSubscriptionId: e.sinSub ? null : "sub_1",
@@ -317,6 +350,11 @@ function montar(e: Escenario = {}) {
     deps, llamadas, ops, auditorias, facturas,
     planLocal: () => planLocal,
     cobros: () => cobrosAplicados,
+    reinicios: () => reinicios,
+    cobrosDeTarjeta: () => cobrosDeTarjeta,
+    pausa: () => pausa,
+    stripe,
+    PAGADO_EN,
     avisos,
     candados,
     /** La otra pestaña termina su subida (anula, cambia el plan y se cobra). */
@@ -1264,6 +1302,225 @@ test("failban.acquireLock/releaseLock con dueño (memoria): solo suelta el dueñ
   await releaseLock(k3);
   assert.equal(await acquireLock(k3, 30, "y"), true);
   await releaseLock(k3, "y");
+});
+
+// ── Regla de la suspensión (ws1-t1 af1a76cc) y V2(a) ──────────────────────────────────────────────────
+
+/** Cuatro meses de renovación sin pagar (jul, ago, sep, oct), la más reciente es oct. */
+const MESES = ["jul", "ago", "sep", "oct"].map((m, i) => ({
+  ...FACTURA_VIEJA,
+  id: `in_${m}`,
+  created: 1_000 + i * 100,
+  amount_due: 48_610,
+  hosted_invoice_url: `https://pay.stripe.test/in_${m}`,
+}));
+const OCT = "in_oct";
+
+test("REGLA — suspendida 4 meses y pulsa «Pagar mi plan»: UN cobro (el mes más reciente), 4-1 = 3 anuladas, y el ciclo pasa a «30 días desde el pago»", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES });
+  const r = await pagarPendiente(m.deps);
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  // 1 cobro: nunca se paga por separado un mes suspendido.
+  assert.deepEqual(m.ops("invoices.pay").map((l) => l.args[0]), [OCT]);
+  assert.equal(m.cobrosDeTarjeta(), 1);
+  // Las otras tres se ANULAN (void), con la clave de la regla, y en la base quedan «No cobrada: servicio suspendido».
+  const anuladas = m.ops("invoices.voidInvoice").map((l) => l.args[0]).sort();
+  assert.deepEqual(anuladas, ["in_ago", "in_jul", "in_sep"]);
+  for (const id of anuladas) {
+    assert.equal(m.ops("invoices.voidInvoice").find((l) => l.args[0] === id)!.args[1].idempotencyKey, `anular-suspendida:${id}`);
+    assert.equal(m.facturas.get(id).status, "void");
+  }
+  assert.equal(m.facturas.get(OCT).status, "paid"); // la pagada no se anula
+  assert.deepEqual(
+    filasFactura.map((f) => [f.reference, f.status, f.notes]).sort(),
+    ["in_ago", "in_jul", "in_sep"].map((id) => [id, "void", NOTA_SERVICIO_SUSPENDIDO]),
+  );
+  // El ciclo: UN `subscriptions.update` con ancla «now» y pausa hasta (pago + 30 días − margen), sin tocar el plan.
+  const reinicio = m.ops("subscriptions.update");
+  assert.equal(reinicio.length, 1);
+  const p = reinicio[0].args[1];
+  const pagadoEn = new Date(m.PAGADO_EN * 1000);
+  assert.equal(p.billing_cycle_anchor, "now");
+  assert.equal(p.proration_behavior, "none");
+  assert.equal(p.pause_collection.behavior, "void");
+  assert.equal(p.pause_collection.resumes_at, Math.floor(reanudarCobroTrasRealinear(finDeLoPagado(pagadoEn, 1)).getTime() / 1000));
+  const dias = (p.pause_collection.resumes_at - m.PAGADO_EN) / 86_400;
+  assert.ok(dias >= 24 && dias <= 28, `reanuda ~un mes después del pago (${dias} días)`);
+  assert.equal(p.metadata, undefined); // no es un cambio de plan
+  assert.equal(m.planLocal(), null);
+  // Orden: primero se mueve el ciclo y después se anulan los meses (si el ciclo falla no se anula nada).
+  const orden = m.llamadas.map((l) => l.op);
+  assert.ok(orden.indexOf("invoices.pay") < orden.indexOf("subscriptions.update"));
+  assert.ok(orden.indexOf("subscriptions.update") < orden.indexOf("invoices.voidInvoice"));
+  const a = m.auditorias.find((x) => x.event === "pago-pendiente-regla-suspension");
+  assert.deepEqual([a.accion, a.realineo, [...a.anuladas].sort(), a.fallos], ["pagar", "hecho", ["in_ago", "in_jul", "in_sep"], []]);
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-pagar").estabaSuspendida, true);
+  // Nunca escribe el estado de cobro de la clínica (lo hace el webhook invoice.paid).
+  assert.deepEqual(m.avisos, []);
+});
+
+test("REGLA — dentro de las 24 h de gracia (aún con acceso): «Pagar» paga la factura del ciclo y el ciclo NO cambia (sin anular, sin reiniciar)", async () => {
+  filasFactura.length = 0;
+  const m = montar({ abiertas: [FACTURA_VIEJA] }); // past_due con acceso por delante
+  const r = await pagarPendiente(m.deps);
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.ops("subscriptions.update").length, 0);
+  assert.equal(m.ops("invoices.voidInvoice").length, 0);
+  assert.equal(m.pausa(), null);
+  assert.deepEqual(filasFactura, []);
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-pagar").estabaSuspendida, false);
+  assert.ok(!m.auditorias.some((x) => x.event === "pago-pendiente-regla-suspension"));
+  // Ni siquiera se relee la suscripción: no hay nada que aplicar.
+  assert.equal(m.ops("subscriptions.retrieve").length, 1); // solo la de cargar el pendiente
+});
+
+test("REGLA — suspendida pero la tarjeta vuelve a fallar: no se aplica nada (no hay pago); el cobro por el enlace lo completa el webhook", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES, tarjetaFalla: true });
+  const r = await pagarPendiente(m.deps);
+  assert.equal(r.body.pagado, false);
+  assert.equal(m.ops("subscriptions.update").length + m.ops("invoices.voidInvoice").length, 0);
+  assert.deepEqual(filasFactura, []);
+  for (const f of MESES) assert.equal(m.facturas.get(f.id).status, "open");
+});
+
+test("REGLA — suspendida 4 meses y pulsa «Subir de plan y pagar»: plan nuevo a lista sin cupones, las demás facturas abiertas se anulan y el ciclo NO se re-alinea (ya es «hoy»)", async () => {
+  filasFactura.length = 0;
+  const m = montar({
+    suspendida: true,
+    abiertas: MESES,
+    descuento: { id: "di_sub", coupon: { id: "REGALO10", percent_off: 10 } },
+    descuentoCliente: { id: "di_cliente", coupon: { id: "REGALO20", percent_off: 20 }, promotion_code: null },
+  });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  // Plan nuevo, cobrado completo en ciclo nuevo desde hoy, sin cupones (ni de la suscripción ni del cliente).
+  const cambios = m.ops("subscriptions.update");
+  assert.equal(cambios.length, 1, "un solo update: el cambio de plan (nada de re-alinear)");
+  assert.equal(cambios[0].args[1].billing_cycle_anchor, "now");
+  assert.equal(cambios[0].args[1].metadata.plan, "PRO");
+  assert.equal(cambios[0].args[1].pause_collection, undefined);
+  assert.equal(cambios[0].args[1].discounts, "");
+  assert.equal(m.ops("customers.deleteDiscount").length, 1);
+  assert.equal(m.planLocal(), "PRO");
+  assert.equal(m.planSub(), "PRO");
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir").montoCobradoMxn, 799.24);
+  assert.equal(m.reinicios(), 0);
+  // Las 4 facturas abiertas de los meses sin servicio quedan anuladas (la más reciente por el flujo de «subir», las otras 3 por la regla).
+  for (const f of MESES) assert.equal(m.facturas.get(f.id).status, "void", f.id);
+  assert.deepEqual(
+    filasFactura.map((f) => f.reference).sort(),
+    ["in_ago", "in_jul", "in_sep"],
+    "las 3 de la regla quedan registradas como no cobradas",
+  );
+  assert.equal(m.ops("invoices.pay").length, 0, "nunca se paga por separado un mes suspendido");
+  // La factura del cambio (subscription_update) NO se anula: es lo que se cobró.
+  assert.equal(m.facturas.get("in_nueva").status, "paid");
+  // Las demás se anulan DESPUÉS del cambio de plan.
+  const orden = m.llamadas.map((l) => l.op);
+  assert.ok(orden.indexOf("subscriptions.update") < orden.lastIndexOf("invoices.voidInvoice"));
+  const a = m.auditorias.find((x) => x.event === "pago-pendiente-regla-suspension");
+  assert.deepEqual([a.accion, [...a.anuladas].sort(), a.fallos], ["subir", ["in_ago", "in_jul", "in_sep"], []]);
+});
+
+test("REGLA — «Subir» con la tarjeta que falla en la factura nueva: igual se anulan los meses sin servicio (no se deben) y se da el enlace", async () => {
+  const m = montar({ suspendida: true, abiertas: MESES, tarjetaFalla: true });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, false);
+  for (const f of MESES) assert.equal(m.facturas.get(f.id).status, "void", f.id);
+  assert.equal(m.facturas.get("in_nueva").status, "open"); // la factura del cambio sigue abierta para pagarla
+});
+
+test("REGLA — «Subir» dentro de las 24 h de gracia: ciclo nuevo por el propio cambio, y no se anula ninguna otra factura", async () => {
+  const otra = { ...FACTURA_VIEJA, id: "in_otra", created: 50 }; // otra abierta que NO es del mes suspendido
+  const m = montar({ abiertas: [otra, FACTURA_VIEJA] });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, true);
+  assert.deepEqual(m.ops("invoices.voidInvoice").map((l) => l.args[0]), ["in_vieja"]); // solo la que «subir» anula siempre
+  assert.equal(m.facturas.get("in_otra").status, "open");
+  assert.ok(!m.auditorias.some((x) => x.event === "pago-pendiente-regla-suspension"));
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir").estabaSuspendida, false);
+});
+
+test("REGLA — carrera con el webhook invoice.paid: si corre a la vez o después con el mismo instante de pago, no se duplica ni se salta nada", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES });
+  const real = m.stripe as any;
+  const viva = async () => real.subscriptions.retrieve("sub_1");
+  // El webhook (t1) aplica la MISMA regla con el instante `status_transitions.paid_at` de la factura pagada.
+  const webhook = async () => {
+    const otras = (await facturasAbiertasDelPlan(real, "sub_1")).filter((f) => f.id !== OCT);
+    const pagadoEn = new Date(m.PAGADO_EN * 1000);
+    return aplicarReglaDeSuspension({ stripe: real, clinicId: "clin_1", sub: await viva(), pagadoEn, finDeLoPagado: finDeLoPagado(pagadoEn, 1), facturas: otras });
+  };
+  // 1) A la vez: pagar y el webhook arrancan juntos.
+  const [r] = await Promise.all([pagarPendiente(m.deps), webhook()]);
+  assert.equal(r.body.pagado, true);
+  assert.equal(m.reinicios(), 1, "un solo reinicio de ciclo (misma clave de idempotencia)");
+  for (const id of ["in_jul", "in_ago", "in_sep"]) assert.equal(m.facturas.get(id).status, "void");
+  assert.equal(m.cobrosDeTarjeta(), 1);
+  // 2) Después: el webhook llega tarde y repite → no vuelve a mover el ciclo ni anula nada nuevo (ya no hay abiertas).
+  const antes = m.ops("subscriptions.update").length;
+  const despues = await webhook();
+  assert.equal(m.reinicios(), 1);
+  assert.deepEqual(despues.anuladas, []);
+  assert.equal(despues.realineo.tipo, "ya_estaba");
+  assert.equal(m.ops("subscriptions.update").length, antes);
+  assert.equal(m.facturas.get(OCT).status, "paid");
+  // Y una sola fila «no cobrada» por factura, sin duplicados.
+  assert.deepEqual(filasFactura.map((f) => f.reference).sort(), ["in_ago", "in_jul", "in_sep"]);
+});
+
+test("REGLA — si el reinicio del ciclo falla, no se anula nada (el reintento del webhook lo completa) y se avisa al admin", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES });
+  (m.deps.stripe as any).subscriptions.update = async () => { throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" }); };
+  const r = await pagarPendiente(m.deps); // la clínica ya pagó: la respuesta sigue siendo «pagado»
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.ops("invoices.voidInvoice").length, 0);
+  for (const f of MESES.filter((f) => f.id !== OCT)) assert.equal(m.facturas.get(f.id).status, "open");
+  assert.equal(m.avisos.length, 1);
+  assert.match(m.avisos[0].asunto, /reactivada tras suspensión/);
+  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-regla-suspension" && x.realineo === "fallo"));
+});
+
+test("V2(a) — «Subir» con el cobro EN PAUSA: bloqueado con mensaje claro (sin «Stripe»), sin tocar nada; no sale gratis", async () => {
+  const resumes = Math.floor(new Date("2027-01-01T00:00:00Z").getTime() / 1000);
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, pausaCobro: { behavior: "void", resumes_at: resumes }, candadoReal: true });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "PAGADO_POR_ADELANTADO");
+  assert.equal(r.body.error, MENSAJES.pagadoPorAdelantado);
+  assert.doesNotMatch(r.body.error as string, /stripe/i);
+  assert.match(r.body.error as string, /soporte/);
+  for (const op of ["customers.deleteDiscount", "customers.update", "prices.create", "invoices.update", "invoices.voidInvoice", "subscriptions.update"]) {
+    assert.equal(m.ops(op).length, 0, op);
+  }
+  assert.equal(m.facturas.get("in_vieja").status, "open"); // la factura vieja sigue ahí
+  assert.equal(m.planLocal(), null);
+  assert.equal(m.candados.size, 0); // y el candado se soltó
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir-bloqueado-por-pausa").reanudaEn, resumes);
+  // El GET no ofrece planes para subir, y lo explica.
+  const g = await consultarPendiente(m.deps);
+  assert.deepEqual(g.body.opcionesSubir, []);
+  assert.equal(g.body.subirNoDisponible, MENSAJES.pagadoPorAdelantado);
+  // «Pagar mi plan» no se bloquea: paga la factura abierta tal cual.
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+});
+
+test("V2(a) — red de seguridad: si la factura del cambio NACE ANULADA (pausa no vista), no se da por cobrada, no se refleja el plan, se avisa al admin", async () => {
+  const m = montar({ facturaNuevaAnulada: true });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(r.body.code, "SUBIDA_SIN_COBRO");
+  assert.equal(r.body.error, MENSAJES.subidaSinCobro);
+  assert.doesNotMatch(r.body.error as string, /stripe/i);
+  assert.equal(m.planLocal(), null, "el plan no se refleja como pagado");
+  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-subir-sin-cobro"));
+  assert.equal(m.avisos.length, 1);
+  assert.match(m.avisos[0].asunto, /SIN cobro/);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──
