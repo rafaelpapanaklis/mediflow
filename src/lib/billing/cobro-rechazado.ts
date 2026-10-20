@@ -187,6 +187,85 @@ export function fijarInicioDelMarcadoParaPruebas(fecha?: Date): void {
   inicioMarcado = fecha ?? INICIO_MARCADO_FUERA_DE_STRIPE;
 }
 
+function sumarMeses(fecha: Date, n: number): Date {
+  const d = new Date(fecha.getTime());
+  const dia = d.getUTCDate();
+  d.setUTCMonth(d.getUTCMonth() + n);
+  if (d.getUTCDate() < dia) d.setUTCDate(0); // 31 ene + 1 mes → fin de feb, no 3 mar
+  return d;
+}
+
+/** Cuántos MESES cubre un pago manual registrado con su periodo (mínimo 1). */
+export function mesesDeUnPeriodo(inicio: Date | string, fin: Date | string): number {
+  const a = aFecha(inicio);
+  const b = aFecha(fin);
+  if (!a || !b) return 1;
+  return Math.max(1, Math.round((b.getTime() - a.getTime()) / (30.44 * DIA_MS)));
+}
+
+/**
+ * Q4 (decisión de Rafael, opción A): un pago manual marca como pagadas SOLO las facturas de los meses que cubre. De las
+ * facturas abiertas / incobrables del plan (más reciente primero) toma tantas como meses cubre el pago (mínimo 1); las
+ * demás siguen abiertas como adeudo. Nunca se anula ni se borra nada.
+ */
+export function facturasDeLosMesesPagados<T extends { created?: number | null }>(pendientes: T[], meses: number): T[] {
+  const n = Math.max(1, Math.floor(meses) || 1);
+  return [...pendientes].sort((a, b) => (b.created ?? 0) - (a.created ?? 0)).slice(0, n);
+}
+
+/** Tolerancia al alinear el prepago con los ciclos de Stripe: una renovación se salta si la mayor parte de su periodo ya estaba pagada. */
+const TOLERANCIA_PREPAGO_MS = 16 * DIA_MS;
+
+/**
+ * Q1 (decisión de Rafael, opción A): un pago manual que cubre VARIOS meses pausa el COBRO de la tarjeta hasta que
+ * termine lo prepagado, sin cancelar la suscripción. Mecanismo: `pause_collection` con `behavior: "void"` y `resumes_at`.
+ * Se eligió sobre `trial_end` porque este último pone la suscripción en «trialing» (prueba) en Stripe y en el portal, y
+ * sobre cancelar porque el mes siguiente a lo prepagado Stripe debe volver a cobrar solo. Con `pause_collection` la
+ * suscripción sigue `active`, los ciclos siguen corriendo y las facturas que nacen durante la pausa se anulan
+ * (void) sin cobrarse; al llegar `resumes_at` Stripe vuelve a cobrar con normalidad.
+ *
+ * Devuelve cuándo debe reanudarse el cobro, o `null` si no hace falta pausar nada:
+ *   · `finDelPeriodoStripe` = fin del ciclo de Stripe que YA cubre la factura marcada (o el pago de la tarjeta);
+ *   · cada renovación posterior (P, P+1 mes, P+2…) se salta mientras su periodo quede cubierto por el prepago
+ *     (`finPrepago`, con 16 días de tolerancia por el desfase entre el ciclo de Stripe y la fecha del pago manual);
+ *   · se reanuda un día ANTES de la primera renovación que sí se cobra, para que esa se cobre.
+ * Un pago de 1 mes tarde (ciclo cubierto por la factura marcada) no pausa nada: el mes siguiente se cobra como siempre.
+ * Solo para suscripciones mensuales.
+ */
+export function reanudarCobroDespuesDelPrepago(args: {
+  finDelPeriodoStripe: Date;
+  finPrepago: Date;
+  intervalo: "month" | "year";
+}): Date | null {
+  if (args.intervalo !== "month") return null;
+  let saltadas = 0;
+  while (saltadas < 36) {
+    const inicio = sumarMeses(args.finDelPeriodoStripe, saltadas);
+    if (sumarMeses(inicio, 1).getTime() <= args.finPrepago.getTime() + TOLERANCIA_PREPAGO_MS) saltadas++;
+    else break;
+  }
+  if (saltadas === 0) return null;
+  return new Date(sumarMeses(args.finDelPeriodoStripe, saltadas).getTime() - DIA_MS);
+}
+
+/**
+ * «Pagado hasta {fecha}» (Q1): cuando un pago manual de varios meses deja el acceso MUY por delante del ciclo de Stripe
+ * (el cobro de la tarjeta está pausado), la clínica ve hasta cuándo está pagada. Con un acceso normal (igual o apenas
+ * por delante del próximo cobro) no se enseña nada.
+ */
+export function pagadoHastaPorPrepago(args: {
+  subscriptionStatus: string | null | undefined;
+  accesoHasta: Date | string | null | undefined;
+  proximoCobro: Date | string | null | undefined;
+}): Date | null {
+  const estado = args.subscriptionStatus ?? null;
+  if (estado === null || !ACTIVE_SUBSCRIPTION_STATUSES.has(estado)) return null;
+  const acceso = aFecha(args.accesoHasta);
+  const cobro = aFecha(args.proximoCobro);
+  if (!acceso || !cobro) return null;
+  return acceso.getTime() > cobro.getTime() + 20 * DIA_MS ? acceso : null;
+}
+
 /** `method` de la fila que deja la activación manual de /admin (`activate_clinic`): es su rastro para el webhook. */
 export const METODO_ACTIVACION_ADMIN = "admin";
 

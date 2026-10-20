@@ -8,7 +8,7 @@
  * está en src/app/api/webhooks/stripe/__tests__/cobro-rechazado.test.ts. Aquí van las piezas que no
  * necesitan base ni Stripe.
  */
-import { test } from "node:test";
+import { describe, it, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -853,11 +853,11 @@ test("el aviso del admin dice exactamente el mensaje pedido, con «Reintentar»,
 
 test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al marcado; el aviso sale en /admin › Pagos y en SPEI pendientes", () => {
   for (const [archivo, marca] of [
-    ["src/app/api/admin/billing/route.ts", "marcarFacturasDeLaClinica(invoice.clinicId)"],
-    ["src/app/api/admin/billing/route.ts", "const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
-    ["src/app/api/admin/subscriptions/route.ts", "marcarFacturasDeLaClinica(clinicId)"],
-    ["src/lib/billing/spei-directo.ts", "marcarFacturasDeLaClinica(sol.clinicId)"],
-    ["src/app/api/webhooks/stripe/route.ts", "facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
+    ["src/app/api/admin/billing/route.ts", "marcarFacturasDeLaClinica(invoice.clinicId, { meses: mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd) })"],
+    ["src/app/api/admin/billing/route.ts", "const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { meses: Math.max(1, Math.floor(Number(months)) || 1) });"],
+    ["src/app/api/admin/subscriptions/route.ts", "marcarFacturasDeLaClinica(clinicId, { meses: mesesDeUnPeriodo(periodStart, periodEnd) })"],
+    ["src/lib/billing/spei-directo.ts", "marcarFacturasDeLaClinica(sol.clinicId, { meses: billing === \"annual\" ? 12 : 1 })"],
+    ["src/app/api/webhooks/stripe/route.ts", "facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { meses: billing === \"annual\" ? 12 : 1 });"],
   ] as const) {
     assert.ok(sinComentarios(leer(archivo)).includes(marca), `${archivo}: ${marca}`);
   }
@@ -868,7 +868,10 @@ test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al mar
   const h = sinComentarios(leer("src/lib/billing/factura-fuera-de-stripe.server.ts"));
   assert.match(h, /paid_out_of_band: true/);
   assert.match(h, /idempotencyKey: claveFueraDeStripe/);
-  assert.doesNotMatch(h, /subscriptions\.(cancel|del|update)/, "la suscripción de tarjeta NUNCA se cancela");
+  assert.doesNotMatch(h, /subscriptions\.(cancel|del)/, "la suscripción de tarjeta NUNCA se cancela");
+  // Lo único que se le cambia a la suscripción es pausar el COBRO (Q1): nunca trial_end ni cancel_at.
+  assert.match(h, /subscriptions\.update\(\s*sub\.id,\s*\{ pause_collection: \{ behavior: "void", resumes_at: hasta \} \}/);
+  assert.doesNotMatch(h, /trial_end|cancel_at|cancel_at_period_end/);
 });
 
 /* ── Quinta vuelta (t4): puro y pantallas ──────────────────────────────── */
@@ -907,4 +910,75 @@ test("Q6 el aviso persistente de /admin › Pagos: título pedido, una fila por 
   assert.match(p, /safe\(clinicasConFacturaPendienteTrasPagoManual\(\), \[\]\)/);
   // El cron diario de vencimiento lo reintenta solo.
   assert.match(sinComentarios(leer("src/app/api/cron/subscription-lapse/route.ts")), /const facturasTarjeta = await reintentarMarcadoPendiente\(\);/);
+});
+
+/* ── Q1 / Q4 (decisión de Rafael, opción A) ── */
+
+import { facturasDeLosMesesPagados, mesesDeUnPeriodo, pagadoHastaPorPrepago, reanudarCobroDespuesDelPrepago } from "../cobro-rechazado";
+
+describe("Q4 facturasDeLosMesesPagados / mesesDeUnPeriodo", () => {
+  const f = (id: string, created: number) => ({ id, created });
+  it("toma tantas facturas como meses cubre el pago, las más recientes primero; mínimo 1", () => {
+    const lista = [f("a", 1), f("b", 2), f("c", 3)];
+    assert.deepEqual(facturasDeLosMesesPagados(lista, 1).map((x) => x.id), ["c"]);
+    assert.deepEqual(facturasDeLosMesesPagados(lista, 2).map((x) => x.id), ["c", "b"]);
+    assert.deepEqual(facturasDeLosMesesPagados(lista, 12).map((x) => x.id), ["c", "b", "a"]);
+    assert.deepEqual(facturasDeLosMesesPagados(lista, 0).map((x) => x.id), ["c"]);
+    assert.deepEqual(facturasDeLosMesesPagados([], 3), []);
+  });
+  it("cuenta los meses de un periodo", () => {
+    assert.equal(mesesDeUnPeriodo("2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z"), 1);
+    assert.equal(mesesDeUnPeriodo("2026-10-01T00:00:00Z", "2027-01-01T00:00:00Z"), 3);
+    assert.equal(mesesDeUnPeriodo("2026-10-01T00:00:00Z", "2027-10-01T00:00:00Z"), 12);
+    assert.equal(mesesDeUnPeriodo("basura", "2027-10-01T00:00:00Z"), 1);
+  });
+});
+
+describe("Q1 reanudarCobroDespuesDelPrepago", () => {
+  const d = (s: string) => new Date(`${s}T12:00:00Z`);
+  it("1 mes pagado tarde (el ciclo ya cubre el pago): no pausa nada", () => {
+    assert.equal(reanudarCobroDespuesDelPrepago({ finDelPeriodoStripe: d("2026-11-20"), finPrepago: d("2026-11-20"), intervalo: "month" }), null);
+    assert.equal(reanudarCobroDespuesDelPrepago({ finDelPeriodoStripe: d("2026-11-20"), finPrepago: d("2026-11-25"), intervalo: "month" }), null);
+  });
+  it("3 meses desde hoy: salta 2 renovaciones y reanuda el día antes de la tercera", () => {
+    const r = reanudarCobroDespuesDelPrepago({ finDelPeriodoStripe: d("2026-11-20"), finPrepago: d("2027-01-20"), intervalo: "month" })!;
+    assert.equal(r.toISOString().slice(0, 10), "2027-01-19");
+  });
+  it("12 meses: pausa casi un año; suscripción anual de Stripe: no pausa", () => {
+    const r = reanudarCobroDespuesDelPrepago({ finDelPeriodoStripe: d("2026-11-20"), finPrepago: d("2027-10-20"), intervalo: "month" })!;
+    assert.equal(r.toISOString().slice(0, 10), "2027-10-19");
+    assert.equal(reanudarCobroDespuesDelPrepago({ finDelPeriodoStripe: d("2026-11-20"), finPrepago: d("2029-10-20"), intervalo: "year" }), null);
+  });
+  it("fin de mes: no se salta de mes al sumar", () => {
+    const r = reanudarCobroDespuesDelPrepago({ finDelPeriodoStripe: d("2026-12-31"), finPrepago: d("2027-03-31"), intervalo: "month" })!;
+    assert.ok(r.getTime() > d("2027-02-20").getTime() && r.getTime() < d("2027-03-31").getTime());
+  });
+});
+
+describe("Q1 pagadoHastaPorPrepago", () => {
+  const ahora = Date.now();
+  const dias = (n: number) => new Date(ahora + n * 86_400_000);
+  it("solo enseña «Pagado hasta» si el acceso rebasa mucho el próximo cobro y la suscripción está activa", () => {
+    assert.ok(pagadoHastaPorPrepago({ subscriptionStatus: "active", accesoHasta: dias(90), proximoCobro: dias(30) }));
+    assert.equal(pagadoHastaPorPrepago({ subscriptionStatus: "active", accesoHasta: dias(35), proximoCobro: dias(30) }), null);
+    assert.equal(pagadoHastaPorPrepago({ subscriptionStatus: "past_due", accesoHasta: dias(90), proximoCobro: dias(30) }), null);
+    assert.equal(pagadoHastaPorPrepago({ subscriptionStatus: "active", accesoHasta: dias(90), proximoCobro: null }), null);
+    assert.equal(pagadoHastaPorPrepago({ subscriptionStatus: null, accesoHasta: dias(90), proximoCobro: dias(30) }), null);
+  });
+});
+
+test("Q1 el aviso de SPEI pendiente es verdad en los dos casos: 1 mes (la tarjeta se cobra el mes siguiente) y un año (el cobro se pausa)", () => {
+  const { textoTarjetaViva } = require("../../../app/admin/payments/spei-pendientes");
+  const mensual = textoTarjetaViva(false);
+  assert.match(mensual, /El mes siguiente se cobra la tarjeta como siempre/);
+  assert.doesNotMatch(mensual, /PAUSA/);
+  const anual = textoTarjetaViva(true);
+  assert.match(anual, /PAUSA hasta que termine lo prepagado/);
+  assert.doesNotMatch(anual, /mes siguiente se cobra/);
+  for (const t of [mensual, anual]) assert.match(t, /NO se cancela/);
+  // La clínica ve «Pagado hasta {fecha}» en los dos idiomas.
+  for (const l of ["es", "en"]) {
+    const d = JSON.parse(readFileSync(join(process.cwd(), `src/i18n/dictionaries/${l}.json`), "utf8"));
+    assert.match(d.shell.subscriptionTab.paidUntil, /\{fecha\}/);
+  }
 });

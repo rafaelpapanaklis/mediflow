@@ -39,6 +39,8 @@ export interface ModeloSuscripcion {
   estadoTexto: string;
   estadoTono: Tono;
   lineaPlan: string;
+  /** «Pagado hasta {fecha}» cuando un pago manual de varios meses deja el cobro de la tarjeta en pausa; null si no aplica. */
+  pagadoHasta: string | null;
   enPrueba: boolean;
   finPrueba: Date | null;
   diasRestantes: number;
@@ -137,6 +139,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
         extra={<Insignia tono={m.estadoTono} punto>{m.estadoTexto}</Insignia>}
       >
         <div className={s.planNombre}>{m.lineaPlan}</div>
+        {m.pagadoHasta && <div className={s.pruebaFecha} data-pagado-hasta>{m.pagadoHasta}</div>}
 
         {m.enPrueba && m.finPrueba && (
           <div>

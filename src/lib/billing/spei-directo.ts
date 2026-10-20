@@ -470,7 +470,7 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
   // Pago manual CONFIRMADO: si la clínica tiene una suscripción de tarjeta viva con la factura del plan abierta o
   // incobrable, esa factura queda pagada FUERA de Stripe (la suscripción no se cancela; el mes siguiente Stripe cobra
   // la tarjeta normal). Si Stripe no contesta, la confirmación sigue en pie y el admin ve el aviso con «Reintentar».
-  const facturaTarjeta = await marcarFacturasDeLaClinica(sol.clinicId);
+  const facturaTarjeta = await marcarFacturasDeLaClinica(sol.clinicId, { meses: billing === "annual" ? 12 : 1 });
 
   return { clinicId: sol.clinicId, invoiceId: factura.id, plan, billing, amountCents: sol.amountCents, periodStart: desde, periodEnd: hasta, facturaTarjeta };
 }

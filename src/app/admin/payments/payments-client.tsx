@@ -20,6 +20,7 @@ import { esActivacionManual, esRastroDePagoUnicoStripe, rotuloDeFilaSinCobro } f
 import {
   AvisoFacturaTarjeta,
   avisarSiSeMarcoLaFacturaTarjeta,
+  datosDelAviso,
   fallóElMarcadoDeLaFacturaTarjeta,
   type AvisoFacturaTarjetaDatos,
 } from "./aviso-factura-tarjeta";
@@ -197,7 +198,7 @@ export function PaymentsClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Error al verificar");
       const fila = pending.find((p: any) => p.id === invoiceId);
-      if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta({ clinicId: fila?.clinicId ?? fila?.clinic?.id, clinicName: fila?.clinic?.name });
+      if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta(datosDelAviso(data, fila?.clinicId ?? fila?.clinic?.id, fila?.clinic?.name));
       else avisarSiSeMarcoLaFacturaTarjeta(data);
       setPending(prev => prev.filter((p: any) => p.id !== invoiceId));
       setPayments(prev =>
@@ -245,7 +246,7 @@ export function PaymentsClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Error al activar");
       if (fallóElMarcadoDeLaFacturaTarjeta(data)) {
-        setAvisoTarjeta({ clinicId, clinicName: overdue.find((c: any) => c.id === clinicId)?.name });
+        setAvisoTarjeta(datosDelAviso(data, clinicId, overdue.find((c: any) => c.id === clinicId)?.name));
       } else avisarSiSeMarcoLaFacturaTarjeta(data);
       setOverdue(prev => prev.filter((c: any) => c.id !== clinicId));
       setActivateClinicId(null);
@@ -323,7 +324,7 @@ export function PaymentsClient({
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const { facturaTarjeta, ...inv } = await res.json();
-      if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta({ clinicId: form.clinicId, clinicName: inv.clinic?.name });
+      if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta(datosDelAviso({ facturaTarjeta }, form.clinicId, inv.clinic?.name));
       else avisarSiSeMarcoLaFacturaTarjeta({ facturaTarjeta });
       setPayments(prev => [inv, ...prev]);
       setShowNewPayment(false);

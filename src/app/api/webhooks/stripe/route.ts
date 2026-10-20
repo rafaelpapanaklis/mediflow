@@ -1338,7 +1338,7 @@ async function activatePlatformSubscription(
   // reintente. No lanza ni deshace la activación; si falla, queda en la bitácora.
   let facturaTarjeta: Awaited<ReturnType<typeof marcarFacturasDeLaClinica>> | null = null;
   if (subscriptionId === null) {
-    facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+    facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { meses: billing === "annual" ? 12 : 1 });
     // Con suscripción de tarjeta de por medio, este pago único no deja ninguna fila de pago manual: sin ella, si el
     // marcado falló y el reintento de Stripe vuelve a fallar dentro de la gracia, la clínica que pagó se suspendería, y
     // el aviso persistente de /admin no la vería. Se deja el mismo rastro de $0 que la activación de /admin (el pago real

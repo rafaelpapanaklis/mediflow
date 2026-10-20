@@ -17,9 +17,16 @@ export const MENSAJE_AVISO_FACTURA_TARJETA =
 export interface AvisoFacturaTarjetaDatos {
   clinicId: string;
   clinicName?: string | null;
+  /** El texto del fallo (marcar la factura, o pausar el cobro de los meses prepagados). Sin él, el de la factura. */
+  mensaje?: string | null;
 }
 
-type RespuestaMarcado = { facturaTarjeta?: { tipo?: string } | null } | null | undefined;
+type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; pausa?: { tipo?: string; hasta?: string } } | null } | null | undefined;
+
+/** Los datos del aviso a partir de la respuesta de una confirmación que falló al marcar / pausar. */
+export function datosDelAviso(data: RespuestaMarcado, clinicId: string, clinicName?: string | null): AvisoFacturaTarjetaDatos {
+  return { clinicId, clinicName, mensaje: data?.facturaTarjeta?.mensaje ?? null };
+}
 
 /** ¿La respuesta de una confirmación trae el fallo de marcado? (si trae `marcadas`, se avisa en un toast aparte). */
 export function fallóElMarcadoDeLaFacturaTarjeta(data: RespuestaMarcado): boolean {
@@ -30,6 +37,11 @@ export function fallóElMarcadoDeLaFacturaTarjeta(data: RespuestaMarcado): boole
 export function avisarSiSeMarcoLaFacturaTarjeta(data: RespuestaMarcado): void {
   if (data?.facturaTarjeta?.tipo === "marcadas") {
     toast.success("La factura de tarjeta quedó pagada fuera de Stripe: ya no la reintentará.");
+  }
+  // Q1: un prepago de varios meses pausa el cobro de la tarjeta hasta que termine (sin cancelar nada).
+  const pausa = data?.facturaTarjeta?.pausa;
+  if (pausa?.tipo === "pausada" && pausa.hasta) {
+    toast.success(`El cobro de la tarjeta queda pausado hasta ${new Date(pausa.hasta).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}; después Stripe vuelve a cobrar solo.`);
   }
 }
 
@@ -82,7 +94,7 @@ export function AvisoFacturaTarjeta({
       <AlertTriangle size={16} aria-hidden />
       <div style={{ flex: 1, minWidth: 220 }}>
         {aviso.clinicName ? <strong>{aviso.clinicName}: </strong> : null}
-        {MENSAJE_AVISO_FACTURA_TARJETA}
+        {aviso.mensaje || MENSAJE_AVISO_FACTURA_TARJETA}
       </div>
       <ButtonNew size="sm" variant="primary" onClick={reintentar} disabled={reintentando}>
         {reintentando ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
