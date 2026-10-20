@@ -19548,6 +19548,9 @@ model GoogleAgendaImport {
   /// «calendario», «google»). NO apaga la sincronización de salida.
   lastError         String?   @db.VarChar(200)
   lastErrorAt       DateTime? @db.Timestamptz(3)
+  /// Último fallo al crear/renovar el canal de avisos (la sincronización no lo pisa).
+  channelError      String?   @db.VarChar(200)
+  channelErrorAt    DateTime? @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
 
@@ -19568,6 +19571,9 @@ model AgendaBlockGoogle {
   /// bloqueo es genérico («Ocupado (Google)») porque el bot se lo dice al paciente.
   title            String    @db.VarChar(300)
   allDay           Boolean   @default(false)
+  /// Por qué es de toda la clínica (null = es de un doctor): «sin_invitados»,
+  /// «no_reconocido» (ningún correo es de alguien de la clínica) o «varios».
+  alcance          String?   @db.VarChar(20)
   /// `updated` de Google la última vez que se leyó.
   googleUpdated    DateTime? @db.Timestamptz(3)
   /// La hora del evento en Google la última vez que se leyó.

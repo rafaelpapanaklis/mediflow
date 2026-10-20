@@ -18,6 +18,7 @@ import {
 } from "@/lib/agenda/bot-recurso-libre";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type { ResourceKind } from "@prisma/client";
+import { MENSAJE_PACIENTE_GOOGLE } from "@/lib/google/entrante-core";
 
 /**
  * Servicio server-side reutilizable para que el bot de WhatsApp agende y
@@ -143,6 +144,8 @@ export interface SlotResult {
    * por vacaciones» en vez de un «no hay atención» que no explica nada.
    */
   mensajeBloqueo?: string;
+  /** WS1-T9 — la frase entera para el paciente, sin «la agenda está cerrada: …». */
+  mensajeCompleto?: string;
 }
 
 /*
@@ -281,8 +284,10 @@ export async function getAvailableSlots(params: {
         reason: "blocked",
         slots: [],
         // El motivo, sin decir de QUIÉN es el bloqueo: al paciente del otro
-        // lado no le corresponde saber que la doctora está operada.
-        mensajeBloqueo: tapaTodo.reason,
+        // lado no le corresponde saber que la doctora está operada. Uno de
+        // Google Calendar (WS1-T9) no dice ni «Google»: «Ese horario no está
+        // disponible» (revisión t8, G9).
+        ...(tapaTodo.kind === "GOOGLE" ? { mensajeCompleto: MENSAJE_PACIENTE_GOOGLE } : { mensajeBloqueo: tapaTodo.reason }),
       };
     }
   }

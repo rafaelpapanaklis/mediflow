@@ -301,6 +301,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // WS1-T9 — «Google Calendar → agenda»: la sede hereda la bandera de la
+    // sede PRINCIPAL del dueño SIEMPRE, aunque no se haya marcado copiar la
+    // configuración (mismo criterio que la agenda flexible; revisión t8, C4).
+    // Solo la bandera: la conexión de Google es de cada sede. Nunca lanza.
+    try {
+      const principalGoogle = origen ? { clinicId: origen.clinicId } : await sedePrincipalDe(supabaseId);
+      if (principalGoogle) {
+        await (await import("@/lib/google/bandera-sede.server")).heredarBanderaGoogle(principalGoogle.clinicId, clinic.id);
+      }
+    } catch (e) {
+      logError("[api/clinics POST] heredar la bandera de Google", e);
+    }
+
     // Auditoría en la clínica DESDE la que se creó (ahí vive el actor).
     await logMutation({
       req,

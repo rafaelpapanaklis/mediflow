@@ -1,11 +1,12 @@
 -- ═══════════════════════════════════════════════════════════════════════
 -- WS1-T9 · Encender «Google Calendar → agenda» SOLO para el grupo Salamanca
 --
--- Requiere antes sql/salamanca-google.sql.
+-- Requiere antes sql/salamanca-google.sql, y mirar ANTES sql/salamanca-google-verificar.sql
+-- (solo lectura): enciende solo las clínicas que salgan con «listo».
 -- Enciende la bandera de las 6 clínicas del Centro Dental Salamanca y de
 -- NINGUNA otra. Si una ya tenía fila (apagada), la enciende; si no, la crea.
 -- Una sede NUEVA de cualquiera de ellas la hereda al darse de alta
--- (src/lib/branches/copia-sede.server.ts → sección «ajustes»).
+-- desde su sede PRINCIPAL, siempre (src/app/api/clinics/route.ts → heredarBanderaGoogle).
 --
 -- Para apagarla después: UPDATE google_agenda_imports SET "enabled" = false
 -- WHERE "clinicId" = '<id>';  (los bloqueos de Google de esa clínica se

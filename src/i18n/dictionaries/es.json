@@ -1692,7 +1692,29 @@
       "mantener": "Mantener la cita",
       "movida": "Cita movida a la hora del evento de Google.",
       "mantenida": "Se mantiene la cita; Google se pone al día con ella.",
-      "errorMover": "No se pudo mover la cita."
+      "errorMover": "No se pudo mover la cita.",
+      "ocupado": "Ocupado (Google)",
+      "aNombreDe": "A nombre de",
+      "alcance_no_reconocido": "Cierra toda la clínica: ningún invitado del evento es alguien de la clínica (quizá invitaron un correo personal).",
+      "alcance_varios": "Cierra toda la clínica: hay varios doctores invitados al evento.",
+      "noConvertibleTodoElDia": "Los eventos de todo el día no se convierten en cita. Si es una cita, ponle hora en Google.",
+      "noConvertibleLargo": "Este evento dura más de 12 horas: no se convierte en una sola cita.",
+      "errorCambio": "El evento cambió o se quitó en Google mientras tanto. Revisa la hora y vuelve a intentarlo.",
+      "errorDoctor": "Este evento es de otro doctor: la cita tiene que ser suya.",
+      "errorApagado": "La conexión de Google Calendar con la agenda está apagada para esta clínica.",
+      "errorComida": "Ese horario es la comida del doctor.",
+      "convertirNota": "El evento de Google conserva su descripción y sus invitados, y toma el título de la cita. Si cancelas la cita, el evento no se borra: queda marcado «Cancelada en DaleControl».",
+      "reconectarCaida": "Google rechazó la conexión de la clínica: ni los eventos de Google cierran la agenda ni las citas se copian a Google. Vuelve a conectar Google en Configuración → Integraciones.",
+      "calendarioNoValido": "La agenda no lee este calendario de Google: no es el calendario propio de esta clínica (es personal o lo usa otra sede). Vuelve a conectar Google en Configuración → Integraciones o escríbenos.",
+      "sobreagendar": {
+        "titulo": "Estás sobreagendando",
+        "cuerpoDoctor": "Este doctor ya tiene una cita a esa hora ({paciente}, {hora}). Estás sobreagendando: las dos citas quedarán al mismo tiempo. ¿Seguro?",
+        "cuerpoComida": "Esa hora es la comida del doctor (de {desde} a {hasta}). Estás sobreagendando: la cita quedará en su hora de comida. ¿Seguro?",
+        "otras": "Además hay {n} cita(s) más encima a esa hora.",
+        "tambienComida": "Además, cae en la hora de comida del doctor (de {desde} a {hasta}).",
+        "confirmar": "Sí, sobreagendar",
+        "cancelar": "Cancelar"
+      }
     },
     "pageClient": {
       "waitlistMarkFailed": "Cita creada, pero no se pudo marcar la espera",

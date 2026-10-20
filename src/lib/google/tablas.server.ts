@@ -50,6 +50,24 @@ export async function tablasGoogleListas(opts: { db?: DbSonda; forzar?: boolean 
   }
 }
 
+/**
+ * Igual, pero sin la caché de «no» y SIN tragarse un fallo: lanza si la base
+ * no contesta. Para lo que no puede equivocarse a ciegas (la salida a Google
+ * de una cita que vino de un evento: equivocarse BORRA el evento de la
+ * clínica y avisa a sus invitados). Revisión t8.
+ */
+export async function tablasGoogleListasOLanzar(opts: { db?: DbSonda } = {}): Promise<boolean> {
+  const m = leerMemoria();
+  if (m?.existe && Date.now() - m.at < DIEZ_MIN) return true;
+  const db = opts.db ?? (await baseReal());
+  const filas = (await db.$queryRaw`
+    SELECT (to_regclass('public.google_agenda_imports') IS NOT NULL
+        AND to_regclass('public.agenda_block_google') IS NOT NULL) AS existe`) as { existe: boolean }[];
+  const existe = Array.isArray(filas) && filas[0]?.existe === true;
+  fijarMemoria({ existe, at: Date.now() });
+  return existe;
+}
+
 /** Solo pruebas. */
 export function _olvidarTablasGoogle(): void {
   fijarMemoria(undefined);

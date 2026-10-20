@@ -21,8 +21,11 @@
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- ── 1. El tipo nuevo de bloqueo ────────────────────────────────────────
--- ADD VALUE IF NOT EXISTS no puede ir dentro de un bloque DO ni de una
--- transacción que luego use el valor: va suelto, como primera sentencia.
+-- El SQL Editor de Supabase corre el archivo ENTERO en una sola transacción,
+-- y Postgres no deja USAR un valor de enum en la misma transacción que lo
+-- añade («unsafe use of new value»). Por eso NADA de este archivo usa 'GOOGLE'
+-- después de añadirlo (ni un cast, ni un enum_range): la comprobación del
+-- final lee pg_enum. (Revisión t8, G2: la versión anterior fallaba entera.)
 ALTER TYPE "AgendaBlockKind" ADD VALUE IF NOT EXISTS 'GOOGLE';
 
 
@@ -44,9 +47,15 @@ CREATE TABLE IF NOT EXISTS google_agenda_imports (
   "channelCalendarId" TEXT,
   "lastError"         VARCHAR(200),
   "lastErrorAt"       TIMESTAMPTZ(3),
+  -- El último fallo al crear/renovar el canal de avisos (no lo pisa la sincronización).
+  "channelError"      VARCHAR(200),
+  "channelErrorAt"    TIMESTAMPTZ(3),
   "createdAt"         TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
   "updatedAt"         TIMESTAMPTZ(3) NOT NULL DEFAULT NOW()
 );
+-- Por si una versión anterior de este archivo ya creó la tabla sin ellas.
+ALTER TABLE google_agenda_imports ADD COLUMN IF NOT EXISTS "channelError"   VARCHAR(200);
+ALTER TABLE google_agenda_imports ADD COLUMN IF NOT EXISTS "channelErrorAt" TIMESTAMPTZ(3);
 CREATE UNIQUE INDEX IF NOT EXISTS "google_agenda_imports_channelId_key"
   ON google_agenda_imports ("channelId");
 COMMENT ON TABLE google_agenda_imports IS
@@ -62,6 +71,9 @@ CREATE TABLE IF NOT EXISTS agenda_block_google (
   "recurringEventId"  VARCHAR(1024),
   "title"             VARCHAR(300) NOT NULL,
   "allDay"            BOOLEAN NOT NULL DEFAULT false,
+  -- Por qué el bloqueo es de toda la clínica (null = es de un doctor):
+  -- 'sin_invitados' | 'no_reconocido' (ningún correo es de alguien de la clínica) | 'varios'.
+  "alcance"           VARCHAR(20),
   "googleUpdated"     TIMESTAMPTZ(3),
   "eventStartsAt"     TIMESTAMPTZ(3) NOT NULL,
   "eventEndsAt"       TIMESTAMPTZ(3) NOT NULL,
@@ -79,6 +91,7 @@ CREATE TABLE IF NOT EXISTS agenda_block_google (
 );
 -- Un evento = un bloqueo por clínica y calendario: lo que hace idempotente
 -- que el aviso de Google, el cron y la agenda sincronicen a la vez.
+ALTER TABLE agenda_block_google ADD COLUMN IF NOT EXISTS "alcance" VARCHAR(20);
 CREATE UNIQUE INDEX IF NOT EXISTS agenda_block_google_evento_unico
   ON agenda_block_google ("clinicId", "calendarId", "googleEventId");
 CREATE INDEX IF NOT EXISTS agenda_block_google_cita_idx
@@ -88,7 +101,37 @@ CREATE INDEX IF NOT EXISTS agenda_block_google_serie_idx
 COMMENT ON TABLE agenda_block_google IS
   'WS1-T9: vínculo de un bloqueo de agenda tipo GOOGLE con su evento de Google Calendar. Nunca se borra: eliminado = bloqueo retirado; convertido = convertedAt + appointmentId.';
 
--- Comprobación (solo lectura): debe devolver 'GOOGLE' y las dos tablas.
-SELECT unnest(enum_range(NULL::"AgendaBlockKind"))::text AS tipo_de_bloqueo;
-SELECT to_regclass('public.google_agenda_imports') AS tabla_bandera,
-       to_regclass('public.agenda_block_google')   AS tabla_vinculo;
+-- ── 4. Defensa en profundidad: RLS que lo niega todo ────────────────────
+-- Mismo patrón que sql/doctor-horarios.sql y sql/ws1-t12-google-calendar-estado.sql.
+-- DaleControl entra solo por Prisma con el rol de servicio (que se salta RLS);
+-- esto cierra PostgREST si alguien usa la llave anon: los títulos de los
+-- eventos y el token del canal no se leen desde fuera (revisión t8).
+DO $rls$
+BEGIN
+  EXECUTE 'ALTER TABLE "google_agenda_imports" ENABLE ROW LEVEL SECURITY';
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'google_agenda_imports' AND policyname = 'google_agenda_imports_deny_anon'
+  ) THEN
+    EXECUTE 'CREATE POLICY "google_agenda_imports_deny_anon" ON "google_agenda_imports" AS RESTRICTIVE FOR ALL TO anon, authenticated USING (false) WITH CHECK (false)';
+  END IF;
+END
+$rls$;
+DO $rls$
+BEGIN
+  EXECUTE 'ALTER TABLE "agenda_block_google" ENABLE ROW LEVEL SECURITY';
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'agenda_block_google' AND policyname = 'agenda_block_google_deny_anon'
+  ) THEN
+    EXECUTE 'CREATE POLICY "agenda_block_google_deny_anon" ON "agenda_block_google" AS RESTRICTIVE FOR ALL TO anon, authenticated USING (false) WITH CHECK (false)';
+  END IF;
+END
+$rls$;
+
+-- Comprobación (solo lectura). El editor enseña solo el ÚLTIMO resultado:
+-- una fila con tipo_google = GOOGLE y las dos tablas con nombre (no NULL).
+SELECT (SELECT enumlabel FROM pg_enum
+         WHERE enumtypid = '"AgendaBlockKind"'::regtype AND enumlabel = 'GOOGLE') AS tipo_google,
+       to_regclass('public.google_agenda_imports')::text AS tabla_bandera,
+       to_regclass('public.agenda_block_google')::text   AS tabla_vinculo;

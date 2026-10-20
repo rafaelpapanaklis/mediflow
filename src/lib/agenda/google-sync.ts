@@ -85,6 +85,10 @@ const puertos: PuertosEnBloque = {
       },
     });
     if (!a) return null;
+    // WS1-T9: ¿vino de un evento de Google? (import dinámico: sin evento no se carga nada).
+    const desdeGoogle = a.googleCalendarEventId
+      ? await (await import("@/lib/google/convertir.server")).vinculoParaSalida(clinicId, a, a.googleCalendarEventId)
+      : null;
     return {
       id: a.id, type: a.type, status: a.status, startsAt: a.startsAt, endsAt: a.endsAt,
       googleEventId: a.googleCalendarEventId,
@@ -92,6 +96,7 @@ const puertos: PuertosEnBloque = {
       doctorName: a.doctor ? `${a.doctor.firstName} ${a.doctor.lastName}`.trim() : null,
       doctorEmail: a.doctor?.email ?? null,
       patientEmail: a.patient.email ?? null,
+      desdeGoogle,
     };
   },
 

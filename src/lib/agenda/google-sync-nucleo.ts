@@ -8,6 +8,9 @@
 //   · cita activa, sin evento        → lo crea con id determinista (sin duplicar)
 //   · cita cancelada / no asistió    → borra el evento y limpia el id
 //
+// Salvo una cita que VINO de un evento de Google («Convertir en cita», WS1-T9):
+// ese evento es de la clínica y nunca se borra (ver `desdeGoogle`).
+//
 // Es idempotente: repetirla, reintentarla o llamarla desde dos rutas a la vez
 // converge al mismo estado. Por eso también sirve para «Sincronizar citas
 // futuras».
@@ -16,6 +19,7 @@
 // decide (qué datos viajan, si la conexión está caída) entran como `Puertos`,
 // para probarlo con una Google falsa.
 
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import {
   borrarEvento,
   asegurarCalendarioDeClinica,
@@ -23,6 +27,7 @@ import {
   idEventoDeCita,
   insertarEvento,
   parcharEvento,
+  parcharTitulo,
   razonDeError,
   type ClienteCalendar,
   type ContenidoEvento,
@@ -56,6 +61,34 @@ export interface CitaParaGoogle {
   doctorName: string | null;
   doctorEmail: string | null;
   patientEmail: string | null;
+  /**
+   * WS1-T9 · la cita vino de un evento de Google y sigue ligada a él (revisión
+   * t8, G4/G6). Entonces:
+   *   · nunca se le pisan la descripción, la ubicación ni los invitados;
+   *   · con un aviso sin decidir («el evento cambió / se eliminó») solo se
+   *     toca el título: ni la hora ni el estado, y no se recrea;
+   *   · al cancelar NO se borra ni se avisa a sus invitados: el título pasa a
+   *     «Cancelada en DaleControl · <título original>»;
+   *   · al marcar «no asistió» se deja como está;
+   *   · antes de copiarle la hora se mira cómo está en Google: si cambió (o se
+   *     borró) y la entrada aún no lo vio, solo el título; la entrada pondrá
+   *     el aviso en vez de que el parche lo deshaga sin que nadie decida.
+   */
+  desdeGoogle?: {
+    tituloOriginal: string;
+    avisoPendiente: boolean;
+    /** La hora del evento la última vez que la entrada lo leyó, y si lo vio borrado. */
+    eventoVisto?: { startsAt: Date; endsAt: Date; eliminado: boolean };
+  } | null;
+}
+
+/** El prefijo del título de un evento de Google cuya cita se canceló en DaleControl. */
+export const PREFIJO_CANCELADA = "Cancelada en DaleControl · ";
+
+export function tituloCancelada(original: string): string {
+  const t = (original ?? "").trim();
+  if (!t) return PREFIJO_CANCELADA.replace(/ · $/, "");
+  return t.startsWith(PREFIJO_CANCELADA) ? t : `${PREFIJO_CANCELADA}${t}`;
 }
 
 export interface EntradaContenido {
@@ -196,6 +229,17 @@ export async function sincronizarCita(
       }
     };
 
+    // ── Cita que vino de Google y se cerró: el evento se queda ──────────────
+    if (esCitaCerrada(cita.status) && cita.desdeGoogle && cita.googleEventId) {
+      if (!calendarId || cita.status !== "CANCELLED") return { estado: "sin_cambios" };
+      const r = await parcharTitulo(cal, {
+        calendarId,
+        eventId: cita.googleEventId,
+        summary: tituloCancelada(cita.desdeGoogle.tituloOriginal),
+      });
+      return { estado: r === "ok" ? "actualizado" : "sin_cambios" };
+    }
+
     // ── Cita cerrada: fuera del calendario ───────────────────────────────────
     if (esCitaCerrada(cita.status)) {
       // Sin calendario propio nunca se creó nada ahí. Con él, y aunque la cita
@@ -233,9 +277,27 @@ export async function sincronizarCita(
       appointmentId,
     });
 
+    if (cita.googleEventId && cita.desdeGoogle?.avisoPendiente) {
+      // Hay un «¿Mover / Cancelar la cita?» sin decidir: si aquí se parchara la
+      // hora, el evento volvería a la de la cita y el aviso desaparecería sin
+      // que nadie decidiera (G4). Solo el título; tampoco se recrea.
+      const cid = await asegurarCalendario();
+      const r = await parcharTitulo(cal, { calendarId: cid, eventId: cita.googleEventId, summary: contenido.summary });
+      return { estado: r === "ok" ? "actualizado" : "sin_cambios" };
+    }
+
+    if (cita.googleEventId && cita.desdeGoogle?.eventoVisto && cal.events.get) {
+      const cid = await asegurarCalendario();
+      if (await cambioQueLaEntradaNoVio(cal, cid, cita.googleEventId, cita.desdeGoogle.eventoVisto, cita, clinica.timezone || "America/Mexico_City")) {
+        const r = await parcharTitulo(cal, { calendarId: cid, eventId: cita.googleEventId, summary: contenido.summary });
+        return { estado: r === "ok" ? "actualizado" : "sin_cambios" };
+      }
+    }
+
     if (cita.googleEventId) {
       const cid = await asegurarCalendario();
-      if ((await parcharEvento(cal, datos(cid, cita.googleEventId))) === "ok") return { estado: "actualizado" };
+      const r = await parcharEvento(cal, datos(cid, cita.googleEventId), { conservarDescripcion: !!cita.desdeGoogle });
+      if (r === "ok") return { estado: "actualizado" };
       // Google ya no tiene ese evento (o ese calendario): se vuelve a crear, con id determinista.
     }
 
@@ -271,6 +333,46 @@ export async function sincronizarCita(
   } finally {
     await Promise.allSettled(pendientes);
   }
+}
+
+/**
+ * WS1-T9 · ¿El evento de la clínica cambió en Google (hora, o borrado) DESPUÉS
+ * de la última lectura, y no está ya a la hora de la cita? Entonces copiarle la
+ * hora lo devolvería atrás sin aviso (revisión t8). Un evento que Google ya no
+ * tiene (404/410) no cuenta aquí: lo resuelve el parche de siempre.
+ */
+async function cambioQueLaEntradaNoVio(
+  cal: ClienteCalendar,
+  calendarId: string,
+  eventId: string,
+  visto: { startsAt: Date; endsAt: Date; eliminado: boolean },
+  cita: { startsAt: Date; endsAt: Date },
+  zona: string,
+): Promise<boolean> {
+  let ev: Record<string, any>;
+  try {
+    ev = (await cal.events.get!({ calendarId, eventId })).data ?? {};
+  } catch (err) {
+    const s = estadoHttpDeError(err);
+    if (s === 404 || s === 410) return false;
+    throw err;
+  }
+  if (ev.status === "cancelled") return !visto.eliminado;
+  // Con hora, el instante; de todo el día, la medianoche de la clínica (igual
+  // que lo guarda la entrada): así un evento pasado a «todo el día» y luego
+  // «Mantenido» sí vuelve a la hora de la cita.
+  const instante = (f: any): Date | null =>
+    typeof f?.dateTime === "string"
+      ? new Date(f.dateTime)
+      : typeof f?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(f.date)
+        ? tzLocalToUtc(f.date, 0, 0, zona)
+        : null;
+  const ini = instante(ev.start);
+  const fin = instante(ev.end);
+  if (!ini || !fin || Number.isNaN(ini.getTime()) || Number.isNaN(fin.getTime())) return true;
+  const igual = (a: Date, b: Date, c: Date, d: Date) => a.getTime() === c.getTime() && b.getTime() === d.getTime();
+  if (igual(ini, fin, cita.startsAt, cita.endsAt)) return false;
+  return !igual(ini, fin, visto.startsAt, visto.endsAt);
 }
 
 /**

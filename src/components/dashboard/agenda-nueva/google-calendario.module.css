@@ -130,6 +130,26 @@
   font-size: 12px;
 }
 
+/* ── «¿Seguro?» de sobreagendar (WS1-T5, con la agenda flexible) ── */
+.confirmacion {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ag-ambar-borde);
+  border-radius: var(--ag-r-8);
+  background: var(--ag-ambar-claro);
+  color: var(--ag-ambar-texto);
+  line-height: 1.45;
+}
+
+.confirmacionIcono {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ag-ambar-icono);
+}
+
 .error {
   margin: 0;
   padding: 8px 10px;

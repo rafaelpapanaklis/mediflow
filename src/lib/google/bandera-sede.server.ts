@@ -1,6 +1,8 @@
 /**
- * Una SEDE NUEVA hereda la bandera «Google Calendar → agenda» de la clínica
- * desde la que se da de alta (WS1-T9). Solo la bandera: la conexión de Google
+ * Una SEDE NUEVA hereda la bandera «Google Calendar → agenda» de la sede
+ * PRINCIPAL del dueño, SIEMPRE (WS1-T9; revisión t8, C4: mismo criterio que la
+ * agenda flexible, no solo al «copiar configuración»). La llama el alta de
+ * sedes (`POST /api/clinics`). Solo la bandera: la conexión de Google
  * (tokens, calendario) es de cada sede y se conecta aparte en Configuración.
  *
  * Nunca lanza (no puede tumbar el alta de una sede). Sin SQL aplicado, o con

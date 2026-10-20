@@ -54,7 +54,7 @@ import {
   type BloqueoLike,
 } from "./core";
 import type { BloqueoCtx } from "./core-ctx";
-import { etiquetaRejilla } from "@/lib/google/entrante-core";
+import { etiquetaRejilla, puedeVerTitulo } from "@/lib/google/entrante-core";
 
 /** Un bloqueo vigente tal como lo consumen las calculadoras de huecos. */
 export interface BloqueoVigente extends BloqueoLike {
@@ -243,6 +243,9 @@ export function puedeRetirar(
 }
 
 export function aDTO(ctx: BloqueoCtx, b: FilaBloqueo, tituloGoogle?: string | null): BloqueoDTO {
+  // WS1-T9 (revisión t8, G1): el título del evento solo a quien puede ver la
+  // agenda de ESE doctor; los demás ven «Ocupado (Google)» a secas.
+  if (b.kind === "GOOGLE" && !puedeVerTitulo(ctx, b)) tituloGoogle = null;
   return {
     id: b.id,
     doctorId: b.doctorId,

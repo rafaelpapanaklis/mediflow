@@ -260,10 +260,13 @@ export async function POST(req: NextRequest) {
   // cita nace ligada al evento de Google: la sincronización de salida lo
   // ACTUALIZA en vez de crear otro. Ver src/lib/google/convertir.server.ts.
   const conversionGoogle = body.googleBloqueoId
-    ? await (await import("@/lib/google/convertir.server")).prepararConversionGoogle(session.clinic.id, body.googleBloqueoId, {
-        userId: session.user.id,
-        role: session.user.role,
-      })
+    ? await (await import("@/lib/google/convertir.server")).prepararConversionGoogle(
+        session.clinic.id,
+        body.googleBloqueoId,
+        { userId: session.user.id, role: session.user.role },
+        // La hora y el doctor los manda el BLOQUEO: si no coinciden, 409.
+        { startsAt, endsAt, doctorId: body.doctorId },
+      )
     : null;
   if (conversionGoogle && !conversionGoogle.ok) {
     return NextResponse.json({ error: conversionGoogle.error }, { status: conversionGoogle.status });
@@ -483,6 +486,8 @@ export async function POST(req: NextRequest) {
           startsAt,
           endsAt,
           status: "SCHEDULED",
+          // WS1-T9: ligada al evento de Google del bloqueo que se convierte.
+          ...(conversionGoogle?.googleEventId ? { googleCalendarEventId: conversionGoogle.googleEventId } : {}),
           type: body.reason ?? "Consulta general",
           // El formulario de /dashboard/appointments recoge notas y hasta ahora
           // se perdían: la ruta no las miraba (hallazgo 24).
@@ -497,8 +502,6 @@ export async function POST(req: NextRequest) {
           overrideReason: body.overrideReason ?? null,
           overriddenBy: body.overrideReason ? session.user.id : null,
           overriddenAt: body.overrideReason ? new Date() : null,
-          // WS1-T9: ligada al evento de Google del bloqueo que se convierte.
-          ...(conversionGoogle?.googleEventId ? { googleCalendarEventId: conversionGoogle.googleEventId } : {}),
         },
         include: APPT_INCLUDE,
       });
@@ -549,6 +552,8 @@ export async function POST(req: NextRequest) {
         startsAt: created.startsAt,
         type: created.type,
         status: created.status,
+        // WS1-T9: «Convertir en cita» de un evento de Google Calendar.
+        ...(conversionGoogle?.bloqueoId ? { desdeBloqueoGoogle: conversionGoogle.bloqueoId } : {}),
         // WS1-T3 — EL RASTRO. Va en la MISMA fila de auditoría que la
         // creación y no en una aparte: quien revise por qué hay una cita un
         // día que la clínica cerró lo lee de un vistazo, sin cruzar dos
@@ -558,7 +563,6 @@ export async function POST(req: NextRequest) {
         ...(trazaBloqueo
           ? { bloqueoSaltado: trazaBloqueo, bloqueoAvisado: avisadaDelBloqueo }
           : {}),
-        ...(conversionGoogle?.bloqueoId ? { desdeBloqueoGoogle: conversionGoogle.bloqueoId } : {}),
       },
     });
 
@@ -617,9 +621,11 @@ export async function POST(req: NextRequest) {
     if (err instanceof Prisma.PrismaClientValidationError) {
       return NextResponse.json({ error: "validation" }, { status: 400 });
     }
-    // WS1-T9: otra persona convirtió el mismo bloqueo de Google a la vez.
-    if ((err as Error)?.message === "google_block_already_converted") {
-      return NextResponse.json({ error: "google_block_already_converted" }, { status: 409 });
+    // WS1-T9: otra persona convirtió el mismo bloqueo de Google a la vez, o el
+    // evento se movió / se quitó en Google mientras tanto.
+    const codigoGoogle = (err as Error)?.message;
+    if (codigoGoogle === "google_block_already_converted" || codigoGoogle === "google_block_changed") {
+      return NextResponse.json({ error: codigoGoogle }, { status: 409 });
     }
     console.error("[POST /api/appointments] unexpected error", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });

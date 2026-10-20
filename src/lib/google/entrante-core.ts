@@ -17,15 +17,20 @@
  *     reimportan: llevan la marca `extendedProperties.private.dalecontrolClinicId`
  *     y un id `dc` + 40 hex (`idEventoDeCita`). Sin esto cada cita se cerraría
  *     a sí misma su propio hueco: el eco.
- *   · ¿De quién es el bloqueo? Del doctor cuyo correo aparece entre los
- *     invitados del evento (uno y solo uno). Si no aparece ninguno, o varios,
- *     de toda la clínica: el calendario es de la sede.
+ *   · ¿De quién es el bloqueo? De la persona de la clínica cuyo correo
+ *     aparece entre los invitados (`asignarEvento`). Si es alguien que no
+ *     recibe citas (recepción, un doctor dado de baja o con la agenda
+ *     apagada), el bloqueo queda a su nombre y no cierra a nadie más. Sin
+ *     invitados, sin ningún correo conocido o con varios doctores: de toda la
+ *     clínica, y el panel dice por qué (`alcance`).
  *
  * 🔴 EL TÍTULO NO VA EN `reason`. El bot de WhatsApp le dice al paciente el
  * `reason` de un día cerrado (`bot-booking-service.ts`), y el título de un
  * evento («Cita con el abogado») no es de su incumbencia. `reason` es siempre
  * MOTIVO_GOOGLE y el título vive en `agenda_block_google.title`, que solo se
- * pinta en la agenda del staff.
+ * pinta a quien puede ver la agenda de ESE doctor (`puedeVerTitulo`). Y el bot
+ * ni siquiera dice MOTIVO_GOOGLE: para el paciente es «Ese horario no está
+ * disponible» (`MENSAJE_PACIENTE_GOOGLE`).
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -33,8 +38,25 @@ import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
 /** El `reason` de todo bloqueo GOOGLE. Genérico a propósito (ver arriba). */
 export const MOTIVO_GOOGLE = "Ocupado (Google)";
+/** Lo que le dice el bot al paciente de un día cerrado por Google (nunca «Google»). */
+export const MENSAJE_PACIENTE_GOOGLE = "Ese horario no está disponible";
 /** Quién «creó» el bloqueo (`agenda_blocks.createdByName`). */
 export const CREADOR_GOOGLE = "Google Calendar";
+/**
+ * ¿Quien mira puede ver el TÍTULO del evento? Con las reglas de visibilidad de
+ * la agenda de hoy (`/api/agenda/range`): un DOCTOR ve solo su agenda; el
+ * resto de roles con acceso a la agenda (recepción, dueño, admin) la ve
+ * entera. Así un DOCTOR ve el título de los suyos, y en los de toda la clínica
+ * (o de un compañero) solo «Ocupado (Google)».
+ */
+export function puedeVerTitulo(
+  quien: { role: string; userId: string },
+  bloqueo: { doctorId: string | null },
+): boolean {
+  if (quien.role !== "DOCTOR") return true;
+  return bloqueo.doctorId !== null && bloqueo.doctorId === quien.userId;
+}
+
 /** Lo que se pinta en la rejilla: «Ocupado (Google) · <título>». */
 export function etiquetaRejilla(titulo: string): string {
   const t = (titulo ?? "").trim();
@@ -78,22 +100,33 @@ export interface EventoGoogle {
   id?: string | null;
   status?: string | null;
   summary?: string | null;
+  description?: string | null;
   start?: FechaGoogle | null;
   end?: FechaGoogle | null;
   transparency?: string | null;
   eventType?: string | null;
   recurringEventId?: string | null;
   updated?: string | null;
-  attendees?: { email?: string | null; responseStatus?: string | null }[] | null;
+  attendees?: { email?: string | null; responseStatus?: string | null; self?: boolean | null; resource?: boolean | null }[] | null;
   extendedProperties?: { private?: Record<string, string> | null } | null;
 }
+
+/** El pie que DaleControl pone en la descripción de sus eventos (`google-calendar-contenido.ts`). */
+const PIE_DE_DALECONTROL = "Agendado desde DaleControl";
+/** El título de una cita copiada a Google: «🏥 <tipo> — <paciente>». */
+const TITULO_DE_CITA = /^🏥 .+ — .+/u;
 
 /** ¿Lo creó DaleControl? (una cita que ya se copia a Google). */
 export function esEventoDeDaleControl(ev: EventoGoogle): boolean {
   const priv = ev.extendedProperties?.private ?? null;
   if (priv && (priv.dalecontrolClinicId || priv.dalecontrolAppointmentId)) return true;
   // Los eventos de cita llevan id determinista: «dc» + 40 hex (`idEventoDeCita`).
-  return typeof ev.id === "string" && /^dc[0-9a-f]{40}$/.test(ev.id);
+  if (typeof ev.id === "string" && /^dc[0-9a-f]{40}$/.test(ev.id)) return true;
+  // Los de antes de la marca (o de citas que ya no existen) se reconocen por
+  // su pie o por la forma del título. Sin esto saldrían como «Ocupado» a la
+  // hora de una cita borrada (revisión t8, G13).
+  if (typeof ev.description === "string" && ev.description.includes(PIE_DE_DALECONTROL)) return true;
+  return typeof ev.summary === "string" && TITULO_DE_CITA.test(ev.summary.trim());
 }
 
 /** ¿El evento está, y está ocupado? Lo que decide si cierra la agenda. */
@@ -149,28 +182,85 @@ export function tituloDeEvento(ev: EventoGoogle): string {
   return Array.from(t).slice(0, TITULO_MAX).join("");
 }
 
+/** Una persona de la clínica (cualquier rol, activa o no) con su correo. */
+export interface UsuarioClinica {
+  id: string;
+  email: string | null;
+  /** ¿Sale en la agenda y recibe citas? (`RECIBE_CITAS_WHERE`). */
+  recibeCitas: boolean;
+}
+
+/** Por qué un bloqueo es de toda la clínica. `null` = es de una persona. */
+export type AlcanceGoogle = "sin_invitados" | "no_reconocido" | "varios";
+
 /**
- * El doctor del bloqueo: el ÚNICO doctor de la clínica invitado al evento
- * (por correo, sin distinguir mayúsculas). Ninguno o varios → null = toda la
- * clínica. Un invitado que rechazó la invitación no cuenta.
+ * De quién es el bloqueo (revisión t8, G1). Se buscan los correos de los
+ * invitados entre TODAS las personas de la clínica:
+ *
+ *   · Un solo doctor que recibe citas → suyo.
+ *   · Varios doctores que reciben citas → toda la clínica («varios»).
+ *   · Ninguno que reciba citas, pero sí alguien de la clínica (recepción, un
+ *     doctor dado de baja, con la agenda apagada) → a su nombre: no cierra la
+ *     agenda de nadie más.
+ *   · Los que rechazaron la invitación cuentan solo si no queda nadie más: un
+ *     «Quirófano» al que la Dra. dijo que no sigue siendo de ella, no de toda
+ *     la clínica.
+ *   · Sin invitados («sin_invitados») o sin ningún correo conocido
+ *     («no_reconocido», p. ej. el Gmail personal de la doctora) → toda la clínica.
+ *
+ * El propio calendario (`self`) y las salas (`resource`) no son invitados.
  */
-export function doctorDelEvento(
+export function asignarEvento(
   ev: EventoGoogle,
-  doctores: readonly { id: string; email: string | null }[],
-): string | null {
-  const correos = new Set(
-    (ev.attendees ?? [])
-      .filter((a) => a && a.responseStatus !== "declined")
-      .map((a) => (typeof a.email === "string" ? a.email.trim().toLowerCase() : ""))
-      .filter(Boolean),
+  usuarios: readonly UsuarioClinica[],
+): { doctorId: string | null; alcance: AlcanceGoogle | null } {
+  const invitados = (ev.attendees ?? []).filter(
+    (a) => a && !a.self && !a.resource && typeof a.email === "string" && a.email.trim(),
   );
-  if (correos.size === 0) return null;
-  const encontrados = new Set<string>();
-  for (const d of doctores) {
-    const c = d.email?.trim().toLowerCase();
-    if (c && correos.has(c)) encontrados.add(d.id);
+  if (invitados.length === 0) return { doctorId: null, alcance: "sin_invitados" };
+  const porCorreo = new Map<string, UsuarioClinica>();
+  for (const u of usuarios) {
+    const c = u.email?.trim().toLowerCase();
+    // Con el correo repetido (una cuenta de baja y la nueva), manda quien recibe
+    // citas; a igualdad, el id menor (que no dependa del orden de la consulta).
+    const previo = c ? porCorreo.get(c) : undefined;
+    const gana = !previo || (u.recibeCitas !== previo.recibeCitas ? u.recibeCitas : u.id < previo.id);
+    if (c && gana) porCorreo.set(c, u);
   }
-  return encontrados.size === 1 ? [...encontrados][0] : null;
+  const elegir = (soloQueAceptan: boolean) => {
+    const vistos = new Map<string, UsuarioClinica>();
+    for (const a of invitados) {
+      if (soloQueAceptan === (a.responseStatus === "declined")) continue;
+      const u = porCorreo.get((a.email as string).trim().toLowerCase());
+      if (u) vistos.set(u.id, u);
+    }
+    return [...vistos.values()];
+  };
+  for (const grupo of [elegir(true), elegir(false)]) {
+    if (grupo.length === 0) continue;
+    const atienden = grupo.filter((u) => u.recibeCitas);
+    if (atienden.length === 1) return { doctorId: atienden[0].id, alcance: null };
+    if (atienden.length > 1) return { doctorId: null, alcance: "varios" };
+    // Nadie que reciba citas: a nombre de uno de ellos (siempre el mismo), no cierra a nadie.
+    const [primero] = [...grupo].sort((a, b) => (a.id < b.id ? -1 : 1));
+    return { doctorId: primero.id, alcance: null };
+  }
+  return { doctorId: null, alcance: "no_reconocido" };
+}
+
+/** Compatibilidad: solo el doctor (las pruebas viejas y quien no necesita el porqué). */
+export function doctorDelEvento(ev: EventoGoogle, usuarios: readonly UsuarioClinica[]): string | null {
+  return asignarEvento(ev, usuarios).doctorId;
+}
+
+/**
+ * ¿Ese calendario se puede leer como «el de la clínica»? Solo los secundarios
+ * que crea DaleControl (`…@group.calendar.google.com`). Un `primary` o un
+ * correo es el calendario PERSONAL de quien conectó (conexiones viejas): cada
+ * evento personal cerraría la clínica (revisión t8, G14).
+ */
+export function calendarioImportable(calendarId: string | null | undefined): boolean {
+  return typeof calendarId === "string" && /^[^@\s]+@group\.calendar\.google\.com$/i.test(calendarId.trim());
 }
 
 export function fechaGoogle(s: string | null | undefined): Date | null {
@@ -188,6 +278,7 @@ export interface BloqueoExistente {
   blockId: string;
   activo: boolean;
   doctorId: string | null;
+  alcance?: AlcanceGoogle | null;
   startsAt: Date;
   endsAt: Date;
   title: string;
@@ -196,6 +287,8 @@ export interface BloqueoExistente {
 
 export interface DatosBloqueo {
   doctorId: string | null;
+  /** Por qué es de toda la clínica (`null` = de una persona). */
+  alcance: AlcanceGoogle | null;
   startsAt: Date;
   endsAt: Date;
   allDay: boolean;
@@ -228,7 +321,7 @@ export function decidirEvento(
     zona: string;
     ahora: Date;
     existente: BloqueoExistente | null;
-    doctores: readonly { id: string; email: string | null }[];
+    usuarios: readonly UsuarioClinica[];
   },
 ): DecisionEvento {
   const { existente } = ctx;
@@ -240,8 +333,10 @@ export function decidirEvento(
   const rango = rangoDeEvento(ev, ctx.zona);
   if (!rango) return retirar();
 
+  const quien = asignarEvento(ev, ctx.usuarios);
   const datos: DatosBloqueo = {
-    doctorId: doctorDelEvento(ev, ctx.doctores),
+    doctorId: quien.doctorId,
+    alcance: quien.alcance,
     startsAt: rango.startsAt,
     endsAt: rango.endsAt,
     allDay: rango.allDay,
@@ -261,6 +356,7 @@ export function decidirEvento(
   const igual =
     existente.activo &&
     existente.doctorId === datos.doctorId &&
+    (existente.alcance ?? null) === datos.alcance &&
     mismoInstante(existente.startsAt, datos.startsAt) &&
     mismoInstante(existente.endsAt, datos.endsAt) &&
     existente.title === datos.title &&
@@ -286,6 +382,8 @@ export interface CitaDelVinculo {
   status: string;
   startsAt: Date;
   endsAt: Date;
+  /** El evento al que va ligada ahora (`appointments.googleCalendarEventId`). */
+  googleEventId?: string | null;
 }
 
 /** Estados en los que la cita ya no ocupa: no se avisa de nada. */
@@ -361,7 +459,14 @@ export function decidirAvisoCita(
 
   const cambioHora =
     !mismoInstante(rango.startsAt, vinculo.eventStartsAt) || !mismoInstante(rango.endsAt, vinculo.eventEndsAt);
-  if (!cambioHora) return cambios;
+  if (!cambioHora) {
+    // Un «movido» que ya quedó resuelto (la cita está a la hora del evento) no
+    // se queda pegado aunque la hora de Google no cambie (revisión t8).
+    const resuelto =
+      vinculo.avisoTipo === "movido" && !!cita &&
+      mismoInstante(rango.startsAt, cita.startsAt) && mismoInstante(rango.endsAt, cita.endsAt);
+    return resuelto ? { ...cambios, ...SIN_AVISO } : cambios;
+  }
 
   Object.assign(cambios, { eventStartsAt: rango.startsAt, eventEndsAt: rango.endsAt, googleUpdated: updated });
   const coincideConCita =
@@ -464,8 +569,22 @@ export function mismoSecreto(a: string | null | undefined, b: string | null | un
   return r === 0;
 }
 
-/** Errores de la sincronización entrante, por clase. Nunca apagan la de salida. */
-export type ErrorEntrante = "permisos" | "autorizacion" | "calendario" | "google";
+/**
+ * Errores de la sincronización entrante, por clase. Nunca apagan la de salida.
+ *   · conexion_caida        — Google rechazó la conexión (también deja de copiar citas).
+ *   · calendario_personal   — el calendario guardado no es uno de la clínica (G14).
+ *   · calendario_compartido — otra clínica con la bandera usa el mismo calendario (G14).
+ *   · parcial               — se acabó el tiempo a media pasada (no es un fallo; frena reintentos).
+ */
+export type ErrorEntrante =
+  | "permisos"
+  | "autorizacion"
+  | "calendario"
+  | "google"
+  | "conexion_caida"
+  | "calendario_personal"
+  | "calendario_compartido"
+  | "parcial";
 
 /**
  * «permisos» es el que pide volver a conectar Google con más alcance (punto 7):

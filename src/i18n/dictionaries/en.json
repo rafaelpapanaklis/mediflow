@@ -1692,7 +1692,29 @@
       "mantener": "Keep appointment",
       "movida": "Appointment moved to the Google event's time.",
       "mantenida": "The appointment stays; Google is updated to match it.",
-      "errorMover": "Could not move the appointment."
+      "errorMover": "Could not move the appointment.",
+      "ocupado": "Busy (Google)",
+      "aNombreDe": "Assigned to",
+      "alcance_no_reconocido": "Blocks the whole clinic: none of the event's guests is someone from the clinic (maybe a personal email was invited).",
+      "alcance_varios": "Blocks the whole clinic: several doctors are invited to the event.",
+      "noConvertibleTodoElDia": "All-day events can't be turned into an appointment. If it's an appointment, give it a time in Google.",
+      "noConvertibleLargo": "This event lasts more than 12 hours: it can't become a single appointment.",
+      "errorCambio": "The event changed or was removed in Google in the meantime. Check the time and try again.",
+      "errorDoctor": "This event belongs to another doctor: the appointment has to be theirs.",
+      "errorApagado": "Google Calendar → agenda is turned off for this clinic.",
+      "errorComida": "That time is the doctor's lunch break.",
+      "convertirNota": "The Google event keeps its description and guests, and takes the appointment's title. If you cancel the appointment, the event isn't deleted: it's marked «Cancelled in DaleControl».",
+      "reconectarCaida": "Google rejected the clinic's connection: Google events don't block the agenda and appointments aren't copied to Google. Reconnect Google in Settings → Integrations.",
+      "calendarioNoValido": "The agenda doesn't read this Google calendar: it isn't this clinic's own calendar (it's personal or another location uses it). Reconnect Google in Settings → Integrations or contact us.",
+      "sobreagendar": {
+        "titulo": "You're double-booking",
+        "cuerpoDoctor": "This doctor already has an appointment at that time ({paciente}, {hora}). You're double-booking: both appointments will be at the same time. Are you sure?",
+        "cuerpoComida": "That time is the doctor's lunch break (from {desde} to {hasta}). You're double-booking: the appointment will be during their lunch. Are you sure?",
+        "otras": "There are also {n} more appointment(s) at that time.",
+        "tambienComida": "It also falls in the doctor's lunch break (from {desde} to {hasta}).",
+        "confirmar": "Yes, double-book",
+        "cancelar": "Cancel"
+      }
     },
     "pageClient": {
       "waitlistMarkFailed": "Appointment created, but the waitlist entry could not be marked",

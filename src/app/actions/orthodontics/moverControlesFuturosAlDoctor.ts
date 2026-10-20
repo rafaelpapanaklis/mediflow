@@ -14,6 +14,7 @@ import {
 } from "@/lib/orthodontics/cambio-de-doctor";
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
 import { isOverlapError } from "@/lib/agenda/api-helpers";
+import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -60,17 +61,11 @@ export async function moverControlesFuturosAlDoctor(args: {
       take: 2000,
     }),
     // Vacaciones, festivos y demás bloqueos: del doctor o de toda la clínica (doctorId nulo).
-    prisma.agendaBlock.findMany({
-      where: {
-        clinicId: ctx.clinicId,
-        deletedAt: null,
-        OR: [{ doctorId: plan.treatingDoctorId }, { doctorId: null }],
-        startsAt: { lt: hasta },
-        endsAt: { gt: desde },
-      },
-      select: { startsAt: true, endsAt: true },
-      take: 500,
-    }).catch(() => []),
+    // El lector común (ordenado, tope 2000): con los de Google Calendar, ~15 al día, el
+    // `take: 500` sin orden de antes podía dejar fuera algunos (revisión t8, G11).
+    // Sin `.catch(() => [])`: ya tolera que falte la tabla, y un fallo de base no
+    // puede leerse como «sin bloqueos» (pasaría controles a días de vacaciones).
+    leerBloqueosDelRango(ctx.clinicId, desde, hasta, { doctorIds: [plan.treatingDoctorId] }),
   ]);
   const { mover, conflicto } = repartirControles(controles, [...citasOcupadas, ...bloqueos]);
   const conflictoTardio: string[] = [];

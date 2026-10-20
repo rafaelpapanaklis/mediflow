@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { CalendarClock, Loader2, RefreshCw, UserPlus, X } from "lucide-react";
+import { CalendarClock, Layers, Loader2, RefreshCw, UserPlus, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { instrumentSans } from "@/fonts/menu";
 import { useLocale, useT } from "@/i18n/i18n-provider";
@@ -31,6 +31,7 @@ import { PatientSearchField } from "@/components/dashboard/new-appointment/patie
 import { MotivoField } from "@/components/dashboard/new-appointment/motivo-field";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { rescheduleAppointment } from "@/lib/agenda/mutations";
+import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import type { BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import { CLASES_PORTAL_AGENDA } from "./ropa";
 import s from "./agenda-nueva.module.css";
@@ -87,6 +88,8 @@ export function SincronizarGoogleAlAbrir() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       try {
         const res = await fetch("/api/google/agenda/sincronizar", { method: "POST", credentials: "include" });
+        // Sesión vencida o sin permiso: no se vuelve a preguntar cada 3 min (G12).
+        if (res.status === 401 || res.status === 403) { window.clearInterval(id); return; }
         if (!res.ok || !vivo) return;
         const e = leerEstado(await res.json());
         if (!e || !vivo) return;
@@ -110,17 +113,29 @@ export function SincronizarGoogleAlAbrir() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const pideReconectar = !!estado?.encendida && (estado.error === "permisos" || estado.error === "autorizacion");
-  if (!pideReconectar) return null;
+  const texto = estado?.encendida ? avisoDeConexion(estado.error) : null;
+  if (!texto) return null;
   return (
     <div className={g.avisoReconectar} role="status">
       <RefreshCw size={16} aria-hidden className={g.avisoIcono} />
-      <span className={g.avisoTexto}>{t("agenda.google.reconectar")}</span>
+      <span className={g.avisoTexto}>{t(texto)}</span>
       <a className={g.avisoEnlace} href="/dashboard/settings?tab=integraciones">
         {t("agenda.google.reconectarBoton")}
       </a>
     </div>
   );
+}
+
+/**
+ * Qué aviso enseña la agenda según el error (revisión t8, G3). Con «permisos»
+ * solo falla LEER (las citas sí se copian a Google); con la conexión caída o
+ * rechazada no va nada en ningún sentido, y no se puede decir lo contrario.
+ */
+export function avisoDeConexion(error: string | null): string | null {
+  if (error === "permisos") return "agenda.google.reconectar";
+  if (error === "autorizacion" || error === "conexion_caida") return "agenda.google.reconectarCaida";
+  if (error === "calendario_personal" || error === "calendario_compartido") return "agenda.google.calendarioNoValido";
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -130,11 +145,16 @@ export function SincronizarGoogleAlAbrir() {
 interface DetalleBloqueo {
   id: string;
   titulo: string;
+  /** false = quien mira no puede ver el título (G1): se pinta «Ocupado (Google)». */
+  tituloVisible: boolean;
   inicio: string;
   fin: string;
   diaCompleto: boolean;
   doctorId: string | null;
   doctorNombre: string | null;
+  /** El doctor del bloqueo atiende: la cita es suya. Si no, se elige. */
+  doctorFijo: boolean;
+  alcance: string | null;
   activo: boolean;
   citaId: string | null;
 }
@@ -146,11 +166,14 @@ function leerDetalle(raw: unknown): DetalleBloqueo | null {
   return {
     id: r.id,
     titulo: typeof r.titulo === "string" ? r.titulo : "",
+    tituloVisible: r.tituloVisible !== false,
     inicio: r.inicio,
     fin: r.fin,
     diaCompleto: r.diaCompleto === true,
     doctorId: typeof r.doctorId === "string" ? r.doctorId : null,
     doctorNombre: typeof r.doctorNombre === "string" ? r.doctorNombre : null,
+    doctorFijo: r.doctorFijo === true,
+    alcance: typeof r.alcance === "string" ? r.alcance : null,
     activo: r.activo === true,
     citaId: typeof r.citaId === "string" ? r.citaId : null,
   };
@@ -161,7 +184,8 @@ export function AccionBloqueoGoogle({ banda }: { banda: BandaBloqueo }) {
   const t = useT();
   const [abierto, setAbierto] = useState(false);
   if (!banda.google) return null;
-  const titulo = banda.google.titulo || t("agenda.google.sinTitulo");
+  // Sin título visible (G1) la franja ya dice «Ocupado (Google)»: el nombre accesible, igual.
+  const titulo = banda.google.titulo || banda.reason || t("agenda.google.sinTitulo");
   const parar = (e: { stopPropagation(): void }) => e.stopPropagation();
   return (
     <>
@@ -207,44 +231,114 @@ function useFormatoRango() {
   );
 }
 
+/** Más que esto no se convierte en UNA cita (mismo tope que el servidor, `CONVERTIR_MAX_HORAS`). */
+const CONVERTIR_MAX_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * WS1-T5 · el «¿Seguro?» de sobreagendar, cuando la clínica además tiene la
+ * agenda flexible: la API de citas contesta 409 con `sobreagendable` (otra cita
+ * del doctor a esa hora, o su comida). Sin esa bandera nunca llega.
+ */
+interface ConfirmacionSobreagenda {
+  tipo: "cita" | "comida";
+  citaId: string | null;
+  paciente: string | null;
+  hora: string | null;
+  comidaDesde: string | null;
+  comidaHasta: string | null;
+  otras: number;
+}
+
+function confirmacionDesde409(raw: unknown, zona: string, locale: string): ConfirmacionSobreagenda | null {
+  const b = raw as {
+    error?: unknown;
+    sobreagendable?: unknown;
+    conflictingAppointment?: { id?: unknown; patientName?: unknown; startsAt?: unknown; endsAt?: unknown; otras?: unknown } | null;
+    comida?: { lunchStart?: unknown; lunchEnd?: unknown } | null;
+  } | null;
+  if (!b || b.sobreagendable !== true || (b.error !== "appointment_overlap" && b.error !== "lunch_overlap")) return null;
+  const c = b.conflictingAppointment && typeof b.conflictingAppointment.id === "string" && b.conflictingAppointment.id !== "unknown"
+    ? b.conflictingAppointment
+    : null;
+  const fmt = new Intl.DateTimeFormat(locale, { timeZone: zona, hour: "2-digit", minute: "2-digit", hour12: false });
+  const hora = (iso: unknown) => (typeof iso === "string" && !Number.isNaN(Date.parse(iso)) ? fmt.format(new Date(iso)) : "");
+  return {
+    // Sin la otra cita (id «unknown») solo es «comida» si el servidor lo dijo.
+    tipo: c || b.error !== "lunch_overlap" ? "cita" : "comida",
+    citaId: c ? (c.id as string) : null,
+    paciente: c && typeof c.patientName === "string" ? c.patientName.trim() || null : null,
+    hora: c ? [hora(c.startsAt), hora(c.endsAt)].filter(Boolean).join("–") : null,
+    comidaDesde: typeof b.comida?.lunchStart === "string" ? b.comida.lunchStart : null,
+    comidaHasta: typeof b.comida?.lunchEnd === "string" ? b.comida.lunchEnd : null,
+    otras: c && typeof c.otras === "number" && c.otras > 0 ? c.otras : 0,
+  };
+}
+
+/** El código de error de la conversión → la frase (G8). `null` = no es de aquí. */
+function claveDeError(codigo: string): string | null {
+  switch (codigo) {
+    case "google_block_already_converted": return "agenda.google.errorYaConvertido";
+    case "google_block_changed":
+    case "google_block_inactive":
+    case "google_block_not_found": return "agenda.google.errorCambio";
+    case "google_block_all_day": return "agenda.google.noConvertibleTodoElDia";
+    case "google_block_too_long": return "agenda.google.noConvertibleLargo";
+    case "google_block_doctor": return "agenda.google.errorDoctor";
+    case "google_block_unavailable": return "agenda.google.errorApagado";
+    case "appointment_overlap": return "agenda.google.errorChoque";
+    case "lunch_overlap": return "agenda.google.errorComida";
+    default: return null;
+  }
+}
+
 function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerrar: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const { state, permissions, invalidateRangeCache, refetchView } = useAgenda();
   const { open: abrirPacienteNuevo } = useNewPatientDialog();
   const formato = useFormatoRango();
 
   const [detalle, setDetalle] = useState<DetalleBloqueo | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [recargas, setRecargas] = useState(0);
   const [paciente, setPaciente] = useState<{ id: string; name: string } | null>(null);
   const [doctorId, setDoctorId] = useState<string>("");
   const [motivo, setMotivo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmar, setConfirmar] = useState<ConfirmacionSobreagenda | null>(null);
 
   useEffect(() => {
     let vivo = true;
+    setCargando(true);
     fetch(`/api/google/agenda/bloqueo/${encodeURIComponent(bloqueoId)}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((raw) => {
         if (!vivo) return;
         const d = leerDetalle(raw);
         setDetalle(d);
-        if (d?.doctorId) setDoctorId(d.doctorId);
+        if (d?.doctorFijo && d.doctorId) setDoctorId(d.doctorId);
       })
       .catch(() => { if (vivo) setDetalle(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [bloqueoId]);
+  }, [bloqueoId, recargas]);
 
   const doctores = useMemo(() => state.doctors.filter((d) => d.activeInAgenda !== false), [state.doctors]);
   const presets = useMemo(() => REASON_PRESET_KEYS.map((k) => t(k)), [t]);
-  const convertible = !!detalle && detalle.activo && !detalle.citaId && permissions.canCreate;
-  const titulo = detalle?.titulo || t("agenda.google.sinTitulo");
+  const muyLargo = !!detalle && new Date(detalle.fin).getTime() - new Date(detalle.inicio).getTime() > CONVERTIR_MAX_MS;
+  // Todo el día crearía una cita de 00:00 a 00:00; un evento de 12 h, una cita de 12 h (G5).
+  const noConvertible = !!detalle && (detalle.diaCompleto || muyLargo);
+  const convertible = !!detalle && detalle.activo && !detalle.citaId && !noConvertible && permissions.canCreate;
+  const titulo = detalle && !detalle.tituloVisible
+    ? t("agenda.google.ocupado")
+    : detalle?.titulo || t("agenda.google.sinTitulo");
+  const eligeDoctor = !!detalle && !detalle.doctorFijo;
 
-  const guardar = async () => {
+  const guardar = async (sobreagendar: ConfirmacionSobreagenda | null = null) => {
     if (!detalle) return;
     if (!paciente) return setError(t("agenda.google.faltaPaciente"));
-    const doctor = detalle.doctorId ?? doctorId;
+    const doctor = detalle.doctorFijo && detalle.doctorId ? detalle.doctorId : doctorId;
     if (!doctor) return setError(t("agenda.google.faltaDoctor"));
     if (!motivo.trim()) return setError(t("agenda.google.faltaProcedimiento"));
     setError(null);
@@ -263,22 +357,35 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
           googleBloqueoId: detalle.id,
           // El único bloqueo encima es este, y el servidor ya no lo cuenta.
           bloqueoConfirmado: true,
+          // Ya se dijo «Sí, sobreagendar» a ESTA cita (o a la comida).
+          ...(sobreagendar
+            ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId, sobreagendarOtras: sobreagendar.otras }
+            : {}),
         }),
       });
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      const body = (await res.json().catch(() => null)) as { error?: string; reason?: string } | null;
       if (!res.ok) {
         const codigo = body?.error ?? "";
+        if (res.status === 409) {
+          const aviso = confirmacionDesde409(body, state.timezone, locale);
+          // Se vuelve a preguntar solo si es OTRA cita (o más) que la ya confirmada.
+          const repetido = !!sobreagendar && !!aviso && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras;
+          if (aviso && !repetido) {
+            setConfirmar(aviso);
+            return;
+          }
+          if (codigo === "google_block_changed" || codigo === "google_block_inactive") setRecargas((n) => n + 1);
+        }
+        const clave = claveDeError(codigo);
+        setConfirmar(null);
         setError(
-          codigo === "google_block_already_converted"
-            ? t("agenda.google.errorYaConvertido")
-            : codigo === "appointment_overlap"
-              ? t("agenda.google.errorChoque")
-              : res.status === 403
-                ? t("agenda.google.sinPermiso")
-                : t("agenda.google.errorGenerico"),
+          clave
+            ? t(clave)
+            : bookingRuleMessage(body) ?? (res.status === 403 ? t("agenda.google.sinPermiso") : t("agenda.google.errorGenerico")),
         );
         return;
       }
+      setConfirmar(null);
       // La cita nueva y el bloqueo ya retirado llegan con el rango otra vez.
       invalidateRangeCache();
       refetchView();
@@ -310,9 +417,28 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
             </Dialog.Close>
           </div>
 
-          <Dialog.Title className={s.modalTitulo}>{cargando ? t("agenda.google.cargando") : titulo}</Dialog.Title>
+          <Dialog.Title className={s.modalTitulo}>
+            {confirmar ? t("agenda.google.sobreagendar.titulo") : cargando ? t("agenda.google.cargando") : titulo}
+          </Dialog.Title>
 
-          {cargando ? (
+          {confirmar ? (
+            <div className={g.cuerpo}>
+              <p className={g.confirmacion} role="alert">
+                <Layers size={16} aria-hidden className={g.confirmacionIcono} />
+                <span>
+                  {confirmar.tipo === "comida"
+                    ? t("agenda.google.sobreagendar.cuerpoComida", { desde: confirmar.comidaDesde ?? "", hasta: confirmar.comidaHasta ?? "" })
+                    : t("agenda.google.sobreagendar.cuerpoDoctor", { paciente: confirmar.paciente ?? "—", hora: confirmar.hora ?? "" })}
+                  {confirmar.tipo === "cita" && confirmar.otras > 0 && (
+                    <><br />{t("agenda.google.sobreagendar.otras", { n: String(confirmar.otras) })}</>
+                  )}
+                  {confirmar.tipo === "cita" && confirmar.comidaDesde && confirmar.comidaHasta && (
+                    <><br />{t("agenda.google.sobreagendar.tambienComida", { desde: confirmar.comidaDesde, hasta: confirmar.comidaHasta })}</>
+                  )}
+                </span>
+              </p>
+            </div>
+          ) : cargando ? (
             <div className={g.cuerpo}><Loader2 size={18} className={g.girando} aria-hidden /></div>
           ) : !detalle ? (
             <p className={g.cuerpo}>{t("agenda.google.noEncontrado")}</p>
@@ -322,12 +448,15 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
                 <CalendarClock size={15} aria-hidden />
                 {formato(detalle.inicio, detalle.fin, detalle.diaCompleto, t("agenda.google.todoElDia"))}
               </p>
-              {/* Sin doctor y convertible, el doctor se elige abajo: no se repite «Doctor». */}
-              {(detalle.doctorId !== null || !convertible) && (
+              {/* Si el doctor se elige abajo, no se repite «Doctor» (salvo para decir a nombre de quién está). */}
+              {(!eligeDoctor || !convertible || detalle.doctorId !== null) && (
                 <p className={g.dato}>
-                  <span className={s.datoRotulo}>{t("agenda.google.doctor")}</span>
+                  <span className={s.datoRotulo}>{t(eligeDoctor && detalle.doctorId ? "agenda.google.aNombreDe" : "agenda.google.doctor")}</span>
                   <span>{detalle.doctorNombre ?? t("agenda.google.alcanceClinica")}</span>
                 </p>
+              )}
+              {detalle.doctorId === null && detalle.alcance && detalle.alcance !== "sin_invitados" && (
+                <p className={g.nota}>{t(`agenda.google.alcance_${detalle.alcance}`)}</p>
               )}
               <p className={g.explicacion}>{t("agenda.google.explicacion")}</p>
 
@@ -335,6 +464,8 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
                 <p className={g.nota}>{t("agenda.google.yaConvertido")}</p>
               ) : !detalle.activo ? (
                 <p className={g.nota}>{t("agenda.google.inactivo")}</p>
+              ) : noConvertible ? (
+                <p className={g.nota}>{t(detalle.diaCompleto ? "agenda.google.noConvertibleTodoElDia" : "agenda.google.noConvertibleLargo")}</p>
               ) : !permissions.canCreate ? null : (
                 <div className={g.formulario}>
                   <h3 className={g.subtitulo}>{t("agenda.google.convertirTitulo")}</h3>
@@ -344,7 +475,7 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
                     <PatientSearchField value={paciente} onChange={(p) => { setPaciente(p); setError(null); }} />
                     {/* El buscador ya trae «Crear paciente nuevo» (en blanco); este atajo da de alta con el
                         título del evento como nombre sugerido. Mismo alta, misma detección de duplicados. */}
-                    {detalle.titulo && !paciente ? (
+                    {detalle.tituloVisible && detalle.titulo && !paciente ? (
                       <>
                         <button
                           type="button"
@@ -363,7 +494,7 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
                     ) : null}
                   </div>
 
-                  {detalle.doctorId === null && (
+                  {eligeDoctor && (
                     <label className={g.campo}>
                       <span className={s.datoRotulo}>{t("agenda.google.doctor")}</span>
                       <select className={g.selector} value={doctorId} onChange={(e) => { setDoctorId(e.target.value); setError(null); }}>
@@ -380,6 +511,7 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
                     <MotivoField value={motivo} onChange={(v) => { setMotivo(v); setError(null); }} presets={presets} />
                   </div>
 
+                  <p className={g.ayuda}>{t("agenda.google.convertirNota")}</p>
                   {error && <p className={g.error} role="alert">{error}</p>}
                 </div>
               )}
@@ -387,13 +519,26 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
           )}
 
           <div className={s.modalPie}>
-            <Dialog.Close asChild>
-              <button type="button" className={s.accionSecundaria} disabled={guardando}>{t("agenda.google.cerrar")}</button>
-            </Dialog.Close>
-            {convertible && (
-              <button type="button" className={s.accionPrincipal} onClick={guardar} disabled={guardando}>
-                {guardando ? t("agenda.google.guardando") : t("agenda.google.guardar")}
-              </button>
+            {confirmar ? (
+              <>
+                <button type="button" className={s.accionSecundaria} onClick={() => setConfirmar(null)} disabled={guardando}>
+                  {t("agenda.google.sobreagendar.cancelar")}
+                </button>
+                <button type="button" className={s.accionPrincipal} onClick={() => guardar(confirmar)} disabled={guardando} autoFocus>
+                  {guardando ? t("agenda.google.guardando") : t("agenda.google.sobreagendar.confirmar")}
+                </button>
+              </>
+            ) : (
+              <>
+                <Dialog.Close asChild>
+                  <button type="button" className={s.accionSecundaria} disabled={guardando}>{t("agenda.google.cerrar")}</button>
+                </Dialog.Close>
+                {convertible && (
+                  <button type="button" className={s.accionPrincipal} onClick={() => guardar()} disabled={guardando}>
+                    {guardando ? t("agenda.google.guardando") : t("agenda.google.guardar")}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </Dialog.Content>

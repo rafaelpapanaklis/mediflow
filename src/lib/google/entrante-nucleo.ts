@@ -24,6 +24,7 @@
  */
 
 import {
+  calendarioImportable,
   clasificarErrorEntrante,
   decidirAvisoCita,
   decidirEvento,
@@ -34,8 +35,10 @@ import {
   type CambiosVinculo,
   type CitaDelVinculo,
   type DatosBloqueo,
+  type AlcanceGoogle,
   type ErrorEntrante,
   type EventoGoogle,
+  type UsuarioClinica,
 } from "./entrante-core";
 
 /** Lo mínimo del cliente de Calendar que usa la entrada (las pruebas lo imitan). */
@@ -82,6 +85,7 @@ export interface VinculoLeido {
   /** El bloqueo, tal como está. */
   activo: boolean;
   doctorId: string | null;
+  alcance?: AlcanceGoogle | null;
   startsAt: Date;
   endsAt: Date;
   title: string;
@@ -111,11 +115,14 @@ export interface PuertosEntrante {
   guardarError(clinicId: string, error: ErrorEntrante | null): Promise<void>;
   abrirCalendar(cred: { accessToken: string | null; refreshToken: string; alRenovarToken: (t: string) => void }): ClienteCalendarEntrante;
   guardarAccessToken(clinicId: string, refreshToken: string, accessToken: string): Promise<void>;
-  leerDoctores(clinicId: string): Promise<{ id: string; email: string | null }[]>;
+  /** TODAS las personas de la clínica con correo (para saber de quién es cada evento). */
+  leerUsuarios(clinicId: string): Promise<UsuarioClinica[]>;
+  /** ¿Otra clínica con la bandera encendida lee ese mismo calendario? */
+  calendarioEnOtraClinica(clinicId: string, calendarId: string): Promise<boolean>;
   /** Los vínculos de esos eventos en ESE calendario. */
   leerVinculos(clinicId: string, calendarId: string, eventIds: string[]): Promise<VinculoLeido[]>;
-  /** Los vínculos SIN convertir y activos de una serie (cuando Google borra la serie entera). */
-  leerVinculosDeSerie(clinicId: string, calendarId: string, recurringEventId: string): Promise<VinculoLeido[]>;
+  /** Los vínculos SIN convertir de esas series (cuando Google borra la serie entera). Una lectura por página. */
+  leerVinculosDeSeries(clinicId: string, calendarId: string, recurringEventIds: string[]): Promise<VinculoLeido[]>;
   /** Eventos que ya son de una cita (por `googleCalendarEventId`): nunca se bloquean. */
   eventosDeCitas(clinicId: string, eventIds: string[]): Promise<Set<string>>;
   crearBloqueo(clinicId: string, calendarId: string, googleEventId: string, d: DatosBloqueo): Promise<void>;
@@ -175,6 +182,16 @@ export async function sincronizarEntrante(
     if (!estado0?.enabled) return { estado: "apagado" };
     const conexion = await p.leerConexion(clinicId);
     if (!conexion?.enabled || !conexion.refreshToken || !conexion.calendarId) return { estado: "sin_conexion" };
+    // Solo el calendario PROPIO de la clínica, y de una sola clínica (revisión t8, G14).
+    const malCalendario: ErrorEntrante | null = !calendarioImportable(conexion.calendarId)
+      ? "calendario_personal"
+      : (await p.calendarioEnOtraClinica(clinicId, conexion.calendarId))
+        ? "calendario_compartido"
+        : null;
+    if (malCalendario) {
+      await p.guardarError(clinicId, malCalendario);
+      return { estado: "fallo", motivo: malCalendario };
+    }
 
     if (!(await p.tomarTurno(clinicId, new Date(reloj().getTime() + TURNO_MS)))) {
       await p.marcarSucio(clinicId);
@@ -211,7 +228,10 @@ export async function sincronizarEntrante(
     } catch (err) {
       await p.soltarTurno(clinicId).catch(() => false);
       if (err instanceof SinTiempo) {
-        // Lo hecho queda hecho (idempotente); el siguiente disparo sigue.
+        // Lo hecho queda hecho (idempotente); el siguiente disparo sigue. Se
+        // anota el intento: si no, abrir la agenda no ve el freno de 60 s y
+        // repite la pasada larga (revisión t8, G15).
+        await p.guardarError(clinicId, "parcial").catch(() => undefined);
         return { estado: "parcial", motivo: "tiempo" };
       }
       throw err;
@@ -256,7 +276,7 @@ async function pasada(
       ahora,
     });
 
-  const doctores = await p.leerDoctores(clinicId);
+  const usuarios = await p.leerUsuarios(clinicId);
   const zona = conexion.timezone || "America/Mexico_City";
 
   try {
@@ -281,7 +301,7 @@ async function pasada(
           const r = await cal.events.list(params);
           const items = (r.data.items ?? []).filter((e): e is EventoGoogle => !!e && typeof e.id === "string" && !!e.id);
           for (const e of items) vistos.add(e.id as string);
-          await procesarPagina(p, clinicId, calendarId, items, { zona, ahora: reloj(), doctores }, total);
+          await procesarPagina(p, clinicId, calendarId, items, { zona, ahora: reloj(), usuarios }, total);
           pageToken = r.data.nextPageToken ?? undefined;
           if (!pageToken) {
             nextSyncToken = r.data.nextSyncToken ?? null;
@@ -312,7 +332,7 @@ async function procesarPagina(
   clinicId: string,
   calendarId: string,
   eventos: EventoGoogle[],
-  ctx: { zona: string; ahora: Date; doctores: { id: string; email: string | null }[] },
+  ctx: { zona: string; ahora: Date; usuarios: UsuarioClinica[] },
   total: Contadores,
 ): Promise<void> {
   if (eventos.length === 0) return;
@@ -320,6 +340,22 @@ async function procesarPagina(
   // Dos lecturas por página (no por evento): el pooler agradece.
   const vinculos = new Map((await p.leerVinculos(clinicId, calendarId, ids)).map((v) => [v.googleEventId, v]));
   const deCitas = await p.eventosDeCitas(clinicId, ids);
+  const esDeCita = (ev: EventoGoogle) => deCitas.has(ev.id as string) || esEventoDeDaleControl(ev);
+
+  // La serie entera se borró: Google puede mandar solo el evento «padre»
+  // cancelado. Los candidatos se leen en UNA consulta por página (antes, una
+  // por evento cancelado: ~17 s por cada 100 en panel.108), y sin los ecos:
+  // el borrado de una cita de DaleControl nunca es una serie importada (G15).
+  const padresBorrados = eventos
+    .filter((e) => e.status === "cancelled" && !e.recurringEventId && !vinculos.has(e.id as string) && !esDeCita(e))
+    .map((e) => e.id as string);
+  const hijosPorSerie = new Map<string, VinculoLeido[]>();
+  if (padresBorrados.length > 0) {
+    for (const h of await p.leerVinculosDeSeries(clinicId, calendarId, padresBorrados)) {
+      const k = h.recurringEventId ?? "";
+      hijosPorSerie.set(k, [...(hijosPorSerie.get(k) ?? []), h]);
+    }
+  }
 
   for (const ev of eventos) {
     const id = ev.id as string;
@@ -327,7 +363,10 @@ async function procesarPagina(
 
     // ── Una cita convertida: se AVISA, la cita nunca se mueve ni se cancela sola.
     if (v?.appointmentId) {
-      const cita = await p.leerCita(clinicId, v.appointmentId);
+      const leida = await p.leerCita(clinicId, v.appointmentId);
+      // La cita ya va ligada a OTRO evento (se canceló, se reactivó y Google le
+      // dio uno nuevo): lo que le pase al viejo no le avisa de nada (G7).
+      const cita = leida && leida.googleEventId !== undefined && leida.googleEventId !== v.googleEventId ? null : leida;
       const cambios = decidirAvisoCita(ev, v, cita, ctx);
       if (Object.keys(cambios).length > 0) {
         await p.actualizarVinculo(clinicId, v.blockId, cambios);
@@ -337,8 +376,8 @@ async function procesarPagina(
     }
 
     // ── La serie entera se borró: Google puede mandar solo el evento «padre».
-    if (ev.status === "cancelled" && !ev.recurringEventId && !v) {
-      for (const hijo of await p.leerVinculosDeSerie(clinicId, calendarId, id)) {
+    if (ev.status === "cancelled" && !ev.recurringEventId && !v && !esDeCita(ev)) {
+      for (const hijo of hijosPorSerie.get(id) ?? []) {
         if (hijo.activo && !hijo.appointmentId) {
           await p.inactivarBloqueo(clinicId, hijo.blockId, ctx.ahora);
           total.retirados++;
@@ -349,10 +388,9 @@ async function procesarPagina(
 
     // ── El eco: un evento que es de una cita (marca, id determinista o ya ligado a una).
     const existente: BloqueoExistente | null = v
-      ? { blockId: v.blockId, activo: v.activo, doctorId: v.doctorId, startsAt: v.startsAt, endsAt: v.endsAt, title: v.title, allDay: v.allDay }
+      ? { blockId: v.blockId, activo: v.activo, doctorId: v.doctorId, alcance: v.alcance ?? null, startsAt: v.startsAt, endsAt: v.endsAt, title: v.title, allDay: v.allDay }
       : null;
-    const esDeCita = deCitas.has(id) || esEventoDeDaleControl(ev);
-    const decision = esDeCita
+    const decision = esDeCita(ev)
       ? existente?.activo
         ? { accion: "inactivar" as const, blockId: existente.blockId }
         : { accion: "nada" as const }
