@@ -236,6 +236,7 @@ const PERMITIDAS: Array<{ archivo: string; funcion: string; max: number; razon: 
   { archivo: "src/lib/billing/facturas-tarjeta-pendientes.server.ts", funcion: "clinicasConFacturaPendienteTrasPagoManual", max: 1, razon: "lee a propósito los pagos MANUALES recientes (incluida la activación) para el aviso y el reintento" },
   { archivo: "src/lib/billing/reactivacion-tras-suspension.server.ts", funcion: "registrarComoNoCobrada", max: 1, razon: "busca SU fila por referencia para no duplicarla al dejarla como «No cobrada: servicio suspendido»" },
   { archivo: "src/app/api/cfdi/usage/route.ts", funcion: "GET", max: 1, razon: "adeudos de excedente de CFDI (method cfdi_overage)" },
+  { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "POST", max: 1, razon: "doble clic en «Registrar pago»: busca el mismo pago creado hace menos de 2 minutos" },
   { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "GET", max: 1, razon: "lista de pagos del admin: se ve, rotulada" },
   { archivo: "src/app/api/admin/billing/route.ts", funcion: "GET", max: 2, razon: "pagos recientes (se ven, rotulados) y transferencias pendientes" },
   { archivo: "src/app/api/admin/billing/route.ts", funcion: "POST", max: 2, razon: "una fila por id (verificar / reembolsar)" },

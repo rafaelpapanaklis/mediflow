@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { MENSAJE_PLAN_PREPAGADO, cobroPausado } from "@/lib/billing/cobro-rechazado";
+import { MENSAJE_PLAN_PREPAGADO, cobroPausado, periodoPagadoHasta } from "@/lib/billing/cobro-rechazado";
 import { z } from "zod";
 import type Stripe from "stripe";
 import { getCurrentUser } from "@/lib/auth";
@@ -115,6 +115,7 @@ export async function GET() {
       live: isLiveSubscriptionStatus(sub.status),
       // Meses prepagados: el cambio de plan en autoservicio está bloqueado (ver MENSAJE_PLAN_PREPAGADO).
       cobroPausado: cobroPausado(sub),
+      prepagadoHasta: periodoPagadoHasta(sub)?.toISOString() ?? null,
       nextBillingDate: periodEnd
         ? new Date(periodEnd * 1000).toISOString()
         : clinic.nextBillingDate?.toISOString() ?? null,

@@ -1,11 +1,17 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { NOTA_SERVICIO_SUSPENDIDO, reanudarCobroTrasRealinear } from "@/lib/billing/cobro-rechazado";
-import { subscriptionItemInterval } from "@/lib/billing/proration";
+import {
+  CICLO_ALINEADO_DIAS,
+  MARCA_PERIODO_PAGADO,
+  NOTA_SERVICIO_SUSPENDIDO,
+  enPeriodoPagado,
+} from "@/lib/billing/cobro-rechazado";
+import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { cobrarAparteExcedentePendiente } from "@/lib/cfdi-overage";
 
 /**
- * PAGO TRAS UNA SUSPENSIÓN POR FALTA DE PAGO (ws1-t1, octava vuelta — corrección de Q4 de Rafael).
+ * PAGO TRAS UNA SUSPENSIÓN POR FALTA DE PAGO (ws1-t1, octava vuelta — corrección de Q4 de Rafael; mecanismo del ciclo
+ * cambiado en la décima).
  *
  *   «Si se tiene 4 meses el servicio suspendido por falta de pago, no debe 4 meses, porque el servicio estuvo suspendido
  *    sin poder usarse. Si vuelve a pagar después de 4 meses, de ese día y hora que pagó se le agregan 30 días.»
@@ -13,30 +19,34 @@ import { cobrarAparteExcedentePendiente } from "@/lib/cfdi-overage";
  * Dos piezas, reutilizables por TODA vía de pago (admin confirma SPEI/transferencia/efectivo, SPEI directo, SPEI/OXXO de
  * Stripe, cobro de tarjeta que entra solo y «Pagar ahora / Subir de plan» de la pantalla de suspendida):
  *
- *  1. `anularFacturasDeMesesSuspendidos` — las facturas abiertas / incobrables de los meses sin servicio se ANULAN en
- *     Stripe (void: Stripe no las cobra ni las reintenta, y nada se borra) y en la base quedan registradas como
+ *  1. `anularFacturasDeMesesSuspendidos` — las facturas abiertas / incobrables / en borrador de los meses sin servicio se
+ *     ANULAN en Stripe (void: no las cobra ni las reintenta, y nada se borra) y en la base quedan registradas como
  *     «No cobrada: servicio suspendido» (status `void`: ni ingreso ni adeudo).
- *  2. `realinearCiclo` — el siguiente cobro de la tarjeta pasa a ser al terminar lo pagado (hoy + N meses), no en la
- *     fecha del ciclo viejo.
+ *  2. `realinearCiclo` — el siguiente cobro de la tarjeta pasa a ser EXACTAMENTE al terminar lo pagado.
  *
- * ── Por qué ese mecanismo para el ciclo (y no otro) ─────────────────────────────────────────────────────────────────
- *  · `trial_end` mueve el ancla sin cobrar, pero deja la suscripción en `trialing`, que para la clínica es «En prueba»
- *    (justo lo prohibido). Cancelar pierde la tarjeta guardada.
- *  · `billing_cycle_anchor: "now"` es lo único que mueve el ancla de una suscripción activa, pero Stripe emite UNA FACTURA
- *    EN ESE INSTANTE (doc: «After you reset the billing cycle anchor, Stripe immediately sends an invoice») y eso cobraría
- *    la tarjeta otra vez: doble cobro. Por eso va en la MISMA llamada que `pause_collection` (behavior "void", `resumes_at`
- *    = fin de lo pagado − margen): esa factura nace con el cobro pausado y Stripe la ANULA (doc: «Void: voids all invoices
- *    while collection is paused»); las renovaciones intermedias (si pagó N meses) se anulan igual, y al llegar `resumes_at`
- *    Stripe vuelve a cobrar solo en la renovación que cae al terminar lo pagado. La suscripción sigue `active`.
- *  · Red de seguridad: la respuesta trae `latest_invoice` (expand); si la factura del reinicio salió COBRADA (no debería),
- *    se devuelve `cobro_inesperado` con su id para que el admin la reembolse. Interruptor de emergencia: la variable de
- *    entorno `COBRO_REALINEAR_CICLO=0` apaga solo el reinicio del ancla (las facturas viejas se siguen anulando y el cobro
- *    se pausa con la regla aproximada de Q1).
- *  ⚠️ El comportamiento de Stripe aquí se tomó de su documentación; no se pudo probar contra Stripe real desde este
- *    servidor. Probar con un reloj de pruebas (test clock) antes de integrar.
+ * ── Por qué `trial_end` para mover el ciclo (décima vuelta; antes era `pause_collection` + `billing_cycle_anchor`) ───────
+ *  · `subscriptions.update({ trial_end: T, proration_behavior: "none" })` es el mecanismo que Stripe documenta para cambiar
+ *    la fecha de cobro de una suscripción existente: «Setting the trial_end sets the billing cycle anchor to the same
+ *    date». No genera ningún cobro (el trial no cobra) ni depende de cómo trate Stripe una factura que nace pausada.
+ *    A T Stripe cobra solo el plan completo. T es el fin de lo pagado (`finDeLoPagado`): el acceso y el cobro coinciden
+ *    al instante, sin días pagados dos veces ni huecos, para 1 mes, N meses, planes mensuales o anuales.
+ *  · La alternativa anterior (pausa `void` + ancla «now» en una llamada) dependía de cuatro comportamientos de Stripe que
+ *    nadie ha probado: que la factura del reinicio nazca anulada, que anular facturas deje la suscripción `active`, que
+ *    `resumes_at` limpie la pausa y qué pasa con los borradores. Si alguno fallaba era un DOBLE COBRO. Con `trial_end` lo
+ *    peor que puede pasar es que Stripe rechace el cambio: la operación falla cerrada (no se cobra, no se mueve nada).
+ *  · Costo: Stripe reporta la suscripción como `trialing`. NUESTRA app la trata como periodo pagado: la llamada deja la
+ *    MARCA `metadata.periodo_pagado_hasta` y el webhook escribe `active` en la base cuando ve `trialing` + marca
+ *    (`estadoVisibleDeSuscripcion`), así que la clínica NUNCA sale «En prueba» y ve «Pagado hasta {fecha}». Lo que sí ve el
+ *    portal de facturación de Stripe / los correos de Stripe es «prueba hasta T» (es verdad: no se cobra hasta T).
+ *    `cobroPausado` (cambio de plan bloqueado) y `resolveOverageBilling` (excedente CFDI) reconocen la marca.
+ *  · Red de seguridad: si la factura que devuelve el cambio trae un cobro (no debería), se reporta `cobro_inesperado`.
+ *    Interruptor de emergencia: `COBRO_REALINEAR_CICLO=0` apaga SOLO este paso (las facturas se anulan igual; el ciclo
+ *    viejo sigue y la tarjeta cobra en su fecha de siempre: avisa al admin en el reporte del pago).
+ *  ⚠️ Sin llaves de Stripe en este servidor no se probó contra Stripe real: probar con un reloj de pruebas (test clock) antes
+ *    de integrar (suscripción mensual con un cobro fallido, esperar 2 ciclos, confirmar un pago manual).
  *
- * Todo es idempotente (claves de idempotencia; la pausa ya puesta se reconoce y no se repite) y NUNCA lanza hacia quien
- * llama: devuelve los fallos para que el admin vea el aviso con «Reintentar». Nunca borra ni cancela nada.
+ * Todo es idempotente (claves de idempotencia; un periodo ya puesto hasta esa fecha se reconoce) y NUNCA lanza hacia quien
+ * llama: devuelve los fallos para que se avise. Nunca borra ni cancela nada.
  */
 
 export type StripeParaSuspension = Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">;
@@ -49,7 +59,7 @@ export const MENSAJE_FALLO_ANULAR =
 export const MENSAJE_FALLO_EXCEDENTE =
   "No pudimos separar el excedente de facturas CFDI antes de mover el cobro de la tarjeta; se perdería en una factura anulada. Reintenta.";
 export const MENSAJE_FALLO_REALINEAR =
-  "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Reintenta o ajústalo a mano en Stripe.";
+  "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Stripe vuelve a mandar el aviso del pago solo (el webhook lo reintenta); si no se arregla, ponle a la suscripción una prueba (trial_end) hasta el fin de lo pagado a mano en Stripe.";
 export function mensajeCobroInesperado(facturaId: string): string {
   return `Stripe cobró la tarjeta al mover el ciclo (factura ${facturaId}): reembolsa ese cobro en Stripe.`;
 }
@@ -60,8 +70,10 @@ export function realinearActivo(): boolean {
 }
 
 /**
- * Las facturas ABIERTAS o INCOBRABLES de renovación / alta de la suscripción del plan (nunca prorrateos). `creadasHasta`:
- * solo las creadas hasta ese momento (el del pago); la renovación posterior es otra cosa.
+ * Las facturas ABIERTAS, INCOBRABLES o en BORRADOR de renovación / alta de la suscripción del plan (nunca prorrateos), con
+ * paginación (M8: antes máximo 20 por estado). Un borrador es una renovación que Stripe aún no finaliza: si se dejara,
+ * al finalizarse cobraría un mes sin servicio. `creadasHasta`: solo las creadas hasta ese momento (el del pago); la
+ * renovación posterior es otra cosa.
  */
 export async function facturasAbiertasDelPlan(
   stripe: Pick<Stripe, "invoices">,
@@ -69,16 +81,22 @@ export async function facturasAbiertasDelPlan(
   creadasHasta?: Date | null,
 ): Promise<Stripe.Invoice[]> {
   const pendientes: Stripe.Invoice[] = [];
-  for (const status of ["open", "uncollectible"] as const) {
-    const lista = await stripe.invoices.list({ subscription: stripeSubscriptionId, status, limit: 20 });
-    pendientes.push(
-      ...lista.data.filter(
-        (f) =>
-          f.billing_reason &&
-          MOTIVOS_DEL_PLAN.has(f.billing_reason) &&
-          (!creadasHasta || (f.created ?? 0) * 1000 <= creadasHasta.getTime()),
-      ),
-    );
+  for (const status of ["open", "uncollectible", "draft"] as const) {
+    let despuesDe: string | undefined;
+    for (let pagina = 0; pagina < 10; pagina++) {
+      const lista = await stripe.invoices.list({ subscription: stripeSubscriptionId, status, limit: 100, ...(despuesDe ? { starting_after: despuesDe } : {}) });
+      pendientes.push(
+        ...lista.data.filter(
+          (f) =>
+            f.billing_reason &&
+            MOTIVOS_DEL_PLAN.has(f.billing_reason) &&
+            (!creadasHasta || (f.created ?? 0) * 1000 <= creadasHasta.getTime()),
+        ),
+      );
+      const ultimo = lista.data[lista.data.length - 1];
+      if (!lista.has_more || !ultimo?.id) break;
+      despuesDe = ultimo.id;
+    }
   }
   return pendientes;
 }
@@ -128,6 +146,8 @@ export async function anularFacturasDeMesesSuspendidos(
   for (const f of facturas) {
     if (!f.id) continue;
     try {
+      // Un borrador no se puede anular: se finaliza SIN cobrarla (`auto_advance: false`) y luego se anula. Nada se borra.
+      if (f.status === "draft") await stripe.invoices.finalizeInvoice(f.id, { auto_advance: false }, { idempotencyKey: `finalizar-suspendida:${f.id}` });
       await stripe.invoices.voidInvoice(f.id, {}, { idempotencyKey: `anular-suspendida:${f.id}` });
       anuladas.push(f.id);
     } catch (err) {
@@ -150,18 +170,25 @@ export async function anularFacturasDeMesesSuspendidos(
 }
 
 export type ResultadoRealineo =
-  /** Interruptor apagado, suscripción no mensual, o no queda nada prepagado: no se tocó el ciclo. */
+  /** Interruptor apagado, el fin de lo pagado ya casi llegó, o el ciclo de Stripe ya coincide con él: no se tocó nada. */
   | { tipo: "no_aplica" }
-  /** Ya estaba hecho (pausa puesta hasta esa fecha): no se repite. */
+  /** Ya estaba hecho (periodo pagado puesto hasta esa fecha): no se repite. */
   | { tipo: "ya_estaba"; hasta: string }
   | { tipo: "hecho"; hasta: string; estadoStripe: string | null }
-  /** El reinicio del ancla cobró la tarjeta (no debería): hay que reembolsar `facturaId`. */
+  /** El cambio generó un cobro de la tarjeta (no debería): hay que reembolsar `facturaId`. */
   | { tipo: "cobro_inesperado"; hasta: string; facturaId: string; monto: number }
   | { tipo: "fallo"; mensaje: string };
 
+/** ¿Un error de Stripe por clave de idempotencia en curso / reutilizada? (la otra llamada, p. ej. el webhook, lo está haciendo). */
+function esErrorDeIdempotencia(err: unknown): boolean {
+  const e = err as { type?: string; code?: string; statusCode?: number; message?: string } | null;
+  return e?.type === "StripeIdempotencyError" || e?.code === "idempotency_key_in_use" || e?.statusCode === 409 || /idempoten/i.test(e?.message ?? "");
+}
+
 /**
- * Mueve el siguiente cobro de la tarjeta a «fin de lo pagado» SIN cobrar, SIN «En prueba» y SIN cancelar (ver arriba).
- * `finDeLoPagado`: hasta cuándo quedó pagada la clínica (hoy + N meses desde el pago).
+ * Mueve el siguiente cobro de la tarjeta a «fin de lo pagado» SIN cobrar, SIN cancelar y SIN que la clínica salga «En
+ * prueba» (ver arriba). `finDeLoPagado`: hasta cuándo quedó pagada la clínica; sale de la fecha del PAGO, nunca del momento
+ * del reintento (M9). Funciona igual con suscripciones mensuales y anuales.
  */
 export async function realinearCiclo(
   stripe: Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">,
@@ -169,17 +196,20 @@ export async function realinearCiclo(
   args: { pagadoEn: Date; finDeLoPagado: Date },
 ): Promise<ResultadoRealineo> {
   if (!realinearActivo()) return { tipo: "no_aplica" };
-  if (subscriptionItemInterval(sub.items?.data?.[0]) !== "month") return { tipo: "no_aplica" };
-  const reanuda = Math.floor(reanudarCobroTrasRealinear(args.finDeLoPagado).getTime() / 1000);
-  if (reanuda * 1000 <= args.pagadoEn.getTime()) return { tipo: "no_aplica" };
-  const hasta = new Date(reanuda * 1000).toISOString();
-  const yaHasta = sub.pause_collection?.resumes_at ?? 0;
-  if (sub.pause_collection && yaHasta >= reanuda - 86_400) return { tipo: "ya_estaba", hasta: new Date(yaHasta * 1000).toISOString() };
+  const trialEnd = Math.floor(args.finDeLoPagado.getTime() / 1000);
+  // Stripe exige un `trial_end` futuro; si lo pagado termina en menos de un día no hay nada que mover.
+  if (trialEnd * 1000 <= Date.now() + 86_400_000) return { tipo: "no_aplica" };
+  const hasta = new Date(trialEnd * 1000).toISOString();
+  const yaHecho = (s: Stripe.Subscription) => enPeriodoPagado(s) && (s.trial_end ?? 0) >= trialEnd - 86_400;
+  if (yaHecho(sub)) return { tipo: "ya_estaba", hasta: new Date((sub.trial_end ?? trialEnd) * 1000).toISOString() };
+  // Si el ciclo de Stripe ya termina (casi) cuando termina lo pagado, no hay nada que mover.
+  const finCiclo = subscriptionPeriodEndSeconds(sub);
+  if (sub.status !== "trialing" && finCiclo && Math.abs(finCiclo - trialEnd) <= CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
   try {
-    // El excedente de CFDI ya sumado a «la próxima mensualidad» se pasa a su propia factura: la que nace al reiniciar el
-    // ancla se anula y se lo llevaría (V3).
+    // El excedente de CFDI ya sumado a «la próxima mensualidad» se pasa a su propia factura: la que genere el cambio de
+    // ciclo se lo llevaría (V3).
     try {
-      await cobrarAparteExcedentePendiente(stripe, typeof sub.customer === "string" ? sub.customer : sub.customer.id, sub.id);
+      await cobrarAparteExcedentePendiente(stripe, typeof sub.customer === "string" ? sub.customer : sub.customer.id, sub);
     } catch (err) {
       console.error("[reactivacion-tras-suspension] no se pudo separar el excedente de CFDI:", sub.id, (err as Error)?.message ?? err);
       return { tipo: "fallo", mensaje: MENSAJE_FALLO_EXCEDENTE };
@@ -187,24 +217,41 @@ export async function realinearCiclo(
     const actualizada = await stripe.subscriptions.update(
       sub.id,
       {
-        pause_collection: { behavior: "void", resumes_at: reanuda },
-        billing_cycle_anchor: "now",
+        trial_end: trialEnd,
         proration_behavior: "none",
+        metadata: { [MARCA_PERIODO_PAGADO]: hasta },
         expand: ["latest_invoice"],
       },
-      { idempotencyKey: `realinear:${sub.id}:${reanuda}` },
+      { idempotencyKey: `periodo-pagado:${sub.id}:${trialEnd}` },
     );
     const ultima = (actualizada as { latest_invoice?: unknown }).latest_invoice;
     if (ultima && typeof ultima === "object") {
-      const f = ultima as { id?: string; status?: string | null; amount_paid?: number | null };
-      if (f.status === "paid" && (f.amount_paid ?? 0) > 0 && f.id) {
-        console.error("[reactivacion-tras-suspension] el reinicio del ciclo COBRÓ la tarjeta", f.id);
-        return { tipo: "cobro_inesperado", hasta, facturaId: f.id, monto: (f.amount_paid ?? 0) / 100 };
+      const f = ultima as { id?: string; status?: string | null; amount_paid?: number | null; amount_due?: number | null };
+      if (f.id && ((f.amount_paid ?? 0) > 0 || ((f.amount_due ?? 0) > 0 && f.status !== "void"))) {
+        // M5: cualquier factura con importe que NO sea una anulada es un cobro (o está por serlo).
+        console.error("[reactivacion-tras-suspension] el cambio de ciclo generó un cobro", f.id, f.status);
+        if (f.status === "open" || f.status === "draft") {
+          try {
+            if (f.status === "draft") await stripe.invoices.finalizeInvoice(f.id, { auto_advance: false });
+            await stripe.invoices.voidInvoice(f.id);
+            return { tipo: "hecho", hasta, estadoStripe: actualizada?.status ?? null };
+          } catch {
+            /* no se pudo anular: se reporta abajo */
+          }
+        }
+        return { tipo: "cobro_inesperado", hasta, facturaId: f.id, monto: ((f.amount_paid ?? f.amount_due) ?? 0) / 100 };
       }
     }
     return { tipo: "hecho", hasta, estadoStripe: actualizada?.status ?? null };
   } catch (err) {
-    console.error("[reactivacion-tras-suspension] no se pudo mover el ciclo:", sub.id, (err as Error)?.message ?? err);
+    // M3: otra llamada idéntica (el webhook y «Pagar» a la vez) tiene la clave en curso: se relee y, si ya quedó, es éxito.
+    try {
+      const releida = await stripe.subscriptions.retrieve(sub.id);
+      if (yaHecho(releida)) return { tipo: "ya_estaba", hasta: new Date((releida.trial_end ?? trialEnd) * 1000).toISOString() };
+    } catch {
+      /* se reporta el error original */
+    }
+    console.error("[reactivacion-tras-suspension] no se pudo mover el ciclo:", sub.id, esErrorDeIdempotencia(err) ? "(idempotencia)" : "", (err as Error)?.message ?? err);
     return { tipo: "fallo", mensaje: MENSAJE_FALLO_REALINEAR };
   }
 }

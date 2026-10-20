@@ -17,13 +17,13 @@ export const MENSAJE_AVISO_FACTURA_TARJETA =
 export interface AvisoFacturaTarjetaDatos {
   clinicId: string;
   clinicName?: string | null;
-  /** El texto del fallo (marcar la factura, o pausar el cobro de los meses prepagados). Sin él, el de la factura. */
+  /** El texto del fallo (marcar la factura, anular meses sin servicio o mover el siguiente cobro). Sin él, el de la factura. */
   mensaje?: string | null;
 }
 
-type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; facturas?: string[]; anuladas?: string[]; pausa?: { tipo?: string; hasta?: string } } | null } | null | undefined;
+type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; facturas?: string[]; anuladas?: string[]; ciclo?: { tipo?: string; hasta?: string } } | null } | null | undefined;
 
-/** Los datos del aviso a partir de la respuesta de una confirmación que falló al marcar / pausar. */
+/** Los datos del aviso a partir de la respuesta de una confirmación que falló al marcar / anular / mover el ciclo. */
 export function datosDelAviso(data: RespuestaMarcado, clinicId: string, clinicName?: string | null): AvisoFacturaTarjetaDatos {
   return { clinicId, clinicName, mensaje: data?.facturaTarjeta?.mensaje ?? null };
 }
@@ -42,10 +42,10 @@ export function avisarSiSeMarcoLaFacturaTarjeta(data: RespuestaMarcado): void {
     const n = data.facturaTarjeta.anuladas.length;
     toast.success(`Se anularon ${n} ${n === 1 ? "factura" : "facturas"} de meses sin servicio: no se cobran ni se deben.`);
   }
-  // Q1: un prepago de varios meses pausa el cobro de la tarjeta hasta que termine (sin cancelar nada).
-  const pausa = data?.facturaTarjeta?.pausa;
-  if (pausa?.tipo === "pausada" && pausa.hasta) {
-    toast.success(`El cobro de la tarjeta queda pausado hasta ${new Date(pausa.hasta).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}; después Stripe vuelve a cobrar solo.`);
+  // El siguiente cobro de la tarjeta pasa a ser exactamente al terminar lo pagado (sin cancelar nada).
+  const ciclo = data?.facturaTarjeta?.ciclo;
+  if (ciclo?.tipo === "movido" && ciclo.hasta) {
+    toast.success(`El siguiente cobro de la tarjeta queda para el ${new Date(ciclo.hasta).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}, cuando termina lo pagado.`);
   }
 }
 

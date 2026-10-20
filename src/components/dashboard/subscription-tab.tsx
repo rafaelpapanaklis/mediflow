@@ -10,7 +10,7 @@ import { exencionDeIva, ivaAplica } from "@/lib/billing/iva-cobro";
 import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
 import { varianteMetodos, type MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { daysUntil, isInTrial as inTrialNow, isPaymentFailed, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
-import { fechaHoraDeLaClinica, pagadoHastaPorPrepago } from "@/lib/billing/cobro-rechazado";
+import { fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
 import { PagoPendiente } from "./pago-pendiente";
 import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
@@ -82,6 +82,8 @@ interface BillingContext {
   status: string | null;
   live?: boolean;
   nextBillingDate: string | null;
+  /** Fin de un periodo ya pagado a mano (ISO) si la tarjeta no se cobra hasta entonces; null si no aplica. */
+  prepagadoHasta?: string | null;
 }
 
 /** POST /api/billing/change-plan/preview — lo que se cobrará al confirmar. */
@@ -173,14 +175,10 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
     !!billingCtx.nextBillingDate &&
     new Date(billingCtx.nextBillingDate) < now;
 
-  // Prepago de varios meses por pago manual: el cobro de la tarjeta está pausado y el acceso llega mucho más lejos que
-  // el próximo ciclo de Stripe. La clínica ve hasta cuándo está pagada.
-  const pagadoHasta = pagadoHastaPorPrepago({
-    subscriptionStatus: clinic.subscriptionStatus,
-    accesoHasta: trialEndsAt,
-    proximoCobro: billingCtx?.nextBillingDate,
-  });
-  const pagadoHastaTexto = pagadoHasta ? t("shell.subscriptionTab.paidUntil", { fecha: fechaPanel(pagadoHasta, clinic.timezone, locale) }) : null;
+  // Periodo pagado a mano (SPEI, transferencia, efectivo…): la tarjeta no se cobra hasta que termine. La clínica ve hasta
+  // cuándo está pagada. El dato sale de la suscripción (marca de periodo pagado), nunca del estado «trialing» de Stripe.
+  const pagadoHasta = billingCtx?.prepagadoHasta ? new Date(billingCtx.prepagadoHasta) : null;
+  const pagadoHastaTexto = pagadoHasta && !Number.isNaN(pagadoHasta.getTime()) ? t("shell.subscriptionTab.paidUntil", { fecha: fechaPanel(pagadoHasta, clinic.timezone, locale) }) : null;
 
   const currentPlanId: PlanId = isPlanId(clinic.plan) ? clinic.plan : "PRO";
   const currentPlan = plans?.find((p) => p.id === currentPlanId) ?? null;

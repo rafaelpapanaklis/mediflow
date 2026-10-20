@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
-import { clinicaEstabaSuspendida, esPagoManualDelPlan } from "@/lib/billing/cobro-rechazado";
+import { clinicaEstabaSuspendida, esPagoManualDelPlan, finDeLoPagado, inicioDeNuevoPeriodo, mesesDeUnPeriodo } from "@/lib/billing/cobro-rechazado";
 import { marcarFacturasDeLaClinica, type ResultadoMarcado } from "@/lib/billing/factura-fuera-de-stripe.server";
 
 export async function POST(req: NextRequest) {
@@ -17,37 +17,64 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
   }
 
+  // Doble clic en «Registrar pago» (B7): el mismo pago (clínica, monto, método y referencia) creado hace menos de 2 minutos
+  // no se vuelve a registrar: el ingreso se contaría dos veces. Se devuelve la fila que ya existe.
+  const idem = reference
+    ? await prisma.subscriptionInvoice.findFirst({
+        where: { clinicId, amount: parseFloat(amount), method, reference, createdAt: { gte: new Date(Date.now() - 120_000) } },
+        include: { clinic: { select: { name: true } } },
+      })
+    : null;
+  if (idem) return NextResponse.json({ ...idem, facturaTarjeta: null, duplicado: true }, { status: 200 });
+
+  // PAGADO = el acceso es «pago + N meses» (X6): N sale de la duración del periodo que capturó el admin, pero se cuenta desde
+  // el día y hora en que se registra el pago —sobre lo que la clínica ya tuviera pagado si estaba al corriente—, NUNCA el
+  // mes de calendario que escriba el admin (si registra el mes que se debía, el acceso quedaba vencido y la tarjeta se
+  // cobraba dos veces). La fila guarda el periodo REAL.
+  const pagado = status === "paid";
+  const ahora = new Date();
+  let estabaSuspendida: boolean | undefined;
+  let current: { trialEndsAt: Date | null; nextBillingDate: Date | null; subscriptionStatus: string | null } | null = null;
+  let periodoReal = { inicio: new Date(periodStart), fin: new Date(periodEnd) };
+  if (pagado) {
+    current = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true },
+    });
+    // Estado de ANTES de activarla (octava vuelta): una clínica suspendida no debe los meses sin servicio.
+    estabaSuspendida = clinicaEstabaSuspendida(current, ahora);
+    const base = inicioDeNuevoPeriodo({
+      ahora,
+      estadoAntes: current?.subscriptionStatus,
+      trialEndsAt: current?.trialEndsAt,
+      nextBillingDate: current?.nextBillingDate,
+    });
+    periodoReal = { inicio: base, fin: finDeLoPagado(base, mesesDeUnPeriodo(periodStart, periodEnd)) };
+  }
+
   const invoice = await prisma.subscriptionInvoice.create({
     data: {
       clinicId,
       amount:      parseFloat(amount),
       method,
       reference,
-      periodStart: new Date(periodStart),
-      periodEnd:   new Date(periodEnd),
+      periodStart: periodoReal.inicio,
+      periodEnd:   periodoReal.fin,
       notes,
       status:      status ?? "paid",
-      paidAt:      status === "paid" ? new Date() : null,
+      paidAt:      pagado ? ahora : null,
     },
     include: { clinic: { select: { name: true } } },
   });
 
-  // If paid, update clinic subscription status. trialEndsAt (el "acceso
-  // hasta" del gate) se mueve junto con nextBillingDate — nunca hacia atrás
-  // (ver manualPeriodFields).
-  // Estado de ANTES de activarla (octava vuelta): una clínica suspendida no debe los meses sin servicio.
-  let estabaSuspendida: boolean | undefined;
-  if (status === "paid") {
-    const current = await prisma.clinic.findUnique({
-      where: { id: clinicId },
-      select: { trialEndsAt: true, subscriptionStatus: true },
-    });
-    estabaSuspendida = clinicaEstabaSuspendida(current);
+  // If paid, update clinic subscription status. trialEndsAt (el "acceso hasta" del gate) se mueve junto con
+  // nextBillingDate — nunca hacia atrás (ver manualPeriodFields).
+  if (pagado) {
     await prisma.clinic.update({
       where: { id: clinicId },
       data: {
         subscriptionStatus: "active",
-        ...manualPeriodFields(current, new Date(periodEnd)),
+        ...manualPeriodFields(current, periodoReal.fin),
       },
     });
     await sincronizarSedesIncluidas(clinicId);

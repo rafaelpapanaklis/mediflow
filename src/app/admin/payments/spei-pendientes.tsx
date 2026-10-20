@@ -32,18 +32,20 @@ import {
  */
 /**
  * Lo que pasa con la tarjeta al confirmar (decisión de Rafael):
- *  · Si la clínica ya estaba SUSPENDIDA, los meses sin servicio no se deben: sus facturas se anulan, el acceso son 30 días
- *    desde el momento de confirmar y el siguiente cobro de la tarjeta cae al terminar lo pagado (ciclo re-alineado exacto).
- *  · Si estaba al corriente (o dentro de las 24 h de gracia), la factura abierta del mes queda pagada fuera de Stripe y el
- *    ciclo NO se mueve: con un mes, la tarjeta se cobra en su fecha de siempre; con un año, el cobro se pausa hasta el
- *    ciclo más cercano al fin de lo pagado (la fecha exacta puede diferir unos días).
- * La suscripción nunca se cancela.
+ *  · Si la clínica ya estaba SUSPENDIDA, los meses sin servicio no se deben: sus facturas se anulan, el acceso es un mes de
+ *    calendario por mes pagado desde el momento de confirmar y el siguiente cobro de la tarjeta cae EXACTAMENTE al terminar
+ *    lo pagado.
+ *  · Si estaba al corriente (o dentro de las 24 h de gracia), la factura abierta del mes queda pagada fuera de Stripe y,
+ *    si lo pagado rebasa el ciclo, el siguiente cobro de la tarjeta también se mueve a donde termina lo pagado (con un mes
+ *    y la factura del ciclo, la fecha de siempre).
+ * La suscripción nunca se cancela. En Stripe, el periodo pagado aparece como «prueba hasta» esa fecha; la clínica no ve «En
+ * prueba».
  */
 export function textoTarjetaViva(anual: boolean): string {
   const base = " Tiene una suscripción de TARJETA viva en Stripe: la suscripción NO se cancela.";
-  const suspendida = " Si ya estaba suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan, el acceso corre desde este momento y la tarjeta se vuelve a cobrar al terminar lo pagado.";
+  const suspendida = " Si ya estaba suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan, el acceso corre desde este momento y la tarjeta se vuelve a cobrar justo al terminar lo pagado.";
   return anual
-    ? `${base}${suspendida} Si estaba al corriente, como paga un año el cobro de la tarjeta se PAUSA hasta que termine lo prepagado (al ciclo más cercano; la fecha exacta puede diferir unos días) y después Stripe vuelve a cobrar solo.`
+    ? `${base}${suspendida} Si estaba al corriente, como paga un año la tarjeta no se cobra hasta que termine lo pagado (en Stripe se verá como «prueba hasta» esa fecha) y después Stripe vuelve a cobrar solo.`
     : `${base}${suspendida} Si estaba al corriente, su factura del mes queda pagada fuera de Stripe y la tarjeta se cobra en su fecha de siempre.`;
 }
 
