@@ -79,7 +79,16 @@ export function AvisoFacturaTarjeta({
         toast.error("Stripe sigue sin contestar. Vuelve a intentarlo en un momento o márcala a mano en Stripe.");
         return;
       }
-      toast.success(data?.facturaTarjeta?.tipo === "marcadas" ? "Factura de tarjeta marcada como pagada" : "No hay factura de tarjeta abierta que marcar");
+      const t = data?.facturaTarjeta;
+      toast.success(
+        t?.ciclo?.tipo === "movido"
+          ? "Listo: el siguiente cobro de la tarjeta ya cae donde termina lo pagado"
+          : t?.tipo === "marcadas" && ((t.facturas ?? []).length > 0)
+            ? "Factura de tarjeta marcada como pagada"
+            : t?.tipo === "marcadas"
+              ? "Listo: se anularon las facturas de los meses sin servicio"
+              : "No hay nada por aplicar",
+      );
       onResuelto();
     } catch (e: any) {
       toast.error(e.message);

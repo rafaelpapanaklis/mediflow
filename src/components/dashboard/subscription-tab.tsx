@@ -140,6 +140,9 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
   const [stripeUnavailable, setStripeUnavailable] = useState(false);
   const [plans, setPlans] = useState<ApiPlan[] | null>(null);
   const [billingCtx, setBillingCtx] = useState<BillingContext | null>(null);
+  // Z20: hasta que responde el GET de facturación no se sabe si hay un periodo pagado: los planes esperan (si el GET falla, se
+  // liberan; el servidor igual bloquea con el texto verdadero al confirmar).
+  const [billingCtxListo, setBillingCtxListo] = useState(false);
   const [preview, setPreview] = useState<ChangePlanPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -251,7 +254,10 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
       .then((data: BillingContext | null) => {
         if (!cancelled && data) setBillingCtx(data);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setBillingCtxListo(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -803,14 +809,14 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                 <button
                   type="button"
                   onClick={() => openConfirm(plan.id)}
-                  disabled={isCurrent || changingPlan !== null || !!billingCtx?.cobroPausado}
+                  disabled={isCurrent || changingPlan !== null || !!billingCtx?.cobroPausado || !billingCtxListo}
                   style={{
                     marginTop: 4,
                     padding: "8px 12px",
                     borderRadius: 8,
                     fontSize: 12,
                     fontWeight: 700,
-                    cursor: isCurrent || changingPlan !== null || billingCtx?.cobroPausado ? "not-allowed" : "pointer",
+                    cursor: isCurrent || changingPlan !== null || billingCtx?.cobroPausado || !billingCtxListo ? "not-allowed" : "pointer",
                     background: isCurrent ? "transparent" : "var(--brand)",
                     color: isCurrent ? "var(--text-3)" : "#fff",
                     border: isCurrent ? "1px solid var(--border-soft, hsl(var(--border)))" : 0,

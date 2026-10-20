@@ -32,7 +32,7 @@ import {
 } from "@/lib/ai-billing/recharge";
 import { paymentIntentDeEvento, revertirRecargaStripe } from "@/lib/ai-billing/reversion";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
-import { CFDI_OVERAGE_APARTE_KIND, CFDI_OVERAGE_KIND, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
+import { CFDI_OVERAGE_APARTE_KIND, CFDI_OVERAGE_KIND, CFDI_OVERAGE_METHOD, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
 import { isPlanId } from "@/lib/billing/plans";
 import {
@@ -700,15 +700,21 @@ export async function POST(req: NextRequest) {
         // Y13: también si Stripe la etiqueta de otro modo (p. ej. `subscription_cycle`): una factura de $0 mientras la suscripción
         // está en un periodo pagado a mano ES la del cambio de ciclo (no existe otra).
         let esFacturaCero = (invoice.amount_paid ?? 0) === 0 && invoice.billing_reason === "subscription_update";
+        // Z21: si no se pudo leer la suscripción para decidirlo, una factura de $0 se registra (no se pierde nada) pero NO manda el
+        // correo de «plan renovado» por $0: ante la duda, sin correo.
+        let ceroSinLectura = false;
         if (!esFacturaCero && clinic?.stripeSubscriptionId && (invoice.amount_paid ?? 0) === 0 && invoice.billing_reason === "subscription_cycle") {
           try {
             esFacturaCero = enPeriodoPagado(await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId));
           } catch {
             esFacturaCero = false;
+            ceroSinLectura = true;
           }
         }
         if (clinic && !esFacturaCero) {
-          await recordStripeInvoice(invoice, clinic.id);
+          // Y7/Z11: la factura aparte del excedente de CFDI se registra con el método del excedente, no como cobro del plan (así
+          // tampoco adelanta la numeración de cobros del afiliado).
+          await recordStripeInvoice(invoice, clinic.id, "paid", invoice.metadata?.kind === CFDI_OVERAGE_APARTE_KIND ? CFDI_OVERAGE_METHOD : undefined);
         }
 
         // La factura APARTE del excedente de CFDI (se cobra sola al mover el ciclo): es dinero real y ya quedó registrado arriba,
@@ -755,7 +761,7 @@ export async function POST(req: NextRequest) {
         // invoice.payment_succeeded para la misma factura → la fila única en
         // billing_email_logs garantiza UN solo correo. Fire-and-forget: ni el
         // envío ni un fallo del guard bloquean el 200 ni la lógica de afiliado.
-        if (clinic && !esFacturaCero) {
+        if (clinic && !esFacturaCero && !ceroSinLectura) {
           try {
             const reason = invoice.billing_reason;
             const kind =

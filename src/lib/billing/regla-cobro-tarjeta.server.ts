@@ -32,7 +32,6 @@ export type ResultadoReglaCobro = { aplicada: false } | { aplicada: true; fin: D
 
 export const KIND_REGLA_FALLO = "regla_fallo";
 export const KIND_REGLA_OK = "regla_ok";
-const VENTANA_RASTROS_MS = 14 * 86_400_000;
 
 async function crearRastro(invoiceId: string, clinicId: string, kind: string): Promise<void> {
   try {
@@ -45,10 +44,13 @@ async function crearRastro(invoiceId: string, clinicId: string, kind: string): P
 export const registrarReglaFallida = (invoiceId: string, clinicId: string) => crearRastro(invoiceId, clinicId, KIND_REGLA_FALLO);
 export const registrarReglaCompletada = (invoiceId: string, clinicId: string) => crearRastro(invoiceId, clinicId, KIND_REGLA_OK);
 
-/** Facturas (de una clínica, o de todas) cuya regla falló y aún no se completó. Dentro de los últimos 14 días. */
+/**
+ * Facturas (de una clínica, o de todas) cuya regla falló y aún no se completó. SIN ventana de tiempo (Z8): un pendiente no
+ * caduca por viejo —se queda visible hasta que se cierre con `regla_ok`—; la tabla solo crece cuando una regla falla.
+ */
 export async function reglasPendientes(clinicId?: string): Promise<Array<{ clinicId: string; invoiceId: string }>> {
   const filas = await prisma.billingEmailLog.findMany({
-    where: { kind: { in: [KIND_REGLA_FALLO, KIND_REGLA_OK] }, createdAt: { gte: new Date(Date.now() - VENTANA_RASTROS_MS) }, ...(clinicId ? { clinicId } : {}) },
+    where: { kind: { in: [KIND_REGLA_FALLO, KIND_REGLA_OK] }, ...(clinicId ? { clinicId } : {}) },
     select: { invoiceId: true, clinicId: true, kind: true },
   });
   const cerradas = new Set<string>();
@@ -60,6 +62,18 @@ export async function reglasPendientes(clinicId?: string): Promise<Array<{ clini
     if (!cerradas.has(id)) salida.push({ clinicId: f.clinicId, invoiceId: id });
   }
   return salida;
+}
+
+/** ¿Alguna línea de la factura cubre (casi) un periodo COMPLETO del plan? Un prorrateo cubre solo unos días. */
+export function esPeriodoCompleto(invoice: Stripe.Invoice, sub: Stripe.Subscription): boolean {
+  const mesesPlan = mesesDelIntervalo(sub);
+  const esperado = mesesPlan * 30.44 * 86_400;
+  let max = 0;
+  for (const l of invoice.lines?.data ?? []) {
+    const p = (l as { period?: { start?: number; end?: number } }).period;
+    if (p?.start && p?.end) max = Math.max(max, p.end - p.start);
+  }
+  return max >= esperado * 0.9;
 }
 
 /**
@@ -92,18 +106,27 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
   const facturaVieja = esMesDeServicioSuspendido({ facturaCreadaEn: finalizada, pagoEn: pagadoEn });
   const fallidaAntes = (await reglasPendientes(clinic.id)).some((r) => r.invoiceId === invoice.id);
   const reintentada = esRenovacion && (invoice.attempt_count ?? 1) > 1; // un pago que no entró a la primera: vale la pena mirar las demás
-  const pruebaPropia = esCambio ? dbVencida || (facturaVieja && isPaymentFailed(clinic.subscriptionStatus)) : dbVencida || facturaVieja;
+  // Z1: SOLO una factura de renovación / alta del plan paga un periodo. Un cambio de plan (`subscription_update`) es un
+  // prorrateo —cubre unos días— y no da un periodo completo ni anula las otras facturas. La única excepción es la factura de
+  // «Subir de plan» (ciclo nuevo desde el clic, cobro completo): sus líneas cubren un periodo COMPLETO del plan, y la clínica
+  // tiene que estar vencida. Ante la duda no se calcula nada: la clínica se reactiva con el periodo de Stripe (abajo).
+  const pruebaPropia = esCambio ? dbVencida : dbVencida || facturaVieja;
   if (!fallidaAntes && !pruebaPropia && !reintentada) return NO;
 
   const viva = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
   if (!["active", "past_due", "unpaid", "trialing"].includes(viva.status)) return NO;
+  if (esCambio && !esPeriodoCompleto(invoice, viva)) return NO;
   const otras = (await facturasAbiertasDelPlan(stripe, clinic.stripeSubscriptionId)).filter((f) => f.id !== invoice.id);
-  const hayMesesSinServicio = otras.some((f) => esMesDeServicioSuspendido({ facturaCreadaEn: f.status_transitions?.finalized_at ?? f.created ?? 0, pagoEn: pagadoEn }));
+  const esMes = (f: Stripe.Invoice) => esMesDeServicioSuspendido({ facturaCreadaEn: f.status_transitions?.finalized_at ?? f.created ?? 0, pagoEn: pagadoEn });
+  const hayMesesSinServicio = otras.some(esMes);
   if (!fallidaAntes && !pruebaPropia && !hayMesesSinServicio) return NO;
+  // Se anulan los meses sin servicio: TODAS las abiertas si la clínica estaba vencida; si no, solo las que de verdad son viejas
+  // (la renovación de hoy dentro de la gracia no se anula, Z1).
+  const aAnular = dbVencida || fallidaAntes ? otras : otras.filter(esMes);
 
   // Un cobro de tarjeta del plan paga un periodo COMPLETO: una anualidad son 12 meses, no 1 (Y1).
   const fin = finDeLoPagado(pagadoEn, mesesDelIntervalo(viva));
-  const r = await aplicarReglaDeSuspension({ stripe, clinicId: clinic.id, sub: viva, pagadoEn, finDeLoPagado: fin, facturas: otras, periodoExacto: true, facturaPagada: [invoice.id] });
+  const r = await aplicarReglaDeSuspension({ stripe, clinicId: clinic.id, sub: viva, pagadoEn, finDeLoPagado: fin, facturas: aAnular, periodoExacto: true, facturaPagada: [invoice.id] });
   await logAudit({
     clinicId: clinic.id,
     userId: clinic.id,
@@ -118,6 +141,14 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     },
   }).catch(() => {});
   if (r.fallos.length > 0) {
+    // Z2: la clínica PAGÓ. Ante un fallo de la regla se reactiva igual con el acceso de lo pagado (nunca se deja sin servicio a
+    // quien ya pagó); lo pendiente queda visible (rastro `regla_fallo`) y se avisa al admin. Después se lanza el error para que
+    // Stripe reenvíe el evento.
+    try {
+      await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin });
+    } catch (e) {
+      console.error("[regla-cobro-tarjeta] no se pudo reactivar tras el fallo de la regla:", (e as Error)?.message ?? e);
+    }
     await registrarReglaFallida(invoice.id, clinic.id);
     await avisarAdminUnaVez(
       `${invoice.id}:regla_suspension_fallo`,
@@ -171,10 +202,19 @@ export async function reactivarSiStripeYaCobro(
   if (!vivaActiva && !tras) return;
   // X5: tras la regla, el `invoice.paid` firmado ya prueba el pago: la clínica queda activa aunque Stripe siga reportando
   // `past_due`/`unpaid` por facturas anuladas. Las fechas salen de la suscripción si está activa, y si no, del fin de lo pagado.
-  const periodFields = vivaActiva ? subscriptionPeriodFields(viva) : tras ? { trialEndsAt: tras.fin, nextBillingDate: tras.fin } : {};
+  const periodFields: { trialEndsAt?: Date; nextBillingDate?: Date } = vivaActiva ? subscriptionPeriodFields(viva) : tras ? { trialEndsAt: tras.fin, nextBillingDate: tras.fin } : {};
+  // Nunca se acorta un acceso ya dado (Z3): lo que escribe es el MÁXIMO entre lo calculado, el fin de lo pagado (`tras`) y lo que
+  // la clínica ya tenía. Si falló mover el ciclo, el periodo de Stripe puede ser menor que lo pagado.
+  const actual = await prisma.clinic.findUnique({ where: { id: clinic.id }, select: { trialEndsAt: true } });
+  const fechas = [periodFields.trialEndsAt, tras?.fin, actual?.trialEndsAt].filter((f): f is Date => f instanceof Date);
+  const sinRetroceso = fechas.length > 0 ? new Date(Math.max(...fechas.map((f) => f.getTime()))) : undefined;
+  const datosFechas = {
+    ...periodFields,
+    ...(sinRetroceso ? { trialEndsAt: sinRetroceso } : {}),
+  };
   await prisma.clinic.update({
     where: { id: clinic.id },
-    data: { subscriptionStatus: "active", ...periodFields },
+    data: { subscriptionStatus: "active", ...datosFechas },
   });
   await sincronizarSedesIncluidas(clinic.id);
   await logAudit({
@@ -185,7 +225,7 @@ export async function reactivarSiStripeYaCobro(
     action: "update",
     changes: {
       subscriptionStatus: { before: clinic.subscriptionStatus, after: "active" },
-      ...(periodFields.trialEndsAt ? { trialEndsAt: { before: null, after: periodFields.trialEndsAt } } : {}),
+      ...(datosFechas.trialEndsAt ? { trialEndsAt: { before: null, after: datosFechas.trialEndsAt } } : {}),
       _source: { before: null, after: { event: "invoice.paid", invoiceId: invoice.id, subscriptionId: viva.id, estadoStripe: viva.status } },
     },
   });
@@ -219,6 +259,8 @@ export async function reintentarReglasPendientes(
       const pagadoEn = new Date((factura.status_transitions?.paid_at ?? factura.created ?? Math.floor(Date.now() / 1000)) * 1000);
       const r = await reglaDeSuspensionPorCobroDeTarjeta(stripe, factura, clinica, pagadoEn);
       if (r.aplicada) await reactivarSiStripeYaCobro(stripe, factura, clinica, { fin: r.fin });
+      // Z12: si ya no aplica (suscripción cancelada, la factura no es del plan…) se CIERRA el pendiente para que no reaparezca.
+      await registrarReglaCompletada(p.invoiceId, p.clinicId);
       completadas.push(p.invoiceId);
     } catch (e) {
       console.error("[regla-cobro-tarjeta] reintento", p.invoiceId, (e as Error)?.message ?? e);
