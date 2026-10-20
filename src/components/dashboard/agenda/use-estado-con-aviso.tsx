@@ -15,7 +15,7 @@
  * `sobreagendable`). `cambiar` devuelve `null` si la persona dijo «Cancelar».
  */
 
-import { useCallback, useState, type PointerEvent, type ReactNode, type SyntheticEvent } from "react";
+import { useCallback, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode, type SyntheticEvent } from "react";
 import { useAgenda } from "./agenda-provider";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { enviarConAvisoDeSobreagenda, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
@@ -30,6 +30,7 @@ export function useEstadoConAviso(): {
 } {
   const { state } = useAgenda();
   const [pregunta, setPregunta] = useState<{ aviso: AvisoSobreagenda; responder: (si: boolean) => void } | null>(null);
+  const tocoElFondo = useRef(false);
 
   const cambiar = useCallback(
     (cita: AgendaAppointmentDTO, destino: AppointmentStatus) =>
@@ -51,18 +52,33 @@ export function useEstadoConAviso(): {
   // Se hace aquí lo mismo que haría Radix: un `pointerdown` fuera del
   // contenido del diálogo (en el velo) es «Cancelar». Dejarlo subir no vale:
   // pasaría por la tarjeta y la rejilla antes de llegar a `document`.
+  //
+  // (revisión t8, N5-A1) En pantalla táctil no se cierra en el `pointerdown`:
+  // el velo desaparecería antes de levantar el dedo y el `click` que el
+  // navegador manda después caería en lo de abajo (seleccionaría la tarjeta o
+  // volvería a pulsar «Re-abrir»). Como Radix, se anota el toque y se cierra
+  // en ese `click`, que todavía cae en el velo. Solo el botón principal.
   const cancelar = () => {
     pregunta?.responder(false);
     setPregunta(null);
   };
+  const fuera = (e: SyntheticEvent) => e.target instanceof Element && !e.target.closest('[role="dialog"]');
   const dialogo = pregunta ? (
     <span
       style={{ display: "contents" }}
-      onClick={parar}
+      onClick={(e: MouseEvent) => {
+        e.stopPropagation();
+        const toco = tocoElFondo.current;
+        tocoElFondo.current = false;
+        if (toco && fuera(e)) cancelar();
+      }}
       onKeyDown={parar}
       onPointerDown={(e: PointerEvent) => {
         e.stopPropagation();
-        if (e.target instanceof Element && !e.target.closest('[role="dialog"]')) cancelar();
+        tocoElFondo.current = false;
+        if (e.button !== 0 || !fuera(e)) return;
+        if (e.pointerType === "touch") tocoElFondo.current = true;
+        else cancelar();
       }}
     >
       <ConfirmarSobreagenda

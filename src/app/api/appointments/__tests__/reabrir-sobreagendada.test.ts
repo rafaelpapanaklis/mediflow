@@ -520,7 +520,7 @@ after(async () => {
  * Abre la agenda de siempre con Ana (cancelada) en Chromium. Cada PATCH de
  * estado lo contesta el handler REAL; lo demás, 404. `null` = sin Playwright.
  */
-async function abrirAgenda(t: { skip(m: string): void }, opciones: { conPanel?: boolean } = {}) {
+async function abrirAgenda(t: { skip(m: string): void }, opciones: { conPanel?: boolean; tactil?: boolean } = {}) {
   const chromium = await cargarChromium();
   if (!chromium) {
     t.skip("Playwright no está (NAVEGADOR_DIR): la pantalla NO se ejecutó");
@@ -529,7 +529,8 @@ async function abrirAgenda(t: { skip(m: string): void }, opciones: { conPanel?: 
   paquete ??= await empaquetar("src/components/dashboard/agenda/__tests__/arnes-reabrir.tsx");
   navegador ??= await chromium.launch({ args: ["--no-sandbox"] });
   const { PATCH } = await import("@/app/api/appointments/[id]/status/route");
-  const page = await navegador.newPage();
+  // `tactil`: una tableta (N5-A1). Sin `hasTouch`, `page.touchscreen` no toca.
+  const page = opciones.tactil ? await (await navegador.newContext({ hasTouch: true })).newPage() : await navegador.newPage();
   const errores: string[] = [];
   page.on("pageerror", (e: Error) => errores.push(String(e)));
   const peticiones: any[] = [];
@@ -695,6 +696,102 @@ test("N4-A2 · control: un clic DENTRO del diálogo (en su texto) no lo cierra",
   await a.dialogo.getByRole("alert").click();
   assert.equal(await a.dialogo.count(), 1, "sigue abierto");
   assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }]);
+  await a.page.close();
+});
+
+test("N5-A1 · un clic DERECHO en el fondo no cierra el «¿Seguro?» (solo el botón principal)", async (t) => {
+  const a = await abrirAgenda(t);
+  if (!a) return;
+  await a.tarjeta.getByRole("button", { name: "Re-abrir cita de Ana García" }).click(CLIC);
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await a.page.mouse.click(3, 3, { button: "right" });
+  assert.equal(await a.dialogo.count(), 1, "sigue abierto");
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }]);
+  await a.page.close();
+});
+
+// N5-A1 — en una TABLETA, el toque que cierra el «¿Seguro?» no puede caer en
+// lo de abajo. El navegador manda el `click` de un toque después de levantar
+// el dedo, en lo que haya en ese punto: si el velo ya se quitó, cae en la
+// tarjeta o en su botón. `page.mouse` no lo ve; `touchscreen.tap` sí.
+const tocarEnElCentro = async (a: { page: any }, caja: { x: number; y: number; width: number; height: number }) => {
+  const [x, y] = [caja.x + caja.width / 2, caja.y + caja.height / 2];
+  assert.equal(await a.page.evaluate(([x, y]: number[]) => document.elementFromPoint(x!, y!)?.className, [x, y]), "velo", "en ese punto está el fondo del diálogo");
+  await a.page.touchscreen.tap(x, y);
+};
+
+test("N5-A1 · TABLETA: tocar el fondo encima de la tarjeta cierra el «¿Seguro?» y NO la selecciona", async (t) => {
+  const a = await abrirAgenda(t, { tactil: true });
+  if (!a) return;
+  await a.tarjeta.getByRole("button", { name: "Re-abrir cita de Ana García" }).tap({ force: true });
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await tocarEnElCentro(a, (await a.tarjeta.boundingBox())!);
+  await a.dialogo.waitFor({ state: "detached", timeout: 5_000 });
+  await a.page.waitForTimeout(500); // el `click` del toque, si se colara, llega después
+  assert.equal(await a.tarjeta.getAttribute("data-selected"), null, "el toque del fondo no llegó a la tarjeta");
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }], "nada más se mandó");
+  assert.equal(escrito, null);
+  assert.equal(await a.page.locator('[data-appt-id="a-ana"][data-status="CANCELLED"]').count(), 1, "Ana sigue cancelada");
+  assert.deepEqual(a.errores, []);
+  await a.page.close();
+});
+
+test("N5-A1 · TABLETA: tocar el fondo encima de «Re-abrir» NO lo vuelve a pulsar (una sola petición, sin otro «¿Seguro?»)", async (t) => {
+  const a = await abrirAgenda(t, { tactil: true });
+  if (!a) return;
+  const boton = a.tarjeta.getByRole("button", { name: "Re-abrir cita de Ana García" });
+  const caja = (await boton.boundingBox())!;
+  await boton.tap({ force: true });
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await tocarEnElCentro(a, caja);
+  await a.dialogo.waitFor({ state: "detached", timeout: 5_000 });
+  await a.page.waitForTimeout(1_000); // tiempo para un segundo PATCH y su 409
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }], "«Re-abrir» no se volvió a mandar");
+  assert.equal(await a.dialogo.count(), 0, "el «¿Seguro?» no volvió a salir");
+  assert.equal(escrito, null);
+  assert.deepEqual(a.errores, []);
+  await a.page.close();
+});
+
+test("N5-A1 · TABLETA: en el PANEL, tocar el fondo encima de «Cerrar detalle» cierra el «¿Seguro?» y el panel sigue abierto", async (t) => {
+  const a = await abrirAgenda(t, { conPanel: true, tactil: true });
+  if (!a) return;
+  await a.tarjeta.tap({ force: true });
+  const panel = a.page.getByRole("complementary", { name: "Detalle de cita" });
+  // Un botón del panel bajo el velo (los de estado de una cancelada están
+  // deshabilitados): si el toque del fondo le llegara, soltaría a Ana y el
+  // panel se quedaría vacío.
+  const caja = (await panel.getByRole("button", { name: "Cerrar detalle" }).boundingBox())!;
+  await panel.getByRole("button", { name: "Más opciones de estado" }).tap();
+  await a.page.getByRole("button", { name: "Re-abrir cita", exact: true }).tap();
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await tocarEnElCentro(a, caja);
+  await a.dialogo.waitFor({ state: "detached", timeout: 5_000 });
+  await a.page.waitForTimeout(1_000);
+  assert.equal(await panel.getByRole("button", { name: "Cerrar detalle" }).count(), 1, "el toque del fondo no pulsó «Cerrar detalle»");
+  assert.equal(await a.tarjeta.getAttribute("data-selected"), "true", "Ana sigue abierta en el panel");
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }]);
+  assert.equal(escrito, null);
+  assert.equal(await a.page.locator('[data-appt-id="a-ana"][data-status="CANCELLED"]').count(), 1, "Ana sigue cancelada");
+  assert.deepEqual(a.errores, []);
+  await a.page.close();
+});
+
+test("N5-A1 · TABLETA, control: tocar DENTRO del diálogo no lo cierra, y «Sí» con el dedo sí reabre", async (t) => {
+  constraintChoca = true;
+  const a = await abrirAgenda(t, { tactil: true });
+  if (!a) return;
+  await a.tarjeta.getByRole("button", { name: "Re-abrir cita de Ana García" }).tap({ force: true });
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await a.dialogo.getByRole("alert").tap();
+  await a.page.waitForTimeout(300);
+  assert.equal(await a.dialogo.count(), 1, "sigue abierto");
+  await a.dialogo.getByRole("button", { name: "Sí, sobreagendar" }).tap();
+  await a.page.waitForSelector('[data-appt-id="a-ana"][data-status="SCHEDULED"]', { timeout: 5_000 });
+  assert.equal(a.peticiones.length, 2);
+  assert.equal(escrito.status, "SCHEDULED");
+  assert.equal(await a.tarjeta.getAttribute("data-selected"), null, "el toque de «Sí» no llegó a la tarjeta");
+  assert.deepEqual(a.errores, []);
   await a.page.close();
 });
 
