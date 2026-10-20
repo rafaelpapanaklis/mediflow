@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import {
   clinicaEstabaSuspendida,
+  enPeriodoPagado,
   esMesDeServicioSuspendido,
   finDeLoPagado,
   mesesDelIntervalo,
@@ -112,6 +113,18 @@ export function textoReglaTardia(a: { clinicaNombre: string; abiertas: string[];
   );
 }
 
+/**
+ * AC8: ¿el siguiente cobro de Stripe ya cae donde termina lo pagado (±1 día), o la suscripción ya está en su periodo pagado
+ * (`trialing` + marca) hasta ahí? Entonces no hay días solapados que revisar y no se avisa. La usan el camino tardío de la regla
+ * de tarjeta y la vía manual.
+ */
+export function cicloDeStripeYaCoincide(sub: Stripe.Subscription, finProtegido: Date): boolean {
+  const segs = subscriptionPeriodEndSeconds(sub);
+  const yaCoincide = !!segs && Math.abs(segs * 1000 - finProtegido.getTime()) <= 86_400_000;
+  const pagado = enPeriodoPagado(sub) && (sub.trial_end ?? 0) * 1000 >= finProtegido.getTime() - 86_400_000;
+  return yaCoincide || pagado;
+}
+
 /** ¿Alguna línea de la factura cubre (casi) un periodo COMPLETO del plan? Un prorrateo cubre solo unos días. */
 export function esPeriodoCompleto(invoice: Stripe.Invoice, sub: Stripe.Subscription): boolean {
   const mesesPlan = mesesDelIntervalo(sub);
@@ -190,16 +203,25 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
   // hasta el fin de lo pagado y avisar al admin para que lo revise en Stripe.
   if (opciones.tardia === true || Date.now() - pagadoEn.getTime() > UMBRAL_REGLA_TARDIA_MS) {
     const { anuladas, fallos: noAnuladas } = await anularFacturasDeMesesSuspendidos(stripe, clinic.id, aAnular);
-    if (noAnuladas.length > 0) {
-      await registrarReglaFallida(invoice.id, clinic.id, fin);
-      throw new Error("No se pudieron anular todas las facturas de los meses sin servicio; se reintenta");
-    }
+    // AC1: la clínica PAGÓ. Se reactiva con el acceso de lo pagado ANTES de cualquier throw por una anulación que falle (igual que
+    // Z2 en el camino normal): un fallo nuestro de anular nunca la deja suspendida.
+    let errorAlReactivar: unknown = null;
     try {
       await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin });
     } catch (e) {
+      errorAlReactivar = e;
       console.error("[regla-cobro-tarjeta] no se pudo reactivar (camino tardío):", (e as Error)?.message ?? e);
+    }
+    if (noAnuladas.length > 0 || errorAlReactivar) {
       await registrarReglaFallida(invoice.id, clinic.id, fin);
-      throw e;
+      if (noAnuladas.length > 0) {
+        await avisarAdminUnaVez(
+          `${invoice.id}:regla_suspension_fallo`,
+          clinic.id,
+          avisoFalloReglaSuspension({ clinicaId: clinic.id, clinicaNombre: clinic.name, accion: "cobro de tarjeta", fallos: noAnuladas }),
+        );
+      }
+      throw errorAlReactivar ?? new Error("No se pudieron anular todas las facturas de los meses sin servicio; se reintenta");
     }
     await registrarReglaCompletada(invoice.id, clinic.id, fin);
     let abiertas: string[] = [];
@@ -208,8 +230,10 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     } catch {
       abiertas = [];
     }
-    const aviso = textoReglaTardia({ clinicaNombre: clinic.name ?? clinic.id, abiertas, finPeriodoStripe: viva, protegidoHasta: fin });
-    await avisarAdminUnaVez(`${invoice.id}:regla_tardia`, clinic.id, { asunto: `Revisa en Stripe la suscripción de ${clinic.name ?? clinic.id}: la regla de la suspensión no se aplicó al momento del pago`, lineas: [aviso] });
+    // AC8: si el ciclo de Stripe ya coincide con lo pagado, no hay nada que revisar y no se avisa.
+    const coincide = cicloDeStripeYaCoincide(viva, fin);
+    const aviso = coincide ? undefined : textoReglaTardia({ clinicaNombre: clinic.name ?? clinic.id, abiertas, finPeriodoStripe: viva, protegidoHasta: fin });
+    if (aviso) await avisarAdminUnaVez(`${invoice.id}:regla_tardia`, clinic.id, { asunto: `Revisa en Stripe la suscripción de ${clinic.name ?? clinic.id}: la regla de la suspensión no se aplicó al momento del pago`, lineas: [aviso] });
     await logAudit({
       clinicId: clinic.id,
       userId: clinic.id,

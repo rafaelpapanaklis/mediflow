@@ -17,7 +17,7 @@ import { finProtegidoPorRastros } from "@/lib/billing/regla-cobro-tarjeta.server
  *   · un pago MANUAL registrado (fila pagada de la lista de métodos manuales, incluida la activación de /admin) cuyo periodo sigue vigente;
  *   · un periodo pagado a mano en la suscripción de Stripe (`trialing` + la marca `periodo_pagado_hasta`);
  *   · el fin de lo pagado que dejó la regla de la suspensión por un cobro de tarjeta (rastro `regla_fallo` / `regla_ok`).
- * No se usan las filas de cobros de Stripe: una mensualidad de MÓDULO pagada también tiene un periodo futuro y no paga el plan.
+ * Si la lectura de Stripe falla, la función LANZA (AC2). No se usan las filas de cobros de Stripe: una mensualidad de MÓDULO pagada también tiene un periodo futuro y no paga el plan.
  */
 export async function finDeAccesoProtegido(args: {
   clinicId: string;
@@ -38,11 +38,15 @@ export async function finDeAccesoProtegido(args: {
   });
   for (const f of manuales) if (f.periodEnd) candidatos.push(new Date(f.periodEnd));
   if (args.stripe && args.stripeSubscriptionId) {
+    // AC2: si Stripe no responde, el error SE PROPAGA (el webhook contesta 5xx y Stripe reenvía el evento): la marca puede ser la única
+    // evidencia de lo pagado, y seguir sin ella bajaría el acceso a «rechazo + 24 h».
+    // Una suscripción que Stripe ya no tiene (`resource_missing`) no es una lectura fallida: simplemente no hay marca.
     try {
       const marca = periodoPagadoHasta(await args.stripe.subscriptions.retrieve(args.stripeSubscriptionId), ahora);
       if (marca) candidatos.push(marca);
-    } catch {
-      /* sin lectura de Stripe: quedan las otras evidencias */
+    } catch (e) {
+      const err = e as { code?: string; statusCode?: number };
+      if (err?.code !== "resource_missing" && err?.statusCode !== 404) throw e;
     }
   }
   const rastro = await finProtegidoPorRastros(args.clinicId, ahora);

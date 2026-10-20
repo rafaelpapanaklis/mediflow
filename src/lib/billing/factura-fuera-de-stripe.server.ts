@@ -2,7 +2,6 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import {
   METODOS_DE_PAGO_MANUAL_DEL_PLAN,
-  enPeriodoPagado,
   esMesDeServicioSuspendido,
   inicioDelMarcadoFueraDeStripe,
 } from "@/lib/billing/cobro-rechazado";
@@ -15,9 +14,8 @@ import {
   realinearCiclo,
   type ResultadoRealineo,
 } from "@/lib/billing/reactivacion-tras-suspension.server";
-import { reintentarReglasPendientes, reglasPendientes, textoReglaTardia } from "@/lib/billing/regla-cobro-tarjeta.server";
+import { reintentarReglasPendientes, reglasPendientes, textoReglaTardia, cicloDeStripeYaCoincide } from "@/lib/billing/regla-cobro-tarjeta.server";
 import { avisarAdminUnaVez } from "@/lib/billing/aviso-admin-envio.server";
-import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { getStripeSafe } from "@/lib/stripe";
 
 /**
@@ -189,10 +187,7 @@ export async function marcarFacturasDelPlanPagadasFueraDeStripe(args: {
       }
       const finProtegido = args.finPrepago ?? null;
       if (finProtegido && finProtegido.getTime() > Date.now() + 86_400_000) {
-        const segs = subscriptionPeriodEndSeconds(sub);
-        const yaCoincide = !!segs && Math.abs(segs * 1000 - finProtegido.getTime()) <= 86_400_000;
-        const pagado = enPeriodoPagado(sub) && (sub.trial_end ?? 0) * 1000 >= finProtegido.getTime() - 86_400_000;
-        if (!yaCoincide && !pagado) {
+        if (!cicloDeStripeYaCoincide(sub, finProtegido)) {
           let abiertas: string[] = [];
           try {
             abiertas = (await facturasAbiertasDelPlan(stripe, stripeSubscriptionId)).map((f) => f.id!).filter(Boolean);
