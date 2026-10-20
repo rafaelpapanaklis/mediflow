@@ -118,14 +118,34 @@ export function alternarDiente(texto: string, fdi: number): string {
 
 // ── Cuentas ────────────────────────────────────────────────────────────────
 
+/**
+ * Lo que se teclea en la cantidad de un renglón: solo un entero (revisión t8 de ws1-t12, N-P4).
+ * «1.5» se guardaba «1.5 ×» y el presupuesto (`QuoteItem.quantity` es Int) lo redondeaba a 2.
+ * Se corta en el primer punto o coma: «1.5» → «1», «2,5» → «2»; lo que no es dígito se va.
+ */
+export function soloEntero(valor: string): string {
+  // Sin ceros a la izquierda, y un «0» suelto no se queda (t8, N3-P3): una cantidad vacía vale 1.
+  return valor.split(/[.,]/)[0].replace(/\D/g, "").replace(/^0+/, "");
+}
+
 const numero = (v: string): number => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
+/** La cantidad de un renglón: vacía o menor que 1 vale 1 (nunca se guarda «0 ×», t8 N3-P3). */
+export function cantidadDe(r: Pick<Renglon, "cantidad">): number {
+  const n = numero(r.cantidad);
+  return n >= 1 ? n : 1;
+}
+
+/** El precio de un renglón, en centavos exactos: «100.004» es $100 (t8, N3-P8). */
+export function precioDe(r: Pick<Renglon, "precio">): number {
+  return Math.round(numero(r.precio) * 100) / 100;
+}
+
 export function importeRenglon(r: Renglon): number {
-  const cantidad = r.cantidad.trim() === "" ? 1 : numero(r.cantidad);
-  return Math.round(cantidad * numero(r.precio) * 100) / 100;
+  return Math.round(cantidadDe(r) * precioDe(r) * 100) / 100;
 }
 
 /** Los renglones que dicen algo (con procedimiento), en orden de fase. */
@@ -230,7 +250,21 @@ export interface Rotulos {
   fase: (f: Fase) => string;
   pronosticoValor: (p: Exclude<Pronostico, "">) => string;
   dinero: (n: number) => string;
+  /**
+   * La ventana de hoy escribe los precios EXACTOS (`dineroExacto`, con centavos cuando los hay) y
+   * lo deja dicho con `MARCA_EXACTO` en la línea del total (ws1-t12, t8 N3-P2). Sin esto, el texto
+   * es como el de antes.
+   */
+  exacto?: boolean;
 }
+
+/**
+ * La marca de «precios exactos»: un espacio duro (U+00A0) justo después de «Total de
+ * procedimientos:». Se ve igual que un espacio en pantalla, en la ventana de editar y en el PDF
+ * del expediente (está en WinAnsi, la Helvetica lo pinta), y solo la escribe la ventana de hoy.
+ * Un plan sin ella es de los de antes, cuyo texto redondeaba los precios a pesos.
+ */
+export const MARCA_EXACTO = "\u00a0";
 
 /** Con lo que empieza una descripción escrita por esta ventana. */
 export const MARCA_PLAN = "▸ ";
@@ -244,8 +278,8 @@ function lineaRenglon(r: Renglon, rot: Rotulos): string {
   const centro = letraCentro(dientes);
   const caras = CARAS.filter((c) => r.caras.includes(c)).map((c) => (c === "O" ? centro : c)).join("");
   const donde = dientes.length > 0 ? ` — ${dientes.join(", ")}${caras ? ` (${caras})` : ""}` : "";
-  const cantidad = r.cantidad.trim() === "" ? 1 : numero(r.cantidad);
-  const precio = numero(r.precio);
+  const cantidad = cantidadDe(r);
+  const precio = precioDe(r);
   const cuanto = precio > 0 ? ` · ${cantidad} × ${rot.dinero(precio)} = ${rot.dinero(importeRenglon(r))}` : "";
   const motivo = r.motivo.trim() ? ` · ${rot.por} ${r.motivo.trim()}` : "";
   return `• ${r.procedimiento.trim()}${donde}${cuanto}${motivo}`;
@@ -273,7 +307,7 @@ export function componerDescripcion(plan: PlanClinico, rot: Rotulos): string {
     bloques.push([titulo, ...f.renglones.map((r) => lineaRenglon(r, rot))].join("\n"));
   }
   const total = totalProcedimientos(plan.renglones);
-  if (fases.length > 0 && total > 0) bloques.push(`${MARCA_PLAN}${rot.total}: ${rot.dinero(total)}`);
+  if (fases.length > 0 && total > 0) bloques.push(`${MARCA_PLAN}${rot.total}:${rot.exacto ? MARCA_EXACTO : " "}${rot.dinero(total)}`);
   if (plan.alternativa.trim()) bloques.push(`${MARCA_PLAN}${rot.alternativa}: ${plan.alternativa.trim()}`);
   if (notas) bloques.push(`${MARCA_PLAN}${rot.notas}: ${notas}`);
   return bloques.join("\n\n");

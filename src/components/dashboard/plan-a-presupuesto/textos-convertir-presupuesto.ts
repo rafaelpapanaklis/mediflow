@@ -29,9 +29,13 @@ const es = {
   cancelar: "Cancelar",
   cerrar: "Cerrar",
   avisoSinDetalle: "Este plan no trae procedimientos detallados: se arma un solo concepto con el nombre y el costo del plan. Podrás desglosarlo en el editor.",
-  avisoSinPrecio: (n: number) => (n === 1 ? "1 concepto no tiene precio: complétalo en el editor del presupuesto." : `${n} conceptos no tienen precio: complétalos en el editor del presupuesto.`),
+  // Un concepto en $0 es una cortesía (la ventana del plan ya lo preguntó: «si es de cortesía,
+  // sigue»); el aviso no puede contradecirla (ws1-t12, t8 N3-P6).
+  avisoSinPrecio: (n: number) => (n === 1 ? "1 concepto va en $0 (cortesía). Si no lo es, ponle precio en el editor del presupuesto." : `${n} conceptos van en $0 (cortesía). Si alguno no lo es, ponle precio en el editor del presupuesto.`),
   avisoSinTarifario: (n: number) => (n === 1 ? "1 concepto no está en el tarifario: se guarda como texto libre." : `${n} conceptos no están en el tarifario: se guardan como texto libre.`),
   avisoTotalDifiere: (costo: string) => `El costo escrito en el plan (${costo}) no coincide con la suma de los conceptos. El presupuesto usa la suma.`,
+  // Plan en $0 con precios por renglón (t8, N4-PDF1): el presupuesto lleva los precios, y se dice.
+  avisoPlanEnCero: (suma: string) => `Este plan está en $0, pero sus conceptos suman ${suma}. El presupuesto se crea con esos precios: si es una garantía o una cortesía, déjalos en $0 en el editor del presupuesto.`,
   estado: { DRAFT: "borrador", PRESENTED: "presentado", ACCEPTED: "aceptado" } as Record<string, string>,
 };
 
@@ -59,9 +63,10 @@ const en: typeof es = {
   cancelar: "Cancel",
   cerrar: "Close",
   avisoSinDetalle: "This plan has no detailed procedures: a single item is built with the plan's name and cost. You can break it down in the editor.",
-  avisoSinPrecio: (n: number) => (n === 1 ? "1 item has no price: fill it in in the quote editor." : `${n} items have no price: fill them in in the quote editor.`),
+  avisoSinPrecio: (n: number) => (n === 1 ? "1 item is at $0 (complimentary). If it isn't, price it in the quote editor." : `${n} items are at $0 (complimentary). If any isn't, price it in the quote editor.`),
   avisoSinTarifario: (n: number) => (n === 1 ? "1 item is not in the price list: it is saved as free text." : `${n} items are not in the price list: they are saved as free text.`),
   avisoTotalDifiere: (costo: string) => `The cost written in the plan (${costo}) doesn't match the sum of the items. The quote uses the sum.`,
+  avisoPlanEnCero: (suma: string) => `This plan is at $0, but its items add up to ${suma}. The quote is created with those prices: if it's a warranty or complimentary, set them to $0 in the quote editor.`,
   estado: { DRAFT: "draft", PRESENTED: "presented", ACCEPTED: "accepted" },
 };
 

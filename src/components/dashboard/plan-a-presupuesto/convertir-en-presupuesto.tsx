@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, FileText, X } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
-import { useTextosConvertirPresupuesto } from "./textos-convertir-presupuesto";
+import { useTextosConvertirPresupuesto, type TEXTOS_CONVERTIR_PRESUPUESTO } from "./textos-convertir-presupuesto";
+import { avisosDeLaVista } from "./avisos-convertir";
 import s from "../plan-tratamiento-rediseno/plan.module.css";
 import c from "./convertir.module.css";
 
@@ -13,7 +14,8 @@ import c from "./convertir.module.css";
  * «Convertir en presupuesto» (ws1-t3). Un botón y su vista previa: lee `GET /api/treatments/[id]/presupuesto`
  * (los conceptos que saldrían del plan y, si ya hay un presupuesto vivo del plan, cuál es) y, al confirmar,
  * `POST` crea el borrador. Con uno vivo NO ofrece crear: ofrece abrirlo. Aquí no se calcula nada de dinero:
- * todo viene del servidor, que recalcula al crear.
+ * todo viene del servidor, que recalcula al crear. Los montos van con `dineroExacto` (centavos solo si los
+ * hay), igual que el PDF del plan y el borrador: 3 × $500.50 es «$1,501.50», no «$1,502» (t8, N4-PDF2).
  */
 
 export interface PresupuestoDelPlan { id: string; folio: string; status: string; total: number; title: string }
@@ -30,6 +32,7 @@ interface Vista {
   sinPrecio: number;
   sinTarifario: number;
   totalDifiere: boolean;
+  planEnCero?: boolean;
 }
 
 export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, antigua = false }: {
@@ -82,13 +85,6 @@ export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, 
   }
 
   const cerrar = () => { if (!creando) setAbierto(false); };
-  const avisos: string[] = [];
-  if (vista && !vista.existente) {
-    if (vista.sinDetalle) avisos.push(t.avisoSinDetalle);
-    if (vista.sinPrecio > 0) avisos.push(t.avisoSinPrecio(vista.sinPrecio));
-    if (vista.sinTarifario > 0 && !vista.sinDetalle) avisos.push(t.avisoSinTarifario(vista.sinTarifario));
-    if (vista.totalDifiere) avisos.push(t.avisoTotalDifiere(formatCurrency(planCosto)));
-  }
 
   return (
     <>
@@ -125,43 +121,7 @@ export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, 
                   </div>
                 )}
 
-                {vista && !vista.existente && (
-                  <>
-                    <div className={c.pista}>{t.intro}</div>
-                    <div className={c.tabla} role="table">
-                      <div className={`${c.fila} ${c.encabezado}`} role="row">
-                        <span role="columnheader">{t.colConcepto}</span>
-                        <span role="columnheader">{t.colDientes}</span>
-                        <span role="columnheader" className={c.num}>{t.colCant}</span>
-                        <span role="columnheader" className={c.num}>{t.colPrecio}</span>
-                        <span role="columnheader" className={c.num}>{t.colImporte}</span>
-                      </div>
-                      {vista.conceptos.map((k, i) => (
-                        <div key={i} className={c.fila} role="row">
-                          <span className={c.nombre} role="cell">{k.name}</span>
-                          <span className={c.apagado} role="cell">{k.toothFdi ? k.toothFdi.split(",").join(", ") : "—"}</span>
-                          <span className={c.num} role="cell">{k.quantity}</span>
-                          <span className={`${c.num} ${k.unitPrice > 0 ? "" : c.sinPrecio}`} role="cell">
-                            {k.unitPrice > 0 ? formatCurrency(k.unitPrice) : t.sinPrecio}
-                          </span>
-                          <span className={c.num} role="cell">{formatCurrency(k.unitPrice * k.quantity)}</span>
-                        </div>
-                      ))}
-                      <div className={`${c.fila} ${c.total}`} role="row">
-                        <span className={c.nombre} role="cell">{t.total}</span>
-                        <span role="cell" /><span role="cell" /><span role="cell" />
-                        <span className={c.num} role="cell">{formatCurrency(vista.total)}</span>
-                      </div>
-                    </div>
-                    {avisos.length > 0 && (
-                      <ul className={s.avisos} style={{ marginTop: 0 }}>
-                        {avisos.map((a) => (
-                          <li key={a} className={s.aviso}><AlertTriangle size={14} strokeWidth={1.75} aria-hidden /> {a}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
-                )}
+                {vista && !vista.existente && <VistaDelPresupuesto vista={vista} planCosto={planCosto} t={t} />}
               </div>
             </div>
 
@@ -182,6 +142,52 @@ export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, 
             </footer>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+/** La tabla y los avisos de la vista previa. Aparte para poder pintarla en la prueba (t8, N4-PDF2). */
+export function VistaDelPresupuesto({ vista, planCosto, t }: {
+  vista: Omit<Vista, "existente">;
+  planCosto: number;
+  t: (typeof TEXTOS_CONVERTIR_PRESUPUESTO)["es"];
+}) {
+  const avisos = avisosDeLaVista(vista, planCosto, t);
+  return (
+    <>
+      <div className={c.pista}>{t.intro}</div>
+      <div className={c.tabla} role="table">
+        <div className={`${c.fila} ${c.encabezado}`} role="row">
+          <span role="columnheader">{t.colConcepto}</span>
+          <span role="columnheader">{t.colDientes}</span>
+          <span role="columnheader" className={c.num}>{t.colCant}</span>
+          <span role="columnheader" className={c.num}>{t.colPrecio}</span>
+          <span role="columnheader" className={c.num}>{t.colImporte}</span>
+        </div>
+        {vista.conceptos.map((k, i) => (
+          <div key={i} className={c.fila} role="row">
+            <span className={c.nombre} role="cell">{k.name}</span>
+            <span className={c.apagado} role="cell">{k.toothFdi ? k.toothFdi.split(",").join(", ") : "—"}</span>
+            <span className={c.num} role="cell">{k.quantity}</span>
+            <span className={`${c.num} ${k.unitPrice > 0 ? "" : c.sinPrecio}`} role="cell">
+              {k.unitPrice > 0 ? dineroExacto(k.unitPrice) : t.sinPrecio}
+            </span>
+            <span className={c.num} role="cell">{dineroExacto(k.unitPrice * k.quantity)}</span>
+          </div>
+        ))}
+        <div className={`${c.fila} ${c.total}`} role="row">
+          <span className={c.nombre} role="cell">{t.total}</span>
+          <span role="cell" /><span role="cell" /><span role="cell" />
+          <span className={c.num} role="cell">{dineroExacto(vista.total)}</span>
+        </div>
+      </div>
+      {avisos.length > 0 && (
+        <ul className={s.avisos} style={{ marginTop: 0 }}>
+          {avisos.map((a) => (
+            <li key={a} className={s.aviso}><AlertTriangle size={14} strokeWidth={1.75} aria-hidden /> {a}</li>
+          ))}
+        </ul>
       )}
     </>
   );

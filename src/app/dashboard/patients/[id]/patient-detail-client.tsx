@@ -8,7 +8,8 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
-import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
+import { formatDate, getInitials, avatarColor } from "@/lib/utils";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
@@ -63,6 +64,7 @@ import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashb
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
 import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
+import { DescargarPlanPdf } from "@/components/dashboard/plan-a-pdf/descargar-pdf";
 import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-a-presupuesto/convertir-en-presupuesto";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
@@ -460,6 +462,8 @@ interface Props {
   canEditTreatments?: boolean;
   /** "billing.create" — «Convertir en presupuesto» desde el plan (ws1-t3): crea un presupuesto borrador. */
   canCreateQuotes?: boolean;
+  /** "treatments.view" — «Descargar PDF» del plan de tratamiento (ws1-t12). Lo resuelve page.tsx con hasPermission. */
+  canViewTreatments?: boolean;
   /**
    * "inbox.send" — el MISMO permiso con el que el Inbox deja responder. Decide
    * si la tarjeta de WhatsApp ofrece INICIAR la conversación cuando todavía no
@@ -549,6 +553,7 @@ export function PatientDetailClient({
   canViewRecords = false,
   canEditTreatments = false,
   canCreateQuotes = false,
+  canViewTreatments = false,
   facturApiEnabled = false,
   reminderOutcome = null,
   rediseno = false,
@@ -2904,7 +2909,7 @@ export function PatientDetailClient({
                             <span className="tabular-nums inline-flex items-center gap-1">
                               {rediseno
                                 ? <CreditCard size={12} strokeWidth={1.75} aria-hidden />
-                                : "💰"} {formatCurrency(plan.totalCost)}
+                                : "💰"} {dineroExacto(plan.totalCost)}
                             </span>
                             <span className="inline-flex items-center gap-1">
                               {rediseno
@@ -3066,6 +3071,7 @@ export function PatientDetailClient({
                       <VentanaVerPlan
                         plan={viewPlan}
                         puedeEditar={canEditTreatments}
+                        puedeDescargar={canViewTreatments}
                         onCerrar={() => setViewPlan(null)}
                         onEditar={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }}
                         onAbrirPresupuesto={canCreateQuotes ? (q) => { setViewPlan(null); setPresupuestoAbrir(q.id); setTab("presupuestos"); } : undefined}
@@ -3106,7 +3112,7 @@ export function PatientDetailClient({
                             <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${vPct}%` }} /></div>
                           </div>
                           <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold tabular-nums">{formatCurrency(vp.totalCost)}</div></div>
+                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold tabular-nums">{dineroExacto(vp.totalCost)}</div></div>
                             <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.daysBetween")}</div><div className="font-semibold">{vp.sessionIntervalDays}</div></div>
                             <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.startLabel")}</div><div className="font-semibold">{new Date(vp.startDate).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}</div></div>
                             {vp.nextExpectedDate && <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.nextLabel")}</div><div className="font-semibold">{new Date(vp.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</div></div>}
@@ -3127,8 +3133,9 @@ export function PatientDetailClient({
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+                        <div className="flex flex-wrap items-center justify-end gap-2 px-5 py-4 border-t border-border">
                           <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("common.close")}</button>
+                          {canViewTreatments && <DescargarPlanPdf antigua planId={vp.id} />}
                           {canCreateQuotes && (
                             <ConvertirEnPresupuesto antigua planId={vp.id} planCosto={Number(vp.totalCost) || 0} onAbrirPresupuesto={(q) => { setViewPlan(null); setPresupuestoAbrir(q.id); setTab("presupuestos"); }} />
                           )}

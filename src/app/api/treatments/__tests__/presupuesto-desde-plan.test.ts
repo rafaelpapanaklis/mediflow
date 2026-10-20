@@ -11,6 +11,9 @@ import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { NextResponse } from "next/server";
 import { componerDescripcion, PLAN_VACIO } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
+import { avisosDeLaVista } from "@/components/dashboard/plan-a-presupuesto/avisos-convertir";
+import { TEXTOS_CONVERTIR_PRESUPUESTO } from "@/components/dashboard/plan-a-presupuesto/textos-convertir-presupuesto";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 
 type Row = Record<string, any>;
 const db = { plans: [] as Row[], quotes: [] as Row[], catalogo: [] as Row[], audit: [] as Row[], seq: 0 };
@@ -159,4 +162,48 @@ test("permisos: solo lectura recibe 403; un paciente oculto es 404", async () =>
   ocultos.add("p1");
   assert.equal((await leer(await POST({} as any, params("plan1")))).status, 404);
   assert.equal(db.quotes.length, 0);
+});
+
+test("t8 N-P2 / N3-P2: un plan escrito por la ventana de hoy (con su marca) con «$450» pasa a $450 aunque el tarifario diga $449.60", async () => {
+  db.catalogo = [{ id: "pr-resina", clinicId: "c1", name: "Resina", basePrice: 449.6, isActive: true }];
+  const renglones = [reng("Resina", { precio: "450", cantidad: "1" })];
+  db.plans.push({
+    id: "plan-nuevo", clinicId: "c1", patientId: "p1", doctorId: "u1", name: "Nuevo", totalCost: 450,
+    // Con el rótulo real de la ventana («Total de procedimientos»): la marca va en esa línea.
+    description: componerDescripcion({ ...PLAN_VACIO, renglones }, { ...rot, total: "Total de procedimientos", exacto: true }),
+  });
+  const { body } = await leer(await GET({} as any, params("plan-nuevo")));
+  assert.equal(body.conceptos[0].unitPrice, 450);
+  // El mismo plan SIN la marca (de antes del cambio) sí toma el exacto del tarifario: su texto redondeó.
+  db.plans[db.plans.length - 1].description = componerDescripcion({ ...PLAN_VACIO, renglones }, rot);
+  assert.equal((await leer(await GET({} as any, params("plan-nuevo")))).body.conceptos[0].unitPrice, 449.6);
+});
+
+test("t8 N4-PDF1: un plan de garantía en $0 con «Corona $9,000» NO se convierte en silencio: la vista previa avisa y el borrador lleva el precio", async () => {
+  const renglones = [reng("Corona", { dientes: "16", precio: "9000", cantidad: "1" })];
+  const descripcion = componerDescripcion({ ...PLAN_VACIO, renglones }, { ...rot, total: "Total de procedimientos", exacto: true, dinero: dineroExacto });
+  // Igual da si se confirmó «¿Crear el plan en $0?» o si alguien bajó el costo a 0 en «Editar plan»: queda totalCost 0.
+  db.plans.push({ id: "plan-garantia", clinicId: "c1", patientId: "p1", doctorId: "u1", name: "Garantía", description: descripcion, totalCost: 0 });
+
+  const { status, body } = await leer(await GET({} as any, params("plan-garantia")));
+  assert.equal(status, 200);
+  assert.equal(body.total, 9000);
+  assert.equal(body.planEnCero, true);
+  assert.equal(body.totalDifiere, false);
+  // Los avisos salen del MISMO cuerpo que recibe la pantalla, con la función que la pantalla usa.
+  for (const [idioma, texto] of [["es", "Este plan está en $0, pero sus conceptos suman $9,000."], ["en", "This plan is at $0, but its items add up to $9,000."]] as const) {
+    const avisos = avisosDeLaVista(body, 0, TEXTOS_CONVERTIR_PRESUPUESTO[idioma]);
+    assert.ok(avisos[0]?.startsWith(texto), `${idioma}: el primer aviso tiene que decir que el plan está en $0 (salió ${JSON.stringify(avisos)})`);
+  }
+
+  const creado = await leer(await POST({} as any, params("plan-garantia")));
+  assert.equal(creado.status, 201);
+  assert.equal(Number(db.quotes[0].total), 9000, "el borrador lleva el precio del renglón, como dijo el aviso");
+  assert.equal(db.quotes[0].status, "DRAFT");
+});
+
+test("t8 N4-PDF1: un plan con costo (o en $0 sin precios) no lleva el aviso de plan en $0", async () => {
+  const { body } = await leer(await GET({} as any, params("plan1")));
+  assert.equal(body.planEnCero, false);
+  assert.ok(!avisosDeLaVista(body, 1800, TEXTOS_CONVERTIR_PRESUPUESTO.es).some((a) => a.includes("está en $0")));
 });

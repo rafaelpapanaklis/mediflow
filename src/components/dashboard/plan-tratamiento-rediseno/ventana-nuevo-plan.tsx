@@ -2,14 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { AlertTriangle, ClipboardList, Grid3x3, MessageCircle, Plus, Trash2, X } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { COND_BY_ID, PERM, PRIMARY } from "@/components/dashboard/odontogram-v2/data";
 import {
   CARAS, FASES, FASE_CLAVE, PLAN_VACIO, PRONOSTICOS, PRONOSTICO_CLAVE,
   alternarDiente, avisosDeOrden, componerDescripcion, hallazgosPorTratar, importeRenglon,
-  leerDientes, letraCentro, sesionesSugeridas, subtotalesPorFase, totalProcedimientos,
+  leerDientes, letraCentro, sesionesSugeridas, soloEntero, subtotalesPorFase, totalProcedimientos,
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import s from "./plan.module.css";
@@ -18,6 +17,7 @@ import { DictationMic, appendDictado } from "@/components/clinical/shared/dictat
 import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
 import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 
 /**
  * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
@@ -113,7 +113,11 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     por: t("planTratamiento.texto.por"),
     fase: (f: Fase) => t(FASE_CLAVE[f]),
     pronosticoValor: (p: Exclude<Pronostico, "">) => t(PRONOSTICO_CLAVE[p]),
-    dinero: (n: number) => formatCurrency(n),
+    // Con centavos cuando los hay: el texto del plan es de donde los vuelven a leer el PDF y
+    // «Convertir en presupuesto»; redondeado a pesos, $500.50 se leía $501 (ws1-t12, P2).
+    dinero: (n: number) => dineroExacto(n),
+    // …y lo deja dicho con la marca de «precios exactos» (t8, N3-P2): el PDF y «Convertir» se fían de ella.
+    exacto: true,
   }), [t]);
 
   const total = totalProcedimientos(plan.renglones);
@@ -434,13 +438,17 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                             );
                           })}
                         </div>
+                        {/* Solo enteros (revisión t8, N-P4): «1.5» se guardaba «1.5 ×» y el presupuesto
+                            (QuoteItem.quantity es Int) lo redondeaba a 2. */}
                         <input
                           type="number"
                           min={1}
+                          step={1}
+                          inputMode="numeric"
                           className={`${s.entrada} ${s.num}`}
                           aria-label={t("planTratamiento.nuevo.colCantidad")}
                           value={r.cantidad}
-                          onChange={(e) => cambiar(r.id, { cantidad: e.target.value })}
+                          onChange={(e) => cambiar(r.id, { cantidad: soloEntero(e.target.value) })}
                         />
                         <input
                           type="number"
@@ -452,7 +460,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                           value={r.precio}
                           onChange={(e) => cambiar(r.id, { precio: e.target.value, precioDelTarifario: false })}
                         />
-                        <span className={`${s.importe} ${s.num}`}>{formatCurrency(importeRenglon(r))}</span>
+                        <span className={`${s.importe} ${s.num}`}>{dineroExacto(importeRenglon(r))}</span>
                         <button
                           type="button"
                           className={s.quitar}
@@ -479,7 +487,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                                 onMouseEnter={() => setMarcada(i)}
                               >
                                 <span className={s.tarifarioSugNombre}>{p.name}</span>
-                                <span className={`${s.tarifarioSugPrecio} ${s.num}`}>{formatCurrency(p.basePrice)}</span>
+                                <span className={`${s.tarifarioSugPrecio} ${s.num}`}>{dineroExacto(p.basePrice)}</span>
                               </li>
                             ))}
                           </ul>
@@ -545,13 +553,13 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                   <div key={f.fase} className={s.resumenFila}>
                     <span>{t(FASE_CLAVE[f.fase])}</span>
                     <span className={s.resumenCuenta}>{t("planTratamiento.nuevo.nProcedimientos", { count: f.renglones.length })}</span>
-                    <span className={s.num}>{formatCurrency(f.subtotal)}</span>
+                    <span className={s.num}>{dineroExacto(f.subtotal)}</span>
                   </div>
                 ))}
                 <div className={`${s.resumenFila} ${s.resumenTotal}`}>
                   <span>{t("planTratamiento.texto.total")}</span>
                   <span />
-                  <span className={s.num}>{formatCurrency(total)}</span>
+                  <span className={s.num}>{dineroExacto(total)}</span>
                 </div>
               </div>
             )}
@@ -607,7 +615,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                 {hayRenglones && total > 0 && (
                   costoAMano && Number(form.totalCost) !== total ? (
                     <button type="button" className={s.enlace} onClick={() => setCostoAMano(false)}>
-                      {t("planTratamiento.nuevo.usarCosto", { total: formatCurrency(total) })}
+                      {t("planTratamiento.nuevo.usarCosto", { total: dineroExacto(total) })}
                     </button>
                   ) : !costoAMano ? <span className={s.pistaLinea}>{t("planTratamiento.nuevo.calculado")}</span> : null
                 )}
@@ -669,7 +677,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
           {hayRenglones && (
             <div className={s.pieResumen}>
               <span>{t("planTratamiento.nuevo.nProcedimientos", { count: fases.reduce((a, f) => a + f.renglones.length, 0) })}</span>
-              <strong>{formatCurrency(total)}</strong>
+              <strong>{dineroExacto(total)}</strong>
             </div>
           )}
           <button type="button" className={s.boton} onClick={onCerrar} disabled={guardando}>

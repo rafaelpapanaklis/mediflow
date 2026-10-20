@@ -2,11 +2,12 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { ClipboardList, Edit, X } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
 import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "../plan-a-presupuesto/convertir-en-presupuesto";
+import { DescargarPlanPdf } from "../plan-a-pdf/descargar-pdf";
 import s from "./plan.module.css";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
@@ -58,8 +59,10 @@ function Marco({ titulo, tituloId, angosta, bloqueado, onCerrar, children }: {
   );
 }
 
-export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar, onAbrirPresupuesto }: {
+export function VentanaVerPlan({ plan, puedeEditar, puedeDescargar = false, onCerrar, onEditar, onAbrirPresupuesto }: {
   plan: any; puedeEditar: boolean; onCerrar: () => void; onEditar: () => void;
+  /** «Descargar PDF» (ws1-t12): quien tiene `treatments.view`. Lo resuelve page.tsx en el servidor. */
+  puedeDescargar?: boolean;
   /** Con él (y solo con él) sale «Convertir en presupuesto»: lo da quien puede crear presupuestos. */
   onAbrirPresupuesto?: (q: PresupuestoDelPlan) => void;
 }) {
@@ -101,7 +104,7 @@ export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar, onAbrirP
           <div className={s.datos}>
             <div className={s.dato}>
               <div className={s.rotulo}>{t("patients.treatment.totalCost")}</div>
-              <div className={s.datoValor}>{formatCurrency(plan.totalCost)}</div>
+              <div className={s.datoValor}>{dineroExacto(plan.totalCost)}</div>
             </div>
             <div className={s.dato}>
               <div className={s.rotulo}>{t("patients.treatment.daysBetween")}</div>
@@ -138,6 +141,7 @@ export function VentanaVerPlan({ plan, puedeEditar, onCerrar, onEditar, onAbrirP
       </div>
       <footer className={s.pie}>
         <button type="button" className={s.boton} onClick={onCerrar}>{t("common.close")}</button>
+        {puedeDescargar && <DescargarPlanPdf planId={plan.id} />}
         {onAbrirPresupuesto && (
           <ConvertirEnPresupuesto planId={plan.id} planCosto={Number(plan.totalCost) || 0} onAbrirPresupuesto={onAbrirPresupuesto} />
         )}
