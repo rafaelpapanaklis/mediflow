@@ -11,6 +11,7 @@ import { CODIGO_PLAN_SIN_COSTO, faltaConfirmarSinCosto } from "@/lib/treatments/
 import { aPesos, comoNueva, conProcedimientosValidos, filaDto, leerFilas, totalCentavos, type FilaDelPlan } from "@/lib/treatments/items";
 import { procedimientosDeLaClinica, repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
 import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
+import { presupuestoDesdeElPlan, type ResultadoPresentar } from "@/lib/treatments/presentar.server";
 
 // GET /api/treatments — list all treatment plans for clinic (role-filtered)
 export async function GET(req: NextRequest) {
@@ -202,9 +203,29 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // ws1-t12 · P4 «Guardar y presentar»: en el mismo clic, el presupuesto del plan (sus filas) y su
+  // liga de firma. Pide las llaves de crear y presentar un presupuesto; sin ellas, o si falla, el
+  // plan YA quedó guardado y la respuesta dice por qué no se presentó.
+  let presupuesto: ResultadoPresentar | null = null;
+  let presupuestoError: string | null = null;
+  if (body.presentar === true) {
+    if (denyIfMissingPermission(ctx, "billing.create") || denyIfMissingPermission(ctx, "billing.edit")) {
+      presupuestoError = "sin_permiso";
+    } else {
+      try {
+        presupuesto = await presupuestoDesdeElPlan({ clinicId: ctx.clinicId, userId: ctx.userId, plan, presentar: true });
+        if (presupuesto.error) presupuestoError = presupuesto.error.mensaje || "no_presentado";
+      } catch (e) {
+        console.error("[plan:presentar] no se pudo generar el presupuesto del plan:", e);
+        presupuestoError = "no_presentado";
+      }
+    }
+  }
+
   revalidateAfter("treatments");
   return NextResponse.json({
     ...plan,
+    ...(body.presentar === true ? { presupuesto: presupuesto?.quote ?? null, presupuestoError } : {}),
     startDate:       plan.startDate.toISOString(),
     endDate:         plan.endDate?.toISOString() ?? null,
     nextExpectedDate:plan.nextExpectedDate?.toISOString() ?? null,

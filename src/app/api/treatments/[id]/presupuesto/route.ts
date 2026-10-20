@@ -27,7 +27,9 @@ interface Params { params: Promise<{ id: string }> }
  * con el que va este presupuesto»; con él puesto, un presupuesto aceptado no ofrece crear OTRO plan.
  *
  * ws1-t12: los conceptos salen del LECTOR DUAL (las filas del plan si las tiene, con precio exacto; si
- * no, su texto).
+ * no, su texto). `POST { presentar: true }` es «Guardar y presentar» (P4): crea o actualiza el
+ * presupuesto con las filas y lo PRESENTA (liga de firma de siempre) sin pasar por su editor; pide
+ * además `billing.edit`, la llave de presentar en /api/quotes/[id]/status.
  */
 
 async function cargarPlan(ctx: AuthContext, id: string) {
@@ -91,22 +93,35 @@ export async function GET(_req: NextRequest, props: Params) {
   });
 }
 
-export async function POST(_req: NextRequest, props: Params) {
+export async function POST(req: NextRequest, props: Params) {
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const denied = await permisos(ctx);
   if (denied) return denied;
 
+  let presentar = false;
+  try {
+    const cuerpo = await req.json();
+    presentar = cuerpo?.presentar === true;
+  } catch {
+    // Sin cuerpo: «Convertir en presupuesto» de siempre (borrador).
+  }
+  if (presentar) {
+    const sinPresentar = denyIfMissingPermission(ctx, "billing.edit");
+    if (sinPresentar) return sinPresentar;
+  }
+
   const r = await cargarPlan(ctx, params.id);
   if ("error" in r) return r.error;
 
-  const hecho = await presupuestoDesdeElPlan({ clinicId: ctx.clinicId, userId: ctx.userId, plan: r.plan, presentar: false });
+  const hecho = await presupuestoDesdeElPlan({ clinicId: ctx.clinicId, userId: ctx.userId, plan: r.plan, presentar });
   if (hecho.error) return NextResponse.json({ error: hecho.error.mensaje, quote: hecho.quote }, { status: hecho.error.http });
   return NextResponse.json(
     {
       already: hecho.already,
       quote: hecho.quote,
+      ...(presentar ? { presentado: hecho.presentado, regenerado: hecho.regenerado, aviso: hecho.aviso } : {}),
     },
     { status: hecho.already ? 200 : 201 },
   );

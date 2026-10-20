@@ -10,6 +10,7 @@ import { componerDescripcion, PLAN_VACIO } from "@/components/dashboard/plan-tra
 import { armarPresupuestoDePlan } from "@/lib/quotes/desde-plan";
 import { armarDocumentoDelPlan } from "@/lib/treatments/plan-pdf";
 import { leerPlan, nombresDeFase, ordenarParaElPapel } from "@/lib/treatments/leer-plan";
+import { filasDesdeConceptos } from "@/lib/treatments/desde-presupuesto";
 import type { FilaDelPlan } from "@/lib/treatments/items";
 
 const fila = (id: string, extra: Partial<FilaDelPlan> = {}): FilaDelPlan => ({
@@ -98,4 +99,20 @@ test("Convertir con filas: precio de la fila (no del tarifario), su procedimient
   assert.equal(a.conceptos[1].unitPrice, 0, "cortesía en $0, no se costea con el tarifario");
   assert.equal(a.total, 1250.5);
   assert.equal(a.totalDifiere, false);
+});
+
+test("presupuesto aceptado → filas: una por concepto, sin perder el concepto por un dato viejo", () => {
+  const filas = filasDesdeConceptos([
+    { id: "qi1", name: "Resina", toothFdi: "16,26", quantity: 2, unitPrice: "1250.50", phase: 1, procedureId: "proc-r" },
+    { id: "qi2", name: "Corona", toothFdi: "99", quantity: 1, unitPrice: 5000, phase: 2 },
+    { id: "qi3", name: "Sin fase", toothFdi: null, quantity: 1, unitPrice: 300, phase: 99 },
+  ]);
+  assert.equal(filas.length, 3);
+  assert.deepEqual(filas.map((f) => f.quoteItemId), ["qi1", "qi2", "qi3"]);
+  assert.equal(filas[0].fila.precioCentavos, 125050);
+  assert.deepEqual(filas[0].fila.dientes, [16, 26]);
+  assert.equal(filas[0].fila.faseNumero, 1);
+  assert.equal(filas[0].fila.procedureId, "proc-r");
+  assert.deepEqual(filas[1].fila.dientes, [], "el 99 no es FDI: la fila entra sin diente");
+  assert.equal(filas[2].fila.faseNumero, null, "etapa fuera de rango: sin etapa");
 });
