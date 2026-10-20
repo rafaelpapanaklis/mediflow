@@ -63,6 +63,7 @@ import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashb
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
 import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
+import { DescargarPlanPdf } from "@/components/dashboard/plan-a-pdf/descargar-pdf";
 import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-a-presupuesto/convertir-en-presupuesto";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
@@ -454,6 +455,8 @@ interface Props {
   canEditTreatments?: boolean;
   /** "billing.create" — «Convertir en presupuesto» desde el plan (ws1-t3): crea un presupuesto borrador. */
   canCreateQuotes?: boolean;
+  /** "treatments.view" — «Descargar PDF» del plan de tratamiento (ws1-t12). Lo resuelve page.tsx con hasPermission. */
+  canViewTreatments?: boolean;
   /**
    * "inbox.send" — el MISMO permiso con el que el Inbox deja responder. Decide
    * si la tarjeta de WhatsApp ofrece INICIAR la conversación cuando todavía no
@@ -540,6 +543,7 @@ export function PatientDetailClient({
   canViewRecords = false,
   canEditTreatments = false,
   canCreateQuotes = false,
+  canViewTreatments = false,
   facturApiEnabled = false,
   reminderOutcome = null,
   rediseno = false,
@@ -3046,6 +3050,7 @@ export function PatientDetailClient({
                       <VentanaVerPlan
                         plan={viewPlan}
                         puedeEditar={canEditTreatments}
+                        puedeDescargar={canViewTreatments}
                         onCerrar={() => setViewPlan(null)}
                         onEditar={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }}
                         onAbrirPresupuesto={canCreateQuotes ? (q) => { setViewPlan(null); setPresupuestoAbrir(q.id); setTab("presupuestos"); } : undefined}
@@ -3107,8 +3112,9 @@ export function PatientDetailClient({
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+                        <div className="flex flex-wrap items-center justify-end gap-2 px-5 py-4 border-t border-border">
                           <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]">{t("common.close")}</button>
+                          {canViewTreatments && <DescargarPlanPdf antigua planId={vp.id} />}
                           {canCreateQuotes && (
                             <ConvertirEnPresupuesto antigua planId={vp.id} planCosto={Number(vp.totalCost) || 0} onAbrirPresupuesto={(q) => { setViewPlan(null); setPresupuestoAbrir(q.id); setTab("presupuestos"); }} />
                           )}

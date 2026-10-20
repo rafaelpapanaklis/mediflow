@@ -55,9 +55,11 @@ test("ida y vuelta: el texto que escribe la ventana del plan se lee de vuelta re
   );
   const leidos = leerRenglonesDelPlan(texto);
   assert.equal(leidos.length, 3);
-  assert.deepEqual(leidos[0], { nombre: "Resina", dientes: "16,26", cantidad: 2, precio: 500, fase: 1, motivo: "Caries" });
-  assert.deepEqual(leidos[1], { nombre: "Limpieza dental", dientes: "", cantidad: 1, precio: 800, fase: 1, motivo: "" });
-  assert.deepEqual(leidos[2], { nombre: "Corona de zirconio", dientes: "36", cantidad: 1, precio: 9000, fase: 2, motivo: "" });
+  const fase1 = "Fase I · Higiénica";
+  const fase3 = "Fase III · Restauradora";
+  assert.deepEqual(leidos[0], { nombre: "Resina", dientes: "16,26", cantidad: 2, precio: 500, fase: 1, faseNombre: fase1, caras: "MO", motivo: "Caries" });
+  assert.deepEqual(leidos[1], { nombre: "Limpieza dental", dientes: "", cantidad: 1, precio: 800, fase: 1, faseNombre: fase1, caras: "", motivo: "" });
+  assert.deepEqual(leidos[2], { nombre: "Corona de zirconio", dientes: "36", cantidad: 1, precio: 9000, fase: 2, faseNombre: fase3, caras: "", motivo: "" });
 });
 
 test("el diagnóstico, el pronóstico, la alternativa y las notas NO se vuelven conceptos", () => {
@@ -68,6 +70,34 @@ test("el diagnóstico, el pronóstico, la alternativa y las notas NO se vuelven 
   const nombres = leerRenglonesDelPlan(texto).map((r) => r.nombre);
   assert.ok(nombres.includes("Resina"));
   assert.deepEqual(nombres, ["Resina"]);
+});
+
+test("ws1-t12: unas notas o una alternativa con viñetas «• …» NO se vuelven conceptos (ni salen en el PDF del plan)", () => {
+  const texto = componerDescripcion(
+    plan([renglon({ procedimiento: "Resina", precio: "500" })], {
+      diagnostico: "Caries\n• en 16",
+      alternativa: "Esperar\n• o extraer",
+      notas: "Interno:\n• no cobrarle la radiografía\n\n• debe $300 de la vez pasada",
+    }),
+    rot,
+  );
+  assert.deepEqual(leerRenglonesDelPlan(texto).map((r) => r.nombre), ["Resina"]);
+  // Sin total (todo en $0) las notas siguen a la última fase: también se cortan.
+  const sinPrecio = componerDescripcion(
+    plan([renglon({ procedimiento: "Resina" })], { notas: "• cobrarle aparte\n\n▸ Fase falsa\n• Corona" }),
+    rot,
+  );
+  assert.deepEqual(leerRenglonesDelPlan(sinPrecio).map((r) => r.nombre), ["Resina"]);
+});
+
+test("ws1-t12: el motivo se lee igual con «por:» (lo que escribe la ventana) que con «por»", () => {
+  const conDosPuntos = componerDescripcion(
+    plan([renglon({ procedimiento: "Resina", dientes: "11", caras: ["O"], precio: "500", motivo: "Caries" })]),
+    { ...rot, por: "por:" },
+  );
+  const [r] = leerRenglonesDelPlan(conDosPuntos);
+  assert.equal(r.motivo, "Caries");
+  assert.equal(r.caras, "I", "en un anterior la cara del centro es la incisal");
 });
 
 test("una descripción de las de antes (una frase) o vacía no trae renglones", () => {

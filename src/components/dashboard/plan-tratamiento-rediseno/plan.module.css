@@ -791,3 +791,18 @@
   font-size: 12px;
   color: var(--pr-alerta, var(--warning));
 }
+
+/* ── «Descargar PDF» del plan (ws1-t12) ───────────────────────────────
+   El aviso de error va a la izquierda del pie, empujando los botones. En
+   móvil el pie de «Ver plan» llega a cuatro botones: se parte en renglones
+   en vez de salirse de la ventana. */
+.pdfError {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--pr-peligro, var(--danger, #dc2626));
+}
+
+@media (max-width: 640px) {
+  .pie { flex-wrap: wrap; }
+  .pdfError { flex-basis: 100%; }
+}

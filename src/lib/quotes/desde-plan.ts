@@ -22,6 +22,10 @@ export interface RenglonLeido {
   precio: number | null;
   /** Orden de aparición de la fase en el texto, desde 1. */
   fase: number;
+  /** El encabezado de la fase tal como quedó escrito («Fase I · Higiénica»), sin su subtotal. */
+  faseNombre: string;
+  /** Caras tal como se escribieron («MO»); "" si no traía. */
+  caras: string;
   motivo: string;
 }
 
@@ -65,20 +69,23 @@ export function leerDinero(texto: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const DONDE = /^(.*?) — (\d{2}(?:, ?\d{2})*)(?: \([A-Z]+\))?$/;
+const DONDE = /^(.*?) — (\d{2}(?:, ?\d{2})*)(?: \(([A-Z]+)\))?$/;
 const CUANTO = /^(\d+(?:\.\d+)?)\s*×\s*([^=]+?)\s*=\s*(.+)$/;
-const MOTIVO = /^(?:por|for|due to|because of)\s+/i;
+// «por: Caries» es lo que escribe la ventana (`planTratamiento.texto.por` = «por:»).
+const MOTIVO = /^(?:por|for|due to|because of):?\s+/i;
 
-function leerLinea(linea: string, fase: number): RenglonLeido | null {
+function leerLinea(linea: string, fase: number, faseNombre: string): RenglonLeido | null {
   const cuerpo = linea.replace(/^\s*•\s*/, "").trim();
   if (!cuerpo) return null;
   const [cabeza, ...resto] = cuerpo.split(" · ");
   let nombre = cabeza.trim();
   let dientes = "";
+  let caras = "";
   const donde = DONDE.exec(nombre);
   if (donde) {
     nombre = donde[1].trim();
     dientes = donde[2].split(",").map((d) => d.trim()).join(",");
+    caras = donde[3] ?? "";
   }
   if (!nombre) return null;
 
@@ -94,25 +101,51 @@ function leerLinea(linea: string, fase: number): RenglonLeido | null {
       motivos.push(trozo.trim().replace(MOTIVO, ""));
     }
   }
-  return { nombre, dientes, cantidad, precio, fase, motivo: motivos.join(" · ") };
+  return { nombre, dientes, cantidad, precio, fase, faseNombre, caras, motivo: motivos.join(" · ") };
+}
+
+/** «▸ Fase I · Higiénica — $1,000» → «Fase I · Higiénica». */
+function nombreDeFase(encabezado: string): string {
+  return encabezado.replace(/^▸\s*/, "").replace(/\s+—\s+[^—]*$/, "").trim();
 }
 
 /**
  * Los renglones que la ventana del plan escribió en `description`. Solo lee los bloques de fase
  * (un encabezado «▸ …» seguido de líneas «• …»); diagnóstico, pronóstico, total, alternativa y notas
  * se ignoran. Una descripción de las de antes (una frase) no trae renglones: devuelve [].
+ *
+ * Cómo se distingue una fase de lo demás (ws1-t12): el encabezado de una fase NO lleva «:»
+ * («▸ Fase I · Higiénica — $1,000»); los demás bloques sí («▸ Diagnóstico: …», «▸ Total…: $…»,
+ * «▸ Alternativa ofrecida: …», «▸ Notas: …»). Diagnóstico y pronóstico van ANTES de las fases;
+ * total, alternativa y notas, DESPUÉS. Así que el primer bloque «con dos puntos» que aparece tras
+ * una fase cierra la lectura: lo que venga detrás es texto libre del doctor y nunca un procedimiento.
+ * Antes bastaba con que las notas trajeran una línea «• …» para que salieran como concepto del
+ * presupuesto (y, en el PDF del plan, impresas para el paciente).
  */
 export function leerRenglonesDelPlan(description: string | null | undefined): RenglonLeido[] {
   if (!description || !description.startsWith(MARCA)) return [];
   const renglones: RenglonLeido[] = [];
   let fase = 0;
+  let faseNombre = "";
+  let enFase = false;
   for (const bloque of description.split(/\n\s*\n/)) {
     const lineas = bloque.split("\n").map((l) => l.trim()).filter(Boolean);
-    const viñetas = lineas.filter((l) => l.startsWith("•"));
-    if (viñetas.length === 0) continue;
-    fase += 1;
-    for (const l of viñetas) {
-      const r = leerLinea(l, fase);
+    if (lineas.length === 0) continue;
+    const cabeza = lineas[0];
+    if (cabeza.startsWith(MARCA.trim())) {
+      if (cabeza.includes(":")) {
+        if (fase > 0) break; // total, alternativa o notas: aquí se acaban los procedimientos
+        enFase = false; // diagnóstico / pronóstico
+        continue;
+      }
+      enFase = true;
+      fase += 1;
+      faseNombre = nombreDeFase(cabeza);
+    } else if (!enFase) {
+      continue; // texto suelto que sigue al diagnóstico
+    }
+    for (const l of lineas.filter((x) => x.startsWith("•"))) {
+      const r = leerLinea(l, fase, faseNombre);
       if (r) renglones.push(r);
     }
   }
@@ -136,7 +169,7 @@ export function armarPresupuestoDePlan(plan: PlanParaPresupuesto, tarifario: Pro
   const costo = Number.isFinite(plan.totalCost) && plan.totalCost > 0 ? redondear2(plan.totalCost) : 0;
   const sinDetalle = leidos.length === 0;
   const base: RenglonLeido[] = sinDetalle
-    ? [{ nombre: plan.name.trim() || "Plan de tratamiento", dientes: "", cantidad: 1, precio: costo > 0 ? costo : null, fase: 1, motivo: "" }]
+    ? [{ nombre: plan.name.trim() || "Plan de tratamiento", dientes: "", cantidad: 1, precio: costo > 0 ? costo : null, fase: 1, faseNombre: "", caras: "", motivo: "" }]
     : leidos;
 
   const conceptos: ConceptoDePlan[] = base.map((r) => {
