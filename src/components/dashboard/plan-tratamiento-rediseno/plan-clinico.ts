@@ -14,6 +14,7 @@
  * Nada de esto cambia lo que recibe `POST /api/treatments`: los mismos siete
  * campos de siempre, con los mismos tipos.
  */
+import { fasesDeHallazgos } from "@/lib/treatments/sugerir-procedimiento";
 
 /** Las fases con las que se ordena un plan dental, en su orden clínico. */
 export const FASES = ["urgencia", "sistemica", "higienica", "correctiva", "restauradora", "mantenimiento"] as const;
@@ -317,32 +318,13 @@ export function componerDescripcion(plan: PlanClinico, rot: Rotulos): string {
 
 /**
  * Los hallazgos del odontograma que PIDEN tratamiento (la lista de problemas
- * de la que nace un plan) y la fase en la que de entrada se atienden. Los ids
- * son los de `odontogram-v2/data.ts`; lo que no está aquí es trabajo ya hecho
- * (restauraciones, coronas, implantes) o un dato que no se trata por sí solo.
+ * de la que nace un plan) y la fase en la que de entrada se atienden. Sale de
+ * LA lista compartida (`CONDICIONES_CLINICAS` de `sugerir-procedimiento.ts`),
+ * la misma de la que sale lo que cobra «Completar consulta» (ws1-t5): lo que
+ * no está aquí es trabajo ya hecho (restauraciones, coronas, implantes) o un
+ * dato que no se trata por sí solo.
  */
-export const HALLAZGO_FASE: Record<string, Fase> = {
-  pulpitis: "urgencia",
-  fracture: "urgencia",
-  caries: "higienica",
-  caries_inc: "higienica",
-  necrosis: "higienica",
-  periapical1: "higienica",
-  periapical2: "higienica",
-  periapical3: "higienica",
-  ext_indicated: "higienica",
-  root_remnant: "higienica",
-  temp_rest: "higienica",
-  calculus: "higienica",
-  pocket: "higienica",
-  bleeding: "higienica",
-  impacted: "correctiva",
-  recession: "correctiva",
-  furcation: "correctiva",
-  mobility: "correctiva",
-  perio_mobility: "correctiva",
-  missing: "restauradora",
-};
+export const HALLAZGO_FASE: Record<string, Fase> = fasesDeHallazgos();
 
 export interface EntradaOdontograma { toothNumber: number; surface: string | null; conditionId: string }
 

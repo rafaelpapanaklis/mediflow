@@ -564,6 +564,8 @@
     "test:presupuesto-desde-plan": "tsx --test --experimental-test-module-mocks src/lib/quotes/__tests__/desde-plan.test.ts src/app/api/treatments/__tests__/presupuesto-desde-plan.test.ts",
     "test:plan-tratamiento-pdf": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/treatments/__tests__/plan-pdf.test.ts src/components/dashboard/plan-a-presupuesto/__tests__/centavos-en-pantalla.test.tsx",
     "test:plan-filas": "tsx --test src/lib/treatments/__tests__/items.test.ts src/lib/treatments/__tests__/items-db.test.ts",
+    "test:plan-sugerencias": "tsx --test src/lib/treatments/__tests__/sugerir-procedimiento.test.ts",
+    "test:plan-hecho-odontograma": "tsx --test src/lib/odontogram/__tests__/aplicar-hecho.test.ts",
     "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts",
     "test:document-templates": "tsx --test src/lib/document-templates/__tests__/document-templates.test.ts",
     "test:plantillas": "tsx --test src/app/dashboard/plantillas/__tests__/plantillas-pulido.test.ts",
