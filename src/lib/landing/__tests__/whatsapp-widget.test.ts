@@ -143,3 +143,52 @@ test("N3-W1: en modo México (campo con +52 fijo) un mexicano nunca queda tomado
   const br = normalizarNumeroWhatsapp("+55 11 91234 5678", "intl");
   assert.ok(br.ok && br.e164 === "5511912345678");
 });
+
+test("N4-W1: «+52» / «0052» con dígitos de menos o de más se rechaza (no se antepone otro 52)", () => {
+  for (const n of ["+52 999 123 45", "0052 999 123 45", "+52 999 123 456", "+52 999 1234 5678", "+52 999", "0052 99912345"]) {
+    for (const modo of ["mx", "intl"] as const) {
+      const r = normalizarNumeroWhatsapp(n, modo);
+      assert.equal(r.ok, false, `${n} (${modo})`);
+      if (!r.ok) assert.match(r.error, /\+52 y 10 dígitos/, `${n} (${modo})`);
+    }
+  }
+  // Los completos siguen entrando, con +52, 0052 y +521.
+  for (const n of ["+52 999 123 4567", "0052 999 123 4567", "+52 1 999 123 4567"]) {
+    const r = normalizarNumeroWhatsapp(n);
+    assert.ok(r.ok && r.e164 === "529991234567", n);
+  }
+});
+
+test("N4-W2: sin lada y sin 10 dígitos válidos no se acepta como México (autollenado)", () => {
+  // Un autollenado con lada local de 3 dígitos mal formada o de otro país escrito sin «+».
+  for (const n of ["4155552671 0", "415 555 267", "1 415 555 2671", "044 999 123 4567", "999 123 456"]) {
+    assert.equal(normalizarNumeroWhatsapp(n).ok, false, n);
+  }
+  // Lada que empieza en 0 o 1 no existe en México.
+  assert.equal(normalizarNumeroWhatsapp("0999123456").ok, false);
+  assert.equal(normalizarNumeroWhatsapp("1999123456").ok, false);
+});
+
+test("N4-W3: mensajes correctos para formatos mexicanos y para «otro país»", () => {
+  const msg = (n: string, modo: "mx" | "intl" = "mx") => {
+    const r = normalizarNumeroWhatsapp(n, modo);
+    assert.equal(r.ok, false, n);
+    return r.ok ? "" : r.error;
+  };
+  // 044, 1 inicial o un dígito de más: se dice qué quitar, sin mandar a «¿Otro país?».
+  for (const n of ["044 999 123 4567", "045 999 123 4567", "1 999 123 4567", "99912345678"]) {
+    const e = msg(n);
+    assert.match(e, /sin 044, 045 ni 1/, n);
+    assert.doesNotMatch(e, /¿Otro país\?/, n);
+  }
+  // Con menos de 10 dígitos: «a 10 dígitos».
+  assert.match(msg("999 123 456"), /10 dígitos/);
+  // «+» con otra lada: sí «¿Otro país?», y dice qué hacer si es mexicano.
+  const otro = msg("+55 1234 5678");
+  assert.match(otro, /¿Otro país\?/);
+  assert.match(otro, /Si tu número es de México, escribe solo los 10 dígitos/);
+  // Modo internacional: un +52 corto dice «+52 y 10 dígitos», no «sin la lada del país».
+  const corto = msg("+52 999 123", "intl");
+  assert.match(corto, /\+52 y 10 dígitos/);
+  assert.doesNotMatch(corto, /sin la lada/);
+});

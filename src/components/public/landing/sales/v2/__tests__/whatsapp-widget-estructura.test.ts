@@ -75,3 +75,12 @@ test("N-W2: la tarjeta registra la conversión en «Iniciar conversación» y al
   assert.match(t, /onClick=\{contarConversion\}/);
   assert.match(t, /if \(conversionContada\.current\) return;/);
 });
+
+test("N4-W2/W4: el campo usa autoComplete=\"tel\" y su etiqueta dice que es de México (+52, 10 dígitos)", () => {
+  const t = leer("whatsapp-widget.tsx");
+  assert.match(t, /autoComplete="tel"/);
+  assert.doesNotMatch(t, /tel-national/);
+  assert.match(t, /Número de WhatsApp en México \(\+52, 10 dígitos\)/);
+  // El «+52» visual sigue fuera del árbol de accesibilidad: la etiqueta ya lo dice.
+  assert.match(t, /dcv4-wawidget__prefijo" aria-hidden="true"/);
+});

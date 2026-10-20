@@ -36,8 +36,11 @@ export type ResultadoNumero =
   | { ok: false; error: string };
 
 const ERROR_NUMERO = "Escribe tu número de WhatsApp a 10 dígitos, sin la lada del país (por ejemplo 999 123 4567).";
+const ERROR_SIN_PREFIJOS =
+  "Escribe solo los 10 dígitos de tu número, sin 044, 045 ni 1 delante (por ejemplo 999 123 4567).";
 const ERROR_OTRO_PAIS =
-  "Ese número parece de otro país. Toca «¿Otro país?» para escribirlo con el signo + y la lada de tu país.";
+  "Si tu número es de México, escribe solo los 10 dígitos. Si es de otro país, toca «¿Otro país?» y escríbelo con el signo + y la lada.";
+const ERROR_MX_CON_MAS = "Un número de México lleva +52 y 10 dígitos (por ejemplo +52 999 123 4567).";
 const ERROR_INTL = "Escribe el número con el signo + y la lada de tu país (por ejemplo +57 300 123 4567).";
 
 /** «mx»: el campo trae fijo +52 y se piden 10 dígitos. «intl»: número internacional con «+» y lada. */
@@ -68,24 +71,32 @@ export function normalizarNumeroWhatsapp(crudo: string, modo: ModoNumero = "mx")
   const mexicano = (): ResultadoNumero => {
     const local = d.slice(2);
     // México: 10 dígitos, y la lada no empieza en 0 ni en 1.
-    if (local.length !== 10 || /^[01]/.test(local)) return falla(ERROR_NUMERO);
+    if (local.length !== 10 || /^[01]/.test(local)) return falla(conMas ? ERROR_MX_CON_MAS : ERROR_NUMERO);
     return { ok: true, e164: d, legible: `+52 ${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}` };
   };
 
   if (modo === "mx") {
+    // «+lada» de otro país: solo ahí se manda a «¿Otro país?».
     if (conMas && !d.startsWith("52")) return falla(ERROR_OTRO_PAIS);
+    if (conMas) {
+      // +52 / 0052 exigen el número completo: 12 dígitos (52…) o 13 (521…); nunca se antepone otro 52.
+      if (d.length === 13 && d.startsWith("521")) d = `52${d.slice(3)}`;
+      else if (d.length !== 12) return falla(ERROR_MX_CON_MAS);
+      return mexicano();
+    }
     if (d.length === 10) d = `52${d}`;
     else if (d.length === 13 && d.startsWith("521")) d = `52${d.slice(3)}`;
-    else if (!(d.length === 12 && d.startsWith("52"))) return falla(d.length > 10 ? ERROR_OTRO_PAIS : ERROR_NUMERO);
+    else if (!(d.length === 12 && d.startsWith("52"))) return falla(d.length > 10 ? ERROR_SIN_PREFIJOS : ERROR_NUMERO);
     return mexicano();
   }
 
   if (!conMas) return falla(ERROR_INTL);
-  if (d.length < 8 || d.length > 15 || d.startsWith("0")) return falla(ERROR_INTL);
   if (d.startsWith("52")) {
+    if (d.length > 13) return falla(ERROR_MX_CON_MAS);
     if (d.length === 13 && d.startsWith("521")) d = `52${d.slice(3)}`;
     return mexicano();
   }
+  if (d.length < 8 || d.length > 15 || d.startsWith("0")) return falla(ERROR_INTL);
   const cc = ladaDePais(d);
   if (!cc) {
     return falla(`La lada «+${d.slice(0, 3)}» no corresponde a ningún país. Revisa el número que escribiste.`);

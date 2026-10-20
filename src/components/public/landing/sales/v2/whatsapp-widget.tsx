@@ -224,7 +224,7 @@ export function WhatsappWidget() {
                 {errores.nombre && <p id={`${id}-ne`} className="dcv4-wawidget__err">{errores.nombre}</p>}
 
                 <label className="dcv4-wawidget__label" htmlFor={`${id}-w`}>
-                  {modo === "mx" ? "Número de WhatsApp (10 dígitos)" : "Número de WhatsApp con lada de país"}
+                  {modo === "mx" ? "Número de WhatsApp en México (+52, 10 dígitos)" : "Número de WhatsApp con lada de país"}
                 </label>
                 <div className="dcv4-wawidget__tel">
                   {modo === "mx" && (
@@ -236,7 +236,7 @@ export function WhatsappWidget() {
                     className="dcv4-wawidget__input"
                     type="tel"
                     inputMode={modo === "mx" ? "numeric" : "tel"}
-                    autoComplete="tel-national"
+                    autoComplete="tel"
                     placeholder={modo === "mx" ? "999 123 4567" : "+57 300 123 4567"}
                     maxLength={24}
                     value={numero}
