@@ -42,7 +42,8 @@ export const respuesta = (status: number, body: Record<string, unknown>): Respue
 // ── Cuerpo del POST ─────────────────────────────────────────────────────────
 
 const CuerpoSchema = z.discriminatedUnion("accion", [
-  z.object({ accion: z.literal("pagar") }),
+  // AA6: «Pagar» lleva el monto (en pesos) que ESA pestaña le enseñó a la clínica y ésta confirmó; el servidor no cobra otro.
+  z.object({ accion: z.literal("pagar"), monto: z.number().positive().finite() }),
   z.object({ accion: z.literal("subir"), plan: z.enum(PLAN_IDS) }),
 ]);
 
@@ -56,7 +57,8 @@ export function parsearCuerpo(body: unknown): { ok: true; cuerpo: CuerpoPago } |
     ok: false,
     respuesta: respuesta(400, {
       code: "CUERPO_INVALIDO",
-      error: 'Envía { "accion": "pagar" } o { "accion": "subir", "plan": "<plan>" } con un plan válido.',
+      // Lo ve la clínica si tiene una pantalla vieja abierta: nada técnico, solo qué hacer.
+      error: "Recarga la página e inténtalo de nuevo.",
     }),
   };
 }
@@ -148,6 +150,8 @@ export const MARCA = {
   desde: "pago_pendiente_subir_desde",
   ts: "pago_pendiente_subir_ts",
   clave: "pago_pendiente_subir_clave",
+  /** Cuántas veces se reintentó el cambio a medias (AA5): sube la clave de idempotencia para no repetir un 5xx cacheado. */
+  intento: "pago_pendiente_subir_intento",
 } as const;
 
 /** Cuánto tiempo, desde la marca, un reintento puede terminar el cambio. */
@@ -162,6 +166,7 @@ export function armarMarca(args: { destino: PlanId; desde: string | null | undef
     [MARCA.desde]: args.desde ?? "",
     [MARCA.ts]: String(segundosDe(args.ahora ?? new Date())),
     [MARCA.clave]: args.clave,
+    [MARCA.intento]: "0",
   };
 }
 
@@ -169,6 +174,8 @@ export interface AnuladaRecuperable {
   factura: FacturaPago;
   /** Plan al que se iba a subir cuando se anuló. */
   planMarcado: PlanId;
+  /** Reintentos ya hechos de ese cambio (0 si ninguno). */
+  intento: number;
 }
 
 /**
@@ -200,11 +207,11 @@ export function anuladaRecuperable(args: {
     const desde = m[MARCA.desde] ?? "";
     if (!desde || desde !== args.planClinica) continue;
     if (args.planSuscripcion && args.planSuscripcion !== desde) continue; // la suscripción ya se movió
-    candidatas.push({ factura: f, planMarcado, ts });
+    candidatas.push({ factura: f, planMarcado, ts, intento: Math.max(0, Math.floor(Number(m[MARCA.intento]) || 0)) });
   }
   if (candidatas.length === 0) return null;
   const mejor = candidatas.reduce((a, b) => (b.ts > a.ts ? b : a));
-  return { factura: mejor.factura, planMarcado: mejor.planMarcado };
+  return { factura: mejor.factura, planMarcado: mejor.planMarcado, intento: mejor.intento };
 }
 
 // ── Opciones de subida (GET) ────────────────────────────────────────────────
@@ -282,7 +289,10 @@ export const claves = {
   anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
   // UNA sola clave por clínica+factura para CUALQUIER plan destino (Z7): si dos «Subir» a planes distintos llegaran a correr a
   // la vez (el candado falló o no se vieron), Stripe rechaza el segundo por tener otros parámetros en vez de cobrar los dos.
-  subir: (clinicId: string, facturaId: string) => `pago-pendiente:subir:${clinicId}:${facturaId}`,
+  // AA5: `intento` sube cada vez que se REINTENTA un cambio a medias, para que Stripe no repita (por la misma clave) el 5xx del
+  // intento anterior. El primer intento (0) conserva la clave de siempre.
+  subir: (clinicId: string, facturaId: string, intento = 0) => `pago-pendiente:subir:${clinicId}:${facturaId}${intento > 0 ? `:r${intento}` : ""}`,
+  subirIntento: (clinicId: string, facturaId: string, intento: number) => `pago-pendiente:subir-intento:${clinicId}:${facturaId}:${intento}`,
   precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number) =>
     `pago-pendiente:precio:${clinicId}:${plan}:${interval}:${cents}`,
 };
@@ -301,6 +311,8 @@ export const MENSAJES = {
   // en que el siguiente cobro ya está movido (meses pagados por adelantado, o el mes pagado al reactivarse tras una suspensión).
   cobroEnPausa: MENSAJE_PLAN_PREPAGADO,
   pagoYaRegistrado: "Tu pago ya se registró.",
+  // AA6: el monto de la factura abierta ya no es el que la pestaña mostró: no se cobra; se pide revisar.
+  montoCambio: "El monto cambió, revísalo y vuelve a confirmar.",
   // Z7: si no se pudo tomar el candado (la base falló) NO se cobra: se pide reintentar.
   intentaDeNuevo: "No pudimos iniciar el cobro. Intenta de nuevo en unos segundos.",
   // Mensajes de «hay otra operación de cobro de esta clínica en curso» según quién tiene el candado (revisión t4, Y19).

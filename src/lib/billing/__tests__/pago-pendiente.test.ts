@@ -731,7 +731,7 @@ test("subir: void OK + update falla de red → 502, la factura vieja queda marca
   const r2 = await subirYPagar(m.deps, "PRO");
   assert.deepEqual(r2, { status: 200, body: { ok: true, pagado: true } });
   assert.equal(m.ops("invoices.voidInvoice").length, 1);
-  assert.equal(m.ops("invoices.update").length, 1);
+  assert.equal(m.ops("invoices.update").length, 2, "la marca de antes de anular + el contador de reintentos");
   assert.equal(m.ops("subscriptions.update").length, 2);
   assert.equal(m.cobros(), 1);
   assert.equal(m.planSub(), "PRO");
@@ -1918,14 +1918,14 @@ test("Y19 — el mensaje de «hay otra operación de cobro en curso» dice QUÉ 
 test("Y19 — el cliente trata 409 PAGO_YA_REGISTRADO como ÉXITO («Tu pago ya se registró»), no como error; los demás 409 siguen siendo errores", async () => {
   const f = (status: number, body: unknown) => async () => ({ status, ok: status >= 200 && status < 300, json: async () => body }) as unknown as Response;
   assert.deepEqual(
-    await cobrarPendiente({ accion: "pagar" }, f(409, { code: "PAGO_YA_REGISTRADO", error: "Tu pago ya se registró." })),
+    await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(409, { code: "PAGO_YA_REGISTRADO", error: "Tu pago ya se registró." })),
     { tipo: "ya_registrado", mensaje: "Tu pago ya se registró." },
   );
   for (const code of ["SIN_PENDIENTE", "CAMBIO_EN_CURSO", "PAGO_EN_CURSO", "COBRO_EN_CURSO", "COBRO_EN_PAUSA"]) {
-    const r = await cobrarPendiente({ accion: "pagar" }, f(409, { code, error: `texto ${code}` }));
-    assert.deepEqual(r, { tipo: "error", mensaje: `texto ${code}` }, code);
+    const r = await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(409, { code, error: `texto ${code}` }));
+    assert.deepEqual(r, { tipo: "error", mensaje: `texto ${code}`, codigo: code }, code);
   }
-  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(200, { ok: true, pagado: true })), { tipo: "pagado" });
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(200, { ok: true, pagado: true })), { tipo: "pagado" });
   // Y la pantalla: el éxito (toast verde y panel), no el toast rojo de error.
   const comp = readFileSync(path.resolve(__dirname, "../../../components/dashboard/pago-pendiente.tsx"), "utf8");
   assert.match(comp, /r\.tipo === "pagado" \|\| r\.tipo === "ya_registrado"/);
@@ -1935,68 +1935,137 @@ test("Y19 — el cliente trata 409 PAGO_YA_REGISTRADO como ÉXITO («Tu pago ya 
   assert.doesNotMatch(bloque, /toast\.error/);
 });
 
-// X2 / Z7 / Z18 / Z19 — candado en la BASE (entre instancias): una fila por clínica en billing_email_logs, comparar-y-cambiar atómico
+// X2 / Z7 / Z18 / Z19 / AA7 / AA16 — candado en la BASE (entre instancias): una fila por clínica en billing_email_logs,
+// comparar-y-cambiar atómico con el reloj de la BASE
 function baseDoble() {
   const filas = new Map<string, { invoiceId: string; clinicId: string; kind: string; email: string; createdAt: Date }>();
-  let falla = false;
+  let falla: Error | null = null;
+  // El reloj de la BASE (now()). El de cada instancia NO se usa: por eso las pruebas pueden desfasar el de la «instancia».
   const reloj = { ahora: new Date("2026-10-20T12:00:00Z") };
-  const cumple = (f: any, where: any): boolean => {
-    if (where.kind !== undefined && f.kind !== where.kind) return false;
-    if (where.email !== undefined && f.email !== where.email) return false;
-    if (where.OR) {
-      return where.OR.some((c: any) => (c.kind !== undefined ? f.kind === c.kind : f.createdAt.getTime() < c.createdAt.lt.getTime()));
-    }
-    return true;
-  };
   const operaciones: string[] = [];
+  const sqlDe = (q: TemplateStringsArray) => q.join("?").replace(/\s+/g, " ");
   const db: DbCandado = {
+    $executeRaw: async (q: TemplateStringsArray, ...v: unknown[]) => {
+      operaciones.push(sqlDe(q));
+      if (falla) throw falla;
+      // UPDATE tomar: values = [tomado, dueno, llave, libre, ttl]
+      const [kindNuevo, dueno, llave, libre, ttl] = v as [string, string, string, string, number];
+      const f = filas.get(llave);
+      if (!f) return 0;
+      const vencida = f.createdAt.getTime() < reloj.ahora.getTime() - ttl * 1000;
+      if (f.kind !== libre && !vencida) return 0;
+      Object.assign(f, { kind: kindNuevo, email: dueno, createdAt: new Date(reloj.ahora) });
+      return 1;
+    },
+    $queryRaw: (async (q: TemplateStringsArray, ...v: unknown[]) => {
+      operaciones.push(sqlDe(q));
+      if (falla) throw falla;
+      const [llave, kind, ttl] = v as [string, string, number];
+      const f = filas.get(llave);
+      return f && f.kind === kind && f.createdAt.getTime() >= reloj.ahora.getTime() - ttl * 1000 ? [{ email: f.email }] : [];
+    }) as DbCandado["$queryRaw"],
     billingEmailLog: {
+      create: async ({ data }: any) => {
+        operaciones.push("create");
+        if (falla) throw falla;
+        if (filas.has(data.invoiceId)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" }); // invoiceId @unique
+        filas.set(data.invoiceId, { ...data, createdAt: new Date(reloj.ahora) }); // createdAt: DEFAULT de la base
+        return data;
+      },
       updateMany: async ({ where, data }: any) => {
         operaciones.push("updateMany");
-        if (falla) throw new Error("base caída");
+        if (falla) throw falla;
         const f = filas.get(where.invoiceId);
-        if (!f || !cumple(f, where)) return { count: 0 };
+        if (!f || f.kind !== where.kind || f.email !== where.email) return { count: 0 };
         Object.assign(f, data);
         return { count: 1 };
       },
-      create: async ({ data }: any) => {
-        operaciones.push("create");
-        if (falla) throw new Error("base caída");
-        if (filas.has(data.invoiceId)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" }); // invoiceId @unique
-        filas.set(data.invoiceId, { ...data });
-        return data;
-      },
       findUnique: async ({ where }: any) => {
         operaciones.push("findUnique");
-        if (falla) throw new Error("base caída");
+        if (falla) throw falla;
         return filas.get(where.invoiceId) ?? null;
       },
     },
   };
-  return { db, filas, reloj, operaciones, romper: () => { falla = true; } };
+  return { db, filas, reloj, operaciones, romper: (e: Error = new Error("base caída")) => { falla = e; } };
 }
 
 test("X2 — candado en la base: dos instancias no cobran a la vez; caduca solo; con dueño; no bloquea otra clínica; una sola fila por clínica, reutilizada (nunca se borra)", async () => {
   const b = baseDoble();
   const ttl = 90;
-  const toma = (clinicId: string, dueno: string) => tomarCandadoEnBase({ clinicId, dueno, ttlSec: ttl, ahora: b.reloj.ahora }, b.db);
+  const toma = (clinicId: string, dueno: string) => tomarCandadoEnBase({ clinicId, dueno, ttlSec: ttl }, b.db);
   assert.equal(await toma("c1", "pagar:A"), "tomado");
   assert.equal(await toma("c1", "subir:B"), "ocupado", "otra instancia de la MISMA clínica");
   assert.equal(await toma("c2", "subir:B"), "tomado", "otra clínica no se bloquea");
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: b.reloj.ahora }, b.db), "pagar:A");
-  // Soltar con otro dueño no suelta; con el suyo sí, y la MISMA fila se reutiliza.
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl }, b.db), "pagar:A");
   await soltarCandadoEnBase({ clinicId: "c1", dueno: "subir:B" }, b.db);
   assert.equal(await toma("c1", "subir:B"), "ocupado");
   await soltarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A" }, b.db);
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: b.reloj.ahora }, b.db), null);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl }, b.db), null);
   assert.equal(await toma("c1", "subir:B"), "tomado");
   // Caduca solo si el proceso muere sin soltarlo.
   b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 91_000);
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: b.reloj.ahora }, b.db), null);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl }, b.db), null);
   assert.equal(await toma("c1", "pagar:C"), "tomado");
   assert.equal(b.filas.size, 2, "una fila por clínica, reutilizada: nada crece ni se borra");
   assert.deepEqual([...b.filas.keys()].sort(), [llaveCandadoCobro("c1"), llaveCandadoCobro("c2")].sort());
   assert.equal(await tomarCandadoEnBase({ clinicId: "", dueno: "x", ttlSec: ttl }, b.db), "error", "sin clinicId no se bloquea a ciegas");
+});
+
+test("AA7 — la vigencia del candado se compara con el reloj de la BASE (now()), no con el de cada instancia", async () => {
+  const b = baseDoble();
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, b.db), "tomado");
+  // Una instancia con la hora 95 s ADELANTADA ya no puede tomarlo «porque caducó»: la API ni siquiera recibe su reloj.
+  const relojDeLaInstancia = new Date(b.reloj.ahora.getTime() + 95_000);
+  assert.ok(relojDeLaInstancia > b.reloj.ahora);
+  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 5_000); // pasan 5 s de verdad
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "subir:B", ttlSec: 90 }, b.db), "ocupado");
+  // La SQL usa now() de la base, y la fila nueva no lleva la hora de la instancia.
+  assert.ok(b.operaciones.some((o) => /"createdAt" = now\(\)/.test(o) && /now\(\) - \(\?::int \* interval '1 second'\)/.test(o)));
+  const codigo = readFileSync(path.resolve(__dirname, "../candado-cobro.server.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(codigo, /new Date\(/, "ningún cálculo de tiempo con el reloj de la instancia");
+  assert.doesNotMatch(codigo, /ahora/);
+  // Pasados los 90 s REALES (de la base), sí caduca.
+  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 86_000);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "subir:B", ttlSec: 90 }, b.db), "tomado");
+});
+
+test("AA16 — esperar un candado ocupado NO hace INSERT con P2002 una y otra vez: se mira (findUnique) antes de volver a intentar el INSERT", async () => {
+  const b = baseDoble();
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, b.db), "tomado"); // primera vez: UPDATE sin fila, findUnique, INSERT
+  assert.equal(b.operaciones.filter((o) => o === "create").length, 1);
+  for (let i = 0; i < 30; i++) assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: `pagar:espera${i}`, ttlSec: 90 }, b.db), "ocupado");
+  assert.equal(b.operaciones.filter((o) => o === "create").length, 1, "30 intentos de espera: ningún INSERT (ningún P2002 que Prisma imprima)");
+  assert.equal(b.operaciones.filter((o) => o === "findUnique").length, 31);
+  // La carrera de la PRIMERA vez (dos INSERT a la vez) sigue resuelta por la llave única.
+  const carrera = baseDoble();
+  const original = carrera.db.billingEmailLog.findUnique;
+  carrera.db.billingEmailLog.findUnique = async () => null; // ambos ven «no existe»
+  const [x, y] = await Promise.all([
+    tomarCandadoEnBase({ clinicId: "c9", dueno: "pagar:X", ttlSec: 90 }, carrera.db),
+    tomarCandadoEnBase({ clinicId: "c9", dueno: "subir:Y", ttlSec: 90 }, carrera.db),
+  ]);
+  assert.deepEqual([x, y].sort(), ["ocupado", "tomado"]);
+  carrera.db.billingEmailLog.findUnique = original;
+});
+
+test("candado — si la tabla billing_email_logs NO existe (falta correr sql/billing-email-log.sql) responde «error» → 503 claro en español, sin cobrar", async () => {
+  const b = baseDoble();
+  b.romper(Object.assign(new Error('The table `public.billing_email_logs` does not exist in the current database.'), { code: "P2021" }));
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, b.db), "error");
+  const cap = { adquirir: async () => true, liberar: async () => {} } as CapaRapida;
+  assert.equal(await crearCandadoDeCobro({ clinicId: "c1" }, { rapida: cap, db: b.db }).tomar("k", 90, "subir:B"), "error");
+  // De punta a punta: el mismo 503 que cualquier fallo del candado (sin nombrar tablas ni al proveedor), y no se cobra nada.
+  for (const accion of ["pagar", "subir"] as const) {
+    const m = montar({ candadoFalla: true });
+    const r = accion === "pagar" ? await pagarPendiente(m.deps, 48.61) : await subirYPagar(m.deps, "PRO");
+    assert.deepEqual([r.status, r.body.code, r.body.error], [503, "CANDADO_NO_DISPONIBLE", MENSAJES.intentaDeNuevo]);
+    assert.doesNotMatch(r.body.error as string, /billing_email_logs|tabla|stripe/i);
+    assert.equal(m.cobrosDeTarjeta() + m.cobros(), 0);
+  }
+  // El log dice QUÉ falta (para quien administra), no la clínica.
+  const fuente = readFileSync(path.resolve(__dirname, "../candado-cobro.server.ts"), "utf8");
+  assert.match(fuente, /sql\/billing-email-log\.sql/);
 });
 
 test("Z7 — si la base FALLA al tomar el candado NO se deja pasar: «error», se suelta la capa rápida, y «Pagar»/«Subir» responden «intenta de nuevo» SIN cobrar", async () => {
@@ -2055,7 +2124,7 @@ test("X2 — las dos capas juntas: la capa rápida es de CADA instancia (sin Ups
       adquirir: async (k, _t, d) => { if (mem.has(k)) return false; mem.set(k, d); return true; },
       liberar: async (k, d) => { if (mem.get(k) === d) mem.delete(k); },
     };
-    return { mem, candado: crearCandadoDeCobro({ clinicId: "c1" }, { rapida, db: b.db, ahora: () => b.reloj.ahora }) };
+    return { mem, candado: crearCandadoDeCobro({ clinicId: "c1" }, { rapida, db: b.db }) };
   };
   const A = instancia();
   const B = instancia(); // otra instancia serverless: su memoria NO ve la de A
@@ -2111,6 +2180,94 @@ test("X2 — el código NO exige UPSTASH_REDIS_REST_URL/TOKEN: sin ellas la capa
   assert.match(failban, /if \(!url \|\| !token\) \{/); // sin las variables: aviso y memoria, no error
   const candado = readFileSync(path.join(raiz, "src/lib/billing/candado-cobro.server.ts"), "utf8");
   assert.doesNotMatch(candado.replace(/\/\*[\s\S]*?\*\//g, ""), /UPSTASH/);
+});
+
+// ── Decimocuarta vuelta t4: AA5 (reintento con clave nueva), AA6 (monto confirmado) ───────────────────────
+
+test("AA5 — tras un 5xx de subscriptions.update en «Subir», el REINTENTO usa una clave de idempotencia NUEVA (Stripe repite el 5xx de una clave ya usada)", async () => {
+  const m = montar({ updateFallaAntes: 2 });
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // 1.er intento: 5xx
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // reintento: otro 5xx
+  const r = await subirYPagar(m.deps, "PRO"); // tercer intento: ya sale
+  assert.equal(r.body.pagado, true);
+  const llaves = m.ops("subscriptions.update").map((l) => l.args[2].idempotencyKey as string);
+  assert.equal(llaves.length, 3);
+  assert.equal(new Set(llaves).size, 3, "cada reintento, una clave distinta");
+  assert.deepEqual(llaves, [claves.subir("clin_1", "in_vieja", 0), claves.subir("clin_1", "in_vieja", 1), claves.subir("clin_1", "in_vieja", 2)]);
+  assert.equal(llaves[0], claves.subir("clin_1", "in_vieja"), "el primer intento conserva la clave de siempre");
+  // El contador vive en la marca de la factura anulada y se anotó ANTES de cada reintento.
+  assert.equal(m.facturas.get("in_vieja").metadata.pago_pendiente_subir_intento, "2");
+  assert.equal(m.cobros(), 1, "y aun así un solo cobro");
+  // Dos reintentos SIMULTÁNEOS del mismo intento comparten clave (siguen sin cobrar doble).
+  const dos = montar({ updateFallaAntes: 1 });
+  await subirYPagar(dos.deps, "PRO");
+  const [a, b2] = await Promise.all([subirYPagar(dos.deps, "PRO"), subirYPagar(dos.deps, "PRO")]);
+  assert.equal(dos.cobros(), 1);
+  assert.equal([a, b2].filter((x) => x.status === 200).length >= 1, true);
+  // Si no se puede anotar el reintento, NO se intenta el cambio (regla de oro) y el cupón del cliente se repone.
+  const sinAnotar = montar({ updateFallaAntes: 1, descuentoCliente: CUPON_CLIENTE });
+  await subirYPagar(sinAnotar.deps, "PRO");
+  const upd = (sinAnotar.deps.stripe as any).invoices.update;
+  (sinAnotar.deps.stripe as any).invoices.update = async (id: string, p: any, o: any) => {
+    if (p.metadata?.pago_pendiente_subir_intento) throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+    return upd(id, p, o);
+  };
+  const antes = sinAnotar.ops("subscriptions.update").length;
+  const rr = await subirYPagar(sinAnotar.deps, "PRO");
+  assert.equal(rr.status, 502);
+  assert.equal(sinAnotar.ops("subscriptions.update").length, antes, "no se intentó el cambio");
+  assert.equal(sinAnotar.descuentoDelCliente()?.coupon?.id, "REGALO20", "el cupón quitado se repuso");
+});
+
+test("AA5 — «Pagar» con un cambio a medias NO dice «No tienes ningún pago pendiente» (es falso): dice lo que hay, con tú y sin nombrar al proveedor", async () => {
+  const m = montar({ updateFallaAntes: 1 });
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // factura vieja anulada; cambio sin terminar
+  const r = await pagarPendiente(m.deps, 48.61);
+  assert.deepEqual([r.status, r.body.code], [409, "CAMBIO_A_MEDIAS"]);
+  assert.match(r.body.error as string, /cambio de plan a medias hacia Profesional/);
+  assert.doesNotMatch(r.body.error as string, /No tienes ningún pago pendiente|stripe/i);
+  assert.equal(m.ops("invoices.pay").length, 0);
+  // Sin cambio a medias, el mensaje de siempre.
+  const nada = montar({ abiertas: [] });
+  assert.equal((await pagarPendiente(nada.deps, 48.61)).body.code, "SIN_PENDIENTE");
+});
+
+test("AA6 — «Pagar» nunca cobra un monto distinto del que ESA pestaña confirmó: si al tomar el candado la factura abierta es otra, 409 «El monto cambió» y no cobra", async () => {
+  // Pestaña 1 confirmó $48.61 (la factura del mes). Mientras tanto un «Subir PRO» con la tarjeta rechazada dejó abierta la
+  // del plan nuevo ($799.24) y anuló la vieja: «Pagar» (que esperaba el candado) encuentra OTRA factura.
+  const m = montar({ candadoReal: true, tarjetaFalla: true });
+  const [subir, pagar] = await Promise.all([subirYPagar(m.deps, "PRO"), pagarPendiente(m.deps, 48.61)]);
+  assert.equal(subir.body.pagado, false);
+  assert.deepEqual([pagar.status, pagar.body.code, pagar.body.error], [409, "MONTO_CAMBIO", MENSAJES.montoCambio]);
+  assert.equal(m.ops("invoices.pay").length, 0, "no cobró nada");
+  assert.equal(m.cobrosDeTarjeta(), 0);
+  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-pagar-monto-cambio" && x.montoConfirmadoMxn === 48.61 && x.montoActualMxn === 799.24));
+  assert.doesNotMatch(MENSAJES.montoCambio, /stripe/i);
+  // Con el monto que de verdad hay, cobra; el redondeo de centavos no estorba.
+  const ok = montar();
+  assert.equal((await pagarPendiente(ok.deps, 48.61)).body.pagado, true);
+  const raro = montar();
+  assert.equal((await pagarPendiente(raro.deps, 48.6100000001)).body.pagado, true);
+  // Un monto confirmado distinto (aunque sea por un centavo) no cobra.
+  const otro = montar();
+  const r = await pagarPendiente(otro.deps, 48.6);
+  assert.equal(r.body.code, "MONTO_CAMBIO");
+  assert.equal(otro.ops("invoices.pay").length, 0);
+});
+
+test("AA6 — el cliente manda el monto que la pantalla mostró y, ante MONTO_CAMBIO, vuelve a leer lo pendiente en vez de reintentar a ciegas", async () => {
+  let enviado: any = null;
+  const f = async (_u: string, init?: RequestInit) => {
+    enviado = JSON.parse(String(init?.body));
+    return { status: 409, ok: false, json: async () => ({ code: "MONTO_CAMBIO", error: "El monto cambió, revísalo y vuelve a confirmar." }) } as unknown as Response;
+  };
+  const r = await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f);
+  assert.deepEqual(enviado, { accion: "pagar", monto: 486.04 });
+  assert.deepEqual(r, { tipo: "error", mensaje: "El monto cambió, revísalo y vuelve a confirmar.", codigo: "MONTO_CAMBIO" });
+  const comp = readFileSync(path.resolve(__dirname, "../../../components/dashboard/pago-pendiente.tsx"), "utf8");
+  assert.match(comp, /setEleccion\(\{ accion: "pagar", monto: lectura\.datos\.montoPendiente \}\)/);
+  assert.match(comp, /r\.codigo === "MONTO_CAMBIO"/);
+  assert.match(comp, /void leerPagoPendiente\(\)\.then\(setLectura\)/);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──
@@ -2236,16 +2393,17 @@ test("N4 (contrato de código): en las rutas de pago ningún `error:` para la cl
 
 // ── cuerpo y utilidades ─────────────────────────────────────────────────────
 
-test("parsearCuerpo: solo pagar o subir con un plan que existe", () => {
-  assert.deepEqual(parsearCuerpo({ accion: "pagar" }), { ok: true, cuerpo: { accion: "pagar" } });
+test("parsearCuerpo: «pagar» lleva el monto confirmado; «subir» un plan que existe", () => {
+  assert.deepEqual(parsearCuerpo({ accion: "pagar", monto: 486.04 }), { ok: true, cuerpo: { accion: "pagar", monto: 486.04 } });
   assert.deepEqual(parsearCuerpo({ accion: "subir", plan: "PRO" }), { ok: true, cuerpo: { accion: "subir", plan: "PRO" } });
-  for (const mal of [{}, null, { accion: "subir" }, { accion: "subir", plan: "ORO" }, { accion: "borrar" }, "pagar"]) {
+  for (const mal of [{}, null, { accion: "pagar" }, { accion: "pagar", monto: 0 }, { accion: "pagar", monto: -5 }, { accion: "pagar", monto: "486" }, { accion: "subir" }, { accion: "subir", plan: "ORO" }, { accion: "borrar" }, "pagar"]) {
     const r = parsearCuerpo(mal) as any;
-    assert.equal(r.ok, false);
+    assert.equal(r.ok, false, JSON.stringify(mal));
     assert.equal(r.respuesta.status, 400);
+    assert.equal(r.respuesta.body.error, "Recarga la página e inténtalo de nuevo.");
   }
   // El clinicId del body se ignora: el esquema no lo conoce.
-  assert.deepEqual(parsearCuerpo({ accion: "pagar", clinicId: "otra" }), { ok: true, cuerpo: { accion: "pagar" } });
+  assert.deepEqual(parsearCuerpo({ accion: "pagar", monto: 1, clinicId: "otra" }), { ok: true, cuerpo: { accion: "pagar", monto: 1 } });
 });
 
 test("planesMasGrandes: sigue el orden BASIC → PRO → CLINIC", () => {

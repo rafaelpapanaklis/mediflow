@@ -148,5 +148,5 @@ export async function POST(req: NextRequest) {
 
   const deps = await armarDeps(req);
   if (deps instanceof NextResponse) return deps;
-  return enviar(parsed.cuerpo.accion === "pagar" ? await pagarPendiente(deps) : await subirYPagar(deps, parsed.cuerpo.plan));
+  return enviar(parsed.cuerpo.accion === "pagar" ? await pagarPendiente(deps, parsed.cuerpo.monto) : await subirYPagar(deps, parsed.cuerpo.plan));
 }
