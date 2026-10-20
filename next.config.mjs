@@ -144,19 +144,15 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              // cdn.livechatinc.com / *.livechatinc.com / *.livechat-static.com = chat de LiveChat de la
-              // portada y el blog (tracking.js + iframe del widget en secure.livechatinc.com). Sus llamadas
-              // (https + wss a api.livechatinc.com) e imágenes ya caben en connect-src / img-src.
               // googleadservices/googleads.g.doubleclick = tag de conversiones de Google Ads (gtag ya permitido vía googletagmanager).
               // connect.facebook.net = SDK JS de Meta (WhatsApp Embedded Signup: botón "Conectar WhatsApp").
               // analytics.tiktok.com = SDK del píxel de TikTok (events.js y sus módulos /i18n/pixel/static/…); lo
               // pide <TiktokPixel/> solo en páginas de DaleControl. Sus peticiones (analytics.tiktok.com,
               // analytics-ipv6.tiktokw.com) e imágenes caben ya en connect-src / img-src (https:). Fuente: el
               // snippet oficial de TikTok Pixel (events.js desde analytics.tiktok.com) y su guía de CSP.
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://cdn.livechatinc.com https://*.livechatinc.com https://*.livechat-static.com https://connect.facebook.net https://analytics.tiktok.com",
-              // LiveChat también en style-src / font-src: hojas y fuentes del widget.
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.livechatinc.com https://*.livechat-static.com",
-              "font-src 'self' https://fonts.gstatic.com data: https://*.livechatinc.com https://*.livechat-static.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://connect.facebook.net https://analytics.tiktok.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https: http:",
               "media-src 'self' blob: https:",
               // blob: = el runtime de Spline (robot 3D del /login) arranca sus
@@ -173,7 +169,7 @@ const nextConfig = {
               // Scaniverse, YouTube, Vimeo). Se arma arriba desde
               // src/lib/realty/tour-hosts.json: para dar de alta un proveedor nuevo
               // se edita ESE archivo y nada más — aquí no se escribe ningún dominio.
-              `frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://*.livechatinc.com https://*.livechat.com https://www.facebook.com https://staticxx.facebook.com ${REALTY_TOUR_FRAME_SRC}`,
+              `frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://www.facebook.com https://staticxx.facebook.com ${REALTY_TOUR_FRAME_SRC}`,
               // 'self' (antes 'none'): equivalente moderno de X-Frame-Options SAMEORIGIN.
               // Habilita el iframe same-origin del visor de heatmap; terceros siguen sin poder enmarcar.
               "frame-ancestors 'self'",

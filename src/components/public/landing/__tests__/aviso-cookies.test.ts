@@ -38,7 +38,7 @@ test("los dos pies públicos lo montan (y solo una vez cada uno)", () => {
 
 test("el aviso de privacidad: fecha real, ancla #cookies y frase de aceptación por uso en la sección 3", () => {
   const p = leer("src/app/privacidad/page.tsx");
-  assert.match(p, /const LAST_UPDATED = "2 de octubre de 2026";/);
+  assert.match(p, /const LAST_UPDATED = "20 de octubre de 2026";/);
   assert.doesNotMatch(p, /\[fecha de publicación\]/);
   assert.match(p, /<Section id="cookies" title="3\. Cookies">/);
   assert.match(p, /section id=\{id\}/);
@@ -48,48 +48,44 @@ test("el aviso de privacidad: fecha real, ancla #cookies y frase de aceptación 
   assert.match(s3, /Cómo borrar o bloquear las cookies/, "sigue diciendo cómo desactivarlas");
 });
 
-test("el aviso nombra el chat LiveChat: viñeta en «3. Cookies» (qué es, para qué, sus cookies, cómo bloquearlas) y encargado en «5. Transferencias»; Tawk.to ya no aparece", () => {
+test("el aviso describe el botón de WhatsApp (nombre y número para contactarte) en «3. Cookies»; LiveChat y Tawk.to ya no aparecen", () => {
   const p = leer("src/app/privacidad/page.tsx");
   const s3 = p.slice(p.indexOf('title="3. Cookies"'), p.indexOf('title="4. Finalidades'));
-  assert.match(s3, /Chat de soporte \(LiveChat\)/);
-  assert.match(s3, /LiveChat \(LiveChat, Inc\.\)/);
-  assert.match(s3, /En la página principal y en el blog del sitio\s+público/);
-  assert.match(s3, /escribirnos para pedir información o soporte/);
-  assert.match(s3, /guarda en su navegador cookies propias/);
-  assert.match(s3, /puede bloquear las cookies de LiveChat/);
+  assert.match(s3, /Botón de WhatsApp/);
+  assert.match(s3, /su nombre y su número de WhatsApp/);
+  assert.match(s3, /únicamente\s+para contactarle/);
+  assert.match(s3, /no instala\s+cookies propias ni de terceros/);
   assert.match(s3, /no en el panel de la clínica, ni en el portal del paciente/);
-  const s5 = p.slice(p.indexOf('title="5. Transferencias"'), p.indexOf('title="6. Derechos ARCO"'));
-  assert.match(s5, /<b>LiveChat, Inc\.<\/b> — chat de soporte de la página principal y del blog/);
+  assert.doesNotMatch(p, /livechat/i, "el aviso ya no nombra LiveChat");
   assert.doesNotMatch(p, /tawk/i, "el aviso ya no nombra Tawk.to");
 });
 
-test("es verdad lo que dice el aviso: LiveChat solo en la portada y el blog, y Tawk.to en ningún sitio", () => {
-  assert.match(leer("src/app/page.tsx"), /<LiveChat \/>/);
-  assert.match(leer("src/app/blog/layout.tsx"), /<LiveChat \/>/);
-  const c = leer("src/components/public/landing/sales/v2/livechat.tsx");
+test("es verdad lo que dice el aviso: el botón de WhatsApp solo en la portada y el blog; LiveChat y Tawk.to en ningún sitio", () => {
+  assert.match(leer("src/app/page.tsx"), /<WhatsappWidget \/>/);
+  assert.match(leer("src/app/blog/layout.tsx"), /<WhatsappWidget \/>/);
+  assert.doesNotMatch(leer("src/app/page.tsx"), /LiveChat/);
+  assert.doesNotMatch(leer("src/app/blog/layout.tsx"), /LiveChat/);
+  const c = leer("src/components/public/landing/sales/v2/whatsapp-widget.tsx");
   assert.match(c, /^"use client";/);
-  assert.match(c, /window\.__lc\.license = \$\{LICENCIA\}/);
-  assert.match(c, /const LICENCIA = 19969055;/);
-  assert.match(c, /https:\/\/cdn\.livechatinc\.com\/tracking\.js/);
-  assert.match(c, /strategy="lazyOnload"/, "no compite con el render de la portada");
-  // Ningún otro archivo de src/app monta el chat.
+  assert.match(c, /\/api\/public\/whatsapp-lead/);
+  // Ningún otro archivo de src/app monta el botón ni el chat viejo.
   const montan: string[] = [];
   const recorrer = (dir: string) => {
     for (const e of readdirSync(path.join(RAIZ, dir), { withFileTypes: true })) {
       const rel = `${dir}/${e.name}`;
       if (e.isDirectory()) recorrer(rel);
-      else if (/\.tsx?$/.test(e.name) && /<LiveChat\b/.test(leer(rel))) montan.push(rel);
+      else if (/\.tsx?$/.test(e.name)) {
+        const t = leer(rel);
+        assert.doesNotMatch(t, /<LiveChat\b/, `${rel} monta LiveChat`);
+        if (/<WhatsappWidget\b/.test(t)) montan.push(rel);
+      }
     }
   };
   recorrer("src/app");
   assert.deepEqual(montan.sort(), ["src/app/blog/layout.tsx", "src/app/page.tsx"]);
-  // Ni rastro de Tawk.to en el código ni en la CSP.
   assert.equal(existsSync(path.join(RAIZ, "src/components/public/landing/sales/v2/tawk-chat.tsx")), false);
-  assert.doesNotMatch(leer("src/components/public/landing/sales/v2/index.ts"), /Tawk/);
+  assert.doesNotMatch(leer("src/components/public/landing/sales/v2/index.ts"), /Tawk|LiveChat/);
+  // La CSP ya no abre dominios para LiveChat ni Tawk.to.
   const csp = leer("next.config.mjs");
-  assert.doesNotMatch(csp, /tawk/i);
-  for (const d of ["script-src", "style-src", "font-src", "frame-src"]) {
-    const linea = csp.split("\n").find((l) => l.includes(`"${d} `) || l.includes(`\`${d} `)) ?? "";
-    assert.match(linea, /https:\/\/\*\.livechatinc\.com/, d);
-  }
+  assert.doesNotMatch(csp, /tawk|livechat/i);
 });

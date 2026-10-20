@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 // Fecha de publicación (texto aprobado por el abogado; se publica con la integración de la ola del 26-sep).
-const LAST_UPDATED = "2 de octubre de 2026";
+const LAST_UPDATED = "20 de octubre de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
 const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
@@ -225,19 +225,16 @@ export default function PrivacidadPage() {
             pago (sin rastrear clics ni el contenido de la página).
           </li>
           <li>
-            <b>Chat de soporte (LiveChat).</b> En la página principal y en el blog del sitio
-            público (no en el panel de la clínica, ni en el portal del paciente, ni en el
-            registro) cargamos el chat de LiveChat (LiveChat, Inc.), un servicio de un tercero
-            con el que puede escribirnos para pedir información o soporte. Al cargarse, LiveChat
-            guarda en su navegador cookies propias para reconocer que es el mismo visitante y
-            conservar su conversación; su duración la fija LiveChat. Si usted escribe en el
-            chat, LiveChat recibe lo que escriba (por ejemplo su nombre, su correo o su
-            mensaje) y los datos técnicos de la visita (dirección IP, navegador y ubicación
-            aproximada), que usamos únicamente para atenderle. Le pedimos no escribir en el
-            chat datos de salud ni datos de pacientes. El chat es opcional:{" "}
-            <b>puede bloquear las cookies de LiveChat</b> desde la configuración de su
-            navegador o con un bloqueador de contenido; el sitio funciona igual y el chat
-            simplemente no aparece.
+            <b>Botón de WhatsApp.</b> En la página principal y en el blog del sitio público
+            (no en el panel de la clínica, ni en el portal del paciente, ni en el registro)
+            mostramos un botón flotante de WhatsApp. «Iniciar conversación» abre WhatsApp
+            (la aplicación o WhatsApp Web) con un mensaje listo para enviarnos; desde ese
+            momento aplican las condiciones y el aviso de WhatsApp. El formulario «Te
+            escribimos nosotros» recoge <b>su nombre y su número de WhatsApp</b> únicamente
+            para contactarle y darle información sobre DaleControl; los recibimos por correo
+            electrónico en nuestro equipo y no los usamos para otra cosa. El botón no instala
+            cookies propias ni de terceros. Le pedimos no escribir datos de salud ni datos de
+            pacientes en la conversación.
           </li>
           <li>
             <b>Vercel Analytics y Speed Insights.</b> Servicios de Vercel, Inc. que usamos
@@ -391,11 +388,6 @@ export default function PrivacidadPage() {
             descrito en la sección 3.
           </li>
           <li>
-            <b>LiveChat, Inc.</b> — chat de soporte de la página principal y del blog del sitio
-            público, con lo descrito en la sección 3: recibe lo que usted escriba en el chat y
-            los datos técnicos de la visita.
-          </li>
-          <li>
             <b>IPinfo (ipinfo.io)</b> — servicio de ubicación por dirección IP de nuestra
             analítica propia: se le envía únicamente la dirección IP de la visita, ningún
             otro dato, para obtener país, región y ciudad aproximados.
@@ -483,7 +475,7 @@ export default function PrivacidadPage() {
           incluye la dirección IP, la ubicación aproximada, el dispositivo, el identificador
           de clic si lo hubo y, si inició sesión, su correo, nombre, rol, clínica y plan) se
           elimina automáticamente a los <b>365 días</b> de haberse iniciado. Los datos que
-          reciben Google, Meta y LiveChat se conservan según sus propias políticas.
+          reciben Google y Meta se conservan según sus propias políticas.
         </p>
       </Section>
 

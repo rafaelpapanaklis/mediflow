@@ -12,7 +12,7 @@ export { Testimonials } from "./testimonials";
 export { TrustFaq } from "./trust-faq";
 export { FinalCta } from "./final-cta";
 export { ScrollReveal } from "./scroll-reveal";
-export { LiveChat } from "./livechat";
+export { WhatsappWidget } from "./whatsapp-widget";
 export { BarraMovil } from "./barra-movil";
 export { WhatsappMpSection } from "./whatsapp-mp-section";
 export { PanelVivoSection } from "./panel-vivo-section";

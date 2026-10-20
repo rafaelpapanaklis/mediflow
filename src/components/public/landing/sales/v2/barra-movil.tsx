@@ -15,8 +15,8 @@ import { barraVisible } from "./barra-movil-logica";
  * mientras el hero se ve, ya tiene sus propios botones. Al pie lleva un
  * espaciador en flujo para que el footer no quede tapado.
  *
- * LiveChat: la barra NO lo toca (ni hide ni minimize). Rafael lo oculta en
- * celular desde la configuración de LiveChat; el porqué, en barra-movil-logica.ts.
+ * El botón flotante de WhatsApp (whatsapp-widget.tsx, que reemplazó a LiveChat)
+ * se asienta encima de esta barra en celular (landing-v2.css, `.dcv4-wawidget`).
  */
 
 export function BarraMovil() {
