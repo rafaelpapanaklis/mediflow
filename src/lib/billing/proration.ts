@@ -597,7 +597,7 @@ export function chargeFailureMessage(err: unknown): string {
   const e = err as { code?: string; decline_code?: string; raw?: { code?: string; decline_code?: string } } | null;
   const code = e?.code ?? e?.raw?.code;
   const decline = e?.decline_code ?? e?.raw?.decline_code;
-  const base = "No se pudo cobrar la diferencia del upgrade. Tu plan NO cambió.";
+  const base = "No se pudo cobrar la diferencia por subir de plan. Tu plan NO cambió.";
   if (decline === "insufficient_funds" || code === "insufficient_funds") {
     return `${base} Tu tarjeta reportó fondos insuficientes; intenta con otra tarjeta.`;
   }
@@ -609,7 +609,7 @@ export function chargeFailureMessage(err: unknown): string {
     code === "subscription_payment_intent_requires_action" ||
     code === "invoice_payment_intent_requires_action"
   ) {
-    return `${base} Tu banco pidió autenticación del cargo: paga la factura pendiente desde "Portal Stripe" y vuelve a intentar.`;
+    return `${base} Tu banco pidió autenticación del cargo: paga la factura pendiente desde el portal de facturación y vuelve a intentar.`;
   }
   return `${base} Tu banco rechazó el cargo; revisa tu método de pago e intenta de nuevo.`;
 }

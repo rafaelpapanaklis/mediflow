@@ -322,9 +322,9 @@ export const MENSAJES = {
   sinPendiente: "No tienes ningún pago pendiente.",
   sinPermiso: "Solo el dueño o un administrador de la clínica puede pagar o cambiar el plan.",
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
-  stripeNoContesto: "No pudimos completar la operación con el proveedor de pagos. Intenta de nuevo en unos minutos.",
+  stripeNoContesto: MENSAJES_CHECKOUT.proveedorNoContesto,
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
   pagosNoDisponibles: MENSAJES_CHECKOUT.pagosNoDisponibles,
-  sinPlanAsociado: "No pudimos encontrar el plan de tu suscripción. Escribe a soporte para que lo revisemos.",
+  sinPlanAsociado: MENSAJES_CHECKOUT.sinPlanAsociado,
 } as const;
