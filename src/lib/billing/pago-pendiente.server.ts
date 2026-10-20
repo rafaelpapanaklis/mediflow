@@ -47,6 +47,7 @@ import {
   esPlanMasGrande,
   facturaAbiertaMasReciente,
   facturaTienePromo,
+  mensajeCambioAMedias,
   planesMasGrandes,
   segundosDe,
   respuesta,
@@ -125,7 +126,8 @@ export interface DepsPago {
    * de failban (Upstash, o memoria de la instancia). Ante un fallo de infraestructura abre (deja pasar).
    */
   candado: {
-    tomar: (clave: string, ttlSec: number, dueno: string) => Promise<boolean>;
+    /** `error` = la base del candado falló: NO se cobra (Z7). */
+    tomar: (clave: string, ttlSec: number, dueno: string) => Promise<"tomado" | "ocupado" | "error">;
     /** Suelta SOLO si el candado sigue siendo de `dueno` (si caducó y lo tomó otra petición, no toca el de ella). */
     soltar: (clave: string, dueno: string) => Promise<void>;
     /** Dueño actual del candado (`pagar:<id>` / `subir:<id>`), para decir QUÉ hay en curso. Opcional. */
@@ -540,6 +542,23 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 
 // ── POST { accion: "pagar" } ────────────────────────────────────────────────
 
+/** Z7: la base del candado falló → NO se cobra; se pide reintentar. */
+function candadoNoDisponible(): RespuestaPago {
+  return respuesta(503, { code: "CANDADO_NO_DISPONIBLE", error: MENSAJES.intentaDeNuevo });
+}
+
+/** ¿Hay una factura del plan pagada DESPUÉS de `desdeMs` (con 60 s de holgura entre relojes)? Si no se puede saber, no. */
+async function hayPagoRegistradoDesde(deps: DepsPago, desdeMs: number): Promise<boolean> {
+  const subId = deps.clinica.stripeSubscriptionId;
+  if (!deps.stripe || !subId) return false;
+  try {
+    const pagadas = (await deps.stripe.invoices.list({ subscription: subId, status: "paid", limit: 5 })).data;
+    return pagadas.some((f) => (f.status_transitions?.paid_at ?? 0) * 1000 >= desdeMs - 60_000);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Otra operación de cobro de ESTA clínica tiene el candado: el mensaje dice QUÉ es. Un «Pagar» que espera a otro «Pagar»
  * no habla de un cambio de plan (Y19).
@@ -564,21 +583,23 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   // está tomado, espera a que la otra operación termine (hasta ~15 s) y entonces mira qué quedó pendiente.
   const clave = claves.candadoSubir(deps.clinica.id);
   const dueno = `pagar:${randomUUID()}`;
-  let tomado = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
-  const esperó = !tomado;
-  for (let i = 0; !tomado && i < ESPERA_PAGAR_INTENTOS; i++) {
+  const inicioMs = Date.now(); // desde aquí se busca un pago registrado por otra operación (Z9)
+  let toma = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
+  const esperó = toma === "ocupado";
+  for (let i = 0; toma === "ocupado" && i < ESPERA_PAGAR_INTENTOS; i++) {
     await deps.esperar(ESPERA_PAGAR_INTERVALO_MS);
-    tomado = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
+    toma = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
   }
-  if (!tomado) return cobroEnCurso(deps, clave);
+  if (toma === "error") return candadoNoDisponible();
+  if (toma !== "tomado") return cobroEnCurso(deps, clave);
   try {
-    return await pagarPendienteConCandado(deps, esperó);
+    return await pagarPendienteConCandado(deps, esperó, inicioMs);
   } finally {
     await deps.candado.soltar(clave, dueno).catch(() => {}); // si no se puede soltar, caduca solo
   }
 }
 
-async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean): Promise<RespuestaPago> {
+async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean, inicioMs: number): Promise<RespuestaPago> {
   // Si tuvo que esperar, el estado de la clínica pudo cambiar mientras tanto (otra pestaña pagó o reactivó): se relee.
   let deps = deps0;
   if (esperó && deps0.releerEstadoClinica) {
@@ -592,13 +613,22 @@ async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean): Prom
   // 24 h de gracia no lo está y el ciclo no cambia.
   const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   const ctx = await cargarPendiente(deps, false);
-  // Esperó el candado y ya no hay nada pendiente: la otra operación (otro «Pagar» o un «Subir») ya lo dejó pagado.
-  const sinPendiente = esperó
-    ? respuesta(409, { code: "PAGO_YA_REGISTRADO", error: MENSAJES.pagoYaRegistrado })
-    : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
-  if (!ctx.ok) return "respuesta" in ctx ? (ctx.respuesta.body.code === "SIN_PENDIENTE" ? sinPendiente : ctx.respuesta) : sinPendiente;
+  // Z9: esperó el candado y ya no hay nada pendiente. «Tu pago ya se registró» SOLO si de verdad hay un pago registrado por
+  // la otra operación (una factura pagada desde que empezó a esperar). Si no (p. ej. el «Subir» de la otra pestaña falló a
+  // medias y dejó la factura anulada), esa frase sería falsa —la clínica creería que pagó— y se dice lo que hay.
+  const sinPendiente = async (): Promise<RespuestaPago> => {
+    if (!esperó) return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+    if (await hayPagoRegistradoDesde(deps, inicioMs)) return respuesta(409, { code: "PAGO_YA_REGISTRADO", error: MENSAJES.pagoYaRegistrado });
+    const rec = await cargarPendiente(deps, false, true);
+    if (rec.ok && rec.anulada) {
+      const nombre = (await deps.plan(rec.anulada.planMarcado).catch(() => null))?.name ?? rec.anulada.planMarcado;
+      return respuesta(409, { code: "CAMBIO_A_MEDIAS", error: mensajeCambioAMedias(nombre) });
+    }
+    return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+  };
+  if (!ctx.ok) return "respuesta" in ctx ? (ctx.respuesta.body.code === "SIN_PENDIENTE" ? await sinPendiente() : ctx.respuesta) : await sinPendiente();
   const { stripe, factura } = ctx;
-  if (!factura) return sinPendiente;
+  if (!factura) return await sinPendiente();
   const clinicId = deps.clinica.id;
 
   let pagada: FacturaPago | null = null;
@@ -640,7 +670,9 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
   }
   const clave = claves.candadoSubir(deps.clinica.id);
   const dueno = `subir:${randomUUID()}`;
-  if (!(await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno))) return cobroEnCurso(deps, clave);
+  const toma = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
+  if (toma === "error") return candadoNoDisponible();
+  if (toma === "ocupado") return cobroEnCurso(deps, clave);
   try {
     return await subirYPagarConCandado(deps, destino);
   } finally {
@@ -697,6 +729,13 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     // Y17: la factura sigue ABIERTA (sin cobrar), así que el plan NO se refleja en la base todavía.
     await quitarDescuentoDelCliente(deps, stripe, sub, destino); // el cambio ya está hecho: no hay nada que reponer
     return resultadoDeFactura(ctx.factura);
+  }
+
+  // Z7 / regla de oro: un cambio a medias solo se TERMINA con el mismo plan (la clave de Stripe del cambio es una por
+  // factura). Elegir otro plan en ese punto sería inventar un cálculo nuevo: se pide terminar el que quedó.
+  if (anulada && anulada.planMarcado !== destino) {
+    const nombre = (await deps.plan(anulada.planMarcado).catch(() => null))?.name ?? anulada.planMarcado;
+    return respuesta(409, { code: "CAMBIO_A_MEDIAS", error: mensajeCambioAMedias(nombre) });
   }
 
   const item = sub.items.data[0];
@@ -788,7 +827,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     try {
       await stripe.invoices.update(
         factura.id,
-        { metadata: armarMarca({ destino, desde: deps.clinica.plan, clave: claves.subir(clinicId, factura.id, destino), ahora }) },
+        { metadata: armarMarca({ destino, desde: deps.clinica.plan, clave: claves.subir(clinicId, factura.id), ahora }) },
         // La hora es un parámetro: va en la clave. Un reintento con otra hora usa otra clave en vez de
         // chocar con la anterior (Stripe rechaza una misma clave con otros parámetros durante 24 h).
         { idempotencyKey: claves.marcar(clinicId, factura.id, destino, segundosDe(ahora)) },
@@ -825,7 +864,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     nueva = await stripe.subscriptions.update(
       sub.id,
       armarUpdateSubir({ sub, itemId: item.id, priceId: precioId, plan: destino, clinicId, iva }) as unknown as Record<string, unknown>,
-      { idempotencyKey: claves.subir(clinicId, factura.id, destino) },
+      { idempotencyKey: claves.subir(clinicId, factura.id) },
     );
   } catch (err) {
     // Si la tarjeta falló en este paso la factura nueva puede haber quedado abierta: se da su enlace.

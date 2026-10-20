@@ -280,7 +280,9 @@ export const claves = {
   reponerDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:reponer-descuento-cliente:${clinicId}:${descuentoId}`,
   quitarDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:quitar-descuento-cliente:${clinicId}:${descuentoId}`,
   anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
-  subir: (clinicId: string, facturaId: string, plan: string) => `pago-pendiente:subir:${clinicId}:${facturaId}:${plan}`,
+  // UNA sola clave por clínica+factura para CUALQUIER plan destino (Z7): si dos «Subir» a planes distintos llegaran a correr a
+  // la vez (el candado falló o no se vieron), Stripe rechaza el segundo por tener otros parámetros en vez de cobrar los dos.
+  subir: (clinicId: string, facturaId: string) => `pago-pendiente:subir:${clinicId}:${facturaId}`,
   precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number) =>
     `pago-pendiente:precio:${clinicId}:${plan}:${interval}:${cents}`,
 };
@@ -299,6 +301,8 @@ export const MENSAJES = {
   // en que el siguiente cobro ya está movido (meses pagados por adelantado, o el mes pagado al reactivarse tras una suspensión).
   cobroEnPausa: MENSAJE_PLAN_PREPAGADO,
   pagoYaRegistrado: "Tu pago ya se registró.",
+  // Z7: si no se pudo tomar el candado (la base falló) NO se cobra: se pide reintentar.
+  intentaDeNuevo: "No pudimos iniciar el cobro. Intenta de nuevo en unos segundos.",
   // Mensajes de «hay otra operación de cobro de esta clínica en curso» según quién tiene el candado (revisión t4, Y19).
   pagoEnCurso: "Tu pago está en proceso, espera unos segundos.",
   cobroEnCurso: "Ya hay un cobro en curso, espera unos segundos.",
@@ -308,3 +312,8 @@ export const MENSAJES = {
   pagosNoDisponibles: MENSAJES_CHECKOUT.pagosNoDisponibles,
   sinPlanAsociado: MENSAJES_CHECKOUT.sinPlanAsociado,
 } as const;
+
+/** Z9: hay un cambio de plan a medias a OTRO plan: se termina con ese plan (o con soporte), no se inventa otro cálculo. */
+export const mensajeCambioAMedias = (nombrePlan: string): string =>
+  `Tienes un cambio de plan a medias hacia ${nombrePlan}. Termínalo con ese mismo plan o escríbenos a soporte y lo resolvemos contigo.`;
+
