@@ -1649,7 +1649,8 @@
       "errorCobro": "No pudimos hacer el cobro. Inténtalo de nuevo o escribe a soporte.",
       "soloDueno": "Pídele al dueño o administrador de la clínica que pague el plan.",
       "terminarCambio": "Terminar el cambio a {plan} y pagar",
-      "cambioNoDisponible": "No pudimos preparar el cambio de plan. Usa «Actualizar tarjeta / pagar» o escribe a soporte."
+      "cambioNoDisponible": "No pudimos preparar el cambio de plan. Usa «Actualizar tarjeta / pagar» o escribe a soporte.",
+      "cambioEnCursoMonto": "Te falta terminar el cambio a {plan}: {monto}"
     }
   },
   "agenda": {

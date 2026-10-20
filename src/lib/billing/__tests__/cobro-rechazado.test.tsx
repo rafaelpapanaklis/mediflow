@@ -25,6 +25,8 @@ import {
   eraClinicaPagadora,
   esDeLaSuscripcionDelPlan,
   inicioDeNuevoPeriodo,
+  METODOS_DE_PAGO_MANUAL_DEL_PLAN,
+  METODO_ACTIVACION_ADMIN,
   motivoParaNoSuspender,
   pagoManualCubreLaFactura,
 } from "../cobro-rechazado";
@@ -635,10 +637,12 @@ test("#1 reglas puras: pago manual posterior o periodo pagado más allá de la f
   assert.equal(pagoManualCubreLaFactura({ hayPagoManualPosterior: false, finPeriodoFacturado: null, accesoActual: dentroDe(90), proximoCobro: dentroDe(90) }), false, "sin periodo de la factura no se adivina");
 });
 
-test("#2/#3 por qué NO se suspende: otra suscripción, factura no abierta (paid/void/uncollectible/sin id) o pago manual", () => {
+test("#2/#3/N1 por qué NO se suspende: otra suscripción, factura pagada o anulada (o sin id) o pago manual; open e incobrable sí suspenden", () => {
   assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: "open", cubiertaPorPagoManual: false }), null);
   assert.equal(motivoParaNoSuspender({ esDelPlan: false, estadoVivoFactura: "open", cubiertaPorPagoManual: false }), "otra_suscripcion");
-  for (const e of ["paid", "void", "uncollectible", "draft", null]) {
+  // N1: incobrable ≠ pagada → suspende igual que «open».
+  assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: "uncollectible", cubiertaPorPagoManual: false }), null);
+  for (const e of ["paid", "void", "draft", null]) {
     assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: e, cubiertaPorPagoManual: false }), "factura_no_abierta", String(e));
   }
   assert.equal(motivoParaNoSuspender({ esDelPlan: true, estadoVivoFactura: "open", cubiertaPorPagoManual: true }), "pago_manual");
@@ -732,4 +736,36 @@ test("#4 con «sin pendiente» o error SIEMPRE queda cómo pagar: el respaldo (p
   assert.match(p, /const tarjetasDeRespaldo = conDosBotones \? \(\s*<SuspendedPlanCards/);
   // Y la pestaña Suscripción nunca esconde su sección «Cambiar plan» ni el respaldo.
   assert.doesNotMatch(sinComentarios(leer("src/components/dashboard/subscription-tab.tsx")), /<PagoPendiente[^>]*tarjetas=/);
+});
+
+test("N2 la lista de métodos de pago manual del plan es explícita y sale de los valores que de verdad se escriben", () => {
+  assert.deepEqual([...METODOS_DE_PAGO_MANUAL_DEL_PLAN].sort(), ["admin", "cash", "deposit", "oxxo", "paypal", "transfer"]);
+  assert.equal(METODO_ACTIVACION_ADMIN, "admin");
+  assert.ok((METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(METODO_ACTIVACION_ADMIN));
+  for (const no of ["stripe", "cfdi_overage"]) assert.equal((METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(no), false, no);
+  // Los valores de la lista existen de verdad: SPEI directo escribe «transfer» y /admin ofrece oxxo, paypal, cash.
+  assert.match(sinComentarios(leer("src/lib/billing/spei-directo.ts")), /method: "transfer"/);
+  const adminPagos = leer("src/app/admin/payments/payments-client.tsx");
+  for (const m of ["transfer", "oxxo", "paypal", "cash"]) assert.match(adminPagos, new RegExp(`value: "${m}"`), m);
+  // La consulta del webhook usa la lista, no «distinto de stripe».
+  const w = sinComentarios(leer("src/app/api/webhooks/stripe/route.ts"));
+  assert.match(w, /method: \{ in: \[\.\.\.METODOS_DE_PAGO_MANUAL_DEL_PLAN\] \}/);
+  assert.doesNotMatch(w, /method: \{ not: "stripe" \}/);
+  // La activación del admin deja su rastro en la misma transacción y sin inventar ingreso.
+  const admin = sinComentarios(leer("src/app/api/admin/billing/route.ts"));
+  assert.match(admin, /prisma\.\$transaction\(\[\s*prisma\.clinic\.update[\s\S]*?prisma\.subscriptionInvoice\.create[\s\S]*?amount: 0,[\s\S]*?status: "paid",[\s\S]*?method: metodo,/);
+});
+
+test("N3 con un cambio a medias la pantalla dice «Te falta terminar el cambio a <plan>: $X», no el pendiente viejo", () => {
+  const html = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, cambioEnCurso: { plan: "CLINIC" } } } });
+  assert.match(html, /Te falta terminar el cambio a Clínica: \$1,489\.00 MXN/);
+  assert.doesNotMatch(html, /Pendiente de tu plan/);
+  assert.doesNotMatch(html, /\$689\.00/, "ni el monto de la factura vieja ya anulada");
+  // Sin cambio a medias, como siempre.
+  assert.match(vista(), /Pendiente de tu plan: <strong>\$689\.00 MXN<\/strong>/);
+  // Si el plan del cambio ya no está entre las opciones: no se enseña ningún monto suelto.
+  const sinOpcion = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, opcionesSubir: [], cambioEnCurso: { plan: "CLINIC" } } } });
+  assert.doesNotMatch(sinOpcion, /\$689\.00|Pendiente de tu plan/);
+  const en = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, cambioEnCurso: { plan: "CLINIC" } } } }, "en");
+  assert.match(en, /You still need to finish the change to Clínica: \$1,489\.00 MXN/);
 });

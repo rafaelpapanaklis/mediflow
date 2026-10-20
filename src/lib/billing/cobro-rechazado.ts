@@ -134,6 +134,18 @@ export function inicioDeNuevoPeriodo(args: {
 }
 
 /**
+ * Valores de `subscription_invoices.method` que son un pago MANUAL del plan (los que de verdad se escriben hoy):
+ * `transfer` (SPEI directo, y el valor por defecto de /admin/payments), `deposit`, `oxxo`, `paypal`, `cash`
+ * (las opciones de «Registrar pago» de /admin) y `admin` (la activación manual de /admin sin cobro registrado,
+ * ver `METODO_ACTIVACION_ADMIN`). Quedan fuera `stripe` (los cobros de tarjeta) y `cfdi_overage` (el excedente de
+ * CFDI no paga el plan). Una fila sin método (`null`) también cuenta.
+ */
+export const METODOS_DE_PAGO_MANUAL_DEL_PLAN = ["transfer", "deposit", "oxxo", "paypal", "cash", "admin"] as const;
+
+/** `method` de la fila que deja la activación manual de /admin (`activate_clinic`): es su rastro para el webhook. */
+export const METODO_ACTIVACION_ADMIN = "admin";
+
+/**
  * ¿Una clínica que pagó a mano (SPEI confirmado o activación del admin) queda cubierta frente a la factura
  * vieja de Stripe que sigue fallando? Sí si hay un pago manual registrado POSTERIOR a la creación de esa factura
  * (`subscription_invoices` pagada que no es de Stripe), o si su periodo pagado ya pasa del fin del periodo que
@@ -167,7 +179,7 @@ export function esDeLaSuscripcionDelPlan(facturaSub: string | null | undefined, 
 
 /**
  * Por qué un `invoice.payment_failed` del plan NO debe suspender (null = suspende). Solo suspende la factura
- * del plan que sigue ABIERTA en Stripe: pagada, anulada (void) o incobrable no; y tampoco si un pago manual
+ * del plan que sigue abierta (open) o incobrable (uncollectible) en Stripe; pagada o anulada (void) no; y tampoco si un pago manual
  * ya cubre a la clínica o si la factura es de otra suscripción.
  */
 export function motivoParaNoSuspender(args: {
@@ -176,7 +188,9 @@ export function motivoParaNoSuspender(args: {
   cubiertaPorPagoManual: boolean;
 }): "otra_suscripcion" | "factura_no_abierta" | "pago_manual" | null {
   if (!args.esDelPlan) return "otra_suscripcion";
-  if (args.estadoVivoFactura !== "open") return "factura_no_abierta";
+  // «open» e «uncollectible» (incobrable) SÍ suspenden: una factura incobrable NO está pagada. Pagada (paid) y
+  // anulada (void) no: ya no hay nada que cobrar.
+  if (args.estadoVivoFactura !== "open" && args.estadoVivoFactura !== "uncollectible") return "factura_no_abierta";
   if (args.cubiertaPorPagoManual) return "pago_manual";
   return null;
 }

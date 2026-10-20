@@ -114,9 +114,18 @@ export function PagoPendienteVista({
   return (
     <section className={s.panel} data-pago-pendiente="pendiente">
       <h2 className={s.titulo}>{t("shell.pagoPendiente.titulo")}</h2>
-      <p className={s.monto}>
-        {t("shell.pagoPendiente.pendiente")} <strong>{montoPendiente}</strong>
-      </p>
+      {d.cambioEnCurso && !cambio ? null : (
+        <p className={s.monto}>
+          {cambio ? (
+            // Un cambio de plan a medias: lo que falta es el plan NUEVO, no la factura vieja ya anulada.
+            t("shell.pagoPendiente.cambioEnCursoMonto", { plan: cambio.nombre, monto: formatoMonto(cambio.monto, d.moneda, idioma) })
+          ) : (
+            <>
+              {t("shell.pagoPendiente.pendiente")} <strong>{montoPendiente}</strong>
+            </>
+          )}
+        </p>
+      )}
 
       <div className={s.fila}>
         {d.cambioEnCurso ? (
