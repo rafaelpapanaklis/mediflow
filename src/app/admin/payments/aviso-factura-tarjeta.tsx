@@ -21,7 +21,7 @@ export interface AvisoFacturaTarjetaDatos {
   mensaje?: string | null;
 }
 
-type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; pausa?: { tipo?: string; hasta?: string } } | null } | null | undefined;
+type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; facturas?: string[]; anuladas?: string[]; pausa?: { tipo?: string; hasta?: string } } | null } | null | undefined;
 
 /** Los datos del aviso a partir de la respuesta de una confirmación que falló al marcar / pausar. */
 export function datosDelAviso(data: RespuestaMarcado, clinicId: string, clinicName?: string | null): AvisoFacturaTarjetaDatos {
@@ -35,8 +35,12 @@ export function fallóElMarcadoDeLaFacturaTarjeta(data: RespuestaMarcado): boole
 
 /** Toast de éxito cuando sí se marcó alguna factura. */
 export function avisarSiSeMarcoLaFacturaTarjeta(data: RespuestaMarcado): void {
-  if (data?.facturaTarjeta?.tipo === "marcadas") {
+  if (data?.facturaTarjeta?.tipo === "marcadas" && (data.facturaTarjeta.facturas === undefined || data.facturaTarjeta.facturas.length > 0)) {
     toast.success("La factura de tarjeta quedó pagada fuera de Stripe: ya no la reintentará.");
+  }
+  if (data?.facturaTarjeta?.anuladas && data.facturaTarjeta.anuladas.length > 0) {
+    const n = data.facturaTarjeta.anuladas.length;
+    toast.success(`Se anularon ${n} ${n === 1 ? "factura" : "facturas"} de meses sin servicio: no se cobran ni se deben.`);
   }
   // Q1: un prepago de varios meses pausa el cobro de la tarjeta hasta que termine (sin cancelar nada).
   const pausa = data?.facturaTarjeta?.pausa;

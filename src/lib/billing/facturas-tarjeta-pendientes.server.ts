@@ -7,10 +7,11 @@ import {
   reanudarCobroDespuesDelPrepago,
 } from "@/lib/billing/cobro-rechazado";
 import {
-  facturasPendientesDelPlan,
   marcarFacturasDelPlanPagadasFueraDeStripe,
+  repartirPendientes,
   suscripcionDeTarjetaViva,
 } from "@/lib/billing/factura-fuera-de-stripe.server";
+import { facturasAbiertasDelPlan } from "@/lib/billing/reactivacion-tras-suspension.server";
 import { subscriptionItemInterval, subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 
 /**
@@ -23,9 +24,9 @@ import { subscriptionItemInterval, subscriptionPeriodEndSeconds } from "@/lib/bi
  * sigue apareciendo hasta que se marque, sin importar quién lo intentó. Alimenta el aviso persistente de /admin › Pagos
  * y el reintento automático del cron diario.
  *
- * Solo pagos manuales confirmados DESDE la fecha de corte (`INICIO_MARCADO_FUERA_DE_STRIPE`) y solo la factura del MISMO
- * ciclo que el pago (la última creada hasta él, sin otra renovación en medio): la renovación del mes siguiente y todo lo
- * anterior al despliegue no se perdonan solos.
+ * Solo pagos manuales confirmados DESDE la fecha de corte (`INICIO_MARCADO_FUERA_DE_STRIPE`) y solo las facturas que ya
+ * existían cuando se pagó: la renovación del mes siguiente y todo lo anterior al despliegue no se tocan solos. De esas, las
+ * de meses SUSPENDIDOS se anulan (nunca se deben) y la del ciclo se paga fuera de Stripe. NO existe «adeudo».
  */
 
 export interface ClinicaConFacturaPendiente {
@@ -33,10 +34,10 @@ export interface ClinicaConFacturaPendiente {
   clinicName: string;
   /** El último pago manual del plan que la dejó «al corriente». */
   pagoManualEn: Date;
-  /** Facturas del CICLO del pago que siguen abiertas (el marcado falló): se pueden reintentar. */
+  /** Facturas que siguen abiertas tras el pago (el marcado / la anulación falló): se pueden reintentar. */
   facturas: string[];
-  /** Facturas de meses ANTERIORES que siguen abiertas como adeudo (Q4: un pago solo marca los meses que cubre). Solo informativo. */
-  adeudo: string[];
+  /** De ellas, las de meses SUSPENDIDOS (por anular, no por pagar). */
+  suspendidas: string[];
   /** Q1: el pago cubre varios meses y la pausa del cobro de la tarjeta falta o llega menos lejos (fecha de reanudación esperada). */
   pausaPendiente: string | null;
 }
@@ -81,10 +82,8 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
         try {
           const sub = await suscripcionDeTarjetaViva(stripe, c.stripeSubscriptionId!);
           if (!sub) return null;
-          const ciclo = (await facturasPendientesDelPlan(stripe, c.stripeSubscriptionId!, corte, true, sub)) ?? [];
-          const todas = (await facturasPendientesDelPlan(stripe, c.stripeSubscriptionId!, corte, false, sub)) ?? [];
-          const idsCiclo = new Set(ciclo.map((f) => f.id));
-          const adeudo = todas.filter((f) => !idsCiclo.has(f.id)).map((f) => f.id!);
+          const pendientes = await facturasAbiertasDelPlan(stripe, c.stripeSubscriptionId!, corte);
+          const { suspendidas } = repartirPendientes(pendientes, { pagadoEn: corte });
           // ¿Falta (o llega corta) la pausa del cobro por el prepago de varios meses?
           const finCiclo = subscriptionPeriodEndSeconds(sub);
           const reanuda =
@@ -96,14 +95,14 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
                 })
               : null;
           const pausaPendiente =
-            reanuda && (sub.pause_collection?.resumes_at ?? 0) < Math.floor(reanuda.getTime() / 1000) ? reanuda.toISOString() : null;
-          if (ciclo.length === 0 && adeudo.length === 0 && !pausaPendiente) return null;
+            reanuda && (sub.pause_collection?.resumes_at ?? 0) < Math.floor(reanuda.getTime() / 1000) - 5 * 86_400 ? reanuda.toISOString() : null;
+          if (pendientes.length === 0 && !pausaPendiente) return null;
           return {
             clinicId: c.id,
             clinicName: c.name,
             pagoManualEn: corte,
-            facturas: ciclo.map((f) => f.id!),
-            adeudo,
+            facturas: pendientes.map((f) => f.id!),
+            suspendidas: suspendidas.map((f) => f.id!),
             pausaPendiente,
           } as ClinicaConFacturaPendiente;
         } catch (e) {
@@ -120,17 +119,19 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
 export interface ResumenReintento {
   revisadas: number;
   marcadas: string[];
+  /** Facturas de meses sin servicio anuladas (void). */
+  anuladas: string[];
   fallos: string[];
 }
 
 /**
- * El reintento automático (cron diario): marca la factura del ciclo del último pago manual que quedó abierta y pausa el
- * cobro de la tarjeta si lo prepagado rebasa el ciclo. Las facturas de meses anteriores (adeudo) NO se tocan. Nunca lanza.
+ * El reintento automático (cron diario): paga fuera de Stripe la factura del ciclo del último pago manual que quedó abierta,
+ * anula las de meses suspendidos, re-alinea el ciclo y pausa el cobro si lo prepagado rebasa el ciclo. Nunca lanza.
  */
 export async function reintentarMarcadoPendiente(
   opciones: { stripe?: Pick<Stripe, "subscriptions" | "invoices"> | null; ahora?: Date } = {},
 ): Promise<ResumenReintento> {
-  const resumen: ResumenReintento = { revisadas: 0, marcadas: [], fallos: [] };
+  const resumen: ResumenReintento = { revisadas: 0, marcadas: [], anuladas: [], fallos: [] };
   try {
     const stripe = opciones.stripe === undefined ? getStripeSafe() : opciones.stripe;
     const todas = await clinicasConFacturaPendienteTrasPagoManual({ ...opciones, stripe });
@@ -139,14 +140,21 @@ export async function reintentarMarcadoPendiente(
     for (const p of pendientes) {
       const clinica = await prisma.clinic.findUnique({ where: { id: p.clinicId }, select: { stripeSubscriptionId: true, trialEndsAt: true } });
       const r = await marcarFacturasDelPlanPagadasFueraDeStripe({
+        clinicId: p.clinicId,
         stripe,
         stripeSubscriptionId: clinica?.stripeSubscriptionId ?? null,
         creadasAntesDe: p.pagoManualEn,
-        soloMismoCiclo: true,
+        pagadoEn: p.pagoManualEn,
         finPrepago: clinica?.trialEndsAt ?? null,
       });
-      if (r.tipo === "marcadas") resumen.marcadas.push(...r.facturas);
-      else if (r.tipo === "fallo") resumen.fallos.push(p.clinicId);
+      if (r.tipo === "marcadas") {
+        resumen.marcadas.push(...r.facturas);
+        resumen.anuladas.push(...(r.anuladas ?? []));
+      } else if (r.tipo === "fallo") {
+        resumen.marcadas.push(...r.marcadas);
+        resumen.anuladas.push(...(r.anuladas ?? []));
+        resumen.fallos.push(p.clinicId);
+      }
     }
   } catch (e) {
     console.error("[facturas-tarjeta-pendientes] reintento:", (e as Error)?.message ?? e);

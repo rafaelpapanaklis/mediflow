@@ -1,4 +1,4 @@
-import { ACTIVE_SUBSCRIPTION_STATUSES, PAYMENT_FAILED_STATUSES } from "@/lib/plan-status";
+import { ACTIVE_SUBSCRIPTION_STATUSES, PAYMENT_FAILED_STATUSES, isPlanExpired } from "@/lib/plan-status";
 import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
 
 /**
@@ -195,22 +195,57 @@ function sumarMeses(fecha: Date, n: number): Date {
   return d;
 }
 
-/** Cuántos MESES cubre un pago manual registrado con su periodo (mínimo 1). */
-export function mesesDeUnPeriodo(inicio: Date | string, fin: Date | string): number {
-  const a = aFecha(inicio);
-  const b = aFecha(fin);
-  if (!a || !b) return 1;
-  return Math.max(1, Math.round((b.getTime() - a.getTime()) / (30.44 * DIA_MS)));
+/**
+ * OCTAVA VUELTA — corrección de Q4 (Rafael): los meses en que la clínica estuvo SUSPENDIDA por falta de pago NO se deben
+ * ni se cobran nunca. No existe «adeudo» de meses suspendidos. Cuando paga después de haber sido suspendida (por cualquier
+ * vía), el acceso se reactiva y se le dan 30 días contados desde el DÍA Y HORA DEL PAGO (N×30 si paga N meses); el
+ * siguiente cobro de la tarjeta es al terminar esos días. Las facturas de Stripe de los meses suspendidos se ANULAN (void)
+ * y en la base quedan como «No cobrada: servicio suspendido» (no se borran, no cuentan como ingreso ni como adeudo).
+ * Si paga DENTRO de las 24 h de gracia (aún no suspendida) no hay meses suspendidos: se paga la factura del ciclo y el
+ * ciclo sigue igual.
+ */
+export const NOTA_SERVICIO_SUSPENDIDO = "No cobrada: servicio suspendido";
+
+/** Hasta cuándo queda pagada una clínica que paga `meses` meses en `pagadoEn` (mismo cálculo de mes que el resto de pagos manuales). */
+export function finDeLoPagado(pagadoEn: Date, meses: number): Date {
+  const fin = new Date(pagadoEn.getTime());
+  fin.setMonth(fin.getMonth() + Math.max(1, Math.floor(meses) || 1));
+  return fin;
 }
 
 /**
- * Q4 (decisión de Rafael, opción A): un pago manual marca como pagadas SOLO las facturas de los meses que cubre. De las
- * facturas abiertas / incobrables del plan (más reciente primero) toma tantas como meses cubre el pago (mínimo 1); las
- * demás siguen abiertas como adeudo. Nunca se anula ni se borra nada.
+ * ¿La clínica estaba SUSPENDIDA (sin acceso) cuando pagó? Es exactamente `isPlanExpired` (la regla del gate): periodo
+ * vencido y sin suscripción viva. Dentro de las 24 h de gracia (past_due con acceso por delante) NO está suspendida.
+ * Se calcula con el estado de ANTES de registrar el pago: después de activarla ya no hay forma de saberlo.
  */
-export function facturasDeLosMesesPagados<T extends { created?: number | null }>(pendientes: T[], meses: number): T[] {
-  const n = Math.max(1, Math.floor(meses) || 1);
-  return [...pendientes].sort((a, b) => (b.created ?? 0) - (a.created ?? 0)).slice(0, n);
+export function clinicaEstabaSuspendida(
+  clinica: { subscriptionStatus?: string | null; trialEndsAt?: Date | string | null } | null | undefined,
+  ahora: Date = new Date(),
+): boolean {
+  return isPlanExpired(clinica, ahora);
+}
+
+/**
+ * Sin el estado de antes (el reintento del cron / del botón «Reintentar»): una factura abierta es de un mes SUSPENDIDO si
+ * se creó hace más que la gracia (más una hora de holgura por el desfase entre el rechazo y el evento) antes del pago.
+ */
+export function esMesDeServicioSuspendido(args: { facturaCreadaEn: Date | number | string; pagoEn: Date }): boolean {
+  const creada = aFecha(typeof args.facturaCreadaEn === "number" ? new Date(args.facturaCreadaEn * 1000) : args.facturaCreadaEn);
+  if (!creada) return false;
+  return creada.getTime() + (GRACIA_COBRO_RECHAZADO_HORAS + 1) * HORA_MS < args.pagoEn.getTime();
+}
+
+/**
+ * Días ANTES del fin de lo pagado en que se reanuda el cobro de la tarjeta tras re-alinear el ciclo. Stripe cuenta el mes
+ * calendario desde el ancla (31 ene + 1 mes = 28 feb) y la clínica se cuenta con `setMonth` (31 ene + 1 mes = 3 mar): el
+ * margen cubre esa diferencia para que la renovación del fin de lo pagado nunca caiga ANTES de la reanudación (se salta
+ * y la clínica se queda un mes sin cobro). Lo normal es que no se note: ancla y acceso salen del mismo instante.
+ */
+export const MARGEN_REANUDACION_DIAS = 4;
+
+/** Cuándo reanuda el cobro de la tarjeta una clínica re-alineada a «hoy + N meses». */
+export function reanudarCobroTrasRealinear(finDeLoPagado: Date): Date {
+  return new Date(finDeLoPagado.getTime() - MARGEN_REANUDACION_DIAS * DIA_MS);
 }
 
 /** Tolerancia al alinear el prepago con los ciclos de Stripe: una renovación se salta si la mayor parte de su periodo ya estaba pagada. */

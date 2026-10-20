@@ -31,16 +31,17 @@ import {
  * pestaña «Todos los pagos» y la bitácora de la clínica.
  */
 /**
- * Lo que pasa con la tarjeta al confirmar (decisión de Rafael, Q1 y Q4): la factura abierta del mes que se paga queda
- * pagada fuera de Stripe, la suscripción NO se cancela y las facturas de meses anteriores siguen abiertas como adeudo.
- * Con un solo mes, el mes siguiente se cobra la tarjeta como siempre; con un año (varios meses) el cobro de la tarjeta
- * se PAUSA hasta que termine lo prepagado y después Stripe vuelve a cobrar solo.
+ * Lo que pasa con la tarjeta al confirmar (decisión de Rafael): dentro de las 24 h de gracia, la factura abierta del mes
+ * queda pagada fuera de Stripe y el mes siguiente se cobra la tarjeta como siempre; con un año el cobro de la tarjeta se
+ * PAUSA hasta que termine lo prepagado. Si la clínica ya estaba SUSPENDIDA, los meses sin servicio no se deben: sus
+ * facturas se anulan y el acceso son 30 días desde el momento de confirmar. La suscripción nunca se cancela.
  */
 export function textoTarjetaViva(anual: boolean): string {
-  const base = " Tiene una suscripción de TARJETA viva en Stripe: al confirmar, la factura abierta del mes que paga queda pagada fuera de Stripe y la suscripción NO se cancela. Las facturas de meses anteriores, si las hay, siguen abiertas como adeudo.";
+  const base = " Tiene una suscripción de TARJETA viva en Stripe: la suscripción NO se cancela.";
+  const suspendida = " Si ya estaba suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan y el acceso corre desde este momento.";
   return anual
-    ? `${base} Como paga un año, el cobro de la tarjeta se PAUSA hasta que termine lo prepagado y después Stripe vuelve a cobrar solo.`
-    : `${base} El mes siguiente se cobra la tarjeta como siempre.`;
+    ? `${base}${suspendida} Como paga un año, el cobro de la tarjeta se PAUSA hasta que termine lo prepagado y después Stripe vuelve a cobrar solo.`
+    : `${base}${suspendida} Si estaba al corriente, el mes siguiente se cobra la tarjeta como siempre.`;
 }
 
 export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {

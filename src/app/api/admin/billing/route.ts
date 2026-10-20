@@ -9,7 +9,7 @@ import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
-import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, esPagoManualDelPlan, mesesDeUnPeriodo } from "@/lib/billing/cobro-rechazado";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, clinicaEstabaSuspendida, esPagoManualDelPlan } from "@/lib/billing/cobro-rechazado";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
@@ -148,8 +148,10 @@ export async function POST(req: NextRequest) {
     nextBilling.setMonth(nextBilling.getMonth() + 1);
     const current = await prisma.clinic.findUnique({
       where: { id: invoice.clinicId },
-      select: { trialEndsAt: true },
+      select: { trialEndsAt: true, subscriptionStatus: true },
     });
+    // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
+    const estabaSuspendida = clinicaEstabaSuspendida(current);
     await prisma.clinic.update({
       where: { id: invoice.clinicId },
       data: {
@@ -163,7 +165,7 @@ export async function POST(req: NextRequest) {
     // Pago manual CONFIRMADO: la factura de tarjeta del plan (si la hay, abierta o incobrable) queda pagada fuera de
     // Stripe para que no la reintente. Si falla, la activación NO se deshace: aviso al admin + bitácora.
     // Solo si lo verificado es un pago MANUAL DEL PLAN (método nulo o de la lista); nunca un cobro de Stripe.
-    const facturaTarjeta = esPagoManualDelPlan(invoice.method) ? await marcarFacturasDeLaClinica(invoice.clinicId, { meses: mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd) }) : null;
+    const facturaTarjeta = esPagoManualDelPlan(invoice.method) ? await marcarFacturasDeLaClinica(invoice.clinicId, { estabaSuspendida }) : null;
 
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId: invoice.clinicId,
@@ -195,8 +197,10 @@ export async function POST(req: NextRequest) {
     // Misma regla que verify_payment: las dos fechas se mueven juntas.
     const current = await prisma.clinic.findUnique({
       where: { id: clinicId },
-      select: { trialEndsAt: true, ...CLINIC_OVERRIDE_SELECT },
+      select: { trialEndsAt: true, subscriptionStatus: true, ...CLINIC_OVERRIDE_SELECT },
     });
+    // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
+    const estabaSuspendida = clinicaEstabaSuspendida(current);
 
     // Precio mensual desde plan_configs (fallback plan-shared) — misma fuente
     // que el checkout; un plan inválido coacciona a PRO. Si se activa el MISMO
@@ -244,7 +248,7 @@ export async function POST(req: NextRequest) {
 
     // Misma regla que «verificar pago»: la factura de tarjeta del plan queda pagada fuera de Stripe (nunca se cancela
     // la suscripción: el mes siguiente Stripe cobra la tarjeta normal). Si falla, la activación sigue en pie.
-    const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { meses: Math.max(1, Math.floor(Number(months)) || 1) });
+    const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { estabaSuspendida });
 
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId,

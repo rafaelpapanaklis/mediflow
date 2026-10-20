@@ -23,8 +23,8 @@ export interface FacturaTarjetaPendienteDTO {
   pagoManualEn: string;
   /** Facturas del ciclo del pago que siguen abiertas (el marcado falló): se pueden reintentar. */
   facturas: string[];
-  /** Facturas de meses anteriores que siguen abiertas como adeudo (un pago manual solo marca los meses que cubre). */
-  adeudo?: string[];
+  /** De ellas, las de meses sin servicio (suspendida) que faltan por anular: no se deben. */
+  suspendidas?: string[];
   /** El prepago de varios meses no tiene (o no llega) la pausa del cobro de la tarjeta: fecha en que debería reanudarse. */
   pausaPendiente?: string | null;
 }
@@ -76,7 +76,7 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
           <AlertTriangle size={16} aria-hidden /> {TITULO_FACTURAS_TARJETA_PENDIENTES} ({filas.length})
         </div>
         <p style={{ margin: "4px 0 10px", fontSize: 12.5, color: "var(--text-2)" }}>
-          Stripe podría reintentar (o cobrar) la tarjeta. Reintenta, o hazlo a mano en Stripe; el cron diario también lo intenta. Las facturas de meses anteriores quedan como adeudo: un pago manual solo cubre los meses que paga.
+          Stripe podría reintentar (o cobrar) la tarjeta. Reintenta, o hazlo a mano en Stripe; el cron diario también lo intenta. Los meses en que estuvo suspendida no se deben: sus facturas se anulan, no se cobran.
         </p>
         <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
           {filas.map((f) => (
@@ -86,7 +86,7 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
                 pagó a mano {fechaHoraAdmin(f.pagoManualEn) ?? ""}
                 {f.facturas.length > 0 ? ` · ${f.facturas.length === 1 ? "factura abierta" : "facturas abiertas"} del ciclo ${f.facturas.join(", ")}` : ""}
                 {f.pausaPendiente ? ` · falta pausar el cobro de la tarjeta hasta ${fechaHoraAdmin(f.pausaPendiente) ?? ""}` : ""}
-                {(f.adeudo ?? []).length > 0 ? ` · adeudo de meses anteriores (siguen abiertas, no se perdonan solas): ${(f.adeudo ?? []).join(", ")}` : ""}
+                {(f.suspendidas ?? []).length > 0 ? ` · por anular (meses sin servicio): ${(f.suspendidas ?? []).join(", ")}` : ""}
               </span>
               {(f.facturas.length > 0 || f.pausaPendiente) && (
                 <span style={{ marginLeft: "auto" }}>

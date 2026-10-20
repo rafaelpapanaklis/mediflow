@@ -234,6 +234,7 @@ const PERMITIDAS: Array<{ archivo: string; funcion: string; max: number; razon: 
   { archivo: "src/app/api/webhooks/stripe/route.ts", funcion: "pagoManualCubre", max: 1, razon: "el webhook la lee a propósito: es el rastro" },
   { archivo: "src/lib/billing/factura-fuera-de-stripe.server.ts", funcion: "ultimoPagoManualDelPlan", max: 1, razon: "lee a propósito el último pago MANUAL (incluida la activación) para cortar las facturas que ya existían" },
   { archivo: "src/lib/billing/facturas-tarjeta-pendientes.server.ts", funcion: "clinicasConFacturaPendienteTrasPagoManual", max: 1, razon: "lee a propósito los pagos MANUALES recientes (incluida la activación) para el aviso y el reintento" },
+  { archivo: "src/lib/billing/reactivacion-tras-suspension.server.ts", funcion: "registrarComoNoCobrada", max: 1, razon: "busca SU fila por referencia para no duplicarla al dejarla como «No cobrada: servicio suspendido»" },
   { archivo: "src/app/api/cfdi/usage/route.ts", funcion: "GET", max: 1, razon: "adeudos de excedente de CFDI (method cfdi_overage)" },
   { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "GET", max: 1, razon: "lista de pagos del admin: se ve, rotulada" },
   { archivo: "src/app/api/admin/billing/route.ts", funcion: "GET", max: 2, razon: "pagos recientes (se ven, rotulados) y transferencias pendientes" },

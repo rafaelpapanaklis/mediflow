@@ -853,11 +853,11 @@ test("el aviso del admin dice exactamente el mensaje pedido, con «Reintentar»,
 
 test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al marcado; el aviso sale en /admin › Pagos y en SPEI pendientes", () => {
   for (const [archivo, marca] of [
-    ["src/app/api/admin/billing/route.ts", "marcarFacturasDeLaClinica(invoice.clinicId, { meses: mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd) })"],
-    ["src/app/api/admin/billing/route.ts", "const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { meses: Math.max(1, Math.floor(Number(months)) || 1) });"],
-    ["src/app/api/admin/subscriptions/route.ts", "marcarFacturasDeLaClinica(clinicId, { meses: mesesDeUnPeriodo(periodStart, periodEnd) })"],
-    ["src/lib/billing/spei-directo.ts", "marcarFacturasDeLaClinica(sol.clinicId, { meses: billing === \"annual\" ? 12 : 1 })"],
-    ["src/app/api/webhooks/stripe/route.ts", "facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { meses: billing === \"annual\" ? 12 : 1 });"],
+    ["src/app/api/admin/billing/route.ts", "marcarFacturasDeLaClinica(invoice.clinicId, { estabaSuspendida })"],
+    ["src/app/api/admin/billing/route.ts", "const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { estabaSuspendida });"],
+    ["src/app/api/admin/subscriptions/route.ts", "marcarFacturasDeLaClinica(clinicId, { estabaSuspendida })"],
+    ["src/lib/billing/spei-directo.ts", "marcarFacturasDeLaClinica(sol.clinicId, { estabaSuspendida })"],
+    ["src/app/api/webhooks/stripe/route.ts", "facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { estabaSuspendida: clinicaEstabaSuspendida(before) });"],
   ] as const) {
     assert.ok(sinComentarios(leer(archivo)).includes(marca), `${archivo}: ${marca}`);
   }
@@ -914,23 +914,30 @@ test("Q6 el aviso persistente de /admin › Pagos: título pedido, una fila por 
 
 /* ── Q1 / Q4 (decisión de Rafael, opción A) ── */
 
-import { facturasDeLosMesesPagados, mesesDeUnPeriodo, pagadoHastaPorPrepago, reanudarCobroDespuesDelPrepago } from "../cobro-rechazado";
+import { clinicaEstabaSuspendida, esMesDeServicioSuspendido, finDeLoPagado, reanudarCobroTrasRealinear, pagadoHastaPorPrepago, reanudarCobroDespuesDelPrepago } from "../cobro-rechazado";
 
-describe("Q4 facturasDeLosMesesPagados / mesesDeUnPeriodo", () => {
-  const f = (id: string, created: number) => ({ id, created });
-  it("toma tantas facturas como meses cubre el pago, las más recientes primero; mínimo 1", () => {
-    const lista = [f("a", 1), f("b", 2), f("c", 3)];
-    assert.deepEqual(facturasDeLosMesesPagados(lista, 1).map((x) => x.id), ["c"]);
-    assert.deepEqual(facturasDeLosMesesPagados(lista, 2).map((x) => x.id), ["c", "b"]);
-    assert.deepEqual(facturasDeLosMesesPagados(lista, 12).map((x) => x.id), ["c", "b", "a"]);
-    assert.deepEqual(facturasDeLosMesesPagados(lista, 0).map((x) => x.id), ["c"]);
-    assert.deepEqual(facturasDeLosMesesPagados([], 3), []);
+describe("octava vuelta: reglas puras de la suspensión", () => {
+  const ahora = new Date("2026-11-20T12:00:00Z");
+  it("clinicaEstabaSuspendida = isPlanExpired: past_due con la gracia vencida sí; dentro de la gracia no", () => {
+    assert.equal(clinicaEstabaSuspendida({ subscriptionStatus: "past_due", trialEndsAt: new Date("2026-11-19T12:00:00Z") }, ahora), true);
+    assert.equal(clinicaEstabaSuspendida({ subscriptionStatus: "past_due", trialEndsAt: new Date("2026-11-21T01:00:00Z") }, ahora), false, "dentro de las 24 h de gracia");
+    assert.equal(clinicaEstabaSuspendida({ subscriptionStatus: "active", trialEndsAt: new Date("2026-12-20T00:00:00Z") }, ahora), false);
+    assert.equal(clinicaEstabaSuspendida(null, ahora), false);
   });
-  it("cuenta los meses de un periodo", () => {
-    assert.equal(mesesDeUnPeriodo("2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z"), 1);
-    assert.equal(mesesDeUnPeriodo("2026-10-01T00:00:00Z", "2027-01-01T00:00:00Z"), 3);
-    assert.equal(mesesDeUnPeriodo("2026-10-01T00:00:00Z", "2027-10-01T00:00:00Z"), 12);
-    assert.equal(mesesDeUnPeriodo("basura", "2027-10-01T00:00:00Z"), 1);
+  it("esMesDeServicioSuspendido: una factura creada hace más que la gracia (+1 h) antes del pago", () => {
+    const pagoEn = ahora;
+    assert.equal(esMesDeServicioSuspendido({ facturaCreadaEn: new Date(pagoEn.getTime() - 120 * 86_400_000), pagoEn }), true);
+    assert.equal(esMesDeServicioSuspendido({ facturaCreadaEn: new Date(pagoEn.getTime() - 26 * 3_600_000), pagoEn }), true);
+    assert.equal(esMesDeServicioSuspendido({ facturaCreadaEn: new Date(pagoEn.getTime() - 5 * 3_600_000), pagoEn }), false, "dentro de la gracia");
+    assert.equal(esMesDeServicioSuspendido({ facturaCreadaEn: Math.floor((pagoEn.getTime() - 30 * 86_400_000) / 1000), pagoEn }), true, "segundos de Stripe");
+  });
+  it("finDeLoPagado: N meses desde el día y hora del pago; reanudarCobroTrasRealinear: unos días antes", () => {
+    const p = new Date("2026-11-20T15:30:00Z");
+    assert.equal(finDeLoPagado(p, 1).toISOString(), new Date(new Date(p).setMonth(p.getMonth() + 1)).toISOString());
+    assert.equal(finDeLoPagado(p, 3).getMonth(), (p.getMonth() + 3) % 12);
+    assert.equal(finDeLoPagado(p, 0).getTime(), finDeLoPagado(p, 1).getTime(), "mínimo 1");
+    const fin = finDeLoPagado(p, 1);
+    assert.ok(reanudarCobroTrasRealinear(fin).getTime() < fin.getTime() && reanudarCobroTrasRealinear(fin).getTime() > p.getTime());
   });
 });
 
@@ -970,12 +977,17 @@ describe("Q1 pagadoHastaPorPrepago", () => {
 test("Q1 el aviso de SPEI pendiente es verdad en los dos casos: 1 mes (la tarjeta se cobra el mes siguiente) y un año (el cobro se pausa)", () => {
   const { textoTarjetaViva } = require("../../../app/admin/payments/spei-pendientes");
   const mensual = textoTarjetaViva(false);
-  assert.match(mensual, /El mes siguiente se cobra la tarjeta como siempre/);
+  assert.match(mensual, /el mes siguiente se cobra la tarjeta como siempre/);
   assert.doesNotMatch(mensual, /PAUSA/);
   const anual = textoTarjetaViva(true);
   assert.match(anual, /PAUSA hasta que termine lo prepagado/);
   assert.doesNotMatch(anual, /mes siguiente se cobra/);
-  for (const t of [mensual, anual]) assert.match(t, /NO se cancela/);
+  // Octava vuelta: ya no existe «adeudo» de meses suspendidos; se dice que sus facturas se anulan.
+  for (const t of [mensual, anual]) {
+    assert.match(t, /NO se cancela/);
+    assert.match(t, /suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan/);
+    assert.doesNotMatch(t, /adeudo/i);
+  }
   // La clínica ve «Pagado hasta {fecha}» en los dos idiomas.
   for (const l of ["es", "en"]) {
     const d = JSON.parse(readFileSync(join(process.cwd(), `src/i18n/dictionaries/${l}.json`), "utf8"));

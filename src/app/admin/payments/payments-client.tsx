@@ -1,5 +1,6 @@
 "use client";
 
+import { NOTA_SERVICIO_SUSPENDIDO } from "@/lib/billing/cobro-rechazado";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,7 +42,7 @@ function methodBadge(method: string | null | undefined, fila?: { reference?: str
   return m ? `${m.icon} ${m.label}` : method ?? "\u2014";
 }
 
-function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null; reference?: string | null }) {
+function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null; reference?: string | null; notes?: string | null }) {
   // Una fila de $0 que es solo un rastro (activación manual de /admin, o el SPEI/OXXO que cobró Stripe) se VE, pero no
   // es un cobro: se rotula distinto de «Pagado».
   const rotulo = rotuloDeFilaSinCobro(fila);
@@ -49,6 +50,8 @@ function statusBadge(status: string, fila?: { method?: string | null; amount?: n
   if (status === "paid")    return <BadgeNew tone="success" dot>Pagado</BadgeNew>;
   if (status === "pending") return <BadgeNew tone="warning" dot>Pendiente</BadgeNew>;
   if (status === "failed")  return <BadgeNew tone="danger"  dot>Fallido</BadgeNew>;
+  // Anulada en Stripe: o se pagó fuera de Stripe, o fue un mes sin servicio (suspendida) que no se cobra ni se debe.
+  if (status === "void")    return <BadgeNew tone="neutral" dot>{fila?.notes?.startsWith(NOTA_SERVICIO_SUSPENDIDO) ? NOTA_SERVICIO_SUSPENDIDO : "Anulada"}</BadgeNew>;
   return <BadgeNew tone="neutral" dot>{status}</BadgeNew>;
 }
 
