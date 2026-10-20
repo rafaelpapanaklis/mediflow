@@ -32,6 +32,7 @@ import type {
   PacientePoliticaCambios,
 } from "@/lib/patient-portal/types";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { MARCA_SOBREAGENDADA } from "@/lib/agenda/agenda-flexible";
 import { hayQueNombrarAlPaciente, pacienteDeLaCita } from "@/lib/patient-portal/ortodoncia-portal";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
@@ -404,6 +405,22 @@ export async function POST(req: NextRequest) {
           select: { id: true },
         });
         if (conflict) throw new Error("SLOT_TAKEN");
+        // WS1-T5 (Salamanca) — el solape parcial lo para la constraint, pero
+        // la constraint NO ve una cita sobreagendada por el equipo: el portal
+        // nunca sobreagenda, así que ésa se mira aquí.
+        const sobreagendada = await tx.appointment.findFirst({
+          where: {
+            clinicId,
+            doctorId,
+            status: { notIn: ["CANCELLED", "NO_SHOW"] },
+            overrideReason: { startsWith: MARCA_SOBREAGENDADA },
+            startsAt: { lt: endsAt },
+            endsAt: { gt: startsAt },
+            AND: [sinApartadoVencido()],
+          },
+          select: { id: true },
+        });
+        if (sobreagendada) throw new Error("SLOT_TAKEN");
 
         return tx.appointment.create({
           data: {

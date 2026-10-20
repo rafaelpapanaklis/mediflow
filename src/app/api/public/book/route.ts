@@ -16,6 +16,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, MENSAJE_PUBLICO_FUERA_DE_HORARIO } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { reservaWebAbierta } from "@/lib/reserva-web/db";
@@ -233,11 +234,11 @@ export async function POST(req: NextRequest) {
           clinicId:  clinic!.id,
           doctorId:  { in: atienden.map(c => c.id) },
           status:    { notIn: ["CANCELLED","NO_SHOW"] },
-          overrideReason: null,
           startsAt:  { lt: endsAtBook },
           endsAt:    { gt: startsAtBook },
           // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
-          AND: [sinApartadoVencido()],
+          // WS1-T5 (Salamanca) — una SOBREAGENDADA por el equipo sí ocupa.
+          AND: [sinApartadoVencido(), ocupaElHueco()],
         },
         select: { doctorId: true },
       });

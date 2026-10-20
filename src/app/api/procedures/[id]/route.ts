@@ -4,7 +4,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { datosDeCambio, leerOrthoIncluido } from "../entrada";
+import { datosDeCambio, leerAgendaColor, leerOrthoIncluido } from "../entrada";
+import { agendaFlexibleEncendida } from "@/lib/agenda/agenda-flexible.server";
+import { guardarColorProcedimiento } from "@/lib/agenda/color-procedimiento.server";
 import { descripcionTrasCambioDeCobro, evaluarCambioDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { quitarProcedimiento } from "@/lib/procedures/quitar-procedimiento";
 import { quitarDepsPrisma } from "@/lib/procedures/quitar-procedimiento-db";
@@ -39,6 +41,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
     const fiscal = leerFiscalDeEntrada(body);
     if (!fiscal.ok) return NextResponse.json({ error: fiscal.error }, { status: 400 });
+    // Salamanca — color en la agenda: se valida siempre, se guarda solo con la bandera encendida.
+    const agendaColor = leerAgendaColor(body.agendaColor);
+    if (!agendaColor.ok) return NextResponse.json({ error: "agendaColor_invalido" }, { status: 400 });
 
     // Reglas de la categoría «Ortodoncia» (control fijo, módulo activo, cobro elegido).
     const orthoIncluido = leerOrthoIncluido(body.orthoIncludedInTreatment);
@@ -89,10 +94,16 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     // ws1-t3 — «Se agenda por WhatsApp»: sin sql/ws1-t3-bot-servicios-agendables.sql no se guarda (y se dice).
     const botGuardado = typeof body.botAgendable === "boolean" ? await guardarMarcaAgendable(params.id, ctx.clinicId, body.botAgendable) : true;
 
+    // Salamanca — color en la agenda (sin la columna no se guarda, y se dice).
+    const colorGuardado = agendaColor.value !== undefined && (await agendaFlexibleEncendida(ctx.clinicId))
+      ? await guardarColorProcedimiento(params.id, ctx.clinicId, agendaColor.value)
+      : true;
+
     revalidateAfter("procedures");
     return NextResponse.json({
       ...updated,
       ...fiscal.datos,
+      ...(colorGuardado ? {} : { agendaColorSinGuardar: true }),
       ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }),
       ...(typeof body.botAgendable === "boolean" ? { botAgendable: body.botAgendable && botGuardado, ...(botGuardado ? {} : { botAgendableSinGuardar: true }) } : {}),
     });

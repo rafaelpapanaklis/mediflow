@@ -4,7 +4,9 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
-import { datosDeAlta, leerOrthoIncluido } from "./entrada";
+import { datosDeAlta, leerAgendaColor, leerOrthoIncluido } from "./entrada";
+import { agendaFlexibleEncendida } from "@/lib/agenda/agenda-flexible.server";
+import { coloresElegidos, guardarColorProcedimiento } from "@/lib/agenda/color-procedimiento.server";
 import { errorDeAltaDeOrtodoncia } from "@/lib/orthodontics/procedimiento-ortodoncia-reglas";
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { sembrarProcedimientosDeOrtodoncia, aplicarOrthoIncluido, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
@@ -89,7 +91,9 @@ export async function GET(req: NextRequest) {
   const fiscal = await fiscalDeProcedimientos(prisma, ctx.clinicId);
   // ws1-t3 — «Se agenda por WhatsApp» (SQL crudo; sin la columna, nadie marcado).
   const marcas = await marcasDeLaClinica(ctx.clinicId);
-  return NextResponse.json(procedures.map((p) => ({ ...p, claveSat: fiscal[p.id]?.claveSat ?? null, ivaCfdi: fiscal[p.id]?.ivaCfdi ?? null, botAgendable: marcas[p.id] === true })));
+  // Salamanca — color en la agenda (solo con la bandera de la clínica; apagada, la respuesta es la de siempre).
+  const colores = (await agendaFlexibleEncendida(ctx.clinicId)) ? await coloresElegidos(ctx.clinicId) : null;
+  return NextResponse.json(procedures.map((p) => ({ ...p, claveSat: fiscal[p.id]?.claveSat ?? null, ivaCfdi: fiscal[p.id]?.ivaCfdi ?? null, botAgendable: marcas[p.id] === true, ...(colores ? { agendaColor: colores[p.id] ?? null } : {}) })));
 }
 
 export async function POST(req: NextRequest) {
@@ -109,6 +113,9 @@ export async function POST(req: NextRequest) {
     if (!entrada.ok) return NextResponse.json({ error: entrada.error }, { status: 400 });
     const fiscal = leerFiscalDeEntrada(body);
     if (!fiscal.ok) return NextResponse.json({ error: fiscal.error }, { status: 400 });
+    // Salamanca — color en la agenda: se valida siempre, se guarda solo con la bandera encendida.
+    const agendaColor = leerAgendaColor(body.agendaColor);
+    if (!agendaColor.ok) return NextResponse.json({ error: "agendaColor_invalido" }, { status: 400 });
 
     // Categoría «Ortodoncia»: solo con el módulo activo y con el cobro elegido
     // (incluido en el tratamiento / con costo aparte). Las reglas viven en un
@@ -133,8 +140,12 @@ export async function POST(req: NextRequest) {
     const fiscalGuardado = await guardarFiscalDeProcedimiento(prisma, { clinicId: ctx.clinicId, procedureId: procedure.id, datos: fiscal.datos ?? {} });
     const botGuardado = typeof body.botAgendable === "boolean" ? await guardarMarcaAgendable(procedure.id, ctx.clinicId, body.botAgendable) : true;
 
+    const colorGuardado = agendaColor.value !== undefined && (await agendaFlexibleEncendida(ctx.clinicId))
+      ? await guardarColorProcedimiento(procedure.id, ctx.clinicId, agendaColor.value)
+      : true;
+
     revalidateAfter("procedures");
-    return NextResponse.json({ ...procedure, ...fiscal.datos, ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }), ...(typeof body.botAgendable === "boolean" ? { botAgendable: body.botAgendable && botGuardado, ...(botGuardado ? {} : { botAgendableSinGuardar: true }) } : {}) }, { status: 201 });
+    return NextResponse.json({ ...procedure, ...fiscal.datos, ...(colorGuardado ? {} : { agendaColorSinGuardar: true }), ...(fiscalGuardado ? {} : { fiscalSinGuardar: true }), ...(typeof body.botAgendable === "boolean" ? { botAgendable: body.botAgendable && botGuardado, ...(botGuardado ? {} : { botAgendableSinGuardar: true }) } : {}) }, { status: 201 });
   } catch (err: any) {
     console.error("Create procedure error:", err);
     return NextResponse.json({ error: err.message ?? "Error al crear procedimiento" }, { status: 500 });

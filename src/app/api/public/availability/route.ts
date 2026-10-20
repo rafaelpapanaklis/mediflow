@@ -9,6 +9,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiendeSlot } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
 import { reservaWebAbierta } from "@/lib/reserva-web/db";
 import { MENSAJE_RESERVA_CERRADA } from "@/lib/reserva-web/estado";
 
@@ -133,10 +134,11 @@ export async function GET(req: NextRequest) {
         startsAt: { lt: dayEndUtc },
         endsAt:   { gt: dayStartUtc },
         status:   { notIn: ["CANCELLED","NO_SHOW"] },
-        overrideReason: null,
         ...(doctorId ? { doctorId } : {}),
         // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
-        AND: [sinApartadoVencido()],
+        // WS1-T5 (Salamanca) — y una SOBREAGENDADA por el equipo sí ocupa,
+        // aunque la constraint no la vea: la web nunca sobreagenda.
+        AND: [sinApartadoVencido(), ocupaElHueco()],
       },
       // doctorId hace falta para el modo "cualquiera": hay que saber de QUIÉN es
       // cada cita ocupada, no solo que la clínica está ocupada a esa hora.

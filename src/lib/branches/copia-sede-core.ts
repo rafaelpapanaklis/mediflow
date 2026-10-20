@@ -21,7 +21,11 @@
  *    indicaciones/constancias (`patient_handout_templates`) con sus
  *    procedimientos re-ligados al catálogo nuevo por NOMBRE;
  *  · los textos del bot de WhatsApp (persona, saludo, fuera de horario, FAQ),
- *    con el bot APAGADO en la sede nueva: la conexión de WhatsApp es por sede.
+ *    con el bot APAGADO en la sede nueva: la conexión de WhatsApp es por sede;
+ *  · las banderas de la agenda flexible (`agenda-flexible` y el color por
+ *    procedimiento, filas de `clinic_feature_flags`) y el color de cada
+ *    procedimiento del catálogo (`agendaColor`, fuera de schema.prisma). Las
+ *    banderas se heredan SIEMPRE, aunque el dueño no marque copiar la configuración.
  *
  * Qué NO se copia, y por qué se le dice al dueño en el diálogo:
  *  · CFDI (emisor, CSD, Facturapi): el RFC y el sello son por sede y los carga
@@ -34,6 +38,8 @@
  *    atiende (los permisos van por persona, no existen roles personalizados);
  *  · módulos de pago (Ortodoncia…): se contratan por sede.
  */
+
+import { BANDERAS_AGENDA_FLEXIBLE, FLAG_AGENDA_FLEXIBLE, FLAG_COLOR_POR_PROCEDIMIENTO } from "@/lib/agenda/agenda-flexible";
 
 /** Columnas escalares de `Clinic` que viajan tal cual a la sede nueva. */
 export const AJUSTES_QUE_SE_COPIAN = [
@@ -208,4 +214,24 @@ export function seccionesFallidas(r: ResultadoCopia): SeccionCopia[] {
 /** Si la copia dejó algo (para decidir si el diálogo enseña la lista o solo «sede creada»). */
 export function copioAlgo(r: ResultadoCopia): boolean {
   return SECCIONES_COPIA.some((s) => (r.copiado[s] ?? 0) > 0);
+}
+
+/** Una fila de `clinic_feature_flags`. */
+export interface FilaBandera {
+  flag: string;
+  enabled: boolean;
+}
+
+/**
+ * Las banderas de la agenda flexible que hereda una sede nueva. Solo cuentan
+ * las dos de `BANDERAS_AGENDA_FLEXIBLE`, y solo si la principal tiene
+ * `agenda-flexible` encendida: el color por procedimiento sin ella no hace nada.
+ */
+export function banderasParaSedeNueva(filas: readonly FilaBandera[] | null | undefined): FilaBandera[] {
+  const propias = (filas ?? []).filter((f) => (BANDERAS_AGENDA_FLEXIBLE as readonly string[]).includes(f.flag));
+  if (!propias.some((f) => f.flag === FLAG_AGENDA_FLEXIBLE && f.enabled === true)) return [];
+  const out: FilaBandera[] = [{ flag: FLAG_AGENDA_FLEXIBLE, enabled: true }];
+  const color = propias.find((f) => f.flag === FLAG_COLOR_POR_PROCEDIMIENTO);
+  if (color) out.push({ flag: FLAG_COLOR_POR_PROCEDIMIENTO, enabled: color.enabled === true });
+  return out;
 }

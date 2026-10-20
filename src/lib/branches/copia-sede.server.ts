@@ -3,10 +3,13 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/safe-log";
 import { repoHojas } from "@/lib/indicaciones/db";
+import { columnaAgendaColorExiste } from "@/lib/agenda/color-procedimiento.server";
+import { BANDERAS_AGENDA_FLEXIBLE } from "@/lib/agenda/agenda-flexible";
 import { columnaBotBookableExiste } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import {
   AJUSTES_QUE_SE_COPIAN,
   ajustesParaSedeNueva,
+  banderasParaSedeNueva,
   copiarCatalogo,
   horarioParaSedeNueva,
   religarProcedimientos,
@@ -104,6 +107,7 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
     idViejoANuevo = copia.idViejoANuevo;
     if (copia.filas.length > 0) await prisma.procedureCatalog.createMany({ data: copia.filas });
     await copiarMarcasDelBot(origenId, destinoId, idViejoANuevo);
+    await copiarColoresDeAgenda(origenId, destinoId, idViejoANuevo);
     return copia.filas.length;
   });
 
@@ -240,6 +244,54 @@ async function copiarMarcasDelBot(origenId: string, destinoId: string, idViejoAN
        WHERE "clinicId" = ${destinoId} AND "id" = ANY(${nuevos}::text[])`;
   } catch (e) {
     logError("[copia-sede] marcas «Se agenda por WhatsApp»", e);
+  }
+}
+
+/** Color de agenda de cada procedimiento: columna fuera de schema.prisma; sin ella, no se copia y no se falla. */
+async function copiarColoresDeAgenda(origenId: string, destinoId: string, idViejoANuevo: ReadonlyMap<string, string>): Promise<void> {
+  if (idViejoANuevo.size === 0 || !(await columnaAgendaColorExiste())) return;
+  try {
+    const coloreados = await prisma.$queryRaw<{ id: string; agendaColor: string }[]>`
+      SELECT "id", "agendaColor" FROM "procedure_catalog" WHERE "clinicId" = ${origenId} AND "agendaColor" IS NOT NULL`;
+    // Un UPDATE por clave de color (son ~10), con los ids nuevos de ese grupo.
+    const porColor = new Map<string, string[]>();
+    for (const c of coloreados) {
+      const nuevo = idViejoANuevo.get(c.id);
+      if (!nuevo) continue;
+      porColor.set(c.agendaColor, [...(porColor.get(c.agendaColor) ?? []), nuevo]);
+    }
+    for (const [color, nuevos] of porColor) {
+      await prisma.$executeRaw`
+        UPDATE "procedure_catalog" SET "agendaColor" = ${color}
+         WHERE "clinicId" = ${destinoId} AND "id" = ANY(${nuevos}::text[])`;
+    }
+  } catch (e) {
+    logError("[copia-sede] color de agenda de los procedimientos", e);
+  }
+}
+
+/**
+ * Banderas de la agenda flexible: la sede nueva hereda las de la principal.
+ * Va APARTE de `copiarConfiguracion` porque se hereda aunque el dueño no marque
+ * «copiar la configuración». No lanza: la sede se crea igual si esto falla.
+ */
+export async function heredarBanderasDeAgenda(origenId: string, destinoId: string): Promise<void> {
+  if (!origenId || !destinoId || origenId === destinoId) return;
+  try {
+    const sonda = await prisma.$queryRaw<{ existe: boolean }[]>`SELECT to_regclass('public.clinic_feature_flags') IS NOT NULL AS existe`;
+    if (sonda[0]?.existe !== true) return;
+    const filas = await prisma.clinicFeatureFlag.findMany({
+      where: { clinicId: origenId, flag: { in: [...BANDERAS_AGENDA_FLEXIBLE] } },
+      select: { flag: true, enabled: true },
+    });
+    const heredar = banderasParaSedeNueva(filas);
+    if (heredar.length === 0) return;
+    await prisma.clinicFeatureFlag.createMany({
+      data: heredar.map((r) => ({ clinicId: destinoId, ...r })),
+      skipDuplicates: true,
+    });
+  } catch (e) {
+    logError("[copia-sede] banderas de la agenda flexible", e);
   }
 }
 

@@ -44,6 +44,13 @@ export interface Dia {
   openTime: string;
   /** `HH:MM`, 24 h. */
   closeTime: string;
+  /**
+   * WS1-T5 — la comida del día, `HH:MM`. Opcional y en pareja. Solo existe
+   * con `comida: true` en la respuesta; en el borrador puede estar a medias
+   * (`""` = vacío) mientras se escribe.
+   */
+  lunchStart?: string | null;
+  lunchEnd?: string | null;
 }
 
 export interface HorarioDoctorDTO {
@@ -51,6 +58,13 @@ export interface HorarioDoctorDTO {
   horario: Dia[];
   /** `true` = no tiene horario propio: sigue el de la clínica. */
   hereda: boolean;
+  /** `true` = la clínica tiene la agenda flexible: la pantalla ofrece la comida. */
+  comida: boolean;
+  /**
+   * (revisión t8, N-A3) `true` = la clínica tiene la comida pero no se pudo
+   * leer. `comida` viene en `false`: ni se enseña ni se manda, y se avisa.
+   */
+  comidaIlegible?: boolean;
 }
 
 export const DIAS_SEMANA = 7;
@@ -106,13 +120,17 @@ export function diaCerrado(dayOfWeek: number): Dia {
 /** Una fila, o `null` si ni siquiera dice qué día es. */
 export function parseDia(raw: unknown): Dia | null {
   if (!esObjeto(raw) || !esDiaSemana(raw.dayOfWeek)) return null;
-  return {
+  const dia: Dia = {
     dayOfWeek: raw.dayOfWeek,
     // Fail-closed: solo `true` abre el día. Un `"true"` o un `1` no.
     enabled: raw.enabled === true,
     openTime: hora(raw.openTime, APERTURA_POR_DEFECTO),
     closeTime: hora(raw.closeTime, CIERRE_POR_DEFECTO),
   };
+  // La comida solo viaja si trae hora válida; una a medias se queda a medias.
+  if (typeof raw.lunchStart === "string" && HORA_RE.test(raw.lunchStart)) dia.lunchStart = raw.lunchStart;
+  if (typeof raw.lunchEnd === "string" && HORA_RE.test(raw.lunchEnd)) dia.lunchEnd = raw.lunchEnd;
+  return dia;
 }
 
 /**
@@ -141,7 +159,14 @@ export function semanaCompleta(filas: unknown): Dia[] {
  */
 export function parseHorarioDoctor(raw: unknown): HorarioDoctorDTO | null {
   if (!esObjeto(raw) || typeof raw.hereda !== "boolean") return null;
-  return { horario: semanaCompleta(raw.horario), hereda: raw.hereda };
+  const comidaIlegible = raw.comidaIlegible === true;
+  return {
+    horario: semanaCompleta(raw.horario),
+    hereda: raw.hereda,
+    // Si no se pudo leer, NUNCA se ofrece: unos campos vacíos se guardarían como «sin comida».
+    comida: raw.comida === true && !comidaIlegible,
+    ...(comidaIlegible ? { comidaIlegible } : {}),
+  };
 }
 
 /**
@@ -155,14 +180,21 @@ export function horarioClinica(filas: unknown): Dia[] | null {
   return alguna ? semanaCompleta(filas) : null;
 }
 
-/** El cuerpo del PUT. Los 7 días, siempre, de lunes a domingo. */
-export function cuerpoPut(dias: Dia[]): { horario: Dia[] } {
+/**
+ * El cuerpo del PUT. Los 7 días, siempre, de lunes a domingo.
+ *
+ * `comida` (WS1-T5): solo con `true` se añaden `lunchStart`/`lunchEnd` a cada
+ * día (`null` si está vacío). Sin él el cuerpo es el de siempre, sin llaves
+ * de comida.
+ */
+export function cuerpoPut(dias: Dia[], comida = false): { horario: Dia[] } {
   return {
     horario: semanaCompleta(dias).map((d) => ({
       dayOfWeek: d.dayOfWeek,
       enabled: d.enabled,
       openTime: d.openTime,
       closeTime: d.closeTime,
+      ...(comida ? { lunchStart: d.lunchStart || null, lunchEnd: d.lunchEnd || null } : {}),
     })),
   };
 }
@@ -184,6 +216,39 @@ export function hayRangoInvalido(dias: Dia[]): boolean {
   return dias.some(rangoInvalido);
 }
 
+/**
+ * Lo que está mal en la comida de un día, o `null` si está bien o no cuenta.
+ * Espeja las reglas del servidor (`parseComida` en `lib/horario-doctor/core`):
+ * las dos horas o ninguna; termina después de empezar; dentro del horario del
+ * día. Un día cerrado no lleva comida. Si el rango del día ya está mal se
+ * calla: dos errores en la misma fila se tapan.
+ *
+ * Devuelve la LLAVE i18n y sus variables (`dia` lo pone quien pinta).
+ */
+export interface ErrorComida {
+  clave: string;
+  vars: Record<string, string>;
+}
+
+export function validarComida(d: Dia): ErrorComida | null {
+  if (!d.enabled || rangoInvalido(d)) return null;
+  const ini = d.lunchStart ?? "";
+  const fin = d.lunchEnd ?? "";
+  if (ini === "" && fin === "") return null;
+  if (!HORA_RE.test(ini) || !HORA_RE.test(fin)) {
+    return { clave: "settings.horarioDoctor.comida.errorPar", vars: {} };
+  }
+  if (ini >= fin) return { clave: "settings.horarioDoctor.comida.errorOrden", vars: {} };
+  if (ini < d.openTime || fin > d.closeTime) {
+    return { clave: "settings.horarioDoctor.comida.errorFuera", vars: { abre: d.openTime, cierra: d.closeTime } };
+  }
+  return null;
+}
+
+export function hayComidaInvalida(dias: Dia[]): boolean {
+  return dias.some((d) => validarComida(d) !== null);
+}
+
 export function algunDiaAbierto(dias: Dia[]): boolean {
   return dias.some((d) => d.enabled);
 }
@@ -196,6 +261,9 @@ export function mismoHorario(a: Dia[], b: Dia[]): boolean {
     // Las horas de un día cerrado no cuentan: no cambian nada.
     if (!x[i].enabled) continue;
     if (x[i].openTime !== y[i].openTime || x[i].closeTime !== y[i].closeTime) return false;
+    if ((x[i].lunchStart || "") !== (y[i].lunchStart || "") || (x[i].lunchEnd || "") !== (y[i].lunchEnd || "")) {
+      return false;
+    }
   }
   return true;
 }

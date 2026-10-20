@@ -109,6 +109,23 @@
   --ag-ambar-badge: oklch(0.86 0.13 80);
   --ag-tarjeta-rojo-borde: oklch(0.86 0.08 25);
   --ag-chip-rojo-fondo: oklch(0.94 0.055 25);
+
+  /* ── WS1-T5 (grupo Salamanca) ──
+     La hora de comida (gris liso) y la paleta de los procedimientos del
+     catálogo (`color-procedimiento.ts`, que las lee con `var(--ag-proc-…)`).
+     Misma familia oklch que los acentos del diseño. */
+  --ag-comida-fondo: rgba(26, 24, 38, 0.06);
+  --ag-comida-filete: rgba(26, 24, 38, 0.22);
+  --ag-proc-morado: oklch(0.55 0.17 290);
+  --ag-proc-azul: oklch(0.56 0.14 250);
+  --ag-proc-cian: oklch(0.62 0.11 210);
+  --ag-proc-verde: oklch(0.6 0.14 150);
+  --ag-proc-oliva: oklch(0.62 0.12 115);
+  --ag-proc-ambar: oklch(0.7 0.14 75);
+  --ag-proc-naranja: oklch(0.65 0.16 50);
+  --ag-proc-coral: oklch(0.62 0.17 25);
+  --ag-proc-rosa: oklch(0.6 0.18 350);
+  --ag-proc-gris: oklch(0.58 0.02 280);
 }
 
 /* ═══ Oscuro ════════════════════════════════════════════════════════════
@@ -163,6 +180,20 @@
   --ag-sombra-modal: 0 24px 64px rgba(0, 0, 0, 0.5);
   --ag-velo: rgba(0, 0, 0, 0.6);
   --ag-cta-hover: color-mix(in srgb, var(--m2-cta-fondo) 90%, var(--m2-n1-fondo));
+
+  /* WS1-T5 — comida y paleta de procedimientos, más luminosas sobre fondo oscuro. */
+  --ag-comida-fondo: rgba(255, 255, 255, 0.06);
+  --ag-comida-filete: rgba(255, 255, 255, 0.24);
+  --ag-proc-morado: oklch(0.7 0.15 290);
+  --ag-proc-azul: oklch(0.7 0.13 250);
+  --ag-proc-cian: oklch(0.74 0.1 210);
+  --ag-proc-verde: oklch(0.72 0.14 150);
+  --ag-proc-oliva: oklch(0.74 0.12 115);
+  --ag-proc-ambar: oklch(0.78 0.13 75);
+  --ag-proc-naranja: oklch(0.74 0.15 50);
+  --ag-proc-coral: oklch(0.72 0.15 25);
+  --ag-proc-rosa: oklch(0.72 0.16 350);
+  --ag-proc-gris: oklch(0.7 0.02 280);
 }
 
 .tokensAgenda {
@@ -754,6 +785,54 @@
   overflow-y: auto;
 }
 
+/* ── WS1-T5 (grupo Salamanca): la leyenda de colores de Día y Semana ──
+   Una línea fina sobre la rejilla; si no cabe, se desplaza en horizontal en
+   vez de crecer (la rejilla manda). */
+.leyendaColores {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--ag-borde-divisor);
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.leyendaColoresTitulo {
+  font-weight: 600;
+  color: var(--ag-texto-3);
+}
+
+.leyendaColoresItem {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Un nombre de procedimiento larguísimo no se come la línea: se corta. */
+.leyendaColoresItem > span:last-child,
+.leyendaColoresItem {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leyendaColoresPunto {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* «Sin procedimiento: color del doctor» — un punto partido, sin color propio. */
+.leyendaColoresPuntoDoctor {
+  background: linear-gradient(135deg, var(--ag-texto-2) 0 50%, var(--ag-borde-casilla) 50% 100%);
+}
+
 /* ═══ Cuerpo: agenda + panel lateral ════════════════════════════════════ */
 
 .cuerpo {
@@ -1001,6 +1080,35 @@
 
 .franjaBloqueoDoctor .franjaBloqueoTexto {
   color: var(--ag-ambar-texto);
+}
+
+/* ── WS1-T5 (grupo Salamanca): la HORA DE COMIDA de un doctor ──
+   Gris liso (no rayado: el rayado es «cerrado» o «bloqueado») y el rótulo
+   «Comida». Debajo de las tarjetas y sin capturar el ratón, como un bloqueo. */
+.franjaComida {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: var(--ag-r-5);
+  background: var(--ag-comida-fondo);
+  box-shadow: inset 3px 0 0 var(--ag-comida-filete);
+  display: flex;
+  align-items: flex-start;
+  padding: 3px 8px;
+}
+
+.franjaComidaTexto {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  color: var(--ag-texto-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* ── Agendar con un clic: el hueco bajo el cursor ──
@@ -1399,6 +1507,19 @@
    Diseño (ws1-t5): un signo de pesos rojo suelto se perdía entre el nombre y
    la hora; ahora es una ficha redonda con el rojo de la agenda (los mismos
    `--ag-rojo-*` de una cita cancelada, con su versión oscura). */
+/* WS1-T5 — la marca de una cita sobreagendada (dos a la misma hora a propósito). */
+.tarjetaSobreagendada {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  color: var(--ag-ambar-texto);
+  background: var(--ag-ambar-fondo);
+}
+
 .tarjetaAvisoOrto {
   flex: none;
   display: grid;

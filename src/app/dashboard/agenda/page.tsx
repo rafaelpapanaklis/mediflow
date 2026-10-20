@@ -28,6 +28,9 @@ import { viewRangeUtc } from "@/lib/agenda/date-ranges";
 import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
 import { ctxDeUsuario } from "@/lib/agenda-bloqueos/core-ctx";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
+import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
+import { procedimientosConColor } from "@/lib/agenda/color-procedimiento.server";
+import { horariosComoObjeto, leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { AgendaPageClient } from "./agenda-page-client";
 
 // ws1-t1 (ronda final, N-55): sin esto la pestaña decía «DaleControl — Software para clínicas en México» (el título
@@ -164,10 +167,24 @@ export default async function AgendaPage(props: PageProps) {
   // tiene que salir de la sesión siempre y de la misma forma (ver
   // `core-ctx.ts`). `listarBloqueos` acota además por rol — un DOCTOR recibe
   // los suyos y los de toda la clínica, nunca el motivo del bloqueo de otra.
-  const bloqueos = await listarBloqueos(ctxDeUsuario({ ...user, clinic }), {
-    desde: range.fromUtc.toISOString(),
-    hasta: range.toUtc.toISOString(),
-  });
+  //
+  // WS1-T5 (grupo Salamanca) — en la MISMA tanda, y solo con la bandera
+  // `agenda-flexible` encendida: el horario de los doctores (para pintar su
+  // hora de comida desde el primer render: el provider se salta el primer
+  // fetch del rango) y, con «Colorear por: Procedimiento», el catálogo con su
+  // color. Sin bandera esto no consulta nada más que la bandera (en memoria
+  // 60 s) y el payload queda igual que siempre.
+  const flexible = await leerAgendaFlexible(clinic.id);
+  const [bloqueos, horariosFlexibles, procedimientos] = await Promise.all([
+    listarBloqueos(ctxDeUsuario({ ...user, clinic }), {
+      desde: range.fromUtc.toISOString(),
+      hasta: range.toUtc.toISOString(),
+    }),
+    flexible.encendida ? leerHorariosDeDoctores(clinic.id) : Promise.resolve(null),
+    flexible.encendida && flexible.modoColor === "procedimiento"
+      ? procedimientosConColor(clinic.id)
+      : Promise.resolve([]),
+  ]);
 
   const payload: AgendaDayResponse = {
     range: {
@@ -189,6 +206,8 @@ export default async function AgendaPage(props: PageProps) {
     pendingValidation,
     waitlistCount,
     bloqueos,
+    ...(horariosFlexibles ? { horariosDoctores: horariosComoObjeto(horariosFlexibles) } : {}),
+    agendaFlexible: { ...flexible, procedimientos },
   };
 
   return (

@@ -5,6 +5,7 @@ import { partitionSlotsByOverlap } from "@/lib/public-booking/slots";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
 
 /**
  * Solicitudes de cita SIN cuenta — lado panel.
@@ -150,9 +151,9 @@ export async function freeSlotsForDay(args: {
         startsAt: { lt: finDia },
         endsAt: { gt: inicioDia },
         // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
-        AND: [sinApartadoVencido()],
+        // WS1-T5 (Salamanca) — y una SOBREAGENDADA sí ocupa (la constraint no la ve).
+        AND: [sinApartadoVencido(), ocupaElHueco()],
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
-        overrideReason: null,
       },
       select: { startsAt: true, endsAt: true, doctorId: true },
     }),

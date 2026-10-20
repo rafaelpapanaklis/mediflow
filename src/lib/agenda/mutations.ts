@@ -12,6 +12,7 @@ import type {
 import toast from "react-hot-toast";
 import { avisarResultadoWhatsApp, type ResultadoAvisoWhatsApp } from "./aviso-whatsapp";
 import { adelantoDeLaRespuesta, textoDelAdelanto } from "./adelanto-texto";
+import type { CamposDeSobreagenda } from "./agenda-flexible";
 
 export interface ApiError {
   status: number;
@@ -29,6 +30,10 @@ export interface ApiError {
     endsAt: string;
     status: string;
   };
+  /** WS1-T5 — el 409 se puede sobreagendar (bandera `agenda-flexible`). */
+  sobreagendable?: boolean;
+  /** WS1-T5 — con `lunch_overlap`: la comida del doctor ese día. */
+  comida?: { lunchStart: string; lunchEnd: string } | null;
 }
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -42,6 +47,7 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
       count: body.count,
       sample: body.sample,
       conflictingAppointment: body.conflictingAppointment,
+      ...(body.sobreagendable === true ? { sobreagendable: true, comida: body.comida ?? null } : {}),
     };
     throw err;
   }
@@ -53,11 +59,13 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
 export async function patchAppointmentStatus(
   id: string,
   status: AppointmentStatus,
+  /** WS1-T5 (revisión t8, N-A1) — reabrir sobreagendada tras el «¿Seguro?». */
+  sobreagenda?: CamposDeSobreagenda,
 ): Promise<AgendaAppointmentDTO> {
   const res = await fetch(`/api/appointments/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...(sobreagenda ?? {}) }),
   });
   const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO; whatsapp?: ResultadoAvisoWhatsApp }>(res);
   // Si tocaba avisar al paciente (cancelación con el aviso encendido), se dice
@@ -118,6 +126,15 @@ export interface RescheduleAppointmentInput {
    * «Avisar al paciente» desmarcada). Sin él, el servidor decide como siempre con el ajuste de la clínica.
    */
   notifyPatient?: boolean;
+  /**
+   * WS1-T5 — «ya confirmé que sobreagendo» (bandera `agenda-flexible`). Solo
+   * tras el «¿Seguro?»; el `overrideReason` lo escribe el servidor.
+   */
+  sobreagendar?: boolean;
+  /** WS1-T5 — la cita que se enseñó en el «¿Seguro?» (`null` = solo la comida). */
+  sobreagendarCita?: string | null;
+  /** WS1-T5 — cuántas citas más se enseñaron. */
+  sobreagendarOtras?: number;
 }
 
 /** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */

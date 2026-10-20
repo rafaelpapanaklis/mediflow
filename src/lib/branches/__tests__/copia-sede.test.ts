@@ -10,6 +10,7 @@ import {
   HORARIO_POR_DEFECTO,
   NO_SE_COPIA,
   ajustesParaSedeNueva,
+  banderasParaSedeNueva,
   copiarCatalogo,
   copioAlgo,
   horarioParaSedeNueva,
@@ -97,5 +98,30 @@ describe("resultado de la copia", () => {
     assert.equal(copioAlgo(r), true);
     assert.deepEqual(seccionesFallidas(r), ["indicaciones", "botWhatsApp"]);
     assert.equal(r.origen.nombre, "Principal");
+  });
+});
+
+describe("sede nueva: banderas de la agenda flexible", () => {
+  it("sin la bandera principal encendida no hereda nada (ni el color suelto)", () => {
+    assert.deepEqual(banderasParaSedeNueva(null), []);
+    assert.deepEqual(banderasParaSedeNueva([]), []);
+    assert.deepEqual(banderasParaSedeNueva([{ flag: "agenda-color-procedimiento", enabled: true }]), []);
+    assert.deepEqual(banderasParaSedeNueva([{ flag: "agenda-flexible", enabled: false }]), []);
+  });
+  it("con la bandera encendida hereda esa y el color con su mismo valor", () => {
+    assert.deepEqual(banderasParaSedeNueva([{ flag: "agenda-flexible", enabled: true }]), [{ flag: "agenda-flexible", enabled: true }]);
+    assert.deepEqual(
+      banderasParaSedeNueva([
+        { flag: "agenda-color-procedimiento", enabled: false },
+        { flag: "agenda-flexible", enabled: true },
+      ]),
+      [{ flag: "agenda-flexible", enabled: true }, { flag: "agenda-color-procedimiento", enabled: false }],
+    );
+  });
+  it("ignora cualquier otra bandera", () => {
+    assert.deepEqual(
+      banderasParaSedeNueva([{ flag: "agenda-flexible", enabled: true }, { flag: "menu-dos-niveles", enabled: true }]),
+      [{ flag: "agenda-flexible", enabled: true }],
+    );
   });
 });

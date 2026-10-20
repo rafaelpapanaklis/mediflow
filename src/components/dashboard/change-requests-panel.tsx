@@ -22,6 +22,7 @@ import { CalendarClock, Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
+import { respuestaAl409 } from "./change-requests-409";
 
 interface ChangeRequestDTO {
   id: string;
@@ -128,15 +129,12 @@ export function ChangeRequestsPanel(props: { onResolved?: () => void }): React.J
       });
 
       if (res.status === 409) {
-        const err = await res.json().catch(() => null);
-        if (err?.error === "slot_taken") {
-          toast.error("El horario propuesto ya está ocupado; la solicitud se rechazó automáticamente");
-          void mutate(); // quedó REJECTED en el server → desaparece del panel
-        } else {
-          toast.error("Esta solicitud ya fue resuelta");
-          void mutate();
-          onResolved?.();
-        }
+        // slot_taken → quedó REJECTED en el server y desaparece del panel;
+        // lunch_overlap (WS1-T5) → su frase, y la solicitud sigue pendiente.
+        const r = respuestaAl409(await res.json().catch(() => null));
+        toast.error(r.texto, { duration: r.refrescar ? 4000 : 6000 });
+        if (r.refrescar) void mutate();
+        if (r.resuelta) onResolved?.();
         return;
       }
       if (res.status === 422) {

@@ -39,7 +39,7 @@ import {
 } from "@/lib/agenda-bloqueos/core";
 import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
-import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { avisoDeHorarioDoctor, comidaQuePisa, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import {
   bookingRuleBody,
@@ -58,6 +58,9 @@ import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.serve
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
+import { MARCA_SOBREAGENDADA, confirmacionValida, decidirSobreagenda, esSobreagendada } from "@/lib/agenda/agenda-flexible";
+import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
+import { buscarChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
@@ -130,6 +133,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     body = (await req.json()) as UpdateApptBody;
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  // WS1-T5 (revisión t8, A12) — un `overrideReason` vacío o de espacios es
+  // «sin motivo»: la constraint solo mira `IS NULL`, así que "" sacaría la
+  // cita del no-solape sin gate de rol, sin aviso y sin rastro.
+  if (typeof body.overrideReason === "string" && body.overrideReason.trim() === "") {
+    body.overrideReason = undefined;
   }
 
   // Igual que en el POST: /dashboard/appointments manda la hora de pared de la
@@ -313,8 +323,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   // bypasses the check.
   const effectiveResourceId =
     body.resourceId === undefined ? existing.resourceId : body.resourceId;
-  const effectiveOverride =
+  // WS1-T5 (revisión t8, A4) — la marca de sobreagendada NO es un motivo de
+  // administración: no salta el horario del sillón.
+  const overrideVigente =
     body.overrideReason !== undefined ? body.overrideReason : existing.overrideReason;
+  const effectiveOverride = esSobreagendada(overrideVigente) ? null : overrideVigente;
   if (effectiveResourceId && !effectiveOverride) {
     const schedule = await loadResourceSchedule(effectiveResourceId);
     const valid = validateResourceSchedule(
@@ -376,6 +389,119 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       data.overriddenAt = null;
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T5 — SOBREAGENDAR AL MOVER O CAMBIAR LA DURACIÓN (bandera
+  // `agenda-flexible`). El gemelo del POST: ver el bloque largo allí.
+  //
+  // Solo si la cita SE MUEVE (`seMueve`, al minuto): corregir las notas de
+  // una que ya está sobreagendada reenvía la misma hora y tiene que guardar
+  // sin volver a preguntar. Y el `overrideReason` de administración, si
+  // viene en el cuerpo, manda: aquí no se toca.
+  //
+  // Una sobreagendada que se mueve a un hueco LIBRE pierde la marca y vuelve
+  // a ser una cita normal (la constraint la vuelve a ver); si se mueve encima
+  // de otra, se pregunta otra vez.
+  // Cambiar SOLO el sillón también cuenta: el sillón nuevo puede estar
+  // ocupado, y una sobreagendada no la para la constraint.
+  const cambiaSillon = body.resourceId !== undefined && body.resourceId !== existing.resourceId;
+  const flexible = (seMueve || cambiaSillon) && body.overrideReason === undefined
+    ? await leerAgendaFlexible(session.clinic.id)
+    : null;
+  const choque = flexible?.encendida
+    ? await buscarChoqueDeCita({
+        clinicId: session.clinic.id,
+        doctorId: doctorEfectivo,
+        resourceId: effectiveResourceId ?? null,
+        startsAt: newStarts,
+        endsAt: newEnds,
+        excluirId: params.id,
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+        // Solo el sillón cambió: con su doctor y su hora ya estaba (y si
+        // estaba sobreagendada, ya se confirmó entonces). Se mira el sillón.
+        porDoctor: seMueve,
+      })
+    : null;
+  // La comida, solo si cambia la hora o el doctor: cambiar el sillón de una
+  // cita que ya estaba en la comida no vuelve a preguntar.
+  // (revisión t8, A2) la comida aunque la cita además se salga del horario.
+  const comidaPisada = flexible?.encendida && seMueve
+    ? comidaQuePisa(horariosDelHueco, newStarts, newEnds, doctorEfectivo, session.clinic.timezone)
+    : null;
+  const pisaComida = !!comidaPisada;
+  const sobreagenda = decidirSobreagenda({
+    encendida: !!flexible?.encendida,
+    confirmado: confirmacionValida({
+      sobreagendar: body.sobreagendar,
+      sobreagendarCita: body.sobreagendarCita,
+      choqueId: choque?.id ?? null,
+      otrasEnsenadas: body.sobreagendarOtras,
+      otrasServidor: choque?.otras ?? 0,
+    }),
+    hayChoque: !!choque,
+    pisaComida,
+  });
+  // Sin la bandera (o ya apagada): lo mismo que en el POST — la constraint no
+  // ve una sobreagendada sola, así que se mira aquí. Y una cita CON la marca
+  // que se mueve pierde la marca: sin bandera ya no se puede sobreagendar, y
+  // así la constraint vuelve a verla (y a parar un choque de verdad).
+  if (flexible && !flexible.encendida) {
+    const huerfana = await buscarChoqueDeCita({
+      clinicId: session.clinic.id,
+      doctorId: doctorEfectivo,
+      resourceId: effectiveResourceId ?? null,
+      startsAt: newStarts,
+      endsAt: newEnds,
+      excluirId: params.id,
+      viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+      // (revisión t8, N-A2) Una cita CON la marca que cambia SOLO de sillón
+      // sigue sin que la constraint la vea: el sillón nuevo se mira entero
+      // (también contra citas normales), no solo contra las marcadas.
+      soloMarcadas: !(!seMueve && cambiaSillon && esSobreagendada(existing.overrideReason)),
+      porDoctor: seMueve,
+    });
+    if (huerfana) {
+      return NextResponse.json(
+        { error: "appointment_overlap", conflictingAppointment: huerfana },
+        { status: 409 },
+      );
+    }
+    // Solo si se MUEVE (revisión t8, A1): cambiar solo el sillón no mira al
+    // doctor, y quitarle la marca a una que sigue encima de otra la haría
+    // chocar con la constraint sin remedio.
+    if (seMueve && esSobreagendada(existing.overrideReason)) {
+      data.overrideReason = null;
+      data.overriddenByUser = { disconnect: true };
+      data.overriddenAt = null;
+    }
+  }
+  if (flexible?.encendida && sobreagenda === "rechazar") {
+    return NextResponse.json(
+      {
+        error: choque ? "appointment_overlap" : "lunch_overlap",
+        sobreagendable: true,
+        ...(choque ? { conflictingAppointment: choque } : {}),
+        comida: comidaPisada,
+      },
+      { status: 409 },
+    );
+  }
+  const sobreagendada = sobreagenda === "sobreagendar";
+  if (flexible?.encendida) {
+    if (sobreagendada && choque && !existing.overrideReason) {
+      data.overrideReason = MARCA_SOBREAGENDADA;
+      data.overriddenByUser = { connect: { id: session.user.id } };
+      data.overriddenAt = new Date();
+    } else if (seMueve && !choque && esSobreagendada(existing.overrideReason)) {
+      data.overrideReason = null;
+      data.overriddenByUser = { disconnect: true };
+      data.overriddenAt = null;
+    }
+  }
+  const avisoTrasConfirmar =
+    sobreagendada && avisoHorario?.reason === "doctor_off" && fueraDelDoctor?.motivo === "comida"
+      ? null
+      : avisoHorario;
 
   try {
     // Auto-inclusión de visibilidad en la MISMA transacción: si esta cita se
@@ -446,6 +572,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ...(trazaBloqueo
           ? { bloqueoSaltado: trazaBloqueo, bloqueoAvisado: avisadaDelBloqueo }
           : {}),
+        // WS1-T5 — EL RASTRO DE SOBREAGENDAR (ver el gemelo en el POST).
+        ...(sobreagendada
+          ? {
+              sobreagendada: {
+                conCita: choque?.id ?? null,
+                enComida: comidaPisada,
+              },
+            }
+          : {}),
       },
     });
 
@@ -474,9 +609,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
         // WS1-T2: si además hay un bloqueo encima, manda el del bloqueo.
         // ws1-t1 (C-87): y el del paciente con otra cita a esa hora, en el mismo texto.
-        scheduleWarning: juntarAvisos(avisoHorario, avisoPaciente),
+        scheduleWarning: juntarAvisos(avisoTrasConfirmar, avisoPaciente),
         // null = no tocaba avisar. Si tocaba: { enviado } o { enviado:false, motivo }.
         whatsapp,
+        ...(sobreagendada && choque ? { sobreagendada: true } : {}),
       },
     );
   } catch (err) {
@@ -494,6 +630,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       );
       const payload: AppointmentConflictError = {
         error: "appointment_overlap",
+        ...(flexible?.encendida ? { sobreagendable: true } : {}),
         conflictingAppointment: conflict ?? {
           id: "unknown",
           patientName: "—",

@@ -28,7 +28,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
-import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { useEstadoConAviso } from "./use-estado-con-aviso";
 import {
   STATUS_PIPELINE,
   STATUS_LABELS,
@@ -143,6 +143,9 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   const [chargingInvoice, setChargingInvoice] = useState<any | null>(null);
   const [resolvingCharge, setResolvingCharge] = useState(false);
   const [, startTransition] = useTransition();
+  // WS1-T5 (revisión t8, N-A1): «Re-abrir cita» con el hueco ya ocupado, con
+  // la bandera `agenda-flexible` → «¿Seguro?» y se reabre sobreagendada.
+  const estado = useEstadoConAviso();
 
   const appt = useMemo(
     () =>
@@ -257,8 +260,13 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     try {
       const updated =
         cancelReason === undefined
-          ? await patchAppointmentStatus(appt.id, target)
+          ? await estado.cambiar(appt, target)
           : await patchStatusWithReason(appt.id, target, cancelReason);
+      if (!updated) {
+        // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
+        dispatch({ type: "ROLLBACK_STATUS", original });
+        return false;
+      }
       startTransition(() => {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       });
@@ -666,6 +674,8 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
       />
+
+      {estado.dialogo}
 
       {/* Cobro inline: reusa el modal de billing (que ya contiene el
           PaymentModal). La factura vinculada a la cita se resuelve vía

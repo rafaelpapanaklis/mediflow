@@ -5,7 +5,7 @@ import * as Popover from "@radix-ui/react-popover";
 import toast from "react-hot-toast";
 import { MoreHorizontal } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
-import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { useEstadoConAviso } from "./use-estado-con-aviso";
 import { offRailsStatuses, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import { useT } from "@/i18n/i18n-provider";
@@ -33,6 +33,8 @@ export function AgendaStatusPopover({ appointment }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<AppointmentStatus | null>(null);
   const [, startTransition] = useTransition();
+  // WS1-T5 (revisión t8, N3-A3): «Re-abrir cita» con el hueco ocupado pregunta.
+  const estado = useEstadoConAviso();
 
   const offRails = useMemo(() => offRailsStatuses(appointment.status), [appointment.status]);
 
@@ -48,7 +50,12 @@ export function AgendaStatusPopover({ appointment }: Props) {
     dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: target });
 
     try {
-      const updated = await patchAppointmentStatus(appointment.id, target);
+      const updated = await estado.cambiar(appointment, target);
+      if (!updated) {
+        // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
+        dispatch({ type: "ROLLBACK_STATUS", original });
+        return;
+      }
       startTransition(() => {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       });
@@ -70,6 +77,7 @@ export function AgendaStatusPopover({ appointment }: Props) {
   if (offRails.length === 0) return null;
 
   return (
+    <>
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
@@ -131,5 +139,8 @@ export function AgendaStatusPopover({ appointment }: Props) {
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+    {/* Fuera del menú: si el menú se cierra mientras se pregunta, la pregunta sigue. */}
+    {estado.dialogo}
+    </>
   );
 }

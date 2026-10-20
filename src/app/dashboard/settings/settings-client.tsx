@@ -42,6 +42,7 @@ import {
 } from "@/components/dashboard/configuracion-rediseno/piezas";
 import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 import { SeccionBloqueos } from "@/components/dashboard/bloqueos/seccion-bloqueos";
+import { AjusteColorCitas } from "@/components/dashboard/agenda-nueva/ajuste-color-citas";
 import blo from "@/components/dashboard/bloqueos/bloqueos.module.css";
 import { SeccionMiHorario } from "@/components/dashboard/horario-doctor/seccion-mi-horario";
 import { horarioClinica } from "@/components/dashboard/horario-doctor/tipos";
@@ -1541,6 +1542,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   modoDoctor={!isAdminUser}
                   miDoctorId={esDoctor ? initUser.id : null}
                 />
+                {isAdminUser && <AjusteColorCitas puedeEditar={puedeEditarClinica} />}
               </Columna>
             )}
 
@@ -2543,6 +2545,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           modoDoctor={!isAdminUser}
           miDoctorId={esDoctor ? initUser.id : null}
         />
+        {isAdminUser && <AjusteColorCitas puedeEditar={puedeEditarClinica} />}
         </>
       )}
 

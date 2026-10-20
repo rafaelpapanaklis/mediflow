@@ -58,6 +58,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { quitarMarcaDeSobreagenda } from "@/lib/agenda/sobreagendar.server";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { fechaHoraParaTexto, textoCita } from "@/lib/movimientos-paciente/textos";
@@ -304,6 +305,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         });
         if (reclamo.count !== 1) throw new Error(CITA_YA_CAMBIADA);
 
+        // WS1-T5 — si era una sobreagendada, en su hueco nuevo ya no lo es.
+        await quitarMarcaDeSobreagenda(tx, appt.id, appt.clinicId);
         // M-22, dentro de la MISMA tx: se cancelan los avisos que llevan la
         // hora vieja y se encolan los de la nueva.
         await applyReminderReschedule(tx, {

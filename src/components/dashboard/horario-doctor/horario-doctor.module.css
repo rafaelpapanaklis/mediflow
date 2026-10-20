@@ -299,6 +299,16 @@
   overflow-wrap: anywhere;
 }
 
+/* WS1-T5 — «Comida de [HH:MM] a [HH:MM]», en su propia línea bajo las horas. */
+.comida {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .errorDia {
   color: hsl(var(--destructive));
 }

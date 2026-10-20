@@ -9,6 +9,8 @@
  * ignora en silencio.
  */
 
+import { esClaveColor, type ClaveColorProcedimiento } from "@/lib/agenda/color-procedimiento";
+
 // Sin unión discriminada: con `"strict": false` TypeScript no estrecha por `ok`.
 export interface Gasto { ok: boolean; value: number | null; error?: string }
 
@@ -89,4 +91,17 @@ export function datosDeCambio(body: any): Entrada<DatosCambio> {
   if (body?.description !== undefined) data.description = body.description?.trim() || null;
   if (body?.isActive !== undefined) data.isActive = Boolean(body.isActive);
   return { ok: true, data };
+}
+
+/**
+ * Salamanca (agenda flexible) — `agendaColor` del body: `undefined` = no se toca;
+ * `null` = volver al color por defecto; una clave de la paleta = ese color;
+ * cualquier otra cosa es inválida. Va por SQL crudo aparte (color-procedimiento.server.ts),
+ * por eso no entra en `DatosAlta`/`DatosCambio`.
+ */
+export function leerAgendaColor(raw: unknown): { ok: boolean; value?: ClaveColorProcedimiento | null } {
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (raw === null) return { ok: true, value: null };
+  if (esClaveColor(raw)) return { ok: true, value: raw };
+  return { ok: false };
 }

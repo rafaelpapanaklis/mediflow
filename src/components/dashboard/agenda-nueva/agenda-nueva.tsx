@@ -51,6 +51,7 @@ import { BarraHerramientas } from "./barra-herramientas";
 import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
 import { PanelCita } from "./panel-cita";
 import { PanelHuecos } from "./panel-huecos";
+import { LeyendaColores } from "./leyenda-colores";
 import { VistaDia } from "./vista-dia";
 import { VistaSemana } from "./vista-semana";
 import { VistaMes } from "./vista-mes";
@@ -131,6 +132,8 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
               el mismo `useAgendaNueva()`: no hay una rejilla por vista. */}
           {/* Día y Semana se agendan con un clic en un hueco y se reordenan
               arrastrando las citas; Mes no (igual que la agenda de siempre). */}
+          {/* WS1-T5 — la leyenda de colores (solo con la bandera `agenda-flexible`). */}
+          {ag.vista !== "mes" && <LeyendaColores />}
           <ArrastreCitas>
             {ag.vista === "dia" && <VistaDia />}
             {ag.vista === "semana" && <VistaSemana />}

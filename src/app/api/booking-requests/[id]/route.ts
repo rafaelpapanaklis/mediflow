@@ -15,6 +15,7 @@ import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { pickExistingPatientForBooking } from "@/lib/patients/patient-search-core";
 import {
   avisoDeHorarioDoctor,
+  comidaQuePisa,
   doctorNoAtiende,
   doctorNoAtiendeSlot,
   horarioPropio,
@@ -24,6 +25,7 @@ import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
@@ -175,6 +177,21 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   const atiende = (id: string) => !doctorNoAtiende(horarios, startsAt, endsAt, id, tz);
   let candidatos = [...pedidos.filter(d => atiende(d.id)), ...pedidos.filter(d => !atiende(d.id))];
 
+  // WS1-T5 (revisión t8, A6) — la hora de comida (solo existe con la bandera
+  // `agenda-flexible`) SÍ descarta: aceptar ahí sería agendar en la comida sin
+  // el «¿Seguro?» de la agenda. Si nadie queda, se dice por qué.
+  const comidaDe = (id: string) => comidaQuePisa(horarios, startsAt, endsAt, id, tz);
+  const enComida = candidatos.map(c => comidaDe(c.id)).find(Boolean) ?? null;
+  if (enComida) {
+    candidatos = candidatos.filter(c => !comidaDe(c.id));
+    if (candidatos.length === 0) {
+      const frase =
+        `Esa hora es la comida del doctor (de ${enComida.lunchStart} a ${enComida.lunchEnd}). ` +
+        "Ofrécele al paciente otra hora o agéndalo desde la Agenda.";
+      return NextResponse.json({ error: frase, code: "lunch_overlap", reason: frase }, { status: 409 });
+    }
+  }
+
   // WS1-T5 — con la clínica en «No» («¿Recepción puede agendar sobre un día
   // bloqueado?»), aceptar sobre un bloqueo es agendar encima: los doctores
   // tapados salen de la lista, y si no queda ninguno se dice por qué. Con
@@ -269,11 +286,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           clinicId,
           doctorId: { in: candidatos.map(c => c.id) },
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
-          overrideReason: null,
           startsAt: { lt: endsAt },
           endsAt: { gt: startsAt },
           // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
-          AND: [sinApartadoVencido()],
+          // WS1-T5 (Salamanca) — y una SOBREAGENDADA sí ocupa (la constraint no la ve).
+          AND: [sinApartadoVencido(), ocupaElHueco()],
         },
         select: { doctorId: true },
       });

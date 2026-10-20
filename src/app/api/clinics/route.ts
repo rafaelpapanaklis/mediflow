@@ -19,7 +19,7 @@ import { logError } from "@/lib/safe-log";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { categoriaDeSucursal } from "@/lib/clinic/categoria-fija";
 import { agendaActiveDeSedeNueva } from "@/lib/agenda/roles-que-atienden";
-import { copiarConfiguracion, leerOrigenParaAlta, sedePrincipalDe, type OrigenParaAlta } from "@/lib/branches/copia-sede.server";
+import { copiarConfiguracion, heredarBanderasDeAgenda, leerOrigenParaAlta, sedePrincipalDe, type OrigenParaAlta } from "@/lib/branches/copia-sede.server";
 import { seccionesFallidas, type ResultadoCopia } from "@/lib/branches/copia-sede-core";
 
 export const dynamic = "force-dynamic";
@@ -259,6 +259,15 @@ export async function POST(req: NextRequest) {
         destinoId: clinic.id,
         destinoOwnerUserId: clinic.users[0].id,
       });
+    }
+
+    // Agenda flexible: la sede hereda las banderas de la principal SIEMPRE, aunque el dueño
+    // no haya marcado copiar la configuración (best-effort: nunca lanza).
+    try {
+      const principalBanderas = origen ? { clinicId: origen.clinicId } : await sedePrincipalDe(supabaseId);
+      if (principalBanderas) await heredarBanderasDeAgenda(principalBanderas.clinicId, clinic.id);
+    } catch (e) {
+      logError("[api/clinics POST] heredar banderas de la agenda", e);
     }
 
     // MULTI-CLÍNICA · FASE 2 — vincular la sede nueva con las que eligió el

@@ -37,7 +37,7 @@ import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { ctxDeSesion } from "@/lib/agenda-bloqueos/core-ctx";
 import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
-import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { avisoDeHorarioDoctor, comidaQuePisa, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import {
   horariosComoObjeto,
   leerHorariosDeDoctores,
@@ -73,6 +73,9 @@ import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { buscarPacienteEmpalmado, juntarAvisos } from "@/lib/agenda/paciente-empalmado";
+import { MARCA_SOBREAGENDADA, confirmacionValida, decidirSobreagenda } from "@/lib/agenda/agenda-flexible";
+import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
+import { buscarChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -242,6 +245,13 @@ export async function POST(req: NextRequest) {
   // aquí, con la tz de la SESIÓN: el navegador no tiene la tz de la clínica y
   // adivinarla con la del dispositivo agendaría a la hora equivocada.
   normalizeLegacyTimes(body, session.clinic.timezone);
+
+  // WS1-T5 (revisión t8, A12) — un `overrideReason` vacío o de espacios es
+  // «sin motivo»: la constraint solo mira `IS NULL`, así que "" sacaría la
+  // cita del no-solape sin gate de rol, sin aviso y sin rastro.
+  if (typeof body.overrideReason === "string" && body.overrideReason.trim() === "") {
+    body.overrideReason = undefined;
+  }
 
   const validation = validateCreate(body);
   if (validation) {
@@ -449,6 +459,94 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T5 — SOBREAGENDAR (solo con la bandera `agenda-flexible`).
+  //
+  // Sin bandera no se pregunta nada y todo sigue como siempre: el choque lo
+  // para la constraint (409 de abajo) y la comida ni existe (el lector no la
+  // lee). Con bandera, ANTES de escribir:
+  //  · se busca el choque contando TODAS las citas vivas, también las ya
+  //    sobreagendadas (la constraint no las ve: ver sobreagendar.server.ts);
+  //  · se mira si la cita pisa la hora de comida del doctor;
+  //  · sin `sobreagendar: true` en el cuerpo → 409 con `sobreagendable`, y la
+  //    pantalla pregunta «¿Seguro?»; con él → se guarda, con la marca en
+  //    `overrideReason` si hay otra cita (la comida no es una constraint) y
+  //    el rastro en la bitácora.
+  // `overrideReason` del cuerpo (el escape de administración de siempre) va
+  // por su camino y aquí no se toca.
+  const flexible = body.overrideReason
+    ? null
+    : await leerAgendaFlexible(session.clinic.id);
+  const viewer = { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id };
+  const choque = flexible?.encendida
+    ? await buscarChoqueDeCita({
+        clinicId: session.clinic.id,
+        doctorId: body.doctorId,
+        resourceId: body.resourceId ?? null,
+        startsAt,
+        endsAt,
+        viewer,
+      })
+    : null;
+  // La comida, AUNQUE la cita además se salga del horario (revisión t8, A2):
+  // «13:00–18:30» cruza la comida y pide el «¿Seguro?» igual.
+  const comidaPisada = flexible?.encendida
+    ? comidaQuePisa(horariosDelHueco, startsAt, endsAt, body.doctorId, session.clinic.timezone)
+    : null;
+  const pisaComida = !!comidaPisada;
+  const sobreagenda = decidirSobreagenda({
+    encendida: !!flexible?.encendida,
+    confirmado: confirmacionValida({
+      sobreagendar: body.sobreagendar,
+      sobreagendarCita: body.sobreagendarCita,
+      choqueId: choque?.id ?? null,
+      otrasEnsenadas: body.sobreagendarOtras,
+      otrasServidor: choque?.otras ?? 0,
+    }),
+    hayChoque: !!choque,
+    pisaComida,
+  });
+  // Sin la bandera (o ya apagada): una sobreagendada que quedó sola en el
+  // hueco no la ve la constraint, así que se mira aquí y se da el 409 de
+  // siempre. Solo lee citas con la marca: en una clínica que nunca tuvo la
+  // bandera no hay ninguna y esto no cambia nada.
+  const huerfana = flexible && !flexible.encendida
+    ? await buscarChoqueDeCita({
+        clinicId: session.clinic.id,
+        doctorId: body.doctorId,
+        resourceId: body.resourceId ?? null,
+        startsAt,
+        endsAt,
+        viewer,
+        soloMarcadas: true,
+      })
+    : null;
+  if (huerfana) {
+    return NextResponse.json(
+      { error: "appointment_overlap", conflictingAppointment: huerfana },
+      { status: 409 },
+    );
+  }
+  if (flexible?.encendida && sobreagenda === "rechazar") {
+    return NextResponse.json(
+      {
+        error: choque ? "appointment_overlap" : "lunch_overlap",
+        sobreagendable: true,
+        ...(choque ? { conflictingAppointment: choque } : {}),
+        comida: comidaPisada,
+      },
+      { status: 409 },
+    );
+  }
+  const sobreagendada = sobreagenda === "sobreagendar";
+  // La marca que saca la cita de la constraint, solo si de verdad hay otra.
+  const overrideFinal = body.overrideReason ?? (sobreagendada && choque ? MARCA_SOBREAGENDADA : null);
+  // Ya se confirmó la comida en pantalla: el «Ojo: cae en la comida» sobra.
+  const avisoTrasConfirmar =
+    sobreagendada && avisoHorario?.reason === "doctor_off" && fueraDelDoctor?.motivo === "comida"
+      ? null
+      : avisoHorario;
+
   try {
     // Auto-inclusión de visibilidad en la MISMA transacción que la cita: si el
     // paciente está restringido y el doctor no está en la lista, se agrega. Sin
@@ -473,10 +571,11 @@ export async function POST(req: NextRequest) {
           source: "STAFF",
           requiresValidation: false,
           // ⛔ SIN TOCAR (WS1-T3). Esta columna apaga el no-solape; el rastro
-          // del bloqueo va a `AuditLog`, más abajo.
-          overrideReason: body.overrideReason ?? null,
-          overriddenBy: body.overrideReason ? session.user.id : null,
-          overriddenAt: body.overrideReason ? new Date() : null,
+          // del bloqueo va a `AuditLog`, más abajo. WS1-T5: o la marca de
+          // sobreagendada, que escribe el servidor (ver arriba).
+          overrideReason: overrideFinal,
+          overriddenBy: overrideFinal ? session.user.id : null,
+          overriddenAt: overrideFinal ? new Date() : null,
         },
         include: APPT_INCLUDE,
       });
@@ -525,6 +624,16 @@ export async function POST(req: NextRequest) {
         ...(trazaBloqueo
           ? { bloqueoSaltado: trazaBloqueo, bloqueoAvisado: avisadaDelBloqueo }
           : {}),
+        // WS1-T5 — EL RASTRO DE SOBREAGENDAR: con qué cita quedó encima
+        // (o si cayó en la comida del doctor). Solo cuando pasó.
+        ...(sobreagendada
+          ? {
+              sobreagendada: {
+                conCita: choque?.id ?? null,
+                enComida: comidaPisada,
+              },
+            }
+          : {}),
       },
     });
 
@@ -550,9 +659,12 @@ export async function POST(req: NextRequest) {
         // P1-13: aviso de fuera-de-horario/día cerrado (null si todo bien).
         // WS1-T2: si además hay un bloqueo encima, manda el del bloqueo.
         // ws1-t1 (C-87): y el del paciente con otra cita a esa hora, en el mismo texto.
-        scheduleWarning: juntarAvisos(avisoHorario, avisoPaciente),
+        scheduleWarning: juntarAvisos(avisoTrasConfirmar, avisoPaciente),
         // null = nadie pidió avisar. Si se pidió: { enviado } o { enviado:false, motivo }.
         whatsapp,
+        // WS1-T5 — `true` = se guardó sobreagendada (la pantalla lo dice).
+        // Solo si quedó encima de OTRA cita: la comida sola no es «dos citas».
+        ...(sobreagendada && choque ? { sobreagendada: true } : {}),
       },
       { status: 201 },
     );
@@ -568,6 +680,9 @@ export async function POST(req: NextRequest) {
       );
       const payload: AppointmentConflictError = {
         error: "appointment_overlap",
+        // WS1-T5 — alguien la ocupó entre la pregunta y el INSERT: con la
+        // bandera, la pantalla puede volver a preguntar «¿Seguro?».
+        ...(flexible?.encendida ? { sobreagendable: true } : {}),
         conflictingAppointment: conflict ?? {
           id: "unknown",
           patientName: "—",

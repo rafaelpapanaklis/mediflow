@@ -27,6 +27,15 @@ import {
 } from "@/lib/agenda/adelantar-cita-a-hoy";
 import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
+import { MARCA_SOBREAGENDADA, confirmacionValida, esSobreagendada } from "@/lib/agenda/agenda-flexible";
+import { leerAgendaFlexibleConFallo } from "@/lib/agenda/agenda-flexible.server";
+import { buscarChoqueDeCita, type ChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
+
+/** WS1-T5 — ¿se está REABRIENDO la cita (de cancelada/no asistió a viva)? */
+function esReapertura(antes: string, despues: string): boolean {
+  const muerta = (s: string) => s === "CANCELLED" || s === "NO_SHOW";
+  return muerta(antes) && !muerta(despues);
+}
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -51,7 +60,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, startsAt: true, endsAt: true, doctorId: true, patientId: true, resourceId: true, overrideReason: true },
+    select: { id: true, status: true, startsAt: true, endsAt: true, doctorId: true, patientId: true, resourceId: true, overrideReason: true, overriddenBy: true, overriddenAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -113,6 +122,90 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // WS1-T5 (revisión t8, A3, N-A1, N3-A1 y N3-A5) — REABRIR una cita cuyo
+  // hueco ya ocupa otra. Mientras estuvo cancelada pudo entrar otra cita, y
+  // una sobreagendada lleva la marca, que la constraint no ve.
+  //  · Clínica SIN la bandera y cita sin marca → EXACTAMENTE como siempre:
+  //    ni se busca nada, decide la constraint (un sobreturno de «Registrar
+  //    llegada» o una cita forzada por un admin no estorban, como en ws7).
+  //    Solo si la bandera se LEYÓ apagada (N4-A1): si la lectura falló, el
+  //    «apagada» es una suposición y en una clínica de Salamanca reabriría
+  //    encima de una sobreagendada sin preguntar; entonces se busca.
+  //  · Sin la bandera y cita CON la marca (se apagó con citas así en la
+  //    agenda) → se cuentan todas: hueco libre, se reabre y pierde la marca;
+  //    ocupado, 409 que dice qué hacer (sin la bandera no se sobreagenda).
+  //  · CON la bandera → se cuentan TODAS las vivas (también las
+  //    sobreagendadas): libre, se reabre (y pierde la marca si la tenía);
+  //    ocupado, 409 `sobreagendable` («¿Seguro?»), y con la confirmación de
+  //    la cita que se enseñó se reabre sobreagendada, con el rastro de encima
+  //    de qué cita y quién lo confirmó (también si ya llevaba la marca).
+  // Una cita con `overrideReason` de administración sigue como siempre: ese
+  // motivo ya la deja convivir.
+  // ═══════════════════════════════════════════════════════════════════════
+  const reabre = esReapertura(existing.status, body.status);
+  let marcaAlReabrir: "quitar" | "poner" | null = null;
+  let choqueAlReabrir: ChoqueDeCita | null = null;
+  /** Sin bandera y sin marca: no se revisó nada, la constraint decide. */
+  let reabreComoSiempre = false;
+  if (reabre && (!existing.overrideReason || esSobreagendada(existing.overrideReason))) {
+    const lectura = await leerAgendaFlexibleConFallo(session.clinic.id);
+    const flexible = lectura.ajustes;
+    if (!flexible.encendida && !lectura.fallo && !esSobreagendada(existing.overrideReason)) {
+      reabreComoSiempre = true;
+    } else {
+      choqueAlReabrir = await buscarChoqueDeCita({
+        clinicId: session.clinic.id,
+        doctorId: existing.doctorId,
+        resourceId: existing.resourceId,
+        startsAt: existing.startsAt,
+        endsAt: existing.endsAt,
+        excluirId: params.id,
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+      });
+    }
+    if (!choqueAlReabrir) {
+      if (esSobreagendada(existing.overrideReason)) marcaAlReabrir = "quitar";
+    } else {
+      const quien = `${choqueAlReabrir.patientName}${choqueAlReabrir.otras > 0 ? ` y ${choqueAlReabrir.otras} más` : ""}`;
+      if (!flexible.encendida) {
+        return NextResponse.json(
+          {
+            error: "invalid_transition",
+            reason: lectura.fallo
+              ? `Ya hay otra cita a esa hora con el mismo doctor o sillón (${quien}). No se pudo comprobar si esta clínica puede sobreagendar; intenta de nuevo en unos segundos.`
+              : `Ya hay otra cita a esa hora con el mismo doctor o sillón (${quien}). Para atender a este paciente, agéndale una cita nueva.`,
+            conflictingAppointment: choqueAlReabrir,
+          },
+          { status: 409 },
+        );
+      }
+      const confirmado = confirmacionValida({
+        sobreagendar: body.sobreagendar,
+        sobreagendarCita: body.sobreagendarCita,
+        choqueId: choqueAlReabrir.id,
+        otrasEnsenadas: body.sobreagendarOtras,
+        otrasServidor: choqueAlReabrir.otras,
+      });
+      if (!confirmado) {
+        return NextResponse.json(
+          {
+            error: "appointment_overlap",
+            sobreagendable: true,
+            conflictingAppointment: choqueAlReabrir,
+            comida: null,
+            // Para las pantallas que no saben preguntar (la ficha, «Citas»).
+            reason: `Ya hay otra cita a esa hora con el mismo doctor o sillón (${quien}). Para reabrirla encima de esa cita, hazlo desde la Agenda.`,
+          },
+          { status: 409 },
+        );
+      }
+      // N3-A5: SIEMPRE que se confirma, aunque ya llevara la marca (de otro
+      // choque, de otra persona): quién y cuándo pasan a ser los de ahora.
+      marcaAlReabrir = "poner";
+    }
+  }
+
   const sideEffects = sideEffectsOf(body.status, now);
 
   // ws1-t8 (decisión 6 de Rafael): el paciente de una cita de un día FUTURO llegó hoy (llegada, sillón o
@@ -163,6 +256,16 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ...sideEffects,
         ...cancelFields,
         ...(adelanto?.datos ?? {}),
+        // WS1-T5 (revisión t8, A3 y N-A1) — ver arriba: al reabrir, la marca
+        // se quita (hueco libre) o se pone (confirmado encima de otra).
+        ...(marcaAlReabrir === "quitar" ? { overrideReason: null, overriddenBy: null, overriddenAt: null } : {}),
+        ...(marcaAlReabrir === "poner"
+          ? {
+              overrideReason: esSobreagendada(existing.overrideReason) ? existing.overrideReason : MARCA_SOBREAGENDADA,
+              overriddenBy: session.user.id,
+              overriddenAt: now,
+            }
+          : {}),
       },
     });
     if (reclamo.count !== 1) return null;
@@ -192,6 +295,22 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   });
   } catch (err) {
     // Otra cita entró en ese hueco entre la lectura y la escritura (el no-solape de la base manda).
+    // WS1-T5 (revisión t8, A3) — al reabrir, otra cita entró en el hueco
+    // entre la revisión de arriba y la escritura. Un 409 claro, no un 500; al
+    // reintentar, la revisión ya la ve (y con la bandera, pregunta).
+    // (N3-A1) Sin la bandera no se revisó nada antes: la constraint la paró
+    // como siempre, y en vez de un 500 se dice qué hacer.
+    if (reabre && isAppointmentOverlapError(err)) {
+      return NextResponse.json(
+        {
+          error: "invalid_transition",
+          reason: reabreComoSiempre
+            ? "Ya hay otra cita a esa hora con el mismo doctor o sillón. Para atender a este paciente, agéndale una cita nueva."
+            : "Otra cita acaba de ocupar esta hora con el mismo doctor o sillón. Intenta de nuevo.",
+        },
+        { status: 409 },
+      );
+    }
     if (adelanto && isAppointmentOverlapError(err)) {
       return NextResponse.json(
         { error: "invalid_transition", reason: "Otra cita acaba de ocupar esta hora con el mismo doctor o sillón. Intenta de nuevo." },
@@ -262,7 +381,21 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           ? textoCita.cancelada(existing.startsAt, zona)
           : textoCita.estado(adelanto ? adelanto.despues.startsAt : existing.startsAt, existing.status, body.status, zona),
       campos: ["status"],
-      cambios: { status: { before: existing.status, after: body.status } },
+      cambios: {
+        status: { before: existing.status, after: body.status },
+        // WS1-T5 — EL RASTRO de reabrirla sobreagendada: encima de qué cita
+        // (quién, lo dice la fila). Si ya llevaba la marca, quién la puso antes.
+        ...(marcaAlReabrir === "poner" && choqueAlReabrir
+          ? {
+              sobreagendada: {
+                before: esSobreagendada(existing.overrideReason)
+                  ? { overriddenBy: existing.overriddenBy, overriddenAt: existing.overriddenAt }
+                  : null,
+                after: { conCita: choqueAlReabrir.id },
+              },
+            }
+          : {}),
+      },
       req,
     });
   }

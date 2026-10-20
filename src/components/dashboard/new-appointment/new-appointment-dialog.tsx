@@ -32,6 +32,8 @@ import {
   type BloqueoParaConfirmar,
 } from "@/components/dashboard/bloqueos/confirmar-bloqueo";
 import { parseBloqueos, type BloqueoDTO } from "@/components/dashboard/bloqueos/tipos";
+import { avisoDesdeRechazo, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
+import { ConfirmarSobreagenda } from "@/components/dashboard/agenda-nueva/confirmar-sobreagenda";
 import { REMINDER_REASON_KEY } from "@/lib/whatsapp/reason-i18n";
 import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
@@ -127,6 +129,16 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
    * `null` la ventana de confirmación está abierta y NADA se ha guardado.
    */
   const [bloqueoPendiente, setBloqueoPendiente] = useState<BloqueoParaConfirmar | null>(null);
+  /**
+   * WS1-T5 (grupo Salamanca) — el «¿Seguro?» de sobreagendar. Solo existe si
+   * el servidor contestó 409 con `sobreagendable` (la clínica tiene la bandera
+   * `agenda-flexible`). Guarda también el bloqueo ya confirmado, para que el
+   * reenvío no vuelva a preguntarlo.
+   */
+  const [sobreagendaPendiente, setSobreagendaPendiente] = useState<{
+    aviso: AvisoSobreagenda;
+    bloqueo: BloqueoParaConfirmar | null;
+  } | null>(null);
   const [errors, setErrors] = useState<{ patient?: boolean; doctorId?: boolean; resourceId?: boolean; reason?: boolean; slot?: boolean }>({});
   const cuerpoRef = useRef<HTMLDivElement>(null);
   // Pediatrics — context derivado del paciente seleccionado. Se hidrata
@@ -480,7 +492,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
   };
 
-  const submit = async (bloqueoConfirmado: BloqueoParaConfirmar | null = null) => {
+  const submit = async (
+    bloqueoConfirmado: BloqueoParaConfirmar | null = null,
+    sobreagendar: AvisoSobreagenda | null = null,
+  ) => {
     const newErrors: typeof errors = {};
     if (!patient) newErrors.patient = true;
     if (!doctorId) newErrors.doctorId = true;
@@ -533,11 +548,27 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           // bloqueo que él mismo lee de la base. Y NO va por `overrideReason`,
           // cuyo valor apaga el no-solape. Ver `agenda-bloqueos/core.ts` §7.
           ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
+          // WS1-T5 — «ya confirmé que sobreagendo». Solo tras el «¿Seguro?».
+          // Con la cita que se le ENSEÑÓ: si el servidor encuentra otra, vuelve a preguntar.
+          ...(sobreagendar
+            ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId, sobreagendarOtras: sobreagendar.otras }
+            : {}),
         }),
       });
 
       if (res.status === 409) {
         const body = (await res.json()) as AppointmentConflictError;
+        // WS1-T5 — con la bandera el equipo puede sobreagendar: se pregunta
+        // AHÍ MISMO y nada se ha guardado todavía.
+        // Si ya se confirmó y el servidor vuelve a preguntar es que hay OTRA
+        // cita encima: se pregunta otra vez, con ésa.
+        const aviso = avisoDesdeRechazo(body, { doctorId, resourceId: resourceId || null }, boot.timezone);
+        const repetido = sobreagendar && aviso && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras;
+        if (aviso && !repetido) {
+          setSobreagendaPendiente({ aviso, bloqueo: bloqueoConfirmado });
+          setSubmitting(false);
+          return;
+        }
         toast.error(
           describeOverlapConflict(body.conflictingAppointment, {
             doctorId,
@@ -596,6 +627,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         scheduleWarning?: { message: string } | null;
         // null = no se pidió avisar. Si se pidió, el servidor dice qué pasó.
         whatsapp?: { enviado: true } | { enviado: false; motivo: string } | null;
+        sobreagendada?: boolean;
       };
       // El interruptor prometía un WhatsApp: se dice si salió o por qué no. La
       // cita está creada en los dos casos.
@@ -617,6 +649,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       if (body.scheduleWarning?.message) {
         toast(body.scheduleWarning.message, { duration: 6000 });
       }
+      // WS1-T5 — se guardó encima de otra a propósito: que quede dicho.
+      if (body.sobreagendada) toast(t("agenda.flexible.sobreagendadaGuardada"), { duration: 6000 });
       params?.onCreated?.({ id: body.appointment.id, startsAt: body.appointment.startsAt });
 
       if (params?.redirectAfter) {
@@ -902,6 +936,18 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
             void submit(confirmado);
           }}
           onCancelar={() => setBloqueoPendiente(null)}
+        />
+      )}
+      {sobreagendaPendiente && (
+        <ConfirmarSobreagenda
+          aviso={sobreagendaPendiente.aviso}
+          guardando={submitting}
+          onConfirmar={() => {
+            const { aviso, bloqueo } = sobreagendaPendiente;
+            setSobreagendaPendiente(null);
+            void submit(bloqueo, aviso);
+          }}
+          onCancelar={() => setSobreagendaPendiente(null)}
         />
       )}
     </Dialog.Root>

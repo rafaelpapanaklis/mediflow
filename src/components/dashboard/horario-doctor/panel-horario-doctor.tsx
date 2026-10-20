@@ -38,6 +38,7 @@ import { EditorSemana } from "./editor-semana";
 import {
   algunDiaAbierto,
   cuerpoPut,
+  hayComidaInvalida,
   hayRangoInvalido,
   mismoHorario,
   parseHorarioDoctor,
@@ -87,6 +88,10 @@ export function PanelHorarioDoctor({
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [hereda, setHereda] = useState(true);
+  /** WS1-T5: ¿la clínica tiene agenda flexible? Si sí, hay comida por día. */
+  const [comida, setComida] = useState(false);
+  /** (revisión t8, N-A3) La comida existe pero no se pudo leer: ni se ofrece ni se manda. */
+  const [comidaIlegible, setComidaIlegible] = useState(false);
   /** El horario propio tal y como está GUARDADO. `null` = hereda. */
   const [guardado, setGuardado] = useState<Dia[] | null>(null);
   /** Lo que se está editando. `null` = no se edita nada (heredando, sin borrador). */
@@ -122,6 +127,8 @@ export function PanelHorarioDoctor({
           return;
         }
         setHereda(dto.hereda);
+        setComida(dto.comida);
+        setComidaIlegible(dto.comidaIlegible === true);
         setGuardado(dto.hereda ? null : dto.horario);
         setBorrador(dto.hereda ? null : dto.horario);
         setCarga("listo");
@@ -141,7 +148,7 @@ export function PanelHorarioDoctor({
 
   const resumenClinica = useMemo(() => (clinica ? resumenSemana(clinica, t) : null), [clinica, t]);
 
-  const invalido = borrador ? hayRangoInvalido(borrador) : false;
+  const invalido = borrador ? hayRangoInvalido(borrador) || (comida && hayComidaInvalida(borrador)) : false;
   const sucio = borrador !== null && (hereda || guardado === null || !mismoHorario(borrador, guardado));
   const idBase = `horario-${modo}-${doctorId}`;
   // En la ventana de Equipo el cuerpo lleva el relleno de la ventana y el pie
@@ -161,7 +168,7 @@ export function PanelHorarioDoctor({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(cuerpoPut(borrador)),
+        body: JSON.stringify(cuerpoPut(borrador, comida)),
       });
       const datos = await res.json().catch(() => null);
       if (!res.ok) {
@@ -175,6 +182,13 @@ export function PanelHorarioDoctor({
       const vuelta =
         Array.isArray(devuelto) && devuelto.length > 0 ? semanaCompleta(devuelto) : semanaCompleta(borrador);
       setHereda(false);
+      const r = datos as { comida?: unknown; comidaIlegible?: unknown } | null;
+      if (typeof r?.comida === "boolean") {
+        // (revisión t8, N-A3) Ilegible = no se ofrece, aunque diga `comida: true`.
+        const ilegible = r.comidaIlegible === true;
+        setComida(r.comida && !ilegible);
+        setComidaIlegible(ilegible);
+      }
       setGuardado(vuelta);
       setBorrador(vuelta);
       toast.success(t("settings.horarioDoctor.guardadoToast"));
@@ -343,7 +357,14 @@ export function PanelHorarioDoctor({
               onCambio={cambiar}
               deshabilitado={ocupado !== null}
               idBase={idBase}
+              comida={comida}
             />
+            {comidaIlegible && (
+              <p className={`${s.nota} ${s.notaAviso}`} role="status">
+                <Info size={14} strokeWidth={2.2} className={s.notaIcono} aria-hidden />
+                <span>{t("settings.horarioDoctor.comida.ilegible")}</span>
+              </p>
+            )}
             {sinDias && (
               <p className={`${s.nota} ${s.notaAviso}`}>
                 <Info size={14} strokeWidth={2.2} className={s.notaIcono} aria-hidden />

@@ -55,6 +55,8 @@ import { RanuraIndicaciones } from "@/components/indicaciones/ranura-indicacione
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { enviarConAvisoDeSobreagenda, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
+import { ConfirmarSobreagenda } from "./confirmar-sobreagenda";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { useAyudaDelPaso } from "@/lib/agenda/ayuda-de-pasos";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
@@ -209,6 +211,12 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   // ws1-t4 (8d): la cita sin nota que se está cobrando con «Cobrar hoy».
   const [cobrarHoy, setCobrarHoy] = useState<{ id: string; motivo: string | null } | null>(null);
   const [editando, setEditando] = useState(false);
+  // WS1-T5 (revisión t8, N-A1): «Reabrir cita» con el hueco ya ocupado, con la
+  // bandera `agenda-flexible` → «¿Seguro?» y se reabre sobreagendada.
+  const [avisoReabrir, setAvisoReabrir] = useState<{
+    aviso: AvisoSobreagenda;
+    responder: (si: boolean) => void;
+  } | null>(null);
   const [pidiendoAnticipo, setPidiendoAnticipo] = useState(false);
   // ws1-t10 (decisión 5): cómo cobra el caso de un control de ortodoncia. `undefined` = la
   // ranura todavía no contesta; `null` = esta cita no tiene caso. Ver «Pedir anticipo».
@@ -294,9 +302,20 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
       dispatch({ type: "OPTIMISTIC_STATUS", id: dto.id, status: destino });
 
       try {
-        const actualizada: AgendaAppointmentDTO = respuesta
+        const actualizada: AgendaAppointmentDTO | null = respuesta
           ? (await cancelarCitaEnServidor(dto.id, respuesta)).appointment
-          : await patchAppointmentStatus(dto.id, destino);
+          : await enviarConAvisoDeSobreagenda({
+              enviar: (confirmacion) => patchAppointmentStatus(dto.id, destino, confirmacion),
+              preguntar: (aviso) =>
+                new Promise<boolean>((responder) => setAvisoReabrir({ aviso, responder })),
+              intento: { doctorId: dto.doctor?.id ?? null, resourceId: dto.resourceId },
+              timeZone: state.timezone,
+            });
+        if (!actualizada) {
+          // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
+          dispatch({ type: "ROLLBACK_STATUS", original });
+          return false;
+        }
         startTransition(() => {
           dispatch({ type: "REPLACE_APPOINTMENT", appointment: actualizada });
         });
@@ -321,7 +340,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         setEnVuelo(null);
       }
     },
-    [dto, permissions, cancelarCita, dispatch, invalidateRangeCache, router],
+    [dto, permissions, cancelarCita, dispatch, invalidateRangeCache, router, state.timezone],
   );
 
   const enviarWhatsapp = useCallback(async () => {
@@ -793,6 +812,20 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         onClose={() => setEditando(false)}
         ropa={ROPA_EDITAR_CITA}
       />
+
+      {avisoReabrir && (
+        <ConfirmarSobreagenda
+          aviso={avisoReabrir.aviso}
+          onConfirmar={() => {
+            avisoReabrir.responder(true);
+            setAvisoReabrir(null);
+          }}
+          onCancelar={() => {
+            avisoReabrir.responder(false);
+            setAvisoReabrir(null);
+          }}
+        />
+      )}
 
       {factura && (
         <InvoiceDetailModal
