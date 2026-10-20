@@ -10,6 +10,7 @@ import { miles, type PruebaVista } from "@/lib/billing/prueba-vista";
 import { Boton, Insignia, Aviso, type Tono } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { Seccion } from "@/components/dashboard/configuracion-rediseno/piezas";
 import { useT } from "@/i18n/i18n-provider";
+import { sufijoIvaTarjeta } from "./sufijo-iva";
 import s from "./bloques.module.css";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
 
@@ -229,7 +230,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
                 </div>
                 <div className={s.precio}>
                   ${miles(precio)}
-                  <span className={s.precioSufijo}>{m.sufijoIntervalo}{m.ivaDe(plan.id) ? " + IVA" : ""}</span>
+                  <span className={s.precioSufijo}>{m.sufijoIntervalo}{sufijoIvaTarjeta(m.ivaDe(plan.id), t("shell.subscriptionTab.sinIvaCorto"))}</span>
                 </div>
                 {!esActual && precioActual !== null && precio !== precioActual && (
                   <div className={`${s.delta} ${precio > precioActual ? s.deltaSube : ""}`}>
