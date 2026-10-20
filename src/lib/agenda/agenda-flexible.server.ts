@@ -82,26 +82,40 @@ export async function leerAgendaFlexible(
   clinicId: string | null | undefined,
   opciones: { db?: BanderasDb } = {},
 ): Promise<AjustesAgendaFlexible> {
+  return (await leerAgendaFlexibleConFallo(clinicId, opciones)).ajustes;
+}
+
+/**
+ * Como `leerAgendaFlexible`, y además dice si el valor salió de un FALLO
+ * (`fallo: true` = no se pudo leer y no había una lectura buena: el «apagada»
+ * es una suposición, no lo que dice la base). Para quien decide con la
+ * bandera algo que no se debe decidir a ciegas: reabrir una cita sin buscar
+ * choques solo vale si la bandera se LEYÓ apagada (revisión t8, N4-A1).
+ */
+export async function leerAgendaFlexibleConFallo(
+  clinicId: string | null | undefined,
+  opciones: { db?: BanderasDb } = {},
+): Promise<{ ajustes: AjustesAgendaFlexible; fallo: boolean }> {
   // Corta ANTES de consultar: un clinicId vacío no filtra nada en Prisma.
-  if (typeof clinicId !== "string" || clinicId.trim() === "") return AGENDA_FLEXIBLE_APAGADA;
+  if (typeof clinicId !== "string" || clinicId.trim() === "") return { ajustes: AGENDA_FLEXIBLE_APAGADA, fallo: false };
 
   if (opciones.db) {
     try {
       // Un doble sin `$queryRaw` dice «no hay tabla»; uno con el modelo y sin
       // `$queryRaw` se lee directo (las pruebas no siempre simulan to_regclass).
       if (typeof opciones.db.$queryRaw === "function" && !(await tablaExiste(opciones.db))) {
-        return AGENDA_FLEXIBLE_APAGADA;
+        return { ajustes: AGENDA_FLEXIBLE_APAGADA, fallo: false };
       }
-      return await leerDeLaBase(clinicId, opciones.db);
+      return { ajustes: await leerDeLaBase(clinicId, opciones.db), fallo: false };
     } catch {
-      return AGENDA_FLEXIBLE_APAGADA;
+      return { ajustes: AGENDA_FLEXIBLE_APAGADA, fallo: true };
     }
   }
 
   const m = memoria();
   const ahora = Date.now();
   const previa = m.clinicas.get(clinicId);
-  if (previa && ahora < previa.hasta) return previa.valor;
+  if (previa && ahora < previa.hasta) return { ajustes: previa.valor, fallo: previa.fallo === true };
 
   const db = prisma as unknown as BanderasDb;
   let valor: AjustesAgendaFlexible = AGENDA_FLEXIBLE_APAGADA;
@@ -129,7 +143,7 @@ export async function leerAgendaFlexible(
     if (!vieja.done) m.clinicas.delete(vieja.value);
   }
   m.clinicas.set(clinicId, { valor, hasta: ahora + ttl, ...(fallo ? { fallo: true } : {}) });
-  return valor;
+  return { ajustes: valor, fallo };
 }
 
 /** Atajo: ¿la bandera está encendida? */

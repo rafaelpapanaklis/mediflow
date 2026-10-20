@@ -28,7 +28,7 @@ import {
 import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
 import { MARCA_SOBREAGENDADA, confirmacionValida, esSobreagendada } from "@/lib/agenda/agenda-flexible";
-import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
+import { leerAgendaFlexibleConFallo } from "@/lib/agenda/agenda-flexible.server";
 import { buscarChoqueDeCita, type ChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
 
 /** WS1-T5 — ¿se está REABRIENDO la cita (de cancelada/no asistió a viva)? */
@@ -129,6 +129,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   //  · Clínica SIN la bandera y cita sin marca → EXACTAMENTE como siempre:
   //    ni se busca nada, decide la constraint (un sobreturno de «Registrar
   //    llegada» o una cita forzada por un admin no estorban, como en ws7).
+  //    Solo si la bandera se LEYÓ apagada (N4-A1): si la lectura falló, el
+  //    «apagada» es una suposición y en una clínica de Salamanca reabriría
+  //    encima de una sobreagendada sin preguntar; entonces se busca.
   //  · Sin la bandera y cita CON la marca (se apagó con citas así en la
   //    agenda) → se cuentan todas: hueco libre, se reabre y pierde la marca;
   //    ocupado, 409 que dice qué hacer (sin la bandera no se sobreagenda).
@@ -146,8 +149,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   /** Sin bandera y sin marca: no se revisó nada, la constraint decide. */
   let reabreComoSiempre = false;
   if (reabre && (!existing.overrideReason || esSobreagendada(existing.overrideReason))) {
-    const flexible = await leerAgendaFlexible(session.clinic.id);
-    if (!flexible.encendida && !esSobreagendada(existing.overrideReason)) {
+    const lectura = await leerAgendaFlexibleConFallo(session.clinic.id);
+    const flexible = lectura.ajustes;
+    if (!flexible.encendida && !lectura.fallo && !esSobreagendada(existing.overrideReason)) {
       reabreComoSiempre = true;
     } else {
       choqueAlReabrir = await buscarChoqueDeCita({
@@ -168,7 +172,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         return NextResponse.json(
           {
             error: "invalid_transition",
-            reason: `Ya hay otra cita a esa hora con el mismo doctor o sillón (${quien}). Para atender a este paciente, agéndale una cita nueva.`,
+            reason: lectura.fallo
+              ? `Ya hay otra cita a esa hora con el mismo doctor o sillón (${quien}). No se pudo comprobar si esta clínica puede sobreagendar; intenta de nuevo en unos segundos.`
+              : `Ya hay otra cita a esa hora con el mismo doctor o sillón (${quien}). Para atender a este paciente, agéndale una cita nueva.`,
             conflictingAppointment: choqueAlReabrir,
           },
           { status: 409 },

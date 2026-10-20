@@ -15,7 +15,7 @@
  * `sobreagendable`). `cambiar` devuelve `null` si la persona dijo «Cancelar».
  */
 
-import { useCallback, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useCallback, useState, type PointerEvent, type ReactNode, type SyntheticEvent } from "react";
 import { useAgenda } from "./agenda-provider";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { enviarConAvisoDeSobreagenda, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
@@ -45,18 +45,33 @@ export function useEstadoConAviso(): {
   // El diálogo va en un portal, pero sus eventos suben por el árbol de React
   // hasta quien lo monta: en la tarjeta, «Sí» la seleccionaría y Enter
   // arrancaría el arrastre con teclado de dnd-kit. Se cortan aquí.
+  //
+  // (revisión t8, N4-A2) Cortar el `pointerdown` también le quita a Radix el
+  // «clic en el fondo cierra» (lo detecta en `document`, adonde ya no llega).
+  // Se hace aquí lo mismo que haría Radix: un `pointerdown` fuera del
+  // contenido del diálogo (en el velo) es «Cancelar». Dejarlo subir no vale:
+  // pasaría por la tarjeta y la rejilla antes de llegar a `document`.
+  const cancelar = () => {
+    pregunta?.responder(false);
+    setPregunta(null);
+  };
   const dialogo = pregunta ? (
-    <span style={{ display: "contents" }} onClick={parar} onPointerDown={parar} onKeyDown={parar}>
+    <span
+      style={{ display: "contents" }}
+      onClick={parar}
+      onKeyDown={parar}
+      onPointerDown={(e: PointerEvent) => {
+        e.stopPropagation();
+        if (e.target instanceof Element && !e.target.closest('[role="dialog"]')) cancelar();
+      }}
+    >
       <ConfirmarSobreagenda
         aviso={pregunta.aviso}
         onConfirmar={() => {
           pregunta.responder(true);
           setPregunta(null);
         }}
-        onCancelar={() => {
-          pregunta.responder(false);
-          setPregunta(null);
-        }}
+        onCancelar={cancelar}
       />
     </span>
   ) : null;

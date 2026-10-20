@@ -23,6 +23,7 @@
 import { test, mock, beforeEach, after } from "node:test";
 import { cargarChromium, empaquetar } from "@/components/dashboard/agenda/__tests__/empaquetar-para-chromium";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const TZ = "America/Mexico_City";
 const MIN = 60_000;
@@ -34,6 +35,8 @@ const INICIO = new Date(Math.floor((Date.now() + 2 * DAY) / DAY) * DAY + 16 * 60
 const FIN = new Date(INICIO.getTime() + 30 * MIN);
 
 let bandera: boolean;
+/** La lectura de la bandera falla (timeout del pooler). */
+let banderaFalla: boolean;
 let existente: any;
 /** Las citas vivas de la base (lo que lee `buscarChoqueDeCita`). */
 let vivas: any[];
@@ -54,6 +57,7 @@ const CLAVE_FLEX = Symbol.for("dalecontrol.agenda.flexible");
 
 beforeEach(() => {
   bandera = true;
+  banderaFalla = false;
   escrito = null;
   constraintChoca = false;
   movimientos = [];
@@ -110,8 +114,10 @@ const prismaStub: any = {
     },
   },
   clinicFeatureFlag: {
-    findMany: async ({ where }: any) =>
-      bandera && where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : [],
+    findMany: async ({ where }: any) => {
+      if (banderaFalla) throw Object.assign(new Error("timeout del pooler"), { code: "P1008" });
+      return bandera && where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : [];
+    },
   },
   $queryRaw: async () => [{ existe: true }],
   $transaction: async (fn: any) =>
@@ -335,6 +341,41 @@ test("N3-A1 · sin bandera: si la base la para (una cita normal en el hueco) →
   assert.equal(escrito, null);
 });
 
+test("N4-A1 · la lectura de la bandera FALLA y en el hueco hay una sobreagendada: no se reabre encima a ciegas", async () => {
+  // Clínica de Salamanca (la bandera está encendida en la base) recién
+  // levantada: la lectura falla y «apagada» es una suposición. Antes se
+  // tomaba el atajo de ws7 y Ana se reabría encima de Eva sin «¿Seguro?».
+  banderaFalla = true;
+  existente.overrideReason = null;
+  vivas = [cita("a-eva", "Eva", "Paz", MARCA)]; // la base la deja convivir
+  const r = await reabrir();
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "invalid_transition");
+  assert.match(r.body.reason, /Eva Paz/);
+  assert.match(r.body.reason, /No se pudo comprobar si esta clínica puede sobreagendar; intenta de nuevo/);
+  assert.equal(busquedas, 1, "con la bandera ilegible SÍ se busca el choque");
+  assert.equal(escrito, null);
+});
+
+test("N4-A1 · la lectura falla y el hueco está libre: se reabre como siempre", async () => {
+  banderaFalla = true;
+  existente.overrideReason = null;
+  vivas = [];
+  const r = await reabrir();
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(escrito.status, "SCHEDULED");
+  assert.equal(escrito.overrideReason, undefined);
+});
+
+test("N4-A1 · control: la bandera se LEYÓ apagada (sin fallo) → el atajo de ws7 sigue, sin buscar", async () => {
+  bandera = false;
+  existente.overrideReason = null;
+  vivas = [cita("a-eva", "Eva", "Paz", MARCA)];
+  const r = await reabrir();
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(busquedas, 0);
+});
+
 test("N3-A1 · control: CON la bandera, el sobreturno sí cuenta y se pregunta", async () => {
   existente.overrideReason = null;
   vivas = [cita("a-mario", "Mario", "López", SOBRETURNO)];
@@ -465,6 +506,12 @@ const DIA = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", mo
 
 let navegador: any = null;
 let paquete: string | null = null;
+/**
+ * El CSS de verdad del «¿Seguro?» (los `.module.css` se empaquetan sin
+ * estilos y el nombre de clase es la llave, así que estas reglas le caen):
+ * sin él, el velo mide 0 px y no hay fondo al que hacer clic (N4-A2).
+ */
+const CSS_DIALOGO = readFileSync("src/components/dashboard/bloqueos/confirmar-bloqueo.module.css", "utf8");
 after(async () => {
   await navegador?.close();
 });
@@ -506,7 +553,7 @@ async function abrirAgenda(t: { skip(m: string): void }, opciones: { conPanel?: 
     if (url.pathname === "/") {
       return route.fulfill({
         contentType: "text/html",
-        body: `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="raiz"></div><script>window.__PAYLOAD__=${JSON.stringify(payload)};window.__DIA__=${JSON.stringify(DIA)};window.__CON_PANEL__=${opciones.conPanel === true};</script><script src="/arnes.js"></script></body></html>`,
+        body: `<!doctype html><html><head><meta charset="utf-8"><style>${CSS_DIALOGO}</style></head><body><div id="raiz"></div><script>window.__PAYLOAD__=${JSON.stringify(payload)};window.__DIA__=${JSON.stringify(DIA)};window.__CON_PANEL__=${opciones.conPanel === true};</script><script src="/arnes.js"></script></body></html>`,
       });
     }
     if (url.pathname === "/arnes.js") return route.fulfill({ contentType: "text/javascript", body: paquete });
@@ -601,6 +648,53 @@ test("N3-A3 · PANEL de detalle (el mismo gancho): «Re-abrir cita» → «¿Seg
   assert.equal(a.peticiones.length, 2);
   assert.equal(escrito.status, "SCHEDULED");
   assert.deepEqual(a.errores, []);
+  await a.page.close();
+});
+
+test("N4-A2 · TARJETA: un clic en el FONDO cierra el «¿Seguro?» como «Cancelar», sin seleccionar la tarjeta que hay debajo", async (t) => {
+  const a = await abrirAgenda(t);
+  if (!a) return;
+  await a.tarjeta.getByRole("button", { name: "Re-abrir cita de Ana García" }).click(CLIC);
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  // El clic va al velo justo encima de la tarjeta: si se colara, la seleccionaría.
+  const caja = (await a.tarjeta.boundingBox())!;
+  const velo = await a.page.evaluate(([x, y]: number[]) => document.elementFromPoint(x!, y!)?.className, [caja.x + caja.width / 2, caja.y + caja.height / 2]);
+  assert.equal(velo, "velo", "lo que hay en ese punto es el fondo del diálogo");
+  await a.page.mouse.click(caja.x + caja.width / 2, caja.y + caja.height / 2);
+  await a.dialogo.waitFor({ state: "detached", timeout: 5_000 });
+  await a.page.waitForSelector('[data-appt-id="a-ana"][data-status="CANCELLED"]', { timeout: 5_000 });
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }], "nada más se mandó");
+  assert.equal(escrito, null);
+  assert.equal(await a.tarjeta.getAttribute("data-selected"), null, "el clic del fondo no llegó a la tarjeta");
+  assert.deepEqual(a.errores, []);
+  await a.page.close();
+});
+
+test("N4-A2 · PANEL: un clic en el fondo también cierra el «¿Seguro?» y Ana sigue cancelada", async (t) => {
+  const a = await abrirAgenda(t, { conPanel: true });
+  if (!a) return;
+  await a.tarjeta.click(CLIC);
+  const panel = a.page.getByRole("complementary", { name: "Detalle de cita" });
+  await panel.getByRole("button", { name: "Más opciones de estado" }).click();
+  await a.page.getByRole("button", { name: "Re-abrir cita", exact: true }).click();
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await a.page.mouse.click(3, 3);
+  await a.dialogo.waitFor({ state: "detached", timeout: 5_000 });
+  await a.page.waitForSelector('[data-appt-id="a-ana"][data-status="CANCELLED"]', { timeout: 5_000 });
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }]);
+  assert.equal(escrito, null);
+  assert.deepEqual(a.errores, []);
+  await a.page.close();
+});
+
+test("N4-A2 · control: un clic DENTRO del diálogo (en su texto) no lo cierra", async (t) => {
+  const a = await abrirAgenda(t);
+  if (!a) return;
+  await a.tarjeta.getByRole("button", { name: "Re-abrir cita de Ana García" }).click(CLIC);
+  await a.dialogo.waitFor({ timeout: 5_000 });
+  await a.dialogo.getByRole("alert").click();
+  assert.equal(await a.dialogo.count(), 1, "sigue abierto");
+  assert.deepEqual(a.peticiones, [{ status: "SCHEDULED" }]);
   await a.page.close();
 });
 
