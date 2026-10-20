@@ -4754,7 +4754,8 @@
         "quitarAria": "Remove lunch on {dia}",
         "errorPar": "Lunch time on {dia} isn't clear. Enter both times (HH:MM) or leave both empty.",
         "errorOrden": "On {dia}, lunch must end after it starts.",
-        "errorFuera": "On {dia}, lunch must fall within working hours ({abre} to {cierra})."
+        "errorFuera": "On {dia}, lunch must fall within working hours ({abre} to {cierra}).",
+        "ilegible": "Lunch time couldn't be loaded. Reload to edit it; if you save now, lunch stays as it was."
       }
     },
     "agendaColor": {

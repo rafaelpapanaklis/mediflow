@@ -55,7 +55,16 @@ export function esTablaAusente(err: unknown): boolean {
  */
 export async function leerHorariosDeDoctores(
   clinicId: string,
-  opciones: { doctorIds?: readonly string[]; db?: HorariosDb } = {},
+  opciones: {
+    doctorIds?: readonly string[];
+    db?: HorariosDb;
+    /**
+     * (revisión t8, N-A3) `true` = si la comida no se puede leer, lanza
+     * `ComidaIlegibleError` en vez de seguir sin ella. Para la pantalla del
+     * horario: con la comida vacía por un error, guardar la borraría.
+     */
+    comidaEstricta?: boolean;
+  } = {},
 ): Promise<Map<string, DiaHorario[]>> {
   const mapa = new Map<string, DiaHorario[]>();
   // Corta ANTES de consultar: un clinicId vacío no filtra, devuelve el mundo.
@@ -84,7 +93,7 @@ export async function leerHorariosDeDoctores(
       select: { doctorId: true, dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       orderBy: [{ doctorId: "asc" }, { dayOfWeek: "asc" }],
     });
-    const comidas = conComida && filas.length > 0 ? await leerComidas(clinicId, ids, db) : null;
+    const comidas = conComida && filas.length > 0 ? await leerComidas(clinicId, ids, db, opciones.comidaEstricta === true) : null;
     for (const f of filas) {
       const doctorId = String(f.doctorId);
       const dia: DiaHorario = {
@@ -116,10 +125,14 @@ export async function leerHorariosDeDoctores(
 export async function leerHorarioDeDoctor(
   clinicId: string,
   doctorId: string,
-  opciones: { db?: HorariosDb } = {},
+  opciones: { db?: HorariosDb; comidaEstricta?: boolean } = {},
 ): Promise<DiaHorario[] | null> {
   if (!doctorId) return null;
-  const mapa = await leerHorariosDeDoctores(clinicId, { doctorIds: [doctorId], db: opciones.db });
+  const mapa = await leerHorariosDeDoctores(clinicId, {
+    doctorIds: [doctorId],
+    db: opciones.db,
+    comidaEstricta: opciones.comidaEstricta,
+  });
   return mapa.get(doctorId) ?? null;
 }
 
@@ -139,15 +152,25 @@ export function horariosComoObjeto(
 
 // ── La hora de comida (WS1-T5) ─────────────────────────────────────────
 
+/** La comida no se pudo leer (y quien pregunta pidió `comidaEstricta`). */
+export class ComidaIlegibleError extends Error {
+  constructor(public readonly causa: unknown) {
+    super("no se pudo leer la hora de comida");
+    this.name = "ComidaIlegibleError";
+  }
+}
+
 /**
  * `"doctorId|dayOfWeek"` → comida, de las filas que la tienen. Por SQL crudo
  * (columnas fuera de schema.prisma, ver arriba), siempre con `clinicId`.
- * Ante un error, ninguna comida: el horario se sigue leyendo como antes.
+ * Ante un error, ninguna comida: el horario se sigue leyendo como antes
+ * (la agenda, el bot y la web). Con `estricta`, lanza `ComidaIlegibleError`.
  */
 async function leerComidas(
   clinicId: string,
   ids: string[] | null,
   db: HorariosDb,
+  estricta = false,
 ): Promise<Map<string, { lunchStart: string; lunchEnd: string }>> {
   const mapa = new Map<string, { lunchStart: string; lunchEnd: string }>();
   const raw = typeof db.$queryRaw === "function" ? db.$queryRaw.bind(db) : prisma.$queryRaw.bind(prisma);
@@ -172,6 +195,7 @@ async function leerComidas(
       }
     }
   } catch (e) {
+    if (estricta) throw new ComidaIlegibleError(e);
     console.warn("[horario-doctor] no se pudo leer la hora de comida:", (e as { code?: string })?.code ?? e);
   }
   return mapa;

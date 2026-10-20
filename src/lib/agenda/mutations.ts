@@ -12,6 +12,7 @@ import type {
 import toast from "react-hot-toast";
 import { avisarResultadoWhatsApp, type ResultadoAvisoWhatsApp } from "./aviso-whatsapp";
 import { adelantoDeLaRespuesta, textoDelAdelanto } from "./adelanto-texto";
+import type { CamposDeSobreagenda } from "./agenda-flexible";
 
 export interface ApiError {
   status: number;
@@ -58,11 +59,13 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
 export async function patchAppointmentStatus(
   id: string,
   status: AppointmentStatus,
+  /** WS1-T5 (revisión t8, N-A1) — reabrir sobreagendada tras el «¿Seguro?». */
+  sobreagenda?: CamposDeSobreagenda,
 ): Promise<AgendaAppointmentDTO> {
   const res = await fetch(`/api/appointments/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...(sobreagenda ?? {}) }),
   });
   const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO; whatsapp?: ResultadoAvisoWhatsApp }>(res);
   // Si tocaba avisar al paciente (cancelación con el aviso encendido), se dice

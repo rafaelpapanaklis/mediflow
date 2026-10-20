@@ -454,7 +454,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       endsAt: newEnds,
       excluirId: params.id,
       viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
-      soloMarcadas: true,
+      // (revisión t8, N-A2) Una cita CON la marca que cambia SOLO de sillón
+      // sigue sin que la constraint la vea: el sillón nuevo se mira entero
+      // (también contra citas normales), no solo contra las marcadas.
+      soloMarcadas: !(!seMueve && cambiaSillon && esSobreagendada(existing.overrideReason)),
       porDoctor: seMueve,
     });
     if (huerfana) {

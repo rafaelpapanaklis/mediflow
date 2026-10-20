@@ -37,6 +37,8 @@ let existingRow: any;
 let created: any[];
 let updated: any[];
 let auditorias: any[];
+/** La lectura de la bandera revienta (timeout del pooler, etc.). */
+let banderaFalla: boolean;
 
 const CLAVE_COLUMNAS = Symbol.for("dalecontrol.horarioDoctor.columnasComida");
 const CLAVE_FLEX = Symbol.for("dalecontrol.agenda.flexible");
@@ -50,6 +52,7 @@ beforeEach(() => {
   created = [];
   updated = [];
   auditorias = [];
+  banderaFalla = false;
   horarioSillon = null;
   session.user.role = "RECEPTIONIST";
   // El lector de la bandera y la sonda de columnas recuerdan en `globalThis`.
@@ -74,8 +77,13 @@ function apptRow(data: any) {
   };
 }
 
+/**
+ * La constraint de verdad: `WHERE "overrideReason" IS NULL`. Un "" NO es NULL
+ * (revisión t8, A12: el doble viejo lo trataba como NULL y la prueba no
+ * demostraba nada).
+ */
 function choca(data: any): boolean {
-  return constraintChoca && !data.overrideReason;
+  return constraintChoca && data.overrideReason == null;
 }
 
 const prismaStub: any = {
@@ -93,6 +101,8 @@ const prismaStub: any = {
         (a) =>
           a.clinicId === where.clinicId &&
           (!where.id?.not || a.id !== where.id.not) &&
+          // `soloMarcadas`: solo las que llevan la marca (el filtro de verdad).
+          (!where.overrideReason?.startsWith || String(a.overrideReason ?? "").startsWith(where.overrideReason.startsWith)) &&
           new Date(a.startsAt) < where.startsAt.lt &&
           new Date(a.endsAt) > where.endsAt.gt &&
           (!where.OR || where.OR.some((o: any) => (o.doctorId && o.doctorId === a.doctorId) || (o.resourceId && o.resourceId === a.resourceId))),
@@ -101,8 +111,10 @@ const prismaStub: any = {
   agendaBlock: { findMany: async () => [] },
   agendaBlockPolicy: { findUnique: async () => null },
   clinicFeatureFlag: {
-    findMany: async ({ where }: any) =>
-      bandera && where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : [],
+    findMany: async ({ where }: any) => {
+      if (banderaFalla) throw Object.assign(new Error("timeout"), { code: "P1008" });
+      return bandera && where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : [];
+    },
   },
   doctorSchedule: {
     findMany: async () =>
@@ -575,11 +587,118 @@ test("t8 · A7 · si entró otra cita más mientras se decidía, se vuelve a pre
 
 test("t8 · A12 · `overrideReason` vacío o de espacios es «sin motivo» (POST y PATCH)", async () => {
   hayCitaDeMario();
-  const r = await post(alta("10:00", { overrideReason: "   " }));
-  assert.equal(r.status, 409, "la constraint lo para como a cualquier otro choque");
+  // ADMIN: con RECEPTIONIST el "   " ya lo paraba el 403 de rol y la prueba
+  // no demostraba el arreglo (segunda vuelta t8).
+  session.user.role = "ADMIN";
+  for (const vacio of ["   ", ""]) {
+    const r = await post(alta("10:00", { overrideReason: vacio }));
+    assert.equal(r.status, 409, `«${vacio}»: la constraint lo para como a cualquier otro choque`);
+  }
   assert.equal(created.length, 0);
   existingRow = apptRow({ startsAt: new Date(martes("12:00")), endsAt: new Date(martes("12:30")) });
   const p = await patch({ startsAt: martes("10:00"), endsAt: martes("10:30"), overrideReason: "", notifyPatient: false });
   assert.equal(p.status, 409);
   assert.equal(updated.length, 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SEGUNDA VUELTA t8
+// ═══════════════════════════════════════════════════════════════════════
+
+test("t8-2 · N-A2 · bandera APAGADA: cambiar SOLO el sillón de una sobreagendada a uno ocupado por una cita NORMAL → 409, no se guarda encima", async () => {
+  constraintChoca = true;
+  ocupadas = [
+    {
+      id: "a-otro",
+      clinicId: "c1",
+      doctorId: "d2",
+      resourceId: "s2",
+      status: "CONFIRMED",
+      overrideReason: null,
+      startsAt: martes("10:00"),
+      endsAt: martes("10:30"),
+      patient: { firstName: "Raúl", lastName: "Soto", visibleUserIds: [] },
+    },
+  ];
+  existingRow = apptRow({
+    startsAt: new Date(martes("10:00")),
+    endsAt: new Date(martes("10:30")),
+    resourceId: "s1",
+    overrideReason: "Sobreagendada por el equipo",
+  });
+  const r = await patch({ resourceId: "s2", notifyPatient: false });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "appointment_overlap");
+  assert.equal(r.body.conflictingAppointment.id, "a-otro");
+  assert.equal(r.body.sobreagendable, undefined, "sin bandera no se pregunta");
+  assert.equal(updated.length, 0);
+});
+
+test("t8-2 · N-A2 · control: al sillón LIBRE sí se cambia (y la marca se queda)", async () => {
+  constraintChoca = true;
+  existingRow = apptRow({
+    startsAt: new Date(martes("10:00")),
+    endsAt: new Date(martes("10:30")),
+    resourceId: "s1",
+    overrideReason: "Sobreagendada por el equipo",
+  });
+  const r = await patch({ resourceId: "s3", notifyPatient: false });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(updated[0].overrideReason, undefined);
+});
+
+test("t8-2 · A2 · PATCH: mover una cita a cruzar la comida (saliéndose además del horario) pide el «¿Seguro?»", async () => {
+  bandera = true;
+  conComida = true;
+  existingRow = apptRow({ startsAt: new Date(martes("11:00")), endsAt: new Date(martes("11:30")) });
+  const r = await patch({ startsAt: martes("13:00"), endsAt: martes("18:30"), notifyPatient: false });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "lunch_overlap");
+  assert.deepEqual(r.body.comida, { lunchStart: "14:00", lunchEnd: "15:00" });
+  assert.equal(updated.length, 0);
+  const ok = await patch({ startsAt: martes("13:00"), endsAt: martes("18:30"), notifyPatient: false, sobreagendar: true, sobreagendarCita: null });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(updated[0].overrideReason, undefined, "solo la comida: sin marca");
+  assert.deepEqual(auditorias[0].after.sobreagendada.enComida, { lunchStart: "14:00", lunchEnd: "15:00" });
+});
+
+test("t8-2 · A9 · dos fallos seguidos de la bandera en una instancia nueva NO dejan el «apagada» 60 s", async () => {
+  const { leerAgendaFlexible } = await import("@/lib/agenda/agenda-flexible.server");
+  let ahora = 1_000_000;
+  const reloj = mock.method(Date, "now", () => ahora);
+  try {
+    banderaFalla = true;
+    assert.equal((await leerAgendaFlexible("c1")).encendida, false, "1.er fallo: apagada");
+    ahora += 6_000;
+    assert.equal((await leerAgendaFlexible("c1")).encendida, false, "2.º fallo: apagada");
+    // La base vuelve; la bandera está encendida.
+    banderaFalla = false;
+    bandera = true;
+    ahora += 6_000;
+    assert.equal((await leerAgendaFlexible("c1")).encendida, true, "a los pocos segundos se vuelve a preguntar");
+    // Con una lectura buena, un fallo después conserva lo último que se leyó.
+    banderaFalla = true;
+    ahora += 61_000;
+    assert.equal((await leerAgendaFlexible("c1")).encendida, true);
+  } finally {
+    reloj.mock.restore();
+  }
+});
+
+test("t8-2 · A5 · la pantalla vieja «Citas» traduce los 409 REALES (comida y choque) y dice dónde sobreagendar", async () => {
+  const { apiErrorMessage } = await import("@/app/dashboard/appointments/mensaje-error-citas");
+  bandera = true;
+  conComida = true;
+  const comida = await post(alta("14:00"));
+  assert.equal(
+    apiErrorMessage(comida.status, comida.body, "x"),
+    "Esa hora es la comida del doctor (de 14:00 a 15:00). Elige otra hora. Si necesitas sobreagendar, hazlo desde la Agenda.",
+  );
+  hayCitaDeMario();
+  const choque = await post(alta("10:00"));
+  assert.match(apiErrorMessage(choque.status, choque.body, "x"), /^Ese horario ya está ocupado: Mario López de .+\. Elige otra hora\. Si necesitas sobreagendar, hazlo desde la Agenda\.$/);
+  bandera = false;
+  (globalThis as any)[Symbol.for("dalecontrol.agenda.flexible")] = undefined;
+  const sinBandera = await post(alta("10:00"));
+  assert.doesNotMatch(apiErrorMessage(sinBandera.status, sinBandera.body, "x"), /sobreagendar/, "sin la bandera no se ofrece");
 });

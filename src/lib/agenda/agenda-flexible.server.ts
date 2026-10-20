@@ -37,7 +37,8 @@ const MAX_CLINICAS = 5000;
 
 type Memoria = {
   tabla: { existe: boolean; at: number } | null;
-  clinicas: Map<string, { valor: AjustesAgendaFlexible; hasta: number }>;
+  /** `fallo` = el valor salió de un error, no de la base (revisión t8, A9). */
+  clinicas: Map<string, { valor: AjustesAgendaFlexible; hasta: number; fallo?: boolean }>;
 };
 const CLAVE = Symbol.for("dalecontrol.agenda.flexible");
 const global_ = globalThis as unknown as Record<symbol, Memoria | undefined>;
@@ -105,25 +106,29 @@ export async function leerAgendaFlexible(
   const db = prisma as unknown as BanderasDb;
   let valor: AjustesAgendaFlexible = AGENDA_FLEXIBLE_APAGADA;
   let ttl = TTL_CLINICA_MS;
+  let fallo = false;
   try {
     if (!m.tabla || (!m.tabla.existe && ahora - m.tabla.at >= RECORDAR_SIN_TABLA_MS)) {
       m.tabla = { existe: await tablaExiste(db), at: ahora };
     }
     valor = m.tabla.existe ? await leerDeLaBase(clinicId, db) : AGENDA_FLEXIBLE_APAGADA;
   } catch (err) {
-    // Falla cerrado: lo último que se supo, o apagada.
-    valor = previa?.valor ?? AGENDA_FLEXIBLE_APAGADA;
-    // (revisión t8, A9) Sin respuesta previa, el «apagada» de un fallo NO se
-    // recuerda 60 s (dejaría la comida abierta al bot y a la web): unos
-    // segundos, y se vuelve a preguntar.
-    if (!previa) ttl = TTL_FALLO_SIN_PREVIA_MS;
+    // Falla cerrado: lo último que se LEYÓ de la base, o apagada.
+    // (revisión t8, A9) Sin una lectura buena previa, el «apagada» de un
+    // fallo NO se recuerda 60 s (dejaría la comida abierta al bot y a la
+    // web): unos segundos, y se vuelve a preguntar. Un fallo anterior no
+    // cuenta como «lo que se sabía»: dos fallos seguidos siguen en 5 s.
+    const buena = previa && !previa.fallo ? previa : null;
+    valor = buena?.valor ?? AGENDA_FLEXIBLE_APAGADA;
+    fallo = !buena;
+    if (!buena) ttl = TTL_FALLO_SIN_PREVIA_MS;
     console.warn("[agenda-flexible] no se pudo leer la bandera; se usa", valor, (err as { code?: string })?.code ?? err);
   }
   if (m.clinicas.size >= MAX_CLINICAS && !m.clinicas.has(clinicId)) {
     const vieja = m.clinicas.keys().next();
     if (!vieja.done) m.clinicas.delete(vieja.value);
   }
-  m.clinicas.set(clinicId, { valor, hasta: ahora + ttl });
+  m.clinicas.set(clinicId, { valor, hasta: ahora + ttl, ...(fallo ? { fallo: true } : {}) });
   return valor;
 }
 

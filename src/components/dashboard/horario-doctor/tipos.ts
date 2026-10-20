@@ -60,6 +60,11 @@ export interface HorarioDoctorDTO {
   hereda: boolean;
   /** `true` = la clínica tiene la agenda flexible: la pantalla ofrece la comida. */
   comida: boolean;
+  /**
+   * (revisión t8, N-A3) `true` = la clínica tiene la comida pero no se pudo
+   * leer. `comida` viene en `false`: ni se enseña ni se manda, y se avisa.
+   */
+  comidaIlegible?: boolean;
 }
 
 export const DIAS_SEMANA = 7;
@@ -154,7 +159,14 @@ export function semanaCompleta(filas: unknown): Dia[] {
  */
 export function parseHorarioDoctor(raw: unknown): HorarioDoctorDTO | null {
   if (!esObjeto(raw) || typeof raw.hereda !== "boolean") return null;
-  return { horario: semanaCompleta(raw.horario), hereda: raw.hereda, comida: raw.comida === true };
+  const comidaIlegible = raw.comidaIlegible === true;
+  return {
+    horario: semanaCompleta(raw.horario),
+    hereda: raw.hereda,
+    // Si no se pudo leer, NUNCA se ofrece: unos campos vacíos se guardarían como «sin comida».
+    comida: raw.comida === true && !comidaIlegible,
+    ...(comidaIlegible ? { comidaIlegible } : {}),
+  };
 }
 
 /**

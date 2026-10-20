@@ -42,7 +42,7 @@ import {
   type DiaHorario,
 } from "./core";
 import { agendaFlexibleEncendida } from "@/lib/agenda/agenda-flexible.server";
-import { columnasComidaExisten, esTablaAusente, leerHorarioDeDoctor } from "./consulta.server";
+import { ComidaIlegibleError, columnasComidaExisten, esTablaAusente, leerHorarioDeDoctor } from "./consulta.server";
 
 /** Quién pide. Sale SIEMPRE de la sesión, nunca del cuerpo de la petición. */
 export interface HorarioCtx {
@@ -99,6 +99,12 @@ export interface RespuestaHorario {
    * ni se guarda.
    */
   comida: boolean;
+  /**
+   * (revisión t8, N-A3) `true` = la clínica tiene la comida pero no se pudo
+   * leer: `comida` va en `false` para que la pantalla ni la enseñe ni la
+   * mande (guardar no la toca) y lo diga.
+   */
+  comidaIlegible?: boolean;
 }
 
 /** Los roles que tienen agenda propia: a quien se le puede dar una cita. */
@@ -142,10 +148,17 @@ export async function resolverDoctor(ctx: HorarioCtx, doctorIdRaw: unknown): Pro
   return doctor.id;
 }
 
-function respuesta(ctx: HorarioCtx, filas: readonly DiaHorario[] | null, comida: boolean): RespuestaHorario {
+function respuesta(
+  ctx: HorarioCtx,
+  filas: readonly DiaHorario[] | null,
+  comidaPedida: boolean,
+  comidaIlegible = false,
+): RespuestaHorario {
   const clinica = semanaHeredada(ctx.clinica, ctx.clinica.schedules);
+  const comida = comidaPedida && !comidaIlegible;
+  const ilegible = comidaPedida && comidaIlegible ? { comidaIlegible: true } : {};
   if (!filas || filas.length === 0) {
-    return { horario: clinica, hereda: true, clinica, avisos: [], comida };
+    return { horario: clinica, hereda: true, clinica, avisos: [], comida, ...ilegible };
   }
   const horario = semanaCompleta(filas);
   return {
@@ -154,7 +167,27 @@ function respuesta(ctx: HorarioCtx, filas: readonly DiaHorario[] | null, comida:
     clinica,
     avisos: avisosDeRecorte(horario, ctx.clinica, ctx.clinica.schedules),
     comida,
+    ...ilegible,
   };
+}
+
+/**
+ * (revisión t8, N-A3) El horario para la PANTALLA. Si la comida no se puede
+ * leer (un timeout del pooler), el horario se enseña igual pero sin la
+ * comida y marcada como ilegible: la pantalla no la manda y guardar no la
+ * borra. Nunca se enseñan unos campos vacíos que parezcan «sin comida».
+ */
+async function leerParaLaPantalla(
+  clinicId: string,
+  doctorId: string,
+): Promise<{ filas: DiaHorario[] | null; comidaIlegible: boolean }> {
+  try {
+    return { filas: await leerHorarioDeDoctor(clinicId, doctorId, { comidaEstricta: true }), comidaIlegible: false };
+  } catch (err) {
+    if (!(err instanceof ComidaIlegibleError)) throw err;
+    console.warn("[horario-doctor] la comida no se pudo leer; la pantalla no la ofrece:", (err.causa as { code?: string })?.code ?? err.causa);
+    return { filas: await leerHorarioDeDoctor(clinicId, doctorId), comidaIlegible: true };
+  }
 }
 
 /**
@@ -189,11 +222,11 @@ async function semanaGuardable(
 /** GET — el horario del doctor, o el de la clínica si hereda. */
 export async function verHorario(ctx: HorarioCtx, doctorIdRaw: unknown): Promise<RespuestaHorario> {
   const doctorId = await resolverDoctor(ctx, doctorIdRaw);
-  const [filas, comida] = await Promise.all([
-    leerHorarioDeDoctor(ctx.clinicId, doctorId),
+  const [leido, comida] = await Promise.all([
+    leerParaLaPantalla(ctx.clinicId, doctorId),
     agendaFlexibleEncendida(ctx.clinicId),
   ]);
-  return respuesta(ctx, filas, comida);
+  return respuesta(ctx, leido.filas, comida, leido.comidaIlegible);
 }
 
 /**
@@ -266,11 +299,11 @@ export async function guardarHorario(
 
   // Si algún día no traía la comida se conservó la de la base: la respuesta
   // la relee para no enseñar una semana distinta de la guardada.
-  const guardada =
+  const releida =
     guardable.comida && semana.some((d) => !diasConComida.has(d.dayOfWeek))
-      ? (await leerHorarioDeDoctor(clinicId, doctorId)) ?? semana
-      : semana;
-  return respuesta(ctx, guardada, guardable.comida);
+      ? await leerParaLaPantalla(clinicId, doctorId)
+      : null;
+  return respuesta(ctx, releida?.filas ?? semana, guardable.comida, releida?.comidaIlegible ?? false);
 }
 
 

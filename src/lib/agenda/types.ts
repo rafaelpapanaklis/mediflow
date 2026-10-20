@@ -354,6 +354,14 @@ export interface StatusChangeInput {
    * «Avisar al paciente» desmarcada). Sin él, el servidor decide con el ajuste de la clínica, como el DELETE.
    */
   notifyPatient?: boolean;
+  /**
+   * WS1-T5 (revisión t8, N-A1) — REABRIR una cita cuyo hueco ya ocupa otra:
+   * con la bandera `agenda-flexible`, «¿Seguro?» y se reabre sobreagendada.
+   * Mismo significado que en `CreateAppointmentInput`.
+   */
+  sobreagendar?: boolean;
+  sobreagendarCita?: string | null;
+  sobreagendarOtras?: number;
 }
 
 export interface CreateWaitlistInput {

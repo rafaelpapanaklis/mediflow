@@ -33,6 +33,7 @@ import { BookingRequestsPanel } from "./booking-requests-panel";
 import { tiposDeCitaParaCategoria } from "@/lib/agenda/tipos-cita-clasica";
 import { teleconsultaDisponible } from "@/lib/agenda/teleconsulta-por-categoria";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { apiErrorMessage } from "./mensaje-error-citas";
 // Sin «Dr.» delante: el título, si lo hay, ya viene en el nombre («Dr. Dr Juan», revisión de ws1-t10).
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
@@ -132,39 +133,6 @@ function statusTargets(current: string): AppointmentStatus[] {
   }
 }
 
-/**
- * Traduce la respuesta de error de la API de citas a algo que una recepcionista
- * pueda leer. Antes se pintaba el código crudo (`appointment_overlap`,
- * `internal_error`) o un genérico que no decía nada.
- */
-function apiErrorMessage(status: number, body: any, fallback: string): string {
-  // WS1-T5 (revisión t8, A5): con la agenda flexible el 409 se puede
-  // sobreagendar, pero esta pantalla (la vieja) no tiene el «¿Seguro?»: se
-  // dice dónde hacerlo en vez de un «Elige otra hora» a secas.
-  const dondeSobreagendar = body?.sobreagendable === true ? " Si necesitas sobreagendar, hazlo desde la Agenda." : "";
-  if (body?.error === "lunch_overlap") {
-    const c = body.comida;
-    return c?.lunchStart && c?.lunchEnd
-      ? `Esa hora es la comida del doctor (de ${c.lunchStart} a ${c.lunchEnd}). Elige otra hora.${dondeSobreagendar}`
-      : `Esa hora es la comida del doctor. Elige otra hora.${dondeSobreagendar}`;
-  }
-  if (body?.error === "appointment_overlap") {
-    const c = body.conflictingAppointment;
-    if (c?.startsAt && c?.endsAt) {
-      const h = (iso: string) =>
-        new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-      return `Ese horario ya está ocupado: ${c.patientName ?? "otra cita"} de ${h(c.startsAt)} a ${h(c.endsAt)}. Elige otra hora.${dondeSobreagendar}`;
-    }
-    return `Ese horario ya está ocupado por otra cita. Elige otra hora.${dondeSobreagendar}`;
-  }
-  if (typeof body?.reason === "string" && body.reason) return body.reason;
-  if (body?.error === "resource_unavailable") return "El sillón no está disponible a esa hora.";
-  if (body?.error === "patient_not_found") return "No se encontró el paciente.";
-  if (body?.error === "doctor_not_found") return "No se encontró al profesional.";
-  if (body?.error === "invalid_duration") return "La hora de fin tiene que ser posterior a la de inicio.";
-  if (status === 403) return "Tu rol no permite hacer este cambio.";
-  return fallback;
-}
 
 // ── Improvement 1: Patient search with autocomplete ───────────────────────────
 function PatientSearch({ patients, value, onChange }: { patients: Patient[]; value: string; onChange: (id: string) => void }) {

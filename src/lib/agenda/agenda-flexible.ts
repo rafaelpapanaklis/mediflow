@@ -298,3 +298,44 @@ export function textoDelAviso(aviso: AvisoSobreagenda): FraseDelAviso & { extras
     extras,
   };
 }
+
+/** Lo que viaja de vuelta al servidor tras el «Sí, sobreagendar». */
+export interface CamposDeSobreagenda {
+  sobreagendar: true;
+  sobreagendarCita: string | null;
+  sobreagendarOtras: number;
+}
+
+/** Los campos de la confirmación para ESTE aviso (la cita que se enseñó y cuántas más). */
+export function camposDelAviso(aviso: AvisoSobreagenda): CamposDeSobreagenda {
+  return { sobreagendar: true, sobreagendarCita: aviso.citaId, sobreagendarOtras: aviso.otras };
+}
+
+/**
+ * Manda una petición y, si el servidor responde «se puede sobreagendar»,
+ * pregunta («¿Seguro?») y la reenvía confirmada. `null` = la persona dijo que
+ * no. Cualquier otro error se relanza tal cual. Si mientras se decidía entró
+ * otra cita, el servidor vuelve a responder 409 y se vuelve a preguntar (hasta
+ * tres veces; luego se rinde con el último error).
+ *
+ * Lo usa «Reabrir cita» del panel (revisión t8, N-A1): sin esto, reabrir una
+ * cancelada cuyo hueco ya ocupa otra era un callejón sin salida.
+ */
+export async function enviarConAvisoDeSobreagenda<T>(args: {
+  enviar: (confirmacion?: CamposDeSobreagenda) => Promise<T>;
+  preguntar: (aviso: AvisoSobreagenda) => Promise<boolean>;
+  intento: { doctorId?: string | null; resourceId?: string | null };
+  timeZone: string;
+}): Promise<T | null> {
+  let confirmacion: CamposDeSobreagenda | undefined;
+  for (let vuelta = 0; ; vuelta++) {
+    try {
+      return await args.enviar(confirmacion);
+    } catch (err) {
+      const aviso = vuelta < 3 ? avisoDesdeRechazo(err, args.intento, args.timeZone) : null;
+      if (!aviso) throw err;
+      if (!(await args.preguntar(aviso))) return null;
+      confirmacion = camposDelAviso(aviso);
+    }
+  }
+}

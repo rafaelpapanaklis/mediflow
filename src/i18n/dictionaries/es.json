@@ -4754,7 +4754,8 @@
         "quitarAria": "Quitar la comida del {dia}",
         "errorPar": "La hora de comida del {dia} no se entiende. Escribe las dos horas (HH:MM) o deja las dos vacías.",
         "errorOrden": "El {dia} la comida tiene que terminar después de empezar.",
-        "errorFuera": "El {dia} la comida tiene que caer dentro del horario (de {abre} a {cierra})."
+        "errorFuera": "El {dia} la comida tiene que caer dentro del horario (de {abre} a {cierra}).",
+        "ilegible": "No se pudo leer la hora de comida. Recarga para editarla; si guardas ahora, la comida se queda como estaba."
       }
     },
     "agendaColor": {

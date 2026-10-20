@@ -46,10 +46,10 @@ SELECT "id", "slug", "name"
 
 -- ── 2. Encender, CON FRENO ─────────────────────────────────────────────
 -- Solo enciende si encuentra EXACTAMENTE las 6 clínicas y TODAS son del mismo
--- dueño (un único SUPER_ADMIN por supabaseId entre ellas). Si no, aborta con
--- un error que dice qué falta y NO enciende ninguna (revisión t8, A10: los
--- slugs son genéricos, p. ej. «centro-dental»; mejor parar que encender la
--- clínica equivocada).
+-- dueño: entre ellas hay un único dueño (SUPER_ADMIN, por supabaseId) y CADA
+-- UNA de las 6 lo tiene. Si no, aborta con un error que dice qué falta y NO
+-- enciende ninguna (revisión t8, A10 y N-A4: los slugs son genéricos, p. ej.
+-- «centro-dental»; una clínica ajena con ese slug y SIN dueño ya no se cuela).
 DO $sal$
 DECLARE
   esperados text[] := ARRAY[
@@ -63,6 +63,8 @@ DECLARE
   encontrados int;
   faltan text;
   duenos int;
+  con_dueno int;
+  sin_dueno text;
   n int;
 BEGIN
   SELECT count(*) INTO encontrados FROM "clinics" WHERE "slug" = ANY(esperados);
@@ -80,6 +82,24 @@ BEGIN
    WHERE c."slug" = ANY(esperados) AND u."role" = 'SUPER_ADMIN';
   IF duenos <> 1 THEN
     RAISE EXCEPTION 'Freno: las 6 clínicas deberían ser del mismo dueño y hay % dueños distintos. No se encendió nada.', duenos;
+  END IF;
+
+  -- Y ese dueño tiene que estar en LAS 6 (revisión t8, N-A4): una clínica
+  -- sin ningún SUPER_ADMIN no suma dueños y pasaba el freno de arriba.
+  SELECT count(DISTINCT c."id") INTO con_dueno
+    FROM "clinics" c
+    JOIN "users" u ON u."clinicId" = c."id" AND u."role" = 'SUPER_ADMIN' AND u."supabaseId" IS NOT NULL
+   WHERE c."slug" = ANY(esperados);
+  IF con_dueno <> 6 THEN
+    SELECT string_agg(c."slug", ', ' ORDER BY c."slug") INTO sin_dueno
+      FROM "clinics" c
+     WHERE c."slug" = ANY(esperados)
+       AND NOT EXISTS (
+         SELECT 1 FROM "users" u
+          WHERE u."clinicId" = c."id" AND u."role" = 'SUPER_ADMIN' AND u."supabaseId" IS NOT NULL
+       );
+    RAISE EXCEPTION 'Freno: solo % de las 6 clínicas tienen al dueño. Sin dueño: %. No se encendió nada.',
+      con_dueno, coalesce(sin_dueno, '(ninguna)');
   END IF;
 
   INSERT INTO "clinic_feature_flags" ("clinicId", "flag", "enabled")

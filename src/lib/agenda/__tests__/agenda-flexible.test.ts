@@ -566,9 +566,9 @@ test("t8 · A8 · la comida solo se escribe en los días que la TRAEN en el cuer
   assert.equal(diasQueTraenComida(null).size, 0);
 });
 
-test("t8 · A3/A13/A11 · reabrir quita la marca; las columnas de comida fuera del modelo; sin texto técnico", () => {
-  const status = leer("src/app/api/appointments/[id]/status/route.ts");
-  assert.match(status, /reabreSobreagendada\(existing\.status, body\.status, existing\.overrideReason\)\s*\?\s*\{ overrideReason: null, overriddenBy: null, overriddenAt: null \}/);
+// A3 (reabrir) ya no se prueba buscando texto: lo EJECUTA
+// src/app/api/appointments/__tests__/reabrir-sobreagendada.test.ts.
+test("t8 · A13/A11 · las columnas de comida fuera del modelo; sin texto técnico", () => {
   const schema = leer("prisma/schema.prisma");
   const modelo = schema.slice(schema.indexOf("model DoctorSchedule {"), schema.indexOf('@@map("doctor_schedules")'));
   assert.doesNotMatch(modelo, /^\s+lunchStart\s/m, "lunchStart no se declara en DoctorSchedule");
@@ -577,9 +577,5 @@ test("t8 · A3/A13/A11 · reabrir quita la marca; las columnas de comida fuera d
   assert.match(leer("src/lib/horario-doctor/service.ts"), /La hora de comida todavía no está disponible\. Avisa a soporte\./);
 });
 
-test("t8 · A10 · el SQL de encendido tiene freno (6 slugs y un solo dueño) y documenta la herencia", () => {
-  const sql = leer("sql/salamanca-encender-agenda.sql");
-  assert.match(sql, /IF encontrados <> 6 THEN\s+[\s\S]*RAISE EXCEPTION 'Freno/);
-  assert.match(sql, /IF duenos <> 1 THEN\s+RAISE EXCEPTION 'Freno/);
-  assert.match(sql, /SEDE PRINCIPAL DE SU DUEÑO, SIEMPRE/);
-});
+// A10 y N-A4 (el freno del SQL de encendido) ya no se prueban buscando texto:
+// los EJECUTA src/lib/agenda/__tests__/encender-agenda-sql.test.ts en PGlite.
