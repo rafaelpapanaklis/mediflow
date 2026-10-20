@@ -60,6 +60,15 @@ interface Escenario {
   reponerFalla?: boolean;
   /** `invoices.update` (marcar) falla de red. */
   marcarFalla?: boolean;
+  /** Candado por clínica REAL (en memoria, como failban sin Upstash); por defecto abre siempre. */
+  candadoReal?: boolean;
+  /**
+   * Otra pestaña tiene en curso la MISMA operación: Stripe rechaza esta petición con idempotency_error (409), como
+   * hace con una clave que sigue en curso. Mientras tanto la otra pestaña la termina (`otraPestaña`).
+   */
+  clavePropiaEnCurso?: "anular" | "cambiar";
+  /** `subscriptions.retrieve` falla a partir de la N-ésima llamada (para «no se pudo comprobar»). */
+  retrieveFallaDesde?: number;
   /** El cliente de la suscripción es OTRO cliente de Stripe. */
   clienteAjeno?: boolean;
   stripeCaido?: boolean;
@@ -87,6 +96,23 @@ function montar(e: Escenario = {}) {
   let descuentoCliente: any = e.descuentoCliente ?? null; // el que Stripe aplicaría a la factura nueva
   let borrado: any = null; // el último cupón del cliente que se quitó (para poder reponerlo)
   const avisos: Array<{ asunto: string; lineas: string[] }> = [];
+  const candados = new Map<string, number>();
+  let retrieves = 0;
+  let otraPestanaActuo = false;
+  const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
+  /** La otra pestaña termina la subida (anula/cambia el plan y se cobra) mientras esta petición choca con su clave. */
+  const otraPestanaTermina = (plan: string) => {
+    if (otraPestanaActuo) return;
+    otraPestanaActuo = true;
+    const f = facturas.get("in_vieja");
+    if (f && f.status !== "void") f.status = "void";
+    planSub = plan;
+    facturas.set("in_nueva", {
+      id: "in_nueva", status: "paid", amount_due: descuentoCliente ? 63939 : 79924, total: descuentoCliente ? 63939 : 79924,
+      currency: "mxn", hosted_invoice_url: "https://pay.stripe.test/in_nueva", customer: "cus_1", created: 200,
+    });
+    cobrosAplicados++;
+  };
   const parametrosPorClave = new Map<string, string>(); // idempotencia de invoices.update, como Stripe
   let respuestasPerdidas = e.updateRespuestaPerdida ?? 0;
   const auditorias: any[] = [];
@@ -103,6 +129,10 @@ function montar(e: Escenario = {}) {
       retrieve: async (id: string) => {
         registra("subscriptions.retrieve", id);
         cuestaCaer();
+        retrieves++;
+        if (e.retrieveFallaDesde && retrieves >= e.retrieveFallaDesde) {
+          throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        }
         return {
           id,
           status: e.subStatus ?? "past_due",
@@ -121,6 +151,10 @@ function montar(e: Escenario = {}) {
         // Mismo idempotencyKey → misma respuesta (como Stripe): no genera otra factura.
         const previa = cobrosPorClave.get(opts.idempotencyKey);
         if (previa) return previa;
+        if (e.clavePropiaEnCurso === "cambiar") {
+          otraPestanaTermina(params.metadata.plan);
+          throw idemEnCurso();
+        }
         if (fallasAntes > 0) {
           fallasAntes--;
           throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
@@ -130,6 +164,7 @@ function montar(e: Escenario = {}) {
           status: e.tarjetaFalla ? "open" : "paid",
           // Lo que Stripe cobraría: lista + IVA de PRO (799.24), con el descuento del cliente si siguiera puesto.
           amount_due: descuentoCliente ? 63939 : 79924,
+          total: descuentoCliente ? 63939 : 79924,
           currency: "mxn",
           hosted_invoice_url: "https://pay.stripe.test/in_nueva",
           customer: "cus_1",
@@ -190,6 +225,7 @@ function montar(e: Escenario = {}) {
       voidInvoice: async (id: string, _p: any, opts: any) => {
         registra("invoices.voidInvoice", id, opts);
         cuestaCaer();
+        if (e.clavePropiaEnCurso === "anular") throw idemEnCurso(); // la otra pestaña sigue en curso; termina después (`otraTermina`)
         if (fallasVoid > 0) {
           fallasVoid--;
           throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
@@ -258,6 +294,19 @@ function montar(e: Escenario = {}) {
     auditar: async (ev) => { auditorias.push(ev); },
     avisoSedeIncluida: (n) => `paga ${n}`,
     avisarAlAdmin: async (a) => { avisos.push(a); },
+    candado: e.candadoReal
+      ? {
+          // Como failban sin Upstash: SET NX con caducidad (aquí en memoria, con reloj de prueba).
+          tomar: async (clave, ttlSec) => {
+            registra("candado.tomar", clave, ttlSec);
+            const hasta = candados.get(clave);
+            if (hasta && hasta > Date.now()) return false;
+            candados.set(clave, Date.now() + ttlSec * 1000);
+            return true;
+          },
+          soltar: async (clave) => { registra("candado.soltar", clave); candados.delete(clave); },
+        }
+      : { tomar: async () => true, soltar: async () => {} },
   };
   const ops = (op: string) => llamadas.filter((l) => l.op === op);
   return {
@@ -265,6 +314,9 @@ function montar(e: Escenario = {}) {
     planLocal: () => planLocal,
     cobros: () => cobrosAplicados,
     avisos,
+    candados,
+    /** La otra pestaña termina su subida (anula, cambia el plan y se cobra). */
+    otraTermina: () => otraPestanaTermina("PRO"),
     descuentoDelCliente: () => descuentoCliente,
     planSub: () => planSub,
   };
@@ -975,6 +1027,145 @@ test("S1: sin cupón en el cliente no se llama a deleteDiscount ni a customers.u
   const pagar = montar({ descuentoCliente: CUPON_CLIENTE });
   assert.equal((await pagarPendiente(pagar.deps)).body.pagado, true);
   assert.equal(pagar.ops("customers.deleteDiscount").length + pagar.ops("customers.update").length, 0);
+});
+
+// ── Octava vuelta t4: T1 (dos pestañas), T2 (respuesta perdida), T3 (cupón con fin) ──────────────────
+
+test("T1 (b): dos pestañas a la vez → la segunda recibe «ya hay un cambio en curso» ANTES de quitar o anular nada; un solo cobro; el candado se suelta", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, candadoReal: true });
+  const [a, b] = await Promise.all([subirYPagar(m.deps, "PRO"), subirYPagar(m.deps, "PRO")]);
+  const [ok, rechazada] = a.status === 200 ? [a, b] : [b, a];
+  assert.deepEqual(ok, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(rechazada.status, 409);
+  assert.equal(rechazada.body.code, "CAMBIO_EN_CURSO");
+  assert.equal(rechazada.body.error, "Ya hay un cambio de plan en curso, espera unos segundos.");
+  // La segunda no tocó nada: una sola vez cada operación de Stripe.
+  assert.equal(m.ops("customers.deleteDiscount").length, 1);
+  assert.equal(m.ops("invoices.voidInvoice").length, 1);
+  assert.equal(m.ops("subscriptions.update").length, 1);
+  assert.equal(m.ops("customers.update").length, 0); // y nadie repuso el cupón
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-subir").montoCobradoMxn, 799.24);
+  // El candado quedó libre (y tiene caducidad, por si el proceso muere con él tomado).
+  assert.equal(m.candados.size, 0);
+  const tomar = m.ops("candado.tomar")[0];
+  assert.equal(tomar.args[0], claves.candadoSubir("clin_1"));
+  assert.ok(tomar.args[1] >= 60 && tomar.args[1] <= 300);
+});
+
+test("T1 (b): el candado se suelta también si la subida falla, y uno vencido no bloquea; otra clínica no se ve afectada; sin permiso ni plan válido ni se toma", async () => {
+  const falla = montar({ candadoReal: true, updateFallaAntes: 1 });
+  assert.equal((await subirYPagar(falla.deps, "PRO")).status, 502);
+  assert.equal(falla.candados.size, 0);
+  assert.equal((await subirYPagar(falla.deps, "PRO")).status, 200); // el reintento no se queda esperando
+
+  const pegado = montar({ candadoReal: true });
+  pegado.candados.set(claves.candadoSubir("clin_1"), Date.now() - 1000); // proceso muerto: el candado ya caducó
+  assert.equal((await subirYPagar(pegado.deps, "PRO")).status, 200);
+
+  const tomado = montar({ candadoReal: true });
+  tomado.candados.set(claves.candadoSubir("otra_clinica"), Date.now() + 60_000);
+  assert.equal((await subirYPagar(tomado.deps, "PRO")).status, 200);
+
+  const sinPermiso = montar({ candadoReal: true, role: "DOCTOR" });
+  assert.equal((await subirYPagar(sinPermiso.deps, "PRO")).status, 403);
+  assert.equal(sinPermiso.ops("candado.tomar").length, 0);
+  const chico = montar({ candadoReal: true, plan: "PRO" });
+  assert.equal((await subirYPagar(chico.deps, "BASIC")).status, 400);
+  assert.equal(chico.ops("candado.tomar").length, 0);
+});
+
+test("T1 (a): SIN candado, si Stripe rechaza por una clave en curso (la otra pestaña lo está terminando) NO se repone el cupón: bitácora + aviso al admin", async () => {
+  for (const donde of ["anular", "cambiar"] as const) {
+    const m = montar({ descuentoCliente: CUPON_CLIENTE, clavePropiaEnCurso: donde });
+    const r = await subirYPagar(m.deps, "PRO");
+    assert.equal(r.status, 502, donde);
+    assert.equal(r.body.error, MENSAJES.stripeNoContesto);
+    assert.equal(m.ops("customers.update").length, 0, `${donde}: no se repone`);
+    assert.equal(m.descuentoDelCliente(), null, donde); // el cupón no vuelve sobre el plan ya subido
+    if (donde === "cambiar") assert.equal(m.planSub(), "PRO"); else m.otraTermina(); // la otra pestaña lo termina
+    assert.equal(m.planSub(), "PRO");
+    assert.equal(m.cobros(), 1);
+    assert.equal(m.facturas.get("in_nueva").amount_due, 79924, `${donde}: la factura sale a lista, sin cupón`);
+    const ev = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-no-repuesto-otro-cambio");
+    assert.deepEqual([ev.razon, ev.cupon, ev.clienteStripe], ["idempotencia", "REGALO20", "cus_1"], donde);
+    assert.equal(m.avisos.length, 1, donde);
+    assert.match(m.avisos[0].asunto, /cambio de plan en paralelo/);
+    assert.match(m.avisos[0].lineas.join("\n"), /REGALO20/);
+    assert.ok(!m.auditorias.some((x) => x.event === "pago-pendiente-descuento-cliente-repuesto"), donde);
+  }
+});
+
+test("T1 (c): si lo cobrado queda por debajo de lo mostrado, queda en la bitácora y se avisa al admin", async () => {
+  // El cupón del cliente SIGUE puesto al cobrar (otra pestaña lo repuso): esta petición lo ve como «sin cupón».
+  const m = montar({ descuentoCliente: CUPON_CLIENTE });
+  const retrieve = (m.deps.stripe as any).subscriptions.retrieve;
+  (m.deps.stripe as any).subscriptions.retrieve = async (...a: any[]) => ({ ...(await retrieve(...a)), customer: { id: "cus_1", discount: null } });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, true);
+  const ev = m.auditorias.find((x) => x.event === "pago-pendiente-subir-cobro-menor");
+  assert.deepEqual([ev.cobradoMxn, ev.esperadoMxn], [639.39, 799.24]);
+  assert.equal(m.avisos.length, 1);
+  assert.match(m.avisos[0].asunto, /por debajo del precio de lista/);
+  // Cobro correcto → ni evento ni aviso.
+  const bien = montar({ descuentoCliente: CUPON_CLIENTE });
+  await subirYPagar(bien.deps, "PRO");
+  assert.ok(!bien.auditorias.some((x) => x.event === "pago-pendiente-subir-cobro-menor"));
+  assert.deepEqual(bien.avisos, []);
+});
+
+test("T2: el cambio SÍ llegó a Stripe pero la respuesta se perdió → se relee la suscripción y NO se repone el cupón; bitácora + aviso al admin", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, updateRespuestaPerdida: 1 });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(m.planSub(), "PRO");
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.ops("customers.update").length, 0);
+  assert.equal(m.descuentoDelCliente(), null);
+  const ev = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-no-repuesto-otro-cambio");
+  assert.deepEqual([ev.razon, ev.motivo], ["plan-ya-en-destino", "cambiar-plan"]);
+  assert.equal(m.avisos.length, 1);
+  assert.match(m.avisos[0].lineas.join("\n"), /ya está en PRO/);
+  // Y la factura nueva salió a lista (el cupón se quitó antes del cambio).
+  assert.equal(m.facturas.get("in_nueva").amount_due, 79924);
+});
+
+test("T2: el cambio realmente NO se hizo (la suscripción sigue en el plan viejo) → sí se repone; y si no se puede comprobar, se repone y queda anotado", async () => {
+  const falla = montar({ descuentoCliente: CUPON_CLIENTE, updateFallaAntes: 1 });
+  await subirYPagar(falla.deps, "PRO");
+  assert.equal(falla.ops("customers.update").length, 1);
+  assert.equal(falla.descuentoDelCliente().coupon.id, "REGALO20");
+  assert.deepEqual(falla.avisos, []);
+  // Se releyó la suscripción antes de reponer.
+  assert.ok(falla.ops("subscriptions.retrieve").length >= 2);
+
+  // La relectura falla (Stripe no contesta): lo reversible es reponer; queda anotado que no se pudo verificar.
+  const sinVerificar = montar({ descuentoCliente: CUPON_CLIENTE, updateFallaAntes: 1, retrieveFallaDesde: 2 });
+  await subirYPagar(sinVerificar.deps, "PRO");
+  assert.equal(sinVerificar.ops("customers.update").length, 1);
+  assert.ok(sinVerificar.auditorias.some((x) => x.event === "pago-pendiente-descuento-cliente-reposicion-sin-verificar"));
+});
+
+test("T3: reponer un cupón CON fecha de fin lo repone igual (no se le quita nada a la clínica) pero avisa al admin con la fecha original", async () => {
+  const fin = Math.floor(new Date("2027-01-15T18:00:00Z").getTime() / 1000);
+  const m = montar({ descuentoCliente: { ...CUPON_CLIENTE, start: 1_700_000_000, end: fin }, updateFallaAntes: 1 });
+  await subirYPagar(m.deps, "PRO");
+  assert.equal(m.ops("customers.update").length, 1); // se repone igual
+  assert.equal(m.descuentoDelCliente().coupon.id, "REGALO20");
+  const quitado = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-quitado");
+  assert.equal(quitado.finOriginal, "2027-01-15T18:00:00.000Z");
+  const rep = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-repuesto");
+  assert.deepEqual([rep.finOriginal, rep.finPorAjustar], ["2027-01-15T18:00:00.000Z", true]);
+  assert.equal(m.avisos.length, 1);
+  assert.match(m.avisos[0].asunto, /Ajusta la fecha de fin/);
+  assert.match(m.avisos[0].lineas.join("\n"), /enero de 2027/);
+  assert.match(m.avisos[0].lineas.join("\n"), /REGALO20/);
+
+  // Sin fecha de fin (cupón «forever» u «once»): se repone sin aviso.
+  const sinFin = montar({ descuentoCliente: CUPON_CLIENTE, updateFallaAntes: 1 });
+  await subirYPagar(sinFin.deps, "PRO");
+  assert.equal(sinFin.ops("customers.update").length, 1);
+  assert.deepEqual(sinFin.avisos, []);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──
