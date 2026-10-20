@@ -699,3 +699,23 @@ test("N-P10: la sede nueva conserva SIN autor los consentimientos de fábrica, y
   assert.equal(restaurableDe({ kind: "CONSENTIMIENTO", name: copia[0].name, body: copia[0].body, createdById: copia[0].createdById }), true);
   assert.equal(restaurableDe({ kind: "CONSENTIMIENTO", name: copia[1].name, body: copia[1].body, createdById: copia[1].createdById }), false);
 });
+
+test("N4-P1: ceder por liga solo si la hoja que gana cubre los procedimientos de la cita que cubre la que cede", () => {
+  const proc = [{ id: "p1", name: "Cordales", isActive: true }, { id: "p2", name: "Injerto", isActive: true }];
+  const version = dto({ id: "ver", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia", procedureIds: ["p1"] });
+  const injerto = dto({ id: "inj", nombre: "Injerto de encía", basadaEn: "cirugia", procedureIds: ["p2"] });
+  const viejaP1 = dto({ id: "vieja", nombre: "Cirugía (copia)", basadaEn: "cirugia", procedureIds: ["p1"] });
+  assert.deepEqual(hojasSugeridas([version, injerto], proc, []).sort(), ["inj", "ver"], "otra copia, otro procedimiento: se propone");
+  assert.deepEqual(hojasSugeridas([version, viejaP1], proc, []), ["ver"], "copia vieja del mismo procedimiento: cede");
+  assert.deepEqual(hojasSugeridas([version, viejaP1, injerto], proc, []).sort(), ["inj", "ver"]);
+  // La copia ligada a p1 Y p2 cubre más que la versión (solo p1): no cede, cubre p2.
+  const amplia = dto({ id: "amplia", nombre: "Cirugía amplia (copia)", basadaEn: "cirugia", procedureIds: ["p1", "p2"] });
+  assert.deepEqual(hojasSugeridas([version, amplia], proc, []).sort(), ["amplia", "ver"]);
+  // La de fábrica pelada cede a sus copias solo si juntas cubren lo que ella cubre en la cita.
+  const pelada = dto({ id: "pelada", deFabrica: true, basadaEn: "cirugia", procedureIds: ["p1", "p2"] });
+  const cordales = dto({ id: "cord", basadaEn: "cirugia", procedureIds: ["p1"] });
+  assert.deepEqual(hojasSugeridas([pelada, cordales, injerto], proc, []).sort(), ["cord", "inj"], "las copias cubren p1 y p2: la pelada cede");
+  assert.deepEqual(hojasSugeridas([pelada, cordales], proc, []).sort(), ["cord", "pelada"], "p2 solo lo cubre la pelada: se queda");
+  // Por palabras (sin procedimientos de la cita) siguen siendo la misma indicación: la copia vieja cede a la versión.
+  assert.deepEqual(sinRepetirLaMismaHoja([viejaP1, version]).map((h) => h.id), ["ver"]);
+});

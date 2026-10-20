@@ -95,12 +95,13 @@ const cita = {
   },
 };
 mock.module("@/lib/indicaciones/cita.server", {
-  namedExports: { PERMISO_EMITIR: "agenda.view", entrarCita: async () => ({ ctx: sesion }), cargarCita: async () => cita },
+  namedExports: { PERMISO_EMITIR: "agenda.view", PERMISO_VER: "agenda.view", entrarCita: async () => ({ ctx: sesion }), cargarCita: async () => cita },
 });
 mock.module("@/lib/indicaciones/hojas-de-cita.server", {
   namedExports: {
     hojasDeLaClinica: async () => hojasDeLaCita,
     ultimoEnvioReciente: async () => null,
+    constanciaSinTabla: () => ({ id: "fabrica:constancia", tipo: "CONSTANCIA", nombre: "Constancia", cuerpo: "c", procedureIds: [], deFabrica: true, basadaEn: "constancia", activa: true, createdAt: "1970-01-01T00:00:00.000Z", updatedAt: "1970-01-01T00:00:00.000Z" }),
     anotarEnMovimientos: async (a: Row) => void movimientos.push(a),
     nombrarHojas: (n: string[]) => n.join(", "),
   },
@@ -111,11 +112,13 @@ mock.module("@/lib/indicaciones/pdf", { namedExports: { construirPdfHoja: async 
 
 let docPATCH: typeof import("../../../app/api/document-templates/[id]/route").PATCH;
 let notaPATCH: typeof import("../../../app/api/orthodontics/note-templates/[id]/route").PATCH;
+let citaGET: typeof import("../../../app/api/indicaciones/cita/[id]/route").GET;
 let waPOST: typeof import("../../../app/api/indicaciones/cita/[id]/whatsapp/route").POST;
 
 before(async () => {
   docPATCH = (await import("../../../app/api/document-templates/[id]/route")).PATCH;
   notaPATCH = (await import("../../../app/api/orthodontics/note-templates/[id]/route")).PATCH;
+  citaGET = (await import("../../../app/api/indicaciones/cita/[id]/route")).GET;
   waPOST = (await import("../../../app/api/indicaciones/cita/[id]/whatsapp/route")).POST;
 });
 
@@ -322,4 +325,40 @@ test("N3-P2: texto, nombre y «en uso» válidos se guardan juntos en una sola o
   assert.deepEqual([plantillas[0].name, plantillas[0].isActive, plantillas[0].body], ["Extracción v2", false, "<p>martes</p>"]);
   assert.equal(versiones.filas.length, 1);
   assert.equal(versiones.filas[0].cuerpo, "<p>texto del lunes</p>");
+});
+
+// ─── N4-P1 · lo que se PROPONE en el cuadro de la cita ─────────────────────
+
+test("N4-P1: la versión editada de «cirugía bucal» y la copia «Injerto de encía» (ligada a OTRO procedimiento de la cita) se proponen las dos", async () => {
+  hojasDeLaCita = [
+    hoja({ id: "cirugia", nombre: "Después de una cirugía bucal", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia", procedureIds: ["p-cordales"] }),
+    hoja({ id: "injerto", nombre: "Injerto de encía", basadaEn: "cirugia", procedureIds: ["p-injerto"] }),
+  ];
+  (cita as any).procedimientos = [
+    { id: "p-cordales", name: "Cordales", isActive: true },
+    { id: "p-injerto", name: "Injerto", isActive: true },
+  ];
+  try {
+    const res = await citaGET(new NextRequest("http://localhost/api/indicaciones/cita/cita-1"), params("cita-1"));
+    assert.equal(res.status, 200);
+    const out = await res.json();
+    assert.deepEqual([...out.sugeridas].sort(), ["cirugia", "injerto"], "las dos vienen marcadas: al paciente le llegan las dos");
+    assert.equal(out.indicaciones.length, 2);
+  } finally {
+    (cita as any).procedimientos = [];
+  }
+});
+
+test("N4-P1: una copia vieja ligada al MISMO procedimiento que la versión editada sí cede (no se manda dos veces lo mismo)", async () => {
+  hojasDeLaCita = [
+    hoja({ id: "cirugia", nombre: "Después de una cirugía bucal", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia", procedureIds: ["p-cordales"] }),
+    hoja({ id: "vieja", nombre: "Después de una cirugía bucal (copia)", basadaEn: "cirugia", procedureIds: ["p-cordales"], updatedAt: "2026-12-01T00:00:00.000Z" }),
+  ];
+  (cita as any).procedimientos = [{ id: "p-cordales", name: "Cordales", isActive: true }];
+  try {
+    const out = await (await citaGET(new NextRequest("http://localhost/api/indicaciones/cita/cita-1"), params("cita-1"))).json();
+    assert.deepEqual(out.sugeridas, ["cirugia"]);
+  } finally {
+    (cita as any).procedimientos = [];
+  }
 });

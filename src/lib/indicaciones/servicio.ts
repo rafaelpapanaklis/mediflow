@@ -352,13 +352,33 @@ export function procedimientosDeLaCita(
  * «Injerto de encía»). Las que no vienen de una de fábrica (`basadaEn` nulo) tampoco. Conserva el orden de entrada.
  * Solo propone: lo que la persona marca a mano se respeta (ver `sinIdsRepetidos`).
  */
-export function sinRepetirLaMismaHoja<T extends HojaDTO>(hojas: readonly T[]): T[] {
-  const conVersion = new Set(hojas.filter((h) => h.deFabrica && h.versionDeClinica && h.basadaEn).map((h) => h.basadaEn));
-  const conCopia = new Set(hojas.filter((h) => !h.deFabrica && h.basadaEn).map((h) => h.basadaEn));
+export function sinRepetirLaMismaHoja<T extends HojaDTO>(
+  hojas: readonly T[],
+  /**
+   * Los procedimientos de la cita, cuando la propuesta sale de la LIGA: una hoja solo cede a otra de su mismo origen si
+   * esa otra cubre los procedimientos de la cita que ella cubre (ws1-t8 · N4-P1). Una copia ligada a OTRO procedimiento
+   * de la cita («Injerto de encía») es otra hoja y se propone. Sin esto (propuesta por palabras) comparten la misma
+   * indicación y ceden como siempre.
+   */
+  procedimientosDeLaCita?: ReadonlySet<string>,
+): T[] {
+  const cubre = (h: HojaDTO) => (procedimientosDeLaCita ? h.procedureIds.filter((id) => procedimientosDeLaCita.has(id)) : []);
+  const estaCubierta = (h: T, quienes: readonly T[]) => {
+    if (!procedimientosDeLaCita) return quienes.length > 0;
+    const cubiertos = new Set(quienes.flatMap(cubre));
+    return quienes.length > 0 && cubre(h).every((id) => cubiertos.has(id));
+  };
+  const delOrigen = (h: T) => hojas.filter((x) => x !== h && x.basadaEn === h.basadaEn);
   return hojas.filter((h) => {
     if (!h.basadaEn) return true;
-    if (!h.deFabrica) return !conVersion.has(h.basadaEn); // la copia vieja cede a la versión editada
-    return h.versionDeClinica || !conCopia.has(h.basadaEn); // la de fábrica pelada cede a sus copias
+    if (!h.deFabrica) {
+      // La copia vieja cede a la versión editada de la MISMA hoja.
+      const version = delOrigen(h).filter((x) => x.deFabrica && x.versionDeClinica);
+      return !estaCubierta(h, version);
+    }
+    if (h.versionDeClinica) return true;
+    // La de fábrica pelada cede a las copias de la clínica, si cubren lo que ella cubre en esta cita.
+    return !estaCubierta(h, delOrigen(h).filter((x) => !x.deFabrica));
   });
 }
 
@@ -385,7 +405,7 @@ export function hojasSugeridas(
   const enUso = hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa);
   const ids = new Set(procedimientos.map((p) => p.id));
   const porLiga = enUso.filter((h) => h.procedureIds.some((id) => ids.has(id)));
-  if (porLiga.length > 0) return sinRepetirLaMismaHoja(porLiga).map((h) => h.id);
+  if (porLiga.length > 0) return sinRepetirLaMismaHoja(porLiga, ids).map((h) => h.id);
   const porPalabras = enUso.filter((h) => {
     const f = textoDeFabrica(h.basadaEn);
     return !!f && textos.some((t) => coincideConFabrica(f, t));
