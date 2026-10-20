@@ -13,7 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   PLAN_VACIO, alternarDiente, avisosDeOrden, componerDescripcion, esDescripcionDePlan, esFdi,
-  hallazgosPorTratar, importeRenglon, leerDientes, letraCentro, sesionesSugeridas, subtotalesPorFase,
+  HALLAZGO_FASE, hallazgosPorTratar, importeRenglon, leerDientes, letraCentro, sesionesSugeridas, subtotalesPorFase,
   totalProcedimientos, type Renglon, type Rotulos,
 } from "../plan-clinico";
 
@@ -234,10 +234,10 @@ test("del odontograma salen los hallazgos por tratar, con sus caras juntas", () 
     [36, "missing", "restauradora", ""],
   ]);
   // Cada id que se da por «problema» existe en el catálogo del odontograma.
+  // (HALLAZGO_FASE sale de la lista compartida de sugerir-procedimiento.ts desde ws1-t5: se revisan sus claves de verdad.)
   const catalogo = leer("components/dashboard/odontogram-v2/data.ts");
-  const clinico = leer("components/dashboard/plan-tratamiento-rediseno/plan-clinico.ts");
-  const bloque = clinico.slice(clinico.indexOf("export const HALLAZGO_FASE"), clinico.indexOf("export interface EntradaOdontograma"));
-  for (const m of bloque.matchAll(/^\s{2}([a-z0-9_]+):/gm)) {
-    assert.ok(catalogo.includes(`C("${m[1]}"`), `${m[1]} no existe en odontogram-v2/data.ts`);
+  assert.ok(Object.keys(HALLAZGO_FASE).length >= 20);
+  for (const id of Object.keys(HALLAZGO_FASE)) {
+    assert.ok(catalogo.includes(`C("${id}"`), `${id} no existe en odontogram-v2/data.ts`);
   }
 });
