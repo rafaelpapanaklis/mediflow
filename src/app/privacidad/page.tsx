@@ -369,7 +369,8 @@ export default function PrivacidadPage() {
         <ul>
           <li><b>Supabase, Inc.</b> — hosting de base de datos y autenticación.</li>
           <li><b>Vercel, Inc.</b> — hosting de la aplicación web y medición de visitas y rendimiento del sitio (Vercel Analytics y Speed Insights).</li>
-          <li><b>Twilio, Inc.</b> — envío de WhatsApp y SMS.</li>
+          <li><b>Meta Platforms, Inc. (WhatsApp Business Platform)</b> — envío y recepción de los mensajes de WhatsApp de la plataforma (recordatorios, confirmaciones y conversaciones con la clínica).</li>
+          <li><b>Twilio, Inc.</b> — respaldo para el envío de WhatsApp, solo en las clínicas que lo tenían configurado antes de usar WhatsApp Business Platform. No enviamos SMS.</li>
           <li><b>Resend, Inc.</b> — envío de los correos de la plataforma (avisos de cuenta, portal del paciente, recordatorios y el aviso que nos llega con su nombre y su número cuando usted pide, en el botón de WhatsApp del sitio, que le escribamos).</li>
           <li><b>Postmark</b> — recepción de correo entrante.</li>
           <li><b>Stripe, Inc. / PayPal / MercadoPago</b> — procesamiento de pagos cuando aplica.</li>

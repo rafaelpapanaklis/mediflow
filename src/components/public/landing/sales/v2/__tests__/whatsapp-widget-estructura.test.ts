@@ -70,5 +70,8 @@ test("N-W2: la tarjeta registra la conversión en «Iniciar conversación» y al
   const t = leer("whatsapp-widget.tsx");
   const abrir = t.slice(t.indexOf("function abrir("), t.indexOf("function cerrar("));
   assert.doesNotMatch(abrir, /registrarPaso/);
-  assert.equal((t.match(/registrarPaso\("whatsapp_clic"/g) ?? []).length, 2);
+  // Un solo punto de registro (contarConversion, una vez por apertura), llamado desde «Iniciar» y desde el envío.
+  assert.equal((t.match(/registrarPaso\("whatsapp_clic"/g) ?? []).length, 1);
+  assert.match(t, /onClick=\{contarConversion\}/);
+  assert.match(t, /if \(conversionContada\.current\) return;/);
 });

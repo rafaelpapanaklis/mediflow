@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { registrarPaso } from "@/lib/analytics/embudo";
 import {
   enlaceIniciarConversacion,
+  type ModoNumero,
   normalizarNombre,
   normalizarNumeroWhatsapp,
 } from "@/lib/landing/whatsapp-widget";
@@ -30,6 +31,7 @@ export function WhatsappWidget() {
   const [estado, setEstado] = useState<Estado>("idle");
   const [nombre, setNombre] = useState("");
   const [numero, setNumero] = useState("");
+  const [modo, setModo] = useState<ModoNumero>("mx");
   const [honeypot, setHoneypot] = useState("");
   const [errores, setErrores] = useState<{ nombre?: string; numero?: string; general?: string }>({});
   const id = useId();
@@ -44,9 +46,21 @@ export function WhatsappWidget() {
   const origenApertura = useRef<"barra_movil" | undefined>(undefined);
   /** En táctil NO se enfoca Nombre al abrir (sacaría el teclado y taparía «Iniciar conversación»). */
   const enfocarNombre = useRef(true);
+  /** Una sola conversión por apertura de la tarjeta: enviar el formulario y luego tocar «Iniciar» no cuenta dos. */
+  const conversionContada = useRef(false);
+
+  function contarConversion() {
+    if (conversionContada.current) return;
+    conversionContada.current = true;
+    registrarPaso("whatsapp_clic", origenApertura.current ? { origen: origenApertura.current } : {});
+  }
 
   function abrir(opts: { origen?: "barra_movil"; conTeclado?: boolean } = {}) {
-    focoPrevio.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Safari no enfoca un botón al hacer clic: activeElement es <body>, que no sirve para volver.
+    const activo = document.activeElement;
+    focoPrevio.current =
+      activo instanceof HTMLElement && activo !== document.body && activo !== document.documentElement ? activo : null;
+    conversionContada.current = false;
     origenApertura.current = opts.origen;
     const tactil = window.matchMedia?.("(pointer: coarse)").matches ?? false;
     enfocarNombre.current = !tactil || !!opts.conTeclado;
@@ -100,7 +114,7 @@ export function WhatsappWidget() {
     e.preventDefault();
     if (estado === "enviando") return;
     const n = normalizarNombre(nombre);
-    const t = normalizarNumeroWhatsapp(numero);
+    const t = normalizarNumeroWhatsapp(numero, modo);
     const nuevos = { nombre: "error" in n ? n.error : undefined, numero: "error" in t ? t.error : undefined };
     setErrores(nuevos);
     if ("error" in n || "error" in t) {
@@ -115,6 +129,7 @@ export function WhatsappWidget() {
         body: JSON.stringify({
           nombre: (n as { nombre: string }).nombre,
           numero,
+          modo,
           empresa_web: honeypot,
           pagina: window.location.pathname,
         }),
@@ -130,7 +145,7 @@ export function WhatsappWidget() {
       }
       setEstado("listo");
       // Enviar el formulario es una conversación iniciada: aquí se registra la conversión.
-      registrarPaso("whatsapp_clic", origenApertura.current ? { origen: origenApertura.current } : {});
+      contarConversion();
     } catch {
       setEstado("idle");
       setErrores({ general: "No hay conexión. Revisa tu internet o toca «Iniciar conversación»." });
@@ -178,7 +193,7 @@ export function WhatsappWidget() {
               target="_blank"
               rel="noopener noreferrer"
               className="dcv2-btn-wa dcv4-wawidget__start"
-              onClick={() => registrarPaso("whatsapp_clic", origenApertura.current ? { origen: origenApertura.current } : {})}
+              onClick={contarConversion}
             >
               <WhatsappGlyph size={19} />
               Iniciar conversación
@@ -208,21 +223,40 @@ export function WhatsappWidget() {
                 />
                 {errores.nombre && <p id={`${id}-ne`} className="dcv4-wawidget__err">{errores.nombre}</p>}
 
-                <label className="dcv4-wawidget__label" htmlFor={`${id}-w`}>Número de WhatsApp</label>
-                <input
-                  ref={campoNumero}
-                  id={`${id}-w`}
-                  className="dcv4-wawidget__input"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="999 123 4567"
-                  maxLength={24}
-                  value={numero}
-                  onChange={(e) => setNumero(e.target.value)}
-                  aria-invalid={errores.numero ? true : undefined}
-                  aria-describedby={errores.numero ? `${id}-we` : undefined}
-                />
+                <label className="dcv4-wawidget__label" htmlFor={`${id}-w`}>
+                  {modo === "mx" ? "Número de WhatsApp (10 dígitos)" : "Número de WhatsApp con lada de país"}
+                </label>
+                <div className="dcv4-wawidget__tel">
+                  {modo === "mx" && (
+                    <span className="dcv4-wawidget__prefijo" aria-hidden="true">+52</span>
+                  )}
+                  <input
+                    ref={campoNumero}
+                    id={`${id}-w`}
+                    className="dcv4-wawidget__input"
+                    type="tel"
+                    inputMode={modo === "mx" ? "numeric" : "tel"}
+                    autoComplete="tel-national"
+                    placeholder={modo === "mx" ? "999 123 4567" : "+57 300 123 4567"}
+                    maxLength={24}
+                    value={numero}
+                    onChange={(e) => setNumero(e.target.value)}
+                    aria-invalid={errores.numero ? true : undefined}
+                    aria-describedby={errores.numero ? `${id}-we` : undefined}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="dcv4-wawidget__otro"
+                  onClick={() => {
+                    setModo((m) => (m === "mx" ? "intl" : "mx"));
+                    setNumero("");
+                    setErrores((e) => ({ ...e, numero: undefined }));
+                    campoNumero.current?.focus();
+                  }}
+                >
+                  {modo === "mx" ? "¿Otro país?" : "Usar un número de México"}
+                </button>
                 {errores.numero && <p id={`${id}-we`} className="dcv4-wawidget__err">{errores.numero}</p>}
 
                 {/* Honeypot: una persona no lo ve ni llega con el teclado. */}

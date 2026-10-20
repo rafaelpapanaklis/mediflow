@@ -61,6 +61,9 @@ test("el aviso describe el botón de WhatsApp (nombre y número para contactarte
   const s5 = p.slice(p.indexOf('title="5. Transferencias"'), p.indexOf('title="6. Derechos ARCO"'));
   assert.match(s5, /<b>Resend, Inc\.<\/b> — envío de los correos de la plataforma/);
   assert.match(s5, /<b>Postmark<\/b> — recepción de correo entrante/);
+  assert.match(s5, /<b>Meta Platforms, Inc\. \(WhatsApp Business Platform\)<\/b> — envío y recepción de los mensajes de WhatsApp/);
+  assert.match(s5, /<b>Twilio, Inc\.<\/b> — respaldo para el envío de WhatsApp[^<]*No enviamos SMS/);
+  assert.doesNotMatch(s5, /envío de WhatsApp y SMS/, "no hay SMS en el código");
   assert.doesNotMatch(s5, /Twilio, Inc\. \/ Postmark/, "Postmark no envía: solo recibe");
   assert.doesNotMatch(p, /texto aprobado por el abogado/, "el texto nuevo aún no lo revisa el abogado");
   const s8 = p.slice(p.indexOf('title="8. Conservación'));

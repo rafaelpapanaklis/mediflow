@@ -36,10 +36,10 @@ test("con lada de México: 52…, +52…, +521… (formato móvil viejo) y 0052�
 });
 
 test("otro país solo con +: se acepta de 8 a 15 dígitos", () => {
-  const r = normalizarNumeroWhatsapp("+57 300 123 4567");
+  const r = normalizarNumeroWhatsapp("+57 300 123 4567", "intl");
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual([r.e164, r.legible], ["573001234567", "+573001234567"]);
-  assert.equal(normalizarNumeroWhatsapp("+1 415 555 2671").ok, true);
+  assert.equal(normalizarNumeroWhatsapp("+1 415 555 2671", "intl").ok, true);
 });
 
 test("rechaza con mensaje claro: vacío, letras, cortos, largos, sin + y de otro largo", () => {
@@ -79,8 +79,10 @@ test("W3: con «+» y sin lada de país (10 dígitos) o con «+» repetidos/fuer
     const r = normalizarNumeroWhatsapp(n);
     assert.equal(r.ok, false, n);
   }
-  const r = normalizarNumeroWhatsapp("+999 123 4567");
+  const r = normalizarNumeroWhatsapp("+999 123 4567", "intl");
   assert.ok("error" in r && /«\+999»/.test(r.error) && /no corresponde a ningún país/.test(r.error));
+  const m = normalizarNumeroWhatsapp("+999 123 4567");
+  assert.ok("error" in m && /¿Otro país\?/.test(m.error), "en modo México, un + que no es +52 manda a «¿Otro país?»");
 });
 
 test("N-W3: con «+» se aceptan números reales de 10 dígitos de otros países y se rechazan ladas que no existen", () => {
@@ -95,12 +97,12 @@ test("N-W3: con «+» se aceptan números reales de 10 dígitos de otros países
     ["+7 912 345 6789", "79123456789"],
   ];
   for (const [crudo, e164] of buenos) {
-    const r = normalizarNumeroWhatsapp(crudo);
+    const r = normalizarNumeroWhatsapp(crudo, "intl");
     assert.ok(r.ok, crudo);
     if (r.ok) assert.equal(r.e164, e164, crudo);
   }
   for (const n of ["+999 123 4567", "+998 12", "+960", "+1 415 555 267", "+292 1234567", "+800 1234 5678"]) {
-    assert.equal(normalizarNumeroWhatsapp(n).ok, false, n);
+    assert.equal(normalizarNumeroWhatsapp(n, "intl").ok, false, n);
   }
   assert.equal(ladaDePais("5016123456"), "501");
   assert.equal(ladaDePais("9991234567"), null);
@@ -111,4 +113,33 @@ test("W1: la línea de log de un aviso que no salió lleva nombre y número (JSO
   assert.match(l, /AVISO NO ENVIADO/);
   const json = JSON.parse(l.slice(l.indexOf("{")));
   assert.deepEqual(json, { origen: "whatsapp-widget", nombre: "Ana López", whatsapp: "+52 999 123 4567", e164: "529991234567", pagina: "/blog" });
+});
+
+test("N3-W1: en modo México (campo con +52 fijo) un mexicano nunca queda tomado por otro país", () => {
+  // Ladas mexicanas que coinciden con una lada de país: CDMX/55 Brasil, GDL/33 Francia, MTY/81 Japón, Cancún/998 Uzbekistán, Toluca/722 Rusia.
+  for (const n of ["5512345678", "3312345678", "8112345678", "9981234567", "7221234567", "55 1234 5678", "(33) 1234-5678"]) {
+    const r = normalizarNumeroWhatsapp(n);
+    assert.ok(r.ok, n);
+    if (r.ok) assert.equal(r.e164, `52${n.replace(/\D/g, "")}`, n);
+  }
+  // Pegados con +52 / 52 / 521 también.
+  for (const n of ["+52 55 1234 5678", "525512345678", "+52 1 55 1234 5678"]) {
+    const r = normalizarNumeroWhatsapp(n);
+    assert.ok(r.ok, n);
+    if (r.ok) assert.equal(r.e164, "525512345678", n);
+  }
+  // Con «+» y otra lada, en modo México se rechaza en vez de aceptarlo como Brasil/Francia/Japón.
+  for (const n of ["+55 1234 5678", "+33 1234 5678", "+81 1234 5678", "+998 123 4567", "+722 123 4567"]) {
+    const r = normalizarNumeroWhatsapp(n);
+    assert.ok("error" in r && /¿Otro país\?/.test(r.error), n);
+  }
+  // 9 dígitos o más de 10 sin +: mensaje de qué falta.
+  assert.equal(normalizarNumeroWhatsapp("999123456").ok, false);
+  assert.equal(normalizarNumeroWhatsapp("99912345678").ok, false);
+  // Modo internacional: exige «+» y valida +52 como México.
+  assert.equal(normalizarNumeroWhatsapp("3001234567", "intl").ok, false);
+  const mx = normalizarNumeroWhatsapp("+52 55 1234 5678", "intl");
+  assert.ok(mx.ok && mx.e164 === "525512345678");
+  const br = normalizarNumeroWhatsapp("+55 11 91234 5678", "intl");
+  assert.ok(br.ok && br.e164 === "5511912345678");
 });

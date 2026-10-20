@@ -129,3 +129,15 @@ test("N-W6: el 429 por IP lleva el texto «Demasiados intentos» (no «ya recibi
 });
 
 test.after(() => { globalThis.fetch = original; });
+
+test("N3-W1: modo «mx» (por omisión) toma +55… como mexicano o lo rechaza; «intl» acepta Belice", async () => {
+  const a = await pedir({ nombre: "Ana", numero: "55 1234 5678" });
+  assert.equal(a.status, 200);
+  assert.match(correos[correos.length - 1].text ?? "", /wa\.me\/525512345678/);
+  const b = await pedir({ nombre: "Ana", numero: "+55 1234 5678" });
+  assert.equal(b.status, 400);
+  assert.match((await b.json()).error, /¿Otro país\?/);
+  const c = await pedir({ nombre: "Ana", numero: "+501 612 3456", modo: "intl" });
+  assert.equal(c.status, 200);
+  assert.match(correos[correos.length - 1].text ?? "", /wa\.me\/5016123456/);
+});

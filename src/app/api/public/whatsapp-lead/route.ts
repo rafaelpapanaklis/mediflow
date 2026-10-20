@@ -30,6 +30,8 @@ export const dynamic = "force-dynamic";
 const Cuerpo = z.object({
   nombre: z.string().max(200),
   numero: z.string().max(40),
+  /** «mx» (campo con +52 fijo, 10 dígitos) o «intl» (tras «¿Otro país?»). Sin él, «mx». */
+  modo: z.enum(["mx", "intl"]).optional(),
   empresa_web: z.string().max(200).optional(),
   pagina: z.string().max(200).optional(),
 });
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const nombre = normalizarNombre(parsed.data.nombre);
   if ("error" in nombre) return NextResponse.json({ error: nombre.error, campo: "nombre" }, { status: 400 });
-  const numero = normalizarNumeroWhatsapp(parsed.data.numero);
+  const numero = normalizarNumeroWhatsapp(parsed.data.numero, parsed.data.modo ?? "mx");
   if ("error" in numero) return NextResponse.json({ error: numero.error, campo: "numero" }, { status: 400 });
 
   // Un mismo número no llena el buzón: 2 avisos por día. Solo cuentan los que SÍ salieron
