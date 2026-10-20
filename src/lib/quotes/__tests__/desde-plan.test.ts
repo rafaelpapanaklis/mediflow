@@ -217,3 +217,22 @@ test("t8 (P4): los nombres de fase y de total con que se escribieron los planes 
   for (const f of FASES_ESCRITAS) assert.ok(esEncabezadoDeFase(`▸ ${f} — $500`), f);
   assert.deepEqual([...TOTALES_ESCRITOS].sort(), [es.planTratamiento.texto.total, en.planTratamiento.texto.total].sort());
 });
+
+test("t8 N4-PDF1: un plan en $0 con precios por renglón lleva esos precios y lo marca (planEnCero) para que la vista previa avise", () => {
+  const exacto = { ...rot, total: "Total de procedimientos", exacto: true, dinero: dineroExacto };
+  const garantia = componerDescripcion(plan([renglon({ procedimiento: "Corona", dientes: "16", precio: "9000", cantidad: "1" })]), exacto);
+  const r = armarPresupuestoDePlan({ name: "Garantía", description: garantia, totalCost: 0 }, TARIFARIO);
+  assert.equal(r.total, 9000);
+  assert.equal(r.conceptos[0].unitPrice, 9000);
+  assert.equal(r.planEnCero, true, "el plan está en $0 y el presupuesto saldría en $9,000: tiene que avisarse");
+  assert.equal(r.totalDifiere, false, "este caso lleva su propio aviso, no el de «el costo no coincide»");
+  // Con el costo puesto, no es un plan en $0.
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: garantia, totalCost: 9000 }, TARIFARIO).planEnCero, false);
+  // En $0 SIN precios por renglón sale en $0 (N3-P4): nada que avisar por este lado.
+  const sinPrecios = componerDescripcion(plan([renglon({ procedimiento: "Resina", cantidad: "1" })]), exacto);
+  const cero = armarPresupuestoDePlan({ name: "P", description: sinPrecios, totalCost: 0 }, TARIFARIO);
+  assert.equal(cero.total, 0);
+  assert.equal(cero.planEnCero, false);
+  // Un plan sin detalle en $0 es un solo concepto en $0: tampoco.
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: "Una frase", totalCost: 0 }, TARIFARIO).planEnCero, false);
+});

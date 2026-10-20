@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { ClipboardList, Edit, X } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
@@ -104,7 +104,7 @@ export function VentanaVerPlan({ plan, puedeEditar, puedeDescargar = false, onCe
           <div className={s.datos}>
             <div className={s.dato}>
               <div className={s.rotulo}>{t("patients.treatment.totalCost")}</div>
-              <div className={s.datoValor}>{formatCurrency(plan.totalCost)}</div>
+              <div className={s.datoValor}>{dineroExacto(plan.totalCost)}</div>
             </div>
             <div className={s.dato}>
               <div className={s.rotulo}>{t("patients.treatment.daysBetween")}</div>

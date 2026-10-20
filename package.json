@@ -558,7 +558,7 @@
     "test:presupuesto-pagos": "tsx --test src/lib/quotes/__tests__/condiciones-pago.test.ts",
     "test:presupuesto-aceptacion": "tsx --test --experimental-test-module-mocks src/lib/quotes/__tests__/aceptacion.test.ts src/app/api/quotes/__tests__/aceptacion-parcial.test.ts src/lib/quotes/__tests__/tarjeta-y-vigencia.test.ts",
     "test:presupuesto-desde-plan": "tsx --test --experimental-test-module-mocks src/lib/quotes/__tests__/desde-plan.test.ts src/app/api/treatments/__tests__/presupuesto-desde-plan.test.ts",
-    "test:plan-tratamiento-pdf": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/treatments/__tests__/plan-pdf.test.ts",
+    "test:plan-tratamiento-pdf": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/treatments/__tests__/plan-pdf.test.ts src/components/dashboard/plan-a-presupuesto/__tests__/centavos-en-pantalla.test.tsx",
     "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts",
     "test:document-templates": "tsx --test src/lib/document-templates/__tests__/document-templates.test.ts",
     "test:plantillas": "tsx --test src/app/dashboard/plantillas/__tests__/plantillas-pulido.test.ts",

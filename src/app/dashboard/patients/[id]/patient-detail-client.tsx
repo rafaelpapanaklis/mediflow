@@ -8,7 +8,8 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
-import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
+import { formatDate, getInitials, avatarColor } from "@/lib/utils";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
@@ -2888,7 +2889,7 @@ export function PatientDetailClient({
                             <span className="tabular-nums inline-flex items-center gap-1">
                               {rediseno
                                 ? <CreditCard size={12} strokeWidth={1.75} aria-hidden />
-                                : "💰"} {formatCurrency(plan.totalCost)}
+                                : "💰"} {dineroExacto(plan.totalCost)}
                             </span>
                             <span className="inline-flex items-center gap-1">
                               {rediseno
@@ -3091,7 +3092,7 @@ export function PatientDetailClient({
                             <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${vPct}%` }} /></div>
                           </div>
                           <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold tabular-nums">{formatCurrency(vp.totalCost)}</div></div>
+                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold tabular-nums">{dineroExacto(vp.totalCost)}</div></div>
                             <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.daysBetween")}</div><div className="font-semibold">{vp.sessionIntervalDays}</div></div>
                             <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.startLabel")}</div><div className="font-semibold">{new Date(vp.startDate).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}</div></div>
                             {vp.nextExpectedDate && <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.nextLabel")}</div><div className="font-semibold">{new Date(vp.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</div></div>}

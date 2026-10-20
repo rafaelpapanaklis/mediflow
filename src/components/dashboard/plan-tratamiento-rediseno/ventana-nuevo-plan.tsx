@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { AlertTriangle, ClipboardList, Grid3x3, MessageCircle, Plus, Trash2, X } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { COND_BY_ID, PERM, PRIMARY } from "@/components/dashboard/odontogram-v2/data";
@@ -461,7 +460,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                           value={r.precio}
                           onChange={(e) => cambiar(r.id, { precio: e.target.value, precioDelTarifario: false })}
                         />
-                        <span className={`${s.importe} ${s.num}`}>{formatCurrency(importeRenglon(r))}</span>
+                        <span className={`${s.importe} ${s.num}`}>{dineroExacto(importeRenglon(r))}</span>
                         <button
                           type="button"
                           className={s.quitar}
@@ -488,7 +487,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                                 onMouseEnter={() => setMarcada(i)}
                               >
                                 <span className={s.tarifarioSugNombre}>{p.name}</span>
-                                <span className={`${s.tarifarioSugPrecio} ${s.num}`}>{formatCurrency(p.basePrice)}</span>
+                                <span className={`${s.tarifarioSugPrecio} ${s.num}`}>{dineroExacto(p.basePrice)}</span>
                               </li>
                             ))}
                           </ul>
@@ -554,13 +553,13 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                   <div key={f.fase} className={s.resumenFila}>
                     <span>{t(FASE_CLAVE[f.fase])}</span>
                     <span className={s.resumenCuenta}>{t("planTratamiento.nuevo.nProcedimientos", { count: f.renglones.length })}</span>
-                    <span className={s.num}>{formatCurrency(f.subtotal)}</span>
+                    <span className={s.num}>{dineroExacto(f.subtotal)}</span>
                   </div>
                 ))}
                 <div className={`${s.resumenFila} ${s.resumenTotal}`}>
                   <span>{t("planTratamiento.texto.total")}</span>
                   <span />
-                  <span className={s.num}>{formatCurrency(total)}</span>
+                  <span className={s.num}>{dineroExacto(total)}</span>
                 </div>
               </div>
             )}
@@ -616,7 +615,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                 {hayRenglones && total > 0 && (
                   costoAMano && Number(form.totalCost) !== total ? (
                     <button type="button" className={s.enlace} onClick={() => setCostoAMano(false)}>
-                      {t("planTratamiento.nuevo.usarCosto", { total: formatCurrency(total) })}
+                      {t("planTratamiento.nuevo.usarCosto", { total: dineroExacto(total) })}
                     </button>
                   ) : !costoAMano ? <span className={s.pistaLinea}>{t("planTratamiento.nuevo.calculado")}</span> : null
                 )}
@@ -678,7 +677,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
           {hayRenglones && (
             <div className={s.pieResumen}>
               <span>{t("planTratamiento.nuevo.nProcedimientos", { count: fases.reduce((a, f) => a + f.renglones.length, 0) })}</span>
-              <strong>{formatCurrency(total)}</strong>
+              <strong>{dineroExacto(total)}</strong>
             </div>
           )}
           <button type="button" className={s.boton} onClick={onCerrar} disabled={guardando}>

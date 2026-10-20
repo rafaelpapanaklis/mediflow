@@ -63,6 +63,12 @@ export interface PresupuestoDePlan {
   sinTarifario: number;
   /** El costo escrito en el plan no coincide con la suma de los renglones (más de un peso de diferencia). */
   totalDifiere: boolean;
+  /**
+   * El plan está en $0 pero sus renglones traen precio (una garantía confirmada en $0, o un costo
+   * bajado a 0 en «Editar plan»): el presupuesto lleva esos precios y la vista previa lo AVISA,
+   * nunca en silencio (revisión t8, N4-PDF1).
+   */
+  planEnCero: boolean;
 }
 
 /** «$1,250» / «$1,250.50» / «1250» → número; null si no hay cifra. */
@@ -313,6 +319,7 @@ export function armarPresupuestoDePlan(
     sinPrecio: conceptos.filter((c) => c.unitPrice <= 0).length,
     sinTarifario: conceptos.filter((c) => !c.deTarifario).length,
     totalDifiere: !sinDetalle && costo > 0 && Math.abs(costo - total) > 1,
+    planEnCero: !sinDetalle && costo === 0 && total > 0,
   };
 }
 
