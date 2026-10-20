@@ -20,6 +20,9 @@ import {
   parsearCuerpo,
   planesMasGrandes,
 } from "../pago-pendiente";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { chargeFailureMessage } from "../proration";
 import { MENSAJES_CHECKOUT } from "../mensajes-pago";
 import { ensureFirstMonthCoupon } from "../first-month-promo";
 import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
@@ -845,6 +848,44 @@ test("N4: TODAS las respuestas de error reales de GET / pagar / subir son texto 
   for (const mal of [{}, { accion: "subir", plan: "ORO" }]) {
     const r = parsearCuerpo(mal) as any;
     for (const t of textosDe(r.respuesta.body.error)) revisaTextoParaClinica(t, "cuerpo inválido");
+  }
+});
+
+test("N4 (change-plan): los mensajes de fallo de cobro (`chargeFailureMessage`, todas sus ramas) tampoco nombran a Stripe ni traen inglés", () => {
+  const errores = [
+    {},
+    { code: "insufficient_funds" },
+    { code: "card_declined", decline_code: "insufficient_funds" },
+    { code: "expired_card" },
+    { code: "incorrect_cvc" },
+    { code: "authentication_required" },
+    { code: "payment_intent_authentication_failure" },
+    { code: "subscription_payment_intent_requires_action" },
+    { code: "invoice_payment_intent_requires_action" },
+  ];
+  for (const e of errores) revisaTextoParaClinica(chargeFailureMessage(e), `chargeFailureMessage(${JSON.stringify(e)})`);
+});
+
+test("N4 (contrato de código): en las rutas de pago ningún `error:` para la clínica lleva `err.message` y ningún texto con espacios nombra a Stripe", () => {
+  const raiz = path.resolve(__dirname, "../../../..");
+  const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+  for (const rel of [
+    "src/app/api/billing/change-plan/route.ts",
+    "src/app/api/billing/checkout/route.ts",
+    "src/app/api/billing/pago-pendiente/route.ts",
+    "src/lib/billing/pago-pendiente.server.ts",
+    "src/lib/billing/pago-pendiente.ts",
+    "src/lib/billing/mensajes-pago.ts",
+  ]) {
+    const t = sinComentarios(readFileSync(path.join(raiz, rel), "utf8"));
+    // `error: <expresión hasta la coma o el cierre>`: lo que viaja en la respuesta.
+    for (const m of t.matchAll(/\berror:\s*([^\n]*)/g)) {
+      assert.doesNotMatch(m[1], /err\??\.message|\bmessage\b\s*\?\?/, `${rel}: «error: ${m[1].trim()}»`);
+    }
+    for (const m of t.matchAll(/(["'`])((?:(?!\1)[^\\\n]|\\.)*?stripe(?:(?!\1)[^\\\n]|\\.)*)\1/gi)) {
+      // Una cadena que nombra a Stripe solo puede ser un identificador interno (import, código, evento, clave), nunca prosa.
+      assert.ok(!/\s/.test(m[2]) || /^(stripe|[a-z0-9_\-:.]+)$/i.test(m[2].trim()), `${rel}: texto con «Stripe»: «${m[2]}»`);
+    }
   }
 });
 
