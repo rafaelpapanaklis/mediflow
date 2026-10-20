@@ -247,8 +247,9 @@ export function PagoPendiente({
       window.location.href = r.url;
       return;
     }
-    if (r.tipo === "pagado") {
-      toast.success(t("shell.pagoPendiente.pagoRecibido"));
+    if (r.tipo === "pagado" || r.tipo === "ya_registrado") {
+      // «Tu pago ya se registró» (otra pestaña ya lo pagó) es un éxito, no un error: mismo destino que un pago nuevo.
+      toast.success(r.tipo === "ya_registrado" && r.mensaje ? r.mensaje : t("shell.pagoPendiente.pagoRecibido"));
       if (suspendida) router.push("/dashboard/suspended/success");
       else router.refresh();
       setCobrando(false);

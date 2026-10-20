@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
 import { sendEmail } from "@/lib/email";
+import { crearCandadoDeCobro } from "@/lib/billing/candado-cobro.server";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import { getResolvedPlan, getPlanLimits } from "@/lib/plans";
 import { clearOverridesData } from "@/lib/billing/plan-overrides";
@@ -20,6 +21,9 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// «Pagar» puede esperar hasta ~15 s a que otra operación de cobro de la clínica suelte el candado, y además hace
+// varias llamadas a Stripe: el límite por defecto de la función se queda corto. El candado (90 s) caduca después.
+export const maxDuration = 60;
 
 /**
  * /api/billing/pago-pendiente — cobro de tarjeta rechazado (ws1-t2).
@@ -109,11 +113,8 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
       const c = await prisma.clinic.findUnique({ where: { id: clinic.id }, select: { subscriptionStatus: true, trialEndsAt: true } });
       return c ?? {};
     },
-    // Candado por clínica de «Pagar» y «Subir»: failban (Upstash, o memoria de la instancia), con caducidad.
-    candado: {
-      tomar: async (clave, ttlSec, dueno) => (await import("@/lib/failban")).acquireLock(clave, ttlSec, dueno),
-      soltar: async (clave, dueno) => (await import("@/lib/failban")).releaseLock(clave, dueno),
-    },
+    // Candado por clínica de «Pagar» y «Subir»: failban (Upstash o memoria) + candado en la base entre instancias.
+    candado: crearCandadoDeCobro({ clinicId: clinic.id, userId: user.id }),
     // Mismo buzón que el aviso de afiliados y el de SPEI: ADMIN_NOTIFY_EMAIL, o el general.
     avisarAlAdmin: async ({ asunto, lineas }) => {
       const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

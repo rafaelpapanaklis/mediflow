@@ -46,6 +46,11 @@ export type OrdenDeCobro = { accion: "pagar" } | { accion: "subir"; plan: string
 
 export type ResultadoCobro =
   | { tipo: "pagado" }
+  /**
+   * 409 `PAGO_YA_REGISTRADO` («Tu pago ya se registró.»): otra pestaña (u otro botón) ya dejó pagado lo que se iba a pagar.
+   * NO es un error para la clínica: se muestra como éxito y se va al panel, igual que `pagado`.
+   */
+  | { tipo: "ya_registrado"; mensaje: string }
   | { tipo: "url"; url: string }
   | { tipo: "no_disponible" }
   | { tipo: "error"; mensaje: string };
@@ -118,6 +123,7 @@ export async function cobrarPendiente(orden: OrdenDeCobro, f: Fetch = fetch): Pr
   }
   if (res.status === 404) return { tipo: "no_disponible" };
   const d = await cuerpo(res);
+  if (res.status === 409 && d.code === "PAGO_YA_REGISTRADO") return { tipo: "ya_registrado", mensaje: typeof d.error === "string" ? d.error : "" };
   if (!res.ok || d.ok === false) return { tipo: "error", mensaje: typeof d.error === "string" ? d.error : "" };
   if (d.pagado === true) return { tipo: "pagado" };
   if (typeof d.url === "string" && d.url) return { tipo: "url", url: d.url };

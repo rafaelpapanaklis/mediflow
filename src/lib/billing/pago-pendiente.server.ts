@@ -128,6 +128,8 @@ export interface DepsPago {
     tomar: (clave: string, ttlSec: number, dueno: string) => Promise<boolean>;
     /** Suelta SOLO si el candado sigue siendo de `dueno` (si caducó y lo tomó otra petición, no toca el de ella). */
     soltar: (clave: string, dueno: string) => Promise<void>;
+    /** Dueño actual del candado (`pagar:<id>` / `subir:<id>`), para decir QUÉ hay en curso. Opcional. */
+    quien?: (clave: string) => Promise<string | null>;
   };
   /** Pausa entre intentos de tomar el candado (en producción, `setTimeout`; las pruebas la acortan). */
   esperar: (ms: number) => Promise<void>;
@@ -538,6 +540,17 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 
 // ── POST { accion: "pagar" } ────────────────────────────────────────────────
 
+/**
+ * Otra operación de cobro de ESTA clínica tiene el candado: el mensaje dice QUÉ es. Un «Pagar» que espera a otro «Pagar»
+ * no habla de un cambio de plan (Y19).
+ */
+async function cobroEnCurso(deps: DepsPago, clave: string): Promise<RespuestaPago> {
+  const quien = await deps.candado.quien?.(clave).catch(() => null);
+  if (quien?.startsWith("subir:")) return respuesta(409, { code: "CAMBIO_EN_CURSO", error: MENSAJES.cambioEnCurso });
+  if (quien?.startsWith("pagar:")) return respuesta(409, { code: "PAGO_EN_CURSO", error: MENSAJES.pagoEnCurso });
+  return respuesta(409, { code: "COBRO_EN_CURSO", error: MENSAJES.cobroEnCurso });
+}
+
 /** Cuánto espera «Pagar» a que termine otra operación de cobro de la misma clínica, y cada cuánto lo intenta. */
 const ESPERA_PAGAR_INTENTOS = 30;
 const ESPERA_PAGAR_INTERVALO_MS = 500;
@@ -550,14 +563,14 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   // cobraban dos veces (o subían gratis); y dos «Pagar» a la vez daban un 502 falso en la segunda. Si el candado
   // está tomado, espera a que la otra operación termine (hasta ~15 s) y entonces mira qué quedó pendiente.
   const clave = claves.candadoSubir(deps.clinica.id);
-  const dueno = randomUUID();
+  const dueno = `pagar:${randomUUID()}`;
   let tomado = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
   const esperó = !tomado;
   for (let i = 0; !tomado && i < ESPERA_PAGAR_INTENTOS; i++) {
     await deps.esperar(ESPERA_PAGAR_INTERVALO_MS);
     tomado = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
   }
-  if (!tomado) return respuesta(409, { code: "CAMBIO_EN_CURSO", error: MENSAJES.cambioEnCurso });
+  if (!tomado) return cobroEnCurso(deps, clave);
   try {
     return await pagarPendienteConCandado(deps, esperó);
   } finally {
@@ -626,10 +639,8 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     return respuesta(400, { code: "PLAN_NO_MAS_GRANDE", error: MENSAJES.planNoMasGrande });
   }
   const clave = claves.candadoSubir(deps.clinica.id);
-  const dueno = randomUUID();
-  if (!(await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno))) {
-    return respuesta(409, { code: "CAMBIO_EN_CURSO", error: MENSAJES.cambioEnCurso });
-  }
+  const dueno = `subir:${randomUUID()}`;
+  if (!(await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno))) return cobroEnCurso(deps, clave);
   try {
     return await subirYPagarConCandado(deps, destino);
   } finally {
@@ -641,6 +652,14 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
 const TTL_CANDADO_SUBIR_SEG = 90;
 
 async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<RespuestaPago> {
+  // ── POR QUÉ «Subir de plan» ES DISTINTO DE «Pagar mi plan» (decisión del gerente, Y18) ─────────────────────────────
+  // «Pagar mi plan» paga LA MISMA factura que ya existía (el mes que se rechazó): si la clínica sigue dentro de las 24 h de
+  // gracia, el ciclo NO cambia —la renovación sigue en su fecha— y solo tras una suspensión se re-alinea («30 días desde el
+  // pago»). «Subir de plan» NO paga esa factura: la anula y cobra el plan NUEVO COMPLETO hoy, así que arranca un ciclo NUEVO
+  // desde el pago (`billing_cycle_anchor: "now"`, sin prorrateo): la clínica paga hoy el plan nuevo entero y tiene un mes
+  // desde hoy. Eso vale también dentro de las 24 h de gracia; no es una excepción a «el ciclo no cambia», que habla de pagar
+  // la factura del ciclo, no de comprar un plan distinto.
+  //
   // ANTES de tocar nada: ¿estaba suspendida? (ver `reglaTrasSubir`).
   const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   // Lo barato primero, y TODO antes de anular nada: la factura vieja solo se anula cuando el resto ya
@@ -675,7 +694,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
   // La suscripción YA está en el plan destino (el update llegó a Stripe y solo faltó reflejarlo aquí): no se
   // anula ni se cambia nada, para no cobrar dos veces. Se refleja el plan y se devuelve el estado de la factura.
   if (ctx.factura && sub.metadata?.plan === destino) {
-    await deps.aplicarPlanLocal(destino);
+    // Y17: la factura sigue ABIERTA (sin cobrar), así que el plan NO se refleja en la base todavía.
     await quitarDescuentoDelCliente(deps, stripe, sub, destino); // el cambio ya está hecho: no hay nada que reponer
     return resultadoDeFactura(ctx.factura);
   }
@@ -850,8 +869,12 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     return respuesta(502, { code: "SUBIDA_SIN_COBRO", error: MENSAJES.subidaSinCobro });
   }
 
-  // La suscripción ya está en el plan nuevo: lo mismo que reflejará el webhook con su metadata.plan.
-  await deps.aplicarPlanLocal(destino);
+  // Y17: el plan nuevo se refleja en la base SOLO si la factura del cambio quedó pagada. Con la tarjeta rechazada la
+  // suscripción de Stripe ya trae el plan nuevo (la factura queda abierta para pagarla por el enlace) pero la clínica
+  // no lo usa sin haberlo pagado: se aplica cuando el cobro pase. (El webhook `customer.subscription.updated` también
+  // sincroniza `Clinic.plan` desde `metadata.plan`: ver el reporte.)
+  const pagada = nuevaFactura?.status === "paid";
+  if (pagada) await deps.aplicarPlanLocal(destino);
 
   // Regla de la suspensión: los demás meses abiertos de la clínica suspendida no se deben (se anulan, nada se borra).
   if (estabaSuspendida) await reglaTrasSubir(deps, stripe, sub.id);
@@ -859,6 +882,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
   await deps.auditar({
     event: "pago-pendiente-subir",
     estabaSuspendida,
+    planAplicadoEnBase: pagada,
     planAntes: deps.clinica.plan,
     planDestino: destino,
     reintento: !!anulada,
