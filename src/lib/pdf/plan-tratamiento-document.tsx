@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { ClinicLetterhead, type ClinicLetterheadClinic } from "./clinic-letterhead";
-import { textoParaHelvetica, type DocumentoDelPlan, type GrupoPdf, type RenglonPdf } from "@/lib/treatments/plan-pdf";
+import { esRenglonGrande, textoParaHelvetica, textoParaPintar, type DocumentoDelPlan, type GrupoPdf, type RenglonPdf } from "@/lib/treatments/plan-pdf";
 
 /**
  * PlanTratamientoDocument — el plan de tratamiento del paciente, CON precios (ws1-t12).
@@ -145,10 +145,10 @@ const conSigno = (n: number, dinero: (n: number) => string) => (n < 0 ? `-${dine
 /** Sin guiones: «implantes» baja entero al renglón siguiente en vez de partirse «im-plantes» (P6). */
 const sinGuiones = (palabra: string) => [palabra];
 
-/** Texto con lo que Helvetica sabe pintar (P5) y sin partir palabras (P6). */
+/** Texto con lo que Helvetica sabe pintar (P5; «—» si no queda nada, t8 N-P6) y sin partir palabras (P6). */
 // El `style` de `Text` admite también el de SVG y no encaja; el de `View` es el mismo `Style | Style[]` de un texto.
 function T({ style, children }: { style?: ComponentProps<typeof View>["style"]; children: string | number | null | undefined }) {
-  const texto = typeof children === "number" ? String(children) : textoParaHelvetica(children ?? "");
+  const texto = typeof children === "number" ? String(children) : textoParaPintar(children ?? "");
   return <Text style={style} hyphenationCallback={sinGuiones}>{texto}</Text>;
 }
 
@@ -208,8 +208,10 @@ function EncabezadoRepetido({ t }: { t: TextosPlanPdf }) {
 const precio = (n: number | null, dinero: (n: number) => string) => (n == null ? "—" : dinero(n));
 
 function Renglon({ r, dinero }: { r: RenglonPdf; dinero: (n: number) => string }) {
+  // Un renglón normal no se parte entre hojas; uno gigante sí (t8, N-P7): si no, no cabría en
+  // ninguna y @react-pdf lo dejaría salirse por abajo.
   return (
-    <View style={styles.tRow} wrap={false}>
+    <View style={styles.tRow} wrap={esRenglonGrande(r)}>
       <View style={styles.cConcept}>
         <T style={styles.tdBold}>{r.nombre}</T>
         {r.motivo ? <T style={styles.tdMutedSmall}>{r.motivo}</T> : null}
@@ -241,18 +243,21 @@ export function PlanTratamientoDocument(props: PlanTratamientoDocumentProps) {
   const dinero = props.dinero;
   const conFases = d.grupos.some((g) => g.fase);
   const subtotalesDeFase = conFases && d.grupos.length > 1;
-  const nombre = textoParaHelvetica(props.pacienteNombre) || "—";
-  const doctor = textoParaHelvetica(props.doctorNombre);
+  const nombre = textoParaPintar(props.pacienteNombre) || "—";
+  const doctor = textoParaPintar(props.doctorNombre);
 
   // El ÚLTIMO renglón viaja con los totales y las firmas en un bloque que no se parte (P6):
   // las firmas nunca quedan solas en una hoja, y la hoja siguiente nunca empieza sin procedimientos.
   const ultimoGrupo = d.grupos[d.grupos.length - 1];
   const ultimoRenglon = ultimoGrupo.renglones[ultimoGrupo.renglones.length - 1];
-  const rotuloViajaAlFinal = conFases && ultimoGrupo.renglones.length === 1;
+  // Salvo que sea gigante (t8, N-P7): entonces el bloque no cabría en una hoja y sacaría el total
+  // y las firmas por abajo. Va con los demás (partible) y el bloque final son totales + firmas.
+  const ultimoViaja = !esRenglonGrande(ultimoRenglon);
+  const rotuloViajaAlFinal = ultimoViaja && conFases && ultimoGrupo.renglones.length === 1;
 
   // Membrete: solo lo que Helvetica sabe pintar.
   const membrete = {
-    clinicName: textoParaHelvetica(props.clinicName) || "—",
+    clinicName: textoParaPintar(props.clinicName) || "—",
     clinicAddress: textoParaHelvetica(props.clinicAddress) || null,
     clinicCity: textoParaHelvetica(props.clinicCity) || null,
     clinicState: textoParaHelvetica(props.clinicState) || null,
@@ -315,14 +320,14 @@ export function PlanTratamientoDocument(props: PlanTratamientoDocumentProps) {
         </View>
         {d.grupos.map((g, gi) => {
           const esUltimo = gi === d.grupos.length - 1;
-          const renglones = esUltimo ? g.renglones.slice(0, -1) : g.renglones;
+          const renglones = esUltimo && ultimoViaja ? g.renglones.slice(0, -1) : g.renglones;
           return (
             <View key={gi}>
               {conFases && !(esUltimo && rotuloViajaAlFinal) ? <RotuloDeFase g={g} /> : null}
               {renglones.map((r, i) => (
                 <Renglon key={i} r={r} dinero={dinero} />
               ))}
-              {subtotalesDeFase && !esUltimo ? <SubtotalDeFase g={g} t={t} dinero={dinero} /> : null}
+              {subtotalesDeFase && !(esUltimo && ultimoViaja) ? <SubtotalDeFase g={g} t={t} dinero={dinero} /> : null}
             </View>
           );
         })}
@@ -330,8 +335,8 @@ export function PlanTratamientoDocument(props: PlanTratamientoDocumentProps) {
         {/* Bloque final, que no se parte: último renglón + totales + firmas. */}
         <View wrap={false}>
           {rotuloViajaAlFinal ? <RotuloDeFase g={ultimoGrupo} /> : null}
-          <Renglon r={ultimoRenglon} dinero={dinero} />
-          {subtotalesDeFase ? <SubtotalDeFase g={ultimoGrupo} t={t} dinero={dinero} /> : null}
+          {ultimoViaja ? <Renglon r={ultimoRenglon} dinero={dinero} /> : null}
+          {ultimoViaja && subtotalesDeFase ? <SubtotalDeFase g={ultimoGrupo} t={t} dinero={dinero} /> : null}
 
           <View style={styles.bottomRow}>
             <T style={styles.legend}>{t.leyenda}</T>

@@ -6,6 +6,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { armarPresupuestoDePlan, ESTADOS_QUE_YA_CUENTAN } from "@/lib/quotes/desde-plan";
 import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
+import { textoPuedeEstarRedondeado } from "@/lib/treatments/dinero-exacto";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ interface Params { params: Promise<{ id: string }> }
 async function cargarPlan(ctx: AuthContext, id: string) {
   const plan = await prisma.treatmentPlan.findFirst({
     where: { id, clinicId: ctx.clinicId, ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}) },
-    select: { id: true, patientId: true, name: true, description: true, totalCost: true },
+    select: { id: true, patientId: true, name: true, description: true, totalCost: true, createdAt: true },
   });
   if (!plan) return { error: NextResponse.json({ error: "Plan no encontrado" }, { status: 404 }) } as const;
   const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
@@ -72,7 +73,7 @@ export async function GET(_req: NextRequest, props: Params) {
   if ("error" in r) return r.error;
 
   const [existente, procs] = await Promise.all([presupuestoVivo(ctx, r.plan.id), tarifario(ctx.clinicId)]);
-  const armado = armarPresupuestoDePlan(r.plan, procs);
+  const armado = armarPresupuestoDePlan(r.plan, procs, { textoRedondeado: textoPuedeEstarRedondeado(r.plan) });
   return NextResponse.json({
     plan: { id: r.plan.id, name: r.plan.name },
     existente: existente ? aDto(existente) : null,
@@ -97,7 +98,7 @@ export async function POST(_req: NextRequest, props: Params) {
   const existente = await presupuestoVivo(ctx, r.plan.id);
   if (existente) return NextResponse.json({ already: true, quote: aDto(existente) });
 
-  const armado = armarPresupuestoDePlan(r.plan, await tarifario(ctx.clinicId));
+  const armado = armarPresupuestoDePlan(r.plan, await tarifario(ctx.clinicId), { textoRedondeado: textoPuedeEstarRedondeado(r.plan) });
   const quote = await createQuoteWithFolio({
     clinicId: ctx.clinicId,
     patientId: r.plan.patientId,

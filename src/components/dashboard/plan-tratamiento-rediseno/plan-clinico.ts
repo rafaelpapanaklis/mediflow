@@ -118,6 +118,15 @@ export function alternarDiente(texto: string, fdi: number): string {
 
 // ── Cuentas ────────────────────────────────────────────────────────────────
 
+/**
+ * Lo que se teclea en la cantidad de un renglón: solo un entero (revisión t8 de ws1-t12, N-P4).
+ * «1.5» se guardaba «1.5 ×» y el presupuesto (`QuoteItem.quantity` es Int) lo redondeaba a 2.
+ * Se corta en el primer punto o coma: «1.5» → «1», «2,5» → «2»; lo que no es dígito se va.
+ */
+export function soloEntero(valor: string): string {
+  return valor.split(/[.,]/)[0].replace(/\D/g, "");
+}
+
 const numero = (v: string): number => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : 0;

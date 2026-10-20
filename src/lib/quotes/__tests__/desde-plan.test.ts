@@ -10,7 +10,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { componerDescripcion, PLAN_VACIO, type PlanClinico, type Renglon, type Rotulos } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
-import { armarPresupuestoDePlan, leerDinero, leerRenglonesDelPlan } from "../desde-plan";
+import { armarPresupuestoDePlan, leerDinero, leerRenglonesDelPlan, leerTotalDelPlan } from "../desde-plan";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { formatCurrency } from "@/lib/utils";
 
 const rot: Rotulos = {
@@ -164,4 +165,54 @@ test("armado: la fase es el orden de los bloques y los dientes salen en CSV de d
   const r = armarPresupuestoDePlan({ name: "P", description: texto, totalCost: 0 }, []);
   // La ventana escribe por orden de fase clínica: urgencia primero.
   assert.deepEqual(r.conceptos.map((c) => [c.name, c.phase, c.toothFdi]), [["Drenaje", 1, "11"], ["Corona", 2, "36,37"]]);
+});
+
+// ── Revisión t8 de ws1-t12 ───────────────────────────────────────────────────
+
+test("t8 N-P2: en un texto exacto (plan nuevo) manda el precio del plan: $449.60 no lo pisa un tarifario de $450, ni $450 uno de $449.60", () => {
+  const TAR = [{ id: "r", name: "Resina", basePrice: 450 }];
+  const conCentavos = componerDescripcion(plan([renglon({ procedimiento: "Resina", precio: "449.60" })]), { ...rot, dinero: (n) => dineroExacto(n) });
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: conCentavos, totalCost: 449.6 }, TAR, { textoRedondeado: false }).conceptos[0].unitPrice, 449.6);
+  // Aunque se diga «redondeado», un precio CON centavos ya es exacto: el tarifario no lo toca.
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: conCentavos, totalCost: 449.6 }, TAR).conceptos[0].unitPrice, 449.6);
+  const entero = componerDescripcion(plan([renglon({ procedimiento: "Resina", precio: "450" })]), rot);
+  const TAR2 = [{ id: "r", name: "Resina", basePrice: 449.6 }];
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: entero, totalCost: 450 }, TAR2, { textoRedondeado: false }).conceptos[0].unitPrice, 450);
+  // En un plan viejo (texto redondeado) el exacto del tarifario sí corrige el «$450» que era $449.60.
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: entero, totalCost: 449.6 }, TAR2, { textoRedondeado: true }).conceptos[0].unitPrice, 449.6);
+});
+
+test("t8 (P3 en «Convertir»): con algún renglón con precio, uno sin precio es cortesía y pasa en $0 (como avisa la ventana), aunque esté en el tarifario", () => {
+  const texto = componerDescripcion(plan([renglon({ procedimiento: "Limpieza dental" }), renglon({ procedimiento: "Resina", precio: "500" })]), rot);
+  const r = armarPresupuestoDePlan({ name: "P", description: texto, totalCost: 500 }, TARIFARIO);
+  assert.equal(r.conceptos[0].name, "Limpieza dental");
+  assert.equal(r.conceptos[0].unitPrice, 0, "el tarifario dice $800, pero el plan la dio de cortesía");
+  assert.equal(r.total, 500);
+});
+
+test("t8 N-P4: una cantidad con decimales de un plan viejo pasa como 1 al importe exacto, y la nota dice cuánto era", () => {
+  const texto = componerDescripcion(plan([renglon({ procedimiento: "Blanqueamiento", cantidad: "1.5", precio: "800", motivo: "Manchas" })]), rot);
+  const [leido] = leerRenglonesDelPlan(texto);
+  assert.equal(leido.cantidad, 1.5, "el lector ya no redondea la cantidad");
+  const c = armarPresupuestoDePlan({ name: "P", description: texto, totalCost: 1200 }, TARIFARIO).conceptos[0];
+  assert.equal(c.quantity, 1);
+  assert.equal(c.unitPrice, 1200);
+  assert.equal(c.notes, "1.5 × $800 · Manchas");
+});
+
+test("t8: leerTotalDelPlan lee el «Total de procedimientos» que escribió la ventana (es y en), no el costo", () => {
+  const conTotal = componerDescripcion(plan([renglon({ procedimiento: "Resina", cantidad: "2", precio: "500" })]), { ...rot, total: "Total de procedimientos" });
+  assert.equal(leerTotalDelPlan(conTotal), 1000);
+  assert.equal(leerTotalDelPlan("▸ Phase I · Hygienic — $800\n• Filling · 1 × $800 = $800\n\n▸ Procedures total: $800"), 800);
+  assert.equal(leerTotalDelPlan("Una frase"), null);
+});
+
+test("t8 (P4): los nombres de fase y de total con que se escribieron los planes están fijos; si el diccionario los cambia, esta prueba lo avisa", async () => {
+  const { FASES_ESCRITAS, TOTALES_ESCRITOS, esEncabezadoDeFase } = await import("../desde-plan");
+  const es = (await import("@/i18n/dictionaries/es.json")).default as any;
+  const en = (await import("@/i18n/dictionaries/en.json")).default as any;
+  const delDiccionario = [...Object.values(es.planTratamiento.fase), ...Object.values(en.planTratamiento.fase)] as string[];
+  for (const f of delDiccionario) assert.ok((FASES_ESCRITAS as readonly string[]).includes(f), `«${f}» cambió en el diccionario: agrega el nombre nuevo a FASES_ESCRITAS SIN quitar el viejo`);
+  for (const f of FASES_ESCRITAS) assert.ok(esEncabezadoDeFase(`▸ ${f} — $500`), f);
+  assert.deepEqual([...TOTALES_ESCRITOS].sort(), [es.planTratamiento.texto.total, en.planTratamiento.texto.total].sort());
 });

@@ -6,6 +6,7 @@ import { PlanTratamientoDocument, type TextosPlanPdf } from "@/lib/pdf/plan-trat
 import { consentTimeZone } from "@/lib/consent/dates";
 import { formatoEnZona } from "@/lib/fechas/fecha-en-zona";
 import { leerCargos } from "@/lib/quotes/aceptacion-db";
+import { leerRenglonesDelPlan } from "@/lib/quotes/desde-plan";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { dineroExacto } from "./dinero-exacto";
 import { getDict, resolveLocale } from "@/i18n/dictionaries";
@@ -30,24 +31,43 @@ const ESTADO_CLAVE: Record<string, string> = {
   PAUSED: "patients.treatmentStatus.paused",
 };
 
+const normalizar = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
 /**
  * Lo que el sistema sabe de pagos del plan: las facturas no canceladas que nacieron
  * de sus presupuestos (`quotes.treatmentPlanId`), por la factura de siempre
  * (`quotes.invoiceId`) o por los cargos de «Se cobrará hoy» (`quote_charges`).
  * Sin presupuestos ligados → `facturas: 0` y el PDF no habla de pagos.
+ *
+ * `soloDelPlan` (revisión t8, N-P1/N-P3) dice si ese dinero es de ESTE plan sin duda:
+ *  · cada concepto de cada presupuesto ligado es un procedimiento del plan (por nombre). Un
+ *    presupuesto mixto (general + ortodoncia), con conceptos añadidos o de otro tratamiento, no;
+ *  · no hay un abono viejo aplicado por saldo a favor (fila de abono con monto negativo en
+ *    `quote_charges`): su dinero está en la factura del abono Y en la del concepto, y sumar
+ *    los dos `paid` lo cuenta dos veces;
+ *  · los cargos se pudieron leer (si la base no contestó, faltarían facturas).
  */
-async function pagosDelPlan(clinicId: string, planId: string): Promise<PagosDelPlan> {
+async function pagosDelPlan(clinicId: string, planId: string, conceptosDelPlan: string[]): Promise<PagosDelPlan> {
   const quotes = await prisma.quote.findMany({
     where: { clinicId, treatmentPlanId: planId },
-    select: { id: true, invoiceId: true },
+    select: { id: true, invoiceId: true, items: { select: { name: true } } },
     take: 50,
   });
-  const nada: PagosDelPlan = { pagado: 0, facturas: 0, facturado: 0, porPagar: 0 };
+  const nada: PagosDelPlan = { pagado: 0, facturas: 0, facturado: 0, porPagar: 0, soloDelPlan: false };
   if (quotes.length === 0) return nada;
+  const delPlan = new Set(conceptosDelPlan.map(normalizar));
+  let soloDelPlan = quotes.every((q) => q.items.every((it) => delPlan.has(normalizar(it.name))));
   const ids = new Set<string>();
   for (const q of quotes) if (q.invoiceId) ids.add(q.invoiceId);
   const cargos = await leerCargos(prisma, clinicId, quotes.map((q) => q.id));
-  for (const lista of cargos.porQuote.values()) for (const c of lista) ids.add(c.invoiceId);
+  if (cargos.fallo) soloDelPlan = false;
+  for (const lista of cargos.porQuote.values()) {
+    for (const c of lista) {
+      ids.add(c.invoiceId);
+      if (c.tipo === "abono" && c.monto < 0) soloDelPlan = false;
+    }
+  }
   if (ids.size === 0) return nada;
   const facturas = await prisma.invoice.findMany({
     where: { clinicId, id: { in: [...ids] }, status: { not: "CANCELLED" } },
@@ -63,7 +83,7 @@ async function pagosDelPlan(clinicId: string, planId: string): Promise<PagosDelP
     facturado += total;
     porPagar += Math.max(0, total - paid);
   }
-  return { pagado, facturas: facturas.length, facturado, porPagar };
+  return { pagado, facturas: facturas.length, facturado, porPagar, soloDelPlan };
 }
 
 export async function buildPlanTratamientoPdf(args: {
@@ -77,24 +97,23 @@ export async function buildPlanTratamientoPdf(args: {
   const plan = await prisma.treatmentPlan.findFirst({
     where: { id: args.planId, clinicId: args.clinicId },
     select: {
-      id: true, patientId: true, name: true, description: true, totalCost: true, status: true, startDate: true,
+      id: true, patientId: true, name: true, description: true, totalCost: true, status: true, startDate: true, createdAt: true,
       patient: { select: { firstName: true, lastName: true, patientNumber: true } },
       doctor: { select: { firstName: true, lastName: true, cedulaProfesional: true } },
     },
   });
   if (!plan) return null;
 
-  const [clinic, tarifario, pagos] = await Promise.all([
+  // Los conceptos del plan, para saber si un presupuesto ligado trae solo cosas de este plan.
+  const leidos = leerRenglonesDelPlan(plan.description);
+  const conceptosDelPlan = leidos.length > 0 ? leidos.map((r) => r.nombre) : [plan.name];
+  // Sin tarifario: en el PDF manda SIEMPRE el precio del plan (revisión t8, N-P2).
+  const [clinic, pagos] = await Promise.all([
     prisma.clinic.findUnique({
       where: { id: args.clinicId },
       select: { ...CLINIC_LETTERHEAD_SELECT, timezone: true, locale: true },
     }),
-    prisma.procedureCatalog.findMany({
-      where: { clinicId: args.clinicId, isActive: true },
-      select: { id: true, name: true, basePrice: true },
-      take: 2000,
-    }),
-    args.verPagos ? pagosDelPlan(args.clinicId, plan.id) : Promise.resolve(null),
+    args.verPagos ? pagosDelPlan(args.clinicId, plan.id, conceptosDelPlan) : Promise.resolve(null),
   ]);
 
   const membrete = await clinicLetterheadProps(clinic);
@@ -107,8 +126,7 @@ export async function buildPlanTratamientoPdf(args: {
   const fechaLarga = (d: Date) => formatoEnZona(d, { day: "numeric", month: "long", year: "numeric" }, zona, intl) ?? "—";
 
   const documento = armarDocumentoDelPlan(
-    { name: plan.name, description: plan.description, totalCost: Number(plan.totalCost) || 0 },
-    tarifario.map((p) => ({ id: p.id, name: p.name, basePrice: Number(p.basePrice) || 0 })),
+    { name: plan.name, description: plan.description, totalCost: Number(plan.totalCost) || 0, createdAt: plan.createdAt },
     pagos,
   );
 

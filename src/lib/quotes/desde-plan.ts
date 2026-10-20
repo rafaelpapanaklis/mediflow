@@ -13,6 +13,7 @@ import type { QuoteItemInput } from "./types";
 import { FASES, FASE_CLAVE } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 
 const MARCA = "▸ ";
 
@@ -98,7 +99,9 @@ function leerLinea(linea: string, fase: number, faseNombre: string): RenglonLeid
   for (const trozo of resto) {
     const cuanto = CUANTO.exec(trozo.trim());
     if (cuanto) {
-      cantidad = Math.max(1, Math.round(Number(cuanto[1])) || 1);
+      // Tal cual (revisión t8, N-P4): un plan viejo pudo guardar «1.5 ×». La ventana ya solo acepta enteros.
+      const c = Number(cuanto[1]);
+      cantidad = Number.isFinite(c) && c > 0 ? c : 1;
       precio = leerDinero(cuanto[2]);
     } else if (trozo.trim()) {
       motivos.push(trozo.trim().replace(MOTIVO, ""));
@@ -120,16 +123,49 @@ function nombreDeFase(encabezado: string): string {
  * (`planTratamiento.fase.*` de es.json y en.json), ya normalizados. Solo un encabezado
  * «▸ …» con uno de estos nombres abre una fase (ws1-t12, revisión P4).
  */
-const FASES_CONOCIDAS: ReadonlySet<string> = new Set(
-  (["es", "en"] as const).flatMap((loc) => {
+/**
+ * Los nombres con los que se ESCRIBIERON los planes guardados (es.json / en.json al 20-oct-2026),
+ * fijos aquí (revisión t8): si alguien corrige un nombre en el diccionario, los planes ya guardados
+ * con el nombre de antes se siguen leyendo. Al nombre nuevo lo agrega solo el diccionario.
+ */
+export const FASES_ESCRITAS = [
+  "Urgencia", "Fase sistémica", "Fase I · Higiénica", "Fase II · Correctiva", "Fase III · Restauradora", "Fase IV · Mantenimiento",
+  "Urgent care", "Systemic phase", "Phase I · Hygienic", "Phase II · Corrective", "Phase III · Restorative", "Phase IV · Maintenance",
+] as const;
+export const TOTALES_ESCRITOS = ["Total de procedimientos", "Procedures total"] as const;
+
+const FASES_CONOCIDAS: ReadonlySet<string> = new Set([
+  ...FASES_ESCRITAS.map(normalizar),
+  ...(["es", "en"] as const).flatMap((loc) => {
     const t = makeT(getDict(loc));
     return FASES.map((f) => normalizar(t(FASE_CLAVE[f])));
   }),
-);
+]);
 
 /** ¿Es el encabezado de una fase escrito por la ventana? «▸ Fase I · Higiénica — $1,000» sí; «▸ Notas: …» no. */
 export function esEncabezadoDeFase(linea: string): boolean {
   return linea.startsWith(MARCA.trim()) && FASES_CONOCIDAS.has(normalizar(nombreDeFase(linea)));
+}
+
+/** «Total de procedimientos» / «Procedures total» (`planTratamiento.texto.total`), normalizados. */
+const TOTALES_CONOCIDOS: ReadonlySet<string> = new Set([
+  ...TOTALES_ESCRITOS.map(normalizar),
+  ...(["es", "en"] as const).map((loc) => normalizar(makeT(getDict(loc))("planTratamiento.texto.total"))),
+]);
+
+/**
+ * El «▸ Total de procedimientos: $X» que la ventana escribió con los mismos números que los renglones
+ * (la suma de procedimientos, NO el costo del plan). null si no está.
+ */
+export function leerTotalDelPlan(description: string | null | undefined): number | null {
+  if (!description || !description.startsWith(MARCA)) return null;
+  for (const linea of description.split("\n").map((l) => l.trim())) {
+    if (!linea.startsWith(MARCA.trim())) continue;
+    const dos = linea.indexOf(":");
+    if (dos < 0) continue;
+    if (TOTALES_CONOCIDOS.has(normalizar(linea.slice(0, dos).replace(/^▸\s*/, "")))) return leerDinero(linea.slice(dos + 1));
+  }
+  return null;
 }
 
 /**
@@ -173,8 +209,22 @@ export function leerRenglonesDelPlan(description: string | null | undefined): Re
 
 const redondear2 = (n: number) => Math.round(n * 100) / 100;
 
+export interface OpcionesDelArmado {
+  /**
+   * ¿Los precios del texto pudieron quedar redondeados a pesos? (`textoPuedeEstarRedondeado`,
+   * lib/treatments/dinero-exacto). Solo entonces el precio exacto del tarifario puede corregir uno
+   * del texto. Sin decirlo se supone que sí, que es lo que ya hacía (revisión t8, N-P2).
+   */
+  textoRedondeado?: boolean;
+}
+
 /** Arma los conceptos del presupuesto a partir del plan y del tarifario de la clínica. */
-export function armarPresupuestoDePlan(plan: PlanParaPresupuesto, tarifario: ProcedimientoTarifario[]): PresupuestoDePlan {
+export function armarPresupuestoDePlan(
+  plan: PlanParaPresupuesto,
+  tarifario: ProcedimientoTarifario[],
+  opciones: OpcionesDelArmado = {},
+): PresupuestoDePlan {
+  const textoRedondeado = opciones.textoRedondeado ?? true;
   const porNombre = new Map<string, ProcedimientoTarifario>();
   for (const p of tarifario) {
     const k = normalizar(p.name);
@@ -187,29 +237,41 @@ export function armarPresupuestoDePlan(plan: PlanParaPresupuesto, tarifario: Pro
   const base: RenglonLeido[] = sinDetalle
     ? [{ nombre: plan.name.trim() || "Plan de tratamiento", dientes: "", cantidad: 1, precio: costo > 0 ? costo : null, fase: 1, faseNombre: "", caras: "", motivo: "" }]
     : leidos;
+  // Con algún renglón con precio, uno sin precio es una CORTESÍA en $0: así lo avisa la ventana al
+  // crear el plan («Se guardará en $0 y así pasará al presupuesto»). Solo un plan sin ningún precio
+  // por renglón se costea con el tarifario (revisión t8, efecto lateral de P3).
+  const conPrecio = base.some((r) => r.precio != null && r.precio > 0);
 
   const conceptos: ConceptoDePlan[] = base.map((r) => {
     const t = porNombre.get(normalizar(r.nombre)) ?? null;
-    // El texto del plan redondea a pesos: si el tarifario redondea a lo mismo, vale el exacto.
-    const tarifarioExacto = !!t && r.precio != null && Math.round(t.basePrice) === Math.round(r.precio);
+    // Un texto viejo redondeó a pesos: si el tarifario redondea a lo mismo, vale el exacto. En un
+    // texto exacto (o con centavos en este precio) manda SIEMPRE el precio del plan.
+    const tarifarioExacto =
+      textoRedondeado && !!t && r.precio != null && Number.isInteger(r.precio) && Math.round(t.basePrice) === Math.round(r.precio);
     let unitPrice = 0;
     let origen: ConceptoDePlan["origen"] = "sinPrecio";
     if (r.precio != null && r.precio > 0) {
       unitPrice = tarifarioExacto && t ? redondear2(t.basePrice) : r.precio;
       origen = tarifarioExacto ? "tarifario" : "plan";
-    } else if (t && t.basePrice > 0) {
+    } else if (!conPrecio && t && t.basePrice > 0) {
       unitPrice = redondear2(t.basePrice);
       origen = "tarifario";
     }
+    // `QuoteItem.quantity` es entero: una cantidad con decimales de un plan viejo («1.5 ×») pasa
+    // como 1 al importe exacto, y la nota dice cuánto era (revisión t8, N-P4).
+    const entera = Number.isInteger(r.cantidad);
+    const quantity = entera ? r.cantidad : 1;
+    const notas = [!entera ? `${r.cantidad} × ${dineroExacto(unitPrice)}` : "", r.motivo].filter(Boolean).join(" · ");
+    if (!entera) unitPrice = redondear2(r.cantidad * unitPrice);
     return {
       procedureId: t?.id ?? null,
       name: r.nombre,
       toothFdi: r.dientes || null,
-      quantity: r.cantidad,
+      quantity,
       unitPrice,
       discount: 0,
       phase: r.fase,
-      notes: r.motivo || null,
+      notes: notas || null,
       origen,
       deTarifario: !!t,
     };

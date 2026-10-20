@@ -9,7 +9,7 @@ import { COND_BY_ID, PERM, PRIMARY } from "@/components/dashboard/odontogram-v2/
 import {
   CARAS, FASES, FASE_CLAVE, PLAN_VACIO, PRONOSTICOS, PRONOSTICO_CLAVE,
   alternarDiente, avisosDeOrden, componerDescripcion, hallazgosPorTratar, importeRenglon,
-  leerDientes, letraCentro, sesionesSugeridas, subtotalesPorFase, totalProcedimientos,
+  leerDientes, letraCentro, sesionesSugeridas, soloEntero, subtotalesPorFase, totalProcedimientos,
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import s from "./plan.module.css";
@@ -437,13 +437,17 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                             );
                           })}
                         </div>
+                        {/* Solo enteros (revisión t8, N-P4): «1.5» se guardaba «1.5 ×» y el presupuesto
+                            (QuoteItem.quantity es Int) lo redondeaba a 2. */}
                         <input
                           type="number"
                           min={1}
+                          step={1}
+                          inputMode="numeric"
                           className={`${s.entrada} ${s.num}`}
                           aria-label={t("planTratamiento.nuevo.colCantidad")}
                           value={r.cantidad}
-                          onChange={(e) => cambiar(r.id, { cantidad: e.target.value })}
+                          onChange={(e) => cambiar(r.id, { cantidad: soloEntero(e.target.value) })}
                         />
                         <input
                           type="number"
