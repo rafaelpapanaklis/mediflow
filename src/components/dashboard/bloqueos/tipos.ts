@@ -55,6 +55,8 @@ export interface BloqueoDTO {
   creadoEl: string;
   /** Lo decide el SERVIDOR. La pantalla no lo vuelve a razonar. */
   puedoRetirarlo: boolean;
+  /** WS1-T9: solo en los bloqueos de Google Calendar (clic → «Convertir en cita»). */
+  google?: { titulo: string } | null;
 }
 
 /** Un festivo del catálogo de México, ya calculado para el año pedido. */
@@ -182,6 +184,7 @@ export function parseBloqueo(raw: unknown): BloqueoDTO | null {
     // Fail-closed: sin el campo, NO se enseña el botón de retirar. Esconder no
     // es permitir, pero enseñar una puerta que da 403 tampoco ayuda a nadie.
     puedoRetirarlo: bool(raw.puedoRetirarlo),
+    google: esObjeto(raw.google) ? { titulo: texto(raw.google.titulo) } : null,
   };
 }
 

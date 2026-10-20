@@ -1,0 +1,240 @@
+/* ═══ Google Calendar → agenda (WS1-T9) ═════════════════════════════════
+   Usa los `--ag-*` de la agenda: la franja vive dentro de `.raiz` y el panel
+   va en un portal con `CLASES_PORTAL_AGENDA`, que trae su propia copia. */
+
+/* La franja de un bloqueo de Google: GRIS, se toque quien se toque (no ámbar
+   como la de un doctor): es «ocupado en otro calendario», no un cierre. */
+.franjaGoogle.franjaGoogle {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      var(--ag-borde-punto) 0 4px,
+      transparent 4px 12px
+    ),
+    var(--ag-fondo-app);
+  box-shadow: inset 3px 0 0 var(--ag-texto-2);
+}
+
+.franjaGoogle.franjaGoogle > span {
+  color: var(--ag-texto-3);
+}
+
+.capaFranja {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: inherit;
+  /* La franja deja pasar el ratón a la columna; esta capa no, para abrir el evento. */
+  pointer-events: auto;
+}
+
+.capaFranja:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: -2px;
+}
+
+/* ── El panel ── */
+.cuerpo {
+  margin: 12px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ag-texto-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.hora {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--ag-tinta);
+}
+
+.dato {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.explicacion,
+.nota {
+  margin: 0;
+  color: var(--ag-texto-2);
+}
+
+.nota {
+  padding: 8px 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-fondo-app);
+}
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ag-borde-divisor);
+}
+
+.subtitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ag-tinta);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.selector {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--ag-borde-control);
+  border-radius: var(--ag-r-8);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  font: inherit;
+}
+
+.botonTexto {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--ag-morado-texto);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ayuda {
+  color: var(--ag-texto-2);
+  font-size: 12px;
+}
+
+.error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-rojo-fondo);
+  color: var(--ag-rojo-texto);
+}
+
+.girando {
+  animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── «Vuelve a conectar Google» (arriba de la agenda) ── */
+.avisoReconectar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--ag-ambar-borde);
+  border-radius: var(--ag-r-10);
+  background: var(--ag-ambar-claro);
+  color: var(--ag-ambar-texto);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.avisoIcono {
+  flex: none;
+  color: var(--ag-ambar-icono);
+}
+
+.avisoTexto {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.avisoEnlace {
+  font-weight: 600;
+  color: var(--ag-ambar-texto-2);
+  text-decoration: underline;
+}
+
+/* ── El aviso en la cita convertida ── */
+.avisoCita {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--ag-ambar-borde);
+  border-radius: var(--ag-r-10);
+  background: var(--ag-ambar-claro);
+  color: var(--ag-ambar-texto);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.avisoCitaTexto {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.avisoCitaTexto svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.avisoAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.botonAviso,
+.botonAvisoSecundario {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--ag-r-8);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.botonAviso {
+  border: 0;
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+}
+
+.botonAvisoSecundario {
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+}
+
+.botonAviso:disabled,
+.botonAvisoSecundario:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

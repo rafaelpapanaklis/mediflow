@@ -113,6 +113,15 @@ function esAdministrativo(ctx: BloqueoCtx): boolean {
   return ctx.role === "ADMIN" || ctx.role === "SUPER_ADMIN" || ctx.role === "RECEPTIONIST";
 }
 
+/** WS1-T9: los bloqueos de Google Calendar no se editan ni se retiran aquí. */
+function errorDeBloqueoGoogle(): BloqueoError {
+  return new BloqueoError(
+    "Este bloqueo viene de Google Calendar: cámbialo o bórralo en Google y la agenda se pone al día sola.",
+    409,
+    "BLOQUEO_DE_GOOGLE",
+  );
+}
+
 function exigeClinica(ctx: BloqueoCtx): string {
   // Corta ANTES de consultar: en Prisma un clinicId vacío no filtra nada.
   if (!ctx?.clinicId || typeof ctx.clinicId !== "string") {
@@ -370,6 +379,7 @@ export async function editarBloqueo(
   if (actual.deletedAt) {
     throw new BloqueoError("Ese bloqueo ya estaba retirado.", 409, "YA_RETIRADO");
   }
+  if (actual.kind === "GOOGLE") throw errorDeBloqueoGoogle();
   // Editar exige lo mismo que retirar: es el mismo bloqueo y la misma
   // decisión. Un doctor edita el suyo y ninguno más.
   if (!puedeRetirar(ctx, actual)) {
@@ -448,9 +458,10 @@ export async function retirarBloqueo(
 
   const b = await prisma.agendaBlock.findFirst({
     where: { id, clinicId },
-    select: { id: true, doctorId: true, reason: true, deletedAt: true, holidayKey: true },
+    select: { id: true, doctorId: true, reason: true, deletedAt: true, holidayKey: true, kind: true },
   });
   if (!b) throw new BloqueoError("Ese bloqueo no existe o no es de tu clínica.", 404, "NO_ENCONTRADO");
+  if (b.kind === "GOOGLE") throw errorDeBloqueoGoogle();
   if (!puedeRetirar(ctx, b)) {
     throw new BloqueoError(
       b.doctorId === null

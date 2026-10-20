@@ -177,6 +177,8 @@ export function cuerpoDeBloqueo(rango: RangoLocal, alcance: AlcanceBloqueo): Cue
 export interface BandaBloqueo {
   id: string;
   reason: string;
+  /** WS1-T9: bloqueo de Google Calendar (se pinta gris y abre «Convertir en cita»). */
+  google?: { titulo: string } | null;
   /** `null` = cierra la clínica entera. Con id, cierra solo a ese doctor. */
   doctorId: string | null;
   doctorNombre: string | null;
@@ -234,6 +236,7 @@ export function bandasDelDia(
     out.push({
       id: b.id,
       reason: b.reason,
+      google: b.google ?? null,
       doctorId: b.doctorId,
       doctorNombre: b.doctorNombre,
       desdeMin,

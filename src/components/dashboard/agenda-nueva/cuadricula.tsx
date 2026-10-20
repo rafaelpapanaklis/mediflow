@@ -31,6 +31,8 @@ import { ANCHO_EJE } from "@/lib/agenda-nueva/tokens";
 import { useT } from "@/i18n/i18n-provider";
 import type { BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import s from "./agenda-nueva.module.css";
+import sg from "./google-calendario.module.css";
+import { AccionBloqueoGoogle } from "./google-calendario";
 
 export interface ColumnaCuadricula {
   /** Identificador estable (id del responsable en Día, `YYYY-MM-DD` en Semana). */
@@ -549,6 +551,8 @@ function FranjaBloqueo({
   const clases = [
     s.franjaBloqueo,
     banda.doctorId === null ? s.franjaBloqueoClinica : s.franjaBloqueoDoctor,
+    // WS1-T9: un evento de Google Calendar — gris y clicable («Convertir en cita»).
+    banda.google ? sg.franjaGoogle : "",
   ].join(" ");
 
   return (
@@ -558,6 +562,7 @@ function FranjaBloqueo({
         {banda.reason}
         {banda.sigueDespues ? " →" : ""}
       </span>
+      {banda.google ? <AccionBloqueoGoogle banda={banda} /> : null}
     </div>
   );
 }

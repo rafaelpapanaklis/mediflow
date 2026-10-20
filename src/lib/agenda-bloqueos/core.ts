@@ -42,7 +42,14 @@ export type AgendaBlockKind =
   | "VACACIONES"
   | "PERSONAL"
   | "MANTENIMIENTO"
-  | "OTRO";
+  | "OTRO"
+  /**
+   * Un evento del Google Calendar de la clínica (WS1-T9). NO está en
+   * `BLOQUEO_KINDS` a propósito: esa lista es la de los tipos que una persona
+   * puede elegir, y un bloqueo GOOGLE solo lo crea y lo mueve la sincronización
+   * (src/lib/google/). `parseKind("GOOGLE")` da OTRO.
+   */
+  | "GOOGLE";
 
 export const BLOQUEO_KINDS: AgendaBlockKind[] = [
   "FESTIVO",
@@ -58,6 +65,7 @@ export const BLOQUEO_KIND_LABELS: Record<AgendaBlockKind, string> = {
   PERSONAL: "Asunto personal",
   MANTENIMIENTO: "Mantenimiento",
   OTRO: "Otro",
+  GOOGLE: "Google Calendar",
 };
 
 export const BLOQUEO_KIND_DESCRIPCIONES: Record<AgendaBlockKind, string> = {
@@ -66,6 +74,7 @@ export const BLOQUEO_KIND_DESCRIPCIONES: Record<AgendaBlockKind, string> = {
   PERSONAL: "Un congreso, una cita médica, una boda. Suele ser de un doctor.",
   MANTENIMIENTO: "Obra, fumigación o equipo en servicio. Suele ser de toda la clínica.",
   OTRO: "Cualquier otra cosa; manda el motivo que escribas.",
+  GOOGLE: "Un evento del Google Calendar de la clínica. Se cambia o se borra en Google.",
 };
 
 export function parseKind(raw: unknown): AgendaBlockKind {
@@ -80,8 +89,12 @@ export function parseKind(raw: unknown): AgendaBlockKind {
 
 export const MOTIVO_MAX = 200;
 export const MOTIVO_MIN = 3;
-/** Cuántos bloqueos se leen de un rango como mucho. */
-export const BLOQUEOS_MAX_FILAS = 300;
+/**
+ * Cuántos bloqueos se leen de un rango como mucho. Era 300; con los eventos de
+ * Google Calendar (WS1-T9, ~15 al día) el mes o «Buscar espacio» (21 días)
+ * podían pasarlo y los días del final se pintaban libres. 2000 sobra.
+ */
+export const BLOQUEOS_MAX_FILAS = 2000;
 /** Cuántas citas en choque se devuelven en el 409. Ver `CHOQUE_MAX` abajo. */
 export const CHOQUE_MAX = 50;
 /**
@@ -471,6 +484,8 @@ export interface BloqueoDTO {
   holidayKey: string | null;
   creadoPor: string;
   creadoEl: string;
+  /** WS1-T9: solo en los bloqueos GOOGLE. El título del evento (solo para el staff). */
+  google?: { titulo: string };
   /**
    * 🔴 LO DECIDE EL SERVIDOR según el rol de quien pide. La pantalla no tiene
    * que volver a razonar el permiso: solo enseña o esconde el botón. Si lo

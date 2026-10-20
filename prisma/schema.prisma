@@ -19152,6 +19152,10 @@ enum AgendaBlockKind {
   MANTENIMIENTO
   /// Cualquier otra cosa; manda el motivo que se escriba.
   OTRO
+  /// Un evento del Google Calendar de la clínica (WS1-T9, Salamanca). Lo crea
+  /// y lo mueve SOLO la sincronización (src/lib/google/); nadie lo edita ni lo
+  /// retira a mano. El vínculo con el evento vive en `AgendaBlockGoogle`.
+  GOOGLE
 }
 
 model AgendaBlock {
@@ -19496,4 +19500,97 @@ model ClinicStorageObject {
   @@unique([bucket, path])
   @@index([clinicId, kind])
   @@map("clinic_storage_objects")
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// GOOGLE CALENDAR → AGENDA (WS1-T9, grupo Salamanca).
+//
+// Lo que se mete en el calendario de la clínica en Google CIERRA ese horario
+// en DaleControl como un `AgendaBlock` de tipo GOOGLE. Así la rejilla, el bot,
+// la web, Sabina y «Buscar espacio» lo respetan sin tocar sus motores.
+//
+// 🔴 TABLAS APARTE y sin relaciones de Prisma hacia `Clinic`/`AgendaBlock`
+// (la llave foránea vive en el SQL): el SQL se aplica A MANO y una columna
+// nueva en `clinics` o en `agenda_blocks` tumbaría toda lectura sin `select`
+// mientras no exista. El código pregunta con `to_regclass` antes de leerlas
+// (src/lib/google/tablas.server.ts).
+//
+// SQL: sql/salamanca-google.sql · bandera: sql/salamanca-encender-google.sql.
+// ⛔ NUNCA `prisma migrate` ni `db push`.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Una fila por clínica: LA BANDERA y el estado de la sincronización entrante.
+/// Sin fila, o con `enabled = false`, la clínica funciona exactamente como antes.
+model GoogleAgendaImport {
+  clinicId          String    @id
+  /// LA BANDERA. Apagada de fábrica; la enciende el SQL de Salamanca.
+  enabled           Boolean   @default(false)
+  /// El calendario al que pertenece `syncToken`. Si la clínica reconecta y
+  /// cambia de calendario, se rehace la sincronización completa.
+  calendarId        String?
+  syncToken         String?
+  lastSyncAt        DateTime? @db.Timestamptz(3)
+  lastFullSyncAt    DateTime? @db.Timestamptz(3)
+  /// Turno: una sola sincronización a la vez por clínica (aviso + cron + agenda).
+  leaseUntil        DateTime? @db.Timestamptz(3)
+  /// Llegó un aviso mientras otra sincronización corría: hay que repetir.
+  dirtyAt           DateTime? @db.Timestamptz(3)
+  /// Canal de avisos de Google (events.watch).
+  channelId         String?   @unique
+  channelResourceId String?
+  /// Secreto del canal: Google lo devuelve en X-Goog-Channel-Token.
+  channelToken      String?
+  channelExpiresAt  DateTime? @db.Timestamptz(3)
+  /// El calendario al que apunta el canal (para renovarlo si la clínica cambia de calendario).
+  channelCalendarId String?
+  /// Último fallo de la sincronización entrante («permisos», «autorizacion»,
+  /// «calendario», «google»). NO apaga la sincronización de salida.
+  lastError         String?   @db.VarChar(200)
+  lastErrorAt       DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("google_agenda_imports")
+}
+
+/// El vínculo de un bloqueo GOOGLE con su evento. Nunca se borra: un evento
+/// eliminado deja el bloqueo retirado (`agenda_blocks.deletedAt`) y uno
+/// convertido en cita queda marcado (`convertedAt` + `appointmentId`).
+model AgendaBlockGoogle {
+  blockId          String    @id
+  clinicId         String
+  calendarId       String
+  googleEventId    String    @db.VarChar(1024)
+  /// La serie, si el evento es una repetición (para cuando se borra la serie entera).
+  recurringEventId String?   @db.VarChar(1024)
+  /// El título del evento. Solo lo ve quien ve la agenda: el `reason` del
+  /// bloqueo es genérico («Ocupado (Google)») porque el bot se lo dice al paciente.
+  title            String    @db.VarChar(300)
+  allDay           Boolean   @default(false)
+  /// `updated` de Google la última vez que se leyó.
+  googleUpdated    DateTime? @db.Timestamptz(3)
+  /// La hora del evento en Google la última vez que se leyó.
+  eventStartsAt    DateTime  @db.Timestamptz(3)
+  eventEndsAt      DateTime  @db.Timestamptz(3)
+  /// Cuándo Google dijo que el evento ya no está (eliminado o cancelado).
+  eventDeletedAt   DateTime? @db.Timestamptz(3)
+  /// «Convertir en cita».
+  convertedAt      DateTime? @db.Timestamptz(3)
+  convertedById    String?
+  appointmentId    String?
+  /// Aviso en la cita convertida: «movido» | «eliminado». La cita NUNCA se
+  /// mueve ni se cancela sola.
+  avisoTipo        String?   @db.VarChar(20)
+  avisoStartsAt    DateTime? @db.Timestamptz(3)
+  avisoEndsAt      DateTime? @db.Timestamptz(3)
+  avisoDesde       DateTime? @db.Timestamptz(3)
+  avisoDescartadoAt DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@unique([clinicId, calendarId, googleEventId], map: "agenda_block_google_evento_unico")
+  @@index([clinicId, appointmentId], map: "agenda_block_google_cita_idx")
+  @@index([clinicId, recurringEventId], map: "agenda_block_google_serie_idx")
+  @@map("agenda_block_google")
 }

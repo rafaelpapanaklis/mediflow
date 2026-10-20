@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { heredarBanderaGoogle } from "@/lib/google/bandera-sede.server";
 import { logError } from "@/lib/safe-log";
 import { repoHojas } from "@/lib/indicaciones/db";
 import { columnaBotBookableExiste } from "@/lib/whatsapp/bot/servicios-agendables-db";
@@ -130,7 +131,9 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
         update: { recepcionPuedeAgendar: pol.recepcionPuedeAgendar, updatedById: args.destinoOwnerUserId },
       });
     }
-    return AJUSTES_QUE_SE_COPIAN.length + (pol ? 1 : 0);
+    // WS1-T9: la bandera «Google Calendar → agenda» (nunca lanza).
+    const google = await heredarBanderaGoogle(origenId, destinoId);
+    return AJUSTES_QUE_SE_COPIAN.length + (pol ? 1 : 0) + google;
   });
 
   // 4 · Plantillas de documentos: notas de evolución y consentimientos.
