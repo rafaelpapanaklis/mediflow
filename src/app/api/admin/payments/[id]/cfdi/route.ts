@@ -1,12 +1,23 @@
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { esActivacionManual } from "@/lib/billing/pagos-reales";
 import { getCFDIProvider, cfdiNotConfiguredInstructions, isCFDIConfigured } from "@/lib/cfdi";
 
 
 export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   if (!(await isAdminAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const payment = await prisma.subscriptionInvoice.findUnique({
+    where: { id: params.id },
+    include: { clinic: true },
+  });
+  if (!payment) return NextResponse.json({ error: "Pago no encontrado" }, { status: 404 });
+  // La activación manual de /admin deja una fila de $0 como rastro: no hubo cobro, no hay nada que timbrar.
+  if (esActivacionManual(payment)) {
+    return NextResponse.json({ error: "Una activación manual no tiene cobro que timbrar" }, { status: 400 });
+  }
 
   if (!isCFDIConfigured()) {
     return NextResponse.json(
@@ -15,11 +26,6 @@ export async function POST(_req: NextRequest, props: { params: Promise<{ id: str
     );
   }
 
-  const payment = await prisma.subscriptionInvoice.findUnique({
-    where: { id: params.id },
-    include: { clinic: true },
-  });
-  if (!payment) return NextResponse.json({ error: "Pago no encontrado" }, { status: 404 });
 
   const provider = getCFDIProvider();
   const clinic = payment.clinic;

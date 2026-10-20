@@ -22,6 +22,7 @@ import path from "node:path";
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { isPlanExpired } from "@/lib/plan-status";
+import { esActivacionManual } from "@/lib/billing/pagos-reales";
 
 const HORA = 3_600_000;
 const DIA = 24 * HORA;
@@ -76,6 +77,10 @@ const prismaBase: any = {
   subscriptionInvoice: {
     // Evalúa el `where` REAL que manda el código (igualdad, gt, in, not y OR): si alguien rompe la consulta, el test lo ve.
     findFirst: async ({ where }: any) => pagosDeSubscripcion.find((p) => coincideWhere(p, where)) ?? null,
+    findUnique: async ({ where }: any) => {
+      const f = pagosDeSubscripcion.find((p) => p.id === where.id);
+      return f ? { ...f, clinic: { id: f.clinicId, name: "BEVADENT", plan: "PRO" } } : null;
+    },
     create: async ({ data }: any) => {
       const fila = { id: `inv${pagosDeSubscripcion.length + 1}`, ...data };
       pagosDeSubscripcion.push(fila);
@@ -141,6 +146,7 @@ Mod._load = function (req, parent, isMain) {
 
 let POST: (req: any) => Promise<Response>;
 let POSTAdmin: (req: any) => Promise<Response>;
+let POSTCfdi: (req: any, ctx: any) => Promise<Response>;
 let NextRequestCtor: any;
 
 before(async () => {
@@ -194,12 +200,18 @@ before(async () => {
     getAdminSession: async () => ({ user: { id: "adm1", email: "admin@dalecontrol.com" } }),
     isAdminAuthed: async () => true,
   });
+  dobles.set(path.join(RAIZ, "src/lib/cfdi/index.ts"), {
+    isCFDIConfigured: () => true,
+    cfdiNotConfiguredInstructions: () => "",
+    getCFDIProvider: () => ({ generateInvoice: async () => { throw new Error("no debería timbrar"); } }),
+  });
   dobles.set(path.join(RAIZ, "src/lib/admin-audit.ts"), { logAdminClinicMutation: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/meta-capi.server.ts"), { enviarCompraMetaDeSesion: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/tiktok-capi.server.ts"), { enviarCompraTiktokDeSesion: async () => {} });
   ({ NextRequest: NextRequestCtor } = await import("next/server"));
   ({ POST } = await import("../route"));
   ({ POST: POSTAdmin } = await import("../../../admin/billing/route"));
+  ({ POST: POSTCfdi } = await import("../../../admin/payments/[id]/cfdi/route"));
 });
 
 /* ── Fábricas ──────────────────────────────────────────────────────────── */
@@ -741,15 +753,35 @@ test("#1 residual: activación del admin (activate_clinic) a las +2 h de la grac
   assert.equal(correos.length + correosSuspendida.length, 1, "ningún correo nuevo");
 });
 
-test("#1 residual: la activación del admin con el método que él indique lo guarda; uno inválido cae a «admin»", async () => {
-  for (const [enviado, guardado] of [["cash", "cash"], ["paypal", "paypal"], ["stripe", "admin"], ["loquesea", "admin"]] as const) {
+test("N6 la activación se graba SIEMPRE con method «admin» y $0; el método que indique el admin va solo en las notas", async () => {
+  for (const [enviado, enNotas] of [["cash", "Pago indicado: cash"], ["paypal", "Pago indicado: paypal"], ["transfer", "Pago indicado: transfer"], ["stripe", null], ["loquesea", null], [undefined, null]] as const) {
     reiniciar();
     const req = new NextRequestCtor("http://localhost/api/admin/billing", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1, method: enviado }),
+      body: JSON.stringify({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1, ...(enviado ? { method: enviado } : {}) }),
     });
     assert.equal((await POSTAdmin(req)).status, 200);
-    assert.equal(pagosDeSubscripcion[0].method, guardado, enviado);
+    const fila = pagosDeSubscripcion[0];
+    assert.deepEqual([fila.method, fila.amount, fila.status], ["admin", 0, "paid"], `${enviado}: el filtro de pagos reales la reconoce siempre`);
+    if (enNotas) assert.match(fila.notes, new RegExp(enNotas), `${enviado}: va en las notas`);
+    else assert.doesNotMatch(fila.notes, /Pago indicado/, `${enviado}: método inválido, sin nota`);
+    // Y el webhook la sigue leyendo como rastro (método «admin» está en su lista).
+    assert.equal(esActivacionManual(fila), true);
   }
+});
+
+test("N8 /api/admin/payments/[id]/cfdi: una activación manual responde 400 «no tiene cobro que timbrar»; un cobro real sigue su camino", async () => {
+  reiniciar();
+  pagosDeSubscripcion = [
+    { id: "inv_activacion", clinicId: CLINIC, status: "paid", method: "admin", amount: 0, currency: "MXN", periodStart: new Date(), periodEnd: new Date(), paidAt: new Date() },
+    { id: "inv_real", clinicId: CLINIC, status: "paid", method: "transfer", amount: 689, currency: "MXN", periodStart: new Date(), periodEnd: new Date(), paidAt: new Date() },
+  ];
+  const llamar = (id: string) => POSTCfdi(new NextRequestCtor("http://localhost/x", { method: "POST" }), { params: Promise.resolve({ id }) });
+  const r = await llamar("inv_activacion");
+  assert.equal(r.status, 400);
+  assert.deepEqual(await r.json(), { error: "Una activación manual no tiene cobro que timbrar" });
+  assert.equal((await llamar("no_existe")).status, 404);
+  // Un cobro real NO recibe el 400 (llega al proveedor, que aquí es un doble que falla → 503 del propio flujo).
+  assert.equal((await llamar("inv_real")).status, 503);
 });

@@ -753,7 +753,7 @@ test("N2 la lista de métodos de pago manual del plan es explícita y sale de lo
   assert.doesNotMatch(w, /method: \{ not: "stripe" \}/);
   // La activación del admin deja su rastro en la misma transacción y sin inventar ingreso.
   const admin = sinComentarios(leer("src/app/api/admin/billing/route.ts"));
-  assert.match(admin, /prisma\.\$transaction\(\[\s*prisma\.clinic\.update[\s\S]*?prisma\.subscriptionInvoice\.create[\s\S]*?amount: 0,[\s\S]*?status: "paid",[\s\S]*?method: metodo,/);
+  assert.match(admin, /prisma\.\$transaction\(\[\s*prisma\.clinic\.update[\s\S]*?prisma\.subscriptionInvoice\.create[\s\S]*?amount: 0,[\s\S]*?status: "paid",[\s\S]*?method: METODO_ACTIVACION_ADMIN,/);
 });
 
 test("N3 con un cambio a medias la pantalla dice «Te falta terminar el cambio a <plan>: $X», no el pendiente viejo", () => {
