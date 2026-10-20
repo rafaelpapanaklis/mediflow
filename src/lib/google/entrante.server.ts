@@ -472,10 +472,15 @@ export async function sincronizarCalendarioEntrante(
     // (revisión t8, G3). «permisos» NO: ahí la copia de citas sigue sirviendo.
     // Solo si la conexión sigue siendo LA MISMA: si alguien reconectó mientras
     // tanto, el rechazo era del token viejo y no se apaga la conexión nueva.
-    if (r.estado === "fallo" && r.motivo === "autorizacion" && tokenAlEmpezar) {
+    if (r.estado === "fallo" && tokenAlEmpezar) {
       const ahora = await leerConexion(clinicId);
       if (ahora?.refreshToken === tokenAlEmpezar) {
-        await marcarGoogleCaido(clinicId, "Google rechazó la conexión al leer el calendario");
+        if (r.motivo === "autorizacion") await marcarGoogleCaido(clinicId, "Google rechazó la conexión al leer el calendario");
+      } else {
+        // Alguien reconectó MIENTRAS esta pasada corría con el token viejo:
+        // su fallo no es de la conexión nueva. Si se quedara, el aviso viejo
+        // volvería en Configuración hasta recargar (cuarta vuelta, N4-G1).
+        await olvidarErrorEntrante(clinicId);
       }
     }
     return r;
@@ -546,19 +551,25 @@ export async function retirarBloqueosDeGoogle(clinicId: string, opts: { conTurno
   try {
     if (opts.conTurno && !(await bloqueosDeGoogleSinMantener(clinicId)).retirar) return 0;
     const ahora = new Date();
-    const r = await prisma.agendaBlock.updateMany({
-      where: { clinicId, kind: "GOOGLE", deletedAt: null },
-      data: { deletedAt: ahora, deletedById: null },
-    });
-    // Sin syncToken NI última completa: al volver a encender o a conectar, la
-    // siguiente pasada es COMPLETA y reactiva lo que siga ocupado en Google,
-    // aunque alguna pasada llegara a guardar un token después (N3-G1). Con el
-    // token, una incremental solo vería lo que cambió y lo demás quedaría
-    // abierto días. (Solo si hace falta: el cron lo llama en cada pasada
-    // mientras dure el problema.)
-    await prisma.googleAgendaImport.updateMany({
-      where: { clinicId, OR: [{ syncToken: { not: null } }, { lastFullSyncAt: { not: null } }] },
-      data: { syncToken: null, lastFullSyncAt: null },
+    // UNA transacción, y el token primero (cuarta vuelta, N4-G2): si se
+    // cortara entre las dos, nunca quedan bloqueos retirados con el token
+    // viejo (la siguiente pasada sería incremental y lo retirado quedaría
+    // abierto hasta la completa semanal, sin aviso).
+    const r = await prisma.$transaction(async (tx) => {
+      // Sin syncToken NI última completa: al volver a encender o a conectar,
+      // la siguiente pasada es COMPLETA y reactiva lo que siga ocupado en
+      // Google, aunque alguna pasada llegara a guardar un token después
+      // (N3-G1). Con el token, una incremental solo vería lo que cambió y lo
+      // demás quedaría abierto días. (Solo si hace falta: el cron lo llama en
+      // cada pasada mientras dure el problema.)
+      await tx.googleAgendaImport.updateMany({
+        where: { clinicId, OR: [{ syncToken: { not: null } }, { lastFullSyncAt: { not: null } }] },
+        data: { syncToken: null, lastFullSyncAt: null },
+      });
+      return tx.agendaBlock.updateMany({
+        where: { clinicId, kind: "GOOGLE", deletedAt: null },
+        data: { deletedAt: ahora, deletedById: null },
+      });
     });
     return r.count;
   } finally {
@@ -663,6 +674,26 @@ export async function clinicaDelAviso(h: {
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   if (f.channelResourceId && h.resourceId && f.channelResourceId !== h.resourceId) return null;
   return f.clinicId;
+}
+
+/**
+ * Google se acaba de reconectar bien (el callback de OAuth): el error de la
+ * entrada es de la conexión VIEJA. Se olvida, y con él su hora, que es la
+ * que frenaba 60 s la sincronización al abrir Configuración: así la
+ * siguiente petición sincroniza ya y el aviso viejo («Google no deja leer…»)
+ * se va sin recargar (cuarta vuelta, N4-G1). Nunca lanza.
+ */
+export async function olvidarErrorEntrante(clinicId: string): Promise<void> {
+  if (!idValido(clinicId)) return;
+  try {
+    if (!(await tablasGoogleListas())) return;
+    await prisma.googleAgendaImport.updateMany({
+      where: { clinicId, OR: [{ lastError: { not: null } }, { lastErrorAt: { not: null } }] },
+      data: { lastError: null, lastErrorAt: null },
+    });
+  } catch (e) {
+    console.error("[google-entrante] no se pudo olvidar el error tras reconectar:", (e as any)?.message ?? e);
+  }
 }
 
 /** El último error de la entrada (antes de una pasada: el cron lo compara después). Nunca lanza. */

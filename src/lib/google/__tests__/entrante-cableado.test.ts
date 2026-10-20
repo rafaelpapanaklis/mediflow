@@ -239,8 +239,9 @@ test("G3: el cron parte de los bloqueos (no de las filas apagadas) y un fallo no
   assert.match(g, /agendaBlock\.groupBy/, "se parte de los bloqueos, no de las filas apagadas");
   assert.match(s, /error: caida \? "conexion_caida" : f\.lastError \?\? null/);
   // Un token rechazado al LEER marca la conexión caída (como al copiar una cita).
-  assert.match(s, /r\.motivo === "autorizacion" && tokenAlEmpezar/);
-  assert.match(s, /if \(ahora\?\.refreshToken === tokenAlEmpezar\) \{\s*await marcarGoogleCaido\(/, "no apaga una conexión recién reconectada");
+  // Solo con la MISMA conexión: si alguien reconectó durante la pasada, su
+  // fallo se olvida (N4-G1; lo ejecuta cuarta-vuelta-servidor).
+  assert.match(s, /if \(ahora\?\.refreshToken === tokenAlEmpezar\) \{\s*if \(r\.motivo === "autorizacion"\) await marcarGoogleCaido\(/, "no apaga una conexión recién reconectada");
   assert.doesNotMatch(s, /leerAjustesGoogle/, "ya no depende de clinic_google_status (ws1-t12)");
   const cron = leer("src/app/api/cron/google-calendario/route.ts");
   assert.match(cron, /clinicasSinBanderaConBloqueos/);
