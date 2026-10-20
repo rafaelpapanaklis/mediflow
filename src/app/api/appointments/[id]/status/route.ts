@@ -27,6 +27,13 @@ import {
 } from "@/lib/agenda/adelantar-cita-a-hoy";
 import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
+import { esSobreagendada } from "@/lib/agenda/agenda-flexible";
+
+/** WS1-T5 — ¿se está reabriendo (de cancelada/no asistió a viva) una cita sobreagendada? */
+function reabreSobreagendada(antes: string, despues: string, overrideReason: string | null): boolean {
+  const muerta = (s: string) => s === "CANCELLED" || s === "NO_SHOW";
+  return muerta(antes) && !muerta(despues) && esSobreagendada(overrideReason);
+}
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -163,6 +170,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ...sideEffects,
         ...cancelFields,
         ...(adelanto?.datos ?? {}),
+        // WS1-T5 (revisión t8, A3) — REABRIR una cita sobreagendada
+        // (cancelada/no asistió → viva) le quita la marca: su compañera pudo
+        // irse y otra cita entrar en su hueco; sin la marca la constraint
+        // vuelve a verla y decide (409 si choca).
+        ...(reabreSobreagendada(existing.status, body.status, existing.overrideReason)
+          ? { overrideReason: null, overriddenBy: null, overriddenAt: null }
+          : {}),
       },
     });
     if (reclamo.count !== 1) return null;
@@ -192,6 +206,14 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   });
   } catch (err) {
     // Otra cita entró en ese hueco entre la lectura y la escritura (el no-solape de la base manda).
+    // WS1-T5 (revisión t8, A3) — reabrir una sobreagendada cuyo hueco ya
+    // está ocupado: sin la marca, la constraint la para. Un 409 claro, no un 500.
+    if (reabreSobreagendada(existing.status, body.status, existing.overrideReason) && isAppointmentOverlapError(err)) {
+      return NextResponse.json(
+        { error: "invalid_transition", reason: "Ya hay otra cita a esa hora con el mismo doctor o sillón: muévela a otra hora antes de reabrirla." },
+        { status: 409 },
+      );
+    }
     if (adelanto && isAppointmentOverlapError(err)) {
       return NextResponse.json(
         { error: "invalid_transition", reason: "Otra cita acaba de ocupar esta hora con el mismo doctor o sillón. Intenta de nuevo." },

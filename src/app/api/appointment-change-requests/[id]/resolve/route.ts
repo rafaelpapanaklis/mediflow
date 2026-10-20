@@ -24,7 +24,7 @@ import { avisoDeBloqueo, bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { bookingRuleBody } from "@/lib/agenda/booking-rules";
-import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { avisoDeHorarioDoctor, comidaQuePisa, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
@@ -279,6 +279,29 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json(bookingRuleBody(bloqueoProhibido), {
       status: bloqueoProhibido.httpStatus,
     });
+  }
+
+  // WS1-T5 (revisión t8, A6) — la hora de comida del doctor (solo existe con
+  // la bandera `agenda-flexible`): aprobar un cambio del portal que cae ahí
+  // es agendar en la comida sin el «¿Seguro?». Antes de mover nada; la
+  // solicitud se queda PENDIENTE (se puede rechazar con su motivo).
+  const comidaDestino = comidaQuePisa(
+    await leerHorariosDeDoctores(session.clinic.id, { doctorIds: [appointment.doctorId] }),
+    proposedStartsAt,
+    proposedEndsAt,
+    appointment.doctorId,
+    session.clinic.timezone,
+  );
+  if (comidaDestino) {
+    return NextResponse.json(
+      {
+        error: "lunch_overlap",
+        reason:
+          `Esa hora es la comida del doctor (de ${comidaDestino.lunchStart} a ${comidaDestino.lunchEnd}). ` +
+          "Rechaza la solicitud con un motivo o pídele al paciente otra hora.",
+      },
+      { status: 409 },
+    );
   }
 
   let free = false;

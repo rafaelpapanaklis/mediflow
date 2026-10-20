@@ -134,10 +134,18 @@ export function confirmacionValida(args: {
   sobreagendar: unknown;
   sobreagendarCita: unknown;
   choqueId: string | null;
+  /** Cuántas citas MÁS se enseñaron además de la nombrada (`sobreagendarOtras`). */
+  otrasEnsenadas?: unknown;
+  /** Cuántas más ve el servidor ahora. */
+  otrasServidor?: number;
 }): boolean {
   if (args.sobreagendar !== true) return false;
   if (!args.choqueId) return true;
-  return args.sobreagendarCita === args.choqueId;
+  if (args.sobreagendarCita !== args.choqueId) return false;
+  // Si mientras se decidía entró OTRA más encima, se vuelve a preguntar
+  // (revisión t8, A7). Una pantalla vieja que no manda el número cuenta 0.
+  const ensenadas = typeof args.otrasEnsenadas === "number" ? args.otrasEnsenadas : 0;
+  return ensenadas >= (args.otrasServidor ?? 0);
 }
 
 /** El tipo de choque que se le explica a la persona: primero la cita, luego la comida. */

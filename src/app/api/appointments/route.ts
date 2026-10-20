@@ -37,7 +37,7 @@ import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { ctxDeSesion } from "@/lib/agenda-bloqueos/core-ctx";
 import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
-import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { avisoDeHorarioDoctor, comidaQuePisa, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import {
   horariosComoObjeto,
   leerHorariosDeDoctores,
@@ -245,6 +245,13 @@ export async function POST(req: NextRequest) {
   // aquí, con la tz de la SESIÓN: el navegador no tiene la tz de la clínica y
   // adivinarla con la del dispositivo agendaría a la hora equivocada.
   normalizeLegacyTimes(body, session.clinic.timezone);
+
+  // WS1-T5 (revisión t8, A12) — un `overrideReason` vacío o de espacios es
+  // «sin motivo»: la constraint solo mira `IS NULL`, así que "" sacaría la
+  // cita del no-solape sin gate de rol, sin aviso y sin rastro.
+  if (typeof body.overrideReason === "string" && body.overrideReason.trim() === "") {
+    body.overrideReason = undefined;
+  }
 
   const validation = validateCreate(body);
   if (validation) {
@@ -481,13 +488,20 @@ export async function POST(req: NextRequest) {
         viewer,
       })
     : null;
-  const pisaComida = !!flexible?.encendida && fueraDelDoctor?.motivo === "comida";
+  // La comida, AUNQUE la cita además se salga del horario (revisión t8, A2):
+  // «13:00–18:30» cruza la comida y pide el «¿Seguro?» igual.
+  const comidaPisada = flexible?.encendida
+    ? comidaQuePisa(horariosDelHueco, startsAt, endsAt, body.doctorId, session.clinic.timezone)
+    : null;
+  const pisaComida = !!comidaPisada;
   const sobreagenda = decidirSobreagenda({
     encendida: !!flexible?.encendida,
     confirmado: confirmacionValida({
       sobreagendar: body.sobreagendar,
       sobreagendarCita: body.sobreagendarCita,
       choqueId: choque?.id ?? null,
+      otrasEnsenadas: body.sobreagendarOtras,
+      otrasServidor: choque?.otras ?? 0,
     }),
     hayChoque: !!choque,
     pisaComida,
@@ -519,7 +533,7 @@ export async function POST(req: NextRequest) {
         error: choque ? "appointment_overlap" : "lunch_overlap",
         sobreagendable: true,
         ...(choque ? { conflictingAppointment: choque } : {}),
-        comida: pisaComida ? { lunchStart: fueraDelDoctor!.lunchStart, lunchEnd: fueraDelDoctor!.lunchEnd } : null,
+        comida: comidaPisada,
       },
       { status: 409 },
     );
@@ -529,7 +543,9 @@ export async function POST(req: NextRequest) {
   const overrideFinal = body.overrideReason ?? (sobreagendada && choque ? MARCA_SOBREAGENDADA : null);
   // Ya se confirmó la comida en pantalla: el «Ojo: cae en la comida» sobra.
   const avisoTrasConfirmar =
-    sobreagendada && avisoHorario?.reason === "doctor_off" && pisaComida ? null : avisoHorario;
+    sobreagendada && avisoHorario?.reason === "doctor_off" && fueraDelDoctor?.motivo === "comida"
+      ? null
+      : avisoHorario;
 
   try {
     // Auto-inclusión de visibilidad en la MISMA transacción que la cita: si el
@@ -614,9 +630,7 @@ export async function POST(req: NextRequest) {
           ? {
               sobreagendada: {
                 conCita: choque?.id ?? null,
-                enComida: pisaComida
-                  ? { lunchStart: fueraDelDoctor!.lunchStart, lunchEnd: fueraDelDoctor!.lunchEnd }
-                  : null,
+                enComida: comidaPisada,
               },
             }
           : {}),

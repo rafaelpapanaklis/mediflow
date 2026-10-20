@@ -46,6 +46,8 @@ import {
 } from "../color-procedimiento";
 import {
   HorarioError,
+  comidaQuePisa,
+  diasQueTraenComida,
   comidaDelDoctor,
   comidaDelDoctorEnFecha,
   doctorNoAtiende,
@@ -419,28 +421,37 @@ const CLAVE_COLUMNAS = Symbol.for("dalecontrol.horarioDoctor.columnasComida");
 
 function dbHorarios(bandera: boolean) {
   const selects: any[] = [];
+  const crudas: string[] = [];
   return {
     selects,
+    crudas,
     db: {
-      $queryRaw: async () => [{ existe: true }],
+      // to_regclass → la tabla existe; la comida va por SQL crudo (A13).
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        const sql = strings.join("?");
+        crudas.push(sql);
+        if (sql.includes("lunchStart")) return [{ doctorId: "d1", dayOfWeek: 1, lunchStart: "14:00", lunchEnd: "15:00" }];
+        return [{ existe: true }];
+      },
       clinicFeatureFlag: {
         findMany: async () => (bandera ? [{ flag: FLAG_AGENDA_FLEXIBLE, enabled: true }] : []),
       },
       doctorSchedule: {
         findMany: async (args: any) => {
           selects.push(args.select);
-          return [{ doctorId: "d1", dayOfWeek: 1, enabled: true, openTime: "09:00", closeTime: "18:00", lunchStart: "14:00", lunchEnd: "15:00" }];
+          return [{ doctorId: "d1", dayOfWeek: 1, enabled: true, openTime: "09:00", closeTime: "18:00" }];
         },
       },
     },
   };
 }
 
-test("lector de horarios · SIN bandera no pide las columnas de la comida (el select de siempre) y no la entrega", async () => {
+test("lector de horarios · SIN bandera no pide la comida (ni en el select ni por SQL crudo) y no la entrega", async () => {
   (globalThis as any)[CLAVE_COLUMNAS] = { existe: true, at: Date.now() };
   const d = dbHorarios(false);
   const mapa = await leerHorariosDeDoctores("c1", { db: d.db });
   assert.equal("lunchStart" in d.selects[0], false);
+  assert.equal(d.crudas.some((q) => q.includes("lunchStart")), false);
   assert.equal(mapa.get("d1")![0]!.lunchStart, undefined);
 });
 
@@ -448,7 +459,8 @@ test("lector de horarios · CON bandera y columnas, la comida llega a todas las 
   (globalThis as any)[CLAVE_COLUMNAS] = { existe: true, at: Date.now() };
   const d = dbHorarios(true);
   const mapa = await leerHorariosDeDoctores("c1", { db: d.db });
-  assert.equal(d.selects[0].lunchStart, true);
+  assert.equal("lunchStart" in d.selects[0], false, "el modelo de Prisma no la declara (A13)");
+  assert.ok(d.crudas.some((q) => q.includes('"lunchStart"') && q.includes('"clinicId" =')), "SQL crudo, con clinicId");
   assert.equal(mapa.get("d1")![0]!.lunchStart, "14:00");
 });
 
@@ -456,7 +468,7 @@ test("lector de horarios · con bandera pero SIN columnas (SQL sin pegar) no las
   (globalThis as any)[CLAVE_COLUMNAS] = { existe: false, at: Date.now() };
   const d = dbHorarios(true);
   await leerHorariosDeDoctores("c1", { db: d.db });
-  assert.equal("lunchStart" in d.selects[0], false);
+  assert.equal(d.crudas.some((q) => q.includes("lunchStart")), false);
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -522,4 +534,52 @@ test("aviso · lo que ADEMÁS hay que saber: más citas encima y que también ca
     assert.equal(typeof (es as any).agenda.flexible.sobreagendar[k], "string", `es: ${k}`);
     assert.equal(typeof (en as any).agenda.flexible.sobreagendar[k], "string", `en: ${k}`);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// REVISIÓN t8
+// ═══════════════════════════════════════════════════════════════════════
+
+test("t8 · A2 · la comida se ve aunque la cita además se salga del horario", () => {
+  // 13:00–18:30: doctorNoAtiende dice «despues» (primer motivo)…
+  assert.equal(doctorNoAtiende(HORARIOS, martes("13:00"), martes("18:30"), "d1", TZ)?.motivo, "despues");
+  // …pero la comida está pisada y el equipo tiene que confirmarla.
+  assert.deepEqual(comidaQuePisa(HORARIOS, martes("13:00"), martes("18:30"), "d1", TZ), { lunchStart: "14:00", lunchEnd: "15:00" });
+  assert.deepEqual(comidaQuePisa(HORARIOS, martes("08:30"), martes("14:30"), "d1", TZ), { lunchStart: "14:00", lunchEnd: "15:00" });
+  assert.equal(comidaQuePisa(HORARIOS, martes("15:00"), martes("19:00"), "d1", TZ), null);
+  assert.equal(comidaQuePisa(null, martes("14:00"), martes("14:30"), "d1", TZ), null, "sin bandera no hay comida");
+});
+
+test("t8 · A7 · la confirmación también cuenta cuántas citas se enseñaron", () => {
+  assert.equal(confirmacionValida({ sobreagendar: true, sobreagendarCita: "a1", choqueId: "a1", otrasEnsenadas: 1, otrasServidor: 1 }), true);
+  assert.equal(confirmacionValida({ sobreagendar: true, sobreagendarCita: "a1", choqueId: "a1", otrasEnsenadas: 0, otrasServidor: 1 }), false, "entró otra más mientras se decidía");
+  assert.equal(confirmacionValida({ sobreagendar: true, sobreagendarCita: "a1", choqueId: "a1", otrasServidor: 0 }), true, "una pantalla que no manda el número cuenta 0");
+});
+
+test("t8 · A8 · la comida solo se escribe en los días que la TRAEN en el cuerpo", () => {
+  const dias = diasQueTraenComida([
+    { dayOfWeek: 0, enabled: true, openTime: "09:00", closeTime: "18:00" },
+    { dayOfWeek: 1, enabled: true, openTime: "09:00", closeTime: "18:00", lunchStart: null, lunchEnd: null },
+    { dayOfWeek: 2, enabled: true, openTime: "09:00", closeTime: "18:00", lunchStart: "14:00", lunchEnd: "15:00" },
+  ]);
+  assert.deepEqual([...dias].sort(), [1, 2], "el lunes (sin llave) conserva la que tenga en la base");
+  assert.equal(diasQueTraenComida(null).size, 0);
+});
+
+test("t8 · A3/A13/A11 · reabrir quita la marca; las columnas de comida fuera del modelo; sin texto técnico", () => {
+  const status = leer("src/app/api/appointments/[id]/status/route.ts");
+  assert.match(status, /reabreSobreagendada\(existing\.status, body\.status, existing\.overrideReason\)\s*\?\s*\{ overrideReason: null, overriddenBy: null, overriddenAt: null \}/);
+  const schema = leer("prisma/schema.prisma");
+  const modelo = schema.slice(schema.indexOf("model DoctorSchedule {"), schema.indexOf('@@map("doctor_schedules")'));
+  assert.doesNotMatch(modelo, /^\s+lunchStart\s/m, "lunchStart no se declara en DoctorSchedule");
+  assert.doesNotMatch(modelo, /^\s+lunchEnd\s/m);
+  assert.doesNotMatch(leer("src/lib/horario-doctor/service.ts"), /salamanca-agenda\.sql; avisa/);
+  assert.match(leer("src/lib/horario-doctor/service.ts"), /La hora de comida todavía no está disponible\. Avisa a soporte\./);
+});
+
+test("t8 · A10 · el SQL de encendido tiene freno (6 slugs y un solo dueño) y documenta la herencia", () => {
+  const sql = leer("sql/salamanca-encender-agenda.sql");
+  assert.match(sql, /IF encontrados <> 6 THEN\s+[\s\S]*RAISE EXCEPTION 'Freno/);
+  assert.match(sql, /IF duenos <> 1 THEN\s+RAISE EXCEPTION 'Freno/);
+  assert.match(sql, /SEDE PRINCIPAL DE SU DUEÑO, SIEMPRE/);
 });

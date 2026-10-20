@@ -72,23 +72,19 @@ export async function leerHorariosDeDoctores(
 
   // WS1-T5 — la hora de comida solo se lee con la bandera `agenda-flexible`
   // de ESTA clínica Y con las columnas ya creadas (sql/salamanca-agenda.sql).
-  // Sin las dos cosas el `select` es el de siempre: pedir una columna que no
-  // existe daría P2022 y tumbaría a la vez el bot, la web y la agenda.
+  // 🔴 Las columnas NO están en schema.prisma (revisión t8, A13): si lo
+  // estuvieran, cualquier `findMany()` sin `select` que alguien añada mañana
+  // tumbaría la agenda, el bot y la web con P2022 hasta pegar el SQL. Se leen
+  // aparte, por SQL crudo, y solo cuando hace falta.
   const conComida = await comidaActiva(clinicId, opciones.db);
 
   try {
     const filas = await db.doctorSchedule.findMany({
       where: { clinicId, ...(ids ? { doctorId: { in: ids } } : {}) },
-      select: {
-        doctorId: true,
-        dayOfWeek: true,
-        enabled: true,
-        openTime: true,
-        closeTime: true,
-        ...(conComida ? { lunchStart: true, lunchEnd: true } : {}),
-      },
+      select: { doctorId: true, dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       orderBy: [{ doctorId: "asc" }, { dayOfWeek: "asc" }],
     });
+    const comidas = conComida && filas.length > 0 ? await leerComidas(clinicId, ids, db) : null;
     for (const f of filas) {
       const doctorId = String(f.doctorId);
       const dia: DiaHorario = {
@@ -97,9 +93,10 @@ export async function leerHorariosDeDoctores(
         openTime: String(f.openTime ?? ""),
         closeTime: String(f.closeTime ?? ""),
       };
-      if (conComida && typeof f.lunchStart === "string" && typeof f.lunchEnd === "string") {
-        dia.lunchStart = f.lunchStart;
-        dia.lunchEnd = f.lunchEnd;
+      const comida = comidas?.get(`${doctorId}|${dia.dayOfWeek}`);
+      if (comida) {
+        dia.lunchStart = comida.lunchStart;
+        dia.lunchEnd = comida.lunchEnd;
       }
       const lista = mapa.get(doctorId);
       if (lista) lista.push(dia);
@@ -141,6 +138,44 @@ export function horariosComoObjeto(
 }
 
 // ── La hora de comida (WS1-T5) ─────────────────────────────────────────
+
+/**
+ * `"doctorId|dayOfWeek"` → comida, de las filas que la tienen. Por SQL crudo
+ * (columnas fuera de schema.prisma, ver arriba), siempre con `clinicId`.
+ * Ante un error, ninguna comida: el horario se sigue leyendo como antes.
+ */
+async function leerComidas(
+  clinicId: string,
+  ids: string[] | null,
+  db: HorariosDb,
+): Promise<Map<string, { lunchStart: string; lunchEnd: string }>> {
+  const mapa = new Map<string, { lunchStart: string; lunchEnd: string }>();
+  const raw = typeof db.$queryRaw === "function" ? db.$queryRaw.bind(db) : prisma.$queryRaw.bind(prisma);
+  try {
+    const filas = (ids
+      ? await raw`
+          SELECT "doctorId", "dayOfWeek", "lunchStart", "lunchEnd" FROM "doctor_schedules"
+           WHERE "clinicId" = ${clinicId} AND "doctorId" = ANY(${ids}::text[])
+             AND "lunchStart" IS NOT NULL AND "lunchEnd" IS NOT NULL`
+      : await raw`
+          SELECT "doctorId", "dayOfWeek", "lunchStart", "lunchEnd" FROM "doctor_schedules"
+           WHERE "clinicId" = ${clinicId}
+             AND "lunchStart" IS NOT NULL AND "lunchEnd" IS NOT NULL`) as {
+      doctorId: string;
+      dayOfWeek: number;
+      lunchStart: string | null;
+      lunchEnd: string | null;
+    }[];
+    for (const f of Array.isArray(filas) ? filas : []) {
+      if (typeof f?.lunchStart === "string" && typeof f?.lunchEnd === "string") {
+        mapa.set(`${String(f.doctorId)}|${Number(f.dayOfWeek)}`, { lunchStart: f.lunchStart, lunchEnd: f.lunchEnd });
+      }
+    }
+  } catch (e) {
+    console.warn("[horario-doctor] no se pudo leer la hora de comida:", (e as { code?: string })?.code ?? e);
+  }
+  return mapa;
+}
 
 const RECORDAR_AUSENCIA_MS = 10 * 60 * 1000;
 const CLAVE_COLUMNAS = Symbol.for("dalecontrol.horarioDoctor.columnasComida");

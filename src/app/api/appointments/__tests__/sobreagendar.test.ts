@@ -50,6 +50,7 @@ beforeEach(() => {
   created = [];
   updated = [];
   auditorias = [];
+  horarioSillon = null;
   session.user.role = "RECEPTIONIST";
   // El lector de la bandera y la sonda de columnas recuerdan en `globalThis`.
   (globalThis as any)[CLAVE_FLEX] = undefined;
@@ -104,22 +105,18 @@ const prismaStub: any = {
       bandera && where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : [],
   },
   doctorSchedule: {
-    findMany: async ({ select }: any) =>
-      conComida
-        ? [
-            {
-              doctorId: "d1",
-              dayOfWeek: 1,
-              enabled: true,
-              openTime: "09:00",
-              closeTime: "18:00",
-              ...(select?.lunchStart ? { lunchStart: "14:00", lunchEnd: "15:00" } : {}),
-            },
-          ]
-        : [],
+    findMany: async () =>
+      conComida ? [{ doctorId: "d1", dayOfWeek: 1, enabled: true, openTime: "09:00", closeTime: "18:00" }] : [],
   },
-  $queryRaw: async (strings: TemplateStringsArray) =>
-    strings.join("").includes("to_regclass") ? [{ existe: true }] : [{ n: 2 }],
+  // to_regclass / information_schema / la comida por SQL crudo (revisión t8, A13).
+  $queryRaw: async (strings: TemplateStringsArray) => {
+    const sql = strings.join("");
+    if (sql.includes("to_regclass")) return [{ existe: true }];
+    if (sql.includes('"lunchStart", "lunchEnd" FROM "doctor_schedules"')) {
+      return conComida ? [{ doctorId: "d1", dayOfWeek: 1, lunchStart: "14:00", lunchEnd: "15:00" }] : [];
+    }
+    return [{ n: 2 }];
+  },
   $transaction: async (fn: any) =>
     fn({
       appointment: {
@@ -179,7 +176,9 @@ const session = {
     canSeePatient: () => true,
   },
 });
-(mock as any).module("@/lib/agenda/resource-schedule.server", { namedExports: { loadResourceSchedule: async () => null } });
+/** Horario del sillón (null = siempre abierto). */
+let horarioSillon: any = null;
+(mock as any).module("@/lib/agenda/resource-schedule.server", { namedExports: { loadResourceSchedule: async () => horarioSillon } });
 (mock as any).module("@/lib/audit", {
   namedExports: {
     logMutation: async (args: any) => {
@@ -500,4 +499,87 @@ test("quitar la marca · solo toca una cita SOBREAGENDADA de ESA clínica", asyn
   assert.deepEqual(llamadas[0].data, { overrideReason: null, overriddenBy: null, overriddenAt: null });
   await quitarMarcaDeSobreagenda(tx, "a1", "");
   assert.equal(llamadas.length, 1, "sin clínica no escribe nada");
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// REVISIÓN t8
+// ═══════════════════════════════════════════════════════════════════════
+
+test("t8 · A1 · cambiar SOLO el sillón de una sobreagendada a uno libre: 200 y la marca se queda", async () => {
+  bandera = true;
+  hayCitaDeMario();
+  existingRow = apptRow({
+    startsAt: new Date(martes("10:00")),
+    endsAt: new Date(martes("10:30")),
+    resourceId: "s1",
+    overrideReason: "Sobreagendada por el equipo",
+  });
+  const r = await patch({ startsAt: martes("10:00"), endsAt: martes("10:30"), resourceId: "s2", notifyPatient: false });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(updated[0].overrideReason, undefined, "la marca no se toca: sigue encima de Mario");
+});
+
+test("t8 · A1 · lo mismo con la bandera ya apagada", async () => {
+  hayCitaDeMario();
+  existingRow = apptRow({
+    startsAt: new Date(martes("10:00")),
+    endsAt: new Date(martes("10:30")),
+    resourceId: "s1",
+    overrideReason: "Sobreagendada por el equipo",
+  });
+  const r = await patch({ resourceId: "s2", notifyPatient: false });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(updated[0].overrideReason, undefined);
+});
+
+test("t8 · A2 · una cita que cruza la comida y además se sale del horario pide el «¿Seguro?»", async () => {
+  bandera = true;
+  conComida = true;
+  const startsAt = martes("13:00");
+  const body = { ...alta("13:00"), endsAt: martes("18:30") };
+  const r = await post(body);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, "lunch_overlap");
+  assert.deepEqual(r.body.comida, { lunchStart: "14:00", lunchEnd: "15:00" });
+  const ok = await post({ ...body, sobreagendar: true, sobreagendarCita: null });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.deepEqual(auditorias[0].after.sobreagendada.enComida, { lunchStart: "14:00", lunchEnd: "15:00" });
+  assert.match(ok.body.scheduleWarning?.message ?? "", /termina después de que salga el doctor/, "el aviso de fuera de horario se sigue dando");
+  void startsAt;
+});
+
+test("t8 · A4 · la marca de sobreagendada NO salta el horario del sillón", async () => {
+  bandera = true;
+  horarioSillon = { days: { 0: [], 1: [{ startTime: "09:00", endTime: "18:00" }], 2: [], 3: [], 4: [], 5: [], 6: [] } };
+  existingRow = apptRow({
+    startsAt: new Date(martes("10:00")),
+    endsAt: new Date(martes("10:30")),
+    resourceId: "s1",
+    overrideReason: "Sobreagendada por el equipo",
+  });
+  const r = await patch({ startsAt: martes("19:00"), endsAt: martes("19:30"), notifyPatient: false });
+  assert.equal(r.status, 422, JSON.stringify(r.body));
+  assert.equal(r.body.error, "resource_unavailable");
+});
+
+test("t8 · A7 · si entró otra cita más mientras se decidía, se vuelve a preguntar", async () => {
+  bandera = true;
+  hayCitaDeMario();
+  ocupadas.push({ ...ocupadas[0], id: "a-zeta", startsAt: martes("10:00"), endsAt: martes("10:30") });
+  const r = await post(alta("10:00", { sobreagendar: true, sobreagendarCita: "a-mario", sobreagendarOtras: 0 }));
+  assert.equal(r.status, 409);
+  assert.equal(r.body.conflictingAppointment.otras, 1);
+  const ok = await post(alta("10:00", { sobreagendar: true, sobreagendarCita: "a-mario", sobreagendarOtras: 1 }));
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+});
+
+test("t8 · A12 · `overrideReason` vacío o de espacios es «sin motivo» (POST y PATCH)", async () => {
+  hayCitaDeMario();
+  const r = await post(alta("10:00", { overrideReason: "   " }));
+  assert.equal(r.status, 409, "la constraint lo para como a cualquier otro choque");
+  assert.equal(created.length, 0);
+  existingRow = apptRow({ startsAt: new Date(martes("12:00")), endsAt: new Date(martes("12:30")) });
+  const p = await patch({ startsAt: martes("10:00"), endsAt: martes("10:30"), overrideReason: "", notifyPatient: false });
+  assert.equal(p.status, 409);
+  assert.equal(updated.length, 0);
 });

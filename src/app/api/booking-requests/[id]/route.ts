@@ -15,6 +15,7 @@ import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
 import { pickExistingPatientForBooking } from "@/lib/patients/patient-search-core";
 import {
   avisoDeHorarioDoctor,
+  comidaQuePisa,
   doctorNoAtiende,
   doctorNoAtiendeSlot,
   horarioPropio,
@@ -175,6 +176,21 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   const horarios = await leerHorariosDeDoctores(clinicId, { doctorIds: pedidos.map(d => d.id) });
   const atiende = (id: string) => !doctorNoAtiende(horarios, startsAt, endsAt, id, tz);
   let candidatos = [...pedidos.filter(d => atiende(d.id)), ...pedidos.filter(d => !atiende(d.id))];
+
+  // WS1-T5 (revisión t8, A6) — la hora de comida (solo existe con la bandera
+  // `agenda-flexible`) SÍ descarta: aceptar ahí sería agendar en la comida sin
+  // el «¿Seguro?» de la agenda. Si nadie queda, se dice por qué.
+  const comidaDe = (id: string) => comidaQuePisa(horarios, startsAt, endsAt, id, tz);
+  const enComida = candidatos.map(c => comidaDe(c.id)).find(Boolean) ?? null;
+  if (enComida) {
+    candidatos = candidatos.filter(c => !comidaDe(c.id));
+    if (candidatos.length === 0) {
+      const frase =
+        `Esa hora es la comida del doctor (de ${enComida.lunchStart} a ${enComida.lunchEnd}). ` +
+        "Ofrécele al paciente otra hora o agéndalo desde la Agenda.";
+      return NextResponse.json({ error: frase, code: "lunch_overlap", reason: frase }, { status: 409 });
+    }
+  }
 
   // WS1-T5 — con la clínica en «No» («¿Recepción puede agendar sobre un día
   // bloqueado?»), aceptar sobre un bloqueo es agendar encima: los doctores

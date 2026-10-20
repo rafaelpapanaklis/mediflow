@@ -290,6 +290,8 @@ export interface CreateAppointmentInput {
   sobreagendar?: boolean;
   /** WS1-T5 — la cita que se le enseñó a la persona (`null` = solo la comida). Ver `confirmacionValida`. */
   sobreagendarCita?: string | null;
+  /** WS1-T5 — cuántas citas MÁS se le enseñaron («Además hay N…»). */
+  sobreagendarOtras?: number;
 }
 
 export interface UpdateAppointmentInput {
@@ -305,6 +307,7 @@ export interface UpdateAppointmentInput {
   /** WS1-T5 — ver `CreateAppointmentInput.sobreagendar`. */
   sobreagendar?: boolean;
   sobreagendarCita?: string | null;
+  sobreagendarOtras?: number;
 }
 
 export interface AppointmentConflictError {

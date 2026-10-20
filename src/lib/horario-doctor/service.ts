@@ -37,6 +37,7 @@ import {
   parseSemana,
   semanaCompleta,
   semanaHeredada,
+  diasQueTraenComida,
   type AvisoRecorte,
   type DiaHorario,
 } from "./core";
@@ -176,8 +177,8 @@ async function semanaGuardable(
   const conColumnas = await columnasComidaExisten(true);
   if (!conColumnas && semana.some((d) => d.lunchStart && d.lunchEnd)) {
     throw new HorarioError(
-      "La hora de comida todavía no está activada en esta base. " +
-        "Falta aplicar sql/salamanca-agenda.sql; avisa a soporte.",
+      // (revisión t8, A11) Sin texto técnico: el detalle va en el código.
+      "La hora de comida todavía no está disponible. Avisa a soporte.",
       503,
       "SQL_PENDIENTE",
     );
@@ -212,22 +213,30 @@ export async function guardarHorario(
   const doctorId = await resolverDoctor(ctx, doctorIdRaw);
   const guardable = await semanaGuardable(clinicId, parseSemana(body?.horario));
   const semana = guardable.semana;
+  // (revisión t8, A8) La comida solo se escribe en los días que la TRAEN en
+  // el cuerpo (aunque sea vacía = quitarla). Una pantalla que no la conoce
+  // —cargada con la bandera apagada, o vieja— no la borra sin querer.
+  const diasConComida = diasQueTraenComida(body?.horario);
 
   const antes = await leerHorarioDeDoctor(clinicId, doctorId);
 
   try {
     // Un upsert por día, en UNA transacción: o se guarda la semana entera o
     // no se guarda nada. Mismo patrón que PATCH /api/settings/schedule.
-    await prisma.$transaction(
-      semana.map((d) => {
-        // WS1-T5 — la comida solo se escribe con la bandera y las columnas
-        // creadas; sin ellas el upsert es exactamente el de antes. Y el
-        // `select` mínimo: sin él Prisma devolvería TODAS las columnas del
-        // modelo, también las de la comida, y daría P2022 sin el SQL.
-        const comida = guardable.conColumnas
-          ? { lunchStart: d.lunchStart ?? null, lunchEnd: d.lunchEnd ?? null }
-          : {};
-        const dia = { enabled: d.enabled, openTime: d.openTime, closeTime: d.closeTime, ...comida };
+    // WS1-T5 — la comida va por SQL crudo DESPUÉS de su upsert y en la misma
+    // transacción (columnas fuera de schema.prisma: ver consulta.server.ts).
+    // Solo con la bandera y las columnas creadas; sin ellas, lo de antes.
+    const comidas = guardable.conColumnas
+      ? semana
+          .filter((d) => diasConComida.has(d.dayOfWeek))
+          .map((d) => prisma.$executeRaw`
+            UPDATE "doctor_schedules"
+               SET "lunchStart" = ${d.lunchStart ?? null}, "lunchEnd" = ${d.lunchEnd ?? null}
+             WHERE "clinicId" = ${clinicId} AND "doctorId" = ${doctorId} AND "dayOfWeek" = ${d.dayOfWeek}`)
+      : [];
+    await prisma.$transaction([
+      ...semana.map((d) => {
+        const dia = { enabled: d.enabled, openTime: d.openTime, closeTime: d.closeTime };
         return prisma.doctorSchedule.upsert({
           where: { doctorId_dayOfWeek: { doctorId, dayOfWeek: d.dayOfWeek } },
           // clinicId de la SESIÓN; el doctor ya se comprobó que es de ella.
@@ -236,7 +245,8 @@ export async function guardarHorario(
           select: { id: true },
         });
       }),
-    );
+      ...comidas,
+    ]);
   } catch (err) {
     throw traducirTablaAusente(err);
   }
@@ -254,8 +264,15 @@ export async function guardarHorario(
     ...meta,
   });
 
-  return respuesta(ctx, semana, guardable.comida);
+  // Si algún día no traía la comida se conservó la de la base: la respuesta
+  // la relee para no enseñar una semana distinta de la guardada.
+  const guardada =
+    guardable.comida && semana.some((d) => !diasConComida.has(d.dayOfWeek))
+      ? (await leerHorarioDeDoctor(clinicId, doctorId)) ?? semana
+      : semana;
+  return respuesta(ctx, guardada, guardable.comida);
 }
+
 
 /**
  * DELETE — borra el horario propio. El doctor vuelve a seguir el de la

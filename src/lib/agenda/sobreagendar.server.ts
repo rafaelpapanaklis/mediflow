@@ -70,7 +70,9 @@ export async function buscarChoqueDeCita(args: {
       AND: [sinApartadoVencido()],
     },
     include: { patient: { select: { firstName: true, lastName: true, visibleUserIds: true } } },
-    orderBy: { startsAt: "asc" },
+    // Orden ESTABLE (revisión t8, A7): con dos a la misma hora, la pantalla y
+    // el servidor nombran la misma.
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
     // Hasta 6: la primera se enseña con nombre y hora, el resto se cuenta.
     take: 6,
   });

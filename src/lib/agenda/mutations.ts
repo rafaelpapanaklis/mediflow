@@ -130,6 +130,8 @@ export interface RescheduleAppointmentInput {
   sobreagendar?: boolean;
   /** WS1-T5 — la cita que se enseñó en el «¿Seguro?» (`null` = solo la comida). */
   sobreagendarCita?: string | null;
+  /** WS1-T5 — cuántas citas más se enseñaron. */
+  sobreagendarOtras?: number;
 }
 
 /** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */

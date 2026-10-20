@@ -157,7 +157,7 @@ export function reschedulePayload(
    */
   notifyPatient?: boolean,
   /** WS1-T5 — tras confirmar «Sí, sobreagendar»: la cita que se enseñó (`null` = solo la comida). */
-  sobreagendar?: { citaId: string | null } | null,
+  sobreagendar?: { citaId: string | null; otras?: number } | null,
 ): RescheduleAppointmentInput {
   const currentDoctorId = plan.original.doctor?.id ?? null;
   const currentResourceId = plan.original.resourceId;
@@ -172,6 +172,7 @@ export function reschedulePayload(
   if (sobreagendar) {
     payload.sobreagendar = true;
     payload.sobreagendarCita = sobreagendar.citaId;
+    payload.sobreagendarOtras = sobreagendar.otras ?? 0;
   }
   return payload;
 }
@@ -213,7 +214,7 @@ export interface CommitRescheduleDeps {
   /** ws1-t1 (F14) — `false` = «Avisar al paciente» desmarcada. Ver `reschedulePayload`. */
   notifyPatient?: boolean;
   /** WS1-T5 — la persona confirmó sobreagendar (lo que se le enseñó). Ver `reschedulePayload`. */
-  sobreagendar?: { citaId: string | null } | null;
+  sobreagendar?: { citaId: string | null; otras?: number } | null;
 }
 
 /**

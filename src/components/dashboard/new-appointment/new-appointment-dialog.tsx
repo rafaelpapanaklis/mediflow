@@ -550,7 +550,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
           // WS1-T5 — «ya confirmé que sobreagendo». Solo tras el «¿Seguro?».
           // Con la cita que se le ENSEÑÓ: si el servidor encuentra otra, vuelve a preguntar.
-          ...(sobreagendar ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId } : {}),
+          ...(sobreagendar
+            ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId, sobreagendarOtras: sobreagendar.otras }
+            : {}),
         }),
       });
 
@@ -561,7 +563,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         // Si ya se confirmó y el servidor vuelve a preguntar es que hay OTRA
         // cita encima: se pregunta otra vez, con ésa.
         const aviso = avisoDesdeRechazo(body, { doctorId, resourceId: resourceId || null }, boot.timezone);
-        const repetido = sobreagendar && aviso && aviso.citaId === sobreagendar.citaId;
+        const repetido = sobreagendar && aviso && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras;
         if (aviso && !repetido) {
           setSobreagendaPendiente({ aviso, bloqueo: bloqueoConfirmado });
           setSubmitting(false);

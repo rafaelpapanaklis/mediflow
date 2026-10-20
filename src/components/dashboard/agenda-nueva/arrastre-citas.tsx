@@ -62,7 +62,7 @@ import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos
 import { altoDeHueco, mensajeDeRechazo, rechazoIncierto } from "@/lib/agenda-nueva/interacciones";
 import { ConfirmarMovimiento } from "./confirmar-movimiento";
 import { useHorariosFlexibles } from "./usar-agenda-flexible";
-import { doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { comidaQuePisa } from "@/lib/horario-doctor/core";
 import {
   avisoDesdeAgenda,
   avisoDesdeRechazo,
@@ -175,7 +175,7 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
   /**
    * WS1-T5 — ¿el destino cae encima de otra cita (la que la pantalla tiene
    * cargada) o en la comida del doctor? Con la MISMA función que el servidor
-   * para la comida (`doctorNoAtiende`). `null` sin bandera o con el hueco libre:
+   * para la comida (`comidaQuePisa`). `null` sin bandera o con el hueco libre:
    * entonces la ventana de mover sale exactamente como antes.
    */
   const sobreagendaDelDestino = useMemo<AvisoSobreagenda | null>(() => {
@@ -190,14 +190,15 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     // se las salta porque la constraint no las ve; aquí sí cuentan).
     const encima = doctorId ? choquesEnPantalla(pendiente, doctorId, state.appointments) : [];
     const choque = encima[0] ?? null;
-    const fuera = doctorNoAtiende(
+    // La comida aunque además se salga del horario (revisión t8, A2): la
+    // misma `comidaQuePisa` que el servidor.
+    const comida = comidaQuePisa(
       horariosFlexibles,
       new Date(pendiente.newStartsAt),
       new Date(pendiente.newEndsAt),
       doctorId,
       state.timezone,
     );
-    const comida = fuera?.motivo === "comida" ? fuera : null;
     // Sin nada que enseñar se manda sin `sobreagendar`: si el servidor ve un
     // choque, contesta 409 con la cita y ESA es la que se pregunta.
     if (!choque && !comida) return null;
@@ -328,7 +329,9 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
         ...aviso,
         // WS1-T5 — solo si la ventana enseñaba el «¿Seguro?» de sobreagendar,
         // con la cita que enseñaba (el servidor no acepta otra).
-        sobreagendar: sobreagendaDelDestino ? { citaId: sobreagendaDelDestino.citaId } : null,
+        sobreagendar: sobreagendaDelDestino
+          ? { citaId: sobreagendaDelDestino.citaId, otras: sobreagendaDelDestino.otras }
+          : null,
       });
       // WS1-T5 — el servidor vio un choque que la pantalla no tenía cargado:
       // la cita ya volvió a su sitio; la misma ventana pregunta «¿Seguro?».
@@ -344,7 +347,10 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
       // que preguntar (se cuenta como rechazo). Con otra cita, se pregunta.
       const yaConfirmado = sobreagendaDelDestino;
       const avisoNuevo =
-        avisoRecibido && !(yaConfirmado && avisoRecibido.citaId === yaConfirmado.citaId) ? avisoRecibido : null;
+        avisoRecibido &&
+        !(yaConfirmado && avisoRecibido.citaId === yaConfirmado.citaId && avisoRecibido.otras <= yaConfirmado.otras)
+          ? avisoRecibido
+          : null;
       if (avisoNuevo) {
         setAvisoServidor(avisoNuevo);
         return;
@@ -456,5 +462,6 @@ function choquesEnPantalla(
       if (!(ini < hasta && fin > desde)) return false;
       return c.doctor?.id === doctorId || (!!plan.newResourceId && c.resourceId === plan.newResourceId);
     })
-    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    // Mismo orden que el servidor: hora y, a la misma hora, id.
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

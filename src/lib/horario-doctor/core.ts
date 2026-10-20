@@ -232,19 +232,7 @@ export function doctorNoAtiende(
     return { motivo: "dia_libre", dayOfWeek, openTime: null, closeTime: null };
   }
 
-  const s = getTzParts(inicio, timeZone);
-  const e = getTzParts(fin, timeZone);
-  // Intl a veces escribe la medianoche como "24": es la hora 0.
-  const inicioMin = (s.hour === 24 ? 0 : s.hour) * 60 + s.minute;
-  const mismoDia = s.year === e.year && s.month === e.month && s.day === e.day;
-  const finMin = mismoDia
-    ? (e.hour === 24 ? 0 : e.hour) * 60 + e.minute
-    // Otro día calendario: termina a medianoche (1440, «hasta el final del
-    // día») o cruza al día siguiente — y entonces se sale de cualquier
-    // horario, porque ninguno pasa de 24:00.
-    : (e.hour === 0 || e.hour === 24) && e.minute === 0
-      ? 24 * 60
-      : 24 * 60 + 1;
+  const { inicioMin, finMin } = minutosDelHueco(inicio, fin, timeZone);
 
   const openTime = horaDeMinutos(ventana.abre);
   const closeTime = horaDeMinutos(ventana.cierra);
@@ -317,6 +305,50 @@ export function comidaDelDoctorEnFecha(
   const filas = horarioPropio(horarios, doctorId);
   if (!filas) return null;
   return comidaDelDoctor(filas, scheduleDayOfISO(dayISO, timeZone));
+}
+
+/** `[inicio, fin)` en minutos de pared del día de `inicio`, en la zona de la clínica. */
+function minutosDelHueco(inicio: Date, fin: Date, timeZone: string): { inicioMin: number; finMin: number } {
+  const s = getTzParts(inicio, timeZone);
+  const e = getTzParts(fin, timeZone);
+  // Intl a veces escribe la medianoche como "24": es la hora 0.
+  const inicioMin = (s.hour === 24 ? 0 : s.hour) * 60 + s.minute;
+  const mismoDia = s.year === e.year && s.month === e.month && s.day === e.day;
+  const finMin = mismoDia
+    ? (e.hour === 24 ? 0 : e.hour) * 60 + e.minute
+    // Otro día calendario: termina a medianoche (1440, «hasta el final del
+    // día») o cruza al día siguiente — y entonces se sale de cualquier
+    // horario, porque ninguno pasa de 24:00.
+    : (e.hour === 0 || e.hour === 24) && e.minute === 0
+      ? 24 * 60
+      : 24 * 60 + 1;
+  return { inicioMin, finMin };
+}
+
+/**
+ * WS1-T5 — LA COMIDA QUE PISA `[inicio, fin)`, aunque además el hueco se
+ * salga del horario del doctor. `doctorNoAtiende` contesta UN motivo (el
+ * primero: «antes», «después»…), y para las puertas sin nadie mirando basta;
+ * pero el equipo sí puede agendar fuera de horario (con aviso), y una cita de
+ * 13:00 a 18:30 que cruza la comida tiene que pedir el «¿Seguro?» igual.
+ * `null` = no pisa ninguna comida (o el doctor no tiene horario propio).
+ */
+export function comidaQuePisa(
+  horarios: HorariosDeDoctores | null | undefined,
+  inicio: Date,
+  fin: Date,
+  doctorId: string | null | undefined,
+  timeZone: string,
+): { lunchStart: string; lunchEnd: string } | null {
+  const filas = horarioPropio(horarios, doctorId);
+  if (!filas) return null;
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) return null;
+  const fila = filas.find((f) => f.dayOfWeek === scheduleDayOf(inicio, timeZone));
+  const comida = comidaDeFila(fila, ventanaDeFila(fila));
+  if (!comida) return null;
+  const { inicioMin, finMin } = minutosDelHueco(inicio, fin, timeZone);
+  if (!(inicioMin < comida.cierra && finMin > comida.abre)) return null;
+  return { lunchStart: horaDeMinutos(comida.abre), lunchEnd: horaDeMinutos(comida.cierra) };
 }
 
 /**
@@ -607,6 +639,23 @@ function parseComida(
     );
   }
   return { lunchStart: raw.lunchStart, lunchEnd: raw.lunchEnd };
+}
+
+/**
+ * Los días (0–6) cuyo objeto del PUT TRAE `lunchStart` o `lunchEnd` (aunque
+ * sea vacío = quitar la comida). Solo en ésos se escribe la comida (revisión
+ * t8, A8): una pantalla que no la conoce no la borra sin querer.
+ */
+export function diasQueTraenComida(raw: unknown): Set<number> {
+  const out = new Set<number>();
+  if (!Array.isArray(raw)) return out;
+  for (const item of raw) {
+    if (item && typeof item === "object" && ("lunchStart" in item || "lunchEnd" in item)) {
+      const d = (item as { dayOfWeek?: unknown }).dayOfWeek;
+      if (typeof d === "number") out.add(d);
+    }
+  }
+  return out;
 }
 
 /**

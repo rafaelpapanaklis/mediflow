@@ -31,6 +31,7 @@ export interface BanderasDb {
 }
 
 const TTL_CLINICA_MS = 60_000;
+const TTL_FALLO_SIN_PREVIA_MS = 5_000;
 const RECORDAR_SIN_TABLA_MS = 10 * 60_000;
 const MAX_CLINICAS = 5000;
 
@@ -103,6 +104,7 @@ export async function leerAgendaFlexible(
 
   const db = prisma as unknown as BanderasDb;
   let valor: AjustesAgendaFlexible = AGENDA_FLEXIBLE_APAGADA;
+  let ttl = TTL_CLINICA_MS;
   try {
     if (!m.tabla || (!m.tabla.existe && ahora - m.tabla.at >= RECORDAR_SIN_TABLA_MS)) {
       m.tabla = { existe: await tablaExiste(db), at: ahora };
@@ -111,13 +113,17 @@ export async function leerAgendaFlexible(
   } catch (err) {
     // Falla cerrado: lo último que se supo, o apagada.
     valor = previa?.valor ?? AGENDA_FLEXIBLE_APAGADA;
+    // (revisión t8, A9) Sin respuesta previa, el «apagada» de un fallo NO se
+    // recuerda 60 s (dejaría la comida abierta al bot y a la web): unos
+    // segundos, y se vuelve a preguntar.
+    if (!previa) ttl = TTL_FALLO_SIN_PREVIA_MS;
     console.warn("[agenda-flexible] no se pudo leer la bandera; se usa", valor, (err as { code?: string })?.code ?? err);
   }
   if (m.clinicas.size >= MAX_CLINICAS && !m.clinicas.has(clinicId)) {
     const vieja = m.clinicas.keys().next();
     if (!vieja.done) m.clinicas.delete(vieja.value);
   }
-  m.clinicas.set(clinicId, { valor, hasta: ahora + TTL_CLINICA_MS });
+  m.clinicas.set(clinicId, { valor, hasta: ahora + ttl });
   return valor;
 }
 

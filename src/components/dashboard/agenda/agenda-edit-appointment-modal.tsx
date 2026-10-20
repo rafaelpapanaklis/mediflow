@@ -308,7 +308,9 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
         // ws1-t1 (F14): solo `notifyPatient: false`, y solo si la casilla se ofreció y la desmarcaron.
         ...campoDelAviso(avisoClinica, cambiaLaHoraDeLaCita(appt.startsAt, startsAtIso), avisar),
         // WS1-T5 — solo tras «Sí, sobreagendar».
-        ...(sobreagendar ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId } : {}),
+        ...(sobreagendar
+          ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId, sobreagendarOtras: sobreagendar.otras }
+          : {}),
       });
       if (prestado) prestado.onGuardada(updated);
       else agenda!.dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
@@ -322,7 +324,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       // ahí mismo (nada se guardó) en vez de pedir el motivo de administración.
       // Ya confirmado y el servidor vuelve a preguntar = hay OTRA cita encima: se pregunta con ésa.
       const aviso = avisoDesdeRechazo(e, { doctorId: form.doctorId, resourceId: form.resourceId || null }, state.timezone);
-      if (aviso && !(sobreagendar && aviso.citaId === sobreagendar.citaId)) {
+      if (aviso && !(sobreagendar && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras)) {
         setSobreagendaPendiente({ aviso, bloqueo: bloqueoConfirmado });
       } else if (e?.error === "appointment_overlap") {
         setConflict({
