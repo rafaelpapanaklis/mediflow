@@ -14,6 +14,7 @@ import type { PendienteAdminDTO } from "@/lib/billing/spei-directo";
 import {
   AvisoFacturaTarjeta,
   avisarSiSeMarcoLaFacturaTarjeta,
+  datosDelAviso,
   fallóElMarcadoDeLaFacturaTarjeta,
   type AvisoFacturaTarjetaDatos,
 } from "./aviso-factura-tarjeta";
@@ -29,6 +30,23 @@ import {
  * verá. Una vez resuelta, la fila desaparece de aquí; el cobro queda en la
  * pestaña «Todos los pagos» y la bitácora de la clínica.
  */
+/**
+ * Lo que pasa con la tarjeta al confirmar (decisión de Rafael):
+ *  · Si la clínica ya estaba SUSPENDIDA, los meses sin servicio no se deben: sus facturas se anulan, el acceso son 30 días
+ *    desde el momento de confirmar y el siguiente cobro de la tarjeta cae al terminar lo pagado (ciclo re-alineado exacto).
+ *  · Si estaba al corriente (o dentro de las 24 h de gracia), la factura abierta del mes queda pagada fuera de Stripe y el
+ *    ciclo NO se mueve: con un mes, la tarjeta se cobra en su fecha de siempre; con un año, el cobro se pausa hasta el
+ *    ciclo más cercano al fin de lo pagado (la fecha exacta puede diferir unos días).
+ * La suscripción nunca se cancela.
+ */
+export function textoTarjetaViva(anual: boolean): string {
+  const base = " Tiene una suscripción de TARJETA viva en Stripe: la suscripción NO se cancela.";
+  const suspendida = " Si ya estaba suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan, el acceso corre desde este momento y la tarjeta se vuelve a cobrar al terminar lo pagado.";
+  return anual
+    ? `${base}${suspendida} Si estaba al corriente, como paga un año el cobro de la tarjeta se PAUSA hasta que termine lo prepagado (al ciclo más cercano; la fecha exacta puede diferir unos días) y después Stripe vuelve a cobrar solo.`
+    : `${base}${suspendida} Si estaba al corriente, su factura del mes queda pagada fuera de Stripe y la tarjeta se cobra en su fecha de siempre.`;
+}
+
 export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -53,7 +71,7 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
       if (!res.ok) throw new Error(data.error ?? "No se pudo completar");
       if (accion === "confirmar") {
         const fila = filas.find((f) => f.id === id);
-        if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta({ clinicId: data.clinicId ?? fila?.clinicId ?? "", clinicName: fila?.clinicName });
+        if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta(datosDelAviso(data, data.clinicId ?? fila?.clinicId ?? "", fila?.clinicName));
         else avisarSiSeMarcoLaFacturaTarjeta(data);
       }
       setFilas((prev) => prev.filter((f) => f.id !== id));
@@ -75,7 +93,7 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
         `Confirma solo si ya ves ${centavosAMxn(f.amountCents)} MXN de ${f.clinicName} en tu banco ` +
         `(referencia ${f.reference}). Se activará su plan ${f.plan} por ${periodo}.` +
         (f.clinicaYaActiva ? " OJO: esta clínica ya está activa; se sumará otro periodo (verifica que no sea un doble pago)." : "") +
-        (f.suscripcionTarjetaViva ? " Tiene una suscripción de TARJETA viva en Stripe: al confirmar, su factura abierta del plan queda pagada fuera de Stripe (la suscripción NO se cancela y el mes siguiente se cobra la tarjeta como siempre)." : ""),
+        (f.suscripcionTarjetaViva ? textoTarjetaViva(f.billing === "annual") : ""),
       confirmText: "Confirmar pago",
     });
     if (!ok) return;

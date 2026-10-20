@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { MENSAJE_PLAN_PREPAGADO, cobroPausado } from "@/lib/billing/cobro-rechazado";
 import { bloqueoDeSedesParaPlan, leerGrupoDePago, sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
@@ -497,6 +498,12 @@ export async function POST(req: NextRequest) {
       },
       { status: 409 },
     );
+  }
+
+  // Meses prepagados (cobro pausado): con la pausa en `void` Stripe anularía la factura del prorrateo y el plan nuevo
+  // quedaría aplicado sin cobrarse. Se bloquea en autoservicio hasta resolverlo con soporte (décima vuelta de t4, V2).
+  if (cobroPausado(sub)) {
+    return NextResponse.json({ code: "PLAN_PREPAGADO", error: MENSAJE_PLAN_PREPAGADO }, { status: 409 });
   }
 
   const item = sub.items.data[0];

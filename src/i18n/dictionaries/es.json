@@ -1542,7 +1542,8 @@
       "viewReceipt": "Ver el recibo",
       "statusPaymentFailed": "Pago rechazado",
       "paymentFailedTitle": "No pudimos cobrar tu plan",
-      "paymentFailedNotice": "Tu acceso se suspende el {fecha}: actualiza tu tarjeta o paga ahora para no perderlo. Tus datos están completos y a salvo."
+      "paymentFailedNotice": "Tu acceso se suspende el {fecha}: actualiza tu tarjeta o paga ahora para no perderlo. Tus datos están completos y a salvo.",
+      "paidUntil": "Pagado hasta {fecha}"
     },
     "onboardingChecklist": {
       "title": "Primeros pasos",

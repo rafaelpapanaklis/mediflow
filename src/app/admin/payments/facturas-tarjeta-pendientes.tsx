@@ -21,7 +21,12 @@ export interface FacturaTarjetaPendienteDTO {
   clinicId: string;
   clinicName: string;
   pagoManualEn: string;
+  /** Facturas del ciclo del pago que siguen abiertas (el marcado falló): se pueden reintentar. */
   facturas: string[];
+  /** De ellas, las de meses sin servicio (suspendida) que faltan por anular: no se deben. */
+  suspendidas?: string[];
+  /** El prepago de varios meses no tiene (o no llega) la pausa del cobro de la tarjeta: fecha en que debería reanudarse. */
+  pausaPendiente?: string | null;
 }
 
 export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPendienteDTO[] }) {
@@ -71,21 +76,26 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
           <AlertTriangle size={16} aria-hidden /> {TITULO_FACTURAS_TARJETA_PENDIENTES} ({filas.length})
         </div>
         <p style={{ margin: "4px 0 10px", fontSize: 12.5, color: "var(--text-2)" }}>
-          Stripe podría reintentar el cobro de la tarjeta. Reintenta, o márcala a mano en Stripe; el cron diario también lo intenta.
+          Stripe podría reintentar (o cobrar) la tarjeta. Reintenta, o hazlo a mano en Stripe; el cron diario también lo intenta. Los meses en que estuvo suspendida no se deben: sus facturas se anulan, no se cobran.
         </p>
         <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
           {filas.map((f) => (
             <li key={f.clinicId} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, fontSize: 13 }}>
               <strong>{f.clinicName}</strong>
               <span style={{ color: "var(--text-3)" }}>
-                pagó a mano {fechaHoraAdmin(f.pagoManualEn) ?? ""} · {f.facturas.length === 1 ? "factura" : "facturas"} {f.facturas.join(", ")}
+                pagó a mano {fechaHoraAdmin(f.pagoManualEn) ?? ""}
+                {f.facturas.length > 0 ? ` · ${f.facturas.length === 1 ? "factura abierta" : "facturas abiertas"} del ciclo ${f.facturas.join(", ")}` : ""}
+                {f.pausaPendiente ? ` · falta pausar el cobro de la tarjeta hasta ${fechaHoraAdmin(f.pausaPendiente) ?? ""}` : ""}
+                {(f.suspendidas ?? []).length > 0 ? ` · por anular (meses sin servicio): ${(f.suspendidas ?? []).join(", ")}` : ""}
               </span>
-              <span style={{ marginLeft: "auto" }}>
-                <ButtonNew size="sm" variant="primary" onClick={() => reintentar(f)} disabled={cargando === f.clinicId}>
-                  {cargando === f.clinicId ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-                  Reintentar
-                </ButtonNew>
-              </span>
+              {(f.facturas.length > 0 || f.pausaPendiente) && (
+                <span style={{ marginLeft: "auto" }}>
+                  <ButtonNew size="sm" variant="primary" onClick={() => reintentar(f)} disabled={cargando === f.clinicId}>
+                    {cargando === f.clinicId ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+                    Reintentar
+                  </ButtonNew>
+                </span>
+              )}
             </li>
           ))}
         </ul>

@@ -604,11 +604,19 @@ test("ningún camino de renovación crea sesiones: `subscriptions.update` solo e
   // (`billing_cycle_anchor: "now"`, sin prorrateo). No crea sesiones ni otra suscripción. No hay helper en
   // stripe-subscriptions.ts para cambiar de plan (solo pausar/reanudar), y change-plan lo hace inline; el
   // IVA y los descuentos de ese update salen de `ivaParaPagoDeClinica` y de `descuentosParaSubir`, no a mano.
+  // ws1-t1 (cobro rechazado, Q1): factura-fuera-de-stripe.server.ts SOLO pide `pause_collection` (behavior "void" +
+  // resumes_at) cuando un pago manual cubre varios meses: la tarjeta no se cobra hasta que termine lo prepagado.
+  // El mismo mecanismo que `pauseSubscription` de stripe-subscriptions.ts. Sin precio, sin tasa, sin sesión.
+  // ws1-t1 (octava vuelta): reactivacion-tras-suspension.server.ts re-alinea el ciclo de una clínica que pagó tras una
+  // suspensión: `pause_collection` + `billing_cycle_anchor: "now"` + `proration_behavior: "none"` en la MISMA llamada (la
+  // factura que Stripe emite al reiniciar el ancla nace con el cobro pausado y se anula: sin doble cobro).
   assert.deepEqual(con, [
     "src/app/actions/admin/toggle-clinic-module.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/marketplace/module-cancel/route.ts",
+    "src/lib/billing/factura-fuera-de-stripe.server.ts",
     "src/lib/billing/pago-pendiente.server.ts",
+    "src/lib/billing/reactivacion-tras-suspension.server.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
 });

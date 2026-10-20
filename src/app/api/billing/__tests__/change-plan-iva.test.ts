@@ -29,7 +29,7 @@ let llamadasTarjeta: { prices: any[]; updates: any[] };
 let auditorias: any[];
 let clinica: any;
 // Fallos de Stripe programables (ws1-t2, textos de la clínica): todo vuelve a null en cada prueba.
-let fallas: { sinStripe?: boolean; sesion?: Error; sesionSinUrl?: boolean; retrieve?: Error; estadoSub?: string; sinItems?: boolean; update?: Error };
+let fallas: { sinStripe?: boolean; sesion?: Error; sesionSinUrl?: boolean; retrieve?: Error; estadoSub?: string; sinItems?: boolean; update?: Error; pausa?: boolean };
 
 const PLANES: Record<string, any> = {
   BASIC: { id: "BASIC", name: "Básico", priceMxn: 419, priceMxnMonthly: 419, priceMxnAnnual: 3264 },
@@ -55,6 +55,7 @@ const stripeDoble: any = {
       return {
         status: fallas.estadoSub ?? "active",
         metadata: {},
+        ...(fallas.pausa ? { pause_collection: { behavior: "void", resumes_at: Math.floor((Date.now() + 60 * 86_400_000) / 1000) } } : {}),
         items: { data: fallas.sinItems ? [] : [{ id: "si_1", price: { unit_amount: 41900, currency: "mxn", recurring: { interval: "month" } } }] },
       };
     },
@@ -315,4 +316,41 @@ test("integración #425: al cambiar de plan por decisión propia se limpian las 
   assert.equal(clinica.planOverrideFor, null);
   assert.equal(clinica.priceMxnMonthlyOverride, null);
   assert.equal(clinica.maxUsersOverride, null);
+});
+
+/* ── Décima vuelta de t4 (V2): cambiar de plan con meses prepagados (cobro pausado) no puede salir gratis ── */
+
+test("V2 change-plan con el cobro de la tarjeta PAUSADO (meses prepagados): se bloquea con un texto claro, sin tocar la suscripción ni crear precios", async () => {
+  const { MENSAJE_PLAN_PREPAGADO } = await import("@/lib/billing/cobro-rechazado");
+  for (const body of [{ plan: "PRO" }, { plan: "CLINIC" }, { plan: "BASIC" }]) {
+    clinica.stripeSubscriptionId = "sub_pausada";
+    clinica.plan = body.plan === "BASIC" ? "PRO" : "BASIC"; // subir y bajar
+    fallas.pausa = true;
+    llamadasTarjeta = { prices: [], updates: [] };
+    const { res, json } = await subir(body);
+    assert.equal(res.status, 409, JSON.stringify(body));
+    assert.equal(json.code, "PLAN_PREPAGADO");
+    assert.equal(json.error, MENSAJE_PLAN_PREPAGADO);
+    assert.equal(llamadasTarjeta.updates.length, 0, "la suscripción no se toca: el prorrateo no se anula por la pausa");
+    assert.equal(llamadasTarjeta.prices.length, 0);
+    assert.equal(sesiones.length, 0);
+    assert.equal(clinica.plan, body.plan === "BASIC" ? "PRO" : "BASIC", "el plan local no cambia");
+  }
+  // Lo que lee la clínica: español, sin nombrar al proveedor de pagos.
+  assert.doesNotMatch(MENSAJE_PLAN_PREPAGADO, /stripe/i);
+  assert.match(MENSAJE_PLAN_PREPAGADO, /Tienes meses pagados por adelantado/);
+});
+
+test("V2 la vista previa del cambio de plan también se bloquea con la pausa, y sin pausa sigue igual", async () => {
+  const { MENSAJE_PLAN_PREPAGADO } = await import("@/lib/billing/cobro-rechazado");
+  clinica.stripeSubscriptionId = "sub_pausada";
+  fallas.pausa = true;
+  const res = await pedir(PREVIEW, { plan: "PRO" });
+  assert.equal(res.status, 409);
+  const json = (await res.json()) as any;
+  assert.equal(json.code, "PLAN_PREPAGADO");
+  assert.equal(json.error, MENSAJE_PLAN_PREPAGADO);
+  fallas.pausa = false;
+  const normal = await pedir(PREVIEW, { plan: "PRO" });
+  assert.notEqual(((await normal.json()) as any).code, "PLAN_PREPAGADO");
 });

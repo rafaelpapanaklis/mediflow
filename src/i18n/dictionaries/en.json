@@ -1542,7 +1542,8 @@
       "viewReceipt": "View the receipt",
       "statusPaymentFailed": "Payment declined",
       "paymentFailedTitle": "We couldn't charge your plan",
-      "paymentFailedNotice": "Your access will be suspended on {fecha}: update your card or pay now to keep it. Your data is complete and safe."
+      "paymentFailedNotice": "Your access will be suspended on {fecha}: update your card or pay now to keep it. Your data is complete and safe.",
+      "paidUntil": "Paid through {fecha}"
     },
     "onboardingChecklist": {
       "title": "First steps",

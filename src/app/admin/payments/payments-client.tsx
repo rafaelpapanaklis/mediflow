@@ -1,5 +1,6 @@
 "use client";
 
+import { NOTA_SERVICIO_SUSPENDIDO } from "@/lib/billing/cobro-rechazado";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import { esActivacionManual, esRastroDePagoUnicoStripe, rotuloDeFilaSinCobro } f
 import {
   AvisoFacturaTarjeta,
   avisarSiSeMarcoLaFacturaTarjeta,
+  datosDelAviso,
   fallóElMarcadoDeLaFacturaTarjeta,
   type AvisoFacturaTarjetaDatos,
 } from "./aviso-factura-tarjeta";
@@ -40,7 +42,7 @@ function methodBadge(method: string | null | undefined, fila?: { reference?: str
   return m ? `${m.icon} ${m.label}` : method ?? "\u2014";
 }
 
-function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null; reference?: string | null }) {
+function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null; reference?: string | null; notes?: string | null }) {
   // Una fila de $0 que es solo un rastro (activación manual de /admin, o el SPEI/OXXO que cobró Stripe) se VE, pero no
   // es un cobro: se rotula distinto de «Pagado».
   const rotulo = rotuloDeFilaSinCobro(fila);
@@ -48,6 +50,8 @@ function statusBadge(status: string, fila?: { method?: string | null; amount?: n
   if (status === "paid")    return <BadgeNew tone="success" dot>Pagado</BadgeNew>;
   if (status === "pending") return <BadgeNew tone="warning" dot>Pendiente</BadgeNew>;
   if (status === "failed")  return <BadgeNew tone="danger"  dot>Fallido</BadgeNew>;
+  // Anulada en Stripe: o se pagó fuera de Stripe, o fue un mes sin servicio (suspendida) que no se cobra ni se debe.
+  if (status === "void")    return <BadgeNew tone="neutral" dot>{fila?.notes?.startsWith(NOTA_SERVICIO_SUSPENDIDO) ? NOTA_SERVICIO_SUSPENDIDO : "Anulada"}</BadgeNew>;
   return <BadgeNew tone="neutral" dot>{status}</BadgeNew>;
 }
 
@@ -197,7 +201,7 @@ export function PaymentsClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Error al verificar");
       const fila = pending.find((p: any) => p.id === invoiceId);
-      if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta({ clinicId: fila?.clinicId ?? fila?.clinic?.id, clinicName: fila?.clinic?.name });
+      if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta(datosDelAviso(data, fila?.clinicId ?? fila?.clinic?.id, fila?.clinic?.name));
       else avisarSiSeMarcoLaFacturaTarjeta(data);
       setPending(prev => prev.filter((p: any) => p.id !== invoiceId));
       setPayments(prev =>
@@ -245,7 +249,7 @@ export function PaymentsClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Error al activar");
       if (fallóElMarcadoDeLaFacturaTarjeta(data)) {
-        setAvisoTarjeta({ clinicId, clinicName: overdue.find((c: any) => c.id === clinicId)?.name });
+        setAvisoTarjeta(datosDelAviso(data, clinicId, overdue.find((c: any) => c.id === clinicId)?.name));
       } else avisarSiSeMarcoLaFacturaTarjeta(data);
       setOverdue(prev => prev.filter((c: any) => c.id !== clinicId));
       setActivateClinicId(null);
@@ -323,7 +327,7 @@ export function PaymentsClient({
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const { facturaTarjeta, ...inv } = await res.json();
-      if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta({ clinicId: form.clinicId, clinicName: inv.clinic?.name });
+      if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta(datosDelAviso({ facturaTarjeta }, form.clinicId, inv.clinic?.name));
       else avisarSiSeMarcoLaFacturaTarjeta({ facturaTarjeta });
       setPayments(prev => [inv, ...prev]);
       setShowNewPayment(false);
