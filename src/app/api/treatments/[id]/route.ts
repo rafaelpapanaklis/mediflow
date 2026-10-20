@@ -10,6 +10,7 @@ import { consumeRecipeForSession } from "@/lib/inventory/recipe.server";
 import { aPesos, conProcedimientosValidos, filaDto, leerFilas, planearCambios, totalCentavos, type FilaDelPlan, type FilaEntrante } from "@/lib/treatments/items";
 import { bloquearPlan, FilaError, procedimientosDeLaClinica, repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
 import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
+import { asegurarNotaDelPlan } from "@/lib/treatments/cobro.server";
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -274,6 +275,18 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data });
   }
 
+  // Un plan ya aceptado que crece: la fila nueva va a su nota de cobro (si la nota sigue por cobrar
+  // la recibe; si ya está pagada, nace una nota adicional del plan). Sin tumbar el guardado.
+  let notaDelPlan: Awaited<ReturnType<typeof asegurarNotaDelPlan>> | { estado: "error" } | null = null;
+  if (entrantes) {
+    try {
+      notaDelPlan = await asegurarNotaDelPlan({ clinicId: ctx.clinicId, planId: params.id, userId: ctx.userId, origen: "plan_crece", soloSiAceptado: true });
+    } catch (e) {
+      console.error("[plan:editar] no se pudo actualizar la nota de cobro del plan:", e);
+      notaDelPlan = { estado: "error" };
+    }
+  }
+
   // NOM-024 §6.3.5 — bitácora: edición general del plan (solo campos cambiados).
   await logMutation({
     req,
@@ -295,7 +308,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   revalidateAfter("treatments");
   return NextResponse.json({
     success: true,
-    ...(entrantes ? { items: filasDespues.map(filaDto) } : {}),
+    ...(entrantes ? { items: filasDespues.map(filaDto), notaDelPlan } : {}),
   });
 }
 

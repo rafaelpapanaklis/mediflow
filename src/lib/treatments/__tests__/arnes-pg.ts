@@ -36,7 +36,7 @@ export const DDL_BASE = `
   CREATE TYPE "InvoiceStatus" AS ENUM ('DRAFT','PENDING','PARTIAL','PAID','OVERDUE','CANCELLED');
   CREATE TYPE "TreatmentStatus" AS ENUM ('ACTIVE','COMPLETED','ABANDONED','PAUSED');
   CREATE TABLE "clinics" ("id" text PRIMARY KEY, "name" text, "cfdiTaxMode" text, "timezone" text, "locale" text);
-  CREATE TABLE "users" ("id" text PRIMARY KEY, "clinicId" text, "role" text, "firstName" text, "lastName" text);
+  CREATE TABLE "users" ("id" text PRIMARY KEY, "clinicId" text, "role" text, "firstName" text, "lastName" text, "isActive" boolean NOT NULL DEFAULT true, "agendaActive" boolean NOT NULL DEFAULT true);
   CREATE TABLE "patients" ("id" text PRIMARY KEY, "clinicId" text NOT NULL, "firstName" text, "lastName" text, "primaryDoctorId" text);
   CREATE TABLE "appointments" ("id" text PRIMARY KEY, "clinicId" text);
   CREATE TABLE "procedure_catalog" ("id" text PRIMARY KEY, "clinicId" text NOT NULL, "name" text NOT NULL, "basePrice" float8 NOT NULL DEFAULT 0, "isActive" boolean NOT NULL DEFAULT true);
@@ -99,7 +99,7 @@ export async function crearBase(PGlite: new () => any, opciones: { conSqlDelPlan
   await db.exec(DDL_BASE);
   for (const c of ["c1", "c2"]) {
     await db.query(`INSERT INTO "clinics" ("id", "name", "cfdiTaxMode") VALUES ($1, $1, NULL)`, [c]);
-    await db.query(`INSERT INTO "users" VALUES ($1, $2, 'DOCTOR', 'Doc', $2)`, [`doc-${c}`, c]);
+    await db.query(`INSERT INTO "users" ("id", "clinicId", "role", "firstName", "lastName") VALUES ($1, $2, 'DOCTOR', 'Doc', $2)`, [`doc-${c}`, c]);
     await db.query(`INSERT INTO "patients" VALUES ($1, $2, 'Ana', 'López', NULL)`, [`pac-${c}`, c]);
   }
   if (opciones.conAceptacion) {
@@ -222,7 +222,10 @@ export function prismaDePrueba(db: any, conn: any = db): any {
         return out;
       },
       async create(a: any) {
-        const { items, ...data } = a.data;
+        const anidados = tabla === "quotes" ? a.data.items : undefined;
+        const { items: _i, ...resto } = a.data;
+        const data = tabla === "quotes" ? resto : a.data;
+        const items = anidados;
         const fila: Record<string, unknown> = { id: data.id ?? randomUUID(), ...data };
         const cols = Object.keys(fila).filter((k) => fila[k] !== undefined);
         const vals = cols.map((k) => valor(k, fila[k]));
@@ -246,7 +249,9 @@ export function prismaDePrueba(db: any, conn: any = db): any {
         return { count: r.affectedRows ?? 0 };
       },
       async update(a: any) {
-        const { items, ...data } = a.data;
+        const items = tabla === "quotes" ? a.data.items : undefined;
+        const { items: _i, ...resto } = a.data;
+        const data = tabla === "quotes" ? resto : a.data;
         await this.updateMany({ where: a.where, data });
         const fila = await this.findFirst({ where: a.where });
         if (tabla === "quotes" && items?.create) {

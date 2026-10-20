@@ -14,6 +14,7 @@ import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db"
 import { doctorDelPlan, FRASE_ELEGIR_DOCTOR_DEL_PLAN } from "@/lib/quotes/doctor-del-plan";
 import { filasDesdeConceptos } from "@/lib/treatments/desde-presupuesto";
 import { repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
+import { asegurarNotaDelPlan } from "@/lib/treatments/cobro.server";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,9 @@ interface Params { params: Promise<{ id: string }> }
  * pide elegir y reenvía con `{ doctorId }`.
  *
  * ws1-t12 · P4: con la tabla de filas, el plan nace CON SUS FILAS (una por concepto aceptado, con su
- * precio y su liga al concepto), no con un texto «Generado desde presupuesto…» sin detalle.
+ * precio y su liga al concepto), no con un texto «Generado desde presupuesto…» sin detalle. Y como lo
+ * aceptado es el plan aceptado, nace también su nota de cobro con lo que el presupuesto todavía no
+ * cobró (cobro.server.ts; lo ya cobrado por «Se cobrará hoy» solo se liga, no se cobra otra vez).
  */
 export async function POST(req: NextRequest, props: Params) {
   const params = await props.params;
@@ -196,6 +199,16 @@ export async function POST(req: NextRequest, props: Params) {
       });
   if (filas.length === 0) await prisma.quote.update({ where: { id: quote.id }, data: { treatmentPlanId: plan.id } });
 
+  let notaDelPlan: unknown = null;
+  if (filas.length) {
+    try {
+      notaDelPlan = await asegurarNotaDelPlan({ clinicId: ctx.clinicId, planId: plan.id, userId: ctx.userId, origen: "desde_presupuesto" });
+    } catch (e) {
+      console.error("[presupuesto:crear-plan] no se pudo crear la nota de cobro del plan:", e);
+      notaDelPlan = { estado: "error" };
+    }
+  }
+
   await logAudit({
     clinicId: ctx.clinicId,
     userId: ctx.userId,
@@ -208,5 +221,5 @@ export async function POST(req: NextRequest, props: Params) {
     },
   });
 
-  return NextResponse.json({ treatmentPlanId: plan.id, name: plan.name, filas: filas.length }, { status: 201 });
+  return NextResponse.json({ treatmentPlanId: plan.id, name: plan.name, filas: filas.length, notaDelPlan }, { status: 201 });
 }
