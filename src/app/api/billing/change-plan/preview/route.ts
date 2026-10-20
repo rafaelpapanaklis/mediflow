@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { MENSAJE_PLAN_PREPAGADO, cobroPausado } from "@/lib/billing/cobro-rechazado";
 import { z } from "zod";
 import type Stripe from "stripe";
 import { getCurrentUser } from "@/lib/auth";
@@ -112,6 +113,8 @@ export async function GET() {
       interval: subscriptionItemInterval(item),
       status: sub.status,
       live: isLiveSubscriptionStatus(sub.status),
+      // Meses prepagados: el cambio de plan en autoservicio está bloqueado (ver MENSAJE_PLAN_PREPAGADO).
+      cobroPausado: cobroPausado(sub),
       nextBillingDate: periodEnd
         ? new Date(periodEnd * 1000).toISOString()
         : clinic.nextBillingDate?.toISOString() ?? null,
@@ -262,6 +265,10 @@ export async function POST(req: NextRequest) {
       { code: "SUBSCRIPTION_NOT_LIVE", error: `Suscripción no activa (${sub.status})` },
       { status: 409 },
     );
+  }
+
+  if (cobroPausado(sub)) {
+    return NextResponse.json({ code: "PLAN_PREPAGADO", error: MENSAJE_PLAN_PREPAGADO }, { status: 409 });
   }
 
   const item = sub.items.data[0];

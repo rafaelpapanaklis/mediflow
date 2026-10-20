@@ -155,13 +155,14 @@ before(async () => {
   dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
     getStripeSafe: () => ({
       subscriptions: {
-        retrieve: async (id: string) => ({ id, status: "past_due", items: { data: [{ current_period_end: Math.floor((Date.now() + 30 * 86_400_000) / 1000) }] } }),
+        retrieve: async (id: string) => ({ id, status: "past_due", customer: "cus_x", items: { data: [{ current_period_end: Math.floor((Date.now() + 30 * 86_400_000) / 1000) }] } }),
         update: async (id: string, params: any, opciones: any) => {
           if (stripeFalla) throw new Error("Stripe no contesta");
           actualizacionesStripe.push({ id, params, opciones });
           return { id, status: "active", latest_invoice: { id: "in_reset", status: "void", amount_paid: 0 } };
         },
       },
+      invoiceItems: { list: async () => ({ data: [] }) },
       invoices: {
         list: async ({ subscription, status }: any) => {
           if (stripeFalla) throw new Error("Stripe no contesta");

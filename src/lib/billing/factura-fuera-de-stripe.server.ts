@@ -13,6 +13,7 @@ import {
   type ResultadoRealineo,
 } from "@/lib/billing/reactivacion-tras-suspension.server";
 import { getStripeSafe } from "@/lib/stripe";
+import { cobrarAparteExcedentePendiente } from "@/lib/cfdi-overage";
 
 /**
  * PAGO MANUAL CONFIRMADO ⇒ qué pasa con la tarjeta de la clínica (ws1-t1).
@@ -66,7 +67,7 @@ export function claveFueraDeStripe(invoiceId: string): string {
   return `fuera-de-stripe:${invoiceId}`;
 }
 
-type StripeMinimo = Pick<Stripe, "subscriptions" | "invoices">;
+type StripeMinimo = Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">;
 
 /** La suscripción de tarjeta VIVA, o `null` si no hay (sin Stripe, inexistente, cancelada). Otros errores suben. */
 export async function suscripcionDeTarjetaViva(stripe: StripeMinimo, stripeSubscriptionId: string): Promise<Stripe.Subscription | null> {
@@ -97,8 +98,8 @@ export async function facturasPendientesDelPlan(
 
 /**
  * Reparte las facturas abiertas en las de MESES SUSPENDIDOS (a anular) y la del CICLO (a pagar fuera de Stripe: solo la
- * más reciente). Con el estado de antes (`estabaSuspendida`) manda ese; sin él (reintentos) se infiere por la fecha de
- * cada factura contra la del pago.
+ * más reciente). Con `estabaSuspendida: true` todas son de meses suspendidos; si no, cada una se juzga por su fecha contra
+ * la del pago (más vieja que la gracia = mes sin servicio).
  */
 export function repartirPendientes(
   pendientes: Stripe.Invoice[],
@@ -107,8 +108,10 @@ export function repartirPendientes(
   const suspendidas: Stripe.Invoice[] = [];
   const resto: Stripe.Invoice[] = [];
   for (const f of pendientes) {
-    const suspendida =
-      args.estabaSuspendida !== undefined ? args.estabaSuspendida : esMesDeServicioSuspendido({ facturaCreadaEn: f.created ?? 0, pagoEn: args.pagadoEn });
+    // Con el estado de antes (`true`) TODAS son de meses suspendidos. Sin él, o con `false` (p. ej. una cortesía que le dio
+    // acceso a una clínica con facturas viejas abiertas), una factura creada hace más que la gracia antes del pago también
+    // es de un mes sin servicio: ninguna factura vieja se queda viva para que Stripe la reintente (V7).
+    const suspendida = args.estabaSuspendida === true || esMesDeServicioSuspendido({ facturaCreadaEn: f.created ?? 0, pagoEn: args.pagadoEn });
     (suspendida ? suspendidas : resto).push(f);
   }
   resto.sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
@@ -136,6 +139,8 @@ export async function pausarCobroHastaFinDelPrepago(
   const hasta = Math.max(Math.floor(reanuda.getTime() / 1000), yaHasta);
   // Una pausa que ya llega (casi) igual de lejos —p. ej. la del re-alineo tras una suspensión— se reconoce y no se repite.
   if (sub.pause_collection && yaHasta >= hasta - 5 * 86_400) return { tipo: "pausada", hasta: new Date(yaHasta * 1000).toISOString() };
+  // El excedente de CFDI pendiente se separa en su propia factura antes de pausar (V3); si falla, no se pausa.
+  await cobrarAparteExcedentePendiente(stripe, typeof sub.customer === "string" ? sub.customer : sub.customer.id, sub.id);
   await stripe.subscriptions.update(
     sub.id,
     { pause_collection: { behavior: "void", resumes_at: hasta } },
