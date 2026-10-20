@@ -251,6 +251,13 @@ export const I18N: Record<Lang, Record<string, string>> = {
     examType: "Examen",
     style: "Estilo",
     loadingChart: "Cargando…",
+    // autoguardado (ws1-t11): no hay botón «Guardar», cada cambio se guarda solo
+    saving: "Guardando…",
+    saved: "Guardado",
+    saveRetrying: "Sin conexión con el servidor: reintentando…",
+    saveFailed: "No se guardó",
+    saveRetry: "Reintentar",
+    saveDiscard: "Descartar",
   },
   en: {
     title: "Dental Chart",
@@ -292,5 +299,11 @@ export const I18N: Record<Lang, Record<string, string>> = {
     examType: "Exam",
     style: "Style",
     loadingChart: "Loading…",
+    saving: "Saving…",
+    saved: "Saved",
+    saveRetrying: "Can't reach the server: retrying…",
+    saveFailed: "Not saved",
+    saveRetry: "Retry",
+    saveDiscard: "Discard",
   },
 };

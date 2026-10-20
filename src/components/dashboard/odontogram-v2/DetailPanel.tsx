@@ -29,7 +29,7 @@ const TYPE_NAMES: Record<string, Record<"es" | "en", string>> = {
  */
 export function DetailPanel({
   fdi, lang, numbering, record, brush,
-  onApply, onClose, onClearTooth, onNote, onRemove, onPick,
+  onApply, onClose, onClearTooth, onNote, onNoteDraft, onNoteFlush, onRemove, onPick,
 }: DetailPanelProps) {
   const t = I18N[lang];
   const meta = classify(fdi);
@@ -47,6 +47,8 @@ export function DetailPanel({
 
   // Re-sync the textarea when the tooth changes or the note is updated/cleared
   // externally (e.g. "clear tooth"). Local edits survive surface/finding edits.
+  // Mientras se teclea, cada tecla ya sube a record.note (onNoteDraft), así
+  // que este efecto no pisa lo escrito: llega el mismo texto.
   useEffect(() => { setNoteLocal(record.note || ""); }, [fdi, record.note]);
 
   /**
@@ -58,14 +60,26 @@ export function DetailPanel({
    * completa y hacer clic fuera para que pase a figurar como tuya, con la
    * hora de hoy, en el expediente del paciente.
    *
-   * Se compara contra `record.note` —lo que hay guardado— y no contra un
-   * valor de arranque: si la nota cambió por otro camino mientras el foco
-   * estaba dentro, lo guardado sigue siendo la referencia buena.
+   * Autoguardado (ws1-t11): la nota se guarda sola tras una pausa al teclear,
+   * y solo si se TECLEÓ algo (onChange). Salir del cuadro, cerrar el panel o
+   * cambiar de diente manda ya lo tecleado; si no se tecleó nada, no manda
+   * nada. El diente va en cada llamada: al cambiar de diente, lo pendiente es
+   * del anterior.
    */
-  const saveNoteIfChanged = () => {
-    if (note === (record.note || "")) return;
-    onNote(note);
+  const dirtyRef = useRef(false);
+  const fdiRef = useRef(fdi);
+  const flushNote = () => {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    onNoteFlush(fdiRef.current);
   };
+  const flushRef = useRef(flushNote);
+  flushRef.current = flushNote;
+  // cambiar de diente o cerrar el panel: lo tecleado en el anterior sale ya
+  useEffect(() => {
+    fdiRef.current = fdi;
+    return () => flushRef.current();
+  }, [fdi]);
 
   const typeName =
     TYPE_NAMES[meta.type][lang] + (meta.primary ? (lang === "es" ? " (temporal)" : " (primary)") : "");
@@ -178,14 +192,15 @@ export function DetailPanel({
           {/* notes */}
           <div className="odo-section-t" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             {t.notes}
-            <DictationMic onText={(txt) => { const next = appendDictado(noteRef.current, txt); setNoteLocal(next); if (next !== (record.note || "")) onNote(next); }} />
+            <DictationMic onText={(txt) => { const next = appendDictado(noteRef.current, txt).slice(0, 2000); setNoteLocal(next); dirtyRef.current = false; if (next !== (record.note || "")) onNote(fdi, next); }} />
           </div>
           <textarea
             className="odo-note"
             placeholder={t.notesPh}
+            maxLength={2000 /* el tope de /api/odontogram/note: más largo no se guardaría */}
             value={note}
-            onChange={(e) => setNoteLocal(e.target.value)}
-            onBlur={saveNoteIfChanged}
+            onChange={(e) => { setNoteLocal(e.target.value); dirtyRef.current = true; onNoteDraft(fdi, e.target.value); }}
+            onBlur={flushNote}
           />
 
           <div className="odo-dt-actions">

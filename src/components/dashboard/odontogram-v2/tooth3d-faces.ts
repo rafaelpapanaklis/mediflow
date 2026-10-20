@@ -5,9 +5,11 @@
    hallazgo mezclando esos pesos, así la mancha sigue la forma real del
    diente y el borde entre caras queda suave en vez de dentado.
 
-   Geometría de referencia (LEEME de los modelos): Y = eje largo, corona
-   hacia −Y en superiores y +Y en inferiores; vestibular = +Z; lado derecho
-   del paciente = espejo del izquierdo.
+   Geometría de referencia: Y = eje largo, corona hacia −Y en superiores y
+   +Y en inferiores; vestibular = +Z; corona centrada en X/Z; lado derecho
+   del paciente = espejo del izquierdo. Los .glb NO vienen así (su LEEME
+   dice V = +Z y solo lo cumplen los incisivos): tooth3d-model.orientTooth
+   los gira y centra antes de llamar a classifyFaces.
 
    Cómo se clasifica un vértice (posición p en metros, normal n):
    - Corona/raíz: por altura a lo largo de Y. El cuello (unión
@@ -23,8 +25,10 @@
    - Mesial/Distal: mesial es hacia la línea media. Con V = +Z y Y arriba
      el sistema es dextrógiro, así que +X es la IZQUIERDA del paciente:
      en cuadrantes izquierdos (2, 3, 6, 7) mesial = −X; en los derechos
-     (1, 4, 5, 8), que son espejo, mesial = +X. Comprobado a ojo sobre
-     26/36 (cúspide de Carabelli y cúspide distal del primer molar inferior).
+     (1, 4, 5, 8), que son espejo, mesial = +X. Medido sobre la malla ya
+     girada (ws1-t11): raíz mesial y fila de cúspides de 36/37/75, raíces
+     vestibulares y palatina de 26/64/65, cresta cervical mesiovestibular
+     del 74.
    ============================================================ */
 import * as THREE from "three";
 import type { ToothMeta } from "./types";
@@ -194,8 +198,10 @@ export function classifyFaces(geometries: THREE.BufferGeometry[], meta: ToothMet
         // Anteriores: la corona es una lámina. La fosa lingual (cóncava) cruza
         // el plano medio, así que por posición saldría V, y cerca de z=0
         // |dx|>|dz| la volvería M/D. Aquí V/L va por el signo de la NORMAL en
-        // Z (la fosa mira a lingual) y M/D solo en las franjas proximales.
-        sMD = smooth(0.6, 0.8, Math.abs(dx));
+        // Z (la fosa mira a lingual) y M/D solo en las franjas proximales
+        // que además MIRAN a mesial/distal: por posición sola, la mitad
+        // incisal de la cara lingual (ancha en X) salía M/D.
+        sMD = smooth(0.6, 0.8, Math.abs(dx)) * smooth(-0.15, 0.15, Math.abs(hx) - Math.abs(hz));
         sV = nrm ? smooth(-0.15, 0.15, nz) : smooth(-0.1, 0.1, dz);
       } else {
         sMD = smooth(-0.12, 0.12, Math.abs(ddx) - Math.abs(ddz));

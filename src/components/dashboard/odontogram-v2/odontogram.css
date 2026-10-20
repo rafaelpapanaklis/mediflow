@@ -83,6 +83,12 @@
 .odo-app .odo-summary-loading { font-weight: 600; color: var(--ink-3); }
 .odo-app .odo-clearall { border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; }
 @media (hover: hover) and (pointer: fine) { .odo-app .odo-clearall:hover { border-color: #f0b4b4; color: #d8504f; background: #fdf3f3; } }
+/* autoguardado (ws1-t11): discreto mientras va bien, claro cuando falla */
+.odo-app .odo-save { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+.odo-app .odo-save-ok { color: #2f8f5b; }
+.odo-app .odo-save-err { color: #b3403f; background: #fdf3f3; border: 1px solid #f0b4b4; border-radius: 8px; padding: 3px 4px 3px 8px; white-space: normal; flex-wrap: wrap; }
+.odo-app .odo-save-why { font-weight: 500; color: #8a3a39; }
+.odo-app .odo-save-btn { border: 1px solid #f0b4b4; background: #fff; color: #b3403f; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
 
 .odo-app .odo-chart-scroll { overflow-x: hidden; padding: 8px 0 4px; }
 

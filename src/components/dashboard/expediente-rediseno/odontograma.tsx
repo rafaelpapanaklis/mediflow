@@ -19,10 +19,10 @@ import s from "./expediente.module.css";
  * bandera antes de esta ola (patient-detail-client.tsx los pasaba como
  * `rediseno`).
  */
-export function OdontogramaExpediente({ patientId }: { patientId: string }) {
+export function OdontogramaExpediente({ patientId, sesion }: { patientId: string; sesion?: { clinicId: string; userId: string } }) {
   return (
     <RaizExpediente className={s.marcoOdontograma}>
-      <OdontogramV2 patientId={patientId} dedupeLegend edgeScrollHint />
+      <OdontogramV2 patientId={patientId} sesion={sesion} dedupeLegend edgeScrollHint />
     </RaizExpediente>
   );
 }

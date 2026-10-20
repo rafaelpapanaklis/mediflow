@@ -4,7 +4,9 @@
    OdontogramV2 — root component (ported from design jsx/app.jsx)
    - Top bar: dentition / numbering / language (ES-EN) toggles.
    - Global state: records (via adapter, NOT localStorage), brush, eraser, selected.
-   - apply / removeFinding: optimistic local update + PUT/DELETE through the adapter.
+   - apply / removeFinding: optimistic local update + escritura por la cola de
+     autoguardado (autosave.ts): sin botón «Guardar», con «Guardando… /
+     Guardado», reintento y aviso si falla — nunca revierte lo marcado.
    - Summary (teeth / findings), "Limpiar todo" (reset).
    - Renders OdoDefs + Odontogram + Legend + Palette + DetailPanel (the stubs).
    - WITHOUT the Tweaks panel and WITHOUT warm/dark variants.
@@ -18,8 +20,10 @@ import type {
 } from "./types";
 import { EMPTY_RECORD } from "./types";
 import {
-  fetchRecords, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
+  fetchOdontogram, fetchQuienSoy, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
+import { SaveQueue, saveQueueFor, type SaveOp, type SaveStatus } from "./autosave";
+import { cargarOdontograma, quitarDelDibujo } from "./recuperar";
 import { OdoDefs } from "./OdoDefs";
 import { Odontogram } from "./Odontogram";
 import { Palette } from "./Palette";
@@ -45,6 +49,40 @@ function toggleInArr(arr: string[], id: string) {
   else arr.push(id);
 }
 
+/** La escritura real de cada operación de la cola. */
+function sendOp(patientId: string, op: SaveOp, opts: { keepalive: boolean }): Promise<void> {
+  switch (op.kind) {
+    case "put": return putFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, opts);
+    case "delete": return deleteFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, opts);
+    case "note": return apiSetNote(patientId, op.toothNumber, op.text, opts);
+    case "reset": return resetOdontogram(patientId, opts);
+  }
+}
+
+
+/** «Guardando… / Guardado / sin conexión / no se guardó», discreto, junto al resumen. */
+function SaveIndicator({ status, lang, onRetry, onDiscard }: {
+  status: SaveStatus; lang: Lang; onRetry: () => void; onDiscard: () => void;
+}) {
+  const t = I18N[lang];
+  if (status.state === "idle") return null;
+  if (status.state === "saving") return <span className="odo-save odo-save-busy" role="status">{t.saving}</span>;
+  if (status.state === "saved") return <span className="odo-save odo-save-ok" role="status">✓ {t.saved}</span>;
+  if (status.state === "discarded") {
+    // 403/404: el cambio no se guardará nunca; se dice y ya no vuelve
+    return <span className="odo-save odo-save-err" role="alert">{status.error}</span>;
+  }
+  const fatal = status.state === "error";
+  return (
+    <span className="odo-save odo-save-err" role="alert" title={status.error}>
+      {fatal ? t.saveFailed : t.saveRetrying}
+      {fatal && status.error ? <span className="odo-save-why">{status.error}</span> : null}
+      <button type="button" className="odo-save-btn" onClick={onRetry}>{t.saveRetry}</button>
+      {fatal && <button type="button" className="odo-save-btn" onClick={onDiscard}>{t.saveDiscard}</button>}
+    </span>
+  );
+}
+
 interface SegOption { v: string; l: string; }
 function Seg({ value, set, options }: { value: string; set: (v: string) => void; options: SegOption[] }) {
   return (
@@ -58,7 +96,7 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   );
 }
 
-export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint }: OdontogramV2Props) {
+export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint, sesion }: OdontogramV2Props) {
   // Modo CONTROLADO (foto por consulta): si llegan value+onChange, el estado lo
   // maneja el padre y NO se toca el servidor. Si no, modo VIVO (como la pestaña).
   const controlled = value !== undefined && !!onChange;
@@ -73,6 +111,30 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   const [loading, setLoading] = useState(!controlled);
   const [error, setError] = useState<string | null>(null);
   const t = I18N[lang];
+
+  // Cola de autoguardado del modo VIVO: una por paciente y por pestaña, que
+  // sobrevive a que este componente se desmonte con algo pendiente.
+  const queue: SaveQueue | null = controlled
+    ? null
+    : saveQueueFor(patientId, () => new SaveQueue({
+        send: (op, opts) => sendOp(patientId, op, opts),
+        // antes de reintentar: ¿quién tiene la sesión ahora? (solo se reintenta si es el mismo usuario y sede)
+        whoAmI: fetchQuienSoy,
+      }));
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const sesionRef = useRef(sesion ?? null);
+  sesionRef.current = sesion ?? null;
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() => queue?.getStatus() ?? { state: "idle", pending: 0, discarded: 0 });
+  /** el contador de descartes ya reflejado en el dibujo (se anota al montar) */
+  const discardedSeen = useRef(saveStatus.discarded);
+  useEffect(() => {
+    if (!queue) return;
+    // de otro paciente (otra cola): sus descartes viejos no son de esta pantalla
+    discardedSeen.current = queue.getStatus().discarded;
+    setSaveStatus(queue.getStatus());
+    return queue.subscribe(setSaveStatus);
+  }, [queue]);
 
   // setRecords unificado: en controlado -> onChange (soporta updater funcional);
   // en vivo -> estado interno. ctrlRef lo mantiene estable (no rompe las deps).
@@ -93,25 +155,68 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     }
   }, []);
 
-  // Load on mount / patient change via the adapter — NOT localStorage.
+  // Load on mount / patient change via the adapter. Nada del odontograma se
+  // guarda en el navegador (revisión t8, tercera vuelta).
   // En modo controlado el estado viene del padre: no se carga del servidor.
   useEffect(() => {
     if (controlled) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchRecords(patientId)
-      .then((recs) => { if (!cancelled) setInternalRecords(recs); })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Error"); })
+    // anota de qué sesión es la cola; lo pendiente se pinta encima; sin red,
+    // mensaje en español (recuperar.ts)
+    cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, leer: fetchOdontogram, force: true })
+      .then((r) => {
+        if (cancelled) return;
+        if (r.records) setInternalRecords(r.records);
+        if (r.error) setError(r.error);
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [patientId, controlled]);
 
-  // Re-sync from the server (recover from a failed optimistic mutation).
+  // Re-sync from the server (al descartar lo que no se pudo guardar, o al
+  // volver a la pestaña: otra pestaña pudo cambiar el odontograma).
   const resync = useCallback(() => {
     if (ctrlRef.current.controlled) return;
-    fetchRecords(patientId).then(setInternalRecords).catch(() => {});
+    cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, leer: fetchOdontogram, force: false })
+      .then((r) => { if (r.records && !r.error) { setInternalRecords(r.records); setError(null); } });
   }, [patientId]);
+
+  // Lo que no se guardó (403/404 de verdad, o «Descartar»): se quita del dibujo
+  // ya —aunque la relectura falle— y luego se enseña lo que de verdad hay.
+  // Solo lo descartado DESPUÉS de montar: lo de cuando estaba fuera de
+  // pantalla ya lo refleja la carga (N4-O4)
+  useEffect(() => {
+    if (saveStatus.discarded === discardedSeen.current) return;
+    const ops = queueRef.current?.descartadosDesde(discardedSeen.current) ?? [];
+    discardedSeen.current = saveStatus.discarded;
+    if (ops.length) setInternalRecords((prev) => quitarDelDibujo(prev, ops));
+    resync();
+  }, [saveStatus.discarded, resync]);
+
+  // Encola una escritura (solo en modo vivo; el controlado lo guarda el padre).
+  const save = useCallback((op: SaveOp) => { queueRef.current?.enqueue(op); }, []);
+
+  // En pantalla: el indicador de aquí avisa (el aviso fijo de la página no
+  // hace falta). Los avisos de cierre de página viven en la cola (autosave.ts),
+  // no aquí: siguen activos cuando este componente ya se desmontó.
+  useEffect(() => {
+    if (!queue) return;
+    const detach = queue.attach();
+    // al volver a la pestaña se trae lo que otra pestaña haya cambiado (si
+    // aquí no queda nada pendiente)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && !queue.hasPending()) resync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      // se desmonta (otra pestaña de la ficha): lo tecleado sale ya y la cola sigue sola
+      queue.flush();
+      detach();
+    };
+  }, [queue, resync]);
 
   const pickBrush = useCallback((id: string) => { setEraser(false); setBrush((b) => (b === id ? null : id)); }, []);
   const pickEraser = useCallback(() => { setBrush(null); setEraser((e) => !e); }, []);
@@ -126,13 +231,11 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
         const lk = String(letter);
         const ids = records[fdi]?.surfaces?.[lk] ?? [];
         setRecords((prev) => applyToRecords(prev, fdi, (r) => { delete r.surfaces[lk]; }));
-        if (live) ids.forEach((conditionId) =>
-          deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId }).catch(resync));
+        if (live) ids.forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: lk, conditionId }));
       } else {
         const ids = records[fdi]?.tooth ?? [];
         setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.tooth = []; }));
-        if (live) ids.forEach((conditionId) =>
-          deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
+        if (live) ids.forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: null, conditionId }));
       }
       return;
     }
@@ -157,13 +260,8 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       }
     }));
 
-    if (live) {
-      const op = present
-        ? deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush })
-        : putFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush });
-      op.catch(resync);
-    }
-  }, [brush, eraser, patientId, resync]);
+    if (live) save({ kind: present ? "delete" : "put", toothNumber: fdi, surface: lk, conditionId: brush });
+  }, [brush, eraser, save]);
 
   const removeFinding = useCallback((fdi: number, scope: RemoveScope, letter: string | undefined, condId: string) => {
     setRecords((prev) => applyToRecords(prev, fdi, (r) => {
@@ -177,39 +275,48 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
         if (i >= 0) r.tooth.splice(i, 1);
       }
     }));
-    if (!ctrlRef.current.controlled) deleteFinding({
-      patientId, toothNumber: fdi,
+    if (!ctrlRef.current.controlled) save({
+      kind: "delete", toothNumber: fdi,
       surface: scope === "surface" ? (letter ?? null) : null,
       conditionId: condId,
-    }).catch(resync);
-  }, [patientId, resync]);
+    });
+  }, [save]);
 
   const clearTooth = useCallback((fdi: number) => {
     const rec = records[fdi];
     setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.tooth = []; r.surfaces = {}; r.note = ""; }));
     if (!rec) return;
     if (!ctrlRef.current.controlled) {
-      (rec.tooth || []).forEach((conditionId) =>
-        deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
+      (rec.tooth || []).forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: null, conditionId }));
       Object.entries(rec.surfaces || {}).forEach(([letter, arr]) =>
-        arr.forEach((conditionId) =>
-          deleteFinding({ patientId, toothNumber: fdi, surface: letter, conditionId }).catch(resync)));
-      if (rec.note) apiSetNote(patientId, fdi, "").catch(resync);
+        arr.forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: letter, conditionId })));
+      if (rec.note) save({ kind: "note", toothNumber: fdi, text: "" });
     }
-  }, [records, patientId, resync]);
+  }, [records, save]);
 
+  // Nota firme (dictado): se guarda ya.
   const handleNote = useCallback((fdi: number, txt: string) => {
-    setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.note = txt; }));
-    if (!ctrlRef.current.controlled) apiSetNote(patientId, fdi, txt).catch(resync);
-  }, [patientId, resync]);
+    setRecords((p) => applyToRecords(p, fdi, (r) => { r.note = txt; }));
+    if (!ctrlRef.current.controlled) save({ kind: "note", toothNumber: fdi, text: txt });
+  }, [save]);
+  // Nota mientras se teclea: se ve al momento y se guarda sola tras una pausa.
+  const handleNoteDraft = useCallback((fdi: number, txt: string) => {
+    setRecords((p) => applyToRecords(p, fdi, (r) => { r.note = txt; }));
+    queueRef.current?.noteChanged(fdi, txt);
+  }, []);
+  const handleNoteFlush = useCallback((fdi: number) => { queueRef.current?.flushNote(fdi); }, []);
 
   const clearAll = () => {
     const ok = window.confirm(lang === "es" ? "¿Borrar todo el odontograma?" : "Clear the whole chart?");
     if (!ok) return;
     setRecords({});
     setSelected(null);
-    if (!ctrlRef.current.controlled) resetOdontogram(patientId).catch(resync);
+    if (!ctrlRef.current.controlled) save({ kind: "reset" });
   };
+
+  // «Descartar» lo apartado: la cola sube su contador y el efecto de arriba lo
+  // quita del dibujo y recarga
+  const discardUnsaved = () => { queueRef.current?.discard(); };
 
   // summary counts
   const toothCount = Object.keys(records).length;
@@ -281,6 +388,9 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
                   <span><b>{findingCount}</b> {t.findings}</span>
                 </>
               )}
+              {queue && (
+                <SaveIndicator status={saveStatus} lang={lang} onRetry={() => { void queue.retryNow(); }} onDiscard={discardUnsaved} />
+              )}
               <button type="button" className="odo-clearall" onClick={clearAll}>{t.clearAll}</button>
             </div>
           </div>
@@ -325,7 +435,9 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
           onApply={apply}
           onClose={() => setSelected(null)}
           onClearTooth={() => clearTooth(selected)}
-          onNote={(txt) => handleNote(selected, txt)}
+          onNote={handleNote}
+          onNoteDraft={handleNoteDraft}
+          onNoteFlush={handleNoteFlush}
           onRemove={removeFinding}
           onPick={pickBrush}
         />

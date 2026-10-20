@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { extractAuditMeta } from "@/lib/audit";
 import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 import { getDbUser, isMissingTableError, puedeEscribirOdontograma } from "@/lib/odontogram/api-auth";
+import { sesionDistinta } from "@/lib/odontogram/sesion-pestana";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // N4-O2: si la cookie es de otra sesión que la de la pestaña, no se borra nada
+    if (sesionDistinta(req.headers, dbUser)) return NextResponse.json({ error: "otra_sesion" }, { status: 409 });
     if (!puedeEscribirOdontograma(dbUser)) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }

@@ -205,7 +205,12 @@ export interface DetailPanelProps {
   onApply: OnApply;
   onClose: () => void;
   onClearTooth: () => void;
-  onNote: (txt: string) => void;
+  /** Nota firme (dictado): se guarda ya. Lleva el diente porque el panel puede haber cambiado de diente. */
+  onNote: (fdi: number, txt: string) => void;
+  /** Nota mientras se teclea: el odontograma vivo la guarda solo tras una pausa (autosave.ts). */
+  onNoteDraft: (fdi: number, txt: string) => void;
+  /** Salir del cuadro, cerrar el panel o cambiar de diente: lo tecleado se manda ya. */
+  onNoteFlush: (fdi: number) => void;
   onRemove: OnRemove;
   onPick: (id: string) => void;
 }
@@ -217,6 +222,13 @@ export interface OdontogramV2Props {
   patientId: string;
   value?: Records;
   onChange?: (records: Records) => void;
+  /**
+   * Clínica y usuario de la SESIÓN con que el servidor pintó la página: de quién
+   * es la cola de autoguardado. Antes de reintentar algo que falló se comprueba
+   * que la sesión siga siendo esta (nada sale firmado por otro usuario ni a otra
+   * sede). Sin esto, se toma la sesión que devuelve el primer GET.
+   */
+  sesion?: { clinicId: string; userId: string };
   /**
    * La paleta ya enseña grupo + color por cada hallazgo (`odo-pal-tabs`): con
    * esto en `true` no se repite la misma leyenda estática debajo del chart.

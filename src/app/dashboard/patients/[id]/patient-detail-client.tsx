@@ -282,7 +282,7 @@ interface Props {
   doctors:      { id: string; firstName: string; lastName: string }[];
   /** El doctor logueado. cedulaProfesional es necesaria para el carnet
    *  de implantes (NOM-024 — firma legal del responsable de la cirugía). */
-  currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null; role?: string };
+  currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null; role?: string; clinicId?: string };
   specialty:    string;
   /**
    * `Clinic.category`. Solo decide DÓNDE cae una consulta recién iniciada
@@ -1092,6 +1092,12 @@ export function PatientDetailClient({
   // Visibilidad por paciente — solo admin la ve y la edita (el server la ignora
   // para el resto, ver PUT/PATCH de /api/patients/[id]). [] = todos lo ven.
   const isVisibilityAdmin = currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
+  // Sesión con que se pintó la página: de quién es lo pendiente del odontograma
+  // (ws1-t11, revisión t8). Memo: misma identidad entre renders.
+  const sesionOdontograma = useMemo(
+    () => (currentUser.clinicId ? { clinicId: currentUser.clinicId, userId: currentUser.id } : undefined),
+    [currentUser.clinicId, currentUser.id],
+  );
   const [editVisibleUserIds, setEditVisibleUserIds] = useState<string[]>(patient.visibleUserIds ?? []);
   useEffect(() => {
     setEditVisibleUserIds(patient.visibleUserIds ?? []);
@@ -2516,13 +2522,14 @@ export function PatientDetailClient({
               El mismo OdontogramV2, con el MARCO vestido (cabecera, controles,
               leyenda, paleta, panel del diente). El dibujo no se toca. */}
           {tab === "odontograma" && rediseno && (
-            <OdontogramaRediseno patientId={patient.id} />
+            <OdontogramaRediseno patientId={patient.id} sesion={sesionOdontograma} />
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
           {tab === "odontograma" && !rediseno && (
             <OdontogramV2
               patientId={patient.id}
+              sesion={sesionOdontograma}
               dedupeLegend={rediseno}
               edgeScrollHint={rediseno}
             />
