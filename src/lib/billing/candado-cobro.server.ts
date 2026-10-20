@@ -153,44 +153,76 @@ export function crearCandadoDeCobro(
 // el único campo de texto libre: sin columnas ni SQL nuevos). La fila se reutiliza y nunca se borra.
 
 const KIND_CONTADOR = "contador_subir";
+const KIND_CAMBIO = "cambio_subir";
 export const llaveIntentosSubir = (clinicId: string) => `subir-intento:${clinicId}`;
+/** La fila que recuerda el ÚLTIMO fallo AMBIGUO del paso del cambio de plan (V3c/AC3): su `createdAt` es la hora de ese fallo. */
+export const llaveCambioSubir = (clinicId: string) => `subir-cambio:${clinicId}`;
+
+/** Cuánto dura "hubo un fallo del cambio de plan que quizá sí se aplicó" (AC3): minutos, no horas. */
+export const MINUTOS_CAMBIO_AMBIGUO = 15;
 
 export interface EstadoIntentosSubir {
-  /** Cuántas veces falló un «Subir» de esta clínica tras tocar Stripe. */
+  /** Cuántas veces falló un «Subir» de esta clínica tras tocar Stripe (cualquier paso). */
   intento: number;
-  /** ¿El último fallo fue en las últimas 24 h? */
-  reciente: boolean;
+  /**
+   * AC3: ¿hubo, en los últimos `MINUTOS_CAMBIO_AMBIGUO` min, un fallo 5xx/de red del paso del CAMBIO de plan (el único que pudo
+   * aplicarse en Stripe aunque la respuesta se perdiera)? Un fallo del precio, de la anulación, de la tarjeta… NO cuenta.
+   */
+  cambioReciente: boolean;
 }
 
-/** `null` = no se pudo leer (quien llama NO sigue: regla de oro). Sin fila → `{ intento: 0, reciente: false }`. */
+/**
+ * EL criterio del contador, igual para leer y para sumar (AC5): solo cuenta un texto de 1 a 9 dígitos (cabe en `int`);
+ * cualquier otra cosa (" 3", "1e3", "99999999999", vacío) vale 0. Se escribe en SQL para que lectura y suma no puedan discrepar.
+ */
+// (Prisma no admite fragmentos de SQL dentro de las plantillas: la lectura y la suma repiten el MISMO `CASE` literal.)
+
+/** `null` = no se pudo leer (quien llama NO sigue: regla de oro). Sin filas → `{ intento: 0, cambioReciente: false }`. */
 export async function leerIntentosSubir(clinicId: string, db: DbCandado = prisma as unknown as DbCandado): Promise<EstadoIntentosSubir | null> {
   if (!clinicId) return null;
   try {
-    const filas = await db.$queryRaw<Array<{ email: string; reciente: boolean }>>`SELECT "email",
-        ("createdAt" >= (now() AT TIME ZONE 'UTC') - interval '24 hours') AS "reciente"
-      FROM "billing_email_logs" WHERE "invoiceId" = ${llaveIntentosSubir(clinicId)} AND "kind" = ${KIND_CONTADOR}`;
+    const filas = await db.$queryRaw<Array<{ intento: number | string; cambio_reciente: boolean }>>`SELECT
+        COALESCE((SELECT (CASE WHEN "email" ~ '^[0-9]{1,9}$' THEN "email"::int ELSE 0 END) FROM "billing_email_logs"
+                  WHERE "invoiceId" = ${llaveIntentosSubir(clinicId)} AND "kind" = ${KIND_CONTADOR}), 0) AS "intento",
+        EXISTS (SELECT 1 FROM "billing_email_logs"
+                WHERE "invoiceId" = ${llaveCambioSubir(clinicId)} AND "kind" = ${KIND_CAMBIO}
+                  AND "createdAt" >= (now() AT TIME ZONE 'UTC') - (${MINUTOS_CAMBIO_AMBIGUO}::int * interval '1 minute')) AS "cambio_reciente"`;
     const f = filas[0];
-    if (!f) return { intento: 0, reciente: false };
-    return { intento: Math.max(0, Math.floor(Number(f.email) || 0)), reciente: !!f.reciente };
+    return { intento: Math.max(0, Math.floor(Number(f?.intento) || 0)), cambioReciente: !!f?.cambio_reciente };
   } catch (e) {
     console.error("[candado-cobro] no se pudo leer el contador de intentos de «Subir»:", (e as Error)?.message ?? e);
     return null;
   }
 }
 
-/** Suma 1 al contador (y marca la hora). Nunca lanza: si falla, el siguiente intento sale con la misma clave y se verá en el log. */
-export async function sumarIntentoSubir(clinicId: string, db: DbCandado = prisma as unknown as DbCandado): Promise<void> {
+/** Crea la fila si no existe y, si existe, la actualiza (hora de la base en UTC). Una sola función para las dos filas. */
+async function tocarFila(db: DbCandado, clinicId: string, llave: string, kind: string, suma: boolean): Promise<void> {
+  const actualizar = () =>
+    suma
+      ? db.$executeRaw`UPDATE "billing_email_logs"
+          SET "email" = ((CASE WHEN "email" ~ '^[0-9]{1,9}$' THEN "email"::int ELSE 0 END) + 1)::text, "createdAt" = (now() AT TIME ZONE 'UTC')
+          WHERE "invoiceId" = ${llave} AND "kind" = ${kind}`
+      : db.$executeRaw`UPDATE "billing_email_logs" SET "createdAt" = (now() AT TIME ZONE 'UTC') WHERE "invoiceId" = ${llave} AND "kind" = ${kind}`;
+  if ((await actualizar()) > 0) return;
+  const creadas = await db.$executeRaw`INSERT INTO "billing_email_logs" ("id", "invoiceId", "clinicId", "kind", "email", "createdAt")
+    VALUES (${randomUUID()}, ${llave}, ${clinicId}, ${kind}, '1', (now() AT TIME ZONE 'UTC'))
+    ON CONFLICT ("invoiceId") DO NOTHING`;
+  if (creadas === 0) await actualizar(); // otra instancia la creó justo antes
+}
+
+/**
+ * Suma 1 al contador y, si el fallo fue AMBIGUO en el paso del cambio de plan (5xx o red: quizá Stripe sí lo aplicó), marca la
+ * hora de ese fallo. Nunca lanza: si falla, el siguiente intento saldría con la misma clave y se vería en el log.
+ */
+export async function sumarIntentoSubir(
+  clinicId: string,
+  opciones: { cambioAmbiguo?: boolean } = {},
+  db: DbCandado = prisma as unknown as DbCandado,
+): Promise<void> {
   if (!clinicId) return;
-  const llave = llaveIntentosSubir(clinicId);
-  const sumar = () => db.$executeRaw`UPDATE "billing_email_logs"
-      SET "email" = ((CASE WHEN "email" ~ '^[0-9]+$' THEN "email"::int ELSE 0 END) + 1)::text, "createdAt" = (now() AT TIME ZONE 'UTC')
-      WHERE "invoiceId" = ${llave} AND "kind" = ${KIND_CONTADOR}`;
   try {
-    if ((await sumar()) > 0) return;
-    const creadas = await db.$executeRaw`INSERT INTO "billing_email_logs" ("id", "invoiceId", "clinicId", "kind", "email", "createdAt")
-      VALUES (${randomUUID()}, ${llave}, ${clinicId}, ${KIND_CONTADOR}, '1', (now() AT TIME ZONE 'UTC'))
-      ON CONFLICT ("invoiceId") DO NOTHING`;
-    if (creadas === 0) await sumar(); // otra instancia la creó justo antes
+    await tocarFila(db, clinicId, llaveIntentosSubir(clinicId), KIND_CONTADOR, true);
+    if (opciones.cambioAmbiguo) await tocarFila(db, clinicId, llaveCambioSubir(clinicId), KIND_CAMBIO, false);
   } catch (e) {
     console.error("[candado-cobro] no se pudo sumar el contador de intentos de «Subir»:", (e as Error)?.message ?? e);
   }

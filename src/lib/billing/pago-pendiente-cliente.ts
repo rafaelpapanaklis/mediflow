@@ -95,6 +95,8 @@ export async function leerPagoPendiente(f: Fetch = fetch): Promise<LecturaPago> 
   const d = await cuerpo(res);
   if (!res.ok) return { tipo: "error", mensaje: typeof d.error === "string" ? d.error : "" };
   if (d.estado === "sin_pendiente") return { tipo: "listo", datos: { estado: "sin_pendiente" } };
+  // Se está terminando de aplicar un cambio de plan: se muestra el texto (y las otras formas de pago) en vez de «no hay pago pendiente».
+  if (d.estado === "cambio_en_aplicacion") return { tipo: "error", mensaje: typeof d.mensaje === "string" ? d.mensaje : "" };
   if (d.estado === "pendiente" && esNumero(d.montoPendiente)) {
     return {
       tipo: "listo",
