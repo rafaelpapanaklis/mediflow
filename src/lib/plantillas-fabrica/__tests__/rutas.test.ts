@@ -362,3 +362,25 @@ test("N4-P1: una copia vieja ligada al MISMO procedimiento que la versión edita
     (cita as any).procedimientos = [];
   }
 });
+
+test("N4-P1/N5-P1 (GET real): versión con la liga de fábrica + «Injerto de encía» + copia vieja amplia → se proponen la versión y el injerto, no dos de cirugía", async () => {
+  hojasDeLaCita = [
+    hoja({ id: "cirugia", nombre: "Después de una cirugía bucal", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia", procedureIds: ["p-cordales", "p-injerto"] }),
+    hoja({ id: "injerto", nombre: "Injerto de encía", basadaEn: "cirugia", procedureIds: ["p-injerto"] }),
+    hoja({ id: "vieja", nombre: "Después de una cirugía bucal (copia)", basadaEn: "cirugia", procedureIds: ["p-cordales", "p-injerto"], updatedAt: "2026-12-01T00:00:00.000Z" }),
+  ];
+  (cita as any).procedimientos = [
+    { id: "p-cordales", name: "Cordales", isActive: true },
+    { id: "p-injerto", name: "Injerto", isActive: true },
+  ];
+  try {
+    const out = await (await citaGET(new NextRequest("http://localhost/api/indicaciones/cita/cita-1"), params("cita-1"))).json();
+    assert.deepEqual([...out.sugeridas].sort(), ["cirugia", "injerto"]);
+    // Y enviar lo propuesto manda exactamente esas dos hojas, una vez cada una.
+    const res = await waPOST(peticion(out.sugeridas), params("cita-1"));
+    assert.equal(res.status, 200);
+    assert.deepEqual([...movimientos[0].hojas].sort(), ["cirugia", "injerto"]);
+  } finally {
+    (cita as any).procedimientos = [];
+  }
+});

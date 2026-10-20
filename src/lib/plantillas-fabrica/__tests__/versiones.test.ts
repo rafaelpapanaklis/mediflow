@@ -700,7 +700,7 @@ test("N-P10: la sede nueva conserva SIN autor los consentimientos de fábrica, y
   assert.equal(restaurableDe({ kind: "CONSENTIMIENTO", name: copia[1].name, body: copia[1].body, createdById: copia[1].createdById }), false);
 });
 
-test("N4-P1: ceder por liga solo si la hoja que gana cubre los procedimientos de la cita que cubre la que cede", () => {
+test("N4-P1/N5-P1: entre la copia y la versión editada de la misma hoja, cede la copia que cubre lo mismo o más; se propone la que cubre menos u otro procedimiento", () => {
   const proc = [{ id: "p1", name: "Cordales", isActive: true }, { id: "p2", name: "Injerto", isActive: true }];
   const version = dto({ id: "ver", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia", procedureIds: ["p1"] });
   const injerto = dto({ id: "inj", nombre: "Injerto de encía", basadaEn: "cirugia", procedureIds: ["p2"] });
@@ -708,9 +708,17 @@ test("N4-P1: ceder por liga solo si la hoja que gana cubre los procedimientos de
   assert.deepEqual(hojasSugeridas([version, injerto], proc, []).sort(), ["inj", "ver"], "otra copia, otro procedimiento: se propone");
   assert.deepEqual(hojasSugeridas([version, viejaP1], proc, []), ["ver"], "copia vieja del mismo procedimiento: cede");
   assert.deepEqual(hojasSugeridas([version, viejaP1, injerto], proc, []).sort(), ["inj", "ver"]);
-  // La copia ligada a p1 Y p2 cubre más que la versión (solo p1): no cede, cubre p2.
+  // N5-P1: una copia vieja MÁS AMPLIA (liga heredada p1+p2) cubre todo lo de la versión: es la vieja → cede.
   const amplia = dto({ id: "amplia", nombre: "Cirugía amplia (copia)", basadaEn: "cirugia", procedureIds: ["p1", "p2"] });
-  assert.deepEqual(hojasSugeridas([version, amplia], proc, []).sort(), ["amplia", "ver"]);
+  assert.deepEqual(hojasSugeridas([version, amplia], proc, []), ["ver"]);
+  assert.deepEqual(hojasSugeridas([version, amplia, injerto], proc, []).sort(), ["inj", "ver"], "el caso de N5-P1: versión + injerto, nunca dos de cirugía");
+  // N4-P1 con la liga que la hoja TRAE DE FÁBRICA (cordales + injerto): la copia de menos procedimientos es otra hoja.
+  const versionDeFabrica = dto({ id: "verf", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia", procedureIds: ["p1", "p2"] });
+  assert.deepEqual(hojasSugeridas([versionDeFabrica, injerto], proc, []).sort(), ["inj", "verf"], "«Injerto de encía» se propone aunque la versión conserve el injerto");
+  assert.deepEqual(hojasSugeridas([versionDeFabrica, amplia, injerto], proc, []).sort(), ["inj", "verf"], "la vieja amplia sigue cediendo");
+  assert.deepEqual(hojasSugeridas([versionDeFabrica, { ...viejaP1, procedureIds: ["p1", "p2"] }], proc, []), ["verf"], "igual a la versión: cede");
+  // El resultado no depende del orden de entrada.
+  assert.deepEqual(hojasSugeridas([injerto, amplia, versionDeFabrica], proc, []).sort(), ["inj", "verf"]);
   // La de fábrica pelada cede a sus copias solo si juntas cubren lo que ella cubre en la cita.
   const pelada = dto({ id: "pelada", deFabrica: true, basadaEn: "cirugia", procedureIds: ["p1", "p2"] });
   const cordales = dto({ id: "cord", basadaEn: "cirugia", procedureIds: ["p1"] });

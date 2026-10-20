@@ -355,30 +355,33 @@ export function procedimientosDeLaCita(
 export function sinRepetirLaMismaHoja<T extends HojaDTO>(
   hojas: readonly T[],
   /**
-   * Los procedimientos de la cita, cuando la propuesta sale de la LIGA: una hoja solo cede a otra de su mismo origen si
-   * esa otra cubre los procedimientos de la cita que ella cubre (ws1-t8 · N4-P1). Una copia ligada a OTRO procedimiento
-   * de la cita («Injerto de encía») es otra hoja y se propone. Sin esto (propuesta por palabras) comparten la misma
-   * indicación y ceden como siempre.
+   * Los procedimientos de la cita, cuando la propuesta sale de la LIGA. Entre una copia y la versión editada de su misma
+   * hoja de fábrica, lo que decide si la copia es «la misma hoja vieja» o OTRA hoja es qué cubre de la cita
+   * (ws1-t8 · N4-P1, N5-P1):
+   *  · cubre todo lo que cubre la versión (lo mismo o más): es la copia vieja → cede, solo la editada;
+   *  · cubre menos que la versión («Injerto de encía» frente a una versión que conserva la liga que la hoja trae de
+   *    fábrica) o cubre otro procedimiento: es otra hoja → se propone.
+   * Sin procedimientos (propuesta por palabras) comparten la misma indicación y la copia vieja cede.
    */
   procedimientosDeLaCita?: ReadonlySet<string>,
 ): T[] {
   const cubre = (h: HojaDTO) => (procedimientosDeLaCita ? h.procedureIds.filter((id) => procedimientosDeLaCita.has(id)) : []);
-  const estaCubierta = (h: T, quienes: readonly T[]) => {
-    if (!procedimientosDeLaCita) return quienes.length > 0;
-    const cubiertos = new Set(quienes.flatMap(cubre));
-    return quienes.length > 0 && cubre(h).every((id) => cubiertos.has(id));
-  };
   const delOrigen = (h: T) => hojas.filter((x) => x !== h && x.basadaEn === h.basadaEn);
   return hojas.filter((h) => {
     if (!h.basadaEn) return true;
     if (!h.deFabrica) {
-      // La copia vieja cede a la versión editada de la MISMA hoja.
-      const version = delOrigen(h).filter((x) => x.deFabrica && x.versionDeClinica);
-      return !estaCubierta(h, version);
+      // La copia cede a la versión editada de la MISMA hoja si cubre todo lo que la versión cubre.
+      const mias = new Set(cubre(h));
+      const versiones = delOrigen(h).filter((x) => x.deFabrica && x.versionDeClinica);
+      return !versiones.some((v) => !procedimientosDeLaCita || cubre(v).every((id) => mias.has(id)));
     }
     if (h.versionDeClinica) return true;
-    // La de fábrica pelada cede a las copias de la clínica, si cubren lo que ella cubre en esta cita.
-    return !estaCubierta(h, delOrigen(h).filter((x) => !x.deFabrica));
+    // La de fábrica pelada cede a las copias de la clínica, si juntas cubren lo que ella cubre en esta cita.
+    const copias = delOrigen(h).filter((x) => !x.deFabrica);
+    if (copias.length === 0) return true;
+    if (!procedimientosDeLaCita) return false;
+    const cubiertos = new Set(copias.flatMap(cubre));
+    return !cubre(h).every((id) => cubiertos.has(id));
   });
 }
 
