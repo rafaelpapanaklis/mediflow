@@ -21,6 +21,9 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// «Pagar» puede esperar hasta ~15 s a que otra operación de cobro de la clínica suelte el candado, y además hace
+// varias llamadas a Stripe: el límite por defecto de la función se queda corto. El candado (90 s) caduca después.
+export const maxDuration = 60;
 
 /**
  * /api/billing/pago-pendiente — cobro de tarjeta rechazado (ws1-t2).
