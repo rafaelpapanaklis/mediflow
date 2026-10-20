@@ -238,12 +238,13 @@ export async function POST(req: NextRequest) {
     if (!estabaSuspendida && body.sumarAlCorriente !== true) {
       const hasta = current?.trialEndsAt ? new Date(current.trialEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Mexico_City" }) : null;
       // AA12: dentro de las 24 h de gracia no está «al corriente»: tiene un cobro rechazado y acceso por unas horas.
-      const enGracia = current?.subscriptionStatus === "past_due" || current?.subscriptionStatus === "unpaid";
+      // AB7: sin fecha de acceso no se afirma nada de las 24 h de gracia.
+      const enGracia = (current?.subscriptionStatus === "past_due" || current?.subscriptionStatus === "unpaid") && !!current?.trialEndsAt;
       return NextResponse.json(
         {
           error: enGracia
-            ? `Esta clínica tiene un cobro rechazado y todavía está dentro de sus 24 horas de gracia${hasta ? ` (acceso hasta el ${hasta})` : ""}. «Activar» es solo para clínicas suspendidas o vencidas; para registrar su pago usa «Registrar pago».`
-            : `Esta clínica ya está al corriente${hasta ? ` hasta el ${hasta}` : ""}. «Activar» es solo para clínicas suspendidas o vencidas; para registrar un pago usa «Registrar pago».`,
+            ? `Esta clínica tiene un cobro rechazado y todavía está dentro de sus 24 horas de gracia (acceso hasta el ${hasta}). «Activar» es solo para clínicas suspendidas o vencidas; para registrar su pago usa «Registrar pago».`
+            : `Esta clínica ${current?.subscriptionStatus === "past_due" || current?.subscriptionStatus === "unpaid" ? "tiene un cobro rechazado pero todavía tiene acceso" : "ya está al corriente"}${hasta ? ` hasta el ${hasta}` : ""}. «Activar» es solo para clínicas suspendidas o vencidas; para registrar un pago usa «Registrar pago».`,
           code: "YA_AL_CORRIENTE",
         },
         { status: 409 },

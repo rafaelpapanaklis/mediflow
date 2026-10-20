@@ -9,10 +9,10 @@ import {
   finDeLoPagado,
   mesesDelIntervalo,
 } from "@/lib/billing/cobro-rechazado";
-import { subscriptionPeriodFields } from "@/lib/billing/proration";
+import { subscriptionPeriodEndSeconds, subscriptionPeriodFields } from "@/lib/billing/proration";
 import { isPaymentFailed } from "@/lib/plan-status";
 import { referenciaDeFactura } from "@/lib/marketplace/module-purchase-core";
-import { aplicarReglaDeSuspension, facturasAbiertasDelPlan } from "@/lib/billing/reactivacion-tras-suspension.server";
+import { anularFacturasDeMesesSuspendidos, aplicarReglaDeSuspension, facturasAbiertasDelPlan } from "@/lib/billing/reactivacion-tras-suspension.server";
 import { avisarAdminUnaVez } from "@/lib/billing/aviso-admin-envio.server";
 import { avisoFalloReglaSuspension, avisoStripeSigueRechazada } from "@/lib/billing/avisos-admin";
 
@@ -28,40 +28,88 @@ import { avisoFalloReglaSuspension, avisoStripeSigueRechazada } from "@/lib/bill
 
 type StripeRegla = Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">;
 
-export type ResultadoReglaCobro = { aplicada: false } | { aplicada: true; fin: Date; estadoStripe: string | null };
+export type ResultadoReglaCobro =
+  | { aplicada: false }
+  | {
+      aplicada: true;
+      fin: Date;
+      estadoStripe: string | null;
+      /** Camino TARDÍO (reintento): solo se anularon los meses sin servicio y NO se movió el ciclo; el admin lo revisa a mano. */
+      tardia?: boolean;
+      /** El aviso «revisa en Stripe…» del camino tardío (el mismo texto que recibe el admin por correo). */
+      aviso?: string;
+    };
+
+/**
+ * Un pago con MÁS de esto de antigüedad ya no se procesa «al momento del pago» (un reenvío tardío del webhook, el cron, «Reintentar»):
+ * ese camino NO calcula el ciclo (ni lo mueve ni anula renovaciones posteriores) porque entre el pago y el reintento Stripe pudo
+ * renovar con el ciclo viejo. Solo hace lo seguro y avisa al admin (decimocuarta vuelta, recorte del camino tardío).
+ */
+export const UMBRAL_REGLA_TARDIA_MS = 6 * 3_600_000;
 
 export const KIND_REGLA_FALLO = "regla_fallo";
 export const KIND_REGLA_OK = "regla_ok";
 
-async function crearRastro(invoiceId: string, clinicId: string, kind: string): Promise<void> {
+/** El rastro guarda en `email` (columna de texto libre) el FIN DE LO PAGADO en ISO: de ahí sale el acceso protegido. */
+async function crearRastro(invoiceId: string, clinicId: string, kind: string, fin?: Date): Promise<void> {
   try {
-    await prisma.billingEmailLog.create({ data: { invoiceId: `${invoiceId}:${kind}`, clinicId, kind, email: "-" } });
+    await prisma.billingEmailLog.create({ data: { invoiceId: `${invoiceId}:${kind}`, clinicId, kind, email: fin ? fin.toISOString() : "-" } });
   } catch (e) {
     if ((e as { code?: string } | null)?.code !== "P2002") console.error("[regla-cobro-tarjeta] rastro", kind, (e as Error)?.message ?? e);
   }
 }
 
-export const registrarReglaFallida = (invoiceId: string, clinicId: string) => crearRastro(invoiceId, clinicId, KIND_REGLA_FALLO);
-export const registrarReglaCompletada = (invoiceId: string, clinicId: string) => crearRastro(invoiceId, clinicId, KIND_REGLA_OK);
+export const registrarReglaFallida = (invoiceId: string, clinicId: string, fin?: Date) => crearRastro(invoiceId, clinicId, KIND_REGLA_FALLO, fin);
+export const registrarReglaCompletada = (invoiceId: string, clinicId: string, fin?: Date) => crearRastro(invoiceId, clinicId, KIND_REGLA_OK, fin);
+
+/**
+ * Hasta cuándo quedó PAGADA la clínica según los rastros de la regla (el `fin` que se anotó al aplicarla o al fallar): es el
+ * acceso que se le dio por un cobro de tarjeta y que ningún rechazo posterior puede recortar. null si no hay ninguno vigente.
+ */
+export async function finProtegidoPorRastros(clinicId: string, ahora: Date = new Date()): Promise<Date | null> {
+  const filas = await prisma.billingEmailLog.findMany({
+    where: { kind: { in: [KIND_REGLA_FALLO, KIND_REGLA_OK] }, clinicId },
+    select: { email: true },
+  });
+  let max: Date | null = null;
+  for (const f of filas) {
+    const d = new Date(f.email);
+    if (!Number.isNaN(d.getTime()) && d.getTime() > ahora.getTime() && (!max || d.getTime() > max.getTime())) max = d;
+  }
+  return max;
+}
 
 /**
  * Facturas (de una clínica, o de todas) cuya regla falló y aún no se completó. SIN ventana de tiempo (Z8): un pendiente no
  * caduca por viejo —se queda visible hasta que se cierre con `regla_ok`—; la tabla solo crece cuando una regla falla.
  */
-export async function reglasPendientes(clinicId?: string): Promise<Array<{ clinicId: string; invoiceId: string }>> {
+export async function reglasPendientes(clinicId?: string): Promise<Array<{ clinicId: string; invoiceId: string; fin?: Date }>> {
   const filas = await prisma.billingEmailLog.findMany({
     where: { kind: { in: [KIND_REGLA_FALLO, KIND_REGLA_OK] }, ...(clinicId ? { clinicId } : {}) },
-    select: { invoiceId: true, clinicId: true, kind: true },
+    select: { invoiceId: true, clinicId: true, kind: true, email: true },
   });
   const cerradas = new Set<string>();
   for (const f of filas) if (f.kind === KIND_REGLA_OK) cerradas.add(f.invoiceId.replace(/:regla_ok$/, ""));
-  const salida: Array<{ clinicId: string; invoiceId: string }> = [];
+  const salida: Array<{ clinicId: string; invoiceId: string; fin?: Date }> = [];
   for (const f of filas) {
     if (f.kind !== KIND_REGLA_FALLO) continue;
     const id = f.invoiceId.replace(/:regla_fallo$/, "");
-    if (!cerradas.has(id)) salida.push({ clinicId: f.clinicId, invoiceId: id });
+    const fin = new Date(f.email);
+    if (!cerradas.has(id)) salida.push({ clinicId: f.clinicId, invoiceId: id, ...(Number.isNaN(fin.getTime()) ? {} : { fin }) });
   }
   return salida;
+}
+
+/** El aviso del camino tardío (admin): qué revisar a mano en Stripe. */
+export function textoReglaTardia(a: { clinicaNombre: string; abiertas: string[]; finPeriodoStripe: Stripe.Subscription; protegidoHasta: Date }): string {
+  const segs = subscriptionPeriodEndSeconds(a.finPeriodoStripe);
+  const fmt = (d: Date) => d.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Mexico_City" });
+  return (
+    `La regla no se aplicó al momento del pago. Revisa en Stripe la suscripción de ${a.clinicaNombre}: ` +
+    `factura(s) abiertas ${a.abiertas.length > 0 ? a.abiertas.join(", ") : "(ninguna)"} y fin de periodo ${segs ? fmt(new Date(segs * 1000)) : "(desconocido)"}. ` +
+    `El acceso de la clínica está protegido hasta ${fmt(a.protegidoHasta)}. ` +
+    "Si el fin de periodo de Stripe queda antes de esa fecha, la tarjeta cobrará antes de tiempo (días solapados): ajusta la fecha de cobro a mano."
+  );
 }
 
 /** ¿Alguna línea de la factura cubre (casi) un periodo COMPLETO del plan? Un prorrateo cubre solo unos días. */
@@ -98,6 +146,7 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
   invoice: Stripe.Invoice,
   clinic: { id: string; name?: string | null; subscriptionStatus: string | null; stripeSubscriptionId: string | null; trialEndsAt: Date | null },
   pagadoEn: Date,
+  opciones: { tardia?: boolean } = {},
 ): Promise<ResultadoReglaCobro> {
   const NO: ResultadoReglaCobro = { aplicada: false };
   if (!clinic.stripeSubscriptionId || (invoice.amount_paid ?? 0) <= 0 || !invoice.id) return NO;
@@ -134,6 +183,44 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
 
   // Un cobro de tarjeta del plan paga un periodo COMPLETO: una anualidad son 12 meses, no 1 (Y1).
   const fin = finDeLoPagado(pagadoEn, mesesDelIntervalo(viva));
+
+  // CAMINO TARDÍO (reintento: cron, «Reintentar», o un reenvío del webhook muchas horas después): SIN CÁLCULO DE CICLO. Entre el pago
+  // y este momento Stripe pudo renovar con el ciclo viejo, y cualquier cálculo (mover el ciclo, anular renovaciones) se equivoca de
+  // un lado o del otro. Solo se hace lo seguro: anular los meses sin servicio creados HASTA el pago, proteger el acceso de la clínica
+  // hasta el fin de lo pagado y avisar al admin para que lo revise en Stripe.
+  if (opciones.tardia === true || Date.now() - pagadoEn.getTime() > UMBRAL_REGLA_TARDIA_MS) {
+    const { anuladas, fallos: noAnuladas } = await anularFacturasDeMesesSuspendidos(stripe, clinic.id, aAnular);
+    if (noAnuladas.length > 0) {
+      await registrarReglaFallida(invoice.id, clinic.id, fin);
+      throw new Error("No se pudieron anular todas las facturas de los meses sin servicio; se reintenta");
+    }
+    try {
+      await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin });
+    } catch (e) {
+      console.error("[regla-cobro-tarjeta] no se pudo reactivar (camino tardío):", (e as Error)?.message ?? e);
+      await registrarReglaFallida(invoice.id, clinic.id, fin);
+      throw e;
+    }
+    await registrarReglaCompletada(invoice.id, clinic.id, fin);
+    let abiertas: string[] = [];
+    try {
+      abiertas = (await facturasAbiertasDelPlan(stripe, clinic.stripeSubscriptionId)).map((f) => f.id!).filter(Boolean);
+    } catch {
+      abiertas = [];
+    }
+    const aviso = textoReglaTardia({ clinicaNombre: clinic.name ?? clinic.id, abiertas, finPeriodoStripe: viva, protegidoHasta: fin });
+    await avisarAdminUnaVez(`${invoice.id}:regla_tardia`, clinic.id, { asunto: `Revisa en Stripe la suscripción de ${clinic.name ?? clinic.id}: la regla de la suspensión no se aplicó al momento del pago`, lineas: [aviso] });
+    await logAudit({
+      clinicId: clinic.id,
+      userId: clinic.id,
+      entityType: "subscription",
+      entityId: invoice.id,
+      action: "update",
+      changes: { _source: { before: null, after: { event: "invoice.paid", invoiceId: invoice.id, reglaTardia: true, anuladas, sinMoverElCiclo: true } } },
+    }).catch(() => {});
+    return { aplicada: true, fin, estadoStripe: viva.status, tardia: true, aviso };
+  }
+
   const r = await aplicarReglaDeSuspension({ stripe, clinicId: clinic.id, sub: viva, pagadoEn, finDeLoPagado: fin, facturas: aAnular, periodoExacto: true, facturaPagada: [invoice.id] });
   await logAudit({
     clinicId: clinic.id,
@@ -157,7 +244,7 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     } catch (e) {
       console.error("[regla-cobro-tarjeta] no se pudo reactivar tras el fallo de la regla:", (e as Error)?.message ?? e);
     }
-    await registrarReglaFallida(invoice.id, clinic.id);
+    await registrarReglaFallida(invoice.id, clinic.id, fin);
     await avisarAdminUnaVez(
       `${invoice.id}:regla_suspension_fallo`,
       clinic.id,
@@ -165,7 +252,7 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     );
     throw new Error("La regla de la suspensión no se completó; Stripe debe reintentar el evento");
   }
-  if (fallidaAntes) await registrarReglaCompletada(invoice.id, clinic.id);
+  if (fallidaAntes) await registrarReglaCompletada(invoice.id, clinic.id, fin);
   // X5: el estado que Stripe reporta tras la regla (con otras facturas anuladas puede seguir `past_due`/`unpaid`).
   let estadoStripe: string | null = null;
   try {
@@ -246,15 +333,16 @@ export async function reactivarSiStripeYaCobro(
 export async function reintentarReglasPendientes(
   stripe: StripeRegla,
   clinicId?: string,
-): Promise<{ completadas: string[]; fallos: string[] }> {
+): Promise<{ completadas: string[]; fallos: string[]; revisar: string[] }> {
   const completadas: string[] = [];
   const fallos: string[] = [];
-  let pendientes: Array<{ clinicId: string; invoiceId: string }> = [];
+  const revisar: string[] = [];
+  let pendientes: Array<{ clinicId: string; invoiceId: string; fin?: Date }> = [];
   try {
     pendientes = await reglasPendientes(clinicId);
   } catch (e) {
     console.error("[regla-cobro-tarjeta] no se pudieron leer los rastros:", (e as Error)?.message ?? e);
-    return { completadas, fallos };
+    return { completadas, fallos, revisar };
   }
   for (const p of pendientes) {
     try {
@@ -265,15 +353,16 @@ export async function reintentarReglasPendientes(
       if (!clinica) continue;
       const factura = await stripe.invoices.retrieve(p.invoiceId);
       const pagadoEn = new Date((factura.status_transitions?.paid_at ?? factura.created ?? Math.floor(Date.now() / 1000)) * 1000);
-      const r = await reglaDeSuspensionPorCobroDeTarjeta(stripe, factura, clinica, pagadoEn);
-      if (r.aplicada) await reactivarSiStripeYaCobro(stripe, factura, clinica, { fin: r.fin });
+      // Siempre el camino TARDÍO: un reintento nunca calcula el ciclo.
+      const r = await reglaDeSuspensionPorCobroDeTarjeta(stripe, factura, clinica, pagadoEn, { tardia: true });
+      if (r.aplicada && r.aviso) revisar.push(r.aviso);
       // Z12: si ya no aplica (suscripción cancelada, la factura no es del plan…) se CIERRA el pendiente para que no reaparezca.
-      await registrarReglaCompletada(p.invoiceId, p.clinicId);
+      if (!r.aplicada) await registrarReglaCompletada(p.invoiceId, p.clinicId, p.fin);
       completadas.push(p.invoiceId);
     } catch (e) {
       console.error("[regla-cobro-tarjeta] reintento", p.invoiceId, (e as Error)?.message ?? e);
       fallos.push(p.invoiceId);
     }
   }
-  return { completadas, fallos };
+  return { completadas, fallos, revisar };
 }

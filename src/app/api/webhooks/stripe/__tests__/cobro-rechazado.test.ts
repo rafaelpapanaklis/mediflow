@@ -1400,7 +1400,7 @@ test("un `trialing` SIN nuestra marca (una prueba de verdad) se guarda tal cual:
   assert.equal(clinica().subscriptionStatus, "trialing");
 });
 
-test("Q1 si Stripe falla al mover el ciclo: la activación NO se deshace, el admin ve el aviso con su texto y «Reintentar» lo completa", async () => {
+test("Q1 si Stripe falla al mover el ciclo: la activación NO se deshace, el admin ve el aviso con su texto y recibe el correo «revisa en Stripe»; «Reintentar» ya NO mueve el ciclo", async () => {
   conTarjetaRechazada();
   suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 30 * DIA));
   stripeCicloFalla = true;
@@ -1411,10 +1411,13 @@ test("Q1 si Stripe falla al mover el ciclo: la activación NO se deshace, el adm
   assert.match(cuerpo.facturaTarjeta.mensaje, /mover el siguiente cobro de la tarjeta/);
   assert.deepEqual(cuerpo.facturaTarjeta.marcadas, [FACTURA], "lo que sí se marcó se informa");
   assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(correosAdmin.length, 1, "el admin recibe el aviso de revisar la suscripción a mano");
+  assert.match(correosAdmin[0].text, /La regla no se aplicó al momento del pago\. Revisa en Stripe la suscripción de BEVADENT/);
   stripeCicloFalla = false;
   const retry = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
-  assert.equal(retry.facturaTarjeta.ciclo?.tipo, "movido");
-  assert.equal(llamadasCiclo.length, 1);
+  assert.equal(llamadasCiclo.length, 0, "el reintento tardío NO mueve el ciclo");
+  assert.match(retry.facturaTarjeta.revisar, /Revisa en Stripe la suscripción de BEVADENT/);
+  assert.match(retry.facturaTarjeta.revisar, /El acceso de la clínica está protegido hasta/);
 });
 
 test("octava · suspendida 4 meses y paga 1: acceso un mes desde el pago, 4 facturas anuladas y no cobradas, el siguiente cobro es EXACTAMENTE al terminar, sin «En prueba»", async () => {
@@ -1480,7 +1483,7 @@ test("octava · idempotente: repetir la confirmación o pulsar «Reintentar» no
   assert.equal(pagosDeSubscripcion.filter((p) => MESES_SUSPENDIDOS.includes(p.reference)).length, 4, "ninguna fila duplicada");
 });
 
-test("octava/Y6 · si Stripe no puede mover el ciclo, las facturas de los meses sin servicio SE ANULAN igual (nunca se deben); el reintento mueve el ciclo con el fin de lo pagado de la FILA del pago (M9)", async () => {
+test("octava/Y6 · si Stripe no puede mover el ciclo, las facturas de los meses sin servicio SE ANULAN igual (nunca se deben); el reintento TARDÍO no mueve el ciclo: avisa qué revisar en Stripe", async () => {
   suspendidaCuatroMeses();
   stripeCicloFalla = true;
   const r = await activarMeses(1);
@@ -1489,24 +1492,27 @@ test("octava/Y6 · si Stripe no puede mover el ciclo, las facturas de los meses 
   assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
   assert.match(cuerpo.facturaTarjeta.mensaje, /mover el siguiente cobro de la tarjeta/);
   assert.match(cuerpo.facturaTarjeta.mensaje, /Reintentar/);
+  assert.match(cuerpo.facturaTarjeta.mensaje, /ya NO vuelve a mover el ciclo/);
   assert.doesNotMatch(cuerpo.facturaTarjeta.mensaje, /trial_end|ponle|pon a la suscripción/i, "Y2: nunca le pide poner la prueba a mano");
   assert.match(cuerpo.facturaTarjeta.mensaje, /No pongas una prueba a mano en Stripe/);
   assert.equal(llamadasAnular.length, 4, "Y6: Stripe no las reintenta ni las cobra aunque el ciclo falle");
   assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0);
   const finPagado = clinica().trialEndsAt.getTime();
+  assert.equal(isPlanExpired(clinica()), false, "tiene acceso");
   const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
-  const lista = await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble });
-  assert.equal(lista.length, 1, "el aviso persistente la detecta por el ciclo pendiente, no por facturas abiertas");
-  assert.equal(new Date(lista[0].cicloPendiente!).getTime(), finPagado, "el aviso espera el fin de lo pagado de la fila del pago");
+  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble }), [], "la lista ya no inventa un «ciclo pendiente» que ningún camino puede resolver");
   stripeCicloFalla = false;
   const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
   assert.equal(re.success, true);
   assert.equal(llamadasAnular.length, 4, "no se anula dos veces");
-  assert.equal(llamadasCiclo.length, 1);
-  assert.ok(Math.abs(trialEndMs() - finPagado) < 1500, "M9: trial_end = fin de lo pagado, no el momento del reintento");
-  assert.equal(suscripcionesVivas.get(SUB).metadata.periodo_pagado_hasta, new Date(trialEndMs()).toISOString(), "Y2: «Reintentar» lo pone CON la marca");
+  assert.equal(llamadasCiclo.length, 0, "RECORTE: el reintento tardío no calcula ni mueve el ciclo (aunque Stripe ya conteste)");
+  assert.match(re.facturaTarjeta.revisar, /La regla no se aplicó al momento del pago\. Revisa en Stripe la suscripción de BEVADENT: factura\(s\) abiertas \(ninguna\) y fin de periodo/);
+  assert.match(re.facturaTarjeta.revisar, /El acceso de la clínica está protegido hasta/);
+  assert.equal(clinica().trialEndsAt.getTime(), finPagado, "el acceso no se toca");
+  assert.equal(correosAdmin.length, 1, "un solo correo aunque se pulse otra vez");
+  await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC });
+  assert.equal(correosAdmin.length, 1);
   assert.equal(llamadasPay.length, 0);
-  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble }), [], "ya no sale en el aviso");
 });
 
 test("octava · si Stripe no puede anular una factura: aviso con su texto, la activación sigue y la factura queda abierta para el reintento", async () => {
@@ -2115,7 +2121,7 @@ test("Y15 con COBRO_REALINEAR_CICLO=0 el pago lo dice (ciclo «apagado»), «Rei
     const cuerpo = await (await activarMeses(1)).json();
     assert.deepEqual(cuerpo.facturaTarjeta.ciclo, { tipo: "apagado" });
     const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
-    assert.equal(re.facturaTarjeta.ciclo?.tipo, "apagado");
+    assert.equal(re.facturaTarjeta.ciclo, undefined, "el reintento tardío no toca el ciclo, esté o no apagado el ajuste");
     const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
     assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble }), []);
   } finally {
@@ -2264,7 +2270,9 @@ test("Z2 si la regla falla, la clínica que PAGÓ se reactiva igual (también co
   assert.equal(clinica().subscriptionStatus, "active");
   assert.match(correosAdmin[0].text, /otra suscripción del cliente/, "Z14: el aviso dice por qué");
   const { reglasPendientes } = await import("@/lib/billing/regla-cobro-tarjeta.server");
-  assert.deepEqual(await reglasPendientes(CLINIC), [{ clinicId: CLINIC, invoiceId: FACTURA }]);
+  const pendientes = await reglasPendientes(CLINIC);
+  assert.deepEqual(pendientes.map((p) => [p.clinicId, p.invoiceId]), [[CLINIC, FACTURA]]);
+  assert.ok(pendientes[0].fin && Math.abs(pendientes[0].fin.getTime() - clinica().trialEndsAt.getTime()) < 2000, "el rastro guarda el fin de lo pagado");
   const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
   const lista = await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble });
   assert.deepEqual(lista[0].tarjetaPendiente, [FACTURA]);
@@ -2338,7 +2346,7 @@ test("Z5 «Activar clínica» solo con la clínica suspendida o vencida: al corr
   assert.equal((await llamarAdmin({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1 })).status, 409, "ya está al corriente: no suma otro mes");
 });
 
-test("Z6 el REINTENTO usa siempre el modo exacto: una suspendida que pagó a 1,5 días del inicio de su ciclo y cuyo primer intento falló sí queda con el cobro donde termina lo pagado", async () => {
+test("Z6 (recortado) el reintento tardío NUNCA mueve el ciclo, ni a 1,5 días del inicio del ciclo ni con past_due: anula lo seguro y avisa qué revisar", async () => {
   const hoy = Date.now();
   reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(hoy - HORA), nextBillingDate: new Date(hoy + 29 * DIA) });
   suscripcionesVivas.set(SUB, suscripcion("past_due", hoy + 29 * DIA));
@@ -2347,15 +2355,12 @@ test("Z6 el REINTENTO usa siempre el modo exacto: una suspendida que pagó a 1,5
   const primero = await (await activarMeses(1)).json();
   assert.equal(primero.facturaTarjeta.tipo, "fallo");
   assert.equal(llamadasCiclo.length, 0);
-  assert.equal(llamadasAnular.length, 1, "la factura ya se anuló: en el reintento no queda nada abierto que delate la suspensión");
-  const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
-  const lista = await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble });
-  assert.equal(lista.length, 1, "el aviso persistente sí la muestra (tolerancia de 1 día, no 3)");
+  assert.equal(llamadasAnular.length, 1, "la factura ya se anuló");
   stripeCicloFalla = false;
   const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
   assert.equal(re.success, true);
-  assert.equal(llamadasCiclo.length, 1, "antes: tolerancia de 3 días → «nada» y la tarjeta cobraba hasta 3 días antes");
-  assert.ok(Math.abs(trialEndMs() - clinica().trialEndsAt.getTime()) < 1500);
+  assert.equal(llamadasCiclo.length, 0, "no calcula el ciclo en el camino tardío");
+  assert.match(re.facturaTarjeta.revisar, /Revisa en Stripe la suscripción/);
 });
 
 test("Z8 un cobro de tarjeta a medias NO caduca por viejo: a los 40 días sigue pendiente en la lista, «Reintentar» y el cron", async () => {
@@ -2582,4 +2587,143 @@ test("AA13 la factura aparte del excedente conserva el método del excedente tam
   const d = (await r.json()) as any;
   assert.match(d.error, /cobro rechazado y todavía está dentro de sus 24 horas de gracia/);
   assert.doesNotMatch(d.error, /ya está al corriente/);
+});
+
+/* ── Recorte del camino tardío + invariante «nunca sin acceso antes del fin de lo ya pagado» (verificación de la decimocuarta) ── */
+
+/** Suspendida que paga con tarjeta y la regla FALLA al momento del pago (el ciclo no se pudo mover): queda activa con acceso hasta `fin`. */
+async function pagoConReglaFallida() {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  const pago = Date.now();
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  facturasVivas.set(FACTURA, pagada);
+  stripeCicloFalla = true;
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 500);
+  stripeCicloFalla = false;
+  return { pago, pagada, fin: mesesDesde(aSegundos(pago) * 1000, 1) };
+}
+
+test("RECORTE camino tardío (tarjeta): «Reintentar» / el cron NO mueven el ciclo (ni con past_due) ni anulan renovaciones creadas después del pago; solo anulan lo seguro y avisan qué revisar en Stripe", async () => {
+  const { pago, fin } = await pagoConReglaFallida();
+  // Stripe renueva con el ciclo viejo DESPUÉS del pago (queda abierta) y la suscripción sigue past_due.
+  facturasDeLista.push(facturaDeMes("in_renov_tras_pago", 0, { created: aSegundos(pago + 2 * DIA), status_transitions: { finalized_at: aSegundos(pago + 2 * DIA) } }));
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 2 * DIA));
+  const antes = { anuladas: llamadasAnular.length, acceso: clinica().trialEndsAt.getTime() };
+  const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
+  assert.equal(re.success, true);
+  assert.equal(llamadasCiclo.length, 0, "AB4: con past_due el camino tardío tampoco recorta ni mueve");
+  assert.equal(facturasDeLista.find((f) => f.id === "in_renov_tras_pago")!.status, "open", "AB1: la renovación posterior al pago no se toca");
+  assert.equal(llamadasAnular.length, antes.anuladas, "y no se anuló nada más");
+  assert.ok(clinica().trialEndsAt.getTime() >= antes.acceso, "el acceso no se acorta");
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < 2000, "protegido hasta el fin de lo pagado");
+  assert.match(re.facturaTarjeta.revisar, /^La regla no se aplicó al momento del pago\. Revisa en Stripe la suscripción de BEVADENT: factura\(s\) abiertas in_renov_tras_pago y fin de periodo /);
+  assert.match(re.facturaTarjeta.revisar, /El acceso de la clínica está protegido hasta /);
+  assert.ok(correosAdmin.some((c) => /Revisa en Stripe la suscripción de BEVADENT/.test(c.subject)), "y el admin recibe el correo");
+  // El rastro se cierra: no reaparece en la lista ni en el cron.
+  const { reglasPendientes } = await import("@/lib/billing/regla-cobro-tarjeta.server");
+  assert.deepEqual(await reglasPendientes(CLINIC), []);
+  const { reintentarMarcadoPendiente } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
+  const cron = await reintentarMarcadoPendiente({ stripe: stripeDoble });
+  assert.deepEqual(cron, { revisadas: 0, marcadas: [], anuladas: [], fallos: [] });
+  assert.equal(llamadasCiclo.length, 0);
+});
+
+test("RECORTE: un reenvío del webhook con el pago de hace MÁS de 6 horas también es camino tardío (sin calcular el ciclo); uno reciente sigue siendo el camino normal", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  const pago = Date.now() - 10 * HORA;
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  assert.equal(await entregar(evento("invoice.paid", pagada, Date.now())), 200);
+  assert.equal(llamadasCiclo.length, 0, "tarde: sin calcular el ciclo");
+  assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), ["in_s2", "in_s3", "in_s4"], "pero sí se anulan los meses sin servicio creados hasta el pago");
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - mesesDesde(aSegundos(pago) * 1000, 1).getTime()) < 2000);
+  assert.ok(correosAdmin.some((c) => /Revisa en Stripe/.test(c.subject)));
+  // Control: reciente (hace 1 h) → normal, mueve el ciclo.
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  llamadasCiclo.length = 0;
+  const reciente = Date.now() - HORA;
+  const p2 = facturaPagada({ id: "in_reciente_pagada", billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(reciente - 100 * DIA), paid_at: aSegundos(reciente) } });
+  facturasVivas.set("in_reciente_pagada", { id: "in_reciente_pagada", status: "paid" });
+  assert.equal(await entregar(evento("invoice.paid", p2, Date.now())), 200);
+  assert.equal(llamadasCiclo.length, 1, "camino normal intacto");
+});
+
+test("INVARIANTE (AB1): un cobro rechazado NO recorta el acceso por debajo del fin de lo ya pagado: max(fin de lo pagado, rechazo + 24 h) — rastro de la regla, pago manual vigente o periodo pagado en Stripe", async () => {
+  const rechazar = async (id: string) => {
+    facturasVivas.set(id, { id, status: "open" });
+    const rechazo = Date.now();
+    assert.equal(await entregar(evento("invoice.payment_failed", facturaFallida({ id, created: aSegundos(rechazo), status_transitions: { finalized_at: aSegundos(rechazo) } }), rechazo)), 200);
+    return rechazo;
+  };
+  // (a) La regla de un cobro de tarjeta falló (rastro con el fin de lo pagado); Stripe renovó con el ciclo viejo y esa renovación se rechaza.
+  const { fin } = await pagoConReglaFallida();
+  const r1 = await rechazar("in_I2");
+  assert.equal(clinica().subscriptionStatus, "past_due", "el estado sí pasa a cobro rechazado (aviso de pago)");
+  assert.equal(isPlanExpired(clinica(), new Date(r1 + 25 * HORA)), false, "pero sigue con acceso a las 25 h: pagó hasta más tarde");
+  assert.ok(clinica().trialEndsAt.getTime() >= fin.getTime() - 2000, "acceso = max(fin de lo pagado, rechazo + 24 h)");
+  // (b) Pago MANUAL vigente (3 meses).
+  conTarjetaRechazada();
+  clinica().subscriptionStatus = "active";
+  clinica().trialEndsAt = new Date(Date.now() + 10 * DIA);
+  const tresMeses = mesesDesde(Date.now(), 3);
+  pagosDeSubscripcion = [{ id: "inv_m3", clinicId: CLINIC, status: "paid", method: "transfer", amount: 2067, paidAt: new Date(Date.now() - 2 * DIA), periodStart: new Date(Date.now() - 2 * DIA), periodEnd: tresMeses }];
+  await rechazar("in_I3");
+  assert.ok(clinica().trialEndsAt.getTime() >= tresMeses.getTime() - 2000, "el pago manual de 3 meses protege el acceso");
+  // (c) Periodo pagado a mano en Stripe (trialing + marca).
+  conTarjetaRechazada();
+  clinica().subscriptionStatus = "active";
+  const periodo: any = suscripcion("trialing", Date.now() + 40 * DIA);
+  periodo.trial_end = aSegundos(Date.now() + 40 * DIA);
+  periodo.metadata.periodo_pagado_hasta = new Date(periodo.trial_end * 1000).toISOString();
+  suscripcionesVivas.set(SUB, periodo);
+  await rechazar("in_I4");
+  assert.ok(clinica().trialEndsAt.getTime() >= periodo.trial_end * 1000 - 2000, "el periodo pagado de Stripe protege el acceso");
+  // (d) NEGATIVO — el caso BEVADENT: sin ninguna evidencia de pago, el acceso baja a rechazo + 24 h aunque la base ya tuviera el periodo nuevo; y una fila de cobro de
+  // Stripe con periodo futuro (p. ej. la mensualidad de un MÓDULO) NO protege al plan.
+  conTarjetaRechazada();
+  clinica().subscriptionStatus = "active";
+  clinica().trialEndsAt = new Date(Date.now() + 30 * DIA);
+  pagosDeSubscripcion = [{ id: "inv_mod", clinicId: CLINIC, status: "paid", method: "stripe", amount: 499, paidAt: new Date(), periodStart: new Date(), periodEnd: mesesDesde(Date.now(), 1) }];
+  const r4 = await rechazar("in_I5");
+  assert.ok(clinica().trialEndsAt.getTime() <= r4 + 25 * HORA, "BEVADENT intacto: sin evidencia de pago no se conserva el periodo que Stripe abrió");
+});
+
+test("RECORTE: el camino NORMAL (la regla se aplica al momento del pago) no cambia: suspendida 3 meses → los meses no se deben y recibe 1 mes desde el día y la hora del pago", async () => {
+  const hoy = Date.now();
+  reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(hoy - 100 * DIA), nextBillingDate: new Date(hoy + 10 * DIA) });
+  suscripcionesVivas.set(SUB, suscripcion("past_due", hoy + 10 * DIA));
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(`in_mes_${i + 1}`, d * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  const pago = Date.now();
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200);
+  const fin = mesesDesde(aSegundos(pago) * 1000, 1);
+  assert.equal(llamadasAnular.length, 3);
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - fin.getTime()) < 2000, "trial_end = pago + 1 mes");
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < 2000);
+  assert.equal(correosAdmin.length, 0, "sin avisos: todo se aplicó al momento del pago");
+});
+
+test("AB6/AB7 «Activar» a una clínica past_due SIN fecha de acceso no afirma nada de las 24 h de gracia; el aviso del botón «Reintentar» con el ajuste apagado cierra el aviso", async () => {
+  reiniciar({ subscriptionStatus: "past_due", trialEndsAt: null });
+  const r = await llamarAdmin({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1 });
+  // Sin fecha de acceso no hay "gracia" que afirmar: el texto es neutro (nada de «24 horas de gracia», nada de una fecha inventada).
+  assert.equal(r.status, 409);
+  const sinFecha = ((await r.json()) as any).error as string;
+  assert.doesNotMatch(sinFecha, /24 horas|gracia|hasta el/);
+  assert.match(sinFecha, /Registrar pago/);
+  reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(Date.now() + 10 * HORA) });
+  const gracia = (await (await llamarAdmin({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1 })).json()) as any;
+  assert.match(gracia.error, /dentro de sus 24 horas de gracia \(acceso hasta el /);
+  const { readFileSync } = await import("node:fs");
+  const aviso = readFileSync(path.join(RAIZ, "src/app/admin/payments/aviso-factura-tarjeta.tsx"), "utf8");
+  assert.match(aviso, /AB6: lo marcado y anulado ya quedó hecho; el aviso se cierra/);
 });

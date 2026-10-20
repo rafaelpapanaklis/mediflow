@@ -21,7 +21,7 @@ export interface AvisoFacturaTarjetaDatos {
   mensaje?: string | null;
 }
 
-type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; facturas?: string[]; anuladas?: string[]; ciclo?: { tipo?: string; hasta?: string } } | null } | null | undefined;
+type RespuestaMarcado = { facturaTarjeta?: { tipo?: string; mensaje?: string; facturas?: string[]; anuladas?: string[]; revisar?: string; ciclo?: { tipo?: string; hasta?: string } } | null } | null | undefined;
 
 /** Los datos del aviso a partir de la respuesta de una confirmación que falló al marcar / anular / mover el ciclo. */
 export function datosDelAviso(data: RespuestaMarcado, clinicId: string, clinicName?: string | null): AvisoFacturaTarjetaDatos {
@@ -81,9 +81,16 @@ export function AvisoFacturaTarjeta({
         return;
       }
       const t = data?.facturaTarjeta;
+      // Reintento TARDÍO: no calcula el ciclo; lo que hay que revisar en Stripe se dice completo y el aviso se cierra (AB6).
+      if (t?.revisar) {
+        toast(t.revisar, { icon: "⚠️", duration: 20000 });
+        onResuelto();
+        return;
+      }
       // AA12: se dice lo que pasó; con el ajuste apagado no se canta victoria.
       if (t?.ciclo?.tipo === "apagado") {
         toast("El ajuste automático del cobro está apagado: la tarjeta cobrará en su fecha anterior. Revísalo.", { icon: "⚠️", duration: 9000 });
+        onResuelto(); // AB6: lo marcado y anulado ya quedó hecho; el aviso se cierra
         return;
       }
       const marcadas = (t?.facturas ?? []).length;

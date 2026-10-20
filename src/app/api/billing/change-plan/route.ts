@@ -69,6 +69,8 @@ const MANUAL_PAID_STATUSES = ["active", "paid"];
  *  3. SIN PAGAR AÚN (`pending_payment` / sin suscripción): el plan es solo una
  *     preferencia, se actualiza in-place y se cobra al activar en
  *     /dashboard/suspended (que preselecciona este plan).
+ *     ⚠️ Una clínica SUSPENDIDA o vencida ya NO entra aquí: esta ruta le responde 409 `PLAN_SUSPENDIDO` y la manda a «Pagar mi
+ *     plan» (suspendida solo paga; AA1). Ninguna pantalla que ve una suspendida llama a esta ruta, y el 409 cubre la llamada a mano.
  *
  * Multi-tenant: clinicId siempre del ctx, NUNCA del body.
  */
