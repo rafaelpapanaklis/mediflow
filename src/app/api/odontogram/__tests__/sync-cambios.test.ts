@@ -26,6 +26,7 @@ interface Fila { id: string; patientId: string; toothNumber: number; surface: st
 let FILAS: Fila[] = [];
 let AUDIT: any[] = [];
 let CANDADOS: string[] = [];
+let TX_OPTS: ({ timeout?: number } | undefined)[] = [];
 let seq = 0;
 
 const coincide = (f: Fila, w: any): boolean => {
@@ -48,7 +49,7 @@ const tabla: any = {
   findMany: async ({ where }: any) => FILAS.filter((f) => coincide(f, where)).map((f) => ({ ...f })),
   findFirst: async ({ where }: any) => { const f = FILAS.find((x) => coincide(x, where)); return f ? { id: f.id } : null; },
   deleteMany: async ({ where }: any) => { const antes = FILAS.length; FILAS = FILAS.filter((f) => !coincide(f, where)); return { count: antes - FILAS.length }; },
-  create: async ({ data }: any) => { const f = { id: `e${++seq}`, notes: null, ...data }; FILAS.push(f); return f; },
+  create: async ({ data }: any) => { const f = { id: `e${++seq}`, notes: null, updatedAt: new Date(), ...data }; FILAS.push(f); return f; },
   createMany: async ({ data, skipDuplicates }: any) => {
     let n = 0;
     for (const d of data) {
@@ -62,7 +63,7 @@ const tabla: any = {
 const prismaFalso: any = {
   odontogramEntry: tabla,
   auditLog: { create: async ({ data }: any) => { AUDIT.push(data); return data; } },
-  $transaction: async (fn: (tx: any) => Promise<unknown>) => fn(prismaFalso),
+  $transaction: async (fn: (tx: any) => Promise<unknown>, opts?: { timeout?: number }) => { TX_OPTS.push(opts); return fn(prismaFalso); },
   $executeRaw: async (strings: TemplateStringsArray, ...vals: unknown[]) => { CANDADOS.push(String(vals[0])); return 1; },
 };
 
@@ -83,7 +84,7 @@ mock.module("@/lib/admin/suplantacion", {
 });
 
 const fila = (toothNumber: number, surface: string | null, conditionId: string, notes: string | null = null): Fila =>
-  ({ id: `e${++seq}`, patientId: PACIENTE, toothNumber, surface, conditionId, notes });
+  ({ id: `e${++seq}`, patientId: PACIENTE, toothNumber, surface, conditionId, notes, updatedAt: new Date("2026-10-19T10:00:00Z") } as Fila);
 
 async function post(body: unknown) {
   const { NextRequest } = await import("next/server");
@@ -96,7 +97,7 @@ async function post(body: unknown) {
 const estado = () => FILAS.map((f) => `${f.toothNumber}:${f.surface ?? "-"}:${f.conditionId}${f.notes ? `=${f.notes}` : ""}`).sort();
 
 beforeEach(() => {
-  FILAS = []; AUDIT = []; CANDADOS = []; seq = 0;
+  FILAS = []; AUDIT = []; CANDADOS = []; TX_OPTS = []; seq = 0;
   FILAS.push(fila(16, "O", "caries"), fila(36, null, "rct"), fila(11, null, "__note__", "sensible"));
 });
 
@@ -120,13 +121,17 @@ test("O4: «Guardar consulta» aplica solo el cambio del doctor y NO pisa lo que
   assert.equal(AUDIT.length, 1);
   assert.equal(AUDIT[0].action, "odontogram_sync");
   assert.deepEqual(AUDIT[0].changes._odontogram.before.dientes, [16]);
+  assert.equal(TX_OPTS[0]?.timeout, 20_000, "tope de la transacción por encima de los 5 s por defecto (t8)");
 });
 
-test("O4: el modo viejo (`records`) sí reemplazaba todo — por eso la consulta ya no lo usa", async () => {
+test("t8 N-O6: el modo viejo (`records`, reemplazo total) responde 410 y no toca nada", async () => {
   FILAS.push(fila(16, null, "crown"), fila(26, "O", "caries"));
+  const antes = estado();
   const res = await post({ patientId: PACIENTE, records: { 16: { surfaces: { M: ["restoration"] }, tooth: [] } } });
-  assert.equal(res.status, 200);
-  assert.deepEqual(estado(), ["16:M:restoration"], "la corona, la caries del 26, la endodoncia y la nota se pierden");
+  assert.equal(res.status, 410);
+  assert.equal((await res.json()).error, "gone");
+  assert.deepEqual(estado(), antes, "antes borraba la corona, la caries del 26, la endodoncia y la nota");
+  assert.equal(AUDIT.length, 0);
 });
 
 test("O4: diente completo y nota con el mismo candado que el autoguardado; sin duplicar lo que ya está", async () => {
@@ -161,5 +166,7 @@ test("O1: GET /api/odontogram devuelve la clínica de la SESIÓN (llave de la co
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.clinicId, CLINICA);
+  assert.equal(body.userId, "u_dr", "el usuario de la sesión: de quién es lo pendiente en el navegador (t8 N-O1)");
   assert.deepEqual(body.notes, { 11: "sensible" });
+  assert.ok(body.noteTimes[11], "cuándo se tocó la nota (para no pisar una más nueva al recuperar)");
 });

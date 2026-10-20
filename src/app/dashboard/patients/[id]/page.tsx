@@ -623,6 +623,9 @@ export default async function PatientDetailPage(
             cedulaProfesional:  user.cedulaProfesional ?? null,
             // El picker de visibilidad y el badge "restringida" son solo de admin.
             role:               user.role,
+            // Clínica de la SESIÓN: con el id, llave de lo pendiente del
+            // odontograma guardado en el navegador (ws1-t11, revisión t8).
+            clinicId:           user.clinicId,
           }}
           specialty={user.clinic.specialty}
           // Solo decide dónde cae una consulta recién iniciada (spa/salón

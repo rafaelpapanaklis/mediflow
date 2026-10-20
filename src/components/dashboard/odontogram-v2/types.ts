@@ -223,6 +223,12 @@ export interface OdontogramV2Props {
   value?: Records;
   onChange?: (records: Records) => void;
   /**
+   * Clínica y usuario de la SESIÓN con que el servidor pintó la página (revisión
+   * t8, N-O1/N-O3): llave de lo pendiente guardado en el navegador. Sin esto, la
+   * llave sale de la sesión que devuelve el GET (y hasta entonces no hay copia).
+   */
+  sesion?: { clinicId: string; userId: string };
+  /**
    * La paleta ya enseña grupo + color por cada hallazgo (`odo-pal-tabs`): con
    * esto en `true` no se repite la misma leyenda estática debajo del chart.
    * Default `false` — ningún caller existente (dental-form.tsx en "Nueva

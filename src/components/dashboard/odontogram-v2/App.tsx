@@ -22,7 +22,8 @@ import { EMPTY_RECORD } from "./types";
 import {
   fetchOdontogram, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
-import { SaveQueue, saveQueueFor, bindBrowserCopy, bindBrowserCopyOffline, type KeyValueStore, type SaveOp, type SaveStatus } from "./autosave";
+import { SaveQueue, saveQueueFor, type KeyValueStore, type SaveOp, type SaveStatus } from "./autosave";
+import { cargarOdontograma, aplicarRecuperado, fechaRecuperado } from "./recuperar";
 import { OdoDefs } from "./OdoDefs";
 import { Odontogram } from "./Odontogram";
 import { Palette } from "./Palette";
@@ -58,27 +59,6 @@ function sendOp(patientId: string, op: SaveOp, opts: { keepalive: boolean }): Pr
   }
 }
 
-/**
- * Lee el odontograma del servidor y le pinta encima lo pendiente. Si mientras
- * llegaba la respuesta la cola confirmó o encoló algo, esa lectura puede ser
- * de ANTES de una escritura ya hecha (la marca «desaparecería»): se vuelve a
- * pedir. Tras varios intentos con el doctor marcando sin parar, `force` decide
- * si se usa igual (carga inicial: hace falta el resto de la boca) o se deja
- * la pantalla como está (recarga al volver a la pestaña).
- */
-async function fetchConsistent(patientId: string, queue: SaveQueue | null, force: boolean): Promise<Records | null> {
-  for (let i = 0; i < 4; i++) {
-    const v = queue?.getVersion();
-    const { records, clinicId } = await fetchOdontogram(patientId);
-    if (!queue) return records;
-    // con la clínica de la sesión ya se sabe la llave de la copia del
-    // navegador: se engancha y se recupera lo que quedó sin mandar (O1)
-    if (clinicId && bindBrowserCopy(queue, browserStore(), clinicId, patientId) > 0) continue;
-    if (queue.getVersion() === v || (force && i === 3)) return queue.overlay(records);
-  }
-  return null;
-}
-
 function browserStore(): KeyValueStore | null {
   try { return window.localStorage; } catch { return null; /* navegación privada o bloqueado */ }
 }
@@ -91,6 +71,10 @@ function SaveIndicator({ status, lang, onRetry, onDiscard }: {
   if (status.state === "idle") return null;
   if (status.state === "saving") return <span className="odo-save odo-save-busy" role="status">{t.saving}</span>;
   if (status.state === "saved") return <span className="odo-save odo-save-ok" role="status">✓ {t.saved}</span>;
+  if (status.state === "discarded") {
+    // 403/404: el cambio no se guardará nunca; se dice y ya no vuelve
+    return <span className="odo-save odo-save-err" role="alert">{status.error}</span>;
+  }
   const fatal = status.state === "error";
   return (
     <span className="odo-save odo-save-err" role="alert" title={status.error}>
@@ -115,7 +99,19 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   );
 }
 
-export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint }: OdontogramV2Props) {
+/** «Tienes cambios sin guardar del …»: lo de una carga anterior de este usuario, que NO se manda solo. */
+function RecoveredBanner({ count, at, onSave, onDiscard }: { count: number; at: number; onSave: () => void; onDiscard: () => void }) {
+  const cambios = count === 1 ? "1 cambio" : `${count} cambios`;
+  return (
+    <div className="odo-recuperado" role="alert">
+      <span>Tienes {cambios} sin guardar del {fechaRecuperado(at)} en este navegador.</span>
+      <button type="button" className="odo-save-btn" onClick={onSave}>Guardar</button>
+      <button type="button" className="odo-save-btn" onClick={onDiscard}>Descartar</button>
+    </div>
+  );
+}
+
+export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint, sesion }: OdontogramV2Props) {
   // Modo CONTROLADO (foto por consulta): si llegan value+onChange, el estado lo
   // maneja el padre y NO se toca el servidor. Si no, modo VIVO (como la pestaña).
   const controlled = value !== undefined && !!onChange;
@@ -135,10 +131,17 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   // sobrevive a que este componente se desmonte con algo pendiente.
   const queue: SaveQueue | null = controlled
     ? null
-    : saveQueueFor(patientId, () => new SaveQueue({ send: (op, opts) => sendOp(patientId, op, opts) }));
+    : saveQueueFor(patientId, () => new SaveQueue({
+        send: (op, opts) => sendOp(patientId, op, opts),
+        // tras un 401: ¿quién tiene la sesión ahora? (solo se reintenta si es el mismo usuario)
+        whoAmI: () => fetchOdontogram(patientId).then((r) => r.userId),
+      }));
   const queueRef = useRef(queue);
   queueRef.current = queue;
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() => queue?.getStatus() ?? { state: "idle", pending: 0 });
+  const sesionRef = useRef(sesion ?? null);
+  sesionRef.current = sesion ?? null;
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() => queue?.getStatus() ?? { state: "idle", pending: 0, discarded: 0, recovered: null });
+  const [recoverMsg, setRecoverMsg] = useState<string | null>(null);
   useEffect(() => {
     if (!queue) return;
     setSaveStatus(queue.getStatus());
@@ -172,16 +175,13 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     let cancelled = false;
     setLoading(true);
     setError(null);
-    // lo que aún no llegó al servidor se pinta encima: no se pierde al volver
-    fetchConsistent(patientId, queueRef.current, true)
-      .then((recs) => { if (!cancelled && recs) setInternalRecords(recs); })
-      .catch((e) => {
+    // copia del navegador con la sesión de la página; lo pendiente se pinta
+    // encima; sin red, mensaje en español (recuperar.ts)
+    cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, store: browserStore(), leer: fetchOdontogram, force: true })
+      .then((r) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Error");
-        // sin red al abrir: lo que quedó pendiente (y lo que se marque ahora)
-        // sigue guardándose en el navegador y se ve, aunque falte el resto
-        const q = queueRef.current;
-        if (q) { bindBrowserCopyOffline(q, browserStore(), patientId); setInternalRecords(q.overlay({})); }
+        if (r.records) setInternalRecords(r.records);
+        if (r.error) setError(r.error);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -191,10 +191,30 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   // volver a la pestaña: otra pestaña pudo cambiar el odontograma).
   const resync = useCallback(() => {
     if (ctrlRef.current.controlled) return;
-    fetchConsistent(patientId, queueRef.current, false)
-      .then((recs) => { if (recs) setInternalRecords(recs); })
-      .catch(() => {});
+    cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, store: browserStore(), leer: fetchOdontogram, force: false })
+      .then((r) => { if (r.records && !r.error) { setInternalRecords(r.records); setError(null); } });
   }, [patientId]);
+
+  // 403/404: el servidor descartó un cambio → se enseña lo que de verdad hay
+  const discardedSeen = useRef(saveStatus.discarded);
+  useEffect(() => {
+    if (saveStatus.discarded !== discardedSeen.current) { discardedSeen.current = saveStatus.discarded; resync(); }
+  }, [saveStatus.discarded, resync]);
+
+  // «Tienes cambios sin guardar del …»: Guardar aplica sobre lo de HOY; Descartar los tira
+  const saveRecovered = () => {
+    const q = queueRef.current;
+    if (!q) return;
+    aplicarRecuperado(q, () => fetchOdontogram(patientId))
+      .then((plan) => {
+        setRecoverMsg(plan.omitidos
+          ? `Se guardó lo recuperado. ${plan.omitidos === 1 ? "Un cambio no se aplicó" : `${plan.omitidos} cambios no se aplicaron`}: alguien lo cambió después.`
+          : null);
+        resync();
+      })
+      .catch((e) => setRecoverMsg(e instanceof Error ? e.message : "No se pudo guardar lo recuperado."));
+  };
+  const discardRecovered = () => { queueRef.current?.discardRecovered(); setRecoverMsg(null); };
 
   // Encola una escritura (solo en modo vivo; el controlado lo guarda el padre).
   const save = useCallback((op: SaveOp) => { queueRef.current?.enqueue(op); }, []);
@@ -297,13 +317,16 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
 
   // Nota firme (dictado): se guarda ya.
   const handleNote = useCallback((fdi: number, txt: string) => {
-    setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.note = txt; }));
-    if (!ctrlRef.current.controlled) save({ kind: "note", toothNumber: fdi, text: txt });
+    const prev = recordsRef.current[fdi]?.note ?? "";
+    setRecords((p) => applyToRecords(p, fdi, (r) => { r.note = txt; }));
+    if (!ctrlRef.current.controlled) save({ kind: "note", toothNumber: fdi, text: txt, prev });
   }, [save]);
   // Nota mientras se teclea: se ve al momento y se guarda sola tras una pausa.
   const handleNoteDraft = useCallback((fdi: number, txt: string) => {
-    setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.note = txt; }));
-    queueRef.current?.noteChanged(fdi, txt);
+    // la nota de antes de la primera tecla (la cola solo guarda la primera)
+    const prev = recordsRef.current[fdi]?.note ?? "";
+    setRecords((p) => applyToRecords(p, fdi, (r) => { r.note = txt; }));
+    queueRef.current?.noteChanged(fdi, txt, prev);
   }, []);
   const handleNoteFlush = useCallback((fdi: number) => { queueRef.current?.flushNote(fdi); }, []);
 
@@ -369,6 +392,10 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       {/* ===== Chart ===== */}
       <section className="odo-main" aria-label="Odontograma">
         <div className="odo-chart-card">
+          {queue && saveStatus.recovered && (
+            <RecoveredBanner count={saveStatus.recovered.count} at={saveStatus.recovered.at} onSave={saveRecovered} onDiscard={discardRecovered} />
+          )}
+          {recoverMsg && <div className="odo-recuperado" role="status">{recoverMsg}</div>}
           <div className="odo-chart-head">
             <div className="odo-hint">
               {error ? (

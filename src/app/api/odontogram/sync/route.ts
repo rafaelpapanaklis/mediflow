@@ -165,7 +165,9 @@ async function aplicarCambios(
         },
       });
     }
-  });
+    // un viaje a la base por diente, cara y hallazgo tocados: con muchos dientes
+    // el tope por defecto (5 s) se queda corto (revisión t8, sospecha)
+  }, { timeout: 20_000, maxWait: 10_000 });
   if (suplantacion) {
     await anotarAccionDeSuplantacion(suplantacion, {
       clinicId: dbUser.clinicId, entityType: "patient", entityId: patientId, action: "odontogram_sync",
@@ -201,6 +203,16 @@ export async function POST(req: NextRequest) {
 
     if (parsed.data.cambios) {
       return aplicarCambios(req, dbUser, patientId, parsed.data.cambios);
+    }
+    // Modo viejo (`records`): REEMPLAZABA el odontograma entero y podía borrar
+    // lo que otra pestaña autoguardó. Nadie lo usa desde la revisión t4 (O4):
+    // se cierra (revisión t8, N-O6). El código de abajo queda solo como
+    // referencia de lo que hacía; no se ejecuta.
+    if (parsed.data.records) {
+      return NextResponse.json(
+        { error: "gone", hint: "El reemplazo completo del odontograma ya no existe: manda `cambios` (solo los dientes tocados)." },
+        { status: 410 },
+      );
     }
     const records = parsed.data.records!;
 

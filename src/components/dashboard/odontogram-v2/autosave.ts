@@ -34,17 +34,22 @@ import type { Records, ToothRecord } from "./types";
 export type SaveOp =
   | { kind: "put"; toothNumber: number; surface: string | null; conditionId: string }
   | { kind: "delete"; toothNumber: number; surface: string | null; conditionId: string }
-  | { kind: "note"; toothNumber: number; text: string }
+  /** `prev`: la nota tal como estaba antes de que el doctor la tocara (para no pisar una nota más nueva al recuperar) */
+  | { kind: "note"; toothNumber: number; text: string; prev?: string }
   | { kind: "reset" };
 
-export type SaveState = "idle" | "saving" | "saved" | "retrying" | "error";
+export type SaveState = "idle" | "saving" | "saved" | "retrying" | "error" | "discarded";
 
 export interface SaveStatus {
   state: SaveState;
   /** escrituras que faltan por confirmar (incluida la nota que se está tecleando) */
   pending: number;
-  /** mensaje del último fallo (retrying / error) */
+  /** mensaje del último fallo (retrying / error / discarded) */
   error?: string;
+  /** cuántas escrituras descartó el servidor (403/404) desde que se creó la cola */
+  discarded: number;
+  /** cambios de una sesión anterior de ESTE usuario en este navegador, esperando «Guardar / Descartar» */
+  recovered: { count: number; at: number } | null;
 }
 
 /** Lo que manda cada operación al servidor. Lanza un error con `status` (0 = sin respuesta). */
@@ -59,6 +64,8 @@ export interface QueueOptions {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (id: unknown) => void;
   now?: () => number;
+  /** ¿Quién tiene la sesión ahora? (userId) — antes de reintentar lo que falló por 401 */
+  whoAmI?: () => Promise<string | null>;
 }
 
 /** Lo mínimo de localStorage que se usa (inyectable en las pruebas). */
@@ -73,23 +80,77 @@ export interface KeyValueStore {
 /** Cada pestaña escribe su propia copia: dos pestañas del mismo paciente no se borran la una a la otra. */
 const TAB_ID = Math.random().toString(36).slice(2, 10);
 
-/** Lo pendiente guardado en el navegador caduca: no se manda una marca de hace semanas. */
-export const PENDIENTE_CADUCA_MS = 14 * 24 * 60 * 60 * 1000;
+/**
+ * Lo pendiente guardado en el navegador caduca a las 48 h de hecho cada
+ * cambio (revisión t8, N-O4): pasado eso no se ofrece recuperarlo y la copia se
+ * borra del disco, sea del paciente que sea.
+ */
+export const PENDIENTE_CADUCA_MS = 48 * 60 * 60 * 1000;
 
-/** Prefijo de lo pendiente en el navegador: por clínica (de la sesión) y paciente; cada pestaña añade `:<pestaña>`. */
-export function pendienteKey(clinicId: string, patientId: string): string {
-  return `dc:odo-pendiente:${clinicId}:${patientId}`;
+/** Todas las copias empiezan así (el barrido de caducadas las busca por este prefijo). */
+export const PENDIENTE_PREFIJO = "dc:odo-pendiente:";
+
+/**
+ * Prefijo de lo pendiente de un paciente: por clínica y USUARIO de la SESIÓN
+ * (revisión t8, N-O1 y N-O3); cada pestaña añade `:<pestaña>`. Otro usuario en
+ * el mismo navegador tiene otra llave: nunca ve ni manda lo de este.
+ */
+export function pendienteKey(clinicId: string, userId: string, patientId: string): string {
+  return `${PENDIENTE_PREFIJO}v2:${clinicId}:${userId}:${patientId}`;
 }
+
+/** Una escritura guardada en la copia, con cuándo la hizo el doctor. */
+export interface OpGuardada { op: SaveOp; at: number }
 
 function esOpValida(o: unknown): o is SaveOp {
   const op = o as Record<string, unknown> | null;
   if (!op || typeof op !== "object") return false;
   if (op.kind === "reset") return true;
   if (typeof op.toothNumber !== "number" || !Number.isInteger(op.toothNumber)) return false;
-  if (op.kind === "note") return typeof op.text === "string";
+  if (op.kind === "note") return typeof op.text === "string" && (op.prev === undefined || typeof op.prev === "string");
   return (op.kind === "put" || op.kind === "delete")
     && typeof op.conditionId === "string"
     && (op.surface === null || typeof op.surface === "string");
+}
+
+/** Lee una copia; null si está corrupta o no es del formato actual. */
+function leerCopia(raw: string | null): { savedAt: number; ops: OpGuardada[] } | null {
+  try {
+    const d = JSON.parse(raw ?? "null");
+    if (!d || d.v !== 2 || typeof d.savedAt !== "number" || !Array.isArray(d.ops)) return null;
+    const ops = (d.ops as unknown[]).filter((x): x is OpGuardada => {
+      const g = x as OpGuardada;
+      return !!g && typeof g.at === "number" && esOpValida(g.op);
+    });
+    return ops.length === d.ops.length ? { savedAt: d.savedAt, ops } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Barre TODAS las copias de lo pendiente del navegador (de cualquier paciente,
+ * usuario o clínica): borra las corruptas o de un formato viejo y quita los
+ * cambios de más de 48 h; si no queda nada, borra la copia (revisión t8,
+ * N-O4). Devuelve cuántas copias borró. Nunca lanza.
+ */
+export function sweepPendientes(store: KeyValueStore | null, now: number): number {
+  if (!store) return 0;
+  let borradas = 0;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      if (k && k.startsWith(PENDIENTE_PREFIJO)) keys.push(k);
+    }
+    for (const k of keys) {
+      const c = leerCopia(store.getItem(k));
+      const vivos = c ? c.ops.filter((g) => now - g.at < PENDIENTE_CADUCA_MS) : [];
+      if (!c || !vivos.length) { store.removeItem(k); borradas++; continue; }
+      if (vivos.length !== c.ops.length) store.setItem(k, JSON.stringify({ v: 2, savedAt: c.savedAt, ops: vivos }));
+    }
+  } catch { /* bloqueado */ }
+  return borradas;
 }
 
 export function opKey(op: SaveOp): string {
@@ -122,7 +183,7 @@ export class SaveQueue {
   private attempt = 0;
   private version = 0;
   private touched = false;
-  private status: SaveStatus = { state: "idle", pending: 0 };
+  private status: SaveStatus = { state: "idle", pending: 0, discarded: 0, recovered: null };
   private listeners = new Set<(s: SaveStatus) => void>();
   private readonly send: SendFn;
   private readonly noteDelay: number;
@@ -132,8 +193,20 @@ export class SaveQueue {
   private readonly now: () => number;
   private store: KeyValueStore | null = null;
   private storeKey: string | null = null;
+  private storePrefix: string | null = null;
+  private ownerUser: string | null = null;
   private attachedCount = 0;
   private lastFailStatus: number | null = null;
+  /** cuándo hizo el doctor cada escritura pendiente (por opKey) — viaja en la copia */
+  private opAt = new Map<string, number>();
+  /** la nota antes de empezar a teclear, por diente */
+  private noteBase = new Map<number, string>();
+  private discardedCount = 0;
+  private discardError: string | undefined;
+  /** copias de una carga anterior (o de otra pestaña) de este usuario: esperan «Guardar / Descartar» */
+  private recovered: OpGuardada[] = [];
+  private recoveredKeys: string[] = [];
+  private readonly whoAmI: (() => Promise<string | null>) | null;
 
   constructor(opts: QueueOptions) {
     this.send = opts.send;
@@ -142,56 +215,97 @@ export class SaveQueue {
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
     this.now = opts.now ?? (() => Date.now());
+    this.whoAmI = opts.whoAmI ?? null;
   }
 
-  /* ---------------- copia en el navegador (O1) ---------------- */
+  /* ---------------- copia en el navegador (O1, revisión t8) ---------------- */
   /**
-   * Engancha el almacenamiento del navegador y recupera lo que quedó
-   * pendiente la última vez (cerrado sin red, pestaña muerta…): lo vuelve a
-   * encolar, y sale solo. Devuelve cuántas escrituras recuperó.
+   * Engancha la copia del navegador con la llave de la SESIÓN (clínica +
+   * usuario + paciente). Lo que quedó de una carga anterior de ESTE usuario
+   * NO se manda solo (revisión t8, N-O2): queda en `recovered` y la pantalla
+   * pregunta «Guardar / Descartar». Si la cola estaba enganchada a OTRA sesión
+   * (otro usuario o clínica en la misma pestaña), lo de esa sesión se deja en
+   * su copia —sin mandarlo con la sesión nueva— y la cola empieza vacía.
+   * Devuelve cuántos cambios recuperables encontró.
    */
-  bindStorage(store: KeyValueStore | null, prefix: string, tabId: string = TAB_ID): number {
+  bindStorage(store: KeyValueStore | null, prefix: string, userId: string, tabId: string = TAB_ID): number {
+    if (!store) return 0;
     const own = `${prefix}:${tabId}`;
-    if (!store || this.storeKey === own) return 0;
+    if (this.storeKey === own) return this.recovered.length;
+    if (this.storePrefix && this.storePrefix !== prefix) this.abandonarSesion();
     this.store = store;
     this.storeKey = own;
-    // Copias de otras cargas de la página (esta pestaña antes de cerrarse, u
-    // otra pestaña): esta cola se hace cargo de ellas y las borra; si la otra
-    // pestaña sigue viva, su próxima copia la vuelve a escribir.
+    this.storePrefix = prefix;
+    this.ownerUser = userId;
+    sweepPendientes(store, this.now());
     const ajenas: string[] = [];
     try {
       for (let i = 0; i < store.length; i++) {
         const k = store.key(i);
-        if (k && k !== own && (k === prefix || k.startsWith(`${prefix}:`))) ajenas.push(k);
+        if (k && k !== own && k.startsWith(`${prefix}:`)) ajenas.push(k);
       }
     } catch { /* bloqueado */ }
-    const pendientes = new Set(this.pendingOps().map(opKey));
-    let restored = 0;
+    const recuperadas: OpGuardada[] = [];
     for (const k of ajenas) {
-      let ops: SaveOp[] = [];
-      try {
-        const d = JSON.parse(store.getItem(k) ?? "null");
-        if (d && d.v === 1 && Array.isArray(d.ops) && typeof d.savedAt === "number" && this.now() - d.savedAt < PENDIENTE_CADUCA_MS) {
-          ops = d.ops.filter(esOpValida);
-        }
-        store.removeItem(k);
-      } catch { /* corrupto: se ignora */ }
-      // en orden (un «limpiar todo» guardado borra lo de antes, como pasó en
-      // pantalla); lo que esta cola ya tiene pendiente de lo mismo es más nuevo
-      for (const op of ops) {
-        if (pendientes.has(opKey(op))) continue;
-        this.enqueue(op);
-        restored++;
-      }
+      const c = leerCopia(store.getItem(k));
+      if (!c) continue;
+      recuperadas.push(...c.ops.filter((g) => this.now() - g.at < PENDIENTE_CADUCA_MS));
+      this.recoveredKeys.push(k);
     }
+    // por fecha del cambio, no por el orden de las llaves
+    this.recovered = recuperadas.sort((x, y) => x.at - y.at);
     this.persist();
-    return restored;
+    this.refresh();
+    return this.recovered.length;
+  }
+
+  /** La pestaña cambió de sesión: lo de la anterior se queda en su copia y no se manda. */
+  private abandonarSesion() {
+    this.persist();
+    this.noteTimers.forEach((id) => this.clearTimer(id));
+    this.noteTimers.clear();
+    this.noteDrafts.clear();
+    this.noteBase.clear();
+    this.queue = [];
+    this.failed = [];
+    this.opAt.clear();
+    this.recovered = [];
+    this.recoveredKeys = [];
+    if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
+    this.store = null; this.storeKey = null; this.storePrefix = null; this.ownerUser = null;
+  }
+
+  /** Lo recuperado de una carga anterior (en orden de fecha). */
+  getRecovered(): OpGuardada[] { return [...this.recovered]; }
+
+  /** «Descartar» lo recuperado: se borra del navegador y no se manda. */
+  discardRecovered() {
+    try { this.recoveredKeys.forEach((k) => this.store?.removeItem(k)); } catch { /* bloqueado */ }
+    this.recovered = [];
+    this.recoveredKeys = [];
+    this.refresh();
+  }
+
+  /**
+   * «Guardar» lo recuperado: encola lo que `planRecovery` decidió aplicar
+   * sobre lo que hay HOY (ya no es una repetición ciega) y suelta las copias
+   * viejas — lo encolado vive ya en la copia propia.
+   */
+  applyRecovered(ops: SaveOp[]) {
+    ops.forEach((op) => this.enqueue(op));
+    this.discardRecovered();
   }
 
   /** Todo lo que aún no está confirmado, en orden, con la nota a medias como nota. */
-  private pendingOps(): SaveOp[] {
-    const notes: SaveOp[] = [...this.noteDrafts].map(([toothNumber, text]) => ({ kind: "note", toothNumber, text }));
-    return [...(this.inflight ? [this.inflight] : []), ...this.failed, ...this.queue, ...notes];
+  private pendingOps(): OpGuardada[] {
+    const at = (op: SaveOp) => this.opAt.get(opKey(op)) ?? this.now();
+    const notes: OpGuardada[] = [...this.noteDrafts].map(([toothNumber, text]) => {
+      const op: SaveOp = { kind: "note", toothNumber, text, prev: this.noteBase.get(toothNumber) };
+      return { op, at: at(op) };
+    });
+    return [...(this.inflight ? [this.inflight] : []), ...this.failed, ...this.queue]
+      .map((op) => ({ op, at: at(op) }))
+      .concat(notes);
   }
 
   /** Escribe (o borra) la copia del navegador. Nunca lanza. */
@@ -200,7 +314,7 @@ export class SaveQueue {
     try {
       const ops = this.pendingOps();
       if (!ops.length) this.store.removeItem(this.storeKey);
-      else this.store.setItem(this.storeKey, JSON.stringify({ v: 1, savedAt: this.now(), ops }));
+      else this.store.setItem(this.storeKey, JSON.stringify({ v: 2, savedAt: this.now(), ops }));
     } catch { /* lleno o bloqueado: queda la cola en memoria */ }
   }
 
@@ -216,6 +330,21 @@ export class SaveQueue {
 
   /** ¿Lo último que falló fue la sesión vencida? (al volver a la pestaña se reintenta) */
   failedBySession(): boolean { return this.failed.length > 0 && this.lastFailStatus === 401; }
+
+  /**
+   * Tras un 401: al volver a la pestaña se reintenta, pero SOLO si la sesión
+   * que hay ahora es del mismo usuario (revisión t8, N-O1). Si entró otro, lo
+   * pendiente se queda en la copia del dueño y no se manda.
+   */
+  async retryAfterSession(): Promise<boolean> {
+    if (!this.failedBySession()) return false;
+    if (this.whoAmI) {
+      const quien = await this.whoAmI().catch(() => null);
+      if (!quien || (this.ownerUser && quien !== this.ownerUser)) return false;
+    }
+    this.retryNow();
+    return true;
+  }
 
   /* ---------------- estado ---------------- */
   getStatus(): SaveStatus { return this.status; }
@@ -246,10 +375,14 @@ export class SaveQueue {
     if (this.retryTimer !== null) { state = "retrying"; error = this.transientError; }
     else if (busy) state = "saving";
     else if (this.failed.length) { state = "error"; error = this.failError; }
+    else if (this.discardError) { state = "discarded"; error = this.discardError; }
     else state = this.touched ? "saved" : "idle";
+    const last = this.recovered.length ? this.recovered[this.recovered.length - 1].at : 0;
     this.status = {
       state, error,
       pending: this.queue.length + (this.inflight ? 1 : 0) + this.noteDrafts.size + this.failed.length,
+      discarded: this.discardedCount,
+      recovered: this.recovered.length ? { count: this.recovered.length, at: last } : null,
     };
     this.persist();
     this.listeners.forEach((fn) => fn(this.status));
@@ -259,6 +392,7 @@ export class SaveQueue {
   /** Encola una escritura. Si había otra de lo mismo esperando (o rechazada), la sustituye. */
   enqueue(op: SaveOp) {
     this.touched = true;
+    this.discardError = undefined;
     if (op.kind === "reset") {
       // limpiar todo deja sin sentido lo que esperaba (no lo que ya va en vuelo)
       this.queue = [];
@@ -266,14 +400,23 @@ export class SaveQueue {
       this.noteTimers.forEach((id) => this.clearTimer(id));
       this.noteTimers.clear();
       this.noteDrafts.clear();
+      this.noteBase.clear();
     } else if (op.kind === "note") {
-      // una nota firme sustituye a la que se estaba tecleando de ese diente
+      // una nota firme sustituye a la que se estaba tecleando de ese diente;
+      // conserva la nota de ANTES de la primera tecla (o de la nota que sustituye)
       const t = this.noteTimers.get(op.toothNumber);
       if (t !== undefined) this.clearTimer(t);
       this.noteTimers.delete(op.toothNumber);
       this.noteDrafts.delete(op.toothNumber);
+      const diente = op.toothNumber;
+      const anterior = [...this.queue, ...this.failed].find((q) => q.kind === "note" && q.toothNumber === diente) as
+        { prev?: string } | undefined;
+      const prev = anterior?.prev ?? this.noteBase.get(op.toothNumber) ?? op.prev;
+      this.noteBase.delete(op.toothNumber);
+      op = prev === undefined ? op : { ...op, prev };
     }
     const k = opKey(op);
+    this.opAt.set(k, this.now());
     this.queue = this.queue.filter((q) => opKey(q) !== k);
     this.failed = this.failed.filter((q) => opKey(q) !== k);
     this.queue.push(op);
@@ -282,11 +425,14 @@ export class SaveQueue {
   }
 
   /** La nota de un diente cambió al teclear: se guarda sola tras una pausa. */
-  noteChanged(toothNumber: number, text: string) {
+  noteChanged(toothNumber: number, text: string, prev?: string) {
     this.touched = true;
+    this.discardError = undefined;
+    if (!this.noteBase.has(toothNumber) && prev !== undefined) this.noteBase.set(toothNumber, prev);
     this.noteDrafts.set(toothNumber, text);
-    const prev = this.noteTimers.get(toothNumber);
-    if (prev !== undefined) this.clearTimer(prev);
+    this.opAt.set(`n:${toothNumber}`, this.now());
+    const timer = this.noteTimers.get(toothNumber);
+    if (timer !== undefined) this.clearTimer(timer);
     this.noteTimers.set(toothNumber, this.setTimer(() => this.flushNote(toothNumber), this.noteDelay));
     this.refresh();
   }
@@ -299,7 +445,8 @@ export class SaveQueue {
     if (!this.noteDrafts.has(toothNumber)) return;
     const text = this.noteDrafts.get(toothNumber)!;
     this.noteDrafts.delete(toothNumber);
-    this.enqueue({ kind: "note", toothNumber, text });
+    const prev = this.noteBase.get(toothNumber);
+    this.enqueue(prev === undefined ? { kind: "note", toothNumber, text } : { kind: "note", toothNumber, text, prev });
   }
 
   /** Manda ya todo lo que se estaba tecleando. */
@@ -341,8 +488,10 @@ export class SaveQueue {
 
   /** «Descartar»: tira lo que el servidor rechazó (el llamador recarga del servidor). */
   discard() {
+    this.failed.forEach((op) => this.opAt.delete(opKey(op)));
     this.failed = [];
     this.failError = undefined;
+    this.discardError = undefined;
     this.refresh();
   }
 
@@ -381,6 +530,7 @@ export class SaveQueue {
         this.attempt = 0;
         this.transientError = undefined;
         this.lastFailStatus = null;
+        if (!this.queue.some((q) => opKey(q) === opKey(op))) this.opAt.delete(opKey(op));
         this.refresh();
         this.pump();
       },
@@ -390,6 +540,18 @@ export class SaveQueue {
         const superseded = op.kind !== "reset" && this.queue.some((q) => opKey(q) === opKey(op));
         const status = (err as { status?: unknown })?.status;
         this.lastFailStatus = typeof status === "number" ? status : null;
+        if (status === 403 || status === 404) {
+          // Sin permiso o paciente que no es de esta clínica (revisión t8,
+          // N-O5): reintentarlo no lo arreglará nunca. Se descarta —no queda en
+          // la copia ni vuelve al abrir— y se dice; la pantalla recarga del
+          // servidor para enseñar lo que de verdad hay.
+          if (!superseded) this.opAt.delete(opKey(op));
+          this.discardedCount++;
+          this.discardError = `${errorMessage(err)} Ese cambio se descartó.`;
+          this.refresh();
+          this.pump();
+          return;
+        }
         if (!isTransient(err)) {
           // el servidor dijo que no: repetirla igual no sirve. Se aparta, se
           // avisa, y lo demás sigue guardándose (no se queda como rehén)
@@ -410,20 +572,15 @@ export class SaveQueue {
   }
 }
 
-/** La última clínica de la sesión vista en este navegador: sirve de llave si se abre sin red. */
-export const ULTIMA_CLINICA = "dc:odo-ultima-clinica";
-
-/** Engancha la copia de lo pendiente (tras leer del servidor la clínica de la sesión). */
-export function bindBrowserCopy(queue: SaveQueue, store: KeyValueStore | null, clinicId: string, patientId: string, tabId?: string): number {
-  try { store?.setItem(ULTIMA_CLINICA, clinicId); } catch { /* lleno o bloqueado */ }
-  return queue.bindStorage(store, pendienteKey(clinicId, patientId), tabId);
-}
-
-/** Sin red al abrir: se engancha con la última clínica conocida para no perder lo que se marque. */
-export function bindBrowserCopyOffline(queue: SaveQueue, store: KeyValueStore | null, patientId: string, tabId?: string): number {
-  let clinicId: string | null = null;
-  try { clinicId = store?.getItem(ULTIMA_CLINICA) ?? null; } catch { /* bloqueado */ }
-  return clinicId ? queue.bindStorage(store, pendienteKey(clinicId, patientId), tabId) : 0;
+/**
+ * Engancha la copia de lo pendiente con la SESIÓN: clínica y usuario de quien
+ * tiene la sesión ahora (los manda la página desde el servidor, o los devuelve
+ * el GET). Nunca «la última clínica conocida» del navegador (revisión t8, N-O3).
+ */
+export function bindBrowserCopy(
+  queue: SaveQueue, store: KeyValueStore | null, sesion: { clinicId: string; userId: string }, patientId: string, tabId?: string,
+): number {
+  return queue.bindStorage(store, pendienteKey(sesion.clinicId, sesion.userId, patientId), sesion.userId, tabId);
 }
 
 /* Una cola por paciente y por pestaña: sobrevive a que el odontograma se desmonte. */
@@ -461,7 +618,7 @@ export function installPageHandlers(win: PageTarget, doc: DocTarget): () => void
   // puede ser el último aviso antes de que la maten → copia al navegador ya
   const onVisibility = () => {
     if (doc.visibilityState === "hidden") all().forEach((q) => { q.flush(); q.persist(); });
-    else all().forEach((q) => { if (q.failedBySession()) q.retryNow(); });
+    else all().forEach((q) => { void q.retryAfterSession(); });
   };
   // la página se va: copia al navegador y, por si hay red, sale con keepalive
   const onPageHide = () => all().forEach((q) => { q.flush(); q.persist(); q.flushForUnload(); });
@@ -475,7 +632,7 @@ export function installPageHandlers(win: PageTarget, doc: DocTarget): () => void
   };
   const onOnline = () => all().forEach((q) => q.retryNow());
   // volver a la pestaña tras iniciar sesión en otra: lo que falló por 401 sale
-  const onFocus = () => all().forEach((q) => { if (q.failedBySession()) q.retryNow(); });
+  const onFocus = () => all().forEach((q) => { void q.retryAfterSession(); });
   doc.addEventListener("visibilitychange", onVisibility);
   win.addEventListener("pagehide", onPageHide);
   win.addEventListener("beforeunload", onBeforeUnload);
@@ -550,6 +707,14 @@ export function renderPendingNotice(doc: NoticeDoc, getQs: () => SaveQueue[] = (
     Object.assign(btn.style, { border: "1px solid #f0b4b4", background: "#fff", color: "#b3403f", borderRadius: "6px", padding: "2px 8px", fontWeight: "700", cursor: "pointer" });
     btn.addEventListener("click", () => getQs().forEach((q) => q.retryNow()));
     el.appendChild(btn);
+    // lo que el servidor rechazó (400, sesión vencida) se puede tirar desde aquí
+    const tirar = doc.createElement("button");
+    tirar.setAttribute("type", "button");
+    tirar.setAttribute("data-descartar", "1");
+    tirar.textContent = "Descartar";
+    Object.assign(tirar.style, btn.style);
+    tirar.addEventListener("click", () => getQs().forEach((q) => { if (!q.isAttached()) q.discard(); }));
+    el.appendChild(tirar);
     doc.body.appendChild(el);
     (el as unknown as { _texto: NoticeEl })._texto = span;
   }

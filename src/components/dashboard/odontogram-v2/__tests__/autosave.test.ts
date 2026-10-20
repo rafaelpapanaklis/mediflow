@@ -151,26 +151,26 @@ test("si mientras reintenta llega otra de lo mismo, manda la nueva y no la vieja
   assert.deepEqual(srv.sent.map((x) => x.op), [put(14, "O", "caries"), del(14, "O", "caries")]);
 });
 
-test("el servidor dice que no (403): avisa, no reintenta solo, y «Reintentar» / «Descartar» funcionan", async () => {
+test("un rechazo que se puede reintentar (400/401): avisa, no reintenta solo, y «Reintentar» / «Descartar» funcionan", async () => {
   const srv = server();
   const { q, c, states } = makeQueue(srv);
-  srv.setFail(() => 403);
+  srv.setFail(() => 400);
   q.enqueue(put(11, "V", "caries"));
   q.enqueue(put(12, "V", "caries"));
   await settle(); await settle();
   assert.equal(states.at(-1)?.state, "error");
-  assert.equal(states.at(-1)?.error, "HTTP 403");
+  assert.equal(states.at(-1)?.error, "HTTP 400");
   assert.equal(states.at(-1)?.pending, 2);
   assert.equal(q.hasPending(), true, "lo rechazado sigue contando: el navegador avisa al cerrar");
   await c.tick(60_000);
-  assert.equal(srv.sent.length, 2, "un 403 no se reintenta solo");
+  assert.equal(srv.sent.length, 2, "un 400 no se reintenta solo");
   srv.setFail(null);
   q.retryNow();
   await settle(); await settle(); await settle();
   assert.equal(srv.sent.length, 4);
   assert.equal(states.at(-1)?.state, "saved");
 
-  srv.setFail(() => 404);
+  srv.setFail(() => 401);
   q.enqueue(put(13, "V", "caries"));
   await settle();
   assert.equal(states.at(-1)?.state, "error");
@@ -179,6 +179,26 @@ test("el servidor dice que no (403): avisa, no reintenta solo, y «Reintentar» 
   assert.equal(q.hasPending(), false);
   assert.equal(states.at(-1)?.state, "saved");
   assert.deepEqual(q.overlay({}), {});
+});
+
+test("t8 N-O5: 403/404 se DESCARTAN con mensaje claro: no quedan pendientes ni vuelven", async () => {
+  const srv = server();
+  const { q, c, states } = makeQueue(srv);
+  srv.setFail((op) => (op.kind === "put" && op.toothNumber === 11 ? 403 : op.kind === "put" && op.toothNumber === 12 ? 404 : null));
+  q.enqueue(put(11, "V", "caries"));
+  q.enqueue(put(12, "V", "caries"));
+  q.enqueue(put(13, "V", "caries"));
+  for (let i = 0; i < 5; i++) await settle();
+  assert.equal(q.hasPending(), false, "ni el 403 ni el 404 se quedan esperando");
+  assert.equal(states.at(-1)?.state, "discarded");
+  assert.match(states.at(-1)?.error ?? "", /Ese cambio se descartó\.$/);
+  assert.equal(states.at(-1)?.discarded, 2, "la pantalla recarga del servidor al cambiar este contador");
+  assert.deepEqual(q.overlay({}), {}, "ya no se pinta lo descartado");
+  await c.tick(120_000);
+  assert.equal(srv.sent.length, 3, "nunca se reintenta");
+  q.enqueue(put(14, "V", "caries"));
+  await settle(); await settle();
+  assert.equal(states.at(-1)?.state, "saved", "el aviso se va con el siguiente cambio que sí se guarda");
 });
 
 test("un rechazo (400) no deja como rehén lo que va detrás: lo demás se guarda", async () => {
