@@ -25,9 +25,13 @@
 
    Quién manda: cada cola sabe de qué sesión es (usuario y clínica que pintó la
    página). Antes de reintentar algo que falló —«Reintentar», vuelve la red,
-   vuelve el foco— se pregunta quién tiene la sesión ahora: si es otro usuario
-   u otra sede, NO se manda (no sale firmado por otro ni a otra sede) y se
-   dice qué hacer.
+   vuelve el foco, vence el temporizador— se pregunta quién tiene la sesión
+   ahora: si es otro usuario u otra sede, NO se manda (no sale firmado por otro
+   ni a otra sede) y se dice qué hacer; si no se puede saber (sin red), no se
+   manda nada ni se cambia el aviso. Además cada escritura lleva esa sesión en
+   la cabecera `x-odontograma-sesion` y el servidor responde 409 sin escribir
+   si la cookie es de otra (revisión t8, cuarta vuelta, N4-O2): así se cubren
+   también el keepalive al cerrar y las marcas nuevas.
 
    Las escrituras son idempotentes en el servidor (upsert / deleteMany y el
    candado de las filas de diente completo), así que un reintento de algo que
@@ -56,8 +60,12 @@ export interface SaveStatus {
 /** Quién tiene la sesión: usuario y clínica (sede) activa. */
 export interface SessionInfo { userId: string; clinicId: string }
 
-/** Lo que manda cada operación al servidor. Lanza un error con `status` (0 = sin respuesta) y `code`. */
-export type SendFn = (op: SaveOp, opts: { keepalive: boolean }) => Promise<void>;
+/**
+ * Lo que manda cada operación al servidor. Lanza un error con `status` (0 = sin
+ * respuesta) y `code`. `sesion` es la de la cola: va en la cabecera y el
+ * servidor la compara con la cookie.
+ */
+export type SendFn = (op: SaveOp, opts: { keepalive: boolean; sesion?: SessionInfo | null }) => Promise<void>;
 
 export interface QueueOptions {
   send: SendFn;
@@ -70,7 +78,7 @@ export interface QueueOptions {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (id: unknown) => void;
   now?: () => number;
-  /** ¿Quién tiene la sesión ahora? — antes de reintentar lo que falló */
+  /** ¿Quién tiene la sesión ahora? — antes de reintentar lo que falló. Lanza si no se pudo saber (sin red). */
   whoAmI?: () => Promise<SessionInfo | null>;
 }
 
@@ -101,7 +109,7 @@ export function limpiarCopiasViejas(store: KeyValueStore | null): number {
   return n;
 }
 
-/** Lo que lleva más de esto fallando ya no se reintenta solo (revisión t8, N3-O3). */
+/** Lo que lleva más de esto sin guardarse ya no sale solo, ni por keepalive (revisión t8, N3-O3). */
 export const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export function opKey(op: SaveOp): string {
@@ -114,9 +122,10 @@ export function opKey(op: SaveOp): string {
  * Qué hacer con un fallo:
  *  - red: sin respuesta, tiempo agotado, demasiadas peticiones o fallo del
  *    servidor → reintentar solo;
- *  - sesion: sesión vencida (401) o el reto de dos pasos pendiente (403
- *    `two_factor_required` del middleware) → apartar y reintentar cuando
- *    vuelva el MISMO usuario (revisión t8, N3-O1: ya no se descarta);
+ *  - sesion: sesión vencida (401), el reto de dos pasos pendiente (403
+ *    `two_factor_required` del middleware) o la cookie es de otra sesión (409
+ *    `otra_sesion`, N4-O2) → apartar y reintentar cuando vuelva el MISMO
+ *    usuario (revisión t8, N3-O1: ya no se descarta);
  *  - descartar: la API dice que ese usuario no puede o que el paciente no es
  *    de esta clínica (`forbidden`, `patient_not_found`) → reintentar no lo
  *    arreglará (salvo que la sede activa haya cambiado: se comprueba antes);
@@ -129,7 +138,7 @@ export function tipoDeFallo(err: unknown): TipoDeFallo {
   const status = typeof e?.status === "number" ? e.status : null;
   const code = typeof e?.code === "string" ? e.code : null;
   if (status === null || status === 0 || status === 408 || status === 429 || status >= 500) return "red";
-  if (status === 401 || code === "two_factor_required") return "sesion";
+  if (status === 401 || code === "two_factor_required" || (status === 409 && code === "otra_sesion")) return "sesion";
   if ((status === 403 && code === "forbidden") || (status === 404 && code === "patient_not_found")) return "descartar";
   return "rechazo";
 }
@@ -142,6 +151,9 @@ export function isTransient(err: unknown): boolean {
 function errorMessage(err: unknown): string {
   return err instanceof Error && err.message ? err.message : "No se pudo guardar";
 }
+
+/** Resultado de comparar la sesión de ahora con la de la cola. */
+export type MismaSesion = "misma" | "otra" | "nose";
 
 export const OTRA_SESION =
   "La sesión de esta pestaña cambió (otro usuario u otra sede en otra pestaña). Vuelve a la sede y al usuario con que abriste a este paciente y pulsa «Reintentar»; no cierres esta pestaña.";
@@ -164,13 +176,14 @@ export class SaveQueue {
   private listeners = new Set<(s: SaveStatus) => void>();
   /** cuándo hizo el doctor cada escritura pendiente (por opKey) */
   private opAt = new Map<string, number>();
-  /** escrituras que ya fallaron por la red al menos una vez */
-  private retried = new Set<string>();
+  /** comprobando la sesión antes de un reintento: no sale nada mientras */
+  private checking = false;
   private owner: SessionInfo | null = null;
   private attachedCount = 0;
   private discardedCount = 0;
   private discardError: string | undefined;
-  private discardedOps: SaveOp[] = [];
+  /** lo descartado, con el número de descarte (para que cada pantalla tome solo lo de después de montar) */
+  private discardedOps: { n: number; op: SaveOp }[] = [];
   private readonly send: SendFn;
   private readonly noteDelay: number;
   private readonly retryDelays: number[];
@@ -199,11 +212,27 @@ export class SaveQueue {
 
   getOwner(): SessionInfo | null { return this.owner; }
 
-  /** ¿La sesión de ahora es la misma con que se abrió? Sin forma de saberlo, sí. */
-  private async sameSession(): Promise<boolean> {
-    if (!this.whoAmI || !this.owner) return true;
-    const now = await this.whoAmI().catch(() => null);
-    return !!now && now.userId === this.owner.userId && now.clinicId === this.owner.clinicId;
+  /**
+   * ¿La sesión de ahora es la misma con que se abrió? (N4-O1) Tres respuestas:
+   * «misma», «otra» (otro usuario, otra sede o sin sesión) y «nose» (no se pudo
+   * preguntar: sin red, sesión vencida, reto de dos pasos, o la cola no sabe
+   * de quién es). Con «nose» no se manda nada ni se aparta nada. Una cola sin
+   * `whoAmI` (sin forma de preguntar) se da por la misma.
+   */
+  private async sameSession(): Promise<MismaSesion> {
+    if (!this.whoAmI) return "misma";
+    if (!this.owner) return "nose";
+    let now: SessionInfo | null;
+    try { now = await this.whoAmI(); } catch { return "nose"; }
+    return now && now.userId === this.owner.userId && now.clinicId === this.owner.clinicId ? "misma" : "otra";
+  }
+
+  /** ¿Se puede mandar algo sin preguntar antes (keepalive)? Solo si el servidor puede comparar la sesión. */
+  private canSendUnchecked(): boolean { return !this.whoAmI || !!this.owner; }
+
+  private isStale(op: SaveOp): boolean {
+    const at = this.opAt.get(opKey(op));
+    return at !== undefined && this.now() - at > this.staleAfterMs;
   }
 
   /** El odontograma de este paciente está en pantalla (su indicador ya avisa). */
@@ -218,6 +247,9 @@ export class SaveQueue {
 
   /** ¿Lo último apartado fue por la sesión (vencida, reto de dos pasos u otra sede)? */
   failedBySession(): boolean { return this.failed.length > 0 && this.lastFailKind === "sesion"; }
+
+  /** ¿Hay algo apartado («Descartar» solo tiene sentido entonces)? */
+  hasFailed(): boolean { return this.failed.length > 0; }
 
   /* ---------------- estado ---------------- */
   getStatus(): SaveStatus { return this.status; }
@@ -239,11 +271,19 @@ export class SaveQueue {
     return this.queue.length > 0 || this.inflight !== null || this.noteDrafts.size > 0 || this.failed.length > 0;
   }
 
-  /** Lo que el servidor descartó (o el doctor tiró) desde la última vez: la pantalla lo quita del dibujo. */
-  takeDiscarded(): SaveOp[] {
-    const out = this.discardedOps;
-    this.discardedOps = [];
-    return out;
+  /**
+   * Lo que el servidor descartó (o el doctor tiró) DESPUÉS del descarte número
+   * `visto` (el contador `discarded` del estado): la pantalla lo quita del
+   * dibujo. Cada pantalla anota el contador al montar, así un descarte de
+   * cuando estaba fuera de pantalla nunca se le aplica después (N4-O4).
+   */
+  descartadosDesde(visto: number): SaveOp[] {
+    return this.discardedOps.filter((d) => d.n > visto).map((d) => d.op);
+  }
+
+  private pushDiscarded(ops: SaveOp[]) {
+    ops.forEach((op) => this.discardedOps.push({ n: this.discardedCount, op }));
+    if (this.discardedOps.length > 200) this.discardedOps = this.discardedOps.slice(-200);
   }
 
   /** Recalcula el estado visible a partir de lo que hay (nunca a parches). */
@@ -252,7 +292,7 @@ export class SaveQueue {
     const busy = this.queue.length > 0 || this.inflight !== null || this.noteDrafts.size > 0;
     let state: SaveState;
     let error: string | undefined;
-    if (this.retryTimer !== null) { state = "retrying"; error = this.transientError; }
+    if (this.retryTimer !== null || this.checking) { state = "retrying"; error = this.transientError; }
     else if (busy) state = "saving";
     else if (this.failed.length) { state = "error"; error = this.failError; }
     else if (this.discardError) { state = "discarded"; error = this.discardError; }
@@ -289,7 +329,6 @@ export class SaveQueue {
     this.failed = this.failed.filter((q) => opKey(q) !== k);
     this.queue.push(op);
     this.opAt.set(k, this.now());
-    this.retried.delete(k);
     this.refresh();
     this.pump();
   }
@@ -326,34 +365,46 @@ export class SaveQueue {
    * keepalive (no da tiempo a ir de una en una). La cola NO se vacía: si la
    * página sigue (pestaña oculta, bfcache), sigue mandando lo suyo, y repetir
    * es inocuo (idempotente). Lo apartado no sale: espera a que alguien diga.
+   *
+   * No da tiempo a preguntar quién tiene la sesión: cada petición lleva la de
+   * la cola en la cabecera y el servidor no escribe si la cookie es de otra
+   * (N4-O2). Si la cola no sabe de quién es, no sale nada. Lo que lleva más
+   * de 15 min sin guardarse tampoco sale (N3-O3): eso lo decide el doctor.
    */
   flushForUnload() {
     this.flush();
+    if (!this.canSendUnchecked()) return;
     // lo que va en vuelo puede no llegar si la página muere: se repite, salvo
     // que detrás espere otra de lo mismo o un «limpiar todo»
     const repeatInflight = this.inflight
       && !this.queue.some((q) => q.kind === "reset" || opKey(q) === opKey(this.inflight!));
-    const ops = repeatInflight ? [this.inflight!, ...this.queue] : [...this.queue];
-    const fire = (list: SaveOp[]) => list.forEach((op) => { this.send(op, { keepalive: true }).catch(() => {}); });
+    const ops = (repeatInflight ? [this.inflight!, ...this.queue] : [...this.queue]).filter((op) => !this.isStale(op));
+    const sesion = this.owner;
+    const fire = (list: SaveOp[]) => list.forEach((op) => { this.send(op, { keepalive: true, sesion }).catch(() => {}); });
     // «limpiar todo» va primero y lo demás detrás: en paralelo podría borrarlo
     const r = ops.findIndex((op) => op.kind === "reset");
     if (r < 0) fire(ops);
-    else this.send(ops[r], { keepalive: true }).then(() => fire(ops.filter((_, i) => i !== r)), () => {});
+    else this.send(ops[r], { keepalive: true, sesion }).then(() => fire(ops.filter((_, i) => i !== r)), () => {});
   }
 
   /**
    * «Reintentar» (y lo que pasa al volver la sesión): lo apartado vuelve a la
    * cola, pero SOLO si la sesión de ahora es la misma con que se abrió (N3-O2:
-   * nada sale firmado por otro usuario ni a otra sede). Devuelve si se reanudó.
+   * nada sale firmado por otro usuario ni a otra sede). Si no se pudo
+   * preguntar (sin red), todo se queda como estaba: ni sale ni se aparta, y el
+   * aviso no cambia (N4-O1). Devuelve si se reanudó.
    */
   async retryNow(): Promise<boolean> {
-    if (!(await this.sameSession())) {
+    const s = await this.sameSession();
+    if (s === "nose") return false;
+    if (s === "otra") {
       if (this.hasPending()) { this.lastFailKind = "sesion"; this.failError = OTRA_SESION; this.moveQueueToFailed(); }
       return false;
     }
     if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
     this.attempt = 0;
-    this.failed.forEach((op) => this.retried.delete(opKey(op)));
+    // el doctor decidió mandarlo ahora: cuenta como hecho ahora (N3-O3)
+    this.failed.forEach((op) => this.opAt.set(opKey(op), this.now()));
     this.queue = [...this.failed, ...this.queue];
     this.failed = [];
     this.failError = undefined;
@@ -366,7 +417,9 @@ export class SaveQueue {
   /** Volvió la red: se reanuda lo que esperaba su reintento (no lo apartado), con la misma comprobación de sesión. */
   async resume(): Promise<boolean> {
     if (this.retryTimer === null) return false;
-    if (!(await this.sameSession())) {
+    const s = await this.sameSession();
+    if (s === "nose") return false; // el temporizador sigue puesto
+    if (s === "otra") {
       if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
       this.lastFailKind = "sesion"; this.failError = OTRA_SESION;
       this.moveQueueToFailed();
@@ -388,13 +441,13 @@ export class SaveQueue {
 
   /** «Descartar»: tira lo apartado (la pantalla lo quita del dibujo y recarga del servidor). */
   discard() {
-    this.failed.forEach((op) => { this.opAt.delete(opKey(op)); this.retried.delete(opKey(op)); });
-    this.discardedOps.push(...this.failed);
+    this.failed.forEach((op) => { this.opAt.delete(opKey(op)); });
+    this.discardedCount++;
+    this.pushDiscarded(this.failed);
     this.failed = [];
     this.failError = undefined;
     this.discardError = undefined;
     this.lastFailKind = null;
-    this.discardedCount++;
     this.refresh();
   }
 
@@ -423,13 +476,14 @@ export class SaveQueue {
 
   /* ---------------- envío ---------------- */
   private pump() {
-    if (this.inflight || this.retryTimer !== null) return;
+    if (this.inflight || this.retryTimer !== null || this.checking) return;
     const op = this.queue.shift();
     if (!op) return;
     const k = opKey(op);
-    // N3-O3: lo que ya falló por la red y lleva demasiado (la laptop cerrada
-    // toda la noche) no sale solo al volver la red: se aparta y se pregunta
-    if (this.retried.has(k) && this.now() - (this.opAt.get(k) ?? this.now()) > this.staleAfterMs) {
+    // N3-O3: lo que lleva demasiado sin guardarse (la laptop cerrada toda la
+    // noche) no sale solo al volver la red: se aparta y se pregunta. TODO lo
+    // que esperaba, no solo el primero que falló (cuarta vuelta)
+    if (this.isStale(op)) {
       this.failed.push(op);
       this.lastFailKind = "rechazo";
       const min = Math.round(this.staleAfterMs / 60000);
@@ -439,12 +493,12 @@ export class SaveQueue {
       return;
     }
     this.inflight = op;
-    this.send(op, { keepalive: false }).then(
+    this.send(op, { keepalive: false, sesion: this.owner }).then(
       () => {
         this.inflight = null;
         this.attempt = 0;
         this.transientError = undefined;
-        if (!this.queue.some((q) => opKey(q) === k)) { this.opAt.delete(k); this.retried.delete(k); }
+        if (!this.queue.some((q) => opKey(q) === k)) this.opAt.delete(k);
         this.refresh();
         this.pump();
       },
@@ -458,18 +512,26 @@ export class SaveQueue {
     const superseded = () => op.kind !== "reset" && this.queue.some((q) => opKey(q) === k);
     let tipo = tipoDeFallo(err);
     let mensaje = errorMessage(err);
-    if (tipo === "descartar" && !(await this.sameSession())) {
-      // N3-O4: un 403/404 porque la sede activa (o el usuario) cambió en otra
-      // pestaña no es un «no» del servidor: se aparta con un aviso claro
-      tipo = "sesion";
-      mensaje = OTRA_SESION;
+    if (tipo === "descartar") {
+      const s = await this.sameSession();
+      if (s === "otra") {
+        // N3-O4: un 403/404 porque la sede activa (o el usuario) cambió en otra
+        // pestaña no es un «no» del servidor: se aparta con un aviso claro
+        tipo = "sesion";
+        mensaje = OTRA_SESION;
+      } else if (s === "nose") {
+        // N4-O1: sin poder preguntar no se tira nada: se reintenta como un
+        // fallo de red (y antes de mandar se vuelve a preguntar)
+        tipo = "red";
+        mensaje = `${mensaje} No se pudo comprobar la sesión; se volverá a intentar.`;
+      }
     }
     this.inflight = null;
     if (tipo === "descartar") {
       // sin permiso o paciente de otra clínica (revisión t8, N-O5): reintentar
       // no lo arreglará nunca. Se descarta, se dice y la pantalla lo quita
-      if (!superseded()) { this.opAt.delete(k); this.retried.delete(k); this.discardedOps.push(op); }
       this.discardedCount++;
+      if (!superseded()) { this.opAt.delete(k); this.pushDiscarded([op]); }
       this.discardError = `${mensaje} Ese cambio se descartó.`;
       this.refresh();
       this.pump();
@@ -484,12 +546,32 @@ export class SaveQueue {
       this.pump();
       return;
     }
-    if (!superseded()) { this.queue.unshift(op); this.retried.add(k); }
+    if (!superseded()) this.queue.unshift(op);
+    this.transientError = mensaje;
+    this.armRetry();
+  }
+
+  private armRetry() {
     const delay = this.retryDelays[Math.min(this.attempt, this.retryDelays.length - 1)];
     this.attempt++;
-    this.transientError = mensaje;
-    this.retryTimer = this.setTimer(() => { this.retryTimer = null; this.refresh(); this.pump(); }, delay);
+    this.retryTimer = this.setTimer(() => { this.retryTimer = null; void this.retryAfterCheck(); }, delay);
     this.refresh();
+  }
+
+  /**
+   * Venció el temporizador del reintento: antes de mandar, ¿la sesión sigue
+   * siendo la misma? (N4-O2) Si es otra, se aparta todo con el aviso; si no se
+   * pudo preguntar (sin red), no sale nada y se vuelve a esperar.
+   */
+  private async retryAfterCheck() {
+    if (!this.whoAmI) { this.refresh(); this.pump(); return; }
+    this.checking = true;
+    this.refresh();
+    const s = await this.sameSession();
+    this.checking = false;
+    if (s === "misma") { this.refresh(); this.pump(); return; }
+    if (s === "otra") { this.lastFailKind = "sesion"; this.failError = OTRA_SESION; this.moveQueueToFailed(); return; }
+    if (this.retryTimer === null) this.armRetry();
   }
 }
 
@@ -509,6 +591,15 @@ export function saveQueueFor(patientId: string, make: () => SaveQueue): SaveQueu
     }
   }
   return q;
+}
+
+/**
+ * ¿Queda algo del odontograma sin guardar en esta pestaña? Lo mira el guardia
+ * del reto de dos pasos antes de llevarse la pestaña al reto (N3-O1): lo
+ * pendiente vive solo en memoria y se perdería al navegar.
+ */
+export function hayPendienteOdontograma(): boolean {
+  return [...queues.values()].some((q) => q.hasPending());
 }
 
 /** Solo pruebas: vacía el registro de colas. */
@@ -634,10 +725,15 @@ export function renderPendingNotice(doc: NoticeDoc, getQs: () => SaveQueue[] = (
     tirar.addEventListener("click", () => getQs().forEach((q) => q.discard()));
     el.appendChild(tirar);
     doc.body.appendChild(el);
-    (el as unknown as { _texto: NoticeEl })._texto = span;
+    (el as unknown as { _texto: NoticeEl; _tirar: NoticeEl })._texto = span;
+    (el as unknown as { _tirar: NoticeEl })._tirar = tirar;
   }
   const span = (el as unknown as { _texto?: NoticeEl })._texto;
   if (span) span.textContent = texto; else el.textContent = texto;
+  // «Descartar» solo tira lo apartado: mientras solo hay «reintentando», no se
+  // enseña (no haría nada y lo que se quería tirar se guardaría igual, N4-O3)
+  const tirar = (el as unknown as { _tirar?: NoticeEl })._tirar;
+  if (tirar) (tirar.style as Record<string, string>).display = getQs().some((q) => q.hasFailed()) ? "" : "none";
 }
 
 let noticeQueued = false;

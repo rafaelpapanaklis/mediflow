@@ -189,6 +189,13 @@ async function aplicarCambios(
  * Modo viejo `records` con la regla segura (N3-O8): dentro de una transacción
  * y sobre lo que haya en la base, añade los hallazgos y la nota que falten
  * (la nota solo si el diente no tiene otra distinta). Nunca borra ni pisa.
+ *
+ * Límite aceptado (cuarta vuelta, N4-O5; decisión 8): el JS viejo manda TODO
+ * lo que cargó, así que lo que otra pestaña quitó mientras esa consulta estaba
+ * abierta vuelve a ponerse — igual que hace hoy producción. Solo pasa con
+ * pestañas abiertas antes del despliegue y hasta RECORDS_COMPAT_HASTA. Para
+ * poder rastrearlo, la bitácora guarda QUÉ se añadió y qué se dejó sin
+ * quitar, no solo cuántos (N4-O6).
  */
 async function aplicarRecordsCompat(
   req: NextRequest,
@@ -209,6 +216,9 @@ async function aplicarRecordsCompat(
   const suplantacion = await suplantacionDeEstaPeticion();
   let detalle: unknown = null;
   let creadas = 0, sinQuitar = 0, notasSinPisar = 0;
+  /** «diente:cara:hallazgo» (letras de la base; «-» = diente completo) */
+  const agregadas: string[] = [];
+  let sinQuitarClaves: string[] = [];
   await prisma.$transaction(async (tx) => {
     const antes = await tx.odontogramEntry.findMany({
       where: { patientId },
@@ -225,9 +235,11 @@ async function aplicarRecordsCompat(
           if (conditionId === NOTE_CONDITION) continue;
           pedidas.add(clave(toothNumber, surface, conditionId));
           if (hay.has(clave(toothNumber, surface, conditionId))) continue;
-          creadas += (await tx.odontogramEntry.createMany({
+          const n = (await tx.odontogramEntry.createMany({
             data: [{ patientId, toothNumber, surface, conditionId, notes: null }], skipDuplicates: true,
           })).count;
+          creadas += n;
+          if (n) agregadas.push(clave(toothNumber, surface, conditionId));
         }
       }
       for (const conditionId of rec.tooth ?? []) {
@@ -236,7 +248,11 @@ async function aplicarRecordsCompat(
         if (hay.has(clave(toothNumber, null, conditionId))) continue;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${toothNumber}:${conditionId}`}))`;
         const ya = await tx.odontogramEntry.findFirst({ where: { patientId, toothNumber, surface: null, conditionId }, select: { id: true } });
-        if (!ya) { await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId, notes: null } }); creadas++; }
+        if (!ya) {
+          await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId, notes: null } });
+          creadas++;
+          agregadas.push(clave(toothNumber, null, conditionId));
+        }
       }
       const nota = (rec.note ?? "").trim();
       if (nota) {
@@ -244,15 +260,27 @@ async function aplicarRecordsCompat(
         if (!actual) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${toothNumber}:${NOTE_CONDITION}`}))`;
           const ya = await tx.odontogramEntry.findFirst({ where: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION }, select: { id: true } });
-          if (!ya) { await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION, notes: nota } }); creadas++; }
+          if (!ya) {
+            await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION, notes: nota } });
+            creadas++;
+            agregadas.push(clave(toothNumber, null, NOTE_CONDITION));
+          }
         } else if ((actual.notes ?? "").trim() !== nota) {
           notasSinPisar++;
         }
       }
     }
     // lo que hay y la consulta no trae: antes se borraba; ahora se deja
-    sinQuitar = antes.filter((r) => r.conditionId !== NOTE_CONDITION && !pedidas.has(clave(r.toothNumber, r.surface, r.conditionId))).length;
-    const changes = { _odontogram: { modo: "records-compat", after: { creadas, sinQuitar, notasSinPisar } } };
+    sinQuitarClaves = antes
+      .filter((r) => r.conditionId !== NOTE_CONDITION && !pedidas.has(clave(r.toothNumber, r.surface, r.conditionId)))
+      .map((r) => clave(r.toothNumber, r.surface, r.conditionId));
+    sinQuitar = sinQuitarClaves.length;
+    const changes = {
+      _odontogram: {
+        modo: "records-compat",
+        after: { creadas, sinQuitar, notasSinPisar, agregadas, sinQuitarClaves },
+      },
+    };
     if (suplantacion) detalle = changes;
     else {
       await tx.auditLog.create({

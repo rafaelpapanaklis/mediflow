@@ -7,6 +7,8 @@
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
 import { classify, SURFACE_NAMES } from "./data";
+import { OTRA_SESION, type SessionInfo } from "./autosave";
+import { CABECERA_SESION_ODONTOGRAMA, valorCabeceraSesion } from "@/lib/odontogram/sesion-pestana";
 
 /* ---------- la cara incisal ----------
    La pantalla llama «I» (Incisal) al centro de los anteriores y «O» al de los
@@ -79,8 +81,12 @@ export class OdontogramHttpError extends Error {
   }
 }
 
-/** Opciones de las escrituras. `keepalive` deja terminar la petición aunque la pestaña se cierre. */
-export interface WriteOptions { keepalive?: boolean }
+/**
+ * Opciones de las escrituras. `keepalive` deja terminar la petición aunque la
+ * pestaña se cierre. `sesion` (la de la cola) va en la cabecera: el servidor
+ * no escribe si la cookie es de otra sesión (409 `otra_sesion`, N4-O2).
+ */
+export interface WriteOptions { keepalive?: boolean; sesion?: SessionInfo | null }
 
 /** Una escritura que no responde en este tiempo se da por perdida y se reintenta (es idempotente). */
 const WRITE_TIMEOUT_MS = 20_000;
@@ -90,7 +96,9 @@ async function send(url: string, init: RequestInit, opts: WriteOptions | undefin
   const timer = setTimeout(() => ctl.abort(), WRITE_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(url, { ...init, keepalive: !!opts?.keepalive, signal: ctl.signal });
+    const headers = new Headers(init.headers);
+    if (opts?.sesion) headers.set(CABECERA_SESION_ODONTOGRAMA, valorCabeceraSesion(opts.sesion));
+    res = await fetch(url, { ...init, headers, keepalive: !!opts?.keepalive, signal: ctl.signal });
   } catch {
     // el texto del navegador («Failed to fetch», «Load failed») no le dice nada a la clínica
     throw new OdontogramHttpError(`${fallback}: ${ctl.signal.aborted ? "el servidor no respondió" : "sin conexión"}`, 0);
@@ -115,7 +123,12 @@ const MENSAJES: Record<string, string> = {
   missing_patientId: "Falta el paciente.",
   schema_not_migrated: "El odontograma no está disponible en este servidor; avisa a soporte.",
   internal_error: "Falló el servidor.",
+  otra_sesion: OTRA_SESION,
 };
+
+/** El 403 del reto de dos pasos (el guardia no se lleva la pestaña si hay algo pendiente, N3-O1). */
+export const FALTA_DOS_PASOS =
+  "Falta la verificación en dos pasos. Complétala en otra pestaña del panel y vuelve aquí; lo que marcaste sigue pendiente en esta pestaña (no la cierres).";
 
 /** La respuesta de error, en español y con su código (la cola decide con él). */
 async function httpError(res: Response, fallback: string): Promise<OdontogramHttpError> {
@@ -123,7 +136,8 @@ async function httpError(res: Response, fallback: string): Promise<OdontogramHtt
   const data = await safeJson<{ error?: string; code?: string }>(res);
   const code = data?.error ?? "";
   if (MENSAJES[code]) return new OdontogramHttpError(`${fallback}: ${MENSAJES[code]}`, res.status, code);
-  // el 403 del reto 2FA (middleware) ya trae su texto en español y un `code` propio
+  if (data?.code === "two_factor_required") return new OdontogramHttpError(`${fallback}: ${FALTA_DOS_PASOS}`, res.status, data.code);
+  // otro 403 con texto en español y `code` propio (middleware)
   if (data?.code && data.error) return new OdontogramHttpError(data.error, res.status, data.code);
   if (res.status >= 500) return new OdontogramHttpError(`${fallback}: falló el servidor (${res.status}).`, res.status, code || null);
   return new OdontogramHttpError(`${fallback} (error ${res.status}).`, res.status, code || null);
@@ -174,6 +188,31 @@ export interface OdontogramRead {
   userId: string | null;
   /** filas tal cual (letras de la base) */
   entries: OdontogramEntry[];
+}
+
+/**
+ * ¿Quién tiene la sesión ahora? (usuario y sede activa; no mira al paciente,
+ * así un 404 de un paciente borrado no se confunde con «no se pudo saber»).
+ * Lanza si no se pudo saber: sin red, sesión vencida, reto de dos pasos.
+ */
+export async function fetchQuienSoy(): Promise<SessionInfo | null> {
+  // con tope: mientras se pregunta no sale nada de la cola
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10_000);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}?quien=1`, { cache: "no-store", signal: ctl.signal });
+  } catch {
+    throw new OdontogramHttpError("No se pudo comprobar la sesión: sin conexión.", 0);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401, "unauthorized");
+  if (!res.ok) throw await httpError(res, "No se pudo comprobar la sesión");
+  const data = await safeJson<{ clinicId?: unknown; userId?: unknown }>(res);
+  return typeof data?.userId === "string" && typeof data?.clinicId === "string"
+    ? { userId: data.userId, clinicId: data.clinicId }
+    : null;
 }
 
 /** Lee el odontograma. Sin red, el error sale en español (revisión t8, O3). */

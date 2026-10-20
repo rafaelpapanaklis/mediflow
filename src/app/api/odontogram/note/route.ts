@@ -7,6 +7,7 @@ import {
   isMissingTableError,
   puedeEscribirOdontograma,
 } from "@/lib/odontogram/api-auth";
+import { sesionDistinta } from "@/lib/odontogram/sesion-pestana";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,9 @@ export async function PUT(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // N4-O2: la pestaña dice de qué sesión es lo que manda; si la cookie es de
+    // otra (otro usuario u otra sede en otra pestaña), no se escribe nada
+    if (sesionDistinta(req.headers, dbUser)) return jsonError("otra_sesion", 409);
     // PAC-05: la nota por diente es texto clínico. Mismo rol que el resto del
     // odontograma; recepción y solo-lectura no la escriben.
     if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
@@ -140,6 +144,9 @@ export async function DELETE(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // N4-O2: la pestaña dice de qué sesión es lo que manda; si la cookie es de
+    // otra (otro usuario u otra sede en otra pestaña), no se escribe nada
+    if (sesionDistinta(req.headers, dbUser)) return jsonError("otra_sesion", 409);
     // PAC-05: borrar la nota clínica de un diente, igual que escribirla.
     if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
 

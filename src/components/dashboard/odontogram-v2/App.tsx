@@ -20,7 +20,7 @@ import type {
 } from "./types";
 import { EMPTY_RECORD } from "./types";
 import {
-  fetchOdontogram, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
+  fetchOdontogram, fetchQuienSoy, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
 import { SaveQueue, saveQueueFor, type SaveOp, type SaveStatus } from "./autosave";
 import { cargarOdontograma, quitarDelDibujo } from "./recuperar";
@@ -118,16 +118,20 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     ? null
     : saveQueueFor(patientId, () => new SaveQueue({
         send: (op, opts) => sendOp(patientId, op, opts),
-        // tras un 401: ¿quién tiene la sesión ahora? (solo se reintenta si es el mismo usuario)
-        whoAmI: () => fetchOdontogram(patientId).then((r) => (r.userId && r.clinicId ? { userId: r.userId, clinicId: r.clinicId } : null)),
+        // antes de reintentar: ¿quién tiene la sesión ahora? (solo se reintenta si es el mismo usuario y sede)
+        whoAmI: fetchQuienSoy,
       }));
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const sesionRef = useRef(sesion ?? null);
   sesionRef.current = sesion ?? null;
   const [saveStatus, setSaveStatus] = useState<SaveStatus>(() => queue?.getStatus() ?? { state: "idle", pending: 0, discarded: 0 });
+  /** el contador de descartes ya reflejado en el dibujo (se anota al montar) */
+  const discardedSeen = useRef(saveStatus.discarded);
   useEffect(() => {
     if (!queue) return;
+    // de otro paciente (otra cola): sus descartes viejos no son de esta pantalla
+    discardedSeen.current = queue.getStatus().discarded;
     setSaveStatus(queue.getStatus());
     return queue.subscribe(setSaveStatus);
   }, [queue]);
@@ -180,12 +184,13 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   }, [patientId]);
 
   // Lo que no se guardó (403/404 de verdad, o «Descartar»): se quita del dibujo
-  // ya —aunque la relectura falle— y luego se enseña lo que de verdad hay
-  const discardedSeen = useRef(saveStatus.discarded);
+  // ya —aunque la relectura falle— y luego se enseña lo que de verdad hay.
+  // Solo lo descartado DESPUÉS de montar: lo de cuando estaba fuera de
+  // pantalla ya lo refleja la carga (N4-O4)
   useEffect(() => {
     if (saveStatus.discarded === discardedSeen.current) return;
+    const ops = queueRef.current?.descartadosDesde(discardedSeen.current) ?? [];
     discardedSeen.current = saveStatus.discarded;
-    const ops = queueRef.current?.takeDiscarded() ?? [];
     if (ops.length) setInternalRecords((prev) => quitarDelDibujo(prev, ops));
     resync();
   }, [saveStatus.discarded, resync]);

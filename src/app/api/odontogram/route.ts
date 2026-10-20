@@ -8,6 +8,7 @@ import {
   puedeEscribirOdontograma,
   puedeLeerOdontograma,
 } from "@/lib/odontogram/api-auth";
+import { sesionDistinta } from "@/lib/odontogram/sesion-pestana";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { extractAuditMeta } from "@/lib/audit";
 import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
@@ -86,6 +87,11 @@ export async function GET(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // ¿quién tiene la sesión? (el autoguardado lo pregunta antes de reintentar;
+    // no mira al paciente: un 404 no se confunde con «no se pudo saber»)
+    if (req.nextUrl.searchParams.get("quien") === "1") {
+      return NextResponse.json({ clinicId: dbUser.clinicId, userId: dbUser.id });
+    }
     // M6: leer el odontograma es leer expediente (antes bastaba la sesión).
     if (!puedeLeerOdontograma(dbUser)) return jsonError("forbidden", 403);
     const patientId = req.nextUrl.searchParams.get("patientId");
@@ -129,6 +135,9 @@ export async function PUT(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // N4-O2: la pestaña dice de qué sesión es lo que manda; si la cookie es de
+    // otra (otro usuario u otra sede en otra pestaña), no se escribe nada
+    if (sesionDistinta(req.headers, dbUser)) return jsonError("otra_sesion", 409);
     // PAC-05: el mismo rol que exigen /reset y /sync. Escribir un hallazgo en
     // el odontograma es escribir expediente clínico.
     if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
@@ -214,6 +223,9 @@ export async function DELETE(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    // N4-O2: la pestaña dice de qué sesión es lo que manda; si la cookie es de
+    // otra (otro usuario u otra sede en otra pestaña), no se escribe nada
+    if (sesionDistinta(req.headers, dbUser)) return jsonError("otra_sesion", 409);
     // PAC-05: igual que el PUT. Quitar hallazgos de una cara, uno a uno, es el
     // mismo borrado que /reset hace de golpe.
     if (!puedeEscribirOdontograma(dbUser)) return jsonError("forbidden", 403);
