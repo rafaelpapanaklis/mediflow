@@ -264,6 +264,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
   }
 
+  // WS1-T9 — «Convertir en cita» un bloqueo de Google Calendar (solo clínicas
+  // con la bandera). Import dinámico: sin `googleBloqueoId` no se carga nada.
+  // Ese bloqueo NO cuenta como hora bloqueada (es el hueco que se ocupa) y la
+  // cita nace ligada al evento de Google: la sincronización de salida lo
+  // ACTUALIZA en vez de crear otro. Ver src/lib/google/convertir.server.ts.
+  const conversionGoogle = body.googleBloqueoId
+    ? await (await import("@/lib/google/convertir.server")).prepararConversionGoogle(
+        session.clinic.id,
+        body.googleBloqueoId,
+        { userId: session.user.id, role: session.user.role },
+        // La hora y el doctor los manda el BLOQUEO: si no coinciden, 409.
+        { startsAt, endsAt, doctorId: body.doctorId },
+      )
+    : null;
+  if (conversionGoogle && !conversionGoogle.ok) {
+    return NextResponse.json({ error: conversionGoogle.error }, { status: conversionGoogle.status });
+  }
+
   // P1-13: fuera-de-horario/día cerrado ya NO bloquea con un 422 mudo — se
   // guarda la cita y se AVISA (scheduleWarning en la respuesta → toast). El
   // horario que manda es el configurado en Ajustes (ClinicSchedule), con
@@ -303,7 +321,12 @@ export async function POST(req: NextRequest) {
     ),
     leerHorariosDeDoctores(session.clinic.id, { doctorIds: [body.doctorId] }),
   ]);
-  const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, startsAt, endsAt, body.doctorId);
+  const bloqueoEncima = bloqueaEsteHueco(
+    conversionGoogle ? bloqueosDelHueco.filter((b) => b.id !== conversionGoogle.bloqueoId) : bloqueosDelHueco,
+    startsAt,
+    endsAt,
+    body.doctorId,
+  );
   const fueraDelDoctor = doctorNoAtiende(
     horariosDelHueco,
     startsAt,
@@ -561,6 +584,8 @@ export async function POST(req: NextRequest) {
           startsAt,
           endsAt,
           status: "SCHEDULED",
+          // WS1-T9: ligada al evento de Google del bloqueo que se convierte.
+          ...(conversionGoogle?.googleEventId ? { googleCalendarEventId: conversionGoogle.googleEventId } : {}),
           type: body.reason ?? "Consulta general",
           // El formulario de /dashboard/appointments recoge notas y hasta ahora
           // se perdían: la ruta no las miraba (hallazgo 24).
@@ -579,6 +604,17 @@ export async function POST(req: NextRequest) {
         },
         include: APPT_INCLUDE,
       });
+      if (conversionGoogle?.bloqueoId) {
+        // Misma transacción: si otro lo convirtió a la vez, lanza y no queda cita.
+        await (await import("@/lib/google/convertir.server")).marcarBloqueoConvertido(tx, {
+          clinicId: session.clinic.id,
+          bloqueoId: conversionGoogle.bloqueoId,
+          appointmentId: appt.id,
+          userId: session.user.id,
+          startsAt,
+          endsAt,
+        });
+      }
       await ensureUserCanSeePatient(tx, body.patientId, body.doctorId, session.clinic.id);
       return appt;
     });
@@ -615,6 +651,8 @@ export async function POST(req: NextRequest) {
         startsAt: created.startsAt,
         type: created.type,
         status: created.status,
+        // WS1-T9: «Convertir en cita» de un evento de Google Calendar.
+        ...(conversionGoogle?.bloqueoId ? { desdeBloqueoGoogle: conversionGoogle.bloqueoId } : {}),
         // WS1-T3 — EL RASTRO. Va en la MISMA fila de auditoría que la
         // creación y no en una aparte: quien revise por qué hay una cita un
         // día que la clínica cerró lo lee de un vistazo, sin cruzar dos
@@ -698,6 +736,12 @@ export async function POST(req: NextRequest) {
     if (err instanceof Prisma.PrismaClientValidationError) {
       return NextResponse.json({ error: "validation" }, { status: 400 });
     }
+    // WS1-T9: otra persona convirtió el mismo bloqueo de Google a la vez, o el
+    // evento se movió / se quitó en Google mientras tanto.
+    const codigoGoogle = (err as Error)?.message;
+    if (codigoGoogle === "google_block_already_converted" || codigoGoogle === "google_block_changed") {
+      return NextResponse.json({ error: codigoGoogle }, { status: 409 });
+    }
     console.error("[POST /api/appointments] unexpected error", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
@@ -715,6 +759,8 @@ type CreateApptBody = CreateAppointmentInput & {
   startTime?: string | null;
   endTime?: string | null;
   durationMins?: number | null;
+  /** WS1-T9: «Convertir en cita» este bloqueo de Google Calendar. */
+  googleBloqueoId?: string | null;
 };
 
 /**

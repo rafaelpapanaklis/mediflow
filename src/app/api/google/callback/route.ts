@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOAuthClient, verifyState, asegurarCalendarioDeClinica, crearClienteCalendar, permisoDeCalendarConcedido } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 import { limpiarGoogleCaido } from "@/lib/google-calendar-estado";
+import { olvidarErrorEntrante } from "@/lib/google/entrante.server";
 import { createClient } from "@/lib/supabase/server";
 import { decidirConexionDeClinica, urlDeSaltoAlHostDeLaApp, type MotivoErrorGcal } from "@/lib/google-calendar-callback";
 
@@ -140,6 +141,9 @@ export async function GET(req: NextRequest) {
       );
       // Reconectó con permiso nuevo: ya no está «caída» (nunca lanza).
       await limpiarGoogleCaido(user.clinicId);
+      // Ni vale el error de la entrada de la conexión vieja: Configuración
+      // sincroniza al volver y el aviso viejo se va (WS1-T9, N4-G1; nunca lanza).
+      await olvidarErrorEntrante(user.clinicId);
     }
 
     if (sinCalendario) return fallo("calendario");

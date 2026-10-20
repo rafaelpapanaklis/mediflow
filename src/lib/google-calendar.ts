@@ -91,6 +91,8 @@ export interface ClienteCalendar {
     insert(p: { calendarId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
     patch(p: { calendarId: string; eventId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
     delete(p: { calendarId: string; eventId: string; sendUpdates?: string }): Promise<unknown>;
+    /** WS1-T9: leer cómo está AHORA un evento de la clínica antes de tocarle la hora. */
+    get?(p: { calendarId: string; eventId: string }): Promise<{ data: Record<string, any> }>;
   };
   calendars: {
     insert(p: { requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
@@ -265,13 +267,53 @@ const cuerpoBase = (d: DatosEvento) => ({
  *
  * `no_existe` = Google ya no tiene ese evento (404/410): el llamador lo vuelve a crear.
  */
-export async function parcharEvento(cal: ClienteCalendar, d: DatosEvento): Promise<"ok" | "no_existe"> {
+export async function parcharEvento(
+  cal: ClienteCalendar,
+  d: DatosEvento,
+  /**
+   * WS1-T9 · una cita que vino de un evento de Google (revisión t8, G6, y
+   * segunda vuelta): el evento es de la clínica, no nuestro. Solo viajan la
+   * hora y el estado: se le conservan el título, la descripción, la
+   * ubicación (los invitados nunca viajan en el parche) y no se le pone la
+   * marca de DaleControl. `titulo` = cambiarle el título a ese (p. ej. quitar
+   * «Cancelada en DaleControl · » al reactivar); null/ausente = no tocarlo.
+   */
+  opts: { conservarContenido?: boolean; titulo?: string | null; restaurar?: boolean } = {},
+): Promise<"ok" | "no_existe"> {
+  const { description, location, summary, extendedProperties, ...horario } = cuerpoBase(d);
+  // En una convertida, «confirmed» solo para RESTAURARLA (`restaurar`): un evento «tentativo» de la clínica se queda así.
+  const cuerpo = opts.conservarContenido
+    ? { ...horario, ...(typeof opts.titulo === "string" ? { summary: opts.titulo } : {}), ...(opts.restaurar ? { status: "confirmed" } : {}) }
+    : { ...horario, summary, description, location, extendedProperties, status: "confirmed" };
   try {
     await cal.events.patch({
       calendarId: d.calendarId,
       eventId: d.eventId,
       sendUpdates: "none",
-      requestBody: { ...cuerpoBase(d), status: "confirmed" },
+      requestBody: cuerpo,
+    });
+    return "ok";
+  } catch (err) {
+    if (esNoExiste(err)) return "no_existe";
+    throw err;
+  }
+}
+
+/**
+ * WS1-T9 · cambia SOLO el título de un evento (sin hora, estado, descripción
+ * ni invitados) y sin avisar a nadie. Para las citas que vinieron de Google:
+ * con un aviso sin decidir, y al cancelarlas (revisión t8, G4/G6).
+ */
+export async function parcharTitulo(
+  cal: ClienteCalendar,
+  d: { calendarId: string; eventId: string; summary: string },
+): Promise<"ok" | "no_existe"> {
+  try {
+    await cal.events.patch({
+      calendarId: d.calendarId,
+      eventId: d.eventId,
+      sendUpdates: "none",
+      requestBody: { summary: d.summary },
     });
     return "ok";
   } catch (err) {

@@ -73,6 +73,7 @@ import s from "./agenda-nueva.module.css";
 import { ORIGEN_WALK_IN, origenCorto, subtituloDeLaCita, textoDuracion } from "@/lib/agenda-nueva/origen-cita";
 import { plazoApartadoEnPalabras } from "@/lib/agenda-nueva/plazo-apartado";
 import { cancelarCitaEnServidor, useCancelarCita, type RespuestaCancelarCita } from "./cancelar-con-dinero";
+import { AvisoGoogleCita } from "./google-calendario";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -459,6 +460,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         </div>
 
         <div className={s.panelDesplaza}>
+          {/* WS1-T9: «El evento de Google cambió / se eliminó» (solo citas convertidas desde Google). */}
+          <AvisoGoogleCita citaId={dto.id} onCancelar={() => void cambiarEstado("CANCELLED")} />
           {/* ── Paciente ── */}
           <div className={s.panelPaciente}>
             <span className={s.panelAvatar} style={{ background: cita.colorResponsable }}>

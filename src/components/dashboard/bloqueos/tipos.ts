@@ -25,6 +25,14 @@ export const TIPOS_BLOQUEO = [
 export type TipoBloqueo = (typeof TIPOS_BLOQUEO)[number];
 
 /**
+ * WS1-T9 (revisión t8, G10) — tipos que se PINTAN pero no se eligen en el
+ * formulario: los bloqueos de Google Calendar los crea y los mueve solo la
+ * sincronización. Antes caían en «Otro».
+ */
+export const TIPOS_SOLO_LECTURA = ["GOOGLE"] as const;
+export type TipoBloqueoMostrado = TipoBloqueo | (typeof TIPOS_SOLO_LECTURA)[number];
+
+/**
  * ⚠️ PENDIENTE DE CONFIRMAR CON ws1-t2 — el encargo nombra los cinco tipos en
  * castellano («Festivo · Vacaciones · Personal · Mantenimiento · Otro») pero no
  * da sus valores de cable. Estos siguen el precedente de la casa: el mismo
@@ -43,7 +51,7 @@ export interface BloqueoDTO {
   id: string;
   doctorId: string | null;
   doctorNombre: string | null;
-  kind: TipoBloqueo;
+  kind: TipoBloqueoMostrado;
   reason: string;
   /** Instante ISO en UTC. NUNCA una hora de pared. */
   inicio: string;
@@ -55,6 +63,8 @@ export interface BloqueoDTO {
   creadoEl: string;
   /** Lo decide el SERVIDOR. La pantalla no lo vuelve a razonar. */
   puedoRetirarlo: boolean;
+  /** WS1-T9: solo en los bloqueos de Google Calendar (clic → «Convertir en cita»). */
+  google?: { titulo: string } | null;
 }
 
 /** Un festivo del catálogo de México, ya calculado para el año pedido. */
@@ -154,9 +164,10 @@ export function codigoDeError(raw: unknown): string | null {
 /** El 503 de la tabla que todavía no existe: el SQL de ws1-t2 sin aplicar. */
 export const ERROR_SQL_PENDIENTE = "SQL_PENDIENTE";
 
-export function parseTipo(raw: unknown): TipoBloqueo {
-  return (TIPOS_BLOQUEO as readonly string[]).includes(raw as string)
-    ? (raw as TipoBloqueo)
+export function parseTipo(raw: unknown): TipoBloqueoMostrado {
+  return (TIPOS_BLOQUEO as readonly string[]).includes(raw as string) ||
+    (TIPOS_SOLO_LECTURA as readonly string[]).includes(raw as string)
+    ? (raw as TipoBloqueoMostrado)
     : TIPO_POR_DEFECTO;
 }
 
@@ -182,6 +193,7 @@ export function parseBloqueo(raw: unknown): BloqueoDTO | null {
     // Fail-closed: sin el campo, NO se enseña el botón de retirar. Esconder no
     // es permitir, pero enseñar una puerta que da 403 tampoco ayuda a nadie.
     puedoRetirarlo: bool(raw.puedoRetirarlo),
+    google: esObjeto(raw.google) ? { titulo: texto(raw.google.titulo) } : null,
   };
 }
 

@@ -112,6 +112,13 @@ export class GoogleFalsa implements ClienteCalendar {
       Object.assign(e, structuredClone(p.requestBody)); // mezcla: lo que no va, se queda
       return { data: { id: p.eventId } };
     },
+    /** Lee el evento tal como está (también uno borrado: `cancelled`), o 404. */
+    get: async (p: { calendarId: string; eventId: string }) => {
+      await this.paso("events.get", p);
+      const e = this.eventos.get(`${p.calendarId}/${p.eventId}`);
+      if (!e) throw errorGoogle(404, "notFound", "Not Found");
+      return { data: structuredClone(e) };
+    },
     /** El reemplazo total del código viejo: si alguien lo llama, `updates` lo delata. */
     update: async (p: { calendarId: string; eventId: string; requestBody: Record<string, any> }) => {
       this.updates++;

@@ -54,6 +54,7 @@ import {
   type BloqueoLike,
 } from "./core";
 import type { BloqueoCtx } from "./core-ctx";
+import { etiquetaRejilla, puedeVerTitulo } from "@/lib/google/entrante-core";
 
 /** Un bloqueo vigente tal como lo consumen las calculadoras de huecos. */
 export interface BloqueoVigente extends BloqueoLike {
@@ -228,8 +229,12 @@ export const SELECT_BLOQUEO = {
  */
 export function puedeRetirar(
   ctx: { role: Role; userId: string },
-  bloqueo: { doctorId: string | null },
+  bloqueo: { doctorId: string | null; kind?: AgendaBlockKind | string | null },
 ): boolean {
+  // WS1-T9: un bloqueo de Google Calendar lo mueve y lo retira SOLO su evento.
+  // Retirarlo aquí lo volvería a abrir hasta la siguiente sincronización, y
+  // el evento seguiría ahí: se cambia o se borra en Google.
+  if (bloqueo.kind === "GOOGLE") return false;
   if (ctx.role === "ADMIN" || ctx.role === "SUPER_ADMIN" || ctx.role === "RECEPTIONIST") return true;
   // «El doctor puede quitar su bloqueo» (Rafael). El SUYO: no el de la
   // clínica (doctorId null) ni el de un compañero.
@@ -237,7 +242,10 @@ export function puedeRetirar(
   return false;
 }
 
-export function aDTO(ctx: BloqueoCtx, b: FilaBloqueo): BloqueoDTO {
+export function aDTO(ctx: BloqueoCtx, b: FilaBloqueo, tituloGoogle?: string | null): BloqueoDTO {
+  // WS1-T9 (revisión t8, G1): el título del evento solo a quien puede ver la
+  // agenda de ESE doctor; los demás ven «Ocupado (Google)» a secas.
+  if (b.kind === "GOOGLE" && !puedeVerTitulo(ctx, b)) tituloGoogle = null;
   return {
     id: b.id,
     doctorId: b.doctorId,
@@ -245,7 +253,10 @@ export function aDTO(ctx: BloqueoCtx, b: FilaBloqueo): BloqueoDTO {
       ? `${b.doctor.firstName ?? ""} ${b.doctor.lastName ?? ""}`.trim() || null
       : null,
     kind: b.kind,
-    reason: b.reason,
+    // WS1-T9: en la agenda del staff, «Ocupado (Google) · <título>». En la base
+    // `reason` es genérico porque el bot se lo dice al paciente.
+    reason: b.kind === "GOOGLE" ? etiquetaRejilla(tituloGoogle ?? "") : b.reason,
+    ...(b.kind === "GOOGLE" ? { google: { titulo: tituloGoogle ?? "" } } : {}),
     inicio: b.startsAt.toISOString(),
     fin: b.endsAt.toISOString(),
     diaCompleto: esDiaCompleto(b.startsAt, b.endsAt, ctx.timezone),
@@ -303,7 +314,12 @@ export async function listarBloqueos(
       take: BLOQUEOS_MAX_FILAS,
       select: SELECT_BLOQUEO,
     });
-    return filas.map((b) => aDTO(ctx, b as FilaBloqueo));
+    // WS1-T9: el título de los de Google vive en su tabla; solo se lee si hay alguno.
+    const deGoogle = filas.filter((b) => b.kind === "GOOGLE").map((b) => b.id);
+    const titulos = deGoogle.length > 0
+      ? await (await import("@/lib/google/convertir.server")).titulosDeBloqueosGoogle(ctx.clinicId, deGoogle)
+      : null;
+    return filas.map((b) => aDTO(ctx, b as FilaBloqueo, titulos?.get(b.id) ?? null));
   } catch (err) {
     // Antes de que Rafael pegue el SQL, la pantalla enseña «no hay bloqueos»
     // en vez de un 500. Ver el porqué completo en la cabecera.

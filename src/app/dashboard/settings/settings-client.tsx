@@ -32,6 +32,7 @@ import { ESPECIALIDADES_EQUIPO, opcionFueraDeLista } from "@/lib/team/especialid
 import { rolLlevaDatosClinicos } from "@/lib/team/parche-miembro";
 import { LLAVE_ESPECIALIDAD, cambiosDeMiPerfil, datosPropiosDeUsuario, textosMiPerfil } from "@/lib/team/mis-datos-profesionales";
 import { claveAvisoErrorGcal } from "@/lib/google-calendar-callback";
+import { AvisoRetiroGoogle } from "@/components/dashboard/agenda-nueva/google-retiro-aviso";
 import dynamic from "next/dynamic";
 import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
 import {
@@ -1355,6 +1356,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       {gcalMotivoTexto && <div>{gcalMotivoTexto}</div>}
                     </Aviso>
                   )}
+                  {/* Los eventos de Google ya no cierran la agenda (WS1-T9, N3-G2). */}
+                  <AvisoRetiroGoogle />
                   {gcalConnected && (
                     <Aviso tono="exito" icono={<CalendarCheck size={16} strokeWidth={1.75} aria-hidden />}>
                       <strong>{t("settings.client.gcalAccountConnected")}</strong>
@@ -2330,6 +2333,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   {gcalMotivoTexto && <div className="text-sm text-rose-600 dark:text-rose-400">{gcalMotivoTexto}</div>}
                 </div>
               )}
+              {/* Los eventos de Google ya no cierran la agenda (WS1-T9, N3-G2). */}
+              <AvisoRetiroGoogle />
               {gcalConnected && (
                 <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />

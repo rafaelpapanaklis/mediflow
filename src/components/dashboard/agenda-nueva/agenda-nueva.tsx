@@ -50,6 +50,7 @@ import { ArrastreCitas } from "./arrastre-citas";
 import { BarraHerramientas } from "./barra-herramientas";
 import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
 import { PanelCita } from "./panel-cita";
+import { SincronizarGoogleAlAbrir } from "./google-calendario";
 import { PanelHuecos } from "./panel-huecos";
 import { LeyendaColores } from "./leyenda-colores";
 import { VistaDia } from "./vista-dia";
@@ -123,6 +124,8 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
                 como mucho el 40 % y hace scroll, y a donde manda la campana
                 tiene que verse sin buscarlo. */}
             <BookingRequestsPanel initialOpen={searchParams.get("solicitudes") === "1"} />
+            {/* WS1-T9: Google Calendar → agenda (sincroniza al abrir; aviso de reconectar). */}
+            <SincronizarGoogleAlAbrir />
             <AgendaValidateBanner ropa={ROPA_VALIDAR} />
             <ChangeRequestsPanel onResolved={alResolverSolicitud} />
           </div>

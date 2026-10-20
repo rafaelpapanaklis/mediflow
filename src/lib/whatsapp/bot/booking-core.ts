@@ -1030,6 +1030,9 @@ async function presentSlots(
     if (!res.closed) {
       motivo = `No quedan horarios disponibles el ${human}.`;
       pregunta = "¿Quieres probar otra fecha?";
+    } else if (res.reason === "blocked" && res.mensajeCompleto) {
+      // WS1-T9 — un evento de Google Calendar: ni «cerrada» ni «Google».
+      motivo = `${res.mensajeCompleto} (${human}).`;
     } else if (res.reason === "blocked" && res.mensajeBloqueo) {
       motivo = `Ese día (${human}) la agenda está cerrada: ${res.mensajeBloqueo}.`;
     } else if (res.reason === "doctor_off") {
