@@ -155,11 +155,14 @@ before(async () => {
   dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
     getStripeSafe: () => ({
       subscriptions: {
-        retrieve: async (id: string) => ({ id, status: "past_due", customer: "cus_x", items: { data: [{ current_period_end: Math.floor((Date.now() + 30 * 86_400_000) / 1000) }] } }),
+        retrieve: async (id: string) => {
+          if (id === "sub_vieja") throw Object.assign(new Error("No such subscription"), { code: "resource_missing" });
+          return { id, status: "past_due", customer: "cus_x", items: { data: [{ current_period_end: Math.floor((Date.now() + (id === "sub_ciclo_desfasado" ? 10 : 30) * 86_400_000) / 1000) }] } };
+        },
         update: async (id: string, params: any, opciones: any) => {
           if (stripeFalla) throw new Error("Stripe no contesta");
           actualizacionesStripe.push({ id, params, opciones });
-          return { id, status: "active", latest_invoice: { id: "in_reset", status: "void", amount_paid: 0 } };
+          return { id, status: "trialing", latest_invoice: { id: "in_trial0", status: "paid", amount_paid: 0, amount_due: 0 } };
         },
       },
       invoiceItems: { list: async () => ({ data: [] }) },
@@ -303,6 +306,16 @@ test("confirmar suelta la suscripción de tarjeta CANCELADA (si no, un pago dar�
   await confirmarSolicitudSpei(a.solicitud.id, "admin1");
   assert.equal(clinicas.get("cA").stripeSubscriptionId, null);
   assert.equal(clinicas.get("cA").subscriptionStatus, "active");
+  // M2: la base dice «cancelada» pero Stripe la tiene VIVA (suspend_clinic por API, o el `deleted` de otra suscripción): NO se
+  // suelta el id (se perdería la posibilidad de anular sus facturas) y se anulan las abiertas.
+  Object.assign(clinicas.get("cB"), { subscriptionStatus: "cancelled", stripeSubscriptionId: "sub_viva_en_stripe" });
+  facturasStripe = [{ id: "in_m2", subscription: "sub_viva_en_stripe", status: "open", billing_reason: "subscription_cycle", created: Math.floor((Date.now() - 6 * 86_400_000) / 1000) }];
+  const m2 = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
+  const rm2 = await confirmarSolicitudSpei(m2.solicitud.id, "admin1");
+  assert.equal(clinicas.get("cB").stripeSubscriptionId, "sub_viva_en_stripe", "Stripe manda: sigue viva");
+  assert.deepEqual((rm2.facturaTarjeta as any).anuladas, ["in_m2"]);
+  Object.assign(clinicas.get("cB"), { subscriptionStatus: "pending_payment", stripeSubscriptionId: null });
+  facturasStripe = [];
   // past_due: Stripe sigue reintentando; NO se toca su id.
   Object.assign(clinicas.get("cB"), { subscriptionStatus: "past_due", stripeSubscriptionId: "sub_viva" });
   const b = await crearSolicitudSpei({ clinicId: "cB", plan: "BASIC", billing: "monthly" });
@@ -591,11 +604,11 @@ test("confirmar con una suscripción de TARJETA viva y su factura abierta DENTRO
   assert.equal(clinicas.get("cA").stripeSubscriptionId, "sub_tarjeta", "la suscripción de tarjeta sigue viva");
 });
 
-test("confirmar a una clínica SUSPENDIDA (octava vuelta): la factura del mes sin servicio se anula, no se paga; acceso 30 días desde la confirmación y el ciclo se re-alinea", async () => {
+test("confirmar a una clínica SUSPENDIDA (octava vuelta): la factura del mes sin servicio se anula, no se paga; acceso un mes desde la confirmación y el cobro cae justo al terminar", async () => {
   const { crearSolicitudSpei, confirmarSolicitudSpei } = lib;
-  clinicas.get("cA").stripeSubscriptionId = "sub_tarjeta";
+  clinicas.get("cA").stripeSubscriptionId = "sub_ciclo_desfasado";
   clinicas.get("cA").subscriptionStatus = "past_due"; // y trialEndsAt de hace 6 días: la gracia venció
-  facturasStripe = [{ id: "in_abierta", subscription: "sub_tarjeta", status: "open", billing_reason: "subscription_cycle", created: Math.floor((Date.now() - 6 * 86_400_000) / 1000) }];
+  facturasStripe = [{ id: "in_abierta", subscription: "sub_ciclo_desfasado", status: "open", billing_reason: "subscription_cycle", created: Math.floor((Date.now() - 6 * 86_400_000) / 1000) }];
   const { solicitud } = await crearSolicitudSpei({ clinicId: "cA", plan: "PRO", billing: "monthly" });
   const antes = Date.now();
   const r = await confirmarSolicitudSpei(solicitud.id, "admin1");
@@ -604,13 +617,14 @@ test("confirmar a una clínica SUSPENDIDA (octava vuelta): la factura del mes si
   assert.equal(pagosStripe.length, 0, "un mes suspendido no se «paga»: se anula");
   assert.deepEqual(anuladasStripe.map((a) => a.id), ["in_abierta"]);
   assert.equal(actualizacionesStripe.length, 1);
-  assert.equal(actualizacionesStripe[0].params.billing_cycle_anchor, "now");
-  assert.equal(actualizacionesStripe[0].params.pause_collection.behavior, "void");
+  assert.equal(actualizacionesStripe[0].params.trial_end, Math.floor(clinicas.get("cA").trialEndsAt.getTime() / 1000), "el cobro cae exacto al terminar lo pagado");
+  assert.equal(actualizacionesStripe[0].params.proration_behavior, "none");
+  assert.equal(actualizacionesStripe[0].params.billing_cycle_anchor, undefined);
   const fin = new Date(antes);
   fin.setMonth(fin.getMonth() + 1);
   assert.ok(Math.abs(clinicas.get("cA").trialEndsAt.getTime() - fin.getTime()) < 120_000, "acceso = confirmación + 1 mes");
   assert.equal(clinicas.get("cA").subscriptionStatus, "active");
-  assert.equal(clinicas.get("cA").stripeSubscriptionId, "sub_tarjeta");
+  assert.equal(clinicas.get("cA").stripeSubscriptionId, "sub_ciclo_desfasado");
 });
 
 test("confirmar: sin suscripción de tarjeta no toca Stripe; con Stripe caído la confirmación sigue en pie y devuelve el aviso", async () => {

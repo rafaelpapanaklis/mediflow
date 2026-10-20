@@ -182,10 +182,28 @@ export function avisoFalloReglaSuspension(a: {
       `La clínica pagó (${a.accion}) después de estar suspendida y la regla de «los meses suspendidos no se deben» no se completó.`,
       `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
       ...a.fallos,
-      "El webhook de Stripe y «Reintentar» en /admin → Pagos vuelven a intentarlo; si no, anula a mano en Stripe las facturas abiertas de los meses sin servicio.",
+      "Si el pago entró por el webhook de Stripe, Stripe reenvía el evento durante horas y el webhook lo reintenta solo. «Reintentar» en /admin → Pagos solo cubre los pagos manuales. Si no se arregla, hazlo a mano en Stripe: anula las facturas abiertas de los meses sin servicio y ponle a la suscripción una prueba (trial_end) hasta el fin de lo pagado.",
     ],
   };
 }
 
 /** Texto (para el admin) cuando la regla de la suspensión no pudo ni leer la suscripción o sus facturas. */
 export const FALLO_LECTURA_REGLA = "No se pudo leer la suscripción o sus facturas en Stripe.";
+
+/** Pagó con tarjeta tras una suspensión y Stripe sigue marcando la suscripción en cobro rechazado (X5). */
+export function avisoStripeSigueRechazada(a: {
+  clinicaId: string;
+  clinicaNombre: string | null | undefined;
+  estadoStripe: string;
+  facturaId: string | null;
+}): AvisoAdmin {
+  const nombre = a.clinicaNombre ?? a.clinicaId;
+  return {
+    asunto: `Revisa una suscripción que sigue en cobro rechazado en Stripe aunque pagó: ${nombre}`,
+    lineas: [
+      `La clínica pagó con tarjeta${a.facturaId ? ` (factura ${a.facturaId})` : ""} y quedó activa en DaleControl, pero Stripe sigue reportando su suscripción como «${a.estadoStripe}».`,
+      `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
+      "Qué hacer: en Stripe, revisa que no queden facturas abiertas del plan y que la suscripción pase a activa. Mientras tanto la clínica tiene acceso hasta el fin de lo pagado.",
+    ],
+  };
+}

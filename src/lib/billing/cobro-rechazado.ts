@@ -187,18 +187,10 @@ export function fijarInicioDelMarcadoParaPruebas(fecha?: Date): void {
   inicioMarcado = fecha ?? INICIO_MARCADO_FUERA_DE_STRIPE;
 }
 
-function sumarMeses(fecha: Date, n: number): Date {
-  const d = new Date(fecha.getTime());
-  const dia = d.getUTCDate();
-  d.setUTCMonth(d.getUTCMonth() + n);
-  if (d.getUTCDate() < dia) d.setUTCDate(0); // 31 ene + 1 mes → fin de feb, no 3 mar
-  return d;
-}
-
 /**
  * OCTAVA VUELTA — corrección de Q4 (Rafael): los meses en que la clínica estuvo SUSPENDIDA por falta de pago NO se deben
  * ni se cobran nunca. No existe «adeudo» de meses suspendidos. Cuando paga después de haber sido suspendida (por cualquier
- * vía), el acceso se reactiva y se le dan 30 días contados desde el DÍA Y HORA DEL PAGO (N×30 si paga N meses); el
+ * vía), el acceso se reactiva y se le dan 30 días contados desde el DÍA Y HORA DEL PAGO (un mes de calendario por mes pagado; ver `finDeLoPagado`); el
  * siguiente cobro de la tarjeta es al terminar esos días. Las facturas de Stripe de los meses suspendidos se ANULAN (void)
  * y en la base quedan como «No cobrada: servicio suspendido» (no se borran, no cuentan como ingreso ni como adeudo).
  * Si paga DENTRO de las 24 h de gracia (aún no suspendida) no hay meses suspendidos: se paga la factura del ciclo y el
@@ -206,7 +198,14 @@ function sumarMeses(fecha: Date, n: number): Date {
  */
 export const NOTA_SERVICIO_SUSPENDIDO = "No cobrada: servicio suspendido";
 
-/** Hasta cuándo queda pagada una clínica que paga `meses` meses en `pagadoEn` (mismo cálculo de mes que el resto de pagos manuales). */
+/**
+ * Hasta cuándo queda pagada una clínica que paga `meses` meses en `pagadoEn`: UN MES DE CALENDARIO por mes (el 20-nov a
+ * las 15:30 → el 20-dic a las 15:30), no «N×30 días». Es la regla de Rafael («se le agregan 30 días, o sea 1 mes») y la
+ * decisión del gerente (B3): el acceso termina EXACTAMENTE cuando la tarjeta vuelve a cobrar, porque ese instante es el
+ * `trial_end` que se le pone a la suscripción (ver reactivacion-tras-suspension.server.ts); así nunca hay días pagados dos
+ * veces ni huecos. Si el día no existe en el mes de llegada, JS lo corre al mes siguiente (31-ene + 1 mes = 3-mar): da igual,
+ * porque Stripe no recalcula nada, cobra en el instante exacto que se le dio.
+ */
 export function finDeLoPagado(pagadoEn: Date, meses: number): Date {
   const fin = new Date(pagadoEn.getTime());
   fin.setMonth(fin.getMonth() + Math.max(1, Math.floor(meses) || 1));
@@ -227,25 +226,16 @@ export function clinicaEstabaSuspendida(
 
 /**
  * Sin el estado de antes (el reintento del cron / del botón «Reintentar»): una factura abierta es de un mes SUSPENDIDO si
- * se creó hace más que la gracia (más una hora de holgura por el desfase entre el rechazo y el evento) antes del pago.
+ * se FINALIZÓ (es cuando Stripe intenta cobrarla; si no se conoce, cuando se creó) hace más que la gracia, más una hora de
+ * holgura por el desfase entre el rechazo y el evento, antes del pago. Con la fecha de creación una factura que Stripe
+ * tardó horas en finalizar se tomaba por un mes sin servicio (M10).
  */
 export function esMesDeServicioSuspendido(args: { facturaCreadaEn: Date | number | string; pagoEn: Date }): boolean {
+  // Sin fecha conocida (0, vacío) no se puede afirmar que sea un mes sin servicio: no lo es.
+  if (typeof args.facturaCreadaEn === "number" && !(args.facturaCreadaEn > 0)) return false;
   const creada = aFecha(typeof args.facturaCreadaEn === "number" ? new Date(args.facturaCreadaEn * 1000) : args.facturaCreadaEn);
   if (!creada) return false;
   return creada.getTime() + (GRACIA_COBRO_RECHAZADO_HORAS + 1) * HORA_MS < args.pagoEn.getTime();
-}
-
-/**
- * Días ANTES del fin de lo pagado en que se reanuda el cobro de la tarjeta tras re-alinear el ciclo. Stripe cuenta el mes
- * calendario desde el ancla (31 ene + 1 mes = 28 feb) y la clínica se cuenta con `setMonth` (31 ene + 1 mes = 3 mar): el
- * margen cubre esa diferencia para que la renovación del fin de lo pagado nunca caiga ANTES de la reanudación (se salta
- * y la clínica se queda un mes sin cobro). Lo normal es que no se note: ancla y acceso salen del mismo instante.
- */
-export const MARGEN_REANUDACION_DIAS = 4;
-
-/** Cuándo reanuda el cobro de la tarjeta una clínica re-alineada a «hoy + N meses». */
-export function reanudarCobroTrasRealinear(finDeLoPagado: Date): Date {
-  return new Date(finDeLoPagado.getTime() - MARGEN_REANUDACION_DIAS * DIA_MS);
 }
 
 /** Cuántos MESES cubre un pago manual registrado con su periodo (mínimo 1). 45 días cuentan como 1; 1 año, 12. */
@@ -257,75 +247,66 @@ export function mesesDeUnPeriodo(inicio: Date | string, fin: Date | string): num
 }
 
 /**
- * Cambiar de plan con el cobro de la tarjeta PAUSADO (`pause_collection`, meses prepagados) no puede hacerse en
- * autoservicio: con la pausa en `void` Stripe anula toda factura que nazca, incluida la del prorrateo, y el plan nuevo
- * quedaría aplicado sin cobrarse (décima vuelta de t4, V2). Se bloquea con este texto (sin nombrar al proveedor de pagos).
+ * Cambiar de plan con la suscripción de tarjeta en un PERIODO YA PAGADO (a mano) no puede hacerse en autoservicio: el
+ * prorrateo de un cambio durante la prueba/pausa no se cobra (o se anula) y el plan nuevo quedaría aplicado gratis
+ * (décima vuelta de t4, V2). Se bloquea con este texto, que vale para cualquier periodo ya pagado (1 mes o varios) y no
+ * nombra al proveedor de pagos.
  */
 export const MENSAJE_PLAN_PREPAGADO =
-  "Tienes meses pagados por adelantado. Para cambiar de plan escríbenos a soporte@dalecontrol.com y lo hacemos contigo, para no cobrarte de más ni de menos.";
-
-/** ¿El cobro de esta suscripción de tarjeta está pausado por un prepago? (`sub.pause_collection`). */
-export function cobroPausado(sub: { pause_collection?: { behavior?: string | null } | null } | null | undefined): boolean {
-  return !!sub?.pause_collection;
-}
-
-/** Tolerancia al alinear el prepago con los ciclos de Stripe: una renovación se salta si la mayor parte de su periodo ya estaba pagada. */
-const TOLERANCIA_PREPAGO_MS = 16 * DIA_MS;
+  "Tu plan ya está pagado por este periodo. Para cambiarlo antes de que termine escríbenos a soporte@dalecontrol.com y lo hacemos contigo, para no cobrarte de más ni de menos.";
 
 /**
- * Q1 (decisión de Rafael, opción A): un pago manual que cubre VARIOS meses pausa el COBRO de la tarjeta hasta que
- * termine lo prepagado, sin cancelar la suscripción. Mecanismo: `pause_collection` con `behavior: "void"` y `resumes_at`.
- * Se eligió sobre `trial_end` porque este último pone la suscripción en «trialing» (prueba) en Stripe y en el portal, y
- * sobre cancelar porque el mes siguiente a lo prepagado Stripe debe volver a cobrar solo. Con `pause_collection` la
- * suscripción sigue `active`, los ciclos siguen corriendo y las facturas que nacen durante la pausa se anulan
- * (void) sin cobrarse; al llegar `resumes_at` Stripe vuelve a cobrar con normalidad.
- *
- * Devuelve cuándo debe reanudarse el cobro, o `null` si no hace falta pausar nada:
- *   · `finDelPeriodoStripe` = fin del ciclo de Stripe que YA cubre la factura marcada (o el pago de la tarjeta);
- *   · cada renovación posterior (P, P+1 mes, P+2…) se salta mientras su periodo quede cubierto por el prepago
- *     (`finPrepago`, con 16 días de tolerancia por el desfase entre el ciclo de Stripe y la fecha del pago manual);
- *   · se reanuda un día ANTES de la primera renovación que sí se cobra, para que esa se cobre.
- * Un pago de 1 mes cuyo ciclo ya cubre la factura marcada no pausa nada y el ciclo sigue igual.
- * Solo para suscripciones mensuales.
- *
- * ⚠️ Es una aproximación al ciclo MÁS CERCANO (el ancla de Stripe no se mueve): el primer cobro cae entre 14 días antes y 16
- * después del fin de lo prepagado. Antes: se cobra un tramo ya pagado (hasta ~14 días). Después: la suscripción sigue `active`,
- * así que la clínica conserva el acceso esos días sin que se le cobre. Solo se usa cuando la clínica NO estaba suspendida
- * (p. ej. prepagar con la tarjeta al corriente); tras una suspensión el ciclo se re-alinea EXACTO (reactivacion-tras-suspension).
+ * MARCA de nuestra app en la suscripción de Stripe cuando la «prueba» (`trial_end`) NO es una prueba sino un periodo YA
+ * PAGADO a mano: valor = fin de lo pagado (ISO). La etiqueta de la clínica la decide NUESTRO código, no el estado de Stripe:
+ * con esta marca un `trialing` se escribe como `active` (ver `estadoVisibleDeSuscripcion`) y nunca sale «En prueba».
  */
-export function reanudarCobroDespuesDelPrepago(args: {
-  finDelPeriodoStripe: Date;
-  finPrepago: Date;
-  intervalo: "month" | "year";
-}): Date | null {
-  if (args.intervalo !== "month") return null;
-  let saltadas = 0;
-  while (saltadas < 36) {
-    const inicio = sumarMeses(args.finDelPeriodoStripe, saltadas);
-    if (sumarMeses(inicio, 1).getTime() <= args.finPrepago.getTime() + TOLERANCIA_PREPAGO_MS) saltadas++;
-    else break;
-  }
-  if (saltadas === 0) return null;
-  return new Date(sumarMeses(args.finDelPeriodoStripe, saltadas).getTime() - DIA_MS);
+export const MARCA_PERIODO_PAGADO = "periodo_pagado_hasta";
+
+type SubParaPeriodoPagado =
+  | {
+      status?: string | null;
+      trial_end?: number | null;
+      metadata?: Record<string, string> | null;
+      pause_collection?: { behavior?: string | null; resumes_at?: number | null } | null;
+    }
+  | null
+  | undefined;
+
+/** ¿Esta suscripción está en un periodo pagado a mano (trial con nuestra marca, aún vigente)? */
+export function enPeriodoPagado(sub: SubParaPeriodoPagado, ahora: Date = new Date()): boolean {
+  if (!sub || sub.status !== "trialing" || !sub.metadata?.[MARCA_PERIODO_PAGADO]) return false;
+  return sub.trial_end == null || sub.trial_end * 1000 > ahora.getTime();
+}
+
+/** Hasta cuándo está pagada (la marca), o null. */
+export function periodoPagadoHasta(sub: SubParaPeriodoPagado, ahora: Date = new Date()): Date | null {
+  if (!enPeriodoPagado(sub, ahora)) return null;
+  return aFecha(sub!.metadata![MARCA_PERIODO_PAGADO]) ?? (sub!.trial_end ? new Date(sub!.trial_end * 1000) : null);
 }
 
 /**
- * «Pagado hasta {fecha}» (Q1): cuando un pago manual de varios meses deja el acceso MUY por delante del ciclo de Stripe
- * (el cobro de la tarjeta está pausado), la clínica ve hasta cuándo está pagada. Con un acceso normal (igual o apenas
- * por delante del próximo cobro) no se enseña nada.
+ * El `subscriptionStatus` que se guarda en la base para lo que Stripe reporta. Un `trialing` con nuestra marca es un
+ * periodo pagado: se guarda `active` (la clínica NO está «En prueba»). Cualquier otro estado, tal cual.
  */
-export function pagadoHastaPorPrepago(args: {
-  subscriptionStatus: string | null | undefined;
-  accesoHasta: Date | string | null | undefined;
-  proximoCobro: Date | string | null | undefined;
-}): Date | null {
-  const estado = args.subscriptionStatus ?? null;
-  if (estado === null || !ACTIVE_SUBSCRIPTION_STATUSES.has(estado)) return null;
-  const acceso = aFecha(args.accesoHasta);
-  const cobro = aFecha(args.proximoCobro);
-  if (!acceso || !cobro) return null;
-  return acceso.getTime() > cobro.getTime() + 20 * DIA_MS ? acceso : null;
+export function estadoVisibleDeSuscripcion(estado: string | null | undefined, sub: SubParaPeriodoPagado): string | null | undefined {
+  if (estado === "trialing" && sub?.metadata?.[MARCA_PERIODO_PAGADO]) return "active";
+  return estado;
 }
+
+/**
+ * ¿La suscripción de tarjeta está en un periodo ya pagado por el que no se puede cambiar de plan en autoservicio?
+ * Sí si es un periodo pagado con nuestra marca, o si el cobro está pausado (`pause_collection`) y esa pausa no ha vencido
+ * (sin `resumes_at` = indefinida; con fecha pasada, Stripe ya la reanudó o está por limpiarla: B5).
+ */
+export function cobroPausado(sub: SubParaPeriodoPagado, ahora: Date = new Date()): boolean {
+  if (enPeriodoPagado(sub, ahora)) return true;
+  const pausa = sub?.pause_collection;
+  if (!pausa) return false;
+  return pausa.resumes_at == null || pausa.resumes_at * 1000 > ahora.getTime();
+}
+
+/** Diferencia máxima (días) entre el fin de lo pagado y el fin del ciclo de Stripe para NO mover el ciclo: ya están alineados. */
+export const CICLO_ALINEADO_DIAS = 3;
 
 /** `method` de la fila que deja la activación manual de /admin (`activate_clinic`): es su rastro para el webhook. */
 export const METODO_ACTIVACION_ADMIN = "admin";

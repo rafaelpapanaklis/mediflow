@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chargeFailureMessage } from "../proration";
 import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
-import { finDeLoPagado, reanudarCobroTrasRealinear, NOTA_SERVICIO_SUSPENDIDO } from "../cobro-rechazado";
+import { finDeLoPagado, NOTA_SERVICIO_SUSPENDIDO } from "../cobro-rechazado";
 import { aplicarReglaDeSuspension, facturasAbiertasDelPlan } from "../reactivacion-tras-suspension.server";
 import { MENSAJES_CHECKOUT } from "../mensajes-pago";
 import { ensureFirstMonthCoupon } from "../first-month-promo";
@@ -115,6 +115,7 @@ function montar(e: Escenario = {}) {
   let retrieves = 0;
   let otraPestanaActuo = false;
   let pausa: any = e.pausaCobro ?? null; // pause_collection de la suscripción en Stripe
+  let periodoPagado: { trial_end: number; metadata: Record<string, string> } | null = null; // trial_end + marca puestos por la regla de la suspensión
   let reinicios = 0; // cuántas veces Stripe aplicó DE VERDAD un reinicio de ciclo (las repeticiones con la misma clave no cuentan)
   const reiniciosPorClave = new Map<string, any>();
   const PAGADO_EN = Math.floor(new Date("2026-10-20T15:00:00Z").getTime() / 1000);
@@ -155,10 +156,11 @@ function montar(e: Escenario = {}) {
         }
         return {
           id,
-          status: e.subStatus ?? "past_due",
+          status: periodoPagado ? "trialing" : e.subStatus ?? "past_due",
+          ...(periodoPagado ? { trial_end: periodoPagado.trial_end } : {}),
           // `customer` viene EXPANDIDO (con su descuento), como lo pide el servicio.
           customer: { id: e.clienteAjeno ? "cus_otro" : "cus_1", discount: descuentoCliente },
-          metadata: { clinicId: "clin_1", plan: planSub, kind: "platform-subscription" },
+          metadata: { clinicId: "clin_1", plan: planSub, kind: "platform-subscription", ...(periodoPagado?.metadata ?? {}) },
           pause_collection: pausa,
           items: { data: [{ id: "si_1", price: { unit_amount: 41900, recurring: { interval: e.interval ?? "month" } } }] },
           // `discounts` viene EXPANDIDO (con su cupón), como lo pide el servicio.
@@ -169,14 +171,14 @@ function montar(e: Escenario = {}) {
       update: async (id: string, params: any, opts: any) => {
         registra("subscriptions.update", id, params, opts);
         cuestaCaer();
-        // Reinicio de ciclo de la regla de la suspensión (billing_cycle_anchor "now" + pausa con void): la factura que
-        // nace durante la pausa se anula. Misma clave → misma respuesta (como Stripe).
-        if (params.pause_collection) {
+        // Cambio de ciclo de la regla de la suspensión (`trial_end` = fin de lo pagado + marca de periodo pagado): no genera
+        // ningún cobro. Misma clave → misma respuesta (como Stripe).
+        if (params.trial_end) {
           const previaR = reiniciosPorClave.get(opts.idempotencyKey);
           if (previaR) return previaR;
           reinicios++;
-          pausa = params.pause_collection;
-          const r = { id, status: "active", pause_collection: pausa, latest_invoice: { id: `in_reinicio_${reinicios}`, status: "void", amount_paid: 0 } };
+          periodoPagado = { trial_end: params.trial_end, metadata: params.metadata ?? {} };
+          const r = { id, status: "trialing", trial_end: params.trial_end, metadata: params.metadata, latest_invoice: { id: `in_reinicio_${reinicios}`, status: "paid", amount_paid: 0, amount_due: 0 } };
           reiniciosPorClave.set(opts.idempotencyKey, r);
           return r;
         }
@@ -1354,18 +1356,19 @@ test("REGLA — suspendida 4 meses y pulsa «Pagar mi plan»: UN cobro (el mes m
     filasFactura.map((f) => [f.reference, f.status, f.notes]).sort(),
     ["in_ago", "in_jul", "in_sep"].map((id) => [id, "void", NOTA_SERVICIO_SUSPENDIDO]),
   );
-  // El ciclo: UN `subscriptions.update` con ancla «now» y pausa hasta (pago + 30 días − margen), sin tocar el plan.
+  // El ciclo: UN `subscriptions.update` con `trial_end` = fin de lo pagado (pago + 1 mes) y la marca de periodo pagado, sin tocar el plan.
   const reinicio = m.ops("subscriptions.update");
   assert.equal(reinicio.length, 1);
   const p = reinicio[0].args[1];
   const pagadoEn = new Date(m.PAGADO_EN * 1000);
-  assert.equal(p.billing_cycle_anchor, "now");
   assert.equal(p.proration_behavior, "none");
-  assert.equal(p.pause_collection.behavior, "void");
-  assert.equal(p.pause_collection.resumes_at, Math.floor(reanudarCobroTrasRealinear(finDeLoPagado(pagadoEn, 1)).getTime() / 1000));
-  const dias = (p.pause_collection.resumes_at - m.PAGADO_EN) / 86_400;
-  assert.ok(dias >= 24 && dias <= 28, `reanuda ~un mes después del pago (${dias} días)`);
-  assert.equal(p.metadata, undefined); // no es un cambio de plan
+  assert.equal(p.billing_cycle_anchor, undefined);
+  assert.equal(p.pause_collection, undefined);
+  assert.equal(p.trial_end, Math.floor(finDeLoPagado(pagadoEn, 1).getTime() / 1000), "el cobro cae EXACTAMENTE al terminar lo pagado");
+  assert.equal(p.metadata.periodo_pagado_hasta, new Date(p.trial_end * 1000).toISOString());
+  const dias = (p.trial_end - m.PAGADO_EN) / 86_400;
+  assert.ok(dias >= 28 && dias <= 31.5, `cobra un mes después del pago (${dias} días)`);
+  assert.equal(p.metadata.plan, undefined); // no es un cambio de plan (la metadata solo trae la marca)
   assert.equal(m.planLocal(), null);
   // Orden: primero se mueve el ciclo y después se anulan los meses (si el ciclo falla no se anula nada).
   const orden = m.llamadas.map((l) => l.op);

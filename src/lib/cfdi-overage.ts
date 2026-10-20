@@ -87,9 +87,12 @@ export async function resolveOverageBilling(clinic: {
     if (interval === "year") {
       return { mode: "annual_card", customerId, paymentMethodId, subscriptionId: sub.id };
     }
-    // Meses prepagados (`pause_collection`): con la pausa en `void` Stripe anula las facturas de la mensualidad y el
-    // InvoiceItem del excedente se perdería con ellas. Se cobra como adeudo manual `cfdi_overage` (décima vuelta de t4, V3).
-    if (sub.pause_collection) return base;
+    // Cobro PAUSADO (`pause_collection` vigente, p. ej. puesto a mano en Stripe): con la pausa en `void` Stripe anula las
+    // facturas de la mensualidad y el InvoiceItem del excedente se perdería con ellas. Se cobra como adeudo manual
+    // `cfdi_overage` (V3). Una pausa ya vencida (`resumes_at` pasado) no cuenta (B5). Un periodo pagado a mano (`trialing`
+    // con nuestra marca) NO pausa nada: el item se suma a la factura que Stripe emite al terminar lo pagado.
+    const pausa = sub.pause_collection;
+    if (pausa && (pausa.resumes_at == null || pausa.resumes_at * 1000 > Date.now())) return base;
     // month (o cualquier otro intervalo recurrente) → InvoiceItem en la mensualidad.
     return { mode: "monthly_sub", customerId, paymentMethodId, subscriptionId: sub.id };
   } catch {
@@ -98,34 +101,40 @@ export async function resolveOverageBilling(clinic: {
 }
 
 /**
- * Antes de pausar el cobro de una suscripción (o de reiniciar su ciclo) los InvoiceItems PENDIENTES del cliente —el
- * excedente de CFDI que ya se había sumado «a la próxima mensualidad»— se pasan a una factura APARTE que se cobra sola:
- * si no, quedarían en la primera factura que nace durante la pausa, que se anula, y el excedente se perdería (V3). No se
+ * Antes de mover el ciclo de una suscripción (periodo pagado a mano) los InvoiceItems PENDIENTES del cliente —el excedente
+ * de CFDI que ya se había sumado «a la próxima mensualidad»— se pasan a una factura APARTE que se cobra sola con la tarjeta
+ * de la suscripción: si no, podrían quedar en la primera factura del cambio de ciclo y no cobrarse a tiempo (V3, M6). No se
  * borra nada: el item solo cambia de factura. Solo toma los items sueltos del cliente o de ESTA suscripción (los de otra,
  * p. ej. un módulo, no son de aquí). Devuelve el id de la factura aparte, o null si no había nada pendiente. Lanza si
- * Stripe falla (quien llama no debe pausar entonces).
+ * Stripe falla (quien llama no debe mover el ciclo entonces).
  */
 export async function cobrarAparteExcedentePendiente(
   stripe: Pick<Stripe, "invoiceItems" | "invoices">,
   customerId: string,
-  subscriptionId: string,
+  sub: { id: string; default_payment_method?: string | { id?: string } | null },
 ): Promise<string | null> {
   const pendientes = await stripe.invoiceItems.list({ customer: customerId, pending: true, limit: 100 });
   const mios = pendientes.data
     .filter((i) => {
       const s = (i as { subscription?: string | { id?: string } | null }).subscription;
       const sid = typeof s === "string" ? s : s?.id ?? null;
-      return sid === null || sid === subscriptionId;
+      return sid === null || sid === sub.id;
     })
     .map((i) => i.id)
     .sort();
   if (mios.length === 0) return null;
+  // `include` arrastra TODO lo pendiente del cliente: si hay items de otra suscripción (un módulo) se deja constancia.
+  if (mios.length !== pendientes.data.length) {
+    console.warn("[cfdi-overage] hay items pendientes de otra suscripción que la factura aparte también incluiría", pendientes.data.length - mios.length);
+  }
+  const pm = typeof sub.default_payment_method === "string" ? sub.default_payment_method : sub.default_payment_method?.id;
   const factura = await stripe.invoices.create(
     {
       customer: customerId,
       auto_advance: true,
       collection_method: "charge_automatically",
       pending_invoice_items_behavior: "include",
+      ...(pm ? { default_payment_method: pm } : {}),
       metadata: { kind: "cfdi-overage-aparte" },
     },
     { idempotencyKey: `excedente-aparte:${customerId}:${mios.join(",")}` },

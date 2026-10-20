@@ -43,11 +43,13 @@ let correoFalla = false;
 let stripeListaFalla = false;
 let stripePagoFalla = false;
 let facturasDeLista: any[];
-let llamadasPausa: Array<{ id: string; params: any; opciones: any }>;
+let llamadasCiclo: Array<{ id: string; params: any; opciones: any }>;
 let llamadasAnular: Array<{ id: string; opciones: any }>;
 let ordenDeLlamadas: string[];
 let resetCobraLaTarjeta = false;
-let stripePausaFalla = false;
+let ultimaFacturaDelCambio: any = null;
+let cicloLanzaDespuesDeAplicar = false;
+let stripeCicloFalla = false;
 let stripeAnularFalla = false;
 let itemsPendientes: any[] = [];
 let anularFallaPara = new Set<string>();
@@ -124,7 +126,7 @@ const prismaBase: any = {
       return { count: filas.length };
     },
     create: async ({ data }: any) => {
-      const fila = { id: `inv${pagosDeSubscripcion.length + 1}`, ...data };
+      const fila = { id: `inv${pagosDeSubscripcion.length + 1}`, createdAt: new Date(), ...data };
       pagosDeSubscripcion.push(fila);
       return fila;
     },
@@ -157,22 +159,20 @@ const stripeDoble: any = {
       return s;
     },
     update: async (id: string, params: any, opciones: any) => {
-      if (stripePausaFalla) throw new Error("Stripe no contesta");
-      llamadasPausa.push({ id, params, opciones });
-      ordenDeLlamadas.push(params.billing_cycle_anchor ? "realinear" : "pausar");
+      if (stripeCicloFalla) throw new Error("Stripe no contesta");
+      llamadasCiclo.push({ id, params, opciones });
+      ordenDeLlamadas.push("ciclo");
       const s = suscripcionesVivas.get(id);
-      if (s && params.pause_collection) s.pause_collection = { ...params.pause_collection };
-      // Reiniciar el ancla a «ahora»: el periodo nuevo corre un mes desde hoy y Stripe emite una factura en ese instante
-      // (anulada por la pausa, salvo que el doble simule lo contrario).
-      if (s && params.billing_cycle_anchor === "now") {
-        const fin = new Date();
-        fin.setMonth(fin.getMonth() + 1);
-        s.items.data[0].current_period_end = Math.floor(fin.getTime() / 1000);
-        s.status = "active";
+      // Periodo pagado a mano: `trial_end` mueve el ancla sin cobrar (Stripe lo reporta `trialing`; la marca va en la metadata).
+      if (s && params.trial_end) {
+        s.status = "trialing";
+        s.trial_end = params.trial_end;
+        s.metadata = { ...(s.metadata ?? {}), ...(params.metadata ?? {}) };
+        s.items.data[0].current_period_end = params.trial_end;
       }
-      return params.expand?.includes("latest_invoice")
-        ? { ...s, latest_invoice: resetCobraLaTarjeta ? { id: "in_reset", status: "paid", amount_paid: 68900 } : { id: "in_reset", status: "void", amount_paid: 0 } }
-        : s;
+      if (cicloLanzaDespuesDeAplicar) throw Object.assign(new Error("Keys for idempotent requests can only be used for the same endpoint they were first used for"), { type: "StripeIdempotencyError" });
+      const ultima = ultimaFacturaDelCambio ?? (resetCobraLaTarjeta ? { id: "in_trial", status: "paid", amount_paid: 68900, amount_due: 68900 } : { id: "in_trial0", status: "paid", amount_paid: 0, amount_due: 0 });
+      return params.expand?.includes("latest_invoice") ? { ...s, latest_invoice: ultima } : s;
     },
   },
   invoiceItems: { list: async () => ({ data: itemsPendientes }) },
@@ -193,6 +193,12 @@ const stripeDoble: any = {
     list: async ({ subscription, status }: any) => {
       if (stripeListaFalla) throw new Error("Stripe no contesta");
       return { data: facturasDeLista.filter((f) => f.subscription === subscription && (status === undefined || f.status === status)) };
+    },
+    finalizeInvoice: async (id: string) => {
+      ordenDeLlamadas.push(`finalizar:${id}`);
+      const f = facturasDeLista.find((x) => x.id === id);
+      if (f) f.status = "open";
+      return f ?? { id, status: "open" };
     },
     voidInvoice: async (id: string, _params: any, opciones: any) => {
       if (stripeAnularFalla || anularFallaPara.has(id)) throw new Error("Stripe no contesta");
@@ -235,6 +241,8 @@ Mod._load = function (req, parent, isMain) {
 let POST: (req: any) => Promise<Response>;
 let POSTAdmin: (req: any) => Promise<Response>;
 let POSTCfdi: (req: any, ctx: any) => Promise<Response>;
+let POSTSubs: (req: any) => Promise<Response>;
+let correosAdmin: any[] = [];
 let NextRequestCtor: any;
 
 before(async () => {
@@ -252,7 +260,10 @@ before(async () => {
     extractAuditMeta: () => ({}),
   });
   dobles.set(path.join(RAIZ, "src/lib/email.ts"), {
-    sendEmail: async () => ({ delivered: true }),
+    sendEmail: async (m: any) => {
+      correosAdmin.push(m);
+      return { delivered: true };
+    },
     sendPlanActivatedEmail: async () => {},
     sendPlanRenewedEmail: async (m: any) => {
       correosRenovacion.push(m);
@@ -303,6 +314,7 @@ before(async () => {
   ({ POST } = await import("../route"));
   ({ POST: POSTAdmin } = await import("../../../admin/billing/route"));
   ({ POST: POSTCfdi } = await import("../../../admin/payments/[id]/cfdi/route"));
+  ({ POST: POSTSubs } = await import("../../../admin/subscriptions/route"));
 });
 
 /* ── Fábricas ──────────────────────────────────────────────────────────── */
@@ -348,11 +360,14 @@ function reiniciar(sobre: Record<string, unknown> = {}) {
   stripeListaFalla = false;
   stripePagoFalla = false;
   facturasDeLista = [];
-  llamadasPausa = [];
+  llamadasCiclo = [];
+  correosAdmin = [];
   llamadasAnular = [];
   ordenDeLlamadas = [];
   resetCobraLaTarjeta = false;
-  stripePausaFalla = false;
+  ultimaFacturaDelCambio = null;
+  cicloLanzaDespuesDeAplicar = false;
+  stripeCicloFalla = false;
   stripeAnularFalla = false;
   itemsPendientes = [];
   facturasAparte = [];
@@ -921,7 +936,9 @@ test("#1(a) confirmar un pago manual con la factura de tarjeta ABIERTA: se marca
   assert.equal(clinica().stripeSubscriptionId, SUB, "la suscripción de tarjeta NO se toca");
   // Una segunda confirmación (doble clic, reintento) ya no la ve abierta: no vuelve a marcar nada.
   const otra = await (await activar()).json();
-  assert.deepEqual(otra.facturaTarjeta, { tipo: "nada" });
+  // (Una segunda confirmación es otro pago de un mes: se suma al acceso y el cobro se mueve a donde termina; la factura no se toca.)
+  assert.equal(otra.facturaTarjeta.tipo, "nada");
+  assert.equal(otra.facturaTarjeta.facturas, undefined);
   assert.equal(llamadasPay.length, 1, "UNA sola vez");
   assert.equal(bitacoraAdmin.some((b) => b.after?.op === "activate_clinic" && b.after.facturaTarjeta?.tipo === "marcadas"), true, "queda en bitácora");
 });
@@ -978,7 +995,8 @@ test("#1(a) Stripe falla al marcar: la activación NO se deshace, queda en bitá
   const re = await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC });
   const cuerpoRe = await re.json();
   assert.equal(cuerpoRe.success, true);
-  assert.deepEqual(cuerpoRe.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
+  assert.equal(cuerpoRe.facturaTarjeta.tipo, "marcadas");
+  assert.deepEqual(cuerpoRe.facturaTarjeta.facturas, [FACTURA]);
   assert.equal(llamadasPay.length, 1);
   assert.equal(clinica().trialEndsAt.getTime(), antes.trialEndsAt.getTime());
   // Y si sigue caído, el reintento lo dice (success false) sin lanzar.
@@ -1300,70 +1318,22 @@ test("R3 el rastro del SPEI/OXXO de Stripe se rotula distinto de la activación 
   assert.deepEqual(facturasRegistradas, []);
 });
 
-/* ── Q4 y Q1 (decisión de Rafael, opción A): el pago marca solo los meses que cubre; el prepago pausa la tarjeta ── */
+/* ── Periodo pagado a mano (octava a undécima vuelta) ─────────────────────────────────────────────────────────────────────
+ * Mecanismo del ciclo: `trial_end` = fin de lo pagado (+ marca `periodo_pagado_hasta` en la metadata). Stripe lo reporta
+ * `trialing`; NUESTRA app guarda `active` y la clínica nunca sale «En prueba».
+ */
 
-const MES = 30.44 * DIA;
+const unMinuto = 60_000;
 const facturaDeMes = (id: string, hace: number, extra: Record<string, unknown> = {}) => ({
   id,
   status: "open",
   subscription: SUB,
   billing_reason: "subscription_cycle",
-  created: Math.floor((Date.now() - hace) / 1000),
+  created: aSegundos(Date.now() - hace),
+  status_transitions: { finalized_at: aSegundos(Date.now() - hace) },
   ...extra,
 });
 const activarMeses = (months: number) => llamarAdmin({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months });
-
-test("Q4 1 mes: un pago de 1 mes con UNA factura abierta la marca; no pausa nada y el mes siguiente se cobra la tarjeta como siempre", async () => {
-  conTarjetaRechazada();
-  const cuerpo = await (await activarMeses(1)).json();
-  assert.deepEqual(cuerpo.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
-  assert.equal(llamadasPausa.length, 0, "sin pausa: no se toca la suscripción");
-  assert.equal(suscripcionesVivas.get(SUB).pause_collection, undefined);
-});
-
-test("Q1 3 meses prepagados: el cobro de la tarjeta se PAUSA (pause_collection, no prueba ni cancelación) hasta que termine lo prepagado", async () => {
-  conTarjetaRechazada();
-  const finCiclo = Date.now() + 30 * DIA;
-  suscripcionesVivas.set(SUB, suscripcion("past_due", finCiclo));
-  const cuerpo = await (await activarMeses(3)).json();
-  assert.equal(cuerpo.facturaTarjeta.tipo, "marcadas");
-  assert.equal(cuerpo.facturaTarjeta.pausa.tipo, "pausada");
-  assert.equal(llamadasPausa.length, 1);
-  const { id, params, opciones } = llamadasPausa[0];
-  assert.equal(id, SUB);
-  assert.deepEqual(Object.keys(params), ["pause_collection"], "solo pause_collection: nada de trial_end ni cancelación");
-  assert.equal(params.pause_collection.behavior, "void");
-  // Se reanuda un día antes de la primera renovación que sí se cobra: finCiclo + 2 meses − 1 día.
-  const esperado = finCiclo + 2 * MES - DIA;
-  assert.ok(Math.abs(params.pause_collection.resumes_at * 1000 - esperado) < 3 * DIA, "reanuda al terminar lo prepagado");
-  assert.equal(opciones.idempotencyKey, `pausa-prepago:${SUB}:${params.pause_collection.resumes_at}`);
-  assert.equal(clinica().subscriptionStatus, "active", "la clínica no sale «En prueba»");
-  assert.equal(clinica().stripeSubscriptionId, SUB, "la tarjeta y la suscripción siguen ahí");
-  // El reintento (mismo estado de Stripe) no vuelve a pausar: ya llega igual de lejos.
-  const retry = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
-  assert.equal(llamadasPausa.length, 1, "idempotente");
-  assert.equal(retry.facturaTarjeta.pausa.tipo, "pausada");
-});
-
-test("Q1 si Stripe falla al pausar: la activación NO se deshace y el admin ve el aviso con su texto", async () => {
-  conTarjetaRechazada();
-  stripePausaFalla = true;
-  const r = await activarMeses(3);
-  assert.equal(r.status, 200);
-  const cuerpo = await r.json();
-  assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
-  assert.match(cuerpo.facturaTarjeta.mensaje, /pausar el cobro de la tarjeta/);
-  assert.deepEqual(cuerpo.facturaTarjeta.marcadas, [FACTURA], "lo que sí se marcó se informa");
-  assert.equal(clinica().subscriptionStatus, "active");
-  // Ya con Stripe de vuelta, «Reintentar» termina de pausar.
-  stripePausaFalla = false;
-  const retry = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
-  assert.equal(retry.facturaTarjeta.pausa?.tipo, "pausada");
-  assert.equal(llamadasPausa.length, 1);
-});
-
-/* ── Octava vuelta · corrección de Q4 (Rafael): los meses suspendidos no se deben ──────────────────────────────────────── */
-
 const MESES_SUSPENDIDOS = ["in_s1", "in_s2", "in_s3", "in_s4"];
 /** Suspendida 4 meses: la gracia venció hace 100 días y Stripe fue abriendo una factura por mes (hace 100, 70, 40 y 10 días). */
 function suspendidaCuatroMeses() {
@@ -1372,15 +1342,79 @@ function suspendidaCuatroMeses() {
   suscripcionesVivas.set(SUB, suscripcion("past_due", hoy + 10 * DIA));
   facturasDeLista = [100, 70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i], d * DIA));
 }
-const unMinuto = 60_000;
+const mesesDesde = (desde: number, n: number) => {
+  const f = new Date(desde);
+  f.setMonth(f.getMonth() + n);
+  return f;
+};
+/** El `trial_end` de la llamada que movió el ciclo, en ms. */
+const trialEndMs = (i = 0) => llamadasCiclo[i].params.trial_end * 1000;
 
-test("octava · suspendida 4 meses y paga 1: 30 días desde el pago, 4 facturas anuladas y no cobradas, siguiente cobro a los 30 días, sin «En prueba»", async () => {
+test("1 mes dentro de la gracia: la factura del ciclo se paga fuera de Stripe y el ciclo NO se mueve (ya coincide con lo pagado)", async () => {
+  conTarjetaRechazada();
+  const cuerpo = await (await activarMeses(1)).json();
+  assert.deepEqual(cuerpo.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
+  assert.equal(llamadasCiclo.length, 0, "sin llamadas a la suscripción");
+  assert.equal(suscripcionesVivas.get(SUB).trial_end, undefined);
+});
+
+test("Q1 3 meses prepagados al corriente: el cobro se mueve EXACTO al fin de lo pagado con trial_end (sin pausa, sin cancelar) y la clínica queda activa", async () => {
+  conTarjetaRechazada();
+  const finCiclo = Date.now() + 30 * DIA;
+  suscripcionesVivas.set(SUB, suscripcion("past_due", finCiclo));
+  const cuerpo = await (await activarMeses(3)).json();
+  assert.equal(cuerpo.facturaTarjeta.tipo, "marcadas");
+  assert.equal(cuerpo.facturaTarjeta.ciclo.tipo, "movido");
+  assert.equal(llamadasCiclo.length, 1);
+  const { id, params, opciones } = llamadasCiclo[0];
+  assert.equal(id, SUB);
+  assert.deepEqual(Object.keys(params).sort(), ["expand", "metadata", "proration_behavior", "trial_end"], "solo trial_end + marca: sin pause_collection ni anclas ni cancelación");
+  assert.equal(params.proration_behavior, "none");
+  // El cobro cae EXACTAMENTE cuando termina el acceso (la misma fecha, al segundo).
+  assert.ok(Math.abs(trialEndMs() - clinica().trialEndsAt.getTime()) < 1500, "el cobro y el fin del acceso coinciden");
+  assert.equal(params.metadata.periodo_pagado_hasta, new Date(trialEndMs()).toISOString());
+  assert.equal(opciones.idempotencyKey, `periodo-pagado:${SUB}:${params.trial_end}`);
+  assert.equal(clinica().subscriptionStatus, "active", "nunca «En prueba»");
+  assert.equal(clinica().stripeSubscriptionId, SUB);
+  // Q1 con el estado de Stripe `trialing`: el `updated` que sigue deja a la clínica `active` y con el acceso exacto.
+  assert.equal(await entregar(evento("customer.subscription.updated", suscripcionesVivas.get(SUB))), 200);
+  assert.equal(clinica().subscriptionStatus, "active", "trialing + marca = periodo pagado, no prueba");
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - trialEndMs()) < 1500);
+  assert.ok(Math.abs(clinica().nextBillingDate.getTime() - trialEndMs()) < 1500, "el próximo cobro que ve el panel es el fin de lo pagado");
+});
+
+test("un `trialing` SIN nuestra marca (una prueba de verdad) se guarda tal cual: el mapeo solo aplica al periodo pagado", async () => {
+  conTarjetaRechazada();
+  const viva = suscripcion("trialing", Date.now() + 20 * DIA);
+  suscripcionesVivas.set(SUB, viva);
+  clinica().subscriptionStatus = "active";
+  assert.equal(await entregar(evento("customer.subscription.updated", viva)), 200);
+  assert.equal(clinica().subscriptionStatus, "trialing");
+});
+
+test("Q1 si Stripe falla al mover el ciclo: la activación NO se deshace, el admin ve el aviso con su texto y «Reintentar» lo completa", async () => {
+  conTarjetaRechazada();
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 30 * DIA));
+  stripeCicloFalla = true;
+  const r = await activarMeses(3);
+  assert.equal(r.status, 200);
+  const cuerpo = await r.json();
+  assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
+  assert.match(cuerpo.facturaTarjeta.mensaje, /mover el siguiente cobro de la tarjeta/);
+  assert.deepEqual(cuerpo.facturaTarjeta.marcadas, [FACTURA], "lo que sí se marcó se informa");
+  assert.equal(clinica().subscriptionStatus, "active");
+  stripeCicloFalla = false;
+  const retry = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
+  assert.equal(retry.facturaTarjeta.ciclo?.tipo, "movido");
+  assert.equal(llamadasCiclo.length, 1);
+});
+
+test("octava · suspendida 4 meses y paga 1: acceso un mes desde el pago, 4 facturas anuladas y no cobradas, el siguiente cobro es EXACTAMENTE al terminar, sin «En prueba»", async () => {
   suspendidaCuatroMeses();
   const antes = Date.now();
   const r = await activarMeses(1);
   assert.equal(r.status, 200);
   const cuerpo = await r.json();
-  // (1) Nada se paga ni se debe: las 4 facturas se ANULAN (void), ninguna se marca «pagada fuera de Stripe».
   assert.equal(cuerpo.facturaTarjeta.tipo, "marcadas");
   assert.deepEqual(cuerpo.facturaTarjeta.facturas, []);
   assert.deepEqual([...cuerpo.facturaTarjeta.anuladas].sort(), MESES_SUSPENDIDOS);
@@ -1388,32 +1422,16 @@ test("octava · suspendida 4 meses y paga 1: 30 días desde el pago, 4 facturas 
   assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), MESES_SUSPENDIDOS);
   for (const l of llamadasAnular) assert.equal(l.opciones.idempotencyKey, `anular-suspendida:${l.id}`);
   assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0, "no queda ninguna abierta: Stripe nunca las cobra ni las reintenta");
-  // (2) Acceso: 30 días (un mes) desde el día y hora del pago.
-  const fin = new Date(antes);
-  fin.setMonth(fin.getMonth() + 1);
-  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, "acceso = pago + 1 mes");
+  const fin = mesesDesde(antes, 1);
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, "acceso = pago + 1 mes de calendario");
   assert.equal(clinica().subscriptionStatus, "active");
-  // (3) El siguiente cobro de la tarjeta es al terminar esos días: ancla reiniciada a «ahora» EN LA MISMA llamada que pausa
-  // el cobro (la factura del reinicio nace anulada: sin doble cobro); sin trial_end (nada de «En prueba») y sin cancelar.
-  assert.equal(llamadasPausa.length, 1);
-  const { id, params, opciones } = llamadasPausa[0];
-  assert.equal(id, SUB);
-  assert.deepEqual(Object.keys(params).sort(), ["billing_cycle_anchor", "expand", "pause_collection", "proration_behavior"]);
-  assert.equal(params.billing_cycle_anchor, "now");
-  assert.equal(params.proration_behavior, "none");
-  assert.equal(params.pause_collection.behavior, "void");
-  assert.ok(Math.abs(params.pause_collection.resumes_at * 1000 - (clinica().trialEndsAt.getTime() - 4 * DIA)) < unMinuto, "reanuda poco antes de terminar lo pagado");
-  assert.equal(opciones.idempotencyKey, `realinear:${SUB}:${params.pause_collection.resumes_at}`);
-  const viva = suscripcionesVivas.get(SUB);
-  assert.equal(viva.status, "active", "la suscripción sigue activa: ni trialing ni cancelada");
-  assert.ok(Math.abs(viva.items.data[0].current_period_end * 1000 - fin.getTime()) < unMinuto, "el siguiente ciclo (y cobro) cae a los 30 días del pago, no en la fecha del ciclo viejo");
-  assert.equal(clinica().stripeSubscriptionId, SUB);
-  assert.deepEqual(cuerpo.facturaTarjeta.pausa.tipo, "pausada");
-  assert.equal(cuerpo.facturaTarjeta.pausa.realineada, true);
-  // (4) El orden protege: primero el ciclo, luego las anulaciones.
-  assert.equal(ordenDeLlamadas[0], "realinear");
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - clinica().trialEndsAt.getTime()) < 1500, "B3: el cobro de la tarjeta cae EXACTAMENTE cuando termina el acceso (sin días pagados dos veces ni huecos)");
+  assert.equal(llamadasCiclo[0].params.billing_cycle_anchor, undefined);
+  assert.equal(llamadasCiclo[0].params.pause_collection, undefined);
+  assert.equal(cuerpo.facturaTarjeta.ciclo.tipo, "movido");
+  assert.equal(ordenDeLlamadas[0], "ciclo", "primero el ciclo, luego las anulaciones");
   assert.equal(ordenDeLlamadas.filter((o) => o.startsWith("anular:")).length, 4);
-  // (5) En la base quedan registradas como «No cobrada: servicio suspendido» (status void: ni ingreso ni adeudo).
   const filas = pagosDeSubscripcion.filter((p) => MESES_SUSPENDIDOS.includes(p.reference));
   assert.equal(filas.length, 4);
   for (const f of filas) {
@@ -1423,71 +1441,59 @@ test("octava · suspendida 4 meses y paga 1: 30 días desde el pago, 4 facturas 
   }
   assert.equal(pagosDeSubscripcion.filter((p) => p.status === "paid" && (p.amount ?? 0) > 0).length, 0, "ningún ingreso");
   assert.equal(pagosDeSubscripcion.filter((p) => p.status === "failed" || p.status === "pending").length, 0, "ningún adeudo");
+  // La fila del pago guarda el periodo REAL (de él sale el fin de lo pagado de cualquier reintento).
+  const filaPago = pagosDeSubscripcion.find((p) => p.method === "admin");
+  assert.ok(Math.abs(filaPago.periodEnd.getTime() - fin.getTime()) < unMinuto);
 });
 
-test("octava · suspendida y paga 3 meses: 90 días desde el pago, facturas anuladas y el cobro de la tarjeta pausado hasta que termine lo prepagado", async () => {
+test("octava · suspendida y paga 3 meses: acceso y cobro a los 3 meses, facturas anuladas", async () => {
   suspendidaCuatroMeses();
   const antes = Date.now();
-  const cuerpo = await (await activarMeses(3)).json();
-  const fin = new Date(antes);
-  fin.setMonth(fin.getMonth() + 3);
-  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, "acceso = pago + 3 meses");
+  await activarMeses(3);
+  const fin = mesesDesde(antes, 3);
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto);
   assert.equal(llamadasAnular.length, 4);
   assert.equal(llamadasPay.length, 0);
-  assert.equal(llamadasPausa.length, 1, "UNA sola llamada: pausa hasta el final + ancla a hoy");
-  const { params } = llamadasPausa[0];
-  assert.equal(params.billing_cycle_anchor, "now");
-  assert.ok(Math.abs(params.pause_collection.resumes_at * 1000 - (fin.getTime() - 4 * DIA)) < unMinuto, "la tarjeta vuelve a cobrar al terminar los 3 meses");
-  assert.equal(cuerpo.facturaTarjeta.pausa.tipo, "pausada");
-  assert.equal(suscripcionesVivas.get(SUB).status, "active");
+  assert.equal(llamadasCiclo.length, 1, "UNA sola llamada");
+  assert.ok(Math.abs(trialEndMs() - fin.getTime()) < unMinuto, "la tarjeta vuelve a cobrar al terminar los 3 meses");
+  assert.equal(suscripcionesVivas.get(SUB).metadata.clinicId, CLINIC, "la metadata existente se conserva");
 });
 
 test("octava · idempotente: repetir la confirmación o pulsar «Reintentar» no anula ni mueve nada otra vez", async () => {
   suspendidaCuatroMeses();
   await activarMeses(1);
   const anuladas = llamadasAnular.length;
-  const pausas = llamadasPausa.length;
-  // «Reintentar» (el botón del aviso): ya no hay facturas abiertas y la pausa está puesta.
+  const ciclos = llamadasCiclo.length;
   const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
   assert.equal(re.success, true);
   assert.equal(llamadasAnular.length, anuladas);
-  assert.equal(llamadasPausa.length, pausas, "no se reinicia el ciclo otra vez");
+  assert.equal(llamadasCiclo.length, ciclos, "no se mueve el ciclo otra vez");
   assert.equal(llamadasPay.length, 0);
   assert.equal(pagosDeSubscripcion.filter((p) => MESES_SUSPENDIDOS.includes(p.reference)).length, 4, "ninguna fila duplicada");
-  assert.equal(clinica().subscriptionStatus, "active");
 });
 
-test("octava · paga DENTRO de las 24 h de gracia (aún no suspendida): se paga la factura del ciclo y el ciclo sigue igual", async () => {
-  conTarjetaRechazada();
-  const cuerpo = await (await activarMeses(1)).json();
-  assert.deepEqual(cuerpo.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
-  assert.equal(llamadasPay.length, 1);
-  assert.equal(llamadasAnular.length, 0, "no hay meses suspendidos");
-  assert.equal(llamadasPausa.length, 0, "el ancla no se toca");
-  assert.equal(clinica().stripeSubscriptionId, SUB);
-});
-
-test("octava · si Stripe no puede mover el ciclo, NO se anula nada (se quedan abiertas para el reintento), la activación sigue y «Reintentar» lo completa", async () => {
+test("octava · si Stripe no puede mover el ciclo NO se anula nada; el reintento (con el fin de lo pagado de la FILA del pago, M9) completa todo", async () => {
   suspendidaCuatroMeses();
-  stripePausaFalla = true; // el `update` de la suscripción falla
+  stripeCicloFalla = true;
   const r = await activarMeses(1);
   assert.equal(r.status, 200, "la activación no se deshace");
   const cuerpo = await r.json();
   assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
   assert.match(cuerpo.facturaTarjeta.mensaje, /mover el siguiente cobro de la tarjeta/);
   assert.equal(llamadasAnular.length, 0, "sin ciclo movido no se anula: el reintento las verá");
-  assert.equal(clinica().subscriptionStatus, "active");
-  // El cron / la lista de /admin ven el pendiente.
+  const finPagado = clinica().trialEndsAt.getTime();
   const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
   const lista = await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble });
   assert.equal(lista.length, 1);
   assert.deepEqual([...lista[0].suspendidas].sort(), MESES_SUSPENDIDOS);
-  // Stripe vuelve: el botón «Reintentar» (sin saber el estado de antes: lo infiere por las fechas) repite todo.
-  stripePausaFalla = false;
+  assert.equal(new Date(lista[0].cicloPendiente!).getTime(), finPagado, "el aviso espera el fin de lo pagado de la fila del pago");
+  stripeCicloFalla = false;
+  // Pasa tiempo: el reintento NO regala días (el cobro sale de la fecha del PAGO, no del «ahora» del reintento).
   const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
   assert.equal(re.success, true);
   assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), MESES_SUSPENDIDOS);
-  assert.equal(llamadasPausa.length, 1);
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - finPagado) < 1500, "M9: trial_end = fin de lo pagado, no el momento del reintento");
   assert.equal(llamadasPay.length, 0);
   assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble }), [], "ya no sale en el aviso");
 });
@@ -1504,51 +1510,71 @@ test("octava · si Stripe no puede anular una factura: aviso con su texto, la ac
   const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
   assert.equal(re.success, true);
   assert.equal(llamadasAnular.length, 4);
-  assert.equal(llamadasPausa.length, 1, "el ciclo ya estaba movido: no se repite");
+  assert.equal(llamadasCiclo.length, 1, "el ciclo ya estaba movido: no se repite");
 });
 
-test("octava · red de seguridad: si el reinicio del ciclo cobrara la tarjeta (no debería), el admin lo ve con el id de la factura para reembolsarla", async () => {
+test("M5 si el cambio de ciclo devolviera un cobro: se avisa con el id para reembolsar; si devuelve una factura ABIERTA con importe, se anula en el momento", async () => {
   suspendidaCuatroMeses();
   resetCobraLaTarjeta = true;
   const cuerpo = await (await activarMeses(1)).json();
   assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
-  assert.match(cuerpo.facturaTarjeta.mensaje, /Stripe cobró la tarjeta al mover el ciclo \(factura in_reset\): reembolsa ese cobro en Stripe\./);
+  assert.match(cuerpo.facturaTarjeta.mensaje, /Stripe cobró la tarjeta al mover el ciclo \(factura in_trial\): reembolsa ese cobro en Stripe\./);
   assert.equal(llamadasAnular.length, 4, "lo demás se completa");
   assert.equal(clinica().subscriptionStatus, "active");
+  // Abierta con importe: se anula antes de que Stripe la cobre.
+  suspendidaCuatroMeses();
+  ultimaFacturaDelCambio = { id: "in_abierta_x", status: "open", amount_paid: 0, amount_due: 68900 };
+  const c2 = await (await activarMeses(1)).json();
+  assert.equal(c2.facturaTarjeta.tipo, "marcadas");
+  assert.ok(llamadasAnular.some((l) => l.id === "in_abierta_x"), "la factura del cambio se anula");
+  // Abierta con importe y NO se puede anular: cobro inesperado reportado.
+  suspendidaCuatroMeses();
+  ultimaFacturaDelCambio = { id: "in_abierta_y", status: "open", amount_paid: 0, amount_due: 68900 };
+  anularFallaPara = new Set(["in_abierta_y"]);
+  const c3 = await (await activarMeses(1)).json();
+  assert.equal(c3.facturaTarjeta.tipo, "fallo");
+  assert.match(c3.facturaTarjeta.mensaje, /in_abierta_y/);
 });
 
-test("octava · interruptor COBRO_REALINEAR_CICLO=0: las facturas suspendidas se anulan igual pero el ancla no se reinicia", async () => {
+test("M3 si otra llamada idéntica (el webhook y «Pagar» a la vez) ya hizo el cambio y Stripe responde con un error de idempotencia: se relee y cuenta como hecho", async () => {
+  suspendidaCuatroMeses();
+  cicloLanzaDespuesDeAplicar = true;
+  const cuerpo = await (await activarMeses(1)).json();
+  assert.equal(cuerpo.facturaTarjeta.tipo, "marcadas", "sin aviso falso");
+  assert.equal(llamadasAnular.length, 4, "y se siguió anulando");
+});
+
+test("octava · interruptor COBRO_REALINEAR_CICLO=0: las facturas suspendidas se anulan igual pero el ciclo no se toca (el ciclo viejo sigue)", async () => {
   process.env.COBRO_REALINEAR_CICLO = "0";
   try {
     suspendidaCuatroMeses();
     const cuerpo = await (await activarMeses(1)).json();
     assert.equal(cuerpo.facturaTarjeta.tipo, "marcadas");
     assert.equal(llamadasAnular.length, 4);
-    assert.equal(llamadasPausa.some((l) => l.params.billing_cycle_anchor !== undefined), false, "nunca se reinicia el ancla");
+    assert.equal(llamadasCiclo.length, 0, "nunca se mueve el ciclo");
   } finally {
     delete process.env.COBRO_REALINEAR_CICLO;
   }
 });
 
-test("octava · cobro de TARJETA que entra solo tras la suspensión: 30 días desde ese pago, las otras facturas anuladas, siguiente cobro a los 30 días", async () => {
+test("octava · cobro de TARJETA que entra solo tras la suspensión: acceso y siguiente cobro a un mes de ese pago, las otras facturas anuladas, y el correo dice la fecha buena (B4)", async () => {
   suspendidaCuatroMeses();
-  // Stripe reintenta la factura más vieja y la COBRA (FACTURA): las otras tres siguen abiertas.
   facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
   facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
-  // Stripe la sigue marcando past_due: hay otras facturas abiertas (el re-alineo y las anulaciones la dejan activa).
   suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
   const pago = Date.now();
-  assert.equal(await entregar(evento("invoice.paid", facturaPagada({ billing_reason: "subscription_cycle" }), pago)), 200);
-  const fin = new Date(pago);
-  fin.setMonth(fin.getMonth() + 1);
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) }, lines: { data: [{ metadata: {}, period: { start: aSegundos(pago - 100 * DIA), end: aSegundos(pago - 70 * DIA) } }] } });
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200);
+  const fin = mesesDesde(aSegundos(pago) * 1000, 1);
   assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), ["in_s2", "in_s3", "in_s4"], "las otras se anulan; la cobrada no se toca");
-  assert.equal(llamadasPausa.length, 1);
-  assert.equal(llamadasPausa[0].params.billing_cycle_anchor, "now");
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - fin.getTime()) < 2000);
   assert.equal(clinica().subscriptionStatus, "active");
-  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < 2 * unMinuto, "acceso = el día y hora del pago + 1 mes (el periodo nuevo que dejó el re-alineo)");
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < 2000, "acceso = el momento del pago + 1 mes");
+  assert.ok(Math.abs(correosRenovacion[0].nextBillingDate.getTime() - fin.getTime()) < 2000, "B4: el correo no promete una fecha ya pasada");
   // El otro evento de la misma factura no repite nada.
-  assert.equal(await entregar(evento("invoice.payment_succeeded", facturaPagada({ billing_reason: "subscription_cycle" }), pago)), 200);
-  assert.equal(llamadasPausa.length, 1);
+  assert.equal(await entregar(evento("invoice.payment_succeeded", pagada, pago)), 200);
+  assert.equal(llamadasCiclo.length, 1);
   assert.equal(llamadasAnular.length, 3);
 });
 
@@ -1557,8 +1583,8 @@ test("octava · cobro de tarjeta DENTRO de la gracia (reintento a las pocas hora
   await entregar(evento("invoice.payment_failed", facturaFallida(), rechazo));
   suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 30 * DIA));
   facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
-  assert.equal(await entregar(evento("invoice.paid", facturaPagada())), 200);
-  assert.equal(llamadasPausa.length, 0);
+  assert.equal(await entregar(evento("invoice.paid", facturaPagada({ attempt_count: 2, status_transitions: { finalized_at: aSegundos(rechazo), paid_at: aSegundos(Date.now()) } }))), 200);
+  assert.equal(llamadasCiclo.length, 0);
   assert.equal(llamadasAnular.length, 0);
   assert.equal(clinica().subscriptionStatus, "active");
 });
@@ -1574,22 +1600,18 @@ test("octava · un aviso de cobro rechazado que llega tarde de una factura YA AN
   assert.equal(fila.notes, "No cobrada: servicio suspendido");
 });
 
-/* ── Novena vuelta (décima de t4): V1, V2(b)→change-plan-iva, V3, V4, V5, V6, V7 ────────────────────────────────────────── */
-
-test("V1 un pago nunca se cuenta hacia atrás y hacia adelante: deuda de 3 meses + pago de 3 → ninguna factura se «paga», 3 meses de acceso y de pausa (no 6)", async () => {
+test("V1 un pago nunca se cuenta hacia atrás y hacia adelante: deuda de 3 meses + pago de 3 → ninguna factura se «paga», 3 meses de acceso y de cobro (no 6)", async () => {
   const hoy = Date.now();
   reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(hoy - 70 * DIA), nextBillingDate: new Date(hoy + 10 * DIA) });
   suscripcionesVivas.set(SUB, suscripcion("past_due", hoy + 10 * DIA));
   facturasDeLista = [facturaDeMes("in_a", 70 * DIA), facturaDeMes("in_b", 40 * DIA), facturaDeMes("in_c", 10 * DIA)];
   const antes = Date.now();
   await activarMeses(3);
-  const fin = new Date(antes);
-  fin.setMonth(fin.getMonth() + 3);
+  const fin = mesesDesde(antes, 3);
   assert.equal(llamadasPay.length, 0, "hacia atrás: ninguna factura vieja se paga con este pago");
   assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), ["in_a", "in_b", "in_c"]);
   assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, "hacia adelante: 3 meses de acceso");
-  const hasta = llamadasPausa[0].params.pause_collection.resumes_at * 1000;
-  assert.ok(Math.abs(hasta - (fin.getTime() - 4 * DIA)) < unMinuto, "y la tarjeta vuelve a cobrar a los 3 meses, no a los 6");
+  assert.ok(Math.abs(trialEndMs() - fin.getTime()) < unMinuto, "y la tarjeta vuelve a cobrar a los 3 meses, no a los 6");
   assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0);
 });
 
@@ -1604,21 +1626,18 @@ test("V4 un fallo a medias nunca deja un mes PAGADO abierto: lo que no se anuló
   const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
   const lista = await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble });
   assert.deepEqual([...lista[0].suspendidas].sort(), ["in_s3", "in_s4"], "el aviso de /admin las muestra como «por anular», no como adeudo");
-  // El cron diario las termina cuando Stripe vuelve.
   anularFallaPara = new Set();
   const resumen = (await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json()).facturaTarjeta;
   assert.deepEqual([...resumen.anuladas].sort(), ["in_s3", "in_s4"]);
   assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0);
   assert.equal(llamadasPay.length, 0);
+  assert.equal(llamadasCiclo.length, 1, "el ciclo ya estaba movido");
 });
 
 test("V7 ninguna factura vieja queda viva para que Stripe la reintente: ni con estado vencido ni con una cortesía que ya le había dado acceso", async () => {
-  // (a) vencida (cubierto arriba): todo anulado.
   suspendidaCuatroMeses();
   await activarMeses(1);
   assert.equal(facturasDeLista.filter((f) => f.status === "open" || f.status === "uncollectible").length, 0);
-  // (b) una cortesía de /admin le dio días por delante a una clínica que seguía past_due con facturas viejas abiertas:
-  // ya no cuenta como suspendida, pero las facturas de hace meses se anulan igual y la del ciclo reciente se paga.
   reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(Date.now() + 5 * DIA), nextBillingDate: new Date(Date.now() + 30 * DIA) });
   suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 30 * DIA));
   facturasDeLista = [facturaDeMes("in_v1", 70 * DIA), facturaDeMes("in_v2", 40 * DIA), facturaDeMes("in_reciente", HORA)];
@@ -1626,35 +1645,228 @@ test("V7 ninguna factura vieja queda viva para que Stripe la reintente: ni con e
   assert.deepEqual([...cuerpo.facturaTarjeta.anuladas].sort(), ["in_v1", "in_v2"]);
   assert.deepEqual(cuerpo.facturaTarjeta.facturas, ["in_reciente"]);
   assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0, "no queda ninguna viva");
-  // (c) sin suscripción de tarjeta no hay nada que reintentar.
 });
 
-test("V6 un pago de 1 mes hecho TARDE (14, 20 y 25 días después de la factura rechazada): 30 días exactos desde el pago, sin regalar un mes ni cobrar días dos veces", async () => {
+test("M8 las facturas en BORRADOR de meses sin servicio también se dejan sin cobro (se finalizan sin cobrar y se anulan; nada se borra) y la lista se pagina", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista.push(facturaDeMes("in_borrador", 5 * DIA, { status: "draft" }));
+  const cuerpo = await (await activarMeses(1)).json();
+  assert.equal(cuerpo.facturaTarjeta.tipo, "marcadas");
+  assert.ok(llamadasAnular.some((l) => l.id === "in_borrador"));
+  assert.ok(ordenDeLlamadas.indexOf("finalizar:in_borrador") < ordenDeLlamadas.indexOf("anular:in_borrador"), "primero se finaliza, luego se anula");
+  assert.equal(facturasDeLista.filter((f) => f.status !== "void").length, 0);
+  // Paginación: más de una página de facturas abiertas.
+  const { facturasAbiertasDelPlan } = await import("@/lib/billing/reactivacion-tras-suspension.server");
+  const paginas: Record<string, any[][]> = {
+    open: [[facturaDeMes("p1", DIA), facturaDeMes("p2", DIA)], [facturaDeMes("p3", DIA)]],
+    uncollectible: [[]],
+    draft: [[]],
+  };
+  const vistas: string[] = [];
+  const falso: any = {
+    invoices: {
+      list: async ({ status, starting_after }: any) => {
+        const idx = starting_after ? 1 : 0;
+        vistas.push(`${status}:${starting_after ?? "-"}`);
+        const pagina = paginas[status][idx] ?? [];
+        return { data: pagina, has_more: idx === 0 && paginas[status].length > 1 };
+      },
+    },
+  };
+  assert.deepEqual((await facturasAbiertasDelPlan(falso, SUB)).map((f) => f.id), ["p1", "p2", "p3"]);
+  assert.ok(vistas.includes("open:p2"), "pidió la página siguiente desde la última factura");
+});
+
+test("M10 una factura de la gracia que Stripe tardó horas en finalizar (creada hace 40 h, finalizada hace 1 h) NO es un mes sin servicio: se paga, no se anula", async () => {
+  conTarjetaRechazada();
+  facturasDeLista = [{ ...FACTURA_ABIERTA(), created: aSegundos(Date.now() - 40 * HORA), status_transitions: { finalized_at: aSegundos(Date.now() - HORA) } }];
+  const cuerpo = await (await activarMeses(1)).json();
+  assert.deepEqual(cuerpo.facturaTarjeta.facturas, [FACTURA]);
+  assert.equal(llamadasAnular.length, 0);
+});
+
+test("X1 «Subir de plan» con la tarjeta rechazada y pagado DÍAS después por el enlace: la factura subscription_update también aplica la regla; la de $0 del cambio de ciclo no es un pago", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  facturasVivas.set("in_subida", { id: "in_subida", status: "paid" });
+  suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 27 * DIA));
+  const pago = Date.now();
+  const subida = facturaPagada({ id: "in_subida", billing_reason: "subscription_update", amount_paid: 79924, status_transitions: { finalized_at: aSegundos(pago - 3 * DIA), paid_at: aSegundos(pago) } });
+  assert.equal(await entregar(evento("invoice.paid", subida, pago)), 200);
+  assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), ["in_s2", "in_s3", "in_s4"]);
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - mesesDesde(aSegundos(pago) * 1000, 1).getTime()) < 2000, "un mes desde ESTE pago, no 27 días desde el clic");
+  assert.equal(clinica().subscriptionStatus, "active");
+  // La factura de $0 que genera mover el ciclo: ni regla, ni fila de cobro, ni ingreso.
+  const antes = { ciclos: llamadasCiclo.length, registradas: facturasRegistradas.length };
+  const cero = facturaPagada({ id: "in_cero", billing_reason: "subscription_update", amount_paid: 0 });
+  facturasVivas.set("in_cero", { id: "in_cero", status: "paid" });
+  assert.equal(await entregar(evento("invoice.paid", cero)), 200);
+  assert.equal(llamadasCiclo.length, antes.ciclos);
+  assert.equal(facturasRegistradas.length, antes.registradas, "no se registra como cobro");
+});
+
+test("X3 orden invertido: el `customer.subscription.updated` (active, con el ciclo viejo) llega ANTES que el `invoice.paid` → la regla se aplica igual", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 25 * DIA));
+  // 1) llega el `updated`: deja a la clínica active con el ciclo viejo (+25 d).
+  assert.equal(await entregar(evento("customer.subscription.updated", suscripcionesVivas.get(SUB))), 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(isPlanExpired(clinica()), false);
+  // 2) llega el `invoice.paid` de «Pagar mi plan» (la factura más reciente, finalizada hace 1 h, que no entró a la primera).
+  const pago = Date.now();
+  const pagada = facturaPagada({ attempt_count: 2, billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - HORA), paid_at: aSegundos(pago) } });
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200);
+  const fin = mesesDesde(aSegundos(pago) * 1000, 1);
+  assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), ["in_s2", "in_s3", "in_s4"], "las otras facturas se anularon");
+  assert.equal(llamadasCiclo.length, 1, "el ciclo se movió");
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < 2000, "acceso = pago + 1 mes (no los 25 días del ciclo viejo)");
+});
+
+test("X4 si mover el ciclo falla DENTRO del webhook: 5xx (Stripe reenvía), la clínica NO se reactiva a medias, el admin recibe UN aviso, y el reenvío lo completa", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  const pago = Date.now();
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  stripeCicloFalla = true;
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 500, "5xx: Stripe reenvía el evento");
+  assert.equal(clinica().subscriptionStatus, "past_due", "no se reactiva a medias");
+  assert.equal(llamadasAnular.length, 0);
+  assert.equal(correosAdmin.length, 1, "el admin se entera");
+  assert.match(correosAdmin[0].subject, /Revisa una clínica reactivada tras suspensión/);
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 500);
+  assert.equal(correosAdmin.length, 1, "pero no un correo por cada reenvío");
+  // Stripe se recupera: el reenvío completa todo.
+  stripeCicloFalla = false;
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(llamadasCiclo.length, 1);
+  assert.deepEqual(llamadasAnular.map((l) => l.id).sort(), ["in_s2", "in_s3", "in_s4"]);
+  // Un último reenvío ya no hace nada.
+  assert.equal(await entregar(evento("invoice.payment_succeeded", pagada, pago)), 200);
+  assert.equal(llamadasCiclo.length, 1);
+  assert.equal(llamadasAnular.length, 3);
+});
+
+test("X4 también si falla a medias al anular: 5xx y el reenvío anula lo que falta", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  const pago = Date.now();
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  anularFallaPara = new Set(["in_s4"]);
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 500);
+  assert.equal(clinica().subscriptionStatus, "past_due");
+  anularFallaPara = new Set();
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200);
+  assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0);
+  assert.equal(llamadasCiclo.length, 1, "el ciclo ya estaba movido");
+  assert.equal(clinica().subscriptionStatus, "active");
+});
+
+test("X5 pagó con tarjeta y Stripe deja la suscripción en past_due/unpaid: la clínica queda ACTIVA con su acceso, y el admin recibe el aviso", async () => {
+  for (const estadoStripe of ["past_due", "unpaid"]) {
+    process.env.COBRO_REALINEAR_CICLO = "0"; // el ciclo no cambia: Stripe sigue reportando lo que tenía
+    try {
+      suspendidaCuatroMeses();
+      facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+      facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+      suscripcionesVivas.set(SUB, suscripcion(estadoStripe, Date.now() + 10 * DIA));
+      const pago = Date.now();
+      const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+      assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200);
+      assert.equal(clinica().subscriptionStatus, "active", `${estadoStripe}: el pago firmado basta`);
+      assert.ok(Math.abs(clinica().trialEndsAt.getTime() - mesesDesde(aSegundos(pago) * 1000, 1).getTime()) < 2000, "con el acceso del pago + 1 mes");
+      assert.equal(isPlanExpired(clinica()), false);
+      assert.ok(correosAdmin.some((c) => /sigue en cobro rechazado en Stripe/.test(c.subject)), "el admin se entera de que Stripe no la pasó a activa");
+    } finally {
+      delete process.env.COBRO_REALINEAR_CICLO;
+    }
+  }
+});
+
+test("X6 «Registrar pago»: el acceso es pago + N meses desde el registro, NO el mes de calendario que escriba el admin; la fila guarda el periodo real; y un doble clic no lo duplica (B7)", async () => {
+  suspendidaCuatroMeses();
+  const hoy = new Date();
+  const mesPasado = { ini: new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1), fin: new Date(hoy.getFullYear(), hoy.getMonth(), 0, 23, 59, 59) };
+  const registrar = () =>
+    POSTSubs(new NextRequestCtor("http://localhost/api/admin/subscriptions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clinicId: CLINIC, amount: 689, method: "transfer", reference: "SPEI-77", periodStart: mesPasado.ini.toISOString(), periodEnd: mesPasado.fin.toISOString(), status: "paid" }),
+    }));
+  const antes = Date.now();
+  const r = await registrar();
+  assert.equal(r.status, 201);
+  const cuerpo = await r.json();
+  const fin = mesesDesde(antes, 1);
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, "acceso = registro + 1 mes (no el fin del mes pasado, que ya venció)");
+  assert.equal(isPlanExpired(clinica()), false);
+  assert.ok(Math.abs(new Date(cuerpo.periodEnd).getTime() - fin.getTime()) < unMinuto, "la fila guarda el periodo REAL");
+  assert.equal(llamadasAnular.length, 4);
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - clinica().trialEndsAt.getTime()) < 1500);
+  // Doble clic: la misma referencia en menos de 2 minutos no crea otra fila pagada (el ingreso no se cuenta dos veces).
+  const otra = await registrar();
+  assert.equal(otra.status, 200);
+  assert.equal((await otra.json()).duplicado, true);
+  assert.equal(pagosDeSubscripcion.filter((p) => p.reference === "SPEI-77").length, 1);
+  assert.equal(llamadasCiclo.length, 1);
+});
+
+test("X7 suscripción ANUAL suspendida que paga el año: el ciclo se mueve igual (trial_end no depende del intervalo) y las facturas se anulan", async () => {
+  suspendidaCuatroMeses();
+  const anual: any = suscripcion("past_due", Date.now() + 8 * 30 * DIA);
+  anual.items.data[0].price = { recurring: { interval: "year" } };
+  suscripcionesVivas.set(SUB, anual);
+  const antes = Date.now();
+  await activarMeses(12);
+  const fin = mesesDesde(antes, 12);
+  assert.equal(llamadasCiclo.length, 1, "antes: no_aplica con un intervalo anual");
+  assert.ok(Math.abs(trialEndMs() - fin.getTime()) < unMinuto, "el aniversario nuevo = fin de lo pagado");
+  assert.equal(llamadasAnular.length, 4);
+  assert.equal(llamadasPay.length, 0);
+});
+
+test("M1 clínica AL CORRIENTE que prepaga 3 meses: se cuenta desde el fin de lo que ya tenía pagado (se suman, no se pierden ni se cobran dos veces)", async () => {
+  reiniciar({ subscriptionStatus: "active", trialEndsAt: new Date(Date.now() + 20 * DIA), nextBillingDate: new Date(Date.now() + 20 * DIA) });
+  suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 20 * DIA));
+  facturasDeLista = [];
+  const base = Date.now() + 20 * DIA;
+  await activarMeses(3);
+  const fin = mesesDesde(base, 3);
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, "20 días que ya tenía + 3 meses");
+  assert.equal(llamadasCiclo.length, 1);
+  assert.ok(Math.abs(trialEndMs() - fin.getTime()) < unMinuto, "y el cobro cae justo ahí");
+});
+
+test("V6 un pago de 1 mes hecho TARDE (14, 20 y 25 días después de la factura rechazada): un mes exacto desde el pago, sin regalar un mes ni cobrar días dos veces", async () => {
   for (const dias of [14, 20, 25]) {
     const hoy = Date.now();
     const creada = hoy - dias * DIA;
     reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(creada + DIA), nextBillingDate: new Date(creada + 30 * DIA) });
     suscripcionesVivas.set(SUB, suscripcion("past_due", creada + 30 * DIA));
-    facturasDeLista = [{ id: `in_tarde${dias}`, status: "open", subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(creada) }];
+    facturasDeLista = [{ id: `in_tarde${dias}`, status: "open", subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(creada), status_transitions: { finalized_at: aSegundos(creada) } }];
     const antes = Date.now();
     await activarMeses(1);
-    const fin = new Date(antes);
-    fin.setMonth(fin.getMonth() + 1);
+    const fin = mesesDesde(antes, 1);
     assert.equal(llamadasPay.length, 0, `${dias} d: la factura de un mes sin servicio no se cobra`);
     assert.equal(llamadasAnular.length, 1);
-    assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, `${dias} d: acceso = pago + 1 mes (ni 16 días de más ni de menos)`);
-    assert.equal(llamadasPausa.length, 1);
-    assert.equal(llamadasPausa[0].params.billing_cycle_anchor, "now");
-    const periodo = suscripcionesVivas.get(SUB).items.data[0].current_period_end * 1000;
-    assert.ok(Math.abs(periodo - fin.getTime()) < unMinuto, `${dias} d: el siguiente cobro cae a los 30 días del pago, no 14–25 días después de la factura vieja`);
+    assert.ok(Math.abs(clinica().trialEndsAt.getTime() - fin.getTime()) < unMinuto, `${dias} d: acceso = pago + 1 mes`);
+    assert.equal(llamadasCiclo.length, 1);
+    assert.ok(Math.abs(trialEndMs() - fin.getTime()) < unMinuto, `${dias} d: el siguiente cobro cae justo al terminar, no 14–25 días después de la factura vieja`);
   }
-  // Y una clínica al corriente que paga 1 mes (factura de hace una hora) no pausa nada: el ciclo sigue igual.
   conTarjetaRechazada();
   await activarMeses(1);
-  assert.equal(llamadasPausa.length, 0);
+  assert.equal(llamadasCiclo.length, 0, "al corriente, 1 mes: el ciclo sigue igual");
 });
 
-test("V3 durante la pausa el excedente de CFDI se cobra como adeudo manual (cfdi_overage), no como item de una factura que se anulará", async () => {
+test("V3 el excedente de CFDI: con una pausa VIGENTE en Stripe va como adeudo manual; con una pausa vencida (B5) o en un periodo pagado a mano va a la próxima factura", async () => {
   const { resolveOverageBilling } = await import("@/lib/cfdi-overage");
   const fila = { stripeSubscriptionId: SUB, stripeCustomerId: CUS, stripePaymentMethodId: "pm_1" };
   const conItem = (extra: Record<string, unknown>) => ({
@@ -1665,11 +1877,16 @@ test("V3 durante la pausa el excedente de CFDI se cobra como adeudo manual (cfdi
   suscripcionesVivas.set(SUB, conItem({}));
   assert.equal((await resolveOverageBilling(fila)).mode, "monthly_sub", "sin pausa: como siempre, a la próxima mensualidad");
   suscripcionesVivas.set(SUB, conItem({ pause_collection: { behavior: "void", resumes_at: aSegundos(Date.now() + 60 * DIA) } }));
-  assert.equal((await resolveOverageBilling(fila)).mode, "manual", "con la pausa: adeudo manual cfdi_overage");
+  assert.equal((await resolveOverageBilling(fila)).mode, "manual", "pausa vigente: adeudo manual cfdi_overage");
+  suscripcionesVivas.set(SUB, conItem({ pause_collection: { behavior: "void", resumes_at: aSegundos(Date.now() - DIA) } }));
+  assert.equal((await resolveOverageBilling(fila)).mode, "monthly_sub", "B5: una pausa vencida no cuenta");
+  suscripcionesVivas.set(SUB, conItem({ status: "trialing", trial_end: aSegundos(Date.now() + 60 * DIA), metadata: { periodo_pagado_hasta: new Date(Date.now() + 60 * DIA).toISOString() } }));
+  assert.equal((await resolveOverageBilling(fila)).mode, "monthly_sub", "periodo pagado a mano: el item se suma a la factura que Stripe emite al terminar");
 });
 
-test("V3 el excedente que ya estaba sumado a «la próxima mensualidad» pasa a su propia factura ANTES de pausar o reiniciar el ciclo (no se pierde en una factura anulada)", async () => {
+test("V3 el excedente que ya estaba sumado a «la próxima mensualidad» pasa a su propia factura ANTES de mover el ciclo, con la tarjeta de la suscripción (M6)", async () => {
   suspendidaCuatroMeses();
+  suscripcionesVivas.get(SUB).default_payment_method = "pm_de_la_suscripcion";
   itemsPendientes = [
     { id: "ii_excedente", subscription: null, metadata: { kind: "cfdi-overage" } },
     { id: "ii_de_un_modulo", subscription: "sub_modulo" },
@@ -1678,26 +1895,24 @@ test("V3 el excedente que ya estaba sumado a «la próxima mensualidad» pasa a 
   assert.equal(facturasAparte.length, 1);
   assert.equal(facturasAparte[0].params.pending_invoice_items_behavior, "include");
   assert.equal(facturasAparte[0].params.collection_method, "charge_automatically");
+  assert.equal(facturasAparte[0].params.default_payment_method, "pm_de_la_suscripcion", "M6: se cobra sola con la tarjeta de la suscripción");
   assert.equal(facturasAparte[0].opciones.idempotencyKey, `excedente-aparte:${CUS}:ii_excedente`, "solo el item suelto; el de otro módulo no es de aquí");
-  assert.ok(ordenDeLlamadas.indexOf("aparte") < ordenDeLlamadas.indexOf("realinear"), "primero se separa, luego se reinicia el ciclo");
-  // Sin items pendientes no se crea ninguna factura aparte.
+  assert.ok(ordenDeLlamadas.indexOf("aparte") < ordenDeLlamadas.indexOf("ciclo"), "primero se separa, luego se mueve el ciclo");
   suspendidaCuatroMeses();
   await activarMeses(1);
-  assert.equal(facturasAparte.length, 0);
-  // Si no se puede separar, NO se pausa (el excedente se perdería) y el admin lo ve.
+  assert.equal(facturasAparte.length, 0, "sin items pendientes no se crea ninguna factura aparte");
   suspendidaCuatroMeses();
   itemsPendientes = [{ id: "ii_x", subscription: null }];
   aparteFalla = true;
   const cuerpo = await (await activarMeses(1)).json();
   assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
   assert.match(cuerpo.facturaTarjeta.mensaje, /separar el excedente de facturas CFDI/);
-  assert.equal(llamadasPausa.length, 0);
+  assert.equal(llamadasCiclo.length, 0, "si no se puede separar, NO se mueve el ciclo");
   assert.equal(llamadasAnular.length, 0);
 });
 
-test("V5 «Verificar pago» da el acceso del PERIODO de la fila (3 meses, o su duración si se verifica tarde) y aplica Q1 con eso", async () => {
+test("V5 «Verificar pago» da el acceso del PERIODO de la fila (3 meses, o su duración si se verifica tarde) y aplica Q1; un doble clic no reescribe nada (B7)", async () => {
   const verificar = (id: string) => llamarAdmin({ action: "verify_payment", invoiceId: id });
-  // (a) fila pendiente de 3 meses, clínica al corriente con la factura del ciclo abierta.
   conTarjetaRechazada();
   const hoy = Date.now();
   const tresMeses = new Date(hoy);
@@ -1706,16 +1921,21 @@ test("V5 «Verificar pago» da el acceso del PERIODO de la fila (3 meses, o su d
   suscripcionesVivas.set(SUB, suscripcion("past_due", hoy + 30 * DIA));
   const cuerpo = await (await verificar("inv_p3")).json();
   assert.equal(cuerpo.success, true);
-  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - tresMeses.getTime()) < 2 * unMinuto, "acceso = 3 meses desde la verificación");
+  // En gracia: el acceso cuenta desde el fin de la gracia (trialEndsAt = hoy + 20 h) sobre lo ya cubierto.
+  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - mesesDesde(hoy + 20 * HORA, 3).getTime()) < 2 * unMinuto, "acceso = 3 meses");
   assert.deepEqual(cuerpo.facturaTarjeta.facturas, [FACTURA]);
-  assert.equal(llamadasPausa.length, 1, "Q1: el cobro de la tarjeta se pausa hasta que termine lo prepagado");
-  assert.ok(llamadasPausa[0].params.pause_collection.resumes_at * 1000 > hoy + 80 * DIA);
-  // (b) fila de 1 mes con periodo ya pasado (se verifica tarde): 1 mes desde hoy, nunca una fecha vencida.
+  assert.equal(llamadasCiclo.length, 1, "Q1: el siguiente cobro se mueve al fin de lo pagado");
+  assert.ok(Math.abs(trialEndMs() - clinica().trialEndsAt.getTime()) < 1500);
+  assert.ok(Math.abs(pagosDeSubscripcion[0].periodEnd.getTime() - clinica().trialEndsAt.getTime()) < 1500, "la fila guarda el periodo real");
+  const paidAt = pagosDeSubscripcion[0].paidAt;
+  const segundo = await verificar("inv_p3");
+  assert.equal(segundo.status, 409, "B7: ya estaba verificado");
+  assert.equal(pagosDeSubscripcion[0].paidAt, paidAt, "no reescribe paidAt (movería el corte del reintento)");
+  assert.equal(llamadasCiclo.length, 1);
+  // Fila de 1 mes con periodo ya pasado (se verifica tarde): 1 mes desde hoy, nunca una fecha vencida.
   conTarjetaRechazada();
   pagosDeSubscripcion = [{ id: "inv_p1", clinicId: CLINIC, status: "pending", method: "transfer", amount: 689, periodStart: new Date(hoy - 200 * DIA), periodEnd: new Date(hoy - 170 * DIA) }];
   await verificar("inv_p1");
-  const unMes = new Date(hoy);
-  unMes.setMonth(unMes.getMonth() + 1);
-  assert.ok(Math.abs(clinica().trialEndsAt.getTime() - unMes.getTime()) < 2 * unMinuto);
-  assert.equal(llamadasPausa.length, 0, "1 mes: no pausa nada");
+  assert.ok(clinica().trialEndsAt.getTime() > hoy + 25 * DIA);
+  assert.equal(llamadasCiclo.length, 0, "1 mes: el ciclo ya coincide");
 });

@@ -9,7 +9,7 @@ import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
-import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, clinicaEstabaSuspendida, esPagoManualDelPlan, finDeLoPagado, mesesDeUnPeriodo } from "@/lib/billing/cobro-rechazado";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, clinicaEstabaSuspendida, esPagoManualDelPlan, finDeLoPagado, inicioDeNuevoPeriodo, mesesDeUnPeriodo } from "@/lib/billing/cobro-rechazado";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
@@ -124,10 +124,15 @@ export async function POST(req: NextRequest) {
     const invoice = await prisma.subscriptionInvoice.findUnique({ where: { id: invoiceId } });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-    await prisma.subscriptionInvoice.update({
-      where: { id: invoiceId },
+    // Solo se verifica lo que sigue pendiente (o rechazado): un doble clic no reescribe `paidAt` (movería el corte del
+    // reintento) ni vuelve a activar nada (B7).
+    const verificada = await prisma.subscriptionInvoice.updateMany({
+      where: { id: invoiceId, status: { in: ["pending", "failed"] } },
       data: { status: "paid", paidAt: new Date() },
     });
+    if (verificada.count === 0) {
+      return NextResponse.json({ error: "Este pago ya estaba verificado." }, { status: 409 });
+    }
 
     // El adeudo de excedente de CFDI NO es un pago del plan: se registra como pagado y nada más. No activa la clínica,
     // no toca su precio mensual ni su acceso, y no marca la factura de tarjeta del plan como pagada.
@@ -144,17 +149,20 @@ export async function POST(req: NextRequest) {
     // gate) se mueve JUNTO con nextBillingDate: antes se quedaba como estaba y
     // /admin pintaba "vencida" a una clínica recién verificada. Nunca acorta
     // una cortesía anterior (ver manualPeriodFields).
-    // El acceso cubre el PERIODO de la fila (1 mes, 3, 12…) contado desde la verificación —el día y hora en que se
-    // confirma el pago—, no un mes fijo (décima vuelta de t4, V5). Si la fila trae un periodo ya pasado (se verifica tarde),
-    // cuenta igual su duración desde hoy, nunca una fecha vencida.
-    const mesesPagados = mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd);
-    const nextBilling = finDeLoPagado(new Date(), mesesPagados);
+    // El acceso cubre la DURACIÓN del periodo de la fila (1 mes, 3, 12…) contada desde la verificación —el día y hora en que
+    // se confirma el pago— y sobre lo que la clínica ya tuviera pagado si estaba al corriente (M1, V5). Si la fila trae un
+    // periodo ya pasado (se verifica tarde), cuenta igual su duración, nunca una fecha vencida.
+    const ahora = new Date();
     const current = await prisma.clinic.findUnique({
       where: { id: invoice.clinicId },
-      select: { trialEndsAt: true, subscriptionStatus: true },
+      select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true },
     });
     // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
-    const estabaSuspendida = clinicaEstabaSuspendida(current);
+    const estabaSuspendida = clinicaEstabaSuspendida(current, ahora);
+    const base = inicioDeNuevoPeriodo({ ahora, estadoAntes: current?.subscriptionStatus, trialEndsAt: current?.trialEndsAt, nextBillingDate: current?.nextBillingDate });
+    const nextBilling = finDeLoPagado(base, mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd));
+    // La fila guarda el periodo REAL pagado (de él sale el fin de lo pagado del reintento automático).
+    await prisma.subscriptionInvoice.update({ where: { id: invoiceId }, data: { periodStart: base, periodEnd: nextBilling } });
     await prisma.clinic.update({
       where: { id: invoice.clinicId },
       data: {
@@ -195,15 +203,17 @@ export async function POST(req: NextRequest) {
 
   if (action === "activate_clinic") {
     const { clinicId, plan, months, method } = body;
-    const nextBilling = new Date();
-    nextBilling.setMonth(nextBilling.getMonth() + (months ?? 1));
-    // Misma regla que verify_payment: las dos fechas se mueven juntas.
+    // Misma regla que verify_payment: las dos fechas se mueven juntas, y el periodo se cuenta desde el pago (hoy) sobre lo
+    // que la clínica ya tuviera pagado si estaba al corriente (M1).
+    const ahora = new Date();
     const current = await prisma.clinic.findUnique({
       where: { id: clinicId },
-      select: { trialEndsAt: true, subscriptionStatus: true, ...CLINIC_OVERRIDE_SELECT },
+      select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true, ...CLINIC_OVERRIDE_SELECT },
     });
     // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
-    const estabaSuspendida = clinicaEstabaSuspendida(current);
+    const estabaSuspendida = clinicaEstabaSuspendida(current, ahora);
+    const base = inicioDeNuevoPeriodo({ ahora, estadoAntes: current?.subscriptionStatus, trialEndsAt: current?.trialEndsAt, nextBillingDate: current?.nextBillingDate });
+    const nextBilling = finDeLoPagado(base, Number(months ?? 1));
 
     // Precio mensual desde plan_configs (fallback plan-shared) — misma fuente
     // que el checkout; un plan inválido coacciona a PRO. Si se activa el MISMO
@@ -220,7 +230,6 @@ export async function POST(req: NextRequest) {
       typeof method === "string" && (METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(method) && method !== METODO_ACTIVACION_ADMIN
         ? method
         : null;
-    const ahora = new Date();
     await prisma.$transaction([
       prisma.clinic.update({
         where: { id: clinicId },
@@ -240,7 +249,7 @@ export async function POST(req: NextRequest) {
           currency: "MXN",
           status: "paid",
           method: METODO_ACTIVACION_ADMIN,
-          periodStart: ahora,
+          periodStart: base,
           periodEnd: nextBilling,
           paidAt: ahora,
           notes: `Activación manual desde /admin (sin cobro registrado)${metodoIndicado ? ` · Pago indicado: ${metodoIndicado}` : ""}`,
