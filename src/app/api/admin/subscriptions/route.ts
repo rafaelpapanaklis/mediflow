@@ -17,14 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
   }
 
-  // Doble clic en «Registrar pago» (B7): el mismo pago (clínica, monto, método y referencia) creado hace menos de 2 minutos
+  // Doble clic en «Registrar pago» (B7): el mismo pago creado hace menos de 2 minutos
   // no se vuelve a registrar: el ingreso se contaría dos veces. Se devuelve la fila que ya existe.
-  const idem = reference
-    ? await prisma.subscriptionInvoice.findFirst({
-        where: { clinicId, amount: parseFloat(amount), method, reference, createdAt: { gte: new Date(Date.now() - 120_000) } },
-        include: { clinic: { select: { name: true } } },
-      })
-    : null;
+  // Con o sin referencia (Y16): el mismo pago —clínica, monto, método y, si la hay, referencia— creado hace menos de 2 minutos.
+  const idem = await prisma.subscriptionInvoice.findFirst({
+    where: { clinicId, amount: parseFloat(amount), method, ...(reference ? { reference } : {}), createdAt: { gte: new Date(Date.now() - 120_000) } },
+    include: { clinic: { select: { name: true } } },
+  });
   if (idem) return NextResponse.json({ ...idem, facturaTarjeta: null, duplicado: true }, { status: 200 });
 
   // PAGADO = el acceso es «pago + N meses» (X6): N sale de la duración del periodo que capturó el admin, pero se cuenta desde

@@ -203,7 +203,7 @@ function montar(e: Escenario = {}) {
           const r = {
             id, status: "trialing", trial_end: params.trial_end, metadata: params.metadata,
             latest_invoice: e.reinicioCobra
-              ? { id: "in_cobro_raro", status: "paid", amount_paid: 48_610, amount_due: 48_610 }
+              ? { id: "in_cobro_raro", status: "paid", amount_paid: 48_610, amount_due: 48_610, created: Math.floor(Date.now() / 1000) }
               : ultima ? { ...ultima, amount_paid: ultima.amount_due } : null,
           };
           reiniciosPorClave.set(opts.idempotencyKey, r);
@@ -1528,7 +1528,7 @@ test("REGLA — carrera con el webhook invoice.paid: si corre a la vez o despué
   assert.deepEqual(filasFactura.map((f) => f.reference).sort(), ["in_ago", "in_jul", "in_sep"]);
 });
 
-test("REGLA — excedente de CFDI pendiente (t1, V3): se separa en su propia factura ANTES de reiniciar el ciclo, y si no se puede separar no se reinicia ni se anula nada", async () => {
+test("REGLA — excedente de CFDI pendiente (t1, V3): se separa en su propia factura ANTES de reiniciar el ciclo, y si no se puede separar no se mueve el ciclo (pero los meses sin servicio se anulan igual: Y6)", async () => {
   filasFactura.length = 0;
   const m = montar({ suspendida: true, abiertas: MESES, excedentePendiente: true });
   assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
@@ -1542,18 +1542,18 @@ test("REGLA — excedente de CFDI pendiente (t1, V3): se separa en su propia fac
   const falla = montar({ suspendida: true, abiertas: MESES, excedentePendiente: true, excedenteFalla: true });
   assert.equal((await pagarPendiente(falla.deps)).body.pagado, true); // ya cobró: la respuesta sigue siendo «pagado»
   assert.equal(falla.reinicios(), 0);
-  assert.equal(falla.ops("invoices.voidInvoice").length, 0);
+  assert.equal(falla.ops("invoices.voidInvoice").length, 3, "Y6: nunca se deben; no quedan cobrables");
   assert.equal(falla.avisos.length, 1);
 });
 
-test("REGLA — si el reinicio del ciclo falla, no se anula nada (el reintento del webhook lo completa) y se avisa al admin", async () => {
+test("REGLA — si el reinicio del ciclo falla, los meses sin servicio se anulan igual (Y6) y se avisa al admin; el reintento del webhook / «Reintentar» mueve el ciclo", async () => {
   filasFactura.length = 0;
   const m = montar({ suspendida: true, abiertas: MESES });
   (m.deps.stripe as any).subscriptions.update = async () => { throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" }); };
   const r = await pagarPendiente(m.deps); // la clínica ya pagó: la respuesta sigue siendo «pagado»
   assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
-  assert.equal(m.ops("invoices.voidInvoice").length, 0);
-  for (const f of MESES.filter((f) => f.id !== OCT)) assert.equal(m.facturas.get(f.id).status, "open");
+  assert.equal(m.ops("invoices.voidInvoice").length, 3, "Y6: ninguna queda cobrable por los reintentos de Stripe");
+  for (const f of MESES.filter((f) => f.id !== OCT)) assert.equal(m.facturas.get(f.id).status, "void");
   assert.equal(m.avisos.length, 1);
   assert.match(m.avisos[0].asunto, /reactivada tras suspensión/);
   assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-regla-suspension" && x.realineo === "fallo"));

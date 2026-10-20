@@ -102,18 +102,27 @@ export function UpgradeUsuariosDialog({
   const [vista, setVista] = useState<Vista | null>(null);
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState(false);
+  // Periodo ya pagado (cobro de la tarjeta sin tocar): el servidor responde 409 con el texto verdadero; se muestra tal cual (Y9).
+  const [bloqueo, setBloqueo] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const peticion = useRef(0);
 
   useEffect(() => {
     if (!elegido) return;
     const id = ++peticion.current;
-    setVista(null); setFallo(false); setCargando(true);
+    setVista(null); setFallo(false); setBloqueo(null); setCargando(true);
     fetch("/api/billing/change-plan/preview", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan: elegido }),
     })
-      .then(async (r) => { if (!r.ok) throw new Error("preview"); return (await r.json()) as Vista; })
+      .then(async (r) => {
+        if (!r.ok) {
+          const d = (await r.json().catch(() => ({}))) as { code?: string; error?: string };
+          if (r.status === 409 && d.code === "PLAN_PREPAGADO" && d.error && peticion.current === id) setBloqueo(d.error);
+          throw new Error("preview");
+        }
+        return (await r.json()) as Vista;
+      })
       .then((d) => { if (peticion.current === id) { setVista(d); setFallo(!!d.unavailable); } })
       .catch(() => { if (peticion.current === id) setFallo(true); })
       .finally(() => { if (peticion.current === id) setCargando(false); });
@@ -189,7 +198,7 @@ export function UpgradeUsuariosDialog({
                       <Loader2 size={14} className="animate-spin" aria-hidden /> {x.calculando}
                     </span>
                   )}
-                  {!cargando && fallo && <span>{x.sinVista}</span>}
+                  {!cargando && fallo && <span>{bloqueo ?? x.sinVista}</span>}
                   {!cargando && vista && !fallo && (
                     <>
                       {vista.lines.map((l, i) => (

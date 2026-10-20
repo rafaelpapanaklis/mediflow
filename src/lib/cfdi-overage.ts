@@ -26,6 +26,9 @@ export const CFDI_OVERAGE_KIND = "cfdi-overage";
  */
 export const CFDI_OVERAGE_METHOD = "cfdi_overage";
 
+/** `metadata.kind` de la factura aparte donde se cobra un excedente que ya estaba sumado a «la próxima mensualidad». No es un cobro del plan. */
+export const CFDI_OVERAGE_APARTE_KIND = "cfdi-overage-aparte";
+
 export type OverageMode = "monthly_sub" | "annual_card" | "manual";
 
 export interface OverageBilling {
@@ -123,11 +126,12 @@ export async function cobrarAparteExcedentePendiente(
     .map((i) => i.id)
     .sort();
   if (mios.length === 0) return null;
-  // `include` arrastra TODO lo pendiente del cliente: si hay items de otra suscripción (un módulo) se deja constancia.
-  if (mios.length !== pendientes.data.length) {
-    console.warn("[cfdi-overage] hay items pendientes de otra suscripción que la factura aparte también incluiría", pendientes.data.length - mios.length);
-  }
   const pm = typeof sub.default_payment_method === "string" ? sub.default_payment_method : sub.default_payment_method?.id;
+  // `include` arrastra TODO lo pendiente del cliente y Stripe no permite mover un item a otra factura: si hay items de otra
+  // suscripción (un módulo), una factura aparte los cobraría también. No se adivina: se falla cerrado (M6) y el admin lo ve.
+  if (mios.length !== pendientes.data.length) {
+    throw new Error("Hay items pendientes de otra suscripción: la factura aparte los arrastraría");
+  }
   const factura = await stripe.invoices.create(
     {
       customer: customerId,
@@ -135,7 +139,7 @@ export async function cobrarAparteExcedentePendiente(
       collection_method: "charge_automatically",
       pending_invoice_items_behavior: "include",
       ...(pm ? { default_payment_method: pm } : {}),
-      metadata: { kind: "cfdi-overage-aparte" },
+      metadata: { kind: CFDI_OVERAGE_APARTE_KIND },
     },
     { idempotencyKey: `excedente-aparte:${customerId}:${mios.join(",")}` },
   );

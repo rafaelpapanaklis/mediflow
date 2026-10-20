@@ -105,7 +105,9 @@ export function esperaAlRechazoDeFactura(args: {
   estadoNuevo: string | null | undefined;
 }): boolean {
   const actual = args.estadoActual ?? null;
-  return args.estadoNuevo === "past_due" && actual !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(actual);
+  // `unpaid` también (Y8): tras pagar, un `updated` en `unpaid` por facturas anuladas no debe bajar a quien ya pagó; el paso a
+  // cobro rechazado lo da solo el `invoice.payment_failed`.
+  return (args.estadoNuevo === "past_due" || args.estadoNuevo === "unpaid") && actual !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(actual);
 }
 
 /**
@@ -125,6 +127,19 @@ export function inicioDeNuevoPeriodo(args: {
   const proximoCobroSinPagar =
     estado !== null && (PAYMENT_FAILED_STATUSES.has(estado) || estado === "cancelled" || estado === "canceled");
   let base = args.ahora;
+  // Y14: DENTRO de la gracia (past_due/unpaid con el «acceso hasta» = rechazo + 24 h por delante) el periodo que se paga
+  // es el que Stripe abrió al rechazarse el cobro, y empieza en el rechazo, no 24 h después: pagar 1 mes cubre hasta el fin
+  // de ESA factura (el ciclo sigue igual) y pagar N meses, N periodos desde ahí; contar desde el fin de la gracia regalaba ~26 h.
+  const accesoGracia = aFecha(args.trialEndsAt);
+  if (
+    estado !== null &&
+    PAYMENT_FAILED_STATUSES.has(estado) &&
+    accesoGracia &&
+    accesoGracia.getTime() > args.ahora.getTime() &&
+    accesoGracia.getTime() - args.ahora.getTime() <= GRACIA_COBRO_RECHAZADO_HORAS * HORA_MS // una cortesía más larga que la gracia no es la gracia
+  ) {
+    return new Date(accesoGracia.getTime() - GRACIA_COBRO_RECHAZADO_HORAS * HORA_MS);
+  }
   const candidatas = proximoCobroSinPagar ? [args.trialEndsAt] : [args.nextBillingDate, args.trialEndsAt];
   for (const f of candidatas) {
     const d = aFecha(f);
@@ -272,16 +287,29 @@ type SubParaPeriodoPagado =
   | null
   | undefined;
 
-/** ¿Esta suscripción está en un periodo pagado a mano (trial con nuestra marca, aún vigente)? */
+/**
+ * ¿La MARCA de periodo pagado de esta suscripción es nuestra? La clave existe (aunque venga vacía: Y11) y, si trae una fecha,
+ * coincide con el `trial_end` (±1 día): una marca vieja con una prueba puesta después no es de este periodo.
+ */
+function marcaVigente(sub: SubParaPeriodoPagado): boolean {
+  const meta = sub?.metadata;
+  if (!meta || !(MARCA_PERIODO_PAGADO in meta)) return false;
+  const fecha = aFecha(meta[MARCA_PERIODO_PAGADO]);
+  if (!fecha || sub?.trial_end == null) return true; // sin fecha que contrastar: la clave basta
+  return Math.abs(fecha.getTime() - sub.trial_end * 1000) <= DIA_MS;
+}
+
+/** ¿Esta suscripción está en un periodo pagado a mano (trial con nuestra marca, aún vigente)? Una marca vencida se ignora. */
 export function enPeriodoPagado(sub: SubParaPeriodoPagado, ahora: Date = new Date()): boolean {
-  if (!sub || sub.status !== "trialing" || !sub.metadata?.[MARCA_PERIODO_PAGADO]) return false;
+  if (!sub || sub.status !== "trialing" || !marcaVigente(sub)) return false;
   return sub.trial_end == null || sub.trial_end * 1000 > ahora.getTime();
 }
 
-/** Hasta cuándo está pagada (la marca), o null. */
+/** Hasta cuándo está pagada: el `trial_end` (que es el instante real del siguiente cobro), o la marca si no hay `trial_end`. */
 export function periodoPagadoHasta(sub: SubParaPeriodoPagado, ahora: Date = new Date()): Date | null {
   if (!enPeriodoPagado(sub, ahora)) return null;
-  return aFecha(sub!.metadata![MARCA_PERIODO_PAGADO]) ?? (sub!.trial_end ? new Date(sub!.trial_end * 1000) : null);
+  if (sub!.trial_end) return new Date(sub!.trial_end * 1000);
+  return aFecha(sub!.metadata![MARCA_PERIODO_PAGADO]);
 }
 
 /**
@@ -289,20 +317,35 @@ export function periodoPagadoHasta(sub: SubParaPeriodoPagado, ahora: Date = new 
  * periodo pagado: se guarda `active` (la clínica NO está «En prueba»). Cualquier otro estado, tal cual.
  */
 export function estadoVisibleDeSuscripcion(estado: string | null | undefined, sub: SubParaPeriodoPagado): string | null | undefined {
-  if (estado === "trialing" && sub?.metadata?.[MARCA_PERIODO_PAGADO]) return "active";
+  if (estado === "trialing" && marcaVigente(sub)) return "active";
   return estado;
 }
 
 /**
  * ¿La suscripción de tarjeta está en un periodo ya pagado por el que no se puede cambiar de plan en autoservicio?
- * Sí si es un periodo pagado con nuestra marca, o si el cobro está pausado (`pause_collection`) y esa pausa no ha vencido
- * (sin `resumes_at` = indefinida; con fecha pasada, Stripe ya la reanudó o está por limpiarla: B5).
+ * Sí si está en una prueba/periodo pagado vigente (con o sin nuestra marca: durante un `trial_end` el prorrateo de un cambio
+ * no se cobra, Y2/Y12) o si el cobro está pausado (`pause_collection`) y esa pausa no ha vencido (sin `resumes_at` =
+ * indefinida; con fecha pasada, Stripe ya la reanudó o está por limpiarla: B5).
  */
 export function cobroPausado(sub: SubParaPeriodoPagado, ahora: Date = new Date()): boolean {
-  if (enPeriodoPagado(sub, ahora)) return true;
+  if (sub?.status === "trialing" && (sub.trial_end == null || sub.trial_end * 1000 > ahora.getTime())) return true;
   const pausa = sub?.pause_collection;
   if (!pausa) return false;
   return pausa.resumes_at == null || pausa.resumes_at * 1000 > ahora.getTime();
+}
+
+/**
+ * Cuántos meses dura UN periodo del plan de esta suscripción (1 mensual, 12 anual…): un cobro de tarjeta del plan paga
+ * un periodo completo, y a eso se le suma el acceso (Y1: una anualidad pagada con tarjeta son 12 meses, no 1).
+ */
+export function mesesDelIntervalo(
+  sub: { items?: { data?: Array<{ price?: { recurring?: { interval?: string | null; interval_count?: number | null } | null } | null }> } | null } | null | undefined,
+): number {
+  const rec = sub?.items?.data?.[0]?.price?.recurring;
+  const cuenta = Math.max(1, Math.floor(rec?.interval_count ?? 1) || 1);
+  if (rec?.interval === "year") return 12 * cuenta;
+  if (rec?.interval === "month") return cuenta;
+  return 1;
 }
 
 /** Diferencia máxima (días) entre el fin de lo pagado y el fin del ciclo de Stripe para NO mover el ciclo: ya están alineados. */

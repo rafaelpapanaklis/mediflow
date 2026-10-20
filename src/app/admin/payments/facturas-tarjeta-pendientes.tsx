@@ -27,6 +27,8 @@ export interface FacturaTarjetaPendienteDTO {
   suspendidas?: string[];
   /** El siguiente cobro de la tarjeta debería caer al terminar lo pagado y no lo hace: fecha esperada (fin de lo pagado). */
   cicloPendiente?: string | null;
+  /** Cobros de tarjeta (facturas) cuya regla de la suspensión quedó a medias. */
+  tarjetaPendiente?: string[];
 }
 
 export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPendienteDTO[] }) {
@@ -43,13 +45,24 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "marcar_factura_fuera_de_stripe", clinicId: f.clinicId }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; facturaTarjeta?: { tipo?: string } };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; facturaTarjeta?: { tipo?: string; mensaje?: string; ciclo?: { tipo?: string } } };
       if (!res.ok) throw new Error(data.error ?? "No se pudo reintentar");
       if (data.facturaTarjeta?.tipo === "fallo") {
-        toast.error("Stripe sigue sin contestar. Vuelve a intentarlo en un momento o márcala a mano en Stripe.");
+        toast.error(data.facturaTarjeta.mensaje ?? "Stripe sigue sin contestar. Vuelve a intentarlo en un momento.");
         return;
       }
-      toast.success(`${f.clinicName}: factura de tarjeta marcada como pagada`);
+      // Y15: lo que se dice es lo que pasó. Con el ajuste del ciclo apagado, o sin nada que aplicar, no se canta victoria.
+      if (data.facturaTarjeta?.ciclo?.tipo === "apagado") {
+        toast(`${f.clinicName}: el ajuste automático del cobro está apagado; la tarjeta cobrará en su fecha anterior.`, { icon: "⚠️", duration: 9000 });
+        return;
+      }
+      if (data.facturaTarjeta?.tipo === "nada") {
+        toast(`${f.clinicName}: no había nada por aplicar.`);
+        setFilas((prev) => prev.filter((x) => x.clinicId !== f.clinicId));
+        router.refresh();
+        return;
+      }
+      toast.success(`${f.clinicName}: listo, ya quedó aplicado`);
       setFilas((prev) => prev.filter((x) => x.clinicId !== f.clinicId));
       router.refresh();
     } catch (e: any) {
@@ -85,10 +98,11 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
               <span style={{ color: "var(--text-3)" }}>
                 pagó a mano {fechaHoraAdmin(f.pagoManualEn) ?? ""}
                 {f.facturas.length > 0 ? ` · ${f.facturas.length === 1 ? "factura abierta" : "facturas abiertas"} del ciclo ${f.facturas.join(", ")}` : ""}
+                {(f.tarjetaPendiente ?? []).length > 0 ? ` · cobro de tarjeta por terminar de aplicar (${(f.tarjetaPendiente ?? []).join(", ")})` : ""}
                 {f.cicloPendiente ? ` · falta mover el siguiente cobro de la tarjeta a ${fechaHoraAdmin(f.cicloPendiente) ?? ""} (fin de lo pagado)` : ""}
                 {(f.suspendidas ?? []).length > 0 ? ` · por anular (meses sin servicio): ${(f.suspendidas ?? []).join(", ")}` : ""}
               </span>
-              {(f.facturas.length > 0 || f.cicloPendiente) && (
+              {(f.facturas.length > 0 || f.cicloPendiente || (f.tarjetaPendiente ?? []).length > 0) && (
                 <span style={{ marginLeft: "auto" }}>
                   <ButtonNew size="sm" variant="primary" onClick={() => reintentar(f)} disabled={cargando === f.clinicId}>
                     {cargando === f.clinicId ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}

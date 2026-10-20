@@ -44,6 +44,9 @@ export function avisarSiSeMarcoLaFacturaTarjeta(data: RespuestaMarcado): void {
   }
   // El siguiente cobro de la tarjeta pasa a ser exactamente al terminar lo pagado (sin cancelar nada).
   const ciclo = data?.facturaTarjeta?.ciclo;
+  if (ciclo?.tipo === "apagado") {
+    toast("El ajuste automático del cobro está apagado: la tarjeta cobrará en su fecha anterior, aunque ya esté pagado. Revísalo.", { icon: "⚠️", duration: 9000 });
+  }
   if (ciclo?.tipo === "movido" && ciclo.hasta) {
     toast.success(`El siguiente cobro de la tarjeta queda para el ${new Date(ciclo.hasta).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}, cuando termina lo pagado.`);
   }

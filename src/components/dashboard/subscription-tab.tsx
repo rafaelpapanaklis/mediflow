@@ -10,7 +10,7 @@ import { exencionDeIva, ivaAplica } from "@/lib/billing/iva-cobro";
 import { miles, pruebaVista } from "@/lib/billing/prueba-vista";
 import { varianteMetodos, type MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { daysUntil, isInTrial as inTrialNow, isPaymentFailed, isPlanExpired, isSubscriptionActive } from "@/lib/plan-status";
-import { fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
+import { MENSAJE_PLAN_PREPAGADO, fechaHoraDeLaClinica } from "@/lib/billing/cobro-rechazado";
 import { PagoPendiente } from "./pago-pendiente";
 import { PaymentMethodModal } from "./payment-method-modal";
 import type { StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
@@ -84,6 +84,8 @@ interface BillingContext {
   nextBillingDate: string | null;
   /** Fin de un periodo ya pagado a mano (ISO) si la tarjeta no se cobra hasta entonces; null si no aplica. */
   prepagadoHasta?: string | null;
+  /** Periodo ya pagado (tarjeta sin cobrar hasta que termine): el cambio de plan en autoservicio está bloqueado. */
+  cobroPausado?: boolean;
 }
 
 /** POST /api/billing/change-plan/preview — lo que se cobrará al confirmar. */
@@ -302,6 +304,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
 
   /** Abre el modal y pide el preview del cobro para ese plan (sin efectos). */
   function openConfirm(targetPlan: PlanId) {
+    if (billingCtx?.cobroPausado) return; // bloqueado con el texto verdadero (Y9)
     setConfirmPlan(targetPlan);
     setPreview(null);
     setPreviewFailed(false);
@@ -741,6 +744,11 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
             ? t("shell.subscriptionTab.changePlanDescSub")
             : t("shell.subscriptionTab.changePlanDescCheckout")}
         </p>
+        {billingCtx?.cobroPausado && (
+          <p role="status" data-cambio-plan-bloqueado style={{ fontSize: 12.5, color: "var(--text-2)", margin: 0, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border-soft, hsl(var(--border)))" }}>
+            {MENSAJE_PLAN_PREPAGADO}
+          </p>
+        )}
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           {(plans ?? []).map((plan) => {
             const isCurrent = plan.id === currentPlanId;
@@ -795,14 +803,14 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                 <button
                   type="button"
                   onClick={() => openConfirm(plan.id)}
-                  disabled={isCurrent || changingPlan !== null}
+                  disabled={isCurrent || changingPlan !== null || !!billingCtx?.cobroPausado}
                   style={{
                     marginTop: 4,
                     padding: "8px 12px",
                     borderRadius: 8,
                     fontSize: 12,
                     fontWeight: 700,
-                    cursor: isCurrent || changingPlan !== null ? "not-allowed" : "pointer",
+                    cursor: isCurrent || changingPlan !== null || billingCtx?.cobroPausado ? "not-allowed" : "pointer",
                     background: isCurrent ? "transparent" : "var(--brand)",
                     color: isCurrent ? "var(--text-3)" : "#fff",
                     border: isCurrent ? "1px solid var(--border-soft, hsl(var(--border)))" : 0,

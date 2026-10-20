@@ -29,7 +29,7 @@ let llamadasTarjeta: { prices: any[]; updates: any[] };
 let auditorias: any[];
 let clinica: any;
 // Fallos de Stripe programables (ws1-t2, textos de la clínica): todo vuelve a null en cada prueba.
-let fallas: { sinStripe?: boolean; sesion?: Error; sesionSinUrl?: boolean; retrieve?: Error; estadoSub?: string; sinItems?: boolean; update?: Error; pausa?: boolean; periodoPagado?: boolean };
+let fallas: { sinStripe?: boolean; sesion?: Error; sesionSinUrl?: boolean; retrieve?: Error; estadoSub?: string; sinItems?: boolean; update?: Error; pausa?: boolean; periodoPagado?: boolean; pruebaSinMarca?: boolean };
 
 const PLANES: Record<string, any> = {
   BASIC: { id: "BASIC", name: "Básico", priceMxn: 419, priceMxnMonthly: 419, priceMxnAnnual: 3264 },
@@ -56,6 +56,7 @@ const stripeDoble: any = {
         status: fallas.estadoSub ?? "active",
         metadata: {},
         ...(fallas.periodoPagado ? { status: "trialing", trial_end: Math.floor((Date.now() + 40 * 86_400_000) / 1000), metadata: { periodo_pagado_hasta: new Date(Date.now() + 40 * 86_400_000).toISOString() } } : {}),
+        ...(fallas.pruebaSinMarca ? { status: "trialing", trial_end: Math.floor((Date.now() + 40 * 86_400_000) / 1000), metadata: {} } : {}),
         ...(fallas.pausa ? { pause_collection: { behavior: "void", resumes_at: Math.floor((Date.now() + 60 * 86_400_000) / 1000) } } : {}),
         items: { data: fallas.sinItems ? [] : [{ id: "si_1", price: { unit_amount: 41900, currency: "mxn", recurring: { interval: "month" } } }] },
       };
@@ -367,4 +368,17 @@ test("«Pagado hasta»: la información del plan da `prepagadoHasta` (la marca) 
   const pagado = (await (await INFO()).json()) as any;
   assert.equal(pagado.cobroPausado, true);
   assert.ok(new Date(pagado.prepagadoHasta).getTime() > Date.now() + 30 * 86_400_000);
+});
+
+test("Y2/Y12 un `trialing` SIN nuestra marca (p. ej. la prueba la puso el admin a mano en Stripe) también bloquea el cambio de plan: el prorrateo durante una prueba no se cobra", async () => {
+  const { MENSAJE_PLAN_PREPAGADO } = await import("@/lib/billing/cobro-rechazado");
+  clinica.stripeSubscriptionId = "sub_x";
+  clinica.plan = "BASIC";
+  fallas.pruebaSinMarca = true;
+  const { res, json } = await subir({ plan: "PRO" });
+  assert.equal(res.status, 409);
+  assert.equal(json.code, "PLAN_PREPAGADO");
+  assert.equal(json.error, MENSAJE_PLAN_PREPAGADO);
+  assert.equal(llamadasTarjeta.updates.length, 0);
+  assert.equal(clinica.plan, "BASIC");
 });

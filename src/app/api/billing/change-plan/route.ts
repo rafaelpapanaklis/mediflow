@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { MENSAJE_PLAN_PREPAGADO, cobroPausado } from "@/lib/billing/cobro-rechazado";
+import { MENSAJE_PLAN_PREPAGADO, cobroPausado, estadoVisibleDeSuscripcion } from "@/lib/billing/cobro-rechazado";
 import { bloqueoDeSedesParaPlan, leerGrupoDePago, sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
@@ -618,7 +618,8 @@ export async function POST(req: NextRequest) {
     where: { id: clinic.id },
     data: {
       plan: targetPlanId,
-      subscriptionStatus: updated.status,
+      // `trialing` con nuestra marca = periodo pagado, no prueba (Y12); aquí el cambio está bloqueado en ese caso, pero por si acaso.
+      subscriptionStatus: estadoVisibleDeSuscripcion(updated.status, updated) ?? updated.status,
       aiTokensLimit: planLimits.aiTokensDefault,
       // Igual que en applyInPlace: condiciones nuevas del plan elegido.
       ...clearOverridesData(),

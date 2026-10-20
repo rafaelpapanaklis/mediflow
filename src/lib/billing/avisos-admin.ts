@@ -182,7 +182,7 @@ export function avisoFalloReglaSuspension(a: {
       `La clínica pagó (${a.accion}) después de estar suspendida y la regla de «los meses suspendidos no se deben» no se completó.`,
       `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
       ...a.fallos,
-      "Si el pago entró por el webhook de Stripe, Stripe reenvía el evento durante horas y el webhook lo reintenta solo. «Reintentar» en /admin → Pagos solo cubre los pagos manuales. Si no se arregla, hazlo a mano en Stripe: anula las facturas abiertas de los meses sin servicio y ponle a la suscripción una prueba (trial_end) hasta el fin de lo pagado.",
+      "Qué hacer: pulsa «Reintentar» en /admin → Pagos (repite el paso completo con la marca de periodo pagado). Lo mismo hacen solos el cron de cada día y, si el pago entró por el webhook, Stripe al reenviar el evento. No pongas una prueba (trial_end) a mano en Stripe: sin la marca de DaleControl la clínica saldría «En prueba».",
     ],
   };
 }
