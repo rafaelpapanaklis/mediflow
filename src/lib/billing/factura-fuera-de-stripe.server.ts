@@ -137,6 +137,8 @@ export async function marcarFacturasDelPlanPagadasFueraDeStripe(args: {
   estabaSuspendida?: boolean;
   /** Hasta cuándo quedó pagada la clínica (su `trialEndsAt` tras el pago): fin de lo pagado para re-alinear / pausar. */
   finPrepago?: Date | null;
+  /** Es un REINTENTO (cron, «Reintentar»): siempre en modo exacto, sin tolerancia (Z6). */
+  reintento?: boolean;
 }): Promise<ResultadoMarcado> {
   const { stripe, stripeSubscriptionId } = args;
   if (!stripe || !stripeSubscriptionId) return { tipo: "sin_tarjeta" };
@@ -176,7 +178,7 @@ export async function marcarFacturasDelPlanPagadasFueraDeStripe(args: {
         realineo = r.realineo;
         if (r.fallos.length > 0) fallo = fallo ?? r.fallos[0];
       } else {
-        realineo = await realinearCiclo(stripe, sub, { pagadoEn, finDeLoPagado });
+        realineo = await realinearCiclo(stripe, sub, { pagadoEn, finDeLoPagado, exacto: args.reintento === true });
         if (realineo.tipo === "fallo") fallo = fallo ?? realineo.mensaje;
         else if (realineo.tipo === "cobro_inesperado") fallo = fallo ?? mensajeCobroInesperado(realineo.facturaId);
       }
@@ -252,6 +254,7 @@ export async function marcarFacturasDeLaClinica(
       pagadoEn: pago?.paidAt ?? undefined,
       estabaSuspendida: opciones.estabaSuspendida,
       finPrepago: pago ? pago.periodEnd : clinica?.trialEndsAt ?? null,
+      reintento: opciones.soloLasQueYaExistian === true,
     });
     if (tarjeta && tarjeta.fallos.length > 0 && r.tipo !== "fallo") return { tipo: "fallo", mensaje: MENSAJE_FALLO_REGLA_TARJETA, marcadas: r.tipo === "marcadas" ? r.facturas : [] };
     return r;

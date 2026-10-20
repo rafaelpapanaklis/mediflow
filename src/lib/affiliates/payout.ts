@@ -175,6 +175,8 @@ export async function getInvoiceNo(
   try {
     const filters: any[] = [
       { OR: [{ notes: null }, { notes: { not: { startsWith: PRORATION_NOTE_PREFIX } } }] },
+      // El excedente de CFDI (también su factura aparte) no es un cobro del plan: no adelanta la numeración (Z11).
+      { OR: [{ method: null }, { method: { not: "cfdi_overage" } }] },
     ];
     if (currentInvoiceRef) {
       filters.push({ OR: [{ reference: null }, { reference: { not: currentInvoiceRef } }] });

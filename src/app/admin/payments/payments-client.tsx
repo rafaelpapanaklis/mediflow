@@ -300,7 +300,7 @@ export function PaymentsClient({
     setCouponCode("");
   }
 
-  async function createPayment() {
+  async function createPayment(confirmarDuplicado = false) {
     if (!form.clinicId || !form.amount || !form.periodStart || !form.periodEnd) {
       toast.error("Completa todos los campos obligatorios");
       return;
@@ -323,13 +323,32 @@ export function PaymentsClient({
           periodEnd: form.periodEnd,
           notes: notesWithCoupon,
           status: "paid",
+          ...(confirmarDuplicado ? { confirmarDuplicado: true } : {}),
         }),
       });
+      if (res.status === 409) {
+        const d = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
+        if (d.code === "POSIBLE_DUPLICADO") {
+          // Z4: sin referencia no se descarta a ciegas ni se registra a ciegas: se pregunta.
+          setLoading(null);
+          if (window.confirm(`${d.error ?? "Posible duplicado."}\n\n¿Registrar este pago de todos modos?`)) await createPayment(true);
+          return;
+        }
+        throw new Error(d.error ?? "No se pudo registrar el pago");
+      }
       if (!res.ok) throw new Error((await res.json()).error);
       const { facturaTarjeta, ...inv } = await res.json();
+      if ((inv as { duplicado?: boolean }).duplicado) {
+        // Z4: no es un éxito: ese pago YA estaba registrado hace un momento y no se creó otro.
+        toast("Ese pago ya estaba registrado hace un momento (misma referencia); no se creó otro. Si es un pago distinto, ponle otra referencia.", { icon: "⚠️", duration: 9000 });
+        setShowNewPayment(false);
+        return;
+      }
       if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta(datosDelAviso({ facturaTarjeta }, form.clinicId, inv.clinic?.name));
       else avisarSiSeMarcoLaFacturaTarjeta({ facturaTarjeta });
       setPayments(prev => [inv, ...prev]);
+      // Z5: la clínica ya está al corriente: sale de la lista de vencidas para que no se le dé «Activar» encima.
+      setOverdue(prev => prev.filter((c: any) => c.id !== form.clinicId));
       setShowNewPayment(false);
       setForm({ clinicId: "", amount: "", method: "transfer", reference: "", periodStart: "", periodEnd: "", notes: "", paypalEmail: "", paypalRecurring: false });
       setCouponApplied(null);
@@ -690,7 +709,7 @@ export function PaymentsClient({
               </ButtonNew>
               <ButtonNew
                 variant="primary"
-                onClick={createPayment}
+                onClick={() => createPayment()}
                 disabled={loading === "new"}
               >
                 {loading === "new" ? "Guardando…" : "Guardar pago"}

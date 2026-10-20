@@ -2,7 +2,6 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
 import {
-  CICLO_ALINEADO_DIAS,
   METODOS_DE_PAGO_MANUAL_DEL_PLAN,
   enPeriodoPagado,
   inicioDelMarcadoFueraDeStripe,
@@ -34,8 +33,8 @@ import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 export interface ClinicaConFacturaPendiente {
   clinicId: string;
   clinicName: string;
-  /** El último pago manual del plan que la dejó «al corriente». */
-  pagoManualEn: Date;
+  /** El último pago manual del plan que la dejó «al corriente»; `null` si solo hay un cobro de tarjeta pendiente (Z13). */
+  pagoManualEn: Date | null;
   /** Facturas que siguen abiertas tras el pago (el marcado / la anulación falló): se pueden reintentar. */
   facturas: string[];
   /** De ellas, las de meses SUSPENDIDOS (por anular, no por pagar). */
@@ -49,6 +48,8 @@ export interface ClinicaConFacturaPendiente {
   tarjetaPendiente: string[];
 }
 
+/** El aviso persistente marca un ciclo pendiente si difiere más de 1 día del fin de lo pagado (Z6: el reintento mueve en modo exacto). */
+const CICLO_LISTA_DIAS = 1;
 const DIAS_DE_VENTANA = 60;
 const TOPE_CLINICAS = 100;
 
@@ -89,12 +90,15 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
     }
   }
 
-  const ids = [...new Set([...ultimoPorClinica.keys(), ...tarjetaPorClinica.keys()])].slice(0, TOPE_CLINICAS);
+  // Z10: primero las de cobro de tarjeta a medias y solo las que TIENEN tarjeta viva; el tope se aplica DESPUÉS de filtrar (antes
+  // se cortaba a 100 ids y las de tarjeta a medias, que iban al final, nunca salían).
+  const ids = [...new Set([...tarjetaPorClinica.keys(), ...ultimoPorClinica.keys()])];
   if (ids.length === 0) return [];
-  const clinicas = await prisma.clinic.findMany({
+  const todas = await prisma.clinic.findMany({
     where: { id: { in: ids }, stripeSubscriptionId: { not: null } },
     select: { id: true, name: true, stripeSubscriptionId: true, trialEndsAt: true },
   });
+  const clinicas = [...todas].sort((a, b) => Number(tarjetaPorClinica.has(b.id)) - Number(tarjetaPorClinica.has(a.id))).slice(0, TOPE_CLINICAS);
 
   const salida: ClinicaConFacturaPendiente[] = [];
   // De 4 en 4: la pantalla de /admin no debe disparar decenas de llamadas a Stripe a la vez.
@@ -106,7 +110,7 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
         if (!corte) {
           // Solo cobros de tarjeta a medias: no hay pago manual que mirar.
           return tarjetaPendiente.length > 0
-            ? ({ clinicId: c.id, clinicName: c.name, pagoManualEn: new Date(0), facturas: [], suspendidas: [], cicloPendiente: null, tarjetaPendiente } as ClinicaConFacturaPendiente)
+            ? ({ clinicId: c.id, clinicName: c.name, pagoManualEn: null, facturas: [], suspendidas: [], cicloPendiente: null, tarjetaPendiente } as ClinicaConFacturaPendiente)
             : null;
         }
         try {
@@ -119,7 +123,7 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
           let cicloPendiente: string | null = null;
           if (realinearActivo() && fin && fin.getTime() > ahora.getTime() + 86_400_000 && !(enPeriodoPagado(sub, ahora) && (sub.trial_end ?? 0) * 1000 >= fin.getTime() - 86_400_000)) {
             const finCiclo = subscriptionPeriodEndSeconds(sub);
-            const alineado = sub.status !== "trialing" && finCiclo && Math.abs(finCiclo * 1000 - fin.getTime()) <= CICLO_ALINEADO_DIAS * 86_400_000;
+            const alineado = sub.status !== "trialing" && finCiclo && Math.abs(finCiclo * 1000 - fin.getTime()) <= CICLO_LISTA_DIAS * 86_400_000;
             if (!alineado) cicloPendiente = fin.toISOString();
           }
           if (pendientes.length === 0 && !cicloPendiente && tarjetaPendiente.length === 0) return null;
@@ -177,7 +181,8 @@ export async function reintentarMarcadoPendiente(
         stripe,
         stripeSubscriptionId: clinica?.stripeSubscriptionId ?? null,
         creadasAntesDe: p.pagoManualEn,
-        pagadoEn: p.pagoManualEn,
+        pagadoEn: p.pagoManualEn ?? undefined,
+        reintento: true,
         // El fin de lo pagado sale de la fila del PAGO (M9): cada día que tarda el reintento no es un día gratis.
         finPrepago: p.cicloPendiente ? new Date(p.cicloPendiente) : null,
       });

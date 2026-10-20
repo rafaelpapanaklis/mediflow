@@ -20,7 +20,7 @@ export const TITULO_FACTURAS_TARJETA_PENDIENTES =
 export interface FacturaTarjetaPendienteDTO {
   clinicId: string;
   clinicName: string;
-  pagoManualEn: string;
+  pagoManualEn: string | null;
   /** Facturas del ciclo del pago que siguen abiertas (el marcado falló): se pueden reintentar. */
   facturas: string[];
   /** De ellas, las de meses sin servicio (suspendida) que faltan por anular: no se deben. */
@@ -54,6 +54,13 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
       // Y15: lo que se dice es lo que pasó. Con el ajuste del ciclo apagado, o sin nada que aplicar, no se canta victoria.
       if (data.facturaTarjeta?.ciclo?.tipo === "apagado") {
         toast(`${f.clinicName}: el ajuste automático del cobro está apagado; la tarjeta cobrará en su fecha anterior.`, { icon: "⚠️", duration: 9000 });
+        return;
+      }
+      // Z16: si solo se movió el ciclo, eso es lo que se dice (antes decía «no había nada por aplicar»).
+      if (data.facturaTarjeta?.ciclo?.tipo === "movido" && data.facturaTarjeta?.tipo === "nada") {
+        toast.success(`${f.clinicName}: listo, el siguiente cobro de la tarjeta ya cae donde termina lo pagado`);
+        setFilas((prev) => prev.filter((x) => x.clinicId !== f.clinicId));
+        router.refresh();
         return;
       }
       if (data.facturaTarjeta?.tipo === "nada") {
@@ -96,7 +103,7 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
             <li key={f.clinicId} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, fontSize: 13 }}>
               <strong>{f.clinicName}</strong>
               <span style={{ color: "var(--text-3)" }}>
-                pagó a mano {fechaHoraAdmin(f.pagoManualEn) ?? ""}
+                {f.pagoManualEn ? `pagó a mano ${fechaHoraAdmin(f.pagoManualEn) ?? ""}` : "cobro de tarjeta"}
                 {f.facturas.length > 0 ? ` · ${f.facturas.length === 1 ? "factura abierta" : "facturas abiertas"} del ciclo ${f.facturas.join(", ")}` : ""}
                 {(f.tarjetaPendiente ?? []).length > 0 ? ` · cobro de tarjeta por terminar de aplicar (${(f.tarjetaPendiente ?? []).join(", ")})` : ""}
                 {f.cicloPendiente ? ` · falta mover el siguiente cobro de la tarjeta a ${fechaHoraAdmin(f.cicloPendiente) ?? ""} (fin de lo pagado)` : ""}

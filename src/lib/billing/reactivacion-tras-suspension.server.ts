@@ -60,6 +60,9 @@ export const MENSAJE_FALLO_ANULAR =
   "No pudimos anular en Stripe las facturas de los meses sin servicio; Stripe podría cobrarlas. Reintenta o anúlalas a mano en Stripe.";
 export const MENSAJE_FALLO_EXCEDENTE =
   "No pudimos separar el excedente de facturas CFDI antes de mover el cobro de la tarjeta; se perdería en una factura anulada. Reintenta.";
+/** Z14: reintentar no sirve mientras haya un cargo pendiente de OTRA suscripción (un módulo): hay que facturarlo o quitarlo primero. */
+export const MENSAJE_FALLO_EXCEDENTE_OTRA_SUSCRIPCION =
+  "No se pudo mover el siguiente cobro de la tarjeta: hay un cargo pendiente de otra suscripción del cliente (un módulo) que se cobraría junto con el excedente de facturas CFDI. Reintentar no sirve hasta que ese cargo se facture; revisa los cargos pendientes del cliente en Stripe.";
 export const MENSAJE_FALLO_REALINEAR =
   "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Pulsa «Reintentar» en /admin → Pagos: repite el paso completo (con la marca de periodo pagado). No pongas una prueba a mano en Stripe.";
 export function mensajeCobroInesperado(facturaId: string): string {
@@ -206,16 +209,21 @@ export async function realinearCiclo(
     ignorarFacturas?: string[];
   },
 ): Promise<ResultadoRealineo> {
-  if (!realinearActivo()) return { tipo: "apagado" };
   const trialEnd = Math.floor(args.finDeLoPagado.getTime() / 1000);
   // Stripe exige un `trial_end` futuro; si lo pagado termina en menos de un día no hay nada que mover.
   if (trialEnd * 1000 <= Date.now() + 86_400_000) return { tipo: "no_aplica" };
   const hasta = new Date(trialEnd * 1000).toISOString();
   const yaHecho = (s: Stripe.Subscription) => enPeriodoPagado(s) && (s.trial_end ?? 0) >= trialEnd - 86_400;
   if (yaHecho(sub)) return { tipo: "ya_estaba", hasta: new Date((sub.trial_end ?? trialEnd) * 1000).toISOString() };
-  // Si el ciclo de Stripe ya termina (casi) cuando termina lo pagado, no hay nada que mover.
   const finCiclo = subscriptionPeriodEndSeconds(sub);
+  // Z3: NUNCA un `trial_end` antes del fin de un periodo que Stripe YA cobró: si el periodo actual termina después de lo que
+  // se busca (la renovación se cobró con el ciclo viejo mientras la regla estaba pendiente), cortarlo quitaría días pagados y
+  // la tarjeta volvería a cobrar antes de tiempo. No se mueve nada.
+  if (sub.status !== "trialing" && finCiclo && finCiclo > trialEnd + CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
+  // Si el ciclo de Stripe ya termina (casi) cuando termina lo pagado, no hay nada que mover.
   if (!args.exacto && sub.status !== "trialing" && finCiclo && Math.abs(finCiclo - trialEnd) <= CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
+  // Z17: el interruptor apagado solo se avisa si HABÍA algo que mover (lo anterior ya salió como «no aplica»).
+  if (!realinearActivo()) return { tipo: "apagado" };
   // La factura más reciente ANTES del cambio: si el cambio no crea ninguna, la `latest_invoice` que devuelve es esta (p. ej. el
   // mes recién pagado) y NO es un cobro del cambio (Y3).
   const latestAntes = typeof sub.latest_invoice === "string" ? sub.latest_invoice : (sub.latest_invoice as { id?: string } | null | undefined)?.id ?? null;
@@ -227,7 +235,7 @@ export async function realinearCiclo(
       await cobrarAparteExcedentePendiente(stripe, typeof sub.customer === "string" ? sub.customer : sub.customer.id, sub);
     } catch (err) {
       console.error("[reactivacion-tras-suspension] no se pudo separar el excedente de CFDI:", sub.id, (err as Error)?.message ?? err);
-      return { tipo: "fallo", mensaje: MENSAJE_FALLO_EXCEDENTE };
+      return { tipo: "fallo", mensaje: (err as { code?: string } | null)?.code === "ITEMS_DE_OTRA_SUSCRIPCION" ? MENSAJE_FALLO_EXCEDENTE_OTRA_SUSCRIPCION : MENSAJE_FALLO_EXCEDENTE };
     }
     const actualizada = await stripe.subscriptions.update(
       sub.id,

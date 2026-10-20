@@ -210,6 +210,10 @@ export async function POST(req: NextRequest) {
 
   if (action === "activate_clinic") {
     const { clinicId, plan, months, method } = body;
+    // Z15: sin `clinicId` válido no se consulta nada (un filtro con `undefined` no filtra y miraría la activación de OTRA clínica).
+    if (!clinicId || typeof clinicId !== "string") {
+      return NextResponse.json({ error: "clinicId es obligatorio" }, { status: 400 });
+    }
     // Idempotente (Y5): una activación hace menos de 2 minutos (doble clic, otra pestaña, otro admin, la API) no suma OTRO
     // periodo —serían meses sin ningún cobro registrado—. Una activación a propósito, pasados los 2 minutos, sí suma.
     const reciente = await prisma.subscriptionInvoice.findFirst({
@@ -228,6 +232,16 @@ export async function POST(req: NextRequest) {
     });
     // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
     const estabaSuspendida = clinicaEstabaSuspendida(current, ahora);
+    // Z5: «Activar» es para una clínica SUSPENDIDA o vencida. Si ya está al corriente sumaría un periodo sin ningún cobro
+    // registrado (p. ej. después de «Registrar pago», o desde otra pestaña): se rechaza con un texto claro. Para sumar un
+    // pago a una clínica al corriente está «Registrar pago»; `sumarAlCorriente: true` es solo para la API.
+    if (!estabaSuspendida && body.sumarAlCorriente !== true) {
+      const hasta = current?.trialEndsAt ? new Date(current.trialEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Mexico_City" }) : null;
+      return NextResponse.json(
+        { error: `Esta clínica ya está al corriente${hasta ? ` hasta el ${hasta}` : ""}. «Activar» es solo para clínicas suspendidas o vencidas; para registrar un pago usa «Registrar pago».`, code: "YA_AL_CORRIENTE" },
+        { status: 409 },
+      );
+    }
     const base = inicioDeNuevoPeriodo({ ahora, estadoAntes: current?.subscriptionStatus, trialEndsAt: current?.trialEndsAt, nextBillingDate: current?.nextBillingDate });
     const nextBilling = finDeLoPagado(base, Number(months ?? 1));
 

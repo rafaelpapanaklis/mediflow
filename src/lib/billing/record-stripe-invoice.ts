@@ -30,6 +30,8 @@ export async function recordStripeInvoice(
   invoice: Stripe.Invoice,
   clinicId: string,
   outcome: "paid" | "failed" = "paid",
+  /** `subscription_invoices.method` de la fila nueva (por omisión «stripe»). La factura aparte del excedente de CFDI usa el del excedente. */
+  metodo?: string,
 ): Promise<{ created: boolean; promoted: boolean }> {
   try {
     const reference = invoice.id;
@@ -95,7 +97,7 @@ export async function recordStripeInvoice(
         amount,
         currency: (invoice.currency ?? "mxn").toUpperCase(),
         status: outcome,
-        method: "stripe",
+        method: metodo ?? "stripe",
         reference,
         periodStart,
         periodEnd,

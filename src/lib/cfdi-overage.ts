@@ -130,7 +130,7 @@ export async function cobrarAparteExcedentePendiente(
   // `include` arrastra TODO lo pendiente del cliente y Stripe no permite mover un item a otra factura: si hay items de otra
   // suscripción (un módulo), una factura aparte los cobraría también. No se adivina: se falla cerrado (M6) y el admin lo ve.
   if (mios.length !== pendientes.data.length) {
-    throw new Error("Hay items pendientes de otra suscripción: la factura aparte los arrastraría");
+    throw Object.assign(new Error("Hay items pendientes de otra suscripción: la factura aparte los arrastraría"), { code: "ITEMS_DE_OTRA_SUSCRIPCION" });
   }
   const factura = await stripe.invoices.create(
     {
