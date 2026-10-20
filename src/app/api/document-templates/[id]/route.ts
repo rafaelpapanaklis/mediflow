@@ -3,8 +3,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions";
-import { deleteTemplate, getTemplate, updateTemplate } from "@/lib/document-templates/service";
-import { restaurableDe, volverAFabricaConsentimiento } from "@/lib/plantillas-fabrica/consentimiento";
+import { deleteTemplate, getTemplate } from "@/lib/document-templates/service";
+import { editarPlantillaConPrevias, restaurableDe, volverAFabricaConsentimiento } from "@/lib/plantillas-fabrica/consentimiento";
 import { repoVersiones } from "@/lib/plantillas-fabrica/db";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 
@@ -60,11 +60,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       return NextResponse.json(v.template);
     }
     // `kind` no se edita; `clinicId` sale de la sesión, nunca del cuerpo.
-    const r = await updateTemplate(prisma, ctx.clinicId, params.id, {
-      name: body?.name,
-      body: body?.body,
-      isActive: body?.isActive,
-    });
+    // En un consentimiento el texto anterior se archiva antes de cambiarlo (nunca se pisa sin copia).
+    const r = await editarPlantillaConPrevias(
+      prisma,
+      repoVersiones,
+      ctx.clinicId,
+      params.id,
+      { name: body?.name, body: body?.body, isActive: body?.isActive, baseBody: body?.baseBody },
+      ctx.userId,
+    );
     if (r.ok === false) return NextResponse.json({ error: r.error, code: r.code }, { status: r.status });
     // `restaurable` para que la tarjeta ofrezca «Volver a la de fábrica» sin recargar (ws1-t8 · P6).
     return NextResponse.json({ ...r.template, restaurable: restaurableDe(r.template) });

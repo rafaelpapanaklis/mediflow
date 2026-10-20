@@ -343,6 +343,31 @@ export function procedimientosDeLaCita(
 }
 
 /**
+ * Una sola hoja por INDICACIÓN (ws1-t8 · N-P2): la de fábrica «Después de una extracción», su copia de la clínica y la
+ * versión editada comparten `basadaEn`, y el paciente no debe recibir dos veces lo mismo. Entre las de la misma
+ * indicación gana la de la clínica (copia o versión) sobre la de fábrica pelada, y entre iguales la más reciente.
+ * Las que no vienen de una de fábrica (`basadaEn` nulo) son indicaciones distintas y se quedan todas. Conserva el
+ * orden de entrada.
+ */
+export function unaPorIndicacion<T extends HojaDTO>(hojas: readonly T[]): T[] {
+  const delaClinica = (h: HojaDTO) => !h.deFabrica || !!h.versionDeClinica;
+  const gana = (a: T, b: T) =>
+    Number(delaClinica(a)) - Number(delaClinica(b)) || a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id);
+  const mejor = new Map<string, T>();
+  for (const h of hojas) {
+    if (!h.basadaEn) continue;
+    const otra = mejor.get(h.basadaEn);
+    if (!otra || gana(h, otra) > 0) mejor.set(h.basadaEn, h);
+  }
+  const vistos = new Set<string>();
+  return hojas.filter((h) => {
+    if (vistos.has(h.id)) return false; // el mismo id pedido dos veces
+    vistos.add(h.id);
+    return !h.basadaEn || mejor.get(h.basadaEn) === h;
+  });
+}
+
+/**
  * Qué hojas de indicaciones proponer para la cita (en uso). Primero las ligadas a
  * sus procedimientos; si ninguna, las de fábrica (o copias de una de fábrica)
  * cuyas palabras aparecen en el motivo o en los conceptos. Solo PROPONE: quien
@@ -356,7 +381,7 @@ export function hojasSugeridas(
   const enUso = hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa);
   const ids = new Set(procedimientos.map((p) => p.id));
   const porLiga = enUso.filter((h) => h.procedureIds.some((id) => ids.has(id)));
-  if (porLiga.length > 0) return porLiga.map((h) => h.id);
+  if (porLiga.length > 0) return unaPorIndicacion(porLiga).map((h) => h.id);
   const porPalabras = enUso.filter((h) => {
     const f = textoDeFabrica(h.basadaEn);
     return !!f && textos.some((t) => coincideConFabrica(f, t));
@@ -365,7 +390,7 @@ export function hojasSugeridas(
   // Una de fábrica que la clínica editó (versionDeClinica) ya es SUYA: cuenta como propia (ws1-t8 · P4).
   const esDeLaClinica = (h: HojaDTO) => !h.deFabrica || !!h.versionDeClinica;
   const propias = new Set(porPalabras.filter(esDeLaClinica).map((h) => h.basadaEn));
-  const sugeridas = porPalabras.filter((h) => !(!esDeLaClinica(h) && propias.has(h.basadaEn))).map((h) => h.id);
+  const sugeridas = unaPorIndicacion(porPalabras.filter((h) => !(!esDeLaClinica(h) && propias.has(h.basadaEn)))).map((h) => h.id);
   if (sugeridas.length > 0) return sugeridas;
   return hojasDeOrtodonciaPorNombre(enUso, textos);
 }

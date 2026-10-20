@@ -14,6 +14,7 @@ import {
 } from "@/lib/orthodontics/plantillas-nota";
 import type { PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
 import type { ModalOrto } from "./plantillas-orto";
+import { cuerpoEdicionNotaOrto } from "./cuerpo-edicion";
 import styles from "./plantillas.module.css";
 
 interface Props {
@@ -92,7 +93,12 @@ export function PlantillaOrtoModal({ modal, nombreSugeridoDeCopia, onClose, onCo
         method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          editando ? { name: nombre, soap } : { name: nombre, soap, ...(esCopia && fila ? { copiaDe: fila.id } : {}) },
+          editando
+            ? // Solo lo que la persona cambió (ws1-t8 · N-P3): ver cuerpo-edicion.ts.
+              fila
+              ? cuerpoEdicionNotaOrto({ name: fila.name, soap: fila.soap }, { name: nombre, soap })
+              : { name: nombre, soap }
+            : { name: nombre, soap, ...(esCopia && fila ? { copiaDe: fila.id } : {}) },
         ),
       });
       const data = await res.json().catch(() => null);

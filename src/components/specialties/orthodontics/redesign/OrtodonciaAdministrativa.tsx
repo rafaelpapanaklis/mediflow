@@ -9,6 +9,7 @@
 import { CalendarDays, Lock, Wallet } from "lucide-react";
 import { Btn } from "./atoms/Btn";
 import { NotasInternas } from "./NotasInternas";
+import { bloquesDeNotas } from "./notas-internas-casos";
 import { RAIZ_ORTO } from "./raiz";
 import orto from "./orto.module.css";
 
@@ -21,10 +22,16 @@ export interface OrtodonciaAdministrativaProps {
    * el doctor X»): las ven todos los que tienen acceso al paciente, recepción incluida (decisión de Rafael, ws1-t6).
    */
   casoId?: string | null;
+  /**
+   * Todos los casos vivos del paciente (el más reciente primero). Si hay más de uno, recepción ve las notas de cada
+   * uno, con el caso al que pertenecen (ws1-t8 · N-P5). Tiene prioridad sobre `casoId`.
+   */
+  casos?: Array<{ id: string; abierto: string }>;
   soloLectura?: boolean;
 }
 
-export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null, soloLectura = false }: OrtodonciaAdministrativaProps) {
+export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null, casos, soloLectura = false }: OrtodonciaAdministrativaProps) {
+  const bloques = bloquesDeNotas(casos, casoId);
   return (
     <div className={`${RAIZ_ORTO} ${orto.lienzo}`}>
       <section className={orto.tarjeta} aria-labelledby="orto-administrativa-titulo">
@@ -60,7 +67,10 @@ export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null
           </div>
         </div>
       </section>
-      <NotasInternas key={casoId ?? "sin-caso"} caseId={casoId} soloLectura={soloLectura} />
+      {bloques.map((b) => (
+        <NotasInternas key={b.caseId ?? "sin-caso"} caseId={b.caseId} soloLectura={soloLectura} etiquetaCaso={b.etiquetaCaso} />
+      ))}
     </div>
   );
 }
+

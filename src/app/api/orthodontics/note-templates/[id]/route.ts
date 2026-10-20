@@ -60,6 +60,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       versiones,
     );
     if (r.ok === false) return NextResponse.json({ code: r.codigo }, { status: r.status });
+    // Guardar sin cambiar nada no es una «actualización»: no se audita (ws1-t8 · N-P6).
+    if (r.sinCambios) return NextResponse.json(r.plantilla);
     const soloInterruptor = body?.name === undefined && body?.soap === undefined;
     await auditClinicalShared({
       ctx,

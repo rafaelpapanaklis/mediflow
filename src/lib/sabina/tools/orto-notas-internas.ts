@@ -180,9 +180,13 @@ export const ortoNotasInternas = definirHerramienta<ParamsOrtoNotasInternas, Dat
       };
     });
 
-    // Bitácora de LECTURA del expediente (la misma de la ficha): esta consulta también es abrir las notas.
+    // Bitácora de LECTURA del expediente (la misma de la ficha): esta consulta también es abrir las notas. Una fila
+    // por cada caso cuyas notas se leyeron (ws1-t8 · N-P7); si ninguno tiene notas, la del caso más reciente.
     const { logRead } = await import("@/lib/audit");
-    await logRead({ clinicId: ctx.clinicId, userId: ctx.userId, kind: "orto_notas_internas", patientId, recordId: casos[0].id });
+    const leidos = casos.filter((_, i) => porCaso[i].length > 0);
+    for (const c of leidos.length > 0 ? leidos : [casos[0]]) {
+      await logRead({ clinicId: ctx.clinicId, userId: ctx.userId, kind: "orto_notas_internas", patientId, recordId: c.id });
+    }
 
     return { ...base, paciente, hayCaso: true, notas, total: todas.length, omitidas, enlace };
   },

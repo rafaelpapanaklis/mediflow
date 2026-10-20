@@ -14,7 +14,8 @@ import { prisma } from "@/lib/prisma";
 import type { FamiliaVersion, GuardarVersion, RepoVersiones, VersionClinica } from "./versiones";
 
 const CLAVE = Symbol.for("dalecontrol.plantillas-fabrica.tabla");
-const VOLVER_A_PREGUNTAR_MS = 10 * 60 * 1000;
+// 1 min: `to_regclass` nunca falla ni deja rastro en los logs; así tras pegar el SQL se enciende sola (ws1-t8 · N-P8).
+const VOLVER_A_PREGUNTAR_MS = 60 * 1000;
 
 type Memoria = { existe: boolean; en: number };
 
@@ -33,8 +34,10 @@ export async function tablaVersionesExiste(forzar = false): Promise<boolean> {
     (globalThis as Record<symbol, Memoria>)[CLAVE] = { existe, en: Date.now() };
     return existe;
   } catch (err) {
+    // Un fallo de la base NO es «no existe»: devolver false haría que la cita, el WhatsApp o el PDF salieran con el
+    // texto de fábrica en vez del de la clínica. Se propaga y no se memoriza (ws1-t8 · N-P8).
     console.error("[plantillas-fabrica] no se pudo saber si existe la tabla:", err);
-    return false;
+    throw err;
   }
 }
 

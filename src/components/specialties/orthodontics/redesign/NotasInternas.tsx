@@ -25,9 +25,11 @@ export interface NotasInternasProps {
   caseId: string | null;
   /** El módulo está en solo lectura (sin contratar): se leen las notas, no se agregan ni se corrigen. */
   soloLectura?: boolean;
+  /** Con varios casos, a cuál pertenecen («abierto el 5 oct 2026»); se añade al título. */
+  etiquetaCaso?: string;
 }
 
-export function NotasInternas({ caseId, soloLectura = false }: NotasInternasProps) {
+export function NotasInternas({ caseId, soloLectura = false, etiquetaCaso }: NotasInternasProps) {
   const t = useT();
   const locale = useLocale();
   const formato = useMemo(
@@ -148,7 +150,7 @@ export function NotasInternas({ caseId, soloLectura = false }: NotasInternasProp
       id="notas-internas"
       icon={<StickyNote size={15} strokeWidth={1.75} />}
       accent="slate"
-      title={t("ortoNotasInternas.titulo")}
+      title={etiquetaCaso ? `${t("ortoNotasInternas.titulo")} · ${etiquetaCaso}` : t("ortoNotasInternas.titulo")}
       action={
         puedeAgregar && carga === "listo" && !agregando ? (
           <Btn

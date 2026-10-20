@@ -14,7 +14,14 @@ import type { DocumentTemplate } from "@prisma/client";
 import { CONSENT_TEMPLATES } from "@/lib/consent/templates";
 import { consentSeedTemplates } from "@/lib/consent/seed-templates";
 import { sanitizeTemplateHtml } from "@/lib/document-templates/sanitize";
-import { getTemplate, type TemplateDb } from "@/lib/document-templates/service";
+import {
+  getTemplate,
+  updateTemplate,
+  validarCuerpo,
+  type TemplateDb,
+  type TemplateResult,
+  type UpdateTemplateInput,
+} from "@/lib/document-templates/service";
 import { difiere, type RepoVersiones } from "./versiones";
 
 export interface TextoDeFabricaConsentimiento {
@@ -110,3 +117,60 @@ export async function volverAFabricaConsentimiento(
 
 /** Para los tests: el catálogo y el sembrado hablan de las mismas cartas. */
 export const CLAVES_CONSENTIMIENTO = CONSENT_TEMPLATES.map((p) => p.key);
+
+export interface EditarConsentimientoInput extends UpdateTemplateInput {
+  /**
+   * El texto con el que la persona abrió el editor. Si el de la base ya es otro (alguien guardó mientras tanto), este
+   * guardado NO lo pisa: 409 CAMBIO_CONCURRENTE (ws1-t8 · N-P1).
+   */
+  baseBody?: unknown;
+}
+
+/** La clave bajo la que se archiva el texto de un consentimiento: la del catálogo, o la de la propia fila. */
+const claveDeArchivo = (fila: { id: string; name: string; createdById: string | null }) =>
+  fabricaDeConsentimiento(fila)?.clave ?? `propia:${fila.id}`;
+
+/**
+ * Editar una plantilla. En un CONSENTIMIENTO, cuando el texto cambia, el anterior se ARCHIVA (nunca se pisa sin copia:
+ * regla de Rafael) y la fila solo se cambia si sigue teniendo el texto archivado; si no, 409 y la edición ajena queda.
+ * Guardar el mismo texto no archiva ni cambia nada. Las notas de evolución y los demás campos van por `updateTemplate`.
+ * Sin la tabla de versiones (falta el SQL) se edita como antes: sin copia.
+ */
+export async function editarPlantillaConPrevias(
+  db: TemplateDb,
+  versiones: RepoVersiones,
+  clinicId: string,
+  id: string,
+  input: EditarConsentimientoInput,
+  userId: string,
+): Promise<TemplateResult> {
+  if (typeof clinicId !== "string" || clinicId.length === 0) {
+    throw new Error("plantillas-fabrica: clinicId ausente — se corta antes de consultar");
+  }
+  const { baseBody, ...resto } = input;
+  const actual = await getTemplate(db, clinicId, id);
+  if (!actual || actual.kind !== "CONSENTIMIENTO" || resto.body === undefined) return updateTemplate(db, clinicId, id, resto);
+
+  const nuevo = validarCuerpo(resto.body);
+  if ("code" in nuevo) return updateTemplate(db, clinicId, id, resto); // que conteste el mismo error de siempre
+  const sinTexto = { name: resto.name, isActive: resto.isActive };
+
+  if (!difiere(nuevo.body, actual.body)) return updateTemplate(db, clinicId, id, sinTexto);
+
+  // Una pestaña abierta antes de que otra persona guardara no pisa lo de la otra persona.
+  if (typeof baseBody === "string" && difiere(baseBody, actual.body)) return concurrente();
+
+  if (await versiones.disponible()) {
+    await versiones.archivarTexto({ clinicId, familia: "CONSENTIMIENTO", clave: claveDeArchivo(actual), cuerpo: actual.body, userId });
+  }
+  const r = await db.documentTemplate.updateMany({
+    where: { id: actual.id, clinicId, body: actual.body },
+    data: { body: nuevo.body },
+  });
+  if (r.count === 0) return concurrente();
+  return updateTemplate(db, clinicId, id, sinTexto);
+}
+
+function concurrente(): TemplateResult {
+  return { ok: false, code: "CAMBIO_CONCURRENTE", status: 409, error: "Alguien guardó un cambio en esta plantilla mientras la editabas" };
+}

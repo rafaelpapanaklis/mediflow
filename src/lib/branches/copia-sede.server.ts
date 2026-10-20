@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/safe-log";
 import { repoHojas } from "@/lib/indicaciones/db";
 import { repoVersiones } from "@/lib/plantillas-fabrica/db";
+import { plantillasParaSedeNueva } from "@/lib/plantillas-fabrica/copia-sede";
 import type { FamiliaVersion } from "@/lib/plantillas-fabrica/versiones";
 import { columnaBotBookableExiste } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import {
@@ -163,11 +164,12 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
     await seccion(r, seccionNombre, async () => {
       const filas = await prisma.documentTemplate.findMany({
         where: { clinicId: origenId, kind, deletedAt: null },
-        select: { name: true, body: true, isActive: true },
+        select: { name: true, body: true, isActive: true, createdById: true },
       });
       if (filas.length > 0) {
         await prisma.documentTemplate.createMany({
-          data: filas.map((f) => ({ ...f, kind, clinicId: destinoId, createdById: args.destinoOwnerUserId })),
+          // Las de fábrica (sin autor) siguen sin autor en la sede nueva: ofrecen «Volver a la de fábrica».
+          data: plantillasParaSedeNueva(filas, kind, destinoId, args.destinoOwnerUserId),
           skipDuplicates: true,
         });
       }

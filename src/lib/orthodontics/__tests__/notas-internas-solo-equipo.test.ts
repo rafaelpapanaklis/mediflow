@@ -96,6 +96,13 @@ const LADO_PACIENTE: Record<string, { rutas: string[]; minimo: number }> = {
       "src/lib/arco",
       "src/app/api/cron",
       "src/lib/ai-assistant",
+      // ws1-t8 · N-P9: acciones que generan PDF y documentos que salen de la clínica, y los Excel.
+      "src/app/actions/orthodontics/exportComparisonPdf.ts",
+      "src/app/actions/orthodontics/exportFinancialAgreementPdf.ts",
+      "src/app/actions/orthodontics/exportReferralProgressLetterPdf.ts",
+      "src/app/actions/orthodontics/exportTreatmentPlanPdf.ts",
+      "src/app/actions/clinical-shared/export-module.ts",
+      "src/lib/excel",
     ],
     minimo: 40,
   },
@@ -222,6 +229,30 @@ for (const [nombre, { rutas, minimo }] of Object.entries(LADO_PACIENTE)) {
     assert.equal(camino, null, `las notas internas son SOLO-EQUIPO; se llega a ellas por:\n  ${camino?.join("\n  → ")}`);
   });
 }
+
+// N-P9 (ws1-t8): una ruta mal escrita no vigila nada y el total mínimo no lo notaría. Cada ruta vigilada tiene que
+// existir y aportar al menos una fuente; si la carpeta se mueve, esta prueba avisa en vez de quedarse ciega.
+test("cada ruta vigilada existe y aporta fuentes (nada vigilado por un nombre mal escrito)", () => {
+  const sinFuentes = Object.values(LADO_PACIENTE)
+    .flatMap((g) => g.rutas)
+    .filter((r) => !existsSync(join(RAIZ, r)) || archivosDe(r).length === 0);
+  assert.deepEqual(sinFuentes, [], `rutas vigiladas que no existen o están vacías:\n  ${sinFuentes.join("\n  ")}`);
+});
+
+test("las acciones que generan PDF/Excel que salen de la clínica están vigiladas", () => {
+  const vigiladas = new Set(Object.values(LADO_PACIENTE).flatMap((g) => g.rutas));
+  for (const r of [
+    "src/app/actions/orthodontics/exportTreatmentPlanPdf.ts",
+    "src/app/actions/orthodontics/exportComparisonPdf.ts",
+    "src/app/actions/orthodontics/exportReferralProgressLetterPdf.ts",
+    "src/app/actions/orthodontics/exportFinancialAgreementPdf.ts",
+    "src/app/actions/clinical-shared/export-module.ts",
+    "src/lib/excel",
+  ]) {
+    assert.ok(vigiladas.has(r), r);
+    assert.ok(archivosDe(r).length > 0, r);
+  }
+});
 
 /* ═════════ C · el detector puede fallar de verdad ═════════ */
 

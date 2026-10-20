@@ -21,6 +21,7 @@ import {
   type ProcedimientoLigable,
   type TipoHoja,
 } from "@/lib/indicaciones/tipos";
+import { cuerpoEdicionHoja } from "./cuerpo-edicion";
 import styles from "./plantillas.module.css";
 import propios from "./plantillas-indicaciones.module.css";
 
@@ -77,6 +78,7 @@ export function PlantillaIndicacionesModal({
   const marcadores = marcadoresDelTipo(tipo);
   const desconocidos = marcadoresDesconocidos(cuerpo);
   const conLiga = tipo === "INDICACIONES";
+  const ligaCambio = hoja ? JSON.stringify([...ligados].sort()) !== JSON.stringify([...hoja.procedureIds].sort()) : false;
 
   // Activos primero; los inactivos solo si ya estaban ligados (para poder quitarlos).
   const opciones = useMemo(() => {
@@ -124,13 +126,14 @@ export function PlantillaIndicacionesModal({
       const cuerpoPeticion = soloVer
         ? { procedureIds: ligados }
         : editando
-          ? {
-              // Solo lo que el usuario cambió: una pestaña con la lista vieja no puede pisar con su texto
-              // el que otra persona guardó mientras tanto (ws1-t8 · P1).
-              ...(hoja && nombre !== hoja.nombre ? { nombre } : {}),
-              ...(hoja && cuerpo !== hoja.cuerpo ? { cuerpo } : {}),
-              ...(conLiga ? { procedureIds: ligados } : {}),
-            }
+          ? // Solo lo que la persona cambió (ws1-t8 · P1, N-P4): ver cuerpo-edicion.ts.
+            hoja
+            ? cuerpoEdicionHoja(
+                { nombre: hoja.nombre, cuerpo: hoja.cuerpo, procedureIds: hoja.procedureIds },
+                { nombre, cuerpo, procedureIds: ligados },
+                conLiga,
+              )
+            : { nombre, cuerpo }
           : {
               tipo,
               nombre,
@@ -157,7 +160,6 @@ export function PlantillaIndicacionesModal({
   }
 
   const titulo = soloVer ? tx.tituloVer : editando ? tx.tituloEditar : esCopia ? tx.tituloCopia : tx.tituloNueva;
-  const ligaCambio = hoja ? JSON.stringify([...ligados].sort()) !== JSON.stringify([...hoja.procedureIds].sort()) : false;
 
   return (
     <div className={styles.modalOverlay}>

@@ -37,6 +37,11 @@ import {
   volverAFabricaConsentimiento,
 } from "../consentimiento";
 import type { TemplateDb } from "@/lib/document-templates/service";
+import { cuerpoEdicionHoja, cuerpoEdicionNotaOrto } from "@/app/dashboard/plantillas/cuerpo-edicion";
+import { bloquesDeNotas } from "@/components/specialties/orthodontics/redesign/notas-internas-casos";
+import { plantillasParaSedeNueva } from "../copia-sede";
+import { unaPorIndicacion } from "@/lib/indicaciones/servicio";
+import type { HojaDTO } from "@/lib/indicaciones/tipos";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
@@ -442,7 +447,7 @@ test("P1: la página de Plantillas lista con el repositorio de la clínica (la v
   assert.ok(!/listarHojas\(repoHojas,/.test(pg), "la página lista con el repo a secas y enseña el texto de fábrica");
   // Y el editor solo manda lo que el usuario cambió: una pestaña vieja no pisa con su texto el que otra guardó.
   const modal = leer("src/app/dashboard/plantillas/plantilla-indicaciones-modal.tsx");
-  assert.match(modal, /cuerpo !== hoja\.cuerpo \? \{ cuerpo \}/);
+  assert.match(modal, /cuerpoEdicionHoja\(/, "el editor construye su petición con cuerpoEdicionHoja (ejecutado en N-P4)");
 });
 
 test("P1: cambiar solo la liga de una de fábrica con versión NO toca la versión de la clínica", async () => {
@@ -572,4 +577,96 @@ test("P10-P12: Sabina lee todos los casos y sin módulo vigente; la sonda no con
   const db = leer("src/lib/orthodontics/notas-internas-db.ts");
   const sonda = db.slice(db.indexOf("export async function tablasNotasInternasExisten"), db.indexOf("function exigirClinica"));
   assert.match(sonda, /throw err/);
+});
+
+
+// ─── Segunda vuelta (ws1-t8): casos ejecutados ──────────────────────────────
+// (las rutas reales están en rutas.test.ts y el repositorio de producción en repo-produccion.test.ts)
+
+const dto = (o: Partial<HojaDTO> & { id: string }): HojaDTO => ({
+  tipo: "INDICACIONES", nombre: "Después de una extracción", cuerpo: "x", procedureIds: [], deFabrica: false,
+  basadaEn: "extraccion", activa: true, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", ...o,
+});
+
+test("N-P2: copia vieja + versión editada de la misma indicación → se propone UNA (por liga y por palabras)", () => {
+  const copia = dto({ id: "copia", nombre: "Después de una extracción (copia)", updatedAt: "2026-02-01T00:00:00.000Z", procedureIds: ["p1"] });
+  const version = dto({ id: "fab", deFabrica: true, versionDeClinica: true, updatedAt: "2026-10-01T00:00:00.000Z", procedureIds: ["p1"] });
+  const proc = [{ id: "p1", name: "Extracción", isActive: true }];
+  assert.deepEqual(hojasSugeridas([copia, version], proc, ["extracción"]), ["fab"], "por liga");
+  assert.deepEqual(hojasSugeridas([{ ...copia, procedureIds: [] }, { ...version, procedureIds: [] }], [], ["extracción de la muela"]), ["fab"], "por palabras");
+  // La más reciente gana, sea la copia o la versión.
+  assert.deepEqual(hojasSugeridas([{ ...copia, updatedAt: "2026-12-01T00:00:00.000Z" }, version], proc, ["extracción"]), ["copia"]);
+  // Indicaciones distintas se quedan todas; las que no vienen de una de fábrica también.
+  const otra = dto({ id: "otra", nombre: "Limpieza", basadaEn: "limpieza", procedureIds: ["p1"] });
+  const suelta = dto({ id: "suelta", nombre: "Mía", basadaEn: null, procedureIds: ["p1"] });
+  assert.deepEqual(hojasSugeridas([copia, version, otra, suelta], proc, []).sort(), ["fab", "otra", "suelta"]);
+});
+
+test("N-P2: unaPorIndicacion — la de la clínica gana a la de fábrica pelada, el mismo id no se repite, conserva el orden", () => {
+  const pelada = dto({ id: "pelada", deFabrica: true });
+  const copia = dto({ id: "copia", updatedAt: "2026-03-01T00:00:00.000Z" });
+  assert.deepEqual(unaPorIndicacion([pelada, copia]).map((h) => h.id), ["copia"]);
+  assert.deepEqual(unaPorIndicacion([copia, copia]).map((h) => h.id), ["copia"]);
+  const a = dto({ id: "a", basadaEn: null });
+  const b = dto({ id: "b", basadaEn: "limpieza" });
+  assert.deepEqual(unaPorIndicacion([b, a, pelada, copia]).map((h) => h.id), ["b", "a", "copia"]);
+});
+
+test("N-P3: una pestaña vieja que guarda la nota de ortodoncia «sin tocar nada» NO revierte la versión que otra persona guardó", async () => {
+  const db = dobleDb([fila("1", "Cementado de brackets")]);
+  const versiones = repoVersionesEnMemoria();
+  const ctx = { versiones, userId: "u1" };
+  const cargadaPorLaPestana = { name: "Cementado de brackets", soap: SOAP_FABRICA }; // se abrió con el texto de fábrica
+  await editarPlantillaNota(db, "c1", "1", { soap: SOAP_CLINICA }, FABRICA, { versiones, userId: "u2" }); // otra persona guardó
+  const payload = cuerpoEdicionNotaOrto(cargadaPorLaPestana, cargadaPorLaPestana);
+  assert.deepEqual(payload, {}, "sin cambios no viaja nada");
+  const r = await editarPlantillaNota(db, "c1", "1", payload, FABRICA, ctx);
+  assert.equal(r.ok && r.plantilla.soap.S, "mía S", "sigue la versión de la otra persona");
+  assert.equal(versiones.filas.length, 1);
+  assert.equal(versiones.filas[0].archivedAt, null);
+  // Y lo que sí cambió viaja solo:
+  assert.deepEqual(cuerpoEdicionNotaOrto(cargadaPorLaPestana, { name: "Cementado de brackets", soap: { ...SOAP_FABRICA, P: "nuevo" } }), { soap: { ...SOAP_FABRICA, P: "nuevo" } });
+});
+
+test("N-P4: corregir solo el texto desde una pestaña vieja NO pisa la liga a procedimientos que otra persona cambió", async () => {
+  const { versiones, vigente, lista } = await conHojasDeFabrica();
+  const catalogo = [{ id: "p1", name: "Extracción", isActive: true }, { id: "p2", name: "Cirugía", isActive: true }];
+  const h = lista.find((x) => x.basadaEn === "extraccion" && x.deFabrica)!;
+  const cargada = { nombre: h.nombre, cuerpo: h.cuerpo, procedureIds: h.procedureIds }; // la pestaña vieja
+  await editarHoja(vigente, "c1", h.id, { procedureIds: ["p1", "p2"] }, catalogo, { versiones, userId: "u2" }); // otra persona
+  const payload = cuerpoEdicionHoja(cargada, { ...cargada, cuerpo: "Texto corregido" }, true);
+  assert.deepEqual(payload, { cuerpo: "Texto corregido" }, "la liga no viaja si no la tocó");
+  const r = await editarHoja(vigente, "c1", h.id, payload, catalogo, { versiones, userId: "u1" });
+  assert.deepEqual(r.ok && r.hoja.procedureIds, ["p1", "p2"], "la liga de la otra persona sigue");
+  assert.equal(r.ok && r.hoja.cuerpo, "Texto corregido");
+  // Si SÍ la tocó, viaja.
+  assert.deepEqual(cuerpoEdicionHoja(cargada, { ...cargada, procedureIds: ["p2"] }, true), { procedureIds: ["p2"] });
+  // La constancia no tiene liga.
+  assert.deepEqual(cuerpoEdicionHoja(cargada, { ...cargada, procedureIds: ["p2"] }, false), {});
+});
+
+test("N-P5: recepción ve las notas de TODOS los casos vivos; con uno solo no se rotula", () => {
+  assert.deepEqual(bloquesDeNotas(undefined, null), [{ caseId: null }]);
+  assert.deepEqual(bloquesDeNotas([], "caso-1"), [{ caseId: "caso-1" }]);
+  assert.deepEqual(bloquesDeNotas([{ id: "caso-1", abierto: "2026-05-05T00:00:00.000Z" }], "caso-1"), [{ caseId: "caso-1" }]);
+  const dos = bloquesDeNotas([{ id: "nuevo", abierto: "2026-10-05T16:00:00.000Z" }, { id: "viejo", abierto: "2024-01-02T10:00:00.000Z" }], "nuevo");
+  assert.deepEqual(dos.map((b) => b.caseId), ["nuevo", "viejo"]);
+  assert.equal(dos[0].etiquetaCaso, "caso abierto el 5 oct 2026");
+  assert.equal(dos[1].etiquetaCaso, "caso abierto el 2 ene 2024");
+});
+
+test("N-P10: la sede nueva conserva SIN autor los consentimientos de fábrica, y por eso puede volver a la de fábrica", () => {
+  const f = consentimientosDeFabrica()[0];
+  const filas = [
+    { name: f.nombre, body: "<p>editada</p>", isActive: true, createdById: null },
+    { name: "Mi carta", body: "<p>mía</p>", isActive: false, createdById: "u-origen" },
+  ];
+  const copia = plantillasParaSedeNueva(filas, "CONSENTIMIENTO", "c-nueva", "u-dueño-nuevo");
+  assert.deepEqual(copia.map((c) => [c.name, c.createdById, c.clinicId, c.kind]), [
+    [f.nombre, null, "c-nueva", "CONSENTIMIENTO"],
+    ["Mi carta", "u-dueño-nuevo", "c-nueva", "CONSENTIMIENTO"],
+  ]);
+  assert.equal(copia[1].isActive, false);
+  assert.equal(restaurableDe({ kind: "CONSENTIMIENTO", name: copia[0].name, body: copia[0].body, createdById: copia[0].createdById }), true);
+  assert.equal(restaurableDe({ kind: "CONSENTIMIENTO", name: copia[1].name, body: copia[1].body, createdById: copia[1].createdById }), false);
 });

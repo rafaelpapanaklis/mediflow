@@ -342,6 +342,8 @@ interface Props {
   orthoSoloAdministrativo?: boolean;
   /** El caso más reciente, para las «Notas internas» que recepción también ve (ws1-t6). */
   orthoCasoAdministrativoId?: string | null;
+  /** Todos los casos vivos, para las notas internas de recepción (ws1-t8 · N-P5). */
+  orthoCasosAdministrativos?: Array<{ id: string; abierto: string }>;
   /**
    * ViewModel del rediseño Fase 1 ortodoncia patient-detail. Cuando viene
    * presente, se renderiza el shell nuevo (Hero+Diagnóstico+Plan+G1) en el
@@ -513,6 +515,7 @@ export function PatientDetailClient({
   orthoSoloLectura = false,
   orthoSoloAdministrativo = false,
   orthoCasoAdministrativoId = null,
+  orthoCasosAdministrativos = [],
   orthoRedesignVM,
   orthoRedesignBundle,
   orthoCasos = [],
@@ -2457,6 +2460,7 @@ export function PatientDetailClient({
               onVerCitas={() => setTab("agenda")}
               onVerCobro={canViewBilling ? openBillingTab : null}
               casoId={orthoCasoAdministrativoId}
+              casos={orthoCasosAdministrativos}
               soloLectura={orthoSoloLectura}
             />
           )}

@@ -507,14 +507,21 @@ export default async function PatientDetailPage(
   // consentimiento que prepara recepción sigue queriendo al doctor tratante y
   // al tutor: solo esas dos columnas del último plan, con filtro de clínica.
   let orthoPlanAdministrativo: { id: string; treatingDoctorId: string | null; responsibleGuardianId: string | null } | null = null;
+  // Todos los casos vivos (el más reciente primero): recepción ve las notas internas de CADA uno (ws1-t8 · N-P5).
+  let orthoCasosAdministrativos: Array<{ id: string; abierto: string }> = [];
   if (orthoSoloAdministrativo) {
-    orthoPlanAdministrativo = await prisma.orthodonticTreatmentPlan
-      .findFirst({
+    const vivos = await prisma.orthodonticTreatmentPlan
+      .findMany({
         where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
         orderBy: { createdAt: "desc" },
-        select: { id: true, treatingDoctorId: true, responsibleGuardianId: true },
+        take: 10,
+        select: { id: true, createdAt: true, treatingDoctorId: true, responsibleGuardianId: true },
       })
-      .catch(() => null);
+      .catch(() => []);
+    orthoPlanAdministrativo = vivos[0]
+      ? { id: vivos[0].id, treatingDoctorId: vivos[0].treatingDoctorId, responsibleGuardianId: vivos[0].responsibleGuardianId }
+      : null;
+    orthoCasosAdministrativos = vivos.map((v) => ({ id: v.id, abierto: v.createdAt.toISOString() }));
   }
   const orthoTreatingDoctorId = orthoData?.plan?.treatingDoctorId ?? orthoPlanAdministrativo?.treatingDoctorId ?? null;
   let orthoResponsibleGuardian: { nombre: string; relacion: string } | null = null;
@@ -680,6 +687,7 @@ export default async function PatientDetailPage(
           orthoSoloLectura={orthoSoloLectura}
           orthoSoloAdministrativo={orthoSoloAdministrativo}
           orthoCasoAdministrativoId={orthoPlanAdministrativo?.id ?? null}
+          orthoCasosAdministrativos={orthoCasosAdministrativos}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
           orthoCasos={orthoCasos}

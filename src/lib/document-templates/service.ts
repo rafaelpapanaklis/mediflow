@@ -29,7 +29,8 @@ export type TemplateErrorCode =
   | "BODY_REQUIRED"
   | "BODY_TOO_LONG"
   | "NAME_TAKEN"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "CAMBIO_CONCURRENTE";
 
 const MENSAJES: Record<TemplateErrorCode, { status: number; error: string }> = {
   KIND_INVALID: { status: 400, error: "Tipo de plantilla inválido" },
@@ -39,6 +40,7 @@ const MENSAJES: Record<TemplateErrorCode, { status: number; error: string }> = {
   BODY_TOO_LONG: { status: 400, error: "El texto de la plantilla es demasiado largo" },
   NAME_TAKEN: { status: 409, error: "Ya existe una plantilla de este tipo con ese nombre" },
   NOT_FOUND: { status: 404, error: "Plantilla no encontrada" },
+  CAMBIO_CONCURRENTE: { status: 409, error: "Alguien guardó un cambio en esta plantilla mientras la editabas" },
 };
 
 export type TemplateResult =
@@ -104,7 +106,7 @@ function validarNombre(v: unknown): { name: string } | { code: TemplateErrorCode
   return { name };
 }
 
-function validarCuerpo(v: unknown): { body: string } | { code: TemplateErrorCode } {
+export function validarCuerpo(v: unknown): { body: string } | { code: TemplateErrorCode } {
   // El tamaño de la ENTRADA se mira antes de gastar CPU en sanearla.
   if (typeof v === "string" && v.length > MAX_INPUT_LENGTH) return { code: "BODY_TOO_LONG" };
   const body = sanitizeTemplateHtml(v);

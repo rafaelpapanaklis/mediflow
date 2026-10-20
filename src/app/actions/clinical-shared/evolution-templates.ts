@@ -114,14 +114,11 @@ export async function listEvolutionTemplates(
   });
 
   // Ortodoncia: si la clínica editó una plantilla de fábrica, aquí sale SU versión (ws1-t6).
-  // Si la lectura de versiones falla, el selector sigue con el texto de fábrica.
   let vigentes: Awaited<ReturnType<typeof versionesVigentes>> = new Map();
   if (parsed.data.module === "orthodontics") {
-    try {
-      vigentes = await versionesVigentes(repoVersiones, ctx.clinicId);
-    } catch (err) {
-      console.error("[evolution-templates] versiones de la clínica:", err);
-    }
+    // Sin atrapar el error: si no se pudo leer la versión de la clínica, el selector avisa («Reintentar») en vez de
+    // ofrecer en silencio el texto de fábrica (ws1-t8 · N-P8).
+    vigentes = await versionesVigentes(repoVersiones, ctx.clinicId);
   }
 
   const dtos: EvolutionTemplateDTO[] = [];

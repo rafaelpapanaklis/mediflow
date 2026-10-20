@@ -244,3 +244,18 @@ test("P11: con el módulo vencido sigue leyendo lo ya escrito, igual que la fich
   assert.equal(d.notas.length, 2);
   assert.doesNotMatch(r.resumen, /no tiene contratado/);
 });
+
+test("N-P7: la bitácora de lectura registra UN caso por cada caso cuyas notas se leyeron", async () => {
+  const { db, auditorias } = montar({ casoAnterior: true });
+  await pregunta(admin(db), { patientId: "p-ana" });
+  assert.deepEqual(auditorias.map((a) => a.changes._read.after.recordId).sort(), ["plan-ana", "plan-ana-viejo"]);
+  assert.ok(auditorias.every((a) => a.clinicId === "cl-norte" && a.entityId === "p-ana"));
+});
+
+test("N-P7: si ningún caso tiene notas, queda una sola fila (la del caso más reciente)", async () => {
+  const { db, auditorias } = montar();
+  // Un paciente con caso y sin notas: p-beto.
+  await pregunta(admin(db), { patientId: "p-beto" });
+  assert.equal(auditorias.length, 1);
+  assert.equal(auditorias[0].changes._read.after.recordId, "plan-beto");
+});

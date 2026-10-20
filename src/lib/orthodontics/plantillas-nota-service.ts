@@ -44,7 +44,7 @@ export interface PlantillaNotaDTO {
 }
 
 export type ResultadoNota =
-  | { ok: true; plantilla: PlantillaNotaDTO; yaEstabaDeFabrica?: boolean }
+  | { ok: true; plantilla: PlantillaNotaDTO; yaEstabaDeFabrica?: boolean; sinCambios?: boolean }
   | { ok: false; codigo: CodigoErrorNota; status: number };
 
 const falla = (codigo: CodigoErrorNota): ResultadoNota => ({ ok: false, codigo, status: ESTADO_DE_ERROR_NOTA[codigo] });
@@ -321,7 +321,9 @@ export async function editarPlantillaNota(
       });
     }
     const vigentes = await versionesVigentes(ctx?.versiones, clinicId);
-    return { ok: true, plantilla: aDTO(fila, nombresDeFabrica, vigentes) };
+    // Nada cambió (guardar sin tocar, o el mismo interruptor): la ruta no deja rastro de una edición que no ocurrió.
+    const sinCambios = Object.keys(data).length === 0 && !soapDeClinica;
+    return { ok: true, plantilla: aDTO(fila, nombresDeFabrica, vigentes), ...(sinCambios ? { sinCambios: true } : {}) };
   } catch (err) {
     if (esChoqueDeUnico(err)) return falla("NAME_TAKEN");
     throw err;
