@@ -116,7 +116,7 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
     // Candado por clínica de «Pagar» y «Subir»: failban (Upstash o memoria) + candado en la base entre instancias.
     candado: crearCandadoDeCobro({ clinicId: clinic.id }),
     // Contador de intentos de «Subir» en NUESTRA base (billing_email_logs), no en Stripe.
-    intentos: { leer: (id) => leerIntentosSubir(id), sumar: (id) => sumarIntentoSubir(id) },
+    intentos: { leer: (id) => leerIntentosSubir(id), sumar: (id, opciones) => sumarIntentoSubir(id, opciones) },
     // Mismo buzón que el aviso de afiliados y el de SPEI: ADMIN_NOTIFY_EMAIL, o el general.
     avisarAlAdmin: async ({ asunto, lineas }) => {
       const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

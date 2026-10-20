@@ -262,6 +262,17 @@ export function esErrorDeIdempotencia(err: unknown): boolean {
   return (e?.code ?? e?.raw?.code) === "idempotency_error" || (e?.type ?? e?.raw?.type) === "StripeIdempotencyError";
 }
 
+/**
+ * AC3: ¿el fallo de un paso de Stripe es AMBIGUO —pudo haberse aplicado aunque la respuesta no llegó—? Un 5xx, un corte de red o
+ * un timeout lo son. Un 4xx (petición inválida, tarjeta, clave repetida…) NO: Stripe respondió que no lo hizo.
+ */
+export function esFalloAmbiguo(err: unknown): boolean {
+  const e = err as { statusCode?: number; type?: string; raw?: { statusCode?: number } } | null;
+  const status = e?.statusCode ?? e?.raw?.statusCode;
+  if (typeof status === "number") return status >= 500;
+  return e?.type === "StripeConnectionError" || e?.type === "StripeAPIError" || e?.type === "StripeAPIConnectionError" || !e?.type;
+}
+
 export { subscriptionItemInterval };
 
 // ── Idempotencia ────────────────────────────────────────────────────────────
@@ -311,7 +322,7 @@ export const MENSAJES = {
   // AA6: el monto de la factura abierta ya no es el que la pestaña mostró: no se cobra; se pide revisar.
   montoCambio: "El monto cambió, revísalo y vuelve a confirmar.",
   // V3c: se está terminando de aplicar un cambio de plan; mientras tanto no se ofrece pagar nada (regla de oro).
-  cambioEnAplicacion: "Estamos terminando de aplicar tu cambio de plan. Espera unos minutos y recarga la página, o escríbenos a soporte.",
+  cambioEnAplicacion: "Estamos terminando de aplicar tu cambio de plan; vuelve a intentar en unos minutos.",
   // Z7: si no se pudo tomar el candado (la base falló) NO se cobra: se pide reintentar.
   intentaDeNuevo: "No pudimos iniciar el cobro. Intenta de nuevo en unos segundos.",
   // Mensajes de «hay otra operación de cobro de esta clínica en curso» según quién tiene el candado (revisión t4, Y19).

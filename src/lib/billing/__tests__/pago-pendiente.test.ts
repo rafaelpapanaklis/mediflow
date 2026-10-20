@@ -16,6 +16,7 @@ import {
   PREFIJO_CUPON_PROMO,
   claves,
   descuentosParaSubir,
+  esFalloAmbiguo,
   idsDeDescuentos,
   parsearCuerpo,
   planesMasGrandes,
@@ -24,7 +25,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chargeFailureMessage } from "../proration";
 import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
-import { cobrarPendiente } from "../pago-pendiente-cliente";
+import { cobrarPendiente, leerPagoPendiente } from "../pago-pendiente-cliente";
 import {
   crearCandadoDeCobro,
   duenoDelCandadoEnBase,
@@ -91,6 +92,8 @@ interface Escenario {
   facturaAnuladaNoEditable?: boolean;
   /** Intentos fallidos previos de «Subir» (los de la última hora) con los que arranca el contador. */
   intentosPrevios?: number;
+  /** Ya hubo un fallo AMBIGUO (5xx/red) del paso del cambio de plan hace un momento (el contador de la fila `cambio_subir`). */
+  cambioAmbiguoPrevio?: boolean;
   /** La base del candado FALLA al tomarlo (Z7): el candado responde `error`. */
   candadoFalla?: boolean;
   /** Candado por clínica REAL (en memoria, como failban sin Upstash); por defecto abre siempre. */
@@ -158,6 +161,8 @@ function montar(e: Escenario = {}) {
   const reiniciosPorClave = new Map<string, any>();
   const huellasUpdate = new Map<string, string>();
   let contadorIntentos = e.intentosPrevios ?? 0; // el contador de intentos de «Subir», en NUESTRA base
+  let desfaseMs = 0; // minutos que «pasan» en la prueba (el fallo ambiguo del cambio solo cuenta 15 min)
+  let cambioAmbiguoEn: number | null = e.cambioAmbiguoPrevio ? Date.now() : null;
   // El pago ocurre «hace un minuto»: `realinearCiclo` exige un fin de lo pagado futuro (no se puede fijar a una fecha fija).
   const PAGADO_EN = Math.floor(Date.now() / 1000);
   const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
@@ -407,8 +412,13 @@ function montar(e: Escenario = {}) {
     avisoSedeIncluida: (n) => `paga ${n}`,
     avisarAlAdmin: async (a) => { avisos.push(a); },
     intentos: {
-      leer: async () => (e.intentosNoLegibles ? null : { intento: contadorIntentos, reciente: contadorIntentos > 0 }),
-      sumar: async () => { contadorIntentos++; registra("intentos.sumar"); },
+      leer: async () =>
+        e.intentosNoLegibles ? null : { intento: contadorIntentos, cambioReciente: cambioAmbiguoEn !== null && Date.now() + desfaseMs - cambioAmbiguoEn < 15 * 60_000 },
+      sumar: async (_id, opciones) => {
+        contadorIntentos++;
+        if (opciones?.cambioAmbiguo) cambioAmbiguoEn = Date.now() + desfaseMs;
+        registra("intentos.sumar", opciones ?? {});
+      },
     },
     // Entre intentos del candado cede el turno (macrotarea): la otra petición, que solo espera promesas, avanza.
     esperar: async () => {
@@ -445,6 +455,8 @@ function montar(e: Escenario = {}) {
     planLocal: () => planLocal,
     cobros: () => cobrosAplicados,
     intentos: () => contadorIntentos,
+    pasanMinutos: (n: number) => { desfaseMs += n * 60_000; },
+    cambioAmbiguoMarcado: () => cambioAmbiguoEn !== null,
     reinicios: () => reinicios,
     cobrosDeTarjeta: () => cobrosDeTarjeta,
     pausa: () => pausa,
@@ -1764,7 +1776,7 @@ test("B1 — «Subir» con el cobro en pausa: el bloqueo va ANTES del atajo «ya
   assert.equal(m.ops("customers.deleteDiscount").length, 0, "ni quitó cupones");
   assert.equal(m.ops("invoices.voidInvoice").length + m.ops("subscriptions.update").length, 0);
   // Sin pausa, el atajo sigue funcionando como antes.
-  const sinPausa = montar({ planEnSuscripcion: "PRO", abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio" }] });
+  const sinPausa = montar({ planEnSuscripcion: "PRO", abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio", billing_reason: "subscription_update" }] });
   const ok = await subirYPagar(sinPausa.deps, "PRO");
   assert.equal(ok.status, 200);
   assert.equal(sinPausa.planLocal(), null, "Y17: la factura sigue abierta (sin cobrar): el plan no se aplica en la base");
@@ -1965,16 +1977,25 @@ function baseDoble() {
   const sqlDe = (q: TemplateStringsArray) => q.join("?").replace(/\s+/g, " ");
   const ahoraUtc = (sql: string) => (sql.includes("AT TIME ZONE 'UTC'") ? reloj.ahora.getTime() : reloj.ahora.getTime() + reloj.zonaSesionHoras * 3_600_000);
   const KIND_CONTADOR = "contador_subir";
+  const KIND_CAMBIO = "cambio_subir";
+  const contarSql = (email: string) => (/^[0-9]{1,9}$/.test(email) ? Number(email) : 0); // el CASE de la SQL real
   const db: DbCandado = {
     $executeRaw: async (q: TemplateStringsArray, ...v: unknown[]) => {
       const sql = sqlDe(q);
       operaciones.push(sql);
       if (falla) throw falla;
       if (sql.startsWith("UPDATE") && sql.includes('"email" = ((CASE')) {
-        // contador de intentos: [llave, kind]
+        // contador de intentos: [llave, kind]. MISMO criterio que la lectura: 1 a 9 dígitos, si no vale 0.
         const f = filas.get(v[0] as string);
         if (!f || f.kind !== v[1]) return 0;
-        f.email = String((Number(f.email) || 0) + 1);
+        f.email = String(contarSql(f.email) + 1);
+        f.createdAt = new Date(ahoraUtc(sql));
+        return 1;
+      }
+      if (sql.startsWith("UPDATE") && sql.includes('SET "createdAt"')) {
+        // marca de hora del fallo ambiguo del cambio: [llave, kind]
+        const f = filas.get(v[0] as string);
+        if (!f || f.kind !== v[1]) return 0;
         f.createdAt = new Date(ahoraUtc(sql));
         return 1;
       }
@@ -1992,7 +2013,7 @@ function baseDoble() {
         // [id, llave, clinicId, kind, (dueno)]  — ON CONFLICT DO NOTHING
         const [, llave, clinicId, kind, dueno] = v as [string, string, string, string, string | undefined];
         if (filas.has(llave)) return 0;
-        filas.set(llave, { invoiceId: llave, clinicId, kind, email: kind === KIND_CONTADOR ? "1" : String(dueno), createdAt: new Date(ahoraUtc(sql)) });
+        filas.set(llave, { invoiceId: llave, clinicId, kind, email: kind === KIND_CONTADOR || kind === KIND_CAMBIO ? "1" : String(dueno), createdAt: new Date(ahoraUtc(sql)) });
         return 1;
       }
       throw new Error(`SQL no soportada por el doble: ${sql}`);
@@ -2001,10 +2022,15 @@ function baseDoble() {
       const sql = sqlDe(q);
       operaciones.push(sql);
       if (falla) throw falla;
-      if (sql.includes('"reciente"')) {
-        const [llave, kind] = v as [string, string];
-        const f = filas.get(llave);
-        return f && f.kind === kind ? [{ email: f.email, reciente: f.createdAt.getTime() >= ahoraUtc(sql) - 24 * 3_600_000 }] : [];
+      if (sql.includes('"cambio_reciente"')) {
+        // [llaveContador, kindContador, llaveCambio, kindCambio, minutos]
+        const [llaveC, kindC, llaveX, kindX, min] = v as [string, string, string, string, number];
+        const c = filas.get(llaveC);
+        const x = filas.get(llaveX);
+        return [{
+          intento: c && c.kind === kindC ? contarSql(c.email) : 0,
+          cambio_reciente: !!x && x.kind === kindX && x.createdAt.getTime() >= ahoraUtc(sql) - min * 60_000,
+        }];
       }
       const [llave, kind, ttl] = v as [string, string, number];
       const f = filas.get(llave);
@@ -2269,17 +2295,15 @@ test("AB2 — si el contador NO se puede LEER no se sigue (503, sin cobrar ni to
   assert.equal(m.ops("customers.deleteDiscount").length, 0);
   // Las funciones reales contra la base simulada: sin fila → 0; sumar crea la fila y después suma; la hora es la de la base.
   const b = baseDoble();
-  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 0, reciente: false });
-  await sumarIntentoSubir("c1", b.db);
-  await sumarIntentoSubir("c1", b.db);
-  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, reciente: true });
-  assert.deepEqual(await leerIntentosSubir("c2", b.db), { intento: 0, reciente: false }, "por clínica");
-  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 25 * 3_600_000);
-  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, reciente: false }, "a las 24 h deja de ser «reciente»");
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 0, cambioReciente: false });
+  await sumarIntentoSubir("c1", {}, b.db);
+  await sumarIntentoSubir("c1", {}, b.db);
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, cambioReciente: false }, "un fallo de otro paso NO marca el cambio");
+  assert.deepEqual(await leerIntentosSubir("c2", b.db), { intento: 0, cambioReciente: false }, "por clínica");
   assert.equal(b.filas.size, 1, "una fila por clínica, reutilizada; nunca se borra");
   b.romper();
   assert.equal(await leerIntentosSubir("c1", b.db), null);
-  await sumarIntentoSubir("c1", b.db); // no lanza
+  await sumarIntentoSubir("c1", {}, b.db); // no lanza
   assert.equal(await leerIntentosSubir("", b.db), null);
 });
 
@@ -2315,21 +2339,21 @@ test("V3c — SÍ es real: un «Subir» cuyo cambio se aplicó pero cuya respues
   assert.equal(m.facturas.get("in_sep").status, "open", "pero la renovación del mes anterior (sin servicio) sigue abierta: la regla de la suspensión no llegó a correr");
   assert.ok(m.intentos() >= 1);
   const g = await consultarPendiente(m.deps);
-  assert.deepEqual(g.body, { estado: "sin_pendiente" }, "no se ofrece pagar el mes sin servicio");
+  assert.deepEqual(g.body, { estado: "cambio_en_aplicacion", mensaje: MENSAJES.cambioEnAplicacion }, "no se ofrece pagar el mes sin servicio, y se dice la verdad");
   const p = await pagarPendiente(m.deps, 48.61);
-  assert.deepEqual([p.status, p.body.code, p.body.error], [409, "CAMBIO_EN_APLICACION", MENSAJES.cambioEnAplicacion]);
+  assert.deepEqual([p.status, p.body.code, p.body.error], [409, "CAMBIO_EN_APLICACION", "Estamos terminando de aplicar tu cambio de plan; vuelve a intentar en unos minutos."]);
   assert.equal(m.ops("invoices.pay").length, 0);
   assert.doesNotMatch(MENSAJES.cambioEnAplicacion, /stripe/i);
   const otra = await subirYPagar(m.deps, "PRO");
   assert.equal(otra.status, 409);
   assert.equal(m.cobrosDeTarjeta() + m.cobros(), 1, "ni un cobro más");
-  // Sin evidencia de un fallo reciente de «Subir» (p. ej. un cambio de plan hecho a mano que no tocó Stripe) NO se bloquea el pago.
+  // Sin evidencia de un fallo reciente del cambio (p. ej. un cambio de plan hecho a mano que no tocó Stripe) NO se bloquea el pago.
   const manual = montar({ suspendida: true, abiertas: MESES, planEnSuscripcion: "PRO" });
   assert.equal((await consultarPendiente(manual.deps)).body.estado, "pendiente");
   const rManual = await pagarPendiente(manual.deps, 486.1);
   assert.equal(rManual.body.pagado, true, JSON.stringify(rManual));
   // Una factura de la propia subida (subscription_update) sí se ofrece: es lo que hay que pagar.
-  const subida = montar({ abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio", billing_reason: "subscription_update" }], planEnSuscripcion: "PRO", intentosPrevios: 1 });
+  const subida = montar({ abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio", billing_reason: "subscription_update" }], planEnSuscripcion: "PRO", intentosPrevios: 1, cambioAmbiguoPrevio: true });
   assert.equal((await consultarPendiente(subida.deps)).body.estado, "pendiente");
 });
 
@@ -2383,6 +2407,110 @@ test("AA6 — el cliente manda el monto que la pantalla mostró y, ante MONTO_CA
   assert.match(comp, /setEleccion\(\{ accion: "pagar", monto: lectura\.datos\.montoPendiente \}\)/);
   assert.match(comp, /r\.codigo === "MONTO_CAMBIO"/);
   assert.match(comp, /void leerPagoPendiente\(\)\.then\(setLectura\)/);
+});
+
+// ── Verificación final del cobro (t4): AC3, AC4, AC5 ──────────────────────────────────────────────────────
+
+const ERR_5XX = (msg = "Stripe 500") => Object.assign(new Error(msg), { type: "StripeAPIError", statusCode: 500 });
+
+test("AC3 — el bloqueo de V3c exige un fallo AMBIGUO (5xx/red) del paso del CAMBIO y dura 15 min; con el texto verdadero", async () => {
+  // Un 5xx del paso del cambio que SÍ se aplicó: se bloquea (y se dice qué pasa).
+  const m = montar({ suspendida: true, abiertas: MESES, updateRespuestaPerdida: 1 });
+  await subirYPagar(m.deps, "PRO");
+  assert.ok(m.cambioAmbiguoMarcado());
+  const g = await consultarPendiente(m.deps);
+  assert.equal(g.body.estado, "cambio_en_aplicacion");
+  assert.equal(g.body.mensaje, "Estamos terminando de aplicar tu cambio de plan; vuelve a intentar en unos minutos.");
+  assert.doesNotMatch(String(g.body.mensaje), /24|horas|Stripe|pago pendiente/i);
+  assert.equal((await pagarPendiente(m.deps, 486.1)).body.code, "CAMBIO_EN_APLICACION");
+  // La pantalla recibe el texto verdadero (y deja las otras formas de pago) en lugar de «no hay pago pendiente».
+  const fGet = async () => ({ status: 200, ok: true, json: async () => g.body }) as unknown as Response;
+  assert.deepEqual(await leerPagoPendiente(fGet), { tipo: "error", mensaje: "Estamos terminando de aplicar tu cambio de plan; vuelve a intentar en unos minutos." });
+  // Pasan MÁS de 15 min: ya no se bloquea. Nunca deja a una suspendida sin «Pagar» por horas.
+  m.pasanMinutos(16);
+  assert.equal((await consultarPendiente(m.deps)).body.estado, "pendiente");
+  const antes = m.intentos();
+  assert.equal(antes >= 1, true);
+  // Dentro de los 15 min sigue bloqueado.
+  const m2 = montar({ suspendida: true, abiertas: MESES, updateRespuestaPerdida: 1 });
+  await subirYPagar(m2.deps, "PRO");
+  m2.pasanMinutos(14);
+  assert.equal((await consultarPendiente(m2.deps)).body.estado, "cambio_en_aplicacion");
+});
+
+test("AC3 — un fallo de OTRO paso (precio, anulación) o un 4xx del cambio NO bloquea: una suspendida con un plan de Stripe distinto por un motivo sin relación sigue pudiendo «Pagar»", async () => {
+  // Fallo 5xx del PRECIO (no del cambio) + el plan de Stripe distinto al de la base (p. ej. las sedes impidieron escribir el plan).
+  const precio = montar({ suspendida: true, abiertas: MESES, planEnSuscripcion: "PRO" });
+  (precio.deps.stripe as any).prices.create = async () => { throw ERR_5XX(); };
+  assert.equal((await subirYPagar(precio.deps, "PRO")).status, 409); // ya está en el plan destino y hay renovaciones: no avanza
+  const precio2 = montar({ suspendida: true, abiertas: MESES });
+  (precio2.deps.stripe as any).prices.create = async () => { throw ERR_5XX(); };
+  assert.equal((await subirYPagar(precio2.deps, "PRO")).status, 502);
+  assert.ok(precio2.intentos() >= 1, "el contador sí cuenta el fallo del precio");
+  assert.equal(precio2.cambioAmbiguoMarcado(), false, "pero NO marca el paso del cambio");
+  // Mismo desajuste de plan (Stripe PRO / base BASIC) después de ese fallo: el GET ofrece y «Pagar» cobra.
+  const desajuste = montar({ suspendida: true, abiertas: MESES, planEnSuscripcion: "PRO", intentosPrevios: 2 }); // intentos previos, sin fallo del cambio
+  assert.equal((await consultarPendiente(desajuste.deps)).body.estado, "pendiente");
+  assert.equal((await pagarPendiente(desajuste.deps, 486.1)).body.pagado, true);
+
+  // 4xx del paso del cambio: Stripe dijo que NO lo hizo → no es ambiguo.
+  const cuatro = montar({ suspendida: true, abiertas: MESES, updateFallaAntes: 1 });
+  const rechazo4xx = Object.assign(new Error("invalid"), { type: "StripeInvalidRequestError", statusCode: 400 });
+  (cuatro.deps.stripe as any).subscriptions.update = async () => { throw rechazo4xx; };
+  assert.equal((await subirYPagar(cuatro.deps, "PRO")).status, 502);
+  assert.equal(cuatro.cambioAmbiguoMarcado(), false);
+  // 5xx / red / timeout sí lo son; 4xx y errores de tarjeta no.
+  assert.equal(esFalloAmbiguo(ERR_5XX()), true);
+  assert.equal(esFalloAmbiguo(Object.assign(new Error("x"), { type: "StripeConnectionError" })), true);
+  assert.equal(esFalloAmbiguo(new Error("sin tipo")), true);
+  assert.equal(esFalloAmbiguo(rechazo4xx), false);
+  assert.equal(esFalloAmbiguo(Object.assign(new Error("x"), { type: "StripeCardError", statusCode: 402 })), false);
+  assert.equal(esFalloAmbiguo(Object.assign(new Error("x"), { type: "StripeIdempotencyError", statusCode: 409 })), false);
+  // La marca la deja SOLO el paso del cambio.
+  const marca = montar({ updateFallaAntes: 1 });
+  await subirYPagar(marca.deps, "PRO");
+  assert.ok(marca.cambioAmbiguoMarcado());
+  assert.deepEqual(marca.ops("intentos.sumar")[0].args[0], { cambioAmbiguo: true });
+});
+
+test("AC3 (base) — sumar con fallo ambiguo del cambio marca la hora en OTRA fila; solo cuenta 15 min; los demás pasos no la tocan", async () => {
+  const b = baseDoble();
+  await sumarIntentoSubir("c1", { cambioAmbiguo: false }, b.db);
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 1, cambioReciente: false });
+  await sumarIntentoSubir("c1", { cambioAmbiguo: true }, b.db);
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, cambioReciente: true });
+  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 14 * 60_000);
+  assert.equal((await leerIntentosSubir("c1", b.db))!.cambioReciente, true);
+  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 2 * 60_000);
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, cambioReciente: false }, "pasados los 15 min ya no cuenta");
+  assert.equal(b.filas.size, 2, "dos filas por clínica (contador y marca del cambio), reutilizadas; nada se borra");
+  assert.ok(b.operaciones.every((o) => !/now\(\)(?! AT TIME ZONE)/.test(o)), "todo en UTC con la hora de la base");
+});
+
+test("AC4 — el bloqueo de V3c escribe su fila de bitácora SOLO en una acción (POST), no en cada GET", async () => {
+  const m = montar({ suspendida: true, abiertas: MESES, updateRespuestaPerdida: 1 });
+  await subirYPagar(m.deps, "PRO");
+  const filas = () => m.auditorias.filter((x) => x.event === "pago-pendiente-cambio-en-aplicacion").length;
+  for (let i = 0; i < 5; i++) assert.equal((await consultarPendiente(m.deps)).body.estado, "cambio_en_aplicacion");
+  assert.equal(filas(), 0, "5 lecturas: ninguna fila");
+  assert.equal((await pagarPendiente(m.deps, 486.1)).status, 409);
+  assert.equal(filas(), 1, "una acción: una fila");
+});
+
+test("AC5 — el contador se LEE y se SUMA con el MISMO criterio (1 a 9 dígitos; cualquier otra cosa vale 0): ni espacios, ni notación científica, ni desbordes", async () => {
+  const b = baseDoble();
+  for (const [valor, esperado] of [["3", 3], [" 3", 0], ["1e3", 0], ["99999999999", 0], ["", 0], ["abc", 0], ["-2", 0], ["000000005", 5], ["999999999", 999999999], ["2147483647", 0]] as const) {
+    b.filas.clear();
+    b.filas.set("subir-intento:c1", { invoiceId: "subir-intento:c1", clinicId: "c1", kind: "contador_subir", email: valor, createdAt: b.reloj.ahora });
+    assert.equal((await leerIntentosSubir("c1", b.db))!.intento, esperado, `leer «${valor}»`);
+    await sumarIntentoSubir("c1", {}, b.db);
+    assert.equal(b.filas.get("subir-intento:c1")!.email, String(esperado + 1), `sumar «${valor}» → lo mismo que leyó + 1`);
+  }
+  // Un solo criterio: el mismo CASE literal en la lectura y en la suma (no un regex distinto en cada lado).
+  const codigo = readFileSync(path.resolve(__dirname, "../candado-cobro.server.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const casos = codigo.match(/CASE WHEN "email" ~ '\^\[0-9\]\{1,9\}\$' THEN "email"::int ELSE 0 END/g) ?? [];
+  assert.equal(casos.length, 2, "lectura y suma usan el mismo CASE");
+  assert.doesNotMatch(codigo, /Number\(f\??\.email|Number\(f\.intento/);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──

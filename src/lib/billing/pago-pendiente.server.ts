@@ -42,6 +42,7 @@ import {
   claves,
   descuentosParaSubir,
   esErrorDeIdempotencia,
+  esFalloAmbiguo,
   idsDeDescuentos,
   idsDePromo,
   esPlanMasGrande,
@@ -138,8 +139,9 @@ export interface DepsPago {
    * `sumar` se llama después de un fallo de Stripe, para que el siguiente intento lleve una clave de idempotencia nueva.
    */
   intentos: {
-    leer: (clinicId: string) => Promise<{ intento: number; reciente: boolean } | null>;
-    sumar: (clinicId: string) => Promise<void>;
+    leer: (clinicId: string) => Promise<{ intento: number; cambioReciente: boolean } | null>;
+    /** `cambioAmbiguo`: el fallo fue un 5xx/red del paso del CAMBIO de plan (quizá Stripe sí lo aplicó): marca la hora (AC3). */
+    sumar: (clinicId: string, opciones?: { cambioAmbiguo?: boolean }) => Promise<void>;
   };
   /** Pausa entre intentos de tomar el candado (en producción, `setTimeout`; las pruebas la acortan). */
   esperar: (ms: number) => Promise<void>;
@@ -385,7 +387,7 @@ type Contexto =
  * `conRecuperacion` (GET y «subir»): sin factura abierta, busca la anulada por «subir» cuyo cambio quedó a
  * medias; si la hay, es un pendiente (hay que terminar el cambio) en vez de «sin pendiente».
  */
-async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecuperacion = false): Promise<Contexto | { ok: false; sinPendiente: true }> {
+async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecuperacion = false): Promise<Contexto | { ok: false; sinPendiente: true } | { ok: false; cambioEnAplicacion: true }> {
   const sinPendiente = soloLectura
     ? ({ ok: false, sinPendiente: true } as const)
     : ({ ok: false, respuesta: respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente }) } as const);
@@ -437,20 +439,23 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
   }
   const factura = facturaAbiertaMasReciente(facturas, clinica.stripeCustomerId);
   if (factura) {
-    // V3c: un «Subir» que falló DESPUÉS de que Stripe aplicó el cambio (la respuesta se perdió) deja la suscripción en el plan
-    // nuevo, el plan de la base sin tocar, y abiertas las renovaciones de los meses sin servicio (la regla de la suspensión
-    // no llegó a correr). Ofrecer pagar esa renovación sería cobrar un mes ya cubierto por el cambio. Ante la duda no se
-    // ofrece nada: se dice que se está terminando de aplicar el cambio. La evidencia es doble: el plan de Stripe no es el
-    // de la base Y hubo un fallo de «Subir» en las últimas 24 h (contador de NUESTRA base); un cambio de plan hecho a mano
-    // sin tocar Stripe no bloquea el pago.
+    // V3c: un «Subir» cuyo `subscriptions.update` falló con un 5xx/red PERO quizá sí se aplicó en Stripe deja la suscripción en el
+    // plan nuevo, el plan de la base sin tocar y abiertas las renovaciones de los meses sin servicio (la regla de la suspensión no
+    // llegó a correr). Ofrecer pagar esa renovación sería cobrar un mes ya cubierto por el cambio. Ante la duda no se ofrece
+    // nada, pero SOLO con la evidencia triple (AC3): el plan de Stripe no es el de la base, la renovación es de ciclo/alta, y
+    // hubo ese fallo ambiguo del paso del CAMBIO en los últimos 15 min (no del precio ni de otro paso, no hace 24 h). Un desajuste
+    // de plan sin relación (sedes que bloquean el plan, un cambio a mano) NUNCA deja a una clínica suspendida sin «Pagar».
     const subMovida = isPlanId(sub.metadata?.plan) && sub.metadata?.plan !== clinica.plan;
     const esRenovacion = factura.billing_reason === "subscription_cycle" || factura.billing_reason === "subscription_create";
     if (subMovida && esRenovacion) {
       const st = await deps.intentos.leer(clinica.id);
-      if (!st || st.reciente) {
-        await deps.auditar({ event: "pago-pendiente-cambio-en-aplicacion", facturaId: factura.id, planStripe: sub.metadata?.plan ?? null, planBase: clinica.plan }).catch(() => {});
+      if (!st || st.cambioReciente) {
+        // AC4: la fila de bitácora se escribe SOLO en una acción (POST), no en cada lectura (GET) mientras dure el bloqueo.
+        if (!soloLectura) {
+          await deps.auditar({ event: "pago-pendiente-cambio-en-aplicacion", facturaId: factura.id, planStripe: sub.metadata?.plan ?? null, planBase: clinica.plan }).catch(() => {});
+        }
         return soloLectura
-          ? { ok: false, sinPendiente: true }
+          ? { ok: false, cambioEnAplicacion: true }
           : { ok: false, respuesta: respuesta(409, { code: "CAMBIO_EN_APLICACION", error: MENSAJES.cambioEnAplicacion }) };
       }
     }
@@ -544,7 +549,13 @@ async function falloDeReglaInesperado(deps: DepsPago, accion: string, err: unkno
 
 export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   const ctx = await cargarPendiente(deps, true, true);
-  if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(200, { estado: "sin_pendiente" });
+  if (!ctx.ok) {
+    if ("respuesta" in ctx) return ctx.respuesta;
+    // AC3: se está terminando de aplicar un cambio de plan: el GET lo dice (la pantalla lo muestra y deja las otras formas de pago)
+    // en lugar de afirmar «no hay pago pendiente», que para esta clínica sería falso.
+    if ("cambioEnAplicacion" in ctx) return respuesta(200, { estado: "cambio_en_aplicacion", mensaje: MENSAJES.cambioEnAplicacion });
+    return respuesta(200, { estado: "sin_pendiente" });
+  }
   const deuda = ctx.factura ?? ctx.anulada?.factura;
   if (!deuda) return respuesta(200, { estado: "sin_pendiente" });
 
@@ -763,6 +774,11 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
   // La suscripción YA está en el plan destino (el update llegó a Stripe y solo faltó reflejarlo aquí): no se
   // anula ni se cambia nada, para no cobrar dos veces. Se refleja el plan y se devuelve el estado de la factura.
   if (ctx.factura && sub.metadata?.plan === destino) {
+    // Solo si la factura abierta es la DEL CAMBIO (`subscription_update`): si es la renovación de un mes sin servicio, darle
+    // su enlace sería mandar a pagar un mes ya cubierto por el cambio. Ante la duda no se ofrece nada.
+    if (ctx.factura.billing_reason === "subscription_cycle" || ctx.factura.billing_reason === "subscription_create") {
+      return respuesta(409, { code: "CAMBIO_EN_APLICACION", error: MENSAJES.cambioEnAplicacion });
+    }
     // Y17: la factura sigue ABIERTA (sin cobrar), así que el plan NO se refleja en la base todavía.
     await quitarDescuentoDelCliente(deps, stripe, sub, destino); // el cambio ya está hecho: no hay nada que reponer
     return resultadoDeFactura(ctx.factura);
@@ -868,7 +884,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
    * curso (otra pestaña la está usando) NO suma: ese intento sigue siendo el mismo.
    */
   const fallar = async (r: RespuestaPago, motivo: string, err?: unknown): Promise<RespuestaPago> => {
-    if (!esErrorDeIdempotencia(err)) await deps.intentos.sumar(clinicId);
+    if (!esErrorDeIdempotencia(err)) await deps.intentos.sumar(clinicId, { cambioAmbiguo: motivo === "cambiar-plan" && esFalloAmbiguo(err) });
     return reponerSiCorresponde(r, motivo, err);
   };
 
