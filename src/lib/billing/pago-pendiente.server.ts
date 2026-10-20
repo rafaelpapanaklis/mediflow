@@ -28,12 +28,11 @@ import {
   MONEDA_PAGO,
   anuladaRecuperable,
   MARCA,
-  aplicarDescuentos,
   armarMarca,
   claves,
-  descuentoSinValorar,
-  descuentosConservados,
   descuentosParaSubir,
+  idsDeDescuentos,
+  idsDePromo,
   esPlanMasGrande,
   facturaAbiertaMasReciente,
   facturaTienePromo,
@@ -108,17 +107,15 @@ export interface OpcionSubir {
 
 /**
  * Lo que costaría el plan nuevo hoy: precio de lista del plan en el intervalo de la suscripción
- * (nunca la promo del primer mes ni los precios conservados de la clínica), menos los cupones que la
- * suscripción conserva al subir (los descuenta Stripe antes del IVA), más el IVA que corresponde.
- * Así el «Vas a pagar $X» es lo que Stripe va a cobrar.
+ * (nunca la promo del primer mes, ni cupones, ni los precios conservados de la clínica: al subir se quitan
+ * todos los descuentos, decisión de Rafael) más el IVA que corresponde. Es lo que Stripe va a cobrar.
  */
 export function opcionDeSubida(args: {
   plan: PlanPricing & { id: PlanId };
   interval: BillingInterval;
   exencion: ExencionIva | null | undefined;
-  descuentos?: ReturnType<typeof descuentosConservados>;
 }): OpcionSubir {
-  const subtotalCents = aplicarDescuentos(planAmountCents(args.plan, args.interval), args.descuentos ?? []);
+  const subtotalCents = planAmountCents(args.plan, args.interval);
   const conIva = ivaAplica({ metodo: "card", plan: args.plan.id, exencion: args.exencion });
   const totalCents = conIva ? desgloseConIva(subtotalCents).totalCents : subtotalCents;
   return { plan: args.plan.id, nombre: args.plan.name, monto: totalCents / 100, ivaIncluido: conIva };
@@ -133,7 +130,8 @@ export interface ParamsSubir {
   metadata: Record<string, string>;
   expand: string[];
   automatic_tax?: NonNullable<IvaOk["sesion"]["automatic_tax"]>;
-  discounts?: "" | Array<{ discount: string }>;
+  /** `""` = quita todos los descuentos de la suscripción (al subir se paga el precio normal). */
+  discounts?: "";
 }
 
 /**
@@ -239,8 +237,8 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
 
   let sub: SuscripcionPago;
   try {
-    // `discounts` expandido: trae el cupón de cada descuento, que hace falta para el monto exacto de «subir».
-    sub = await stripe.subscriptions.retrieve(clinica.stripeSubscriptionId, { expand: ["items.data", "discounts"] });
+    // `discounts` y `customer` expandidos: se registra qué cupones se quitan y si el cliente trae uno propio.
+    sub = await stripe.subscriptions.retrieve(clinica.stripeSubscriptionId, { expand: ["items.data", "discounts", "customer"] });
   } catch (err) {
     if (codigoDe(err) === "resource_missing") return sinPendiente;
     return { ok: false, respuesta: await falloDeStripe(deps, "suscripcion", err) };
@@ -288,11 +286,10 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 
   const interval = subscriptionItemInterval(ctx.sub.items.data[0]);
   const exencion = await deps.exencionIva();
-  const descuentos = descuentosConservados(ctx.sub);
   const opciones: OpcionSubir[] = [];
   for (const id of planesMasGrandes(deps.clinica.plan)) {
     if (await deps.bloqueoDeSedes(id)) continue; // un plan que las sedes no admiten no se ofrece
-    opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion, descuentos }));
+    opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion }));
   }
   return respuesta(200, {
     estado: "pendiente",
@@ -469,7 +466,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     }
   }
 
-  const conservados = descuentosConservados(sub);
+  const cliente = typeof sub.customer === "object" ? sub.customer : null;
   await deps.auditar({
     event: "pago-pendiente-subir",
     planAntes: deps.clinica.plan,
@@ -478,9 +475,12 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     facturaAnuladaId: factura.id,
     facturaNuevaId: nuevaFactura?.id ?? null,
     subtotalMxn: cents / 100,
-    descuentosConservados: conservados.map((d) => d.id),
-    ...(descuentoSinValorar(conservados) ? { descuentoSinValorar: true } : {}),
-    montoEsperadoMxn: opcionDeSubida({ plan, interval, exencion, descuentos: conservados }).monto,
+    // Decisión de Rafael (#10): al subir se quitan TODOS los descuentos de la suscripción.
+    descuentosQuitados: idsDeDescuentos(sub),
+    promoQuitada: idsDePromo(sub),
+    // Un cupón puesto en el CLIENTE (no en la suscripción) sigue aplicando aunque se vacíen los de la suscripción.
+    ...(cliente?.discount ? { descuentoDelCliente: cliente.discount.id } : {}),
+    montoEsperadoMxn: opcionDeSubida({ plan, interval, exencion }).monto,
     ivaModo: iva.modo,
     montoCobradoMxn: nuevaFactura ? nuevaFactura.amount_due / 100 : null,
     pagado: nuevaFactura?.status === "paid",

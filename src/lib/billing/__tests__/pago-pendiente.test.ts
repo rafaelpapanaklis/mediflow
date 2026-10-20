@@ -12,11 +12,9 @@ import assert from "node:assert/strict";
 import {
   MENSAJES,
   PREFIJO_CUPON_PROMO,
-  aplicarDescuentos,
   claves,
-  descuentoSinValorar,
-  descuentosConservados,
   descuentosParaSubir,
+  idsDeDescuentos,
   parsearCuerpo,
   planesMasGrandes,
 } from "../pago-pendiente";
@@ -386,19 +384,12 @@ test("subir: el price nuevo es el de LISTA del plan (nunca la promo $19/$29/$39)
   assert.equal(pa.recurring.interval, "year");
 });
 
-test("subir: si la suscripción aún arrastra la promo del primer mes, se le quita SOLO esa", async () => {
+test("subir: si la suscripción aún arrastra la promo del primer mes, se le quita (junto con cualquier otro descuento: decisión de Rafael #10)", async () => {
   const promo = { id: "di_promo", coupon: { id: `${PREFIJO_CUPON_PROMO}iva-basic-39000` } };
   const m = montar({ descuento: promo });
   await subirYPagar(m.deps, "PRO");
   assert.equal(m.ops("subscriptions.update")[0].args[1].discounts, "");
-
-  // Un descuento que NO es la promo (otro cupón) se conserva.
-  assert.deepEqual(
-    descuentosParaSubir({ discount: promo, discounts: ["di_promo", "di_otro"] }),
-    [{ discount: "di_otro" }],
-  );
-  assert.equal(descuentosParaSubir({ discount: { id: "di_otro", coupon: { id: "REGALO" } }, discounts: ["di_otro"] }), undefined);
-  assert.equal(descuentosParaSubir({ discount: null, discounts: [] }), undefined);
+  assert.equal(descuentosParaSubir({ discount: promo, discounts: ["di_promo", "di_otro"] }), "");
 });
 
 test("el prefijo de la promo es el que usa ensureFirstMonthCoupon (si cambia, esto avisa)", async () => {
@@ -748,44 +739,73 @@ test("t4 #8: ningún error de Stripe llega a la clínica en inglés; el mensaje 
   assert.equal(rm.body.error, MENSAJES.stripeNoContesto);
 });
 
-// #10 — el «Vas a pagar $X» es lo que Stripe cobra.
-test("t4 #10: con un cupón conservado, el monto mostrado lo descuenta antes del IVA (porcentaje y monto fijo)", async () => {
-  const pct = montar({ descuento: { id: "di_pct", coupon: { id: "REGALO20", percent_off: 20 } } });
-  const g = await consultarPendiente(pct.deps);
-  // PRO: 689 − 20 % = 551.20 → +16 % = 639.39 (IVA sobre el subtotal ya descontado)
-  assert.equal((g.body.opcionesSubir as any[])[0].monto, 639.39);
-  // CLINIC: 1719 − 20 % = 1375.20 → 1595.23
-  assert.equal((g.body.opcionesSubir as any[])[1].monto, 1595.23);
+// #10 — DECISIÓN DE RAFAEL: al subir de plan se paga el precio normal, sin NINGÚN cupón.
+test("#10 (Rafael): suscripción con cupón del 20 % que sube → se quita el cupón, se cobra la lista completa + IVA y el monto mostrado coincide", async () => {
+  const cupon = { id: "di_pct", coupon: { id: "REGALO20", percent_off: 20 } };
+  const m = montar({ descuento: cupon });
 
-  const fijo = montar({ descuento: { id: "di_fijo", coupon: { id: "MENOS100", amount_off: 10000 } } });
-  const gf = await consultarPendiente(fijo.deps);
-  assert.equal((gf.body.opcionesSubir as any[])[0].monto, 683.24); // (689 − 100) × 1.16
-  assert.equal(descuentosParaSubir({ discount: { id: "di_fijo", coupon: { id: "MENOS100", amount_off: 10000 } }, discounts: ["di_fijo"] }), undefined);
-});
-
-test("t4 #10: la promo del primer mes NO se resta (se quita al subir); lo demás sí; un cupón vencido tampoco", async () => {
-  const promo = { id: "di_promo", coupon: { id: `${PREFIJO_CUPON_PROMO}iva-basic-39000`, amount_off: 36000 } };
-  const otro = { id: "di_otro", coupon: { id: "REGALO10", percent_off: 10 } };
-  const m = montar({ descuentos: [promo, otro] });
+  // El «Vas a pagar» NO resta el cupón: lista + IVA (PRO 689 → 799.24; CLINIC 1719 → 1994.04).
   const g = await consultarPendiente(m.deps);
-  assert.equal((g.body.opcionesSubir as any[])[0].monto, 719.32); // 689 − 10 % = 620.10 → ×1.16
-  await subirYPagar(m.deps, "PRO");
-  assert.deepEqual(m.ops("subscriptions.update")[0].args[1].discounts, [{ discount: "di_otro" }]); // se conserva solo ese
-  // Lo que se mostró es lo que se registra como esperado en la bitácora.
-  assert.equal(m.auditorias.at(-1).montoEsperadoMxn, 719.32);
-  assert.deepEqual(m.auditorias.at(-1).descuentosConservados, ["di_otro"]);
+  assert.deepEqual((g.body.opcionesSubir as any[]).map((o) => [o.plan, o.monto]), [["PRO", 799.24], ["CLINIC", 1994.04]]);
 
-  const vencido = montar({ descuento: { id: "di_viejo", end: Math.floor(Date.now() / 1000) - 3600, coupon: { id: "X", percent_off: 50 } } });
-  assert.equal(((await consultarPendiente(vencido.deps)).body.opcionesSubir as any[])[0].monto, 799.24); // sin descuento
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  const p = m.ops("subscriptions.update")[0].args[1];
+  assert.equal(p.discounts, ""); // el cupón ya no queda en la suscripción
+  assert.equal(m.ops("prices.create")[0].args[0].unit_amount, 68900); // precio de lista, sin descuento
+  // Lo mostrado es lo esperado y queda en la bitácora junto con lo que se quitó.
+  const a = m.auditorias.at(-1);
+  assert.equal(a.montoEsperadoMxn, 799.24);
+  assert.equal(a.montoEsperadoMxn, (g.body.opcionesSubir as any[])[0].monto);
+  assert.deepEqual(a.descuentosQuitados, ["di_pct"]);
+  assert.deepEqual(a.promoQuitada, []);
 });
 
-test("t4 #10: sin descuentos el monto sigue siendo lista + IVA; y un cupón sin datos se avisa en la bitácora", async () => {
-  assert.equal(((await consultarPendiente(montar().deps)).body.opcionesSubir as any[])[0].monto, 799.24);
-  const m = montar({ descuentos: [{ id: "di_raro" }] });
+test("#10 (Rafael): se quitan TODOS — la promo del primer mes, un cupón fijo y uno en porcentaje juntos; sin descuentos no se manda nada", async () => {
+  const promo = { id: "di_promo", coupon: { id: `${PREFIJO_CUPON_PROMO}iva-basic-39000`, amount_off: 36000 } };
+  const fijo = { id: "di_fijo", coupon: { id: "MENOS100", amount_off: 10000 } };
+  const pct = { id: "di_pct", coupon: { id: "REGALO10", percent_off: 10 } };
+  const m = montar({ descuentos: [promo, fijo, pct] });
+  assert.equal(((await consultarPendiente(m.deps)).body.opcionesSubir as any[])[0].monto, 799.24);
   await subirYPagar(m.deps, "PRO");
-  assert.equal(m.auditorias.at(-1).descuentoSinValorar, true);
-  assert.equal(descuentoSinValorar(descuentosConservados({ discount: null, discounts: ["di_x"] })), true);
-  assert.equal(aplicarDescuentos(68900, descuentosConservados({ discount: { id: "d", coupon: { id: "c", percent_off: 100 } }, discounts: [] })), 0);
+  assert.equal(m.ops("subscriptions.update")[0].args[1].discounts, "");
+  assert.deepEqual(m.auditorias.at(-1).descuentosQuitados.sort(), ["di_fijo", "di_pct", "di_promo"]);
+  assert.deepEqual(m.auditorias.at(-1).promoQuitada, ["di_promo"]);
+
+  const limpia = montar();
+  await subirYPagar(limpia.deps, "PRO");
+  assert.equal(limpia.ops("subscriptions.update")[0].args[1].discounts, undefined);
+  assert.equal(limpia.auditorias.at(-1).montoEsperadoMxn, 799.24);
+
+  // Cupón sin datos (id suelto) también se quita; funciones puras:
+  assert.equal(descuentosParaSubir({ discount: null, discounts: ["di_x"] }), "");
+  assert.equal(descuentosParaSubir({ discount: pct, discounts: [] }), "");
+  assert.equal(descuentosParaSubir({ discount: null, discounts: [] }), undefined);
+  assert.deepEqual(idsDeDescuentos({ discount: pct, discounts: ["di_pct", "di_otro"] }), ["di_pct", "di_otro"]);
+});
+
+test("#10 (Rafael): «Pagar mi plan» NO cambia — cobra la factura abierta tal cual, sin tocar los descuentos", async () => {
+  const m = montar({ descuento: { id: "di_pct", coupon: { id: "REGALO20", percent_off: 20 } } });
+  const r = await pagarPendiente(m.deps);
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.ops("invoices.pay").length, 1);
+  assert.equal(m.ops("subscriptions.update").length, 0);
+  assert.equal(m.ops("prices.create").length, 0);
+  assert.equal((await consultarPendiente(montar({ descuento: { id: "d", coupon: { id: "X", percent_off: 50 } } }).deps)).body.montoPendiente, 48.61);
+});
+
+test("#10 (Rafael): un cupón puesto en el CLIENTE (no en la suscripción) se avisa en la bitácora, porque seguiría aplicando", async () => {
+  const m = montar();
+  const retrieve = (m.deps.stripe as any).subscriptions.retrieve;
+  let pedido: any = null;
+  (m.deps.stripe as any).subscriptions.retrieve = async (...a: any[]) => {
+    pedido = a[1];
+    return { ...(await retrieve(...a)), customer: { id: "cus_1", discount: { id: "di_cliente" } } };
+  };
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, true);
+  assert.equal(m.auditorias.at(-1).descuentoDelCliente, "di_cliente");
+  assert.deepEqual(pedido, { expand: ["items.data", "discounts", "customer"] });
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──
