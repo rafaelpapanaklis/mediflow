@@ -2450,3 +2450,21 @@ test("Z21 si no se pudo leer la suscripción para decidir una factura de $0, se 
   assert.ok(r === 200 || r === 500);
   assert.equal(correosRenovacion.length, 0, "sin correo por $0");
 });
+
+
+test("factura pagada de un MÓDULO: se registra el cobro, y NO manda correo de plan ni comisión de afiliado ni reactiva el plan (comportamiento que fija webhook-facturas-de-modulo)", async () => {
+  conTarjetaRechazada();
+  Object.assign(clinica(), { affiliateId: "aff_1", affiliate: { commissionPct: 10, status: "APPROVED", payoutMode: "percent" } });
+  facturasVivas.set("in_modulo_pagada", { id: "in_modulo_pagada", status: "paid" });
+  const modulo = facturaPagada({
+    id: "in_modulo_pagada",
+    billing_reason: "subscription_cycle",
+    amount_paid: 49900,
+    parent: { subscription_details: { subscription: "sub_mod", metadata: { kind: "module-subscription", moduleKey: "orthodontics" } } },
+  });
+  assert.equal(await entregar(evento("invoice.paid", modulo)), 200, "corta antes del bloque de afiliados (que reventaría con este doble)");
+  assert.deepEqual(facturasRegistradas.map((f) => f.id), ["in_modulo_pagada"], "el cobro del módulo SÍ queda registrado");
+  assert.equal(correosRenovacion.length, 0, "sin correo de plan");
+  assert.equal(clinica().subscriptionStatus, "past_due", "y no reactiva el plan");
+  assert.equal(llamadasCiclo.length + llamadasAnular.length, 0);
+});

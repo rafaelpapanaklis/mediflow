@@ -59,7 +59,10 @@ test("cobro fallido de módulo: igual se registra, para que salga en «por cobra
 
 test("factura pagada de módulo: se registra el cobro y se corta ANTES de los correos de plan y de la comisión", () => {
   const cuerpo = caso("invoice.payment_succeeded");
-  const iRegistro = cuerpo.indexOf("recordStripeInvoice(invoice, clinic.id)");
+  // La llamada puede llevar más argumentos (p. ej. el método de la factura aparte del excedente de CFDI): lo que se fija es que
+  // se registre el cobro de ESTA clínica ANTES del corte, no la forma exacta de los argumentos. El comportamiento (la factura de
+  // módulo se registra y no manda correos ni comisión) además se ejecuta de verdad en `test:cobro-rechazado`.
+  const iRegistro = cuerpo.search(/await recordStripeInvoice\(invoice, clinic\.id\b/);
   const iCorte = cuerpo.search(/if \(\(await moduloDeFactura\(invoice\)\) !== null\) break;/);
   const iCorreoPlan = cuerpo.indexOf("sendPlanActivatedEmail(");
   const iRenovado = cuerpo.indexOf("sendPlanRenewedEmail(");
