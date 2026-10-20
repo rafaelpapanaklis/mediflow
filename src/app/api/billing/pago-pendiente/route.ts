@@ -49,6 +49,8 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
       id: true,
       name: true,
       plan: true,
+      subscriptionStatus: true,
+      trialEndsAt: true,
       createdAt: true,
       stripeCustomerId: true,
       stripeSubscriptionId: true,
@@ -64,6 +66,8 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
     clinica: {
       id: clinic.id,
       nombre: clinic.name,
+      subscriptionStatus: clinic.subscriptionStatus,
+      trialEndsAt: clinic.trialEndsAt,
       plan: clinic.plan,
       stripeCustomerId: clinic.stripeCustomerId,
       stripeSubscriptionId: clinic.stripeSubscriptionId,
@@ -100,6 +104,11 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
       }).catch(() => {});
     },
     avisoSedeIncluida,
+    // Candado por clínica de «subir»: failban (Upstash, o memoria de la instancia), con caducidad.
+    candado: {
+      tomar: async (clave, ttlSec, dueno) => (await import("@/lib/failban")).acquireLock(clave, ttlSec, dueno),
+      soltar: async (clave, dueno) => (await import("@/lib/failban")).releaseLock(clave, dueno),
+    },
     // Mismo buzón que el aviso de afiliados y el de SPEI: ADMIN_NOTIFY_EMAIL, o el general.
     avisarAlAdmin: async ({ asunto, lineas }) => {
       const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

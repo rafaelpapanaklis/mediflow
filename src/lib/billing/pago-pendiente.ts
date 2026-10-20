@@ -72,8 +72,10 @@ interface DescuentoStripe {
 export interface SuscripcionPago {
   id: string;
   status: string;
-  customer?: string | { id: string; discount?: { id: string; coupon?: { id?: string | null } | null; promotion_code?: string | { id: string } | null } | null } | null;
+  customer?: string | { id: string; discount?: { id: string; coupon?: { id?: string | null } | null; promotion_code?: string | { id: string } | null; start?: number | null; end?: number | null } | null } | null;
   metadata?: Record<string, string> | null;
+  /** Cobro en pausa (prepago de varios meses, o ciclo re-alineado tras una suspensión). */
+  pause_collection?: { behavior?: string | null; resumes_at?: number | null } | null;
   items: { data: Array<{ id: string; price?: { unit_amount?: number | null; recurring?: { interval?: string | null } | null } | null }> };
   /** API 2024-06-20: el descuento principal viene con su cupón. */
   discount?: DescuentoStripe | null;
@@ -85,11 +87,14 @@ export interface FacturaPago {
   id: string;
   status?: string | null;
   amount_due: number;
+  /** Total de la factura (después de descuentos, antes de saldo a favor). */
+  total?: number | null;
   currency?: string | null;
   hosted_invoice_url?: string | null;
   customer?: string | { id: string } | null;
   created?: number | null;
   attempt_count?: number | null;
+  status_transitions?: { paid_at?: number | null } | null;
   discount?: DescuentoStripe | null;
   metadata?: Record<string, string> | null;
 }
@@ -246,6 +251,12 @@ export function descuentosParaSubir(sub: Pick<SuscripcionPago, "discount" | "dis
   return idsDeDescuentos(sub).length > 0 ? "" : undefined;
 }
 
+/** ¿Stripe rechazó la petición por una clave de idempotencia en curso / con otros parámetros? */
+export function esErrorDeIdempotencia(err: unknown): boolean {
+  const e = err as { code?: string; type?: string; raw?: { code?: string; type?: string } } | null;
+  return (e?.code ?? e?.raw?.code) === "idempotency_error" || (e?.type ?? e?.raw?.type) === "StripeIdempotencyError";
+}
+
 export { subscriptionItemInterval };
 
 // ── Idempotencia ────────────────────────────────────────────────────────────
@@ -264,6 +275,7 @@ export const claves = {
   // La hora (`ts`) va en la clave porque es un PARÁMETRO de la llamada: la misma clave con otros parámetros
   // la rechaza Stripe (idempotency_error) durante 24 h.
   marcar: (clinicId: string, facturaId: string, plan: string, ts: number) => `pago-pendiente:marcar:${clinicId}:${facturaId}:${plan}:${ts}`,
+  candadoSubir: (clinicId: string) => `pago-pendiente:subir:${clinicId}`,
   reponerDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:reponer-descuento-cliente:${clinicId}:${descuentoId}`,
   quitarDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:quitar-descuento-cliente:${clinicId}:${descuentoId}`,
   anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
@@ -279,6 +291,9 @@ export const MENSAJES = {
   sinPermiso: "Solo el dueño o un administrador de la clínica puede pagar o cambiar el plan.",
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
   stripeNoContesto: MENSAJES_CHECKOUT.proveedorNoContesto,
+  cambioEnCurso: "Ya hay un cambio de plan en curso, espera unos segundos.",
+  pagadoPorAdelantado: "Tienes meses pagados por adelantado, así que no podemos cambiarte de plan desde aquí. Escríbenos a soporte y lo hacemos contigo.",
+  subidaSinCobro: "No pudimos completar el cobro del cambio de plan. Escríbenos a soporte y lo revisamos contigo.",
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
   pagosNoDisponibles: MENSAJES_CHECKOUT.pagosNoDisponibles,
