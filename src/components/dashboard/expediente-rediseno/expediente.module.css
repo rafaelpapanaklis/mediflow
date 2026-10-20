@@ -67,6 +67,14 @@
   color: var(--m2-texto);
 }
 
+/* Título junto a un botón con rótulo largo («Nuevo plan de tratamiento»):
+   con `min-width: 0` el título se encogía hasta partirse en tres líneas y el
+   botón le tapaba la última palabra (390 px). La base reserva su ancho, así
+   que cuando no caben los dos la acción baja de renglón. */
+.tituloConAccionAncha {
+  flex: 1 1 12rem;
+}
+
 .contador {
   display: inline-grid;
   place-items: center;

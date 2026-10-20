@@ -241,3 +241,24 @@ test("del odontograma salen los hallazgos por tratar, con sus caras juntas", () 
     assert.ok(catalogo.includes(`C("${m[1]}"`), `${m[1]} no existe en odontogram-v2/data.ts`);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A 390 px nada se encima (QA del push, ws1-t1)
+// ═══════════════════════════════════════════════════════════════════════════
+test("el título de la pestaña reserva su ancho y el botón largo baja de renglón", () => {
+  const pestana = leer("components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
+  assert.match(pestana, /className=\{`\$\{s\.titulo\} \$\{s\.tituloConAccionAncha\}`\}>\{t\("planTratamiento\.lista\.titulo"\)\}/);
+  const css = leer("components/dashboard/expediente-rediseno/expediente.module.css");
+  const regla = css.match(/\.tituloConAccionAncha\s*\{([^}]*)\}/)?.[1] ?? "";
+  // Una base en rem (no 0 ni auto): con `min-width: 0` sola, el título se encoge y el botón lo tapa.
+  assert.match(regla, /flex:\s*1\s+1\s+\d+(\.\d+)?rem/, "el título necesita una base de ancho");
+  assert.match(css, /\.cabecera\s*\{[^}]*flex-wrap:\s*wrap/, "la cabecera tiene que poder partirse");
+});
+
+test("en un teléfono los dientes y las caras del procedimiento van cada uno en su renglón", () => {
+  const css = archivosNuevos.find((a) => a.nombre === "plan.module.css")!.texto;
+  const movil = css.slice(css.indexOf("@media (max-width: 640px) {\n  .dosColumnas"));
+  const areas = movil.match(/\.renglon\s*\{[^}]*grid-template-areas:([^;]*);/)?.[1] ?? "";
+  assert.match(areas, /"dientes dientes dientes dientes"/);
+  assert.match(areas, /"caras caras caras caras"/);
+});

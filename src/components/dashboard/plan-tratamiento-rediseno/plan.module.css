@@ -710,6 +710,16 @@
   .dosColumnas,
   .dosColumnasAncha,
   .tresColumnas { grid-template-columns: minmax(0, 1fr); }
+
+  /* En un teléfono la columna de dientes quedaba en ~34 px y cortaba «16, 26»:
+     dientes y caras van cada uno en su renglón. */
+  .renglon {
+    grid-template-areas:
+      "fase proc proc quitar"
+      "dientes dientes dientes dientes"
+      "caras caras caras caras"
+      "cantidad precio importe importe";
+  }
 }
 
 /* Rótulo + micrófono de dictado en la misma línea. */
