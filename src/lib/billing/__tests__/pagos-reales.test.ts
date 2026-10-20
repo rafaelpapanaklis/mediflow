@@ -187,7 +187,7 @@ test("el webhook sigue leyendo la activación manual como rastro (no pasa por el
   assert.doesNotMatch(fn, /sinActivacionManual/);
   assert.match(fn, /METODOS_DE_PAGO_MANUAL_DEL_PLAN/);
   const a = sinComentarios(leer("src/app/api/admin/billing/route.ts"));
-  assert.match(a, /prisma\.subscriptionInvoice\.create\(\{[\s\S]*?amount: 0,[\s\S]*?status: "paid",[\s\S]*?method: metodo,/);
+  assert.match(a, /prisma\.subscriptionInvoice\.create\(\{[\s\S]*?amount: 0,[\s\S]*?status: "paid",[\s\S]*?method: METODO_ACTIVACION_ADMIN,/);
 });
 
 /* ── Vigilante: ninguna consulta nueva cuenta pagos sin el filtro ──────── */
@@ -210,44 +210,118 @@ function llamada(texto: string, desde: number): string {
   return texto.slice(desde);
 }
 
-// Consultas que NO cuentan ni suman pagos reales y por eso no llevan el filtro, con su razón.
-const PERMITIDAS: Array<{ archivo: string; marca: string; razon: string }> = [
-  { archivo: "src/app/api/webhooks/stripe/route.ts", marca: "METODOS_DE_PAGO_MANUAL_DEL_PLAN", razon: "el webhook la lee a propósito: es el rastro" },
-  { archivo: "src/lib/billing/iva-clinica.ts", marca: 'method: "stripe"', razon: "solo cobros de Stripe" },
-  { archivo: "src/app/api/cfdi/usage/route.ts", marca: "CFDI_OVERAGE_METHOD", razon: "adeudos de excedente de CFDI (pendientes)" },
-  { archivo: "src/app/admin/payments/page.tsx", marca: 'paidAt: { not: null }', razon: "lista de pagos recientes: se ve, rotulada" },
-  { archivo: "src/app/admin/payments/page.tsx", marca: "paidAt: null", razon: "lista de pagos sin cobrar" },
-  { archivo: "src/app/admin/payments/page.tsx", marca: 'status: "pending"', razon: "pendientes de verificar" },
-  { archivo: "src/app/api/admin/billing/route.ts", marca: 'orderBy: { createdAt: "desc" }, take: 50', razon: "lista de pagos recientes: se ve, rotulada" },
-  { archivo: "src/app/api/admin/billing/route.ts", marca: 'status: "pending"', razon: "transferencias pendientes" },
-  { archivo: "src/app/api/admin/subscriptions/route.ts", marca: "take:    100", razon: "lista de pagos del admin: se ve" },
-  { archivo: "src/app/admin/page.tsx", marca: 'status: "pending"', razon: "pendientes por verificar" },
+/** La función (o flecha con nombre) que contiene la posición: así una excepción es por FUNCIÓN, no por un trozo de texto. */
+function funcionQueContiene(texto: string, pos: number): string {
+  const decl = /(?:async\s+)?function\s+(\w+)|(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*(?::[^=]+)?=>/g;
+  let nombre = "?";
+  for (const m of texto.slice(0, pos).matchAll(decl)) nombre = m[1] ?? m[2];
+  return nombre;
+}
+
+/**
+ * Lecturas de `subscription_invoices` que NO cuentan ni suman pagos reales y por eso no llevan el filtro. Se reconocen
+ * por archivo + FUNCIÓN + cuántas hay como máximo: una consulta nueva en la misma función supera el tope y falla.
+ */
+const PERMITIDAS: Array<{ archivo: string; funcion: string; max: number; razon: string }> = [
+  { archivo: "src/lib/billing/record-stripe-invoice.ts", funcion: "recordStripeInvoice", max: 1, razon: "busca SU fila por referencia para escribirla" },
+  { archivo: "src/lib/billing/iva-clinica.ts", funcion: "tuvoSuscripcionDeTarjeta", max: 1, razon: "solo cobros de Stripe (method stripe)" },
+  { archivo: "src/app/admin/page.tsx", funcion: "renderAdminDashboard", max: 1, razon: "pagos PENDIENTES por verificar" },
+  { archivo: "src/app/admin/payments/page.tsx", funcion: "renderPaymentsPage", max: 3, razon: "listas de /admin › Pagos (recientes, sin cobrar, pendientes): se ven, rotuladas" },
+  { archivo: "src/app/admin/payments/[id]/cfdi/page.tsx", funcion: "CfdiPaymentPage", max: 1, razon: "una fila por id" },
+  { archivo: "src/app/api/webhooks/stripe/route.ts", funcion: "pagoManualCubre", max: 1, razon: "el webhook la lee a propósito: es el rastro" },
+  { archivo: "src/app/api/cfdi/usage/route.ts", funcion: "GET", max: 1, razon: "adeudos de excedente de CFDI (method cfdi_overage)" },
+  { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "GET", max: 1, razon: "lista de pagos del admin: se ve, rotulada" },
+  { archivo: "src/app/api/admin/billing/route.ts", funcion: "GET", max: 2, razon: "pagos recientes (se ven, rotulados) y transferencias pendientes" },
+  { archivo: "src/app/api/admin/billing/route.ts", funcion: "POST", max: 2, razon: "una fila por id (verificar / reembolsar)" },
+  { archivo: "src/app/api/admin/payments/[id]/cfdi/route.ts", funcion: "POST", max: 1, razon: "una fila por id (rechaza la activación manual con 400)" },
+  { archivo: "src/app/api/admin/payments/[id]/receipt/route.ts", funcion: "GET", max: 1, razon: "una fila por id" },
 ];
 
-test("vigilante: toda consulta que cuenta o suma subscription_invoices usa sinActivacionManual (o está en la lista de permitidas, con razón)", () => {
-  const consulta = /subscriptionInvoice\s*\.\s*(count|groupBy|aggregate|findMany|findFirst)\s*\(/g;
+// Cualquier lectura por el cliente de Prisma, con cualquier nombre de variable (prisma, tx, db, prismaAdmin…).
+const LECTURA = /\bsubscriptionInvoice\s*\.\s*(count|groupBy|aggregate|findMany|findFirst|findFirstOrThrow|findUnique|findUniqueOrThrow)\s*\(/g;
+
+test("vigilante: toda lectura de subscription_invoices por Prisma usa sinActivacionManual, o es una excepción de ESA función con su tope", () => {
   const sinFiltro: string[] = [];
+  const porFuncion = new Map<string, number>();
   let vistas = 0;
   for (const archivo of archivos(join(process.cwd(), "src"))) {
     const rel = archivo.slice(process.cwd().length + 1);
     const texto = sinComentarios(readFileSync(archivo, "utf8"));
-    for (const m of texto.matchAll(consulta)) {
+    for (const m of texto.matchAll(LECTURA)) {
       vistas++;
-      const abre = m.index! + m[0].length - 1;
-      const cuerpo = llamada(texto, abre);
+      const cuerpo = llamada(texto, m.index! + m[0].length - 1);
       if (cuerpo.includes("sinActivacionManual(")) continue;
-      if (PERMITIDAS.some((p) => p.archivo === rel && cuerpo.includes(p.marca))) continue;
-      sinFiltro.push(`${rel}: ${cuerpo.replace(/\s+/g, " ").slice(0, 110)}`);
+      const funcion = funcionQueContiene(texto, m.index!);
+      const clave = `${rel}::${funcion}`;
+      porFuncion.set(clave, (porFuncion.get(clave) ?? 0) + 1);
+      const permitida = PERMITIDAS.find((p) => p.archivo === rel && p.funcion === funcion);
+      if (!permitida || porFuncion.get(clave)! > permitida.max) {
+        sinFiltro.push(`${rel} · función ${funcion}: ${m[1]}(${cuerpo.replace(/\s+/g, " ").slice(1, 90)}…`);
+      }
     }
   }
-  assert.ok(vistas >= 20, `el vigilante debería ver las consultas (vio ${vistas})`);
-  assert.deepEqual(sinFiltro, [], "consultas sobre subscription_invoices sin pasar por pagos-reales");
-  // Y el SQL crudo.
-  const crudo = archivos(join(process.cwd(), "src")).filter((f) => /FROM subscription_invoices/.test(readFileSync(f, "utf8")));
-  for (const f of crudo) {
-    const t = sinComentarios(readFileSync(f, "utf8"));
-    const usos = t.match(/subscription_invoices s/g)?.length ?? 0;
-    const filtros = t.match(/\$\{SIN_ACTIVACION_MANUAL\}/g)?.length ?? 0;
-    assert.ok(usos > 0 && filtros >= usos, `${f}: ${usos} consultas, ${filtros} con filtro`);
+  assert.ok(vistas >= 25, `el vigilante debería ver las consultas (vio ${vistas})`);
+  assert.deepEqual(sinFiltro, [], "lecturas de subscription_invoices sin pasar por pagos-reales");
+  // Las excepciones no envejecen: cada una sigue existiendo (si se borra la consulta, se borra de la lista).
+  for (const p of PERMITIDAS) {
+    assert.ok((porFuncion.get(`${p.archivo}::${p.funcion}`) ?? 0) >= 1, `excepción huérfana: ${p.archivo} · ${p.funcion}`);
   }
+});
+
+test("vigilante: nadie lee los pagos por la RELACIÓN clinic.subscriptionInvoices (include / select / _count)", () => {
+  const usos: string[] = [];
+  for (const archivo of archivos(join(process.cwd(), "src"))) {
+    const texto = sinComentarios(readFileSync(archivo, "utf8"));
+    if (/\bsubscriptionInvoices\b/.test(texto)) usos.push(archivo.slice(process.cwd().length + 1));
+  }
+  assert.deepEqual(usos, [], "la relación no tiene el filtro: leer por ella cuenta la activación manual");
+});
+
+test("vigilante: todo SQL crudo sobre subscription_invoices (cualquier alias, con o sin comillas) lleva el filtro", () => {
+  const SQL = /\b(?:FROM|JOIN)\s+(?:"?public"?\s*\.\s*)?"?subscription_invoices"?(?:\s+(?:AS\s+)?"?(?!WHERE|ON|JOIN|LEFT|INNER|GROUP|ORDER|LIMIT|AND|OR|WHERE)(\w+)"?)?/gi;
+  const CUALQUIER_MENCION = /subscription_invoices/i;
+  const sinFiltro: string[] = [];
+  let consultas = 0;
+  for (const archivo of archivos(join(process.cwd(), "src"))) {
+    const rel = archivo.slice(process.cwd().length + 1);
+    const texto = sinComentarios(readFileSync(archivo, "utf8"));
+    if (!CUALQUIER_MENCION.test(texto)) continue;
+    const lecturas = [...texto.matchAll(SQL)];
+    consultas += lecturas.length;
+    const filtros = (texto.match(/\$\{SIN_ACTIVACION_MANUAL\}/g) ?? []).length;
+    // Solo la nombra (un texto de pantalla): vale mientras el archivo no arme SQL crudo con otra forma que el detector no entiende.
+    if (lecturas.length === 0) {
+      if (/\$(?:query|execute)Raw|Prisma\.sql|Prisma\.raw|\.unsafe\(/.test(texto)) sinFiltro.push(`${rel}: nombra subscription_invoices y arma SQL crudo, pero no es un FROM/JOIN reconocible`);
+    }
+    else if (filtros < lecturas.length) sinFiltro.push(`${rel}: ${lecturas.length} consultas, ${filtros} con filtro`);
+  }
+  assert.ok(consultas >= 6, `el vigilante debería ver el SQL del embudo (vio ${consultas})`);
+  assert.deepEqual(sinFiltro, []);
+  // El detector entiende alias, comillas y esquema (si no, un SQL futuro se le escaparía).
+  for (const ejemplo of [
+    'FROM subscription_invoices s WHERE', 'FROM "subscription_invoices" AS "si" WHERE', 'JOIN public.subscription_invoices x ON',
+    'FROM subscription_invoices\n WHERE', 'from  "public"."subscription_invoices"  inv',
+  ]) {
+    assert.equal([...ejemplo.matchAll(SQL)].length, 1, ejemplo);
+  }
+});
+
+test("vigilante: detecta lo que antes se le escapaba (relación, findUnique, otro alias, otro nombre de cliente)", () => {
+  const ejemplos = ["await tx.subscriptionInvoice.findUnique({ where: { id } })", "await db.subscriptionInvoice\n  .findFirst({ where: {} })", "prismaAdmin.subscriptionInvoice.findUniqueOrThrow({})"];
+  for (const e of ejemplos) assert.equal([...e.matchAll(LECTURA)].length, 1, e);
+  assert.equal(funcionQueContiene("export async function GET() {\n  await x.subscriptionInvoice.findMany(", 55), "GET");
+  assert.equal(funcionQueContiene("const leer = async (a) => {\n  y", 30), "leer");
+});
+
+test("N8 /admin › Pagos: el filtro «Pagados» no muestra las activaciones manuales (el resto de filtros sí las ven, rotuladas)", () => {
+  const c = sinComentarios(leer("src/app/admin/payments/payments-client.tsx"));
+  assert.match(c, /if \(filterStatus === "paid" && esActivacionManual\(p\)\) return false;/);
+  // El mismo criterio sobre filas de ejemplo: con «Pagados» solo quedan los cobros.
+  const lista = [
+    { id: "1", status: "paid", method: "stripe", amount: 689 },
+    { id: "2", status: "paid", method: "admin", amount: 0 },
+    { id: "3", status: "paid", method: "transfer", amount: 689 },
+  ];
+  const pagados = lista.filter((p) => !(p.status === "paid" && esActivacionManual(p)));
+  assert.deepEqual(pagados.map((p) => p.id), ["1", "3"]);
 });

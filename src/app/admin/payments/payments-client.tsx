@@ -167,6 +167,8 @@ export function PaymentsClient({
   const filteredPayments = useMemo(() => {
     return payments.filter((p: any) => {
       if (filterStatus !== "all" && p.status !== filterStatus) return false;
+      // «Pagados» son cobros: las activaciones manuales (fila de $0, rastro del webhook) no se mezclan ahí.
+      if (filterStatus === "paid" && esActivacionManual(p)) return false;
       if (filterMethod !== "all" && p.method !== filterMethod) return false;
       return true;
     });

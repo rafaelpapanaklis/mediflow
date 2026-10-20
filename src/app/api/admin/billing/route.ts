@@ -187,13 +187,14 @@ export async function POST(req: NextRequest) {
     const { monthlyPrice } = planToLimits(applyClinicOverrides(await getResolvedPlan(plan), current));
     // RASTRO PARA EL WEBHOOK DE STRIPE (revisión t4, #1): esta activación no dejaba ninguna fila, y si se hacía
     // durante la gracia de un cobro rechazado el siguiente reintento fallido de Stripe la volvía a suspender. Deja
-    // una fila de pago manual —pagada, de $0 (no se inventa un ingreso: aquí no se capturó ningún cobro), con
-    // `method` el que indique el admin (transfer, deposit, oxxo, paypal, cash) o «admin»— que el webhook lee
-    // (`pagoManualCubre`). Va en la MISMA transacción que la activación: o quedan las dos cosas o ninguna.
-    const metodo =
-      typeof method === "string" && (METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(method)
+    // una fila de pago manual que el webhook lee (`pagoManualCubre`): pagada, de $0 (no se inventa un ingreso: aquí
+    // no se captura ningún cobro) y SIEMPRE con `method = "admin"` —así los conteos y KPIs la reconocen y la
+    // excluyen (`pagos-reales`) sea cual sea el método—; el método de pago que indique el admin (transfer, deposit,
+    // oxxo, paypal, cash) va solo en las notas. Misma transacción que la activación: o quedan las dos cosas o ninguna.
+    const metodoIndicado =
+      typeof method === "string" && (METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(method) && method !== METODO_ACTIVACION_ADMIN
         ? method
-        : METODO_ACTIVACION_ADMIN;
+        : null;
     const ahora = new Date();
     await prisma.$transaction([
       prisma.clinic.update({
@@ -213,11 +214,11 @@ export async function POST(req: NextRequest) {
           amount: 0,
           currency: "MXN",
           status: "paid",
-          method: metodo,
+          method: METODO_ACTIVACION_ADMIN,
           periodStart: ahora,
           periodEnd: nextBilling,
           paidAt: ahora,
-          notes: "Activación manual desde /admin (sin cobro registrado)",
+          notes: `Activación manual desde /admin (sin cobro registrado)${metodoIndicado ? ` · Pago indicado: ${metodoIndicado}` : ""}`,
         },
       }),
     ]);
