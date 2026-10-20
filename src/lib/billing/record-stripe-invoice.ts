@@ -76,7 +76,8 @@ export async function recordStripeInvoice(
       if (outcome === "paid" && existing.status !== "paid") {
         await prisma.subscriptionInvoice.update({
           where: { reference },
-          data: { status: "paid", paidAt, amount },
+          // AA13: si ya se conoce el método (la factura aparte del excedente), también se corrige al pasar a pagada.
+          data: { status: "paid", paidAt, amount, ...(metodo ? { method: metodo } : {}) },
         });
         return { created: false, promoted: true };
       }

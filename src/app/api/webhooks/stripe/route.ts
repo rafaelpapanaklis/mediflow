@@ -600,7 +600,7 @@ export async function POST(req: NextRequest) {
             // Una factura que ya está ANULADA (la anulamos al cobrar a una clínica suspendida) y cuyo aviso de fallo llega
             // tarde NO es un cobro rechazado ni un adeudo: queda como «No cobrada: servicio suspendido».
             if (estadoVivoFactura === "void") await registrarComoNoCobrada(invoice, clinicId);
-            else await recordStripeInvoice(invoice, clinicId, "failed");
+            else await recordStripeInvoice(invoice, clinicId, "failed", invoice.metadata?.kind === CFDI_OVERAGE_APARTE_KIND ? CFDI_OVERAGE_METHOD : undefined);
           } catch (e) {
             console.error("[stripe webhook] no se pudo registrar el cobro fallido:", e);
           }

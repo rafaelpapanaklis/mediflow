@@ -74,7 +74,9 @@ export async function POST(req: NextRequest) {
       clinicId,
       amount:      parseFloat(amount),
       method,
-      reference,
+      // AA3: una referencia vacía o de solo espacios es `null`: `reference` es único y `""` chocaría consigo mismo (y bloquearía
+      // todos los pagos siguientes sin referencia de cualquier clínica).
+      reference: refNueva,
       periodStart: periodoReal.inicio,
       periodEnd:   periodoReal.fin,
       notes,

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { MENSAJE_PLAN_PREPAGADO, cobroPausado, estadoVisibleDeSuscripcion } from "@/lib/billing/cobro-rechazado";
+import { MENSAJE_PLAN_PREPAGADO, clinicaEstabaSuspendida, cobroPausado, estadoVisibleDeSuscripcion } from "@/lib/billing/cobro-rechazado";
 import { bloqueoDeSedesParaPlan, leerGrupoDePago, sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 import { z } from "zod";
@@ -122,6 +122,15 @@ export async function POST(req: NextRequest) {
   });
   if (!clinic) {
     return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  }
+
+  // AA1: una clínica suspendida o vencida solo puede pagar (o abrir un ticket / hablar con su manager): un cambio de plan con la
+  // tarjeta genera un prorrateo y no es la vía para reactivarla. Ante la duda no se calcula nada.
+  if (clinicaEstabaSuspendida(clinic)) {
+    return NextResponse.json(
+      { code: "PLAN_SUSPENDIDO", error: "Tu plan está suspendido por falta de pago. Para reactivarlo usa «Pagar mi plan» en la pantalla de pago; ahí también puedes elegir un plan más grande." },
+      { status: 409 },
+    );
   }
 
   if (clinic.plan === targetPlanId) {

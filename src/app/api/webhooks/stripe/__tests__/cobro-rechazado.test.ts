@@ -2435,8 +2435,9 @@ test("Z13/Z16/Z20 pantallas: «cobro de tarjeta» en vez de una fecha de 1969, e
   assert.match(lista, /f\.pagoManualEn \? `pagó a mano \$\{fechaHoraAdmin\(f\.pagoManualEn\) \?\? ""\}` : "cobro de tarjeta"/);
   assert.match(lista, /ciclo\?\.tipo === "movido" && data\.facturaTarjeta\?\.tipo === "nada"/);
   const aviso = readFileSync(path.join(RAIZ, "src/app/admin/payments/aviso-factura-tarjeta.tsx"), "utf8");
-  assert.match(aviso, /Listo: el siguiente cobro de la tarjeta ya cae donde termina lo pagado/);
+  assert.match(aviso, /el siguiente cobro de la tarjeta ya cae donde termina lo pagado/);
   assert.doesNotMatch(aviso, /No hay factura de tarjeta abierta que marcar/);
+  assert.match(aviso, /data\?\.facturaTarjeta\?\.mensaje \?\? "Stripe sigue sin contestar/, "Z14: muestra el texto verdadero del fallo");
   const tab = readFileSync(path.join(RAIZ, "src/components/dashboard/subscription-tab.tsx"), "utf8");
   assert.match(tab, /billingCtxListo/);
 });
@@ -2449,4 +2450,136 @@ test("Z21 si no se pudo leer la suscripción para decidir una factura de $0, se 
   const r = await entregar(evento("invoice.paid", facturaPagada({ id: "in_cero9", billing_reason: "subscription_cycle", amount_paid: 0 })));
   assert.ok(r === 200 || r === 500);
   assert.equal(correosRenovacion.length, 0, "sin correo por $0");
+});
+
+
+test("factura pagada de un MÓDULO: se registra el cobro, y NO manda correo de plan ni comisión de afiliado ni reactiva el plan (comportamiento que fija webhook-facturas-de-modulo)", async () => {
+  conTarjetaRechazada();
+  Object.assign(clinica(), { affiliateId: "aff_1", affiliate: { commissionPct: 10, status: "APPROVED", payoutMode: "percent" } });
+  facturasVivas.set("in_modulo_pagada", { id: "in_modulo_pagada", status: "paid" });
+  const modulo = facturaPagada({
+    id: "in_modulo_pagada",
+    billing_reason: "subscription_cycle",
+    amount_paid: 49900,
+    parent: { subscription_details: { subscription: "sub_mod", metadata: { kind: "module-subscription", moduleKey: "orthodontics" } } },
+  });
+  assert.equal(await entregar(evento("invoice.paid", modulo)), 200, "corta antes del bloque de afiliados (que reventaría con este doble)");
+  assert.deepEqual(facturasRegistradas.map((f) => f.id), ["in_modulo_pagada"], "el cobro del módulo SÍ queda registrado");
+  assert.equal(correosRenovacion.length, 0, "sin correo de plan");
+  assert.equal(clinica().subscriptionStatus, "past_due", "y no reactiva el plan");
+  assert.equal(llamadasCiclo.length + llamadasAnular.length, 0);
+});
+
+
+/* ── Decimocuarta vuelta de t4 (AA1–AA13) ───────────────────────────────────────────────────────────────────────────────── */
+
+test("AA1 esPeriodoCompleto: una línea de PRORRATEO nunca cuenta (aunque dure 30 o 335 días) ni un periodo que no empieza cuando se creó la factura; el ciclo nuevo de «Subir» sí", async () => {
+  const { esPeriodoCompleto } = await import("@/lib/billing/regla-cobro-tarjeta.server");
+  const ahora = aSegundos(Date.now());
+  const mensual: any = suscripcion("past_due", Date.now() + 10 * DIA);
+  const anual: any = suscripcion("past_due", Date.now() + 10 * DIA);
+  anual.items.data[0].price = { recurring: { interval: "year" } };
+  const factura = (lineas: any[]): any => ({ created: ahora, lines: { data: lineas } });
+  assert.equal(esPeriodoCompleto(factura([{ proration: true, period: { start: ahora, end: ahora + 30 * 86_400 } }]), mensual), false, "prorrateo mensual de 30 días");
+  assert.equal(esPeriodoCompleto(factura([{ parent: { subscription_item_details: { proration: true } }, period: { start: ahora, end: ahora + 335 * 86_400 } }]), anual), false, "prorrateo anual de 335 días (API nueva)");
+  assert.equal(esPeriodoCompleto(factura([{ period: { start: ahora - 5 * 86_400, end: ahora + 26 * 86_400 } }]), mensual), false, "empieza 5 días antes de la factura");
+  assert.equal(esPeriodoCompleto(factura([{ proration: true, period: { start: ahora, end: ahora + 30 * 86_400 } }, { period: { start: ahora, end: ahora + 31 * 86_400 } }]), mensual), true, "el cobro del ciclo nuevo sí, aunque venga acompañado de un crédito");
+  assert.equal(esPeriodoCompleto(factura([{ period: { start: ahora, end: ahora + 365 * 86_400 } }]), anual), true);
+});
+
+test("AA1 una suspendida con un prorrateo LARGO (28 días) pagado con tarjeta no recibe un periodo completo ni se anula nada; se reactiva con el periodo de Stripe", async () => {
+  suspendidaCuatroMeses();
+  facturasVivas.set("in_prorrateo_largo", { id: "in_prorrateo_largo", status: "paid" });
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 28 * DIA));
+  const pago = Date.now();
+  const largo = facturaPagada({
+    id: "in_prorrateo_largo",
+    billing_reason: "subscription_update",
+    amount_paid: 40000,
+    created: aSegundos(pago - 2 * DIA),
+    status_transitions: { finalized_at: aSegundos(pago - 2 * DIA), paid_at: aSegundos(pago) },
+    lines: { data: [{ metadata: {}, proration: true, period: { start: aSegundos(pago - 2 * DIA), end: aSegundos(pago + 28 * DIA) } }] },
+  });
+  assert.equal(await entregar(evento("invoice.paid", largo, pago)), 200);
+  assert.equal(llamadasCiclo.length, 0);
+  assert.equal(llamadasAnular.length, 0);
+  assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 4, "los meses suspendidos siguen visibles");
+});
+
+test("AA2 el reintento de una regla fallida solo anula facturas creadas HASTA el pago: una renovación posterior (otra deuda) NO se anula", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  const pago = Date.now();
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  facturasVivas.set(FACTURA, pagada);
+  stripeCicloFalla = true;
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 500);
+  stripeCicloFalla = false;
+  // Stripe renueva con el ciclo viejo DESPUÉS del pago y esa renovación se rechaza (queda abierta).
+  facturasDeLista.push(facturaDeMes("in_renov_tras_pago", 0, { created: aSegundos(pago + 2 * DIA), status_transitions: { finalized_at: aSegundos(pago + 2 * DIA) } }));
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 2 * DIA));
+  const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
+  assert.equal(re.success, true);
+  assert.equal(facturasDeLista.find((f) => f.id === "in_renov_tras_pago")!.status, "open", "la renovación posterior al pago NO se anula (no se regala ese mes)");
+  assert.ok(!llamadasAnular.some((l) => l.id === "in_renov_tras_pago"));
+});
+
+test("AA4 contra un periodo ya cobrado (active) nunca se recorta, ni 1 hora: el modo exacto no pone un trial_end antes de su fin; con past_due (periodo sin cobrar) sí se mueve", async () => {
+  const { realinearCiclo } = await import("@/lib/billing/reactivacion-tras-suspension.server");
+  const fin = new Date(Date.now() + 30 * DIA);
+  for (const delta of [-3 * 86_400_000, -2 * 86_400_000, -3_600_000]) {
+    // El periodo que Stripe ya cobró termina `-delta` DESPUÉS de lo pagado a mano.
+    const cobrado = suscripcion("active", fin.getTime() - delta);
+    suscripcionesVivas.set(SUB, cobrado);
+    llamadasCiclo.length = 0;
+    const r = await realinearCiclo(stripeDoble, cobrado as any, { pagadoEn: new Date(), finDeLoPagado: fin, exacto: true });
+    assert.equal(r.tipo, "no_aplica", `active, ${-delta / 3_600_000} h de diferencia`);
+    assert.equal(llamadasCiclo.length, 0);
+  }
+  // Un periodo SIN cobrar (past_due) que termina después: sí se mueve.
+  const sinCobrar = suscripcion("past_due", fin.getTime() + 2 * DIA);
+  suscripcionesVivas.set(SUB, sinCobrar);
+  const r2 = await realinearCiclo(stripeDoble, sinCobrar as any, { pagadoEn: new Date(), finDeLoPagado: fin, exacto: true });
+  assert.equal(r2.tipo, "hecho");
+  // Y el periodo cobrado que termina ANTES de lo pagado a mano (hay que mover) sigue moviéndose.
+  const corto = suscripcion("active", fin.getTime() - 5 * DIA);
+  suscripcionesVivas.set(SUB, corto);
+  llamadasCiclo.length = 0;
+  assert.equal((await realinearCiclo(stripeDoble, corto as any, { pagadoEn: new Date(), finDeLoPagado: fin, exacto: true })).tipo, "hecho");
+});
+
+test("AA3 «Registrar pago» guarda NULL cuando la referencia viene vacía o solo con espacios (nunca \"\", que choca con el índice único)", async () => {
+  suspendidaCuatroMeses();
+  const hoy = new Date();
+  const registrar = (reference: unknown, extra: Record<string, unknown> = {}) =>
+    POSTSubs(new NextRequestCtor("http://localhost/api/admin/subscriptions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clinicId: CLINIC, amount: 689, method: "deposit", reference, periodStart: hoy.toISOString(), periodEnd: mesesDesde(hoy.getTime(), 1).toISOString(), status: "paid", ...extra }),
+    }));
+  assert.equal((await registrar("   ")).status, 201);
+  assert.equal((await registrar("", { confirmarDuplicado: true })).status, 201);
+  assert.equal((await registrar(undefined, { confirmarDuplicado: true })).status, 201);
+  const filas = pagosDeSubscripcion.filter((p) => p.method === "deposit");
+  assert.equal(filas.length, 3);
+  for (const f of filas) assert.strictEqual(f.reference, null, "null, no \"\" ni \"   \"");
+  // Con referencia real se guarda recortada.
+  assert.equal((await registrar("  SPEI-1  ", { confirmarDuplicado: true })).status, 201);
+  assert.equal(pagosDeSubscripcion.at(-1)!.reference, "SPEI-1");
+});
+
+test("AA13 la factura aparte del excedente conserva el método del excedente también si primero se rechazó; AA12 «Activar» dentro de la gracia no dice «al corriente»", async () => {
+  conTarjetaRechazada();
+  facturasVivas.set("in_aparte_f", { id: "in_aparte_f", status: "open" });
+  const fallida = facturaFallida({ id: "in_aparte_f", billing_reason: "manual", metadata: { kind: "cfdi-overage-aparte" }, parent: null, subscription: null });
+  assert.equal(await entregar(evento("invoice.payment_failed", fallida)), 200);
+  assert.ok(facturasRegistradas.some((f) => f.id === "in_aparte_f" && f.metodo === "cfdi_overage"), "método del excedente desde el primer registro");
+  // AA12
+  conTarjetaRechazada(); // past_due con acceso por unas horas
+  const r = await llamarAdmin({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1 });
+  assert.equal(r.status, 409);
+  const d = (await r.json()) as any;
+  assert.match(d.error, /cobro rechazado y todavía está dentro de sus 24 horas de gracia/);
+  assert.doesNotMatch(d.error, /ya está al corriente/);
 });

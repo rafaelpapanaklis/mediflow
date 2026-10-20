@@ -318,7 +318,7 @@ export function PaymentsClient({
           clinicId: form.clinicId,
           amount: finalAmount,
           method: form.method,
-          reference: form.reference,
+          reference: form.reference.trim() || null,
           periodStart: form.periodStart,
           periodEnd: form.periodEnd,
           notes: notesWithCoupon,

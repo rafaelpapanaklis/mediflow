@@ -76,19 +76,24 @@ export function AvisoFacturaTarjeta({
       const data = (await res.json().catch(() => ({}))) as RespuestaMarcado & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "No se pudo reintentar");
       if (fallóElMarcadoDeLaFacturaTarjeta(data)) {
-        toast.error("Stripe sigue sin contestar. Vuelve a intentarlo en un momento o márcala a mano en Stripe.");
+        // Z14: el texto verdadero del fallo (p. ej. el de los cargos de otra suscripción), no un «Stripe sigue sin contestar» genérico.
+        toast.error(data?.facturaTarjeta?.mensaje ?? "Stripe sigue sin contestar. Vuelve a intentarlo en un momento o márcala a mano en Stripe.");
         return;
       }
       const t = data?.facturaTarjeta;
-      toast.success(
-        t?.ciclo?.tipo === "movido"
-          ? "Listo: el siguiente cobro de la tarjeta ya cae donde termina lo pagado"
-          : t?.tipo === "marcadas" && ((t.facturas ?? []).length > 0)
-            ? "Factura de tarjeta marcada como pagada"
-            : t?.tipo === "marcadas"
-              ? "Listo: se anularon las facturas de los meses sin servicio"
-              : "No hay nada por aplicar",
-      );
+      // AA12: se dice lo que pasó; con el ajuste apagado no se canta victoria.
+      if (t?.ciclo?.tipo === "apagado") {
+        toast("El ajuste automático del cobro está apagado: la tarjeta cobrará en su fecha anterior. Revísalo.", { icon: "⚠️", duration: 9000 });
+        return;
+      }
+      const marcadas = (t?.facturas ?? []).length;
+      const anuladas = (t?.anuladas ?? []).length;
+      const partes = [
+        marcadas > 0 ? "factura de tarjeta marcada como pagada" : null,
+        anuladas > 0 ? `${anuladas} ${anuladas === 1 ? "factura anulada" : "facturas anuladas"} de meses sin servicio` : null,
+        t?.ciclo?.tipo === "movido" ? "el siguiente cobro de la tarjeta ya cae donde termina lo pagado" : null,
+      ].filter(Boolean);
+      toast.success(partes.length > 0 ? `Listo: ${partes.join("; ")}` : "No hay nada por aplicar");
       onResuelto();
     } catch (e: any) {
       toast.error(e.message);
