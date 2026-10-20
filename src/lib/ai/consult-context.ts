@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { readCurrentEntries } from "@/lib/odontogram/snapshot";
 import { SURFACE_NAMES, COND_BY_ID } from "@/components/dashboard/odontogram-v2/data";
+import { fromServerSurface } from "@/components/dashboard/odontogram-v2/adapter";
 
 interface Args {
   patientId: string;
@@ -86,7 +87,8 @@ export async function buildConsultContext(args: Args): Promise<string> {
       const byTooth: Record<number, string[]> = {};
       entries.forEach((e) => {
         const cond = COND_BY_ID[e.conditionId]?.es ?? e.conditionId;
-        const surf = e.surface ? ` (${SURFACE_NAMES[e.surface as "M" | "D" | "V" | "L" | "O"]?.es ?? e.surface})` : "";
+        // la incisal de los anteriores se guarda como «O» (ws1-t11): se rotula «Incisal»
+        const surf = e.surface ? ` (${SURFACE_NAMES[fromServerSurface(e.toothNumber, e.surface) as "M" | "D" | "V" | "L" | "O" | "I"]?.es ?? e.surface})` : "";
         (byTooth[e.toothNumber] ||= []).push(`${cond}${surf}`);
       });
       Object.keys(byTooth)

@@ -7,10 +7,18 @@
    visible en la app es obligatorio: lo pinta Tooth3D en el escenario.
 
    Convenciones del material (LEEME.md de los modelos):
-   - Unidades en metros. Centrados en el origen. Eje Y = eje largo.
+   - Unidades en metros. Eje Y = eje largo.
    - Superiores con la corona hacia −Y, inferiores con la corona hacia +Y.
-   - Cara vestibular hacia +Z.
-   - Lado derecho del paciente (cuadrantes 1, 4, 5, 8) = espejo del izquierdo.
+   - Lado derecho del paciente (cuadrantes 1, 4, 5, 8) = espejo exacto en X
+     del izquierdo (medido: < 0.5 mm en los 26 pares).
+   - El LEEME dice «cara vestibular hacia +Z», y NO es verdad: los
+     permanentes conservan el marco de la ARCADA de la que se recortaron
+     (+X = izquierda del paciente, +Z = delante), así que la vestibular solo
+     mira a +Z en los incisivos; en caninos está girada ~30–45° y en
+     premolares y molares ~55–90°. Los temporales vienen alineados uno a uno,
+     cada uno a su manera (el 75, casi del revés). Tampoco vienen centrados
+     en la corona: la raíz palatina abierta de 64/65 desplaza el origen.
+     orientTooth() lo arregla al cargar (ver VESTIBULAR_DEG).
 
    Los .glb SÍ viajan en git, comprimidos (12.5 MB los 52; los originales
    de Dundee pesaban 94.5 MB y NO están en el repo): geometría con Draco
@@ -106,6 +114,67 @@ function evict() {
   }
 }
 
+/* Ángulo (grados) de la cara vestibular REAL de cada modelo izquierdo, medido
+   en el plano XZ desde +Z hacia +X. Medido sobre la malla el 19/20-oct-2026
+   (ws1-t11): raíces (palatina en superiores, mesial/distal en molares
+   inferiores), filas de cúspides vestibular/lingual y, en anteriores, el
+   borde incisal con el cíngulo/la fosa como lado lingual. Margen ~±10°.
+   El derecho es el espejo en X del izquierdo, así que usa −θ. */
+export const VESTIBULAR_DEG: Readonly<Record<number, number>> = {
+  // permanentes superiores (21–28) e inferiores (31–38)
+  21: 11, 22: 17, 23: 32, 24: 78, 25: 72, 26: 70, 27: 71, 28: 74,
+  31: 22, 32: 7, 33: 43, 34: 55, 35: 58, 36: 65, 37: 87, 38: 68,
+  // temporales superiores (61–65) e inferiores (71–75)
+  61: -4, 62: 5, 63: 1, 64: 10, 65: 10,
+  71: 5, 72: 20, 73: -12, 74: 0, 75: -148,
+};
+
+/** FDI del modelo izquierdo del que el diente es espejo (16→26, 44→34, 85→75). */
+export function leftModelFdi(fdi: number): number {
+  const q = Math.floor(fdi / 10);
+  const left: Record<number, number> = { 1: 2, 4: 3, 5: 6, 8: 7 };
+  return (left[q] ?? q) * 10 + (fdi % 10);
+}
+
+/** Giro en Y (radianes, convención de three) que lleva la vestibular real a +Z. */
+export function vestibularRotationY(meta: ToothMeta): number {
+  const rad = ((VESTIBULAR_DEG[leftModelFdi(meta.fdi)] ?? 0) * Math.PI) / 180;
+  // makeRotationY(a) lleva el ángulo φ (desde +Z hacia +X) a φ + a; en el
+  // derecho, espejo en X, la vestibular está en −θ
+  return meta.right ? rad : -rad;
+}
+
+/**
+ * Deja el diente como lo supone tooth3d-faces: vestibular hacia +Z (mesial
+ * hacia +X en los derechos y −X en los izquierdos) y la corona centrada en
+ * X/Z. Gira y traslada las geometrías en sitio; un giro y una traslación no
+ * invierten el sentido de los triángulos.
+ */
+export function orientTooth(geometries: THREE.BufferGeometry[], meta: ToothMeta, crownLen: number): void {
+  const rot = new THREE.Matrix4().makeRotationY(vestibularRotationY(meta));
+  geometries.forEach((g) => g.applyMatrix4(rot));
+  // centro de la corona (sin el 15 % del cuello, como en classifyFaces)
+  const tipSign = meta.upper ? -1 : 1;
+  let hTip = -Infinity;
+  geometries.forEach((g) => {
+    const p = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) hTip = Math.max(hTip, tipSign * p.getY(i));
+  });
+  const hMin = hTip - crownLen * 0.85;
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  geometries.forEach((g) => {
+    const p = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) {
+      if (tipSign * p.getY(i) < hMin) continue;
+      x0 = Math.min(x0, p.getX(i)); x1 = Math.max(x1, p.getX(i));
+      z0 = Math.min(z0, p.getZ(i)); z1 = Math.max(z1, p.getZ(i));
+    }
+  });
+  if (!Number.isFinite(x0)) return;
+  const move = new THREE.Matrix4().makeTranslation(-(x0 + x1) / 2, 0, -(z0 + z1) / 2);
+  geometries.forEach((g) => g.applyMatrix4(move));
+}
+
 function parseGltf(fdi: number, meta: ToothMeta, gltf: { scene: THREE.Group }): LoadedTooth {
   const geometries: THREE.BufferGeometry[] = [];
   const materials: THREE.Material[] = [];
@@ -129,7 +198,9 @@ function parseGltf(fdi: number, meta: ToothMeta, gltf: { scene: THREE.Group }): 
     materials.push(Array.isArray(m.material) ? m.material[0] : m.material);
   });
   if (!geometries.length) throw new Error(`modelo ${fdi} sin mallas`);
-  const faces = classifyFaces(geometries, meta, crownLengthMm(meta) / 1000);
+  const crownLen = crownLengthMm(meta) / 1000;
+  orientTooth(geometries, meta, crownLen);
+  const faces = classifyFaces(geometries, meta, crownLen);
   return { fdi, geometries, materials, faces };
 }
 

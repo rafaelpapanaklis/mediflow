@@ -46,6 +46,11 @@ const DeleteSchema = z.object({
   conditionId: CONDITION_ID.optional(),
 });
 
+/** Clave del candado de una fila de diente completo (pg_advisory_xact_lock(hashtext(clave))). */
+function candadoDiente(patientId: string, toothNumber: number, conditionId: string): string {
+  return `odontogram:${patientId}:${toothNumber}:${conditionId}`;
+}
+
 function jsonError(message: string, status: number, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...(extra ?? {}) }, { status });
 }
@@ -146,20 +151,27 @@ export async function PUT(req: NextRequest) {
     // Postgres trata NULL como distinto en UNIQUE; para condiciones de diente
     // completo (surface=null) hacemos el upsert manual por (tooth, conditionId).
     if (surface === null) {
-      const existing = await prisma.odontogramEntry.findFirst({
-        where: { patientId, toothNumber, surface: null, conditionId },
-        select: { id: true },
+      // Diente completo: la unique (patientId, toothNumber, surface, conditionId)
+      // NO cubre surface NULL en Postgres (dos NULL no chocan), así que el
+      // buscar-y-crear necesita su candado. Con el autoguardado, dos pestañas o
+      // un reintento de algo que sí llegó pueden mandar el mismo PUT a la vez.
+      const entry = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${candadoDiente(patientId, toothNumber, conditionId)}))`;
+        const existing = await tx.odontogramEntry.findFirst({
+          where: { patientId, toothNumber, surface: null, conditionId },
+          select: { id: true },
+        });
+        return existing
+          ? tx.odontogramEntry.update({
+              where: { id: existing.id },
+              data: { notes },
+              select: ENTRY_SELECT,
+            })
+          : tx.odontogramEntry.create({
+              data: { patientId, toothNumber, surface: null, conditionId, notes },
+              select: ENTRY_SELECT,
+            });
       });
-      const entry = existing
-        ? await prisma.odontogramEntry.update({
-            where: { id: existing.id },
-            data: { notes },
-            select: ENTRY_SELECT,
-          })
-        : await prisma.odontogramEntry.create({
-            data: { patientId, toothNumber, surface: null, conditionId, notes },
-            select: ENTRY_SELECT,
-          });
       await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
         toothNumber, surface: null, conditionId, notes,
       });

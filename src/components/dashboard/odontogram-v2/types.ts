@@ -205,7 +205,12 @@ export interface DetailPanelProps {
   onApply: OnApply;
   onClose: () => void;
   onClearTooth: () => void;
-  onNote: (txt: string) => void;
+  /** Nota firme (dictado): se guarda ya. Lleva el diente porque el panel puede haber cambiado de diente. */
+  onNote: (fdi: number, txt: string) => void;
+  /** Nota mientras se teclea: el odontograma vivo la guarda solo tras una pausa (autosave.ts). */
+  onNoteDraft: (fdi: number, txt: string) => void;
+  /** Salir del cuadro, cerrar el panel o cambiar de diente: lo tecleado se manda ya. */
+  onNoteFlush: (fdi: number) => void;
   onRemove: OnRemove;
   onPick: (id: string) => void;
 }

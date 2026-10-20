@@ -4,7 +4,9 @@
    OdontogramV2 — root component (ported from design jsx/app.jsx)
    - Top bar: dentition / numbering / language (ES-EN) toggles.
    - Global state: records (via adapter, NOT localStorage), brush, eraser, selected.
-   - apply / removeFinding: optimistic local update + PUT/DELETE through the adapter.
+   - apply / removeFinding: optimistic local update + escritura por la cola de
+     autoguardado (autosave.ts): sin botón «Guardar», con «Guardando… /
+     Guardado», reintento y aviso si falla — nunca revierte lo marcado.
    - Summary (teeth / findings), "Limpiar todo" (reset).
    - Renders OdoDefs + Odontogram + Legend + Palette + DetailPanel (the stubs).
    - WITHOUT the Tweaks panel and WITHOUT warm/dark variants.
@@ -20,6 +22,7 @@ import { EMPTY_RECORD } from "./types";
 import {
   fetchRecords, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
+import { SaveQueue, saveQueueFor, type SaveOp, type SaveStatus } from "./autosave";
 import { OdoDefs } from "./OdoDefs";
 import { Odontogram } from "./Odontogram";
 import { Palette } from "./Palette";
@@ -43,6 +46,53 @@ function toggleInArr(arr: string[], id: string) {
   const i = arr.indexOf(id);
   if (i >= 0) arr.splice(i, 1);
   else arr.push(id);
+}
+
+/** La escritura real de cada operación de la cola. */
+function sendOp(patientId: string, op: SaveOp, opts: { keepalive: boolean }): Promise<void> {
+  switch (op.kind) {
+    case "put": return putFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, opts);
+    case "delete": return deleteFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, opts);
+    case "note": return apiSetNote(patientId, op.toothNumber, op.text, opts);
+    case "reset": return resetOdontogram(patientId, opts);
+  }
+}
+
+/**
+ * Lee el odontograma del servidor y le pinta encima lo pendiente. Si mientras
+ * llegaba la respuesta la cola confirmó o encoló algo, esa lectura puede ser
+ * de ANTES de una escritura ya hecha (la marca «desaparecería»): se vuelve a
+ * pedir. Tras varios intentos con el doctor marcando sin parar, `force` decide
+ * si se usa igual (carga inicial: hace falta el resto de la boca) o se deja
+ * la pantalla como está (recarga al volver a la pestaña).
+ */
+async function fetchConsistent(patientId: string, queue: SaveQueue | null, force: boolean): Promise<Records | null> {
+  for (let i = 0; i < 4; i++) {
+    const v = queue?.getVersion();
+    const recs = await fetchRecords(patientId);
+    if (!queue) return recs;
+    if (queue.getVersion() === v || (force && i === 3)) return queue.overlay(recs);
+  }
+  return null;
+}
+
+/** «Guardando… / Guardado / sin conexión / no se guardó», discreto, junto al resumen. */
+function SaveIndicator({ status, lang, onRetry, onDiscard }: {
+  status: SaveStatus; lang: Lang; onRetry: () => void; onDiscard: () => void;
+}) {
+  const t = I18N[lang];
+  if (status.state === "idle") return null;
+  if (status.state === "saving") return <span className="odo-save odo-save-busy" role="status">{t.saving}</span>;
+  if (status.state === "saved") return <span className="odo-save odo-save-ok" role="status">✓ {t.saved}</span>;
+  const fatal = status.state === "error";
+  return (
+    <span className="odo-save odo-save-err" role="alert" title={status.error}>
+      {fatal ? t.saveFailed : t.saveRetrying}
+      {fatal && status.error ? <span className="odo-save-why">{status.error}</span> : null}
+      <button type="button" className="odo-save-btn" onClick={onRetry}>{t.saveRetry}</button>
+      {fatal && <button type="button" className="odo-save-btn" onClick={onDiscard}>{t.saveDiscard}</button>}
+    </span>
+  );
 }
 
 interface SegOption { v: string; l: string; }
@@ -74,6 +124,20 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   const [error, setError] = useState<string | null>(null);
   const t = I18N[lang];
 
+  // Cola de autoguardado del modo VIVO: una por paciente y por pestaña, que
+  // sobrevive a que este componente se desmonte con algo pendiente.
+  const queue: SaveQueue | null = controlled
+    ? null
+    : saveQueueFor(patientId, () => new SaveQueue({ send: (op, opts) => sendOp(patientId, op, opts) }));
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() => queue?.getStatus() ?? { state: "idle", pending: 0 });
+  useEffect(() => {
+    if (!queue) return;
+    setSaveStatus(queue.getStatus());
+    return queue.subscribe(setSaveStatus);
+  }, [queue]);
+
   // setRecords unificado: en controlado -> onChange (soporta updater funcional);
   // en vivo -> estado interno. ctrlRef lo mantiene estable (no rompe las deps).
   const ctrlRef = useRef({ controlled, value, onChange });
@@ -100,18 +164,58 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchRecords(patientId)
-      .then((recs) => { if (!cancelled) setInternalRecords(recs); })
+    // lo que aún no llegó al servidor se pinta encima: no se pierde al volver
+    fetchConsistent(patientId, queueRef.current, true)
+      .then((recs) => { if (!cancelled && recs) setInternalRecords(recs); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [patientId, controlled]);
 
-  // Re-sync from the server (recover from a failed optimistic mutation).
+  // Re-sync from the server (al descartar lo que no se pudo guardar, o al
+  // volver a la pestaña: otra pestaña pudo cambiar el odontograma).
   const resync = useCallback(() => {
     if (ctrlRef.current.controlled) return;
-    fetchRecords(patientId).then(setInternalRecords).catch(() => {});
+    fetchConsistent(patientId, queueRef.current, false)
+      .then((recs) => { if (recs) setInternalRecords(recs); })
+      .catch(() => {});
   }, [patientId]);
+
+  // Encola una escritura (solo en modo vivo; el controlado lo guarda el padre).
+  const save = useCallback((op: SaveOp) => { queueRef.current?.enqueue(op); }, []);
+
+  // Salir de la página / pestaña con algo pendiente.
+  useEffect(() => {
+    if (!queue) return;
+    // cerrar o recargar: aviso del navegador si queda algo sin confirmar
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      queue.flush();
+      if (!queue.hasPending()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    // la página se va de verdad: lo pendiente sale con keepalive
+    const onPageHide = () => queue.flushForUnload();
+    // cambiar de pestaña: lo tecleado se manda; al volver, se trae lo que
+    // otra pestaña haya cambiado (si aquí no queda nada pendiente)
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") queue.flush();
+      else if (!queue.hasPending()) resync();
+    };
+    const onOnline = () => queue.retryNow();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", onOnline);
+      // se desmonta (otra pestaña de la ficha): lo tecleado sale ya y la cola sigue sola
+      queue.flush();
+    };
+  }, [queue, resync]);
 
   const pickBrush = useCallback((id: string) => { setEraser(false); setBrush((b) => (b === id ? null : id)); }, []);
   const pickEraser = useCallback(() => { setBrush(null); setEraser((e) => !e); }, []);
@@ -126,13 +230,11 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
         const lk = String(letter);
         const ids = records[fdi]?.surfaces?.[lk] ?? [];
         setRecords((prev) => applyToRecords(prev, fdi, (r) => { delete r.surfaces[lk]; }));
-        if (live) ids.forEach((conditionId) =>
-          deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId }).catch(resync));
+        if (live) ids.forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: lk, conditionId }));
       } else {
         const ids = records[fdi]?.tooth ?? [];
         setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.tooth = []; }));
-        if (live) ids.forEach((conditionId) =>
-          deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
+        if (live) ids.forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: null, conditionId }));
       }
       return;
     }
@@ -157,13 +259,8 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       }
     }));
 
-    if (live) {
-      const op = present
-        ? deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush })
-        : putFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush });
-      op.catch(resync);
-    }
-  }, [brush, eraser, patientId, resync]);
+    if (live) save({ kind: present ? "delete" : "put", toothNumber: fdi, surface: lk, conditionId: brush });
+  }, [brush, eraser, save]);
 
   const removeFinding = useCallback((fdi: number, scope: RemoveScope, letter: string | undefined, condId: string) => {
     setRecords((prev) => applyToRecords(prev, fdi, (r) => {
@@ -177,38 +274,48 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
         if (i >= 0) r.tooth.splice(i, 1);
       }
     }));
-    if (!ctrlRef.current.controlled) deleteFinding({
-      patientId, toothNumber: fdi,
+    if (!ctrlRef.current.controlled) save({
+      kind: "delete", toothNumber: fdi,
       surface: scope === "surface" ? (letter ?? null) : null,
       conditionId: condId,
-    }).catch(resync);
-  }, [patientId, resync]);
+    });
+  }, [save]);
 
   const clearTooth = useCallback((fdi: number) => {
     const rec = records[fdi];
     setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.tooth = []; r.surfaces = {}; r.note = ""; }));
     if (!rec) return;
     if (!ctrlRef.current.controlled) {
-      (rec.tooth || []).forEach((conditionId) =>
-        deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
+      (rec.tooth || []).forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: null, conditionId }));
       Object.entries(rec.surfaces || {}).forEach(([letter, arr]) =>
-        arr.forEach((conditionId) =>
-          deleteFinding({ patientId, toothNumber: fdi, surface: letter, conditionId }).catch(resync)));
-      if (rec.note) apiSetNote(patientId, fdi, "").catch(resync);
+        arr.forEach((conditionId) => save({ kind: "delete", toothNumber: fdi, surface: letter, conditionId })));
+      if (rec.note) save({ kind: "note", toothNumber: fdi, text: "" });
     }
-  }, [records, patientId, resync]);
+  }, [records, save]);
 
+  // Nota firme (dictado): se guarda ya.
   const handleNote = useCallback((fdi: number, txt: string) => {
     setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.note = txt; }));
-    if (!ctrlRef.current.controlled) apiSetNote(patientId, fdi, txt).catch(resync);
-  }, [patientId, resync]);
+    if (!ctrlRef.current.controlled) save({ kind: "note", toothNumber: fdi, text: txt });
+  }, [save]);
+  // Nota mientras se teclea: se ve al momento y se guarda sola tras una pausa.
+  const handleNoteDraft = useCallback((fdi: number, txt: string) => {
+    setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.note = txt; }));
+    queueRef.current?.noteChanged(fdi, txt);
+  }, []);
+  const handleNoteFlush = useCallback((fdi: number) => { queueRef.current?.flushNote(fdi); }, []);
 
   const clearAll = () => {
     const ok = window.confirm(lang === "es" ? "¿Borrar todo el odontograma?" : "Clear the whole chart?");
     if (!ok) return;
     setRecords({});
     setSelected(null);
-    if (!ctrlRef.current.controlled) resetOdontogram(patientId).catch(resync);
+    if (!ctrlRef.current.controlled) save({ kind: "reset" });
+  };
+
+  const discardUnsaved = () => {
+    queueRef.current?.discard();
+    resync();
   };
 
   // summary counts
@@ -281,6 +388,9 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
                   <span><b>{findingCount}</b> {t.findings}</span>
                 </>
               )}
+              {queue && (
+                <SaveIndicator status={saveStatus} lang={lang} onRetry={() => queue.retryNow()} onDiscard={discardUnsaved} />
+              )}
               <button type="button" className="odo-clearall" onClick={clearAll}>{t.clearAll}</button>
             </div>
           </div>
@@ -325,7 +435,9 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
           onApply={apply}
           onClose={() => setSelected(null)}
           onClearTooth={() => clearTooth(selected)}
-          onNote={(txt) => handleNote(selected, txt)}
+          onNote={handleNote}
+          onNoteDraft={handleNoteDraft}
+          onNoteFlush={handleNoteFlush}
           onRemove={removeFinding}
           onPick={pickBrush}
         />

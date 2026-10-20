@@ -11,6 +11,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { fetchRecords, syncOdontogram } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
+import { mergeLiveOdontogram, changedTeeth } from "@/components/dashboard/odontogram-v2/merge-consulta";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useCodedDiagnoses } from "@/components/clinical/use-coded-diagnoses";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
@@ -59,27 +60,6 @@ async function fetchTodayAppointmentId(patientId: string): Promise<string | null
   } catch {
     return null;
   }
-}
-
-/** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
-function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
-  if (!rec) return false;
-  if ((rec.tooth?.length ?? 0) > 0 || (rec.note ?? "").trim()) return true;
-  return Object.values(rec.surfaces ?? {}).some(ids => ids.length > 0);
-}
-
-/**
- * Mezcla la precarga del odontograma vivo con lo ya marcado localmente: si el
- * doctor tocó dientes ANTES de que resolviera el fetch, esos dientes conservan
- * sus marcas y el resto toma el estado vivo del paciente.
- */
-function mergeLiveOdontogram(live: Records, local: Records, touched: boolean): Records {
-  if (!touched) return live;
-  const merged: Records = { ...live };
-  for (const [fdi, rec] of Object.entries(local)) {
-    if (toothRecordHasContent(rec)) merged[Number(fdi)] = rec;
-  }
-  return merged;
 }
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
@@ -210,6 +190,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   const [odoRetry, setOdoRetry] = useState(0);
   // true desde que el doctor toca el odontograma; la precarga no pisa sus marcas.
   const odoTouchedRef = useRef(false);
+  // Qué dientes tocó en esta consulta y cómo estaban al tocarlos: su cambio es
+  // lo que va al borrador local (ws1-t11) y lo que se aplica sobre el vivo.
+  const odoBasesRef = useRef<Map<number, ToothRecord>>(new Map());
+  const [odoTouchedCount, setOdoTouchedCount] = useState(0);
+  const odontogramRef = useRef(odontogram);
+  odontogramRef.current = odontogram;
   useEffect(() => {
     if (initialRecord) return; // edición: ya tenemos la foto guardada
     let cancelled = false;
@@ -217,7 +203,13 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     fetchRecords(patientId)
       .then(live => {
         if (cancelled) return;
-        setOdontogram(prev => mergeLiveOdontogram(live, prev, odoTouchedRef.current));
+        const merged = mergeLiveOdontogram(live, odontogramRef.current, odoTouchedRef.current, odoBasesRef.current);
+        // desde aquí el cambio del doctor se mide contra ESTE vivo: si luego
+        // alguien quita algo en el vivo, el borrador no lo resucita
+        odoBasesRef.current.forEach((_, fdi) => {
+          odoBasesRef.current.set(fdi, JSON.parse(JSON.stringify(live[fdi] ?? { surfaces: {}, tooth: [] })));
+        });
+        setOdontogram(merged);
         setOdoStatus("ready");
       })
       .catch(() => { if (!cancelled) setOdoStatus("error"); });
@@ -226,6 +218,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
   const handleOdontogramChange = useCallback((next: Records) => {
     odoTouchedRef.current = true;
+    changedTeeth(odontogramRef.current, next).forEach((fdi) => {
+      if (!odoBasesRef.current.has(fdi)) {
+        odoBasesRef.current.set(fdi, JSON.parse(JSON.stringify(odontogramRef.current[fdi] ?? { surfaces: {}, tooth: [] })));
+      }
+    });
+    setOdoTouchedCount(odoBasesRef.current.size);
     setOdontogram(next);
   }, []);
 
@@ -420,11 +418,16 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   //
   // Qué se guarda: lo que se TECLEA (SOAP, periodontal, oclusal, ATM, higiene,
   // radiografías, próxima visita), los signos vitales, la exploración física,
-  // el pronóstico y los procedimientos elegidos. El odontograma queda fuera a
-  // propósito: en una consulta nueva se precarga del estado vivo del paciente
-  // y al guardar se sincroniza
-  // REEMPLAZANDO su historial dental — restaurar ahí una foto a medias es la
-  // forma de borrarle el odontograma a alguien, y no vale la pena.
+  // el pronóstico, los procedimientos elegidos y —desde ws1-t11— los dientes
+  // del odontograma que el doctor TOCÓ en esta consulta (antes se perdían al
+  // cambiar de pestaña o recargar). NUNCA la foto entera: en una consulta nueva
+  // el odontograma se precarga del estado vivo del paciente y al guardar se
+  // sincroniza REEMPLAZANDO su historial dental, así que restaurar una foto a
+  // medias sería la forma de borrarle el odontograma a alguien. Lo que se
+  // restaura es el CAMBIO del doctor en esos dientes (cómo estaban al tocarlos
+  // y cómo los dejó), aplicado encima de la precarga fresca del vivo
+  // (mergeLiveOdontogram): el resto de la boca sale siempre del servidor, y si
+  // el diente cambió entretanto en la pestaña Odontograma, se combina.
   const draftKey = isEditing ? null : `dc:dental-draft:${patientId}`;
   const [draftRestored, setDraftRestored] = useState(false);
   // Hasta que no se intentó leer el borrador no se puede escribir: si no, el
@@ -470,6 +473,24 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           setPronostico(normalizePronostico(d.pronostico, PRONOSTICOS) as Pronostico);
         }
         if (Array.isArray(d.procs)) setSelectedProcs(d.procs);
+        if (d.odo && typeof d.odo === "object") {
+          // { [fdi]: { base, now } }: el cambio del doctor en cada diente tocado
+          const cambios = Object.entries(d.odo as Record<string, { base?: ToothRecord; now?: ToothRecord }>)
+            .map(([k, c]) => [Number(k), c] as const)
+            .filter(([n, c]) => Number.isInteger(n) && n >= 11 && n <= 85 && c && typeof c === "object");
+          if (cambios.length) {
+            odoTouchedRef.current = true;
+            const now: Records = {};
+            cambios.forEach(([n, c]) => {
+              odoBasesRef.current.set(n, c.base ?? { surfaces: {}, tooth: [] });
+              now[n] = c.now ?? { surfaces: {}, tooth: [] };
+            });
+            setOdoTouchedCount(odoBasesRef.current.size);
+            // tal como los dejó; cuando llegue la precarga del vivo, su cambio
+            // (de `base` a `now`) se aplica encima del vivo fresco, no la foto vieja
+            setOdontogram(prev => ({ ...prev, ...now }));
+          }
+        }
         setDraftRestored(true);
       }
     } catch {
@@ -486,12 +507,14 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       try {
         const hayAlgoQueGuardar =
           tieneContenido(form) || tieneContenido(vitals) || tieneContenido(exploracion) ||
-          !!pronostico || selectedProcs.length > 0;
+          !!pronostico || selectedProcs.length > 0 || odoBasesRef.current.size > 0;
+        const odo: Record<number, { base: ToothRecord; now: ToothRecord }> = {};
+        odoBasesRef.current.forEach((base, fdi) => { odo[fdi] = { base, now: odontogram[fdi] ?? { surfaces: {}, tooth: [] } }; });
         if (!hayAlgoQueGuardar) {
           window.sessionStorage.removeItem(draftKey);
         } else {
           window.sessionStorage.setItem(draftKey, JSON.stringify({
-            v: 1, savedAt: Date.now(), form, vitals, exploracion, pronostico, procs: selectedProcs,
+            v: 1, savedAt: Date.now(), form, vitals, exploracion, pronostico, procs: selectedProcs, odo,
           }));
         }
       } catch { /* sin almacenamiento: se sigue sin borrador */ }
@@ -499,7 +522,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     draftPendienteRef.current = escribir;
     const id = window.setTimeout(escribir, 700);
     return () => window.clearTimeout(id);
-  }, [draftKey, form, vitals, exploracion, pronostico, selectedProcs]);
+  }, [draftKey, form, vitals, exploracion, pronostico, selectedProcs, odontogram]);
   useEffect(() => () => draftPendienteRef.current?.(), []);
 
   /** Tira el borrador y deja el formulario como recién abierto. */
@@ -519,6 +542,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     setExploracion(exploracionVacia);
     setPronostico("");
     setSelectedProcs([]);
+    // el odontograma vuelve a lo que diga el vivo del paciente
+    odoTouchedRef.current = false;
+    odoBasesRef.current = new Map();
+    setOdoTouchedCount(0);
+    setOdontogram({});
+    setOdoRetry(k => k + 1);
     setDraftRestored(false);
   }
 
@@ -694,7 +723,12 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         // hacerlo tras una precarga fallida/incompleta borraría el historial dental.
         if (odoStatus === "ready") {
           try {
-            await syncOdontogram(patientId, odontogram);
+            // El vivo puede haber cambiado desde la precarga (pestaña
+            // Odontograma con autoguardado, otra pestaña): se relee y se le
+            // aplica el cambio del doctor en los dientes que tocó, en vez de
+            // reemplazarlo con la foto de cuando se abrió la consulta.
+            const vivo = await fetchRecords(patientId);
+            await syncOdontogram(patientId, mergeLiveOdontogram(vivo, odontogram, odoTouchedRef.current, odoBasesRef.current));
           } catch {
             toast.error("La consulta se guardó; el odontograma del paciente no se pudo actualizar.", { duration: 7000 });
           }
@@ -1019,6 +1053,15 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       <div style={{ width: "100%", overflowX: "auto", pointerEvents: isLocked ? "none" : undefined }} aria-disabled={isLocked}>
         <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} />
       </div>
+      {/* Autoguardado (ws1-t11): las marcas de la consulta no se pierden al
+          cambiar de pestaña ni al recargar; al odontograma del paciente pasan
+          con «Guardar consulta», como el resto de la nota. */}
+      {draftKey && odoTouchedCount > 0 && (
+        <div className="text-xs text-muted-foreground -mt-3" role="status">
+          ✓ Marcas guardadas en el borrador de esta consulta. Pasan al odontograma del paciente al pulsar
+          «{t("clinical.dentalForm.saveConsultation")}».
+        </div>
+      )}
 
       {/* PERIODONTAL */}
       <CardNew title={t("clinical.dentalForm.periodontalTitle")}>

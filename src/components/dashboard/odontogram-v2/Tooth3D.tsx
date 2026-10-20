@@ -106,7 +106,7 @@ function makeLabelSprite(text: string, color: string): THREE.Sprite {
  *  mesial ligeramente girado hacia delante. Con la corona hacia −Y
  *  (superiores) la inclinación va al revés que con la corona hacia +Y. */
 function homeRotation(meta: ToothMeta, real: boolean): { rotX: number; rotY: number } {
-  if (!real) return { rotX: -0.15, rotY: 0.5 };
+  if (!real) return { rotX: -0.15, rotY: -0.5 * mesialSign(meta) };
   return { rotX: meta.upper ? -0.45 : 0.45, rotY: -0.4 * mesialSign(meta) };
 }
 
@@ -361,11 +361,14 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
 
       const order = meta.center === "O" ? ["O", "M", "D", "V", "L"] : ["I", "M", "D", "V", "L"];
       const cy = 0.55, sx = tooth.userData.sx, sz = tooth.userData.sz;
+      // mismo convenio que el diente real (V = +Z): mesial hacia +X en los
+      // derechos y hacia −X en los izquierdos
+      const ms = mesialSign(meta);
       const placements: Record<string, { p: [number, number, number]; r: [number, number, number] }> = {
         O: { p: [0, tooth.userData.crownTop + 0.16, 0], r: [-Math.PI / 2, 0, 0] },
         I: { p: [0, tooth.userData.crownTop + 0.16, 0], r: [-Math.PI / 2, 0, 0] },
-        M: { p: [sx * 0.92 + 0.18, cy, 0], r: [0, Math.PI / 2, 0] },
-        D: { p: [-sx * 0.92 - 0.18, cy, 0], r: [0, -Math.PI / 2, 0] },
+        M: { p: [ms * (sx * 0.92 + 0.18), cy, 0], r: [0, (ms * Math.PI) / 2, 0] },
+        D: { p: [-ms * (sx * 0.92 + 0.18), cy, 0], r: [0, (-ms * Math.PI) / 2, 0] },
         V: { p: [0, cy, sz * 0.92 + 0.18], r: [0, 0, 0] },
         L: { p: [0, cy, -sz * 0.92 - 0.18], r: [0, Math.PI, 0] },
       };
@@ -385,7 +388,7 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
         const lab = makeLabelSprite(letter, labelColor);
         const lp: [number, number, number] = [pl.p[0], pl.p[1], pl.p[2]];
         const out = 0.34;
-        if (letter === "M") lp[0] += out; else if (letter === "D") lp[0] -= out;
+        if (letter === "M") lp[0] += ms * out; else if (letter === "D") lp[0] -= ms * out;
         else if (letter === "V") lp[2] += out; else if (letter === "L") lp[2] -= out;
         else lp[1] += out;
         lab.position.set(lp[0], lp[1], lp[2]);

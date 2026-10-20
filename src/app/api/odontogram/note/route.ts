@@ -101,26 +101,33 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ ok: true, note: null });
     }
 
-    const existing = await prisma.odontogramEntry.findFirst({
-      where: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION },
-      select: { id: true },
+    // La nota va en surface NULL, que la unique no cubre (en Postgres dos NULL
+    // no chocan): sin candado, dos guardados a la vez (autoguardado en dos
+    // pestañas, o un reintento) crearían dos notas del mismo diente. Misma
+    // clave que el PUT de diente completo de /api/odontogram.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${toothNumber}:${NOTE_CONDITION}`}))`;
+      const existing = await tx.odontogramEntry.findFirst({
+        where: { patientId, toothNumber, surface: null, conditionId: NOTE_CONDITION },
+        select: { id: true },
+      });
+      if (existing) {
+        await tx.odontogramEntry.update({
+          where: { id: existing.id },
+          data: { notes: note },
+        });
+      } else {
+        await tx.odontogramEntry.create({
+          data: {
+            patientId,
+            toothNumber,
+            surface: null,
+            conditionId: NOTE_CONDITION,
+            notes: note,
+          },
+        });
+      }
     });
-    if (existing) {
-      await prisma.odontogramEntry.update({
-        where: { id: existing.id },
-        data: { notes: note },
-      });
-    } else {
-      await prisma.odontogramEntry.create({
-        data: {
-          patientId,
-          toothNumber,
-          surface: null,
-          conditionId: NOTE_CONDITION,
-          notes: note,
-        },
-      });
-    }
     await anotarNota(req, dbUser, patientId, "Escribió una nota en un diente del odontograma", "update");
     return NextResponse.json({ ok: true, note });
   } catch (err) {

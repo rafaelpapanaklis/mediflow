@@ -6,6 +6,24 @@
    regardless of whether the extended fields are live yet.
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
+import { classify } from "./data";
+
+/* ---------- la cara incisal ----------
+   La pantalla llama «I» (Incisal) al centro de los anteriores y «O» al de los
+   posteriores; la base solo conoce M | D | V | L | O (el enum de la API y el
+   importador, que ya guarda «incisal» como «O»). Hasta ws1-t11 la «I» viajaba
+   tal cual: la API la rechazaba con 400 y el hallazgo incisal nunca se
+   guardaba (en vivo se revertía sin aviso; en «Guardar consulta» tumbaba la
+   sincronización entera). Se traduce aquí, en la frontera: la base sigue con
+   sus cinco letras y la pantalla con las suyas. */
+export function toServerSurface(surface: string | null | undefined): string | null {
+  if (surface == null) return null;
+  return surface === "I" ? "O" : surface;
+}
+export function fromServerSurface(toothNumber: number, surface: string | null): string | null {
+  if (surface === "O" && !classify(toothNumber).posterior) return "I";
+  return surface;
+}
 
 const BASE = "/api/odontogram";
 
@@ -36,6 +54,42 @@ async function safeJson<T>(res: Response): Promise<T | null> {
   }
 }
 
+/**
+ * Error de una escritura con el código HTTP (0 = no hubo respuesta: sin red,
+ * servidor caído, petición cortada). La cola de autoguardado lo usa para
+ * decidir si reintentar (0, 408, 429, 5xx) o parar y avisar (resto de 4xx:
+ * sin permiso, paciente no encontrado, datos inválidos).
+ */
+export class OdontogramHttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "OdontogramHttpError";
+    this.status = status;
+  }
+}
+
+/** Opciones de las escrituras. `keepalive` deja terminar la petición aunque la pestaña se cierre. */
+export interface WriteOptions { keepalive?: boolean }
+
+/** Una escritura que no responde en este tiempo se da por perdida y se reintenta (es idempotente). */
+const WRITE_TIMEOUT_MS = 20_000;
+
+async function send(url: string, init: RequestInit, opts: WriteOptions | undefined, fallback: string): Promise<void> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), WRITE_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, keepalive: !!opts?.keepalive, signal: ctl.signal });
+  } catch (e) {
+    const why = ctl.signal.aborted ? "sin respuesta del servidor" : e instanceof Error ? e.message : "";
+    throw new OdontogramHttpError(why ? `${fallback}: ${why}` : fallback, 0);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, fallback), res.status);
+}
+
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   const data = await safeJson<{ error?: string; reason?: string; hint?: string }>(res);
   if (data?.error) return data.hint ? `${data.error} — ${data.hint}` : data.error;
@@ -60,10 +114,11 @@ export function entriesToRecords(entries: OdontogramEntry[]): Records {
       rec.note = e.notes ?? "";
       continue;
     }
-    if (e.surface != null) {
-      if (!rec.surfaces[e.surface]) rec.surfaces[e.surface] = [];
-      if (!rec.surfaces[e.surface].includes(e.conditionId)) {
-        rec.surfaces[e.surface].push(e.conditionId);
+    const surface = fromServerSurface(fdi, e.surface);
+    if (surface != null) {
+      if (!rec.surfaces[surface]) rec.surfaces[surface] = [];
+      if (!rec.surfaces[surface].includes(e.conditionId)) {
+        rec.surfaces[surface].push(e.conditionId);
       }
     } else if (!rec.tooth.includes(e.conditionId)) {
       rec.tooth.push(e.conditionId);
@@ -103,20 +158,19 @@ export interface PutArgs {
   notes?: string | null;
 }
 
-/** Add / upsert a condition (or a note via NOTE_CONDITION_ID). */
-export async function putFinding(args: PutArgs): Promise<void> {
-  const res = await fetch(BASE, {
+/** Add / upsert a condition. Idempotente en el servidor: repetirla no duplica. */
+export async function putFinding(args: PutArgs, opts?: WriteOptions): Promise<void> {
+  await send(BASE, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       patientId: args.patientId,
       toothNumber: args.toothNumber,
-      surface: args.surface ?? null,
+      surface: toServerSurface(args.surface),
       conditionId: args.conditionId,
       notes: args.notes ?? null,
     }),
-  });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo guardar el hallazgo"));
+  }, opts, "No se pudo guardar el hallazgo");
 }
 
 export interface DeleteArgs {
@@ -126,19 +180,18 @@ export interface DeleteArgs {
   conditionId: string;
 }
 
-/** Remove a single condition (or a note via NOTE_CONDITION_ID). */
-export async function deleteFinding(args: DeleteArgs): Promise<void> {
-  const res = await fetch(BASE, {
+/** Remove a single condition. Borrar lo que ya no está no es error (deleted: 0). */
+export async function deleteFinding(args: DeleteArgs, opts?: WriteOptions): Promise<void> {
+  await send(BASE, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       patientId: args.patientId,
       toothNumber: args.toothNumber,
-      surface: args.surface ?? null,
+      surface: toServerSurface(args.surface),
       conditionId: args.conditionId,
     }),
-  });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo quitar el hallazgo"));
+  }, opts, "No se pudo quitar el hallazgo");
 }
 
 /**
@@ -146,19 +199,31 @@ export async function deleteFinding(args: DeleteArgs): Promise<void> {
  * PUT /api/odontogram/note — an empty / whitespace-only note clears it
  * (the API treats empty as a delete). The main PUT rejects "__note__".
  */
-export async function setNote(patientId: string, toothNumber: number, text: string): Promise<void> {
-  const res = await fetch(`${BASE}/note`, {
+export async function setNote(patientId: string, toothNumber: number, text: string, opts?: WriteOptions): Promise<void> {
+  await send(`${BASE}/note`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ patientId, toothNumber, note: text ?? "" }),
-  });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo guardar la nota"));
+  }, opts, "No se pudo guardar la nota");
 }
 
 /** Clear the entire chart for a patient (POST /api/odontogram/reset). */
-export async function resetOdontogram(patientId: string): Promise<void> {
-  const res = await fetch(`${BASE}/reset?patientId=${encodeURIComponent(patientId)}`, { method: "POST" });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo limpiar el odontograma"));
+export async function resetOdontogram(patientId: string, opts?: WriteOptions): Promise<void> {
+  await send(`${BASE}/reset?patientId=${encodeURIComponent(patientId)}`, { method: "POST" }, opts, "No se pudo limpiar el odontograma");
+}
+
+/** Las caras con la letra de la base (la «I» de los anteriores viaja como «O»). */
+export function recordsForServer(records: Records): Records {
+  const out: Records = {};
+  for (const [fdi, rec] of Object.entries(records)) {
+    const surfaces: Record<string, string[]> = {};
+    for (const [letter, ids] of Object.entries(rec.surfaces ?? {})) {
+      const key = toServerSurface(letter) as string;
+      surfaces[key] = [...new Set([...(surfaces[key] ?? []), ...ids])];
+    }
+    out[Number(fdi)] = { ...rec, surfaces };
+  }
+  return out;
 }
 
 /**
@@ -170,7 +235,7 @@ export async function syncOdontogram(patientId: string, records: Records): Promi
   const res = await fetch(`${BASE}/sync`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patientId, records }),
+    body: JSON.stringify({ patientId, records: recordsForServer(records) }),
   });
   if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo sincronizar el odontograma"));
 }

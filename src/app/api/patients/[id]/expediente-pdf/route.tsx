@@ -16,6 +16,7 @@ import {
   imageAspect,
 } from "@/lib/pdf/clinic-letterhead";
 import { COND_BY_ID, SURFACE_NAMES } from "@/components/dashboard/odontogram-v2/data";
+import { fromServerSurface } from "@/components/dashboard/odontogram-v2/adapter";
 import {
   PADECIMIENTOS,
   ALERGIAS,
@@ -477,7 +478,8 @@ export async function GET(req: NextRequest, props0: Params) {
     // hallazgo "Nota del diente" para que el texto no se pierda.
     .map((h) => ({
       diente: h.toothNumber,
-      cara: h.surface ? (SURFACE_NAMES[h.surface as keyof typeof SURFACE_NAMES]?.es ?? h.surface) : null,
+      // la base guarda la incisal de los anteriores como «O» (ws1-t11): se rotula «Incisal»
+      cara: h.surface ? (SURFACE_NAMES[fromServerSurface(h.toothNumber, h.surface) as keyof typeof SURFACE_NAMES]?.es ?? h.surface) : null,
       hallazgo:
         h.conditionId === "__note__"
           ? "Nota del diente"
