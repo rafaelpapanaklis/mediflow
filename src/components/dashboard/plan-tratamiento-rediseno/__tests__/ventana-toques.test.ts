@@ -33,7 +33,7 @@ const ODONTOGRAMA = {
   ],
 };
 
-interface Escenario { presentar: boolean; conFilas: boolean; idioma?: "es" | "en" }
+interface Escenario { presentar: boolean; conFilas: boolean; idioma?: "es" | "en"; precarga?: unknown; esperar?: string }
 
 async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, esc: Escenario, viewport: { width: number; height: number }) {
   const navegador = await chromium.launch();
@@ -41,14 +41,16 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
   const css = sinGlobal(readFileSync(join(CARPETA, "plan.module.css"), "utf8"))
     + sinGlobal(readFileSync("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.module.css", "utf8"));
   const posts: { url: string; cuerpo: any }[] = [];
+  const pedidas: string[] = [];
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <style>html,body{margin:0}body{font-family:system-ui,sans-serif}${css}</style></head>
-    <body><div id="raiz"></div><script>window.__IDIOMA__=${JSON.stringify(esc.idioma ?? "es")};window.__TOQUES__=0;
+    <body><div id="raiz"></div><script>window.__IDIOMA__=${JSON.stringify(esc.idioma ?? "es")};window.__PRECARGA__=${JSON.stringify(esc.precarga ?? null) === "null" ? "undefined" : JSON.stringify(esc.precarga)};window.__TOQUES__=0;
     document.addEventListener("pointerdown",()=>{window.__TOQUES__++},true);</script><script src="/paquete.js"></script></body></html>`;
   await pagina.route("**/*", async (ruta: any) => {
     const req = ruta.request();
     const url = new URL(req.url());
     const json = (status: number, cuerpo: unknown) => ruta.fulfill({ status, contentType: "application/json", body: JSON.stringify(cuerpo) });
+    pedidas.push(`${req.method()} ${url.pathname}`);
     if (url.pathname === "/") return ruta.fulfill({ status: 200, contentType: "text/html", body: html });
     if (url.pathname === "/paquete.js") return ruta.fulfill({ status: 200, contentType: "text/javascript", body: paquete });
     if (url.pathname === "/api/procedures") return json(200, TARIFARIO);
@@ -69,8 +71,8 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
   });
   await pagina.goto("http://plan.prueba/");
   // Esperar a que lleguen tarifario y odontograma: el último chip es la limpieza de toda la boca.
-  await pagina.waitForSelector('[data-chip="g:limpieza"]');
-  return { navegador, pagina, posts };
+  await pagina.waitForSelector(esc.esperar ?? '[data-chip="g:limpieza"]');
+  return { navegador, pagina, posts, pedidas };
 }
 
 const CHIPS = ["h:36:pulpitis", "h:16:caries", "h:18:ext_indicated", "h:26:caries", "g:limpieza"];
@@ -178,6 +180,49 @@ test("a 390 px: sin scroll horizontal, con el plan armado y los detalles abierto
     await pagina.locator("#plan-diagnostico").scrollIntoViewIfNeeded();
     if (process.env.CAPTURAS) await pagina.screenshot({ path: join(process.env.CAPTURAS, "ventana-390-detalles.png") });
     assert.deepEqual(await desborde(), { documento: 0, caja: 0, cuerpo: 0, fuera: [] });
+  } finally {
+    await navegador.close();
+  }
+});
+
+test("desde la Nueva consulta (P9): chips de ESA consulta, su diagnóstico y su pronóstico, sin releer nada", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const paquete = await empaquetar(`${CARPETA}/__tests__/arnes-ventana.tsx`);
+  const precarga = {
+    // Lo que el doctor marcó en la consulta y aún NO guardó: 11 con caries incisal y mesial, 36 con pulpitis.
+    entradas: [
+      { toothNumber: 11, surface: "O", conditionId: "caries" }, { toothNumber: 11, surface: "M", conditionId: "caries" },
+      { toothNumber: 36, surface: null, conditionId: "pulpitis" },
+    ],
+    diagnostico: "Pulpitis irreversible en 36; caries en 11.",
+    pronostico: "bueno",
+  };
+  const { navegador, pagina, pedidas, posts } = await abrir(chromium, paquete, { presentar: false, conFilas: true, precarga, esperar: '[data-chip="h:36:pulpitis"]' }, { width: 1440, height: 1000 });
+  try {
+    // Los chips son los de la consulta (no los del odontograma guardado: ahí no hay 11).
+    assert.deepEqual(await pagina.locator("[data-chip]").evaluateAll((els) => els.map((e) => e.getAttribute("data-chip"))), ["h:36:pulpitis", "h:11:caries"]);
+    // No se releyó el odontograma ni la última consulta.
+    assert.ok(!pedidas.some((p) => p.includes("/api/odontogram") || p.includes("/api/clinical")), pedidas.join(" | "));
+    await pagina.click('[data-chip="h:36:pulpitis"]');
+    await pagina.click('[data-chip="h:11:caries"]');
+    await pagina.click("[aria-controls='plan-detalles']");
+    assert.equal(await pagina.inputValue("#plan-diagnostico"), "Pulpitis irreversible en 36; caries en 11.");
+    // Pronóstico una sola vez: se enseña el de la consulta y no hay selector.
+    assert.equal(await pagina.$("#plan-pronostico"), null);
+    assert.equal((await pagina.textContent("[data-plan-pronostico-de-consulta]"))?.trim(), "Bueno");
+    if (process.env.CAPTURAS) {
+      await pagina.locator("#plan-diagnostico").scrollIntoViewIfNeeded();
+      await pagina.screenshot({ path: join(process.env.CAPTURAS, "consulta-armar-plan-1440.png") });
+    }
+    await pagina.click("[data-plan-guardar]");
+    await pagina.waitForFunction(() => (window as any).__GUARDADO__);
+    const cuerpo = posts[0].cuerpo;
+    assert.match(cuerpo.description, /Pronóstico: Bueno/);
+    assert.deepEqual(cuerpo.items.map((f: any) => [f.nombre, f.dientes.join(","), f.caras.join("")]), [
+      ["Endodoncia multirradicular", "36", ""],
+      ["Restauración resina 2 caras", "11", "MO"],
+    ]);
   } finally {
     await navegador.close();
   }

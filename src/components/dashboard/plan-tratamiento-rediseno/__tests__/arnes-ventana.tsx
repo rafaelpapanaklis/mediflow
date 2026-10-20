@@ -7,11 +7,15 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "react-hot-toast";
 import { I18nProvider } from "@/i18n/i18n-provider";
-import { VentanaNuevoPlan, type FormPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
+import { VentanaNuevoPlan, type FormPlan, type VentanaNuevoPlanProps } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
 import es from "@/i18n/dictionaries/es.json";
 import en from "@/i18n/dictionaries/en.json";
 
-const w = window as unknown as { __IDIOMA__?: "es" | "en"; __GUARDADO__?: unknown; __CERRADA__?: boolean };
+const w = window as unknown as {
+  __IDIOMA__?: "es" | "en"; __GUARDADO__?: unknown; __CERRADA__?: boolean;
+  /** Lo que pasaría la Nueva consulta (P9); sin él, la ventana como se abre desde la ficha. */
+  __PRECARGA__?: VentanaNuevoPlanProps["precarga"];
+};
 const idioma = w.__IDIOMA__ === "en" ? "en" : "es";
 
 function Ficha() {
@@ -27,6 +31,7 @@ function Ficha() {
       guardando={false}
       onCerrar={() => { w.__CERRADA__ = true; }}
       onGuardado={(plan) => { w.__GUARDADO__ = plan; }}
+      precarga={w.__PRECARGA__}
     />
   );
 }

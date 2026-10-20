@@ -930,3 +930,16 @@
       "cantidad precio importe importe";
   }
 }
+
+/* Pronóstico que ya puso la consulta (P9): se enseña, no se vuelve a pedir. */
+.valorFijo {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+  font-weight: 600;
+}

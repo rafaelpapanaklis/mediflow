@@ -66,6 +66,12 @@ export interface VentanaNuevoPlanProps {
   onCrear?: () => void;
   /** Al guardar, el plan que contestó la API. Sin él, la ventana refresca la página y se cierra. */
   onGuardado?: (plan: Record<string, unknown>) => void;
+  /**
+   * Lo que ya trae quien abre la ventana —la Nueva consulta, P9—: con ello no se vuelve a leer ni
+   * a pedir. `entradas`: el odontograma de ESA consulta (con lo marcado aún sin guardar);
+   * `diagnostico`: el de la consulta; `pronostico`: si la consulta ya lo tiene, no se pide otra vez.
+   */
+  precarga?: { entradas?: EntradaOdontograma[]; diagnostico?: string; pronostico?: Pronostico };
 }
 
 let contador = 0;
@@ -87,14 +93,23 @@ const renglonNuevo = (parcial: Partial<Renglon> = {}): Renglon => ({
 
 type Accion = "guardar" | "presentar";
 
-export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencias, guardando: guardandoPadre, onCerrar, onGuardado }: VentanaNuevoPlanProps) {
+export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencias, guardando: guardandoPadre, onCerrar, onGuardado, precarga }: VentanaNuevoPlanProps) {
   const t = useT();
   const idioma: "es" | "en" = useLocale() === "en" ? "en" : "es";
   const router = useRouter();
   const nombresDoctores = useMemo(() => etiquetasDeProfesionales(doctores), [doctores]);
-  const [plan, setPlan] = useState<PlanClinico>(PLAN_VACIO);
+  const [plan, setPlan] = useState<PlanClinico>(() => ({
+    ...PLAN_VACIO,
+    diagnostico: precarga?.diagnostico?.trim() ?? "",
+    pronostico: precarga?.pronostico ?? "",
+  }));
   const [tarifario, setTarifario] = useState<ProcedimientoTarifario[]>([]);
-  const [entradas, setEntradas] = useState<EntradaOdontograma[]>([]);
+  const [entradas, setEntradas] = useState<EntradaOdontograma[]>(() => precarga?.entradas ?? []);
+  // Lo que trae la consulta no se vuelve a leer: ni su odontograma ni su diagnóstico.
+  const odontogramaDeConsulta = precarga?.entradas !== undefined;
+  const diagnosticoDeConsulta = precarga?.diagnostico !== undefined;
+  // Pronóstico una sola vez (P9): si la consulta ya lo puso, aquí no se vuelve a pedir.
+  const pronosticoDeConsulta = !!precarga?.pronostico;
   const [selectorAbierto, setSelectorAbierto] = useState<string | null>(null);
   // ws1-t2 (F15): el renglón cuyo buscador del tarifario está abierto y la sugerencia marcada.
   const [buscando, setBuscando] = useState<string | null>(null);
@@ -118,12 +133,14 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (vivo && Array.isArray(d)) setTarifario(d); })
       .catch(() => {});
-    fetch(`/api/odontogram?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (vivo && d && Array.isArray(d.entries)) setEntradas(d.entries as EntradaOdontograma[]); })
-      .catch(() => {});
+    if (!odontogramaDeConsulta) {
+      fetch(`/api/odontogram?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (vivo && d && Array.isArray(d.entries)) setEntradas(d.entries as EntradaOdontograma[]); })
+        .catch(() => {});
+    }
     // El diagnóstico de la última consulta (sin `medicalRecord.view` la API dice 403 y no se precarga nada).
-    fetch(`/api/clinical?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
+    if (!diagnosticoDeConsulta) fetch(`/api/clinical?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         const ultima = Array.isArray(d) ? d.find((x) => typeof x?.assessment === "string" && x.assessment.trim()) : null;
@@ -134,6 +151,8 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
       .catch(() => {});
     presentarDisponible().then((ok) => { if (vivo) setPuedePresentar(ok); });
     return () => { vivo = false; };
+    // La precarga es la de cuando se abrió la ventana: no se relee si la consulta cambia detrás.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paciente.id]);
 
   // El nombre se llena solo mientras nadie lo escriba (la ficha lo deja vacío al abrir).
@@ -640,7 +659,11 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
             >
               <ChevronRight size={14} strokeWidth={2} aria-hidden className={detalles ? s.plegableAbierto : undefined} />
               <span>{t("planTratamiento.nuevo.detalles")}</span>
-              {!detalles && diagnosticoFecha && <span className={s.plegableNota}>{t("planTratamiento.nuevo.diagnosticoPrecargado")}</span>}
+              {!detalles && (diagnosticoFecha || (diagnosticoDeConsulta && plan.diagnostico.trim())) && (
+                <span className={s.plegableNota}>
+                  {t(diagnosticoDeConsulta ? "planTratamiento.nuevo.diagnosticoDeEstaConsulta" : "planTratamiento.nuevo.diagnosticoPrecargado")}
+                </span>
+              )}
             </button>
             {detalles && (
               <div id="plan-detalles" className={s.detalles}>
@@ -659,18 +682,29 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       onChange={(e) => { diagnosticoTocado.current = true; setPlan((p) => ({ ...p, diagnostico: e.target.value })); }}
                     />
                     {diagnosticoFecha && <span className={s.pistaLinea}>{t("planTratamiento.nuevo.diagnosticoDeConsulta", { fecha: diagnosticoFecha })}</span>}
+                    {diagnosticoDeConsulta && plan.diagnostico.trim() && <span className={s.pistaLinea}>{t("planTratamiento.nuevo.diagnosticoDeEstaConsultaPista")}</span>}
                   </div>
                   <div className={s.campo}>
-                    <label className={s.rotulo} htmlFor="plan-pronostico">{t("planTratamiento.texto.pronostico")}</label>
-                    <select
-                      id="plan-pronostico"
-                      className={s.entrada}
-                      value={plan.pronostico}
-                      onChange={(e) => setPlan((p) => ({ ...p, pronostico: e.target.value as Pronostico }))}
-                    >
-                      <option value="">{t("planTratamiento.pronostico.sinDefinir")}</option>
-                      {PRONOSTICOS.map((p) => <option key={p} value={p}>{t(PRONOSTICO_CLAVE[p])}</option>)}
-                    </select>
+                    {pronosticoDeConsulta && plan.pronostico ? (
+                      <>
+                        <span className={s.rotulo}>{t("planTratamiento.texto.pronostico")}</span>
+                        <span className={s.valorFijo} data-plan-pronostico-de-consulta>{t(PRONOSTICO_CLAVE[plan.pronostico])}</span>
+                        <span className={s.pistaLinea}>{t("planTratamiento.nuevo.pronosticoDeConsulta")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <label className={s.rotulo} htmlFor="plan-pronostico">{t("planTratamiento.texto.pronostico")}</label>
+                        <select
+                          id="plan-pronostico"
+                          className={s.entrada}
+                          value={plan.pronostico}
+                          onChange={(e) => setPlan((p) => ({ ...p, pronostico: e.target.value as Pronostico }))}
+                        >
+                          <option value="">{t("planTratamiento.pronostico.sinDefinir")}</option>
+                          {PRONOSTICOS.map((p) => <option key={p} value={p}>{t(PRONOSTICO_CLAVE[p])}</option>)}
+                        </select>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className={s.dosColumnas}>

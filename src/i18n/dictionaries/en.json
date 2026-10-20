@@ -493,6 +493,7 @@
       "resources": "Resources",
       "inventory": "Inventory",
       "procedures": "Procedures",
+      "treatments": "Treatment plans",
       "plantillas": "Templates",
       "clinic-layout": "My Visual Clinic",
       "before-after": "Before/After",
@@ -7092,6 +7093,9 @@
       "clinicalObservationsPlaceholder": "Diagnosis, clinical findings…",
       "futurePlanLabel": "Future treatment plan",
       "futurePlanPlaceholder": "Upcoming procedures to perform…",
+      "armarPlan": "Build the plan",
+      "armarPlanTitulo": "Opens the treatment plan with this visit's diagnosis, prognosis and findings",
+      "planCreado": "Plan “{nombre}” created: see it under Treatment plan. What you write here stays in the visit.",
       "xraysLabel": "X-rays taken",
       "xraysPlaceholder": "Panoramic X-ray, periapical #26…",
       "nextVisitLabel": "Recommended next appointment",
@@ -10742,7 +10746,10 @@
       "citasEstimadas": {"one": "~{count} appointment ({minutos} min chair time)", "other": "~{count} appointments ({minutos} min chair time)"},
       "todaLaBoca": "Mouth",
       "todaLaBocaTitulo": "Whole mouth: no teeth",
-      "procedimientosPistaRapida": "Tap a finding above, or type “comp…” and pick from the price list."
+      "procedimientosPistaRapida": "Tap a finding above, or type “comp…” and pick from the price list.",
+      "diagnosticoDeEstaConsulta": "Diagnosis from this visit",
+      "diagnosticoDeEstaConsultaPista": "Taken from this visit. You can change it for the plan.",
+      "pronosticoDeConsulta": "Taken from this visit: change it in the visit, not here."
     },
     "fase": {
       "urgencia": "Urgent care",

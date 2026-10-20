@@ -13,7 +13,7 @@
  */
 import {
   CARAS, MINUTOS_POR_DEFECTO, cantidadDe, leerDientes, precioDe, renglonesUtiles, sesionesSugeridas,
-  type Fase, type Hallazgo, type Renglon,
+  type EntradaOdontograma, type Fase, type Hallazgo, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import {
   PROCEDIMIENTOS, sugerenciaARenglon, sugerirPlan, sugerirProcedimiento,
@@ -169,6 +169,57 @@ export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: Contexto
     origen,
     hallazgo,
   }];
+}
+
+/* ─────── Desde la Nueva consulta (P9) ─────── */
+
+/** Un diente en el formato `Records` del odontograma (el de la consulta, con letras de pantalla). */
+type RegistroDiente = { surfaces?: Record<string, string[] | undefined>; tooth?: string[]; note?: string };
+
+/**
+ * El odontograma de una consulta (`Records`, lo que el doctor ve y marcó, aún sin guardar) como
+ * las entradas que leen los chips: caras de la base (la «I» de un anterior es la «O»), el diente
+ * completo con `surface: null`, sin la nota del diente.
+ */
+export function entradasDeRegistros(registros: Record<number | string, RegistroDiente | undefined>): EntradaOdontograma[] {
+  const out: EntradaOdontograma[] = [];
+  const vistas = new Set<string>();
+  const poner = (toothNumber: number, surface: string | null, conditionId: string) => {
+    const k = `${toothNumber}:${surface ?? "_"}:${conditionId}`;
+    if (vistas.has(k) || conditionId === "__note__") return;
+    vistas.add(k);
+    out.push({ toothNumber, surface, conditionId });
+  };
+  for (const [fdi, r] of Object.entries(registros)) {
+    const diente = Number(fdi);
+    if (!Number.isInteger(diente) || !r) continue;
+    for (const [letra, ids] of Object.entries(r.surfaces ?? {})) {
+      for (const id of ids ?? []) poner(diente, letra === "I" ? "O" : letra, id);
+    }
+    for (const id of r.tooth ?? []) poner(diente, null, id);
+  }
+  return out;
+}
+
+/**
+ * Lo que la Nueva consulta le pasa a la ventana (P9): diagnóstico = observaciones de la consulta
+ * más los CIE-10 si no están ya escritos; el pronóstico tal cual; y el odontograma de la consulta
+ * solo si la precarga del vivo llegó (sin ella está a medias y la ventana lee el del paciente).
+ */
+export function precargaDeConsulta(c: {
+  observaciones: string;
+  cie10: string;
+  pronostico: Pronostico;
+  odontograma: Record<number | string, RegistroDiente | undefined>;
+  odontogramaListo: boolean;
+}): { diagnostico: string; pronostico: Pronostico; entradas: EntradaOdontograma[] | undefined } {
+  const obs = c.observaciones.trim();
+  const cie = c.cie10.trim();
+  return {
+    diagnostico: [obs, cie && !obs.includes(cie) ? cie : ""].filter(Boolean).join("\n"),
+    pronostico: c.pronostico,
+    entradas: c.odontogramaListo ? entradasDeRegistros(c.odontograma) : undefined,
+  };
 }
 
 /* ─────── Lo que se llena solo ─────── */

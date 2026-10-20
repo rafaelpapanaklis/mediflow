@@ -183,6 +183,15 @@ export function totalProcedimientos(renglones: Renglon[]): number {
   return Math.round(renglonesUtiles(renglones).reduce((a, r) => a + importeRenglon(r), 0) * 100) / 100;
 }
 
+/**
+ * Sesiones HECHAS de un plan: las que tienen fecha de realizado (`completedAt`). Una sesión sin
+ * ella está agendada (planes importados, N8), no hecha: contar `sessions.length` decía «18/18»
+ * de un plan con 4 hechas. La usan el Resumen y la pestaña del plan de la ficha (ws1-t5, P10).
+ */
+export function sesionesHechas(sesiones: ReadonlyArray<{ completedAt?: unknown } | null | undefined> | null | undefined): number {
+  return (sesiones ?? []).filter((s) => !!s && !!s.completedAt).length;
+}
+
 /** Sin duración en el tarifario se supone una cita corta de sillón. */
 export const MINUTOS_POR_DEFECTO = 45;
 /** Lo que razonablemente se trabaja en una cita. */

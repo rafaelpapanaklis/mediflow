@@ -493,6 +493,7 @@
       "resources": "Recursos",
       "inventory": "Inventario",
       "procedures": "Procedimientos",
+      "treatments": "Planes de tratamiento",
       "plantillas": "Plantillas",
       "clinic-layout": "Mi Clínica Visual",
       "before-after": "Antes y Después",
@@ -7092,6 +7093,9 @@
       "clinicalObservationsPlaceholder": "Diagnóstico, hallazgos clínicos…",
       "futurePlanLabel": "Plan de tratamiento futuro",
       "futurePlanPlaceholder": "Próximos procedimientos a realizar…",
+      "armarPlan": "Armar el plan",
+      "armarPlanTitulo": "Abre el plan de tratamiento con el diagnóstico, el pronóstico y los hallazgos de esta consulta",
+      "planCreado": "Plan «{nombre}» creado: lo ves en Plan de tratamiento. Lo que escribas aquí se queda en la consulta.",
       "xraysLabel": "Radiografías tomadas",
       "xraysPlaceholder": "Rx panorámica, periapical #26…",
       "nextVisitLabel": "Próxima cita recomendada",
@@ -10742,7 +10746,10 @@
       "citasEstimadas": {"one": "~{count} cita ({minutos} min de sillón)", "other": "~{count} citas ({minutos} min de sillón)"},
       "todaLaBoca": "Boca",
       "todaLaBocaTitulo": "Toda la boca: sin dientes",
-      "procedimientosPistaRapida": "Toca un hallazgo de arriba o escribe «resi…» y elige del tarifario."
+      "procedimientosPistaRapida": "Toca un hallazgo de arriba o escribe «resi…» y elige del tarifario.",
+      "diagnosticoDeEstaConsulta": "Diagnóstico de esta consulta",
+      "diagnosticoDeEstaConsultaPista": "Tomado de esta consulta. Puedes cambiarlo para el plan.",
+      "pronosticoDeConsulta": "Tomado de esta consulta: se cambia en la consulta, no aquí."
     },
     "fase": {
       "urgencia": "Urgencia",

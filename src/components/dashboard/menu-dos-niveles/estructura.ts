@@ -65,7 +65,8 @@ export const GRUPOS: readonly { id: GrupoId; ids: readonly string[] }[] = [
   { id: "dinero", ids: ["finanzas", "analytics", "saldo-ia", "reports"] },
   {
     id: "clinica",
-    ids: ["team", "resources", "inventory", "procedures", "plantillas", "clinic-layout", "before-after", "formulas", "exercises", "orthotics"],
+    // «Planes de tratamiento» junto a Procedimientos (ws1-t5, P10): el seguimiento de todos los planes.
+    ids: ["team", "resources", "inventory", "procedures", "treatments", "plantillas", "clinic-layout", "before-after", "formulas", "exercises", "orthotics"],
   },
   { id: "pacientes", ids: ["landing", "resenas", "tv-modes", "messages"] },
   { id: "sistema", ids: ["settings", "auditoria", "soporte"] },
@@ -91,6 +92,7 @@ export const ICONO_DE: Readonly<Record<string, string>> = {
   resources: "chair",
   inventory: "inventory_2",
   procedures: "dentistry",
+  treatments: "folder", // en la fuente recortada; «checklist» o «medical_information» pedirían rehacerla
   plantillas: "assignment",
   "clinic-layout": "map",
   "before-after": "compare",

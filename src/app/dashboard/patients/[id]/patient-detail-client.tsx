@@ -63,6 +63,7 @@ import {
 import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashboard/expediente-rediseno/odontograma";
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
+import { sesionesHechas } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
 import { DescargarPlanPdf } from "@/components/dashboard/plan-a-pdf/descargar-pdf";
 import { ConvertirEnPresupuesto } from "@/components/dashboard/plan-a-presupuesto/convertir-en-presupuesto";
@@ -964,6 +965,19 @@ export function PatientDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showNewTreatment, doctors]);
   const etiquetasDoctoresPlan = useMemo(() => etiquetasDeProfesionales(doctors ?? []), [doctors]);
+
+  // P9 (ws1-t5): «Armar el plan» desde la Nueva consulta del rediseño, solo con permiso de crear
+  // planes. El plan guardado sale ya en su pestaña, sin refrescar: la consulta sigue abierta.
+  const armarPlanConsulta = useMemo(() => (canEditTreatments ? {
+    paciente: { id: patient.id, nombre: `${patient.firstName} ${patient.lastName}`, esNino: !!patient.isChild },
+    doctores: doctors ?? [],
+    doctorId: doctorParaNuevoPlan(appointments, {
+      ahora: new Date(),
+      usuarioId: currentUser.id,
+      doctorIds: (doctors ?? []).map((d) => d.id),
+    }),
+    onGuardado: (plan: Record<string, unknown>) => setPlanesRecienCreados((prev) => agregarRecienCreado(prev, { sessions: [], ...plan })),
+  } : undefined), [canEditTreatments, patient.id, patient.firstName, patient.lastName, patient.isChild, doctors, appointments, currentUser.id]);
 
   const [viewPlan, setViewPlan] = useState<any | null>(null);
   const [editPlan, setEditPlan] = useState<any | null>(null);
@@ -2284,7 +2298,8 @@ export function PatientDetailClient({
                 {(() => {
                   const activePlan = treatments.find((p: any) => p.status === "ACTIVE");
                   if (!activePlan) return null;
-                  const done = activePlan.sessions?.length ?? 0;
+                  // P10 (ws1-t5): sesiones HECHAS, no creadas — la misma cuenta que la pestaña del plan.
+                  const done = sesionesHechas(activePlan.sessions);
                   const pctPlan = activePlan.totalSessions > 0 ? Math.round((done / activePlan.totalSessions) * 100) : 0;
                   return (
                     <div className="mt-3 pt-3 border-t border-[var(--border-soft)]">
@@ -2561,7 +2576,7 @@ export function PatientDetailClient({
               onIrACuestionario={() => setTab("cuestionario")}
               formulario={
                 <>
-                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} citaEnCursoId={activeAppointment?.id ?? null} rediseno />}
+                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} citaEnCursoId={activeAppointment?.id ?? null} rediseno armarPlan={armarPlanConsulta} />}
                   {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -2760,10 +2775,9 @@ export function PatientDetailClient({
             // completedAt null = agendada, no hecha. Contar sessions.length a
             // secas cuenta las creadas, no las hechas: un plan de 18 sesiones
             // creadas de una vez con 4 hechas decía "18/18" y "0 pendientes".
-            // Detrás de la bandera para que una clínica sin el rediseño siga
-            // viendo el número de siempre hasta que Rafael lo encienda.
-            const sessionsDone = (s: any[] | undefined) =>
-              rediseno ? (s ?? []).filter((x: any) => x.completedAt).length : (s?.length ?? 0);
+            // P10 (ws1-t5): ya con o sin el rediseño, igual que el Resumen
+            // (antes iba detrás de la bandera; ver DECISIONES del reporte ws1-t5).
+            const sessionsDone = (s: any[] | undefined) => sesionesHechas(s);
             const pendingSessionsTotal = treatments
               .filter((t: any) => t.status === "ACTIVE")
               .reduce((acc: number, t: any) => acc + Math.max(0, (t.totalSessions || 0) - sessionsDone(t.sessions)), 0);
@@ -2939,6 +2953,12 @@ export function PatientDetailClient({
                     guardando={savingTreatment}
                     onCerrar={() => setShowNewTreatment(false)}
                     onCrear={handleCreateTreatment}
+                    // La ventana rápida guarda ella misma sus filas (ws1-t5, P3): aquí solo se enseña ya.
+                    onGuardado={(plan) => {
+                      setPlanesRecienCreados((prev) => agregarRecienCreado(prev, { sessions: [], ...plan }));
+                      setShowNewTreatment(false);
+                      router.refresh();
+                    }}
                   />
                 ) : (
                   <div
