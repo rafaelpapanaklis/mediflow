@@ -25,8 +25,8 @@ export interface FacturaTarjetaPendienteDTO {
   facturas: string[];
   /** De ellas, las de meses sin servicio (suspendida) que faltan por anular: no se deben. */
   suspendidas?: string[];
-  /** El siguiente cobro de la tarjeta debería caer al terminar lo pagado y no lo hace: fecha esperada (fin de lo pagado). */
-  cicloPendiente?: string | null;
+  /** Hasta cuándo quedó pagada según el último pago manual. */
+  finPagado?: string | null;
   /** Cobros de tarjeta (facturas) cuya regla de la suspensión quedó a medias. */
   tarjetaPendiente?: string[];
 }
@@ -45,7 +45,7 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "marcar_factura_fuera_de_stripe", clinicId: f.clinicId }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; facturaTarjeta?: { tipo?: string; mensaje?: string; ciclo?: { tipo?: string } } };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; facturaTarjeta?: { tipo?: string; mensaje?: string; revisar?: string; ciclo?: { tipo?: string } } };
       if (!res.ok) throw new Error(data.error ?? "No se pudo reintentar");
       if (data.facturaTarjeta?.tipo === "fallo") {
         toast.error(data.facturaTarjeta.mensaje ?? "Stripe sigue sin contestar. Vuelve a intentarlo en un momento.");
@@ -54,6 +54,13 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
       // Y15: lo que se dice es lo que pasó. Con el ajuste del ciclo apagado, o sin nada que aplicar, no se canta victoria.
       if (data.facturaTarjeta?.ciclo?.tipo === "apagado") {
         toast(`${f.clinicName}: el ajuste automático del cobro está apagado; la tarjeta cobrará en su fecha anterior.`, { icon: "⚠️", duration: 9000 });
+        return;
+      }
+      // Reintento TARDÍO: no calcula el ciclo; si algo hay que revisar en Stripe, se dice con todas sus letras.
+      if (data.facturaTarjeta?.revisar) {
+        toast(data.facturaTarjeta.revisar, { icon: "⚠️", duration: 20000 });
+        setFilas((prev) => prev.filter((x) => x.clinicId !== f.clinicId));
+        router.refresh();
         return;
       }
       // Z16: si solo se movió el ciclo, eso es lo que se dice (antes decía «no había nada por aplicar»).
@@ -106,10 +113,9 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
                 {f.pagoManualEn ? `pagó a mano ${fechaHoraAdmin(f.pagoManualEn) ?? ""}` : "cobro de tarjeta"}
                 {f.facturas.length > 0 ? ` · ${f.facturas.length === 1 ? "factura abierta" : "facturas abiertas"} del ciclo ${f.facturas.join(", ")}` : ""}
                 {(f.tarjetaPendiente ?? []).length > 0 ? ` · cobro de tarjeta por terminar de aplicar (${(f.tarjetaPendiente ?? []).join(", ")})` : ""}
-                {f.cicloPendiente ? ` · falta mover el siguiente cobro de la tarjeta a ${fechaHoraAdmin(f.cicloPendiente) ?? ""} (fin de lo pagado)` : ""}
                 {(f.suspendidas ?? []).length > 0 ? ` · por anular (meses sin servicio): ${(f.suspendidas ?? []).join(", ")}` : ""}
               </span>
-              {(f.facturas.length > 0 || f.cicloPendiente || (f.tarjetaPendiente ?? []).length > 0) && (
+              {(f.facturas.length > 0 || (f.tarjetaPendiente ?? []).length > 0) && (
                 <span style={{ marginLeft: "auto" }}>
                   <ButtonNew size="sm" variant="primary" onClick={() => reintentar(f)} disabled={cargando === f.clinicId}>
                     {cargando === f.clinicId ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}

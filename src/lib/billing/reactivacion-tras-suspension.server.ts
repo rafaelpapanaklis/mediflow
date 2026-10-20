@@ -64,7 +64,7 @@ export const MENSAJE_FALLO_EXCEDENTE =
 export const MENSAJE_FALLO_EXCEDENTE_OTRA_SUSCRIPCION =
   "No se pudo mover el siguiente cobro de la tarjeta: hay un cargo pendiente de otra suscripción del cliente (un módulo) que se cobraría junto con el excedente de facturas CFDI. Reintentar no sirve hasta que ese cargo se facture; revisa los cargos pendientes del cliente en Stripe.";
 export const MENSAJE_FALLO_REALINEAR =
-  "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Pulsa «Reintentar» en /admin → Pagos: repite el paso completo (con la marca de periodo pagado). No pongas una prueba a mano en Stripe.";
+  "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. «Reintentar» ya NO vuelve a mover el ciclo (solo anula lo seguro y te dice qué revisar): revisa a mano en Stripe la suscripción y su fin de periodo. El acceso de la clínica ya está protegido hasta el fin de lo pagado. No pongas una prueba a mano en Stripe.";
 export function mensajeCobroInesperado(facturaId: string): string {
   return `Stripe cobró la tarjeta al mover el ciclo (factura ${facturaId}): reembolsa ese cobro en Stripe.`;
 }

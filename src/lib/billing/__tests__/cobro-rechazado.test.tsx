@@ -875,7 +875,7 @@ test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al mar
   assert.match(h, /idempotencyKey: claveFueraDeStripe/);
   assert.doesNotMatch(h, /subscriptions\.(cancel|del)/, "la suscripción de tarjeta NUNCA se cancela");
   // Esa capa nunca cancela ni borra: el único cambio a la suscripción vive en reactivacion-tras-suspension (trial_end + marca).
-  assert.doesNotMatch(h, /subscriptions\.update|trial_end|cancel_at|cancel_at_period_end/);
+  assert.doesNotMatch(h, /subscriptions\.update|trial_end:|cancel_at|cancel_at_period_end/);
   const r = sinComentarios(leer("src/lib/billing/reactivacion-tras-suspension.server.ts"));
   assert.match(r, /trial_end: trialEnd,\s*proration_behavior: "none",\s*metadata: \{ \[MARCA_PERIODO_PAGADO\]: hasta \}/);
   assert.doesNotMatch(r, /subscriptions\.(cancel|del)|cancel_at|pause_collection|billing_cycle_anchor/);
@@ -1038,8 +1038,9 @@ test("el aviso de SPEI pendiente es verdad en los dos casos: suspendida (factura
 test("M4/Y2 el aviso al admin por una regla incompleta dice lo que de verdad pasa: «Reintentar» lo repite con la marca, y nunca pide poner la prueba a mano", () => {
   const { avisoFalloReglaSuspension } = require("../avisos-admin");
   const t = avisoFalloReglaSuspension({ clinicaId: "c1", clinicaNombre: "BEVADENT", accion: "pagar", fallos: ["x"] }).lineas.join("\n");
-  assert.match(t, /pulsa «Reintentar» en \/admin → Pagos/);
-  assert.match(t, /Stripe al reenviar el evento/);
+  assert.match(t, /Stripe reenvía el evento del pago durante unas horas/);
+  assert.match(t, /«Reintentar» en \/admin → Pagos o el cron de cada día— ya NO se calcula el ciclo/);
+  assert.match(t, /revisa en Stripe/);
   assert.match(t, /No pongas una prueba \(trial_end\) a mano en Stripe/, "Y2: nunca le pide poner la prueba a mano");
   assert.doesNotMatch(t, /ponle a la suscripción una prueba/);
   assert.doesNotMatch(t, /vuelven a intentarlo/);

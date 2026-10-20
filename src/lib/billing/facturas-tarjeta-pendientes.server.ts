@@ -39,17 +39,12 @@ export interface ClinicaConFacturaPendiente {
   facturas: string[];
   /** De ellas, las de meses SUSPENDIDOS (por anular, no por pagar). */
   suspendidas: string[];
-  /**
-   * El siguiente cobro de la tarjeta debería ser al terminar lo pagado y no lo es: fecha esperada (ISO, el `periodEnd` de la
-   * fila del pago, no «hoy»), o null si ya está bien.
-   */
-  cicloPendiente: string | null;
+  /** Hasta cuándo quedó pagada la clínica según el último pago manual (para el aviso «revisa en Stripe…» del reintento). */
+  finPagado: string | null;
   /** Cobros de TARJETA (facturas) cuya regla de la suspensión quedó a medias: se reintentan con «Reintentar» y el cron. */
   tarjetaPendiente: string[];
 }
 
-/** El aviso persistente marca un ciclo pendiente si difiere más de 1 día del fin de lo pagado (Z6: el reintento mueve en modo exacto). */
-const CICLO_LISTA_DIAS = 1;
 const DIAS_DE_VENTANA = 60;
 const TOPE_CLINICAS = 100;
 
@@ -110,7 +105,7 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
         if (!corte) {
           // Solo cobros de tarjeta a medias: no hay pago manual que mirar.
           return tarjetaPendiente.length > 0
-            ? ({ clinicId: c.id, clinicName: c.name, pagoManualEn: null, facturas: [], suspendidas: [], cicloPendiente: null, tarjetaPendiente } as ClinicaConFacturaPendiente)
+            ? ({ clinicId: c.id, clinicName: c.name, pagoManualEn: null, facturas: [], suspendidas: [], finPagado: null, tarjetaPendiente } as ClinicaConFacturaPendiente)
             : null;
         }
         try {
@@ -118,22 +113,17 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
           if (!sub) return null;
           const pendientes = await facturasAbiertasDelPlan(stripe, c.stripeSubscriptionId!, corte);
           const { suspendidas } = repartirPendientes(pendientes, { pagadoEn: corte });
-          // ¿El siguiente cobro de la tarjeta ya cae al terminar lo pagado? (fin de lo pagado = `periodEnd` de la fila del pago)
           const fin = finPagadoPorClinica.get(c.id) ?? null;
-          let cicloPendiente: string | null = null;
-          if (realinearActivo() && fin && fin.getTime() > ahora.getTime() + 86_400_000 && !(enPeriodoPagado(sub, ahora) && (sub.trial_end ?? 0) * 1000 >= fin.getTime() - 86_400_000)) {
-            const finCiclo = subscriptionPeriodEndSeconds(sub);
-            const alineado = sub.status !== "trialing" && finCiclo && Math.abs(finCiclo * 1000 - fin.getTime()) <= CICLO_LISTA_DIAS * 86_400_000;
-            if (!alineado) cicloPendiente = fin.toISOString();
-          }
-          if (pendientes.length === 0 && !cicloPendiente && tarjetaPendiente.length === 0) return null;
+          // Decimocuarta vuelta: el reintento tardío ya NO mueve el ciclo, así que un ciclo distinto del fin de lo pagado no es algo
+          // que la lista pueda «resolver»: lo que se muestra son las facturas abiertas y los cobros de tarjeta a medias.
+          if (pendientes.length === 0 && tarjetaPendiente.length === 0) return null;
           return {
             clinicId: c.id,
             clinicName: c.name,
             pagoManualEn: corte,
             facturas: pendientes.map((f) => f.id!),
             suspendidas: suspendidas.map((f) => f.id!),
-            cicloPendiente,
+            finPagado: fin ? fin.toISOString() : null,
             tarjetaPendiente,
           } as ClinicaConFacturaPendiente;
         } catch (e) {
@@ -166,7 +156,7 @@ export async function reintentarMarcadoPendiente(
   try {
     const stripe = opciones.stripe === undefined ? getStripeSafe() : opciones.stripe;
     const todas = await clinicasConFacturaPendienteTrasPagoManual({ ...opciones, stripe });
-    const pendientes = todas.filter((p) => p.facturas.length > 0 || p.cicloPendiente || p.tarjetaPendiente.length > 0);
+    const pendientes = todas.filter((p) => p.facturas.length > 0 || p.tarjetaPendiente.length > 0);
     resumen.revisadas = pendientes.length;
     for (const p of pendientes) {
       if (p.tarjetaPendiente.length > 0 && stripe) {
@@ -174,7 +164,7 @@ export async function reintentarMarcadoPendiente(
         resumen.marcadas.push(...t.completadas.map((id) => `${id} (tarjeta)`));
         if (t.fallos.length > 0) resumen.fallos.push(p.clinicId);
       }
-      if (p.facturas.length === 0 && !p.cicloPendiente) continue;
+      if (p.facturas.length === 0) continue;
       const clinica = await prisma.clinic.findUnique({ where: { id: p.clinicId }, select: { stripeSubscriptionId: true } });
       const r = await marcarFacturasDelPlanPagadasFueraDeStripe({
         clinicId: p.clinicId,
@@ -183,8 +173,9 @@ export async function reintentarMarcadoPendiente(
         creadasAntesDe: p.pagoManualEn,
         pagadoEn: p.pagoManualEn ?? undefined,
         reintento: true,
-        // El fin de lo pagado sale de la fila del PAGO (M9): cada día que tarda el reintento no es un día gratis.
-        finPrepago: p.cicloPendiente ? new Date(p.cicloPendiente) : null,
+        // El fin de lo pagado sale de la fila del PAGO (M9). El reintento tardío no mueve el ciclo: solo lo usa para el aviso.
+        finPrepago: p.finPagado ? new Date(p.finPagado) : null,
+        clinicaNombre: p.clinicName,
       });
       if (r.tipo === "marcadas") {
         resumen.marcadas.push(...r.facturas);

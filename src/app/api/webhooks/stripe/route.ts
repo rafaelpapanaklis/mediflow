@@ -45,6 +45,7 @@ import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
 import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
+import { finDeAccesoProtegido } from "@/lib/billing/acceso-protegido.server";
 import { registrarComoNoCobrada } from "@/lib/billing/reactivacion-tras-suspension.server";
 import { reactivarSiStripeYaCobro, reglaDeSuspensionPorCobroDeTarjeta, type ResultadoReglaCobro } from "@/lib/billing/regla-cobro-tarjeta.server";
 import { avisarCobroRechazado, type ClinicaParaAvisoDeCobro } from "@/lib/billing/aviso-cobro-rechazado.server";
@@ -536,11 +537,16 @@ export async function POST(req: NextRequest) {
           if (suspende && antes) {
             const estadoAntes = antes.subscriptionStatus;
             const accesoAntes = antes.trialEndsAt;
-            const acceso = accesoTrasCobroRechazado({
+            let acceso = accesoTrasCobroRechazado({
               estadoActual: antes.subscriptionStatus,
               accesoActual: antes.trialEndsAt,
               rechazoEn: new Date(event.created * 1000),
             });
+            // INVARIANTE: nunca sin acceso antes del fin de lo que ya pagó → max(fin de lo pagado, rechazo + 24 h).
+            if (acceso) {
+              const protegido = await finDeAccesoProtegido({ clinicId, stripe, stripeSubscriptionId: antes.stripeSubscriptionId });
+              if (protegido && protegido.getTime() > acceso.getTime()) acceso = protegido;
+            }
             await prisma.clinic.update({
               where: { id: clinicId },
               data: { subscriptionStatus: "past_due", ...(acceso ? { trialEndsAt: acceso } : {}) },
