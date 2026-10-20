@@ -17,6 +17,7 @@
 import { z } from "zod";
 import { PLAN_IDS, isPlanId, type PlanId } from "./plans";
 import { MENSAJES_CHECKOUT } from "./mensajes-pago";
+import { MENSAJE_PLAN_PREPAGADO } from "./cobro-rechazado";
 import { isPlanTierUpgrade, subscriptionItemInterval, type BillingInterval } from "./proration";
 
 /** Moneda del contrato: todos los planes se cobran en pesos. */
@@ -292,7 +293,12 @@ export const MENSAJES = {
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
   stripeNoContesto: MENSAJES_CHECKOUT.proveedorNoContesto,
   cambioEnCurso: "Ya hay un cambio de plan en curso, espera unos segundos.",
-  pagadoPorAdelantado: "Tienes meses pagados por adelantado, así que no podemos cambiarte de plan desde aquí. Escríbenos a soporte y lo hacemos contigo.",
+  // Verdadero en los dos casos en que el cobro está en pausa: meses pagados por adelantado, o el mes que se pagó al
+  // reactivarse tras una suspensión (revisión t4, M7). No dice «por adelantado».
+  // Un solo texto para «Subir» y para cambiar de plan: el de ws1-t1 (`MENSAJE_PLAN_PREPAGADO`), verdadero en los dos casos
+  // en que el siguiente cobro ya está movido (meses pagados por adelantado, o el mes pagado al reactivarse tras una suspensión).
+  cobroEnPausa: MENSAJE_PLAN_PREPAGADO,
+  pagoYaRegistrado: "Tu pago ya se registró.",
   subidaSinCobro: "No pudimos completar el cobro del cambio de plan. Escríbenos a soporte y lo revisamos contigo.",
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
