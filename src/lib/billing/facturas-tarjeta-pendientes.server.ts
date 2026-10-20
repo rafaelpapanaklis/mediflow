@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
-import { METODOS_DE_PAGO_MANUAL_DEL_PLAN } from "@/lib/billing/cobro-rechazado";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, inicioDelMarcadoFueraDeStripe } from "@/lib/billing/cobro-rechazado";
 import {
   facturasPendientesDelPlan,
   marcarFacturasDelPlanPagadasFueraDeStripe,
@@ -17,7 +17,9 @@ import {
  * sigue apareciendo hasta que se marque, sin importar quién lo intentó. Alimenta el aviso persistente de /admin › Pagos
  * y el reintento automático del cron diario.
  *
- * Solo facturas creadas ANTES del último pago manual: la renovación del mes siguiente es otra deuda y no se perdona.
+ * Solo pagos manuales confirmados DESDE la fecha de corte (`INICIO_MARCADO_FUERA_DE_STRIPE`) y solo la factura del MISMO
+ * ciclo que el pago (la última creada hasta él, sin otra renovación en medio): la renovación del mes siguiente y todo lo
+ * anterior al despliegue no se perdonan solos.
  */
 
 export interface ClinicaConFacturaPendiente {
@@ -37,7 +39,9 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
   const stripe = opciones.stripe === undefined ? getStripeSafe() : opciones.stripe;
   if (!stripe) return [];
   const ahora = opciones.ahora ?? new Date();
-  const desde = new Date(ahora.getTime() - DIAS_DE_VENTANA * 86_400_000);
+  // Ventana de 60 días, pero NUNCA antes de la fecha de corte: los pagos manuales confirmados antes de que existiera
+  // esta regla no se marcan (R1).
+  const desde = new Date(Math.max(ahora.getTime() - DIAS_DE_VENTANA * 86_400_000, inicioDelMarcadoFueraDeStripe().getTime()));
 
   const pagos = await prisma.subscriptionInvoice.findMany({
     where: {
@@ -64,7 +68,7 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
       clinicas.slice(i, i + 4).map(async (c) => {
         const corte = ultimoPorClinica.get(c.id)!;
         try {
-          const pendientes = await facturasPendientesDelPlan(stripe, c.stripeSubscriptionId!, corte);
+          const pendientes = await facturasPendientesDelPlan(stripe, c.stripeSubscriptionId!, corte, true);
           return pendientes && pendientes.length > 0
             ? ({ clinicId: c.id, clinicName: c.name, pagoManualEn: corte, facturas: pendientes.map((f) => f.id!) } as ClinicaConFacturaPendiente)
             : null;
@@ -100,6 +104,7 @@ export async function reintentarMarcadoPendiente(
         stripe,
         stripeSubscriptionId: clinica?.stripeSubscriptionId ?? null,
         creadasAntesDe: p.pagoManualEn,
+        soloMismoCiclo: true,
       });
       if (r.tipo === "marcadas") resumen.marcadas.push(...r.facturas);
       else if (r.tipo === "fallo") resumen.fallos.push(p.clinicId);

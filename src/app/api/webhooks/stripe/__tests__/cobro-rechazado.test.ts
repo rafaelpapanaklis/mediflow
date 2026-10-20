@@ -22,7 +22,8 @@ import path from "node:path";
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { isPlanExpired } from "@/lib/plan-status";
-import { esActivacionManual } from "@/lib/billing/pagos-reales";
+import { esActivacionManual, rotuloDeFilaSinCobro } from "@/lib/billing/pagos-reales";
+import { INICIO_MARCADO_FUERA_DE_STRIPE, fijarInicioDelMarcadoParaPruebas, inicioDelMarcadoFueraDeStripe } from "@/lib/billing/cobro-rechazado";
 
 const HORA = 3_600_000;
 const DIA = 24 * HORA;
@@ -153,7 +154,7 @@ const stripeDoble: any = {
     // Las facturas de la suscripción que ve el admin al confirmar un pago manual (abiertas / incobrables).
     list: async ({ subscription, status }: any) => {
       if (stripeListaFalla) throw new Error("Stripe no contesta");
-      return { data: facturasDeLista.filter((f) => f.subscription === subscription && f.status === status) };
+      return { data: facturasDeLista.filter((f) => f.subscription === subscription && (status === undefined || f.status === status)) };
     },
     pay: async (id: string, params: any, opciones: any) => {
       if (stripePagoFalla) throw new Error("Stripe no contesta");
@@ -252,6 +253,7 @@ before(async () => {
   dobles.set(path.join(RAIZ, "src/lib/analytics/meta-capi.server.ts"), { enviarCompraMetaDeSesion: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/tiktok-capi.server.ts"), { enviarCompraTiktokDeSesion: async () => {} });
   ({ NextRequest: NextRequestCtor } = await import("next/server"));
+  fijarInicioDelMarcadoParaPruebas(new Date(0)); // las pruebas usan la hora real; el corte de producción se prueba aparte
   ({ POST } = await import("../route"));
   ({ POST: POSTAdmin } = await import("../../../admin/billing/route"));
   ({ POST: POSTCfdi } = await import("../../../admin/payments/[id]/cfdi/route"));
@@ -1156,4 +1158,86 @@ test("Q6 reintento automático: el cron diario marca SOLO las facturas que ya ex
   assert.equal(caido.status, 200);
   assert.deepEqual((await caido.json()).facturasTarjeta, { revisadas: 1, marcadas: [], fallos: [CLINIC] });
   delete process.env.CRON_SECRET;
+});
+
+/* ── Sexta vuelta (t4): R1 (corte y mismo ciclo) y R3 (rótulo del rastro de Stripe) ── */
+
+async function llamarCron() {
+  process.env.CRON_SECRET = "secreto-de-prueba";
+  const { GET: cron } = await import("../../../cron/subscription-lapse/route");
+  try {
+    const r = await cron(new NextRequestCtor("http://localhost/api/cron/subscription-lapse", { headers: { authorization: "Bearer secreto-de-prueba" } }));
+    return (await r.json()).facturasTarjeta;
+  } finally {
+    delete process.env.CRON_SECRET;
+  }
+}
+
+test("R1 la fecha de corte de producción: 20-oct-2026 00:00 (Ciudad de México), y las pruebas la pueden mover y devolver", () => {
+  assert.equal(INICIO_MARCADO_FUERA_DE_STRIPE.toISOString(), "2026-10-20T06:00:00.000Z");
+  fijarInicioDelMarcadoParaPruebas();
+  assert.equal(inicioDelMarcadoFueraDeStripe().getTime(), INICIO_MARCADO_FUERA_DE_STRIPE.getTime());
+  fijarInicioDelMarcadoParaPruebas(new Date(0));
+});
+
+test("R1 el cron NO aplica la regla hacia atrás: un pago manual ANTERIOR al corte con la factura abierta no se marca; uno POSTERIOR sí", async () => {
+  const hoy = Date.now();
+  fijarInicioDelMarcadoParaPruebas(new Date(hoy - DIA)); // el despliegue fue ayer
+  try {
+    // Pago manual de hace 3 días (como el «1-oct»): antes del corte → ni el cron ni la lista lo tocan.
+    conTarjetaRechazada();
+    pagosDeSubscripcion = [{ id: "inv_antes", clinicId: CLINIC, status: "paid", method: "transfer", amount: 689, paidAt: new Date(hoy - 3 * DIA) }];
+    facturasDeLista = [{ id: "in_vieja", status: "open", subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(hoy - 6 * DIA) }];
+    assert.deepEqual(await llamarCron(), { revisadas: 0, marcadas: [], fallos: [] });
+    assert.equal(llamadasPay.length, 0, "nada de lo anterior al corte se marca solo");
+    const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
+    assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble }), [], "ni sale en la lista de /admin");
+    // «Reintentar» tampoco lo toma: no hay pago manual desde el corte.
+    const re = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
+    assert.deepEqual(re.facturaTarjeta, { tipo: "nada" });
+    assert.equal(llamadasPay.length, 0);
+
+    // Pago manual de hace 12 h (después del corte) → sí.
+    pagosDeSubscripcion = [{ id: "inv_despues", clinicId: CLINIC, status: "paid", method: "transfer", amount: 689, paidAt: new Date(hoy - 12 * HORA) }];
+    assert.deepEqual(await llamarCron(), { revisadas: 1, marcadas: ["in_vieja"], fallos: [] });
+    assert.deepEqual(llamadasPay.map((l) => l.id), ["in_vieja"]);
+  } finally {
+    fijarInicioDelMarcadoParaPruebas(new Date(0));
+  }
+});
+
+test("R1 solo la factura del MISMO ciclo que el pago manual: con otra renovación en medio, las anteriores no se marcan solas", async () => {
+  const hoy = Date.now();
+  const base = (extra: any[]) => {
+    conTarjetaRechazada();
+    pagosDeSubscripcion = [{ id: "inv_m", clinicId: CLINIC, status: "paid", method: "transfer", amount: 689, paidAt: new Date(hoy - 12 * HORA) }];
+    facturasDeLista = extra;
+  };
+  const f = (id: string, status: string, diasAtras: number) => ({ id, status, subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(hoy - diasAtras * DIA) });
+  // (a) Ciclo 1 sin pagar (hace 40 d) y ciclo 2 (hace 10 d) ya pagado: el pago manual es del ciclo 2 → el ciclo 1 NO se perdona.
+  base([f("in_ciclo1", "open", 40), f("in_ciclo2", "paid", 10)]);
+  assert.deepEqual(await llamarCron(), { revisadas: 0, marcadas: [], fallos: [] });
+  assert.equal(llamadasPay.length, 0);
+  // (b) Ciclo 1 y ciclo 2 abiertos: solo el último (el del pago), no los dos.
+  base([f("in_ciclo1", "open", 40), f("in_ciclo2", "open", 10)]);
+  assert.deepEqual(await llamarCron(), { revisadas: 1, marcadas: ["in_ciclo2"], fallos: [] });
+  assert.deepEqual(llamadasPay.map((l) => l.id), ["in_ciclo2"]);
+  // (c) Una renovación creada DESPUÉS del pago tampoco entra (otra deuda).
+  base([f("in_ciclo2", "open", 10), f("in_ciclo3", "open", 0.1)]);
+  assert.deepEqual(await llamarCron(), { revisadas: 1, marcadas: ["in_ciclo2"], fallos: [] });
+});
+
+test("R3 el rastro del SPEI/OXXO de Stripe se rotula distinto de la activación manual, y se dice que su cobro real NO queda en su propia fila", async () => {
+  conTarjetaRechazada();
+  const sesion = evento("checkout.session.async_payment_succeeded", { id: "cs_oxxo_9", mode: "payment", payment_status: "paid", subscription: null, amount_total: 68900, metadata: { kind: "platform-subscription", clinicId: CLINIC, plan: "PRO" } });
+  assert.equal(await entregar(sesion), 200);
+  const rastro = pagosDeSubscripcion.find((p) => p.reference === "pago-unico:cs_oxxo_9");
+  assert.ok(rastro);
+  assert.equal(rotuloDeFilaSinCobro(rastro), "Pago SPEI/OXXO por Stripe (rastro)");
+  assert.equal(rotuloDeFilaSinCobro({ method: "admin", amount: 0, reference: null }), "Activación manual (sin cobro)");
+  assert.equal(rotuloDeFilaSinCobro({ method: "stripe", amount: 689, reference: "in_1" }), null);
+  // El cobro real de ese pago NO queda en subscription_invoices: la sesión es de modo «payment» sin factura, así que ni
+  // `invoice.paid` ni `recordStripeInvoice` lo ven. La única fila es el rastro de $0 (hueco que ya existía).
+  assert.equal(pagosDeSubscripcion.filter((p) => (p.amount ?? 0) > 0).length, 0);
+  assert.deepEqual(facturasRegistradas, []);
 });

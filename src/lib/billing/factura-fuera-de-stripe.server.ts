@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { METODOS_DE_PAGO_MANUAL_DEL_PLAN } from "@/lib/billing/cobro-rechazado";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, inicioDelMarcadoFueraDeStripe } from "@/lib/billing/cobro-rechazado";
 import { getStripeSafe } from "@/lib/stripe";
 
 /**
@@ -50,6 +50,7 @@ export async function facturasPendientesDelPlan(
   stripe: StripeMinimo,
   stripeSubscriptionId: string,
   creadasAntesDe?: Date | null,
+  soloMismoCiclo = false,
 ): Promise<Stripe.Invoice[] | null> {
   try {
     const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
@@ -58,6 +59,18 @@ export async function facturasPendientesDelPlan(
     const e = err as { code?: string; raw?: { code?: string } } | null;
     if ((e?.code ?? e?.raw?.code) === "resource_missing") return null;
     throw err;
+  }
+  if (soloMismoCiclo) {
+    // El CICLO del pago manual = la última factura del plan creada hasta ese pago. Si Stripe ya había abierto otra
+    // renovación en medio, las anteriores no son de este ciclo y NO se marcan solas (R1): solo esa última, y solo si
+    // sigue abierta o incobrable.
+    const todas = await stripe.invoices.list({ subscription: stripeSubscriptionId, limit: 20 });
+    const delPlan = todas.data
+      .filter((f) => f.billing_reason && MOTIVOS_DEL_PLAN.has(f.billing_reason))
+      .filter((f) => !creadasAntesDe || (f.created ?? 0) * 1000 <= creadasAntesDe.getTime())
+      .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+    const ciclo = delPlan[0];
+    return ciclo && (ciclo.status === "open" || ciclo.status === "uncollectible") ? [ciclo] : [];
   }
   const pendientes: Stripe.Invoice[] = [];
   for (const status of ["open", "uncollectible"] as const) {
@@ -79,12 +92,14 @@ export async function marcarFacturasDelPlanPagadasFueraDeStripe(args: {
   stripeSubscriptionId: string | null | undefined;
   /** Solo las facturas creadas hasta este momento (el del pago manual). Sin él, todas las abiertas de hoy. */
   creadasAntesDe?: Date | null;
+  /** Solo la factura del MISMO ciclo que el pago manual (sin otra renovación en medio): el reintento automático y «Reintentar». */
+  soloMismoCiclo?: boolean;
 }): Promise<ResultadoMarcado> {
   const { stripe, stripeSubscriptionId } = args;
   if (!stripe || !stripeSubscriptionId) return { tipo: "sin_tarjeta" };
   const marcadas: string[] = [];
   try {
-    const pendientes = await facturasPendientesDelPlan(stripe, stripeSubscriptionId, args.creadasAntesDe);
+    const pendientes = await facturasPendientesDelPlan(stripe, stripeSubscriptionId, args.creadasAntesDe, args.soloMismoCiclo);
     if (pendientes === null) return { tipo: "sin_tarjeta" };
     if (pendientes.length === 0) return { tipo: "nada" };
 
@@ -114,7 +129,8 @@ export async function ultimoPagoManualDelPlan(clinicId: string): Promise<Date | 
     where: {
       clinicId,
       status: "paid",
-      paidAt: { not: null },
+      // Solo pagos confirmados DESDE el despliegue de esta regla (R1): nada de lo anterior se marca hacia atrás.
+      paidAt: { gte: inicioDelMarcadoFueraDeStripe() },
       OR: [{ method: null }, { method: { in: [...METODOS_DE_PAGO_MANUAL_DEL_PLAN] } }],
     },
     orderBy: { paidAt: "desc" },
@@ -141,6 +157,7 @@ export async function marcarFacturasDeLaClinica(
       stripe: getStripeSafe(),
       stripeSubscriptionId: clinica?.stripeSubscriptionId ?? null,
       creadasAntesDe: corte,
+      soloMismoCiclo: opciones.soloLasQueYaExistian === true,
     });
   } catch (err) {
     console.error("[factura-fuera-de-stripe] error leyendo la clínica:", (err as Error)?.message ?? err);
