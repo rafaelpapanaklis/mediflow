@@ -815,81 +815,108 @@ test("#10 (Rafael): «Pagar mi plan» NO cambia — cobra la factura abierta tal
   assert.equal((await consultarPendiente(montar({ descuento: { id: "d", coupon: { id: "X", percent_off: 50 } } }).deps)).body.montoPendiente, 48.61);
 });
 
-// Q7 (quinta vuelta t4): un cupón en el CLIENTE de Stripe también se quita al subir.
+// Q7 / R2 (quinta y sexta vuelta t4): el cupón del CLIENTE de Stripe también se quita al subir, pero SOLO
+// después de que el cambio de plan respondió bien (nunca se queda la clínica sin cupón y sin plan nuevo).
 const CUPON_CLIENTE = { id: "di_cliente", coupon: { id: "REGALO20", percent_off: 20 } };
 
-test("Q7: cupón en el CLIENTE → se quita ANTES de tocar la factura, y lo cobrado = lo mostrado (lista + IVA)", async () => {
+test("R2: cupón en el CLIENTE → se quita DESPUÉS de que subscriptions.update respondió, nunca antes de anular ni de cambiar", async () => {
   const m = montar({ descuentoCliente: CUPON_CLIENTE });
-  const mostrado = ((await consultarPendiente(m.deps)).body.opcionesSubir as any[])[0].monto;
-  assert.equal(mostrado, 799.24);
-
   const r = await subirYPagar(m.deps, "PRO");
   assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
   const borrados = m.ops("customers.deleteDiscount");
   assert.equal(borrados.length, 1);
   assert.equal(borrados[0].args[0], "cus_1"); // el cliente de la clínica de la sesión
   assert.equal(borrados[0].args[2].idempotencyKey, claves.quitarDescuentoCliente("clin_1", "di_cliente"));
-  // Orden: se quita el cupón del cliente antes de marcar/anular la factura y antes de cambiar el plan.
   const orden = m.llamadas.map((l) => l.op);
-  assert.ok(orden.indexOf("customers.deleteDiscount") < orden.indexOf("invoices.update"));
-  assert.ok(orden.indexOf("customers.deleteDiscount") < orden.indexOf("invoices.voidInvoice"));
-  assert.ok(orden.indexOf("customers.deleteDiscount") < orden.indexOf("subscriptions.update"));
-  // Lo cobrado es lo mostrado (el doble cobra 639.39 si el cupón siguiera puesto).
-  const a = m.auditorias.at(-1);
-  assert.equal(a.montoCobradoMxn, mostrado);
-  assert.equal(a.montoEsperadoMxn, mostrado);
-  assert.equal(a.descuentoDelClienteQuitado, "di_cliente");
-  // Bitácora propia del borrado.
+  assert.ok(orden.indexOf("invoices.voidInvoice") < orden.indexOf("subscriptions.update"));
+  assert.ok(orden.indexOf("subscriptions.update") < orden.indexOf("customers.deleteDiscount"), "el cupón se quita después del cambio de plan");
+  assert.equal(m.planLocal(), "PRO");
+  assert.equal(m.auditorias.at(-1).descuentoDelClienteQuitado, "di_cliente");
   const ev = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-quitado");
   assert.deepEqual([ev.descuentoId, ev.cupon, ev.planDestino], ["di_cliente", "REGALO20", "PRO"]);
 });
 
-test("Q7: cupón en la suscripción Y en el cliente → se quitan los dos; sin cupón en el cliente no se llama a deleteDiscount", async () => {
-  const dos = montar({ descuento: { id: "di_sub", coupon: { id: "REGALO10", percent_off: 10 } }, descuentoCliente: CUPON_CLIENTE });
-  await subirYPagar(dos.deps, "PRO");
-  assert.equal(dos.ops("subscriptions.update")[0].args[1].discounts, "");
-  assert.equal(dos.ops("customers.deleteDiscount").length, 1);
-  assert.equal(dos.auditorias.at(-1).montoCobradoMxn, 799.24);
+test("R2: FALLA el update → el cupón del cliente SIGUE puesto (ni se llamó a deleteDiscount); el reintento termina el cambio y entonces lo quita", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, updateFallaAntes: 1 });
+  const r1 = await subirYPagar(m.deps, "PRO");
+  assert.equal(r1.status, 502);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0, "el cupón sigue puesto: no se perdió");
+  assert.equal(m.planSub(), "BASIC"); // y el plan tampoco cambió
 
-  const sin = montar();
-  await subirYPagar(sin.deps, "PRO");
-  assert.equal(sin.ops("customers.deleteDiscount").length, 0);
-  assert.equal(sin.auditorias.at(-1).descuentoDelClienteQuitado, undefined);
+  const r2 = await subirYPagar(m.deps, "PRO"); // el reintento termina el cambio
+  assert.equal(r2.body.pagado, true);
+  assert.equal(m.planSub(), "PRO");
+  const orden = m.llamadas.map((l) => l.op);
+  assert.equal(m.ops("customers.deleteDiscount").length, 1);
+  assert.ok(orden.lastIndexOf("subscriptions.update") < orden.indexOf("customers.deleteDiscount"));
 });
 
-test("Q7: si otro POST ya lo quitó (Stripe: «no tiene descuento») se sigue sin error; un POST doble no cobra dos veces", async () => {
-  const m = montar({ descuentoCliente: CUPON_CLIENTE });
-  const [a, b] = await Promise.all([subirYPagar(m.deps, "PRO"), subirYPagar(m.deps, "PRO")]);
-  assert.equal(a.body.pagado, true);
-  assert.equal(b.body.pagado, true);
-  assert.equal(m.cobros(), 1);
-  assert.equal(m.facturas.get("in_nueva").amount_due, 79924);
-});
-
-test("Q7: si quitar el cupón del cliente falla de red → 502 en español y NO se marca, anula ni cambia nada (la vieja sigue abierta)", async () => {
+test("R2: si quitar el cupón del cliente falla DESPUÉS del cambio, el cambio y el cobro se mantienen y el cupón no se pierde (queda en la bitácora)", async () => {
   const m = montar({ descuentoCliente: CUPON_CLIENTE, deleteDiscountFalla: true });
   const r = await subirYPagar(m.deps, "PRO");
-  assert.equal(r.status, 502);
-  assert.equal(r.body.error, MENSAJES.stripeNoContesto);
-  assert.equal(m.facturas.get("in_vieja").status, "open");
-  assert.equal(m.ops("invoices.update").length, 0);
-  assert.equal(m.ops("invoices.voidInvoice").length, 0);
-  assert.equal(m.ops("subscriptions.update").length, 0);
-  assert.equal(m.cobros(), 0);
-  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-error-stripe" && x.paso === "quitar-descuento-cliente"));
-  assert.equal((await pagarPendiente(m.deps)).body.pagado, true); // «Pagar mi plan» sigue funcionando
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.planSub(), "PRO");
+  assert.equal(m.planLocal(), "PRO");
+  assert.equal(m.cobros(), 1);
+  const ev = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-no-quitado");
+  assert.deepEqual([ev.descuentoId, ev.cupon], ["di_cliente", "REGALO20"]);
+  assert.equal(m.auditorias.at(-1).descuentoDelClienteQuitado, undefined);
 });
 
-test("Q7: nunca se toca el descuento de un cliente de Stripe que no es el de la clínica de la sesión", async () => {
+test("R2: honestidad del orden — Stripe cobra la factura nueva en el mismo instante del cambio, así que con cupón en el cliente la PRIMERA factura sale con él y la bitácora lo marca", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE });
+  await subirYPagar(m.deps, "PRO");
+  const a = m.auditorias.at(-1);
+  assert.equal(a.montoCobradoMxn, 639.39); // 799.24 con el 20 % del cliente todavía puesto al cambiar
+  assert.equal(a.montoEsperadoMxn, 799.24);
+  assert.equal(a.cobroConDescuentoDelCliente, true);
+  // Sin cupón en el cliente: cobrado = mostrado y sin marca.
+  const limpio = montar();
+  await subirYPagar(limpio.deps, "PRO");
+  assert.equal(limpio.auditorias.at(-1).montoCobradoMxn, limpio.auditorias.at(-1).montoEsperadoMxn);
+  assert.equal(limpio.auditorias.at(-1).cobroConDescuentoDelCliente, undefined);
+  assert.equal(limpio.ops("customers.deleteDiscount").length, 0);
+});
+
+test("R2: cupón en la suscripción Y en el cliente → se quitan los dos (el de la suscripción en el update, el del cliente después)", async () => {
+  const m = montar({ descuento: { id: "di_sub", coupon: { id: "REGALO10", percent_off: 10 } }, descuentoCliente: CUPON_CLIENTE });
+  await subirYPagar(m.deps, "PRO");
+  assert.equal(m.ops("subscriptions.update")[0].args[1].discounts, "");
+  assert.equal(m.ops("customers.deleteDiscount").length, 1);
+});
+
+test("R2: cambio ya hecho en Stripe pero el cupón del cliente no se alcanzó a quitar y el plan local no se escribió → el reintento refleja el plan y lo quita, sin segundo cambio ni cobro", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, tarjetaFalla: true, deleteDiscountFalla: true });
+  await subirYPagar(m.deps, "PRO"); // cambio hecho; borrar el cupón falló (queda en la bitácora)
+  assert.equal(m.ops("customers.deleteDiscount").length, 1);
+  m.deps.clinica.plan = "BASIC"; // el plan local no se escribió
+  (m.deps.stripe as any).customers.deleteDiscount = async (...a: any[]) => { m.llamadas.push({ op: "customers.deleteDiscount", args: a }); return {}; };
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, false); // la tarjeta falló en la factura nueva: se da su enlace
+  assert.equal(m.ops("customers.deleteDiscount").length, 2, "el reintento vuelve a intentar quitarlo (y ahora sí)");
+  assert.equal(m.ops("subscriptions.update").length, 1, "sin segundo cambio ni segundo cobro");
+  assert.equal(m.planLocal(), "PRO");
+});
+
+test("R2: un POST doble con cupón en el cliente cobra una sola vez", async () => {
+  const doble = montar({ descuentoCliente: CUPON_CLIENTE });
+  const [a, b] = await Promise.all([subirYPagar(doble.deps, "PRO"), subirYPagar(doble.deps, "PRO")]);
+  assert.equal(a.body.pagado, true);
+  assert.equal(b.body.pagado, true);
+  assert.equal(doble.cobros(), 1);
+});
+
+test("R2: nunca se toca el descuento de un cliente de Stripe que no es el de la clínica de la sesión (502 antes de empezar nada)", async () => {
   const m = montar({ descuentoCliente: CUPON_CLIENTE, clienteAjeno: true });
   const r = await subirYPagar(m.deps, "PRO");
   assert.equal(r.status, 502);
   assert.equal(m.ops("customers.deleteDiscount").length, 0);
   assert.equal(m.ops("invoices.voidInvoice").length, 0);
+  assert.equal(m.ops("subscriptions.update").length, 0);
   assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-descuento-cliente-ajeno"));
 });
 
-test("Q7: «Pagar mi plan» NO borra el cupón del cliente (cobra la factura abierta tal cual)", async () => {
+test("R2: «Pagar mi plan» NO borra el cupón del cliente (cobra la factura abierta tal cual)", async () => {
   const m = montar({ descuentoCliente: CUPON_CLIENTE });
   assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
   assert.equal(m.ops("customers.deleteDiscount").length, 0);
