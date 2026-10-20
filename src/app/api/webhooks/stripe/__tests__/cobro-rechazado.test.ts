@@ -2727,3 +2727,70 @@ test("AB6/AB7 «Activar» a una clínica past_due SIN fecha de acceso no afirma 
   const aviso = readFileSync(path.join(RAIZ, "src/app/admin/payments/aviso-factura-tarjeta.tsx"), "utf8");
   assert.match(aviso, /AB6: lo marcado y anulado ya quedó hecho; el aviso se cierra/);
 });
+
+/* ── Verificación final del cobro (t4): AC1, AC2, AC8 ── */
+
+test("AC1 camino tardío: si una anulación falla, la clínica que PAGÓ queda activa con su acceso ANTES del throw, el admin recibe el aviso y el rastro queda para reintentar", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  const pago = Date.now() - 8 * HORA; // el webhook se procesa 8 h después del pago: camino tardío
+  const fin = mesesDesde(aSegundos(pago) * 1000, 1);
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  facturasVivas.set(FACTURA, pagada);
+  anularFallaPara = new Set([facturasDeLista[1].id!]);
+  assert.equal(await entregar(evento("invoice.paid", pagada, Date.now())), 500, "Stripe reenvía");
+  assert.equal(clinica().subscriptionStatus, "active", "la clínica que pagó NO queda suspendida por un fallo nuestro de anular");
+  assert.equal(isPlanExpired(clinica()), false);
+  assert.ok(clinica().trialEndsAt.getTime() >= fin.getTime() - 2000, "con el acceso de lo pagado");
+  assert.equal(llamadasCiclo.length, 0, "sin calcular el ciclo");
+  assert.ok(correosAdmin.length >= 1 && correosAdmin.some((c) => /no se completó|anul/i.test(`${c.subject} ${c.text}`)), "el admin recibe el aviso del fallo");
+  const { reglasPendientes } = await import("@/lib/billing/regla-cobro-tarjeta.server");
+  assert.equal((await reglasPendientes(CLINIC)).length, 1, "rastro regla_fallo para el reintento");
+  const correos1 = correosAdmin.length;
+  // El reenvío también sale por el camino tardío, repite el fallo y NO suspende ni repite el aviso.
+  assert.equal(await entregar(evento("invoice.paid", pagada, Date.now())), 500);
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(isPlanExpired(clinica()), false);
+  assert.equal(correosAdmin.length, correos1, "un solo aviso por factura");
+  // Cuando Stripe ya deja anular, el reenvío termina y cierra el rastro.
+  anularFallaPara = new Set();
+  assert.equal(await entregar(evento("invoice.paid", pagada, Date.now())), 200);
+  assert.deepEqual(await reglasPendientes(CLINIC), []);
+  assert.equal(facturasDeLista.filter((f) => f.status === "open").length, 0);
+});
+
+test("AC2 si finDeAccesoProtegido no puede leer Stripe, el webhook responde 5xx y NO baja el acceso a rechazo + 24 h; al reenviarse con Stripe disponible, lo conserva", async () => {
+  conTarjetaRechazada();
+  clinica().subscriptionStatus = "active";
+  const periodo: any = suscripcion("trialing", Date.now() + 40 * DIA);
+  periodo.trial_end = aSegundos(Date.now() + 40 * DIA);
+  periodo.metadata.periodo_pagado_hasta = new Date(periodo.trial_end * 1000).toISOString();
+  suscripcionesVivas.set(SUB, periodo);
+  const acceso = clinica().trialEndsAt.getTime();
+  const id = "in_AC2";
+  facturasVivas.set(id, { id, status: "open" });
+  const rechazo = Date.now();
+  const ev = evento("invoice.payment_failed", facturaFallida({ id, created: aSegundos(rechazo), status_transitions: { finalized_at: aSegundos(rechazo) } }), rechazo);
+  stripeRespondeSuscripciones = false;
+  assert.equal(await entregar(ev), 500, "Stripe reintenta el evento");
+  assert.equal(clinica().subscriptionStatus, "active", "no se escribió nada");
+  assert.equal(clinica().trialEndsAt.getTime(), acceso, "el acceso no baja");
+  stripeRespondeSuscripciones = true;
+  assert.equal(await entregar(ev), 200);
+  assert.ok(clinica().trialEndsAt.getTime() >= periodo.trial_end * 1000 - 2000, "con Stripe disponible conserva lo pagado");
+});
+
+test("AC8 camino tardío: si el ciclo de Stripe ya coincide con lo pagado no se manda el aviso «revisa en Stripe»", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  const pago = Date.now() - 8 * HORA;
+  const fin = mesesDesde(aSegundos(pago) * 1000, 1);
+  suscripcionesVivas.set(SUB, suscripcion("active", fin.getTime()));
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  facturasVivas.set(FACTURA, pagada);
+  assert.equal(await entregar(evento("invoice.paid", pagada, Date.now())), 200);
+  assert.equal(llamadasAnular.length, 3, "sí anula los meses sin servicio");
+  assert.equal(correosAdmin.length, 0, "ciclo ya coincide: sin aviso");
+  assert.equal(clinica().subscriptionStatus, "active");
+});
