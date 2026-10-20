@@ -120,7 +120,8 @@ test("el catálogo del motor trae las herramientas de las cuatro ramas", () => {
   // (ws1-t11): orto_caso, orto_controles y orto_cobranza, que solo leen; + orto_diagnostico (ws1-t8);
   // + orto_resumen y presupuestos (ws1-t9); + inventario, gastos y reportes (ws1-t6).
   // + orto_notas y notas_de_consulta (ws1-t9): el texto libre dictado.
-  assert.equal(nombres.length, 44);
+  // + orto_notas_internas (Salamanca): las notas internas del equipo en el caso de ortodoncia.
+  assert.equal(nombres.length, 45);
 });
 
 test("🔴 cada herramienta del motor: el usuario tiene la key, el Super Admin se la quita a Sabina → sin_permiso «sabina», sin tocar la base", async () => {

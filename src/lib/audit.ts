@@ -291,7 +291,9 @@ export type ReadKind =
   | "ficha" | "nota_pdf" | "export_cda" | "export_arco" | "expediente_pdf"
   // ws1-t12: «Movimientos Completo» descargado (CSV o PDF). Es una copia que sale
   // del sistema: lleva nombres de quien hizo qué y cuándo.
-  | "movimientos_export";
+  | "movimientos_export"
+  // Notas internas del caso de ortodoncia (solo-equipo): quién las abrió. `recordId` = id del caso.
+  | "orto_notas_internas";
 
 /**
  * Ventana de dedupe. Aplica SOLO a "ficha": la página se re-renderiza con cada
@@ -347,7 +349,7 @@ export async function logRead(opts: {
   userId: string;
   kind: ReadKind;
   patientId: string;
-  /** Solo para `nota_pdf`: id de la nota (MedicalRecord). */
+  /** Para `nota_pdf`: id de la nota (MedicalRecord). Para `orto_notas_internas`: id del caso. */
   recordId?: string;
   ipAddress?: string;
   userAgent?: string;
