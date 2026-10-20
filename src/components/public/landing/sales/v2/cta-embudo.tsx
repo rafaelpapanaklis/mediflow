@@ -50,6 +50,7 @@ export function BotonWhatsapp({
   className,
   style,
   glyphSize = 18,
+  alClic,
   children,
 }: {
   origen: OrigenBoton;
@@ -60,6 +61,8 @@ export function BotonWhatsapp({
   className?: string;
   style?: CSSProperties;
   glyphSize?: number;
+  /** Si devuelve true el clic ya se atendió (p. ej. abrió la tarjeta del botón flotante): no se navega a wa.me. */
+  alClic?: (conTeclado: boolean) => boolean;
   children: ReactNode;
 }) {
   return (
@@ -69,7 +72,16 @@ export function BotonWhatsapp({
       rel="noopener noreferrer"
       className={className}
       style={style}
-      onClick={() => registrarPaso("whatsapp_clic", { origen, plan })}
+      onClick={(e) => {
+        // Si alClic lo atiende (abre la tarjeta del botón flotante) todavía no se inició
+        // ninguna conversación: la conversión se registra al tocar «Iniciar conversación»
+        // o al enviar el formulario (whatsapp-widget.tsx), no aquí.
+        if (alClic?.(e.detail === 0)) {
+          e.preventDefault();
+          return;
+        }
+        registrarPaso("whatsapp_clic", { origen, plan });
+      }}
     >
       <WhatsappGlyph size={glyphSize} />
       {children}

@@ -7,8 +7,9 @@ export const metadata: Metadata = {
     "Aviso de privacidad integral conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).",
 };
 
-// Fecha de publicación (texto aprobado por el abogado; se publica con la integración de la ola del 26-sep).
-const LAST_UPDATED = "2 de octubre de 2026";
+// Fecha del último cambio del aviso. Lo del botón de WhatsApp (sección 3), Resend/Postmark (sección 5) y el párrafo de
+// la sección 8 es texto nuevo de la rama feat/whatsapp-widget: PENDIENTE de revisión del abogado.
+const LAST_UPDATED = "20 de octubre de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
 const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
@@ -225,19 +226,17 @@ export default function PrivacidadPage() {
             pago (sin rastrear clics ni el contenido de la página).
           </li>
           <li>
-            <b>Chat de soporte (LiveChat).</b> En la página principal y en el blog del sitio
-            público (no en el panel de la clínica, ni en el portal del paciente, ni en el
-            registro) cargamos el chat de LiveChat (LiveChat, Inc.), un servicio de un tercero
-            con el que puede escribirnos para pedir información o soporte. Al cargarse, LiveChat
-            guarda en su navegador cookies propias para reconocer que es el mismo visitante y
-            conservar su conversación; su duración la fija LiveChat. Si usted escribe en el
-            chat, LiveChat recibe lo que escriba (por ejemplo su nombre, su correo o su
-            mensaje) y los datos técnicos de la visita (dirección IP, navegador y ubicación
-            aproximada), que usamos únicamente para atenderle. Le pedimos no escribir en el
-            chat datos de salud ni datos de pacientes. El chat es opcional:{" "}
-            <b>puede bloquear las cookies de LiveChat</b> desde la configuración de su
-            navegador o con un bloqueador de contenido; el sitio funciona igual y el chat
-            simplemente no aparece.
+            <b>Botón de WhatsApp.</b> En la página principal y en el blog del sitio público
+            (no en el panel de la clínica, ni en el portal del paciente, ni en el registro)
+            mostramos un botón flotante de WhatsApp. «Iniciar conversación» abre WhatsApp
+            (la aplicación o WhatsApp Web) con un mensaje listo para enviarnos; desde ese
+            momento aplican las condiciones y el aviso de WhatsApp. El formulario «Te
+            escribimos nosotros» recoge <b>su nombre y su número de WhatsApp</b> únicamente
+            para contactarle y darle información sobre DaleControl; los recibimos por correo
+            electrónico en nuestro equipo (mediante Resend, Inc.) y no los usamos para otra cosa; los
+            conservamos hasta <b>90 días</b>, como se explica en la sección 8. El botón no instala
+            cookies propias ni de terceros. Le pedimos no escribir datos de salud ni datos de
+            pacientes en la conversación.
           </li>
           <li>
             <b>Vercel Analytics y Speed Insights.</b> Servicios de Vercel, Inc. que usamos
@@ -370,7 +369,10 @@ export default function PrivacidadPage() {
         <ul>
           <li><b>Supabase, Inc.</b> — hosting de base de datos y autenticación.</li>
           <li><b>Vercel, Inc.</b> — hosting de la aplicación web y medición de visitas y rendimiento del sitio (Vercel Analytics y Speed Insights).</li>
-          <li><b>Twilio, Inc. / Postmark</b> — envío de WhatsApp, SMS y correos transaccionales.</li>
+          <li><b>Meta Platforms, Inc. (WhatsApp Business Platform)</b> — envío y recepción de los mensajes de WhatsApp de la plataforma (recordatorios, confirmaciones y conversaciones con la clínica).</li>
+          <li><b>Twilio, Inc.</b> — respaldo para el envío de WhatsApp, solo en las clínicas que lo tenían configurado antes de usar WhatsApp Business Platform. No enviamos SMS.</li>
+          <li><b>Resend, Inc.</b> — envío de los correos de la plataforma (avisos de cuenta, portal del paciente, recordatorios y el aviso que nos llega con su nombre y su número cuando usted pide, en el botón de WhatsApp del sitio, que le escribamos).</li>
+          <li><b>Postmark</b> — recepción de correo entrante.</li>
           <li><b>Stripe, Inc. / PayPal / MercadoPago</b> — procesamiento de pagos cuando aplica.</li>
           <li><b>FacturAPI / Proveedores autorizados de CFDI</b> — emisión de comprobantes fiscales.</li>
           <li><b>Daily.co</b> — sesiones de teleconsulta cuando aplica.</li>
@@ -389,11 +391,6 @@ export default function PrivacidadPage() {
             <b>Meta Platforms, Inc.</b> — medición de visitas al sitio público, de cuentas
             creadas y del primer pago con el Píxel de Meta y la API de Conversiones, con lo
             descrito en la sección 3.
-          </li>
-          <li>
-            <b>LiveChat, Inc.</b> — chat de soporte de la página principal y del blog del sitio
-            público, con lo descrito en la sección 3: recibe lo que usted escriba en el chat y
-            los datos técnicos de la visita.
           </li>
           <li>
             <b>IPinfo (ipinfo.io)</b> — servicio de ubicación por dirección IP de nuestra
@@ -462,6 +459,12 @@ export default function PrivacidadPage() {
           se conservan conforme a la legislación aplicable.
         </p>
         <p>
+          <b>Contacto por el botón de WhatsApp.</b> El nombre y el número de WhatsApp que usted
+          deja en el formulario «Te escribimos nosotros» se conservan hasta <b>90 días</b>
+          contados desde que los envía, para darle seguimiento a su solicitud, y después se
+          eliminan; si usted lo solicita antes, se eliminan en ese momento.
+        </p>
+        <p>
           <b>Clic de un anuncio de Google.</b> El identificador del clic de un anuncio se
           guarda en la cookie &laquo;dc_ads&raquo; hasta 90 días. Si usted crea una cuenta, se
           conserva asociado a ella durante <b>12 meses contados desde que se registra la
@@ -483,7 +486,7 @@ export default function PrivacidadPage() {
           incluye la dirección IP, la ubicación aproximada, el dispositivo, el identificador
           de clic si lo hubo y, si inició sesión, su correo, nombre, rol, clínica y plan) se
           elimina automáticamente a los <b>365 días</b> de haberse iniciado. Los datos que
-          reciben Google, Meta y LiveChat se conservan según sus propias políticas.
+          reciben Google y Meta se conservan según sus propias políticas.
         </p>
       </Section>
 

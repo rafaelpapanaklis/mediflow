@@ -11,7 +11,7 @@ import { WhatsappGlyph } from "./whatsapp-glyph";
  * y el teléfono solo vive en `landing-data.ts` (`WHATSAPP_CTA.numberE164`).
  *
  * Es una sección DENTRO del flujo, no un botón flotante: la esquina inferior
- * derecha ya la ocupa el widget de LiveChat (livechat.tsx) y dos burbujas
+ * derecha ya la ocupa el botón flotante (whatsapp-widget.tsx) y dos burbujas
  * flotantes se pisarían.
  *
  * 11-oct-2026 (ws1-t4, encargo de ws7): el botón es `BotonWhatsapp` con origen

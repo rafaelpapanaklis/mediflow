@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { WHATSAPP_CTA } from "./landing-data";
 import { BotonWhatsapp, EnlaceEmpezar } from "./cta-embudo";
 import { barraVisible } from "./barra-movil-logica";
+import { abrirTarjetaWhatsapp } from "./whatsapp-widget-eventos";
 
 /**
  * Barra fija al pie en celular (11-oct-2026, ws1-t4, punto 1b del encargo de
@@ -15,8 +16,8 @@ import { barraVisible } from "./barra-movil-logica";
  * mientras el hero se ve, ya tiene sus propios botones. Al pie lleva un
  * espaciador en flujo para que el footer no quede tapado.
  *
- * LiveChat: la barra NO lo toca (ni hide ni minimize). Rafael lo oculta en
- * celular desde la configuración de LiveChat; el porqué, en barra-movil-logica.ts.
+ * El botón flotante de WhatsApp (whatsapp-widget.tsx, que reemplazó a LiveChat)
+ * se asienta encima de esta barra en celular (landing-v2.css, `.dcv4-wawidget`).
  */
 
 export function BarraMovil() {
@@ -30,13 +31,21 @@ export function BarraMovil() {
     return () => io.disconnect();
   }, []);
 
+  // El botón flotante de WhatsApp lee esta marca (landing-v2.css): con la barra a la vista
+  // no se pintan dos botones de WhatsApp y la tarjeta se asienta encima de la barra.
+  useEffect(() => {
+    if (visible) document.body.setAttribute("data-barra-movil", "");
+    else document.body.removeAttribute("data-barra-movil");
+    return () => document.body.removeAttribute("data-barra-movil");
+  }, [visible]);
+
   return (
     <>
       <div className="dcv4-barra" data-visible={visible ? "" : undefined} role="region" aria-label="Acciones rápidas">
         <EnlaceEmpezar href="#precios" origen="barra_movil" className="dcv2-btn-primary dcv4-barra__btn">
           {WHATSAPP_CTA.barStart}
         </EnlaceEmpezar>
-        <BotonWhatsapp origen="barra_movil" className="dcv2-btn-wa dcv4-barra__btn" glyphSize={19}>
+        <BotonWhatsapp origen="barra_movil" className="dcv2-btn-wa dcv4-barra__btn" glyphSize={19} alClic={(teclado) => abrirTarjetaWhatsapp(teclado)}>
           {WHATSAPP_CTA.barWhatsapp}
         </BotonWhatsapp>
       </div>

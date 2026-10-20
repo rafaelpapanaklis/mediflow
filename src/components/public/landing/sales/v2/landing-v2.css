@@ -1293,3 +1293,65 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   .dcv4-navbar--portada > div:last-child { min-width: 0; flex: 0 1 auto !important; }
   .dcv4-navbar--portada > div:last-child > a { min-width: 0; flex: 0 1 auto !important; overflow: hidden; }
 }
+
+/* ── Botón de WhatsApp flotante (whatsapp-widget.tsx; reemplaza al chat de LiveChat) ──
+   Abajo a la derecha. La portada es clara: la tarjeta no tiene modo oscuro.
+   En celular, ver la regla de data-barra-movil más abajo. El verde es el de .dcv2-btn-wa. */
+.dcv4-wawidget {
+  --wa-bg: #ffffff; --wa-fg: #0f172a; --wa-muted: #475569; --wa-line: #e2e8f0; --wa-field: #f8fafc;
+  position: fixed; right: 20px; bottom: 20px; z-index: 70;
+  display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 12px;
+  font-family: inherit;
+}
+.dcv4-wawidget__fab {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 58px; height: 58px; border: 0; border-radius: 999px; cursor: pointer;
+  background: #128C7E; color: #fff; box-shadow: 0 10px 26px -8px rgba(2,6,23,.5);
+  transition: transform .16s, background .16s;
+}
+.dcv4-wawidget__fab:hover { background: #0e7566; transform: translateY(-2px); }
+.dcv4-wawidget__fab:focus-visible, .dcv4-wawidget__send:focus-visible, .dcv4-wawidget__close:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; box-shadow: 0 0 0 4px #fff; }
+.dcv4-wawidget__card {
+  width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 120px); overflow-y: auto;
+  background: var(--wa-bg); color: var(--wa-fg); border: 1px solid var(--wa-line); border-radius: 18px;
+  box-shadow: 0 24px 56px -20px rgba(2,6,23,.45);
+}
+.dcv4-wawidget__card:focus { outline: none; }
+.dcv4-wawidget__head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: #075E54; color: #fff; border-radius: 17px 17px 0 0; }
+.dcv4-wawidget__avatar { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 999px; background: rgba(255,255,255,.18); }
+.dcv4-wawidget__title { margin: 0; font-size: 15.5px; font-weight: 700; }
+.dcv4-wawidget__sub { margin: 2px 0 0; font-size: 13px; opacity: .9; }
+.dcv4-wawidget__close { margin-left: auto; width: 36px; height: 36px; border: 0; border-radius: 999px; background: transparent; color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+.dcv4-wawidget__close:hover { background: rgba(255,255,255,.18); }
+.dcv4-wawidget__body { padding: 16px; }
+.dcv4-wawidget__start { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 12px; font-size: 15.5px; font-weight: 700; text-decoration: none; }
+.dcv4-wawidget__or { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; color: var(--wa-muted); font-size: 13px; }
+.dcv4-wawidget__or::before, .dcv4-wawidget__or::after { content: ""; flex: 1; height: 1px; background: var(--wa-line); }
+.dcv4-wawidget__legend { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+.dcv4-wawidget__label { display: block; margin: 10px 0 4px; font-size: 13.5px; font-weight: 600; color: var(--wa-muted); }
+.dcv4-wawidget__input { width: 100%; min-height: 46px; padding: 0 12px; border: 1px solid var(--wa-line); border-radius: 10px; background: var(--wa-field); color: var(--wa-fg); font: inherit; font-size: 16px; }
+.dcv4-wawidget__tel { display: flex; align-items: stretch; gap: 8px; }
+.dcv4-wawidget__prefijo { display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--wa-line); border-radius: 10px; background: var(--wa-field); color: var(--wa-muted); font-size: 16px; font-weight: 600; }
+.dcv4-wawidget__otro { margin: 6px 0 0; padding: 6px 0; border: 0; background: none; color: #075E54; font: inherit; font-size: 13.5px; font-weight: 600; text-decoration: underline; cursor: pointer; min-height: 32px; }
+.dcv4-wawidget__input:focus-visible { outline: 2px solid #128C7E; outline-offset: 1px; }
+.dcv4-wawidget__input[aria-invalid="true"] { border-color: #dc2626; }
+.dcv4-wawidget__err { margin: 6px 0 0; font-size: 13px; color: #dc2626; }
+.dcv4-wawidget__send { width: 100%; min-height: 48px; margin-top: 14px; border: 0; border-radius: 12px; background: #0f172a; color: #fff; font: inherit; font-size: 15.5px; font-weight: 700; cursor: pointer; }
+.dcv4-wawidget__send:disabled { opacity: .6; cursor: default; }
+.dcv4-wawidget__fine { margin: 10px 0 0; font-size: 12.5px; color: var(--wa-muted); }
+.dcv4-wawidget__fine a { color: inherit; text-decoration: underline; }
+.dcv4-wawidget__ok { margin: 8px 0 0; padding: 14px; border-radius: 12px; background: #dcfce7; color: #14532d; font-weight: 600; text-align: center; }
+/* Honeypot fuera de pantalla (no display:none: algunos robots lo saltan). */
+.dcv4-wawidget__hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+@media (max-width: 760px) {
+  /* Sube solo cuando la barra fija está a la vista (BarraMovil pone data-barra-movil en <body>);
+     en el blog, o con el hero a la vista, va a su altura normal. Con la barra visible su
+     «WhatsApp» abre esta tarjeta y el botón flotante se esconde: un solo WhatsApp a la vista. */
+  .dcv4-wawidget { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  body[data-barra-movil] .dcv4-wawidget { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+  body[data-barra-movil] .dcv4-wawidget__fab { display: none; }
+  .dcv4-wawidget__fab { width: 52px; height: 52px; }
+  .dcv4-wawidget__fab:hover { transform: none; }
+  .dcv4-wawidget__card { max-height: calc(100dvh - 170px); }
+}
+@media (prefers-reduced-motion: reduce) { .dcv4-wawidget__fab { transition: none; } .dcv4-wawidget__fab:hover { transform: none; } }
