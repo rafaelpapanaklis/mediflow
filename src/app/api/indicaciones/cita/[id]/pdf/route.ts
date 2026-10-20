@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PERMISO_EMITIR, cargarCita, entrarCita } from "@/lib/indicaciones/cita.server";
-import { unaPorIndicacion } from "@/lib/indicaciones/servicio";
+import { sinIdsRepetidos } from "@/lib/indicaciones/servicio";
 import { anotarEnMovimientos, hojasDeLaClinica, nombrarHojas } from "@/lib/indicaciones/hojas-de-cita.server";
 import { admiteIndicaciones, fechaLarga, seccionesRellenas, valoresDeLaCita } from "@/lib/indicaciones/envio";
 import { construirPdfHoja, nombreDeArchivoHoja } from "@/lib/indicaciones/pdf";
@@ -28,8 +28,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     if (!admiteIndicaciones(c.datos.cita.status)) return NextResponse.json({ code: "ESTADO" }, { status: 409 });
     const hojas = await hojasDeLaClinica(ctx.clinicId, c.catalogo);
     if (!hojas) return NextResponse.json({ code: "SIN_TABLA" }, { status: 503 });
-    // Aunque lleguen dos hojas de la misma indicación (copia vieja + versión editada), sale UNA (ws1-t8 · N-P2).
-    const elegidas = unaPorIndicacion(hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa && pedidas.includes(h.id)));
+    // Lo que la persona marcó se respeta: solo se quitan los ids repetidos (ws1-t8 · N3-P1).
+    const elegidas = sinIdsRepetidos(hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa && pedidas.includes(h.id)));
     if (elegidas.length === 0) return NextResponse.json({ code: "SIN_HOJAS" }, { status: 400 });
 
     const ahora = new Date();

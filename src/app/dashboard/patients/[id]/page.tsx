@@ -688,6 +688,7 @@ export default async function PatientDetailPage(
           orthoSoloAdministrativo={orthoSoloAdministrativo}
           orthoCasoAdministrativoId={orthoPlanAdministrativo?.id ?? null}
           orthoCasosAdministrativos={orthoCasosAdministrativos}
+          orthoZonaHoraria={tz}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
           orthoCasos={orthoCasos}

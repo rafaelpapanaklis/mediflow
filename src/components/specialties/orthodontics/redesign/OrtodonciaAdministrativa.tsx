@@ -9,7 +9,8 @@
 import { CalendarDays, Lock, Wallet } from "lucide-react";
 import { Btn } from "./atoms/Btn";
 import { NotasInternas } from "./NotasInternas";
-import { bloquesDeNotas } from "./notas-internas-casos";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { bloquesDeNotas, fechaCortaDeCaso } from "./notas-internas-casos";
 import { RAIZ_ORTO } from "./raiz";
 import orto from "./orto.module.css";
 
@@ -27,11 +28,17 @@ export interface OrtodonciaAdministrativaProps {
    * uno, con el caso al que pertenecen (ws1-t8 · N-P5). Tiene prioridad sobre `casoId`.
    */
   casos?: Array<{ id: string; abierto: string }>;
+  /** Zona horaria de la CLÍNICA, para la fecha de cada caso (ws1-t8 · N3-P4). */
+  zonaHoraria?: string | null;
   soloLectura?: boolean;
 }
 
-export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null, casos, soloLectura = false }: OrtodonciaAdministrativaProps) {
-  const bloques = bloquesDeNotas(casos, casoId);
+export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null, casos, zonaHoraria = null, soloLectura = false }: OrtodonciaAdministrativaProps) {
+  const t = useT();
+  const locale = useLocale();
+  const bloques = bloquesDeNotas(casos, casoId, (abierto) =>
+    t("ortoNotasInternas.casoAbierto", { fecha: fechaCortaDeCaso(abierto, locale, zonaHoraria) }),
+  );
   return (
     <div className={`${RAIZ_ORTO} ${orto.lienzo}`}>
       <section className={orto.tarjeta} aria-labelledby="orto-administrativa-titulo">

@@ -18,6 +18,9 @@ import {
   getTemplate,
   updateTemplate,
   validarCuerpo,
+  validarNombre,
+  nombreOcupado,
+  esChoqueDeUnico,
   type TemplateDb,
   type TemplateResult,
   type UpdateTemplateInput,
@@ -160,15 +163,34 @@ export async function editarPlantillaConPrevias(
   // Una pestaña abierta antes de que otra persona guardara no pisa lo de la otra persona.
   if (typeof baseBody === "string" && difiere(baseBody, actual.body)) return concurrente();
 
+  // TODO O NADA (ws1-t8 · N3-P2): todo lo que puede rechazar el guardado se revisa ANTES de escribir, y el texto, el
+  // nombre y «en uso» se escriben en una sola sentencia. Un nombre repetido ya no deja el texto nuevo vigente.
+  const data: { body: string; name?: string; isActive?: boolean } = { body: nuevo.body };
+  if (resto.name !== undefined) {
+    const n = validarNombre(resto.name);
+    if ("code" in n) return updateTemplate(db, clinicId, id, { name: resto.name }); // el mismo error de siempre; no escribe
+    if (n.name !== actual.name) {
+      if (await nombreOcupado(db, clinicId, actual.kind, n.name, actual.id)) {
+        return { ok: false, code: "NAME_TAKEN", status: 409, error: "Ya existe una plantilla de este tipo con ese nombre" };
+      }
+      data.name = n.name;
+    }
+  }
+  if (typeof resto.isActive === "boolean") data.isActive = resto.isActive;
+
   if (await versiones.disponible()) {
     await versiones.archivarTexto({ clinicId, familia: "CONSENTIMIENTO", clave: claveDeArchivo(actual), cuerpo: actual.body, userId });
   }
-  const r = await db.documentTemplate.updateMany({
-    where: { id: actual.id, clinicId, body: actual.body },
-    data: { body: nuevo.body },
-  });
-  if (r.count === 0) return concurrente();
-  return updateTemplate(db, clinicId, id, sinTexto);
+  try {
+    const r = await db.documentTemplate.updateMany({ where: { id: actual.id, clinicId, body: actual.body }, data });
+    if (r.count === 0) return concurrente();
+  } catch (err) {
+    // Otra persona tomó ese nombre justo ahora: nada se escribió (una sola sentencia).
+    if (esChoqueDeUnico(err)) return { ok: false, code: "NAME_TAKEN", status: 409, error: "Ya existe una plantilla de este tipo con ese nombre" };
+    throw err;
+  }
+  const guardada = await getTemplate(db, clinicId, id);
+  return guardada ? { ok: true, template: guardada } : concurrente();
 }
 
 function concurrente(): TemplateResult {

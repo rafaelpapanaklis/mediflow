@@ -343,28 +343,32 @@ export function procedimientosDeLaCita(
 }
 
 /**
- * Una sola hoja por INDICACIÓN (ws1-t8 · N-P2): la de fábrica «Después de una extracción», su copia de la clínica y la
- * versión editada comparten `basadaEn`, y el paciente no debe recibir dos veces lo mismo. Entre las de la misma
- * indicación gana la de la clínica (copia o versión) sobre la de fábrica pelada, y entre iguales la más reciente.
- * Las que no vienen de una de fábrica (`basadaEn` nulo) son indicaciones distintas y se quedan todas. Conserva el
- * orden de entrada.
+ * Lo que se PROPONE no repite la MISMA hoja (ws1-t8 · N-P2, N3-P1, N3-P3). La fila de fábrica «Después de una
+ * extracción», la versión que la clínica editó de ella y las copias que sacó comparten `basadaEn`; entre ellas:
+ *  · si la clínica editó la de fábrica (`versionDeClinica`), esa versión es LA hoja y las copias viejas no se proponen
+ *    (la fecha de una copia cambia con solo tocarle la liga o «en uso», así que no sirve para decidir cuál es la nueva);
+ *  · si no hay versión, la de fábrica pelada cede a sus copias (la clínica ya tiene la suya).
+ * Dos COPIAS entre sí nunca se descartan: son hojas distintas que la clínica hizo a propósito («Cirugía de cordales»,
+ * «Injerto de encía»). Las que no vienen de una de fábrica (`basadaEn` nulo) tampoco. Conserva el orden de entrada.
+ * Solo propone: lo que la persona marca a mano se respeta (ver `sinIdsRepetidos`).
  */
-export function unaPorIndicacion<T extends HojaDTO>(hojas: readonly T[]): T[] {
-  const delaClinica = (h: HojaDTO) => !h.deFabrica || !!h.versionDeClinica;
-  const gana = (a: T, b: T) =>
-    Number(delaClinica(a)) - Number(delaClinica(b)) || a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id);
-  const mejor = new Map<string, T>();
-  for (const h of hojas) {
-    if (!h.basadaEn) continue;
-    const otra = mejor.get(h.basadaEn);
-    if (!otra || gana(h, otra) > 0) mejor.set(h.basadaEn, h);
-  }
-  const vistos = new Set<string>();
+export function sinRepetirLaMismaHoja<T extends HojaDTO>(hojas: readonly T[]): T[] {
+  const conVersion = new Set(hojas.filter((h) => h.deFabrica && h.versionDeClinica && h.basadaEn).map((h) => h.basadaEn));
+  const conCopia = new Set(hojas.filter((h) => !h.deFabrica && h.basadaEn).map((h) => h.basadaEn));
   return hojas.filter((h) => {
-    if (vistos.has(h.id)) return false; // el mismo id pedido dos veces
-    vistos.add(h.id);
-    return !h.basadaEn || mejor.get(h.basadaEn) === h;
+    if (!h.basadaEn) return true;
+    if (!h.deFabrica) return !conVersion.has(h.basadaEn); // la copia vieja cede a la versión editada
+    return h.versionDeClinica || !conCopia.has(h.basadaEn); // la de fábrica pelada cede a sus copias
   });
+}
+
+/**
+ * Lo que la persona MARCÓ: se respeta tal cual, sin descartar hojas distintas aunque vengan de la misma de fábrica
+ * (ws1-t8 · N3-P1). Solo se quitan los ids repetidos en la petición.
+ */
+export function sinIdsRepetidos<T extends { id: string }>(hojas: readonly T[]): T[] {
+  const vistos = new Set<string>();
+  return hojas.filter((h) => (vistos.has(h.id) ? false : (vistos.add(h.id), true)));
 }
 
 /**
@@ -381,16 +385,14 @@ export function hojasSugeridas(
   const enUso = hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa);
   const ids = new Set(procedimientos.map((p) => p.id));
   const porLiga = enUso.filter((h) => h.procedureIds.some((id) => ids.has(id)));
-  if (porLiga.length > 0) return unaPorIndicacion(porLiga).map((h) => h.id);
+  if (porLiga.length > 0) return sinRepetirLaMismaHoja(porLiga).map((h) => h.id);
   const porPalabras = enUso.filter((h) => {
     const f = textoDeFabrica(h.basadaEn);
     return !!f && textos.some((t) => coincideConFabrica(f, t));
   });
-  // Si una copia de la clínica y su original de fábrica coinciden, va la de la clínica.
-  // Una de fábrica que la clínica editó (versionDeClinica) ya es SUYA: cuenta como propia (ws1-t8 · P4).
-  const esDeLaClinica = (h: HojaDTO) => !h.deFabrica || !!h.versionDeClinica;
-  const propias = new Set(porPalabras.filter(esDeLaClinica).map((h) => h.basadaEn));
-  const sugeridas = unaPorIndicacion(porPalabras.filter((h) => !(!esDeLaClinica(h) && propias.has(h.basadaEn)))).map((h) => h.id);
+  // Si la clínica ya tiene su propia hoja (copia o versión editada), la de fábrica pelada no se propone; y una copia
+  // vieja no compite con la versión editada de la misma hoja.
+  const sugeridas = sinRepetirLaMismaHoja(porPalabras).map((h) => h.id);
   if (sugeridas.length > 0) return sugeridas;
   return hojasDeOrtodonciaPorNombre(enUso, textos);
 }
@@ -422,7 +424,10 @@ export function hojasDeOrtodonciaPorNombre(
 /** La constancia que se usa si no se elige: la de la clínica más reciente en uso; si no, la de fábrica. */
 export function constanciaPorDefecto(hojas: readonly HojaDTO[]): HojaDTO | null {
   const enUso = hojas.filter((h) => h.tipo === "CONSTANCIA" && h.activa);
-  // La de fábrica que la clínica editó cuenta como propia y compite por recencia con sus copias (ws1-t8 · P4).
-  const propias = enUso.filter((h) => !h.deFabrica || h.versionDeClinica).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // La de fábrica que la clínica editó es LA constancia de la clínica y va primero; las copias, de la más reciente a la
+  // más antigua (la fecha de una copia cambia al tocarle «en uso», por eso la versión no compite por fecha: N3-P3).
+  const propias = enUso
+    .filter((h) => !h.deFabrica || h.versionDeClinica)
+    .sort((a, b) => Number(!!b.versionDeClinica) - Number(!!a.versionDeClinica) || b.updatedAt.localeCompare(a.updatedAt));
   return propias[0] ?? enUso[0] ?? null;
 }

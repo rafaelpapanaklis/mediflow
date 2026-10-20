@@ -51,6 +51,7 @@
     "abrirAyuda": "Item, payment and balance in one step"
   },
   "ortoNotasInternas": {
+    "casoAbierto": "case opened on {fecha}",
     "titulo": "Internal notes",
     "aviso": "Only the clinic team can see these. They never appear in the patient portal, the medical record PDF or any message.",
     "agregar": "Add note",

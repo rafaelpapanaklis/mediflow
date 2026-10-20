@@ -244,29 +244,82 @@ const peticion = (hojas: string[]) =>
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hojas }),
   });
 
-test("N-P2: copia vieja + versión editada de la MISMA indicación → el paciente recibe una sola, una vez", async () => {
+test("N3-P1: lo que la doctora marcó a mano se manda COMPLETO: dos hojas distintas de la misma de fábrica llegan las dos", async () => {
   hojasDeLaCita = [
-    hoja({ id: "copia", nombre: "Después de una extracción (copia)", cuerpo: "TEXTO DE LA COPIA VIEJA", updatedAt: "2026-02-01T00:00:00.000Z" }),
-    hoja({ id: "fabrica", deFabrica: true, versionDeClinica: true, cuerpo: "TEXTO DE LA VERSIÓN EDITADA", updatedAt: "2026-10-01T00:00:00.000Z" }),
+    hoja({ id: "cordales", nombre: "Cirugía de cordales", basadaEn: "cirugia", cuerpo: "TEXTO CORDALES" }),
+    hoja({ id: "injerto", nombre: "Injerto de encía", basadaEn: "cirugia", cuerpo: "TEXTO INJERTO" }),
+  ];
+  const res = await waPOST(peticion(["cordales", "injerto"]), params("cita-1"));
+  assert.equal(res.status, 200);
+  assert.equal(envios.length, 1);
+  const texto: string = envios[0].body;
+  assert.equal(texto.split("TEXTO CORDALES").length - 1, 1);
+  assert.equal(texto.split("TEXTO INJERTO").length - 1, 1);
+  assert.deepEqual(movimientos[0].hojas, ["cordales", "injerto"], "Movimientos registra las dos");
+});
+
+test("N3-P1: copia vieja + versión editada marcadas a mano también salen las dos (la protección está en lo que se PROPONE)", async () => {
+  hojasDeLaCita = [
+    hoja({ id: "copia", nombre: "Después de una extracción (copia)", cuerpo: "COPIA" }),
+    hoja({ id: "fabrica", deFabrica: true, versionDeClinica: true, cuerpo: "VERSIÓN" }),
   ];
   const res = await waPOST(peticion(["copia", "fabrica"]), params("cita-1"));
   assert.equal(res.status, 200);
-  assert.equal(envios.length, 1, "un solo WhatsApp");
-  const texto: string = envios[0].body;
-  assert.equal(texto.split("TEXTO DE LA VERSIÓN EDITADA").length - 1, 1, "la versión editada va una vez");
-  assert.ok(!texto.includes("TEXTO DE LA COPIA VIEJA"), "la copia vieja no se manda en el mismo mensaje");
-  assert.deepEqual(movimientos[0].hojas, ["fabrica"]);
+  assert.deepEqual(movimientos[0].hojas, ["copia", "fabrica"]);
 });
 
-test("N-P2: el mismo id pedido dos veces sale una vez; indicaciones DISTINTAS sí salen las dos", async () => {
+test("el mismo id pedido dos veces sale una vez, en el orden de la biblioteca", async () => {
   hojasDeLaCita = [
     hoja({ id: "a", basadaEn: "extraccion", cuerpo: "UNO" }),
     hoja({ id: "b", nombre: "Limpieza", basadaEn: "limpieza", cuerpo: "DOS" }),
     hoja({ id: "c", nombre: "Mía sin origen", basadaEn: null, cuerpo: "TRES" }),
   ];
-  const res = await waPOST(peticion(["a", "a", "b", "c"]), params("cita-1"));
+  const res = await waPOST(peticion(["c", "a", "a", "b", "c"]), params("cita-1"));
   assert.equal(res.status, 200);
   assert.deepEqual(movimientos[0].hojas, ["a", "b", "c"]);
   const texto: string = envios[0].body;
   for (const t of ["UNO", "DOS", "TRES"]) assert.equal(texto.split(t).length - 1, 1, t);
+});
+
+// ─── N3-P2 · todo o nada ───────────────────────────────────────────────────
+
+test("N3-P2: corregir el texto Y renombrar con un nombre que ya existe → 409 y NO queda nada a medias", async () => {
+  const f = consentimientosDeFabrica();
+  plantillas = [
+    { id: "t1", clinicId: "c1", kind: "CONSENTIMIENTO", name: f[0].nombre, body: "<p>texto del lunes</p>", isActive: true, createdById: null, deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
+    { id: "t2", clinicId: "c1", kind: "CONSENTIMIENTO", name: "Mi carta", body: "<p>otra</p>", isActive: true, createdById: "u9", deletedAt: null, createdAt: new Date(), updatedAt: new Date() },
+  ];
+  const res = await docPATCH(
+    patch("/api/document-templates/t1", { name: "mi carta", body: "<p>texto del martes</p>", baseBody: "<p>texto del lunes</p>" }),
+    params("t1"),
+  );
+  assert.equal(res.status, 409);
+  assert.equal((await res.json()).code, "NAME_TAKEN");
+  assert.equal(plantillas[0].body, "<p>texto del lunes</p>", "el texto nuevo NO quedó vigente");
+  assert.equal(plantillas[0].name, f[0].nombre);
+  assert.equal(versiones.filas.length, 0, "ni siquiera se archivó algo que sigue vigente");
+});
+
+test("N3-P2: si el nombre se toma justo al escribir (carrera), tampoco queda a medias", async () => {
+  sembrarConsentimiento("<p>texto del lunes</p>");
+  const original = fakePrisma.documentTemplate.updateMany;
+  fakePrisma.documentTemplate.updateMany = async () => {
+    throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+  };
+  try {
+    const res = await docPATCH(patch("/api/document-templates/t1", { name: "Nombre nuevo", body: "<p>martes</p>", baseBody: "<p>texto del lunes</p>" }), params("t1"));
+    assert.equal(res.status, 409);
+    assert.equal(plantillas[0].body, "<p>texto del lunes</p>");
+  } finally {
+    fakePrisma.documentTemplate.updateMany = original;
+  }
+});
+
+test("N3-P2: texto, nombre y «en uso» válidos se guardan juntos en una sola operación", async () => {
+  sembrarConsentimiento("<p>texto del lunes</p>");
+  const res = await docPATCH(patch("/api/document-templates/t1", { name: "Extracción v2", isActive: false, body: "<p>martes</p>", baseBody: "<p>texto del lunes</p>" }), params("t1"));
+  assert.equal(res.status, 200);
+  assert.deepEqual([plantillas[0].name, plantillas[0].isActive, plantillas[0].body], ["Extracción v2", false, "<p>martes</p>"]);
+  assert.equal(versiones.filas.length, 1);
+  assert.equal(versiones.filas[0].cuerpo, "<p>texto del lunes</p>");
 });

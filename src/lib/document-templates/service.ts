@@ -63,7 +63,7 @@ function exigirClinica(clinicId: string): void {
   }
 }
 
-const esChoqueDeUnico = (err: unknown): boolean =>
+export const esChoqueDeUnico = (err: unknown): boolean =>
   typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
 
 export interface ListTemplatesOptions {
@@ -99,7 +99,7 @@ export async function getTemplate(
   return db.documentTemplate.findFirst({ where: { id, clinicId, deletedAt: null } });
 }
 
-function validarNombre(v: unknown): { name: string } | { code: TemplateErrorCode } {
+export function validarNombre(v: unknown): { name: string } | { code: TemplateErrorCode } {
   const name = normalizeTemplateName(v);
   if (!name) return { code: "NAME_REQUIRED" };
   if (name.length > MAX_NAME_LENGTH) return { code: "NAME_TOO_LONG" };
@@ -116,7 +116,7 @@ export function validarCuerpo(v: unknown): { body: string } | { code: TemplateEr
 }
 
 /** «Endodoncia» y «endodoncia» son la misma plantilla para quien las lee en una lista. */
-async function nombreOcupado(
+export async function nombreOcupado(
   db: TemplateDb,
   clinicId: string,
   kind: DocumentTemplateKindValue,

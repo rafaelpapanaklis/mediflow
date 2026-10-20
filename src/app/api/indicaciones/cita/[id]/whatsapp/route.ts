@@ -16,7 +16,7 @@ import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { enmascararTelefono } from "@/lib/patient-documents/envio";
 import { PERMISO_EMITIR, cargarCita, entrarCita } from "@/lib/indicaciones/cita.server";
-import { unaPorIndicacion } from "@/lib/indicaciones/servicio";
+import { sinIdsRepetidos } from "@/lib/indicaciones/servicio";
 import { anotarEnMovimientos, hojasDeLaClinica, nombrarHojas, ultimoEnvioReciente } from "@/lib/indicaciones/hojas-de-cita.server";
 import {
   KIND_ENVIO_INDICACIONES,
@@ -54,8 +54,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const hojas = await hojasDeLaClinica(ctx.clinicId, c.catalogo);
     if (!hojas) return NextResponse.json({ code: "SIN_TABLA" }, { status: 503 });
     // En el orden de la biblioteca; solo indicaciones en uso de ESTA clínica.
-    // Aunque lleguen dos hojas de la misma indicación (copia vieja + versión editada), sale UNA (ws1-t8 · N-P2).
-    const elegidas = unaPorIndicacion(hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa && pedidas.includes(h.id)));
+    // Lo que la persona marcó se respeta: solo se quitan los ids repetidos (ws1-t8 · N3-P1).
+    const elegidas = sinIdsRepetidos(hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa && pedidas.includes(h.id)));
     if (elegidas.length === 0) return NextResponse.json({ code: "SIN_HOJAS" }, { status: 400 });
 
     if (!c.telefono) return NextResponse.json({ code: "SIN_TELEFONO" }, { status: 409 });

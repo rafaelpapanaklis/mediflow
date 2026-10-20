@@ -40,7 +40,8 @@ import type { TemplateDb } from "@/lib/document-templates/service";
 import { cuerpoEdicionHoja, cuerpoEdicionNotaOrto } from "@/app/dashboard/plantillas/cuerpo-edicion";
 import { bloquesDeNotas } from "@/components/specialties/orthodontics/redesign/notas-internas-casos";
 import { plantillasParaSedeNueva } from "../copia-sede";
-import { unaPorIndicacion } from "@/lib/indicaciones/servicio";
+import { sinIdsRepetidos, sinRepetirLaMismaHoja } from "@/lib/indicaciones/servicio";
+import { fechaCortaDeCaso } from "@/components/specialties/orthodontics/redesign/notas-internas-casos";
 import type { HojaDTO } from "@/lib/indicaciones/tipos";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
@@ -491,7 +492,12 @@ test("P4: la de fábrica que la clínica editó cuenta como propia en la cita (c
   await editarHoja(vigente, "c1", c.id, { cuerpo: "Constancia editada de fábrica" }, [], { versiones, userId: "u1" });
   const hojas = (await listarHojas(vigente, "c1", async () => []))!;
   assert.equal((copia as FilaHoja).nombre, "Constancia (copia)");
-  assert.equal(constanciaPorDefecto(hojas)?.id, c.id, "la última editada manda, aunque sea la de fábrica con versión");
+  assert.equal(constanciaPorDefecto(hojas)?.id, c.id, "la de fábrica editada es LA constancia de la clínica");
+  // N3-P3: tocarle «en uso» a la copia le cambia la fecha; no por eso vuelve a ganar la copia vieja.
+  await vigente.actualizar("c1", (copia as FilaHoja).id, { activa: false });
+  await vigente.actualizar("c1", (copia as FilaHoja).id, { activa: true });
+  const despues = (await listarHojas(vigente, "c1", async () => []))!;
+  assert.equal(constanciaPorDefecto(despues)?.id, c.id, "la versión sigue ganando aunque la copia se haya tocado después");
   const ext = hojas.find((h) => h.basadaEn === "extraccion" && h.deFabrica)!;
   await editarHoja(vigente, "c1", ext.id, { cuerpo: "Mi extracción" }, [], { versiones, userId: "u1" });
   const de = (await listarHojas(vigente, "c1", async () => []))!;
@@ -588,28 +594,35 @@ const dto = (o: Partial<HojaDTO> & { id: string }): HojaDTO => ({
   basadaEn: "extraccion", activa: true, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", ...o,
 });
 
-test("N-P2: copia vieja + versión editada de la misma indicación → se propone UNA (por liga y por palabras)", () => {
-  const copia = dto({ id: "copia", nombre: "Después de una extracción (copia)", updatedAt: "2026-02-01T00:00:00.000Z", procedureIds: ["p1"] });
+test("N-P2/N3-P3: copia vieja + versión editada de la misma hoja → se propone la VERSIÓN (por liga y por palabras), aunque la copia sea más nueva", () => {
+  const copia = dto({ id: "copia", nombre: "Después de una extracción (copia)", updatedAt: "2026-12-01T00:00:00.000Z", procedureIds: ["p1"] });
   const version = dto({ id: "fab", deFabrica: true, versionDeClinica: true, updatedAt: "2026-10-01T00:00:00.000Z", procedureIds: ["p1"] });
   const proc = [{ id: "p1", name: "Extracción", isActive: true }];
   assert.deepEqual(hojasSugeridas([copia, version], proc, ["extracción"]), ["fab"], "por liga");
   assert.deepEqual(hojasSugeridas([{ ...copia, procedureIds: [] }, { ...version, procedureIds: [] }], [], ["extracción de la muela"]), ["fab"], "por palabras");
-  // La más reciente gana, sea la copia o la versión.
-  assert.deepEqual(hojasSugeridas([{ ...copia, updatedAt: "2026-12-01T00:00:00.000Z" }, version], proc, ["extracción"]), ["copia"]);
   // Indicaciones distintas se quedan todas; las que no vienen de una de fábrica también.
   const otra = dto({ id: "otra", nombre: "Limpieza", basadaEn: "limpieza", procedureIds: ["p1"] });
   const suelta = dto({ id: "suelta", nombre: "Mía", basadaEn: null, procedureIds: ["p1"] });
   assert.deepEqual(hojasSugeridas([copia, version, otra, suelta], proc, []).sort(), ["fab", "otra", "suelta"]);
 });
 
-test("N-P2: unaPorIndicacion — la de la clínica gana a la de fábrica pelada, el mismo id no se repite, conserva el orden", () => {
-  const pelada = dto({ id: "pelada", deFabrica: true });
-  const copia = dto({ id: "copia", updatedAt: "2026-03-01T00:00:00.000Z" });
-  assert.deepEqual(unaPorIndicacion([pelada, copia]).map((h) => h.id), ["copia"]);
-  assert.deepEqual(unaPorIndicacion([copia, copia]).map((h) => h.id), ["copia"]);
-  const a = dto({ id: "a", basadaEn: null });
-  const b = dto({ id: "b", basadaEn: "limpieza" });
-  assert.deepEqual(unaPorIndicacion([b, a, pelada, copia]).map((h) => h.id), ["b", "a", "copia"]);
+test("N3-P1: dos COPIAS distintas de la misma de fábrica se proponen las dos (hojas hechas a propósito)", () => {
+  const cordales = dto({ id: "cordales", nombre: "Cirugía de cordales", basadaEn: "cirugia", procedureIds: ["p1"] });
+  const injerto = dto({ id: "injerto", nombre: "Injerto de encía", basadaEn: "cirugia", procedureIds: ["p2"] });
+  const pelada = dto({ id: "pelada", nombre: "Después de una cirugía bucal", basadaEn: "cirugia", deFabrica: true, procedureIds: ["p1", "p2"] });
+  const proc = [{ id: "p1", name: "Cordales", isActive: true }, { id: "p2", name: "Injerto", isActive: true }];
+  assert.deepEqual(hojasSugeridas([cordales, injerto, pelada], proc, []).sort(), ["cordales", "injerto"], "la de fábrica pelada cede; las dos copias se quedan");
+  assert.deepEqual(sinRepetirLaMismaHoja([cordales, injerto]).map((h) => h.id), ["cordales", "injerto"]);
+  // Con versión editada, las copias viejas ceden (la versión es LA hoja) pero la liga de otras hojas no se toca.
+  const version = dto({ id: "fab", deFabrica: true, versionDeClinica: true, basadaEn: "cirugia" });
+  assert.deepEqual(sinRepetirLaMismaHoja([cordales, version, dto({ id: "x", basadaEn: "limpieza" })]).map((h) => h.id), ["fab", "x"]);
+});
+
+test("N3-P1: lo que la persona marcó se respeta — solo se quitan los ids repetidos y se conserva el orden", () => {
+  const a = dto({ id: "a" });
+  const b = dto({ id: "b" }); // misma de fábrica que a
+  const c = dto({ id: "c", basadaEn: null });
+  assert.deepEqual(sinIdsRepetidos([b, a, a, c, b]).map((h) => h.id), ["b", "a", "c"]);
 });
 
 test("N-P3: una pestaña vieja que guarda la nota de ortodoncia «sin tocar nada» NO revierte la versión que otra persona guardó", async () => {
@@ -645,14 +658,30 @@ test("N-P4: corregir solo el texto desde una pestaña vieja NO pisa la liga a pr
   assert.deepEqual(cuerpoEdicionHoja(cargada, { ...cargada, procedureIds: ["p2"] }, false), {});
 });
 
-test("N-P5: recepción ve las notas de TODOS los casos vivos; con uno solo no se rotula", () => {
-  assert.deepEqual(bloquesDeNotas(undefined, null), [{ caseId: null }]);
-  assert.deepEqual(bloquesDeNotas([], "caso-1"), [{ caseId: "caso-1" }]);
-  assert.deepEqual(bloquesDeNotas([{ id: "caso-1", abierto: "2026-05-05T00:00:00.000Z" }], "caso-1"), [{ caseId: "caso-1" }]);
-  const dos = bloquesDeNotas([{ id: "nuevo", abierto: "2026-10-05T16:00:00.000Z" }, { id: "viejo", abierto: "2024-01-02T10:00:00.000Z" }], "nuevo");
+test("N-P5/N3-P4: recepción ve las notas de TODOS los casos vivos; con uno solo no se rotula; la fecha va en la zona de la clínica", () => {
+  const etiqueta = (iso: string) => `caso abierto el ${fechaCortaDeCaso(iso, "es", "America/Mexico_City")}`;
+  assert.deepEqual(bloquesDeNotas(undefined, null, etiqueta), [{ caseId: null }]);
+  assert.deepEqual(bloquesDeNotas([], "caso-1", etiqueta), [{ caseId: "caso-1" }]);
+  assert.deepEqual(bloquesDeNotas([{ id: "caso-1", abierto: "2026-05-05T00:00:00.000Z" }], "caso-1", etiqueta), [{ caseId: "caso-1" }]);
+  const dos = bloquesDeNotas([{ id: "nuevo", abierto: "2026-10-06T01:00:00.000Z" }, { id: "viejo", abierto: "2024-01-02T10:00:00.000Z" }], "nuevo", etiqueta);
   assert.deepEqual(dos.map((b) => b.caseId), ["nuevo", "viejo"]);
+  // 6 oct 01:00 UTC = 5 oct 19:00 en CDMX (UTC-6): el caso se abrió el 5.
   assert.equal(dos[0].etiquetaCaso, "caso abierto el 5 oct 2026");
   assert.equal(dos[1].etiquetaCaso, "caso abierto el 2 ene 2024");
+});
+
+test("N3-P4: la fecha del caso sale en la zona de la clínica y el mes en el idioma de la interfaz", () => {
+  const iso = "2026-10-06T01:00:00.000Z"; // 5 oct 19:00 CDMX · 6 oct 01:00 UTC · 6 oct 10:00 Tokio
+  assert.equal(fechaCortaDeCaso(iso, "es", "America/Mexico_City"), "5 oct 2026");
+  assert.equal(fechaCortaDeCaso(iso, "en", "America/Mexico_City"), "Oct 5, 2026");
+  assert.equal(fechaCortaDeCaso(iso, "es", "Asia/Tokyo"), "6 oct 2026", "otra clínica, otro día");
+  assert.equal(fechaCortaDeCaso(iso, "es", null), "5 oct 2026", "sin zona: la de México, no UTC");
+  assert.equal(fechaCortaDeCaso(iso, "es", "Zona/Inexistente"), "5 oct 2026", "una zona que Intl no conoce no tumba la ficha");
+  assert.equal(fechaCortaDeCaso("no es fecha", "es", "America/Mexico_City"), "");
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json")).ortoNotasInternas;
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json")).ortoNotasInternas;
+  assert.equal(es.casoAbierto, "caso abierto el {fecha}");
+  assert.equal(en.casoAbierto, "case opened on {fecha}");
 });
 
 test("N-P10: la sede nueva conserva SIN autor los consentimientos de fábrica, y por eso puede volver a la de fábrica", () => {

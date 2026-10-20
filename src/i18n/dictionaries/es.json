@@ -51,6 +51,7 @@
     "abrirAyuda": "Concepto, pago y saldo en un paso"
   },
   "ortoNotasInternas": {
+    "casoAbierto": "caso abierto el {fecha}",
     "titulo": "Notas internas",
     "aviso": "Solo las ve el equipo de la clínica. No salen en el portal del paciente, ni en el PDF del expediente, ni en los mensajes.",
     "agregar": "Agregar nota",
