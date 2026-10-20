@@ -25,7 +25,7 @@ import s from "./pago-pendiente.module.css";
  * Mientras esa ruta no exista (404) o falle, se avisa y queda «Actualizar tarjeta / pagar» (portal de Stripe).
  */
 
-type Eleccion = { accion: "pagar" } | { accion: "subir"; plan: string };
+type Eleccion = { accion: "pagar"; monto: number } | { accion: "subir"; plan: string };
 
 export function PagoPendienteVista({
   lectura,
@@ -257,7 +257,14 @@ export function PagoPendiente({
       return;
     }
     if (r.tipo === "no_disponible") setLectura({ tipo: "no_disponible" });
-    else toast.error(r.mensaje || t("shell.pagoPendiente.errorCobro"));
+    else {
+      toast.error(r.mensaje || t("shell.pagoPendiente.errorCobro"));
+      if (r.tipo === "error" && r.codigo === "MONTO_CAMBIO") {
+        // El monto cambió desde que se mostró (AA6): se vuelve a leer lo pendiente y se pide confirmar de nuevo.
+        setEleccion(null);
+        void leerPagoPendiente().then(setLectura);
+      }
+    }
     setCobrando(false);
   }
 
@@ -277,7 +284,10 @@ export function PagoPendiente({
           {abriendoPortal ? t("shell.pagoRechazado.abriendo") : t("shell.pagoRechazado.cta")}
         </button>
       }
-      onPagarPlan={() => setEleccion({ accion: "pagar" })}
+      onPagarPlan={() => {
+        // Lo que la pestaña muestra ahora es lo que se confirma: viaja con la orden y el servidor no cobra otro monto.
+        if (lectura?.tipo === "listo" && lectura.datos.estado === "pendiente") setEleccion({ accion: "pagar", monto: lectura.datos.montoPendiente });
+      }}
       onVerPlanes={() => {
         setEligiendoPlan((v) => !v);
         setEleccion(null);

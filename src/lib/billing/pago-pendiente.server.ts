@@ -388,6 +388,9 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
   const { clinica } = deps;
   if (!clinica.id) return { ok: false, respuesta: respuesta(401, { error: "Sin sesión de clínica" }) };
 
+  // GET sin suscripción de tarjeta propia: «sin pendiente» (lo mismo que diría para una sede incluida) SIN mirar las sedes del
+  // dueño. Evita una lectura de las clínicas hermanas que esta consulta no necesita (prueba de aislamiento entre clínicas).
+  if (soloLectura && !clinica.stripeSubscriptionId) return { ok: false, sinPendiente: true };
   const sede = await deps.sedeIncluida();
   if (sede) {
     return soloLectura
@@ -574,7 +577,7 @@ async function cobroEnCurso(deps: DepsPago, clave: string): Promise<RespuestaPag
 const ESPERA_PAGAR_INTENTOS = 30;
 const ESPERA_PAGAR_INTERVALO_MS = 500;
 
-export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
+export async function pagarPendiente(deps: DepsPago, montoConfirmado?: number): Promise<RespuestaPago> {
   if (!isClinicBillingAdmin(deps.role)) {
     return respuesta(403, { code: "FORBIDDEN_NOT_CLINIC_ADMIN", error: MENSAJES.sinPermiso });
   }
@@ -593,13 +596,13 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   if (toma === "error") return candadoNoDisponible();
   if (toma !== "tomado") return cobroEnCurso(deps, clave);
   try {
-    return await pagarPendienteConCandado(deps, esperó, inicioMs);
+    return await pagarPendienteConCandado(deps, esperó, inicioMs, montoConfirmado);
   } finally {
     await deps.candado.soltar(clave, dueno).catch(() => {}); // si no se puede soltar, caduca solo
   }
 }
 
-async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean, inicioMs: number): Promise<RespuestaPago> {
+async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean, inicioMs: number, montoConfirmado?: number): Promise<RespuestaPago> {
   // Si tuvo que esperar, el estado de la clínica pudo cambiar mientras tanto (otra pestaña pagó o reactivó): se relee.
   let deps = deps0;
   if (esperó && deps0.releerEstadoClinica) {
@@ -617,8 +620,8 @@ async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean, inici
   // la otra operación (una factura pagada desde que empezó a esperar). Si no (p. ej. el «Subir» de la otra pestaña falló a
   // medias y dejó la factura anulada), esa frase sería falsa —la clínica creería que pagó— y se dice lo que hay.
   const sinPendiente = async (): Promise<RespuestaPago> => {
-    if (!esperó) return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
-    if (await hayPagoRegistradoDesde(deps, inicioMs)) return respuesta(409, { code: "PAGO_YA_REGISTRADO", error: MENSAJES.pagoYaRegistrado });
+    if (esperó && (await hayPagoRegistradoDesde(deps, inicioMs))) return respuesta(409, { code: "PAGO_YA_REGISTRADO", error: MENSAJES.pagoYaRegistrado });
+    // AA5: aunque no haya esperado, un cambio de plan que quedó a medias NO es «no tienes ningún pago pendiente»: es verdad otra cosa.
     const rec = await cargarPendiente(deps, false, true);
     if (rec.ok && rec.anulada) {
       const nombre = (await deps.plan(rec.anulada.planMarcado).catch(() => null))?.name ?? rec.anulada.planMarcado;
@@ -630,6 +633,13 @@ async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean, inici
   const { stripe, factura } = ctx;
   if (!factura) return await sinPendiente();
   const clinicId = deps.clinica.id;
+
+  // AA6: nunca se cobra un monto distinto del que ESTA pestaña mostró y la clínica confirmó. Se compara con la factura
+  // abierta que hay AHORA, ya con el candado tomado (p. ej. un «Subir» con la tarjeta rechazada dejó la del plan nuevo).
+  if (montoConfirmado !== undefined && Math.round(montoConfirmado * 100) !== Math.round(factura.amount_due)) {
+    await deps.auditar({ event: "pago-pendiente-pagar-monto-cambio", facturaId: factura.id, montoConfirmadoMxn: montoConfirmado, montoActualMxn: factura.amount_due / 100 }).catch(() => {});
+    return respuesta(409, { code: "MONTO_CAMBIO", error: MENSAJES.montoCambio });
+  }
 
   let pagada: FacturaPago | null = null;
   let rechazo: unknown = null;
@@ -858,13 +868,25 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     }
   }
 
+  // AA5: un REINTENTO de un cambio a medias usa una clave de idempotencia NUEVA (la anterior pudo quedar guardada con el
+  // 5xx del intento que falló y Stripe repetiría ese mismo error durante 24 h). El contador vive en la marca de la factura
+  // anulada y se sube ANTES del cambio: si no se puede anotar, no se intenta (regla de oro: nada de calcular a ciegas).
+  const intento = anulada ? anulada.intento + 1 : 0;
+  if (anulada) {
+    try {
+      await stripe.invoices.update(factura.id, { metadata: { [MARCA.intento]: String(intento) } }, { idempotencyKey: claves.subirIntento(clinicId, factura.id, intento) });
+    } catch (err) {
+      return fallar(await falloDeStripe(deps, "anotar-reintento", err), "anotar-reintento", err); // aún no se cambió nada: se repone el cupón
+    }
+  }
+
   // 2) La MISMA suscripción pasa al plan nuevo y se cobra completo ahora.
   let nueva: SuscripcionPago & { latest_invoice?: string | FacturaPago | null };
   try {
     nueva = await stripe.subscriptions.update(
       sub.id,
       armarUpdateSubir({ sub, itemId: item.id, priceId: precioId, plan: destino, clinicId, iva }) as unknown as Record<string, unknown>,
-      { idempotencyKey: claves.subir(clinicId, factura.id) },
+      { idempotencyKey: claves.subir(clinicId, factura.id, intento) },
     );
   } catch (err) {
     // Si la tarjeta falló en este paso la factura nueva puede haber quedado abierta: se da su enlace.

@@ -463,17 +463,17 @@ test("contrato POST: pagar / subir, pagado, url de Stripe, errores tal cual y 40
     llamadas.push({ url, init: init ?? {} });
     return respuesta(status, cuerpo)();
   };
-  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(200, { ok: true, pagado: true })), { tipo: "pagado" });
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(200, { ok: true, pagado: true })), { tipo: "pagado" });
   assert.deepEqual(await cobrarPendiente({ accion: "subir", plan: "CLINIC" }, f(200, { ok: true, pagado: false, url: "https://checkout.stripe.com/c/pay/x" })), { tipo: "url", url: "https://checkout.stripe.com/c/pay/x" });
   assert.equal(llamadas[0].url, "/api/billing/pago-pendiente");
   assert.equal(llamadas[0].init.method, "POST");
-  assert.equal(llamadas[0].init.body, JSON.stringify({ accion: "pagar" }));
+  assert.equal(llamadas[0].init.body, JSON.stringify({ accion: "pagar", monto: 486.04 }), "«Pagar» lleva el monto confirmado (AA6)");
   assert.equal(llamadas[1].init.body, JSON.stringify({ accion: "subir", plan: "CLINIC" }));
   for (const status of [400, 403, 409, 502, 503]) {
-    assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(status, { error: `Error ${status} en español` })), { tipo: "error", mensaje: `Error ${status} en español` }, String(status));
+    assert.deepEqual(await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(status, { error: `Error ${status} en español` })), { tipo: "error", mensaje: `Error ${status} en español` }, String(status));
   }
-  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(404, {})), { tipo: "no_disponible" });
-  assert.deepEqual(await cobrarPendiente({ accion: "pagar" }, f(200, { ok: true, pagado: false })), { tipo: "error", mensaje: "" }, "sin url ni pagado: no se inventa nada");
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(404, {})), { tipo: "no_disponible" });
+  assert.deepEqual(await cobrarPendiente({ accion: "pagar", monto: 486.04 }, f(200, { ok: true, pagado: false })), { tipo: "error", mensaje: "" }, "sin url ni pagado: no se inventa nada");
 });
 
 test("monto exacto y cuándo aplican los dos botones", () => {

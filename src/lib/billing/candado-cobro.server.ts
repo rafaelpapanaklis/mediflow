@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
  *  2. ESTE candado en la base, que ve a TODAS las instancias. Es una sola fila por clínica en `billing_email_logs`
  *     (tabla interna de cobros que ninguna pantalla lista; `invoiceId` es UNIQUE y ya se usa como llave de «una sola vez»
  *     por otros avisos), manejada con comparar-y-cambiar atómico:
- *       · tomar  = `UPDATE … SET kind='candado_tomado', email=<dueño>, createdAt=ahora WHERE llave AND (libre OR vencida)`;
+ *       · tomar  = `UPDATE … SET kind='candado_tomado', email=<dueño>, createdAt=now() WHERE llave AND (libre OR vencida según now() de la BASE)`;
  *         si no hay fila todavía, `INSERT` (la llave UNIQUE hace que de dos que compiten solo uno entre: P2002 = ocupado);
  *       · soltar = `UPDATE … SET kind='candado_libre' WHERE llave AND kind='candado_tomado' AND email=<dueño>`.
  *     No usa transacción larga (con `connection_limit=1` por instancia retendría la única conexión mientras se cobra y el
@@ -27,44 +27,51 @@ export type ResultadoCandado = "tomado" | "ocupado" | "error";
 const KIND_TOMADO = "candado_tomado";
 const KIND_LIBRE = "candado_libre";
 
-export interface FilaCandado {
-  kind: string;
-  email: string;
-  createdAt: Date;
-}
 export interface DbCandado {
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   billingEmailLog: {
-    updateMany(args: any): Promise<{ count: number }>;
     create(args: any): Promise<unknown>;
-    findUnique(args: any): Promise<FilaCandado | null>;
+    updateMany(args: any): Promise<{ count: number }>;
+    findUnique(args: any): Promise<{ kind: string } | null>;
   };
 }
 
 /** La llave única de la clínica en `billing_email_logs.invoiceId`. */
 export const llaveCandadoCobro = (clinicId: string) => `candado-cobro:${clinicId}`;
 
+/**
+ * `true` = el candado quedó tomado por `dueno`.
+ *
+ * AA7: la vigencia se compara con el reloj de la BASE (`now()`), no con el de cada instancia: dos instancias con la hora
+ * desfasada no se pisan el candado. AA16: si el UPDATE no toma nada se MIRA antes de volver a intentar el INSERT (un «Pagar»
+ * que espera hacía ~30 INSERT con P2002 en 15 s y Prisma imprime cada error aunque se atrape).
+ */
 export async function tomarCandadoEnBase(
-  args: { clinicId: string; dueno: string; ttlSec: number; ahora?: Date },
+  args: { clinicId: string; dueno: string; ttlSec: number },
   db: DbCandado = prisma as unknown as DbCandado,
 ): Promise<ResultadoCandado> {
   if (!args.clinicId) return "error"; // sin clinicId no se sabe a quién bloquear (y Prisma descartaría el filtro)
-  const ahora = args.ahora ?? new Date();
   const llave = llaveCandadoCobro(args.clinicId);
+  const ttl = Math.max(1, Math.floor(args.ttlSec));
   try {
-    const r = await db.billingEmailLog.updateMany({
-      where: { invoiceId: llave, OR: [{ kind: KIND_LIBRE }, { createdAt: { lt: new Date(ahora.getTime() - args.ttlSec * 1000) } }] },
-      data: { kind: KIND_TOMADO, email: args.dueno, createdAt: ahora },
-    });
-    if (r.count > 0) return "tomado";
+    const tomadas = await db.$executeRaw`UPDATE "billing_email_logs"
+      SET "kind" = ${KIND_TOMADO}, "email" = ${args.dueno}, "createdAt" = now()
+      WHERE "invoiceId" = ${llave} AND ("kind" = ${KIND_LIBRE} OR "createdAt" < now() - (${ttl}::int * interval '1 second'))`;
+    if (tomadas > 0) return "tomado";
+    // Sin UPDATE: o la fila existe y está tomada (vigente) → ocupado, sin tocar el INSERT; o todavía no existe → se crea.
+    if (await db.billingEmailLog.findUnique({ where: { invoiceId: llave }, select: { kind: true } })) return "ocupado";
     try {
-      await db.billingEmailLog.create({ data: { invoiceId: llave, clinicId: args.clinicId, kind: KIND_TOMADO, email: args.dueno, createdAt: ahora } });
+      // `createdAt` lo pone el DEFAULT de la base (su reloj).
+      await db.billingEmailLog.create({ data: { invoiceId: llave, clinicId: args.clinicId, kind: KIND_TOMADO, email: args.dueno } });
       return "tomado";
     } catch (e) {
-      if ((e as { code?: string })?.code === "P2002") return "ocupado"; // la fila existe y está tomada (vigente)
+      if ((e as { code?: string })?.code === "P2002") return "ocupado"; // otra instancia la creó justo antes (carrera de la primera vez)
       throw e;
     }
   } catch (e) {
-    console.error("[candado-cobro] no se pudo tomar el candado en la base:", (e as Error)?.message ?? e);
+    // Incluye «la tabla no existe» (P2021 / 42P01: falta correr sql/billing-email-log.sql): NO se cobra sin candado.
+    console.error("[candado-cobro] no se pudo tomar el candado en la base (¿falta la tabla billing_email_logs? sql/billing-email-log.sql):", (e as Error)?.message ?? e);
     return "error";
   }
 }
@@ -83,16 +90,14 @@ export async function soltarCandadoEnBase(args: { clinicId: string; dueno: strin
 }
 
 /** Quién tiene hoy el candado de la clínica (su dueño: `pagar:<id>` / `subir:<id>`), o null. Solo para escoger el mensaje. */
-export async function duenoDelCandadoEnBase(
-  args: { clinicId: string; ttlSec: number; ahora?: Date },
-  db: DbCandado = prisma as unknown as DbCandado,
-): Promise<string | null> {
+export async function duenoDelCandadoEnBase(args: { clinicId: string; ttlSec: number }, db: DbCandado = prisma as unknown as DbCandado): Promise<string | null> {
   if (!args.clinicId) return null;
-  const ahora = args.ahora ?? new Date();
+  const ttl = Math.max(1, Math.floor(args.ttlSec));
   try {
-    const f = await db.billingEmailLog.findUnique({ where: { invoiceId: llaveCandadoCobro(args.clinicId) }, select: { kind: true, email: true, createdAt: true } });
-    if (!f || f.kind !== KIND_TOMADO || ahora.getTime() - f.createdAt.getTime() >= args.ttlSec * 1000) return null;
-    return f.email;
+    const f = await db.$queryRaw<Array<{ email: string }>>`SELECT "email" FROM "billing_email_logs"
+      WHERE "invoiceId" = ${llaveCandadoCobro(args.clinicId)} AND "kind" = ${KIND_TOMADO}
+        AND "createdAt" >= now() - (${ttl}::int * interval '1 second')`;
+    return f[0]?.email ?? null;
   } catch {
     return null;
   }
@@ -117,15 +122,14 @@ const capaRapidaReal: CapaRapida = {
  */
 export function crearCandadoDeCobro(
   args: { clinicId: string },
-  capas: { rapida?: CapaRapida; db?: DbCandado; ahora?: () => Date } = {},
+  capas: { rapida?: CapaRapida; db?: DbCandado } = {},
 ) {
   const rapida = capas.rapida ?? capaRapidaReal;
   const db = capas.db ?? (prisma as unknown as DbCandado);
-  const ahora = () => (capas.ahora ?? (() => new Date()))();
   return {
     tomar: async (clave: string, ttlSec: number, dueno: string): Promise<ResultadoCandado> => {
       if (!(await rapida.adquirir(clave, ttlSec, dueno))) return "ocupado";
-      const enBase = await tomarCandadoEnBase({ clinicId: args.clinicId, dueno, ttlSec, ahora: ahora() }, db);
+      const enBase = await tomarCandadoEnBase({ clinicId: args.clinicId, dueno, ttlSec }, db);
       if (enBase !== "tomado") await rapida.liberar(clave, dueno).catch(() => {});
       return enBase;
     },
@@ -133,6 +137,6 @@ export function crearCandadoDeCobro(
       await soltarCandadoEnBase({ clinicId: args.clinicId, dueno }, db);
       await rapida.liberar(clave, dueno).catch(() => {});
     },
-    quien: async (): Promise<string | null> => duenoDelCandadoEnBase({ clinicId: args.clinicId, ttlSec: 90, ahora: ahora() }, db),
+    quien: async (): Promise<string | null> => duenoDelCandadoEnBase({ clinicId: args.clinicId, ttlSec: 90 }, db),
   };
 }

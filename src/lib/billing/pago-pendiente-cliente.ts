@@ -42,7 +42,8 @@ export type LecturaPago =
   | { tipo: "no_disponible" }
   | { tipo: "error"; mensaje: string };
 
-export type OrdenDeCobro = { accion: "pagar" } | { accion: "subir"; plan: string };
+/** «Pagar» lleva el monto (pesos) que la pantalla mostró y la clínica confirmó: el servidor no cobra otro (AA6). */
+export type OrdenDeCobro = { accion: "pagar"; monto: number } | { accion: "subir"; plan: string };
 
 export type ResultadoCobro =
   | { tipo: "pagado" }
@@ -53,7 +54,7 @@ export type ResultadoCobro =
   | { tipo: "ya_registrado"; mensaje: string }
   | { tipo: "url"; url: string }
   | { tipo: "no_disponible" }
-  | { tipo: "error"; mensaje: string };
+  | { tipo: "error"; mensaje: string; codigo?: string };
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -124,7 +125,9 @@ export async function cobrarPendiente(orden: OrdenDeCobro, f: Fetch = fetch): Pr
   if (res.status === 404) return { tipo: "no_disponible" };
   const d = await cuerpo(res);
   if (res.status === 409 && d.code === "PAGO_YA_REGISTRADO") return { tipo: "ya_registrado", mensaje: typeof d.error === "string" ? d.error : "" };
-  if (!res.ok || d.ok === false) return { tipo: "error", mensaje: typeof d.error === "string" ? d.error : "" };
+  if (!res.ok || d.ok === false) {
+    return { tipo: "error", mensaje: typeof d.error === "string" ? d.error : "", ...(typeof d.code === "string" ? { codigo: d.code } : {}) };
+  }
   if (d.pagado === true) return { tipo: "pagado" };
   if (typeof d.url === "string" && d.url) return { tipo: "url", url: d.url };
   return { tipo: "error", mensaje: "" };
