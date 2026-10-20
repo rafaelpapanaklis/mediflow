@@ -30,7 +30,7 @@
 //    en tres revisiones seguidas y Rafael pidió el plan «con precios». Lo pagado se consulta en
 //    el estado de cuenta del paciente, no en este papel.
 
-import { leerRenglonesDelPlan, leerTotalDelPlan, textoPuedeEstarRedondeado } from "@/lib/quotes/desde-plan";
+import { leerRenglonesDelPlan, leerTotalDelPlan, textoPuedeEstarRedondeado, type RenglonLeido } from "@/lib/quotes/desde-plan";
 
 /** Diferencias menores a medio centavo no son diferencias. */
 const CENTAVO = 0.005;
@@ -118,11 +118,15 @@ export function nombreDeLaDiferencia(args: {
   return "ajuste";
 }
 
-/** Arma el contenido del PDF. */
-export function armarDocumentoDelPlan(plan: PlanParaPdf): DocumentoDelPlan {
+/**
+ * Arma el contenido del PDF. Con `renglones` (las FILAS del plan, por el lector dual de
+ * `lib/treatments/leer-plan.ts`, ws1-t12) no se lee el texto y los precios son exactos.
+ */
+export function armarDocumentoDelPlan(plan: PlanParaPdf, opciones: { renglones?: RenglonLeido[] } = {}): DocumentoDelPlan {
   // El total es el costo del plan, el que enseña la ficha (también un plan confirmado «sin costo»).
   const total = Math.max(0, r2(num(plan.totalCost)));
-  const leidos = leerRenglonesDelPlan(plan.description);
+  const deFilas = Array.isArray(opciones.renglones) && opciones.renglones.length > 0;
+  const leidos = deFilas ? opciones.renglones! : leerRenglonesDelPlan(plan.description);
 
   if (leidos.length === 0) {
     // Plan sin detalle (o de los de antes, cuya descripción es la nota): su nombre y su costo.
@@ -135,7 +139,7 @@ export function armarDocumentoDelPlan(plan: PlanParaPdf): DocumentoDelPlan {
     };
   }
 
-  const textoRedondeado = textoPuedeEstarRedondeado(plan);
+  const textoRedondeado = deFilas ? false : textoPuedeEstarRedondeado(plan);
   const conPrecio = leidos.some((l) => l.precio != null && l.precio > 0);
   let toleranciaRedondeo = 0;
   const renglones: RenglonPdf[] = leidos.map((leido) => {

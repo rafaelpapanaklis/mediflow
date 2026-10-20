@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext, type AuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { logAudit } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { armarPresupuestoDePlan, ESTADOS_QUE_YA_CUENTAN, textoPuedeEstarRedondeado } from "@/lib/quotes/desde-plan";
-import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
+import { armarPresupuestoDePlan, ESTADOS_QUE_YA_CUENTAN } from "@/lib/quotes/desde-plan";
+import { repoFilas } from "@/lib/treatments/items-db";
+import { leerPlan } from "@/lib/treatments/leer-plan";
+import { presupuestoDesdeElPlan, tarifarioDeLaClinica } from "@/lib/treatments/presentar.server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,9 @@ interface Params { params: Promise<{ id: string }> }
  * `treatments.view` (se lee un plan). El doctor solo ve sus planes, como en GET /api/treatments. Todo por
  * la clínica de la sesión. No hay SQL: `treatmentPlanId` ya existe en `quotes` (sin FK) y significa «el plan
  * con el que va este presupuesto»; con él puesto, un presupuesto aceptado no ofrece crear OTRO plan.
+ *
+ * ws1-t12: los conceptos salen del LECTOR DUAL (las filas del plan si las tiene, con precio exacto; si
+ * no, su texto).
  */
 
 async function cargarPlan(ctx: AuthContext, id: string) {
@@ -53,13 +57,6 @@ async function permisos(ctx: AuthContext) {
   return denyIfMissingPermission(ctx, "billing.create") ?? denyIfMissingPermission(ctx, "treatments.view");
 }
 
-async function tarifario(clinicId: string) {
-  return prisma.procedureCatalog.findMany({
-    where: { clinicId, isActive: true },
-    select: { id: true, name: true, basePrice: true },
-    take: 2000,
-  });
-}
 
 export async function GET(_req: NextRequest, props: Params) {
   const params = await props.params;
@@ -71,11 +68,21 @@ export async function GET(_req: NextRequest, props: Params) {
   const r = await cargarPlan(ctx, params.id);
   if ("error" in r) return r.error;
 
-  const [existente, procs] = await Promise.all([presupuestoVivo(ctx, r.plan.id), tarifario(ctx.clinicId)]);
-  const armado = armarPresupuestoDePlan(r.plan, procs, { textoRedondeado: textoPuedeEstarRedondeado(r.plan) });
+  const [existente, procs, filas] = await Promise.all([
+    presupuestoVivo(ctx, r.plan.id),
+    tarifarioDeLaClinica(ctx.clinicId),
+    repoFilas.leer(ctx.clinicId, r.plan.id),
+  ]);
+  const leido = leerPlan(r.plan, filas);
+  const armado = armarPresupuestoDePlan(
+    r.plan,
+    procs,
+    leido.fuente === "filas" ? { renglones: leido.renglones } : { textoRedondeado: leido.textoRedondeado },
+  );
   return NextResponse.json({
     plan: { id: r.plan.id, name: r.plan.name },
     existente: existente ? aDto(existente) : null,
+    deFilas: leido.fuente === "filas",
     ...armado,
     conceptos: armado.conceptos.map((c) => ({
       name: c.name, toothFdi: c.toothFdi ?? null, quantity: c.quantity, unitPrice: c.unitPrice,
@@ -94,35 +101,13 @@ export async function POST(_req: NextRequest, props: Params) {
   const r = await cargarPlan(ctx, params.id);
   if ("error" in r) return r.error;
 
-  const existente = await presupuestoVivo(ctx, r.plan.id);
-  if (existente) return NextResponse.json({ already: true, quote: aDto(existente) });
-
-  const armado = armarPresupuestoDePlan(r.plan, await tarifario(ctx.clinicId), { textoRedondeado: textoPuedeEstarRedondeado(r.plan) });
-  const quote = await createQuoteWithFolio({
-    clinicId: ctx.clinicId,
-    patientId: r.plan.patientId,
-    createdById: ctx.userId,
-    title: r.plan.name.trim().slice(0, 160) || "Presupuesto",
-    items: armado.conceptos,
-    validUntil: parseValidUntil(null),
-    notes: null,
-    treatmentPlanId: r.plan.id,
-  });
-
-  await logAudit({
-    patientId: quote.patientId,
-    texto: `Creó el presupuesto ${quote.folio} (borrador) desde el plan de tratamiento «${r.plan.name}»`,
-    clinicId: ctx.clinicId,
-    userId: ctx.userId,
-    entityType: "quote",
-    entityId: quote.id,
-    action: "create",
-    changes: {
-      folio: { before: null, after: quote.folio },
-      total: { before: null, after: Number(quote.total) },
-      treatmentPlanId: { before: null, after: r.plan.id },
+  const hecho = await presupuestoDesdeElPlan({ clinicId: ctx.clinicId, userId: ctx.userId, plan: r.plan, presentar: false });
+  if (hecho.error) return NextResponse.json({ error: hecho.error.mensaje, quote: hecho.quote }, { status: hecho.error.http });
+  return NextResponse.json(
+    {
+      already: hecho.already,
+      quote: hecho.quote,
     },
-  });
-
-  return NextResponse.json({ already: false, quote: aDto(quote) }, { status: 201 });
+    { status: hecho.already ? 200 : 201 },
+  );
 }

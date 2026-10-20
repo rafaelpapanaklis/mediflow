@@ -8,6 +8,9 @@ import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db"
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
 import { CODIGO_PLAN_SIN_COSTO, faltaConfirmarSinCosto } from "@/lib/treatments/plan-sin-costo";
+import { aPesos, comoNueva, conProcedimientosValidos, filaDto, leerFilas, totalCentavos, type FilaDelPlan } from "@/lib/treatments/items";
+import { procedimientosDeLaClinica, repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
+import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
 
 // GET /api/treatments — list all treatment plans for clinic (role-filtered)
 export async function GET(req: NextRequest) {
@@ -51,8 +54,13 @@ export async function GET(req: NextRequest) {
     skip,
   });
 
+  // ws1-t12 · P2: las filas de cada plan (una consulta para todos). Sin la tabla, `items: []` y el
+  // plan se lee de su texto como siempre.
+  const filasPorPlan = await repoFilas.leerDePlanes(ctx.clinicId, treatments.map((t) => t.id));
+
   return NextResponse.json(treatments.map(t => ({
     ...t,
+    items:           (filasPorPlan.get(t.id) ?? []).map(filaDto),
     startDate:       t.startDate instanceof Date ? t.startDate.toISOString() : t.startDate,
     endDate:         t.endDate instanceof Date ? t.endDate.toISOString() : t.endDate,
     nextExpectedDate:t.nextExpectedDate instanceof Date ? t.nextExpectedDate.toISOString() : t.nextExpectedDate,
@@ -74,6 +82,18 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { patientId, doctorId, name, description, totalSessions, sessionIntervalDays, totalCost } = body;
+
+  // ws1-t12 · P2: los procedimientos como FILAS (`items`). Se validan antes de tocar nada: una fila
+  // mala no deja un plan a medias. Sin la tabla (SQL sin pegar) se ignoran y el plan se guarda como
+  // hoy, con su texto en `description` (la ventana lo sigue mandando).
+  let filasNuevas: ReturnType<typeof comoNueva>[] = [];
+  if (body.items !== undefined) {
+    const lectura = leerFilas(body.items);
+    if (!lectura.ok) return NextResponse.json(cuerpoDeErrorDeFila(lectura.codigo!, lectura.indice), { status: 400 });
+    filasNuevas = lectura.filas!.map(comoNueva);
+  }
+  // Sin costo escrito, el plan con filas cuesta lo que suman (nada de teclearlo dos veces).
+  const costoDelPlan = totalCost ?? (filasNuevas.length ? aPesos(totalCentavos(filasNuevas.map((f) => ({ ...f, estado: "pendiente" as const })))) : undefined);
 
   if (!patientId || !name) {
     return NextResponse.json({ error: "patientId y nombre son requeridos" }, { status: 400 });
@@ -113,7 +133,7 @@ export async function POST(req: NextRequest) {
   // ws1-t2 (F15): un plan en $0 no se crea sin confirmarlo (la pantalla pregunta antes y manda
   // `confirmarSinCosto: true`). Va DESPUÉS de validar paciente y doctor: el aviso solo sale cuando
   // lo demás ya está bien, y no dice nada de un paciente ajeno.
-  if (faltaConfirmarSinCosto(body)) {
+  if (faltaConfirmarSinCosto({ ...body, totalCost: costoDelPlan })) {
     return NextResponse.json(
       {
         error: "El plan va en $0: ningún procedimiento trae precio. Escribe el costo o confirma que va sin costo.",
@@ -132,26 +152,40 @@ export async function POST(req: NextRequest) {
   // First expected session = today + interval
   const nextExpectedDate = new Date(startDate.getTime() + interval * 24 * 60 * 60 * 1000);
 
-  const plan = await prisma.treatmentPlan.create({
-    data: {
-      clinicId:            ctx.clinicId,
-      patientId,
-      doctorId:            assignedDoctorId,
-      name:                name.trim(),
-      description:         description?.trim() ?? null,
-      totalSessions:       sessions,
-      sessionIntervalDays: interval,
-      totalCost:           Number(totalCost ?? 0),
-      startDate,
-      endDate,
-      nextExpectedDate,
-    },
-    include: {
-      patient: { select: { id: true, firstName: true, lastName: true } },
-      doctor:  { select: { id: true, firstName: true, lastName: true } },
-      sessions:true,
-    },
-  });
+  const conFilas = filasNuevas.length > 0 && (await tablaDeFilasExiste());
+  if (conFilas) {
+    const validos = await procedimientosDeLaClinica(ctx.clinicId, filasNuevas.map((f) => f.procedureId));
+    filasNuevas = conProcedimientosValidos(filasNuevas, validos);
+  }
+
+  const datosDelPlan = {
+    clinicId:            ctx.clinicId,
+    patientId,
+    doctorId:            assignedDoctorId,
+    name:                name.trim(),
+    description:         description?.trim() ?? null,
+    totalSessions:       sessions,
+    sessionIntervalDays: interval,
+    totalCost:           Number(costoDelPlan ?? 0),
+    startDate,
+    endDate,
+    nextExpectedDate,
+  };
+  const incluir = {
+    patient: { select: { id: true, firstName: true, lastName: true } },
+    doctor:  { select: { id: true, firstName: true, lastName: true } },
+    sessions: true,
+  } as const;
+
+  // Plan y filas juntos o nada (una transacción).
+  let filas: FilaDelPlan[] = [];
+  const plan = conFilas
+    ? await prisma.$transaction(async (tx) => {
+        const p = await tx.treatmentPlan.create({ data: datosDelPlan, include: incluir });
+        filas = await repoFilas.insertar(tx, { clinicId: ctx.clinicId, planId: p.id, userId: ctx.userId, filas: filasNuevas });
+        return p;
+      })
+    : await prisma.treatmentPlan.create({ data: datosDelPlan, include: incluir });
 
   // NOM-024 §6.3.5 — bitácora de creación del plan de tratamiento.
   // clinicId/userId SIEMPRE de sesión (getAuthContext), nunca del body.
@@ -162,7 +196,10 @@ export async function POST(req: NextRequest) {
     entityType: "treatment",
     entityId:   plan.id,
     action:     "create",
-    after:      { patientId: plan.patientId, doctorId: plan.doctorId, name: plan.name, totalSessions: plan.totalSessions, totalCost: Number(plan.totalCost) },
+    after:      {
+      patientId: plan.patientId, doctorId: plan.doctorId, name: plan.name, totalSessions: plan.totalSessions, totalCost: Number(plan.totalCost),
+      ...(filas.length ? { procedimientos: filas.map((f) => f.nombre), filas: filas.length } : {}),
+    },
   });
 
   revalidateAfter("treatments");
@@ -173,5 +210,8 @@ export async function POST(req: NextRequest) {
     nextExpectedDate:plan.nextExpectedDate?.toISOString() ?? null,
     createdAt:       plan.createdAt.toISOString(),
     updatedAt:       plan.updatedAt.toISOString(),
+    items:           filas.map(filaDto),
+    // ¿Se guardaron como filas? false = sin la tabla: el plan quedó como texto, como hoy.
+    filasGuardadas:  conFilas,
   }, { status: 201 });
 }

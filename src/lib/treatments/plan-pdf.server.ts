@@ -10,6 +10,8 @@ import { dineroExacto } from "./dinero-exacto";
 import { getDict, resolveLocale } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
 import { armarDocumentoDelPlan, nombreDeArchivo } from "./plan-pdf";
+import { repoFilas } from "./items-db";
+import { leerPlan, nombresDeFase } from "./leer-plan";
 
 /**
  * buildPlanTratamientoPdf — lectura + logo + render del PDF de un plan de tratamiento (ws1-t12).
@@ -60,8 +62,11 @@ export async function buildPlanTratamientoPdf(args: {
   const ahora = args.ahora ?? new Date();
   const fechaLarga = (d: Date) => formatoEnZona(d, { day: "numeric", month: "long", year: "numeric" }, zona, intl) ?? "—";
 
+  // Lector dual (ws1-t12 · P2): las filas del plan si las tiene; si no, el texto de siempre.
+  const leido = leerPlan(plan, await repoFilas.leer(args.clinicId, plan.id), nombresDeFase(locale));
   const documento = armarDocumentoDelPlan(
     { name: plan.name, description: plan.description, totalCost: Number(plan.totalCost) || 0 },
+    { renglones: leido.fuente === "filas" ? leido.renglones : undefined },
   );
 
   const pacienteNombre = `${plan.patient?.firstName ?? ""} ${plan.patient?.lastName ?? ""}`.trim() || "—";

@@ -44,10 +44,11 @@ test("leer una fila: dientes, caras, precio y estado como los manda la ventana",
   assert.equal(f!.nombre, "Resina 2 caras");
   assert.equal(f!.estado, "pendiente");
   assert.equal(f!.id, null);
-  // precioCentavos manda sobre precio; dientes como lista; sin cantidad = 1
-  const b = leerFila({ name: "Limpieza", dientes: [11, 11], precioCentavos: 80000, precio: "1" }).fila!;
+  // `precio` (pesos, lo que se edita) manda sobre `precioCentavos`; dientes como lista; sin cantidad = 1
+  const b = leerFila({ name: "Limpieza", dientes: [11, 11], precioCentavos: 80000, precio: "900" }).fila!;
   assert.deepEqual(b.dientes, [11]);
-  assert.equal(b.precioCentavos, 80000);
+  assert.equal(b.precioCentavos, 90000);
+  assert.equal(leerFila({ nombre: "Limpieza", precioCentavos: 80000 }).fila!.precioCentavos, 80000);
   assert.equal(b.cantidad, 1);
   // sin precio = $0 (cortesía), no un error
   assert.equal(leerFila({ nombre: "Revisión" }).fila!.precioCentavos, 0);

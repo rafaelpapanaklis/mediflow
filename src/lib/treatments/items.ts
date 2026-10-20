@@ -162,6 +162,19 @@ export function resumenDeFilas(filas: FilaDelPlan[]): ResumenDeFilas {
   return r;
 }
 
+const rango = (f: Pick<FilaDelPlan, "fase" | "faseNumero">) => (f.fase ? FASES.indexOf(f.fase) : FASES.length + (f.faseNumero ?? 0));
+
+/**
+ * Las filas en el orden del PAPEL: por fase clínica (en su orden), luego por su orden en el plan. Es
+ * el orden del PDF, del presupuesto y de las líneas de la nota de cobro.
+ */
+export function ordenarParaElPapel<T extends Pick<FilaDelPlan, "fase" | "faseNumero" | "orden">>(filas: T[]): T[] {
+  return filas
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => rango(a.f) - rango(b.f) || a.f.orden - b.f.orden || a.i - b.i)
+    .map((x) => x.f);
+}
+
 /** «16,26»: los dientes como los guarda `QuoteItem.toothFdi`. "" si no hay. */
 export const dientesCsv = (dientes: number[]): string => dientes.join(",");
 
@@ -265,8 +278,8 @@ function leerHallazgo(v: unknown): HallazgoDeOrigen | null {
 }
 
 /**
- * Lee UNA fila del navegador. Acepta el precio como `precio` (pesos: número o texto) o como
- * `precioCentavos` (entero); dientes como lista o «16, 26»; caras como lista o «MO».
+ * Lee UNA fila del navegador. Acepta el precio como `precio` (pesos: número o texto; manda) o como
+ * `precioCentavos` (entero, si no viene `precio`); dientes como lista o «16, 26»; caras como lista o «MO».
  */
 export function leerFila(raw: unknown): { fila: FilaEntrante | null; codigo: CodigoDeFila | null } {
   if (!raw || typeof raw !== "object") return { fila: null, codigo: "sin_nombre" };
@@ -288,8 +301,11 @@ export function leerFila(raw: unknown): { fila: FilaEntrante | null; codigo: Cod
   const cantidad = r.cantidad == null || r.cantidad === "" ? 1 : Number(r.cantidad);
   if (!(Number.isInteger(cantidad) && cantidad >= 1 && cantidad <= MAX_CANTIDAD)) return { fila: null, codigo: "cantidad_invalida" };
 
+  // Manda `precio` (pesos: lo que se edita en pantalla); `precioCentavos` solo si no viene `precio`.
+  // Así una fila devuelta tal cual la contestó la API (trae los dos) y luego editada en pesos no se
+  // queda con el precio viejo.
   const precioCentavos =
-    r.precioCentavos != null && r.precioCentavos !== "" ? Number(r.precioCentavos) : r.precio == null || r.precio === "" ? 0 : aCentavos(r.precio);
+    r.precio != null && r.precio !== "" ? aCentavos(r.precio) : r.precioCentavos != null && r.precioCentavos !== "" ? Number(r.precioCentavos) : 0;
   if (!(Number.isInteger(precioCentavos) && precioCentavos >= 0 && precioCentavos <= MAX_PRECIO_CENTAVOS)) {
     return { fila: null, codigo: "precio_invalido" };
   }
