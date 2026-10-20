@@ -18,8 +18,10 @@ export interface HojaDTO {
   cuerpo: string;
   /** Procedimientos del catálogo de la clínica a los que está ligada (solo indicaciones). */
   procedureIds: string[];
-  /** Sembrada por DaleControl: el texto no se edita (se copia); la liga y el «en uso» sí. */
+  /** Sembrada por DaleControl: el nombre no cambia; el texto se edita como versión de la clínica; la liga y el «en uso» sí. */
   deFabrica: boolean;
+  /** El texto que rige es el de la clínica (editó la de fábrica). Solo en las de fábrica. */
+  versionDeClinica?: boolean;
   /** De qué texto de fábrica es (la de fábrica) o de cuál salió (una copia). */
   basadaEn: string | null;
   activa: boolean;
@@ -47,7 +49,9 @@ export type CodigoHoja =
   | "CUERPO_LARGO"
   | "NOMBRE_OCUPADO"
   | "NO_ENCONTRADA"
-  | "FABRICA_NO_SE_EDITA";
+  | "FABRICA_NO_SE_EDITA"
+  | "NO_ES_DE_FABRICA"
+  | "VERSIONES_NO_DISPONIBLES";
 
 export const STATUS_HOJA: Record<CodigoHoja, number> = {
   SIN_TABLA: 503,
@@ -59,6 +63,8 @@ export const STATUS_HOJA: Record<CodigoHoja, number> = {
   NOMBRE_OCUPADO: 409,
   NO_ENCONTRADA: 404,
   FABRICA_NO_SE_EDITA: 409,
+  NO_ES_DE_FABRICA: 409,
+  VERSIONES_NO_DISPONIBLES: 503,
 };
 
 /**

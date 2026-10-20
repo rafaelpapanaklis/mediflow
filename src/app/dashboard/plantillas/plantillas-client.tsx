@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { FileText, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
+import { FileText, Pencil, Plus, Power, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import {
@@ -28,6 +28,8 @@ export interface PlantillaFila {
   updatedAt: string;
   /** Sembrada por DaleControl, no escrita por la clínica. Ver tarjeta.ts. */
   precargada: boolean;
+  /** De fábrica y la clínica ya cambió su texto: se ofrece «Volver a la de fábrica» (ws1-t6). */
+  restaurable?: boolean;
 }
 
 /** La pestaña de las notas de la hoja de control de Ortodoncia (otra tabla; ver plantillas-orto.tsx). */
@@ -45,6 +47,8 @@ interface Props {
   initialHojas?: HojaDTO[] | null;
   /** El catálogo de la clínica, para ligar indicaciones a procedimientos. */
   procedimientos?: ProcedimientoLigable[];
+  /** Existe la tabla de versiones por clínica: las de fábrica se editan y se puede volver a ellas. */
+  versionesDisponibles?: boolean;
 }
 
 // Pestañas y no dos listas: en la ficha del paciente cada sitio enseña SOLO las
@@ -59,7 +63,13 @@ const VACIO_KEY: Record<DocumentTemplateKindValue, string> = {
   CONSENTIMIENTO: "pages.plantillas.vacioConsentimiento",
 };
 
-export function PlantillasClient({ initialTemplates, initialOrto = null, initialHojas = null, procedimientos = [] }: Props) {
+export function PlantillasClient({
+  initialTemplates,
+  initialOrto = null,
+  initialHojas = null,
+  procedimientos = [],
+  versionesDisponibles = false,
+}: Props) {
   const t = useT();
   const locale = useLocale();
   const askConfirm = useConfirm();
@@ -128,6 +138,39 @@ export function PlantillasClient({ initialTemplates, initialOrto = null, initial
       }
       setTemplates((prev) => prev.map((x) => (x.id === p.id ? { ...x, isActive: data.isActive, updatedAt: data.updatedAt } : x)));
       toast.success(t(data.isActive ? "pages.plantillas.toastActivada" : "pages.plantillas.toastDesactivada"));
+    } catch {
+      toast.error(t("pages.plantillas.errores.generico"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // «Volver a la de fábrica» (consentimientos): el texto de la clínica se archiva, no se borra.
+  async function volverAFabrica(p: PlantillaFila) {
+    if (busyId) return;
+    const ok = await askConfirm({
+      title: t("pages.plantillas.confirmarVolverTitulo", { nombre: p.name }),
+      description: t("pages.plantillas.confirmarVolverTexto"),
+      confirmText: t("pages.plantillas.volverAFabrica"),
+      variant: "warning",
+    });
+    if (!ok) return;
+    setBusyId(p.id);
+    try {
+      const res = await fetch(`/api/document-templates/${p.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volverAFabrica: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.id) {
+        toast.error(mensajeDeError(data));
+        return;
+      }
+      setTemplates((prev) =>
+        prev.map((x) => (x.id === p.id ? { ...x, body: data.body, updatedAt: data.updatedAt, restaurable: false } : x)),
+      );
+      toast.success(t("pages.plantillas.toastVolvioAFabrica"));
     } catch {
       toast.error(t("pages.plantillas.errores.generico"));
     } finally {
@@ -238,12 +281,13 @@ export function PlantillasClient({ initialTemplates, initialOrto = null, initial
 
       <section id="plantillas-panel" role="tabpanel" aria-labelledby={`plantillas-tab-${pestana}`} className={styles.panel}>
         {pestana === TAB_ORTO && orto ? (
-          <PlantillasOrto filas={orto} onChange={setOrto} />
+          <PlantillasOrto filas={orto} versionesDisponibles={versionesDisponibles} onChange={setOrto} />
         ) : (pestana === TAB_INDICACIONES || pestana === TAB_CONSTANCIA) && hojas ? (
           <PlantillasIndicaciones
             tipo={pestana === TAB_CONSTANCIA ? "CONSTANCIA" : "INDICACIONES"}
             hojas={hojas}
             procedimientos={procedimientos}
+            versionesDisponibles={versionesDisponibles}
             onChange={setHojas}
           />
         ) : (
@@ -294,8 +338,14 @@ export function PlantillasClient({ initialTemplates, initialOrto = null, initial
                     <span className={`${styles.badge} ${p.isActive ? styles.badgeEnUso : ""}`}>
                       {t(p.isActive ? "pages.plantillas.enUso" : "pages.plantillas.inactiva")}
                     </span>
-                    <span className={`${styles.badge} ${p.precargada ? "" : styles.badgePropia}`}>
-                      {t(p.precargada ? "pages.plantillas.precargada" : "pages.plantillas.propia")}
+                    <span className={`${styles.badge} ${p.precargada && !p.restaurable ? "" : styles.badgePropia}`}>
+                      {t(
+                        p.precargada
+                          ? p.restaurable
+                            ? "pages.plantillas.versionDeClinica"
+                            : "pages.plantillas.precargada"
+                          : "pages.plantillas.propia",
+                      )}
                     </span>
                   </div>
                   <p className={styles.cardMeta}>
@@ -314,6 +364,19 @@ export function PlantillasClient({ initialTemplates, initialOrto = null, initial
                   >
                     <Pencil size={16} aria-hidden />
                   </button>
+                  {p.restaurable && versionesDisponibles && (
+                    <button
+                      type="button"
+                      className={`${styles.iconBtn} ${styles.iconBtnTexto}`}
+                      disabled={busyId === p.id}
+                      onClick={() => volverAFabrica(p)}
+                      title={t("pages.plantillas.volverAFabrica")}
+                      aria-label={`${t("pages.plantillas.volverAFabrica")}: ${p.name}`}
+                    >
+                      <RotateCcw size={16} aria-hidden />
+                      <span>{t("pages.plantillas.volverAFabrica")}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnTexto}`}

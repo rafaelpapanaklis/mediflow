@@ -2,13 +2,15 @@
 
 // Administración → Plantillas → «Indicaciones» y «Constancia de asistencia»
 // (ws1-t10, mejora 12). Misma forma que «Notas de ortodoncia»: las de fábrica se
-// ven y se copian; las propias se editan; nada se borra, se apaga. Las de
+// ven, se copian y (ws1-t6) se editan como versión de la clínica, con «Volver a la
+// de fábrica»; las propias se editan; nada se borra, se apaga. Las de
 // indicaciones, además, se ligan a procedimientos del catálogo (las de fábrica
 // también: el texto no se toca, la liga sí).
 
 import { useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ClipboardList, Copy, FileBadge, Pencil, Plus, Power, Search } from "lucide-react";
+import { ClipboardList, Copy, FileBadge, Pencil, Plus, Power, RotateCcw, Search } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useLocale } from "@/i18n/i18n-provider";
 import { nombreDeCopiaHoja } from "@/lib/indicaciones/servicio";
 import { conValores, useTextosIndicaciones } from "@/lib/indicaciones/textos";
@@ -23,11 +25,14 @@ interface Props {
   /** Todas las hojas de la clínica (las dos pestañas); aquí se ven las de `tipo`. */
   hojas: HojaDTO[];
   procedimientos: ProcedimientoLigable[];
+  /** Falta pegar el SQL de las versiones por clínica: las de fábrica siguen siendo de solo lectura. */
+  versionesDisponibles?: boolean;
   onChange: (hojas: HojaDTO[]) => void;
 }
 
-export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }: Props) {
+export function PlantillasIndicaciones({ tipo, hojas, procedimientos, versionesDisponibles = false, onChange }: Props) {
   const tx = useTextosIndicaciones();
+  const askConfirm = useConfirm();
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalHoja | null>(null);
@@ -112,6 +117,40 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
     }
   }
 
+  // «Volver a la de fábrica»: la versión de la clínica se archiva (no se borra) y la hoja recupera su texto.
+  async function volverAFabrica(h: HojaDTO) {
+    if (busyId) return;
+    const ok = await askConfirm({
+      title: conValores(tx.confirmarVolverTitulo, { nombre: h.nombre }),
+      description: tx.confirmarVolverTexto,
+      confirmText: tx.volverAFabrica,
+      variant: "warning",
+    });
+    if (!ok) return;
+    setBusyId(h.id);
+    try {
+      const res = await fetch(`/api/indicaciones/plantillas/${h.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volverAFabrica: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.id) {
+        toast.error(mensajeDeError(data));
+        return;
+      }
+      onChange(hojasRef.current.map((x) => (x.id === h.id ? (data as HojaDTO) : x)));
+      toast.success(tx.toastVolvioAFabrica);
+    } catch {
+      toast.error(tx.errores.generico);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Una de fábrica se edita (como versión de la clínica) cuando la tabla existe; si no, solo se ve. */
+  const modoAlAbrir = (h: HojaDTO): "ver" | "editar" => (h.deFabrica && !versionesDisponibles ? "ver" : "editar");
+
   const Icono = tipo === "CONSTANCIA" ? FileBadge : ClipboardList;
 
   return (
@@ -158,7 +197,7 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
                       <button
                         type="button"
                         className={styles.cardTitleBtn}
-                        onClick={() => setModal({ modo: h.deFabrica ? "ver" : "editar", hoja: h })}
+                        onClick={() => setModal({ modo: modoAlAbrir(h), hoja: h })}
                       >
                         {h.nombre}
                       </button>
@@ -166,8 +205,8 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
                     <span className={`${styles.badge} ${h.activa ? styles.badgeEnUso : ""}`}>
                       {h.activa ? tx.enUso : tx.inactiva}
                     </span>
-                    <span className={`${styles.badge} ${h.deFabrica ? "" : styles.badgePropia}`}>
-                      {h.deFabrica ? tx.deFabrica : tx.propia}
+                    <span className={`${styles.badge} ${h.deFabrica && !h.versionDeClinica ? "" : styles.badgePropia}`}>
+                      {h.deFabrica ? (h.versionDeClinica ? tx.versionDeClinica : tx.deFabrica) : tx.propia}
                     </span>
                   </div>
                   {tipo === "INDICACIONES" && (
@@ -184,12 +223,25 @@ export function PlantillasIndicaciones({ tipo, hojas, procedimientos, onChange }
                   <button
                     type="button"
                     className={styles.iconBtn}
-                    onClick={() => setModal({ modo: h.deFabrica ? "ver" : "editar", hoja: h })}
-                    title={h.deFabrica ? tx.ver : tx.editar}
-                    aria-label={`${h.deFabrica ? tx.ver : tx.editar}: ${h.nombre}`}
+                    onClick={() => setModal({ modo: modoAlAbrir(h), hoja: h })}
+                    title={modoAlAbrir(h) === "ver" ? tx.ver : tx.editar}
+                    aria-label={`${modoAlAbrir(h) === "ver" ? tx.ver : tx.editar}: ${h.nombre}`}
                   >
                     <Pencil size={16} aria-hidden />
                   </button>
+                  {h.deFabrica && h.versionDeClinica && versionesDisponibles && (
+                    <button
+                      type="button"
+                      className={`${styles.iconBtn} ${styles.iconBtnTexto}`}
+                      disabled={busyId === h.id}
+                      onClick={() => volverAFabrica(h)}
+                      title={tx.volverAFabrica}
+                      aria-label={`${tx.volverAFabrica}: ${h.nombre}`}
+                    >
+                      <RotateCcw size={16} aria-hidden />
+                      <span>{tx.volverAFabrica}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={styles.iconBtn}

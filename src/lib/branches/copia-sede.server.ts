@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/safe-log";
 import { repoHojas } from "@/lib/indicaciones/db";
+import { repoVersiones } from "@/lib/plantillas-fabrica/db";
+import type { FamiliaVersion } from "@/lib/plantillas-fabrica/versiones";
 import { columnaBotBookableExiste } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import {
   AJUSTES_QUE_SE_COPIAN,
@@ -89,6 +91,26 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
   await seccion(r, "horario", async () => prisma.clinicSchedule.count({ where: { clinicId: destinoId } }));
   r.copiado.ajustes = AJUSTES_QUE_SE_COPIAN.length;
 
+  // Las versiones de la clínica de las plantillas de fábrica (ws1-t6) viajan a la sede nueva:
+  // si no, la sede nacería con los textos de fábrica y perdería lo que la clínica ya adaptó.
+  const copiarVersiones = async (familias: readonly FamiliaVersion[]): Promise<number> => {
+    if (!(await repoVersiones.disponible())) return 0;
+    let n = 0;
+    for (const familia of familias) {
+      for (const v of await repoVersiones.activas(origenId, familia)) {
+        await repoVersiones.guardar({
+          clinicId: destinoId,
+          familia,
+          clave: v.clave,
+          cuerpo: v.cuerpo,
+          userId: args.destinoOwnerUserId,
+        });
+        n++;
+      }
+    }
+    return n;
+  };
+
   // 1 · Catálogo de procedimientos (+ «Se agenda por WhatsApp»).
   let idViejoANuevo = new Map<string, string>();
   await seccion(r, "catalogo", async () => {
@@ -173,7 +195,8 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
         skipDuplicates: true,
       });
     }
-    return filas.length;
+    // Las versiones de la clínica de las notas de ortodoncia de fábrica (ws1-t6) viajan con ellas.
+    return filas.length + (await copiarVersiones(["ORTO_NOTA"]));
   });
 
   // 6 · Hojas de indicaciones y constancias (tabla por SQL crudo; sin tabla, 0).
@@ -195,7 +218,8 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
         })),
       );
     }
-    return activas.length;
+    // Y sus versiones de la clínica (ws1-t6): la hoja de fábrica llega con el texto de fábrica y la versión encima.
+    return activas.length + (await copiarVersiones(["HOJA_INDICACIONES", "HOJA_CONSTANCIA"]));
   });
 
   // 7 · Textos del bot de WhatsApp, con el bot apagado (la conexión es por sede).

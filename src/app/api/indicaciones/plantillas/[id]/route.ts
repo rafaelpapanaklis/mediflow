@@ -3,14 +3,16 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
-import { catalogoLigable, repoHojas } from "@/lib/indicaciones/db";
-import { editarHoja } from "@/lib/indicaciones/servicio";
+import { catalogoLigable, repoHojasVigente } from "@/lib/indicaciones/db";
+import { editarHoja, volverAFabricaHoja } from "@/lib/indicaciones/servicio";
+import { repoVersiones } from "@/lib/plantillas-fabrica/db";
 
 export const dynamic = "force-dynamic";
 
 // PATCH /api/indicaciones/plantillas/[id] — nombre, texto, procedimientos ligados
-// y «en uso». Las de fábrica solo cambian liga y «en uso» (409 FABRICA_NO_SE_EDITA
-// si se intenta el texto). Nada se borra: se apaga.
+// y «en uso». En las de fábrica el nombre no cambia (409 FABRICA_NO_SE_EDITA) y el
+// texto se guarda como versión de ESTA clínica; `volverAFabrica: true` archiva esa
+// versión (503 VERSIONES_NO_DISPONIBLES si falta el SQL). Nada se borra: se apaga.
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const ctx = await getAuthContext();
@@ -22,13 +24,32 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
 
   try {
+    const versiones = { versiones: repoVersiones, userId: ctx.userId };
+    if (body.volverAFabrica === true) {
+      const v = await volverAFabricaHoja(repoHojasVigente, ctx.clinicId, params.id, versiones);
+      if (v.ok === false) return NextResponse.json({ code: v.codigo }, { status: v.status });
+      try {
+        await anotarFilaDeModulo({
+          clinicId: ctx.clinicId,
+          userId: ctx.userId,
+          entityType: "handout-template",
+          entityId: v.hoja.id,
+          action: "update",
+          changes: { volverAFabrica: { before: true, after: false } },
+        });
+      } catch (e) {
+        console.error("[indicaciones] bitácora (volver a la de fábrica):", e);
+      }
+      return NextResponse.json(v.hoja);
+    }
     const catalogo = await catalogoLigable(ctx.clinicId);
     const r = await editarHoja(
-      repoHojas,
+      repoHojasVigente,
       ctx.clinicId,
       params.id,
       { nombre: body.nombre, cuerpo: body.cuerpo, procedureIds: body.procedureIds, activa: body.activa },
       catalogo,
+      versiones,
     );
     if (r.ok === false) return NextResponse.json({ code: r.codigo }, { status: r.status });
     const antes = r.antes;

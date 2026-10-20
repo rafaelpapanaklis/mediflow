@@ -3,7 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
-import { catalogoLigable, repoHojas } from "@/lib/indicaciones/db";
+import { catalogoLigable, repoHojasVigente } from "@/lib/indicaciones/db";
 import { crearHoja } from "@/lib/indicaciones/servicio";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   try {
     const catalogo = await catalogoLigable(ctx.clinicId);
     const r = await crearHoja(
-      repoHojas,
+      repoHojasVigente,
       ctx.clinicId,
       ctx.userId,
       { tipo: body.tipo, nombre: body.nombre, cuerpo: body.cuerpo, procedureIds: body.procedureIds, copiaDe: body.copiaDe },
