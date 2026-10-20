@@ -263,8 +263,8 @@ export const WHATSAPP_CTA = {
   barWhatsapp: 'WhatsApp',
   // La banda de contacto ya NO lo enseña (7-oct-2026, pedido de Rafael); lo
   // sigue usando el footer (`contact`, abajo).
-  numberDisplay: '+52 999 260 2093',
-  numberE164: '529992602093',
+  numberDisplay: '+52 999 438 7769',
+  numberE164: '529994387769',
   mensajes: {
     hero: 'Hola, estoy viendo DaleControl y quiero saber más para mi clínica dental.',
     precio: 'Hola, estoy viendo los planes de DaleControl y tengo una duda sobre el plan {plan}.',

@@ -293,7 +293,7 @@ test("accesibilidad: el nombre del botón corto CONTIENE su texto visible", () =
 });
 
 test("manager: el teléfono legible se DERIVA del E.164", () => {
-  assert.equal(eduManagerDisplayPhone(), "+52 999 260 2093");
+  assert.equal(eduManagerDisplayPhone(), "+52 999 438 7769");
   // Y los dígitos son exactamente los mismos, sin uno de más ni de menos.
   assert.equal(eduManagerDisplayPhone().replace(/\D/g, ""), EDU_MANAGER.numeroE164);
 });
