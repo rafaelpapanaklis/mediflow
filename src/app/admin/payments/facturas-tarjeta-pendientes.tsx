@@ -25,8 +25,8 @@ export interface FacturaTarjetaPendienteDTO {
   facturas: string[];
   /** De ellas, las de meses sin servicio (suspendida) que faltan por anular: no se deben. */
   suspendidas?: string[];
-  /** El prepago de varios meses no tiene (o no llega) la pausa del cobro de la tarjeta: fecha en que debería reanudarse. */
-  pausaPendiente?: string | null;
+  /** El siguiente cobro de la tarjeta debería caer al terminar lo pagado y no lo hace: fecha esperada (fin de lo pagado). */
+  cicloPendiente?: string | null;
 }
 
 export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPendienteDTO[] }) {
@@ -85,10 +85,10 @@ export function FacturasTarjetaPendientes({ items }: { items: FacturaTarjetaPend
               <span style={{ color: "var(--text-3)" }}>
                 pagó a mano {fechaHoraAdmin(f.pagoManualEn) ?? ""}
                 {f.facturas.length > 0 ? ` · ${f.facturas.length === 1 ? "factura abierta" : "facturas abiertas"} del ciclo ${f.facturas.join(", ")}` : ""}
-                {f.pausaPendiente ? ` · falta pausar el cobro de la tarjeta hasta ${fechaHoraAdmin(f.pausaPendiente) ?? ""}` : ""}
+                {f.cicloPendiente ? ` · falta mover el siguiente cobro de la tarjeta a ${fechaHoraAdmin(f.cicloPendiente) ?? ""} (fin de lo pagado)` : ""}
                 {(f.suspendidas ?? []).length > 0 ? ` · por anular (meses sin servicio): ${(f.suspendidas ?? []).join(", ")}` : ""}
               </span>
-              {(f.facturas.length > 0 || f.pausaPendiente) && (
+              {(f.facturas.length > 0 || f.cicloPendiente) && (
                 <span style={{ marginLeft: "auto" }}>
                   <ButtonNew size="sm" variant="primary" onClick={() => reintentar(f)} disabled={cargando === f.clinicId}>
                     {cargando === f.clinicId ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}

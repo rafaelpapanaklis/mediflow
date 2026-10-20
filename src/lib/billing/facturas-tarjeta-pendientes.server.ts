@@ -2,9 +2,10 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
 import {
+  CICLO_ALINEADO_DIAS,
   METODOS_DE_PAGO_MANUAL_DEL_PLAN,
+  enPeriodoPagado,
   inicioDelMarcadoFueraDeStripe,
-  reanudarCobroDespuesDelPrepago,
 } from "@/lib/billing/cobro-rechazado";
 import {
   marcarFacturasDelPlanPagadasFueraDeStripe,
@@ -12,7 +13,7 @@ import {
   suscripcionDeTarjetaViva,
 } from "@/lib/billing/factura-fuera-de-stripe.server";
 import { facturasAbiertasDelPlan } from "@/lib/billing/reactivacion-tras-suspension.server";
-import { subscriptionItemInterval, subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
+import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 
 /**
  * Clínicas con la TARJETA viva y una factura del plan ABIERTA (o incobrable) DESPUÉS de un pago manual (ws1-t1).
@@ -38,8 +39,11 @@ export interface ClinicaConFacturaPendiente {
   facturas: string[];
   /** De ellas, las de meses SUSPENDIDOS (por anular, no por pagar). */
   suspendidas: string[];
-  /** Q1: el pago cubre varios meses y la pausa del cobro de la tarjeta falta o llega menos lejos (fecha de reanudación esperada). */
-  pausaPendiente: string | null;
+  /**
+   * El siguiente cobro de la tarjeta debería ser al terminar lo pagado y no lo es: fecha esperada (ISO, el `periodEnd` de la
+   * fila del pago, no «hoy»), o null si ya está bien.
+   */
+  cicloPendiente: string | null;
 }
 
 const DIAS_DE_VENTANA = 60;
@@ -62,10 +66,16 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
       OR: [{ method: null }, { method: { in: [...METODOS_DE_PAGO_MANUAL_DEL_PLAN] } }],
     },
     orderBy: { paidAt: "desc" },
-    select: { clinicId: true, paidAt: true },
+    select: { clinicId: true, paidAt: true, periodEnd: true },
   });
   const ultimoPorClinica = new Map<string, Date>();
-  for (const p of pagos) if (p.paidAt && !ultimoPorClinica.has(p.clinicId)) ultimoPorClinica.set(p.clinicId, p.paidAt);
+  const finPagadoPorClinica = new Map<string, Date>();
+  for (const p of pagos) {
+    if (p.paidAt && !ultimoPorClinica.has(p.clinicId)) {
+      ultimoPorClinica.set(p.clinicId, p.paidAt);
+      finPagadoPorClinica.set(p.clinicId, p.periodEnd);
+    }
+  }
   if (ultimoPorClinica.size === 0) return [];
 
   const clinicas = await prisma.clinic.findMany({
@@ -84,26 +94,22 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
           if (!sub) return null;
           const pendientes = await facturasAbiertasDelPlan(stripe, c.stripeSubscriptionId!, corte);
           const { suspendidas } = repartirPendientes(pendientes, { pagadoEn: corte });
-          // ¿Falta (o llega corta) la pausa del cobro por el prepago de varios meses?
-          const finCiclo = subscriptionPeriodEndSeconds(sub);
-          const reanuda =
-            finCiclo && c.trialEndsAt
-              ? reanudarCobroDespuesDelPrepago({
-                  finDelPeriodoStripe: new Date(finCiclo * 1000),
-                  finPrepago: c.trialEndsAt,
-                  intervalo: subscriptionItemInterval(sub.items?.data?.[0]),
-                })
-              : null;
-          const pausaPendiente =
-            reanuda && (sub.pause_collection?.resumes_at ?? 0) < Math.floor(reanuda.getTime() / 1000) - 5 * 86_400 ? reanuda.toISOString() : null;
-          if (pendientes.length === 0 && !pausaPendiente) return null;
+          // ¿El siguiente cobro de la tarjeta ya cae al terminar lo pagado? (fin de lo pagado = `periodEnd` de la fila del pago)
+          const fin = finPagadoPorClinica.get(c.id) ?? null;
+          let cicloPendiente: string | null = null;
+          if (fin && fin.getTime() > ahora.getTime() + 86_400_000 && !(enPeriodoPagado(sub, ahora) && (sub.trial_end ?? 0) * 1000 >= fin.getTime() - 86_400_000)) {
+            const finCiclo = subscriptionPeriodEndSeconds(sub);
+            const alineado = sub.status !== "trialing" && finCiclo && Math.abs(finCiclo * 1000 - fin.getTime()) <= CICLO_ALINEADO_DIAS * 86_400_000;
+            if (!alineado) cicloPendiente = fin.toISOString();
+          }
+          if (pendientes.length === 0 && !cicloPendiente) return null;
           return {
             clinicId: c.id,
             clinicName: c.name,
             pagoManualEn: corte,
             facturas: pendientes.map((f) => f.id!),
             suspendidas: suspendidas.map((f) => f.id!),
-            pausaPendiente,
+            cicloPendiente,
           } as ClinicaConFacturaPendiente;
         } catch (e) {
           console.error("[facturas-tarjeta-pendientes] Stripe no contestó para", c.id, (e as Error)?.message ?? e);
@@ -126,7 +132,7 @@ export interface ResumenReintento {
 
 /**
  * El reintento automático (cron diario): paga fuera de Stripe la factura del ciclo del último pago manual que quedó abierta,
- * anula las de meses suspendidos, re-alinea el ciclo y pausa el cobro si lo prepagado rebasa el ciclo. Nunca lanza.
+ * anula las de meses suspendidos, mueve el siguiente cobro de la tarjeta al fin de lo pagado. Nunca lanza.
  */
 export async function reintentarMarcadoPendiente(
   opciones: { stripe?: Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems"> | null; ahora?: Date } = {},
@@ -135,17 +141,18 @@ export async function reintentarMarcadoPendiente(
   try {
     const stripe = opciones.stripe === undefined ? getStripeSafe() : opciones.stripe;
     const todas = await clinicasConFacturaPendienteTrasPagoManual({ ...opciones, stripe });
-    const pendientes = todas.filter((p) => p.facturas.length > 0 || p.pausaPendiente);
+    const pendientes = todas.filter((p) => p.facturas.length > 0 || p.cicloPendiente);
     resumen.revisadas = pendientes.length;
     for (const p of pendientes) {
-      const clinica = await prisma.clinic.findUnique({ where: { id: p.clinicId }, select: { stripeSubscriptionId: true, trialEndsAt: true } });
+      const clinica = await prisma.clinic.findUnique({ where: { id: p.clinicId }, select: { stripeSubscriptionId: true } });
       const r = await marcarFacturasDelPlanPagadasFueraDeStripe({
         clinicId: p.clinicId,
         stripe,
         stripeSubscriptionId: clinica?.stripeSubscriptionId ?? null,
         creadasAntesDe: p.pagoManualEn,
         pagadoEn: p.pagoManualEn,
-        finPrepago: clinica?.trialEndsAt ?? null,
+        // El fin de lo pagado sale de la fila del PAGO (M9): cada día que tarda el reintento no es un día gratis.
+        finPrepago: p.cicloPendiente ? new Date(p.cicloPendiente) : null,
       });
       if (r.tipo === "marcadas") {
         resumen.marcadas.push(...r.facturas);

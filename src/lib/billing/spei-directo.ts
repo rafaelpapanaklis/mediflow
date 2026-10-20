@@ -1,6 +1,7 @@
 import "server-only";
 import { clinicaEstabaSuspendida } from "@/lib/billing/cobro-rechazado";
-import { marcarFacturasDeLaClinica, type ResultadoMarcado } from "@/lib/billing/factura-fuera-de-stripe.server";
+import { marcarFacturasDeLaClinica, suscripcionDeTarjetaViva, type ResultadoMarcado } from "@/lib/billing/factura-fuera-de-stripe.server";
+import { getStripeSafe } from "@/lib/stripe";
 import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
@@ -409,7 +410,21 @@ export async function confirmarSolicitudSpei(id: string, adminId: string): Promi
   // Una suscripción de tarjeta CANCELADA deja su id en la clínica (el webhook no lo limpia). Si se
   // quedara, la clínica activa por SPEI nunca vencería (el cron de vencimiento solo mira las que no
   // tienen suscripción de Stripe): un solo pago daría acceso indefinido. Se suelta el id muerto.
-  const suscripcionMuerta = !!clinica.stripeSubscriptionId && ["cancelled", "canceled"].includes(clinica.subscriptionStatus ?? "");
+  // La base dice «cancelada», pero Stripe manda (M2): con `suspend_clinic` (solo API) o el `deleted` de OTRA suscripción la de
+  // tarjeta puede seguir viva y cobrando. Solo se suelta el id si Stripe confirma que está muerta; si no se puede
+  // preguntar, se CONSERVA (peor que un id muerto es una tarjeta que sigue cobrando sin nadie que anule sus facturas).
+  let suscripcionMuerta = false;
+  if (clinica.stripeSubscriptionId && ["cancelled", "canceled"].includes(clinica.subscriptionStatus ?? "")) {
+    const stripe = getStripeSafe();
+    if (!stripe) suscripcionMuerta = true; // sin Stripe configurado no hay nada que cobrar
+    else {
+      try {
+        suscripcionMuerta = (await suscripcionDeTarjetaViva(stripe, clinica.stripeSubscriptionId)) === null;
+      } catch {
+        suscripcionMuerta = false;
+      }
+    }
+  }
 
   const ahora = new Date();
   // Estado de ANTES de registrar el pago (octava vuelta): si estaba suspendida, los meses sin servicio no se deben.
