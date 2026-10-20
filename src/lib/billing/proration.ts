@@ -609,7 +609,7 @@ export function chargeFailureMessage(err: unknown): string {
     code === "subscription_payment_intent_requires_action" ||
     code === "invoice_payment_intent_requires_action"
   ) {
-    return `${base} Tu banco pidió autenticación del cargo: paga la factura pendiente desde "Portal Stripe" y vuelve a intentar.`;
+    return `${base} Tu banco pidió autenticación del cargo: paga la factura pendiente desde "Portal de facturación" y vuelve a intentar.`;
   }
   return `${base} Tu banco rechazó el cargo; revisa tu método de pago e intenta de nuevo.`;
 }

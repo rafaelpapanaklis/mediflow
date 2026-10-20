@@ -769,3 +769,37 @@ test("N3 con un cambio a medias la pantalla dice «Te falta terminar el cambio a
   const en = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, cambioEnCurso: { plan: "CLINIC" } } } }, "en");
   assert.match(en, /You still need to finish the change to Clínica: \$1,489\.00 MXN/);
 });
+
+/* ── La clínica no lee «Stripe» ────────────────────────────────────────── */
+
+test("ningún texto que lee la clínica en el diccionario (suscripción, pago, aviso de cobro rechazado, suspendida, pago pendiente) nombra a «Stripe»", () => {
+  const BLOQUES: string[][] = [
+    ["shell", "subscriptionTab"],
+    ["shell", "paymentMethodModal"],
+    ["shell", "pagoRechazado"],
+    ["shell", "pagoPendiente"],
+    ["pages", "suspended"],
+  ];
+  const textos = (o: unknown, ruta: string[]): Array<[string, string]> =>
+    typeof o === "string" ? [[ruta.join("."), o]] : o && typeof o === "object" ? Object.entries(o).flatMap(([k, v]) => textos(v, [...ruta, k])) : [];
+  let revisados = 0;
+  for (const idioma of ["es", "en"] as const) {
+    const dict = getDict(idioma) as any;
+    for (const bloque of BLOQUES) {
+      const nodo = bloque.reduce((x, k) => x?.[k], dict);
+      assert.ok(nodo, `${idioma}: falta el bloque ${bloque.join(".")}`);
+      for (const [clave, texto] of textos(nodo, [idioma, ...bloque])) {
+        revisados++;
+        assert.doesNotMatch(texto, /stripe/i, `${clave}: «${texto}»`);
+      }
+    }
+  }
+  assert.ok(revisados > 150, `el test debería revisar todos los textos de los bloques (revisó ${revisados})`);
+  // Y los mensajes que armó este trabajo en código (correos y avisos).
+  const correo = buildPaymentFailedEmail({ firstName: "Ana", clinicName: "X", planName: "P", suspensionLabel: "20 oct 2026, 12:00 p.m.", payUrl: "https://x/y" });
+  const suspendido = buildPlanSuspendedEmail({ firstName: "Ana", clinicName: "X", planName: "P", payUrl: "https://x/y" });
+  for (const t of [correo.subject, correo.html, correo.text, suspendido.subject, suspendido.html, suspendido.text]) assert.doesNotMatch(t, /stripe/i);
+  // La etiqueta del portal ya no se llama «Portal Stripe», y el aviso de proration.ts que la menciona dice lo mismo.
+  assert.equal((getDict("es") as any).shell.subscriptionTab.stripePortal, "Portal de facturación");
+  assert.match(leer("src/lib/billing/proration.ts"), /desde "Portal de facturación"/);
+});
