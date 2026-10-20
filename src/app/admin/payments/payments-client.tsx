@@ -16,6 +16,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { ETIQUETA_VIA_RECARGA } from "@/lib/ai-billing/recargas";
 import type { PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
+import { ROTULO_ACTIVACION_MANUAL, esActivacionManual } from "@/lib/billing/pagos-reales";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
@@ -28,11 +29,14 @@ const PAYMENT_METHODS = [
 ] as const;
 
 function methodBadge(method: string | null | undefined) {
+  if (method === "admin") return "\uD83D\uDEE0\uFE0F Admin";
   const m = PAYMENT_METHODS.find(pm => pm.value === method);
   return m ? `${m.icon} ${m.label}` : method ?? "\u2014";
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null }) {
+  // La activación manual de /admin deja una fila de $0 como rastro: se VE, pero no es un cobro.
+  if (esActivacionManual(fila)) return <BadgeNew tone="neutral" dot>{ROTULO_ACTIVACION_MANUAL}</BadgeNew>;
   if (status === "paid")    return <BadgeNew tone="success" dot>Pagado</BadgeNew>;
   if (status === "pending") return <BadgeNew tone="warning" dot>Pendiente</BadgeNew>;
   if (status === "failed")  return <BadgeNew tone="danger"  dot>Fallido</BadgeNew>;
@@ -868,19 +872,22 @@ export function PaymentsClient({
                         {fmtMXN(inv.amount)}
                       </td>
                       <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
-                      <td>{statusBadge(inv.status)}</td>
+                      <td>{statusBadge(inv.status, inv)}</td>
                       <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
                         {inv.reference || "—"}
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <PaymentDateCell inv={inv} />
-                          <Link
-                            href={`/admin/payments/${inv.id}/cfdi`}
-                            style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}
-                          >
-                            CFDI
-                          </Link>
+                          {/* Una activación manual no es un cobro: no hay nada que facturar. */}
+                          {!esActivacionManual(inv) && (
+                            <Link
+                              href={`/admin/payments/${inv.id}/cfdi`}
+                              style={{ fontSize: 11, fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}
+                            >
+                              CFDI
+                            </Link>
+                          )}
                         </div>
                       </td>
                     </tr>

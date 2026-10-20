@@ -12,6 +12,7 @@ import { SpeiPendientes } from "./spei-pendientes";
 import { listarPendientesAdmin, type PendienteAdminDTO } from "@/lib/billing/spei-directo";
 import { inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
 import { leerPagosSaldoIaRecientes, type PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 /** Tope de la pestaña "Todos los pagos". */
 const RECENT_PAYMENTS_LIMIT = 100;
@@ -168,12 +169,12 @@ async function renderPaymentsPage() {
   const [thisMonthRev, prevMonthRev, aiTopups] =
     await Promise.all([
       safe(prisma.subscriptionInvoice.aggregate({
-        where: { status: "paid", paidAt: { gte: firstOfMonth } },
+        where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfMonth } }),
         _sum: { amount: true },
         _count: true,
       }), { _sum: { amount: 0 }, _count: 0 } as any),
       safe(prisma.subscriptionInvoice.aggregate({
-        where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lt: firstOfMonth } },
+        where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfPrevMonth, lt: firstOfMonth } }),
         _sum: { amount: true },
       }), { _sum: { amount: 0 } } as any),
       safe(leerPagosSaldoIaRecientes(), [] as PagoSaldoIaGlobalDTO[]),

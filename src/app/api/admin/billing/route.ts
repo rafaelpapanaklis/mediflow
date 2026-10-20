@@ -10,6 +10,7 @@ import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
 import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN } from "@/lib/billing/cobro-rechazado";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import { getPlanStatus, isInTrial } from "@/lib/plan-status";
 
 // GET — Dashboard metrics
@@ -32,15 +33,15 @@ export async function GET(req: NextRequest) {
     prisma.clinic.findMany({
       select: { id: true, name: true, plan: true, email: true, trialEndsAt: true, subscriptionStatus: true, createdAt: true },
     }),
-    prisma.subscriptionInvoice.aggregate({ where: { status: "paid", paidAt: { gte: firstOfMonth } }, _sum: { amount: true }, _count: true }),
-    prisma.subscriptionInvoice.aggregate({ where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lte: lastOfPrevMonth } }, _sum: { amount: true }, _count: true }),
+    prisma.subscriptionInvoice.aggregate({ where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfMonth } }), _sum: { amount: true }, _count: true }),
+    prisma.subscriptionInvoice.aggregate({ where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfPrevMonth, lte: lastOfPrevMonth } }), _sum: { amount: true }, _count: true }),
     prisma.subscriptionInvoice.findMany({ orderBy: { createdAt: "desc" }, take: 50, include: { clinic: { select: { id: true, name: true, plan: true } } } }),
   ]);
 
   // Revenue by method
   const byMethod = await prisma.subscriptionInvoice.groupBy({
     by: ["method"],
-    where: { status: "paid", paidAt: { gte: firstOfMonth } },
+    where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfMonth } }),
     _sum: { amount: true },
     _count: true,
   });
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
     const data = await prisma.subscriptionInvoice.aggregate({
-      where: { status: "paid", paidAt: { gte: start, lte: end } },
+      where: sinActivacionManual({ status: "paid", paidAt: { gte: start, lte: end } }),
       _sum: { amount: true },
       _count: true,
     });

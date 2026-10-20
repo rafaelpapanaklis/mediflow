@@ -340,7 +340,7 @@ test("encargo 7 · pantallas: el registro y la de pago arrancan en ANUAL, dejan 
   const pag = leer("src/app/dashboard/suspended/page.tsx");
   assert.match(pag, /const firstMonthEligible = isFirstContract\(clinic\) && enlace === null;/);
   assert.match(pag, /const planesAMostrar = enlace \? planCards\.filter\(\(p\) => p\.id === enlace\.plan\) : planCards;/);
-  assert.equal((pag.match(/soloTarjeta=\{enlace !== null\}/g) ?? []).length, 2, "las dos vistas");
+  assert.equal((pag.match(/soloTarjeta=\{enlace !== null\}/g) ?? []).length, 3, "las dos vistas y el respaldo de los dos botones (tarjetasDeRespaldo, ws1-t1)");
   const cli = leer("src/app/dashboard/suspended/suspended-client.tsx");
   assert.match(cli, /useState<Billing>\(soloTarjeta \? PERIODO_INICIAL_DEL_ENLACE : "monthly"\)/, "arranca en anual");
   assert.match(cli, /\{\/\* === Toggle Mensual \/ Anual === \*\/\}\s*<div className="mb-7 flex flex-wrap/, "el conmutador se ve");
