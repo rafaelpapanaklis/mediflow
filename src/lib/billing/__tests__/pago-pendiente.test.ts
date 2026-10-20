@@ -20,6 +20,7 @@ import {
   parsearCuerpo,
   planesMasGrandes,
 } from "../pago-pendiente";
+import { MENSAJES_CHECKOUT } from "../mensajes-pago";
 import { ensureFirstMonthCoupon } from "../first-month-promo";
 import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
 import {
@@ -782,6 +783,69 @@ test("t4 #10: sin descuentos el monto sigue siendo lista + IVA; y un cupón sin 
   assert.equal(m.auditorias.at(-1).descuentoSinValorar, true);
   assert.equal(descuentoSinValorar(descuentosConservados({ discount: null, discounts: ["di_x"] })), true);
   assert.equal(aplicarDescuentos(68900, descuentosConservados({ discount: { id: "d", coupon: { id: "c", percent_off: 100 } }, discounts: [] })), 0);
+});
+
+// ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──
+
+/** Todos los textos (string) de una respuesta, a cualquier profundidad. */
+const textosDe = (v: unknown): string[] =>
+  typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(textosDe) : v && typeof v === "object" ? Object.values(v).flatMap(textosDe) : [];
+
+const INGLES = /\b(the|and|invoice|declined|please|try again|failed|error|payment|subscription|customer|keys?|request|cannot|can no longer)\b/i;
+const VOSEO = /\b(tenés|podés|hacé|pagá|elegí|escribinos|vos)\b/i;
+
+function revisaTextoParaClinica(texto: string, donde: string) {
+  assert.doesNotMatch(texto, /stripe/i, `${donde} nombra al proveedor: «${texto}»`);
+  assert.doesNotMatch(texto, INGLES, `${donde} trae inglés: «${texto}»`);
+  assert.doesNotMatch(texto, VOSEO, `${donde} usa voseo: «${texto}»`);
+}
+
+test("N4: ningún MENSAJES.* ni MENSAJES_CHECKOUT.* que lee la clínica nombra a Stripe, trae inglés o voseo", () => {
+  for (const [k, v] of Object.entries(MENSAJES)) revisaTextoParaClinica(v, `MENSAJES.${k}`);
+  for (const [k, v] of Object.entries(MENSAJES_CHECKOUT)) revisaTextoParaClinica(v, `MENSAJES_CHECKOUT.${k}`);
+  assert.equal(MENSAJES.noHayUrl, "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte.");
+});
+
+test("N4: TODAS las respuestas de error reales de GET / pagar / subir son texto nuestro, sin «Stripe»", async () => {
+  const escenarios: Array<[string, Escenario, ((m: ReturnType<typeof montar>) => void)?]> = [
+    ["sin permiso", { role: "DOCTOR" }],
+    ["Stripe caído", { stripeCaido: true }],
+    ["sin pendiente", { abiertas: [] }],
+    ["sin suscripción", { sinSub: true }],
+    ["sede incluida", { sedeIncluida: true }],
+    ["sin IVA configurado", { env: {} }],
+    ["Stripe sin configurar", {}, (m) => { m.deps.stripe = null; }],
+    ["suscripción sin items", {}, (m) => {
+      const r = (m.deps.stripe as any).subscriptions.retrieve;
+      (m.deps.stripe as any).subscriptions.retrieve = async (...a: any[]) => ({ ...(await r(...a)), items: { data: [] } });
+    }],
+    ["pagar sin enlace de pago", { tarjetaFalla: true }, (m) => {
+      m.facturas.get("in_vieja").hosted_invoice_url = null;
+    }],
+    ["pagar con error de Stripe en inglés", {}, (m) => {
+      (m.deps.stripe as any).invoices.pay = async () => { throw Object.assign(new Error("This invoice can no longer be paid."), { type: "StripeInvalidRequestError" }); };
+    }],
+    ["marcar con error en inglés", {}, (m) => {
+      (m.deps.stripe as any).invoices.update = async () => { throw new Error("Stripe says: invalid request"); };
+    }],
+  ];
+  let respuestas = 0;
+  for (const [nombre, esc, ajusta] of escenarios) {
+    for (const op of ["GET", "pagar", "subir"] as const) {
+      const m = montar(esc);
+      ajusta?.(m);
+      const r = op === "GET" ? await consultarPendiente(m.deps) : op === "pagar" ? await pagarPendiente(m.deps) : await subirYPagar(m.deps, "PRO");
+      if (r.status < 400) continue;
+      respuestas++;
+      for (const t of textosDe(r.body.error)) revisaTextoParaClinica(t, `${op} / ${nombre} (${r.status})`);
+    }
+  }
+  assert.ok(respuestas >= 20, `se revisaron ${respuestas} respuestas de error`);
+  // El cuerpo inválido del POST también.
+  for (const mal of [{}, { accion: "subir", plan: "ORO" }]) {
+    const r = parsearCuerpo(mal) as any;
+    for (const t of textosDe(r.respuesta.body.error)) revisaTextoParaClinica(t, "cuerpo inválido");
+  }
 });
 
 // ── cuerpo y utilidades ─────────────────────────────────────────────────────

@@ -16,6 +16,7 @@
 
 import { z } from "zod";
 import { PLAN_IDS, isPlanId, type PlanId } from "./plans";
+import { MENSAJES_CHECKOUT } from "./mensajes-pago";
 import { isPlanTierUpgrade, subscriptionItemInterval, type BillingInterval } from "./proration";
 
 /** Moneda del contrato: todos los planes se cobran en pesos. */
@@ -323,5 +324,7 @@ export const MENSAJES = {
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
   stripeNoContesto: "No pudimos completar la operación con el proveedor de pagos. Intenta de nuevo en unos minutos.",
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
-  noHayUrl: "Stripe no devolvió el enlace para pagar. Intenta de nuevo o abre el portal de facturación.",
+  noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
+  pagosNoDisponibles: MENSAJES_CHECKOUT.pagosNoDisponibles,
+  sinPlanAsociado: "No pudimos encontrar el plan de tu suscripción. Escribe a soporte para que lo revisemos.",
 } as const;

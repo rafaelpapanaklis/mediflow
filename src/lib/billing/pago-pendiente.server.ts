@@ -233,7 +233,7 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
   }
   if (!clinica.stripeSubscriptionId) return sinPendiente;
   if (!deps.stripe) {
-    return { ok: false, respuesta: respuesta(503, { code: "STRIPE_NO_CONFIGURADO", error: "Los pagos con tarjeta no están disponibles por ahora. Escríbenos a soporte@dalecontrol.com." }) };
+    return { ok: false, respuesta: respuesta(503, { code: "STRIPE_NO_CONFIGURADO", error: MENSAJES.pagosNoDisponibles }) };
   }
   const stripe = deps.stripe;
 
@@ -368,7 +368,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
   }
 
   const item = sub.items.data[0];
-  if (!item) return respuesta(502, { code: "SUSCRIPCION_SIN_ITEMS", error: "Tu suscripción no tiene un plan asociado en Stripe." });
+  if (!item) return respuesta(502, { code: "SUSCRIPCION_SIN_ITEMS", error: MENSAJES.sinPlanAsociado });
 
   // IVA del cambio de plan (Ajuste 1c). Sin IVA configurado NO se cobra sin IVA en silencio.
   const exencion = await deps.exencionIva();

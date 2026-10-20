@@ -32,6 +32,8 @@ let cupones: any[];
 let llamadasProhibidas: string[];
 let suscripcionViva: any;
 let errorAlComprobar: any = null; // si no es null, subscriptions.retrieve lanza esto
+let sinStripe = false; // getStripeSafe() devuelve null
+let sesionSinUrl = false; // checkout.sessions.create devuelve una sesión sin url
 
 const stripeDoble: any = {
   customers: { create: async () => ({ id: "cus_falso" }) },
@@ -39,7 +41,7 @@ const stripeDoble: any = {
     sessions: {
       create: async (p: any) => {
         sesiones.push(p);
-        return { id: "cs_falso", url: "https://checkout.stripe.test/cs_falso" };
+        return { id: "cs_falso", url: sesionSinUrl ? null : "https://checkout.stripe.test/cs_falso" };
       },
     },
   },
@@ -110,7 +112,7 @@ before(async () => {
     getCurrentUser: async () => ({ id: "u1", email: "u@ejemplo.mx", clinicId: "cA" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
-    getStripeSafe: () => stripeDoble,
+    getStripeSafe: () => (sinStripe ? null : stripeDoble),
     stripeUnavailableResponse: () => ({ error: "Stripe no configurado" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/plans.ts"), { getResolvedPlan: async (id: string) => PLANES[id] });
@@ -129,6 +131,8 @@ beforeEach(() => {
   llamadasProhibidas = [];
   suscripcionViva = null;
   errorAlComprobar = null;
+  sinStripe = false;
+  sesionSinUrl = false;
   facturasStripe = [];
   consultasFacturas = [];
   // Clínica NUEVA (registrada después del corte de IVA, 26-sep-2026): todo lleva IVA.
@@ -465,6 +469,46 @@ test("tarjeta con suscripción guardada que Stripe ya no tiene (resource_missing
   const { res } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
   assert.equal(res.status, 200);
   assert.equal(sesiones.length, 1);
+});
+
+/* ── N4 (segunda vuelta t4): lo que lee la clínica no nombra al proveedor ── */
+
+test("checkout: ninguna respuesta que lee la clínica nombra a Stripe ni trae inglés (503 sin pagos, 502 sin enlace, 502 al comprobar, portal)", async () => {
+  const revisa = (json: any, donde: string) => {
+    const textos = [json.error, json.message].filter((t) => typeof t === "string");
+    assert.ok(textos.length > 0, `${donde}: sin texto`);
+    for (const t of textos) {
+      assert.doesNotMatch(t, /stripe/i, `${donde}: «${t}»`);
+      assert.doesNotMatch(t, /\b(the|invoice|declined|failed|error|keys?|request)\b/i, `${donde}: «${t}»`);
+    }
+    assert.equal(json.instructions, undefined, `${donde}: no filtra instrucciones de configuración`);
+  };
+
+  sinStripe = true;
+  let r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.res.status, 503);
+  revisa(r.json, "sin pagos");
+  assert.equal(sesiones.length, 0);
+  sinStripe = false;
+
+  sesionSinUrl = true;
+  r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.res.status, 502);
+  assert.equal(r.json.error, "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte.");
+  revisa(r.json, "sin enlace de pago");
+  sesionSinUrl = false;
+
+  clinica.stripeSubscriptionId = "sub_x";
+  errorAlComprobar = new Error("timeout");
+  r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.res.status, 502);
+  revisa(r.json, "al comprobar la suscripción");
+  errorAlComprobar = null;
+
+  suscripcionViva = { status: "past_due" };
+  r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.json.portal, true);
+  revisa(r.json, "ya tiene suscripción");
 });
 
 /* ── contratos de código: ninguna renovación ni suscripción existente pasa por lo nuevo ── */
