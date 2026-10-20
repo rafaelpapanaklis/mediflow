@@ -311,6 +311,18 @@ test("P6 · aceptar el presupuesto del plan crea UNA nota PENDIENTE ligada, una 
   assert.ok(auditoria.some((a) => a.tipo === "audit" && /Creó la nota de cobro/.test(a.texto) && a.patientId === "pac-c1"));
 });
 
+test("P6 · aceptado por la liga pública (sin usuario): nace la nota y NO se intenta una fila de bitácora sin usuario", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const creado = await crearPlan({ presentar: true });
+  auditoria.length = 0;
+  const { aceptarPresupuesto } = await import("@/lib/quotes/cargos.server");
+  const r = await aceptarPresupuesto({ quoteId: creado.body.presupuesto.id, clinicId: "c1", userId: null, via: "liga", itemIds: undefined, desde: ["PRESENTED"] });
+  assert.equal((r.notaDelPlan as any).estado, "creada");
+  assert.equal((await notas(creado.body.id)).length, 1);
+  assert.equal(auditoria.length, 0, "AuditLog exige usuario: sin él no se escribe (como la ruta pública)");
+});
+
 test("P6 · nunca dos notas por la misma fila: doble clic y dos a la vez", async (t) => {
   if (salta(t)) return;
   await usar();
@@ -484,4 +496,132 @@ test("sin el SQL, aceptar el presupuesto de un plan de antes funciona como hoy (
   assert.equal(r.status, 200);
   assert.equal(r.body.status, "ACCEPTED");
   assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "invoices"`)).rows[0].n, 0);
+});
+
+// ── Revisión (revisor ws1-t12, 20-oct) ──────────────────────────────────────
+
+test("A1 · plan aceptado a mano, luego presentado y firmado: «Generar factura» NO cobra otra vez", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const creado = await crearPlan();
+  const id = creado.body.id;
+  await (await import("@/app/api/treatments/[id]/nota-de-cobro/route")).POST(pedir(`/api/treatments/${id}/nota-de-cobro`), params(id));
+  const [n] = await notas(id);
+  const { POST } = await import("@/app/api/treatments/[id]/presupuesto/route");
+  const q = (await leer(await POST(pedir(`/api/treatments/${id}/presupuesto`, { presentar: true }), params(id)))).body.quote;
+  await aceptar(q.id);
+  const fila = (await base.db.query(`SELECT "invoiceId" FROM "quotes" WHERE "id" = $1`, [q.id])).rows[0];
+  assert.equal(fila.invoiceId, n.id, "el presupuesto sabe que ya lo cobra la nota del plan");
+  const { POST: generar } = await import("@/app/api/quotes/[id]/invoice/route");
+  const g = await leer(await generar(pedir(`/api/quotes/${q.id}/invoice`, {}), params(q.id)));
+  assert.ok(g.status < 300, JSON.stringify(g.body));
+  assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "invoices"`)).rows[0].n, 1, "una sola factura");
+});
+
+test("A1 · lo mismo con quote_charges encendida: los conceptos quedan anotados a la nota y no hay nada por cargar", async (t) => {
+  if (salta(t)) return;
+  await usar({ conAceptacion: true });
+  const creado = await crearPlan();
+  const id = creado.body.id;
+  await (await import("@/app/api/treatments/[id]/nota-de-cobro/route")).POST(pedir(`/api/treatments/${id}/nota-de-cobro`), params(id));
+  const [n] = await notas(id);
+  const { POST } = await import("@/app/api/treatments/[id]/presupuesto/route");
+  const q = (await leer(await POST(pedir(`/api/treatments/${id}/presupuesto`, { presentar: true }), params(id)))).body.quote;
+  await aceptar(q.id);
+  const cargos = (await base.db.query(`SELECT "invoiceId" FROM "quote_charges" WHERE "quoteId" = $1`, [q.id])).rows;
+  assert.equal(cargos.length, 3);
+  assert.ok(cargos.every((c: any) => c.invoiceId === n.id));
+  const { POST: generar } = await import("@/app/api/quotes/[id]/invoice/route");
+  await generar(pedir(`/api/quotes/${q.id}/invoice`, {}), params(q.id));
+  assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "invoices"`)).rows[0].n, 1, "una sola factura");
+});
+
+test("A3 · doble clic en «Crear plan» desde un presupuesto: un plan y una nota", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await base.db.query(`INSERT INTO "quotes" ("id","clinicId","patientId","createdById","folio","title","status","total","acceptedAt") VALUES ('q9','c1','pac-c1','doc-c1','P-0009','Rehabilitación','ACCEPTED',800, now())`);
+  await base.db.query(`INSERT INTO "quote_items" ("id","quoteId","name","quantity","unitPrice","lineTotal","sortOrder") VALUES ('qi1','q9','Limpieza',1,800,800,0)`);
+  const { POST } = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  const [a, b] = await Promise.all([leer(await POST(pedir(`/api/quotes/q9/treatment-plan`), params("q9"))), leer(await POST(pedir(`/api/quotes/q9/treatment-plan`), params("q9")))]);
+  assert.equal(a.body.treatmentPlanId, b.body.treatmentPlanId);
+  assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "treatment_plans"`)).rows[0].n, 1);
+  assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "invoices"`)).rows[0].n, 1);
+});
+
+test("M1 · nota cancelada: reordenar el plan no cobra nada; una fila nueva se cobra sola", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const creado = await crearPlan({ items: [ITEMS[0], ITEMS[1]] });
+  const id = creado.body.id;
+  await (await import("@/app/api/treatments/[id]/nota-de-cobro/route")).POST(pedir(`/api/treatments/${id}/nota-de-cobro`), params(id));
+  await base.db.query(`UPDATE "invoices" SET "status" = 'CANCELLED' WHERE "treatmentPlanId" = $1`, [id]);
+  const { PATCH } = await import("@/app/api/treatments/[id]/route");
+  const reorden = await leer(await PATCH(pedir(`/api/treatments/${id}`, { items: [creado.body.items[1], creado.body.items[0]] }, "PATCH"), params(id)));
+  assert.equal(reorden.status, 200);
+  assert.equal(reorden.body.notaDelPlan, null, "reordenar no toca la nota");
+  assert.equal((await notas(id)).length, 1);
+  // Sin presupuesto aceptado y con su única nota cancelada, el plan ya no cuenta como aceptado.
+  const crece = await leer(await PATCH(pedir(`/api/treatments/${id}`, { items: [...reorden.body.items, { nombre: "Corona", precio: 5000 }] }, "PATCH"), params(id)));
+  assert.equal(crece.body.notaDelPlan.estado, "nada");
+  assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "invoices"`)).rows[0].n, 1);
+});
+
+test("M1 · con presupuesto aceptado y su nota cancelada: una fila nueva se cobra sola, lo cancelado no se reabre", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const creado = await crearPlan({ items: [ITEMS[1]], presentar: true });
+  const id = creado.body.id;
+  await aceptar(creado.body.presupuesto.id);
+  await base.db.query(`UPDATE "invoices" SET "status" = 'CANCELLED' WHERE "treatmentPlanId" = $1`, [id]);
+  const { PATCH } = await import("@/app/api/treatments/[id]/route");
+  const crece = await leer(await PATCH(pedir(`/api/treatments/${id}`, { items: [...creado.body.items, { nombre: "Corona", precio: 5000 }] }, "PATCH"), params(id)));
+  assert.equal(crece.body.notaDelPlan.estado, "creada");
+  assert.deepEqual(crece.body.notaDelPlan.omitidas.map((o: any) => o.motivo), ["nota_cancelada"]);
+  const nueva = (await notas(id)).find((x: any) => x.status === "PENDING");
+  assert.equal(nueva.total, 5000, "solo la fila nueva");
+});
+
+test("M2 · sin billing.create, una fila nueva en un plan aceptado no crea factura (queda por facturar)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const creado = await crearPlan({ items: [ITEMS[1]] });
+  const id = creado.body.id;
+  await (await import("@/app/api/treatments/[id]/nota-de-cobro/route")).POST(pedir(`/api/treatments/${id}/nota-de-cobro`), params(id));
+  ctx.permissionsOverride = ["treatments.view", "treatments.edit"];
+  const { PATCH } = await import("@/app/api/treatments/[id]/route");
+  const r = await leer(await PATCH(pedir(`/api/treatments/${id}`, { items: [...creado.body.items, { nombre: "Corona", precio: 5000 }] }, "PATCH"), params(id)));
+  assert.equal(r.status, 200);
+  assert.equal(r.body.notaDelPlan.estado, "sin_permiso");
+  const [n] = await notas(id);
+  assert.equal(n.total, 800);
+  ctx.permissionsOverride = null;
+  const c = await leer(await (await import("@/app/api/treatments/[id]/cuenta/route")).GET(pedir(`/api/treatments/${id}/cuenta`, undefined, "GET"), params(id)));
+  assert.equal(c.body.porFacturar, 5000);
+});
+
+test("M3 · presupuesto con un abono viejo sin aplicar: la nota no se arma sola (lo lleva el presupuesto)", async (t) => {
+  if (salta(t)) return;
+  await usar({ conAceptacion: true });
+  await base.db.query(`INSERT INTO "invoices" ("id","clinicId","patientId","invoiceNumber","items","subtotal","total","paid","balance","status") VALUES ('ab','c1','pac-c1','F-0001','[]',2000,2000,2000,0,'PAID')`);
+  await base.db.query(`INSERT INTO "quotes" ("id","clinicId","patientId","createdById","folio","title","status","total","acceptedAt") VALUES ('q5','c1','pac-c1','doc-c1','P-0005','Rehabilitación','ACCEPTED',8000, now())`);
+  await base.db.query(`INSERT INTO "quote_items" ("id","quoteId","name","quantity","unitPrice","lineTotal","sortOrder") VALUES ('qi5','q5','Corona',1,8000,8000,0)`);
+  await base.db.query(`INSERT INTO "quote_charges" ("id","clinicId","quoteId","quoteItemId","invoiceId","tipo","monto") VALUES ('c1','c1','q5',NULL,'ab','abono',2000)`);
+  const { POST } = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  const r = await leer(await POST(pedir(`/api/quotes/q5/treatment-plan`), params("q5")));
+  assert.equal(r.status, 201);
+  assert.equal(r.body.notaDelPlan.estado, "abono_viejo");
+  assert.equal((await base.db.query(`SELECT count(*)::int AS n FROM "invoices"`)).rows[0].n, 1, "solo la del abono");
+});
+
+test("B4 · la cuenta de un plan con descuento firmado no enseña el descuento como «por facturar»", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await base.db.query(`INSERT INTO "quotes" ("id","clinicId","patientId","createdById","folio","title","status","total","discountAmount","acceptedAt") VALUES ('q4','c1','pac-c1','doc-c1','P-0004','Plan','ACCEPTED',9000,1000, now())`);
+  await base.db.query(`INSERT INTO "quote_items" ("id","quoteId","name","quantity","unitPrice","lineTotal","sortOrder") VALUES ('qi4','q4','Corona',1,10000,10000,0)`);
+  const { POST } = await import("@/app/api/quotes/[id]/treatment-plan/route");
+  const r = await leer(await POST(pedir(`/api/quotes/q4/treatment-plan`), params("q4")));
+  const [n] = await notas(r.body.treatmentPlanId);
+  assert.equal(n.total, 9000, "lo firmado, con su descuento");
+  const c = await leer(await (await import("@/app/api/treatments/[id]/cuenta/route")).GET(pedir(`/api/treatments/x/cuenta`, undefined, "GET"), params(r.body.treatmentPlanId)));
+  assert.deepEqual([c.body.total, c.body.facturado, c.body.porFacturar], [9000, 9000, 0]);
 });

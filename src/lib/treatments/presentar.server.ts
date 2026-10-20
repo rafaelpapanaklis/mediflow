@@ -152,16 +152,25 @@ export async function presupuestoDesdeElPlan(args: {
         if (existente.invoiceId) {
           return { already: true, regenerado: false, presentado: false, quote: dto(existente), aviso: "factura_ligada", deFilas };
         }
-        const q = await replaceQuoteContent({
-          quoteId: existente.id,
-          clinicId,
-          title: existente.title,
-          items: armado.conceptos,
-          discountPct: existente.discountPct == null ? null : Number(existente.discountPct),
-          discountAmount: existente.discountAmount == null ? null : Number(existente.discountAmount),
-          validUntil: existente.validUntil ?? parseValidUntil(null),
-          notes: existente.notes,
+        // Con el presupuesto BLOQUEADO y releído: si el paciente lo firmó (o se facturó) en medio, no se
+        // reescribe lo firmado — se contesta como aceptado. Mismo candado que aceptarPresupuesto.
+        const q = await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "quotes" WHERE id = ${existente.id} AND "clinicId" = ${clinicId} FOR UPDATE`;
+          const fresco = await tx.quote.findFirst({ where: { id: existente.id, clinicId }, select: { status: true, invoiceId: true } });
+          if (!fresco || (fresco.status !== "DRAFT" && fresco.status !== "PRESENTED") || fresco.invoiceId) return null;
+          return replaceQuoteContent({
+            quoteId: existente.id,
+            clinicId,
+            title: existente.title,
+            items: armado.conceptos,
+            discountPct: existente.discountPct == null ? null : Number(existente.discountPct),
+            discountAmount: existente.discountAmount == null ? null : Number(existente.discountAmount),
+            validUntil: existente.validUntil ?? parseValidUntil(null),
+            notes: existente.notes,
+            tx,
+          });
         });
+        if (!q) return { already: true, regenerado: false, presentado: false, quote: dto(existente), aviso: "ya_aceptado", deFilas };
         await ligarFilas(clinicId, plan.id, armado.conceptos, q.id);
         await logAudit({
           patientId: plan.patientId,

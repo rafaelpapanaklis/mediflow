@@ -175,3 +175,42 @@ test("Cobrar hoy con plan: el pago abona a las notas del plan, de la más vieja 
   assert.equal(abonoAlPlan([notas[2]], 10).falta, "sin_nota");
   assert.equal(abonoAlPlan(notas, 800).saldoQueda, 0);
 });
+
+// ── Revisión (revisor ws1-t12, 20-oct): A1, A2 y M1 ──────────────────────────
+
+test("A1 · filas ya en nota y LUEGO presentadas y firmadas: no se cobran otra vez y sus conceptos quedan anotados", () => {
+  const p = planearNota({
+    filas: [fila("a", { invoiceId: "n1", quoteItemId: "qa" }), fila("b", { invoiceId: "n1", nombre: "Resina", dientes: [16], quoteItemId: "viejo", orden: 1 })],
+    notas: [nota("n1")], facturasVivas: ["n1"],
+    presupuesto: presupuesto({ conceptos: [concepto("qa", { precio: 90 }), concepto("nuevo", { nombre: "Resina", toothFdi: "16" })] }),
+  });
+  assert.equal(p.destino, null, "nada que cobrar");
+  assert.deepEqual(p.lineas, [], "el concepto rehecho por el editor tampoco entra como «sin fila»");
+  assert.deepEqual(p.anotarCargos, [{ quoteItemId: "qa", invoiceId: "n1", monto: 90 }, { quoteItemId: "nuevo", invoiceId: "n1", monto: 100 }]);
+  assert.deepEqual(p.religar, [{ filaId: "b", quoteItemId: "nuevo" }]);
+  // Ya anotados, no se vuelven a anotar.
+  const otra = planearNota({
+    filas: [fila("a", { invoiceId: "n1", quoteItemId: "qa" })], notas: [nota("n1")], facturasVivas: ["n1"],
+    presupuesto: presupuesto({ conceptos: [concepto("qa")], cargos: [{ quoteItemId: "qa", invoiceId: "n1" }] }),
+  });
+  assert.deepEqual(otra.anotarCargos, []);
+});
+
+test("A2 · presupuesto mixto: el concepto de ortodoncia sin fila NO entra a la nota del plan general", () => {
+  const p = planearNota({
+    filas: [fila("r", { quoteItemId: "qr" })], notas: [], facturasVivas: [],
+    presupuesto: presupuesto({ conceptos: [concepto("qr"), concepto("qo", { nombre: "Tratamiento de ortodoncia con brackets", precio: 35000 })] }),
+  });
+  assert.deepEqual(p.lineas.map((l) => l.quoteItemId), ["qr"]);
+});
+
+test("M1 · al crecer el plan no se reabre una nota cancelada (se dice por qué)", () => {
+  const args = { filas: [fila("a", { invoiceId: "cancelada" }), fila("b", { createdAt: DESPUES, orden: 1 })], notas: [nota("cancelada", { status: "CANCELLED" })], facturasVivas: [], presupuesto: null };
+  const crece = planearNota({ ...args, noReemplazar: true });
+  assert.deepEqual(crece.lineas.map((l) => l.filaId), ["b"]);
+  assert.deepEqual(crece.omitidas, [{ filaId: "a", motivo: "nota_cancelada" }]);
+  assert.deepEqual(planearNota(args).lineas.map((l) => l.filaId), ["a", "b"], "pedido a mano (o al aceptar), sí");
+  // Con presupuesto: el concepto de la fila omitida no se cuela como «concepto sin fila».
+  const conPres = planearNota({ ...args, filas: [fila("a", { invoiceId: "cancelada", quoteItemId: "qa" })], noReemplazar: true, presupuesto: presupuesto({ conceptos: [concepto("qa")] }) });
+  assert.deepEqual(conPres.lineas, []);
+});

@@ -183,7 +183,17 @@ function compilarOrden(orderBy: any): string {
   return partes.length ? ` ORDER BY ${partes.join(", ")}` : "";
 }
 
+/**
+ * PGlite tiene UNA conexión: mientras una transacción está abierta, una consulta por el cliente global
+ * (en Postgres de verdad iría por otra conexión del pool) esperaría para siempre. Aquí va por la
+ * transacción abierta. Las transacciones son una a la vez, así que hay a lo más una.
+ */
+const abierta = new WeakMap<object, { tx: any | null }>();
+
 export function prismaDePrueba(db: any, conn: any = db): any {
+  if (!abierta.has(db)) abierta.set(db, { tx: null });
+  const estado = abierta.get(db)!;
+  if (conn === db) conn = { query: (...a: unknown[]) => (estado.tx ?? db).query(...a) };
   async function relaciones(tabla: string, fila: any, pide: any, cx: any) {
     if (!fila || !pide) return fila;
     for (const [nombre, sel] of Object.entries(pide)) {
@@ -285,11 +295,20 @@ export function prismaDePrueba(db: any, conn: any = db): any {
   const cliente: any = { ...crudo(conn) };
   for (const m of Object.keys(TABLAS)) cliente[m] = modelo(m, conn);
   // payments y patientCredit no se usan en estas pruebas: un intento de usarlos es un error del arnés.
-  if (conn === db) {
+  if (!(conn as any).__esTx) {
     let cola: Promise<unknown> = Promise.resolve();
     cliente.$transaction = (fn: (tx: any) => Promise<unknown>) => {
       // Una a la vez, como lo dejaría el FOR UPDATE del plan en Postgres.
-      const turno = cola.then(() => db.transaction((t: any) => fn(prismaDePrueba(db, t))));
+      const turno = cola.then(() =>
+        db.transaction(async (t: any) => {
+          estado.tx = t;
+          try {
+            return await fn(prismaDePrueba(db, Object.assign(t, { __esTx: true })));
+          } finally {
+            estado.tx = null;
+          }
+        }),
+      );
       cola = turno.catch(() => undefined);
       return turno;
     };

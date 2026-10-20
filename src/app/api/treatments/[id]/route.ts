@@ -275,10 +275,16 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data });
   }
 
-  // Un plan ya aceptado que crece: la fila nueva va a su nota de cobro (si la nota sigue por cobrar
-  // la recibe; si ya está pagada, nace una nota adicional del plan). Sin tumbar el guardado.
-  let notaDelPlan: Awaited<ReturnType<typeof asegurarNotaDelPlan>> | { estado: "error" } | null = null;
-  if (entrantes) {
+  // Un plan ya aceptado que CRECE (fila nueva): la fila va a su nota de cobro (si la nota sigue por
+  // cobrar la recibe; si ya está pagada, nace una nota adicional del plan). Reordenar o corregir un
+  // diente no toca la nota. Nace dinero, así que pide `billing.create`; sin él la fila queda «por
+  // facturar» (la cuenta del plan lo enseña) para quien sí factura. Sin tumbar el guardado.
+  let notaDelPlan: Awaited<ReturnType<typeof asegurarNotaDelPlan>> | { estado: "error" | "sin_permiso" } | null = null;
+  const antes = new Set(filasAntes.map((f) => f.id));
+  const crecio = filasDespues.some((f) => !antes.has(f.id));
+  if (entrantes && crecio && denyIfMissingPermission(ctx, "billing.create")) {
+    notaDelPlan = { estado: "sin_permiso" };
+  } else if (entrantes && crecio) {
     try {
       notaDelPlan = await asegurarNotaDelPlan({ clinicId: ctx.clinicId, planId: params.id, userId: ctx.userId, origen: "plan_crece", soloSiAceptado: true });
     } catch (e) {

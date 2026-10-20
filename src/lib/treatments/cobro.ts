@@ -15,6 +15,7 @@
 //  · una fila en $0 (cortesía) no lleva línea.
 
 import { round2 } from "@/lib/invoice-totals";
+import { conceptosGenerales } from "@/lib/quotes/ortodoncia";
 import { aPesos, dientesCsv, filasVivas, importeCentavos, ordenarParaElPapel, type FilaDelPlan } from "./items";
 
 /** Una factura ligada al plan (la nota y sus adicionales). */
@@ -81,7 +82,7 @@ export interface LineaDeNota {
   neto: number;
 }
 
-export type MotivoOmitida = "sin_precio" | "no_aceptada";
+export type MotivoOmitida = "sin_precio" | "no_aceptada" | "nota_cancelada";
 
 export interface PlaneoDeNota {
   /** Filas que ya cobró una factura del presupuesto: se ligan a ella, sin línea nueva. */
@@ -94,6 +95,12 @@ export interface PlaneoDeNota {
   reemplazar: string[];
   /** Filas que se reconocieron en un concepto por nombre (el editor rehízo los conceptos): se reanotan. */
   religar: Array<{ filaId: string; quoteItemId: string }>;
+  /**
+   * Conceptos del presupuesto cuya fila YA estaba en una nota viva (el plan se aceptó sin presupuesto
+   * y luego se presentó y firmó): se anotan como cobrados por esa nota, para que «Generar factura» /
+   * «Se cobrará hoy» no los vuelvan a cobrar.
+   */
+  anotarCargos: Array<{ quoteItemId: string; invoiceId: string; monto: number }>;
 }
 
 const normalizar = (s: string) =>
@@ -141,6 +148,11 @@ export function planearNota(args: {
   notas: NotaDelPlan[];
   facturasVivas: string[];
   presupuesto: PresupuestoDelPlan | null;
+  /**
+   * No volver a cobrar filas cuya nota se canceló (cancelar una nota es a propósito). Lo usa «el plan
+   * crece»: una edición del plan no reabre lo que Facturación canceló.
+   */
+  noReemplazar?: boolean;
 }): PlaneoDeNota {
   const vivasFact = new Set(args.facturasVivas);
   const p = args.presupuesto;
@@ -156,6 +168,7 @@ export function planearNota(args: {
   const omitidas: PlaneoDeNota["omitidas"] = [];
   const reemplazar = new Set<string>();
   const religar: PlaneoDeNota["religar"] = [];
+  const anotarCargos: PlaneoDeNota["anotarCargos"] = [];
 
   /** ¿Quién cobró ya ese concepto? (cargo anotado o la factura de siempre) */
   const cobradoPor = (quoteItemId: string): string | null =>
@@ -164,19 +177,8 @@ export function planearNota(args: {
   // En el orden del papel (el del presupuesto y el PDF): así se leen también las líneas de la nota.
   const filas = ordenarParaElPapel(filasVivas(args.filas));
 
-  // 1) Lo que ya tiene nota viva no se toca. Lo que apunta a una nota muerta se vuelve a cobrar.
-  const porCobrarFilas: FilaDelPlan[] = [];
-  for (const f of filas) {
-    if (f.invoiceId && vivasFact.has(f.invoiceId)) {
-      if (f.quoteItemId) usados.add(f.quoteItemId);
-      continue;
-    }
-    if (f.invoiceId) reemplazar.add(f.invoiceId);
-    porCobrarFilas.push(f);
-  }
-
-  // 2) Cada fila con su concepto firmado: por su liga, o (si el editor rehízo los conceptos) por
-  //    nombre + dientes + cantidad con uno que nadie más tomó.
+  // Cada fila con su concepto firmado: por su liga, o (si el editor rehízo los conceptos) por
+  // nombre + dientes + cantidad con uno que nadie más tomó.
   const libres = (c: ConceptoFirmado) => !usados.has(c.quoteItemId);
   const conceptoDe = (f: FilaDelPlan): ConceptoFirmado | null => {
     const ligado = f.quoteItemId ? porId.get(f.quoteItemId) : undefined;
@@ -185,6 +187,32 @@ export function planearNota(args: {
     return conceptos.find((c) => libres(c) && claveDe(c.nombre, c.toothFdi ?? "", c.cantidad) === clave) ?? null;
   };
 
+  // 1) Lo que ya tiene nota viva no se vuelve a cobrar; su concepto (si el plan se presentó después)
+  //    queda tomado y anotado como cobrado por esa nota. Lo que apunta a una nota muerta se vuelve a
+  //    cobrar, salvo `noReemplazar`.
+  const porCobrarFilas: FilaDelPlan[] = [];
+  for (const f of filas) {
+    if (f.invoiceId && vivasFact.has(f.invoiceId)) {
+      const c = p ? conceptoDe(f) : null;
+      if (c) {
+        usados.add(c.quoteItemId);
+        if (f.quoteItemId !== c.quoteItemId) religar.push({ filaId: f.id, quoteItemId: c.quoteItemId });
+        if (c.aceptado && !cobradoPor(c.quoteItemId)) anotarCargos.push({ quoteItemId: c.quoteItemId, invoiceId: f.invoiceId, monto: netoDeConcepto(c) });
+      }
+      continue;
+    }
+    if (f.invoiceId && args.noReemplazar) {
+      // Su concepto también queda tomado: si no, el paso 3 lo cobraría como «concepto sin fila».
+      const c = p ? conceptoDe(f) : null;
+      if (c) usados.add(c.quoteItemId);
+      omitidas.push({ filaId: f.id, motivo: "nota_cancelada" });
+      continue;
+    }
+    if (f.invoiceId) reemplazar.add(f.invoiceId);
+    porCobrarFilas.push(f);
+  }
+
+  // 2) Lo que falta cobrar.
   for (const f of porCobrarFilas) {
     const c = p ? conceptoDe(f) : null;
     if (c) {
@@ -214,8 +242,9 @@ export function planearNota(args: {
     else lineas.push(l);
   }
 
-  // 3) Conceptos aceptados sin fila y sin cobrar (agregados en el editor del presupuesto).
-  for (const c of conceptos) {
+  // 3) Conceptos aceptados sin fila y sin cobrar (agregados en el editor del presupuesto). Los de
+  //    ortodoncia no: en un presupuesto mixto los cobra el caso de ortodoncia, no el plan general.
+  for (const c of conceptosGenerales(conceptos.map((x) => ({ ...x, name: x.nombre })))) {
     if (usados.has(c.quoteItemId) || !c.aceptado || cobradoPor(c.quoteItemId)) continue;
     const l = lineaDeConcepto(c, null);
     if (l.neto > 0) lineas.push(l);
@@ -229,6 +258,7 @@ export function planearNota(args: {
     omitidas,
     reemplazar: Array.from(reemplazar),
     religar,
+    anotarCargos,
   };
 }
 

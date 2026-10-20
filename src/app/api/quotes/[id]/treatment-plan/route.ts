@@ -52,9 +52,11 @@ export async function POST(req: NextRequest, props: Params) {
 
   // Crea un TreatmentPlan ACTIVE del paciente (coste total y nº de sesiones):
   // es exactamente lo que protege "treatments.edit" — "Crear y editar planes
-  // de tratamiento". Se elige esa key y NO una billing.*: aquí no nace factura
-  // ni se quema folio, y recepción (que tiene treatments.edit por default)
-  // sigue pudiendo abrir el plan de un presupuesto aceptado, como hasta ahora.
+  // de tratamiento". Se elige esa key y NO una billing.*: recepción (que tiene
+  // treatments.edit por default) sigue pudiendo abrir el plan de un
+  // presupuesto aceptado, como hasta ahora. ws1-t12: con las filas del plan
+  // también nace su nota de cobro, y esa parte SÍ pide "billing.create" (sin
+  // ella el plan se crea igual y su nota queda para quien factura).
   const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
   if (deniedPerm) return deniedPerm;
 
@@ -185,6 +187,13 @@ export async function POST(req: NextRequest, props: Params) {
   const plan = filas.length === 0
     ? await prisma.treatmentPlan.create({ data: datosDelPlan, select: { id: true, name: true } })
     : await prisma.$transaction(async (tx) => {
+        // Doble clic: el presupuesto bloqueado y releído; el segundo ve el plan del primero.
+        await tx.$queryRaw`SELECT id FROM "quotes" WHERE id = ${quote.id} AND "clinicId" = ${ctx.clinicId} FOR UPDATE`;
+        const fresco = await tx.quote.findFirst({ where: { id: quote.id, clinicId: ctx.clinicId }, select: { treatmentPlanId: true } });
+        if (fresco?.treatmentPlanId) {
+          const ya = await tx.treatmentPlan.findFirst({ where: { id: fresco.treatmentPlanId, clinicId: ctx.clinicId }, select: { id: true, name: true } });
+          if (ya) return { ...ya, already: true as const };
+        }
         const p = await tx.treatmentPlan.create({ data: datosDelPlan, select: { id: true, name: true } });
         if (filas.length) {
           const creadas = await repoFilas.insertar(tx, { clinicId: ctx.clinicId, planId: p.id, userId: ctx.userId, filas: filas.map((f) => f.fila) });
@@ -195,12 +204,17 @@ export async function POST(req: NextRequest, props: Params) {
           });
         }
         await tx.quote.updateMany({ where: { id: quote.id, clinicId: ctx.clinicId }, data: { treatmentPlanId: p.id } });
-        return p;
+        return { ...p, already: false as const };
       });
+  if ("already" in plan && plan.already) {
+    return NextResponse.json({ treatmentPlanId: plan.id, name: plan.name, already: true });
+  }
   if (filas.length === 0) await prisma.quote.update({ where: { id: quote.id }, data: { treatmentPlanId: plan.id } });
 
   let notaDelPlan: unknown = null;
-  if (filas.length) {
+  if (filas.length && denyIfMissingPermission(ctx, "billing.create")) {
+    notaDelPlan = { estado: "sin_permiso" };
+  } else if (filas.length) {
     try {
       notaDelPlan = await asegurarNotaDelPlan({ clinicId: ctx.clinicId, planId: plan.id, userId: ctx.userId, origen: "desde_presupuesto" });
     } catch (e) {
