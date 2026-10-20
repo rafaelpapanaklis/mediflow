@@ -14,6 +14,8 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import type { TipoHoja } from "./fabrica";
 import type { RepoHojas, FilaHoja, FilaNueva, CambiosFila } from "./servicio";
+import { conVersiones } from "./con-versiones";
+import { repoVersiones } from "@/lib/plantillas-fabrica/db";
 
 const CLAVE = Symbol.for("dalecontrol.indicaciones.tabla");
 const VOLVER_A_PREGUNTAR_MS = 10 * 60 * 1000;
@@ -164,6 +166,13 @@ export const repoHojas: RepoHojas = {
     }
   },
 };
+
+/**
+ * La biblioteca como la ve la clínica: con SU versión del texto puesta sobre cada
+ * hoja de fábrica que editó. Es la que usan las pantallas, la API y la cita.
+ * `repoHojas` a secas es la tabla tal cual (la copia de sede la necesita así).
+ */
+export const repoHojasVigente: RepoHojas = conVersiones(repoHojas, repoVersiones);
 
 /** El catálogo de la clínica, sin precios: lo que hace falta para ligar y para reconocer la cita. */
 export async function catalogoLigable(clinicId: string) {

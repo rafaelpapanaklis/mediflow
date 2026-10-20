@@ -3,7 +3,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
-import { repoHojas } from "./db";
+import { repoHojasVigente } from "./db";
 import { textoDeFabrica } from "./fabrica";
 import { listarHojas } from "./servicio";
 import type { HojaDTO, ProcedimientoLigable } from "./tipos";
@@ -13,7 +13,7 @@ export async function hojasDeLaClinica(
   clinicId: string,
   catalogo: readonly ProcedimientoLigable[],
 ): Promise<HojaDTO[] | null> {
-  return listarHojas(repoHojas, clinicId, async () => catalogo);
+  return listarHojas(repoHojasVigente, clinicId, async () => catalogo);
 }
 
 /** Id de la constancia de fábrica cuando todavía no hay tabla: no es una fila. */
@@ -34,6 +34,7 @@ export function constanciaSinTabla(): HojaDTO {
     cuerpo: f.cuerpo,
     procedureIds: [],
     deFabrica: true,
+    versionDeClinica: false,
     basadaEn: f.clave,
     activa: true,
     createdAt: epoca,

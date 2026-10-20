@@ -63,6 +63,7 @@ import { agregarFotoExtra } from "@/app/actions/orthodontics/fotosDelJuego";
 import { esVistaEnExtras } from "@/lib/orthodontics/fotos-del-juego";
 import { OrtodonciaSinCaso } from "./OrtodonciaSinCaso";
 import { CasosMigrados } from "./CasosMigrados";
+import { NotasInternas } from "./NotasInternas";
 import { DrawerNewCase, type DrawerEditarPlanSubmit, type DrawerNewCaseSubmit } from "./drawers/DrawerNewCase";
 import { guardarPlanDeTratamiento } from "@/app/actions/orthodontics/guardarPlanDeTratamiento";
 import { guardarDiagnosticoYPlan } from "@/app/actions/orthodontics/guardarDiagnosticoYPlan";
@@ -1403,6 +1404,13 @@ export function OrthodonticsPatientTab(props: OrthodonticsPatientTabProps) {
           }
         />
       )}
+      {/* Notas internas del caso (solo-equipo): al final del caso, tanto en la ficha como en el detalle que abre la
+          lista del módulo (es esta misma pestaña). Sin caso, no se monta. */}
+      <NotasInternas
+        key={orthoRedesignVM?.treatment.treatmentPlanId ?? orthoData?.plan?.id ?? "sin-caso"}
+        caseId={orthoRedesignVM?.treatment.treatmentPlanId ?? orthoData?.plan?.id ?? null}
+        soloLectura={soloLectura}
+      />
       {/* I5 (revisión final): los casos migrados del sistema anterior también se ven en la ficha nueva. */}
       <CasosMigrados patientId={patient.id} conLienzo />
     </>

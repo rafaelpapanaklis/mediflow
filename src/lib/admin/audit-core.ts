@@ -719,6 +719,8 @@ export const READ_KIND_LABELS: Record<string, { key: string; fallback: string }>
   expediente_pdf: { key: "auditoria.readExpedientePdf", fallback: "Descargó el expediente completo (PDF)" },
   // ws1-t12: la lista «Movimientos Completo» del paciente, en CSV o PDF.
   movimientos_export: { key: "auditoria.readMovimientosExport", fallback: "Descargó los movimientos del paciente" },
+  // Notas internas del caso de ortodoncia (solo-equipo).
+  orto_notas_internas: { key: "auditoria.readOrtoNotasInternas", fallback: "Abrió las notas internas de ortodoncia" },
 };
 
 /**

@@ -14,6 +14,8 @@ import {
 import { ensurePediatricDefaults } from "@/lib/clinical-shared/evolution-templates/seed-pediatrics";
 import { ensureOrthoDefaults } from "@/lib/clinical-shared/evolution-templates/seed-orthodontics";
 import { fail, ok, type ActionResult } from "@/lib/clinical-shared/result";
+import { soapVigente, versionesVigentes } from "@/lib/orthodontics/plantillas-nota-service";
+import { repoVersiones } from "@/lib/plantillas-fabrica/db";
 
 const moduleEnum = z.nativeEnum(ClinicalModule);
 
@@ -111,14 +113,23 @@ export async function listEvolutionTemplates(
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
   });
 
+  // Ortodoncia: si la clínica editó una plantilla de fábrica, aquí sale SU versión (ws1-t6).
+  let vigentes: Awaited<ReturnType<typeof versionesVigentes>> = new Map();
+  if (parsed.data.module === "orthodontics") {
+    // Sin atrapar el error: si no se pudo leer la versión de la clínica, el selector avisa («Reintentar») en vez de
+    // ofrecer en silencio el texto de fábrica (ws1-t8 · N-P8).
+    vigentes = await versionesVigentes(repoVersiones, ctx.clinicId);
+  }
+
   const dtos: EvolutionTemplateDTO[] = [];
   for (const r of rows) {
-    if (!isSoapTemplateBody(r.soapTemplate)) continue;
+    const soap = soapVigente(r.name, r.soapTemplate, vigentes);
+    if (!isSoapTemplateBody(soap)) continue;
     dtos.push({
       id: r.id,
       name: r.name,
       module: r.module,
-      soapTemplate: r.soapTemplate,
+      soapTemplate: soap,
       proceduresPrefilled: r.proceduresPrefilled,
       materialsPrefilled: r.materialsPrefilled,
       isDefault: r.isDefault,

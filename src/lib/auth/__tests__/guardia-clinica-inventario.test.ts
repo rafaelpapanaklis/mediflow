@@ -132,6 +132,16 @@ const EXCEPCIONES: Record<string, string> = {
     "plantilla de indicaciones por WhatsApp: whatsapp.send",
   "src/app/actions/orthodontics/whatsapp/sendMensualidadReminder.ts#sendMensualidadReminder":
     "recordatorio de pago: whatsapp.send",
+  // Notas internas del caso (Salamanca): por decisión de Rafael las ve y escribe TODO el equipo con acceso a
+  // pacientes (recepción incluida), no solo quien lee el expediente clínico. Su llave es patients.view / patients.edit
+  // + specialties.orthodontics (notas-internas-acceso.ts, con prueba) y el paciente restringido se oculta con
+  // assertPatientVisible. Siguen sin pasar por medicalRecord.* a propósito.
+  "src/app/api/orthodontics/internal-notes/route.ts#GET":
+    "notas internas: patients.view + specialties.orthodontics (guardaNotasInternas) y visibilidad del paciente",
+  "src/app/api/orthodontics/internal-notes/route.ts#POST":
+    "notas internas: patients.edit + specialties.orthodontics + módulo activo (guardaNotasInternas) y visibilidad del paciente",
+  "src/app/api/orthodontics/internal-notes/[id]/route.ts#PATCH":
+    "notas internas: patients.edit + specialties.orthodontics + módulo activo, y solo el autor o un admin corrige",
   "src/app/actions/orthodontics/imagen/boltonAnalysis.ts#limpiarAnchos":
     "función pura de validación de números (sin sesión ni base); no lee ni escribe nada",
 };

@@ -4,13 +4,16 @@
 //
 // Leyes:
 //  · `clinicId` sale SIEMPRE de la sesión; el repo corta si falta.
-//  · Las de fábrica no se editan (texto ni nombre): se copian. Sí se les cambia
-//    a qué procedimientos se ligan y si están en uso.
+//  · Las de fábrica no cambian de nombre. Su texto se edita como VERSIÓN DE LA
+//    CLÍNICA (plantillas-fabrica; la fila de fábrica no se toca) y «volver a la de
+//    fábrica» la archiva. Sin esa tabla (falta el SQL) el texto sigue siendo de solo
+//    lectura: se copia. Sí se les cambia a qué procedimientos se ligan y si están en uso.
 //  · Nada se borra: se apaga («en uso» / «inactiva»).
 //  · Los procedimientos ligados se filtran contra el catálogo de ESTA clínica:
 //    un id ajeno o inventado se descarta en silencio.
 
 import { TEXTOS_DE_FABRICA, coincideConFabrica, normalizar, textoDeFabrica, type TipoHoja } from "./fabrica";
+import type { RepoVersiones } from "@/lib/plantillas-fabrica/versiones";
 import {
   MAX_CUERPO_HOJA,
   MAX_NOMBRE_HOJA,
@@ -35,6 +38,8 @@ export interface FilaHoja {
   activa: boolean;
   createdAt: Date;
   updatedAt: Date;
+  /** El texto que trae es el de la versión de la clínica (lo pone `conVersiones`, no la tabla). */
+  versionDeClinica?: boolean;
 }
 
 export interface FilaNueva {
@@ -64,6 +69,8 @@ export interface RepoHojas {
   actualizar(clinicId: string, id: string, c: CambiosFila): Promise<FilaHoja | "NOMBRE_OCUPADO" | null>;
 }
 
+const familiaDeTipo = (tipo: TipoHoja) => (tipo === "CONSTANCIA" ? ("HOJA_CONSTANCIA" as const) : ("HOJA_INDICACIONES" as const));
+
 const falla = (codigo: CodigoHoja): ResultadoHoja => ({ ok: false, codigo, status: STATUS_HOJA[codigo] });
 
 export function aDTO(f: FilaHoja): HojaDTO {
@@ -74,6 +81,7 @@ export function aDTO(f: FilaHoja): HojaDTO {
     cuerpo: f.cuerpo,
     procedureIds: [...f.procedureIds],
     deFabrica: !!f.factoryKey,
+    versionDeClinica: !!f.versionDeClinica,
     basadaEn: f.factoryKey ?? f.basadaEn,
     activa: f.activa,
     createdAt: f.createdAt.toISOString(),
@@ -212,42 +220,99 @@ export interface EntradaEdicion {
   activa?: unknown;
 }
 
+/** Dónde se guardan las versiones de clínica de las hojas de fábrica, y quién las guarda. */
+export interface ContextoVersionesHoja {
+  versiones: RepoVersiones;
+  userId: string | null;
+}
+
 export async function editarHoja(
   repo: RepoHojas,
   clinicId: string,
   id: string,
   e: EntradaEdicion,
   catalogo: readonly ProcedimientoLigable[],
+  ctx?: ContextoVersionesHoja,
 ): Promise<ResultadoHoja & { antes?: HojaDTO }> {
   if (!(await repo.tablaExiste())) return falla("SIN_TABLA");
   const actual = await repo.obtener(clinicId, id);
   if (!actual) return falla("NO_ENCONTRADA");
 
   const cambios: CambiosFila = {};
+  let cuerpoDeClinica: string | null = null;
   if (e.nombre !== undefined || e.cuerpo !== undefined) {
     const n = e.nombre !== undefined ? limpiarNombre(e.nombre) : { nombre: actual.nombre };
     if ("codigo" in n) return falla(n.codigo);
     const c = e.cuerpo !== undefined ? limpiarCuerpo(e.cuerpo) : { cuerpo: actual.cuerpo };
     if ("codigo" in c) return falla(c.codigo);
     const cambiaTexto = n.nombre !== actual.nombre || c.cuerpo !== actual.cuerpo;
-    // El texto de fábrica es el mismo para todas las clínicas: se copia, no se reescribe.
-    if (cambiaTexto && actual.factoryKey) return falla("FABRICA_NO_SE_EDITA");
-    if (n.nombre !== actual.nombre) {
-      if (await nombreOcupado(repo, clinicId, actual.tipo, n.nombre, actual.id)) return falla("NOMBRE_OCUPADO");
-      cambios.nombre = n.nombre;
+    if (actual.factoryKey) {
+      // El nombre de la de fábrica es su identidad. El texto se guarda como versión de ESTA clínica.
+      if (n.nombre !== actual.nombre) return falla("FABRICA_NO_SE_EDITA");
+      if (c.cuerpo !== actual.cuerpo) {
+        if (!ctx) return falla("FABRICA_NO_SE_EDITA");
+        if (!(await ctx.versiones.disponible())) return falla("VERSIONES_NO_DISPONIBLES");
+        cuerpoDeClinica = c.cuerpo;
+      }
+    } else if (cambiaTexto) {
+      if (n.nombre !== actual.nombre) {
+        if (await nombreOcupado(repo, clinicId, actual.tipo, n.nombre, actual.id)) return falla("NOMBRE_OCUPADO");
+        cambios.nombre = n.nombre;
+      }
+      if (c.cuerpo !== actual.cuerpo) cambios.cuerpo = c.cuerpo;
     }
-    if (c.cuerpo !== actual.cuerpo) cambios.cuerpo = c.cuerpo;
   }
   if (e.procedureIds !== undefined && actual.tipo === "INDICACIONES") {
     cambios.procedureIds = limpiarProcedimientos(e.procedureIds, catalogo);
   }
   if (typeof e.activa === "boolean") cambios.activa = e.activa;
 
-  if (Object.keys(cambios).length === 0) return { ok: true, hoja: aDTO(actual), antes: aDTO(actual) };
+  if (Object.keys(cambios).length === 0 && cuerpoDeClinica === null) {
+    return { ok: true, hoja: aDTO(actual), antes: aDTO(actual) };
+  }
+  if (cuerpoDeClinica !== null && ctx) {
+    // Misma fila de fábrica, otro texto SOLO para esta clínica (la de fábrica no se toca).
+    await ctx.versiones.guardar({
+      clinicId,
+      familia: familiaDeTipo(actual.tipo),
+      clave: actual.factoryKey!,
+      cuerpo: cuerpoDeClinica,
+      userId: ctx.userId,
+    });
+  }
+  if (Object.keys(cambios).length === 0) {
+    const fresca = await repo.obtener(clinicId, actual.id);
+    if (!fresca) return falla("NO_ENCONTRADA");
+    return { ok: true, hoja: aDTO(fresca), antes: aDTO(actual) };
+  }
   const r = await repo.actualizar(clinicId, actual.id, cambios);
   if (r === "NOMBRE_OCUPADO") return falla("NOMBRE_OCUPADO");
   if (!r) return falla("NO_ENCONTRADA");
-  return { ok: true, hoja: aDTO(r), antes: aDTO(actual) };
+  // `actualizar` devuelve la fila con la versión puesta si el repo es el de la clínica; si no, la lee otra vez.
+  const hoja = cuerpoDeClinica !== null ? ((await repo.obtener(clinicId, actual.id)) ?? r) : r;
+  return { ok: true, hoja: aDTO(hoja), antes: aDTO(actual) };
+}
+
+/**
+ * «Volver a la de fábrica»: archiva la versión de la clínica (la fila se queda) y
+ * la hoja vuelve a su texto de fábrica. Devuelve la hoja ya sin versión.
+ */
+export async function volverAFabricaHoja(
+  repo: RepoHojas,
+  clinicId: string,
+  id: string,
+  ctx: ContextoVersionesHoja,
+): Promise<ResultadoHoja & { antes?: HojaDTO }> {
+  if (!(await repo.tablaExiste())) return falla("SIN_TABLA");
+  const actual = await repo.obtener(clinicId, id);
+  if (!actual) return falla("NO_ENCONTRADA");
+  if (!actual.factoryKey) return falla("NO_ES_DE_FABRICA");
+  if (!(await ctx.versiones.disponible())) return falla("VERSIONES_NO_DISPONIBLES");
+  // Una pestaña vieja puede pedir «volver» cuando ya no hay versión vigente: no cambió nada (y no se audita).
+  const archivada = await ctx.versiones.archivar(clinicId, familiaDeTipo(actual.tipo), actual.factoryKey, ctx.userId);
+  const fresca = await repo.obtener(clinicId, actual.id);
+  if (!fresca) return falla("NO_ENCONTRADA");
+  return { ok: true, hoja: aDTO(fresca), antes: aDTO(actual), ...(archivada ? {} : { yaEstabaDeFabrica: true }) };
 }
 
 /** «Después de una extracción (copia)», «… (copia 2)»… sin chocar con los nombres que ya hay. */
@@ -278,6 +343,58 @@ export function procedimientosDeLaCita(
 }
 
 /**
+ * Lo que se PROPONE no repite la MISMA hoja (ws1-t8 · N-P2, N3-P1, N3-P3). La fila de fábrica «Después de una
+ * extracción», la versión que la clínica editó de ella y las copias que sacó comparten `basadaEn`; entre ellas:
+ *  · si la clínica editó la de fábrica (`versionDeClinica`), esa versión es LA hoja y las copias viejas no se proponen
+ *    (la fecha de una copia cambia con solo tocarle la liga o «en uso», así que no sirve para decidir cuál es la nueva);
+ *  · si no hay versión, la de fábrica pelada cede a sus copias (la clínica ya tiene la suya).
+ * Dos COPIAS entre sí nunca se descartan: son hojas distintas que la clínica hizo a propósito («Cirugía de cordales»,
+ * «Injerto de encía»). Las que no vienen de una de fábrica (`basadaEn` nulo) tampoco. Conserva el orden de entrada.
+ * Solo propone: lo que la persona marca a mano se respeta (ver `sinIdsRepetidos`).
+ */
+export function sinRepetirLaMismaHoja<T extends HojaDTO>(
+  hojas: readonly T[],
+  /**
+   * Los procedimientos de la cita, cuando la propuesta sale de la LIGA. Entre una copia y la versión editada de su misma
+   * hoja de fábrica, lo que decide si la copia es «la misma hoja vieja» o OTRA hoja es qué cubre de la cita
+   * (ws1-t8 · N4-P1, N5-P1):
+   *  · cubre todo lo que cubre la versión (lo mismo o más): es la copia vieja → cede, solo la editada;
+   *  · cubre menos que la versión («Injerto de encía» frente a una versión que conserva la liga que la hoja trae de
+   *    fábrica) o cubre otro procedimiento: es otra hoja → se propone.
+   * Sin procedimientos (propuesta por palabras) comparten la misma indicación y la copia vieja cede.
+   */
+  procedimientosDeLaCita?: ReadonlySet<string>,
+): T[] {
+  const cubre = (h: HojaDTO) => (procedimientosDeLaCita ? h.procedureIds.filter((id) => procedimientosDeLaCita.has(id)) : []);
+  const delOrigen = (h: T) => hojas.filter((x) => x !== h && x.basadaEn === h.basadaEn);
+  return hojas.filter((h) => {
+    if (!h.basadaEn) return true;
+    if (!h.deFabrica) {
+      // La copia cede a la versión editada de la MISMA hoja si cubre todo lo que la versión cubre.
+      const mias = new Set(cubre(h));
+      const versiones = delOrigen(h).filter((x) => x.deFabrica && x.versionDeClinica);
+      return !versiones.some((v) => !procedimientosDeLaCita || cubre(v).every((id) => mias.has(id)));
+    }
+    if (h.versionDeClinica) return true;
+    // La de fábrica pelada cede a las copias de la clínica, si juntas cubren lo que ella cubre en esta cita.
+    const copias = delOrigen(h).filter((x) => !x.deFabrica);
+    if (copias.length === 0) return true;
+    if (!procedimientosDeLaCita) return false;
+    const cubiertos = new Set(copias.flatMap(cubre));
+    return !cubre(h).every((id) => cubiertos.has(id));
+  });
+}
+
+/**
+ * Lo que la persona MARCÓ: se respeta tal cual, sin descartar hojas distintas aunque vengan de la misma de fábrica
+ * (ws1-t8 · N3-P1). Solo se quitan los ids repetidos en la petición.
+ */
+export function sinIdsRepetidos<T extends { id: string }>(hojas: readonly T[]): T[] {
+  const vistos = new Set<string>();
+  return hojas.filter((h) => (vistos.has(h.id) ? false : (vistos.add(h.id), true)));
+}
+
+/**
  * Qué hojas de indicaciones proponer para la cita (en uso). Primero las ligadas a
  * sus procedimientos; si ninguna, las de fábrica (o copias de una de fábrica)
  * cuyas palabras aparecen en el motivo o en los conceptos. Solo PROPONE: quien
@@ -291,14 +408,14 @@ export function hojasSugeridas(
   const enUso = hojas.filter((h) => h.tipo === "INDICACIONES" && h.activa);
   const ids = new Set(procedimientos.map((p) => p.id));
   const porLiga = enUso.filter((h) => h.procedureIds.some((id) => ids.has(id)));
-  if (porLiga.length > 0) return porLiga.map((h) => h.id);
+  if (porLiga.length > 0) return sinRepetirLaMismaHoja(porLiga, ids).map((h) => h.id);
   const porPalabras = enUso.filter((h) => {
     const f = textoDeFabrica(h.basadaEn);
     return !!f && textos.some((t) => coincideConFabrica(f, t));
   });
-  // Si una copia de la clínica y su original de fábrica coinciden, va la de la clínica.
-  const propias = new Set(porPalabras.filter((h) => !h.deFabrica).map((h) => h.basadaEn));
-  const sugeridas = porPalabras.filter((h) => !(h.deFabrica && propias.has(h.basadaEn))).map((h) => h.id);
+  // Si la clínica ya tiene su propia hoja (copia o versión editada), la de fábrica pelada no se propone; y una copia
+  // vieja no compite con la versión editada de la misma hoja.
+  const sugeridas = sinRepetirLaMismaHoja(porPalabras).map((h) => h.id);
   if (sugeridas.length > 0) return sugeridas;
   return hojasDeOrtodonciaPorNombre(enUso, textos);
 }
@@ -330,6 +447,10 @@ export function hojasDeOrtodonciaPorNombre(
 /** La constancia que se usa si no se elige: la de la clínica más reciente en uso; si no, la de fábrica. */
 export function constanciaPorDefecto(hojas: readonly HojaDTO[]): HojaDTO | null {
   const enUso = hojas.filter((h) => h.tipo === "CONSTANCIA" && h.activa);
-  const propias = enUso.filter((h) => !h.deFabrica).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // La de fábrica que la clínica editó es LA constancia de la clínica y va primero; las copias, de la más reciente a la
+  // más antigua (la fecha de una copia cambia al tocarle «en uso», por eso la versión no compite por fecha: N3-P3).
+  const propias = enUso
+    .filter((h) => !h.deFabrica || h.versionDeClinica)
+    .sort((a, b) => Number(!!b.versionDeClinica) - Number(!!a.versionDeClinica) || b.updatedAt.localeCompare(a.updatedAt));
   return propias[0] ?? enUso[0] ?? null;
 }

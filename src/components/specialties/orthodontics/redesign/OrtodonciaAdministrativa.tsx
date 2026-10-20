@@ -8,6 +8,9 @@
 // src/lib/orthodontics/pestana-ficha.ts.
 import { CalendarDays, Lock, Wallet } from "lucide-react";
 import { Btn } from "./atoms/Btn";
+import { NotasInternas } from "./NotasInternas";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { bloquesDeNotas, fechaCortaDeCaso } from "./notas-internas-casos";
 import { RAIZ_ORTO } from "./raiz";
 import orto from "./orto.module.css";
 
@@ -15,9 +18,27 @@ export interface OrtodonciaAdministrativaProps {
   onVerCitas: () => void;
   /** `null` si la persona no puede ver la facturación: el botón no sale. */
   onVerCobro: (() => void) | null;
+  /**
+   * El caso más reciente del paciente. Las «Notas internas» NO son un dato clínico (son de trato: «pidió que lo atienda
+   * el doctor X»): las ven todos los que tienen acceso al paciente, recepción incluida (decisión de Rafael, ws1-t6).
+   */
+  casoId?: string | null;
+  /**
+   * Todos los casos vivos del paciente (el más reciente primero). Si hay más de uno, recepción ve las notas de cada
+   * uno, con el caso al que pertenecen (ws1-t8 · N-P5). Tiene prioridad sobre `casoId`.
+   */
+  casos?: Array<{ id: string; abierto: string }>;
+  /** Zona horaria de la CLÍNICA, para la fecha de cada caso (ws1-t8 · N3-P4). */
+  zonaHoraria?: string | null;
+  soloLectura?: boolean;
 }
 
-export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro }: OrtodonciaAdministrativaProps) {
+export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null, casos, zonaHoraria = null, soloLectura = false }: OrtodonciaAdministrativaProps) {
+  const t = useT();
+  const locale = useLocale();
+  const bloques = bloquesDeNotas(casos, casoId, (abierto) =>
+    t("ortoNotasInternas.casoAbierto", { fecha: fechaCortaDeCaso(abierto, locale, zonaHoraria) }),
+  );
   return (
     <div className={`${RAIZ_ORTO} ${orto.lienzo}`}>
       <section className={orto.tarjeta} aria-labelledby="orto-administrativa-titulo">
@@ -53,6 +74,10 @@ export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro }: OrtodonciaA
           </div>
         </div>
       </section>
+      {bloques.map((b) => (
+        <NotasInternas key={b.caseId ?? "sin-caso"} caseId={b.caseId} soloLectura={soloLectura} etiquetaCaso={b.etiquetaCaso} />
+      ))}
     </div>
   );
 }
+

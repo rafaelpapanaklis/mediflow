@@ -6,8 +6,9 @@
 // (module = orthodontics) que ya lee el selector de la hoja de control
 // (EvolutionTemplatePicker). Lo único nuevo es poder verlas, crearlas,
 // editarlas y apagarlas desde Plantillas. Las seis de fábrica
-// (seed-orthodontics.ts) NO se editan: se copian, y la copia es la que se
-// edita, así la original nunca se pierde.
+// (seed-orthodontics.ts) conservan su nombre; su texto se edita como VERSIÓN DE
+// LA CLÍNICA (src/lib/plantillas-fabrica) y «volver a la de fábrica» la archiva,
+// así la original nunca se pierde. También se pueden copiar.
 
 export const MAX_NOMBRE_NOTA = 80;
 export const MAX_TEXTO_SECCION = 4000;
@@ -96,6 +97,8 @@ export type CodigoErrorNota =
   | "NAME_TAKEN"
   | "FACTORY_READONLY"
   | "NOT_FOUND"
+  | "NOT_FACTORY"
+  | "VERSIONES_NO_DISPONIBLES"
   | "MODULE_REQUIRED";
 
 export const ESTADO_DE_ERROR_NOTA: Record<CodigoErrorNota, number> = {
@@ -107,6 +110,8 @@ export const ESTADO_DE_ERROR_NOTA: Record<CodigoErrorNota, number> = {
   NAME_TAKEN: 409,
   FACTORY_READONLY: 409,
   NOT_FOUND: 404,
+  NOT_FACTORY: 409,
+  VERSIONES_NO_DISPONIBLES: 503,
   MODULE_REQUIRED: 403,
 };
 

@@ -14,6 +14,7 @@ import {
 } from "@/lib/orthodontics/plantillas-nota";
 import type { PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
 import type { ModalOrto } from "./plantillas-orto";
+import { cuerpoEdicionNotaOrto } from "./cuerpo-edicion";
 import styles from "./plantillas.module.css";
 
 interface Props {
@@ -34,6 +35,8 @@ export function PlantillaOrtoModal({ modal, nombreSugeridoDeCopia, onClose, onCo
   const soloVer = modal.modo === "ver";
   const esCopia = modal.modo === "copia";
   const editando = modal.modo === "editar";
+  // Una de fábrica en «editar» (ws1-t6): el nombre es fijo y el texto se guarda como versión de ESTA clínica.
+  const fabricaEditable = editando && !!fila?.deFabrica;
   const nombreRef = useRef<HTMLInputElement>(null);
   const campos = useRef<Partial<Record<SeccionSoap, HTMLTextAreaElement | null>>>({});
   const ultimo = useRef<SeccionSoap>("S");
@@ -43,8 +46,8 @@ export function PlantillaOrtoModal({ modal, nombreSugeridoDeCopia, onClose, onCo
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    nombreRef.current?.focus();
-  }, []);
+    (fabricaEditable ? campos.current.S : nombreRef.current)?.focus();
+  }, [fabricaEditable]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !saving) onClose();
@@ -90,7 +93,12 @@ export function PlantillaOrtoModal({ modal, nombreSugeridoDeCopia, onClose, onCo
         method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          editando ? { name: nombre, soap } : { name: nombre, soap, ...(esCopia && fila ? { copiaDe: fila.id } : {}) },
+          editando
+            ? // Solo lo que la persona cambió (ws1-t8 · N-P3): ver cuerpo-edicion.ts.
+              fila
+              ? cuerpoEdicionNotaOrto({ name: fila.name, soap: fila.soap }, { name: nombre, soap })
+              : { name: nombre, soap }
+            : { name: nombre, soap, ...(esCopia && fila ? { copiaDe: fila.id } : {}) },
         ),
       });
       const data = await res.json().catch(() => null);
@@ -131,6 +139,7 @@ export function PlantillaOrtoModal({ modal, nombreSugeridoDeCopia, onClose, onCo
         <form className={styles.modalForm} onSubmit={guardar}>
           <div className={styles.modalBody}>
             {soloVer && <p className={styles.avisoInfo}>{t("pages.plantillas.orto.avisoFabrica")}</p>}
+            {fabricaEditable && <p className={styles.avisoInfo}>{t("pages.plantillas.orto.avisoFabricaEditable")}</p>}
             {esCopia && <p className={styles.avisoInfo}>{t("pages.plantillas.orto.avisoCopia")}</p>}
 
             <label className={styles.field}>
@@ -140,7 +149,7 @@ export function PlantillaOrtoModal({ modal, nombreSugeridoDeCopia, onClose, onCo
                 className={styles.input}
                 value={name}
                 maxLength={MAX_NOMBRE_NOTA}
-                disabled={soloVer}
+                disabled={soloVer || fabricaEditable}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t("pages.plantillas.orto.nombrePlaceholder")}
               />

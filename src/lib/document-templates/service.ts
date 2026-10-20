@@ -29,7 +29,8 @@ export type TemplateErrorCode =
   | "BODY_REQUIRED"
   | "BODY_TOO_LONG"
   | "NAME_TAKEN"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "CAMBIO_CONCURRENTE";
 
 const MENSAJES: Record<TemplateErrorCode, { status: number; error: string }> = {
   KIND_INVALID: { status: 400, error: "Tipo de plantilla inválido" },
@@ -39,6 +40,7 @@ const MENSAJES: Record<TemplateErrorCode, { status: number; error: string }> = {
   BODY_TOO_LONG: { status: 400, error: "El texto de la plantilla es demasiado largo" },
   NAME_TAKEN: { status: 409, error: "Ya existe una plantilla de este tipo con ese nombre" },
   NOT_FOUND: { status: 404, error: "Plantilla no encontrada" },
+  CAMBIO_CONCURRENTE: { status: 409, error: "Alguien guardó un cambio en esta plantilla mientras la editabas" },
 };
 
 export type TemplateResult =
@@ -61,7 +63,7 @@ function exigirClinica(clinicId: string): void {
   }
 }
 
-const esChoqueDeUnico = (err: unknown): boolean =>
+export const esChoqueDeUnico = (err: unknown): boolean =>
   typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
 
 export interface ListTemplatesOptions {
@@ -97,14 +99,14 @@ export async function getTemplate(
   return db.documentTemplate.findFirst({ where: { id, clinicId, deletedAt: null } });
 }
 
-function validarNombre(v: unknown): { name: string } | { code: TemplateErrorCode } {
+export function validarNombre(v: unknown): { name: string } | { code: TemplateErrorCode } {
   const name = normalizeTemplateName(v);
   if (!name) return { code: "NAME_REQUIRED" };
   if (name.length > MAX_NAME_LENGTH) return { code: "NAME_TOO_LONG" };
   return { name };
 }
 
-function validarCuerpo(v: unknown): { body: string } | { code: TemplateErrorCode } {
+export function validarCuerpo(v: unknown): { body: string } | { code: TemplateErrorCode } {
   // El tamaño de la ENTRADA se mira antes de gastar CPU en sanearla.
   if (typeof v === "string" && v.length > MAX_INPUT_LENGTH) return { code: "BODY_TOO_LONG" };
   const body = sanitizeTemplateHtml(v);
@@ -114,7 +116,7 @@ function validarCuerpo(v: unknown): { body: string } | { code: TemplateErrorCode
 }
 
 /** «Endodoncia» y «endodoncia» son la misma plantilla para quien las lee en una lista. */
-async function nombreOcupado(
+export async function nombreOcupado(
   db: TemplateDb,
   clinicId: string,
   kind: DocumentTemplateKindValue,

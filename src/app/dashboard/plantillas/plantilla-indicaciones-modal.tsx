@@ -2,9 +2,11 @@
 
 // El editor de una hoja (indicaciones o constancia). Cuatro modos:
 //   · nueva   — vacía, del tipo de la pestaña;
-//   · editar  — una propia: nombre, texto y procedimientos;
-//   · ver     — una de fábrica: el texto no se toca; sí la liga a procedimientos
-//               («Guardar procedimientos») y «Copiar y editar»;
+//   · editar  — una propia: nombre, texto y procedimientos. En una de fábrica
+//               (ws1-t6) el nombre es fijo y el texto se guarda como versión de
+//               ESTA clínica;
+//   · ver     — una de fábrica sin la tabla de versiones: el texto no se toca; sí
+//               la liga a procedimientos («Guardar procedimientos») y «Copiar y editar»;
 //   · copia   — nueva, con el texto y la liga de la original.
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +21,7 @@ import {
   type ProcedimientoLigable,
   type TipoHoja,
 } from "@/lib/indicaciones/tipos";
+import { cuerpoEdicionHoja } from "./cuerpo-edicion";
 import styles from "./plantillas.module.css";
 import propios from "./plantillas-indicaciones.module.css";
 
@@ -51,6 +54,7 @@ export function PlantillaIndicacionesModal({
   const soloVer = modal.modo === "ver";
   const esCopia = modal.modo === "copia";
   const editando = modal.modo === "editar";
+  const fabricaEditable = editando && !!hoja?.deFabrica;
   const nombreRef = useRef<HTMLInputElement>(null);
   const textoRef = useRef<HTMLTextAreaElement>(null);
   const [nombre, setNombre] = useState(() => (esCopia && hoja ? nombreSugeridoDeCopia(hoja.nombre) : (hoja?.nombre ?? "")));
@@ -61,8 +65,8 @@ export function PlantillaIndicacionesModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (soloVer ? textoRef : nombreRef).current?.focus();
-  }, [soloVer]);
+    (soloVer || fabricaEditable ? textoRef : nombreRef).current?.focus();
+  }, [soloVer, fabricaEditable]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !saving) onClose();
@@ -74,6 +78,7 @@ export function PlantillaIndicacionesModal({
   const marcadores = marcadoresDelTipo(tipo);
   const desconocidos = marcadoresDesconocidos(cuerpo);
   const conLiga = tipo === "INDICACIONES";
+  const ligaCambio = hoja ? JSON.stringify([...ligados].sort()) !== JSON.stringify([...hoja.procedureIds].sort()) : false;
 
   // Activos primero; los inactivos solo si ya estaban ligados (para poder quitarlos).
   const opciones = useMemo(() => {
@@ -121,7 +126,14 @@ export function PlantillaIndicacionesModal({
       const cuerpoPeticion = soloVer
         ? { procedureIds: ligados }
         : editando
-          ? { nombre, cuerpo, ...(conLiga ? { procedureIds: ligados } : {}) }
+          ? // Solo lo que la persona cambió (ws1-t8 · P1, N-P4): ver cuerpo-edicion.ts.
+            hoja
+            ? cuerpoEdicionHoja(
+                { nombre: hoja.nombre, cuerpo: hoja.cuerpo, procedureIds: hoja.procedureIds },
+                { nombre, cuerpo, procedureIds: ligados },
+                conLiga,
+              )
+            : { nombre, cuerpo }
           : {
               tipo,
               nombre,
@@ -148,7 +160,6 @@ export function PlantillaIndicacionesModal({
   }
 
   const titulo = soloVer ? tx.tituloVer : editando ? tx.tituloEditar : esCopia ? tx.tituloCopia : tx.tituloNueva;
-  const ligaCambio = hoja ? JSON.stringify([...ligados].sort()) !== JSON.stringify([...hoja.procedureIds].sort()) : false;
 
   return (
     <div className={styles.modalOverlay}>
@@ -169,6 +180,7 @@ export function PlantillaIndicacionesModal({
         <form className={styles.modalForm} onSubmit={guardar}>
           <div className={styles.modalBody}>
             {soloVer && <p className={styles.avisoInfo}>{tx.avisoFabrica}</p>}
+            {fabricaEditable && <p className={styles.avisoInfo}>{tx.avisoFabricaEditable}</p>}
             {esCopia && <p className={styles.avisoInfo}>{tx.avisoCopia}</p>}
 
             <label className={styles.field}>
@@ -178,7 +190,7 @@ export function PlantillaIndicacionesModal({
                 className={styles.input}
                 value={nombre}
                 maxLength={MAX_NOMBRE_HOJA}
-                disabled={soloVer}
+                disabled={soloVer || fabricaEditable}
                 onChange={(e) => setNombre(e.target.value)}
               />
             </label>

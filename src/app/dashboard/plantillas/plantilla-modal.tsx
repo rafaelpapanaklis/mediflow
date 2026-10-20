@@ -63,6 +63,8 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
   const editorRef = useRef<HTMLDivElement>(null);
   const nombreRef = useRef<HTMLInputElement>(null);
   const seleccion = useRef<Range | null>(null);
+  // Cómo quedó el editor al abrirlo: solo si cambia se manda el texto (una pestaña vieja no pisa lo de otra persona).
+  const inicialRef = useRef<string>("");
   const [name, setName] = useState(editing?.name ?? "");
   const [vacio, setVacio] = useState(!editing);
   const [activos, setActivos] = useState<Record<string, boolean>>({});
@@ -77,6 +79,7 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
     const el = editorRef.current;
     if (!el) return;
     el.innerHTML = sanitizeTemplateHtml(editing?.body ?? "");
+    inicialRef.current = el.innerHTML;
     try {
       document.execCommand("defaultParagraphSeparator", false, "p");
       // <b>/<i>/<u> y no <span style>: la lista blanca tira los atributos, y el
@@ -186,7 +189,11 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
       const res = await fetch(editing ? `/api/document-templates/${editing.id}` : "/api/document-templates", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editing ? { name: nombre, body } : { kind, name: nombre, body }),
+        body: JSON.stringify(
+          editing
+            ? { name: nombre, ...(body !== inicialRef.current ? { body, baseBody: editing.body } : {}) }
+            : { kind, name: nombre, body },
+        ),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.id) {
@@ -204,6 +211,7 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
           precargada: esPrecargada(data.createdById),
+          restaurable: data.restaurable === true,
         },
         !editing,
       );

@@ -23,6 +23,11 @@ const es = {
   ayudaConstancia:
     "El texto de la constancia que se imprime desde la cita (paciente, fecha, hora, doctor con cédula y clínica). Se usa la tuya más reciente en uso; si no tienes, la de fábrica.",
   deFabrica: "De fábrica",
+  versionDeClinica: "Versión de tu clínica",
+  volverAFabrica: "Volver a la de fábrica",
+  confirmarVolverTitulo: "¿Volver a la plantilla de fábrica «{nombre}»?",
+  confirmarVolverTexto: "La plantilla vuelve a su texto de fábrica. Tu versión no se borra: queda archivada en el sistema.",
+  toastVolvioAFabrica: "La plantilla volvió a la de fábrica",
   propia: "Propia",
   enUso: "En uso",
   inactiva: "Inactiva",
@@ -63,6 +68,8 @@ const es = {
   marcadorDesconocido: "Estos marcadores no existen y saldrán tal cual: {lista}",
   avisoFabrica:
     "Este texto es de fábrica y es el mismo para todas las clínicas: no se edita. Puedes ligarlo a tus procedimientos, apagarlo o copiarlo para adaptarlo.",
+  avisoFabricaEditable:
+    "Esta plantilla viene de fábrica. Al guardar, tu cambio se aplica solo en tu clínica: las demás clínicas siguen con la de fábrica, y tú puedes volver a ella cuando quieras. El nombre no se cambia.",
   avisoCopia: "Se crea una plantilla tuya con este texto; la original queda igual.",
   avisoRevisa: "Revisa que el texto sea correcto para tu clínica: lo recibe el paciente tal cual.",
   guardar: "Guardar",
@@ -93,7 +100,9 @@ const es = {
     CUERPO_LARGO: "El texto es demasiado largo.",
     NOMBRE_OCUPADO: "Ya hay una plantilla de este tipo con ese nombre.",
     NO_ENCONTRADA: "La plantilla ya no existe.",
-    FABRICA_NO_SE_EDITA: "Un texto de fábrica no se edita: usa «Copiar y editar».",
+    FABRICA_NO_SE_EDITA: "El nombre de una plantilla de fábrica no se cambia: edita el texto o usa «Copiar y editar».",
+    NO_ES_DE_FABRICA: "Esa plantilla no es de fábrica.",
+    VERSIONES_NO_DISPONIBLES: "Esta función todavía no está activada en tu cuenta.",
     generico: "No se pudo guardar. Inténtalo de nuevo.",
   } as Record<CodigoHoja | "generico", string>,
 
@@ -167,6 +176,11 @@ const en: Textos = {
   ayudaConstancia:
     "The certificate text printed from the appointment (patient, date, time, doctor with license number and clinic). Your most recent active one is used; if you have none, the default.",
   deFabrica: "Default",
+  versionDeClinica: "Your clinic's version",
+  volverAFabrica: "Back to the default",
+  confirmarVolverTitulo: "Go back to the default template “{nombre}”?",
+  confirmarVolverTexto: "The template goes back to its default text. Your version isn't deleted: it stays archived in the system.",
+  toastVolvioAFabrica: "The template is back to the default",
   propia: "Yours",
   enUso: "In use",
   inactiva: "Inactive",
@@ -206,6 +220,8 @@ const en: Textos = {
   marcadorDesconocido: "These markers don't exist and will print as-is: {lista}",
   avisoFabrica:
     "This is a default text shared by every clinic: it can't be edited. You can link it to your procedures, turn it off or copy it to adapt it.",
+  avisoFabricaEditable:
+    "This is a default template. Saving applies your change only to your clinic: other clinics keep the default, and you can go back to it anytime. The name can't be changed.",
   avisoCopia: "A template of your own is created with this text; the original stays the same.",
   avisoRevisa: "Make sure the text is right for your clinic: the patient receives it as written.",
   guardar: "Save",
@@ -236,7 +252,9 @@ const en: Textos = {
     CUERPO_LARGO: "The text is too long.",
     NOMBRE_OCUPADO: "There's already a template of this type with that name.",
     NO_ENCONTRADA: "The template no longer exists.",
-    FABRICA_NO_SE_EDITA: "A default text can't be edited: use “Copy and edit”.",
+    FABRICA_NO_SE_EDITA: "A default template can't be renamed: edit its text or use “Copy and edit”.",
+    NO_ES_DE_FABRICA: "That template isn't a default one.",
+    VERSIONES_NO_DISPONIBLES: "This feature isn't enabled on your account yet.",
     generico: "Couldn't save. Please try again.",
   },
   ranuraTitulo: "After the visit",

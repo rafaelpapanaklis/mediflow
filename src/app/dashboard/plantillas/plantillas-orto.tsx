@@ -3,10 +3,13 @@
 // Administración → Plantillas → «Notas de ortodoncia»: las plantillas que la
 // hoja de control ofrece en «Plantillas» (ws1-t5 · 10b). Son las mismas filas
 // que lee el selector de la hoja; aquí se ven, se copian, se editan y se apagan.
+// Las de fábrica también se editan (ws1-t6): el cambio es la versión de ESTA clínica
+// y «Volver a la de fábrica» la archiva (nada se borra).
 
 import { useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { Copy, FileText, Pencil, Plus, Power, Search } from "lucide-react";
+import { Copy, FileText, Pencil, Plus, Power, RotateCcw, Search } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { nombreDeCopia } from "@/lib/orthodontics/plantillas-nota";
 import type { PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
@@ -16,6 +19,8 @@ import styles from "./plantillas.module.css";
 
 interface Props {
   filas: PlantillaNotaDTO[];
+  /** Falta pegar el SQL de las versiones por clínica: las de fábrica siguen siendo de solo lectura. */
+  versionesDisponibles?: boolean;
   onChange: (filas: PlantillaNotaDTO[]) => void;
 }
 
@@ -24,8 +29,9 @@ export type ModalOrto =
   | { modo: "ver" | "editar"; fila: PlantillaNotaDTO }
   | { modo: "copia"; fila: PlantillaNotaDTO };
 
-export function PlantillasOrto({ filas, onChange }: Props) {
+export function PlantillasOrto({ filas, versionesDisponibles = false, onChange }: Props) {
   const t = useT();
+  const askConfirm = useConfirm();
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalOrto | null>(null);
@@ -62,6 +68,9 @@ export function PlantillasOrto({ filas, onChange }: Props) {
     setModal(null);
     toast.success(t(eraNueva ? "pages.plantillas.toastCreada" : "pages.plantillas.toastGuardada"));
   }
+
+  /** Una de fábrica se edita (como versión de la clínica) cuando la tabla existe; si no, solo se ve. */
+  const modoAlAbrir = (p: PlantillaNotaDTO): "ver" | "editar" => (p.deFabrica && !versionesDisponibles ? "ver" : "editar");
 
   // Siempre la lista más reciente: el «Deshacer» del aviso se pulsa segundos después y no debe pisar lo que
   // cambió mientras tanto (otra plantilla guardada, copiada…).
@@ -114,10 +123,41 @@ export function PlantillasOrto({ filas, onChange }: Props) {
     }
   }
 
+  // «Volver a la de fábrica»: la versión de la clínica se archiva (no se borra) y la plantilla recupera su texto.
+  async function volverAFabrica(p: PlantillaNotaDTO) {
+    if (busyId) return;
+    const ok = await askConfirm({
+      title: t("pages.plantillas.confirmarVolverTitulo", { nombre: p.name }),
+      description: t("pages.plantillas.confirmarVolverTexto"),
+      confirmText: t("pages.plantillas.volverAFabrica"),
+      variant: "warning",
+    });
+    if (!ok) return;
+    setBusyId(p.id);
+    try {
+      const res = await fetch(`/api/orthodontics/note-templates/${p.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volverAFabrica: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.id) {
+        toast.error(mensajeDeError(data));
+        return;
+      }
+      onChange(filasRef.current.map((f) => (f.id === p.id ? (data as PlantillaNotaDTO) : f)));
+      toast.success(t("pages.plantillas.toastVolvioAFabrica"));
+    } catch {
+      toast.error(t("pages.plantillas.errores.generico"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <>
       <div className={styles.headAcciones}>
-        <p className={styles.notaAyuda}>{t("pages.plantillas.orto.ayuda")}</p>
+        <p className={styles.notaAyuda}>{t(versionesDisponibles ? "pages.plantillas.orto.ayuda" : "pages.plantillas.orto.ayudaSinVersiones")}</p>
         <button type="button" className={styles.btnPrimary} onClick={() => setModal({ modo: "nueva" })}>
           <Plus size={16} aria-hidden />
           {t("pages.plantillas.nueva")}
@@ -164,7 +204,7 @@ export function PlantillasOrto({ filas, onChange }: Props) {
                     <button
                       type="button"
                       className={styles.cardTitleBtn}
-                      onClick={() => setModal({ modo: p.deFabrica ? "ver" : "editar", fila: p })}
+                      onClick={() => setModal({ modo: modoAlAbrir(p), fila: p })}
                     >
                       {p.name}
                     </button>
@@ -172,8 +212,14 @@ export function PlantillasOrto({ filas, onChange }: Props) {
                   <span className={`${styles.badge} ${p.activa ? styles.badgeEnUso : ""}`}>
                     {t(p.activa ? "pages.plantillas.enUso" : "pages.plantillas.inactiva")}
                   </span>
-                  <span className={`${styles.badge} ${p.deFabrica ? "" : styles.badgePropia}`}>
-                    {t(p.deFabrica ? "pages.plantillas.orto.deFabrica" : "pages.plantillas.propia")}
+                  <span className={`${styles.badge} ${p.deFabrica && !p.versionDeClinica ? "" : styles.badgePropia}`}>
+                    {t(
+                      p.deFabrica
+                        ? p.versionDeClinica
+                          ? "pages.plantillas.versionDeClinica"
+                          : "pages.plantillas.orto.deFabrica"
+                        : "pages.plantillas.propia",
+                    )}
                   </span>
                 </div>
                 <p className={styles.cardMeta}>
@@ -183,7 +229,7 @@ export function PlantillasOrto({ filas, onChange }: Props) {
                 </p>
               </div>
               <div className={styles.cardActions}>
-                {!p.deFabrica && (
+                {(!p.deFabrica || versionesDisponibles) && (
                   <button
                     type="button"
                     className={styles.iconBtn}
@@ -192,6 +238,19 @@ export function PlantillasOrto({ filas, onChange }: Props) {
                     aria-label={`${t("pages.plantillas.editar")}: ${p.name}`}
                   >
                     <Pencil size={16} aria-hidden />
+                  </button>
+                )}
+                {p.deFabrica && p.versionDeClinica && versionesDisponibles && (
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnTexto}`}
+                    disabled={busyId === p.id}
+                    onClick={() => volverAFabrica(p)}
+                    title={t("pages.plantillas.volverAFabrica")}
+                    aria-label={`${t("pages.plantillas.volverAFabrica")}: ${p.name}`}
+                  >
+                    <RotateCcw size={16} aria-hidden />
+                    <span>{t("pages.plantillas.volverAFabrica")}</span>
                   </button>
                 )}
                 <button
