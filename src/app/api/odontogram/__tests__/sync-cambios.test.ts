@@ -24,6 +24,10 @@
  * Verificación final (t8), con la misma cadena: V-O1 (un «Limpiar todo» viejo
  * no borra lo guardado después) y V-O3 (con la sesión vencida, el 401 real de
  * `?quien=1` aparta con «Tu sesión venció», no «sin conexión»).
+ *
+ * Última verificación (t8), V2-O1: con la cookie del Dr. B, la relectura
+ * real al volver a la pestaña (GET real) no cambia el dueño de la cola; la
+ * marca de la Dra. A recibe 409 y no se escribe firmada por B.
  */
 import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -432,6 +436,42 @@ test("t8 V-O1 y V-O3 (verificación final), con la cadena completa: el «Limpiar
     for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r));
     assert.equal(q.hasPending(), false);
     assert.deepEqual(estado(), [...antes, "26:O:caries", "46:-:crown"].sort());
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("t8 V2-O1 (última verificación), con la cadena completa: la relectura al volver a la pestaña no pasa la cola a la cookie de B", async () => {
+  const { SaveQueue } = await import("@/components/dashboard/odontogram-v2/autosave");
+  const { cargarOdontograma } = await import("@/components/dashboard/odontogram-v2/recuperar");
+  const adapter = await import("@/components/dashboard/odontogram-v2/adapter");
+  const nav = await navegador();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = nav.fetchFalso as unknown as typeof fetch;
+  try {
+    const q = new SaveQueue({
+      send: (op, o) => op.kind === "put"
+        ? adapter.putFinding({ patientId: PACIENTE, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, o)
+        : Promise.reject(new Error("no se usa")),
+      whoAmI: adapter.fetchQuienSoy,
+      setTimer: () => 0, clearTimer: () => {},
+    });
+    await cargarOdontograma({ patientId: PACIENTE, queue: q, sesion: DRA_A, leer: adapter.fetchOdontogram, force: false });
+    const antes = estado();
+    // B entra en otra pestaña; A vuelve a la suya y la ficha relee (GET real con la cookie de B)
+    COOKIE = DR_B;
+    const r = await cargarOdontograma({ patientId: PACIENTE, queue: q, sesion: DRA_A, leer: adapter.fetchOdontogram, force: false });
+    assert.equal(r.error, null);
+    assert.ok(nav.vistos.some((v) => v.metodo === "GET" && v.status === 200), "la relectura sí entró");
+    assert.deepEqual(q.getOwner(), DRA_A);
+    q.enqueue({ kind: "put", toothNumber: 46, surface: null, conditionId: "crown" });
+    for (let i = 0; i < 12; i++) await new Promise((r2) => setImmediate(r2));
+    const put46 = nav.vistos.find((v) => v.metodo === "PUT");
+    assert.equal(put46?.cabecera, "u_dr|cli_1");
+    assert.equal(put46?.status, 409);
+    assert.deepEqual(estado(), antes, "nada escrito firmado por B");
+    assert.match(q.getStatus().error ?? "", /La sesión de esta pestaña cambió/);
+    assert.equal(q.getStatus().discarded, 0);
   } finally {
     globalThis.fetch = realFetch;
   }

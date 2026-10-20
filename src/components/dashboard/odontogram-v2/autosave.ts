@@ -191,6 +191,9 @@ export class SaveQueue {
   private owner: SessionInfo | null = null;
   /** el aviso de la última «sinsesion» (sesión vencida, reto de dos pasos) */
   private sinSesionMsg = "";
+  /** el aviso de un «Limpiar todo» descartado: se suma al de lo apartado para que no quede tapado (V2-O2) */
+  private resetAviso: string | undefined;
+  private habiaApartado = false;
   private attachedCount = 0;
   private discardedCount = 0;
   private discardError: string | undefined;
@@ -218,11 +221,15 @@ export class SaveQueue {
 
   /* ---------------- de quién es ---------------- */
   /**
-   * La sesión con que se abrió al paciente (la pinta el servidor, o la devuelve
-   * el GET). Sin nada pendiente que proteger se acepta la nueva (V-O5).
+   * La sesión con que se abrió al paciente. La que pinta la página (`pagina`)
+   * puede cambiar al dueño si no hay nada pendiente que proteger (V-O5: el Dr. B
+   * vuelve al paciente en esta pestaña sin recargar). La que devuelve un GET
+   * solo cuenta si la cola aún no tiene dueño: la cookie es de todo el
+   * navegador, y la relectura al volver a la pestaña no puede pasar la cola a
+   * la sesión de otra pestaña (V2-O1); eso se trata como «otra sesión».
    */
-  setOwner(owner: SessionInfo | null) {
-    if (owner && (!this.owner || !this.hasPending())) this.owner = owner;
+  setOwner(owner: SessionInfo | null, opts: { pagina?: boolean } = {}) {
+    if (owner && (!this.owner || (opts.pagina && !this.hasPending()))) this.owner = owner;
   }
 
   getOwner(): SessionInfo | null { return this.owner; }
@@ -309,12 +316,15 @@ export class SaveQueue {
   /** Recalcula el estado visible a partir de lo que hay (nunca a parches). */
   private refresh() {
     this.version++;
+    // el aviso del reset acompaña a lo apartado con él: se olvida cuando eso sale o se tira
+    if (this.habiaApartado && !this.failed.length) this.resetAviso = undefined;
+    this.habiaApartado = this.failed.length > 0;
     const busy = this.queue.length > 0 || this.inflight !== null || this.noteDrafts.size > 0;
     let state: SaveState;
     let error: string | undefined;
     if (this.retryTimer !== null || this.checking) { state = "retrying"; error = this.transientError; }
     else if (busy) state = "saving";
-    else if (this.failed.length) { state = "error"; error = this.failError; }
+    else if (this.failed.length) { state = "error"; error = this.resetAviso ? `${this.failError ?? ""} ${this.resetAviso}`.trim() : this.failError; }
     else if (this.discardError) { state = "discarded"; error = this.discardError; }
     else state = this.touched ? "saved" : "idle";
     this.status = {
@@ -330,8 +340,10 @@ export class SaveQueue {
   enqueue(op: SaveOp) {
     this.touched = true;
     this.discardError = undefined;
+    if (!this.failed.length) this.resetAviso = undefined;
     if (op.kind === "reset") {
       // limpiar todo deja sin sentido lo que esperaba (no lo que ya va en vuelo)
+      this.resetAviso = undefined;
       this.queue = [];
       this.failed = [];
       this.noteTimers.forEach((id) => this.clearTimer(id));
@@ -480,7 +492,9 @@ export class SaveQueue {
     this.opAt.delete(opKey(op));
     this.discardedCount++;
     this.pushDiscarded([op]);
-    this.discardError = `El «Limpiar todo» de ${min >= 1 ? `hace ${min} min` : "hace un momento"} no se aplicó; si lo quieres, vuelve a pulsarlo.`;
+    const hace = min < 1 ? "hace un momento" : min < 60 ? `hace ${min} min` : `hace ${Math.round(min / 60)} h`;
+    this.discardError = `El «Limpiar todo» de ${hace} no se aplicó; si lo quieres, vuelve a pulsarlo.`;
+    this.resetAviso = this.discardError;
   }
 
   /** «Descartar»: tira lo apartado (la pantalla lo quita del dibujo y recarga del servidor). */
@@ -491,6 +505,7 @@ export class SaveQueue {
     this.failed = [];
     this.failError = undefined;
     this.discardError = undefined;
+    this.resetAviso = undefined;
     this.lastFailKind = null;
     this.refresh();
   }

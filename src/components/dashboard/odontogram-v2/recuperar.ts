@@ -35,7 +35,9 @@ export async function cargarOdontograma(args: {
   force: boolean;
 }): Promise<ResultadoCarga> {
   const { patientId, queue, sesion, leer, force } = args;
-  if (queue && sesion) queue.setOwner(sesion);
+  // la sesión que pinta la página puede ser dueña; la del GET (la cookie, que
+  // puede ser de otra pestaña) solo si aún no hay dueño (V2-O1)
+  if (queue && sesion) queue.setOwner(sesion, { pagina: true });
   try {
     for (let i = 0; i < 4; i++) {
       const v = queue?.getVersion();
