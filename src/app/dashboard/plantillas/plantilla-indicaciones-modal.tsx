@@ -124,7 +124,13 @@ export function PlantillaIndicacionesModal({
       const cuerpoPeticion = soloVer
         ? { procedureIds: ligados }
         : editando
-          ? { nombre, cuerpo, ...(conLiga ? { procedureIds: ligados } : {}) }
+          ? {
+              // Solo lo que el usuario cambió: una pestaña con la lista vieja no puede pisar con su texto
+              // el que otra persona guardó mientras tanto (ws1-t8 · P1).
+              ...(hoja && nombre !== hoja.nombre ? { nombre } : {}),
+              ...(hoja && cuerpo !== hoja.cuerpo ? { cuerpo } : {}),
+              ...(conLiga ? { procedureIds: ligados } : {}),
+            }
           : {
               tipo,
               nombre,

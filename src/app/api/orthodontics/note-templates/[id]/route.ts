@@ -40,6 +40,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     if (body?.volverAFabrica === true) {
       const v = await volverAFabricaNota(prisma, ctx.clinicId, params.id, FABRICA, versiones);
       if (v.ok === false) return NextResponse.json({ code: v.codigo }, { status: v.status });
+      // Ya estaba de fábrica (pestaña vieja): no cambió nada, no se deja rastro de una restauración que no ocurrió.
+      if (v.yaEstabaDeFabrica) return NextResponse.json(v.plantilla);
       await auditClinicalShared({
         ctx,
         action: "clinical-shared.evolution-template.factory-restored",

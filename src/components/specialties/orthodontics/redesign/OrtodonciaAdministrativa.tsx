@@ -8,6 +8,7 @@
 // src/lib/orthodontics/pestana-ficha.ts.
 import { CalendarDays, Lock, Wallet } from "lucide-react";
 import { Btn } from "./atoms/Btn";
+import { NotasInternas } from "./NotasInternas";
 import { RAIZ_ORTO } from "./raiz";
 import orto from "./orto.module.css";
 
@@ -15,9 +16,15 @@ export interface OrtodonciaAdministrativaProps {
   onVerCitas: () => void;
   /** `null` si la persona no puede ver la facturación: el botón no sale. */
   onVerCobro: (() => void) | null;
+  /**
+   * El caso más reciente del paciente. Las «Notas internas» NO son un dato clínico (son de trato: «pidió que lo atienda
+   * el doctor X»): las ven todos los que tienen acceso al paciente, recepción incluida (decisión de Rafael, ws1-t6).
+   */
+  casoId?: string | null;
+  soloLectura?: boolean;
 }
 
-export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro }: OrtodonciaAdministrativaProps) {
+export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro, casoId = null, soloLectura = false }: OrtodonciaAdministrativaProps) {
   return (
     <div className={`${RAIZ_ORTO} ${orto.lienzo}`}>
       <section className={orto.tarjeta} aria-labelledby="orto-administrativa-titulo">
@@ -53,6 +60,7 @@ export function OrtodonciaAdministrativa({ onVerCitas, onVerCobro }: OrtodonciaA
           </div>
         </div>
       </section>
+      <NotasInternas key={casoId ?? "sin-caso"} caseId={casoId} soloLectura={soloLectura} />
     </div>
   );
 }

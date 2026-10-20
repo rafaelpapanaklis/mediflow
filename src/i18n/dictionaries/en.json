@@ -9563,7 +9563,7 @@
       "versionDeClinica": "Your clinic's version",
       "volverAFabrica": "Back to the factory version",
       "confirmarVolverTitulo": "Go back to the factory template “{nombre}”?",
-      "confirmarVolverTexto": "The template goes back to its factory text. Your version isn't deleted: it stays saved, archived.",
+      "confirmarVolverTexto": "The template goes back to its factory text. Your version isn't deleted: it stays archived in the system.",
       "toastVolvioAFabrica": "The template is back to the factory version",
       "toastActivada": "Template activated",
       "toastDesactivada": "Template deactivated",
@@ -9580,11 +9580,13 @@
         "NOT_FOUND": "That template no longer exists.",
         "NOT_FACTORY": "That template isn't a factory one.",
         "NOT_MODIFIED": "That template already has the factory text.",
+        "CAMBIO_CONCURRENTE": "Someone just saved a change to this template. Reload the page to see it before going back to the factory version.",
         "VERSIONES_NO_DISPONIBLES": "This feature isn't enabled on your account yet.",
         "generico": "Could not save. Please try again."
       },
       "tabOrto": "Orthodontics notes",
       "orto": {
+        "ayudaSinVersiones": "These are the templates offered under “Templates” in the Orthodontics control sheet. Factory templates are never changed: copy one and edit the copy.",
         "ayuda": "These are the templates offered under “Templates” in the Orthodontics control sheet. You can edit the factory ones: your change applies only to your clinic and you can go back to the factory version anytime. You can also copy them.",
         "vacio": "There are no orthodontics note templates yet.",
         "vacioAyuda": "Create the first one and it will show up in the control sheet.",

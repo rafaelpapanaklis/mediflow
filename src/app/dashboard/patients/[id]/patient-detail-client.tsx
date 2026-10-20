@@ -340,6 +340,8 @@ interface Props {
    * cobro. `orthoData` llega `null` en este caso.
    */
   orthoSoloAdministrativo?: boolean;
+  /** El caso más reciente, para las «Notas internas» que recepción también ve (ws1-t6). */
+  orthoCasoAdministrativoId?: string | null;
   /**
    * ViewModel del rediseño Fase 1 ortodoncia patient-detail. Cuando viene
    * presente, se renderiza el shell nuevo (Hero+Diagnóstico+Plan+G1) en el
@@ -510,6 +512,7 @@ export function PatientDetailClient({
   orthoData,
   orthoSoloLectura = false,
   orthoSoloAdministrativo = false,
+  orthoCasoAdministrativoId = null,
   orthoRedesignVM,
   orthoRedesignBundle,
   orthoCasos = [],
@@ -2453,6 +2456,8 @@ export function PatientDetailClient({
             <OrtodonciaAdministrativa
               onVerCitas={() => setTab("agenda")}
               onVerCobro={canViewBilling ? openBillingTab : null}
+              casoId={orthoCasoAdministrativoId}
+              soloLectura={orthoSoloLectura}
             />
           )}
           {tab === "ortodoncia" && !orthoSoloAdministrativo && (

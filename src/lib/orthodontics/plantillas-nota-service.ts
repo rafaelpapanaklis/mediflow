@@ -44,7 +44,7 @@ export interface PlantillaNotaDTO {
 }
 
 export type ResultadoNota =
-  | { ok: true; plantilla: PlantillaNotaDTO }
+  | { ok: true; plantilla: PlantillaNotaDTO; yaEstabaDeFabrica?: boolean }
   | { ok: false; codigo: CodigoErrorNota; status: number };
 
 const falla = (codigo: CodigoErrorNota): ResultadoNota => ({ ok: false, codigo, status: ESTADO_DE_ERROR_NOTA[codigo] });
@@ -279,7 +279,10 @@ export async function editarPlantillaNota(
       if (!(await ctx.versiones.disponible())) return falla("VERSIONES_NO_DISPONIBLES");
       const c = validarCuerpoNota(input.soap);
       if ("codigo" in c) return falla(c.codigo);
-      soapDeClinica = c.soap;
+      // Guardar sin cambiar nada no convierte la de fábrica en «versión de la clínica» (ws1-t8 · P5).
+      const vigentesAntes = await versionesVigentes(ctx.versiones, clinicId);
+      const rige = comoSoap(soapVigente(actual.name, actual.soapTemplate, vigentesAntes));
+      if (SECCIONES_SOAP.some((s) => rige[s].replace(/\r\n/g, "\n").trim() !== c.soap[s])) soapDeClinica = c.soap;
     }
   } else {
     if (input.name !== undefined) {
@@ -345,7 +348,8 @@ export async function volverAFabricaNota(
   if (!actual) return falla("NOT_FOUND");
   if (!esDeFabrica(actual.name, nombresDeFabrica)) return falla("NOT_FACTORY");
   if (!(await ctx.versiones.disponible())) return falla("VERSIONES_NO_DISPONIBLES");
-  await ctx.versiones.archivar(clinicId, "ORTO_NOTA", actual.name, ctx.userId);
+  // Una pestaña vieja puede pedir «volver» cuando ya no hay versión vigente: no cambió nada, no se audita (P8).
+  const archivada = await ctx.versiones.archivar(clinicId, "ORTO_NOTA", actual.name, ctx.userId);
   const vigentes = await versionesVigentes(ctx.versiones, clinicId);
-  return { ok: true, plantilla: aDTO(actual, nombresDeFabrica, vigentes) };
+  return { ok: true, plantilla: aDTO(actual, nombresDeFabrica, vigentes), ...(archivada ? {} : { yaEstabaDeFabrica: true }) };
 }

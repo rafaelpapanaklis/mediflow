@@ -40,6 +40,8 @@ import type { SabinaCtx } from "../tipos";
 export const TOPE_NOTA = 500;
 /** Cuántas notas (las más recientes) se leen. */
 export const TOPE_NOTAS = 10;
+/** Cuántos casos del paciente se recorren (el más reciente primero). */
+const TOPE_CASOS = 10;
 
 const parametros = z.object({
   /** El id del paciente, SOLO si lo tienes del contexto de pantalla. Nunca lo inventes. */
@@ -115,8 +117,10 @@ export const ortoNotasInternas = definirHerramienta<ParamsOrtoNotasInternas, Dat
       enlace: "",
     };
 
+    // Igual que la ficha (ws1-t8 · P11): LEER lo ya escrito no pide el módulo vigente (el expediente se conserva);
+    // solo una clínica que no es dental queda fuera. Esta herramienta nunca escribe.
     const modulo = await motor.estadoDelModulo(ctx);
-    if (modulo !== "activo") return { ...base, ...sinModulo(modulo) };
+    if (modulo === "no_es_dental") return { ...base, ...sinModulo(modulo) };
 
     const dbPacientes = dbDe(ctx) as unknown as AgendaDb;
     let quien = await resolverPaciente(ctx, dbPacientes, { pacienteId: params.patientId ?? null, paciente: params.paciente ?? null });
@@ -144,17 +148,26 @@ export const ortoNotasInternas = definirHerramienta<ParamsOrtoNotasInternas, Dat
 
     const db = dbDe(ctx);
     // 🔴 `clinicId` de la sesión en cada lectura; sin él no se consulta (exigirSesion).
-    const caso = await db.orthodonticTreatmentPlan?.findFirst({
+    // TODOS los casos vivos del paciente, no solo el último: la nota «no llamarle después de las 6» puede estar en
+    // el caso anterior (ws1-t8 · P10). Pocos por paciente; tope por si acaso.
+    const planes = db.orthodonticTreatmentPlan as unknown as
+      | { findMany(args: unknown): Promise<Array<{ id: string }>> }
+      | undefined;
+    const casos = (await planes?.findMany({
       where: { clinicId: ctx.clinicId, patientId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: { id: true },
-    });
-    if (!caso) return { ...base, paciente, omitidas, enlace };
+      take: TOPE_CASOS,
+    })) as Array<{ id: string }> | undefined;
+    if (!casos || casos.length === 0) return { ...base, paciente, omitidas, enlace };
 
     // Las notas viven en tablas con SQL crudo (sin modelo de Prisma): sin ellas, se dice y no se rompe.
     const { repoNotasInternas } = await import("@/lib/orthodontics/notas-internas-db");
     if (!(await repoNotasInternas.tablaExiste())) return { ...base, paciente, hayCaso: true, disponible: false, omitidas, enlace };
-    const todas = await repoNotasInternas.listar(ctx.clinicId, caso.id);
+    const porCaso: Array<Awaited<ReturnType<typeof repoNotasInternas.listar>>> = [];
+    for (const c of casos) porCaso.push(await repoNotasInternas.listar(ctx.clinicId, c.id)); // en fila: máx. TOPE_CASOS
+    // De la más reciente a la más antigua, entre todos los casos.
+    const todas = porCaso.flat().sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt)));
     const notas = todas.slice(0, TOPE_NOTAS).map((n): NotaInternaLeida => {
       const t = n.texto.replace(/\s+/g, " ").trim();
       const recortado = t.length > TOPE_NOTA;
@@ -169,7 +182,7 @@ export const ortoNotasInternas = definirHerramienta<ParamsOrtoNotasInternas, Dat
 
     // Bitácora de LECTURA del expediente (la misma de la ficha): esta consulta también es abrir las notas.
     const { logRead } = await import("@/lib/audit");
-    await logRead({ clinicId: ctx.clinicId, userId: ctx.userId, kind: "orto_notas_internas", patientId, recordId: caso.id });
+    await logRead({ clinicId: ctx.clinicId, userId: ctx.userId, kind: "orto_notas_internas", patientId, recordId: casos[0].id });
 
     return { ...base, paciente, hayCaso: true, notas, total: todas.length, omitidas, enlace };
   },

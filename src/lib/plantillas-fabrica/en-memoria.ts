@@ -29,11 +29,9 @@ export function repoVersionesEnMemoria(opciones: { disponible?: boolean } = {}):
       const actual = filas.find(
         (f) => f.clinicId === v.clinicId && f.familia === v.familia && f.clave === v.clave && f.archivedAt === null,
       );
-      if (actual) {
-        actual.cuerpo = v.cuerpo;
-        actual.updatedAt = mover();
-        return actual;
-      }
+      // Nada se pisa: la vigente con otro texto se archiva y entra la nueva (igual que en la tabla).
+      if (actual && actual.cuerpo === v.cuerpo) return actual;
+      if (actual) actual.archivedAt = mover();
       const fila: VersionClinica = {
         id: `v${++n}`,
         clinicId: v.clinicId,

@@ -15,7 +15,9 @@ import { prisma } from "@/lib/prisma";
 import type { FilaNotaNueva, NotaInterna, RepoNotasInternas, RevisionNota } from "./notas-internas-service";
 
 const CLAVE = Symbol.for("dalecontrol.orto.notasInternas.tablas");
-const VOLVER_A_PREGUNTAR_MS = 10 * 60 * 1000;
+// 1 min: `to_regclass` nunca falla ni deja rastro en los logs, y así tras pegar el SQL la sección se enciende sola
+// (ws1-t8 · P12; antes eran 10 min y la QA tenía que esperar).
+const VOLVER_A_PREGUNTAR_MS = 60 * 1000;
 
 type Memoria = { existe: boolean; en: number };
 
@@ -36,8 +38,10 @@ export async function tablasNotasInternasExisten(forzar = false): Promise<boolea
     (globalThis as Record<symbol, Memoria>)[CLAVE] = { existe, en: Date.now() };
     return existe;
   } catch (err) {
+    // Si la base tarda (pooler) NO es «las tablas no existen»: se propaga para que la ruta conteste el error con
+    // «Reintentar» y no el aviso de «todavía no están activas» (ws1-t8 · P12). No se memoriza.
     console.error("[ortodoncia:notas-internas] no se pudo saber si existen las tablas:", err);
-    return false;
+    throw err;
   }
 }
 

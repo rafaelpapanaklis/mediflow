@@ -28,6 +28,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     if (body.volverAFabrica === true) {
       const v = await volverAFabricaHoja(repoHojasVigente, ctx.clinicId, params.id, versiones);
       if (v.ok === false) return NextResponse.json({ code: v.codigo }, { status: v.status });
+      if (v.yaEstabaDeFabrica) return NextResponse.json(v.hoja);
       try {
         await anotarFilaDeModulo({
           clinicId: ctx.clinicId,

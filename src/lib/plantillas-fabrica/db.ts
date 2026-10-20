@@ -70,7 +70,7 @@ function aVersion(r: FilaSql): VersionClinica {
   };
 }
 
-export const repoVersiones: RepoVersiones = {
+export const repoVersiones: RepoVersiones & { guardar(v: GuardarVersion, reintento?: boolean): Promise<VersionClinica> } = {
   disponible: () => tablaVersionesExiste(),
 
   async activas(clinicId, familia) {
@@ -82,16 +82,37 @@ export const repoVersiones: RepoVersiones = {
     return filas.map(aVersion);
   },
 
-  async guardar(v: GuardarVersion) {
+  async guardar(v: GuardarVersion, reintento = false): Promise<VersionClinica> {
     exigirClinica(v.clinicId);
-    // Una sola vigente por (clínica, familia, plantilla): el índice único parcial la hace cumplir.
-    const filas = await prisma.$queryRaw<FilaSql[]>`
-      INSERT INTO "clinic_template_versions" ("id", "clinicId", "family", "factoryKey", "body", "createdById")
-      VALUES (${randomUUID()}, ${v.clinicId}, ${v.familia}, ${v.clave}, ${v.cuerpo}, ${v.userId})
-      ON CONFLICT ("clinicId", "family", "factoryKey") WHERE "archivedAt" IS NULL
-      DO UPDATE SET "body" = EXCLUDED."body", "updatedAt" = now()
-      RETURNING *`;
-    return aVersion(filas[0]);
+    // Nada se pisa (ws1-t8 · P2): si ya había una vigente con OTRO texto, esa se ARCHIVA y se inserta la nueva, en
+    // una transacción. El índice único parcial garantiza una sola vigente.
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const vigente = await tx.$queryRaw<FilaSql[]>`
+          SELECT * FROM "clinic_template_versions"
+          WHERE "clinicId" = ${v.clinicId} AND "family" = ${v.familia} AND "factoryKey" = ${v.clave}
+            AND "archivedAt" IS NULL
+          FOR UPDATE`;
+        if (vigente[0]?.body === v.cuerpo) return aVersion(vigente[0]);
+        if (vigente[0]) {
+          await tx.$executeRaw`
+            UPDATE "clinic_template_versions"
+            SET "archivedAt" = now(), "archivedById" = ${v.userId}, "updatedAt" = now()
+            WHERE "id" = ${vigente[0].id} AND "clinicId" = ${v.clinicId}`;
+        }
+        const nueva = await tx.$queryRaw<FilaSql[]>`
+          INSERT INTO "clinic_template_versions" ("id", "clinicId", "family", "factoryKey", "body", "createdById")
+          VALUES (${randomUUID()}, ${v.clinicId}, ${v.familia}, ${v.clave}, ${v.cuerpo}, ${v.userId})
+          RETURNING *`;
+        return aVersion(nueva[0]);
+      });
+    } catch (err) {
+      // Dos primeras ediciones a la vez: la que pierde choca con el índice único; se repite una vez y ya ve la vigente.
+      const e = err as { code?: string; meta?: { code?: string }; message?: string };
+      const choque = e?.code === "23505" || e?.meta?.code === "23505" || /23505|unique constraint/i.test(String(e?.message ?? ""));
+      if (choque && !reintento) return repoVersiones.guardar(v, true);
+      throw err;
+    }
   },
 
   async archivar(clinicId, familia, clave, userId) {

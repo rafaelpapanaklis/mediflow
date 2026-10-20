@@ -506,13 +506,13 @@ export default async function PatientDetailPage(
   // En la cara administrativa (sin expediente) el caso no se carga, pero el
   // consentimiento que prepara recepción sigue queriendo al doctor tratante y
   // al tutor: solo esas dos columnas del último plan, con filtro de clínica.
-  let orthoPlanAdministrativo: { treatingDoctorId: string | null; responsibleGuardianId: string | null } | null = null;
+  let orthoPlanAdministrativo: { id: string; treatingDoctorId: string | null; responsibleGuardianId: string | null } | null = null;
   if (orthoSoloAdministrativo) {
     orthoPlanAdministrativo = await prisma.orthodonticTreatmentPlan
       .findFirst({
         where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
         orderBy: { createdAt: "desc" },
-        select: { treatingDoctorId: true, responsibleGuardianId: true },
+        select: { id: true, treatingDoctorId: true, responsibleGuardianId: true },
       })
       .catch(() => null);
   }
@@ -679,6 +679,7 @@ export default async function PatientDetailPage(
           orthoData={orthoData}
           orthoSoloLectura={orthoSoloLectura}
           orthoSoloAdministrativo={orthoSoloAdministrativo}
+          orthoCasoAdministrativoId={orthoPlanAdministrativo?.id ?? null}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
           orthoCasos={orthoCasos}

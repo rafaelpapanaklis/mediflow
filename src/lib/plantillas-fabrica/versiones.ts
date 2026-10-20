@@ -56,7 +56,7 @@ export interface RepoVersiones {
   disponible(): Promise<boolean>;
   /** Las versiones vigentes (no archivadas) de la clínica en una familia. */
   activas(clinicId: string, familia: FamiliaVersion): Promise<VersionClinica[]>;
-  /** Crea la versión vigente o, si ya había una, le cambia el texto. */
+  /** Crea la versión vigente. Si ya había una con otro texto, la ARCHIVA (nada se pisa); con el mismo texto no hace nada. */
   guardar(v: GuardarVersion): Promise<VersionClinica>;
   /** Archiva la vigente (no la borra). `null` si no había ninguna. */
   archivar(clinicId: string, familia: FamiliaVersion, clave: string, userId: string | null): Promise<VersionClinica | null>;

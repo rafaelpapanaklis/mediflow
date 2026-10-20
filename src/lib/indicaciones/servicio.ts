@@ -308,10 +308,11 @@ export async function volverAFabricaHoja(
   if (!actual) return falla("NO_ENCONTRADA");
   if (!actual.factoryKey) return falla("NO_ES_DE_FABRICA");
   if (!(await ctx.versiones.disponible())) return falla("VERSIONES_NO_DISPONIBLES");
-  await ctx.versiones.archivar(clinicId, familiaDeTipo(actual.tipo), actual.factoryKey, ctx.userId);
+  // Una pestaña vieja puede pedir «volver» cuando ya no hay versión vigente: no cambió nada (y no se audita).
+  const archivada = await ctx.versiones.archivar(clinicId, familiaDeTipo(actual.tipo), actual.factoryKey, ctx.userId);
   const fresca = await repo.obtener(clinicId, actual.id);
   if (!fresca) return falla("NO_ENCONTRADA");
-  return { ok: true, hoja: aDTO(fresca), antes: aDTO(actual) };
+  return { ok: true, hoja: aDTO(fresca), antes: aDTO(actual), ...(archivada ? {} : { yaEstabaDeFabrica: true }) };
 }
 
 /** «Después de una extracción (copia)», «… (copia 2)»… sin chocar con los nombres que ya hay. */
@@ -361,8 +362,10 @@ export function hojasSugeridas(
     return !!f && textos.some((t) => coincideConFabrica(f, t));
   });
   // Si una copia de la clínica y su original de fábrica coinciden, va la de la clínica.
-  const propias = new Set(porPalabras.filter((h) => !h.deFabrica).map((h) => h.basadaEn));
-  const sugeridas = porPalabras.filter((h) => !(h.deFabrica && propias.has(h.basadaEn))).map((h) => h.id);
+  // Una de fábrica que la clínica editó (versionDeClinica) ya es SUYA: cuenta como propia (ws1-t8 · P4).
+  const esDeLaClinica = (h: HojaDTO) => !h.deFabrica || !!h.versionDeClinica;
+  const propias = new Set(porPalabras.filter(esDeLaClinica).map((h) => h.basadaEn));
+  const sugeridas = porPalabras.filter((h) => !(!esDeLaClinica(h) && propias.has(h.basadaEn))).map((h) => h.id);
   if (sugeridas.length > 0) return sugeridas;
   return hojasDeOrtodonciaPorNombre(enUso, textos);
 }
@@ -394,6 +397,7 @@ export function hojasDeOrtodonciaPorNombre(
 /** La constancia que se usa si no se elige: la de la clínica más reciente en uso; si no, la de fábrica. */
 export function constanciaPorDefecto(hojas: readonly HojaDTO[]): HojaDTO | null {
   const enUso = hojas.filter((h) => h.tipo === "CONSTANCIA" && h.activa);
-  const propias = enUso.filter((h) => !h.deFabrica).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // La de fábrica que la clínica editó cuenta como propia y compite por recencia con sus copias (ws1-t8 · P4).
+  const propias = enUso.filter((h) => !h.deFabrica || h.versionDeClinica).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return propias[0] ?? enUso[0] ?? null;
 }

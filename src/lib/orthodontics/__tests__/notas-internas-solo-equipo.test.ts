@@ -87,6 +87,18 @@ const LADO_PACIENTE: Record<string, { rutas: string[]; minimo: number }> = {
     ],
     minimo: 40,
   },
+  // ws1-t8 · P13: lo que sale de la clínica por otros caminos que el portal, el PDF y los mensajes.
+  "páginas compartidas, exportación del paciente (ARCO), crons y asistente de IA": {
+    rutas: [
+      "src/app/share",
+      "src/app/r",
+      "src/app/api/patients/[id]/export",
+      "src/lib/arco",
+      "src/app/api/cron",
+      "src/lib/ai-assistant",
+    ],
+    minimo: 40,
+  },
 };
 
 const ES_FUENTE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;

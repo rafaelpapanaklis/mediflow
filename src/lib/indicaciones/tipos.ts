@@ -72,7 +72,7 @@ export const STATUS_HOJA: Record<CodigoHoja, number> = {
  * los dos campos para que `r.codigo` y `r.hoja` se lean sin TS2339.
  */
 export type ResultadoHoja =
-  | { ok: true; hoja: HojaDTO; codigo?: undefined; status?: undefined }
+  | { ok: true; hoja: HojaDTO; codigo?: undefined; status?: undefined; yaEstabaDeFabrica?: boolean }
   | { ok: false; codigo: CodigoHoja; status: number; hoja?: undefined };
 
 /** Lo que contesta GET /api/indicaciones/cita/[id] (el cuadro de la cita). */

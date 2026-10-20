@@ -53,11 +53,26 @@ export function consentimientoModificado(fila: { name: string; body: string; cre
   return !!f && difiere(fila.body, f.cuerpo);
 }
 
+/** Lo que la pantalla necesita saber de una fila: solo los CONSENTIMIENTOS tienen texto de fábrica que restaurar. */
+export function restaurableDe(fila: { kind: string; name: string; body: string; createdById: string | null }): boolean {
+  return fila.kind === "CONSENTIMIENTO" && consentimientoModificado(fila);
+}
+
 export type ResultadoVolverConsentimiento =
   | { ok: true; template: DocumentTemplate }
-  | { ok: false; code: "NOT_FOUND" | "NOT_FACTORY" | "NOT_MODIFIED" | "VERSIONES_NO_DISPONIBLES"; status: number };
+  | {
+      ok: false;
+      code: "NOT_FOUND" | "NOT_FACTORY" | "NOT_MODIFIED" | "VERSIONES_NO_DISPONIBLES" | "CAMBIO_CONCURRENTE";
+      status: number;
+    };
 
-const ESTADOS = { NOT_FOUND: 404, NOT_FACTORY: 409, NOT_MODIFIED: 409, VERSIONES_NO_DISPONIBLES: 503 } as const;
+const ESTADOS = {
+  NOT_FOUND: 404,
+  NOT_FACTORY: 409,
+  NOT_MODIFIED: 409,
+  VERSIONES_NO_DISPONIBLES: 503,
+  CAMBIO_CONCURRENTE: 409,
+} as const;
 const error = (code: keyof typeof ESTADOS): ResultadoVolverConsentimiento => ({ ok: false, code, status: ESTADOS[code] });
 
 /**
@@ -82,8 +97,15 @@ export async function volverAFabricaConsentimiento(
   if (!difiere(actual.body, fabrica.cuerpo)) return error("NOT_MODIFIED");
   if (!(await versiones.disponible())) return error("VERSIONES_NO_DISPONIBLES");
   await versiones.archivarTexto({ clinicId, familia: "CONSENTIMIENTO", clave: fabrica.clave, cuerpo: actual.body, userId });
-  const template = await db.documentTemplate.update({ where: { id: actual.id }, data: { body: fabrica.cuerpo } });
-  return { ok: true, template };
+  // Solo si el texto sigue siendo el que se archivó: si alguien guardó otra edición entre la lectura y este punto, esa
+  // edición NO se pisa (el texto leído ya quedó archivado arriba). ws1-t8 · P9.
+  const r = await db.documentTemplate.updateMany({
+    where: { id: actual.id, clinicId, body: actual.body },
+    data: { body: fabrica.cuerpo },
+  });
+  if (r.count === 0) return error("CAMBIO_CONCURRENTE");
+  const template = await getTemplate(db, clinicId, actual.id);
+  return template ? { ok: true, template } : error("NOT_FOUND");
 }
 
 /** Para los tests: el catálogo y el sembrado hablan de las mismas cartas. */

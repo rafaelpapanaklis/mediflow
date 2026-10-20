@@ -4,7 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions";
 import { deleteTemplate, getTemplate, updateTemplate } from "@/lib/document-templates/service";
-import { volverAFabricaConsentimiento } from "@/lib/plantillas-fabrica/consentimiento";
+import { restaurableDe, volverAFabricaConsentimiento } from "@/lib/plantillas-fabrica/consentimiento";
 import { repoVersiones } from "@/lib/plantillas-fabrica/db";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 
@@ -66,7 +66,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       isActive: body?.isActive,
     });
     if (r.ok === false) return NextResponse.json({ error: r.error, code: r.code }, { status: r.status });
-    return NextResponse.json(r.template);
+    // `restaurable` para que la tarjeta ofrezca «Volver a la de fábrica» sin recargar (ws1-t8 · P6).
+    return NextResponse.json({ ...r.template, restaurable: restaurableDe(r.template) });
   } catch (err) {
     console.error("Update document template error:", err);
     return NextResponse.json({ error: "Error al guardar la plantilla" }, { status: 500 });

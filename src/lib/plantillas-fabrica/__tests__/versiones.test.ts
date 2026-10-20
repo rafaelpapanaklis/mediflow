@@ -28,11 +28,12 @@ import {
   type NotaDb,
 } from "@/lib/orthodontics/plantillas-nota-service";
 import { conVersiones } from "@/lib/indicaciones/con-versiones";
-import { editarHoja, listarHojas, volverAFabricaHoja, type FilaHoja, type FilaNueva, type RepoHojas } from "@/lib/indicaciones/servicio";
+import { constanciaPorDefecto, editarHoja, hojasSugeridas, listarHojas, volverAFabricaHoja, type FilaHoja, type FilaNueva, type RepoHojas } from "@/lib/indicaciones/servicio";
 import {
   consentimientoModificado,
   consentimientosDeFabrica,
   fabricaDeConsentimiento,
+  restaurableDe,
   volverAFabricaConsentimiento,
 } from "../consentimiento";
 import type { TemplateDb } from "@/lib/document-templates/service";
@@ -287,12 +288,21 @@ test("hojas: la constancia también se edita y se restaura (familia propia)", as
 function dobleTemplates(filas: any[]): TemplateDb {
   return {
     documentTemplate: {
-      findFirst: async (a: any) =>
-        filas.find((f) => f.id === a.where.id && f.clinicId === a.where.clinicId && f.deletedAt === null) ?? null,
+      // Una COPIA, como la base: lo leído no cambia solo si otra pestaña guarda después.
+      findFirst: async (a: any) => {
+        const f = filas.find((x) => x.id === a.where.id && x.clinicId === a.where.clinicId && x.deletedAt === null);
+        return f ? { ...f } : null;
+      },
       update: async (a: any) => {
         const f = filas.find((x) => x.id === a.where.id)!;
         Object.assign(f, a.data);
         return f;
+      },
+      updateMany: async (a: any) => {
+        const f = filas.find((x) => x.id === a.where.id && x.clinicId === a.where.clinicId && x.body === a.where.body);
+        if (!f) return { count: 0 };
+        Object.assign(f, a.data);
+        return { count: 1 };
       },
     },
   } as unknown as TemplateDb;
@@ -421,4 +431,145 @@ test("los textos nuevos existen en es y en (diccionarios y textos de indicacione
   for (const k of ["versionDeClinica", "volverAFabrica", "confirmarVolverTitulo", "avisoFabricaEditable", "NO_ES_DE_FABRICA"]) {
     assert.equal((t.match(new RegExp(`\\b${k}\\b`, "g")) ?? []).length >= 2, true, `${k} no está en es y en`);
   }
+});
+
+
+// ─── Arreglos de la revisión (ws1-t8) ───────────────────────────────────────
+
+test("P1: la página de Plantillas lista con el repositorio de la clínica (la versión), como la cita", () => {
+  const pg = leer("src/app/dashboard/plantillas/page.tsx");
+  assert.match(pg, /listarHojas\(repoHojasVigente/);
+  assert.ok(!/listarHojas\(repoHojas,/.test(pg), "la página lista con el repo a secas y enseña el texto de fábrica");
+  // Y el editor solo manda lo que el usuario cambió: una pestaña vieja no pisa con su texto el que otra guardó.
+  const modal = leer("src/app/dashboard/plantillas/plantilla-indicaciones-modal.tsx");
+  assert.match(modal, /cuerpo !== hoja\.cuerpo \? \{ cuerpo \}/);
+});
+
+test("P1: cambiar solo la liga de una de fábrica con versión NO toca la versión de la clínica", async () => {
+  const { versiones, vigente, lista } = await conHojasDeFabrica();
+  const h = lista.find((x) => x.basadaEn === "extraccion" && x.deFabrica)!;
+  await editarHoja(vigente, "c1", h.id, { cuerpo: "Texto mío" }, [], { versiones, userId: "u1" });
+  // El editor (sin texto en la petición) cambia solo la liga:
+  await editarHoja(vigente, "c1", h.id, { procedureIds: [] }, [], { versiones, userId: "u1" });
+  assert.equal(versiones.filas.length, 1);
+  assert.equal(versiones.filas[0].cuerpo, "Texto mío");
+  assert.equal(versiones.filas[0].archivedAt, null);
+});
+
+test("P2: editar otra vez ARCHIVA la versión anterior, no la pisa (notas, hojas y repo)", async () => {
+  const versiones = repoVersionesEnMemoria();
+  const base = { clinicId: "c1", familia: "HOJA_INDICACIONES" as const, clave: "extraccion", userId: "u1" };
+  await versiones.guardar({ ...base, cuerpo: "lunes" });
+  await versiones.guardar({ ...base, cuerpo: "martes" });
+  await versiones.guardar({ ...base, cuerpo: "martes" }); // mismo texto: no hace nada
+  assert.equal(versiones.filas.length, 2);
+  assert.deepEqual(versiones.filas.map((v) => [v.cuerpo, v.archivedAt !== null]), [["lunes", true], ["martes", false]]);
+  const db = dobleDb([fila("1", "Cementado de brackets")]);
+  const ctx = { versiones: repoVersionesEnMemoria(), userId: "u1" };
+  await editarPlantillaNota(db, "c1", "1", { soap: SOAP_CLINICA }, FABRICA, ctx);
+  await editarPlantillaNota(db, "c1", "1", { soap: { ...SOAP_CLINICA, S: "martes" } }, FABRICA, ctx);
+  assert.equal(ctx.versiones.filas.length, 2);
+  assert.equal(JSON.parse(ctx.versiones.filas[0].cuerpo).S, "mía S", "el texto del lunes sigue guardado");
+  const src = leer("src/lib/plantillas-fabrica/db.ts");
+  assert.ok(!/DO UPDATE SET "body"/.test(src), "el repositorio de producción sigue pisando el texto");
+  assert.match(src, /\$transaction/);
+  assert.match(src, /FOR UPDATE/);
+});
+
+test("P4: la de fábrica que la clínica editó cuenta como propia en la cita (constancia y sugeridas)", async () => {
+  const { versiones, vigente, lista } = await conHojasDeFabrica();
+  const copia = await vigente.insertar({
+    clinicId: "c1", tipo: "CONSTANCIA", nombre: "Constancia (copia)", cuerpo: "vieja", procedureIds: [],
+    factoryKey: null, basadaEn: "constancia", createdById: "u1",
+  });
+  const c = lista.find((x) => x.tipo === "CONSTANCIA" && x.deFabrica)!;
+  await editarHoja(vigente, "c1", c.id, { cuerpo: "Constancia editada de fábrica" }, [], { versiones, userId: "u1" });
+  const hojas = (await listarHojas(vigente, "c1", async () => []))!;
+  assert.equal((copia as FilaHoja).nombre, "Constancia (copia)");
+  assert.equal(constanciaPorDefecto(hojas)?.id, c.id, "la última editada manda, aunque sea la de fábrica con versión");
+  const ext = hojas.find((h) => h.basadaEn === "extraccion" && h.deFabrica)!;
+  await editarHoja(vigente, "c1", ext.id, { cuerpo: "Mi extracción" }, [], { versiones, userId: "u1" });
+  const de = (await listarHojas(vigente, "c1", async () => []))!;
+  assert.ok(hojasSugeridas(de, [], ["extracción de la muela"]).includes(ext.id), "la versión de la clínica se sugiere");
+});
+
+test("P5: guardar la de fábrica sin cambiar nada no crea una versión", async () => {
+  const db = dobleDb([fila("1", "Cementado de brackets")]);
+  const versiones = repoVersionesEnMemoria();
+  const ctx = { versiones, userId: "u1" };
+  const igual = await editarPlantillaNota(db, "c1", "1", { name: "Cementado de brackets", soap: SOAP_FABRICA }, FABRICA, ctx);
+  assert.equal(igual.ok && igual.plantilla.versionDeClinica, false);
+  assert.equal(versiones.filas.length, 0);
+  await editarPlantillaNota(db, "c1", "1", { soap: SOAP_CLINICA }, FABRICA, ctx);
+  await editarPlantillaNota(db, "c1", "1", { soap: SOAP_CLINICA }, FABRICA, ctx); // igual a la vigente
+  assert.equal(versiones.filas.length, 1);
+});
+
+test("P6: la respuesta de editar un consentimiento dice si ya se puede volver a la de fábrica", () => {
+  const f = consentimientosDeFabrica()[0];
+  assert.equal(restaurableDe({ kind: "CONSENTIMIENTO", name: f.nombre, body: "<p>x</p>", createdById: null }), true);
+  assert.equal(restaurableDe({ kind: "NOTA_EVOLUCION", name: f.nombre, body: "<p>x</p>", createdById: null }), false, "una nota no");
+  assert.match(leer("src/app/api/document-templates/[id]/route.ts"), /restaurable: restaurableDe\(r\.template\)/);
+  assert.match(leer("src/app/dashboard/plantillas/plantilla-modal.tsx"), /restaurable: data\.restaurable === true/);
+  assert.match(leer("src/app/dashboard/plantillas/page.tsx"), /restaurableDe\(/);
+});
+
+test("P7: la ayuda de Notas de ortodoncia no promete editar si falta el SQL", () => {
+  assert.match(leer("src/app/dashboard/plantillas/plantillas-orto.tsx"), /versionesDisponibles \? "pages\.plantillas\.orto\.ayuda" : "pages\.plantillas\.orto\.ayudaSinVersiones"/);
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json")).pages.plantillas;
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json")).pages.plantillas;
+  assert.ok(es.orto.ayudaSinVersiones && en.orto.ayudaSinVersiones);
+  assert.ok(!/guardada y archivada/.test(es.confirmarVolverTexto), "promete una pantalla de historial que no existe");
+});
+
+test("P8: «volver a la de fábrica» sin versión vigente no cambia nada y avisa para no auditar", async () => {
+  const db = dobleDb([fila("1", "Cementado de brackets")]);
+  const ctx = { versiones: repoVersionesEnMemoria(), userId: "u1" };
+  const nota = await volverAFabricaNota(db, "c1", "1", FABRICA, ctx);
+  assert.equal(nota.ok && nota.yaEstabaDeFabrica, true);
+  const { versiones, vigente, lista } = await conHojasDeFabrica();
+  const h = lista.find((x) => x.deFabrica)!;
+  const hoja = await volverAFabricaHoja(vigente, "c1", h.id, { versiones, userId: "u1" });
+  assert.equal(hoja.ok && hoja.yaEstabaDeFabrica, true);
+  for (const rel of ["src/app/api/orthodontics/note-templates/[id]/route.ts", "src/app/api/indicaciones/plantillas/[id]/route.ts"]) {
+    assert.match(leer(rel), /yaEstabaDeFabrica/, rel);
+  }
+  // Y cuando sí había versión, no es un no-hecho.
+  await editarPlantillaNota(db, "c1", "1", { soap: SOAP_CLINICA }, FABRICA, ctx);
+  const real = await volverAFabricaNota(db, "c1", "1", FABRICA, ctx);
+  assert.equal(real.ok && real.yaEstabaDeFabrica, undefined);
+});
+
+test("P9: si alguien guardó otra edición entre la lectura y «volver», esa edición no se pisa", async () => {
+  const f = consentimientosDeFabrica()[0];
+  const filas = [{ id: "t1", clinicId: "c1", kind: "CONSENTIMIENTO", name: f.nombre, body: "<p>leído</p>", createdById: null, deletedAt: null }];
+  const db = dobleTemplates(filas);
+  const versiones = repoVersionesEnMemoria();
+  // La otra pestaña guarda justo después de que se archiva el texto leído.
+  const archivar = versiones.archivarTexto.bind(versiones);
+  versiones.archivarTexto = async (v) => {
+    const r = await archivar(v);
+    filas[0].body = "<p>edición de otra pestaña</p>";
+    return r;
+  };
+  const r = await volverAFabricaConsentimiento(db, versiones, "c1", "t1", "u1");
+  assert.equal(r.ok === false && r.code, "CAMBIO_CONCURRENTE");
+  assert.equal(filas[0].body, "<p>edición de otra pestaña</p>", "la edición ajena sigue ahí");
+  assert.equal(versiones.filas[0].cuerpo, "<p>leído</p>");
+});
+
+test("P3: recepción ve las notas internas en la ficha (vista administrativa) con el mismo componente", () => {
+  const adm = leer("src/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa.tsx");
+  assert.match(adm, /<NotasInternas /);
+  assert.match(leer("src/app/dashboard/patients/[id]/page.tsx"), /orthoCasoAdministrativoId=\{orthoPlanAdministrativo\?\.id \?\? null\}/);
+  assert.match(leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx"), /casoId=\{orthoCasoAdministrativoId\}/);
+});
+
+test("P10-P12: Sabina lee todos los casos y sin módulo vigente; la sonda no confunde un fallo con «no existe»", () => {
+  const sab = leer("src/lib/sabina/tools/orto-notas-internas.ts");
+  assert.match(sab, /findMany\(\{/);
+  assert.match(sab, /modulo === "no_es_dental"/);
+  const db = leer("src/lib/orthodontics/notas-internas-db.ts");
+  const sonda = db.slice(db.indexOf("export async function tablasNotasInternasExisten"), db.indexOf("function exigirClinica"));
+  assert.match(sonda, /throw err/);
 });

@@ -204,6 +204,7 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
           precargada: esPrecargada(data.createdById),
+          restaurable: data.restaurable === true,
         },
         !editing,
       );

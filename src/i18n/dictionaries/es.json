@@ -9563,7 +9563,7 @@
       "versionDeClinica": "Versión de tu clínica",
       "volverAFabrica": "Volver a la de fábrica",
       "confirmarVolverTitulo": "¿Volver a la plantilla de fábrica «{nombre}»?",
-      "confirmarVolverTexto": "La plantilla vuelve a su texto de fábrica. Tu versión no se borra: queda guardada y archivada.",
+      "confirmarVolverTexto": "La plantilla vuelve a su texto de fábrica. Tu versión no se borra: queda archivada en el sistema.",
       "toastVolvioAFabrica": "La plantilla volvió a la de fábrica",
       "toastActivada": "Plantilla activada",
       "toastDesactivada": "Plantilla desactivada",
@@ -9580,11 +9580,13 @@
         "NOT_FOUND": "Esa plantilla ya no existe.",
         "NOT_FACTORY": "Esa plantilla no es de fábrica.",
         "NOT_MODIFIED": "Esa plantilla ya tiene el texto de fábrica.",
+        "CAMBIO_CONCURRENTE": "Alguien guardó un cambio en esta plantilla justo ahora. Recarga la página para verlo antes de volver a la de fábrica.",
         "VERSIONES_NO_DISPONIBLES": "Esta función todavía no está activada en tu cuenta.",
         "generico": "No se pudo guardar. Inténtalo de nuevo."
       },
       "tabOrto": "Notas de ortodoncia",
       "orto": {
+        "ayudaSinVersiones": "Son las plantillas que aparecen en «Plantillas» dentro de la hoja de control de Ortodoncia. Las de fábrica no se modifican: cópialas y edita la copia.",
         "ayuda": "Son las plantillas que aparecen en «Plantillas» dentro de la hoja de control de Ortodoncia. Las de fábrica las puedes editar: tu cambio vale solo en tu clínica y puedes volver a la de fábrica cuando quieras. También puedes copiarlas.",
         "vacio": "Todavía no hay plantillas de nota de ortodoncia.",
         "vacioAyuda": "Crea la primera y aparecerá en la hoja de control.",

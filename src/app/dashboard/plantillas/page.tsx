@@ -7,11 +7,11 @@ import { TEMPLATES_WRITE_PERMISSION } from "@/lib/document-templates/permissions
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { ORTHO_DEFAULT_TEMPLATES, ensureOrthoDefaults } from "@/lib/clinical-shared/evolution-templates/seed-orthodontics";
 import { listarPlantillasNota, type PlantillaNotaDTO } from "@/lib/orthodontics/plantillas-nota-service";
-import { catalogoLigable, repoHojas, tablaHojasExiste } from "@/lib/indicaciones/db";
+import { catalogoLigable, repoHojasVigente, tablaHojasExiste } from "@/lib/indicaciones/db";
 import { listarHojas } from "@/lib/indicaciones/servicio";
 import type { HojaDTO, ProcedimientoLigable } from "@/lib/indicaciones/tipos";
 import { repoVersiones } from "@/lib/plantillas-fabrica/db";
-import { consentimientoModificado } from "@/lib/plantillas-fabrica/consentimiento";
+import { restaurableDe } from "@/lib/plantillas-fabrica/consentimiento";
 import { PlantillasClient } from "./plantillas-client";
 import { esPrecargada } from "./tarjeta";
 
@@ -59,7 +59,7 @@ export default async function PlantillasPage() {
   try {
     if (await tablaHojasExiste()) {
       procedimientos = await catalogoLigable(user.clinicId);
-      hojas = await listarHojas(repoHojas, user.clinicId, async () => procedimientos);
+      hojas = await listarHojas(repoHojasVigente, user.clinicId, async () => procedimientos);
     }
   } catch (err) {
     console.error("[plantillas] indicaciones y constancia:", err);
@@ -82,7 +82,7 @@ export default async function PlantillasPage() {
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
         precargada: esPrecargada(t.createdById),
-        restaurable: consentimientoModificado({ name: t.name, body: t.body, createdById: t.createdById }),
+        restaurable: restaurableDe({ kind: t.kind, name: t.name, body: t.body, createdById: t.createdById }),
       }))}
     />
   );

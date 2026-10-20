@@ -38,8 +38,19 @@ interface FilaNota {
   updatedAt: Date;
 }
 
-function montar(opciones: { tablas?: boolean } = {}) {
+function montar(opciones: { tablas?: boolean; casoAnterior?: boolean; moduloVencido?: boolean } = {}) {
   const b = baseOrto();
+  if (opciones.casoAnterior) {
+    // ws1-t8 · P10: un caso anterior del mismo paciente (el más reciente sigue siendo plan-ana).
+    const planes = b.datos.orthodonticTreatmentPlans ?? [];
+    const ana = planes.find((p: any) => p.id === "plan-ana") as any;
+    ana.createdAt = new Date("2026-01-01T00:00:00Z");
+    planes.push({ ...ana, id: "plan-ana-viejo", status: "COMPLETED", createdAt: new Date("2024-01-01T00:00:00Z") });
+  }
+  if (opciones.moduloVencido) {
+    // ws1-t8 · P11: el módulo venció; la ficha conserva la lectura de lo ya escrito.
+    for (const cm of (b.datos.clinicModules ?? []) as any[]) if (cm.id === "cm-n") cm.currentPeriodEnd = new Date("2026-01-01T00:00:00Z");
+  }
   const escrituras: string[] = [];
   const auditorias: Array<Record<string, any>> = [];
   const consultasSobreNotas: Array<{ texto: string; valores: unknown[] }> = [];
@@ -48,6 +59,9 @@ function montar(opciones: { tablas?: boolean } = {}) {
   const notas: FilaNota[] = [
     { id: "n1", clinicId: "cl-norte", patientId: "p-ana", caseId: "plan-ana", authorId: "u-recep-n", body: "Pidió que la llamen solo por WhatsApp.", createdAt: t("2026-09-01T16:00:00Z"), updatedAt: t("2026-09-01T16:00:00Z") },
     { id: "n2", clinicId: "cl-norte", patientId: "p-ana", caseId: "plan-ana", authorId: "u-doc-n", body: LARGA, createdAt: t("2026-09-10T17:30:00Z"), updatedAt: t("2026-09-12T18:00:00Z") },
+    ...(opciones.casoAnterior
+      ? [{ id: "n-viejo", clinicId: "cl-norte", patientId: "p-ana", caseId: "plan-ana-viejo", authorId: "u-recep-n", body: "No llamarle después de las 6.", createdAt: t("2025-03-01T16:00:00Z"), updatedAt: t("2025-03-01T16:00:00Z") }]
+      : []),
     { id: "n-sur", clinicId: CL_SUR, patientId: "p-sur-1", caseId: "plan-sur", authorId: U_ADMIN_S, body: "NO DEBE SALIR EN EL NORTE", createdAt: t("2026-09-02T10:00:00Z"), updatedAt: t("2026-09-02T10:00:00Z") },
     // Una nota de OTRA clínica pegada, por error de datos, al mismo caso: el clinicId la deja fuera.
     { id: "n-intruso", clinicId: CL_SUR, patientId: "p-ana", caseId: "plan-ana", authorId: U_ADMIN_S, body: "INTRUSO DEL SUR EN EL CASO DEL NORTE", createdAt: t("2026-09-03T10:00:00Z"), updatedAt: t("2026-09-03T10:00:00Z") },
@@ -211,4 +225,22 @@ test("está en el catálogo del motor y es de consulta, no una acción", () => {
   assert.ok(nombres.includes("orto_notas_internas"));
   assert.ok(!ACCIONES_SABINA.some((a) => a.nombre === "orto_notas_internas"));
   assert.equal(new Set(nombres).size, nombres.length);
+});
+
+test("P10: lee las notas de TODOS los casos del paciente, no solo las del último", async () => {
+  const { db, consultasSobreNotas } = montar({ casoAnterior: true });
+  const r = await pregunta(admin(db), { patientId: "p-ana" });
+  const d = r.datos as DatosOrtoNotasInternas;
+  assert.equal(d.total, 3);
+  assert.match(r.resumen, /No llamarle después de las 6/);
+  assert.equal(d.notas[d.notas.length - 1].texto, "No llamarle después de las 6.", "la más antigua va al final");
+  for (const c of consultasSobreNotas) assert.equal(c.valores[0], "cl-norte", c.texto);
+});
+
+test("P11: con el módulo vencido sigue leyendo lo ya escrito, igual que la ficha", async () => {
+  const { db } = montar({ moduloVencido: true });
+  const r = await pregunta(admin(db), { patientId: "p-ana" });
+  const d = r.datos as DatosOrtoNotasInternas;
+  assert.equal(d.notas.length, 2);
+  assert.doesNotMatch(r.resumen, /no tiene contratado/);
 });

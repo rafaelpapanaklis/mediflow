@@ -157,7 +157,7 @@ export function PlantillasOrto({ filas, versionesDisponibles = false, onChange }
   return (
     <>
       <div className={styles.headAcciones}>
-        <p className={styles.notaAyuda}>{t("pages.plantillas.orto.ayuda")}</p>
+        <p className={styles.notaAyuda}>{t(versionesDisponibles ? "pages.plantillas.orto.ayuda" : "pages.plantillas.orto.ayudaSinVersiones")}</p>
         <button type="button" className={styles.btnPrimary} onClick={() => setModal({ modo: "nueva" })}>
           <Plus size={16} aria-hidden />
           {t("pages.plantillas.nueva")}
