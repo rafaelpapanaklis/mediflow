@@ -128,6 +128,13 @@ export interface DepsPago {
     /** Suelta SOLO si el candado sigue siendo de `dueno` (si caducó y lo tomó otra petición, no toca el de ella). */
     soltar: (clave: string, dueno: string) => Promise<void>;
   };
+  /** Pausa entre intentos de tomar el candado (en producción, `setTimeout`; las pruebas la acortan). */
+  esperar: (ms: number) => Promise<void>;
+  /**
+   * Estado de cobro de la clínica AHORA (la ruta lo lee al abrirse la petición; si «Pagar» tuvo que esperar el candado
+   * puede haber cambiado: otra pestaña pagó o reactivó). Opcional.
+   */
+  releerEstadoClinica?: () => Promise<{ subscriptionStatus?: string | null; trialEndsAt?: Date | string | null }>;
   /** Aviso a quien administra la plataforma (correo); no debe lanzar. Sirve para lo que hay que hacer a mano. */
   avisarAlAdmin: (aviso: { asunto: string; lineas: string[] }) => Promise<void>;
   /** Mensaje cuando una sede incluida intenta pagar (`avisoSedeIncluida`). */
@@ -502,7 +509,7 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
   const interval = subscriptionItemInterval(ctx.sub.items.data[0]);
   const exencion = await deps.exencionIva();
   const opciones: OpcionSubir[] = [];
-  // Con el cobro en pausa («Subir» respondería 409 PAGADO_POR_ADELANTADO) no se ofrece ningún plan.
+  // Con el cobro en pausa («Subir» respondería 409 COBRO_EN_PAUSA) no se ofrece ningún plan.
   const enPausa = cobroPausado(ctx.sub);
   for (const id of enPausa ? [] : planesMasGrandes(deps.clinica.plan)) {
     if (await deps.bloqueoDeSedes(id)) continue; // un plan que las sedes no admiten no se ofrece
@@ -514,7 +521,7 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
     montoPendiente: deuda.amount_due / 100,
     moneda: MONEDA_PAGO,
     opcionesSubir: opciones,
-    ...(enPausa ? { subirNoDisponible: MENSAJES.pagadoPorAdelantado } : {}),
+    ...(enPausa ? { subirNoDisponible: MENSAJES.cobroEnPausa } : {}),
     // Solo cuando un cambio de plan quedó a medias: no hay factura que «pagar», solo terminar la subida
     // (POST subir). Con esto presente, «Pagar mi plan» no aplica.
     ...(ctx.anulada ? { cambioEnCurso: { plan: ctx.anulada.planMarcado } } : {}),
@@ -523,14 +530,54 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 
 // ── POST { accion: "pagar" } ────────────────────────────────────────────────
 
+/** Cuánto espera «Pagar» a que termine otra operación de cobro de la misma clínica, y cada cuánto lo intenta. */
+const ESPERA_PAGAR_INTENTOS = 30;
+const ESPERA_PAGAR_INTERVALO_MS = 500;
+
 export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
+  if (!isClinicBillingAdmin(deps.role)) {
+    return respuesta(403, { code: "FORBIDDEN_NOT_CLINIC_ADMIN", error: MENSAJES.sinPermiso });
+  }
+  // X2: «Pagar» toma el MISMO candado por clínica que «Subir». Sin él, «Pagar» en una pestaña y «Subir» en otra
+  // cobraban dos veces (o subían gratis); y dos «Pagar» a la vez daban un 502 falso en la segunda. Si el candado
+  // está tomado, espera a que la otra operación termine (hasta ~15 s) y entonces mira qué quedó pendiente.
+  const clave = claves.candadoSubir(deps.clinica.id);
+  const dueno = randomUUID();
+  let tomado = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
+  const esperó = !tomado;
+  for (let i = 0; !tomado && i < ESPERA_PAGAR_INTENTOS; i++) {
+    await deps.esperar(ESPERA_PAGAR_INTERVALO_MS);
+    tomado = await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno);
+  }
+  if (!tomado) return respuesta(409, { code: "CAMBIO_EN_CURSO", error: MENSAJES.cambioEnCurso });
+  try {
+    return await pagarPendienteConCandado(deps, esperó);
+  } finally {
+    await deps.candado.soltar(clave, dueno).catch(() => {}); // si no se puede soltar, caduca solo
+  }
+}
+
+async function pagarPendienteConCandado(deps0: DepsPago, esperó: boolean): Promise<RespuestaPago> {
+  // Si tuvo que esperar, el estado de la clínica pudo cambiar mientras tanto (otra pestaña pagó o reactivó): se relee.
+  let deps = deps0;
+  if (esperó && deps0.releerEstadoClinica) {
+    try {
+      deps = { ...deps0, clinica: { ...deps0.clinica, ...(await deps0.releerEstadoClinica()) } };
+    } catch {
+      deps = deps0;
+    }
+  }
   // ANTES de tocar nada: ¿estaba SUSPENDIDA (sin acceso)? Después de pagar ya no hay forma de saberlo. Dentro de las
   // 24 h de gracia no lo está y el ciclo no cambia.
   const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   const ctx = await cargarPendiente(deps, false);
-  if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+  // Esperó el candado y ya no hay nada pendiente: la otra operación (otro «Pagar» o un «Subir») ya lo dejó pagado.
+  const sinPendiente = esperó
+    ? respuesta(409, { code: "PAGO_YA_REGISTRADO", error: MENSAJES.pagoYaRegistrado })
+    : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+  if (!ctx.ok) return "respuesta" in ctx ? (ctx.respuesta.body.code === "SIN_PENDIENTE" ? sinPendiente : ctx.respuesta) : sinPendiente;
   const { stripe, factura } = ctx;
-  if (!factura) return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
+  if (!factura) return sinPendiente;
   const clinicId = deps.clinica.id;
 
   let pagada: FacturaPago | null = null;
@@ -607,20 +654,22 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
   if (!factura) return respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
   const clinicId = deps.clinica.id;
 
+  // V2(a) y B1 (revisión t4): ANTES del atajo de abajo —un atajo no puede aplicar el plan ni quitar cupones con el cobro
+  // en pausa—.
+  // V2(a): con el cobro de la suscripción EN PAUSA (meses pagados por adelantado, o ciclo re-alineado tras una
+  // suspensión) Stripe anula todas las facturas que nacen durante la pausa: el cambio de plan saldría GRATIS y
+  // además se anularía la factura vieja. No se sube de plan en autoservicio; se manda a soporte, sin tocar nada.
+  if (cobroPausado(sub)) {
+    await deps.auditar({ event: "pago-pendiente-subir-bloqueado-por-pausa", planDestino: destino, reanudaEn: sub.pause_collection?.resumes_at ?? null });
+    return respuesta(409, { code: "COBRO_EN_PAUSA", error: MENSAJES.cobroEnPausa });
+  }
+
   // La suscripción YA está en el plan destino (el update llegó a Stripe y solo faltó reflejarlo aquí): no se
   // anula ni se cambia nada, para no cobrar dos veces. Se refleja el plan y se devuelve el estado de la factura.
   if (ctx.factura && sub.metadata?.plan === destino) {
     await deps.aplicarPlanLocal(destino);
     await quitarDescuentoDelCliente(deps, stripe, sub, destino); // el cambio ya está hecho: no hay nada que reponer
     return resultadoDeFactura(ctx.factura);
-  }
-
-  // V2(a): con el cobro de la suscripción EN PAUSA (meses pagados por adelantado, o ciclo re-alineado tras una
-  // suspensión) Stripe anula todas las facturas que nacen durante la pausa: el cambio de plan saldría GRATIS y
-  // además se anularía la factura vieja. No se sube de plan en autoservicio; se manda a soporte, sin tocar nada.
-  if (cobroPausado(sub)) {
-    await deps.auditar({ event: "pago-pendiente-subir-bloqueado-por-pausa", planDestino: destino, reanudaEn: sub.pause_collection?.resumes_at ?? null });
-    return respuesta(409, { code: "PAGADO_POR_ADELANTADO", error: MENSAJES.pagadoPorAdelantado });
   }
 
   const item = sub.items.data[0];
