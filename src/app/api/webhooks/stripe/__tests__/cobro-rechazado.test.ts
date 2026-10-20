@@ -57,6 +57,7 @@ function coincideWhere(fila: any, where: any): boolean {
     if (v === null) return valor == null;
     if (v && typeof v === "object" && !(v instanceof Date)) {
       if ("gt" in v) return valor != null && valor > v.gt;
+      if ("gte" in v) return valor != null && valor >= v.gte;
       if ("in" in v) return v.in.includes(valor);
       if ("not" in v) return valor != null && valor !== v.not;
       throw new Error(`operador de where no soportado en el doble: ${JSON.stringify(v)}`);
@@ -68,6 +69,9 @@ function coincideWhere(fila: any, where: any): boolean {
 const prismaBase: any = {
   clinic: {
     findFirst: async ({ where }: any) => [...clinicas.values()].find((c) => c.stripeCustomerId === where.stripeCustomerId) ?? null,
+    // El cron de vencimiento (manualLapseWhere) no trae `id.in`: nadie vence. El de facturas de tarjeta sí.
+    findMany: async ({ where }: any) =>
+      where?.id?.in ? [...clinicas.values()].filter((c) => where.id.in.includes(c.id) && c.stripeSubscriptionId != null) : [],
     findUnique: async ({ where }: any) => clinicas.get(where.id) ?? null,
     update: async ({ where, data }: any) => {
       const c = clinicas.get(where.id);
@@ -83,7 +87,16 @@ const prismaBase: any = {
   clinicModule: { findUnique: async () => null },
   subscriptionInvoice: {
     // Evalúa el `where` REAL que manda el código (igualdad, gt, in, not y OR): si alguien rompe la consulta, el test lo ve.
-    findFirst: async ({ where }: any) => pagosDeSubscripcion.find((p) => coincideWhere(p, where)) ?? null,
+    findFirst: async ({ where, orderBy }: any) => {
+      const filas = pagosDeSubscripcion.filter((p) => coincideWhere(p, where));
+      if (orderBy?.paidAt === "desc") filas.sort((a, b) => (b.paidAt?.getTime?.() ?? 0) - (a.paidAt?.getTime?.() ?? 0));
+      return filas[0] ?? null;
+    },
+    findMany: async ({ where, orderBy }: any) => {
+      const filas = pagosDeSubscripcion.filter((p) => coincideWhere(p, where));
+      if (orderBy?.paidAt === "desc") filas.sort((a, b) => (b.paidAt?.getTime?.() ?? 0) - (a.paidAt?.getTime?.() ?? 0));
+      return filas;
+    },
     findUnique: async ({ where }: any) => {
       const f = pagosDeSubscripcion.find((p) => p.id === where.id);
       return f ? { ...f, clinic: { id: f.clinicId, name: "BEVADENT", plan: "PRO" } } : null;
@@ -958,7 +971,7 @@ test("#1(a) invoice.paid de esa factura pagada fuera de Stripe: NO crea otro cob
     assert.deepEqual(facturasRegistradas, [], "no se registra otro cobro (el cobro real es el manual)");
     assert.equal(correosRenovacion.length, 0, "ni «plan renovado»");
     assert.equal(filasAnuladas.length, 1, "la fila de cobro fallido de esa factura sale de «por cobrar»");
-    assert.deepEqual(filasAnuladas[0].where, { reference: FACTURA, status: { in: ["failed", "pending"] } });
+    assert.deepEqual(filasAnuladas[0].where, { clinicId: CLINIC, reference: FACTURA, status: { in: ["failed", "pending"] } }, "con el tenant en el filtro");
     assert.equal(filasAnuladas[0].data.status, "void");
   }
   assert.ok(fallidoAntes >= 1);
@@ -988,4 +1001,159 @@ test("#1(a) con la tarjeta VIVA el mes siguiente: un payment_failed NUEVO sí ap
   assert.equal(clinica().trialEndsAt.getTime(), aSegundos(rechazo) * 1000 + 24 * HORA, "24 h desde ESE rechazo");
   await nada();
   assert.equal(correos.length >= 1, true, "y el aviso de «no pudimos cobrar tu plan» sale");
+});
+
+/* ── Quinta vuelta (t4): Q2, Q3, Q5, Q6 ────────────────────────────────── */
+
+test("Q2 activar 3 meses → marcar → `updated` active → `payment_failed` del mes siguiente: NO suspende (el `updated` no recorta el pago manual)", async () => {
+  conTarjetaRechazada();
+  // Stripe: el ciclo que abrió la renovación termina en ~1 mes; el pago manual da 3 meses.
+  const finCiclo = Date.now() + 30 * DIA;
+  const req = new NextRequestCtor("http://localhost/api/admin/billing", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 3 }),
+  });
+  assert.equal((await POSTAdmin(req)).status, 200);
+  assert.equal(llamadasPay.length, 1, "la factura se marcó pagada fuera de Stripe");
+  const accesoManual = clinica().trialEndsAt.getTime();
+  assert.ok(accesoManual > Date.now() + 80 * DIA, "tres meses de acceso");
+
+  // Stripe pasa la suscripción a active y manda el `updated`: el fin de SU ciclo (1 mes) no puede bajar el acceso.
+  suscripcionesVivas.set(SUB, suscripcion("active", finCiclo));
+  assert.equal(await entregar(evento("customer.subscription.updated", suscripcion("active", finCiclo))), 200);
+  assert.equal(clinica().trialEndsAt.getTime(), accesoManual, "el acceso del pago manual NO se recorta al ciclo de Stripe");
+  assert.equal(clinica().nextBillingDate.getTime(), aSegundos(finCiclo) * 1000, "la fecha informativa sí sigue a Stripe");
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid", paid_out_of_band: true });
+  await entregar(evento("invoice.paid", facturaPagada({ paid_out_of_band: true })));
+
+  // Al mes siguiente la tarjeta falla en la renovación: sigue cubierta por el prepago.
+  const siguiente = "in_renovacion_mes2";
+  facturasVivas.set(siguiente, { id: siguiente, status: "open" });
+  const inicio = finCiclo;
+  const r = await entregar(evento("invoice.payment_failed", facturaFallida({ id: siguiente, ...conPeriodo(inicio + 30 * DIA, inicio - HORA) }), inicio));
+  assert.equal(r, 200);
+  assert.equal(clinica().subscriptionStatus, "active", "NO se suspende: prepagó tres meses");
+  assert.equal(clinica().trialEndsAt.getTime(), accesoManual);
+  assert.equal(sinSuspender(), "pago_manual");
+  await nada();
+  assert.equal(correos.length, 0);
+});
+
+test("Q2 contraste: el `updated` sigue concediendo el periodo de Stripe cuando es MAYOR (recuperación normal con tarjeta)", async () => {
+  await entregar(evento("invoice.payment_failed", facturaFallida()));
+  const finPagado = Date.now() + 30 * DIA;
+  suscripcionesVivas.set(SUB, suscripcion("active", finPagado));
+  await entregar(evento("customer.subscription.updated", suscripcion("active", finPagado)));
+  assert.equal(clinica().trialEndsAt.getTime(), aSegundos(finPagado) * 1000);
+});
+
+test("Q3 «verificar» un adeudo de excedente de CFDI NO activa la clínica, no toca monthlyPrice ni marca la factura de tarjeta del plan", async () => {
+  conTarjetaRechazada();
+  clinica().monthlyPrice = 689;
+  const antes = { estado: clinica().subscriptionStatus, acceso: clinica().trialEndsAt.getTime() };
+  pagosDeSubscripcion = [{ id: "inv_cfdi", clinicId: CLINIC, status: "pending", method: "cfdi_overage", amount: 45, currency: "MXN", periodStart: new Date(), periodEnd: new Date() }];
+  const r = await llamarAdmin({ action: "verify_payment", invoiceId: "inv_cfdi" });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).facturaTarjeta, null);
+  assert.equal(pagosDeSubscripcion[0].status, "paid", "el adeudo sí queda pagado");
+  assert.equal(clinica().subscriptionStatus, antes.estado, "la clínica NO se activa");
+  assert.equal(clinica().trialEndsAt.getTime(), antes.acceso);
+  assert.equal(clinica().monthlyPrice, 689, "ni su precio mensual");
+  assert.equal(llamadasPay.length, 0, "ni se marca la factura del plan");
+});
+
+test("Q3 solo un pago MANUAL DEL PLAN marca la factura: método nulo o de la lista sí; stripe, cfdi_overage y desconocidos no", async () => {
+  const { POST: POSTSubs } = await import("../../../admin/subscriptions/route");
+  const registrar = (method?: string) =>
+    POSTSubs(new NextRequestCtor("http://localhost/api/admin/subscriptions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clinicId: CLINIC, amount: 689, ...(method ? { method } : {}), periodStart: new Date().toISOString(), periodEnd: new Date(Date.now() + 30 * DIA).toISOString(), status: "paid" }),
+    }));
+  for (const [metodo, marca] of [[undefined, true], ["transfer", true], ["oxxo", true], ["cash", true], ["stripe", false], ["cfdi_overage", false], ["mercadopago", false]] as const) {
+    conTarjetaRechazada();
+    const j = await (await registrar(metodo)).json();
+    assert.equal(j.facturaTarjeta !== null, marca, String(metodo));
+    assert.equal(llamadasPay.length, marca ? 1 : 0, String(metodo));
+  }
+  conTarjetaRechazada();
+  pagosDeSubscripcion = [{ id: "inv_n", clinicId: CLINIC, status: "pending", method: null, amount: 689, currency: "MXN", periodStart: new Date(), periodEnd: new Date() }];
+  assert.deepEqual((await (await llamarAdmin({ action: "verify_payment", invoiceId: "inv_n" })).json()).facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] }, "verificar un pago sin método (null) es del plan");
+});
+
+test("Q5 `invoice.paid` sin `paid_out_of_band` en el evento y sin poder leer la factura: 5xx (Stripe reintenta); nada se registra", async () => {
+  facturasVivas.delete(FACTURA);
+  assert.equal(await entregar(evento("invoice.paid", facturaPagada())), 500);
+  assert.deepEqual(facturasRegistradas, [], "no se registra un cobro de tarjeta que quizá fue manual");
+  assert.equal(correosRenovacion.length, 0);
+  // Con el campo en el evento no hace falta leer nada.
+  assert.equal(await entregar(evento("invoice.paid", facturaPagada({ paid_out_of_band: false }))), 200);
+});
+
+test("Q6 el pago único de Stripe (SPEI/OXXO) con tarjeta viva deja su rastro aunque el marcado falle; sin tarjeta, ningún rastro", async () => {
+  const sesion = (id: string) =>
+    evento("checkout.session.async_payment_succeeded", { id, mode: "payment", payment_status: "paid", subscription: null, metadata: { kind: "platform-subscription", clinicId: CLINIC, plan: "PRO" } });
+  conTarjetaRechazada();
+  stripePagoFalla = true;
+  assert.equal(await entregar(sesion("cs_oxxo_1")), 200);
+  assert.equal(clinica().subscriptionStatus, "active", "la activación sigue en pie");
+  const rastro = pagosDeSubscripcion.find((p) => p.reference === "pago-unico:cs_oxxo_1");
+  assert.ok(rastro, "quedó el rastro de pago manual");
+  assert.deepEqual([rastro.method, rastro.amount, rastro.status], ["admin", 0, "paid"]);
+  assert.equal(esActivacionManual(rastro), true, "no cuenta como cobro");
+  // Sin suscripción de tarjeta: nada que dejar.
+  reiniciar({ stripeSubscriptionId: null });
+  await entregar(sesion("cs_oxxo_2"));
+  assert.equal(pagosDeSubscripcion.length, 0);
+});
+
+test("Q6 el aviso persistente se DERIVA de Stripe: clínicas con la tarjeta viva y una factura del plan abierta después de un pago manual", async () => {
+  const { clinicasConFacturaPendienteTrasPagoManual } = await import("@/lib/billing/facturas-tarjeta-pendientes.server");
+  conTarjetaRechazada();
+  const hoy = Date.now();
+  // Pago manual de hace 2 días; la factura (creada antes) sigue abierta porque el marcado falló.
+  pagosDeSubscripcion = [{ id: "inv_m", clinicId: CLINIC, status: "paid", method: "transfer", amount: 689, paidAt: new Date(hoy - 2 * DIA) }];
+  facturasDeLista = [{ ...FACTURA_ABIERTA(), created: aSegundos(hoy - 5 * DIA) }];
+  const lista = await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble, ahora: new Date(hoy) });
+  assert.deepEqual(lista.map((c) => [c.clinicId, c.clinicName, c.facturas]), [[CLINIC, "BEVADENT", [FACTURA]]]);
+  // La renovación del mes siguiente (creada DESPUÉS del pago manual) no cuenta: es otra deuda.
+  facturasDeLista = [{ ...FACTURA_ABIERTA(), created: aSegundos(hoy - DIA) }];
+  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble, ahora: new Date(hoy) }), []);
+  // Ya marcada → no aparece; sin pagos manuales → no aparece; sin Stripe → vacío; pago de hace más de 60 días → no.
+  facturasDeLista = [{ ...FACTURA_ABIERTA(), created: aSegundos(hoy - 5 * DIA), status: "paid" }];
+  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble, ahora: new Date(hoy) }), []);
+  facturasDeLista = [{ ...FACTURA_ABIERTA(), created: aSegundos(hoy - 5 * DIA) }];
+  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: null }), []);
+  pagosDeSubscripcion = [{ id: "inv_viejo", clinicId: CLINIC, status: "paid", method: "transfer", amount: 689, paidAt: new Date(hoy - 90 * DIA) }];
+  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble, ahora: new Date(hoy) }), []);
+  // Un pago de Stripe o un adeudo de CFDI no es un pago manual del plan.
+  pagosDeSubscripcion = [{ id: "inv_s", clinicId: CLINIC, status: "paid", method: "stripe", amount: 689, paidAt: new Date(hoy - DIA) }, { id: "inv_c", clinicId: CLINIC, status: "paid", method: "cfdi_overage", amount: 45, paidAt: new Date(hoy - DIA) }];
+  assert.deepEqual(await clinicasConFacturaPendienteTrasPagoManual({ stripe: stripeDoble, ahora: new Date(hoy) }), []);
+});
+
+test("Q6 reintento automático: el cron diario marca SOLO las facturas que ya existían al pago manual (no la renovación siguiente)", async () => {
+  process.env.CRON_SECRET = "secreto-de-prueba";
+  const { GET: cron } = await import("../../../cron/subscription-lapse/route");
+  const llamar = () => cron(new NextRequestCtor("http://localhost/api/cron/subscription-lapse", { headers: { authorization: "Bearer secreto-de-prueba" } }));
+  conTarjetaRechazada();
+  const hoy = Date.now();
+  pagosDeSubscripcion = [{ id: "inv_m", clinicId: CLINIC, status: "paid", method: "admin", amount: 0, paidAt: new Date(hoy - 2 * DIA) }];
+  facturasDeLista = [
+    { id: "in_vieja", status: "open", subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(hoy - 6 * DIA) },
+    { id: "in_nueva", status: "open", subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(hoy - DIA) },
+  ];
+  const r = await llamar();
+  assert.equal(r.status, 200);
+  const cuerpo = await r.json();
+  assert.deepEqual(cuerpo.facturasTarjeta, { revisadas: 1, marcadas: ["in_vieja"], fallos: [] });
+  assert.deepEqual(llamadasPay.map((l) => l.id), ["in_vieja"], "la renovación nueva no se perdona");
+  // Segunda pasada: nada que hacer. Con Stripe caído: no se cae el cron y queda el fallo para mañana.
+  assert.deepEqual((await (await llamar()).json()).facturasTarjeta, { revisadas: 0, marcadas: [], fallos: [] });
+  facturasDeLista = [{ id: "in_otra", status: "open", subscription: SUB, billing_reason: "subscription_cycle", created: aSegundos(hoy - 6 * DIA) }];
+  stripePagoFalla = true;
+  const caido = await llamar();
+  assert.equal(caido.status, 200);
+  assert.deepEqual((await caido.json()).facturasTarjeta, { revisadas: 1, marcadas: [], fallos: [CLINIC] });
+  delete process.env.CRON_SECRET;
 });

@@ -9,8 +9,9 @@ import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
-import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN } from "@/lib/billing/cobro-rechazado";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, esPagoManualDelPlan } from "@/lib/billing/cobro-rechazado";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
 import { getPlanStatus, isInTrial } from "@/lib/plan-status";
 
@@ -128,6 +129,17 @@ export async function POST(req: NextRequest) {
       data: { status: "paid", paidAt: new Date() },
     });
 
+    // El adeudo de excedente de CFDI NO es un pago del plan: se registra como pagado y nada más. No activa la clínica,
+    // no toca su precio mensual ni su acceso, y no marca la factura de tarjeta del plan como pagada.
+    if (invoice.method === CFDI_OVERAGE_METHOD) {
+      await logAdminClinicMutation({
+        req, admin: admin.user, clinicId: invoice.clinicId,
+        entityType: "admin-billing", entityId: invoice.clinicId, action: "update",
+        after: { op: "verify_payment", invoiceId, amount: invoice.amount, method: invoice.method, activada: false },
+      });
+      return NextResponse.json({ success: true, facturaTarjeta: null });
+    }
+
     // Activate the clinic's subscription. trialEndsAt (el "acceso hasta" del
     // gate) se mueve JUNTO con nextBillingDate: antes se quedaba como estaba y
     // /admin pintaba "vencida" a una clínica recién verificada. Nunca acorta
@@ -150,7 +162,8 @@ export async function POST(req: NextRequest) {
 
     // Pago manual CONFIRMADO: la factura de tarjeta del plan (si la hay, abierta o incobrable) queda pagada fuera de
     // Stripe para que no la reintente. Si falla, la activación NO se deshace: aviso al admin + bitácora.
-    const facturaTarjeta = await marcarFacturasDeLaClinica(invoice.clinicId);
+    // Solo si lo verificado es un pago MANUAL DEL PLAN (método nulo o de la lista); nunca un cobro de Stripe.
+    const facturaTarjeta = esPagoManualDelPlan(invoice.method) ? await marcarFacturasDeLaClinica(invoice.clinicId) : null;
 
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId: invoice.clinicId,
@@ -247,7 +260,8 @@ export async function POST(req: NextRequest) {
   if (action === "marcar_factura_fuera_de_stripe") {
     const { clinicId } = body;
     if (!clinicId || typeof clinicId !== "string") return NextResponse.json({ error: "clinicId es obligatorio" }, { status: 400 });
-    const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+    // Solo las facturas que YA existían cuando se registró el último pago manual: la renovación del mes siguiente no se perdona.
+    const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId, { soloLasQueYaExistian: true });
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId,
       entityType: "admin-billing", entityId: clinicId, action: "update",
