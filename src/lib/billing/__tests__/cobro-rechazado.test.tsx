@@ -39,6 +39,7 @@ import {
 } from "../../plan-status";
 import { planStatusLabel } from "../../plan-status-label";
 import { datosDeSedeDesdeMadre } from "../sedes-incluidas-core";
+import { chargeFailureMessage } from "../proration";
 import { fechaHoraPanel } from "../../formato-fecha-panel";
 import { cobrarPendiente, formatoMonto, leerPagoPendiente, tarjetaRechazadaViva } from "../pago-pendiente-cliente";
 import { buildPaymentFailedEmail, buildPlanSuspendedEmail } from "../../email";
@@ -768,4 +769,65 @@ test("N3 con un cambio a medias la pantalla dice «Te falta terminar el cambio a
   assert.doesNotMatch(sinOpcion, /\$689\.00|Pendiente de tu plan/);
   const en = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, cambioEnCurso: { plan: "CLINIC" } } } }, "en");
   assert.match(en, /You still need to finish the change to Clínica: \$1,489\.00 MXN/);
+});
+
+/* ── La clínica no lee «Stripe» ────────────────────────────────────────── */
+
+test("ningún texto que lee la clínica en el diccionario (suscripción, pago, aviso de cobro rechazado, suspendida, pago pendiente) nombra a «Stripe»", () => {
+  const BLOQUES: string[][] = [
+    ["shell", "subscriptionTab"],
+    ["shell", "paymentMethodModal"],
+    ["shell", "pagoRechazado"],
+    ["shell", "pagoPendiente"],
+    ["pages", "suspended"],
+  ];
+  const textos = (o: unknown, ruta: string[]): Array<[string, string]> =>
+    typeof o === "string" ? [[ruta.join("."), o]] : o && typeof o === "object" ? Object.entries(o).flatMap(([k, v]) => textos(v, [...ruta, k])) : [];
+  let revisados = 0;
+  for (const idioma of ["es", "en"] as const) {
+    const dict = getDict(idioma) as any;
+    for (const bloque of BLOQUES) {
+      const nodo = bloque.reduce((x, k) => x?.[k], dict);
+      assert.ok(nodo, `${idioma}: falta el bloque ${bloque.join(".")}`);
+      for (const [clave, texto] of textos(nodo, [idioma, ...bloque])) {
+        revisados++;
+        assert.doesNotMatch(texto, /stripe/i, `${clave}: «${texto}»`);
+      }
+    }
+  }
+  assert.ok(revisados > 150, `el test debería revisar todos los textos de los bloques (revisó ${revisados})`);
+  // Y los mensajes que armó este trabajo en código (correos y avisos).
+  const correo = buildPaymentFailedEmail({ firstName: "Ana", clinicName: "X", planName: "P", suspensionLabel: "20 oct 2026, 12:00 p.m.", payUrl: "https://x/y" });
+  const suspendido = buildPlanSuspendedEmail({ firstName: "Ana", clinicName: "X", planName: "P", payUrl: "https://x/y" });
+  for (const t of [correo.subject, correo.html, correo.text, suspendido.subject, suspendido.html, suspendido.text]) assert.doesNotMatch(t, /stripe/i);
+  // La etiqueta del portal ya no se llama «Portal Stripe», y el aviso de proration.ts que la menciona dice lo mismo.
+  assert.equal((getDict("es") as any).shell.subscriptionTab.stripePortal, "Portal de facturación");
+  assert.match(leer("src/lib/billing/proration.ts"), /desde "Portal de facturación"/);
+});
+
+test("chargeFailureMessage (tras el merge con ws1-t2): un solo texto por caso, sin «Stripe» ni «upgrade», con tú, y siempre «Tu plan NO cambió»", () => {
+  const casos = [
+    { type: "StripeCardError", code: "card_declined" },
+    { code: "insufficient_funds" },
+    { decline_code: "insufficient_funds" },
+    { code: "expired_card" },
+    { code: "incorrect_cvc" },
+    { code: "authentication_required" },
+    { code: "payment_intent_authentication_failure" },
+    { code: "subscription_payment_intent_requires_action" },
+    { code: "invoice_payment_intent_requires_action" },
+    {},
+  ];
+  for (const e of casos) {
+    const m = chargeFailureMessage(e);
+    assert.match(m, /Tu plan NO cambió/, JSON.stringify(e));
+    assert.doesNotMatch(m, /stripe|upgrade/i, `${JSON.stringify(e)}: «${m}»`);
+    assert.doesNotMatch(m, /\b(vos|tenés|podés|intentá|actualizá)\b|\.\./i, m);
+  }
+  // El caso del banco que pide autenticación manda al botón que de verdad existe en Suscripción.
+  assert.match(chargeFailureMessage({ code: "authentication_required" }), /desde "Portal de facturación"/);
+  assert.equal(((getDict("es") as any).shell.subscriptionTab.stripePortal), "Portal de facturación");
+  const fuente = sinComentarios(leer("src/lib/billing/proration.ts"));
+  assert.doesNotMatch(fuente, /<<<<<<<|>>>>>>>/);
+  assert.equal((fuente.match(/Tu banco pidió autenticación del cargo/g) ?? []).length, 1, "un solo texto");
 });
