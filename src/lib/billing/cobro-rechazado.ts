@@ -268,7 +268,17 @@ export function mesesDeUnPeriodo(inicio: Date | string, fin: Date | string): num
  * nombra al proveedor de pagos.
  */
 export const MENSAJE_PLAN_PREPAGADO =
-  "Tu plan ya está pagado por este periodo. Para cambiarlo antes de que termine escríbenos a soporte@dalecontrol.com y lo hacemos contigo, para no cobrarte de más ni de menos.";
+  "Tu plan ya está pagado por ahora, así que no podemos cambiártelo desde aquí. Escríbenos a soporte@dalecontrol.com y lo hacemos contigo.";
+
+/**
+ * ¿Se puede aplicar a `Clinic.plan` el plan de `metadata.plan` de la suscripción? Solo cuando está PAGADA (active, o un
+ * periodo pagado a mano / prueba): con la tarjeta rechazada (`past_due`, `unpaid`) o sin pagar aún (`incomplete`,
+ * `incomplete_expired`) «Subir de plan» deja `metadata.plan` en el plan nuevo y aplicarlo daría el plan sin cobrarlo (Y17).
+ * Se aplica cuando la suscripción pase a `active`.
+ */
+export function planDeMetadataAplicable(estadoStripe: string | null | undefined): boolean {
+  return !["past_due", "unpaid", "incomplete", "incomplete_expired"].includes(estadoStripe ?? "");
+}
 
 /**
  * MARCA de nuestra app en la suscripción de Stripe cuando la «prueba» (`trial_end`) NO es una prueba sino un periodo YA

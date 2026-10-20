@@ -2157,3 +2157,56 @@ test("Y9 la pestaña Suscripción deshabilita el cambio de plan con el texto ver
   assert.match(dlg, /code === "PLAN_PREPAGADO"/);
   assert.match(dlg, /bloqueo \?\? x\.sinVista/);
 });
+
+/* ── Duodécima vuelta (t2): Y17 en el webhook y la falsa alarma de «cobro inesperado» ──────────────────────────────────── */
+
+test("Y17 `customer.subscription.updated` NO aplica Clinic.plan desde metadata.plan mientras la suscripción esté past_due / unpaid / incomplete; lo aplica cuando pasa a active", async () => {
+  for (const estado of ["past_due", "unpaid", "incomplete", "incomplete_expired"]) {
+    conTarjetaRechazada();
+    clinica().plan = "BASIC";
+    const sub = suscripcion(estado, Date.now() + 30 * DIA); // metadata.plan = PRO («Subir» dejó el plan nuevo en la metadata)
+    suscripcionesVivas.set(SUB, sub);
+    assert.equal(await entregar(evento("customer.subscription.updated", sub)), 200, estado);
+    assert.equal(clinica().plan, "BASIC", `${estado}: el plan nuevo no se aplica sin pagar`);
+  }
+  // Ya pagada (active): se aplica.
+  conTarjetaRechazada();
+  clinica().plan = "BASIC";
+  const pagada = suscripcion("active", Date.now() + 30 * DIA);
+  suscripcionesVivas.set(SUB, pagada);
+  assert.equal(await entregar(evento("customer.subscription.updated", pagada)), 200);
+  assert.equal(clinica().plan, "PRO", "active: ahora sí");
+  // Un periodo pagado a mano (trialing + marca) también cuenta como pagado.
+  conTarjetaRechazada();
+  clinica().plan = "BASIC";
+  const periodo: any = suscripcion("trialing", Date.now() + 30 * DIA);
+  periodo.trial_end = aSegundos(Date.now() + 30 * DIA);
+  periodo.metadata.periodo_pagado_hasta = new Date(periodo.trial_end * 1000).toISOString();
+  suscripcionesVivas.set(SUB, periodo);
+  assert.equal(await entregar(evento("customer.subscription.updated", periodo)), 200);
+  assert.equal(clinica().plan, "PRO");
+});
+
+test("falsa alarma: con tarjeta, la `latest_invoice` que devuelve el cambio de ciclo es el mes RECIÉN COBRADO; no es un «cobro inesperado» ni pide reembolsar un pago bueno", async () => {
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  const viva: any = suscripcion("past_due", Date.now() + 10 * DIA);
+  delete viva.latest_invoice; // ni siquiera sabemos cuál era la última antes del cambio
+  suscripcionesVivas.set(SUB, viva);
+  // Stripe no crea factura de $0 con trial_end: devuelve la última, que es la que acaba de cobrarse (creada hace segundos).
+  ultimaFacturaDelCambio = { id: FACTURA, status: "paid", amount_paid: 68900, amount_due: 68900, created: Math.floor(Date.now() / 1000) };
+  const pago = Date.now();
+  const pagada = facturaPagada({ billing_reason: "subscription_cycle", status_transitions: { finalized_at: aSegundos(pago - 100 * DIA), paid_at: aSegundos(pago) } });
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 200, "sin 5xx");
+  assert.equal(correosAdmin.length, 0, "sin aviso de «reembolsa»");
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(llamadasCiclo.length, 1);
+  // Y una factura DISTINTA con cobro sí se reporta (control).
+  suspendidaCuatroMeses();
+  facturasDeLista = [70, 40, 10].map((d, i) => facturaDeMes(MESES_SUSPENDIDOS[i + 1], d * DIA));
+  ultimaFacturaDelCambio = { id: "in_otra_cobrada", status: "paid", amount_paid: 68900, amount_due: 68900, created: Math.floor(Date.now() / 1000) };
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 10 * DIA));
+  assert.equal(await entregar(evento("invoice.paid", pagada, pago)), 500);
+  assert.match(correosAdmin[0].text, /in_otra_cobrada/);
+});

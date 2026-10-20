@@ -103,7 +103,7 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
 
   // Un cobro de tarjeta del plan paga un periodo COMPLETO: una anualidad son 12 meses, no 1 (Y1).
   const fin = finDeLoPagado(pagadoEn, mesesDelIntervalo(viva));
-  const r = await aplicarReglaDeSuspension({ stripe, clinicId: clinic.id, sub: viva, pagadoEn, finDeLoPagado: fin, facturas: otras, periodoExacto: true });
+  const r = await aplicarReglaDeSuspension({ stripe, clinicId: clinic.id, sub: viva, pagadoEn, finDeLoPagado: fin, facturas: otras, periodoExacto: true, facturaPagada: [invoice.id] });
   await logAudit({
     clinicId: clinic.id,
     userId: clinic.id,

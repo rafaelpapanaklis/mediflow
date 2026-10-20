@@ -52,6 +52,7 @@ import {
   accesoTrasCobroRechazado,
   clinicaEstabaSuspendida,
   debeReintentarPorEstadoVivo,
+  planDeMetadataAplicable,
   esMesDeServicioSuspendido,
   estadoVisibleDeSuscripcion,
   finDeLoPagado,
@@ -339,7 +340,7 @@ export async function POST(req: NextRequest) {
               changes: { _source: { before: null, after: { event: event.type, planNoAplicado: subPlan, motivo: sedesBloquean } } },
             }).catch(() => {});
           }
-          const subPlanFields = isPlanId(subPlan) && !sedesBloquean
+          const subPlanFieldsSiPagado = isPlanId(subPlan) && !sedesBloquean
             ? { plan: subPlan, aiTokensLimit: (await getPlanLimits(subPlan)).aiTokensDefault }
             : {};
           // Fin del periodo REAL de Stripe → nextBillingDate Y trialEndsAt (el
@@ -363,6 +364,20 @@ export async function POST(req: NextRequest) {
             suscripcionViva = null;
           }
           const estadoVivo: string | null = suscripcionViva?.status ?? null;
+          // Y17: el plan de la metadata solo se aplica con la suscripción PAGADA. «Subir de plan» con la tarjeta rechazada deja
+          // `metadata.plan` en el plan nuevo; aplicarlo daría el plan sin cobrarlo. Cuando pase a `active` se aplica.
+          const planPagado = planDeMetadataAplicable(estadoEfectivoDeSuscripcion({ evento: sub.status, vivo: estadoVivo }));
+          const subPlanFields = planPagado ? subPlanFieldsSiPagado : {};
+          if (!planPagado && Object.keys(subPlanFieldsSiPagado).length > 0) {
+            await logAudit({
+              clinicId,
+              userId: clinicId,
+              entityType: "subscription",
+              entityId: sub.id,
+              action: "update",
+              changes: { _source: { before: null, after: { event: event.type, planNoAplicado: subPlan, motivo: "suscripción sin pagar", estadoStripe: estadoVivo ?? sub.status } } },
+            }).catch(() => {});
+          }
           const antes = await prisma.clinic.findUnique({
             where: { id: clinicId },
             select: { subscriptionStatus: true, stripeSubscriptionId: true, trialEndsAt: true },

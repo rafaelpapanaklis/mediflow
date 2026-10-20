@@ -1008,7 +1008,7 @@ describe("periodo pagado a mano: la etiqueta de la clínica la decide NUESTRO c�
     assert.equal(mesesDelIntervalo(null), 1);
   });
   it("el texto de la clínica vale para 1 mes o varios y no nombra al proveedor de pagos", () => {
-    assert.match(MENSAJE_PLAN_PREPAGADO, /^Tu plan ya está pagado por este periodo/);
+    assert.equal(MENSAJE_PLAN_PREPAGADO, "Tu plan ya está pagado por ahora, así que no podemos cambiártelo desde aquí. Escríbenos a soporte@dalecontrol.com y lo hacemos contigo.", "M7: el mismo texto verdadero que usa «Subir» (t2)");
     assert.doesNotMatch(MENSAJE_PLAN_PREPAGADO, /stripe|adelantado|meses/i);
   });
 });
@@ -1043,4 +1043,10 @@ test("M4/Y2 el aviso al admin por una regla incompleta dice lo que de verdad pas
   assert.match(t, /No pongas una prueba \(trial_end\) a mano en Stripe/, "Y2: nunca le pide poner la prueba a mano");
   assert.doesNotMatch(t, /ponle a la suscripción una prueba/);
   assert.doesNotMatch(t, /vuelven a intentarlo/);
+});
+
+test("M7 «Subir» (t2) y el bloqueo de change-plan comparten UN solo texto verdadero", () => {
+  const { MENSAJES } = require("../pago-pendiente");
+  assert.equal(MENSAJES.cobroEnPausa, MENSAJE_PLAN_PREPAGADO);
+  assert.match(MENSAJE_PLAN_PREPAGADO, /^Tu plan ya está pagado por ahora, así que no podemos cambiártelo desde aquí\./);
 });

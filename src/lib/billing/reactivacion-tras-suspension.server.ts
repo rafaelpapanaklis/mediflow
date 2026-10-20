@@ -202,6 +202,8 @@ export async function realinearCiclo(
     finDeLoPagado: Date;
     /** Sin tolerancia: el ciclo se mueve aunque ya casi coincida (clínica que estaba SUSPENDIDA: cada día cuenta, Y4). */
     exacto?: boolean;
+    /** Facturas que NO son un cobro del cambio de ciclo (la que acaba de pagar el cliente): su `latest_invoice` no es alarma. */
+    ignorarFacturas?: string[];
   },
 ): Promise<ResultadoRealineo> {
   if (!realinearActivo()) return { tipo: "apagado" };
@@ -241,7 +243,7 @@ export async function realinearCiclo(
     if (ultima && typeof ultima === "object") {
       const f = ultima as { id?: string; status?: string | null; amount_paid?: number | null; amount_due?: number | null; created?: number | null };
       // Solo cuenta una factura NUEVA: distinta de la de antes y creada por esta llamada.
-      const esNueva = !!f.id && f.id !== latestAntes && (f.created ?? 0) * 1000 >= inicioLlamada - 15_000;
+      const esNueva = !!f.id && f.id !== latestAntes && !(args.ignorarFacturas ?? []).includes(f.id) && (f.created ?? 0) * 1000 >= inicioLlamada - 15_000;
       if (esNueva && ((f.amount_paid ?? 0) > 0 || ((f.amount_due ?? 0) > 0 && f.status !== "void"))) {
         // M5: cualquier factura con importe que NO sea una anulada es un cobro (o está por serlo).
         console.error("[reactivacion-tras-suspension] el cambio de ciclo generó un cobro", f.id, f.status);
@@ -302,12 +304,14 @@ export async function aplicarReglaDeSuspension(args: {
   finDeLoPagado: Date;
   facturas: Stripe.Invoice[];
   periodoExacto?: boolean;
+  /** La(s) factura(s) que acaba de pagar el cliente: nunca se toman por un cobro inesperado del cambio de ciclo. */
+  facturaPagada?: string[];
 }): Promise<ResultadoReactivacion> {
   const fin = args.periodoExacto
     ? args.finDeLoPagado
     : new Date(Math.max(args.finDeLoPagado.getTime(), finDeLoPagado(args.pagadoEn, mesesDelIntervalo(args.sub)).getTime()));
   // Una clínica que estaba suspendida: sin tolerancia, cada día cuenta (Y4).
-  const realineo = await realinearCiclo(args.stripe, args.sub, { pagadoEn: args.pagadoEn, finDeLoPagado: fin, exacto: true });
+  const realineo = await realinearCiclo(args.stripe, args.sub, { pagadoEn: args.pagadoEn, finDeLoPagado: fin, exacto: true, ignorarFacturas: args.facturaPagada });
   const fallos: string[] = [];
   if (realineo.tipo === "fallo") fallos.push(realineo.mensaje);
   if (realineo.tipo === "cobro_inesperado") fallos.push(mensajeCobroInesperado(realineo.facturaId));

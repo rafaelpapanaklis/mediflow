@@ -342,7 +342,7 @@ test("V2 change-plan con el cobro de la tarjeta PAUSADO (meses prepagados): se b
   }
   // Lo que lee la clínica: español, sin nombrar al proveedor de pagos.
   assert.doesNotMatch(MENSAJE_PLAN_PREPAGADO, /stripe/i);
-  assert.match(MENSAJE_PLAN_PREPAGADO, /Tu plan ya está pagado por este periodo/);
+  assert.match(MENSAJE_PLAN_PREPAGADO, /Tu plan ya está pagado por ahora/);
 });
 
 test("V2 la vista previa del cambio de plan también se bloquea con la pausa, y sin pausa sigue igual", async () => {
