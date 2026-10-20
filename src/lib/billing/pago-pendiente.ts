@@ -72,7 +72,7 @@ interface DescuentoStripe {
 export interface SuscripcionPago {
   id: string;
   status: string;
-  customer?: string | { id: string; discount?: { id: string } | null } | null;
+  customer?: string | { id: string; discount?: { id: string; coupon?: { id?: string | null } | null } | null } | null;
   metadata?: Record<string, string> | null;
   items: { data: Array<{ id: string; price?: { unit_amount?: number | null; recurring?: { interval?: string | null } | null } | null }> };
   /** API 2024-06-20: el descuento principal viene con su cupón. */
@@ -264,6 +264,7 @@ export const claves = {
   // La hora (`ts`) va en la clave porque es un PARÁMETRO de la llamada: la misma clave con otros parámetros
   // la rechaza Stripe (idempotency_error) durante 24 h.
   marcar: (clinicId: string, facturaId: string, plan: string, ts: number) => `pago-pendiente:marcar:${clinicId}:${facturaId}:${plan}:${ts}`,
+  quitarDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:quitar-descuento-cliente:${clinicId}:${descuentoId}`,
   anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
   subir: (clinicId: string, facturaId: string, plan: string) => `pago-pendiente:subir:${clinicId}:${facturaId}:${plan}`,
   precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number) =>
