@@ -39,9 +39,6 @@ export interface TextosPlanPdf {
   redondeo: string;
   ajuste: string;
   total: string;
-  pagado: string;
-  saldo: string;
-  notaPagos: string;
   leyenda: string;
   firmaPaciente: string;
   firmaDoctor: string;
@@ -117,7 +114,6 @@ const styles = StyleSheet.create({
   totalsValue: { fontSize: 10, color: TINTA, fontFamily: "Helvetica-Bold", textAlign: "right", width: 90 },
   grandLabel: { fontSize: 12, color: ACENTO, fontFamily: "Helvetica-Bold", textAlign: "right", width: 140 },
   grandValue: { fontSize: 12, color: ACENTO, fontFamily: "Helvetica-Bold", textAlign: "right", width: 90 },
-  pagosNota: { fontSize: 8, color: GRIS, textAlign: "right", marginTop: 3, maxWidth: 260 },
   legend: { fontSize: 8, color: GRIS, flex: 1, maxWidth: 220 },
   // Firmas: como las de los consentimientos (consent-document.tsx): sitio de
   // sobra encima de la línea para un bolígrafo, rol, nombre y fecha por llenar.
@@ -359,21 +355,6 @@ export function PlanTratamientoDocument(props: PlanTratamientoDocumentProps) {
                 <T style={styles.grandLabel}>{t.total}</T>
                 <T style={styles.grandValue}>{dinero(d.total)}</T>
               </View>
-              {d.pagos ? (
-                <>
-                  <View style={[styles.totalsRow, { marginTop: 6 }]}>
-                    <T style={styles.totalsLabel}>{t.pagado}</T>
-                    <T style={styles.totalsValue}>{dinero(d.pagos.pagado)}</T>
-                  </View>
-                  {d.pagos.saldo != null ? (
-                    <View style={styles.totalsRow}>
-                      <T style={styles.totalsLabel}>{t.saldo}</T>
-                      <T style={styles.totalsValue}>{dinero(d.pagos.saldo)}</T>
-                    </View>
-                  ) : null}
-                  <T style={styles.pagosNota}>{t.notaPagos}</T>
-                </>
-              ) : null}
             </View>
           </View>
 

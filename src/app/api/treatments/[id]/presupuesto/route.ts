@@ -4,9 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { armarPresupuestoDePlan, ESTADOS_QUE_YA_CUENTAN } from "@/lib/quotes/desde-plan";
+import { armarPresupuestoDePlan, ESTADOS_QUE_YA_CUENTAN, textoPuedeEstarRedondeado } from "@/lib/quotes/desde-plan";
 import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
-import { textoPuedeEstarRedondeado } from "@/lib/treatments/dinero-exacto";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +29,7 @@ interface Params { params: Promise<{ id: string }> }
 async function cargarPlan(ctx: AuthContext, id: string) {
   const plan = await prisma.treatmentPlan.findFirst({
     where: { id, clinicId: ctx.clinicId, ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}) },
-    select: { id: true, patientId: true, name: true, description: true, totalCost: true, createdAt: true },
+    select: { id: true, patientId: true, name: true, description: true, totalCost: true },
   });
   if (!plan) return { error: NextResponse.json({ error: "Plan no encontrado" }, { status: 404 }) } as const;
   const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });

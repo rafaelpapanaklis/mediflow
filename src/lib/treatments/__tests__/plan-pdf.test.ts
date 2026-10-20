@@ -19,6 +19,7 @@ import { textosPintados, textoVisiblePorPagina } from "@/lib/pdf/__tests__/_text
 import { makePng } from "@/lib/pdf/__tests__/_imagenes-de-prueba";
 import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { leerRenglonesDelPlan } from "@/lib/quotes/desde-plan";
+import { soloEntero } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 
 type Row = Record<string, any>;
 
@@ -30,6 +31,8 @@ const rot: Rotulos = {
   pronosticoValor: (p) => ({ bueno: "Bueno", reservado: "Reservado", malo: "Malo" }[p]),
   dinero: (n) => formatCurrency(n),
 };
+/** Rótulos de la ventana de HOY: dinero exacto y la marca de «precios exactos» (t8, N3-P2). */
+const rotExacto: Rotulos = { ...rot, dinero: (n) => dineroExacto(n), exacto: true };
 let seq = 0;
 const reng = (r: Partial<Renglon>): Renglon => ({
   id: `r${++seq}`, fase: "higienica", procedimiento: "", procedimientoId: null, dientes: "", caras: [], motivo: "",
@@ -50,14 +53,11 @@ const DESCRIPCION = componerDescripcion(
     alternativa: "Resinas en vez de corona",
     notas: `${NOTA_SECRETA}\n• debe 300 de la vez pasada`,
   },
-  rot,
+  rotExacto,
 );
 // 2 × 500 + 800 + 9000
 const SUMA = 10800;
 
-/** Un plan creado con la ventana de ahora (precios exactos) y uno de antes (texto redondeado a pesos). */
-const NUEVO = new Date("2026-10-22T12:00:00Z");
-const VIEJO = new Date("2026-09-01T12:00:00Z");
 
 // ── 1 · Puro ────────────────────────────────────────────────────────────────
 test("armado: renglones con fase, zona (dientes y caras), cantidad, precio e importe; subtotales por fase", async () => {
@@ -72,7 +72,6 @@ test("armado: renglones con fase, zona (dientes y caras), cantidad, precio e imp
   assert.equal(d.subtotal, SUMA);
   assert.equal(d.ajuste, null);
   assert.equal(d.total, SUMA);
-  assert.equal(d.pagos, null);
 });
 
 test("armado: las notas, aunque traigan viñetas, nunca son un renglón", async () => {
@@ -85,18 +84,18 @@ test("armado: las notas, aunque traigan viñetas, nunca son un renglón", async 
 
 test("armado: un costo tecleado a mano por debajo de la suma sale como descuento; por encima, como ajuste; el redondeo no", async () => {
   const { armarDocumentoDelPlan } = await import("../plan-pdf");
-  const menos = armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 9800, createdAt: NUEVO });
+  const menos = armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 9800 });
   assert.equal(menos.subtotal, SUMA);
   assert.deepEqual(menos.ajuste, { tipo: "descuento", monto: -1000 });
   assert.equal(menos.total, 9800);
-  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 11000, createdAt: NUEVO }).ajuste, { tipo: "ajuste", monto: 200 });
-  assert.equal(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 10800, createdAt: NUEVO }).ajuste, null);
+  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 11000 }).ajuste, { tipo: "ajuste", monto: 200 });
+  assert.equal(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 10800 }).ajuste, null);
 });
 
 test("armado: en un plan viejo que redondeó $3,500.50 a $3,501, el renglón dice lo del plan y la diferencia es «Redondeo»", async () => {
   const { armarDocumentoDelPlan } = await import("../plan-pdf");
   const desc = componerDescripcion({ ...PLAN_VACIO, renglones: [reng({ procedimiento: "Endodoncia", precio: "3500.5" })] }, rot);
-  const d = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 3500.5, createdAt: VIEJO });
+  const d = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 3500.5 });
   assert.equal(d.grupos[0].renglones[0].precioUnitario, 3501, "el precio del PLAN (su texto), nunca el del tarifario");
   assert.deepEqual(d.ajuste, { tipo: "redondeo", monto: -0.5 });
   assert.equal(d.total, 3500.5);
@@ -108,20 +107,6 @@ test("armado: un plan de los de antes (descripción libre = nota) sale con un so
   assert.equal(d.sinDetalle, true);
   assert.deepEqual(d.grupos.map((g) => g.renglones.map((r) => [r.nombre, r.importe])), [[["Ortodoncia 18 meses", 25000]]]);
   assert.doesNotMatch(JSON.stringify(d), /NOTA-INTERNA/);
-});
-
-test("armado: pagado y saldo solo cuando el sistema sabe de facturas del plan", async () => {
-  const { armarDocumentoDelPlan } = await import("../plan-pdf");
-  const plan = { name: "P", description: DESCRIPCION, totalCost: SUMA };
-  const pagos = (p: Partial<import("../plan-pdf").PagosDelPlan>) => ({ pagado: 0, facturas: 1, facturado: SUMA, porPagar: 0, soloDelPlan: true, ...p });
-  assert.equal(armarDocumentoDelPlan(plan, pagos({ facturas: 0, facturado: 0 })).pagos, null);
-  // Todo el plan facturado a su precio: el saldo es lo que falta de esas facturas.
-  assert.deepEqual(armarDocumentoDelPlan(plan, pagos({ pagado: 3000, facturas: 2, porPagar: 7800 })).pagos, { pagado: 3000, saldo: 7800 });
-  assert.deepEqual(armarDocumentoDelPlan(plan, pagos({ pagado: SUMA })).pagos, { pagado: SUMA, saldo: 0 });
-  // Juntos o nada (t8): dinero que no es solo del plan, lo facturado distinto del costo, o pagado > total.
-  assert.equal(armarDocumentoDelPlan(plan, pagos({ pagado: 3000, soloDelPlan: false })).pagos, null);
-  assert.equal(armarDocumentoDelPlan(plan, pagos({ pagado: 9000, facturado: 9000 })).pagos, null);
-  assert.equal(armarDocumentoDelPlan(plan, pagos({ pagado: SUMA + 1 })).pagos, null);
 });
 
 test("nombre del archivo: sin acentos ni espacios, con el día", async () => {
@@ -195,7 +180,7 @@ const prismaStub: any = {
 
 const plan = (extra: Row): Row => ({
   clinicId: "c1", patientId: "p1", doctorId: "doc-1", name: "Rehabilitación", description: DESCRIPCION, totalCost: SUMA,
-  status: "ACTIVE", startDate: new Date("2026-10-01T15:00:00Z"), createdAt: NUEVO,
+  status: "ACTIVE", startDate: new Date("2026-10-01T15:00:00Z"),
   patient: { firstName: "Ana", lastName: "López", patientNumber: "P-0042" },
   doctor: { firstName: "Mariana", lastName: "Cortés", cedulaProfesional: "12345678" },
   ...extra,
@@ -300,48 +285,15 @@ test("ruta: un costo con descuento a mano sale con su línea de descuento y el t
   assert.ok(tiene(texto, "$9,800"));
 });
 
-test("ruta: el doctor descarga el plan de un colega del mismo paciente (lo ve en la ficha); sin billing.view no ve pagos", async () => {
+test("ruta: el doctor descarga el plan de un colega del mismo paciente (lo ve en la ficha)", async () => {
   authCtx.role = "DOCTOR";
   authCtx.isDoctor = true;
   authCtx.userId = "doc-1";
   authCtx.permissionsOverride = ["treatments.view", "patients.view"];
-  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: "prueba-plan-02", invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 4000, total: SUMA }];
   const r = await GET("prueba-plan-02");
   assert.equal(r.status, 200);
   const texto = await textoDe(r);
   assert.ok(tiene(texto, "$10,800"));
-  assert.ok(!tiene(texto, "Pagado") && !tiene(texto, "Saldo"), "sin billing.view no salen pagos");
-});
-
-test("ruta: con billing.view salen pagado y saldo de las facturas de los presupuestos del plan (factura de siempre + cargos), sin canceladas ni de otra clínica", async () => {
-  db.tablasDeCargos = true;
-  const id = "cmabc123def456ghi789jkl0";
-  db.quotes = [
-    { id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" },
-    { id: "q2", clinicId: "c1", treatmentPlanId: id, invoiceId: null },
-    { id: "q-c2", clinicId: "c2", treatmentPlanId: id, invoiceId: "f-c2" },
-  ];
-  db.cargos = [
-    { clinicId: "c1", quoteId: "q2", quoteItemId: null, invoiceId: "f2", tipo: "abono", monto: 2000, invoiceNumber: "MF-2", status: "PAID", createdAt: new Date() },
-    { clinicId: "c1", quoteId: "q1", quoteItemId: null, invoiceId: "f1", tipo: "concepto", monto: 1000, invoiceNumber: "MF-1", status: "PARTIAL", createdAt: new Date() },
-  ];
-  db.invoices = [
-    { id: "f1", clinicId: "c1", status: "PARTIAL", paid: 1000, total: 8800 },
-    { id: "f2", clinicId: "c1", status: "PAID", paid: 2000, total: 2000 },
-    { id: "f3", clinicId: "c1", status: "CANCELLED", paid: 999, total: 999 },
-    { id: "f-c2", clinicId: "c2", status: "PAID", paid: 50000, total: 50000 },
-  ];
-  const texto = await textoDe(await GET(id));
-  assert.ok(tiene(texto, "Pagado"));
-  assert.ok(tiene(texto, "$3,000"), "pagado = 1,000 + 2,000 (f1 contada una vez)");
-  assert.ok(tiene(texto, "Saldo"));
-  assert.ok(tiene(texto, "$7,800"), "saldo = 10,800 − 3,000");
-});
-
-test("ruta: sin presupuestos ligados al plan, el PDF no habla de pagos aunque se vea la facturación", async () => {
-  const texto = await textoDe(await GET("cmabc123def456ghi789jkl0"));
-  assert.ok(!tiene(texto, "Pagado"));
 });
 
 test("ruta: clínica en inglés → el PDF sale en inglés", async () => {
@@ -373,29 +325,6 @@ function planLargo(): Renglon[] {
   );
 }
 
-test("P1/t8: presupuesto con 10 % de descuento → la factura trae menos que el plan: ni «Pagado» ni un saldo que no se debe", async () => {
-  const id = "cmabc123def456ghi789jkl0";
-  db.plans[0].totalCost = 10000;
-  db.plans[0].description = descripcionDeVentana([reng({ procedimiento: "Corona", precio: "10000" })]);
-  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PAID", paid: 9000, total: 9000 }];
-  const texto = await textoDe(await GET(id));
-  assert.ok(!tiene(texto, "Pagado"), "«Total $10,000 · Pagado $9,000» invita a una resta que no es la deuda");
-  assert.ok(!tiene(texto, "Saldo"), "con descuento del presupuesto no se puede saber el saldo: no se enseña");
-  assert.ok(!tiene(texto, "$1,000"), "el «saldo» de $1,000 que el paciente no debe");
-});
-
-test("P1/t8: facturado de más que el plan → nada de pagos; y con todo facturado a su precio, pagado y saldo de las facturas", async () => {
-  const id = "cmabc123def456ghi789jkl0";
-  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 5000, total: SUMA + 25000 }];
-  const mixto = await textoDe(await GET(id));
-  assert.ok(!tiene(mixto, "Saldo") && !tiene(mixto, "Pagado"));
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 5000, total: SUMA }];
-  const texto = await textoDe(await GET(id));
-  assert.ok(tiene(texto, "Saldo") && tiene(texto, "$5,800"));
-});
-
 test("P2: precios con centavos salen tal cual ($500.50), sin «Descuento» inventado; y $1,250 sin «.00»", async () => {
   const { armarDocumentoDelPlan } = await import("../plan-pdf");
   assert.equal(dineroExacto(1250.5), "$1,250.50");
@@ -424,7 +353,6 @@ test("P2: un plan VIEJO cuyo texto redondeó $500.50 a $501 → la diferencia sa
     rot, // formatCurrency: pesos enteros, como escribía la ventana antes
   );
   db.plans[0].totalCost = 1501.5;
-  db.plans[0].createdAt = VIEJO;
   const texto = await textoDe(await GET(id));
   assert.ok(tiene(texto, "Redondeo de precios") && tiene(texto, "-$1.50"));
   assert.ok(!tiene(texto, "Descuento"));
@@ -515,56 +443,6 @@ test("P6: plan largo → el encabezado de columnas se repite en cada hoja, la ú
 
 // ── Segunda vuelta (t8): N-P1 a N-P7 ─────────────────────────────────────────
 
-test("t8 N-P1: un presupuesto mixto (general + ortodoncia) del plan → ni «Pagado» ni «Saldo», aunque lo facturado cuadre", async () => {
-  const id = "cmabc123def456ghi789jkl0";
-  db.quotes = [{
-    id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1",
-    items: [{ name: "Resina" }, { name: "Limpieza dental" }, { name: "Brackets metálicos" }],
-  }];
-  // Aunque la factura sume justo el costo del plan, trae dinero que no es de este plan.
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 20000, total: SUMA }];
-  const texto = await textoDe(await GET(id));
-  assert.ok(!tiene(texto, "Pagado") && !tiene(texto, "Saldo"));
-  assert.ok(!tiene(texto, "$20,000"), "nunca un «Pagado» de dinero que no es del plan");
-});
-
-test("t8 N-P1: «Pagado» nunca pasa del total (pagado > total → no se imprime)", async () => {
-  const id = "cmabc123def456ghi789jkl0";
-  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PAID", paid: SUMA + 500, total: SUMA }];
-  const texto = await textoDe(await GET(id));
-  assert.ok(!tiene(texto, "Pagado"));
-});
-
-test("t8 N-P3: un abono viejo aplicado por saldo a favor (contaría dos veces) → no se imprimen pagos", async () => {
-  db.tablasDeCargos = true;
-  const id = "cmabc123def456ghi789jkl0";
-  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f-abono" }];
-  db.cargos = [
-    // La factura del abono de antes, pagada…
-    { clinicId: "c1", quoteId: "q1", quoteItemId: null, invoiceId: "f-abono", tipo: "abono", monto: 2000, invoiceNumber: "MF-1", status: "PAID", createdAt: new Date() },
-    // …y el mismo abono aplicado como pago a la factura del concepto (fila de abono NEGATIVA).
-    { clinicId: "c1", quoteId: "q1", quoteItemId: "qi1", invoiceId: "f-concepto", tipo: "concepto", monto: SUMA, invoiceNumber: "MF-2", status: "PARTIAL", createdAt: new Date() },
-    { clinicId: "c1", quoteId: "q1", quoteItemId: null, invoiceId: "f-concepto", tipo: "abono", monto: -2000, invoiceNumber: "MF-2", status: "PARTIAL", createdAt: new Date() },
-  ];
-  db.invoices = [
-    { id: "f-abono", clinicId: "c1", status: "PAID", paid: 2000, total: 2000 },
-    { id: "f-concepto", clinicId: "c1", status: "PARTIAL", paid: 2000, total: SUMA },
-  ];
-  const texto = await textoDe(await GET(id));
-  assert.ok(!tiene(texto, "Pagado"), "el paciente pagó $2,000, no $4,000: si no se puede separar, no se imprime");
-});
-
-test("t8: si los cargos de «Se cobrará hoy» no se pudieron leer, no se imprimen pagos (faltarían facturas)", async () => {
-  db.tablasDeCargos = true;
-  db.cargosFallan = true;
-  const id = "cmabc123def456ghi789jkl0";
-  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 1000, total: SUMA }];
-  const texto = await textoDe(await GET(id));
-  assert.ok(!tiene(texto, "Pagado"));
-});
-
 test("t8 N-P2: el precio del PLAN manda: $449.60 sale $449.60 aunque el tarifario diga $450, sin «Descuento» de centavos", async () => {
   const id = "cmabc123def456ghi789jkl0";
   db.catalogo = [{ id: "res", name: "Resina", basePrice: 450 }];
@@ -584,17 +462,20 @@ test("t8 N-P2: el precio del PLAN manda: $449.60 sale $449.60 aunque el tarifari
 test("t8 N-P5: en un plan NUEVO, 24 × $1,500 con costo de $35,990 es «Descuento -$10», no «Redondeo»", async () => {
   const { armarDocumentoDelPlan } = await import("../plan-pdf");
   const desc = descripcionDeVentana([reng({ procedimiento: "Mensualidad", cantidad: "24", precio: "1500" })]);
-  const nuevo = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 35990, createdAt: NUEVO });
+  const nuevo = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 35990 });
   assert.deepEqual(nuevo.ajuste, { tipo: "descuento", monto: -10 });
   // En un plan VIEJO con el costo tecleado (≠ al total que el plan escribió) no se puede separar
   // redondeo de descuento: «Ajuste», con su signo; nunca «Redondeo».
-  const viejo = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 35990, createdAt: VIEJO });
+  const sinMarca = componerDescripcion({ ...PLAN_VACIO, renglones: [reng({ procedimiento: "Mensualidad", cantidad: "24", precio: "1500" })] }, rot);
+  const viejo = armarDocumentoDelPlan({ name: "P", description: sinMarca, totalCost: 35990 });
   assert.deepEqual(viejo.ajuste, { tipo: "ajuste", monto: -10 });
   // Y el redondeo solo se nombra en un plan viejo cuyo costo es el que él mismo escribió.
   const redondeado = componerDescripcion({ ...PLAN_VACIO, renglones: [reng({ procedimiento: "Resina", cantidad: "3", precio: "500.50" })] }, rot);
-  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: redondeado, totalCost: 1501.5, createdAt: VIEJO }).ajuste, { tipo: "redondeo", monto: -1.5 });
-  // El mismo texto en un plan nuevo no se trata como redondeo.
-  assert.equal(armarDocumentoDelPlan({ name: "P", description: redondeado, totalCost: 1501.5, createdAt: NUEVO }).ajuste?.tipo, "descuento");
+  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: redondeado, totalCost: 1501.5 }).ajuste, { tipo: "redondeo", monto: -1.5 });
+  // El mismo texto CON la marca de la ventana de hoy no se trata como redondeo.
+  const conMarca = redondeado.replace("Total de procedimientos: ", "Total de procedimientos:\u00a0");
+  assert.notEqual(conMarca, redondeado);
+  assert.equal(armarDocumentoDelPlan({ name: "P", description: conMarca, totalCost: 1501.5 }).ajuste?.tipo, "descuento");
   // Por la ruta: el plan nuevo dice «Descuento -$10».
   const id = "cmabc123def456ghi789jkl0";
   db.plans[0].description = desc;
@@ -613,7 +494,6 @@ test("t8 N-P4: una cantidad con decimales de un plan viejo sale tal cual (1.5 ×
   db.plans[0].description = componerDescripcion({ ...PLAN_VACIO, renglones: [reng({ procedimiento: "Resina", cantidad: "1.5", precio: "500" })] }, rot);
   assert.match(db.plans[0].description, /1\.5 × \$500 = \$750/);
   db.plans[0].totalCost = 750;
-  db.plans[0].createdAt = VIEJO;
   const texto = await textoDe(await GET(id));
   assert.ok(tiene(texto, "1.5") && tiene(texto, "$750"));
   assert.ok(!tiene(texto, "Descuento") && !tiene(texto, "$1,000") && !tiene(texto, "Ajuste") && !tiene(texto, "Redondeo"));
@@ -666,6 +546,121 @@ test("t8 N-P7: un último renglón gigante no saca el total ni las firmas de la 
   assert.ok((todo.match(/rehabilitación integral con implantes/g) ?? []).length >= 90, "el renglón gigante sale entero, partido entre hojas");
 });
 
+// ── Tercera vuelta (t8) ──────────────────────────────────────────────────────
+
+test("t8 v3 · decisión del gerente: el PDF NO lleva «Pagado» ni «Saldo», ni lee facturas, aunque haya cobros y se vea la facturación", async () => {
+  const id = "cmabc123def456ghi789jkl0";
+  authCtx.permissionsOverride = ["treatments.view", "patients.view", "billing.view"];
+  db.tablasDeCargos = true;
+  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
+  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 4321, total: SUMA }];
+  let leyoFacturas = 0;
+  const original = prismaStub.invoice.findMany;
+  prismaStub.invoice.findMany = async (...a: any[]) => { leyoFacturas++; return original(...a); };
+  try {
+    const texto = await textoDe(await GET(id));
+    assert.ok(!tiene(texto, "Pagado") && !tiene(texto, "Saldo") && !tiene(texto, "Pagos registrados"));
+    assert.ok(!tiene(texto, "$4,321") && !tiene(texto, "$6,479"), "N3-P1: ni lo pagado ni un saldo, ciertos o no");
+    assert.ok(tiene(texto, "$10,800"), "el total del plan sí");
+    assert.equal(leyoFacturas, 0, "el PDF ni siquiera lee facturas");
+  } finally {
+    prismaStub.invoice.findMany = original;
+  }
+  const es = (await import("@/i18n/dictionaries/es.json")).default as any;
+  for (const k of ["pagado", "saldo", "notaPagos"]) assert.equal(es.planTratamiento.pdf[k], undefined, `sobra la llave ${k}`);
+});
+
+test("t8 v3 N3-P2: plan exacto o viejo lo dice la MARCA que deja la ventana de hoy, no una fecha", async () => {
+  const { textoEsExacto } = await import("@/lib/quotes/desde-plan");
+  const { MARCA_EXACTO } = await import("@/components/dashboard/plan-tratamiento-rediseno/plan-clinico");
+  const deHoy = descripcionDeVentana([reng({ procedimiento: "Resina", precio: "500.50" })]);
+  assert.ok(deHoy.includes(`Total de procedimientos:${MARCA_EXACTO}`), "la ventana de hoy deja la marca");
+  assert.equal(MARCA_EXACTO, "\u00a0", "un espacio duro: está en WinAnsi (el PDF del expediente lo pinta como espacio)");
+  assert.equal(textoEsExacto(deHoy), true);
+  // Una pestaña abierta con la ventana de antes que escribe DESPUÉS del despliegue: sin marca → viejo.
+  const pestanaVieja = componerDescripcion({ ...PLAN_VACIO, renglones: [reng({ procedimiento: "Resina", precio: "500.50" })] }, rot);
+  assert.equal(textoEsExacto(pestanaVieja), false);
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: pestanaVieja, totalCost: 500.5 }).ajuste, { tipo: "redondeo", monto: -0.5 }, "nunca «Descuento -$0.50»");
+  assert.equal(armarDocumentoDelPlan({ name: "P", description: deHoy, totalCost: 500.5 }).ajuste, null);
+  assert.equal(textoEsExacto(null), false);
+  assert.equal(textoEsExacto("Una frase"), false);
+  // La ventana real escribe con la marca (y el rótulo del diccionario, que es el que se reconoce).
+  const { readFileSync } = await import("node:fs");
+  const ventana = readFileSync("src/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan.tsx", "utf8");
+  assert.match(ventana, /total: t\("planTratamiento\.texto\.total"\)/);
+  assert.match(ventana, /dinero: \(n: number\) => dineroExacto\(n\)/);
+  assert.match(ventana, /exacto: true/);
+  // Por la ruta, con la misma pestaña vieja:
+  db.plans[0].description = pestanaVieja;
+  db.plans[0].totalCost = 500.5;
+  const texto = await textoDe(await GET("cmabc123def456ghi789jkl0"));
+  assert.ok(tiene(texto, "Redondeo de precios") && !tiene(texto, "Descuento"));
+});
+
+test("t8 v3 N3-P7: un plan VIEJO con «$1,000.00» en sus notas o diagnóstico sigue siendo viejo (sin «Descuento -$0.50»)", async () => {
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  const desc = componerDescripcion(
+    { ...PLAN_VACIO, diagnostico: "Caries; anticipo $1,000.00", renglones: [reng({ procedimiento: "Resina", precio: "500.50" })], notas: "Dejó $2,500.50 de anticipo" },
+    rot,
+  );
+  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 500.5 }).ajuste, { tipo: "redondeo", monto: -0.5 });
+});
+
+test("t8 v3 N3-P3: cantidad «0»: la ventana no la deja (vale 1); un «0 ×» de antes sale tal cual ($0) en el PDF, sin «Descuento», y «Convertir» no lo cobra", async () => {
+  const { soloEntero, cantidadDe, importeRenglon } = await import("@/components/dashboard/plan-tratamiento-rediseno/plan-clinico");
+  assert.equal(soloEntero("0"), "");
+  assert.equal(soloEntero("007"), "7");
+  assert.equal(soloEntero("10"), "10");
+  assert.equal(cantidadDe({ cantidad: "0" }), 1);
+  assert.equal(importeRenglon(reng({ cantidad: "0", precio: "500" })), 500);
+  assert.match(descripcionDeVentana([reng({ procedimiento: "Resina", cantidad: "0", precio: "500" })]), /1 × \$500 = \$500/, "nunca se escribe «0 ×»");
+  // Un texto de antes con «0 ×»:
+  const viejo = "▸ Fase I · Higiénica — $800\n• Resina · 0 × $500 = $0\n• Limpieza dental · 1 × $800 = $800\n\n▸ Total de procedimientos: $800";
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  const d = armarDocumentoDelPlan({ name: "P", description: viejo, totalCost: 800 });
+  assert.deepEqual(d.grupos[0].renglones.map((r) => [r.nombre, r.cantidad, r.importe]), [["Resina", 0, 0], ["Limpieza dental", 1, 800]]);
+  assert.equal(d.ajuste, null, "sin «Descuento -$500» falso");
+  const { armarPresupuestoDePlan } = await import("@/lib/quotes/desde-plan");
+  const c = armarPresupuestoDePlan({ name: "P", description: viejo, totalCost: 800 }, []).conceptos[0];
+  assert.deepEqual([c.quantity, c.unitPrice, c.notes], [1, 0, "0 × $500"], "«Convertir» no cobra $500 por esa línea");
+  db.plans[0].description = viejo;
+  db.plans[0].totalCost = 800;
+  const texto = await textoDe(await GET("cmabc123def456ghi789jkl0"));
+  assert.ok(!tiene(texto, "Descuento") && !tiene(texto, "Ajuste"));
+});
+
+test("t8 v3 N3-P4: un plan confirmado en $0 se convierte en $0 (el tarifario no lo rellena) y la vista previa lo avisa", async () => {
+  const { armarPresupuestoDePlan } = await import("@/lib/quotes/desde-plan");
+  const desc = descripcionDeVentana([reng({ procedimiento: "Limpieza dental" })]);
+  const r = armarPresupuestoDePlan({ name: "Garantía", description: desc, totalCost: 0 }, [{ id: "l", name: "Limpieza dental", basePrice: 800 }]);
+  assert.deepEqual(r.conceptos.map((c) => [c.unitPrice, c.origen]), [[0, "sinPrecio"]]);
+  assert.equal(r.total, 0);
+  assert.equal(r.sinPrecio, 1, "la vista previa avisa del concepto en $0");
+  // Con costo y sin precios por renglón, sí se costea con el tarifario (como siempre).
+  assert.equal(armarPresupuestoDePlan({ name: "P", description: desc, totalCost: 800 }, [{ id: "l", name: "Limpieza dental", basePrice: 800 }]).conceptos[0].unitPrice, 800);
+});
+
+test("t8 v3 N3-P6: el aviso de «Convertir» llama cortesía a un concepto en $0, como la ventana del plan", async () => {
+  const { readFileSync } = await import("node:fs");
+  const texto = readFileSync("src/components/dashboard/plan-a-presupuesto/textos-convertir-presupuesto.ts", "utf8");
+  assert.match(texto, /1 concepto va en \$0 \(cortesía\)\. Si no lo es, ponle precio/);
+  assert.doesNotMatch(texto, /no tiene precio: complétalo/);
+  assert.match(texto, /1 item is at \$0 \(complimentary\)/);
+});
+
+test("t8 v3 N3-P8: un precio tecleado con tres decimales («100.004») se redondea a centavos antes del importe: sin «Ajuste +$0.01»", async () => {
+  const { importeRenglon, precioDe } = await import("@/components/dashboard/plan-tratamiento-rediseno/plan-clinico");
+  const r = reng({ procedimiento: "Resina", cantidad: "3", precio: "100.004" });
+  assert.equal(precioDe(r), 100);
+  assert.equal(importeRenglon(r), 300);
+  const desc = descripcionDeVentana([r]);
+  assert.match(desc, /3 × \$100 = \$300/);
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  assert.equal(armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 300 }).ajuste, null);
+  assert.equal(importeRenglon(reng({ cantidad: "3", precio: "100.005" })), 300.03, "medio centavo sube, como siempre");
+});
+
 /** Corre `fn` con el logo de prueba servido; lo demás (el wasm del maquetador de @react-pdf) sigue su camino. */
 async function conLogo<T>(fn: () => Promise<T>): Promise<T> {
   CLINICAS.c1.logoUrl = "https://logo.prueba/logo.png";
@@ -684,62 +679,60 @@ async function conLogo<T>(fn: () => Promise<T>): Promise<T> {
 
 /** Descripción escrita como la escribe HOY la ventana (dinero con centavos solo si los hay). */
 const descripcionDeVentana = (renglones: Renglon[], extra: Record<string, string> = {}) =>
-  componerDescripcion({ ...PLAN_VACIO, renglones, ...extra }, { ...rot, dinero: (n) => dineroExacto(n) });
+  componerDescripcion({ ...PLAN_VACIO, renglones, ...extra }, rotExacto);
 
 test("muestras: con MUESTRA_DIR=<carpeta> deja los PDF de muestra (datos inventados)", async (t) => {
   const dir = process.env.MUESTRA_DIR;
   if (!dir) return t.skip("sin MUESTRA_DIR");
   const id = "cmabc123def456ghi789jkl0";
+  const guardar = async (nombre: string) => writeFileSync(`${dir}/${nombre}.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
   await conLogo(async () => {
-    // 1 · El de siempre: descuento a mano, todo facturado a su precio → pagado y saldo.
-    db.plans[0].totalCost = 10300;
+    // Facturas y cobros del plan, a propósito: el PDF ya NO los imprime (decisión del gerente, t8 vuelta 3).
     db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
     db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 3500, total: 10300 }];
-    writeFileSync(`${dir}/plan-muestra-1-saldo.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
 
-    // 2 · Centavos, una cortesía en $0 y un presupuesto con 10 % de descuento real → sin pagos (t8).
+    // 1 · Plan de hoy con un descuento tecleado (costo $10,300 frente a $10,800 de procedimientos).
+    db.plans[0].totalCost = 10300;
+    await guardar("plan-muestra-1-descuento");
+
+    // 2 · Centavos, una cortesía en $0 (en el tarifario a $500) y una cantidad «0» tecleada (se guarda 1).
     db.plans[0].description = descripcionDeVentana([
       reng({ fase: "higienica", procedimiento: "Revisión", motivo: "Control" }),
       reng({ fase: "higienica", procedimiento: "Resina compuesta", dientes: "16", caras: ["O"], cantidad: "3", precio: "500.50", motivo: "Caries" }),
-      reng({ fase: "restauradora", procedimiento: "Incrustación de porcelana", dientes: "36", precio: "4250.75" }),
+      reng({ fase: "restauradora", procedimiento: "Incrustación de porcelana", dientes: "36", cantidad: soloEntero("0"), precio: "4250.75" }),
     ]);
     db.plans[0].totalCost = 5752.25;
     db.catalogo = [{ id: "rev", name: "Revisión", basePrice: 500 }];
-    db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 2000, total: 5177.03 }];
-    writeFileSync(`${dir}/plan-muestra-2-centavos-cortesia-descuento.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+    await guardar("plan-muestra-2-centavos-cortesia");
 
     // 3 · Plan largo (varias hojas) con nombres con emoji y otros alfabetos.
     db.plans[0].description = descripcionDeVentana(planLargo());
     db.plans[0].totalCost = 38 * 1500;
     db.plans[0].patient = { firstName: "Zoë 🙂", lastName: "Ñañez Иванова", patientNumber: "P-0099" };
     db.plans[0].name = "Rehabilitación con implantes 🦷";
-    db.quotes = [];
-    db.invoices = [];
     db.catalogo = [];
-    writeFileSync(`${dir}/plan-muestra-3-largo-emoji.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+    await guardar("plan-muestra-3-largo-emoji");
 
-    // 4 · Plan VIEJO (texto redondeado a pesos): «Redondeo de precios», una cantidad 1.5 y nombres con Ł/ễ.
+    // 4 · Plan VIEJO (sin la marca: texto redondeado a pesos): «Redondeo de precios», una cantidad 1.5,
+    //     un «0 ×» de antes y nombres con Ł/ễ.
     db.plans[0].description = componerDescripcion(
       { ...PLAN_VACIO, renglones: [
         reng({ fase: "higienica", procedimiento: "Resina", dientes: "16", cantidad: "3", precio: "500.50", motivo: "Caries" }),
         reng({ fase: "higienica", procedimiento: "Blanqueamiento por sesión", cantidad: "1.5", precio: "800" }),
       ] },
       rot,
-    );
+    ).replace("• Blanqueamiento", "• Sellador · 0 × $350 = $0\n• Blanqueamiento");
     db.plans[0].totalCost = 2701.5;
-    db.plans[0].createdAt = VIEJO;
     db.plans[0].patient = { firstName: "Łukasz", lastName: "Nguyễn", patientNumber: "P-0100" };
     db.plans[0].name = "Rehabilitación";
-    writeFileSync(`${dir}/plan-muestra-4-viejo-redondeo-cantidad.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+    await guardar("plan-muestra-4-viejo-redondeo-cantidades");
 
-    // 5 · Plan NUEVO con descuento real tecleado y todo facturado a ese precio → pagado y saldo.
+    // 5 · Plan de hoy, 24 × $1,500 con costo de $35,990: «Descuento -$10», sin pagos aunque haya cobros.
     db.plans[0].description = descripcionDeVentana([reng({ procedimiento: "Mensualidad de ortodoncia", cantidad: "24", precio: "1500" })]);
     db.plans[0].totalCost = 35990;
-    db.plans[0].createdAt = NUEVO;
     db.plans[0].patient = { firstName: "Ana", lastName: "López", patientNumber: "P-0042" };
-    db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
     db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 12000, total: 35990 }];
-    writeFileSync(`${dir}/plan-muestra-5-descuento-real-pagos.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+    await guardar("plan-muestra-5-descuento-sin-pagos");
   });
 });
 
@@ -748,6 +741,6 @@ test("textos: es.json y en.json tienen las mismas llaves de planTratamiento.pdf,
   const en = (await import("@/i18n/dictionaries/en.json")).default as any;
   const llaves = Object.keys(es.planTratamiento.pdf).sort();
   assert.deepEqual(Object.keys(en.planTratamiento.pdf).sort(), llaves);
-  for (const k of ["boton", "titulo", "firmaPaciente", "total", "saldo", "pagina", "archivo"]) assert.ok(llaves.includes(k), k);
+  for (const k of ["boton", "titulo", "firmaPaciente", "total", "redondeo", "pagina", "archivo"]) assert.ok(llaves.includes(k), k);
   assert.doesNotMatch(JSON.stringify(es.planTratamiento.pdf), /\b(intentá|podés|tenés|usted)\b/i);
 });

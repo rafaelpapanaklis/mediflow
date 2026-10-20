@@ -20,16 +20,17 @@
 //  · el TOTAL es siempre el costo del plan (`totalCost`), el mismo que enseña la ficha;
 //  · si el costo no cuadra con la suma de los renglones, la diferencia lleva el nombre que
 //    se puede asegurar (`nombreDeLaDiferencia`): «Descuento»/«Ajuste» cuando el texto es
-//    exacto; «Redondeo de precios» solo en un plan VIEJO cuyo costo coincide con el total
-//    de procedimientos que él mismo escribió (la diferencia es solo el redondeo a pesos del
-//    texto); y si en un plan viejo no se puede separar redondeo de descuento, el neutro
-//    «Ajuste» con su signo — que nunca esconde la cifra ni inventa un descuento;
+//    exacto (lo dice la marca de la ventana, `textoEsExacto`); «Redondeo de precios» solo en
+//    un plan VIEJO (sin marca) cuyo costo coincide con el total de procedimientos que él mismo
+//    escribió (la diferencia es solo el redondeo a pesos del texto); y si en un plan viejo no
+//    se puede separar redondeo de descuento, el neutro «Ajuste» con su signo — que nunca
+//    esconde la cifra ni inventa un descuento;
 //  · el plan no tiene IVA ni descuentos propios (`model TreatmentPlan` no tiene dónde);
-//  · PAGADO y SALDO salen juntos o no salen (`pagosParaElPapel`): solo cuando todo el
-//    dinero de las facturas es de este plan sin duda y lo facturado es exactamente su costo.
+//  · NI «Pagado» NI «Saldo» (decisión del gerente, tercera vuelta t8): dieron un hallazgo alto
+//    en tres revisiones seguidas y Rafael pidió el plan «con precios». Lo pagado se consulta en
+//    el estado de cuenta del paciente, no en este papel.
 
-import { leerRenglonesDelPlan, leerTotalDelPlan } from "@/lib/quotes/desde-plan";
-import { textoPuedeEstarRedondeado } from "./dinero-exacto";
+import { leerRenglonesDelPlan, leerTotalDelPlan, textoPuedeEstarRedondeado } from "@/lib/quotes/desde-plan";
 
 /** Diferencias menores a medio centavo no son diferencias. */
 const CENTAVO = 0.005;
@@ -45,8 +46,6 @@ export interface PlanParaPdf {
   name: string;
   description: string | null;
   totalCost: number;
-  /** Para saber si el texto pudo redondear precios (`textoPuedeEstarRedondeado`). */
-  createdAt?: Date | string | null;
 }
 
 export interface RenglonPdf {
@@ -70,24 +69,6 @@ export interface GrupoPdf {
   subtotal: number | null;
 }
 
-/** Lo que el servidor sabe de las facturas de los presupuestos del plan. */
-export interface PagosDelPlan {
-  /** Facturas vivas encontradas. 0 = el sistema no sabe de pagos de este plan. */
-  facturas: number;
-  /** Σ `paid` de esas facturas. */
-  pagado: number;
-  /** Σ `total` de esas facturas (ya con el descuento del presupuesto, si lo hubo). */
-  facturado: number;
-  /** Σ lo que falta pagar de cada una (total − pagado, nunca negativo). */
-  porPagar: number;
-  /**
-   * Todo ese dinero es de ESTE plan sin duda: los presupuestos solo traen conceptos del plan,
-   * no hay abonos viejos aplicados por saldo a favor (que se contarían dos veces) y los cargos
-   * se pudieron leer. Si no, no se imprime nada de pagos.
-   */
-  soloDelPlan: boolean;
-}
-
 export type TipoAjuste = "redondeo" | "descuento" | "ajuste";
 
 export interface DocumentoDelPlan {
@@ -99,8 +80,6 @@ export interface DocumentoDelPlan {
   /** total − subtotal con su nombre; null si cuadra. */
   ajuste: { tipo: TipoAjuste; monto: number } | null;
   total: number;
-  /** null = no se imprime nada de pagos. Cuando sale, salen los dos. */
-  pagos: { pagado: number; saldo: number } | null;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -113,22 +92,6 @@ function zonaDe(dientes: string, caras: string): string {
   const lista = dientes ? dientes.split(",").map((d) => d.trim()).filter(Boolean).join(", ") : "";
   if (!lista) return "";
   return caras ? `${lista} (${caras})` : lista;
-}
-
-/**
- * Pagado y saldo, JUNTOS o nada (revisiones t4 P1 y t8 N-P1/N-P3). Solo cuando:
- *  · el servidor asegura que todo el dinero es de este plan (`soloDelPlan`);
- *  · lo facturado es exactamente el costo del plan (con un descuento del presupuesto o una
- *    parte sin facturar, «Pagado» invita a una resta que no es la deuda);
- *  · lo pagado no pasa del total.
- * Entonces el saldo es lo que falta de esas facturas.
- */
-export function pagosParaElPapel(total: number, pagos: PagosDelPlan | null): DocumentoDelPlan["pagos"] {
-  if (!pagos || pagos.facturas <= 0 || !pagos.soloDelPlan) return null;
-  const pagado = r2(Math.max(0, num(pagos.pagado)));
-  if (Math.abs(r2(num(pagos.facturado)) - total) >= CENTAVO) return null;
-  if (pagado > total + CENTAVO) return null;
-  return { pagado, saldo: r2(Math.max(0, num(pagos.porPagar))) };
 }
 
 /**
@@ -155,10 +118,8 @@ export function nombreDeLaDiferencia(args: {
   return "ajuste";
 }
 
-/**
- * Arma el contenido del PDF. `pagos` llega solo si quien descarga puede ver la facturación.
- */
-export function armarDocumentoDelPlan(plan: PlanParaPdf, pagos: PagosDelPlan | null = null): DocumentoDelPlan {
+/** Arma el contenido del PDF. */
+export function armarDocumentoDelPlan(plan: PlanParaPdf): DocumentoDelPlan {
   // El total es el costo del plan, el que enseña la ficha (también un plan confirmado «sin costo»).
   const total = Math.max(0, r2(num(plan.totalCost)));
   const leidos = leerRenglonesDelPlan(plan.description);
@@ -171,7 +132,6 @@ export function armarDocumentoDelPlan(plan: PlanParaPdf, pagos: PagosDelPlan | n
       subtotal: total,
       ajuste: null,
       total,
-      pagos: pagosParaElPapel(total, pagos),
     };
   }
 
@@ -179,7 +139,8 @@ export function armarDocumentoDelPlan(plan: PlanParaPdf, pagos: PagosDelPlan | n
   const conPrecio = leidos.some((l) => l.precio != null && l.precio > 0);
   let toleranciaRedondeo = 0;
   const renglones: RenglonPdf[] = leidos.map((leido) => {
-    const cantidad = leido.cantidad > 0 ? leido.cantidad : 1;
+    // Tal cual, también un «0 ×» de un plan de antes (importe $0; t8, N3-P3).
+    const cantidad = leido.cantidad >= 0 ? leido.cantidad : 1;
     let precioUnitario: number | null;
     if (!conPrecio) precioUnitario = null;
     else if (leido.precio == null || leido.precio <= 0) precioUnitario = 0; // cortesía: $0, como en el plan
@@ -219,7 +180,6 @@ export function armarDocumentoDelPlan(plan: PlanParaPdf, pagos: PagosDelPlan | n
     subtotal,
     ajuste: tipo ? { tipo, monto: diferencia } : null,
     total,
-    pagos: pagosParaElPapel(total, pagos),
   };
 }
 

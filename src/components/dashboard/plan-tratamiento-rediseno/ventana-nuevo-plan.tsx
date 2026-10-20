@@ -117,6 +117,8 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     // Con centavos cuando los hay: el texto del plan es de donde los vuelven a leer el PDF y
     // «Convertir en presupuesto»; redondeado a pesos, $500.50 se leía $501 (ws1-t12, P2).
     dinero: (n: number) => dineroExacto(n),
+    // …y lo deja dicho con la marca de «precios exactos» (t8, N3-P2): el PDF y «Convertir» se fían de ella.
+    exacto: true,
   }), [t]);
 
   const total = totalProcedimientos(plan.renglones);

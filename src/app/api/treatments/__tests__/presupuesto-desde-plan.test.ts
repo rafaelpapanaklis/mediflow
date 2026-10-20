@@ -161,16 +161,17 @@ test("permisos: solo lectura recibe 403; un paciente oculto es 404", async () =>
   assert.equal(db.quotes.length, 0);
 });
 
-test("t8 N-P2: un plan NUEVO (creado con la ventana de ahora) con «$450» pasa a $450 aunque el tarifario diga $449.60", async () => {
+test("t8 N-P2 / N3-P2: un plan escrito por la ventana de hoy (con su marca) con «$450» pasa a $450 aunque el tarifario diga $449.60", async () => {
   db.catalogo = [{ id: "pr-resina", clinicId: "c1", name: "Resina", basePrice: 449.6, isActive: true }];
+  const renglones = [reng("Resina", { precio: "450", cantidad: "1" })];
   db.plans.push({
     id: "plan-nuevo", clinicId: "c1", patientId: "p1", doctorId: "u1", name: "Nuevo", totalCost: 450,
-    description: componerDescripcion({ ...PLAN_VACIO, renglones: [reng("Resina", { precio: "450" })] }, rot),
-    createdAt: new Date("2026-10-22T12:00:00Z"),
+    // Con el rótulo real de la ventana («Total de procedimientos»): la marca va en esa línea.
+    description: componerDescripcion({ ...PLAN_VACIO, renglones }, { ...rot, total: "Total de procedimientos", exacto: true }),
   });
   const { body } = await leer(await GET({} as any, params("plan-nuevo")));
   assert.equal(body.conceptos[0].unitPrice, 450);
-  // El mismo plan, si es de antes del cambio, sí toma el exacto del tarifario (su texto redondeó).
-  db.plans[db.plans.length - 1].createdAt = new Date("2026-09-01T12:00:00Z");
+  // El mismo plan SIN la marca (de antes del cambio) sí toma el exacto del tarifario: su texto redondeó.
+  db.plans[db.plans.length - 1].description = componerDescripcion({ ...PLAN_VACIO, renglones }, rot);
   assert.equal((await leer(await GET({} as any, params("plan-nuevo")))).body.conceptos[0].unitPrice, 449.6);
 });

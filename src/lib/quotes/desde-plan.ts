@@ -10,7 +10,7 @@
 // del tarifario redondea a lo escrito, se usa el del tarifario (el exacto); si no, el escrito.
 
 import type { QuoteItemInput } from "./types";
-import { FASES, FASE_CLAVE } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
+import { FASES, FASE_CLAVE, MARCA_EXACTO } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { getDict } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
 import { dineroExacto } from "@/lib/treatments/dinero-exacto";
@@ -100,8 +100,9 @@ function leerLinea(linea: string, fase: number, faseNombre: string): RenglonLeid
     const cuanto = CUANTO.exec(trozo.trim());
     if (cuanto) {
       // Tal cual (revisión t8, N-P4): un plan viejo pudo guardar «1.5 ×». La ventana ya solo acepta enteros.
+      // Un «0 ×» (un plan de antes lo pudo guardar) se respeta: importe $0 (t8, N3-P3).
       const c = Number(cuanto[1]);
-      cantidad = Number.isFinite(c) && c > 0 ? c : 1;
+      cantidad = Number.isFinite(c) && c >= 0 ? c : 1;
       precio = leerDinero(cuanto[2]);
     } else if (trozo.trim()) {
       motivos.push(trozo.trim().replace(MOTIVO, ""));
@@ -169,6 +170,29 @@ export function leerTotalDelPlan(description: string | null | undefined): number
 }
 
 /**
+ * ¿Lo escribió la ventana de hoy, con los precios exactos? Se fía SOLO de la marca que ella deja
+ * (`MARCA_EXACTO`, un espacio duro tras «Total de procedimientos:») — nada de fechas ni de buscar
+ * centavos en el texto, que unas notas con «$1,000.00» harían pasar por exacto (t8, N3-P2 y N3-P7).
+ * Sin marca = plan de antes: sus precios pudieron quedar redondeados a pesos.
+ */
+export function textoEsExacto(description: string | null | undefined): boolean {
+  if (!description || !description.startsWith(MARCA)) return false;
+  for (const linea of description.split("\n")) {
+    const l = linea.trim();
+    if (!l.startsWith(MARCA.trim())) continue;
+    const dos = l.indexOf(":");
+    if (dos < 0 || !TOTALES_CONOCIDOS.has(normalizar(l.slice(0, dos).replace(/^▸\s*/, "")))) continue;
+    return l.charAt(dos + 1) === MARCA_EXACTO;
+  }
+  return false;
+}
+
+/** Lo contrario: los precios del texto pudieron quedar redondeados a pesos (plan de antes). */
+export function textoPuedeEstarRedondeado(plan: { description: string | null | undefined }): boolean {
+  return !textoEsExacto(plan.description);
+}
+
+/**
  * Los renglones que la ventana del plan escribió en `description`. Solo lee las viñetas «• …» que
  * siguen a un encabezado de fase; diagnóstico, pronóstico, total, alternativa y notas se ignoran.
  * Una descripción de las de antes (una frase) no trae renglones: devuelve [].
@@ -211,9 +235,9 @@ const redondear2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface OpcionesDelArmado {
   /**
-   * ¿Los precios del texto pudieron quedar redondeados a pesos? (`textoPuedeEstarRedondeado`,
-   * lib/treatments/dinero-exacto). Solo entonces el precio exacto del tarifario puede corregir uno
-   * del texto. Sin decirlo se supone que sí, que es lo que ya hacía (revisión t8, N-P2).
+   * ¿Los precios del texto pudieron quedar redondeados a pesos? Solo entonces el precio exacto del
+   * tarifario puede corregir uno del texto. Sin decirlo se lee de la marca del texto
+   * (`textoPuedeEstarRedondeado`): sin marca, sí (revisión t8, N-P2 / N3-P2).
    */
   textoRedondeado?: boolean;
 }
@@ -224,7 +248,7 @@ export function armarPresupuestoDePlan(
   tarifario: ProcedimientoTarifario[],
   opciones: OpcionesDelArmado = {},
 ): PresupuestoDePlan {
-  const textoRedondeado = opciones.textoRedondeado ?? true;
+  const textoRedondeado = opciones.textoRedondeado ?? textoPuedeEstarRedondeado(plan);
   const porNombre = new Map<string, ProcedimientoTarifario>();
   for (const p of tarifario) {
     const k = normalizar(p.name);
@@ -238,9 +262,12 @@ export function armarPresupuestoDePlan(
     ? [{ nombre: plan.name.trim() || "Plan de tratamiento", dientes: "", cantidad: 1, precio: costo > 0 ? costo : null, fase: 1, faseNombre: "", caras: "", motivo: "" }]
     : leidos;
   // Con algún renglón con precio, uno sin precio es una CORTESÍA en $0: así lo avisa la ventana al
-  // crear el plan («Se guardará en $0 y así pasará al presupuesto»). Solo un plan sin ningún precio
-  // por renglón se costea con el tarifario (revisión t8, efecto lateral de P3).
+  // crear el plan («Se guardará en $0 y así pasará al presupuesto»). Un plan confirmado en $0
+  // («¿Crear el plan en $0?») tampoco toma precios del tarifario: el presupuesto sale en $0 igual
+  // que su PDF, y la vista previa avisa de cada concepto en $0 (t8, N3-P4). Solo un plan CON costo
+  // y sin ningún precio por renglón se costea con el tarifario (revisión t8, efecto lateral de P3).
   const conPrecio = base.some((r) => r.precio != null && r.precio > 0);
+  const costeaConTarifario = !conPrecio && costo > 0;
 
   const conceptos: ConceptoDePlan[] = base.map((r) => {
     const t = porNombre.get(normalizar(r.nombre)) ?? null;
@@ -253,13 +280,14 @@ export function armarPresupuestoDePlan(
     if (r.precio != null && r.precio > 0) {
       unitPrice = tarifarioExacto && t ? redondear2(t.basePrice) : r.precio;
       origen = tarifarioExacto ? "tarifario" : "plan";
-    } else if (!conPrecio && t && t.basePrice > 0) {
+    } else if (costeaConTarifario && t && t.basePrice > 0) {
       unitPrice = redondear2(t.basePrice);
       origen = "tarifario";
     }
-    // `QuoteItem.quantity` es entero: una cantidad con decimales de un plan viejo («1.5 ×») pasa
-    // como 1 al importe exacto, y la nota dice cuánto era (revisión t8, N-P4).
-    const entera = Number.isInteger(r.cantidad);
+    // `QuoteItem.quantity` es entero y de 1 en adelante: una cantidad con decimales («1.5 ×») o un
+    // «0 ×» de un plan viejo pasa como 1 al importe exacto ($750, $0), y la nota dice cuánto era
+    // (revisión t8, N-P4 y N3-P3).
+    const entera = Number.isInteger(r.cantidad) && r.cantidad >= 1;
     const quantity = entera ? r.cantidad : 1;
     const notas = [!entera ? `${r.cantidad} × ${dineroExacto(unitPrice)}` : "", r.motivo].filter(Boolean).join(" · ");
     if (!entera) unitPrice = redondear2(r.cantidad * unitPrice);

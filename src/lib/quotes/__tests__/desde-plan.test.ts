@@ -126,12 +126,13 @@ test("armado: el procedimiento del tarifario se enlaza por nombre (sin mayúscul
   assert.equal(r.sinTarifario, 0);
 });
 
-test("armado: un renglón sin precio toma el del tarifario; sin tarifario queda en 0 y se avisa", () => {
+test("armado: en un plan CON costo y sin precios por renglón, un renglón toma el del tarifario; sin tarifario queda en 0 y se avisa", () => {
+  // Con costo $0 (plan confirmado en $0) ya no se costea con el tarifario: ver «t8 v3 N3-P4».
   const texto = componerDescripcion(
     plan([renglon({ procedimiento: "Limpieza dental" }), renglon({ procedimiento: "Procedimiento raro" })]),
     rot,
   );
-  const r = armarPresupuestoDePlan({ name: "Plan", description: texto, totalCost: 0 }, TARIFARIO);
+  const r = armarPresupuestoDePlan({ name: "Plan", description: texto, totalCost: 800 }, TARIFARIO);
   assert.equal(r.conceptos[0].unitPrice, 800);
   assert.equal(r.conceptos[1].unitPrice, 0);
   assert.equal(r.conceptos[1].origen, "sinPrecio");

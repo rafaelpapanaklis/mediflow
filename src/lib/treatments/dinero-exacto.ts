@@ -16,35 +16,6 @@ export function dineroExacto(n: number): string {
   }).format(v);
 }
 
-// ── ¿El texto del plan pudo redondear sus precios? (revisión t8, N-P2 y N-P5) ──
-//
-// Antes de `dineroExacto`, la ventana escribía los precios con `formatCurrency`: $500.50 quedaba «$501».
-// Un plan nuevo con precios enteros («$450») y uno viejo redondeado («$450» por $449.60) escriben EL
-// MISMO texto, así que el texto solo no basta: manda la fecha de creación. El texto lo escribe la
-// ventana al crear el plan (editarlo después no lo reescribe), así que un plan creado desde
-// `FECHA_DINERO_EXACTO` trae sus precios exactos. Un texto con centavos es nuevo sin duda.
-//
-// ⚠️ DECISIÓN PARA RAFAEL: esta fecha tiene que ser la del DESPLIEGUE de este cambio. Si se despliega
-// después, los planes creados entre esta fecha y el despliegue (con la ventana vieja) se tratan como
-// exactos: un redondeo suyo saldría como «Descuento»/«Ajuste». Si se despliega antes, nada se rompe:
-// solo esos días cuentan como viejos.
-
-/** Desde cuándo la ventana del plan escribe los precios con centavos. */
-export const FECHA_DINERO_EXACTO = new Date("2026-10-21T00:00:00-06:00");
-
-/** «$1,250.50» en algún monto del texto: lo escribió `dineroExacto` (un redondeo viejo nunca trae centavos). */
-export function textoConCentavos(texto: string | null | undefined): boolean {
-  return !!texto && /\$\s?[\d,]*\d\.\d{2}(?!\d)/.test(texto);
-}
-
-/**
- * ¿Los precios del texto pudieron quedar redondeados a pesos? Solo un plan creado antes de
- * `FECHA_DINERO_EXACTO` y sin un solo centavo en su texto. Sin fecha (no debería pasar) se supone
- * viejo, que es lo que nunca inventa un descuento.
- */
-export function textoPuedeEstarRedondeado(plan: { createdAt?: Date | string | null; description: string | null | undefined }): boolean {
-  if (textoConCentavos(plan.description)) return false;
-  if (plan.createdAt == null) return true;
-  const creado = new Date(plan.createdAt);
-  return Number.isNaN(creado.getTime()) || creado.getTime() < FECHA_DINERO_EXACTO.getTime();
-}
+// Si un texto de plan trae sus precios exactos o redondeados (los de antes de esta función) no lo
+// dice una fecha: lo dice la marca que deja la ventana de hoy (`MARCA_EXACTO` en plan-clinico.ts;
+// `textoEsExacto` en lib/quotes/desde-plan.ts). Revisión t8, N3-P2.
