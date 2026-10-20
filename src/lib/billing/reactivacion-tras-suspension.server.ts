@@ -216,10 +216,11 @@ export async function realinearCiclo(
   const yaHecho = (s: Stripe.Subscription) => enPeriodoPagado(s) && (s.trial_end ?? 0) >= trialEnd - 86_400;
   if (yaHecho(sub)) return { tipo: "ya_estaba", hasta: new Date((sub.trial_end ?? trialEnd) * 1000).toISOString() };
   const finCiclo = subscriptionPeriodEndSeconds(sub);
-  // Z3: NUNCA un `trial_end` antes del fin de un periodo que Stripe YA cobró: si el periodo actual termina después de lo que
-  // se busca (la renovación se cobró con el ciclo viejo mientras la regla estaba pendiente), cortarlo quitaría días pagados y
-  // la tarjeta volvería a cobrar antes de tiempo. No se mueve nada.
-  if (sub.status !== "trialing" && finCiclo && finCiclo > trialEnd + CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
+  // Z3/AA4: NUNCA un `trial_end` antes del fin de un periodo que Stripe YA cobró, sin tolerancia en ESE sentido (ni 1 hora): si
+  // el periodo actual está pagado (`active`) y termina después de lo que se busca, cortarlo quitaría días pagados y la tarjeta
+  // volvería a cobrar antes de tiempo. No se mueve nada. Solo cuenta un periodo PAGADO: con `past_due`/`unpaid` el «periodo
+  // actual» es el que Stripe abrió y no se cobró, y ese sí se mueve.
+  if ((sub.status === "active" || sub.status === "trialing") && finCiclo && finCiclo > trialEnd) return { tipo: "no_aplica" };
   // Si el ciclo de Stripe ya termina (casi) cuando termina lo pagado, no hay nada que mover.
   if (!args.exacto && sub.status !== "trialing" && finCiclo && Math.abs(finCiclo - trialEnd) <= CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
   // Z17: el interruptor apagado solo se avisa si HABÍA algo que mover (lo anterior ya salió como «no aplica»).

@@ -70,8 +70,14 @@ export function esPeriodoCompleto(invoice: Stripe.Invoice, sub: Stripe.Subscript
   const esperado = mesesPlan * 30.44 * 86_400;
   let max = 0;
   for (const l of invoice.lines?.data ?? []) {
-    const p = (l as { period?: { start?: number; end?: number } }).period;
-    if (p?.start && p?.end) max = Math.max(max, p.end - p.start);
+    const linea = l as { period?: { start?: number; end?: number }; proration?: boolean; parent?: { subscription_item_details?: { proration?: boolean } | null } | null };
+    // AA1: una línea de PRORRATEO nunca cuenta, por larga que sea (un prorrateo de 30 días no es un periodo pagado).
+    if (linea.proration === true || linea.parent?.subscription_item_details?.proration === true) continue;
+    const p = linea.period;
+    if (!p?.start || !p?.end) continue;
+    // Y el periodo tiene que EMPEZAR cuando se creó la factura (el ciclo nuevo de «Subir»), no antes.
+    if (invoice.created && Math.abs(p.start - invoice.created) > 86_400) continue;
+    max = Math.max(max, p.end - p.start);
   }
   return max >= esperado * 0.9;
 }
@@ -116,7 +122,9 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
   const viva = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
   if (!["active", "past_due", "unpaid", "trialing"].includes(viva.status)) return NO;
   if (esCambio && !esPeriodoCompleto(invoice, viva)) return NO;
-  const otras = (await facturasAbiertasDelPlan(stripe, clinic.stripeSubscriptionId)).filter((f) => f.id !== invoice.id);
+  // AA2: solo las facturas creadas HASTA el pago. Una renovación que nació DESPUÉS (la regla tardó en completarse y Stripe renovó
+  // con el ciclo viejo) es otra deuda: anularla regalaría ese mes. El margen de 1 minuto cubre el reloj de Stripe.
+  const otras = (await facturasAbiertasDelPlan(stripe, clinic.stripeSubscriptionId, new Date(pagadoEn.getTime() + 60_000))).filter((f) => f.id !== invoice.id);
   const esMes = (f: Stripe.Invoice) => esMesDeServicioSuspendido({ facturaCreadaEn: f.status_transitions?.finalized_at ?? f.created ?? 0, pagoEn: pagadoEn });
   const hayMesesSinServicio = otras.some(esMes);
   if (!fallidaAntes && !pruebaPropia && !hayMesesSinServicio) return NO;

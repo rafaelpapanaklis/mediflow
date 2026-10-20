@@ -54,7 +54,8 @@ test("cobro fallido: una factura de módulo no suspende a la clínica", () => {
 });
 
 test("cobro fallido de módulo: igual se registra, para que salga en «por cobrar»", () => {
-  assert.match(caso("invoice.payment_failed"), /recordStripeInvoice\(invoice, clinicId, "failed"\)/);
+  // (la llamada puede llevar el método de la factura aparte del excedente de CFDI como 4.º argumento)
+  assert.match(caso("invoice.payment_failed"), /recordStripeInvoice\(invoice, clinicId, "failed"[,)]/);
 });
 
 test("factura pagada de módulo: se registra el cobro y se corta ANTES de los correos de plan y de la comisión", () => {

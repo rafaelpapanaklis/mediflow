@@ -382,3 +382,22 @@ test("Y2/Y12 un `trialing` SIN nuestra marca (p. ej. la prueba la puso el admin 
   assert.equal(llamadasTarjeta.updates.length, 0);
   assert.equal(clinica.plan, "BASIC");
 });
+
+test("AA1 /api/billing/change-plan responde 409 a una clínica SUSPENDIDA o vencida (que use «Pagar mi plan»): sin tocar Stripe, en español con tú y sin nombrar al proveedor", async () => {
+  clinica.stripeSubscriptionId = "sub_x";
+  clinica.plan = "BASIC";
+  for (const estado of [{ subscriptionStatus: "past_due", trialEndsAt: new Date(Date.now() - 3 * 86_400_000) }, { subscriptionStatus: "cancelled", trialEndsAt: new Date(Date.now() - 86_400_000) }]) {
+    Object.assign(clinica, estado);
+    const { res, json } = await subir({ plan: "PRO" });
+    assert.equal(res.status, 409, estado.subscriptionStatus);
+    assert.equal(json.code, "PLAN_SUSPENDIDO");
+    assert.match(json.error, /Pagar mi plan/);
+    assert.match(json.error, /Tu plan está suspendido/);
+    assert.doesNotMatch(json.error, /stripe/i);
+    assert.equal(llamadasTarjeta.prices.length + llamadasTarjeta.updates.length, 0);
+    assert.equal(clinica.plan, "BASIC");
+  }
+  // Una clínica al corriente sigue cambiando de plan como siempre.
+  Object.assign(clinica, { subscriptionStatus: "active", trialEndsAt: new Date(Date.now() + 15 * 86_400_000) });
+  assert.equal((await subir({ plan: "PRO" })).res.status, 200);
+});
