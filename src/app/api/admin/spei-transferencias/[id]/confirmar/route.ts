@@ -35,12 +35,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         amountCents: r.amountCents,
         periodEnd: r.periodEnd.toISOString(),
         subscriptionStatus: "active",
+        facturaTarjeta: r.facturaTarjeta,
       },
     });
     // El SPEI directo no pasa por ninguna página con píxel: solo lo cuenta el servidor.
     await enviarCompraMetaSpei(compraMeta && compraMeta.clinicId === r.clinicId ? compraMeta : null);
     await enviarCompraTiktokSpei(compraMeta && compraMeta.clinicId === r.clinicId ? compraMeta : null); // ws1-t5
-    return NextResponse.json({ success: true, periodEnd: r.periodEnd.toISOString() });
+    return NextResponse.json({ success: true, periodEnd: r.periodEnd.toISOString(), clinicId: r.clinicId, facturaTarjeta: r.facturaTarjeta });
   } catch (err) {
     if (err instanceof SpeiError) {
       return NextResponse.json({ error: err.message }, { status: err.codigo === "no-encontrada" ? 404 : 409 });

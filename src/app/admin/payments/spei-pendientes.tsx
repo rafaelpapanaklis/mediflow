@@ -11,6 +11,12 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { centavosAMxn } from "@/lib/billing/spei-directo-core";
 import type { PendienteAdminDTO } from "@/lib/billing/spei-directo";
+import {
+  AvisoFacturaTarjeta,
+  avisarSiSeMarcoLaFacturaTarjeta,
+  fallóElMarcadoDeLaFacturaTarjeta,
+  type AvisoFacturaTarjetaDatos,
+} from "./aviso-factura-tarjeta";
 
 /**
  * Transferencias SPEI (directas a la cuenta de la plataforma) que las clínicas
@@ -32,6 +38,8 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
   const [cargando, setCargando] = useState<string | null>(null);
   const [rechazando, setRechazando] = useState<PendienteAdminDTO | null>(null);
   const [motivo, setMotivo] = useState("");
+  // Al confirmar: la activación quedó, pero Stripe no dejó marcar la factura de tarjeta como pagada.
+  const [avisoTarjeta, setAvisoTarjeta] = useState<AvisoFacturaTarjetaDatos | null>(null);
 
   async function llamar(id: string, accion: "confirmar" | "rechazar", cuerpo?: object): Promise<boolean> {
     setCargando(id);
@@ -41,8 +49,13 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cuerpo ?? {}),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; clinicId?: string; facturaTarjeta?: { tipo?: string } };
       if (!res.ok) throw new Error(data.error ?? "No se pudo completar");
+      if (accion === "confirmar") {
+        const fila = filas.find((f) => f.id === id);
+        if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta({ clinicId: data.clinicId ?? fila?.clinicId ?? "", clinicName: fila?.clinicName });
+        else avisarSiSeMarcoLaFacturaTarjeta(data);
+      }
       setFilas((prev) => prev.filter((f) => f.id !== id));
       router.refresh();
       return true;
@@ -62,7 +75,7 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
         `Confirma solo si ya ves ${centavosAMxn(f.amountCents)} MXN de ${f.clinicName} en tu banco ` +
         `(referencia ${f.reference}). Se activará su plan ${f.plan} por ${periodo}.` +
         (f.clinicaYaActiva ? " OJO: esta clínica ya está activa; se sumará otro periodo (verifica que no sea un doble pago)." : "") +
-        (f.suscripcionTarjetaViva ? " OJO: tiene una suscripción de TARJETA viva en Stripe; confirmar NO la cancela y podría cobrarle también (cancélala en Stripe si va a pagar por transferencia)." : ""),
+        (f.suscripcionTarjetaViva ? " Tiene una suscripción de TARJETA viva en Stripe: al confirmar, su factura abierta del plan queda pagada fuera de Stripe (la suscripción NO se cancela y el mes siguiente se cobra la tarjeta como siempre)." : ""),
       confirmText: "Confirmar pago",
     });
     if (!ok) return;
@@ -82,6 +95,11 @@ export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {
 
   return (
     <div style={{ maxWidth: 1800, margin: "0 auto", padding: "24px 24px 0" }} id="transferencias-spei">
+      {avisoTarjeta && (
+        <div style={{ marginBottom: 12 }}>
+          <AvisoFacturaTarjeta aviso={avisoTarjeta} onResuelto={() => setAvisoTarjeta(null)} onCerrar={() => setAvisoTarjeta(null)} />
+        </div>
+      )}
       <div
         style={{
           borderRadius: 14,

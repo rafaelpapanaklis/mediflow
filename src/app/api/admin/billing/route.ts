@@ -11,6 +11,7 @@ import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
 import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN } from "@/lib/billing/cobro-rechazado";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
 import { getPlanStatus, isInTrial } from "@/lib/plan-status";
 
 // GET — Dashboard metrics
@@ -147,13 +148,17 @@ export async function POST(req: NextRequest) {
     });
     await sincronizarSedesIncluidas(invoice.clinicId);
 
+    // Pago manual CONFIRMADO: la factura de tarjeta del plan (si la hay, abierta o incobrable) queda pagada fuera de
+    // Stripe para que no la reintente. Si falla, la activación NO se deshace: aviso al admin + bitácora.
+    const facturaTarjeta = await marcarFacturasDeLaClinica(invoice.clinicId);
+
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId: invoice.clinicId,
       entityType: "admin-billing", entityId: invoice.clinicId, action: "update",
-      after: { op: "verify_payment", invoiceId, amount: invoice.amount, subscriptionStatus: "active" },
+      after: { op: "verify_payment", invoiceId, amount: invoice.amount, subscriptionStatus: "active", facturaTarjeta },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, facturaTarjeta });
   }
 
   if (action === "reject_payment") {
@@ -224,13 +229,31 @@ export async function POST(req: NextRequest) {
     ]);
     await sincronizarSedesIncluidas(clinicId);
 
+    // Misma regla que «verificar pago»: la factura de tarjeta del plan queda pagada fuera de Stripe (nunca se cancela
+    // la suscripción: el mes siguiente Stripe cobra la tarjeta normal). Si falla, la activación sigue en pie.
+    const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+
     await logAdminClinicMutation({
       req, admin: admin.user, clinicId,
       entityType: "admin-billing", entityId: clinicId, action: "update",
-      after: { op: "activate_clinic", plan, months: months ?? 1, subscriptionStatus: "active", monthlyPrice },
+      after: { op: "activate_clinic", plan, months: months ?? 1, subscriptionStatus: "active", monthlyPrice, facturaTarjeta },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, facturaTarjeta });
+  }
+
+  // Reintento del aviso «No pudimos marcar la factura de tarjeta como pagada»: vuelve a marcar las facturas abiertas
+  // o incobrables del plan (idempotente: sin facturas abiertas no hace nada). No toca el estado de la clínica.
+  if (action === "marcar_factura_fuera_de_stripe") {
+    const { clinicId } = body;
+    if (!clinicId || typeof clinicId !== "string") return NextResponse.json({ error: "clinicId es obligatorio" }, { status: 400 });
+    const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+    await logAdminClinicMutation({
+      req, admin: admin.user, clinicId,
+      entityType: "admin-billing", entityId: clinicId, action: "update",
+      after: { op: "marcar_factura_fuera_de_stripe", facturaTarjeta },
+    });
+    return NextResponse.json({ success: facturaTarjeta.tipo !== "fallo", facturaTarjeta });
   }
 
   if (action === "suspend_clinic") {
