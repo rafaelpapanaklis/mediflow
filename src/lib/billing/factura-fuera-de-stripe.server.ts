@@ -12,6 +12,7 @@ import {
   realinearCiclo,
   type ResultadoRealineo,
 } from "@/lib/billing/reactivacion-tras-suspension.server";
+import { reintentarReglasPendientes, reglasPendientes } from "@/lib/billing/regla-cobro-tarjeta.server";
 import { getStripeSafe } from "@/lib/stripe";
 
 /**
@@ -38,10 +39,15 @@ import { getStripeSafe } from "@/lib/stripe";
  * `periodo-pagado:<suscripción>:<hasta>`.
  */
 
+export const MENSAJE_FALLO_REGLA_TARJETA =
+  "No pudimos terminar de aplicar un cobro de tarjeta a esta clínica (anular los meses sin servicio o mover el siguiente cobro). Reintenta en un momento.";
 export const MENSAJE_FALLO_MARCADO =
   "No pudimos marcar la factura de tarjeta como pagada; Stripe podría reintentar el cobro. Reintenta o márcala a mano en Stripe.";
-/** El siguiente cobro de la tarjeta se movió a `hasta` (ISO, el fin de lo pagado). */
-export type ResultadoCiclo = { tipo: "movido"; hasta: string };
+/**
+ * `movido`: el siguiente cobro de la tarjeta se movió a `hasta` (ISO, el fin de lo pagado).
+ * `apagado`: el ajuste automático está apagado (`COBRO_REALINEAR_CICLO=0`) y la tarjeta cobrará en su fecha anterior (Y15).
+ */
+export type ResultadoCiclo = { tipo: "movido"; hasta: string } | { tipo: "apagado" };
 
 export type ResultadoMarcado =
   /** Stripe no está configurado o la clínica no tiene suscripción de tarjeta viva: nada que marcar. */
@@ -110,6 +116,7 @@ export function repartirPendientes(
 }
 
 function cicloDelRealineo(r: ResultadoRealineo): ResultadoCiclo | null {
+  if (r.tipo === "apagado") return { tipo: "apagado" };
   if (r.tipo === "hecho" || r.tipo === "ya_estaba" || r.tipo === "cobro_inesperado") return { tipo: "movido", hasta: r.hasta };
   return null;
 }
@@ -164,7 +171,7 @@ export async function marcarFacturasDelPlanPagadasFueraDeStripe(args: {
       const finDeLoPagado = args.finPrepago ?? pagadoEn;
       let realineo: ResultadoRealineo;
       if (huboSuspension) {
-        const r = await aplicarReglaDeSuspension({ stripe, clinicId: args.clinicId, sub, pagadoEn, finDeLoPagado, facturas: suspendidas });
+        const r = await aplicarReglaDeSuspension({ stripe, clinicId: args.clinicId, sub, pagadoEn, finDeLoPagado, facturas: suspendidas, periodoExacto: true });
         anuladas = r.anuladas;
         realineo = r.realineo;
         if (r.fallos.length > 0) fallo = fallo ?? r.fallos[0];
@@ -219,18 +226,35 @@ export async function marcarFacturasDeLaClinica(
 ): Promise<ResultadoMarcado> {
   try {
     if (!clinicId) return { tipo: "sin_tarjeta" };
+    const stripe = getStripeSafe();
     const clinica = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { stripeSubscriptionId: true, trialEndsAt: true } });
     const pago = opciones.soloLasQueYaExistian ? await ultimoPagoManualDelPlan(clinicId) : null;
-    if (opciones.soloLasQueYaExistian && !pago) return { tipo: "nada" };
-    return await marcarFacturasDelPlanPagadasFueraDeStripe({
+    // Reintento: además de lo del último pago manual, se repiten las reglas de COBROS DE TARJETA que quedaron a medias
+    // (rastro `regla_fallo` sin `regla_ok`): es el «Reintentar» de verdad del cobro con tarjeta, con la marca de periodo pagado.
+    let tarjeta: { completadas: string[]; fallos: string[] } | null = null;
+    if (opciones.soloLasQueYaExistian && stripe) {
+      const hay = await reglasPendientes(clinicId);
+      if (hay.length > 0) tarjeta = await reintentarReglasPendientes(stripe, clinicId);
+    }
+    if (opciones.soloLasQueYaExistian && !pago) {
+      if (tarjeta) {
+        return tarjeta.fallos.length > 0
+          ? { tipo: "fallo", mensaje: MENSAJE_FALLO_REGLA_TARJETA, marcadas: [] }
+          : { tipo: "marcadas", facturas: [], anuladas: [] };
+      }
+      return { tipo: "nada" };
+    }
+    const r = await marcarFacturasDelPlanPagadasFueraDeStripe({
       clinicId,
-      stripe: getStripeSafe(),
+      stripe,
       stripeSubscriptionId: clinica?.stripeSubscriptionId ?? null,
       creadasAntesDe: pago?.paidAt ?? null,
       pagadoEn: pago?.paidAt ?? undefined,
       estabaSuspendida: opciones.estabaSuspendida,
       finPrepago: pago ? pago.periodEnd : clinica?.trialEndsAt ?? null,
     });
+    if (tarjeta && tarjeta.fallos.length > 0 && r.tipo !== "fallo") return { tipo: "fallo", mensaje: MENSAJE_FALLO_REGLA_TARJETA, marcadas: r.tipo === "marcadas" ? r.facturas : [] };
+    return r;
   } catch (err) {
     console.error("[factura-fuera-de-stripe] error leyendo la clínica:", (err as Error)?.message ?? err);
     return { tipo: "fallo", mensaje: MENSAJE_FALLO_MARCADO, marcadas: [] };

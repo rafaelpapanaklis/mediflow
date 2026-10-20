@@ -152,26 +152,33 @@ export async function POST(req: NextRequest) {
     // El acceso cubre la DURACIÓN del periodo de la fila (1 mes, 3, 12…) contada desde la verificación —el día y hora en que
     // se confirma el pago— y sobre lo que la clínica ya tuviera pagado si estaba al corriente (M1, V5). Si la fila trae un
     // periodo ya pasado (se verifica tarde), cuenta igual su duración, nunca una fecha vencida.
-    const ahora = new Date();
-    const current = await prisma.clinic.findUnique({
-      where: { id: invoice.clinicId },
-      select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true },
-    });
-    // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
-    const estabaSuspendida = clinicaEstabaSuspendida(current, ahora);
-    const base = inicioDeNuevoPeriodo({ ahora, estadoAntes: current?.subscriptionStatus, trialEndsAt: current?.trialEndsAt, nextBillingDate: current?.nextBillingDate });
-    const nextBilling = finDeLoPagado(base, mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd));
-    // La fila guarda el periodo REAL pagado (de él sale el fin de lo pagado del reintento automático).
-    await prisma.subscriptionInvoice.update({ where: { id: invoiceId }, data: { periodStart: base, periodEnd: nextBilling } });
-    await prisma.clinic.update({
-      where: { id: invoice.clinicId },
-      data: {
-        subscriptionStatus: "active",
-        ...manualPeriodFields(current, nextBilling),
-        monthlyPrice: invoice.amount,
-      },
-    });
-    await sincronizarSedesIncluidas(invoice.clinicId);
+    let estabaSuspendida = false;
+    try {
+      const ahora = new Date();
+      const current = await prisma.clinic.findUnique({
+        where: { id: invoice.clinicId },
+        select: { trialEndsAt: true, nextBillingDate: true, subscriptionStatus: true },
+      });
+      // Estado de ANTES de activarla: si estaba suspendida, los meses sin servicio no se deben (octava vuelta).
+      estabaSuspendida = clinicaEstabaSuspendida(current, ahora);
+      const base = inicioDeNuevoPeriodo({ ahora, estadoAntes: current?.subscriptionStatus, trialEndsAt: current?.trialEndsAt, nextBillingDate: current?.nextBillingDate });
+      const nextBilling = finDeLoPagado(base, mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd));
+      // La fila guarda el periodo REAL pagado (de él sale el fin de lo pagado del reintento automático).
+      await prisma.subscriptionInvoice.update({ where: { id: invoiceId }, data: { periodStart: base, periodEnd: nextBilling } });
+      await prisma.clinic.update({
+        where: { id: invoice.clinicId },
+        data: {
+          subscriptionStatus: "active",
+          ...manualPeriodFields(current, nextBilling),
+          monthlyPrice: invoice.amount,
+        },
+      });
+      await sincronizarSedesIncluidas(invoice.clinicId);
+    } catch (err) {
+      // Si la activación falla, la fila vuelve a como estaba: reintentar «Verificar» no debe dar 409 por una fila ya pagada (Y16).
+      await prisma.subscriptionInvoice.updateMany({ where: { id: invoiceId, status: "paid" }, data: { status: invoice.status, paidAt: invoice.paidAt ?? null } }).catch(() => {});
+      throw err;
+    }
 
     // Pago manual CONFIRMADO: la factura de tarjeta del plan (si la hay, abierta o incobrable) queda pagada fuera de
     // Stripe para que no la reintente. Si falla, la activación NO se deshace: aviso al admin + bitácora.
@@ -203,6 +210,15 @@ export async function POST(req: NextRequest) {
 
   if (action === "activate_clinic") {
     const { clinicId, plan, months, method } = body;
+    // Idempotente (Y5): una activación hace menos de 2 minutos (doble clic, otra pestaña, otro admin, la API) no suma OTRO
+    // periodo —serían meses sin ningún cobro registrado—. Una activación a propósito, pasados los 2 minutos, sí suma.
+    const reciente = await prisma.subscriptionInvoice.findFirst({
+      where: { clinicId, method: METODO_ACTIVACION_ADMIN, paidAt: { gte: new Date(Date.now() - 120_000) } },
+      select: { id: true },
+    });
+    if (reciente) {
+      return NextResponse.json({ error: "Esta clínica se activó hace un momento; no se suma otro periodo por un doble clic." }, { status: 409 });
+    }
     // Misma regla que verify_payment: las dos fechas se mueven juntas, y el periodo se cuenta desde el pago (hoy) sobre lo
     // que la clínica ya tuviera pagado si estaba al corriente (M1).
     const ahora = new Date();

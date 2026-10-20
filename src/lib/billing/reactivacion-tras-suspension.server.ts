@@ -5,6 +5,8 @@ import {
   MARCA_PERIODO_PAGADO,
   NOTA_SERVICIO_SUSPENDIDO,
   enPeriodoPagado,
+  finDeLoPagado,
+  mesesDelIntervalo,
 } from "@/lib/billing/cobro-rechazado";
 import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { cobrarAparteExcedentePendiente } from "@/lib/cfdi-overage";
@@ -59,7 +61,7 @@ export const MENSAJE_FALLO_ANULAR =
 export const MENSAJE_FALLO_EXCEDENTE =
   "No pudimos separar el excedente de facturas CFDI antes de mover el cobro de la tarjeta; se perdería en una factura anulada. Reintenta.";
 export const MENSAJE_FALLO_REALINEAR =
-  "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Stripe vuelve a mandar el aviso del pago solo (el webhook lo reintenta); si no se arregla, ponle a la suscripción una prueba (trial_end) hasta el fin de lo pagado a mano en Stripe.";
+  "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Pulsa «Reintentar» en /admin → Pagos: repite el paso completo (con la marca de periodo pagado). No pongas una prueba a mano en Stripe.";
 export function mensajeCobroInesperado(facturaId: string): string {
   return `Stripe cobró la tarjeta al mover el ciclo (factura ${facturaId}): reembolsa ese cobro en Stripe.`;
 }
@@ -172,6 +174,8 @@ export async function anularFacturasDeMesesSuspendidos(
 export type ResultadoRealineo =
   /** Interruptor apagado, el fin de lo pagado ya casi llegó, o el ciclo de Stripe ya coincide con él: no se tocó nada. */
   | { tipo: "no_aplica" }
+  /** `COBRO_REALINEAR_CICLO=0`: el ciclo NO se movió y la tarjeta cobrará en su fecha anterior (se avisa, Y15). */
+  | { tipo: "apagado" }
   /** Ya estaba hecho (periodo pagado puesto hasta esa fecha): no se repite. */
   | { tipo: "ya_estaba"; hasta: string }
   | { tipo: "hecho"; hasta: string; estadoStripe: string | null }
@@ -193,9 +197,16 @@ function esErrorDeIdempotencia(err: unknown): boolean {
 export async function realinearCiclo(
   stripe: Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">,
   sub: Stripe.Subscription,
-  args: { pagadoEn: Date; finDeLoPagado: Date },
+  args: {
+    pagadoEn: Date;
+    finDeLoPagado: Date;
+    /** Sin tolerancia: el ciclo se mueve aunque ya casi coincida (clínica que estaba SUSPENDIDA: cada día cuenta, Y4). */
+    exacto?: boolean;
+    /** Facturas que NO son un cobro del cambio de ciclo (la que acaba de pagar el cliente): su `latest_invoice` no es alarma. */
+    ignorarFacturas?: string[];
+  },
 ): Promise<ResultadoRealineo> {
-  if (!realinearActivo()) return { tipo: "no_aplica" };
+  if (!realinearActivo()) return { tipo: "apagado" };
   const trialEnd = Math.floor(args.finDeLoPagado.getTime() / 1000);
   // Stripe exige un `trial_end` futuro; si lo pagado termina en menos de un día no hay nada que mover.
   if (trialEnd * 1000 <= Date.now() + 86_400_000) return { tipo: "no_aplica" };
@@ -204,7 +215,11 @@ export async function realinearCiclo(
   if (yaHecho(sub)) return { tipo: "ya_estaba", hasta: new Date((sub.trial_end ?? trialEnd) * 1000).toISOString() };
   // Si el ciclo de Stripe ya termina (casi) cuando termina lo pagado, no hay nada que mover.
   const finCiclo = subscriptionPeriodEndSeconds(sub);
-  if (sub.status !== "trialing" && finCiclo && Math.abs(finCiclo - trialEnd) <= CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
+  if (!args.exacto && sub.status !== "trialing" && finCiclo && Math.abs(finCiclo - trialEnd) <= CICLO_ALINEADO_DIAS * 86_400) return { tipo: "no_aplica" };
+  // La factura más reciente ANTES del cambio: si el cambio no crea ninguna, la `latest_invoice` que devuelve es esta (p. ej. el
+  // mes recién pagado) y NO es un cobro del cambio (Y3).
+  const latestAntes = typeof sub.latest_invoice === "string" ? sub.latest_invoice : (sub.latest_invoice as { id?: string } | null | undefined)?.id ?? null;
+  const inicioLlamada = Date.now();
   try {
     // El excedente de CFDI ya sumado a «la próxima mensualidad» se pasa a su propia factura: la que genere el cambio de
     // ciclo se lo llevaría (V3).
@@ -226,11 +241,13 @@ export async function realinearCiclo(
     );
     const ultima = (actualizada as { latest_invoice?: unknown }).latest_invoice;
     if (ultima && typeof ultima === "object") {
-      const f = ultima as { id?: string; status?: string | null; amount_paid?: number | null; amount_due?: number | null };
-      if (f.id && ((f.amount_paid ?? 0) > 0 || ((f.amount_due ?? 0) > 0 && f.status !== "void"))) {
+      const f = ultima as { id?: string; status?: string | null; amount_paid?: number | null; amount_due?: number | null; created?: number | null };
+      // Solo cuenta una factura NUEVA: distinta de la de antes y creada por esta llamada.
+      const esNueva = !!f.id && f.id !== latestAntes && !(args.ignorarFacturas ?? []).includes(f.id) && (f.created ?? 0) * 1000 >= inicioLlamada - 15_000;
+      if (esNueva && ((f.amount_paid ?? 0) > 0 || ((f.amount_due ?? 0) > 0 && f.status !== "void"))) {
         // M5: cualquier factura con importe que NO sea una anulada es un cobro (o está por serlo).
         console.error("[reactivacion-tras-suspension] el cambio de ciclo generó un cobro", f.id, f.status);
-        if (f.status === "open" || f.status === "draft") {
+        if (f.id && (f.status === "open" || f.status === "draft")) {
           try {
             if (f.status === "draft") await stripe.invoices.finalizeInvoice(f.id, { auto_advance: false });
             await stripe.invoices.voidInvoice(f.id);
@@ -239,7 +256,7 @@ export async function realinearCiclo(
             /* no se pudo anular: se reporta abajo */
           }
         }
-        return { tipo: "cobro_inesperado", hasta, facturaId: f.id, monto: ((f.amount_paid ?? f.amount_due) ?? 0) / 100 };
+        return { tipo: "cobro_inesperado", hasta, facturaId: f.id ?? "", monto: ((f.amount_paid ?? f.amount_due) ?? 0) / 100 };
       }
     }
     return { tipo: "hecho", hasta, estadoStripe: actualizada?.status ?? null };
@@ -259,22 +276,25 @@ export async function realinearCiclo(
 export interface ResultadoReactivacion {
   anuladas: string[];
   realineo: ResultadoRealineo;
+  /** Hasta cuándo quedó pagada la clínica (el `trial_end` que se buscó). */
+  finDeLoPagado: Date;
   /** Mensajes para el aviso del admin; vacío = todo en orden. */
   fallos: string[];
 }
 
 /**
- * La regla completa, en el orden que no deja a nadie sin protección: primero se mueve el ciclo (la clínica ya no puede
- * ser cobrada por el ciclo viejo) y, solo si salió bien, se anulan las facturas de los meses suspendidos; si el ciclo
- * falló, esas facturas se quedan abiertas a propósito para que el reintento (cron / «Reintentar») las vea y repita todo.
+ * La regla completa: se mueve el ciclo y SIEMPRE se anulan las facturas de los meses suspendidos (nunca se deben, Y6: si el
+ * cambio de ciclo falla, dejarlas abiertas las dejaría cobrables por los reintentos de Stripe). Si el ciclo falló, el
+ * resultado lo dice y quien llama deja la marca para que el reintento (webhook 5xx / «Reintentar» / cron) lo complete.
  *
  *  `facturas`  las facturas abiertas de los meses suspendidos (excluyendo la que acaba de pagar un cobro de tarjeta).
- *  `pagadoEn`  el día y hora del pago.  `finDeLoPagado`  pagadoEn + N meses (el `trialEndsAt` que quedó).
+ *  `pagadoEn`  el día y hora del pago.
+ *  `finDeLoPagado`  hasta cuándo quedó pagado. Para un cobro de TARJETA del plan (sin `periodoExacto`) se toma al menos un
+ *    periodo completo del plan desde el pago: una anualidad son 12 meses, no 1 (Y1). Las vías manuales pasan
+ *    `periodoExacto: true` con los meses que pagó el admin.
  *
- *  Para «Pagar ahora / Subir de plan» (ws1-t2): tras cobrar con éxito llamar a esta función con el estado de la clínica
- *  de ANTES (`clinicaEstabaSuspendida`) y `facturas` = las demás abiertas del plan; con `billing_cycle_anchor: "now"` ya
- *  hecho por su propio `subscriptions.update`, el ciclo ya está alineado y `realinearCiclo` lo reconoce solo si hay pausa;
- *  si no la hay basta `anularFacturasDeMesesSuspendidos`.
+ *  Para «Pagar ahora / Subir de plan» (ws1-t2): tras cobrar con éxito llamar a esta función con `facturas` = las demás
+ *  abiertas del plan.
  */
 export async function aplicarReglaDeSuspension(args: {
   stripe: StripeParaSuspension;
@@ -283,15 +303,19 @@ export async function aplicarReglaDeSuspension(args: {
   pagadoEn: Date;
   finDeLoPagado: Date;
   facturas: Stripe.Invoice[];
+  periodoExacto?: boolean;
+  /** La(s) factura(s) que acaba de pagar el cliente: nunca se toman por un cobro inesperado del cambio de ciclo. */
+  facturaPagada?: string[];
 }): Promise<ResultadoReactivacion> {
-  const realineo = await realinearCiclo(args.stripe, args.sub, { pagadoEn: args.pagadoEn, finDeLoPagado: args.finDeLoPagado });
+  const fin = args.periodoExacto
+    ? args.finDeLoPagado
+    : new Date(Math.max(args.finDeLoPagado.getTime(), finDeLoPagado(args.pagadoEn, mesesDelIntervalo(args.sub)).getTime()));
+  // Una clínica que estaba suspendida: sin tolerancia, cada día cuenta (Y4).
+  const realineo = await realinearCiclo(args.stripe, args.sub, { pagadoEn: args.pagadoEn, finDeLoPagado: fin, exacto: true, ignorarFacturas: args.facturaPagada });
   const fallos: string[] = [];
-  if (realineo.tipo === "fallo") {
-    fallos.push(realineo.mensaje);
-    return { anuladas: [], realineo, fallos };
-  }
+  if (realineo.tipo === "fallo") fallos.push(realineo.mensaje);
   if (realineo.tipo === "cobro_inesperado") fallos.push(mensajeCobroInesperado(realineo.facturaId));
   const { anuladas, fallos: noAnuladas } = await anularFacturasDeMesesSuspendidos(args.stripe, args.clinicId, args.facturas);
   if (noAnuladas.length > 0) fallos.push(MENSAJE_FALLO_ANULAR);
-  return { anuladas, realineo, fallos };
+  return { anuladas, realineo, fallos, finDeLoPagado: fin };
 }

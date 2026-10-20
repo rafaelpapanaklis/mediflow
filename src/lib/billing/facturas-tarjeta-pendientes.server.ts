@@ -12,7 +12,8 @@ import {
   repartirPendientes,
   suscripcionDeTarjetaViva,
 } from "@/lib/billing/factura-fuera-de-stripe.server";
-import { facturasAbiertasDelPlan } from "@/lib/billing/reactivacion-tras-suspension.server";
+import { facturasAbiertasDelPlan, realinearActivo } from "@/lib/billing/reactivacion-tras-suspension.server";
+import { reintentarReglasPendientes, reglasPendientes } from "@/lib/billing/regla-cobro-tarjeta.server";
 import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 
 /**
@@ -44,6 +45,8 @@ export interface ClinicaConFacturaPendiente {
    * fila del pago, no «hoy»), o null si ya está bien.
    */
   cicloPendiente: string | null;
+  /** Cobros de TARJETA (facturas) cuya regla de la suspensión quedó a medias: se reintentan con «Reintentar» y el cron. */
+  tarjetaPendiente: string[];
 }
 
 const DIAS_DE_VENTANA = 60;
@@ -58,6 +61,15 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
   // Ventana de 60 días, pero NUNCA antes de la fecha de corte: los pagos manuales confirmados antes de que existiera
   // esta regla no se marcan (R1).
   const desde = new Date(Math.max(ahora.getTime() - DIAS_DE_VENTANA * 86_400_000, inicioDelMarcadoFueraDeStripe().getTime()));
+
+  // Cobros de tarjeta con la regla a medias (rastro `regla_fallo` sin `regla_ok`), con o sin pago manual de por medio.
+  let tarjetaPorClinica = new Map<string, string[]>();
+  try {
+    for (const r of await reglasPendientes()) tarjetaPorClinica.set(r.clinicId, [...(tarjetaPorClinica.get(r.clinicId) ?? []), r.invoiceId]);
+  } catch (e) {
+    console.error("[facturas-tarjeta-pendientes] rastros de la regla:", (e as Error)?.message ?? e);
+    tarjetaPorClinica = new Map();
+  }
 
   const pagos = await prisma.subscriptionInvoice.findMany({
     where: {
@@ -76,10 +88,11 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
       finPagadoPorClinica.set(p.clinicId, p.periodEnd);
     }
   }
-  if (ultimoPorClinica.size === 0) return [];
 
+  const ids = [...new Set([...ultimoPorClinica.keys(), ...tarjetaPorClinica.keys()])].slice(0, TOPE_CLINICAS);
+  if (ids.length === 0) return [];
   const clinicas = await prisma.clinic.findMany({
-    where: { id: { in: [...ultimoPorClinica.keys()].slice(0, TOPE_CLINICAS) }, stripeSubscriptionId: { not: null } },
+    where: { id: { in: ids }, stripeSubscriptionId: { not: null } },
     select: { id: true, name: true, stripeSubscriptionId: true, trialEndsAt: true },
   });
 
@@ -88,7 +101,14 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
   for (let i = 0; i < clinicas.length; i += 4) {
     const lote = await Promise.all(
       clinicas.slice(i, i + 4).map(async (c) => {
-        const corte = ultimoPorClinica.get(c.id)!;
+        const tarjetaPendiente = tarjetaPorClinica.get(c.id) ?? [];
+        const corte = ultimoPorClinica.get(c.id);
+        if (!corte) {
+          // Solo cobros de tarjeta a medias: no hay pago manual que mirar.
+          return tarjetaPendiente.length > 0
+            ? ({ clinicId: c.id, clinicName: c.name, pagoManualEn: new Date(0), facturas: [], suspendidas: [], cicloPendiente: null, tarjetaPendiente } as ClinicaConFacturaPendiente)
+            : null;
+        }
         try {
           const sub = await suscripcionDeTarjetaViva(stripe, c.stripeSubscriptionId!);
           if (!sub) return null;
@@ -97,12 +117,12 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
           // ¿El siguiente cobro de la tarjeta ya cae al terminar lo pagado? (fin de lo pagado = `periodEnd` de la fila del pago)
           const fin = finPagadoPorClinica.get(c.id) ?? null;
           let cicloPendiente: string | null = null;
-          if (fin && fin.getTime() > ahora.getTime() + 86_400_000 && !(enPeriodoPagado(sub, ahora) && (sub.trial_end ?? 0) * 1000 >= fin.getTime() - 86_400_000)) {
+          if (realinearActivo() && fin && fin.getTime() > ahora.getTime() + 86_400_000 && !(enPeriodoPagado(sub, ahora) && (sub.trial_end ?? 0) * 1000 >= fin.getTime() - 86_400_000)) {
             const finCiclo = subscriptionPeriodEndSeconds(sub);
             const alineado = sub.status !== "trialing" && finCiclo && Math.abs(finCiclo * 1000 - fin.getTime()) <= CICLO_ALINEADO_DIAS * 86_400_000;
             if (!alineado) cicloPendiente = fin.toISOString();
           }
-          if (pendientes.length === 0 && !cicloPendiente) return null;
+          if (pendientes.length === 0 && !cicloPendiente && tarjetaPendiente.length === 0) return null;
           return {
             clinicId: c.id,
             clinicName: c.name,
@@ -110,6 +130,7 @@ export async function clinicasConFacturaPendienteTrasPagoManual(
             facturas: pendientes.map((f) => f.id!),
             suspendidas: suspendidas.map((f) => f.id!),
             cicloPendiente,
+            tarjetaPendiente,
           } as ClinicaConFacturaPendiente;
         } catch (e) {
           console.error("[facturas-tarjeta-pendientes] Stripe no contestó para", c.id, (e as Error)?.message ?? e);
@@ -141,9 +162,15 @@ export async function reintentarMarcadoPendiente(
   try {
     const stripe = opciones.stripe === undefined ? getStripeSafe() : opciones.stripe;
     const todas = await clinicasConFacturaPendienteTrasPagoManual({ ...opciones, stripe });
-    const pendientes = todas.filter((p) => p.facturas.length > 0 || p.cicloPendiente);
+    const pendientes = todas.filter((p) => p.facturas.length > 0 || p.cicloPendiente || p.tarjetaPendiente.length > 0);
     resumen.revisadas = pendientes.length;
     for (const p of pendientes) {
+      if (p.tarjetaPendiente.length > 0 && stripe) {
+        const t = await reintentarReglasPendientes(stripe, p.clinicId);
+        resumen.marcadas.push(...t.completadas.map((id) => `${id} (tarjeta)`));
+        if (t.fallos.length > 0) resumen.fallos.push(p.clinicId);
+      }
+      if (p.facturas.length === 0 && !p.cicloPendiente) continue;
       const clinica = await prisma.clinic.findUnique({ where: { id: p.clinicId }, select: { stripeSubscriptionId: true } });
       const r = await marcarFacturasDelPlanPagadasFueraDeStripe({
         clinicId: p.clinicId,

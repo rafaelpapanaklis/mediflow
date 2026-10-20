@@ -44,9 +44,10 @@ import {
 export function textoTarjetaViva(anual: boolean): string {
   const base = " Tiene una suscripción de TARJETA viva en Stripe: la suscripción NO se cancela.";
   const suspendida = " Si ya estaba suspendida por falta de pago, los meses sin servicio no se cobran: sus facturas se anulan, el acceso corre desde este momento y la tarjeta se vuelve a cobrar justo al terminar lo pagado.";
-  return anual
-    ? `${base}${suspendida} Si estaba al corriente, como paga un año la tarjeta no se cobra hasta que termine lo pagado (en Stripe se verá como «prueba hasta» esa fecha) y después Stripe vuelve a cobrar solo.`
-    : `${base}${suspendida} Si estaba al corriente, su factura del mes queda pagada fuera de Stripe y la tarjeta se cobra en su fecha de siempre.`;
+  const alCorriente = anual
+    ? " Si estaba al corriente, su factura abierta (si la hay) queda pagada fuera de Stripe y, como paga un año, la tarjeta no se cobra hasta que termine lo pagado (en Stripe se verá como «prueba hasta» esa fecha)."
+    : " Si estaba al corriente, su factura abierta (si la hay) queda pagada fuera de Stripe y el siguiente cobro de la tarjeta cae donde termina lo pagado (con un mes pagado dentro de la gracia, en la fecha de siempre).";
+  return `${base}${suspendida}${alCorriente}`;
 }
 
 export function SpeiPendientes({ items }: { items: PendienteAdminDTO[] }) {

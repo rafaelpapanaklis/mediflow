@@ -239,7 +239,7 @@ const PERMITIDAS: Array<{ archivo: string; funcion: string; max: number; razon: 
   { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "POST", max: 1, razon: "doble clic en «Registrar pago»: busca el mismo pago creado hace menos de 2 minutos" },
   { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "GET", max: 1, razon: "lista de pagos del admin: se ve, rotulada" },
   { archivo: "src/app/api/admin/billing/route.ts", funcion: "GET", max: 2, razon: "pagos recientes (se ven, rotulados) y transferencias pendientes" },
-  { archivo: "src/app/api/admin/billing/route.ts", funcion: "POST", max: 2, razon: "una fila por id (verificar / reembolsar)" },
+  { archivo: "src/app/api/admin/billing/route.ts", funcion: "POST", max: 3, razon: "una fila por id (verificar / reembolsar) y la activación reciente (doble clic, Y5)" },
   { archivo: "src/app/api/admin/payments/[id]/cfdi/route.ts", funcion: "POST", max: 1, razon: "una fila por id (rechaza la activación manual con 400)" },
   { archivo: "src/app/api/admin/payments/[id]/receipt/route.ts", funcion: "GET", max: 1, razon: "una fila por id" },
 ];
