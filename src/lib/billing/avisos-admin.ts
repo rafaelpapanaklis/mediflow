@@ -33,6 +33,9 @@ export function avisoCuponNoRepuesto(a: {
 const fechaMx = (segundos: number): string =>
   new Date(segundos * 1000).toLocaleString("es-MX", { timeZone: "America/Mexico_City", dateStyle: "long", timeStyle: "short" });
 
+const diaMx = (segundos: number): string =>
+  new Date(segundos * 1000).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", dateStyle: "long" });
+
 /**
  * El cupón del cliente se quitó y NO se repuso porque otra petición está haciendo (o ya hizo) el cambio de plan
  * (dos pestañas, o el cambio llegó a Stripe y la respuesta se perdió). Hay que revisar cómo quedó.
@@ -82,7 +85,11 @@ export function avisoCobroMenorQueLoMostrado(a: {
   };
 }
 
-/** Se repuso un cupón que tenía fecha de fin: Stripe lo cuenta desde hoy, hay que ajustar la fecha a mano. */
+/**
+ * Se repuso un cupón que tenía fecha de fin: Stripe lo cuenta desde hoy y NO permite editar el fin de un descuento
+ * del cliente (solo quitarlo o poner otro). La instrucción es lo que sí se puede hacer: quitarlo y ponerle un
+ * cupón con duración de N meses (los que le quedaban), o quitarle el cupón en la fecha original.
+ */
 export function avisoCuponConFinRepuesto(a: {
   clinicaId: string;
   clinicaNombre: string | null | undefined;
@@ -90,16 +97,55 @@ export function avisoCuponConFinRepuesto(a: {
   cupon: string | null;
   codigoPromocional: string | null;
   finOriginal: number;
+  ahora?: Date;
 }): AvisoAdmin {
   const nombre = a.clinicaNombre ?? a.clinicaId;
+  const ahora = a.ahora ?? new Date();
+  const meses = mesesRestantes(a.finOriginal, ahora);
+  const fecha = fechaMx(a.finOriginal);
   return {
-    asunto: `Ajusta la fecha de fin de un cupón repuesto en Stripe: ${nombre}`,
+    asunto: `Ajusta la duración de un cupón repuesto en Stripe: ${nombre}`,
     lineas: [
       "Se volvió a poner el cupón del cliente (no se le quita a la clínica lo que tenía), pero Stripe lo cuenta desde hoy: si tiene duración, le reinicia los meses.",
       `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
       `Cliente de Stripe: ${a.clienteStripe}`,
       `Cupón: ${a.cupon ?? "(desconocido)"}${a.codigoPromocional ? ` · código promocional: ${a.codigoPromocional}` : ""}`,
-      `Fecha de fin ORIGINAL: ${fechaMx(a.finOriginal)} (México). Ajusta el descuento nuevo para que termine ese día.`,
+      `Fecha de fin ORIGINAL: ${fecha} (México).`,
+      meses === null
+        ? "Esa fecha ya pasó: el descuento ya no le correspondía. Quítaselo al cliente en Stripe."
+        : `Stripe no deja editar la fecha de fin de un descuento del cliente. Opción 1: quítale este descuento al cliente y ponle un cupón con duración de ${meses} ${meses === 1 ? "mes" : "meses"} (los que le quedaban). Opción 2: déjalo y quítale el cupón el ${diaMx(a.finOriginal)}.`,
+    ],
+  };
+}
+
+/** Meses (enteros, hacia arriba) que faltan hasta `fin` (epoch en segundos), o null si ya pasó. */
+export function mesesRestantes(fin: number, ahora: Date): number | null {
+  const dias = (fin * 1000 - ahora.getTime()) / 86_400_000;
+  if (dias <= 0) return null;
+  return Math.max(1, Math.ceil(dias / 30));
+}
+
+/**
+ * Falló el cambio de plan y NO se pudo comprobar si llegó a Stripe (la relectura también falló): se repuso el
+ * cupón por prudencia, pero pudo quedar el plan subido con el cupón puesto. Hay que revisarlo.
+ */
+export function avisoReposicionSinVerificar(a: {
+  clinicaId: string;
+  clinicaNombre: string | null | undefined;
+  clienteStripe: string;
+  cupon: string | null;
+  codigoPromocional: string | null;
+  planDestino: string;
+}): AvisoAdmin {
+  const nombre = a.clinicaNombre ?? a.clinicaId;
+  return {
+    asunto: `Revisa el plan y el cupón en Stripe (no se pudo confirmar un cambio de plan): ${nombre}`,
+    lineas: [
+      `Una subida a ${a.planDestino} falló y tampoco se pudo volver a leer la suscripción para saber si el cambio llegó a Stripe. Por prudencia se volvió a poner el cupón del cliente.`,
+      `Clínica: ${a.clinicaNombre ?? "(sin nombre)"} (${a.clinicaId})`,
+      `Cliente de Stripe: ${a.clienteStripe}`,
+      `Cupón repuesto: ${a.cupon ?? "(desconocido)"}${a.codigoPromocional ? ` · código promocional: ${a.codigoPromocional}` : ""}`,
+      `Qué revisar: en Stripe, si la suscripción quedó en ${a.planDestino}. Si sí, quítale el cupón al cliente (la subida se cobra a precio de lista). Si no, no hay nada que hacer. Detalle en la bitácora de la clínica (pago-pendiente-descuento-cliente-reposicion-sin-verificar).`,
     ],
   };
 }

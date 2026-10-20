@@ -10,8 +10,9 @@
  * `subscriptionStatus`.
  */
 
+import { randomUUID } from "node:crypto";
 import { isClinicBillingAdmin } from "./authz";
-import { avisoCobroMenorQueLoMostrado, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
+import { avisoCobroMenorQueLoMostrado, avisoReposicionSinVerificar, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
 import { desgloseConIva, ivaAplica, ivaParaPagoDeClinica, type ExencionIva, type IvaParaCobro } from "./iva-cobro";
 import type { PlanId } from "./plans";
 import {
@@ -106,7 +107,11 @@ export interface DepsPago {
    * (`ttlSec`): si el proceso muere con él tomado no queda pegado. En producción: `acquireLock`/`releaseLock`
    * de failban (Upstash, o memoria de la instancia). Ante un fallo de infraestructura abre (deja pasar).
    */
-  candado: { tomar: (clave: string, ttlSec: number) => Promise<boolean>; soltar: (clave: string) => Promise<void> };
+  candado: {
+    tomar: (clave: string, ttlSec: number, dueno: string) => Promise<boolean>;
+    /** Suelta SOLO si el candado sigue siendo de `dueno` (si caducó y lo tomó otra petición, no toca el de ella). */
+    soltar: (clave: string, dueno: string) => Promise<void>;
+  };
   /** Aviso a quien administra la plataforma (correo); no debe lanzar. Sirve para lo que hay que hacer a mano. */
   avisarAlAdmin: (aviso: { asunto: string; lineas: string[] }) => Promise<void>;
   /** Mensaje cuando una sede incluida intenta pagar (`avisoSedeIncluida`). */
@@ -482,13 +487,14 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     return respuesta(400, { code: "PLAN_NO_MAS_GRANDE", error: MENSAJES.planNoMasGrande });
   }
   const clave = claves.candadoSubir(deps.clinica.id);
-  if (!(await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG))) {
+  const dueno = randomUUID();
+  if (!(await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno))) {
     return respuesta(409, { code: "CAMBIO_EN_CURSO", error: MENSAJES.cambioEnCurso });
   }
   try {
     return await subirYPagarConCandado(deps, destino);
   } finally {
-    await deps.candado.soltar(clave).catch(() => {}); // si no se puede soltar, caduca solo
+    await deps.candado.soltar(clave, dueno).catch(() => {}); // si no se puede soltar, caduca solo
   }
 }
 
@@ -583,7 +589,23 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     } catch {
       verificado = false;
     }
-    if (!verificado) await deps.auditar({ event: "pago-pendiente-descuento-cliente-reposicion-sin-verificar", motivo, planDestino: destino }).catch(() => {});
+    if (!verificado) {
+      // No se pudo comprobar si el cambio llegó a Stripe: pudo quedar hecho con el cupón repuesto encima. Además
+      // de la bitácora se avisa al admin para que revise el plan y el cupón de esta clínica.
+      await deps.auditar({ event: "pago-pendiente-descuento-cliente-reposicion-sin-verificar", motivo, planDestino: destino }).catch(() => {});
+      await deps
+        .avisarAlAdmin(
+          avisoReposicionSinVerificar({
+            clinicaId: deps.clinica.id,
+            clinicaNombre: deps.clinica.nombre,
+            clienteStripe: quitado.clienteId,
+            cupon: quitado.descuento.coupon?.id ?? null,
+            codigoPromocional: idDeCodigoPromocional(quitado.descuento),
+            planDestino: destino,
+          }),
+        )
+        .catch(() => {});
+    }
     await reponerDescuentoDelCliente(deps, stripe, quitado, destino, motivo);
     return r;
   };

@@ -21,6 +21,7 @@ import {
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chargeFailureMessage } from "../proration";
+import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
 import { MENSAJES_CHECKOUT } from "../mensajes-pago";
 import { ensureFirstMonthCoupon } from "../first-month-promo";
 import { FIRST_MONTH_PROMO_MXN } from "@/lib/plan-shared";
@@ -96,7 +97,7 @@ function montar(e: Escenario = {}) {
   let descuentoCliente: any = e.descuentoCliente ?? null; // el que Stripe aplicaría a la factura nueva
   let borrado: any = null; // el último cupón del cliente que se quitó (para poder reponerlo)
   const avisos: Array<{ asunto: string; lineas: string[] }> = [];
-  const candados = new Map<string, number>();
+  const candados = new Map<string, { hasta: number; dueno: string }>();
   let retrieves = 0;
   let otraPestanaActuo = false;
   const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
@@ -296,15 +297,18 @@ function montar(e: Escenario = {}) {
     avisarAlAdmin: async (a) => { avisos.push(a); },
     candado: e.candadoReal
       ? {
-          // Como failban sin Upstash: SET NX con caducidad (aquí en memoria, con reloj de prueba).
-          tomar: async (clave, ttlSec) => {
-            registra("candado.tomar", clave, ttlSec);
-            const hasta = candados.get(clave);
-            if (hasta && hasta > Date.now()) return false;
-            candados.set(clave, Date.now() + ttlSec * 1000);
+          // Como failban: SET NX con caducidad y DUEÑO (aquí en memoria); soltar solo si sigue siendo suyo.
+          tomar: async (clave, ttlSec, dueno) => {
+            registra("candado.tomar", clave, ttlSec, dueno);
+            const actual = candados.get(clave);
+            if (actual && actual.hasta > Date.now()) return false;
+            candados.set(clave, { hasta: Date.now() + ttlSec * 1000, dueno });
             return true;
           },
-          soltar: async (clave) => { registra("candado.soltar", clave); candados.delete(clave); },
+          soltar: async (clave, dueno) => {
+            registra("candado.soltar", clave, dueno);
+            if (candados.get(clave)?.dueno === dueno) candados.delete(clave);
+          },
         }
       : { tomar: async () => true, soltar: async () => {} },
   };
@@ -1060,11 +1064,11 @@ test("T1 (b): el candado se suelta también si la subida falla, y uno vencido no
   assert.equal((await subirYPagar(falla.deps, "PRO")).status, 200); // el reintento no se queda esperando
 
   const pegado = montar({ candadoReal: true });
-  pegado.candados.set(claves.candadoSubir("clin_1"), Date.now() - 1000); // proceso muerto: el candado ya caducó
+  pegado.candados.set(claves.candadoSubir("clin_1"), { hasta: Date.now() - 1000, dueno: "proceso-muerto" }); // proceso muerto: el candado ya caducó
   assert.equal((await subirYPagar(pegado.deps, "PRO")).status, 200);
 
   const tomado = montar({ candadoReal: true });
-  tomado.candados.set(claves.candadoSubir("otra_clinica"), Date.now() + 60_000);
+  tomado.candados.set(claves.candadoSubir("otra_clinica"), { hasta: Date.now() + 60_000, dueno: "otra" });
   assert.equal((await subirYPagar(tomado.deps, "PRO")).status, 200);
 
   const sinPermiso = montar({ candadoReal: true, role: "DOCTOR" });
@@ -1144,6 +1148,11 @@ test("T2: el cambio realmente NO se hizo (la suscripción sigue en el plan viejo
   await subirYPagar(sinVerificar.deps, "PRO");
   assert.equal(sinVerificar.ops("customers.update").length, 1);
   assert.ok(sinVerificar.auditorias.some((x) => x.event === "pago-pendiente-descuento-cliente-reposicion-sin-verificar"));
+  // U1: además de la bitácora, aviso al admin para que revise el plan y el cupón de esa clínica.
+  assert.equal(sinVerificar.avisos.length, 1);
+  assert.match(sinVerificar.avisos[0].asunto, /no se pudo confirmar un cambio de plan/);
+  const textoU1 = sinVerificar.avisos[0].lineas.join("\n");
+  for (const dato of ["clin_1", "cus_1", "REGALO20", "PRO"]) assert.match(textoU1, new RegExp(dato));
 });
 
 test("T3: reponer un cupón CON fecha de fin lo repone igual (no se le quita nada a la clínica) pero avisa al admin con la fecha original", async () => {
@@ -1157,7 +1166,7 @@ test("T3: reponer un cupón CON fecha de fin lo repone igual (no se le quita nad
   const rep = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-repuesto");
   assert.deepEqual([rep.finOriginal, rep.finPorAjustar], ["2027-01-15T18:00:00.000Z", true]);
   assert.equal(m.avisos.length, 1);
-  assert.match(m.avisos[0].asunto, /Ajusta la fecha de fin/);
+  assert.match(m.avisos[0].asunto, /Ajusta la duración/);
   assert.match(m.avisos[0].lineas.join("\n"), /enero de 2027/);
   assert.match(m.avisos[0].lineas.join("\n"), /REGALO20/);
 
@@ -1166,6 +1175,95 @@ test("T3: reponer un cupón CON fecha de fin lo repone igual (no se le quita nad
   await subirYPagar(sinFin.deps, "PRO");
   assert.equal(sinFin.ops("customers.update").length, 1);
   assert.deepEqual(sinFin.avisos, []);
+});
+
+// ── Novena vuelta t4: U1, U2 y candado con dueño ──────────────────────────────────────────────────
+
+test("U1: el cambio llegó a Stripe, la respuesta se perdió Y la relectura también falla → se repone por prudencia pero se avisa al admin (sonda9c)", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, updateRespuestaPerdida: 1, retrieveFallaDesde: 2 });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(m.planSub(), "PRO"); // el cambio sí quedó hecho en Stripe
+  assert.equal(m.ops("customers.update").length, 1); // sin poder verificar, se repone
+  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-descuento-cliente-reposicion-sin-verificar"));
+  assert.equal(m.avisos.length, 1, "y el admin se entera");
+  assert.match(m.avisos[0].lineas.join("\n"), /quítale el cupón al cliente/);
+  assert.doesNotMatch(JSON.stringify(r.body), /REGALO20|cus_1/); // nada de esto llega a la clínica
+  // Si SÍ se pudo verificar y el cambio no se hizo, no hay aviso extra (solo se repone).
+  const normal = montar({ descuentoCliente: CUPON_CLIENTE, updateFallaAntes: 1 });
+  await subirYPagar(normal.deps, "PRO");
+  assert.deepEqual(normal.avisos, []);
+});
+
+test("U2: el aviso del cupón con fin pide algo que Stripe sí permite (quitarlo y poner uno de N meses, o quitarlo en la fecha), con N calculado", async () => {
+  const ahora = new Date("2026-10-20T12:00:00Z");
+  const base = { clinicaId: "clin_1", clinicaNombre: "Clínica Prueba", clienteStripe: "cus_1", cupon: "REGALO20", codigoPromocional: null };
+  const aviso = (fin: string) => avisoCuponConFinRepuesto({ ...base, finOriginal: Math.floor(new Date(fin).getTime() / 1000), ahora });
+  const t = (fin: string) => aviso(fin).lineas.join("\n");
+  assert.match(t("2027-01-15T18:00:00Z"), /ponle un cupón con duración de 3 meses/); // 87 días → 3 meses
+  assert.match(t("2027-01-15T18:00:00Z"), /quítale el cupón el 15 de enero de 2027/);
+  assert.match(t("2026-11-10T12:00:00Z"), /duración de 1 mes \(/); // 21 días → 1 mes
+  assert.match(t("2027-10-20T12:00:00Z"), /duración de 13 meses/);
+  assert.match(t("2026-10-01T12:00:00Z"), /ya pasó.*Quítaselo/);
+  for (const fin of ["2027-01-15T18:00:00Z", "2026-11-10T12:00:00Z"]) {
+    assert.doesNotMatch(t(fin), /ajusta el descuento nuevo|termine ese día/i); // la instrucción vieja, imposible en Stripe
+  }
+  assert.equal(mesesRestantes(Math.floor(new Date("2026-10-20T12:00:00Z").getTime() / 1000) - 5, ahora), null);
+  // De punta a punta: se repone y el aviso trae la instrucción nueva.
+  const fin = Math.floor(new Date("2027-01-15T18:00:00Z").getTime() / 1000);
+  const m = montar({ descuentoCliente: { ...CUPON_CLIENTE, end: fin }, updateFallaAntes: 1 });
+  await subirYPagar(m.deps, "PRO");
+  assert.match(m.avisos[0].lineas.join("\n"), /ponle un cupón con duración de \d+ mes/);
+});
+
+test("candado con dueño: una petición lenta cuyo candado ya caducó y tomó otra NO suelta el candado de la otra", async () => {
+  const m = montar({ candadoReal: true });
+  const clave = claves.candadoSubir("clin_1");
+  const update = (m.deps.stripe as any).subscriptions.update;
+  (m.deps.stripe as any).subscriptions.update = async (...a: any[]) => {
+    // Mientras esta petición sigue en curso, su candado caduca y otra petición toma el suyo.
+    m.candados.set(clave, { hasta: Date.now() + 60_000, dueno: "otra-peticion" });
+    return update(...a);
+  };
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.body.pagado, true);
+  assert.equal(m.candados.get(clave)?.dueno, "otra-peticion", "el candado de la otra petición sigue puesto");
+  const tomar = m.ops("candado.tomar")[0];
+  const soltar = m.ops("candado.soltar")[0];
+  assert.equal(soltar.args[1], tomar.args[2]); // soltó con SU dueño
+  assert.match(tomar.args[2], /^[0-9a-f-]{36}$/); // un dueño único por petición
+  // Cada petición usa un dueño distinto.
+  const dos = montar({ candadoReal: true });
+  await subirYPagar(dos.deps, "PRO");
+  dos.deps.clinica.plan = "BASIC";
+  await subirYPagar(dos.deps, "PRO").catch(() => {});
+  const duenos = dos.ops("candado.tomar").map((l) => l.args[2]);
+  assert.equal(new Set(duenos).size, duenos.length);
+});
+
+test("failban.acquireLock/releaseLock con dueño (memoria): solo suelta el dueño; sin dueño se comporta como siempre", async () => {
+  const { acquireLock, releaseLock } = await import("@/lib/failban");
+  const k = `prueba-dueno-${Date.now()}`;
+  assert.equal(await acquireLock(k, 30, "a"), true);
+  assert.equal(await acquireLock(k, 30, "b"), false); // ocupado
+  await releaseLock(k, "b"); // no es suyo: no lo suelta
+  assert.equal(await acquireLock(k, 30, "b"), false);
+  await releaseLock(k, "a"); // el dueño sí
+  assert.equal(await acquireLock(k, 30, "b"), true);
+  await releaseLock(k, "b");
+  // Sin dueño: igual que antes (acquire/release a secas).
+  const k2 = `prueba-sin-dueno-${Date.now()}`;
+  assert.equal(await acquireLock(k2, 30), true);
+  assert.equal(await acquireLock(k2, 30), false);
+  await releaseLock(k2);
+  assert.equal(await acquireLock(k2, 30), true);
+  await releaseLock(k2);
+  // Un candado con dueño se puede soltar a secas (compatibilidad con quien no pasa dueño).
+  const k3 = `prueba-mixto-${Date.now()}`;
+  assert.equal(await acquireLock(k3, 30, "x"), true);
+  await releaseLock(k3);
+  assert.equal(await acquireLock(k3, 30, "y"), true);
+  await releaseLock(k3, "y");
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──

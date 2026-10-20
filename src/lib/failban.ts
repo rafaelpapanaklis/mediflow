@@ -106,6 +106,7 @@ interface Counter {
 }
 const memCounters = new Map<string, Counter>();
 const memLocks = new Map<string, number>(); // key → lockedUntil (epoch ms)
+const memLockOwners = new Map<string, string>(); // key → dueño del candado (solo los tomados con dueño)
 const memSets = new Map<string, { members: Set<string>; resetAt: number }>();
 
 let lastSweep = Date.now();
@@ -117,7 +118,10 @@ function sweep(): void {
     if (c.resetAt < now) memCounters.delete(k);
   });
   memLocks.forEach((until, k) => {
-    if (until < now) memLocks.delete(k);
+    if (until < now) {
+      memLocks.delete(k);
+      memLockOwners.delete(k);
+    }
   });
   memSets.forEach((c, k) => {
     if (c.resetAt < now) memSets.delete(k);
@@ -260,14 +264,18 @@ export async function persistentRateLimitKey(key: string, limit: number, windowS
  * serverless sigue evitando el duplicado; entre instancias no. Ante error de
  * Redis, fail-OPEN (devuelve true): el trabajo se hace, nunca se bloquea al
  * usuario por un problema de infraestructura.
+ *
+ * `owner` (opcional): quién lo toma. Con dueño, `releaseLock(key, owner)` SOLO lo suelta si sigue siendo suyo:
+ * una petición lenta cuyo candado ya caducó (y que otra volvió a tomar) no suelta el de la otra. Sin `owner`
+ * todo se comporta como siempre.
  */
-export async function acquireLock(key: string, ttlSec: number): Promise<boolean> {
+export async function acquireLock(key: string, ttlSec: number, owner?: string): Promise<boolean> {
   sweep();
   const lockKey = `fb:job:${key}`;
   const redis = getRedis();
   if (redis) {
     try {
-      const res = await redis.set(lockKey, "1", { nx: true, ex: ttlSec });
+      const res = await redis.set(lockKey, owner ?? "1", { nx: true, ex: ttlSec });
       return res === "OK";
     } catch (err) {
       warnRuntime(err);
@@ -278,22 +286,34 @@ export async function acquireLock(key: string, ttlSec: number): Promise<boolean>
   const until = memLocks.get(lockKey);
   if (until && until > now) return false;
   memLocks.set(lockKey, now + ttlSec * 1000);
+  if (owner) memLockOwners.set(lockKey, owner);
+  else memLockOwners.delete(lockKey);
   return true;
 }
 
-/** Suelta el candado de acquireLock (llámalo SIEMPRE al terminar, ok o error). */
-export async function releaseLock(key: string): Promise<void> {
+/** Borra la clave SOLO si su valor es el del dueño (compara y borra en un solo paso, sin carrera). */
+const SOLTAR_SI_ES_MIO = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`;
+
+/**
+ * Suelta el candado de acquireLock (llámalo SIEMPRE al terminar, ok o error). Con `owner`, solo si el candado
+ * sigue siendo de ese dueño; si caducó y lo tomó otro, no toca el del otro.
+ */
+export async function releaseLock(key: string, owner?: string): Promise<void> {
   const lockKey = `fb:job:${key}`;
   const redis = getRedis();
   if (redis) {
     try {
-      await redis.del(lockKey);
+      if (owner) await redis.eval(SOLTAR_SI_ES_MIO, [lockKey], [owner]);
+      else await redis.del(lockKey);
       return;
     } catch (err) {
       warnRuntime(err); // el TTL lo acabará soltando
+      if (owner) return; // con dueño nunca se cae a un borrado sin comprobar
     }
   }
+  if (owner && memLockOwners.get(lockKey) !== owner) return;
   memLocks.delete(lockKey);
+  memLockOwners.delete(lockKey);
 }
 
 // ─────────────────────────── Lockout (punto 3) ─────────────────────────────
