@@ -26,9 +26,9 @@ import { chargeFailureMessage } from "../proration";
 import { avisoCuponConFinRepuesto, mesesRestantes } from "../avisos-admin";
 import { cobrarPendiente } from "../pago-pendiente-cliente";
 import {
-  ENTIDAD_CANDADO_COBRO,
   crearCandadoDeCobro,
   duenoDelCandadoEnBase,
+  llaveCandadoCobro,
   soltarCandadoEnBase,
   tomarCandadoEnBase,
   type DbCandado,
@@ -83,6 +83,8 @@ interface Escenario {
   reponerFalla?: boolean;
   /** `invoices.update` (marcar) falla de red. */
   marcarFalla?: boolean;
+  /** La base del candado FALLA al tomarlo (Z7): el candado responde `error`. */
+  candadoFalla?: boolean;
   /** Candado por clínica REAL (en memoria, como failban sin Upstash); por defecto abre siempre. */
   candadoReal?: boolean;
   /**
@@ -146,8 +148,9 @@ function montar(e: Escenario = {}) {
   let periodoPagado: { trial_end: number; metadata: Record<string, string> } | null = e.periodoPagado ?? null; // trial_end + marca puestos por la regla de la suspensión
   let reinicios = 0; // cuántas veces Stripe aplicó DE VERDAD un reinicio de ciclo (las repeticiones con la misma clave no cuentan)
   const reiniciosPorClave = new Map<string, any>();
+  const huellasUpdate = new Map<string, string>();
   // El pago ocurre «hace un minuto»: `realinearCiclo` exige un fin de lo pagado futuro (no se puede fijar a una fecha fija).
-  const PAGADO_EN = Math.floor(Date.now() / 1000) - 60;
+  const PAGADO_EN = Math.floor(Date.now() / 1000);
   const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
   /** La otra pestaña termina la subida (anula/cambia el plan y se cobra) mientras esta petición choca con su clave. */
   const otraPestanaTermina = (plan: string) => {
@@ -157,7 +160,7 @@ function montar(e: Escenario = {}) {
     if (f && f.status !== "void") f.status = "void";
     planSub = plan;
     facturas.set("in_nueva", {
-      id: "in_nueva", status: "paid", amount_due: descuentoCliente ? 63939 : 79924, total: descuentoCliente ? 63939 : 79924,
+      id: "in_nueva", status: "paid", status_transitions: { paid_at: Math.floor(Date.now() / 1000) }, amount_due: descuentoCliente ? 63939 : 79924, total: descuentoCliente ? 63939 : 79924,
       currency: "mxn", hosted_invoice_url: "https://pay.stripe.test/in_nueva", customer: "cus_1", created: 200,
     });
     cobrosAplicados++;
@@ -219,7 +222,12 @@ function montar(e: Escenario = {}) {
           reiniciosPorClave.set(opts.idempotencyKey, r);
           return r;
         }
-        // Mismo idempotencyKey → misma respuesta (como Stripe): no genera otra factura.
+        // Mismo idempotencyKey → misma respuesta (como Stripe): no genera otra factura; con OTROS parámetros Stripe lo rechaza
+        // (idempotency_error): así dos «Subir» a planes distintos no cobran los dos.
+        const huellaU = JSON.stringify(params.items) + JSON.stringify(params.metadata?.plan);
+        const previaH = huellasUpdate.get(opts.idempotencyKey);
+        if (previaH !== undefined && previaH !== huellaU) throw idemEnCurso();
+        huellasUpdate.set(opts.idempotencyKey, huellaU);
         const previa = cobrosPorClave.get(opts.idempotencyKey);
         if (previa) return previa;
         if (e.clavePropiaEnCurso === "cambiar") {
@@ -233,6 +241,7 @@ function montar(e: Escenario = {}) {
         const nueva = {
           id: "in_nueva",
           status: e.facturaNuevaAnulada ? "void" : e.tarjetaFalla ? "open" : "paid",
+          ...(!e.facturaNuevaAnulada && !e.tarjetaFalla ? { status_transitions: { paid_at: Math.floor(Date.now() / 1000) } } : {}),
           billing_reason: "subscription_update",
           // Lo que Stripe cobraría: lista + IVA de PRO (799.24), con el descuento del cliente si siguiera puesto.
           amount_due: descuentoCliente ? 63939 : 79924,
@@ -391,15 +400,17 @@ function montar(e: Escenario = {}) {
       await (e.alEsperar ? e.alEsperar() : new Promise<void>((r) => setImmediate(r)));
     },
     ...(e.estadoReleido ? { releerEstadoClinica: async () => e.estadoReleido! } : {}),
-    candado: e.candadoReal
+    candado: e.candadoFalla
+      ? { tomar: async () => "error" as const, soltar: async () => {} }
+      : e.candadoReal
       ? {
-          // Como failban: SET NX con caducidad y DUEÑO (aquí en memoria); soltar solo si sigue siendo suyo.
+          // Como el candado real: SET NX con caducidad y DUEÑO (aquí en memoria); soltar solo si sigue siendo suyo.
           tomar: async (clave, ttlSec, dueno) => {
             registra("candado.tomar", clave, ttlSec, dueno);
             const actual = candados.get(clave);
-            if (actual && actual.hasta > Date.now()) return false;
+            if (actual && actual.hasta > Date.now()) return "ocupado" as const;
             candados.set(clave, { hasta: Date.now() + ttlSec * 1000, dueno });
-            return true;
+            return "tomado" as const;
           },
           soltar: async (clave, dueno) => {
             registra("candado.soltar", clave, dueno);
@@ -410,7 +421,7 @@ function montar(e: Escenario = {}) {
             return c && c.hasta > Date.now() ? c.dueno : null;
           },
         }
-      : { tomar: async () => true, soltar: async () => {} },
+      : { tomar: async () => "tomado" as const, soltar: async () => {} },
   };
   const ops = (op: string) => llamadas.filter((l) => l.op === op);
   return {
@@ -638,7 +649,7 @@ test("subir: repetir el POST no cobra dos veces (una sola actualización efectiv
   assert.equal(b.body.pagado, true);
   const ks = m.ops("subscriptions.update").map((l) => l.args[2].idempotencyKey);
   assert.equal(new Set(ks).size, 1);
-  assert.equal(ks[0], claves.subir("clin_1", "in_vieja", "PRO"));
+  assert.equal(ks[0], claves.subir("clin_1", "in_vieja"));
   // Un tercer intento ya no encuentra la factura vieja abierta: no hay nada que cobrar.
   const c = await subirYPagar(m.deps, "CLINIC");
   assert.equal(c.status, 409);
@@ -705,7 +716,7 @@ test("subir: void OK + update falla de red → 502, la factura vieja queda marca
   assert.equal(vieja.status, "void");
   assert.equal(vieja.metadata.pago_pendiente_subir, "PRO");
   assert.equal(vieja.metadata.pago_pendiente_subir_desde, "BASIC");
-  assert.equal(vieja.metadata.pago_pendiente_subir_clave, claves.subir("clin_1", "in_vieja", "PRO"));
+  assert.equal(vieja.metadata.pago_pendiente_subir_clave, claves.subir("clin_1", "in_vieja"));
   assert.equal(m.cobros(), 0);
 
   // El GET lo refleja: pendiente, con la opción de terminar el cambio y SIN factura que «pagar».
@@ -729,12 +740,18 @@ test("subir: void OK + update falla de red → 502, la factura vieja queda marca
   assert.equal(m.ops("subscriptions.create").length, 0);
 });
 
-test("subir: el reintento puede elegir otro plan más grande mientras la suscripción no se haya movido", async () => {
+test("subir: un cambio a medias solo se TERMINA con el mismo plan; con otro plan se pide terminar el que quedó (una sola clave de Stripe por factura, regla de oro)", async () => {
   const m = montar({ updateFallaAntes: 1 });
-  await subirYPagar(m.deps, "PRO");
-  const r = await subirYPagar(m.deps, "CLINIC");
-  assert.equal(r.body.pagado, true);
-  assert.equal(m.planSub(), "CLINIC");
+  await subirYPagar(m.deps, "PRO"); // quedó a medias hacia PRO
+  const otro = await subirYPagar(m.deps, "CLINIC");
+  assert.deepEqual([otro.status, otro.body.code], [409, "CAMBIO_A_MEDIAS"]);
+  assert.match(otro.body.error as string, /Profesional/);
+  assert.equal(m.ops("subscriptions.update").length, 1, "no se intentó un segundo cambio");
+  assert.equal(m.cobros(), 0);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0);
+  const mismo = await subirYPagar(m.deps, "PRO"); // con el mismo plan sí se termina
+  assert.equal(mismo.body.pagado, true);
+  assert.equal(m.planSub(), "PRO");
   assert.equal(m.cobros(), 1);
 });
 
@@ -1918,59 +1935,116 @@ test("Y19 — el cliente trata 409 PAGO_YA_REGISTRADO como ÉXITO («Tu pago ya 
   assert.doesNotMatch(bloque, /toast\.error/);
 });
 
-// X2 — candado en la BASE (entre instancias), simulado con una base compartida
+// X2 / Z7 / Z18 / Z19 — candado en la BASE (entre instancias): una fila por clínica en billing_email_logs, comparar-y-cambiar atómico
 function baseDoble() {
-  const filas: Array<{ clinicId: string; entityType: string; action: string; createdAt: Date; changes: any }> = [];
-  const bloqueos: string[] = [];
+  const filas = new Map<string, { invoiceId: string; clinicId: string; kind: string; email: string; createdAt: Date }>();
   let falla = false;
-  const tx = {
-    $executeRaw: async (q: TemplateStringsArray, ...v: unknown[]) => { bloqueos.push(`${q.join("?")}|${v.join(",")}`); },
-    auditLog: {
-      findFirst: async ({ where }: any) => {
-        const mias = filas.filter((f) => f.clinicId === where.clinicId && f.entityType === where.entityType);
-        return mias.length ? mias[mias.length - 1] : null;
-      },
-      create: async ({ data }: any) => { filas.push({ ...data, createdAt: relojBase.ahora }); },
-    },
+  const reloj = { ahora: new Date("2026-10-20T12:00:00Z") };
+  const cumple = (f: any, where: any): boolean => {
+    if (where.kind !== undefined && f.kind !== where.kind) return false;
+    if (where.email !== undefined && f.email !== where.email) return false;
+    if (where.OR) {
+      return where.OR.some((c: any) => (c.kind !== undefined ? f.kind === c.kind : f.createdAt.getTime() < c.createdAt.lt.getTime()));
+    }
+    return true;
   };
-  const relojBase = { ahora: new Date("2026-10-20T12:00:00Z") };
+  const operaciones: string[] = [];
   const db: DbCandado = {
-    $transaction: async (fn) => {
-      if (falla) throw new Error("base caída");
-      return fn(tx as any);
+    billingEmailLog: {
+      updateMany: async ({ where, data }: any) => {
+        operaciones.push("updateMany");
+        if (falla) throw new Error("base caída");
+        const f = filas.get(where.invoiceId);
+        if (!f || !cumple(f, where)) return { count: 0 };
+        Object.assign(f, data);
+        return { count: 1 };
+      },
+      create: async ({ data }: any) => {
+        operaciones.push("create");
+        if (falla) throw new Error("base caída");
+        if (filas.has(data.invoiceId)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" }); // invoiceId @unique
+        filas.set(data.invoiceId, { ...data });
+        return data;
+      },
+      findUnique: async ({ where }: any) => {
+        operaciones.push("findUnique");
+        if (falla) throw new Error("base caída");
+        return filas.get(where.invoiceId) ?? null;
+      },
     },
   };
-  return { db, filas, bloqueos, reloj: relojBase, romper: () => { falla = true; } };
+  return { db, filas, reloj, operaciones, romper: () => { falla = true; } };
 }
 
-test("X2 — candado en la base: dos instancias (sin Upstash) no cobran a la vez; caduca solo; con dueño; no bloquea otra clínica; fail-open si la base cae", async () => {
+test("X2 — candado en la base: dos instancias no cobran a la vez; caduca solo; con dueño; no bloquea otra clínica; una sola fila por clínica, reutilizada (nunca se borra)", async () => {
   const b = baseDoble();
   const ttl = 90;
-  const ahora = () => b.reloj.ahora;
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "pagar:A", ttlSec: ttl, ahora: ahora() }, b.db), true);
-  // Otra instancia (otra petición) de la MISMA clínica: ocupado. Otra clínica: libre.
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), false);
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c2", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), true);
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: ahora() }, b.db), "pagar:A");
-  // Usa el candado de Postgres por clínica (transacción corta) y la bitácora, sin tabla nueva.
-  assert.ok(b.bloqueos.every((q) => q.includes("pg_advisory_xact_lock")));
-  assert.ok(b.filas.every((f) => f.entityType === ENTIDAD_CANDADO_COBRO));
-  // Soltar con otro dueño no suelta; con el suyo sí.
-  await soltarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db);
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), false);
-  await soltarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "pagar:A", ttlSec: ttl, ahora: ahora() }, b.db);
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: ahora() }, b.db), null);
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "subir:B", ttlSec: ttl, ahora: ahora() }, b.db), true);
+  const toma = (clinicId: string, dueno: string) => tomarCandadoEnBase({ clinicId, dueno, ttlSec: ttl, ahora: b.reloj.ahora }, b.db);
+  assert.equal(await toma("c1", "pagar:A"), "tomado");
+  assert.equal(await toma("c1", "subir:B"), "ocupado", "otra instancia de la MISMA clínica");
+  assert.equal(await toma("c2", "subir:B"), "tomado", "otra clínica no se bloquea");
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: b.reloj.ahora }, b.db), "pagar:A");
+  // Soltar con otro dueño no suelta; con el suyo sí, y la MISMA fila se reutiliza.
+  await soltarCandadoEnBase({ clinicId: "c1", dueno: "subir:B" }, b.db);
+  assert.equal(await toma("c1", "subir:B"), "ocupado");
+  await soltarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A" }, b.db);
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: b.reloj.ahora }, b.db), null);
+  assert.equal(await toma("c1", "subir:B"), "tomado");
   // Caduca solo si el proceso muere sin soltarlo.
   b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 91_000);
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: ahora() }, b.db), null);
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", userId: "u", dueno: "pagar:C", ttlSec: ttl, ahora: ahora() }, b.db), true);
-  // Nunca se borra nada: solo se agregan filas.
-  assert.equal(b.filas.length, 5); // 4 reservas + 1 «libre»; ninguna se borra
-  // Fail-open: si la base cae, el cobro no se bloquea.
+  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c1", ttlSec: ttl, ahora: b.reloj.ahora }, b.db), null);
+  assert.equal(await toma("c1", "pagar:C"), "tomado");
+  assert.equal(b.filas.size, 2, "una fila por clínica, reutilizada: nada crece ni se borra");
+  assert.deepEqual([...b.filas.keys()].sort(), [llaveCandadoCobro("c1"), llaveCandadoCobro("c2")].sort());
+  assert.equal(await tomarCandadoEnBase({ clinicId: "", dueno: "x", ttlSec: ttl }, b.db), "error", "sin clinicId no se bloquea a ciegas");
+});
+
+test("Z7 — si la base FALLA al tomar el candado NO se deja pasar: «error», se suelta la capa rápida, y «Pagar»/«Subir» responden «intenta de nuevo» SIN cobrar", async () => {
+  const b = baseDoble();
   b.romper();
-  assert.equal(await tomarCandadoEnBase({ clinicId: "c9", userId: "u", dueno: "pagar:Z", ttlSec: ttl, ahora: ahora() }, b.db), true);
-  assert.equal(await duenoDelCandadoEnBase({ clinicId: "c9", ttlSec: ttl }, b.db), null);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, b.db), "error");
+  const mem = new Map<string, string>();
+  const rapida: CapaRapida = {
+    adquirir: async (k, _t, d) => { if (mem.has(k)) return false; mem.set(k, d); return true; },
+    liberar: async (k, d) => { if (mem.get(k) === d) mem.delete(k); },
+  };
+  const real = crearCandadoDeCobro({ clinicId: "c1" }, { rapida, db: b.db });
+  assert.equal(await real.tomar("k", 90, "subir:B"), "error");
+  assert.equal(mem.size, 0, "no se queda con la capa rápida tomada");
+  // De punta a punta: ni «Pagar» ni «Subir» tocan Stripe.
+  for (const accion of ["pagar", "subir"] as const) {
+    const m = montar({ candadoFalla: true, suspendida: true, abiertas: MESES });
+    const r = accion === "pagar" ? await pagarPendiente(m.deps) : await subirYPagar(m.deps, "PRO");
+    assert.deepEqual([r.status, r.body.code, r.body.error], [503, "CANDADO_NO_DISPONIBLE", MENSAJES.intentaDeNuevo], accion);
+    assert.equal(m.llamadas.filter((l) => !l.op.startsWith("candado")).length, 0, `${accion}: no llamó a Stripe`);
+    assert.equal(m.cobrosDeTarjeta() + m.cobros(), 0);
+    assert.doesNotMatch(r.body.error as string, /stripe/i);
+  }
+});
+
+test("Z7 — dos «Subir» a planes DISTINTOS nunca cobran los dos: una sola clave de Stripe por clínica+factura (aunque el candado no los frene)", async () => {
+  const m = montar(); // candado permisivo: simula que ninguna capa los vio
+  const [a, b] = await Promise.all([subirYPagar(m.deps, "PRO"), subirYPagar(m.deps, "CLINIC")]);
+  assert.equal(m.cobros(), 1, "un solo plan cobrado");
+  assert.equal([a, b].filter((r) => r.status === 200).length, 1);
+  const llaves = new Set(m.ops("subscriptions.update").map((l) => l.args[2].idempotencyKey));
+  assert.equal(llaves.size, 1, "la misma clave para cualquier plan destino");
+  assert.equal(claves.subir("c", "in_x"), claves.subir("c", "in_x"));
+  // El segundo no repone ni cobra: el rechazo de Stripe por clave en curso lo trata como «otra operación lo está haciendo».
+  assert.ok(["PRO", "CLINIC"].includes(m.planSub()));
+  assert.equal(m.facturas.get("in_nueva").status, "paid");
+});
+
+test("Z18/Z19 — el candado NO escribe en audit_logs (no sale en /dashboard/auditoria ni en la actividad) y no hay nada que atribuir a quien suplanta", () => {
+  const raiz = path.resolve(__dirname, "../../../..");
+  const codigo = readFileSync(path.join(raiz, "src/lib/billing/candado-cobro.server.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(codigo, /auditLog|logAudit|audit_logs|ENTIDAD_/);
+  assert.match(codigo, /billingEmailLog/);
+  assert.doesNotMatch(codigo, /\$transaction|pg_advisory/, "sin transacción larga: con connection_limit=1 retendría la única conexión mientras se cobra");
+  assert.doesNotMatch(codigo, /\.delete\(|deleteMany/, "nunca se borra nada");
+  // La ruta tampoco lo audita por su cuenta.
+  const ruta = readFileSync(path.join(raiz, "src/app/api/billing/pago-pendiente/route.ts"), "utf8");
+  assert.doesNotMatch(ruta, /candado[^\n]*logAudit/i);
 });
 
 test("X2 — las dos capas juntas: la capa rápida es de CADA instancia (sin Upstash no se ven), pero la base las ve a las dos; suelta las dos", async () => {
@@ -1981,19 +2055,53 @@ test("X2 — las dos capas juntas: la capa rápida es de CADA instancia (sin Ups
       adquirir: async (k, _t, d) => { if (mem.has(k)) return false; mem.set(k, d); return true; },
       liberar: async (k, d) => { if (mem.get(k) === d) mem.delete(k); },
     };
-    return { mem, candado: crearCandadoDeCobro({ clinicId: "c1", userId: "u" }, { rapida, db: b.db, ahora: () => b.reloj.ahora }) };
+    return { mem, candado: crearCandadoDeCobro({ clinicId: "c1" }, { rapida, db: b.db, ahora: () => b.reloj.ahora }) };
   };
   const A = instancia();
   const B = instancia(); // otra instancia serverless: su memoria NO ve la de A
-  assert.equal(await A.candado.tomar("k", 90, "pagar:A"), true);
-  assert.equal(await B.candado.tomar("k", 90, "subir:B"), false, "la capa rápida de B está libre, pero la base la frena");
+  assert.equal(await A.candado.tomar("k", 90, "pagar:A"), "tomado");
+  assert.equal(await B.candado.tomar("k", 90, "subir:B"), "ocupado", "la capa rápida de B está libre, pero la base la frena");
   assert.equal(B.mem.size, 0, "y B no se queda con su capa rápida tomada");
   assert.equal(await B.candado.quien(), "pagar:A");
   await A.candado.soltar("k", "pagar:A");
   assert.equal(A.mem.size, 0);
-  assert.equal(await B.candado.tomar("k", 90, "subir:B"), true);
+  assert.equal(await B.candado.tomar("k", 90, "subir:B"), "tomado");
   await B.candado.soltar("k", "subir:B");
-  assert.equal(await A.candado.tomar("k", 90, "pagar:A2"), true);
+  assert.equal(await A.candado.tomar("k", 90, "pagar:A2"), "tomado");
+});
+
+test("Z9 — «Tu pago ya se registró» SOLO si de verdad hay un pago registrado; si el «Subir» de la otra pestaña falló a medias, el mensaje es verdadero", async () => {
+  // El «Subir» falla (error de Stripe que no es de tarjeta) mientras «Pagar» esperaba el candado.
+  const m = montar({ candadoReal: true, updateFallaAntes: 1 });
+  const [subir, pagar] = await Promise.all([subirYPagar(m.deps, "PRO"), pagarPendiente(m.deps)]);
+  assert.equal(subir.status, 502);
+  assert.notEqual(pagar.body.code, "PAGO_YA_REGISTRADO", "no se cobró nada: no puede decir que ya se registró");
+  assert.equal(pagar.body.code, "CAMBIO_A_MEDIAS");
+  assert.match(pagar.body.error as string, /cambio de plan a medias/);
+  assert.equal(m.cobros() + m.cobrosDeTarjeta(), 0);
+  assert.doesNotMatch(JSON.stringify(pagar.body), /ya se registró/);
+
+  // Sin pago y sin cambio a medias (la otra operación no hizo nada): «sin pendiente», no «ya se registró».
+  const vacio = montar({ candadoReal: true, abiertas: [], alEsperar: () => { vacio.candados.clear(); } });
+  vacio.candados.set(claves.candadoSubir("clin_1"), { hasta: Date.now() + 60_000, dueno: "pagar:otra" });
+  const r = await pagarPendiente(vacio.deps);
+  assert.deepEqual([r.status, r.body.code], [409, "SIN_PENDIENTE"]);
+
+  // Una factura pagada ANTES de empezar a esperar no cuenta como «ya se registró».
+  const vieja = montar({ candadoReal: true, abiertas: [{ ...FACTURA_VIEJA, id: "in_antigua", status: "paid", status_transitions: { paid_at: Math.floor(Date.now() / 1000) - 3600 } }], alEsperar: () => { vieja.candados.clear(); } });
+  vieja.candados.set(claves.candadoSubir("clin_1"), { hasta: Date.now() + 60_000, dueno: "pagar:otra" });
+  assert.equal((await pagarPendiente(vieja.deps)).body.code, "SIN_PENDIENTE");
+
+  // Cuando sí se pagó mientras esperaba (el caso de siempre): sigue diciendo «Tu pago ya se registró».
+  const ok = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
+  const [a, b2] = await Promise.all([pagarPendiente(ok.deps), pagarPendiente(ok.deps)]);
+  assert.equal(a.body.pagado, true);
+  assert.equal(b2.body.code, "PAGO_YA_REGISTRADO");
+  // Si no se puede consultar a Stripe, no se afirma nada.
+  const sinStripe = montar({ candadoReal: true, abiertas: [], alEsperar: () => { sinStripe.candados.clear(); sinStripe.deps.stripe = null; } });
+  sinStripe.candados.set(claves.candadoSubir("clin_1"), { hasta: Date.now() + 60_000, dueno: "pagar:otra" });
+  const rr = await pagarPendiente(sinStripe.deps);
+  assert.notEqual(rr.body.code, "PAGO_YA_REGISTRADO");
 });
 
 test("X2 — el código NO exige UPSTASH_REDIS_REST_URL/TOKEN: sin ellas la capa rápida cae a memoria y la base cubre entre instancias", () => {

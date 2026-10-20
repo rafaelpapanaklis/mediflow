@@ -114,7 +114,7 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
       return c ?? {};
     },
     // Candado por clínica de «Pagar» y «Subir»: failban (Upstash o memoria) + candado en la base entre instancias.
-    candado: crearCandadoDeCobro({ clinicId: clinic.id, userId: user.id }),
+    candado: crearCandadoDeCobro({ clinicId: clinic.id }),
     // Mismo buzón que el aviso de afiliados y el de SPEI: ADMIN_NOTIFY_EMAIL, o el general.
     avisarAlAdmin: async ({ asunto, lineas }) => {
       const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
