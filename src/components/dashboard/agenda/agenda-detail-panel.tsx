@@ -28,9 +28,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
-import { patchAppointmentStatus } from "@/lib/agenda/mutations";
-import { enviarConAvisoDeSobreagenda, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
-import { ConfirmarSobreagenda } from "@/components/dashboard/agenda-nueva/confirmar-sobreagenda";
+import { useEstadoConAviso } from "./use-estado-con-aviso";
 import {
   STATUS_PIPELINE,
   STATUS_LABELS,
@@ -147,10 +145,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   const [, startTransition] = useTransition();
   // WS1-T5 (revisión t8, N-A1): «Re-abrir cita» con el hueco ya ocupado, con
   // la bandera `agenda-flexible` → «¿Seguro?» y se reabre sobreagendada.
-  const [avisoReabrir, setAvisoReabrir] = useState<{
-    aviso: AvisoSobreagenda;
-    responder: (si: boolean) => void;
-  } | null>(null);
+  const estado = useEstadoConAviso();
 
   const appt = useMemo(
     () =>
@@ -265,13 +260,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     try {
       const updated =
         cancelReason === undefined
-          ? await enviarConAvisoDeSobreagenda({
-              enviar: (confirmacion) => patchAppointmentStatus(appt.id, target, confirmacion),
-              preguntar: (aviso) =>
-                new Promise<boolean>((responder) => setAvisoReabrir({ aviso, responder })),
-              intento: { doctorId: appt.doctor?.id ?? null, resourceId: appt.resourceId },
-              timeZone: state.timezone,
-            })
+          ? await estado.cambiar(appt, target)
           : await patchStatusWithReason(appt.id, target, cancelReason);
       if (!updated) {
         // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
@@ -686,19 +675,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         onClose={() => setEditOpen(false)}
       />
 
-      {avisoReabrir && (
-        <ConfirmarSobreagenda
-          aviso={avisoReabrir.aviso}
-          onConfirmar={() => {
-            avisoReabrir.responder(true);
-            setAvisoReabrir(null);
-          }}
-          onCancelar={() => {
-            avisoReabrir.responder(false);
-            setAvisoReabrir(null);
-          }}
-        />
-      )}
+      {estado.dialogo}
 
       {/* Cobro inline: reusa el modal de billing (que ya contiene el
           PaymentModal). La factura vinculada a la cita se resuelve vía

@@ -64,6 +64,13 @@ export async function leerHorariosDeDoctores(
      * horario: con la comida vacía por un error, guardar la borraría.
      */
     comidaEstricta?: boolean;
+    /**
+     * (revisión t8, N3-A2) La bandera YA LEÍDA por quien llama. Así la
+     * pantalla la lee UNA vez para las dos cosas (leer la comida y decir si
+     * la enseña): con dos lecturas, una podía fallar y la otra no, y salían
+     * los campos de comida vacíos sin el aviso.
+     */
+    banderaLeida?: boolean;
   } = {},
 ): Promise<Map<string, DiaHorario[]>> {
   const mapa = new Map<string, DiaHorario[]>();
@@ -85,7 +92,10 @@ export async function leerHorariosDeDoctores(
   // estuvieran, cualquier `findMany()` sin `select` que alguien añada mañana
   // tumbaría la agenda, el bot y la web con P2022 hasta pegar el SQL. Se leen
   // aparte, por SQL crudo, y solo cuando hace falta.
-  const conComida = await comidaActiva(clinicId, opciones.db);
+  const conComida =
+    opciones.banderaLeida === undefined
+      ? await comidaActiva(clinicId, opciones.db)
+      : opciones.banderaLeida && (await columnasParaLeer(opciones.comidaEstricta === true));
 
   try {
     const filas = await db.doctorSchedule.findMany({
@@ -125,13 +135,14 @@ export async function leerHorariosDeDoctores(
 export async function leerHorarioDeDoctor(
   clinicId: string,
   doctorId: string,
-  opciones: { db?: HorariosDb; comidaEstricta?: boolean } = {},
+  opciones: { db?: HorariosDb; comidaEstricta?: boolean; banderaLeida?: boolean } = {},
 ): Promise<DiaHorario[] | null> {
   if (!doctorId) return null;
   const mapa = await leerHorariosDeDoctores(clinicId, {
     doctorIds: [doctorId],
     db: opciones.db,
     comidaEstricta: opciones.comidaEstricta,
+    banderaLeida: opciones.banderaLeida,
   });
   return mapa.get(doctorId) ?? null;
 }
@@ -212,19 +223,38 @@ const memoria = globalThis as unknown as Record<symbol, Sonda | undefined>;
  * respuesta «no» se vuelve a preguntar a los 10 min, una «sí» ya no.
  */
 export async function columnasComidaExisten(forzar = false): Promise<boolean> {
-  const s = memoria[CLAVE_COLUMNAS];
-  if (!forzar && s && (s.existe || Date.now() - s.at < RECORDAR_AUSENCIA_MS)) return s.existe;
   try {
-    const filas = await prisma.$queryRaw<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'doctor_schedules'
-         AND column_name IN ('lunchStart', 'lunchEnd')`;
-    const existe = Number(filas[0]?.n ?? 0) === 2;
-    memoria[CLAVE_COLUMNAS] = { existe, at: Date.now() };
-    return existe;
+    return await sondaColumnas(forzar);
   } catch (e) {
     console.warn("[horario-doctor] no se pudo comprobar las columnas de la comida:", e);
     return false;
+  }
+}
+
+/** La sonda de `columnasComidaExisten`, sin atrapar el error. */
+async function sondaColumnas(forzar: boolean): Promise<boolean> {
+  const s = memoria[CLAVE_COLUMNAS];
+  if (!forzar && s && (s.existe || Date.now() - s.at < RECORDAR_AUSENCIA_MS)) return s.existe;
+  const filas = await prisma.$queryRaw<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'doctor_schedules'
+       AND column_name IN ('lunchStart', 'lunchEnd')`;
+  const existe = Number(filas[0]?.n ?? 0) === 2;
+  memoria[CLAVE_COLUMNAS] = { existe, at: Date.now() };
+  return existe;
+}
+
+/**
+ * ¿Se pueden leer las columnas de la comida? Con `estricta` (la pantalla del
+ * horario, revisión t8 N3-A2), una sonda que FALLA no es «no hay columnas»:
+ * es `ComidaIlegibleError`, igual que un fallo al leer la comida.
+ */
+async function columnasParaLeer(estricta: boolean): Promise<boolean> {
+  if (!estricta) return columnasComidaExisten();
+  try {
+    return await sondaColumnas(false);
+  } catch (e) {
+    throw new ComidaIlegibleError(e);
   }
 }
 

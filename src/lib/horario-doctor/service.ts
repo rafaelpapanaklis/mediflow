@@ -180,9 +180,13 @@ function respuesta(
 async function leerParaLaPantalla(
   clinicId: string,
   doctorId: string,
+  bandera: boolean,
 ): Promise<{ filas: DiaHorario[] | null; comidaIlegible: boolean }> {
   try {
-    return { filas: await leerHorarioDeDoctor(clinicId, doctorId, { comidaEstricta: true }), comidaIlegible: false };
+    return {
+      filas: await leerHorarioDeDoctor(clinicId, doctorId, { comidaEstricta: true, banderaLeida: bandera }),
+      comidaIlegible: false,
+    };
   } catch (err) {
     if (!(err instanceof ComidaIlegibleError)) throw err;
     console.warn("[horario-doctor] la comida no se pudo leer; la pantalla no la ofrece:", (err.causa as { code?: string })?.code ?? err.causa);
@@ -222,10 +226,12 @@ async function semanaGuardable(
 /** GET — el horario del doctor, o el de la clínica si hereda. */
 export async function verHorario(ctx: HorarioCtx, doctorIdRaw: unknown): Promise<RespuestaHorario> {
   const doctorId = await resolverDoctor(ctx, doctorIdRaw);
-  const [leido, comida] = await Promise.all([
-    leerParaLaPantalla(ctx.clinicId, doctorId),
-    agendaFlexibleEncendida(ctx.clinicId),
-  ]);
+  // (revisión t8, N3-A2) La bandera se lee UNA vez y vale para las dos
+  // cosas: leer la comida y decir si se enseña. Con dos lecturas en paralelo,
+  // la de leer podía fallar («apagada») y la otra no: salían los campos de
+  // comida vacíos sin el aviso, y guardar la borraba.
+  const comida = await agendaFlexibleEncendida(ctx.clinicId);
+  const leido = await leerParaLaPantalla(ctx.clinicId, doctorId, comida);
   return respuesta(ctx, leido.filas, comida, leido.comidaIlegible);
 }
 
@@ -301,7 +307,7 @@ export async function guardarHorario(
   // la relee para no enseñar una semana distinta de la guardada.
   const releida =
     guardable.comida && semana.some((d) => !diasConComida.has(d.dayOfWeek))
-      ? await leerParaLaPantalla(clinicId, doctorId)
+      ? await leerParaLaPantalla(clinicId, doctorId, guardable.comida)
       : null;
   return respuesta(ctx, releida?.filas ?? semana, guardable.comida, releida?.comidaIlegible ?? false);
 }

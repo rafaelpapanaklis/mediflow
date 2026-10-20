@@ -22,6 +22,10 @@ const CLAVE_FLEX = Symbol.for("dalecontrol.agenda.flexible");
 const CLAVE_COLUMNAS = Symbol.for("dalecontrol.horarioDoctor.columnasComida");
 
 let comidaFalla: boolean;
+/** Cuántas lecturas de la bandera fallan todavía (N3-A2: la primera, sí; la segunda, no). */
+let banderaFallaVeces: number;
+/** Cuántas sondas de columnas (information_schema) fallan todavía. */
+let sondaFallaVeces: number;
 /** Lo que hay en la base: comida del lunes (0) al viernes (4). */
 let comidas: { dayOfWeek: number; lunchStart: string; lunchEnd: string }[];
 /** Los UPDATE de comida que llegaron a la transacción. */
@@ -31,6 +35,8 @@ let columnas: boolean;
 
 beforeEach(() => {
   comidaFalla = false;
+  banderaFallaVeces = 0;
+  sondaFallaVeces = 0;
   comidas = [0, 1, 2, 3, 4].map((dayOfWeek) => ({ dayOfWeek, lunchStart: "14:00", lunchEnd: "15:00" }));
   escriturasComida = [];
   columnas = true;
@@ -49,7 +55,13 @@ const semanaBase = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
 const prismaStub: any = {
   user: { findFirst: async ({ where }: any) => (where.id === "d1" && where.clinicId === "c1" ? { id: "d1", role: "DOCTOR" } : null) },
   clinicFeatureFlag: {
-    findMany: async ({ where }: any) => (where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : []),
+    findMany: async ({ where }: any) => {
+      if (banderaFallaVeces > 0) {
+        banderaFallaVeces--;
+        throw Object.assign(new Error("timeout del pooler"), { code: "P1008" });
+      }
+      return where.clinicId === "c1" ? [{ flag: "agenda-flexible", enabled: true }] : [];
+    },
   },
   doctorSchedule: {
     findMany: async ({ where }: any) => {
@@ -61,7 +73,13 @@ const prismaStub: any = {
   $queryRaw: async (strings: TemplateStringsArray, ...valores: unknown[]) => {
     const sql = strings.join("?");
     if (sql.includes("to_regclass")) return [{ existe: true }];
-    if (sql.includes("information_schema")) return [{ n: columnas ? 2 : 0 }];
+    if (sql.includes("information_schema")) {
+      if (sondaFallaVeces > 0) {
+        sondaFallaVeces--;
+        throw Object.assign(new Error("timeout del pooler"), { code: "P1008" });
+      }
+      return [{ n: columnas ? 2 : 0 }];
+    }
     if (sql.includes('"lunchStart"')) {
       assert.equal(valores[0], "c1", "la comida se lee con el clinicId de la sesión");
       if (comidaFalla) throw Object.assign(new Error("timeout del pooler"), { code: "P1008" });
@@ -145,6 +163,28 @@ test("N-A3 · una pantalla VIEJA que recibe `comida: true` junto a `comidaIlegib
   const { parseHorarioDoctor } = await import("@/components/dashboard/horario-doctor/tipos");
   const dto = parseHorarioDoctor({ hereda: false, horario: semanaBase, comida: true, comidaIlegible: true })!;
   assert.equal(dto.comida, false);
+});
+
+test("N3-A2 · la PRIMERA lectura de la bandera falla y la segunda no: ni campos vacíos ni la comida borrada al guardar", async () => {
+  // Antes, `verHorario` leía la bandera dos veces en paralelo: la de «leer la
+  // comida» fallaba («apagada») y la de «enseñarla» salía bien. La pantalla
+  // ofrecía la comida VACÍA, sin aviso, y guardar mandaba null los 7 días.
+  banderaFallaVeces = 1;
+  const { get, dto } = await abrirCambiarYGuardar();
+  assert.equal(get.horario.some((d) => d.lunchStart || d.lunchEnd), false);
+  assert.equal(dto.comida, false, "con la bandera ilegible no se ofrece la comida");
+  assert.deepEqual(escriturasComida, [], "ni un UPDATE de comida: la de la base se queda");
+});
+
+test("N3-A2 · la SONDA de las columnas falla: la comida sale ilegible (con aviso) y guardar no la borra", async () => {
+  (globalThis as any)[CLAVE_COLUMNAS] = undefined; // instancia nueva: aún no sabe si existen
+  sondaFallaVeces = 1; // al guardar, la sonda ya contesta
+  const { get, dto, put } = await abrirCambiarYGuardar();
+  assert.equal(get.comida, false);
+  assert.equal(get.comidaIlegible, true, "una sonda que falla no es «no hay columnas»");
+  assert.equal(dto.comidaIlegible, true, "la pantalla avisa");
+  assert.deepEqual(escriturasComida, [], "ni un UPDATE de comida");
+  assert.equal(put.comida, true, "al guardar la sonda ya contestó: la respuesta vuelve a ofrecerla");
 });
 
 test("A8 · la comida solo se escribe en los días que la TRAEN (una llave en null sí la quita)", async () => {

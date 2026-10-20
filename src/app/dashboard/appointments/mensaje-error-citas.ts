@@ -11,6 +11,11 @@ export function apiErrorMessage(status: number, body: any, fallback: string): st
   // WS1-T5 (revisión t8, A5): con la agenda flexible el 409 se puede
   // sobreagendar, pero esta pantalla (la vieja) no tiene el «¿Seguro?»: se
   // dice dónde hacerlo en vez de un «Elige otra hora» a secas.
+  // (revisión t8, N3-A4) La frase del servidor, si la trae, va PRIMERO: la
+  // de reabrir una cancelada dice qué hacer («agéndale una cita nueva»,
+  // «hazlo desde la Agenda»); el «Elige otra hora» de abajo no sirve para
+  // una cita cancelada, que no se puede mover.
+  if (typeof body?.reason === "string" && body.reason) return body.reason;
   const dondeSobreagendar = body?.sobreagendable === true ? " Si necesitas sobreagendar, hazlo desde la Agenda." : "";
   if (body?.error === "lunch_overlap") {
     const c = body.comida;
@@ -27,7 +32,6 @@ export function apiErrorMessage(status: number, body: any, fallback: string): st
     }
     return `Ese horario ya está ocupado por otra cita. Elige otra hora.${dondeSobreagendar}`;
   }
-  if (typeof body?.reason === "string" && body.reason) return body.reason;
   if (body?.error === "resource_unavailable") return "El sillón no está disponible a esa hora.";
   if (body?.error === "patient_not_found") return "No se encontró el paciente.";
   if (body?.error === "doctor_not_found") return "No se encontró al profesional.";

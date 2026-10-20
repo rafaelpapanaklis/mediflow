@@ -8,12 +8,13 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
+import { useEstadoConAviso } from "./use-estado-con-aviso";
 import { timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor, doctorInitials, readableTextOn } from "@/lib/agenda/doctor-color";
 import { deltaYToSlots } from "@/lib/agenda/drag-utils";
 import { CARD_TWO_ROW_MIN_PX } from "@/lib/agenda/slot-metrics";
-import { batchValidateAppointments, patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { batchValidateAppointments } from "@/lib/agenda/mutations";
 import { nextLogicalStatus, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
@@ -69,6 +70,8 @@ export function AgendaAppointmentCard({
   const { state, permissions, selectAppointment, dispatch, slotHpx } = useAgenda();
   const t = useT();
   const [pendingNext, setPendingNext] = useState(false);
+  // WS1-T5 (revisión t8, N3-A3): «Re-abrir» con el hueco ocupado pregunta.
+  const estado = useEstadoConAviso();
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
   const rawSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
@@ -204,7 +207,12 @@ export function AgendaAppointmentCard({
 
     dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: nextStep.status });
     try {
-      const updated = await patchAppointmentStatus(appointment.id, nextStep.status);
+      const updated = await estado.cambiar(appointment, nextStep.status);
+      if (!updated) {
+        // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
+        dispatch({ type: "ROLLBACK_STATUS", original });
+        return;
+      }
       dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
     } catch (err) {
       dispatch({ type: "ROLLBACK_STATUS", original });
@@ -292,6 +300,7 @@ export function AgendaAppointmentCard({
         </div>
       )}
       <AgendaStatusPopover appointment={appointment} />
+      {estado.dialogo}
       {nextStep && (
         <button
           type="button"
