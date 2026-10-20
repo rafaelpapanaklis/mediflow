@@ -9,7 +9,7 @@ import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
-import { fetchRecords, syncOdontogram } from "@/components/dashboard/odontogram-v2/adapter";
+import { fetchRecords, syncCambios, type CambioDiente } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
 import { mergeLiveOdontogram, changedTeeth } from "@/components/dashboard/odontogram-v2/merge-consulta";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
@@ -183,9 +183,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // estado vivo actual para que el doctor parta de ahí y registre los cambios.
   const [odontogram, setOdontogram] = useState<Records>(() => (initialSpec.odontogram as Records) ?? {});
   // Estado de la precarga del vivo. Si NO llegó a "ready", al guardar NO se
-  // sincroniza: /api/odontogram/sync REEMPLAZA todo el odontograma del paciente,
-  // y sincronizar tras una precarga fallida borraría su historial dental
-  // (quedaría solo lo marcado en esta consulta). En edición no hay precarga.
+  // sincroniza (lo dice el aviso de abajo). Antes era imprescindible porque el
+  // sync REEMPLAZABA todo el odontograma; desde la revisión t4 (O4) solo manda
+  // el cambio de los dientes tocados y ya no podría borrar historial, pero se
+  // deja igual: sin ver el vivo, el doctor marcó a ciegas. En edición no hay precarga.
   const [odoStatus, setOdoStatus] = useState<"loading" | "ready" | "error">(isEditing ? "ready" : "loading");
   const [odoRetry, setOdoRetry] = useState(0);
   // true desde que el doctor toca el odontograma; la precarga no pisa sus marcas.
@@ -724,11 +725,15 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         if (odoStatus === "ready") {
           try {
             // El vivo puede haber cambiado desde la precarga (pestaña
-            // Odontograma con autoguardado, otra pestaña): se relee y se le
-            // aplica el cambio del doctor en los dientes que tocó, en vez de
-            // reemplazarlo con la foto de cuando se abrió la consulta.
-            const vivo = await fetchRecords(patientId);
-            await syncOdontogram(patientId, mergeLiveOdontogram(vivo, odontogram, odoTouchedRef.current, odoBasesRef.current));
+            // Odontograma con autoguardado, otra pestaña). Se manda SOLO el
+            // cambio del doctor en los dientes que tocó y el servidor lo aplica
+            // dentro de su transacción sobre lo que haya en ese momento
+            // (revisión t4, O4): nada de reemplazar el odontograma entero.
+            const cambios: Record<number, CambioDiente> = {};
+            odoBasesRef.current.forEach((base, fdi) => {
+              cambios[fdi] = { base, now: odontogram[fdi] ?? { surfaces: {}, tooth: [] } };
+            });
+            if (Object.keys(cambios).length) await syncCambios(patientId, cambios);
           } catch {
             toast.error("La consulta se guardó; el odontograma del paciente no se pudo actualizar.", { duration: 7000 });
           }

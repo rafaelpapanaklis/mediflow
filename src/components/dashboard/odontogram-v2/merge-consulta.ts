@@ -2,12 +2,13 @@
    merge-consulta — el odontograma de «Nueva consulta» (modo controlado)
    frente al vivo del paciente.
 
-   La consulta precarga el vivo y el doctor marca encima; «Guardar consulta»
-   sincroniza REEMPLAZANDO el vivo (/api/odontogram/sync). Para no borrar
+   La consulta precarga el vivo y el doctor marca encima. Para no borrar
    nada de lo que no tocó —ni pisar lo que otra pestaña autoguardó en el
    vivo mientras tanto— lo que manda de cada diente tocado es su CAMBIO
-   (cómo estaba al tocarlo → cómo lo dejó), aplicado sobre el vivo fresco.
-   Es también lo que guarda el borrador de sesión (ws1-t11).
+   (cómo estaba al tocarlo → cómo lo dejó): en pantalla se aplica sobre el
+   vivo fresco (aquí), y al «Guardar consulta» viaja tal cual y el servidor
+   lo aplica dentro de su transacción (/api/odontogram/sync con `cambios`,
+   revisión t4 O4). Es también lo que guarda el borrador de sesión (ws1-t11).
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
 

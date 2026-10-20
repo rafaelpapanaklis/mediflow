@@ -9,6 +9,7 @@ import { sumInvoiceItems, itemLineTotal } from "@/lib/invoice-totals";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
+import { rotuloCara } from "@/components/dashboard/odontogram-v2/adapter";
 
 export interface SuggestedTreatment {
   code?: string;
@@ -28,10 +29,6 @@ interface TreatmentsModalProps {
   /** Llamado cuando la factura se crea con éxito. */
   onInvoiced?: (invoice: { id: string; invoiceNumber: string; total: number }) => void;
 }
-
-const SURFACE_LABEL: Record<string, string> = {
-  V: "Vestibular", L: "Lingual", M: "Mesial", D: "Distal", O: "Oclusal",
-};
 
 interface Row extends SuggestedTreatment {
   _key: string;
@@ -188,7 +185,8 @@ export function TreatmentsModal({
                   <tr key={r._key}>
                     <td className={styles.treatmentsName}>{r.name}</td>
                     <td className={styles.mono}>{r.toothNumber ?? "—"}</td>
-                    <td>{r.surface ? SURFACE_LABEL[r.surface] ?? r.surface : "—"}</td>
+                    {/* la base guarda la incisal de un anterior como «O»: rotuloCara dice «Incisal» */}
+                    <td>{rotuloCara(r.toothNumber, r.surface) ?? "—"}</td>
                     <td>
                       <input
                         type="number"

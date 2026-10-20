@@ -20,9 +20,9 @@ import type {
 } from "./types";
 import { EMPTY_RECORD } from "./types";
 import {
-  fetchRecords, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
+  fetchOdontogram, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
-import { SaveQueue, saveQueueFor, type SaveOp, type SaveStatus } from "./autosave";
+import { SaveQueue, saveQueueFor, bindBrowserCopy, bindBrowserCopyOffline, type KeyValueStore, type SaveOp, type SaveStatus } from "./autosave";
 import { OdoDefs } from "./OdoDefs";
 import { Odontogram } from "./Odontogram";
 import { Palette } from "./Palette";
@@ -69,11 +69,18 @@ function sendOp(patientId: string, op: SaveOp, opts: { keepalive: boolean }): Pr
 async function fetchConsistent(patientId: string, queue: SaveQueue | null, force: boolean): Promise<Records | null> {
   for (let i = 0; i < 4; i++) {
     const v = queue?.getVersion();
-    const recs = await fetchRecords(patientId);
-    if (!queue) return recs;
-    if (queue.getVersion() === v || (force && i === 3)) return queue.overlay(recs);
+    const { records, clinicId } = await fetchOdontogram(patientId);
+    if (!queue) return records;
+    // con la clínica de la sesión ya se sabe la llave de la copia del
+    // navegador: se engancha y se recupera lo que quedó sin mandar (O1)
+    if (clinicId && bindBrowserCopy(queue, browserStore(), clinicId, patientId) > 0) continue;
+    if (queue.getVersion() === v || (force && i === 3)) return queue.overlay(records);
   }
   return null;
+}
+
+function browserStore(): KeyValueStore | null {
+  try { return window.localStorage; } catch { return null; /* navegación privada o bloqueado */ }
 }
 
 /** «Guardando… / Guardado / sin conexión / no se guardó», discreto, junto al resumen. */
@@ -157,7 +164,8 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     }
   }, []);
 
-  // Load on mount / patient change via the adapter — NOT localStorage.
+  // Load on mount / patient change via the adapter. localStorage NO guarda el
+  // odontograma: solo lo pendiente de mandar (autosave.ts, revisión t4 O1).
   // En modo controlado el estado viene del padre: no se carga del servidor.
   useEffect(() => {
     if (controlled) return;
@@ -167,7 +175,14 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     // lo que aún no llegó al servidor se pinta encima: no se pierde al volver
     fetchConsistent(patientId, queueRef.current, true)
       .then((recs) => { if (!cancelled && recs) setInternalRecords(recs); })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Error"); })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Error");
+        // sin red al abrir: lo que quedó pendiente (y lo que se marque ahora)
+        // sigue guardándose en el navegador y se ve, aunque falte el resto
+        const q = queueRef.current;
+        if (q) { bindBrowserCopyOffline(q, browserStore(), patientId); setInternalRecords(q.overlay({})); }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [patientId, controlled]);
@@ -184,36 +199,23 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   // Encola una escritura (solo en modo vivo; el controlado lo guarda el padre).
   const save = useCallback((op: SaveOp) => { queueRef.current?.enqueue(op); }, []);
 
-  // Salir de la página / pestaña con algo pendiente.
+  // En pantalla: el indicador de aquí avisa (el aviso fijo de la página no
+  // hace falta). Los avisos de cierre de página viven en la cola (autosave.ts),
+  // no aquí: siguen activos cuando este componente ya se desmontó.
   useEffect(() => {
     if (!queue) return;
-    // cerrar o recargar: aviso del navegador si queda algo sin confirmar
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      queue.flush();
-      if (!queue.hasPending()) return;
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    // la página se va de verdad: lo pendiente sale con keepalive
-    const onPageHide = () => queue.flushForUnload();
-    // cambiar de pestaña: lo tecleado se manda; al volver, se trae lo que
-    // otra pestaña haya cambiado (si aquí no queda nada pendiente)
+    const detach = queue.attach();
+    // al volver a la pestaña se trae lo que otra pestaña haya cambiado (si
+    // aquí no queda nada pendiente)
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") queue.flush();
-      else if (!queue.hasPending()) resync();
+      if (document.visibilityState === "visible" && !queue.hasPending()) resync();
     };
-    const onOnline = () => queue.retryNow();
-    window.addEventListener("beforeunload", onBeforeUnload);
-    window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("online", onOnline);
     return () => {
-      window.removeEventListener("beforeunload", onBeforeUnload);
-      window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("online", onOnline);
       // se desmonta (otra pestaña de la ficha): lo tecleado sale ya y la cola sigue sola
       queue.flush();
+      detach();
     };
   }, [queue, resync]);
 

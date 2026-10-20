@@ -6,7 +6,7 @@
    regardless of whether the extended fields are live yet.
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
-import { classify } from "./data";
+import { classify, SURFACE_NAMES } from "./data";
 
 /* ---------- la cara incisal ----------
    La pantalla llama «I» (Incisal) al centro de los anteriores y «O» al de los
@@ -23,6 +23,13 @@ export function toServerSurface(surface: string | null | undefined): string | nu
 export function fromServerSurface(toothNumber: number, surface: string | null): string | null {
   if (surface === "O" && !classify(toothNumber).posterior) return "I";
   return surface;
+}
+
+/** Nombre de la cara tal como está en la base, para mostrar: «O» de un anterior es «Incisal». */
+export function rotuloCara(toothNumber: number | null | undefined, surface: string | null | undefined): string | null {
+  if (!surface) return null;
+  const letter = toothNumber ? fromServerSurface(toothNumber, surface) ?? surface : surface;
+  return SURFACE_NAMES[letter as keyof typeof SURFACE_NAMES]?.es ?? surface;
 }
 
 const BASE = "/api/odontogram";
@@ -81,20 +88,41 @@ async function send(url: string, init: RequestInit, opts: WriteOptions | undefin
   let res: Response;
   try {
     res = await fetch(url, { ...init, keepalive: !!opts?.keepalive, signal: ctl.signal });
-  } catch (e) {
-    const why = ctl.signal.aborted ? "sin respuesta del servidor" : e instanceof Error ? e.message : "";
-    throw new OdontogramHttpError(why ? `${fallback}: ${why}` : fallback, 0);
+  } catch {
+    // el texto del navegador («Failed to fetch», «Load failed») no le dice nada a la clínica
+    throw new OdontogramHttpError(`${fallback}: ${ctl.signal.aborted ? "el servidor no respondió" : "sin conexión"}`, 0);
   } finally {
     clearTimeout(timer);
   }
+  // una redirección seguida (al login) no es un guardado: se trata como sesión vencida
+  if (res.redirected) throw new OdontogramHttpError(SESION_VENCIDA, 401);
   if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, fallback), res.status);
 }
 
+export const SESION_VENCIDA = "Tu sesión venció, vuelve a entrar. Lo que marcaste sigue pendiente y se guardará al volver.";
+
+/** Códigos de la API del odontograma → lo que entiende la clínica. */
+const MENSAJES: Record<string, string> = {
+  unauthorized: SESION_VENCIDA,
+  forbidden: "Tu usuario no tiene permiso para editar el odontograma.",
+  patient_not_found: "No se encontró al paciente en esta clínica.",
+  invalid_payload: "El cambio no es válido y no se pudo guardar.",
+  invalid_tooth: "Ese diente no existe en el odontograma.",
+  payload_too_large: "Son demasiados hallazgos para guardarlos de una vez.",
+  missing_patientId: "Falta el paciente.",
+  schema_not_migrated: "El odontograma no está disponible en este servidor; avisa a soporte.",
+  internal_error: "Falló el servidor.",
+};
+
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
-  const data = await safeJson<{ error?: string; reason?: string; hint?: string }>(res);
-  if (data?.error) return data.hint ? `${data.error} — ${data.hint}` : data.error;
-  if (data?.reason) return String(data.reason);
-  return `${fallback} (HTTP ${res.status})`;
+  if (res.status === 401) return SESION_VENCIDA;
+  const data = await safeJson<{ error?: string; code?: string }>(res);
+  const code = data?.error ?? "";
+  if (MENSAJES[code]) return `${fallback}: ${MENSAJES[code]}`;
+  // el 403 del reto 2FA (middleware) ya trae su texto en español y un `code` propio
+  if (data?.code && data.error) return data.error;
+  if (res.status >= 500) return `${fallback}: falló el servidor (${res.status}).`;
+  return `${fallback} (error ${res.status}).`;
 }
 
 /* ============================================================
@@ -131,9 +159,14 @@ export function entriesToRecords(entries: OdontogramEntry[]): Records {
    READ
    ============================================================ */
 export async function fetchRecords(patientId: string): Promise<Records> {
+  return (await fetchOdontogram(patientId)).records;
+}
+
+/** Lee el odontograma y la clínica de la sesión (la llave de lo pendiente guardado en el navegador). */
+export async function fetchOdontogram(patientId: string): Promise<{ records: Records; clinicId: string | null }> {
   const res = await fetch(`${BASE}?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo cargar el odontograma"));
-  const data = await safeJson<{ entries: OdontogramEntry[]; notes?: Record<string, string> }>(res);
+  if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, "No se pudo cargar el odontograma"), res.status);
+  const data = await safeJson<{ entries: OdontogramEntry[]; notes?: Record<string, string>; clinicId?: string }>(res);
   const records = entriesToRecords(data?.entries ?? []);
   // Per-tooth notes arrive in a SEPARATE `notes` map keyed by toothNumber — the
   // API does NOT return them as "__note__" entries (see WS3-T1 contract).
@@ -144,7 +177,7 @@ export async function fetchRecords(patientId: string): Promise<Records> {
     if (!records[fdi]) records[fdi] = { surfaces: {}, tooth: [] };
     records[fdi].note = note;
   }
-  return records;
+  return { records, clinicId: typeof data?.clinicId === "string" ? data.clinicId : null };
 }
 
 /* ============================================================
@@ -210,6 +243,31 @@ export async function setNote(patientId: string, toothNumber: number, text: stri
 /** Clear the entire chart for a patient (POST /api/odontogram/reset). */
 export async function resetOdontogram(patientId: string, opts?: WriteOptions): Promise<void> {
   await send(`${BASE}/reset?patientId=${encodeURIComponent(patientId)}`, { method: "POST" }, opts, "No se pudo limpiar el odontograma");
+}
+
+/** Un diente tocado en una consulta: cómo estaba al tocarlo y cómo lo dejó el doctor. */
+export interface CambioDiente { base: ToothRecord; now: ToothRecord }
+
+/**
+ * «Guardar consulta» (ws1-t11, revisión t4 O4): manda SOLO el cambio de los
+ * dientes que el doctor tocó y el servidor lo aplica dentro de su transacción
+ * sobre lo que haya en ese momento (POST /api/odontogram/sync con `cambios`).
+ * Así no pisa lo que otra pestaña autoguardó, ni siquiera en el mismo diente.
+ */
+export async function syncCambios(patientId: string, cambios: Record<number, CambioDiente>): Promise<void> {
+  const out: Record<number, CambioDiente> = {};
+  for (const [fdi, c] of Object.entries(cambios)) {
+    const n = Number(fdi);
+    const conv = recordsForServer({ [n]: c.base ?? { surfaces: {}, tooth: [] } })[n];
+    const conv2 = recordsForServer({ [n]: c.now ?? { surfaces: {}, tooth: [] } })[n];
+    out[n] = { base: conv, now: conv2 };
+  }
+  const res = await fetch(`${BASE}/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patientId, cambios: out }),
+  });
+  if (!res.ok) throw new OdontogramHttpError(await readErrorMessage(res, "No se pudo actualizar el odontograma"), res.status);
 }
 
 /** Las caras con la letra de la base (la «I» de los anteriores viaja como «O»). */

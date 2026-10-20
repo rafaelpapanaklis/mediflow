@@ -111,7 +111,9 @@ export async function GET(req: NextRequest) {
     for (const r of rows) {
       if (r.conditionId === NOTE_CONDITION && r.notes) notes[r.toothNumber] = r.notes;
     }
-    return NextResponse.json({ entries, notes });
+    // clinicId de la SESIÓN (no del paciente): el panel lo usa como parte de la
+    // llave con la que guarda en el navegador lo que aún no llegó (autoguardado).
+    return NextResponse.json({ entries, notes, clinicId: dbUser.clinicId });
   } catch (err) {
     return unexpectedError(err);
   }
