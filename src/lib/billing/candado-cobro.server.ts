@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -10,8 +11,8 @@ import { prisma } from "@/lib/prisma";
  *  2. ESTE candado en la base, que ve a TODAS las instancias. Es una sola fila por clínica en `billing_email_logs`
  *     (tabla interna de cobros que ninguna pantalla lista; `invoiceId` es UNIQUE y ya se usa como llave de «una sola vez»
  *     por otros avisos), manejada con comparar-y-cambiar atómico:
- *       · tomar  = `UPDATE … SET kind='candado_tomado', email=<dueño>, createdAt=now() WHERE llave AND (libre OR vencida según now() de la BASE)`;
- *         si no hay fila todavía, `INSERT` (la llave UNIQUE hace que de dos que compiten solo uno entre: P2002 = ocupado);
+ *       · tomar  = `UPDATE … SET kind='candado_tomado', email=<dueño>, createdAt=(now() AT TIME ZONE 'UTC') WHERE llave AND (libre OR vencida según el reloj de la BASE)`;
+ *         si no hay fila todavía, `INSERT … ON CONFLICT DO NOTHING` con la hora de la base (la llave UNIQUE hace que de dos que compiten solo una entre);
  *       · soltar = `UPDATE … SET kind='candado_libre' WHERE llave AND kind='candado_tomado' AND email=<dueño>`.
  *     No usa transacción larga (con `connection_limit=1` por instancia retendría la única conexión mientras se cobra y el
  *     resto de las consultas de la petición se quedarían esperando), ni `audit_logs` (Z18/Z19: no ensucia /dashboard/auditoria
@@ -31,7 +32,6 @@ export interface DbCandado {
   $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
   $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   billingEmailLog: {
-    create(args: any): Promise<unknown>;
     updateMany(args: any): Promise<{ count: number }>;
     findUnique(args: any): Promise<{ kind: string } | null>;
   };
@@ -41,11 +41,18 @@ export interface DbCandado {
 export const llaveCandadoCobro = (clinicId: string) => `candado-cobro:${clinicId}`;
 
 /**
+ * AB5: TODA la hora del candado es la de la BASE, expresada en UTC: `now() AT TIME ZONE 'UTC'` es un `timestamp` sin zona,
+ * igual que la columna `createdAt` (`timestamp(3)`, donde Prisma guarda UTC), así que NI el reloj de una instancia NI la zona
+ * de la sesión (que si no fuera UTC desfasaría `now()` horas contra la columna) cambian la comparación.
+ */
+// (Prisma no admite fragmentos de SQL dentro de las plantillas: cada consulta lo escribe en línea.)
+
+/**
  * `true` = el candado quedó tomado por `dueno`.
  *
- * AA7: la vigencia se compara con el reloj de la BASE (`now()`), no con el de cada instancia: dos instancias con la hora
- * desfasada no se pisan el candado. AA16: si el UPDATE no toma nada se MIRA antes de volver a intentar el INSERT (un «Pagar»
- * que espera hacía ~30 INSERT con P2002 en 15 s y Prisma imprime cada error aunque se atrape).
+ * AA7: la vigencia se compara con el reloj de la BASE, no con el de cada instancia. AA16: si el UPDATE no toma nada se MIRA
+ * (`findUnique`) antes de volver a intentar el INSERT. AB5: la PRIMERA toma de una clínica también es un INSERT con la hora de
+ * la base (`ON CONFLICT DO NOTHING`: si dos compiten solo una inserta y la otra queda «ocupado», sin errores que imprimir).
  */
 export async function tomarCandadoEnBase(
   args: { clinicId: string; dueno: string; ttlSec: number },
@@ -56,19 +63,15 @@ export async function tomarCandadoEnBase(
   const ttl = Math.max(1, Math.floor(args.ttlSec));
   try {
     const tomadas = await db.$executeRaw`UPDATE "billing_email_logs"
-      SET "kind" = ${KIND_TOMADO}, "email" = ${args.dueno}, "createdAt" = now()
-      WHERE "invoiceId" = ${llave} AND ("kind" = ${KIND_LIBRE} OR "createdAt" < now() - (${ttl}::int * interval '1 second'))`;
+      SET "kind" = ${KIND_TOMADO}, "email" = ${args.dueno}, "createdAt" = (now() AT TIME ZONE 'UTC')
+      WHERE "invoiceId" = ${llave} AND ("kind" = ${KIND_LIBRE} OR "createdAt" < (now() AT TIME ZONE 'UTC') - (${ttl}::int * interval '1 second'))`;
     if (tomadas > 0) return "tomado";
     // Sin UPDATE: o la fila existe y está tomada (vigente) → ocupado, sin tocar el INSERT; o todavía no existe → se crea.
     if (await db.billingEmailLog.findUnique({ where: { invoiceId: llave }, select: { kind: true } })) return "ocupado";
-    try {
-      // `createdAt` lo pone el DEFAULT de la base (su reloj).
-      await db.billingEmailLog.create({ data: { invoiceId: llave, clinicId: args.clinicId, kind: KIND_TOMADO, email: args.dueno } });
-      return "tomado";
-    } catch (e) {
-      if ((e as { code?: string })?.code === "P2002") return "ocupado"; // otra instancia la creó justo antes (carrera de la primera vez)
-      throw e;
-    }
+    const creadas = await db.$executeRaw`INSERT INTO "billing_email_logs" ("id", "invoiceId", "clinicId", "kind", "email", "createdAt")
+      VALUES (${randomUUID()}, ${llave}, ${args.clinicId}, ${KIND_TOMADO}, ${args.dueno}, (now() AT TIME ZONE 'UTC'))
+      ON CONFLICT ("invoiceId") DO NOTHING`;
+    return creadas > 0 ? "tomado" : "ocupado"; // 0 = otra instancia la creó justo antes (carrera de la primera vez)
   } catch (e) {
     // Incluye «la tabla no existe» (P2021 / 42P01: falta correr sql/billing-email-log.sql): NO se cobra sin candado.
     console.error("[candado-cobro] no se pudo tomar el candado en la base (¿falta la tabla billing_email_logs? sql/billing-email-log.sql):", (e as Error)?.message ?? e);
@@ -96,7 +99,7 @@ export async function duenoDelCandadoEnBase(args: { clinicId: string; ttlSec: nu
   try {
     const f = await db.$queryRaw<Array<{ email: string }>>`SELECT "email" FROM "billing_email_logs"
       WHERE "invoiceId" = ${llaveCandadoCobro(args.clinicId)} AND "kind" = ${KIND_TOMADO}
-        AND "createdAt" >= now() - (${ttl}::int * interval '1 second')`;
+        AND "createdAt" >= (now() AT TIME ZONE 'UTC') - (${ttl}::int * interval '1 second')`;
     return f[0]?.email ?? null;
   } catch {
     return null;
@@ -139,4 +142,56 @@ export function crearCandadoDeCobro(
     },
     quien: async (): Promise<string | null> => duenoDelCandadoEnBase({ clinicId: args.clinicId, ttlSec: 90 }, db),
   };
+}
+
+// ── Contador de intentos de «Subir» (AB2/AB3) ─────────────────────────────────────────────────────────────────────
+//
+// Después de un 5xx de Stripe en «Subir», el siguiente intento tiene que llevar una clave de idempotencia NUEVA (Stripe repite
+// un 5xx guardado con la misma clave durante 24 h). El contador vive en NUESTRA base —NO en Stripe: ni en la metadata de una
+// factura anulada (que quizá no se pueda editar) ni en una escritura con clave que pudiera repetir su propio 500—, en una fila
+// por clínica de la misma tabla (`invoiceId = subir-intento:<clínica>`, `kind = contador_subir`; el contador va en `email`, que es
+// el único campo de texto libre: sin columnas ni SQL nuevos). La fila se reutiliza y nunca se borra.
+
+const KIND_CONTADOR = "contador_subir";
+export const llaveIntentosSubir = (clinicId: string) => `subir-intento:${clinicId}`;
+
+export interface EstadoIntentosSubir {
+  /** Cuántas veces falló un «Subir» de esta clínica tras tocar Stripe. */
+  intento: number;
+  /** ¿El último fallo fue en las últimas 24 h? */
+  reciente: boolean;
+}
+
+/** `null` = no se pudo leer (quien llama NO sigue: regla de oro). Sin fila → `{ intento: 0, reciente: false }`. */
+export async function leerIntentosSubir(clinicId: string, db: DbCandado = prisma as unknown as DbCandado): Promise<EstadoIntentosSubir | null> {
+  if (!clinicId) return null;
+  try {
+    const filas = await db.$queryRaw<Array<{ email: string; reciente: boolean }>>`SELECT "email",
+        ("createdAt" >= (now() AT TIME ZONE 'UTC') - interval '24 hours') AS "reciente"
+      FROM "billing_email_logs" WHERE "invoiceId" = ${llaveIntentosSubir(clinicId)} AND "kind" = ${KIND_CONTADOR}`;
+    const f = filas[0];
+    if (!f) return { intento: 0, reciente: false };
+    return { intento: Math.max(0, Math.floor(Number(f.email) || 0)), reciente: !!f.reciente };
+  } catch (e) {
+    console.error("[candado-cobro] no se pudo leer el contador de intentos de «Subir»:", (e as Error)?.message ?? e);
+    return null;
+  }
+}
+
+/** Suma 1 al contador (y marca la hora). Nunca lanza: si falla, el siguiente intento sale con la misma clave y se verá en el log. */
+export async function sumarIntentoSubir(clinicId: string, db: DbCandado = prisma as unknown as DbCandado): Promise<void> {
+  if (!clinicId) return;
+  const llave = llaveIntentosSubir(clinicId);
+  const sumar = () => db.$executeRaw`UPDATE "billing_email_logs"
+      SET "email" = ((CASE WHEN "email" ~ '^[0-9]+$' THEN "email"::int ELSE 0 END) + 1)::text, "createdAt" = (now() AT TIME ZONE 'UTC')
+      WHERE "invoiceId" = ${llave} AND "kind" = ${KIND_CONTADOR}`;
+  try {
+    if ((await sumar()) > 0) return;
+    const creadas = await db.$executeRaw`INSERT INTO "billing_email_logs" ("id", "invoiceId", "clinicId", "kind", "email", "createdAt")
+      VALUES (${randomUUID()}, ${llave}, ${clinicId}, ${KIND_CONTADOR}, '1', (now() AT TIME ZONE 'UTC'))
+      ON CONFLICT ("invoiceId") DO NOTHING`;
+    if (creadas === 0) await sumar(); // otra instancia la creó justo antes
+  } catch (e) {
+    console.error("[candado-cobro] no se pudo sumar el contador de intentos de «Subir»:", (e as Error)?.message ?? e);
+  }
 }

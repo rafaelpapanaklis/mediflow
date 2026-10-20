@@ -97,6 +97,8 @@ export interface FacturaPago {
   customer?: string | { id: string } | null;
   created?: number | null;
   attempt_count?: number | null;
+  /** `subscription_cycle` / `subscription_create` (renovación o alta) / `subscription_update` (cambio de plan)… */
+  billing_reason?: string | null;
   status_transitions?: { paid_at?: number | null } | null;
   discount?: DescuentoStripe | null;
   metadata?: Record<string, string> | null;
@@ -150,8 +152,6 @@ export const MARCA = {
   desde: "pago_pendiente_subir_desde",
   ts: "pago_pendiente_subir_ts",
   clave: "pago_pendiente_subir_clave",
-  /** Cuántas veces se reintentó el cambio a medias (AA5): sube la clave de idempotencia para no repetir un 5xx cacheado. */
-  intento: "pago_pendiente_subir_intento",
 } as const;
 
 /** Cuánto tiempo, desde la marca, un reintento puede terminar el cambio. */
@@ -166,7 +166,6 @@ export function armarMarca(args: { destino: PlanId; desde: string | null | undef
     [MARCA.desde]: args.desde ?? "",
     [MARCA.ts]: String(segundosDe(args.ahora ?? new Date())),
     [MARCA.clave]: args.clave,
-    [MARCA.intento]: "0",
   };
 }
 
@@ -174,8 +173,6 @@ export interface AnuladaRecuperable {
   factura: FacturaPago;
   /** Plan al que se iba a subir cuando se anuló. */
   planMarcado: PlanId;
-  /** Reintentos ya hechos de ese cambio (0 si ninguno). */
-  intento: number;
 }
 
 /**
@@ -207,11 +204,11 @@ export function anuladaRecuperable(args: {
     const desde = m[MARCA.desde] ?? "";
     if (!desde || desde !== args.planClinica) continue;
     if (args.planSuscripcion && args.planSuscripcion !== desde) continue; // la suscripción ya se movió
-    candidatas.push({ factura: f, planMarcado, ts, intento: Math.max(0, Math.floor(Number(m[MARCA.intento]) || 0)) });
+    candidatas.push({ factura: f, planMarcado, ts });
   }
   if (candidatas.length === 0) return null;
   const mejor = candidatas.reduce((a, b) => (b.ts > a.ts ? b : a));
-  return { factura: mejor.factura, planMarcado: mejor.planMarcado, intento: mejor.intento };
+  return { factura: mejor.factura, planMarcado: mejor.planMarcado };
 }
 
 // ── Opciones de subida (GET) ────────────────────────────────────────────────
@@ -286,15 +283,15 @@ export const claves = {
   candadoSubir: (clinicId: string) => `pago-pendiente:subir:${clinicId}`,
   reponerDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:reponer-descuento-cliente:${clinicId}:${descuentoId}`,
   quitarDescuentoCliente: (clinicId: string, descuentoId: string) => `pago-pendiente:quitar-descuento-cliente:${clinicId}:${descuentoId}`,
-  anular: (clinicId: string, facturaId: string) => `pago-pendiente:anular:${clinicId}:${facturaId}`,
+  anular: (clinicId: string, facturaId: string, intento = 0) => `pago-pendiente:anular:${clinicId}:${facturaId}${intento > 0 ? `:r${intento}` : ""}`,
   // UNA sola clave por clínica+factura para CUALQUIER plan destino (Z7): si dos «Subir» a planes distintos llegaran a correr a
   // la vez (el candado falló o no se vieron), Stripe rechaza el segundo por tener otros parámetros en vez de cobrar los dos.
-  // AA5: `intento` sube cada vez que se REINTENTA un cambio a medias, para que Stripe no repita (por la misma clave) el 5xx del
-  // intento anterior. El primer intento (0) conserva la clave de siempre.
+  // AA5/AB2: `intento` (el contador de NUESTRA base, no de Stripe) sube después de cada fallo de Stripe en «Subir», para que
+  // el siguiente intento lleve una clave NUEVA y no repita el 5xx que Stripe guardó con la anterior. El primer intento (0)
+  // conserva la clave de siempre. Dos peticiones del MISMO intento comparten clave (siguen sin cobrar doble).
   subir: (clinicId: string, facturaId: string, intento = 0) => `pago-pendiente:subir:${clinicId}:${facturaId}${intento > 0 ? `:r${intento}` : ""}`,
-  subirIntento: (clinicId: string, facturaId: string, intento: number) => `pago-pendiente:subir-intento:${clinicId}:${facturaId}:${intento}`,
-  precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number) =>
-    `pago-pendiente:precio:${clinicId}:${plan}:${interval}:${cents}`,
+  precio: (clinicId: string, plan: string, interval: BillingInterval, cents: number, intento = 0) =>
+    `pago-pendiente:precio:${clinicId}:${plan}:${interval}:${cents}${intento > 0 ? `:r${intento}` : ""}`,
 };
 
 // ── Mensajes (español neutro, con tú) ───────────────────────────────────────
@@ -313,6 +310,8 @@ export const MENSAJES = {
   pagoYaRegistrado: "Tu pago ya se registró.",
   // AA6: el monto de la factura abierta ya no es el que la pestaña mostró: no se cobra; se pide revisar.
   montoCambio: "El monto cambió, revísalo y vuelve a confirmar.",
+  // V3c: se está terminando de aplicar un cambio de plan; mientras tanto no se ofrece pagar nada (regla de oro).
+  cambioEnAplicacion: "Estamos terminando de aplicar tu cambio de plan. Espera unos minutos y recarga la página, o escríbenos a soporte.",
   // Z7: si no se pudo tomar el candado (la base falló) NO se cobra: se pide reintentar.
   intentaDeNuevo: "No pudimos iniciar el cobro. Intenta de nuevo en unos segundos.",
   // Mensajes de «hay otra operación de cobro de esta clínica en curso» según quién tiene el candado (revisión t4, Y19).

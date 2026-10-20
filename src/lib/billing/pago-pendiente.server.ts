@@ -22,7 +22,7 @@ import {
 } from "./reactivacion-tras-suspension.server";
 import { FALLO_LECTURA_REGLA, avisoFalloReglaSuspension, avisoSubidaSinCobro, avisoCobroMenorQueLoMostrado, avisoReposicionSinVerificar, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
 import { desgloseConIva, ivaAplica, ivaParaPagoDeClinica, type ExencionIva, type IvaParaCobro } from "./iva-cobro";
-import type { PlanId } from "./plans";
+import { isPlanId, type PlanId } from "./plans";
 import {
   buildTargetPriceParams,
   chargeFailureMessage,
@@ -132,6 +132,14 @@ export interface DepsPago {
     soltar: (clave: string, dueno: string) => Promise<void>;
     /** Dueño actual del candado (`pagar:<id>` / `subir:<id>`), para decir QUÉ hay en curso. Opcional. */
     quien?: (clave: string) => Promise<string | null>;
+  };
+  /**
+   * Contador de intentos de «Subir» (AB2/AB3), en NUESTRA base (no en Stripe). `leer` → null si no se pudo leer (no se sigue).
+   * `sumar` se llama después de un fallo de Stripe, para que el siguiente intento lleve una clave de idempotencia nueva.
+   */
+  intentos: {
+    leer: (clinicId: string) => Promise<{ intento: number; reciente: boolean } | null>;
+    sumar: (clinicId: string) => Promise<void>;
   };
   /** Pausa entre intentos de tomar el candado (en producción, `setTimeout`; las pruebas la acortan). */
   esperar: (ms: number) => Promise<void>;
@@ -428,7 +436,26 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
     return { ok: false, respuesta: await falloDeStripe(deps, "facturas", err) };
   }
   const factura = facturaAbiertaMasReciente(facturas, clinica.stripeCustomerId);
-  if (factura) return { ok: true, stripe, sub, factura, anulada: null };
+  if (factura) {
+    // V3c: un «Subir» que falló DESPUÉS de que Stripe aplicó el cambio (la respuesta se perdió) deja la suscripción en el plan
+    // nuevo, el plan de la base sin tocar, y abiertas las renovaciones de los meses sin servicio (la regla de la suspensión
+    // no llegó a correr). Ofrecer pagar esa renovación sería cobrar un mes ya cubierto por el cambio. Ante la duda no se
+    // ofrece nada: se dice que se está terminando de aplicar el cambio. La evidencia es doble: el plan de Stripe no es el
+    // de la base Y hubo un fallo de «Subir» en las últimas 24 h (contador de NUESTRA base); un cambio de plan hecho a mano
+    // sin tocar Stripe no bloquea el pago.
+    const subMovida = isPlanId(sub.metadata?.plan) && sub.metadata?.plan !== clinica.plan;
+    const esRenovacion = factura.billing_reason === "subscription_cycle" || factura.billing_reason === "subscription_create";
+    if (subMovida && esRenovacion) {
+      const st = await deps.intentos.leer(clinica.id);
+      if (!st || st.reciente) {
+        await deps.auditar({ event: "pago-pendiente-cambio-en-aplicacion", facturaId: factura.id, planStripe: sub.metadata?.plan ?? null, planBase: clinica.plan }).catch(() => {});
+        return soloLectura
+          ? { ok: false, sinPendiente: true }
+          : { ok: false, respuesta: respuesta(409, { code: "CAMBIO_EN_APLICACION", error: MENSAJES.cambioEnAplicacion }) };
+      }
+    }
+    return { ok: true, stripe, sub, factura, anulada: null };
+  }
   if (!conRecuperacion) return sinPendiente;
 
   let anuladas: FacturaPago[];
@@ -761,12 +788,18 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
   const interval = subscriptionItemInterval(item);
   const cents = planAmountCents(plan, interval);
 
+  // AB2/AB3: cuántos intentos fallidos lleva «Subir» en esta clínica (NUESTRA base). Sin poder leerlo no se sigue.
+  const estadoIntentos = await deps.intentos.leer(clinicId);
+  if (!estadoIntentos) return candadoNoDisponible();
+  const intento = estadoIntentos.intento;
+
   let precioId: string;
   try {
     precioId = (
-      await stripe.prices.create(buildTargetPriceParams(plan, interval), { idempotencyKey: claves.precio(clinicId, destino, interval, cents) })
+      await stripe.prices.create(buildTargetPriceParams(plan, interval), { idempotencyKey: claves.precio(clinicId, destino, interval, cents, intento) })
     ).id;
   } catch (err) {
+    if (!esErrorDeIdempotencia(err)) await deps.intentos.sumar(clinicId);
     return falloDeStripe(deps, "precio", err);
   }
 
@@ -787,7 +820,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
    * hecho ni lo está haciendo otra petición, repone el cupón. Quien llama no sabe si el cambio llegó a Stripe;
    * esto lo averigua.
    */
-  const fallar = async (r: RespuestaPago, motivo: string, err?: unknown): Promise<RespuestaPago> => {
+  const reponerSiCorresponde = async (r: RespuestaPago, motivo: string, err?: unknown): Promise<RespuestaPago> => {
     if (quitado.estado !== "quitado") return r;
     // Antes de reponer hay que saber si el cambio NO quedó hecho. Se repone si falló de verdad; NO se repone si
     //  (a) Stripe rechazó por una clave en curso (otra pestaña lo está haciendo), o
@@ -829,6 +862,16 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     return r;
   };
 
+  /**
+   * Falló un paso de Stripe en «Subir»: se suma el contador de NUESTRA base (el siguiente intento llevará claves nuevas, así un
+   * 5xx que Stripe guardó con la clave anterior no se repite) y se repone el cupón del cliente si corresponde. Una clave en
+   * curso (otra pestaña la está usando) NO suma: ese intento sigue siendo el mismo.
+   */
+  const fallar = async (r: RespuestaPago, motivo: string, err?: unknown): Promise<RespuestaPago> => {
+    if (!esErrorDeIdempotencia(err)) await deps.intentos.sumar(clinicId);
+    return reponerSiCorresponde(r, motivo, err);
+  };
+
   // 1) Se ANULA la factura abierta del plan viejo (nunca se borra), DESPUÉS de marcarla: si el cambio de
   // abajo falla de red, el reintento encuentra la marca y lo termina en vez de responder «sin pendiente».
   // Si otro POST ya la anuló, se sigue. En un reintento (`anulada`) ya está marcada y anulada: se salta.
@@ -856,7 +899,7 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
       if (!marcada) return fallar(await falloDeStripe(deps, "marcar", err), "marcar-factura", err);
     }
     try {
-      await stripe.invoices.voidInvoice(factura.id, {}, { idempotencyKey: claves.anular(clinicId, factura.id) });
+      await stripe.invoices.voidInvoice(factura.id, {}, { idempotencyKey: claves.anular(clinicId, factura.id, intento) });
     } catch (err) {
       let yaAnulada = false;
       try {
@@ -868,25 +911,13 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
     }
   }
 
-  // AA5: un REINTENTO de un cambio a medias usa una clave de idempotencia NUEVA (la anterior pudo quedar guardada con el
-  // 5xx del intento que falló y Stripe repetiría ese mismo error durante 24 h). El contador vive en la marca de la factura
-  // anulada y se sube ANTES del cambio: si no se puede anotar, no se intenta (regla de oro: nada de calcular a ciegas).
-  const intento = anulada ? anulada.intento + 1 : 0;
-  if (anulada) {
-    try {
-      await stripe.invoices.update(factura.id, { metadata: { [MARCA.intento]: String(intento) } }, { idempotencyKey: claves.subirIntento(clinicId, factura.id, intento) });
-    } catch (err) {
-      return fallar(await falloDeStripe(deps, "anotar-reintento", err), "anotar-reintento", err); // aún no se cambió nada: se repone el cupón
-    }
-  }
-
   // 2) La MISMA suscripción pasa al plan nuevo y se cobra completo ahora.
   let nueva: SuscripcionPago & { latest_invoice?: string | FacturaPago | null };
   try {
     nueva = await stripe.subscriptions.update(
       sub.id,
       armarUpdateSubir({ sub, itemId: item.id, priceId: precioId, plan: destino, clinicId, iva }) as unknown as Record<string, unknown>,
-      { idempotencyKey: claves.subir(clinicId, factura.id, intento) },
+      { idempotencyKey: claves.subir(clinicId, factura.id, intento) }, // AA5/AB2: la clave sube con el contador de NUESTRA base
     );
   } catch (err) {
     // Si la tarjeta falló en este paso la factura nueva puede haber quedado abierta: se da su enlace.

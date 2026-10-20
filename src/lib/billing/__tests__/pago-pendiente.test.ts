@@ -28,7 +28,9 @@ import { cobrarPendiente } from "../pago-pendiente-cliente";
 import {
   crearCandadoDeCobro,
   duenoDelCandadoEnBase,
+  leerIntentosSubir,
   llaveCandadoCobro,
+  sumarIntentoSubir,
   soltarCandadoEnBase,
   tomarCandadoEnBase,
   type DbCandado,
@@ -83,6 +85,12 @@ interface Escenario {
   reponerFalla?: boolean;
   /** `invoices.update` (marcar) falla de red. */
   marcarFalla?: boolean;
+  /** El contador de intentos de «Subir» (NUESTRA base) no se puede leer. */
+  intentosNoLegibles?: boolean;
+  /** Stripe NO deja editar la metadata de una factura anulada (AB3): cualquier `invoices.update` sobre una `void` falla. */
+  facturaAnuladaNoEditable?: boolean;
+  /** Intentos fallidos previos de «Subir» (los de la última hora) con los que arranca el contador. */
+  intentosPrevios?: number;
   /** La base del candado FALLA al tomarlo (Z7): el candado responde `error`. */
   candadoFalla?: boolean;
   /** Candado por clínica REAL (en memoria, como failban sin Upstash); por defecto abre siempre. */
@@ -149,6 +157,7 @@ function montar(e: Escenario = {}) {
   let reinicios = 0; // cuántas veces Stripe aplicó DE VERDAD un reinicio de ciclo (las repeticiones con la misma clave no cuentan)
   const reiniciosPorClave = new Map<string, any>();
   const huellasUpdate = new Map<string, string>();
+  let contadorIntentos = e.intentosPrevios ?? 0; // el contador de intentos de «Subir», en NUESTRA base
   // El pago ocurre «hace un minuto»: `realinearCiclo` exige un fin de lo pagado futuro (no se puede fijar a una fecha fija).
   const PAGADO_EN = Math.floor(Date.now() / 1000);
   const idemEnCurso = () => Object.assign(new Error("There is currently another in-progress request using this Stripe idempotency key."), { type: "StripeIdempotencyError", code: "idempotency_error", statusCode: 409 });
@@ -268,6 +277,9 @@ function montar(e: Escenario = {}) {
         registra("invoices.update", id, p, opts);
         cuestaCaer();
         if (e.marcarFalla) throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        if (e.facturaAnuladaNoEditable && facturas.get(id)?.status === "void") {
+          throw Object.assign(new Error("You cannot update a void invoice."), { type: "StripeInvalidRequestError", code: "invoice_not_editable" });
+        }
         // Stripe: la misma clave con OTROS parámetros se rechaza (idempotency_error) durante 24 h.
         const huella = JSON.stringify([id, p]);
         const previa = parametrosPorClave.get(opts.idempotencyKey);
@@ -394,6 +406,10 @@ function montar(e: Escenario = {}) {
     auditar: async (ev) => { auditorias.push(ev); },
     avisoSedeIncluida: (n) => `paga ${n}`,
     avisarAlAdmin: async (a) => { avisos.push(a); },
+    intentos: {
+      leer: async () => (e.intentosNoLegibles ? null : { intento: contadorIntentos, reciente: contadorIntentos > 0 }),
+      sumar: async () => { contadorIntentos++; registra("intentos.sumar"); },
+    },
     // Entre intentos del candado cede el turno (macrotarea): la otra petición, que solo espera promesas, avanza.
     esperar: async () => {
       registra("esperar");
@@ -428,6 +444,7 @@ function montar(e: Escenario = {}) {
     deps, llamadas, ops, auditorias, facturas,
     planLocal: () => planLocal,
     cobros: () => cobrosAplicados,
+    intentos: () => contadorIntentos,
     reinicios: () => reinicios,
     cobrosDeTarjeta: () => cobrosDeTarjeta,
     pausa: () => pausa,
@@ -731,7 +748,7 @@ test("subir: void OK + update falla de red → 502, la factura vieja queda marca
   const r2 = await subirYPagar(m.deps, "PRO");
   assert.deepEqual(r2, { status: 200, body: { ok: true, pagado: true } });
   assert.equal(m.ops("invoices.voidInvoice").length, 1);
-  assert.equal(m.ops("invoices.update").length, 2, "la marca de antes de anular + el contador de reintentos");
+  assert.equal(m.ops("invoices.update").length, 1, "solo la marca de antes de anular: el contador de intentos NO se guarda en Stripe");
   assert.equal(m.ops("subscriptions.update").length, 2);
   assert.equal(m.cobros(), 1);
   assert.equal(m.planSub(), "PRO");
@@ -1938,40 +1955,62 @@ test("Y19 — el cliente trata 409 PAGO_YA_REGISTRADO como ÉXITO («Tu pago ya 
 // X2 / Z7 / Z18 / Z19 / AA7 / AA16 — candado en la BASE (entre instancias): una fila por clínica en billing_email_logs,
 // comparar-y-cambiar atómico con el reloj de la BASE
 function baseDoble() {
-  const filas = new Map<string, { invoiceId: string; clinicId: string; kind: string; email: string; createdAt: Date }>();
+  type Fila = { invoiceId: string; clinicId: string; kind: string; email: string; createdAt: Date };
+  const filas = new Map<string, Fila>();
   let falla: Error | null = null;
-  // El reloj de la BASE (now()). El de cada instancia NO se usa: por eso las pruebas pueden desfasar el de la «instancia».
-  const reloj = { ahora: new Date("2026-10-20T12:00:00Z") };
+  // El reloj de la BASE en UTC (`now() AT TIME ZONE 'UTC'`). El de cada instancia NO se usa. `zonaSesionHoras` simula una sesión
+  // con zona distinta de UTC: `now()` a secas saldría desfasado esas horas contra la columna; con AT TIME ZONE 'UTC' no.
+  const reloj = { ahora: new Date("2026-10-20T12:00:00Z"), zonaSesionHoras: 0 };
   const operaciones: string[] = [];
   const sqlDe = (q: TemplateStringsArray) => q.join("?").replace(/\s+/g, " ");
+  const ahoraUtc = (sql: string) => (sql.includes("AT TIME ZONE 'UTC'") ? reloj.ahora.getTime() : reloj.ahora.getTime() + reloj.zonaSesionHoras * 3_600_000);
+  const KIND_CONTADOR = "contador_subir";
   const db: DbCandado = {
     $executeRaw: async (q: TemplateStringsArray, ...v: unknown[]) => {
-      operaciones.push(sqlDe(q));
+      const sql = sqlDe(q);
+      operaciones.push(sql);
       if (falla) throw falla;
-      // UPDATE tomar: values = [tomado, dueno, llave, libre, ttl]
-      const [kindNuevo, dueno, llave, libre, ttl] = v as [string, string, string, string, number];
-      const f = filas.get(llave);
-      if (!f) return 0;
-      const vencida = f.createdAt.getTime() < reloj.ahora.getTime() - ttl * 1000;
-      if (f.kind !== libre && !vencida) return 0;
-      Object.assign(f, { kind: kindNuevo, email: dueno, createdAt: new Date(reloj.ahora) });
-      return 1;
+      if (sql.startsWith("UPDATE") && sql.includes('"email" = ((CASE')) {
+        // contador de intentos: [llave, kind]
+        const f = filas.get(v[0] as string);
+        if (!f || f.kind !== v[1]) return 0;
+        f.email = String((Number(f.email) || 0) + 1);
+        f.createdAt = new Date(ahoraUtc(sql));
+        return 1;
+      }
+      if (sql.startsWith("UPDATE")) {
+        // tomar: [tomado, dueno, llave, libre, ttl]
+        const [kindNuevo, dueno, llave, libre, ttl] = v as [string, string, string, string, number];
+        const f = filas.get(llave);
+        if (!f) return 0;
+        const vencida = f.createdAt.getTime() < ahoraUtc(sql) - ttl * 1000;
+        if (f.kind !== libre && !vencida) return 0;
+        Object.assign(f, { kind: kindNuevo, email: dueno, createdAt: new Date(ahoraUtc(sql)) });
+        return 1;
+      }
+      if (sql.startsWith("INSERT")) {
+        // [id, llave, clinicId, kind, (dueno)]  — ON CONFLICT DO NOTHING
+        const [, llave, clinicId, kind, dueno] = v as [string, string, string, string, string | undefined];
+        if (filas.has(llave)) return 0;
+        filas.set(llave, { invoiceId: llave, clinicId, kind, email: kind === KIND_CONTADOR ? "1" : String(dueno), createdAt: new Date(ahoraUtc(sql)) });
+        return 1;
+      }
+      throw new Error(`SQL no soportada por el doble: ${sql}`);
     },
     $queryRaw: (async (q: TemplateStringsArray, ...v: unknown[]) => {
-      operaciones.push(sqlDe(q));
+      const sql = sqlDe(q);
+      operaciones.push(sql);
       if (falla) throw falla;
+      if (sql.includes('"reciente"')) {
+        const [llave, kind] = v as [string, string];
+        const f = filas.get(llave);
+        return f && f.kind === kind ? [{ email: f.email, reciente: f.createdAt.getTime() >= ahoraUtc(sql) - 24 * 3_600_000 }] : [];
+      }
       const [llave, kind, ttl] = v as [string, string, number];
       const f = filas.get(llave);
-      return f && f.kind === kind && f.createdAt.getTime() >= reloj.ahora.getTime() - ttl * 1000 ? [{ email: f.email }] : [];
+      return f && f.kind === kind && f.createdAt.getTime() >= ahoraUtc(sql) - ttl * 1000 ? [{ email: f.email }] : [];
     }) as DbCandado["$queryRaw"],
     billingEmailLog: {
-      create: async ({ data }: any) => {
-        operaciones.push("create");
-        if (falla) throw falla;
-        if (filas.has(data.invoiceId)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" }); // invoiceId @unique
-        filas.set(data.invoiceId, { ...data, createdAt: new Date(reloj.ahora) }); // createdAt: DEFAULT de la base
-        return data;
-      },
       updateMany: async ({ where, data }: any) => {
         operaciones.push("updateMany");
         if (falla) throw falla;
@@ -2021,7 +2060,7 @@ test("AA7 — la vigencia del candado se compara con el reloj de la BASE (now())
   b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 5_000); // pasan 5 s de verdad
   assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "subir:B", ttlSec: 90 }, b.db), "ocupado");
   // La SQL usa now() de la base, y la fila nueva no lleva la hora de la instancia.
-  assert.ok(b.operaciones.some((o) => /"createdAt" = now\(\)/.test(o) && /now\(\) - \(\?::int \* interval '1 second'\)/.test(o)));
+  assert.ok(b.operaciones.some((o) => /"createdAt" = \(now\(\) AT TIME ZONE 'UTC'\)/.test(o) && /\(now\(\) AT TIME ZONE 'UTC'\) - \(\?::int \* interval '1 second'\)/.test(o)));
   const codigo = readFileSync(path.resolve(__dirname, "../candado-cobro.server.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   assert.doesNotMatch(codigo, /new Date\(/, "ningún cálculo de tiempo con el reloj de la instancia");
   assert.doesNotMatch(codigo, /ahora/);
@@ -2033,14 +2072,15 @@ test("AA7 — la vigencia del candado se compara con el reloj de la BASE (now())
 test("AA16 — esperar un candado ocupado NO hace INSERT con P2002 una y otra vez: se mira (findUnique) antes de volver a intentar el INSERT", async () => {
   const b = baseDoble();
   assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, b.db), "tomado"); // primera vez: UPDATE sin fila, findUnique, INSERT
-  assert.equal(b.operaciones.filter((o) => o === "create").length, 1);
+  const inserts = () => b.operaciones.filter((o) => o.startsWith("INSERT")).length;
+  assert.equal(inserts(), 1);
   for (let i = 0; i < 30; i++) assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: `pagar:espera${i}`, ttlSec: 90 }, b.db), "ocupado");
-  assert.equal(b.operaciones.filter((o) => o === "create").length, 1, "30 intentos de espera: ningún INSERT (ningún P2002 que Prisma imprima)");
+  assert.equal(inserts(), 1, "30 intentos de espera: ningún INSERT más");
   assert.equal(b.operaciones.filter((o) => o === "findUnique").length, 31);
   // La carrera de la PRIMERA vez (dos INSERT a la vez) sigue resuelta por la llave única.
   const carrera = baseDoble();
   const original = carrera.db.billingEmailLog.findUnique;
-  carrera.db.billingEmailLog.findUnique = async () => null; // ambos ven «no existe»
+  carrera.db.billingEmailLog.findUnique = async () => null; // ambos ven «no existe»; ON CONFLICT DO NOTHING decide, sin errores
   const [x, y] = await Promise.all([
     tomarCandadoEnBase({ clinicId: "c9", dueno: "pagar:X", ttlSec: 90 }, carrera.db),
     tomarCandadoEnBase({ clinicId: "c9", dueno: "subir:Y", ttlSec: 90 }, carrera.db),
@@ -2184,40 +2224,115 @@ test("X2 — el código NO exige UPSTASH_REDIS_REST_URL/TOKEN: sin ellas la capa
 
 // ── Decimocuarta vuelta t4: AA5 (reintento con clave nueva), AA6 (monto confirmado) ───────────────────────
 
-test("AA5 — tras un 5xx de subscriptions.update en «Subir», el REINTENTO usa una clave de idempotencia NUEVA (Stripe repite el 5xx de una clave ya usada)", async () => {
+test("AA5/AB2 — tras un 5xx de subscriptions.update en «Subir», el siguiente intento SIEMPRE lleva clave nueva (contador en NUESTRA base, ningún paso intermedio en Stripe)", async () => {
   const m = montar({ updateFallaAntes: 2 });
   assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // 1.er intento: 5xx
+  assert.equal(m.intentos(), 1);
   assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // reintento: otro 5xx
+  assert.equal(m.intentos(), 2);
   const r = await subirYPagar(m.deps, "PRO"); // tercer intento: ya sale
   assert.equal(r.body.pagado, true);
   const llaves = m.ops("subscriptions.update").map((l) => l.args[2].idempotencyKey as string);
-  assert.equal(llaves.length, 3);
-  assert.equal(new Set(llaves).size, 3, "cada reintento, una clave distinta");
   assert.deepEqual(llaves, [claves.subir("clin_1", "in_vieja", 0), claves.subir("clin_1", "in_vieja", 1), claves.subir("clin_1", "in_vieja", 2)]);
+  assert.equal(new Set(llaves).size, 3, "cada intento, una clave distinta");
   assert.equal(llaves[0], claves.subir("clin_1", "in_vieja"), "el primer intento conserva la clave de siempre");
-  // El contador vive en la marca de la factura anulada y se anotó ANTES de cada reintento.
-  assert.equal(m.facturas.get("in_vieja").metadata.pago_pendiente_subir_intento, "2");
   assert.equal(m.cobros(), 1, "y aun así un solo cobro");
+  // AB2: NINGÚN paso intermedio en Stripe para anotar el contador: la única escritura en Stripe de la factura es la marca de antes de anular.
+  assert.equal(m.ops("invoices.update").length, 1);
+  assert.equal(m.facturas.get("in_vieja").metadata.pago_pendiente_subir_intento, undefined);
+  assert.ok(!m.ops("invoices.update").some((l) => JSON.stringify(l.args[1]).includes("intento")));
   // Dos reintentos SIMULTÁNEOS del mismo intento comparten clave (siguen sin cobrar doble).
   const dos = montar({ updateFallaAntes: 1 });
   await subirYPagar(dos.deps, "PRO");
-  const [a, b2] = await Promise.all([subirYPagar(dos.deps, "PRO"), subirYPagar(dos.deps, "PRO")]);
+  const [a2, b2] = await Promise.all([subirYPagar(dos.deps, "PRO"), subirYPagar(dos.deps, "PRO")]);
   assert.equal(dos.cobros(), 1);
-  assert.equal([a, b2].filter((x) => x.status === 200).length >= 1, true);
-  // Si no se puede anotar el reintento, NO se intenta el cambio (regla de oro) y el cupón del cliente se repone.
-  const sinAnotar = montar({ updateFallaAntes: 1, descuentoCliente: CUPON_CLIENTE });
-  await subirYPagar(sinAnotar.deps, "PRO");
-  const upd = (sinAnotar.deps.stripe as any).invoices.update;
-  (sinAnotar.deps.stripe as any).invoices.update = async (id: string, p: any, o: any) => {
-    if (p.metadata?.pago_pendiente_subir_intento) throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
-    return upd(id, p, o);
-  };
-  const antes = sinAnotar.ops("subscriptions.update").length;
-  const rr = await subirYPagar(sinAnotar.deps, "PRO");
-  assert.equal(rr.status, 502);
-  assert.equal(sinAnotar.ops("subscriptions.update").length, antes, "no se intentó el cambio");
-  assert.equal(sinAnotar.descuentoDelCliente()?.coupon?.id, "REGALO20", "el cupón quitado se repuso");
+  assert.equal([a2, b2].filter((x) => x.status === 200).length >= 1, true);
 });
+
+test("AB3 — si Stripe NO deja editar una factura anulada, el reintento igual termina el cambio (el contador no depende de editar nada en Stripe)", async () => {
+  const m = montar({ updateFallaAntes: 1, facturaAnuladaNoEditable: true });
+  assert.equal((await subirYPagar(m.deps, "PRO")).status, 502); // factura vieja anulada, cambio sin terminar
+  assert.equal(m.facturas.get("in_vieja").status, "void");
+  const r = await subirYPagar(m.deps, "PRO"); // antes: 502 para siempre al intentar anotar el contador en la anulada
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.ops("invoices.update").length, 1, "ninguna escritura sobre la factura anulada");
+  assert.notEqual(m.ops("subscriptions.update")[0].args[2].idempotencyKey, m.ops("subscriptions.update")[1].args[2].idempotencyKey);
+});
+
+test("AB2 — si el contador NO se puede LEER no se sigue (503, sin cobrar ni tocar Stripe); si no se puede SUMAR, el reintento sigue y se ve en el log", async () => {
+  const m = montar({ intentosNoLegibles: true, descuentoCliente: CUPON_CLIENTE });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual([r.status, r.body.code], [503, "CANDADO_NO_DISPONIBLE"]);
+  assert.equal(m.llamadas.filter((l) => !l.op.startsWith("candado") && l.op !== "subscriptions.retrieve" && l.op !== "invoices.list" && l.op !== "invoiceItems.list").length, 0, "no tocó nada de Stripe");
+  assert.equal(m.cobros() + m.cobrosDeTarjeta(), 0);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0);
+  // Las funciones reales contra la base simulada: sin fila → 0; sumar crea la fila y después suma; la hora es la de la base.
+  const b = baseDoble();
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 0, reciente: false });
+  await sumarIntentoSubir("c1", b.db);
+  await sumarIntentoSubir("c1", b.db);
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, reciente: true });
+  assert.deepEqual(await leerIntentosSubir("c2", b.db), { intento: 0, reciente: false }, "por clínica");
+  b.reloj.ahora = new Date(b.reloj.ahora.getTime() + 25 * 3_600_000);
+  assert.deepEqual(await leerIntentosSubir("c1", b.db), { intento: 2, reciente: false }, "a las 24 h deja de ser «reciente»");
+  assert.equal(b.filas.size, 1, "una fila por clínica, reutilizada; nunca se borra");
+  b.romper();
+  assert.equal(await leerIntentosSubir("c1", b.db), null);
+  await sumarIntentoSubir("c1", b.db); // no lanza
+  assert.equal(await leerIntentosSubir("", b.db), null);
+});
+
+test("AB5 — la PRIMERA toma del candado usa la hora de la BASE (INSERT con now() en UTC), no la de la instancia; con la sesión en otra zona no se desfasa", async () => {
+  const b = baseDoble();
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, b.db), "tomado");
+  const insert = b.operaciones.find((o) => o.startsWith("INSERT"))!;
+  assert.match(insert, /\(now\(\) AT TIME ZONE 'UTC'\)/);
+  assert.match(insert, /ON CONFLICT \("invoiceId"\) DO NOTHING/);
+  assert.equal(b.filas.get(llaveCandadoCobro("c1"))!.createdAt.getTime(), b.reloj.ahora.getTime(), "nació con la hora de la base");
+  // Una instancia con la hora 95 s atrasada ya no puede hacer nacer la fila «vencida»: no manda ninguna hora.
+  const codigo = readFileSync(path.resolve(__dirname, "../candado-cobro.server.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(codigo, /new Date\(|billingEmailLog\.create|createdAt:/);
+  // Sesión de la base en otra zona (+6 h): TODA comparación va en UTC, así que el candado sigue ocupado y caduca a los 90 s reales.
+  const z = baseDoble();
+  z.reloj.zonaSesionHoras = 6;
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "pagar:A", ttlSec: 90 }, z.db), "tomado");
+  z.reloj.ahora = new Date(z.reloj.ahora.getTime() + 5_000);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "subir:B", ttlSec: 90 }, z.db), "ocupado");
+  z.reloj.ahora = new Date(z.reloj.ahora.getTime() + 86_000);
+  assert.equal(await tomarCandadoEnBase({ clinicId: "c1", dueno: "subir:B", ttlSec: 90 }, z.db), "tomado");
+  assert.ok(z.operaciones.filter((o) => /now\(\)/.test(o)).every((o) => !/now\(\)(?! AT TIME ZONE)/.test(o)), "ningún now() a secas");
+});
+
+test("V3c — SÍ es real: un «Subir» cuyo cambio se aplicó pero cuya respuesta se perdió deja abiertas las renovaciones de los meses sin servicio; el GET y «Pagar» ya NO las ofrecen (se dice que se está aplicando el cambio)", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES, updateRespuestaPerdida: 1 });
+  const subir = await subirYPagar(m.deps, "PRO");
+  assert.equal(subir.status, 502);
+  assert.equal(m.planSub(), "PRO", "Stripe aplicó el cambio");
+  assert.equal(m.planLocal(), null, "pero la base no");
+  assert.equal(m.facturas.get(OCT).status, "void", "«Subir» anuló la más reciente");
+  assert.equal(m.facturas.get("in_sep").status, "open", "pero la renovación del mes anterior (sin servicio) sigue abierta: la regla de la suspensión no llegó a correr");
+  assert.ok(m.intentos() >= 1);
+  const g = await consultarPendiente(m.deps);
+  assert.deepEqual(g.body, { estado: "sin_pendiente" }, "no se ofrece pagar el mes sin servicio");
+  const p = await pagarPendiente(m.deps, 48.61);
+  assert.deepEqual([p.status, p.body.code, p.body.error], [409, "CAMBIO_EN_APLICACION", MENSAJES.cambioEnAplicacion]);
+  assert.equal(m.ops("invoices.pay").length, 0);
+  assert.doesNotMatch(MENSAJES.cambioEnAplicacion, /stripe/i);
+  const otra = await subirYPagar(m.deps, "PRO");
+  assert.equal(otra.status, 409);
+  assert.equal(m.cobrosDeTarjeta() + m.cobros(), 1, "ni un cobro más");
+  // Sin evidencia de un fallo reciente de «Subir» (p. ej. un cambio de plan hecho a mano que no tocó Stripe) NO se bloquea el pago.
+  const manual = montar({ suspendida: true, abiertas: MESES, planEnSuscripcion: "PRO" });
+  assert.equal((await consultarPendiente(manual.deps)).body.estado, "pendiente");
+  const rManual = await pagarPendiente(manual.deps, 486.1);
+  assert.equal(rManual.body.pagado, true, JSON.stringify(rManual));
+  // Una factura de la propia subida (subscription_update) sí se ofrece: es lo que hay que pagar.
+  const subida = montar({ abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio", billing_reason: "subscription_update" }], planEnSuscripcion: "PRO", intentosPrevios: 1 });
+  assert.equal((await consultarPendiente(subida.deps)).body.estado, "pendiente");
+});
+
 
 test("AA5 — «Pagar» con un cambio a medias NO dice «No tienes ningún pago pendiente» (es falso): dice lo que hay, con tú y sin nombrar al proveedor", async () => {
   const m = montar({ updateFallaAntes: 1 });
