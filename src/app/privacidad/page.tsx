@@ -232,7 +232,8 @@ export default function PrivacidadPage() {
             momento aplican las condiciones y el aviso de WhatsApp. El formulario «Te
             escribimos nosotros» recoge <b>su nombre y su número de WhatsApp</b> únicamente
             para contactarle y darle información sobre DaleControl; los recibimos por correo
-            electrónico en nuestro equipo y no los usamos para otra cosa. El botón no instala
+            electrónico en nuestro equipo (mediante Resend, Inc.) y no los usamos para otra cosa; los
+            conservamos hasta <b>90 días</b>, como se explica en la sección 8. El botón no instala
             cookies propias ni de terceros. Le pedimos no escribir datos de salud ni datos de
             pacientes en la conversación.
           </li>
@@ -368,6 +369,7 @@ export default function PrivacidadPage() {
           <li><b>Supabase, Inc.</b> — hosting de base de datos y autenticación.</li>
           <li><b>Vercel, Inc.</b> — hosting de la aplicación web y medición de visitas y rendimiento del sitio (Vercel Analytics y Speed Insights).</li>
           <li><b>Twilio, Inc. / Postmark</b> — envío de WhatsApp, SMS y correos transaccionales.</li>
+          <li><b>Resend, Inc.</b> — envío de correo electrónico; por este medio nos llega el aviso con su nombre y su número cuando usted pide, en el botón de WhatsApp del sitio, que le escribamos.</li>
           <li><b>Stripe, Inc. / PayPal / MercadoPago</b> — procesamiento de pagos cuando aplica.</li>
           <li><b>FacturAPI / Proveedores autorizados de CFDI</b> — emisión de comprobantes fiscales.</li>
           <li><b>Daily.co</b> — sesiones de teleconsulta cuando aplica.</li>
@@ -452,6 +454,12 @@ export default function PrivacidadPage() {
           Los datos del expediente clínico se conservan al menos <b>5 años</b> contados a
           partir del último acto médico (NOM-004-SSA3-2012, numeral 5.5). Datos fiscales
           se conservan conforme a la legislación aplicable.
+        </p>
+        <p>
+          <b>Contacto por el botón de WhatsApp.</b> El nombre y el número de WhatsApp que usted
+          deja en el formulario «Te escribimos nosotros» se conservan hasta <b>90 días</b>
+          contados desde que los envía, para darle seguimiento a su solicitud, y después se
+          eliminan; si usted lo solicita antes, se eliminan en ese momento.
         </p>
         <p>
           <b>Clic de un anuncio de Google.</b> El identificador del clic de un anuncio se

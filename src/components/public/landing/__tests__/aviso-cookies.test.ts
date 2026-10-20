@@ -56,6 +56,12 @@ test("el aviso describe el botón de WhatsApp (nombre y número para contactarte
   assert.match(s3, /únicamente\s+para contactarle/);
   assert.match(s3, /no instala\s+cookies propias ni de terceros/);
   assert.match(s3, /no en el panel de la clínica, ni en el portal del paciente/);
+  // W8: Resend como encargado y plazo de conservación.
+  assert.match(s3, /conservamos hasta <b>90 días<\/b>/);
+  const s5 = p.slice(p.indexOf('title="5. Transferencias"'), p.indexOf('title="6. Derechos ARCO"'));
+  assert.match(s5, /<b>Resend, Inc\.<\/b> — envío de correo electrónico/);
+  const s8 = p.slice(p.indexOf('title="8. Conservación'));
+  assert.match(s8, /Contacto por el botón de WhatsApp\.<\/b>[\s\S]*?hasta <b>90 días<\/b>/);
   assert.doesNotMatch(p, /livechat/i, "el aviso ya no nombra LiveChat");
   assert.doesNotMatch(p, /tawk/i, "el aviso ya no nombra Tawk.to");
 });

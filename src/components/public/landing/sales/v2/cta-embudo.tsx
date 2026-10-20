@@ -50,6 +50,7 @@ export function BotonWhatsapp({
   className,
   style,
   glyphSize = 18,
+  alClic,
   children,
 }: {
   origen: OrigenBoton;
@@ -60,6 +61,8 @@ export function BotonWhatsapp({
   className?: string;
   style?: CSSProperties;
   glyphSize?: number;
+  /** Si devuelve true el clic ya se atendió (p. ej. abrió la tarjeta del botón flotante): no se navega a wa.me. */
+  alClic?: () => boolean;
   children: ReactNode;
 }) {
   return (
@@ -69,7 +72,10 @@ export function BotonWhatsapp({
       rel="noopener noreferrer"
       className={className}
       style={style}
-      onClick={() => registrarPaso("whatsapp_clic", { origen, plan })}
+      onClick={(e) => {
+        registrarPaso("whatsapp_clic", { origen, plan });
+        if (alClic?.()) e.preventDefault();
+      }}
     >
       <WhatsappGlyph size={glyphSize} />
       {children}

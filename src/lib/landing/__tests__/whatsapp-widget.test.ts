@@ -10,6 +10,7 @@ import {
   enlaceIniciarConversacion,
   normalizarNombre,
   normalizarNumeroWhatsapp,
+  registroLeadNoEnviado,
   ORIGEN_WIDGET_WHATSAPP,
 } from "../whatsapp-widget";
 import { WHATSAPP_CTA } from "@/components/public/landing/sales/v2/landing-data";
@@ -70,4 +71,20 @@ test("el aviso al equipo lleva nombre, número, enlace para escribirle y el orig
   assert.match(t, /\+52 999 123 4567/);
   assert.match(t, /https:\/\/wa\.me\/529991234567/);
   assert.match(t, new RegExp(`Origen: ${ORIGEN_WIDGET_WHATSAPP} · página: /blog`));
+});
+
+test("W3: con «+» y sin lada de país (10 dígitos) o con «+» repetidos/fuera de lugar se rechaza", () => {
+  for (const n of ["+999 123 4567", "+12345678", "+-+-+-9991234567", "++529991234567", "52+9991234567", "+9991234567"]) {
+    const r = normalizarNumeroWhatsapp(n);
+    assert.equal(r.ok, false, n);
+  }
+  const r = normalizarNumeroWhatsapp("+999 123 4567");
+  assert.ok("error" in r && /lada del país/.test(r.error));
+});
+
+test("W1: la línea de log de un aviso que no salió lleva nombre y número (JSON recuperable)", () => {
+  const l = registroLeadNoEnviado({ nombre: "Ana López", e164: "529991234567", legible: "+52 999 123 4567", pagina: "/blog" });
+  assert.match(l, /AVISO NO ENVIADO/);
+  const json = JSON.parse(l.slice(l.indexOf("{")));
+  assert.deepEqual(json, { origen: "whatsapp-widget", nombre: "Ana López", whatsapp: "+52 999 123 4567", e164: "529991234567", pagina: "/blog" });
 });

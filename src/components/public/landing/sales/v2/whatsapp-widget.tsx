@@ -8,6 +8,7 @@ import {
   normalizarNumeroWhatsapp,
 } from "@/lib/landing/whatsapp-widget";
 import { WHATSAPP_CTA } from "./landing-data";
+import { EVENTO_ABRIR_WHATSAPP } from "./whatsapp-widget-eventos";
 import { WhatsappGlyph } from "./whatsapp-glyph";
 
 /**
@@ -33,7 +34,23 @@ export function WhatsappWidget() {
   const [errores, setErrores] = useState<{ nombre?: string; numero?: string; general?: string }>({});
   const id = useId();
   const lanzador = useRef<HTMLButtonElement>(null);
-  const primerCampo = useRef<HTMLInputElement>(null);
+  const campoNombre = useRef<HTMLInputElement>(null);
+  const campoNumero = useRef<HTMLInputElement>(null);
+
+  // Al abrir, el foco va al primer campo (el botón va antes que la tarjeta en el DOM: Tab sigue ahí).
+  useEffect(() => {
+    if (abierto) campoNombre.current?.focus();
+  }, [abierto]);
+
+  // «WhatsApp» de la barra fija de móvil abre esta tarjeta.
+  useEffect(() => {
+    const abrir = (e: Event) => {
+      e.preventDefault();
+      setAbierto(true);
+    };
+    window.addEventListener(EVENTO_ABRIR_WHATSAPP, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_WHATSAPP, abrir);
+  }, []);
 
   useEffect(() => {
     if (!abierto) return;
@@ -59,7 +76,7 @@ export function WhatsappWidget() {
     const nuevos = { nombre: "error" in n ? n.error : undefined, numero: "error" in t ? t.error : undefined };
     setErrores(nuevos);
     if ("error" in n || "error" in t) {
-      (e.currentTarget.querySelector("[aria-invalid=true]") as HTMLElement | null)?.focus();
+      ("error" in n ? campoNombre : campoNumero).current?.focus();
       return;
     }
     setEstado("enviando");
@@ -77,6 +94,7 @@ export function WhatsappWidget() {
       const j = (await r.json().catch(() => ({}))) as { error?: string; campo?: "nombre" | "numero" };
       if (!r.ok) {
         setEstado("idle");
+        if (j.campo) (j.campo === "nombre" ? campoNombre : campoNumero).current?.focus();
         setErrores(
           j.campo ? { [j.campo]: j.error } : { general: r.status === 429
             ? "Ya recibimos varias solicitudes. Intenta más tarde o toca «Iniciar conversación»."
@@ -92,7 +110,20 @@ export function WhatsappWidget() {
   }
 
   return (
+    // El botón va primero en el DOM (Tab entra a la tarjeta al abrirla); el CSS
+    // (`column-reverse`) lo pinta debajo de ella.
     <div className="dcv4-wawidget" data-abierto={abierto ? "" : undefined}>
+      <button
+        ref={lanzador}
+        type="button"
+        className="dcv4-wawidget__fab"
+        aria-expanded={abierto}
+        aria-label={abierto ? "Cerrar WhatsApp" : "Escríbenos por WhatsApp"}
+        onClick={alternar}
+      >
+        <WhatsappGlyph size={28} />
+      </button>
+
       {abierto && (
         <div role="dialog" aria-labelledby={`${id}-t`} className="dcv4-wawidget__card">
           <div className="dcv4-wawidget__head">
@@ -139,7 +170,7 @@ export function WhatsappWidget() {
                 <p className="dcv4-wawidget__legend">Te escribimos nosotros</p>
                 <label className="dcv4-wawidget__label" htmlFor={`${id}-n`}>Nombre</label>
                 <input
-                  ref={primerCampo}
+                  ref={campoNombre}
                   id={`${id}-n`}
                   className="dcv4-wawidget__input"
                   type="text"
@@ -154,6 +185,7 @@ export function WhatsappWidget() {
 
                 <label className="dcv4-wawidget__label" htmlFor={`${id}-w`}>Número de WhatsApp</label>
                 <input
+                  ref={campoNumero}
                   id={`${id}-w`}
                   className="dcv4-wawidget__input"
                   type="tel"
@@ -198,16 +230,6 @@ export function WhatsappWidget() {
         </div>
       )}
 
-      <button
-        ref={lanzador}
-        type="button"
-        className="dcv4-wawidget__fab"
-        aria-expanded={abierto}
-        aria-label={abierto ? "Cerrar WhatsApp" : "Escríbenos por WhatsApp"}
-        onClick={alternar}
-      >
-        <WhatsappGlyph size={28} />
-      </button>
     </div>
   );
 }

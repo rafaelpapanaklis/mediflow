@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { persistentRateLimit } from "@/lib/failban";
+import { isRemembered, persistentRateLimit, rememberKey } from "@/lib/failban";
 import { sendEmail } from "@/lib/email";
 import {
   avisoLeadWhatsapp,
   normalizarNombre,
   normalizarNumeroWhatsapp,
+  registroLeadNoEnviado,
 } from "@/lib/landing/whatsapp-widget";
 
 export const runtime = "nodejs";
@@ -18,6 +19,9 @@ export const dynamic = "force-dynamic";
  * No guarda nada en la base (sin tabla nueva): avisa al equipo por correo, al
  * mismo buzón que los demás avisos de plataforma (ADMIN_NOTIFY_EMAIL, o
  * hola@dalecontrol.com), con el origen «whatsapp-widget».
+ *
+ * Si el correo no sale, nombre y número se escriben en el log del servidor
+ * (`registroLeadNoEnviado`) y el visitante recibe un 502.
  *
  * Antispam: honeypot (`empresa_web`, un campo que una persona no ve; si viene
  * con texto se responde 200 sin avisar a nadie) y límite por IP.
@@ -53,11 +57,16 @@ export async function POST(req: NextRequest) {
   const numero = normalizarNumeroWhatsapp(parsed.data.numero);
   if ("error" in numero) return NextResponse.json({ error: numero.error, campo: "numero" }, { status: 400 });
 
-  // Un mismo número no llena el buzón: 2 avisos por día.
-  const tope = await persistentRateLimit(req, {
-    id: numero.e164, limit: 2, windowSec: 86400, scope: "whatsapp-lead:numero",
-  });
-  if (tope) return tope;
+  // Un mismo número no llena el buzón: 2 avisos por día. Solo cuentan los que SÍ salieron
+  // (dos marcas, una por aviso enviado): un fallo de correo no gasta el cupo del visitante.
+  const marcaA = `whatsapp-lead:numero:${numero.e164}:a`;
+  const marcaB = `whatsapp-lead:numero:${numero.e164}:b`;
+  if (await isRemembered(marcaB)) {
+    return NextResponse.json(
+      { error: "Ya recibimos tu solicitud. Te escribimos en breve, o toca «Iniciar conversación»." },
+      { status: 429 },
+    );
+  }
 
   const pagina = parsed.data.pagina?.startsWith("/") ? parsed.data.pagina.replace(/[\u0000-\u001f]/g, "") : undefined;
   const { asunto, lineas } = avisoLeadWhatsapp({ nombre: nombre.nombre, ...numero, pagina });
@@ -68,11 +77,13 @@ export async function POST(req: NextRequest) {
     text: lineas.join("\n"),
   });
   if (!res.delivered) {
-    console.error("[whatsapp-lead] el aviso al equipo no salió");
+    // Sin tabla: el contacto queda en el log del servidor para que el equipo lo recupere.
+    console.error(registroLeadNoEnviado({ nombre: nombre.nombre, ...numero, pagina }));
     return NextResponse.json(
       { error: "No pudimos enviar tu solicitud. Toca «Iniciar conversación» para escribirnos directo." },
       { status: 502 },
     );
   }
+  await rememberKey((await isRemembered(marcaA)) ? marcaB : marcaA, 86400);
   return NextResponse.json({ ok: true });
 }

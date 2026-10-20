@@ -74,11 +74,42 @@ test("el mismo número no avisa más de 2 veces al día", async () => {
   assert.equal(correos.length, 2);
 });
 
-test("si el correo no sale: 502 con el mensaje que manda a «Iniciar conversación»", async () => {
+test("W1: si el correo no sale: 502, y nombre y número quedan en el log del servidor", async () => {
   globalThis.fetch = (async () => new Response("x", { status: 500 })) as typeof fetch;
-  const r = await pedir({ nombre: "Eva", numero: "9996660000" });
-  assert.equal(r.status, 502);
-  assert.match((await r.json()).error, /Iniciar conversación/);
+  const errores: string[] = [];
+  const logOriginal = console.error;
+  console.error = (...a: unknown[]) => { errores.push(a.map(String).join(" ")); };
+  try {
+    const r = await pedir({ nombre: "Eva Ruiz", numero: "9996660000", pagina: "/" });
+    assert.equal(r.status, 502);
+    assert.match((await r.json()).error, /Iniciar conversación/);
+  } finally {
+    console.error = logOriginal;
+  }
+  const linea = errores.find((e) => e.includes("AVISO NO ENVIADO")) ?? "";
+  assert.match(linea, /Eva Ruiz/);
+  assert.match(linea, /529996660000/);
+});
+
+test("W1: los envíos fallidos no gastan el cupo del número: tras dos fallos, el tercer intento sí pasa", async () => {
+  const cuerpo = { nombre: "Raúl", numero: "9995550000" };
+  globalThis.fetch = (async () => new Response("x", { status: 500 })) as typeof fetch;
+  const silenciar = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await pedir(cuerpo)).status, 502);
+    assert.equal((await pedir(cuerpo)).status, 502);
+    assert.equal((await pedir(cuerpo)).status, 502, "sigue intentando enviar, no responde 429");
+  } finally {
+    console.error = silenciar;
+  }
+  globalThis.fetch = (async (_u: unknown, init?: { body?: string }) => {
+    const b = JSON.parse(String(init?.body));
+    correos.push({ to: b.to[0], subject: b.subject, text: b.text });
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  assert.equal((await pedir(cuerpo)).status, 200);
+  assert.equal(correos.length, 1);
 });
 
 test.after(() => { globalThis.fetch = original; });

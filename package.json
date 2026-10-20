@@ -315,7 +315,7 @@
     "test:next-headers": "tsx --test src/lib/__tests__/next-config-headers.test.ts",
     "test:vista-pago": "tsx --test src/lib/billing/__tests__/vista-pago.test.ts",
     "test:aviso-cookies": "tsx --test src/components/public/landing/__tests__/aviso-cookies.test.ts",
-    "test:whatsapp-widget": "tsx --test src/lib/landing/__tests__/whatsapp-widget.test.ts src/app/api/public/whatsapp-lead/__tests__/route.test.ts",
+    "test:whatsapp-widget": "tsx --test src/lib/landing/__tests__/whatsapp-widget.test.ts src/app/api/public/whatsapp-lead/__tests__/route.test.ts src/components/public/landing/sales/v2/__tests__/whatsapp-widget-estructura.test.ts",
     "test:plan-status": "tsx --test src/lib/__tests__/plan-status.test.ts src/lib/__tests__/plan-status-guard.test.ts src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts",
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",

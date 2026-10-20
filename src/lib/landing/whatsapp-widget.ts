@@ -24,13 +24,17 @@ const ERROR_NUMERO =
  * Número de WhatsApp → E.164 sin «+».
  *  · 10 dígitos → México (52 + 10).
  *  · 52 + 10 dígitos, o 521 + 10 (formato móvil viejo) → 52 + 10.
- *  · Con «+» (o 00) y otro país: de 8 a 15 dígitos, sin cero inicial.
+ *  · Con «+» (o 00) y otro país: de 11 a 15 dígitos, sin cero inicial.
  */
 export function normalizarNumeroWhatsapp(crudo: string): ResultadoNumero {
   const texto = String(crudo ?? "").trim();
   if (!texto) return { ok: false, error: "Escribe tu número de WhatsApp." };
   if (/[^\d\s()+\-.]/.test(texto)) {
     return { ok: false, error: "El número solo puede llevar dígitos, espacios, guiones y el signo +." };
+  }
+  // El «+» solo va una vez y al principio.
+  if (texto.lastIndexOf("+") > 0 || (texto.match(/\+/g) ?? []).length > 1) {
+    return { ok: false, error: ERROR_NUMERO };
   }
   const conMas = texto.startsWith("+") || texto.replace(/\D/g, "").startsWith("00");
   let d = texto.replace(/\D/g, "");
@@ -45,6 +49,10 @@ export function normalizarNumeroWhatsapp(crudo: string): ResultadoNumero {
   }
 
   if (d.length < 8 || d.length > 15 || d.startsWith("0")) return { ok: false, error: ERROR_NUMERO };
+  // Con «+», 10 dígitos es un número mexicano al que le falta el 52 (o un +cc incompleto): no sirve en WhatsApp.
+  if (conMas && d.length <= 10) {
+    return { ok: false, error: "Con el signo + escribe también la lada del país: +52 para México (por ejemplo +52 999 123 4567)." };
+  }
   if (d.startsWith("52")) {
     const local = d.slice(2);
     // México: 10 dígitos, y la lada no empieza en 0 ni en 1.
@@ -68,6 +76,13 @@ export function normalizarNombre(crudo: string): ResultadoNombre {
 /** wa.me del número de DaleControl con el mensaje de «Iniciar conversación». */
 export function enlaceIniciarConversacion(numeroE164: string): string {
   return `https://wa.me/${numeroE164}?text=${encodeURIComponent(MENSAJE_INICIAR_CONVERSACION)}`;
+}
+
+/** Línea de log cuando el aviso no salió: el contacto no se pierde (nombre y número quedan en el log del servidor). */
+export function registroLeadNoEnviado(l: { nombre: string; e164: string; legible: string; pagina?: string }): string {
+  return `[whatsapp-lead] AVISO NO ENVIADO — contacto por recuperar: ${JSON.stringify({
+    origen: ORIGEN_WIDGET_WHATSAPP, nombre: l.nombre, whatsapp: l.legible, e164: l.e164, pagina: l.pagina ?? null,
+  })}`;
 }
 
 /** Aviso al equipo (mismo buzón que los demás avisos de plataforma: ADMIN_NOTIFY_EMAIL). */

@@ -1295,16 +1295,13 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 }
 
 /* ── Botón de WhatsApp flotante (whatsapp-widget.tsx; reemplaza al chat de LiveChat) ──
-   Abajo a la derecha. En celular se asienta SOBRE la barra fija (.dcv4-barra,
-   ~68px) para no taparle «WhatsApp»/«Empezar». El verde es el de .dcv2-btn-wa. */
+   Abajo a la derecha. La portada es clara: la tarjeta no tiene modo oscuro.
+   En celular, ver la regla de data-barra-movil más abajo. El verde es el de .dcv2-btn-wa. */
 .dcv4-wawidget {
   --wa-bg: #ffffff; --wa-fg: #0f172a; --wa-muted: #475569; --wa-line: #e2e8f0; --wa-field: #f8fafc;
   position: fixed; right: 20px; bottom: 20px; z-index: 70;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 12px;
   font-family: inherit;
-}
-@media (prefers-color-scheme: dark) {
-  .dcv4-wawidget { --wa-bg: #0f172a; --wa-fg: #f1f5f9; --wa-muted: #cbd5e1; --wa-line: #334155; --wa-field: #1e293b; }
 }
 .dcv4-wawidget__fab {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1319,7 +1316,7 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   background: var(--wa-bg); color: var(--wa-fg); border: 1px solid var(--wa-line); border-radius: 18px;
   box-shadow: 0 24px 56px -20px rgba(2,6,23,.45);
 }
-.dcv4-wawidget__head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: #128C7E; color: #fff; border-radius: 17px 17px 0 0; }
+.dcv4-wawidget__head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: #075E54; color: #fff; border-radius: 17px 17px 0 0; }
 .dcv4-wawidget__avatar { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 999px; background: rgba(255,255,255,.18); }
 .dcv4-wawidget__title { margin: 0; font-size: 15.5px; font-weight: 700; }
 .dcv4-wawidget__sub { margin: 2px 0 0; font-size: 13px; opacity: .9; }
@@ -1335,18 +1332,20 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
 .dcv4-wawidget__input:focus-visible { outline: 2px solid #128C7E; outline-offset: 1px; }
 .dcv4-wawidget__input[aria-invalid="true"] { border-color: #dc2626; }
 .dcv4-wawidget__err { margin: 6px 0 0; font-size: 13px; color: #dc2626; }
-@media (prefers-color-scheme: dark) { .dcv4-wawidget__err { color: #fca5a5; } }
 .dcv4-wawidget__send { width: 100%; min-height: 48px; margin-top: 14px; border: 0; border-radius: 12px; background: #0f172a; color: #fff; font: inherit; font-size: 15.5px; font-weight: 700; cursor: pointer; }
-@media (prefers-color-scheme: dark) { .dcv4-wawidget__send { background: #f1f5f9; color: #0f172a; } }
 .dcv4-wawidget__send:disabled { opacity: .6; cursor: default; }
 .dcv4-wawidget__fine { margin: 10px 0 0; font-size: 12.5px; color: var(--wa-muted); }
 .dcv4-wawidget__fine a { color: inherit; text-decoration: underline; }
 .dcv4-wawidget__ok { margin: 8px 0 0; padding: 14px; border-radius: 12px; background: #dcfce7; color: #14532d; font-weight: 600; text-align: center; }
-@media (prefers-color-scheme: dark) { .dcv4-wawidget__ok { background: #14532d; color: #dcfce7; } }
 /* Honeypot fuera de pantalla (no display:none: algunos robots lo saltan). */
 .dcv4-wawidget__hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 @media (max-width: 760px) {
-  .dcv4-wawidget { right: 14px; bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+  /* Sube solo cuando la barra fija está a la vista (BarraMovil pone data-barra-movil en <body>);
+     en el blog, o con el hero a la vista, va a su altura normal. Con la barra visible su
+     «WhatsApp» abre esta tarjeta y el botón flotante se esconde: un solo WhatsApp a la vista. */
+  .dcv4-wawidget { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  body[data-barra-movil] .dcv4-wawidget { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+  body[data-barra-movil] .dcv4-wawidget__fab { display: none; }
   .dcv4-wawidget__fab { width: 52px; height: 52px; }
   .dcv4-wawidget__fab:hover { transform: none; }
   .dcv4-wawidget__card { max-height: calc(100dvh - 170px); }
