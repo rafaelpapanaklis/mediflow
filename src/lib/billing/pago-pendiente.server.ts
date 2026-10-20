@@ -12,7 +12,7 @@
 
 import { randomUUID } from "node:crypto";
 import { isClinicBillingAdmin } from "./authz";
-import { clinicaEstabaSuspendida, finDeLoPagado } from "./cobro-rechazado";
+import { clinicaEstabaSuspendida, cobroPausado, finDeLoPagado } from "./cobro-rechazado";
 import {
   aplicarReglaDeSuspension,
   anularFacturasDeMesesSuspendidos,
@@ -68,10 +68,16 @@ export interface StripePago {
     update(id: string, params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
     pay(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
     voidInvoice(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
+    create(params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<{ id: string }>;
   };
   prices: {
     create(params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<{ id: string }>;
   };
+  /**
+   * Lo que usa la regla de la suspensión de ws1-t1 (`realinearCiclo` separa el excedente de CFDI pendiente antes de
+   * reiniciar el ciclo: `invoiceItems.list` y, si hay algo, `invoices.create`). El cliente real de Stripe lo trae.
+   */
+  invoiceItems: { list(params: Record<string, unknown>): Promise<{ data: Array<{ id: string; subscription?: unknown }> }> };
   customers: {
     /** Quita el cupón puesto en el CLIENTE (DELETE /v1/customers/:id/discount). */
     deleteDiscount(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<unknown>;
@@ -497,7 +503,7 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
   const exencion = await deps.exencionIva();
   const opciones: OpcionSubir[] = [];
   // Con el cobro en pausa («Subir» respondería 409 PAGADO_POR_ADELANTADO) no se ofrece ningún plan.
-  const enPausa = !!ctx.sub.pause_collection;
+  const enPausa = cobroPausado(ctx.sub);
   for (const id of enPausa ? [] : planesMasGrandes(deps.clinica.plan)) {
     if (await deps.bloqueoDeSedes(id)) continue; // un plan que las sedes no admiten no se ofrece
     opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion }));
@@ -612,8 +618,8 @@ async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<R
   // V2(a): con el cobro de la suscripción EN PAUSA (meses pagados por adelantado, o ciclo re-alineado tras una
   // suspensión) Stripe anula todas las facturas que nacen durante la pausa: el cambio de plan saldría GRATIS y
   // además se anularía la factura vieja. No se sube de plan en autoservicio; se manda a soporte, sin tocar nada.
-  if (sub.pause_collection) {
-    await deps.auditar({ event: "pago-pendiente-subir-bloqueado-por-pausa", planDestino: destino, reanudaEn: sub.pause_collection.resumes_at ?? null });
+  if (cobroPausado(sub)) {
+    await deps.auditar({ event: "pago-pendiente-subir-bloqueado-por-pausa", planDestino: destino, reanudaEn: sub.pause_collection?.resumes_at ?? null });
     return respuesta(409, { code: "PAGADO_POR_ADELANTADO", error: MENSAJES.pagadoPorAdelantado });
   }
 

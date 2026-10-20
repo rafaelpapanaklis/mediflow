@@ -80,6 +80,10 @@ interface Escenario {
   pausaCobro?: { behavior: string; resumes_at: number };
   /** La factura del cambio de plan nace ANULADA (cobro en pausa que no se vio). */
   facturaNuevaAnulada?: boolean;
+  /** Excedente de CFDI ya sumado «a la próxima mensualidad» (items pendientes del cliente). */
+  excedentePendiente?: boolean;
+  /** `invoiceItems.list` falla de red. */
+  excedenteFalla?: boolean;
   /** El cliente de la suscripción es OTRO cliente de Stripe. */
   clienteAjeno?: boolean;
   stripeCaido?: boolean;
@@ -253,6 +257,11 @@ function montar(e: Escenario = {}) {
         cobrosDeTarjeta++;
         return { ...f };
       },
+      create: async (p: any, opts: any) => {
+        registra("invoices.create", p, opts);
+        cuestaCaer();
+        return { id: "in_excedente_aparte" };
+      },
       voidInvoice: async (id: string, _p: any, opts: any) => {
         registra("invoices.voidInvoice", id, opts);
         cuestaCaer();
@@ -263,6 +272,15 @@ function montar(e: Escenario = {}) {
         }
         facturas.get(id).status = "void";
         return facturas.get(id);
+      },
+    },
+    // Lo que usa `realinearCiclo` (t1, V3): separar el excedente de CFDI pendiente antes de reiniciar el ciclo.
+    invoiceItems: {
+      list: async (p: any) => {
+        registra("invoiceItems.list", p);
+        cuestaCaer();
+        if (e.excedenteFalla) throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        return { data: e.excedentePendiente ? [{ id: "ii_excedente", subscription: null }] : [] };
       },
     },
     customers: {
@@ -1471,6 +1489,24 @@ test("REGLA — carrera con el webhook invoice.paid: si corre a la vez o despué
   assert.equal(m.facturas.get(OCT).status, "paid");
   // Y una sola fila «no cobrada» por factura, sin duplicados.
   assert.deepEqual(filasFactura.map((f) => f.reference).sort(), ["in_ago", "in_jul", "in_sep"]);
+});
+
+test("REGLA — excedente de CFDI pendiente (t1, V3): se separa en su propia factura ANTES de reiniciar el ciclo, y si no se puede separar no se reinicia ni se anula nada", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES, excedentePendiente: true });
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+  const orden = m.llamadas.map((l) => l.op);
+  assert.equal(m.ops("invoices.create").length, 1);
+  assert.equal(m.ops("invoices.create")[0].args[0].metadata.kind, "cfdi-overage-aparte");
+  assert.ok(orden.indexOf("invoices.create") < orden.indexOf("subscriptions.update"), "el excedente se aparta antes del reinicio");
+  assert.equal(m.reinicios(), 1);
+  assert.equal(m.ops("invoices.voidInvoice").length, 3);
+
+  const falla = montar({ suspendida: true, abiertas: MESES, excedentePendiente: true, excedenteFalla: true });
+  assert.equal((await pagarPendiente(falla.deps)).body.pagado, true); // ya cobró: la respuesta sigue siendo «pagado»
+  assert.equal(falla.reinicios(), 0);
+  assert.equal(falla.ops("invoices.voidInvoice").length, 0);
+  assert.equal(falla.avisos.length, 1);
 });
 
 test("REGLA — si el reinicio del ciclo falla, no se anula nada (el reintento del webhook lo completa) y se avisa al admin", async () => {
