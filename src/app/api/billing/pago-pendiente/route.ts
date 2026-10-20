@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
 import { sendEmail } from "@/lib/email";
-import { crearCandadoDeCobro } from "@/lib/billing/candado-cobro.server";
+import { crearCandadoDeCobro, leerIntentosSubir, sumarIntentoSubir } from "@/lib/billing/candado-cobro.server";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import { getResolvedPlan, getPlanLimits } from "@/lib/plans";
 import { clearOverridesData } from "@/lib/billing/plan-overrides";
@@ -115,6 +115,8 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
     },
     // Candado por clínica de «Pagar» y «Subir»: failban (Upstash o memoria) + candado en la base entre instancias.
     candado: crearCandadoDeCobro({ clinicId: clinic.id }),
+    // Contador de intentos de «Subir» en NUESTRA base (billing_email_logs), no en Stripe.
+    intentos: { leer: (id) => leerIntentosSubir(id), sumar: (id) => sumarIntentoSubir(id) },
     // Mismo buzón que el aviso de afiliados y el de SPEI: ADMIN_NOTIFY_EMAIL, o el general.
     avisarAlAdmin: async ({ asunto, lineas }) => {
       const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
