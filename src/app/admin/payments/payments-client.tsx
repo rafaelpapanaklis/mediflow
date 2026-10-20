@@ -16,7 +16,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { ETIQUETA_VIA_RECARGA } from "@/lib/ai-billing/recargas";
 import type { PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
-import { ROTULO_ACTIVACION_MANUAL, esActivacionManual } from "@/lib/billing/pagos-reales";
+import { esActivacionManual, esRastroDePagoUnicoStripe, rotuloDeFilaSinCobro } from "@/lib/billing/pagos-reales";
 import {
   AvisoFacturaTarjeta,
   avisarSiSeMarcoLaFacturaTarjeta,
@@ -34,15 +34,17 @@ const PAYMENT_METHODS = [
   { value: "cash",     label: "Efectivo",       icon: "\uD83D\uDCB5" },
 ] as const;
 
-function methodBadge(method: string | null | undefined) {
-  if (method === "admin") return "\uD83D\uDEE0\uFE0F Admin";
+function methodBadge(method: string | null | undefined, fila?: { reference?: string | null } | null) {
+  if (method === "admin") return esRastroDePagoUnicoStripe(fila) ? "\uD83C\uDFEA Stripe (SPEI/OXXO)" : "\uD83D\uDEE0\uFE0F Admin";
   const m = PAYMENT_METHODS.find(pm => pm.value === method);
   return m ? `${m.icon} ${m.label}` : method ?? "\u2014";
 }
 
-function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null }) {
-  // La activación manual de /admin deja una fila de $0 como rastro: se VE, pero no es un cobro.
-  if (esActivacionManual(fila)) return <BadgeNew tone="neutral" dot>{ROTULO_ACTIVACION_MANUAL}</BadgeNew>;
+function statusBadge(status: string, fila?: { method?: string | null; amount?: number | null; reference?: string | null }) {
+  // Una fila de $0 que es solo un rastro (activación manual de /admin, o el SPEI/OXXO que cobró Stripe) se VE, pero no
+  // es un cobro: se rotula distinto de «Pagado».
+  const rotulo = rotuloDeFilaSinCobro(fila);
+  if (rotulo) return <BadgeNew tone="neutral" dot>{rotulo}</BadgeNew>;
   if (status === "paid")    return <BadgeNew tone="success" dot>Pagado</BadgeNew>;
   if (status === "pending") return <BadgeNew tone="warning" dot>Pendiente</BadgeNew>;
   if (status === "failed")  return <BadgeNew tone="danger"  dot>Fallido</BadgeNew>;
@@ -751,7 +753,7 @@ export function PaymentsClient({
                     <td className="mono" style={{ color: "var(--success)", fontWeight: 600 }}>
                       {fmtMXN(inv.amount)}
                     </td>
-                    <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
+                    <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method, inv)}</td>
                     <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
                       {inv.reference || "—"}
                     </td>
@@ -898,7 +900,7 @@ export function PaymentsClient({
                       <td className="mono" style={{ color: "var(--success)", fontWeight: 600 }}>
                         {fmtMXN(inv.amount)}
                       </td>
-                      <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
+                      <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method, inv)}</td>
                       <td>{statusBadge(inv.status, inv)}</td>
                       <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
                         {inv.reference || "—"}

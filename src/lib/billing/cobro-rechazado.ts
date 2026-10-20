@@ -167,6 +167,26 @@ export function trialEndsAtSinRetroceder(
   return d && d.getTime() > nuevo.getTime() ? d : nuevo;
 }
 
+/**
+ * FECHA DE CORTE del marcado automático «factura de tarjeta pagada fuera de Stripe» (revisión t4, R1). El reintento
+ * automático (cron diario) y la lista de /admin › Pagos NO aplican la regla hacia atrás: solo cuentan los pagos manuales
+ * confirmados DESDE esta fecha. Todo lo anterior (cuando al admin se le decía «cancélala en Stripe») no se marca solo.
+ *
+ * ⚠️ Debe ser el día en que este código se INTEGRA a producción: si se integra después del 20-oct-2026, hay que subir
+ * esta fecha a ese día, o los pagos manuales de entre medias (confirmados con el código anterior) se marcarían solos.
+ */
+export const INICIO_MARCADO_FUERA_DE_STRIPE = new Date("2026-10-20T00:00:00-06:00");
+
+let inicioMarcado = INICIO_MARCADO_FUERA_DE_STRIPE;
+/** La fecha de corte vigente. */
+export function inicioDelMarcadoFueraDeStripe(): Date {
+  return inicioMarcado;
+}
+/** Solo para pruebas: mueve el corte (sin argumento, vuelve al de producción). */
+export function fijarInicioDelMarcadoParaPruebas(fecha?: Date): void {
+  inicioMarcado = fecha ?? INICIO_MARCADO_FUERA_DE_STRIPE;
+}
+
 /** `method` de la fila que deja la activación manual de /admin (`activate_clinic`): es su rastro para el webhook. */
 export const METODO_ACTIVACION_ADMIN = "admin";
 

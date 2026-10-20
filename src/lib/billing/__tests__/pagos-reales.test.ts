@@ -16,6 +16,9 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ROTULO_PAGO_UNICO_STRIPE,
+  rotuloDeFilaSinCobro,
+  esRastroDePagoUnicoStripe,
   FILTRO_SIN_ACTIVACION_MANUAL,
   ROTULO_ACTIVACION_MANUAL,
   esActivacionManual,
@@ -171,7 +174,7 @@ test("isFirstContract no lee pagos: la fila de $0 ni gana ni pierde la promo del
 
 test("/admin › Pagos enseña la fila como «Activación manual (sin cobro)», no como «Pagado», y sin enlace a CFDI", () => {
   const c = sinComentarios(leer("src/app/admin/payments/payments-client.tsx"));
-  assert.match(c, /if \(esActivacionManual\(fila\)\) return <BadgeNew tone="neutral" dot>\{ROTULO_ACTIVACION_MANUAL\}<\/BadgeNew>;/);
+  assert.match(c, /const rotulo = rotuloDeFilaSinCobro\(fila\);\s*if \(rotulo\) return <BadgeNew tone="neutral" dot>\{rotulo\}<\/BadgeNew>;/);
   assert.match(c, /<td>\{statusBadge\(inv\.status, inv\)\}<\/td>/);
   assert.match(c, /\{!esActivacionManual\(inv\) && \(\s*<Link\s+href=\{`\/admin\/payments\/\$\{inv\.id\}\/cfdi`\}/);
   // La lista de pagos NO la filtra: la consulta de las listas de /admin › Pagos sigue trayendo todas las filas.
@@ -326,4 +329,18 @@ test("N8 /admin › Pagos: el filtro «Pagados» no muestra las activaciones man
   ];
   const pagados = lista.filter((p) => !(p.status === "paid" && esActivacionManual(p)));
   assert.deepEqual(pagados.map((p) => p.id), ["1", "3"]);
+});
+
+test("R3 /admin › Pagos distingue el rastro del SPEI/OXXO de Stripe («pago-unico:») de la activación manual", () => {
+  assert.equal(ROTULO_PAGO_UNICO_STRIPE, "Pago SPEI/OXXO por Stripe (rastro)");
+  assert.equal(esRastroDePagoUnicoStripe({ reference: "pago-unico:cs_1" }), true);
+  for (const r of [null, undefined, "", "in_1", "SPEI-1", "pago-unico"]) assert.equal(esRastroDePagoUnicoStripe({ reference: r }), false, String(r));
+  assert.equal(rotuloDeFilaSinCobro({ method: "admin", amount: 0, reference: "pago-unico:cs_1" }), "Pago SPEI/OXXO por Stripe (rastro)");
+  assert.equal(rotuloDeFilaSinCobro({ method: "admin", amount: 0, reference: null }), "Activación manual (sin cobro)");
+  assert.equal(rotuloDeFilaSinCobro({ method: "transfer", amount: 689, reference: "x" }), null);
+  const c = sinComentarios(leer("src/app/admin/payments/payments-client.tsx"));
+  assert.match(c, /const rotulo = rotuloDeFilaSinCobro\(fila\);/);
+  assert.equal((c.match(/methodBadge\(inv\.method, inv\)/g) ?? []).length, 2);
+  // Y el rastro se escribe con ese prefijo.
+  assert.match(sinComentarios(leer("src/app/api/webhooks/stripe/route.ts")), /reference: source\.sessionId \? `pago-unico:\$\{source\.sessionId\}` : undefined/);
 });

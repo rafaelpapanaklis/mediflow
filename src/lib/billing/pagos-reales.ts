@@ -23,6 +23,26 @@ import { METODO_ACTIVACION_ADMIN } from "@/lib/billing/cobro-rechazado";
 
 export const ROTULO_ACTIVACION_MANUAL = "Activación manual (sin cobro)";
 
+/** Prefijo de `reference` del rastro que deja el SPEI/OXXO de Stripe (pago único acreditado por webhook). */
+export const PREFIJO_REFERENCIA_PAGO_UNICO_STRIPE = "pago-unico:";
+export const ROTULO_PAGO_UNICO_STRIPE = "Pago SPEI/OXXO por Stripe (rastro)";
+
+/** El rastro de $0 de un SPEI/OXXO cobrado por Stripe (no es una activación del admin aunque comparta método). */
+export function esRastroDePagoUnicoStripe(fila: { reference?: string | null } | null | undefined): boolean {
+  return !!fila && typeof fila.reference === "string" && fila.reference.startsWith(PREFIJO_REFERENCIA_PAGO_UNICO_STRIPE);
+}
+
+/**
+ * El rótulo de una fila de $0 que NO es un cobro, o null si es un pago normal: «Activación manual (sin cobro)» para la
+ * del admin y «Pago SPEI/OXXO por Stripe (rastro)» para la del pago único de Stripe (el cobro real vive en Stripe).
+ */
+export function rotuloDeFilaSinCobro(
+  fila: { method?: string | null; amount?: number | null; reference?: string | null } | null | undefined,
+): string | null {
+  if (!esActivacionManual(fila)) return null;
+  return esRastroDePagoUnicoStripe(fila) ? ROTULO_PAGO_UNICO_STRIPE : ROTULO_ACTIVACION_MANUAL;
+}
+
 /** Una fila de $0 con método «admin». */
 export function esActivacionManual(fila: { method?: string | null; amount?: number | null } | null | undefined): boolean {
   return !!fila && fila.method === METODO_ACTIVACION_ADMIN && (fila.amount ?? 0) === 0;
