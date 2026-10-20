@@ -7,7 +7,8 @@ export const metadata: Metadata = {
     "Aviso de privacidad integral conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).",
 };
 
-// Fecha de publicación (texto aprobado por el abogado; se publica con la integración de la ola del 26-sep).
+// Fecha del último cambio del aviso. Lo del botón de WhatsApp (sección 3), Resend/Postmark (sección 5) y el párrafo de
+// la sección 8 es texto nuevo de la rama feat/whatsapp-widget: PENDIENTE de revisión del abogado.
 const LAST_UPDATED = "20 de octubre de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
@@ -368,8 +369,9 @@ export default function PrivacidadPage() {
         <ul>
           <li><b>Supabase, Inc.</b> — hosting de base de datos y autenticación.</li>
           <li><b>Vercel, Inc.</b> — hosting de la aplicación web y medición de visitas y rendimiento del sitio (Vercel Analytics y Speed Insights).</li>
-          <li><b>Twilio, Inc. / Postmark</b> — envío de WhatsApp, SMS y correos transaccionales.</li>
-          <li><b>Resend, Inc.</b> — envío de correo electrónico; por este medio nos llega el aviso con su nombre y su número cuando usted pide, en el botón de WhatsApp del sitio, que le escribamos.</li>
+          <li><b>Twilio, Inc.</b> — envío de WhatsApp y SMS.</li>
+          <li><b>Resend, Inc.</b> — envío de los correos de la plataforma (avisos de cuenta, portal del paciente, recordatorios y el aviso que nos llega con su nombre y su número cuando usted pide, en el botón de WhatsApp del sitio, que le escribamos).</li>
+          <li><b>Postmark</b> — recepción de correo entrante.</li>
           <li><b>Stripe, Inc. / PayPal / MercadoPago</b> — procesamiento de pagos cuando aplica.</li>
           <li><b>FacturAPI / Proveedores autorizados de CFDI</b> — emisión de comprobantes fiscales.</li>
           <li><b>Daily.co</b> — sesiones de teleconsulta cuando aplica.</li>

@@ -45,7 +45,7 @@ export function BarraMovil() {
         <EnlaceEmpezar href="#precios" origen="barra_movil" className="dcv2-btn-primary dcv4-barra__btn">
           {WHATSAPP_CTA.barStart}
         </EnlaceEmpezar>
-        <BotonWhatsapp origen="barra_movil" className="dcv2-btn-wa dcv4-barra__btn" glyphSize={19} alClic={abrirTarjetaWhatsapp}>
+        <BotonWhatsapp origen="barra_movil" className="dcv2-btn-wa dcv4-barra__btn" glyphSize={19} alClic={(teclado) => abrirTarjetaWhatsapp(teclado)}>
           {WHATSAPP_CTA.barWhatsapp}
         </BotonWhatsapp>
       </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { isRemembered, persistentRateLimit, rememberKey } from "@/lib/failban";
+import { acquireLock, isRemembered, persistentRateLimit, releaseLock, rememberKey } from "@/lib/failban";
 import { sendEmail } from "@/lib/email";
 import {
   avisoLeadWhatsapp,
@@ -61,29 +61,42 @@ export async function POST(req: NextRequest) {
   // (dos marcas, una por aviso enviado): un fallo de correo no gasta el cupo del visitante.
   const marcaA = `whatsapp-lead:numero:${numero.e164}:a`;
   const marcaB = `whatsapp-lead:numero:${numero.e164}:b`;
-  if (await isRemembered(marcaB)) {
+  const pagina = parsed.data.pagina?.startsWith("/") ? parsed.data.pagina.replace(/[\u0000-\u001f]/g, "") : undefined;
+
+  // Candado por número alrededor de «comprobar → enviar → marcar»: peticiones en paralelo del
+  // mismo número no pasan todas la comprobación (el tope de 2 al día es real).
+  const llave = `whatsapp-lead:${numero.e164}`;
+  if (!(await acquireLock(llave, 30))) {
     return NextResponse.json(
-      { error: "Ya recibimos tu solicitud. Te escribimos en breve, o toca «Iniciar conversación»." },
+      { error: "Ya estamos enviando tu solicitud. Espera unos segundos." },
       { status: 429 },
     );
   }
-
-  const pagina = parsed.data.pagina?.startsWith("/") ? parsed.data.pagina.replace(/[\u0000-\u001f]/g, "") : undefined;
-  const { asunto, lineas } = avisoLeadWhatsapp({ nombre: nombre.nombre, ...numero, pagina });
-  const res = await sendEmail({
-    to: process.env.ADMIN_NOTIFY_EMAIL?.trim() || "hola@dalecontrol.com",
-    subject: asunto,
-    html: lineas.map((l) => `<p>${esc(l)}</p>`).join(""),
-    text: lineas.join("\n"),
-  });
-  if (!res.delivered) {
-    // Sin tabla: el contacto queda en el log del servidor para que el equipo lo recupere.
-    console.error(registroLeadNoEnviado({ nombre: nombre.nombre, ...numero, pagina }));
-    return NextResponse.json(
-      { error: "No pudimos enviar tu solicitud. Toca «Iniciar conversación» para escribirnos directo." },
-      { status: 502 },
-    );
+  try {
+    if (await isRemembered(marcaB)) {
+      return NextResponse.json(
+        { error: "Ya recibimos tu solicitud. Te escribimos en breve, o toca «Iniciar conversación»." },
+        { status: 429 },
+      );
+    }
+    const { asunto, lineas } = avisoLeadWhatsapp({ nombre: nombre.nombre, ...numero, pagina });
+    const res = await sendEmail({
+      to: process.env.ADMIN_NOTIFY_EMAIL?.trim() || "hola@dalecontrol.com",
+      subject: asunto,
+      html: lineas.map((l) => `<p>${esc(l)}</p>`).join(""),
+      text: lineas.join("\n"),
+    });
+    if (!res.delivered) {
+      // Sin tabla: el contacto queda en el log del servidor para que el equipo lo recupere.
+      console.error(registroLeadNoEnviado({ nombre: nombre.nombre, ...numero, pagina }));
+      return NextResponse.json(
+        { error: "No pudimos enviar tu solicitud. Toca «Iniciar conversación» para escribirnos directo." },
+        { status: 502 },
+      );
+    }
+    await rememberKey((await isRemembered(marcaA)) ? marcaB : marcaA, 86400);
+  } finally {
+    await releaseLock(llave);
   }
-  await rememberKey((await isRemembered(marcaA)) ? marcaB : marcaA, 86400);
   return NextResponse.json({ ok: true });
 }

@@ -59,7 +59,10 @@ test("el aviso describe el botón de WhatsApp (nombre y número para contactarte
   // W8: Resend como encargado y plazo de conservación.
   assert.match(s3, /conservamos hasta <b>90 días<\/b>/);
   const s5 = p.slice(p.indexOf('title="5. Transferencias"'), p.indexOf('title="6. Derechos ARCO"'));
-  assert.match(s5, /<b>Resend, Inc\.<\/b> — envío de correo electrónico/);
+  assert.match(s5, /<b>Resend, Inc\.<\/b> — envío de los correos de la plataforma/);
+  assert.match(s5, /<b>Postmark<\/b> — recepción de correo entrante/);
+  assert.doesNotMatch(s5, /Twilio, Inc\. \/ Postmark/, "Postmark no envía: solo recibe");
+  assert.doesNotMatch(p, /texto aprobado por el abogado/, "el texto nuevo aún no lo revisa el abogado");
   const s8 = p.slice(p.indexOf('title="8. Conservación'));
   assert.match(s8, /Contacto por el botón de WhatsApp\.<\/b>[\s\S]*?hasta <b>90 días<\/b>/);
   assert.doesNotMatch(p, /livechat/i, "el aviso ya no nombra LiveChat");

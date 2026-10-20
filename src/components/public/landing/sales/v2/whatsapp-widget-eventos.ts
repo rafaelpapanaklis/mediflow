@@ -6,9 +6,9 @@
 export const EVENTO_ABRIR_WHATSAPP = "dc:abrir-whatsapp";
 
 /** Pide abrir la tarjeta. true = alguien la atendió (el widget llama a `preventDefault` del evento). */
-export function abrirTarjetaWhatsapp(): boolean {
+export function abrirTarjetaWhatsapp(conTeclado = false): boolean {
   if (typeof window === "undefined") return false;
-  const ev = new CustomEvent(EVENTO_ABRIR_WHATSAPP, { cancelable: true });
+  const ev = new CustomEvent(EVENTO_ABRIR_WHATSAPP, { cancelable: true, detail: { origen: "barra_movil", conTeclado } });
   window.dispatchEvent(ev);
   return ev.defaultPrevented;
 }

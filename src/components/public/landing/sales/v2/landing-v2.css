@@ -1316,6 +1316,7 @@ html:has(.dcv4-root) { scroll-behavior: smooth; }
   background: var(--wa-bg); color: var(--wa-fg); border: 1px solid var(--wa-line); border-radius: 18px;
   box-shadow: 0 24px 56px -20px rgba(2,6,23,.45);
 }
+.dcv4-wawidget__card:focus { outline: none; }
 .dcv4-wawidget__head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: #075E54; color: #fff; border-radius: 17px 17px 0 0; }
 .dcv4-wawidget__avatar { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 999px; background: rgba(255,255,255,.18); }
 .dcv4-wawidget__title { margin: 0; font-size: 15.5px; font-weight: 700; }

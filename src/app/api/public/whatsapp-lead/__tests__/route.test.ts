@@ -112,4 +112,20 @@ test("W1: los envíos fallidos no gastan el cupo del número: tras dos fallos, e
   assert.equal(correos.length, 1);
 });
 
+test("N-W7: peticiones en paralelo del mismo número no pasan todas: máximo 2 avisos al día", async () => {
+  const cuerpo = { nombre: "Paola", numero: "9994440000" };
+  const rs = await Promise.all([1, 2, 3, 4, 5].map(() => pedir(cuerpo)));
+  const codigos = rs.map((r) => r.status);
+  assert.ok(correos.length <= 2, `salieron ${correos.length} correos: ${codigos}`);
+  assert.ok(codigos.includes(429));
+});
+
+test("N-W6: el 429 por IP lleva el texto «Demasiados intentos» (no «ya recibimos»)", async () => {
+  const ip = "198.51.100.9";
+  let ultimo: Response | undefined;
+  for (let i = 0; i < 6; i++) ultimo = await pedir({ nombre: "Ana", numero: `99933300${i}0` }, ip);
+  assert.equal(ultimo?.status, 429);
+  assert.match((await ultimo!.json()).error, /Demasiados intentos/);
+});
+
 test.after(() => { globalThis.fetch = original; });

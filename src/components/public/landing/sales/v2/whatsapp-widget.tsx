@@ -37,35 +37,63 @@ export function WhatsappWidget() {
   const campoNombre = useRef<HTMLInputElement>(null);
   const campoNumero = useRef<HTMLInputElement>(null);
 
-  // Al abrir, el foco va al primer campo (el botón va antes que la tarjeta en el DOM: Tab sigue ahí).
+  const tarjeta = useRef<HTMLDivElement>(null);
+  /** Quien tenía el foco al abrir (el botón verde, o «WhatsApp» de la barra): ahí vuelve al cerrar. */
+  const focoPrevio = useRef<HTMLElement | null>(null);
+  /** Desde dónde se abrió: la barra de móvil registra su conversión con su propio origen. */
+  const origenApertura = useRef<"barra_movil" | undefined>(undefined);
+  /** En táctil NO se enfoca Nombre al abrir (sacaría el teclado y taparía «Iniciar conversación»). */
+  const enfocarNombre = useRef(true);
+
+  function abrir(opts: { origen?: "barra_movil"; conTeclado?: boolean } = {}) {
+    focoPrevio.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    origenApertura.current = opts.origen;
+    const tactil = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+    enfocarNombre.current = !tactil || !!opts.conTeclado;
+    setAbierto(true);
+  }
+
+  function cerrar() {
+    setAbierto(false);
+    // Si el botón verde está escondido (barra de móvil a la vista), el foco vuelve a quien abrió.
+    const previo = focoPrevio.current;
+    const visible = (el: HTMLElement | null) => !!el && el.isConnected && el.getClientRects().length > 0;
+    (visible(previo) ? previo : visible(lanzador.current) ? lanzador.current : null)?.focus();
+  }
+
+  // Al abrir con ratón o teclado el foco va al primer campo (el botón va antes que la tarjeta en el DOM:
+  // Tab sigue ahí); en táctil, a la propia tarjeta, sin teclado.
   useEffect(() => {
-    if (abierto) campoNombre.current?.focus();
+    if (!abierto) return;
+    (enfocarNombre.current ? campoNombre.current : tarjeta.current)?.focus();
   }, [abierto]);
 
   // «WhatsApp» de la barra fija de móvil abre esta tarjeta.
   useEffect(() => {
-    const abrir = (e: Event) => {
+    const alAbrir = (e: Event) => {
       e.preventDefault();
-      setAbierto(true);
+      const d = (e as CustomEvent<{ origen?: "barra_movil"; conTeclado?: boolean }>).detail;
+      abrir({ origen: d?.origen, conTeclado: d?.conTeclado });
     };
-    window.addEventListener(EVENTO_ABRIR_WHATSAPP, abrir);
-    return () => window.removeEventListener(EVENTO_ABRIR_WHATSAPP, abrir);
+    window.addEventListener(EVENTO_ABRIR_WHATSAPP, alAbrir);
+    return () => window.removeEventListener(EVENTO_ABRIR_WHATSAPP, alAbrir);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!abierto) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setAbierto(false);
-        lanzador.current?.focus();
+        cerrar();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [abierto]);
 
-  function alternar() {
-    setAbierto((a) => !a);
+  function alternar(e: React.MouseEvent) {
+    if (abierto) cerrar();
+    else abrir({ conTeclado: e.detail === 0 });
   }
 
   async function enviar(e: FormEvent) {
@@ -96,13 +124,13 @@ export function WhatsappWidget() {
         setEstado("idle");
         if (j.campo) (j.campo === "nombre" ? campoNombre : campoNumero).current?.focus();
         setErrores(
-          j.campo ? { [j.campo]: j.error } : { general: r.status === 429
-            ? "Ya recibimos varias solicitudes. Intenta más tarde o toca «Iniciar conversación»."
-            : j.error ?? "No pudimos enviar tu solicitud. Toca «Iniciar conversación» para escribirnos directo." },
+          j.campo ? { [j.campo]: j.error } : { general: j.error ?? "No pudimos enviar tu solicitud. Toca «Iniciar conversación» para escribirnos directo." },
         );
         return;
       }
       setEstado("listo");
+      // Enviar el formulario es una conversación iniciada: aquí se registra la conversión.
+      registrarPaso("whatsapp_clic", origenApertura.current ? { origen: origenApertura.current } : {});
     } catch {
       setEstado("idle");
       setErrores({ general: "No hay conexión. Revisa tu internet o toca «Iniciar conversación»." });
@@ -125,7 +153,7 @@ export function WhatsappWidget() {
       </button>
 
       {abierto && (
-        <div role="dialog" aria-labelledby={`${id}-t`} className="dcv4-wawidget__card">
+        <div ref={tarjeta} tabIndex={-1} role="dialog" aria-labelledby={`${id}-t`} className="dcv4-wawidget__card">
           <div className="dcv4-wawidget__head">
             <span aria-hidden="true" className="dcv4-wawidget__avatar">
               <WhatsappGlyph size={22} />
@@ -138,10 +166,7 @@ export function WhatsappWidget() {
               type="button"
               className="dcv4-wawidget__close"
               aria-label="Cerrar"
-              onClick={() => {
-                setAbierto(false);
-                lanzador.current?.focus();
-              }}
+              onClick={cerrar}
             >
               ×
             </button>
@@ -153,7 +178,7 @@ export function WhatsappWidget() {
               target="_blank"
               rel="noopener noreferrer"
               className="dcv2-btn-wa dcv4-wawidget__start"
-              onClick={() => registrarPaso("whatsapp_clic")}
+              onClick={() => registrarPaso("whatsapp_clic", origenApertura.current ? { origen: origenApertura.current } : {})}
             >
               <WhatsappGlyph size={19} />
               Iniciar conversación

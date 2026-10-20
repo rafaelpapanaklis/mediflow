@@ -25,7 +25,7 @@ test("W2: el botón va antes que la tarjeta en el DOM y el CSS lo pinta debajo (
   const t = leer("whatsapp-widget.tsx");
   assert.ok(t.indexOf("dcv4-wawidget__fab") < t.indexOf('role="dialog"'));
   assert.match(bloque, /flex-direction: column-reverse/);
-  assert.match(t, /campoNombre\.current\?\.focus\(\)/);
+  assert.match(t, /enfocarNombre\.current \? campoNombre\.current : tarjeta\.current/);
 });
 
 test("W7: el botón solo sube cuando la barra está visible; en ese caso se esconde y la barra abre la tarjeta", () => {
@@ -34,7 +34,7 @@ test("W7: el botón solo sube cuando la barra está visible; en ese caso se esco
   assert.match(bloque, /body\[data-barra-movil\] \.dcv4-wawidget__fab \{ display: none; \}/);
   const b = leer("barra-movil.tsx");
   assert.match(b, /setAttribute\("data-barra-movil"/);
-  assert.match(b, /alClic=\{abrirTarjetaWhatsapp\}/);
+  assert.match(b, /alClic=\{\(teclado\) => abrirTarjetaWhatsapp\(teclado\)\}/);
   assert.match(leer("whatsapp-widget.tsx"), /EVENTO_ABRIR_WHATSAPP/);
 });
 
@@ -46,4 +46,29 @@ test("el puente barra→tarjeta: sin widget montado el enlace sigue a wa.me; con
   assert.equal(abrirTarjetaWhatsapp(), false);
   objetivo.addEventListener(EVENTO_ABRIR_WHATSAPP, (e) => e.preventDefault());
   assert.equal(abrirTarjetaWhatsapp(), true);
+});
+
+test("N-W2: el «WhatsApp» de la barra que abre la tarjeta NO registra la conversión; sin widget sí", async () => {
+  const { BotonWhatsapp } = await import("../cta-embudo");
+  const lanzados: string[] = [];
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.window = { gtag: (...a: unknown[]) => lanzados.push(String(a[1])), dataLayer: [], location: { pathname: "/", search: "" }, addEventListener() {}, localStorage: undefined };
+  const el = BotonWhatsapp({ origen: "barra_movil", alClic: () => true, children: "x" }) as unknown as {
+    props: { onClick: (e: { detail: number; preventDefault(): void }) => void };
+  };
+  let prevenido = false;
+  el.props.onClick({ detail: 1, preventDefault: () => { prevenido = true; } });
+  assert.equal(prevenido, true);
+  assert.deepEqual(lanzados, [], "atendido por la tarjeta: ni gtag ni embudo");
+  const el2 = BotonWhatsapp({ origen: "barra_movil", alClic: () => false, children: "x" }) as unknown as typeof el;
+  let prev2 = false;
+  el2.props.onClick({ detail: 1, preventDefault: () => { prev2 = true; } });
+  assert.equal(prev2, false);
+});
+
+test("N-W2: la tarjeta registra la conversión en «Iniciar conversación» y al enviar el formulario, no al abrir", () => {
+  const t = leer("whatsapp-widget.tsx");
+  const abrir = t.slice(t.indexOf("function abrir("), t.indexOf("function cerrar("));
+  assert.doesNotMatch(abrir, /registrarPaso/);
+  assert.equal((t.match(/registrarPaso\("whatsapp_clic"/g) ?? []).length, 2);
 });
