@@ -10788,6 +10788,28 @@
       "fechaPorLlenar": "Date: ____ / ____ / ________",
       "pie": "Treatment plan generated in DaleControl · {clinica}",
       "pagina": "Page {n} of {total}"
+    },
+    "filas": {
+      "faseNumero": "Phase {n}",
+      "error": {
+        "generico": "The plan procedure could not be saved.",
+        "filas_no_lista": "The plan procedures did not arrive as a list.",
+        "demasiadas_filas": "The plan has more than 100 procedures. Split it into two plans.",
+        "sin_nombre": "A procedure has no name.",
+        "nombre_largo": "A procedure name is longer than 200 characters.",
+        "diente_invalido": "A procedure has a tooth that is not FDI.",
+        "cara_invalida": "A procedure has a surface that does not exist (use M, O, D, B or L).",
+        "fase_invalida": "A procedure has a phase that does not exist.",
+        "cantidad_invalida": "Quantity goes from 1 to 999, with no decimals.",
+        "precio_invalido": "The price is not valid (from $0 to $10,000,000).",
+        "estado_invalido": "A new procedure can only start as pending, in progress or done.",
+        "fila_desconocida": "That procedure is no longer part of this plan. Reload the plan and try again.",
+        "fila_repetida": "The same procedure comes twice.",
+        "fila_cancelada": "That procedure is cancelled. If it is needed again, add it as a new one.",
+        "fila_cobrada": "That procedure is already on a billing note: its name, quantity and price are adjusted in Billing, and it cannot be removed from the plan.",
+        "fila_hecha": "That procedure is already done: it is not removed from the plan. If it was a mistake, mark it as pending.",
+        "fila_doble": "Someone just billed this plan. Reload and try again."
+      }
     }
   },
   "sabina": {

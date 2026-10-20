@@ -206,7 +206,9 @@ export type CodigoDeFila =
   | "fila_repetida"
   | "fila_cancelada"
   | "fila_cobrada"
-  | "fila_hecha";
+  | "fila_hecha"
+  /** Al cobrar: otra petición ligó la fila a una nota en medio (la transacción se deshace). */
+  | "fila_doble";
 
 /**
  * Resultado de leer filas. Interfaz plana a propósito (tsconfig sin `strict`: `if (!r.ok)` no
@@ -452,3 +454,52 @@ export interface RepoFilas {
   /** Anota de qué concepto del presupuesto salió cada fila. */
   ligarAConceptos(db: DbDeFilas, args: { clinicId: string; planId: string; ligas: Array<{ filaId: string; quoteItemId: string | null }> }): Promise<void>;
 }
+
+// ── Respuesta de la API ─────────────────────────────────────────────────────
+
+/** Una fila tal como la contesta la API: el contrato más el precio e importe en pesos, para pintar. */
+export type FilaDto = Omit<FilaDelPlan, "hechoEn" | "canceladoEn" | "createdAt" | "updatedAt"> & {
+  precio: number;
+  importe: number;
+  hechoEn: string | null;
+  canceladoEn: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function filaDto(f: FilaDelPlan): FilaDto {
+  return {
+    ...f,
+    precio: aPesos(f.precioCentavos),
+    importe: aPesos(importeCentavos(f)),
+    hechoEn: f.hechoEn ? f.hechoEn.toISOString() : null,
+    canceladoEn: f.canceladoEn ? f.canceladoEn.toISOString() : null,
+    createdAt: f.createdAt.toISOString(),
+    updatedAt: f.updatedAt.toISOString(),
+  };
+}
+
+/** Anula los `procedureId` que no son del tarifario de la clínica (defensa multi-tenant, como `sanitizeItems`). */
+export function conProcedimientosValidos<T extends { procedureId: string | null }>(filas: T[], validos: ReadonlySet<string>): T[] {
+  return filas.map((f) => (f.procedureId && !validos.has(f.procedureId) ? { ...f, procedureId: null } : f));
+}
+
+/** Texto de cada código para la respuesta de la API (la pantalla lo enseña tal cual; es/en en el diccionario). */
+export const CLAVE_DE_CODIGO: Record<CodigoDeFila, string> = {
+  filas_no_lista: "planTratamiento.filas.error.filas_no_lista",
+  demasiadas_filas: "planTratamiento.filas.error.demasiadas_filas",
+  sin_nombre: "planTratamiento.filas.error.sin_nombre",
+  nombre_largo: "planTratamiento.filas.error.nombre_largo",
+  diente_invalido: "planTratamiento.filas.error.diente_invalido",
+  cara_invalida: "planTratamiento.filas.error.cara_invalida",
+  fase_invalida: "planTratamiento.filas.error.fase_invalida",
+  cantidad_invalida: "planTratamiento.filas.error.cantidad_invalida",
+  precio_invalido: "planTratamiento.filas.error.precio_invalido",
+  estado_invalido: "planTratamiento.filas.error.estado_invalido",
+  fila_desconocida: "planTratamiento.filas.error.fila_desconocida",
+  fila_repetida: "planTratamiento.filas.error.fila_repetida",
+  fila_cancelada: "planTratamiento.filas.error.fila_cancelada",
+  fila_cobrada: "planTratamiento.filas.error.fila_cobrada",
+  fila_hecha: "planTratamiento.filas.error.fila_hecha",
+  fila_doble: "planTratamiento.filas.error.fila_doble",
+};

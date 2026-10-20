@@ -66,8 +66,7 @@ CREATE INDEX IF NOT EXISTS "treatment_plan_items_clinicId_planId_orden_idx"
   ON "treatment_plan_items" ("clinicId", "planId", "orden");
 CREATE INDEX IF NOT EXISTS "treatment_plan_items_invoiceId_idx"
   ON "treatment_plan_items" ("invoiceId");
--- Un concepto del presupuesto sale de UNA sola fila del plan.
-CREATE UNIQUE INDEX IF NOT EXISTS "treatment_plan_items_quoteItemId_key"
+CREATE INDEX IF NOT EXISTS "treatment_plan_items_quoteItemId_idx"
   ON "treatment_plan_items" ("quoteItemId") WHERE "quoteItemId" IS NOT NULL;
 
 
