@@ -10,7 +10,16 @@
  * `subscriptionStatus`.
  */
 
+import { randomUUID } from "node:crypto";
 import { isClinicBillingAdmin } from "./authz";
+import { clinicaEstabaSuspendida, cobroPausado, finDeLoPagado } from "./cobro-rechazado";
+import {
+  aplicarReglaDeSuspension,
+  anularFacturasDeMesesSuspendidos,
+  facturasAbiertasDelPlan,
+  type StripeParaSuspension,
+} from "./reactivacion-tras-suspension.server";
+import { FALLO_LECTURA_REGLA, avisoFalloReglaSuspension, avisoSubidaSinCobro, avisoCobroMenorQueLoMostrado, avisoReposicionSinVerificar, avisoCuponConFinRepuesto, avisoCuponNoRepuesto, avisoCuponNoRepuestoPorCambio } from "./avisos-admin";
 import { desgloseConIva, ivaAplica, ivaParaPagoDeClinica, type ExencionIva, type IvaParaCobro } from "./iva-cobro";
 import type { PlanId } from "./plans";
 import {
@@ -28,12 +37,12 @@ import {
   MONEDA_PAGO,
   anuladaRecuperable,
   MARCA,
-  aplicarDescuentos,
   armarMarca,
   claves,
-  descuentoSinValorar,
-  descuentosConservados,
   descuentosParaSubir,
+  esErrorDeIdempotencia,
+  idsDeDescuentos,
+  idsDePromo,
   esPlanMasGrande,
   facturaAbiertaMasReciente,
   facturaTienePromo,
@@ -59,14 +68,31 @@ export interface StripePago {
     update(id: string, params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
     pay(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
     voidInvoice(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<FacturaPago>;
+    create(params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<{ id: string }>;
   };
   prices: {
     create(params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<{ id: string }>;
+  };
+  /**
+   * Lo que usa la regla de la suspensión de ws1-t1 (`realinearCiclo` separa el excedente de CFDI pendiente antes de
+   * reiniciar el ciclo: `invoiceItems.list` y, si hay algo, `invoices.create`). El cliente real de Stripe lo trae.
+   */
+  invoiceItems: { list(params: Record<string, unknown>): Promise<{ data: Array<{ id: string; subscription?: unknown }> }> };
+  customers: {
+    /** Quita el cupón puesto en el CLIENTE (DELETE /v1/customers/:id/discount). */
+    deleteDiscount(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<unknown>;
+    /** Vuelve a poner un cupón / código promocional al cliente (`coupon` o `promotion_code`). */
+    update(id: string, params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<unknown>;
   };
 }
 
 export interface ClinicaPago {
   id: string;
+  /** Nombre de la clínica (solo para el aviso al admin). */
+  nombre?: string | null;
+  /** Estado de cobro de la clínica y hasta cuándo tiene acceso: deciden si estaba SUSPENDIDA al pagar. */
+  subscriptionStatus?: string | null;
+  trialEndsAt?: Date | string | null;
   plan: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
@@ -92,6 +118,18 @@ export interface DepsPago {
   aplicarPlanLocal: (plan: PlanId) => Promise<void>;
   /** Una fila en la bitácora de la clínica por acción. */
   auditar: (evento: Record<string, unknown>) => Promise<void>;
+  /**
+   * Candado por clínica para que dos peticiones de «subir» no corran a la vez (dos pestañas). Caduca solo
+   * (`ttlSec`): si el proceso muere con él tomado no queda pegado. En producción: `acquireLock`/`releaseLock`
+   * de failban (Upstash, o memoria de la instancia). Ante un fallo de infraestructura abre (deja pasar).
+   */
+  candado: {
+    tomar: (clave: string, ttlSec: number, dueno: string) => Promise<boolean>;
+    /** Suelta SOLO si el candado sigue siendo de `dueno` (si caducó y lo tomó otra petición, no toca el de ella). */
+    soltar: (clave: string, dueno: string) => Promise<void>;
+  };
+  /** Aviso a quien administra la plataforma (correo); no debe lanzar. Sirve para lo que hay que hacer a mano. */
+  avisarAlAdmin: (aviso: { asunto: string; lineas: string[] }) => Promise<void>;
   /** Mensaje cuando una sede incluida intenta pagar (`avisoSedeIncluida`). */
   avisoSedeIncluida: (pagadoraNombre: string | null) => string;
 }
@@ -108,17 +146,15 @@ export interface OpcionSubir {
 
 /**
  * Lo que costaría el plan nuevo hoy: precio de lista del plan en el intervalo de la suscripción
- * (nunca la promo del primer mes ni los precios conservados de la clínica), menos los cupones que la
- * suscripción conserva al subir (los descuenta Stripe antes del IVA), más el IVA que corresponde.
- * Así el «Vas a pagar $X» es lo que Stripe va a cobrar.
+ * (nunca la promo del primer mes, ni cupones, ni los precios conservados de la clínica: al subir se quitan
+ * todos los descuentos, decisión de Rafael) más el IVA que corresponde. Es lo que Stripe va a cobrar.
  */
 export function opcionDeSubida(args: {
   plan: PlanPricing & { id: PlanId };
   interval: BillingInterval;
   exencion: ExencionIva | null | undefined;
-  descuentos?: ReturnType<typeof descuentosConservados>;
 }): OpcionSubir {
-  const subtotalCents = aplicarDescuentos(planAmountCents(args.plan, args.interval), args.descuentos ?? []);
+  const subtotalCents = planAmountCents(args.plan, args.interval);
   const conIva = ivaAplica({ metodo: "card", plan: args.plan.id, exencion: args.exencion });
   const totalCents = conIva ? desgloseConIva(subtotalCents).totalCents : subtotalCents;
   return { plan: args.plan.id, nombre: args.plan.name, monto: totalCents / 100, ivaIncluido: conIva };
@@ -133,7 +169,8 @@ export interface ParamsSubir {
   metadata: Record<string, string>;
   expand: string[];
   automatic_tax?: NonNullable<IvaOk["sesion"]["automatic_tax"]>;
-  discounts?: "" | Array<{ discount: string }>;
+  /** `""` = quita todos los descuentos de la suscripción (al subir se paga el precio normal). */
+  discounts?: "";
 }
 
 /**
@@ -168,6 +205,123 @@ export function armarUpdateSubir(args: {
 }
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
+
+/** El cliente de Stripe de la suscripción, si vino expandido (con su descuento). */
+const clienteDe = (sub: SuscripcionPago) => (sub.customer && typeof sub.customer === "object" ? sub.customer : null);
+
+type DescuentoDelCliente = NonNullable<NonNullable<ReturnType<typeof clienteDe>>["discount"]>;
+
+type QuitadoDelCliente =
+  | { estado: "sin" } // el cliente no tiene cupón (o no es el de esta clínica: no se toca)
+  | { estado: "quitado"; clienteId: string; descuento: DescuentoDelCliente }
+  | { estado: "fallo"; err: unknown };
+
+/**
+ * Quita el cupón puesto en el CLIENTE de Stripe (`customers.deleteDiscount`). Solo toca el cliente de Stripe de
+ * ESTA clínica. DELETE es idempotente por definición (Stripe ignora la clave en DELETE): si otro POST ya lo
+ * quitó, Stripe responde «no tiene descuento» (resource_missing) y cuenta como quitado por el otro (`sin`).
+ * Deja en la bitácora QUÉ cupón era (cupón y código promocional) para poder reponerlo.
+ */
+async function quitarDescuentoDelCliente(deps: DepsPago, stripe: StripePago, sub: SuscripcionPago, destino: PlanId): Promise<QuitadoDelCliente> {
+  const cliente = clienteDe(sub);
+  const descuento = cliente?.discount;
+  if (!cliente || !descuento) return { estado: "sin" };
+  if (!deps.clinica.stripeCustomerId || cliente.id !== deps.clinica.stripeCustomerId) {
+    await deps.auditar({ event: "pago-pendiente-descuento-cliente-ajeno", clienteSuscripcion: cliente.id });
+    return { estado: "sin" };
+  }
+  try {
+    await stripe.customers.deleteDiscount(cliente.id, {}, { idempotencyKey: claves.quitarDescuentoCliente(deps.clinica.id, descuento.id) });
+  } catch (err) {
+    if (codigoDe(err) === "resource_missing") return { estado: "sin" };
+    return { estado: "fallo", err };
+  }
+  await deps.auditar({
+    event: "pago-pendiente-descuento-cliente-quitado",
+    descuentoId: descuento.id,
+    cupon: descuento.coupon?.id ?? null,
+    codigoPromocional: idDeCodigoPromocional(descuento),
+    // Si el cupón tenía duración, su fecha de fin original (para ajustarla si hubiera que reponerlo).
+    finOriginal: descuento.end ? new Date(descuento.end * 1000).toISOString() : null,
+    planDestino: destino,
+  });
+  return { estado: "quitado", clienteId: cliente.id, descuento };
+}
+
+/**
+ * NO se repone el cupón porque otra petición está haciendo (o ya hizo) el cambio: dejarlo puesto sobre un plan
+ * ya subido iría contra la decisión de Rafael (precio de lista sin cupones). Queda en la bitácora y se avisa al
+ * admin para que revise cómo quedó. Nunca lanza.
+ */
+async function noReponerPorOtroCambio(deps: DepsPago, q: Extract<QuitadoDelCliente, { estado: "quitado" }>, destino: PlanId, razon: "idempotencia" | "plan-ya-en-destino", motivo: string): Promise<void> {
+  const promo = idDeCodigoPromocional(q.descuento);
+  const cupon = q.descuento.coupon?.id ?? null;
+  await deps
+    .auditar({
+      event: "pago-pendiente-descuento-cliente-no-repuesto-otro-cambio",
+      clienteStripe: q.clienteId,
+      descuentoQuitado: q.descuento.id,
+      cupon,
+      codigoPromocional: promo,
+      razon,
+      motivo,
+      planDestino: destino,
+    })
+    .catch(() => {});
+  await deps
+    .avisarAlAdmin(avisoCuponNoRepuestoPorCambio({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, clienteStripe: q.clienteId, cupon, codigoPromocional: promo, razon, planDestino: destino }))
+    .catch(() => {});
+}
+
+const idDeCodigoPromocional = (d: DescuentoDelCliente): string | null =>
+  typeof d.promotion_code === "string" ? d.promotion_code : d.promotion_code?.id ?? null;
+
+/**
+ * Vuelve a poner al cliente el MISMO cupón que se le quitó (su código promocional si tenía uno; si no, el
+ * cupón), con clave de idempotencia por cliente+descuento. Se llama si algo falla DESPUÉS de quitarlo y ANTES
+ * de que el cambio de plan quede hecho: así la clínica nunca se queda sin cupón y sin plan nuevo. Nunca lanza.
+ * Si reponerlo también falla, queda en la bitácora con todo lo necesario y se avisa al admin por correo para
+ * hacerlo a mano en Stripe.
+ */
+async function reponerDescuentoDelCliente(deps: DepsPago, stripe: StripePago, q: Extract<QuitadoDelCliente, { estado: "quitado" }>, destino: PlanId, motivo: string): Promise<boolean> {
+  const promo = idDeCodigoPromocional(q.descuento);
+  const cupon = q.descuento.coupon?.id ?? null;
+  const params: Record<string, unknown> | null = promo ? { promotion_code: promo } : cupon ? { coupon: cupon } : null;
+  let error: unknown = params ? null : new Error("sin cupón que reponer");
+  if (params) {
+    try {
+      await stripe.customers.update(q.clienteId, params, { idempotencyKey: claves.reponerDescuentoCliente(deps.clinica.id, q.descuento.id) });
+      const fin = q.descuento.end ?? null;
+      await deps.auditar({
+        event: "pago-pendiente-descuento-cliente-repuesto",
+        descuentoId: q.descuento.id,
+        cupon,
+        codigoPromocional: promo,
+        motivo,
+        planDestino: destino,
+        // Stripe cuenta el descuento repuesto desde hoy: si tenía fin, la duración se reinicia (hay que ajustarla a mano).
+        ...(fin ? { finOriginal: new Date(fin * 1000).toISOString(), finPorAjustar: true } : {}),
+      });
+      if (fin) {
+        await deps
+          .avisarAlAdmin(avisoCuponConFinRepuesto({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, clienteStripe: q.clienteId, cupon, codigoPromocional: promo, finOriginal: fin }))
+          .catch(() => {});
+      }
+      return true;
+    } catch (err) {
+      error = err;
+    }
+  }
+  const e = error as { message?: string; type?: string } | null;
+  const datos = { clienteStripe: q.clienteId, descuentoQuitado: q.descuento.id, cupon, codigoPromocional: promo };
+  await deps
+    .auditar({ event: "pago-pendiente-descuento-cliente-NO-repuesto", ...datos, motivo, planDestino: destino, code: codigoDe(error) ?? null, tipo: e?.type ?? null, mensajeStripe: e?.message ?? null })
+    .catch(() => {});
+  await deps
+    .avisarAlAdmin(avisoCuponNoRepuesto({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, clienteStripe: q.clienteId, cupon, codigoPromocional: promo }))
+    .catch(() => {});
+  return false;
+}
 
 const codigoDe = (err: unknown): string | undefined => {
   const e = err as { code?: string; raw?: { code?: string } } | null;
@@ -239,8 +393,8 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
 
   let sub: SuscripcionPago;
   try {
-    // `discounts` expandido: trae el cupón de cada descuento, que hace falta para el monto exacto de «subir».
-    sub = await stripe.subscriptions.retrieve(clinica.stripeSubscriptionId, { expand: ["items.data", "discounts"] });
+    // `discounts` y `customer` expandidos: se registra qué cupones se quitan y si el cliente trae uno propio.
+    sub = await stripe.subscriptions.retrieve(clinica.stripeSubscriptionId, { expand: ["items.data", "discounts", "customer"] });
   } catch (err) {
     if (codigoDe(err) === "resource_missing") return sinPendiente;
     return { ok: false, respuesta: await falloDeStripe(deps, "suscripcion", err) };
@@ -278,6 +432,65 @@ async function cargarPendiente(deps: DepsPago, soloLectura: boolean, conRecupera
   return { ok: true, stripe, sub, factura: null, anulada };
 }
 
+// ── Regla de la suspensión (ws1-t1 af1a76cc) ───────────────────────────────
+
+/**
+ * Rafael: una clínica suspendida por falta de pago NO debe los meses que estuvo sin servicio; al volver a pagar se
+ * le dan 30 días contados desde el día y la hora del pago. Dentro de las 24 h de gracia (aún con acceso) no hay
+ * meses suspendidos y el ciclo no cambia. Estas dos funciones aplican la regla a los dos botones; ambas son
+ * idempotentes (las claves de Stripe salen de la factura y del momento del pago, el mismo que usa el webhook
+ * `invoice.paid`, así que si los dos corren a la vez no se duplica ni se salta nada) y NUNCA lanzan: la clínica ya
+ * pagó. Si algo falla queda en la bitácora y se avisa al admin; el webhook y «Reintentar» lo completan.
+ */
+async function reglaTrasPagar(deps: DepsPago, stripe: StripePago, facturaPagada: FacturaPago): Promise<void> {
+  const subId = deps.clinica.stripeSubscriptionId;
+  if (!subId) return;
+  const real = stripe as unknown as StripeParaSuspension;
+  // El mismo instante de pago que usa el webhook (`status_transitions.paid_at`): mismas claves de idempotencia.
+  const pagadoEn = facturaPagada.status_transitions?.paid_at ? new Date(facturaPagada.status_transitions.paid_at * 1000) : new Date();
+  try {
+    const viva = await real.subscriptions.retrieve(subId);
+    const otras = (await facturasAbiertasDelPlan(real, subId)).filter((f) => f.id !== facturaPagada.id);
+    // Se paga UN mes (la factura más reciente); los meses suspendidos se anulan y el ciclo pasa a «hoy + 30 días».
+    const r = await aplicarReglaDeSuspension({ stripe: real, clinicId: deps.clinica.id, sub: viva, pagadoEn, finDeLoPagado: finDeLoPagado(pagadoEn, 1), facturas: otras });
+    await deps.auditar({
+      event: "pago-pendiente-regla-suspension",
+      accion: "pagar",
+      facturaPagadaId: facturaPagada.id,
+      anuladas: r.anuladas,
+      realineo: r.realineo.tipo,
+      fallos: r.fallos,
+    });
+    if (r.fallos.length > 0) await avisarFalloDeRegla(deps, "pagar", r.fallos);
+  } catch (err) {
+    await falloDeReglaInesperado(deps, "pagar", err);
+  }
+}
+
+async function reglaTrasSubir(deps: DepsPago, stripe: StripePago, subId: string): Promise<void> {
+  const real = stripe as unknown as StripeParaSuspension;
+  try {
+    // El `update` con `billing_cycle_anchor: "now"` ya dejó el ciclo en «hoy»: NO se re-alinea. Solo se anulan las
+    // demás facturas abiertas de meses sin servicio (la de la subida es `subscription_update` y no entra en la lista).
+    const abiertas = await facturasAbiertasDelPlan(real, subId);
+    const { anuladas, fallos } = await anularFacturasDeMesesSuspendidos(real, deps.clinica.id, abiertas);
+    await deps.auditar({ event: "pago-pendiente-regla-suspension", accion: "subir", anuladas, fallos });
+    if (fallos.length > 0) await avisarFalloDeRegla(deps, "subir", ["No se pudieron anular todas las facturas abiertas de meses sin servicio."]);
+  } catch (err) {
+    await falloDeReglaInesperado(deps, "subir", err);
+  }
+}
+
+async function avisarFalloDeRegla(deps: DepsPago, accion: string, fallos: string[]): Promise<void> {
+  await deps.avisarAlAdmin(avisoFalloReglaSuspension({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, accion, fallos })).catch(() => {});
+}
+
+async function falloDeReglaInesperado(deps: DepsPago, accion: string, err: unknown): Promise<void> {
+  const e = err as { message?: string } | null;
+  await deps.auditar({ event: "pago-pendiente-regla-suspension-fallo", accion, mensajeStripe: e?.message ?? null }).catch(() => {});
+  await avisarFalloDeRegla(deps, accion, [FALLO_LECTURA_REGLA]);
+}
+
 // ── GET ─────────────────────────────────────────────────────────────────────
 
 export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago> {
@@ -288,11 +501,12 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 
   const interval = subscriptionItemInterval(ctx.sub.items.data[0]);
   const exencion = await deps.exencionIva();
-  const descuentos = descuentosConservados(ctx.sub);
   const opciones: OpcionSubir[] = [];
-  for (const id of planesMasGrandes(deps.clinica.plan)) {
+  // Con el cobro en pausa («Subir» respondería 409 PAGADO_POR_ADELANTADO) no se ofrece ningún plan.
+  const enPausa = cobroPausado(ctx.sub);
+  for (const id of enPausa ? [] : planesMasGrandes(deps.clinica.plan)) {
     if (await deps.bloqueoDeSedes(id)) continue; // un plan que las sedes no admiten no se ofrece
-    opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion, descuentos }));
+    opciones.push(opcionDeSubida({ plan: await deps.plan(id), interval, exencion }));
   }
   return respuesta(200, {
     estado: "pendiente",
@@ -300,6 +514,7 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
     montoPendiente: deuda.amount_due / 100,
     moneda: MONEDA_PAGO,
     opcionesSubir: opciones,
+    ...(enPausa ? { subirNoDisponible: MENSAJES.pagadoPorAdelantado } : {}),
     // Solo cuando un cambio de plan quedó a medias: no hay factura que «pagar», solo terminar la subida
     // (POST subir). Con esto presente, «Pagar mi plan» no aplica.
     ...(ctx.anulada ? { cambioEnCurso: { plan: ctx.anulada.planMarcado } } : {}),
@@ -309,6 +524,9 @@ export async function consultarPendiente(deps: DepsPago): Promise<RespuestaPago>
 // ── POST { accion: "pagar" } ────────────────────────────────────────────────
 
 export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
+  // ANTES de tocar nada: ¿estaba SUSPENDIDA (sin acceso)? Después de pagar ya no hay forma de saberlo. Dentro de las
+  // 24 h de gracia no lo está y el ciclo no cambia.
+  const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   const ctx = await cargarPendiente(deps, false);
   if (!ctx.ok) return "respuesta" in ctx ? ctx.respuesta : respuesta(409, { code: "SIN_PENDIENTE", error: MENSAJES.sinPendiente });
   const { stripe, factura } = ctx;
@@ -326,8 +544,11 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
   }
 
   const final: FacturaPago = pagada ?? factura;
+  // Cobrada una clínica que estaba suspendida: los meses sin servicio se anulan y el ciclo pasa a «hoy + 30 días».
+  if (final.status === "paid" && estabaSuspendida) await reglaTrasPagar(deps, stripe, final);
   await deps.auditar({
     event: "pago-pendiente-pagar",
+    estabaSuspendida,
     facturaId: factura.id,
     montoMxn: factura.amount_due / 100,
     pagado: final.status === "paid",
@@ -341,6 +562,32 @@ export async function pagarPendiente(deps: DepsPago): Promise<RespuestaPago> {
 // ── POST { accion: "subir", plan } ──────────────────────────────────────────
 
 export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<RespuestaPago> {
+  // Lo barato primero (sin candado): permiso y tier. Después, UN solo «subir» a la vez por clínica: la segunda
+  // pestaña recibe «ya hay un cambio en curso» ANTES de que se quite o se anule nada. El candado caduca solo.
+  if (!isClinicBillingAdmin(deps.role)) {
+    return respuesta(403, { code: "FORBIDDEN_NOT_CLINIC_ADMIN", error: MENSAJES.sinPermiso });
+  }
+  if (!esPlanMasGrande(deps.clinica.plan, destino)) {
+    return respuesta(400, { code: "PLAN_NO_MAS_GRANDE", error: MENSAJES.planNoMasGrande });
+  }
+  const clave = claves.candadoSubir(deps.clinica.id);
+  const dueno = randomUUID();
+  if (!(await deps.candado.tomar(clave, TTL_CANDADO_SUBIR_SEG, dueno))) {
+    return respuesta(409, { code: "CAMBIO_EN_CURSO", error: MENSAJES.cambioEnCurso });
+  }
+  try {
+    return await subirYPagarConCandado(deps, destino);
+  } finally {
+    await deps.candado.soltar(clave, dueno).catch(() => {}); // si no se puede soltar, caduca solo
+  }
+}
+
+/** Cuánto vive el candado de «subir» si el proceso muere con él tomado: más que lo que tarda la operación entera. */
+const TTL_CANDADO_SUBIR_SEG = 90;
+
+async function subirYPagarConCandado(deps: DepsPago, destino: PlanId): Promise<RespuestaPago> {
+  // ANTES de tocar nada: ¿estaba suspendida? (ver `reglaTrasSubir`).
+  const estabaSuspendida = clinicaEstabaSuspendida(deps.clinica);
   // Lo barato primero, y TODO antes de anular nada: la factura vieja solo se anula cuando el resto ya
   // se sabe que va a poder hacerse.
   if (!isClinicBillingAdmin(deps.role)) {
@@ -364,7 +611,16 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
   // anula ni se cambia nada, para no cobrar dos veces. Se refleja el plan y se devuelve el estado de la factura.
   if (ctx.factura && sub.metadata?.plan === destino) {
     await deps.aplicarPlanLocal(destino);
+    await quitarDescuentoDelCliente(deps, stripe, sub, destino); // el cambio ya está hecho: no hay nada que reponer
     return resultadoDeFactura(ctx.factura);
+  }
+
+  // V2(a): con el cobro de la suscripción EN PAUSA (meses pagados por adelantado, o ciclo re-alineado tras una
+  // suspensión) Stripe anula todas las facturas que nacen durante la pausa: el cambio de plan saldría GRATIS y
+  // además se anularía la factura vieja. No se sube de plan en autoservicio; se manda a soporte, sin tocar nada.
+  if (cobroPausado(sub)) {
+    await deps.auditar({ event: "pago-pendiente-subir-bloqueado-por-pausa", planDestino: destino, reanudaEn: sub.pause_collection?.resumes_at ?? null });
+    return respuesta(409, { code: "PAGADO_POR_ADELANTADO", error: MENSAJES.pagadoPorAdelantado });
   }
 
   const item = sub.items.data[0];
@@ -388,6 +644,65 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
   } catch (err) {
     return falloDeStripe(deps, "precio", err);
   }
+
+  // 0) Un cupón puesto en el CLIENTE de Stripe (no en la suscripción) también se quita al subir (decisión de
+  // Rafael, Q7/S1): se quita ANTES del cambio, porque Stripe cobra la factura nueva en el mismo instante del
+  // `subscriptions.update` y así sale a precio de lista = lo mostrado. Como quitarlo es irreversible, se guarda
+  // cuál era y, si algo falla y el cambio NO quedó hecho (se comprueba), se VUELVE A PONER (`fallar`, abajo).
+  // Antes de nada se comprueba que el cliente de la suscripción sea el de esta clínica.
+  const clienteStripe = clienteDe(sub);
+  if (clienteStripe?.discount && clienteStripe.id !== deps.clinica.stripeCustomerId) {
+    await deps.auditar({ event: "pago-pendiente-descuento-cliente-ajeno", clienteSuscripcion: clienteStripe.id });
+    return respuesta(502, { code: "STRIPE_ERROR", error: MENSAJES.stripeNoContesto });
+  }
+  const quitado = await quitarDescuentoDelCliente(deps, stripe, sub, destino);
+  if (quitado.estado === "fallo") return falloDeStripe(deps, "quitar-descuento-cliente", quitado.err); // aún no se tocó nada más
+  /**
+   * Algo falló (o la respuesta no llegó): devuelve el error y, SOLO si se comprueba que el cambio de plan no quedó
+   * hecho ni lo está haciendo otra petición, repone el cupón. Quien llama no sabe si el cambio llegó a Stripe;
+   * esto lo averigua.
+   */
+  const fallar = async (r: RespuestaPago, motivo: string, err?: unknown): Promise<RespuestaPago> => {
+    if (quitado.estado !== "quitado") return r;
+    // Antes de reponer hay que saber si el cambio NO quedó hecho. Se repone si falló de verdad; NO se repone si
+    //  (a) Stripe rechazó por una clave en curso (otra pestaña lo está haciendo), o
+    //  (b) la suscripción ya está en el plan destino (el cambio llegó a Stripe aunque la respuesta se perdiera).
+    // Si no se puede comprobar (Stripe no contesta), se repone: es lo reversible y nunca deja a la clínica sin
+    // cupón y sin plan; lo anota la bitácora.
+    if (esErrorDeIdempotencia(err)) {
+      await noReponerPorOtroCambio(deps, quitado, destino, "idempotencia", motivo);
+      return r;
+    }
+    let verificado = true;
+    try {
+      const viva = await stripe.subscriptions.retrieve(sub.id);
+      if (viva.metadata?.plan === destino) {
+        await noReponerPorOtroCambio(deps, quitado, destino, "plan-ya-en-destino", motivo);
+        return r;
+      }
+    } catch {
+      verificado = false;
+    }
+    if (!verificado) {
+      // No se pudo comprobar si el cambio llegó a Stripe: pudo quedar hecho con el cupón repuesto encima. Además
+      // de la bitácora se avisa al admin para que revise el plan y el cupón de esta clínica.
+      await deps.auditar({ event: "pago-pendiente-descuento-cliente-reposicion-sin-verificar", motivo, planDestino: destino }).catch(() => {});
+      await deps
+        .avisarAlAdmin(
+          avisoReposicionSinVerificar({
+            clinicaId: deps.clinica.id,
+            clinicaNombre: deps.clinica.nombre,
+            clienteStripe: quitado.clienteId,
+            cupon: quitado.descuento.coupon?.id ?? null,
+            codigoPromocional: idDeCodigoPromocional(quitado.descuento),
+            planDestino: destino,
+          }),
+        )
+        .catch(() => {});
+    }
+    await reponerDescuentoDelCliente(deps, stripe, quitado, destino, motivo);
+    return r;
+  };
 
   // 1) Se ANULA la factura abierta del plan viejo (nunca se borra), DESPUÉS de marcarla: si el cambio de
   // abajo falla de red, el reintento encuentra la marca y lo termina en vez de responder «sin pendiente».
@@ -413,7 +728,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
           marcada = false;
         }
       }
-      if (!marcada) return falloDeStripe(deps, "marcar", err);
+      if (!marcada) return fallar(await falloDeStripe(deps, "marcar", err), "marcar-factura", err);
     }
     try {
       await stripe.invoices.voidInvoice(factura.id, {}, { idempotencyKey: claves.anular(clinicId, factura.id) });
@@ -424,7 +739,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
       } catch {
         yaAnulada = false;
       }
-      if (!yaAnulada) return falloDeStripe(deps, "anular", err);
+      if (!yaAnulada) return fallar(await falloDeStripe(deps, "anular", err), "anular-factura", err);
     }
   }
 
@@ -451,12 +766,10 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
       planDestino: destino,
       code: codigoDe(err) ?? null,
     });
+    // El cambio SÍ quedó hecho (la tarjeta falló en la factura nueva, a precio de lista): el cupón no se repone.
     if (abierta?.hosted_invoice_url && isStripeChargeFailure(err)) return resultadoDeFactura(abierta);
-    return falloDeStripe(deps, "cambiar-plan", err);
+    return fallar(await falloDeStripe(deps, "cambiar-plan", err), "cambiar-plan", err);
   }
-
-  // La suscripción ya está en el plan nuevo: lo mismo que reflejará el webhook con su metadata.plan.
-  await deps.aplicarPlanLocal(destino);
 
   let nuevaFactura: FacturaPago | null = null;
   const li = nueva.latest_invoice;
@@ -469,22 +782,53 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     }
   }
 
-  const conservados = descuentosConservados(sub);
+  // V2 (red de seguridad): si la factura del cambio NACIÓ ANULADA (cobro en pausa que no se vio antes), la subida
+  // saldría gratis. No se da por cobrada ni se refleja el plan como pagado: queda en la bitácora, se avisa al admin
+  // y la clínica recibe un mensaje claro sin nombrar al proveedor.
+  if (nuevaFactura?.status === "void") {
+    await deps.auditar({ event: "pago-pendiente-subir-sin-cobro", facturaNuevaId: nuevaFactura.id, planDestino: destino }).catch(() => {});
+    await deps
+      .avisarAlAdmin(avisoSubidaSinCobro({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, facturaId: nuevaFactura.id, planDestino: destino }))
+      .catch(() => {});
+    return respuesta(502, { code: "SUBIDA_SIN_COBRO", error: MENSAJES.subidaSinCobro });
+  }
+
+  // La suscripción ya está en el plan nuevo: lo mismo que reflejará el webhook con su metadata.plan.
+  await deps.aplicarPlanLocal(destino);
+
+  // Regla de la suspensión: los demás meses abiertos de la clínica suspendida no se deben (se anulan, nada se borra).
+  if (estabaSuspendida) await reglaTrasSubir(deps, stripe, sub.id);
+
   await deps.auditar({
     event: "pago-pendiente-subir",
+    estabaSuspendida,
     planAntes: deps.clinica.plan,
     planDestino: destino,
     reintento: !!anulada,
     facturaAnuladaId: factura.id,
     facturaNuevaId: nuevaFactura?.id ?? null,
     subtotalMxn: cents / 100,
-    descuentosConservados: conservados.map((d) => d.id),
-    ...(descuentoSinValorar(conservados) ? { descuentoSinValorar: true } : {}),
-    montoEsperadoMxn: opcionDeSubida({ plan, interval, exencion, descuentos: conservados }).monto,
+    // Decisión de Rafael (#10): al subir se quitan TODOS los descuentos de la suscripción.
+    descuentosQuitados: idsDeDescuentos(sub),
+    promoQuitada: idsDePromo(sub),
+    // El cupón puesto en el CLIENTE se quitó ANTES del cambio (la factura nueva sale a precio de lista).
+    ...(quitado.estado === "quitado" ? { descuentoDelClienteQuitado: quitado.descuento.id } : {}),
+    montoEsperadoMxn: opcionDeSubida({ plan, interval, exencion }).monto,
     ivaModo: iva.modo,
     montoCobradoMxn: nuevaFactura ? nuevaFactura.amount_due / 100 : null,
     pagado: nuevaFactura?.status === "paid",
     intervalo: interval,
   });
+
+  // Red de seguridad (c): si lo cobrado quedó por debajo de lo mostrado (un descuento que no se quitó: dos
+  // pestañas, un cupón nuevo…), queda en la bitácora y se avisa al admin para que lo revise.
+  const esperado = opcionDeSubida({ plan, interval, exencion }).monto;
+  const cobrado = nuevaFactura ? (nuevaFactura.total ?? nuevaFactura.amount_due) / 100 : null;
+  if (nuevaFactura && cobrado !== null && cobrado < esperado - 0.005) {
+    await deps.auditar({ event: "pago-pendiente-subir-cobro-menor", facturaNuevaId: nuevaFactura.id, cobradoMxn: cobrado, esperadoMxn: esperado, planDestino: destino }).catch(() => {});
+    await deps
+      .avisarAlAdmin(avisoCobroMenorQueLoMostrado({ clinicaId: deps.clinica.id, clinicaNombre: deps.clinica.nombre, facturaId: nuevaFactura.id, cobradoMxn: cobrado, esperadoMxn: esperado, planDestino: destino }))
+      .catch(() => {});
+  }
   return resultadoDeFactura(nuevaFactura);
 }
