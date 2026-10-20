@@ -62,6 +62,10 @@ export interface StripePago {
   prices: {
     create(params: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<{ id: string }>;
   };
+  customers: {
+    /** Quita el cupón puesto en el CLIENTE (DELETE /v1/customers/:id/discount). */
+    deleteDiscount(id: string, params?: Record<string, unknown>, opts?: { idempotencyKey?: string }): Promise<unknown>;
+  };
 }
 
 export interface ClinicaPago {
@@ -386,6 +390,33 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     return falloDeStripe(deps, "precio", err);
   }
 
+  // 0) Un cupón puesto en el CLIENTE (no en la suscripción) sigue aplicando aunque se vacíen los de la
+  // suscripción. Decisión de Rafael (Q7/#10): al subir se paga el precio de lista sin ningún cupón, así que
+  // también se quita (`customers.deleteDiscount`) ANTES de tocar la factura, para que lo cobrado sea lo
+  // mostrado. Solo del cliente de Stripe de ESTA clínica (el de la sesión), y queda en la bitácora. DELETE
+  // es idempotente por definición (Stripe ignora la clave en DELETE): si otro POST ya lo quitó, Stripe
+  // responde «no tiene descuento» (resource_missing) y se sigue.
+  const clienteStripe = sub.customer && typeof sub.customer === "object" ? sub.customer : null;
+  if (clienteStripe?.discount) {
+    if (!deps.clinica.stripeCustomerId || clienteStripe.id !== deps.clinica.stripeCustomerId) {
+      // La suscripción no es de este cliente: no se toca ningún descuento ajeno.
+      await deps.auditar({ event: "pago-pendiente-descuento-cliente-ajeno", clienteSuscripcion: clienteStripe.id });
+      return respuesta(502, { code: "STRIPE_ERROR", error: MENSAJES.stripeNoContesto });
+    }
+    const descuento = clienteStripe.discount;
+    try {
+      await stripe.customers.deleteDiscount(clienteStripe.id, {}, { idempotencyKey: claves.quitarDescuentoCliente(clinicId, descuento.id) });
+    } catch (err) {
+      if (codigoDe(err) !== "resource_missing") return falloDeStripe(deps, "quitar-descuento-cliente", err);
+    }
+    await deps.auditar({
+      event: "pago-pendiente-descuento-cliente-quitado",
+      descuentoId: descuento.id,
+      cupon: descuento.coupon?.id ?? null,
+      planDestino: destino,
+    });
+  }
+
   // 1) Se ANULA la factura abierta del plan viejo (nunca se borra), DESPUÉS de marcarla: si el cambio de
   // abajo falla de red, el reintento encuentra la marca y lo termina en vez de responder «sin pendiente».
   // Si otro POST ya la anuló, se sigue. En un reintento (`anulada`) ya está marcada y anulada: se salta.
@@ -466,7 +497,7 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     }
   }
 
-  const cliente = typeof sub.customer === "object" ? sub.customer : null;
+  const descuentoDelClienteQuitado = sub.customer && typeof sub.customer === "object" ? sub.customer.discount?.id ?? null : null;
   await deps.auditar({
     event: "pago-pendiente-subir",
     planAntes: deps.clinica.plan,
@@ -478,8 +509,8 @@ export async function subirYPagar(deps: DepsPago, destino: PlanId): Promise<Resp
     // Decisión de Rafael (#10): al subir se quitan TODOS los descuentos de la suscripción.
     descuentosQuitados: idsDeDescuentos(sub),
     promoQuitada: idsDePromo(sub),
-    // Un cupón puesto en el CLIENTE (no en la suscripción) sigue aplicando aunque se vacíen los de la suscripción.
-    ...(cliente?.discount ? { descuentoDelCliente: cliente.discount.id } : {}),
+    // También el cupón puesto en el CLIENTE (customers.deleteDiscount): lo cobrado = lo mostrado.
+    ...(descuentoDelClienteQuitado ? { descuentoDelClienteQuitado } : {}),
     montoEsperadoMxn: opcionDeSubida({ plan, interval, exencion }).monto,
     ivaModo: iva.modo,
     montoCobradoMxn: nuevaFactura ? nuevaFactura.amount_due / 100 : null,

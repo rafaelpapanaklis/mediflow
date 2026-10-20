@@ -52,6 +52,12 @@ interface Escenario {
   descuentos?: any[];
   /** Cuántos `invoices.voidInvoice` fallan de red. */
   voidFalla?: number;
+  /** Cupón puesto en el CLIENTE de Stripe (no en la suscripción). */
+  descuentoCliente?: any;
+  /** `customers.deleteDiscount` falla de red. */
+  deleteDiscountFalla?: boolean;
+  /** El cliente de la suscripción es OTRO cliente de Stripe. */
+  clienteAjeno?: boolean;
   stripeCaido?: boolean;
   /** Cuántos `subscriptions.update` fallan de red ANTES de llegar a Stripe (el cambio no se aplica). */
   updateFallaAntes?: number;
@@ -74,6 +80,7 @@ function montar(e: Escenario = {}) {
   let planSub = e.plan ?? "BASIC"; // el plan que Stripe tiene en la metadata de la suscripción
   let fallasAntes = e.updateFallaAntes ?? 0;
   let fallasVoid = e.voidFalla ?? 0;
+  let descuentoCliente: any = e.descuentoCliente ?? null; // el que Stripe aplicaría a la factura nueva
   const parametrosPorClave = new Map<string, string>(); // idempotencia de invoices.update, como Stripe
   let respuestasPerdidas = e.updateRespuestaPerdida ?? 0;
   const auditorias: any[] = [];
@@ -93,7 +100,8 @@ function montar(e: Escenario = {}) {
         return {
           id,
           status: e.subStatus ?? "past_due",
-          customer: "cus_1",
+          // `customer` viene EXPANDIDO (con su descuento), como lo pide el servicio.
+          customer: { id: e.clienteAjeno ? "cus_otro" : "cus_1", discount: descuentoCliente },
           metadata: { clinicId: "clin_1", plan: planSub, kind: "platform-subscription" },
           items: { data: [{ id: "si_1", price: { unit_amount: 41900, recurring: { interval: e.interval ?? "month" } } }] },
           // `discounts` viene EXPANDIDO (con su cupón), como lo pide el servicio.
@@ -114,7 +122,8 @@ function montar(e: Escenario = {}) {
         const nueva = {
           id: "in_nueva",
           status: e.tarjetaFalla ? "open" : "paid",
-          amount_due: 79904,
+          // Lo que Stripe cobraría: lista + IVA de PRO (799.24), con el descuento del cliente si siguiera puesto.
+          amount_due: descuentoCliente ? 63939 : 79924,
           currency: "mxn",
           hosted_invoice_url: "https://pay.stripe.test/in_nueva",
           customer: "cus_1",
@@ -180,6 +189,18 @@ function montar(e: Escenario = {}) {
         }
         facturas.get(id).status = "void";
         return facturas.get(id);
+      },
+    },
+    customers: {
+      deleteDiscount: async (id: string, p: any, opts: any) => {
+        registra("customers.deleteDiscount", id, p, opts);
+        cuestaCaer();
+        if (e.deleteDiscountFalla) throw Object.assign(new Error("connection reset"), { type: "StripeConnectionError" });
+        if (!descuentoCliente) {
+          throw Object.assign(new Error("No such customer discount"), { type: "StripeInvalidRequestError", code: "resource_missing" });
+        }
+        descuentoCliente = null;
+        return { deleted: true };
       },
     },
     prices: {
@@ -794,18 +815,84 @@ test("#10 (Rafael): «Pagar mi plan» NO cambia — cobra la factura abierta tal
   assert.equal((await consultarPendiente(montar({ descuento: { id: "d", coupon: { id: "X", percent_off: 50 } } }).deps)).body.montoPendiente, 48.61);
 });
 
-test("#10 (Rafael): un cupón puesto en el CLIENTE (no en la suscripción) se avisa en la bitácora, porque seguiría aplicando", async () => {
-  const m = montar();
-  const retrieve = (m.deps.stripe as any).subscriptions.retrieve;
-  let pedido: any = null;
-  (m.deps.stripe as any).subscriptions.retrieve = async (...a: any[]) => {
-    pedido = a[1];
-    return { ...(await retrieve(...a)), customer: { id: "cus_1", discount: { id: "di_cliente" } } };
-  };
+// Q7 (quinta vuelta t4): un cupón en el CLIENTE de Stripe también se quita al subir.
+const CUPON_CLIENTE = { id: "di_cliente", coupon: { id: "REGALO20", percent_off: 20 } };
+
+test("Q7: cupón en el CLIENTE → se quita ANTES de tocar la factura, y lo cobrado = lo mostrado (lista + IVA)", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE });
+  const mostrado = ((await consultarPendiente(m.deps)).body.opcionesSubir as any[])[0].monto;
+  assert.equal(mostrado, 799.24);
+
   const r = await subirYPagar(m.deps, "PRO");
-  assert.equal(r.body.pagado, true);
-  assert.equal(m.auditorias.at(-1).descuentoDelCliente, "di_cliente");
-  assert.deepEqual(pedido, { expand: ["items.data", "discounts", "customer"] });
+  assert.deepEqual(r, { status: 200, body: { ok: true, pagado: true } });
+  const borrados = m.ops("customers.deleteDiscount");
+  assert.equal(borrados.length, 1);
+  assert.equal(borrados[0].args[0], "cus_1"); // el cliente de la clínica de la sesión
+  assert.equal(borrados[0].args[2].idempotencyKey, claves.quitarDescuentoCliente("clin_1", "di_cliente"));
+  // Orden: se quita el cupón del cliente antes de marcar/anular la factura y antes de cambiar el plan.
+  const orden = m.llamadas.map((l) => l.op);
+  assert.ok(orden.indexOf("customers.deleteDiscount") < orden.indexOf("invoices.update"));
+  assert.ok(orden.indexOf("customers.deleteDiscount") < orden.indexOf("invoices.voidInvoice"));
+  assert.ok(orden.indexOf("customers.deleteDiscount") < orden.indexOf("subscriptions.update"));
+  // Lo cobrado es lo mostrado (el doble cobra 639.39 si el cupón siguiera puesto).
+  const a = m.auditorias.at(-1);
+  assert.equal(a.montoCobradoMxn, mostrado);
+  assert.equal(a.montoEsperadoMxn, mostrado);
+  assert.equal(a.descuentoDelClienteQuitado, "di_cliente");
+  // Bitácora propia del borrado.
+  const ev = m.auditorias.find((x) => x.event === "pago-pendiente-descuento-cliente-quitado");
+  assert.deepEqual([ev.descuentoId, ev.cupon, ev.planDestino], ["di_cliente", "REGALO20", "PRO"]);
+});
+
+test("Q7: cupón en la suscripción Y en el cliente → se quitan los dos; sin cupón en el cliente no se llama a deleteDiscount", async () => {
+  const dos = montar({ descuento: { id: "di_sub", coupon: { id: "REGALO10", percent_off: 10 } }, descuentoCliente: CUPON_CLIENTE });
+  await subirYPagar(dos.deps, "PRO");
+  assert.equal(dos.ops("subscriptions.update")[0].args[1].discounts, "");
+  assert.equal(dos.ops("customers.deleteDiscount").length, 1);
+  assert.equal(dos.auditorias.at(-1).montoCobradoMxn, 799.24);
+
+  const sin = montar();
+  await subirYPagar(sin.deps, "PRO");
+  assert.equal(sin.ops("customers.deleteDiscount").length, 0);
+  assert.equal(sin.auditorias.at(-1).descuentoDelClienteQuitado, undefined);
+});
+
+test("Q7: si otro POST ya lo quitó (Stripe: «no tiene descuento») se sigue sin error; un POST doble no cobra dos veces", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE });
+  const [a, b] = await Promise.all([subirYPagar(m.deps, "PRO"), subirYPagar(m.deps, "PRO")]);
+  assert.equal(a.body.pagado, true);
+  assert.equal(b.body.pagado, true);
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.facturas.get("in_nueva").amount_due, 79924);
+});
+
+test("Q7: si quitar el cupón del cliente falla de red → 502 en español y NO se marca, anula ni cambia nada (la vieja sigue abierta)", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, deleteDiscountFalla: true });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(r.body.error, MENSAJES.stripeNoContesto);
+  assert.equal(m.facturas.get("in_vieja").status, "open");
+  assert.equal(m.ops("invoices.update").length, 0);
+  assert.equal(m.ops("invoices.voidInvoice").length, 0);
+  assert.equal(m.ops("subscriptions.update").length, 0);
+  assert.equal(m.cobros(), 0);
+  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-error-stripe" && x.paso === "quitar-descuento-cliente"));
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true); // «Pagar mi plan» sigue funcionando
+});
+
+test("Q7: nunca se toca el descuento de un cliente de Stripe que no es el de la clínica de la sesión", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE, clienteAjeno: true });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.equal(r.status, 502);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0);
+  assert.equal(m.ops("invoices.voidInvoice").length, 0);
+  assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-descuento-cliente-ajeno"));
+});
+
+test("Q7: «Pagar mi plan» NO borra el cupón del cliente (cobra la factura abierta tal cual)", async () => {
+  const m = montar({ descuentoCliente: CUPON_CLIENTE });
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──
@@ -888,7 +975,27 @@ test("N4 (change-plan): los mensajes de fallo de cobro (`chargeFailureMessage`, 
 
 test("N4 (contrato de código): en las rutas de pago ningún `error:` para la clínica lleva `err.message` y ningún texto con espacios nombra a Stripe", () => {
   const raiz = path.resolve(__dirname, "../../../..");
-  const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+  // Mini analizador: devuelve el código sin comentarios y las cadenas de texto reales (no confunde comillas de comentarios).
+  const analiza = (t: string) => {
+    let codigo = "";
+    const cadenas: string[] = [];
+    for (let i = 0; i < t.length; ) {
+      const c = t[i];
+      if (c === "/" && t[i + 1] === "/") { while (i < t.length && t[i] !== "\n") i++; continue; }
+      if (c === "/" && t[i + 1] === "*") { const f = t.indexOf("*/", i + 2); i = f < 0 ? t.length : f + 2; continue; }
+      if (c === '"' || c === "'" || c === "`") {
+        let j = i + 1, txt = "";
+        while (j < t.length && t[j] !== c) { if (t[j] === "\\") { txt += t[j + 1] ?? ""; j += 2; } else { txt += t[j]; j++; } }
+        cadenas.push(txt);
+        codigo += c + txt + c;
+        i = j + 1;
+        continue;
+      }
+      codigo += c;
+      i++;
+    }
+    return { codigo, cadenas };
+  };
   for (const rel of [
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/billing/checkout/route.ts",
@@ -897,14 +1004,14 @@ test("N4 (contrato de código): en las rutas de pago ningún `error:` para la cl
     "src/lib/billing/pago-pendiente.ts",
     "src/lib/billing/mensajes-pago.ts",
   ]) {
-    const t = sinComentarios(readFileSync(path.join(raiz, rel), "utf8"));
-    // `error: <expresión hasta la coma o el cierre>`: lo que viaja en la respuesta.
-    for (const m of t.matchAll(/\berror:\s*([^\n]*)/g)) {
+    const { codigo, cadenas } = analiza(readFileSync(path.join(raiz, rel), "utf8"));
+    // `error: <expresión hasta el fin de línea>`: lo que viaja en la respuesta.
+    for (const m of codigo.matchAll(/\berror:\s*([^\n]*)/g)) {
       assert.doesNotMatch(m[1], /err\??\.message|\bmessage\b\s*\?\?/, `${rel}: «error: ${m[1].trim()}»`);
     }
-    for (const m of t.matchAll(/(["'`])((?:(?!\1)[^\\\n]|\\.)*?stripe(?:(?!\1)[^\\\n]|\\.)*)\1/gi)) {
+    for (const texto of cadenas) {
       // Una cadena que nombra a Stripe solo puede ser un identificador interno (import, código, evento, clave), nunca prosa.
-      assert.ok(!/\s/.test(m[2]) || /^(stripe|[a-z0-9_\-:.]+)$/i.test(m[2].trim()), `${rel}: texto con «Stripe»: «${m[2]}»`);
+      if (/stripe/i.test(texto)) assert.ok(!/\s/.test(texto.trim()), `${rel}: texto con «Stripe»: «${texto}»`);
     }
   }
 });
