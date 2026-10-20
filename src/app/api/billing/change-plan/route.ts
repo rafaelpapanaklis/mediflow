@@ -5,7 +5,8 @@ import { z } from "zod";
 import type Stripe from "stripe";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
+import { getStripeSafe } from "@/lib/stripe";
+import { MENSAJES_CHECKOUT } from "@/lib/billing/mensajes-pago";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan, getResolvedPlanForClinic, getPlanLimits } from "@/lib/plans";
 import { CLINIC_OVERRIDE_SELECT, clearOverridesData } from "@/lib/billing/plan-overrides";
@@ -147,6 +148,32 @@ export async function POST(req: NextRequest) {
   const currentPlan = await getResolvedPlanForClinic(clinic);
   const { ipAddress, userAgent } = extractAuditMeta(req);
 
+  /**
+   * Lo que dijo Stripe (en inglés, técnico) va SOLO a la bitácora: la clínica recibe un texto nuestro
+   * (`MENSAJES_CHECKOUT`). Nunca lanza.
+   */
+  const registraErrorStripe = (paso: string, err: any) =>
+    logAudit({
+      clinicId: clinic.id,
+      userId: user.id,
+      entityType: "subscription",
+      entityId: clinic.stripeSubscriptionId ?? clinic.id,
+      action: "update",
+      changes: {
+        _source: {
+          before: null,
+          after: {
+            event: "self-service-change-plan-error-stripe",
+            paso,
+            code: err?.code ?? err?.raw?.code ?? null,
+            mensajeStripe: err?.message ?? null,
+          },
+        },
+      },
+      ipAddress,
+      userAgent,
+    }).catch(() => {});
+
   /** Aplica el plan en la BD sin cobrar (preferencia / diferencial nulo). */
   const applyInPlace = async (event: string, extra?: Record<string, unknown>) => {
     const planLimits = await getPlanLimits(targetPlanId);
@@ -251,7 +278,7 @@ export async function POST(req: NextRequest) {
 
     const stripe = getStripeSafe();
     if (!stripe) {
-      return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
+      return NextResponse.json({ code: "PAGOS_NO_DISPONIBLES", error: MENSAJES_CHECKOUT.pagosNoDisponibles }, { status: 503 });
     }
 
     // IVA 16 % del diferencial (Ajuste 1b): un cambio de plan voluntario ya es una condición NUEVA, así que
@@ -360,10 +387,12 @@ export async function POST(req: NextRequest) {
           .catch(() => null);
       }
       if (!session) {
+        await registraErrorStripe("checkout-diferencial", err);
         return NextResponse.json(
           {
             code: "CHECKOUT_FAILED",
-            error: err?.message ?? "No se pudo crear el cobro de la diferencia",
+            // El texto de Stripe (en inglés) va a la bitácora, no a la clínica.
+            error: MENSAJES_CHECKOUT.noPudimosAbrirPago,
           },
           { status: 502 },
         );
@@ -372,7 +401,7 @@ export async function POST(req: NextRequest) {
 
     if (!session.url) {
       return NextResponse.json(
-        { error: "Stripe no devolvió URL de checkout" },
+        { code: "SIN_URL_DE_PAGO", error: MENSAJES_CHECKOUT.noPudimosAbrirPago },
         { status: 502 },
       );
     }
@@ -428,7 +457,7 @@ export async function POST(req: NextRequest) {
   // ───────────────────────────────────────────────────────────────────────────
   const stripe = getStripeSafe();
   if (!stripe) {
-    return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
+    return NextResponse.json({ code: "PAGOS_NO_DISPONIBLES", error: MENSAJES_CHECKOUT.pagosNoDisponibles }, { status: 503 });
   }
 
   // Stripe requiere el `id` del subscription item para reemplazar su price — no
@@ -446,14 +475,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           code: "SUBSCRIPTION_MISSING",
-          error:
-            'Tu suscripción ya no existe en Stripe. Vuelve a activarla con "Activar / pagar mi plan" y elige el plan que quieres.',
+          error: MENSAJES_CHECKOUT.suscripcionNoExiste,
         },
         { status: 409 },
       );
     }
+    await registraErrorStripe("suscripcion", err);
     return NextResponse.json(
-      { code: "STRIPE_ERROR", error: err?.message ?? "Stripe no respondió" },
+      { code: "STRIPE_ERROR", error: MENSAJES_CHECKOUT.proveedorNoContesto },
       { status: 502 },
     );
   }
@@ -464,7 +493,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         code: "SUBSCRIPTION_NOT_LIVE",
-        error: `Tu suscripción no está activa en Stripe (estado: ${sub.status}). Reactívala con "Activar / pagar mi plan" y elige el plan que quieres.`,
+        error: MENSAJES_CHECKOUT.suscripcionNoActiva, // el estado ("canceled"…) viene en inglés: no se muestra
       },
       { status: 409 },
     );
@@ -473,7 +502,7 @@ export async function POST(req: NextRequest) {
   const item = sub.items.data[0];
   if (!item) {
     return NextResponse.json(
-      { error: "Suscripción sin items en Stripe" },
+      { code: "SUSCRIPCION_SIN_ITEMS", error: MENSAJES_CHECKOUT.sinPlanAsociado },
       { status: 500 },
     );
   }
@@ -554,6 +583,7 @@ export async function POST(req: NextRequest) {
             direction,
             code: err?.code ?? err?.raw?.code ?? null,
             declineCode: err?.decline_code ?? err?.raw?.decline_code ?? null,
+            mensajeStripe: err?.message ?? null,
           },
         },
       },
@@ -568,7 +598,7 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json(
-      { code: "STRIPE_ERROR", error: err?.message ?? "Stripe rechazó el cambio de plan" },
+      { code: "STRIPE_ERROR", error: MENSAJES_CHECKOUT.proveedorNoContesto },
       { status: 502 },
     );
   }

@@ -6,7 +6,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { metadataMetaDePeticion } from "@/lib/analytics/meta-capi.server";
 import { metadataTiktokDePeticion } from "@/lib/analytics/tiktok-capi.server";
 import { prisma } from "@/lib/prisma";
-import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
+import { getStripeSafe } from "@/lib/stripe";
+import { MENSAJES_CHECKOUT } from "@/lib/billing/mensajes-pago";
 import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { getResolvedPlan } from "@/lib/plans";
 import { CLINIC_OVERRIDE_SELECT, applyClinicOverrides } from "@/lib/billing/plan-overrides";
@@ -67,7 +68,8 @@ export async function POST(req: NextRequest) {
 
   const stripe = getStripeSafe();
   if (!stripe) {
-    return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
+    // Sin las instrucciones de configuración de Stripe (son para quien administra el servidor, no para la clínica).
+    return NextResponse.json({ code: "PAGOS_NO_DISPONIBLES", error: MENSAJES_CHECKOUT.pagosNoDisponibles }, { status: 503 });
   }
 
   let planId: PlanId = parsed.data.plan;
@@ -161,8 +163,18 @@ export async function POST(req: NextRequest) {
     let existing: any = null;
     try {
       existing = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
-    } catch {
-      existing = null; // la suscripción ya no existe en Stripe → seguir con alta normal
+    } catch (err: any) {
+      // SOLO «ya no existe en Stripe» sigue con el alta normal. Con cualquier otro error (timeout, 5xx,
+      // red) la suscripción quizá SÍ existe: abrir un Checkout nuevo dejaría dos suscripciones y la vieja
+      // (p. ej. past_due) seguiría reintentando su cobro → doble cobro. Se pide reintentar.
+      if ((err?.code ?? err?.raw?.code) !== "resource_missing") {
+        console.error("[billing/checkout] no se pudo comprobar la suscripción existente:", err?.message ?? err);
+        return NextResponse.json(
+          { code: "SUBSCRIPTION_CHECK_FAILED", error: MENSAJES_CHECKOUT.noPudimosComprobar },
+          { status: 502 },
+        );
+      }
+      existing = null;
     }
     const liveStatuses = ["active", "trialing", "past_due", "unpaid"];
     if (existing && liveStatuses.indexOf(existing.status) >= 0) {
@@ -174,7 +186,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           url: portal.url,
           portal: true,
-          message: "Ya tienes una suscripción de tarjeta activa. Gestiónala (cambiar tarjeta, plan o cancelar) en el portal de Stripe.",
+          message: MENSAJES_CHECKOUT.yaTieneSuscripcion,
         });
       } catch {
         return NextResponse.json(
@@ -331,7 +343,7 @@ export async function POST(req: NextRequest) {
 
   if (!session.url) {
     return NextResponse.json(
-      { error: "Stripe no devolvió URL de checkout" },
+      { code: "SIN_URL_DE_PAGO", error: MENSAJES_CHECKOUT.noPudimosAbrirPago },
       { status: 502 },
     );
   }

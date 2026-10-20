@@ -28,6 +28,8 @@ let clientesCreados: number;
 let llamadasTarjeta: { prices: any[]; updates: any[] };
 let auditorias: any[];
 let clinica: any;
+// Fallos de Stripe programables (ws1-t2, textos de la clínica): todo vuelve a null en cada prueba.
+let fallas: { sinStripe?: boolean; sesion?: Error; sesionSinUrl?: boolean; retrieve?: Error; estadoSub?: string; sinItems?: boolean; update?: Error };
 
 const PLANES: Record<string, any> = {
   BASIC: { id: "BASIC", name: "Básico", priceMxn: 419, priceMxnMonthly: 419, priceMxnAnnual: 3264 },
@@ -42,17 +44,25 @@ const stripeDoble: any = {
       create: async (p: any, o: any) => {
         sesiones.push(p);
         opcionesSesion.push(o);
-        return { id: "cs_falso", url: "https://checkout.stripe.test/cs_falso" };
+        if (fallas.sesion) throw fallas.sesion;
+        return { id: "cs_falso", url: fallas.sesionSinUrl ? null : "https://checkout.stripe.test/cs_falso" };
       },
     },
   },
   subscriptions: {
-    retrieve: async () => ({
-      status: "active",
-      metadata: {},
-      items: { data: [{ id: "si_1", price: { unit_amount: 41900, currency: "mxn", recurring: { interval: "month" } } }] },
-    }),
-    update: async (id: string, p: any) => { llamadasTarjeta.updates.push({ id, p }); return { status: "active" }; },
+    retrieve: async () => {
+      if (fallas.retrieve) throw fallas.retrieve;
+      return {
+        status: fallas.estadoSub ?? "active",
+        metadata: {},
+        items: { data: fallas.sinItems ? [] : [{ id: "si_1", price: { unit_amount: 41900, currency: "mxn", recurring: { interval: "month" } } }] },
+      };
+    },
+    update: async (id: string, p: any) => {
+      llamadasTarjeta.updates.push({ id, p });
+      if (fallas.update) throw fallas.update;
+      return { status: "active" };
+    },
   },
   prices: { create: async (p: any) => { llamadasTarjeta.prices.push(p); return { id: "price_nuevo" }; } },
 };
@@ -95,7 +105,7 @@ before(async () => {
     getCurrentUser: async () => ({ id: "u1", role: "SUPER_ADMIN", email: "u@ejemplo.mx", clinicId: "cA" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
-    getStripeSafe: () => stripeDoble,
+    getStripeSafe: () => (fallas.sinStripe ? null : stripeDoble),
     stripeUnavailableResponse: () => ({ error: "Stripe no configurado" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/plans.ts"), {
@@ -119,6 +129,7 @@ beforeEach(() => {
   clientesCreados = 0;
   llamadasTarjeta = { prices: [], updates: [] };
   auditorias = [];
+  fallas = {};
   const enQuinceDias = new Date(Date.now() + 15 * 86_400_000);
   // Clínica que pagó a mano (OXXO/SPEI), sin suscripción de tarjeta, con 15 días de periodo por delante.
   clinica = {
@@ -231,6 +242,46 @@ test("clínica con suscripción de TARJETA viva: change-plan NO se toca (mismos 
   assert.deepEqual(u.p.items, [{ id: "si_1", price: "price_nuevo" }], "solo cambia el price del item; nada de tax_rates");
   assert.equal(u.p.proration_behavior, "always_invoice");
   assert.equal(JSON.stringify(u.p).includes("tax"), false);
+});
+
+/* ── ws1-t2 (tercera vuelta t4): lo que lee la clínica no nombra al proveedor ni trae inglés ── */
+
+test("change-plan: NINGUNA respuesta de error que lee la clínica nombra a Stripe ni trae su texto en inglés; el texto de Stripe queda en la bitácora", async () => {
+  const INGLES = /\b(the|invoice|declined|failed|error|keys?|request|canceled|incomplete|past_due)\b|upgrade/i;
+  const error = (msg: string, extra: object = {}) => Object.assign(new Error(msg), extra);
+  const casos: Array<[string, () => void, number, string | null]> = [
+    ["sin Stripe configurado (diferencial)", () => { fallas.sinStripe = true; }, 503, null],
+    ["sesión de cobro falla (SPEI/OXXO)", () => { fallas.sesion = error("Invalid request: payment_method_types is wrong"); }, 502, "Invalid request"],
+    ["sesión sin URL", () => { fallas.sesionSinUrl = true; }, 502, null],
+    ["tarjeta: sin Stripe configurado", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.sinStripe = true; }, 503, null],
+    ["tarjeta: la suscripción ya no existe", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.retrieve = error("No such subscription: 'sub_x'", { code: "resource_missing" }); }, 409, null],
+    ["tarjeta: Stripe no contesta al leerla", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.retrieve = error("An error occurred with our connection to Stripe."); }, 502, "connection to Stripe"],
+    ["tarjeta: suscripción cancelada (estado en inglés)", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.estadoSub = "canceled"; }, 409, null],
+    ["tarjeta: sin items", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.sinItems = true; }, 500, null],
+    ["tarjeta: Stripe rechaza el cambio (texto en inglés)", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.update = error("Stripe rejected: The subscription cannot be updated."); }, 502, "cannot be updated"],
+    ["tarjeta: el banco pide autenticación", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.update = error("Your card requires authentication.", { type: "StripeCardError", code: "authentication_required" }); }, 402, null],
+    ["tarjeta: fondos insuficientes", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.update = error("Your card has insufficient funds.", { type: "StripeCardError", code: "card_declined", decline_code: "insufficient_funds" }); }, 402, null],
+    ["tarjeta: rechazo genérico", () => { clinica.stripeSubscriptionId = "sub_x"; fallas.update = error("Your card was declined.", { type: "StripeCardError", code: "card_declined" }); }, 402, null],
+  ];
+  for (const [nombre, prepara, status, enBitacora] of casos) {
+    fallas = {};
+    auditorias = [];
+    clinica.stripeSubscriptionId = null;
+    prepara();
+    const { res, json } = await subir({ plan: "PRO", method: "oxxo" });
+    assert.equal(res.status, status, nombre);
+    const textos = [json.error, json.message].filter((t) => typeof t === "string") as string[];
+    assert.ok(textos.length > 0, `${nombre}: sin texto`);
+    for (const t of textos) {
+      assert.doesNotMatch(t, /stripe/i, `${nombre}: «${t}»`);
+      assert.doesNotMatch(t, INGLES, `${nombre}: «${t}»`);
+    }
+    assert.equal(json.instructions, undefined, `${nombre}: sin instrucciones de configuración`);
+    if (enBitacora) {
+      assert.ok(JSON.stringify(auditorias).includes(enBitacora), `${nombre}: el texto de Stripe quedó en la bitácora`);
+    }
+  }
+  fallas = {};
 });
 
 /* ── Integración #425: el plan ACTUAL se valúa con lo que la clínica paga; el destino, a precio vigente ── */

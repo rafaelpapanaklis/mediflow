@@ -597,7 +597,7 @@ export function chargeFailureMessage(err: unknown): string {
   const e = err as { code?: string; decline_code?: string; raw?: { code?: string; decline_code?: string } } | null;
   const code = e?.code ?? e?.raw?.code;
   const decline = e?.decline_code ?? e?.raw?.decline_code;
-  const base = "No se pudo cobrar la diferencia del upgrade. Tu plan NO cambió.";
+  const base = "No se pudo cobrar la diferencia por subir de plan. Tu plan NO cambió.";
   if (decline === "insufficient_funds" || code === "insufficient_funds") {
     return `${base} Tu tarjeta reportó fondos insuficientes; intenta con otra tarjeta.`;
   }

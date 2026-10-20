@@ -31,6 +31,9 @@ let sesiones: any[];
 let cupones: any[];
 let llamadasProhibidas: string[];
 let suscripcionViva: any;
+let errorAlComprobar: any = null; // si no es null, subscriptions.retrieve lanza esto
+let sinStripe = false; // getStripeSafe() devuelve null
+let sesionSinUrl = false; // checkout.sessions.create devuelve una sesión sin url
 
 const stripeDoble: any = {
   customers: { create: async () => ({ id: "cus_falso" }) },
@@ -38,12 +41,12 @@ const stripeDoble: any = {
     sessions: {
       create: async (p: any) => {
         sesiones.push(p);
-        return { id: "cs_falso", url: "https://checkout.stripe.test/cs_falso" };
+        return { id: "cs_falso", url: sesionSinUrl ? null : "https://checkout.stripe.test/cs_falso" };
       },
     },
   },
   subscriptions: {
-    retrieve: async () => suscripcionViva,
+    retrieve: async () => { if (errorAlComprobar) throw errorAlComprobar; return suscripcionViva; },
     update: async () => { llamadasProhibidas.push("subscriptions.update"); return {}; },
     cancel: async () => { llamadasProhibidas.push("subscriptions.cancel"); return {}; },
     create: async () => { llamadasProhibidas.push("subscriptions.create"); return {}; },
@@ -109,7 +112,7 @@ before(async () => {
     getCurrentUser: async () => ({ id: "u1", email: "u@ejemplo.mx", clinicId: "cA" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
-    getStripeSafe: () => stripeDoble,
+    getStripeSafe: () => (sinStripe ? null : stripeDoble),
     stripeUnavailableResponse: () => ({ error: "Stripe no configurado" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/plans.ts"), { getResolvedPlan: async (id: string) => PLANES[id] });
@@ -127,6 +130,9 @@ beforeEach(() => {
   auditorias = [];
   llamadasProhibidas = [];
   suscripcionViva = null;
+  errorAlComprobar = null;
+  sinStripe = false;
+  sesionSinUrl = false;
   facturasStripe = [];
   consultasFacturas = [];
   // Clínica NUEVA (registrada después del corte de IVA, 26-sep-2026): todo lleva IVA.
@@ -437,6 +443,74 @@ test("una clínica de antes con suscripción de tarjeta VIVA va al portal, como 
   assert.deepEqual(llamadasProhibidas, []);
 });
 
+/* ── ws1-t2 (revisión t4 #6): comprobar la suscripción existente no se da por perdida si Stripe falla ── */
+
+test("tarjeta con suscripción guardada y Stripe falla al comprobarla (timeout/5xx) → 502, NO se abre un Checkout nuevo", async () => {
+  clinica.stripeSubscriptionId = "sub_vieja";
+  for (const err of [
+    Object.assign(new Error("timeout"), { type: "StripeConnectionError" }),
+    Object.assign(new Error("boom"), { type: "StripeAPIError", statusCode: 503 }),
+    new Error("sin código"),
+  ]) {
+    errorAlComprobar = err;
+    sesiones = [];
+    const { res, json } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+    assert.equal(res.status, 502);
+    assert.equal(json.error, "No pudimos comprobar tu suscripción. Intenta de nuevo en un momento.");
+    assert.equal(sesiones.length, 0, "ni sesión de Checkout ni cupón: quizá la suscripción existe");
+    assert.equal(cupones.length, 0);
+  }
+  assert.deepEqual(llamadasProhibidas, []);
+});
+
+test("tarjeta con suscripción guardada que Stripe ya no tiene (resource_missing) → sigue con el alta normal", async () => {
+  clinica.stripeSubscriptionId = "sub_borrada";
+  errorAlComprobar = Object.assign(new Error("No such subscription"), { code: "resource_missing", statusCode: 404 });
+  const { res } = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(res.status, 200);
+  assert.equal(sesiones.length, 1);
+});
+
+/* ── N4 (segunda vuelta t4): lo que lee la clínica no nombra al proveedor ── */
+
+test("checkout: ninguna respuesta que lee la clínica nombra a Stripe ni trae inglés (503 sin pagos, 502 sin enlace, 502 al comprobar, portal)", async () => {
+  const revisa = (json: any, donde: string) => {
+    const textos = [json.error, json.message].filter((t) => typeof t === "string");
+    assert.ok(textos.length > 0, `${donde}: sin texto`);
+    for (const t of textos) {
+      assert.doesNotMatch(t, /stripe/i, `${donde}: «${t}»`);
+      assert.doesNotMatch(t, /\b(the|invoice|declined|failed|error|keys?|request)\b/i, `${donde}: «${t}»`);
+    }
+    assert.equal(json.instructions, undefined, `${donde}: no filtra instrucciones de configuración`);
+  };
+
+  sinStripe = true;
+  let r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.res.status, 503);
+  revisa(r.json, "sin pagos");
+  assert.equal(sesiones.length, 0);
+  sinStripe = false;
+
+  sesionSinUrl = true;
+  r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.res.status, 502);
+  assert.equal(r.json.error, "No pudimos abrir el pago. Inténtalo de nuevo o escribe a soporte.");
+  revisa(r.json, "sin enlace de pago");
+  sesionSinUrl = false;
+
+  clinica.stripeSubscriptionId = "sub_x";
+  errorAlComprobar = new Error("timeout");
+  r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.res.status, 502);
+  revisa(r.json, "al comprobar la suscripción");
+  errorAlComprobar = null;
+
+  suscripcionViva = { status: "past_due" };
+  r = await pagar({ plan: "PRO", method: "card", billing: "monthly" });
+  assert.equal(r.json.portal, true);
+  revisa(r.json, "ya tiene suscripción");
+});
+
 /* ── contratos de código: ninguna renovación ni suscripción existente pasa por lo nuevo ── */
 
 const leer = (rel: string) => readFileSync(path.join(RAIZ, rel), "utf8");
@@ -476,6 +550,12 @@ test("el IVA nuevo solo lo usan los sitios que crean cobros nuevos por plan (che
     "src/lib/billing/contratar.ts",
     "src/lib/billing/first-month-promo.ts", // el cupón del primer mes deja el total exacto con el IVA dentro
     "src/lib/billing/iva-clinica.ts",
+    // ws1-t2 (cobro rechazado): «Subir de plan y pagar» es un cambio de plan con cobro inmediato, el mismo caso
+    // que el diferencial de change-plan, así que lleva el IVA de cambio de plan (`ivaParaPagoDeClinica` +
+    // `desgloseConIva` para el precio que enseña el GET). No hay un helper de más alto nivel que lo dé: los
+    // sitios de arriba tampoco lo tienen. Es el ÚNICO archivo de esa función que conoce iva-cobro (el núcleo
+    // puro `pago-pendiente.ts` no lo importa) y no escribe ninguna tasa: usa solo los trozos del helper.
+    "src/lib/billing/pago-pendiente.server.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
 });
@@ -519,10 +599,16 @@ test("ningún camino de renovación crea sesiones: `subscriptions.update` solo e
   // ws1-t5: toggle-clinic-module.ts (el interruptor de /admin) hace lo mismo
   // sobre la suscripción de un módulo: `cancel_at_period_end: true` al
   // apagarlo y `false` al deshacer la baja. Tampoco toca precio ni tasa.
+  // ws1-t2 (cobro rechazado): pago-pendiente.server.ts cambia el plan de la MISMA suscripción de tarjeta
+  // de una clínica con un cobro rechazado («Subir de plan y pagar»), cobrándolo completo en un ciclo nuevo
+  // (`billing_cycle_anchor: "now"`, sin prorrateo). No crea sesiones ni otra suscripción. No hay helper en
+  // stripe-subscriptions.ts para cambiar de plan (solo pausar/reanudar), y change-plan lo hace inline; el
+  // IVA y los descuentos de ese update salen de `ivaParaPagoDeClinica` y de `descuentosParaSubir`, no a mano.
   assert.deepEqual(con, [
     "src/app/actions/admin/toggle-clinic-module.ts",
     "src/app/api/billing/change-plan/route.ts",
     "src/app/api/marketplace/module-cancel/route.ts",
+    "src/lib/billing/pago-pendiente.server.ts",
     "src/lib/stripe-subscriptions.ts",
   ]);
 });
