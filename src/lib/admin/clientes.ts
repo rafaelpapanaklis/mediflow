@@ -18,6 +18,7 @@ import { isPlanExpired } from "@/lib/plan-status";
 import { getPatientQuotaMany } from "@/lib/patient-quota";
 import { ultimoAccesoPorClinica } from "@/lib/admin/ultimo-acceso";
 import { aggregatePatientQuotas, type PatientQuota } from "@/lib/patient-quota-shared";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 const DAY = 86_400_000;
 
@@ -436,8 +437,9 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     clinicIds.map((id) => quotaByClinic[id]).filter(Boolean) as PatientQuota[],
   );
 
+  // Sin las activaciones manuales de /admin (fila de $0, método «admin»): no son un cobro.
   const subInvoices = await prisma.subscriptionInvoice.findMany({
-    where: { clinicId: { in: clinicIds } },
+    where: sinActivacionManual({ clinicId: { in: clinicIds } }),
     orderBy: { createdAt: "desc" },
     select: {
       id: true, clinicId: true, amount: true, currency: true, status: true,

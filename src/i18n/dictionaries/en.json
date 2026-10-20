@@ -1649,7 +1649,8 @@
       "errorCobro": "We couldn't process the charge. Try again or contact support.",
       "soloDueno": "Ask the clinic owner or an administrator to pay the plan.",
       "terminarCambio": "Finish the change to {plan} and pay",
-      "cambioNoDisponible": "We couldn't prepare the plan change. Use \"Update card / pay\" or contact support."
+      "cambioNoDisponible": "We couldn't prepare the plan change. Use \"Update card / pay\" or contact support.",
+      "cambioEnCursoMonto": "You still need to finish the change to {plan}: {monto}"
     }
   },
   "agenda": {

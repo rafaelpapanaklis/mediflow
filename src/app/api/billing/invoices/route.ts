@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import {
   esPagoStripe,
   filaDeRecarga,
@@ -52,8 +53,10 @@ export async function GET() {
       where: { id: clinicId },
       select: { stripeCustomerId: true },
     }),
+    // Sin las activaciones manuales de /admin (fila de $0, método «admin»): para la clínica no hubo cobro, y un
+    // renglón «Pagado $0.00» en su historial de facturas sería falso.
     prisma.subscriptionInvoice.findMany({
-      where: { clinicId },
+      where: sinActivacionManual({ clinicId }),
       orderBy: { createdAt: "desc" },
       take: 50,
     }),

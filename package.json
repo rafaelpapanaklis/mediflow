@@ -275,7 +275,7 @@
     "test:ai-reserva": "tsx --test src/lib/ai-billing/__tests__/reserva-saldo.test.ts",
     "test:ai-reembolsos": "tsx --test src/lib/ai-billing/__tests__/reembolsos.test.ts",
     "test:subscription-lapse": "tsx --test src/lib/billing/__tests__/manual-subscription-lapse.test.ts",
-    "test:cobro-rechazado": "tsx --tsconfig tsconfig.test.json --test src/lib/billing/__tests__/cobro-rechazado.test.tsx src/app/api/webhooks/stripe/__tests__/cobro-rechazado.test.ts",
+    "test:cobro-rechazado": "tsx --tsconfig tsconfig.test.json --test src/lib/billing/__tests__/cobro-rechazado.test.tsx src/app/api/webhooks/stripe/__tests__/cobro-rechazado.test.ts src/lib/billing/__tests__/pagos-reales.test.ts",
     "test:click-guard": "tsx --test src/lib/affiliates/__tests__/click-guard-core.test.ts",
     "test:afiliados": "tsx --test src/lib/affiliates/payout-core.test.ts",
     "test:bonos-red": "tsx --test src/lib/affiliates/network-bonus-core.test.ts",

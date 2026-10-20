@@ -39,6 +39,7 @@ import { medirUsoClinicas } from "@/lib/admin/uso-clinica";
 import { loadModulosContratados } from "@/lib/admin/modulos";
 import { conMrrModulos, mrrModulosPorClinica, repartirIngresos, INGRESOS_VACIOS } from "./cartera";
 import type { ClienteCrudo, ClinicaDeCliente, IngresosCliente } from "./cartera";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 /** Lo que la pantalla necesita para pintarse entera. */
 export interface DatosClientes {
@@ -233,7 +234,7 @@ async function medirClinicas(
     // "una prueba".
     prisma.subscriptionInvoice.groupBy({
       by: ["clinicId"],
-      where: { ...en, status: "paid" },
+      where: sinActivacionManual({ ...en, status: "paid" }),
       _count: { _all: true },
       _max: { paidAt: true },
       _sum: { amount: true },
@@ -319,7 +320,7 @@ async function medirClinicas(
  */
 async function medirIngresos(clinicIds: string[], ahora: Date): Promise<IngresosCliente> {
   const cobros = await prisma.subscriptionInvoice.findMany({
-    where: { clinicId: { in: clinicIds }, status: "paid" },
+    where: sinActivacionManual({ clinicId: { in: clinicIds }, status: "paid" }),
     select: { amount: true, paidAt: true, createdAt: true },
   });
   return repartirIngresos(

@@ -9,6 +9,8 @@ import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN } from "@/lib/billing/cobro-rechazado";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import { getPlanStatus, isInTrial } from "@/lib/plan-status";
 
 // GET — Dashboard metrics
@@ -31,15 +33,15 @@ export async function GET(req: NextRequest) {
     prisma.clinic.findMany({
       select: { id: true, name: true, plan: true, email: true, trialEndsAt: true, subscriptionStatus: true, createdAt: true },
     }),
-    prisma.subscriptionInvoice.aggregate({ where: { status: "paid", paidAt: { gte: firstOfMonth } }, _sum: { amount: true }, _count: true }),
-    prisma.subscriptionInvoice.aggregate({ where: { status: "paid", paidAt: { gte: firstOfPrevMonth, lte: lastOfPrevMonth } }, _sum: { amount: true }, _count: true }),
+    prisma.subscriptionInvoice.aggregate({ where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfMonth } }), _sum: { amount: true }, _count: true }),
+    prisma.subscriptionInvoice.aggregate({ where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfPrevMonth, lte: lastOfPrevMonth } }), _sum: { amount: true }, _count: true }),
     prisma.subscriptionInvoice.findMany({ orderBy: { createdAt: "desc" }, take: 50, include: { clinic: { select: { id: true, name: true, plan: true } } } }),
   ]);
 
   // Revenue by method
   const byMethod = await prisma.subscriptionInvoice.groupBy({
     by: ["method"],
-    where: { status: "paid", paidAt: { gte: firstOfMonth } },
+    where: sinActivacionManual({ status: "paid", paidAt: { gte: firstOfMonth } }),
     _sum: { amount: true },
     _count: true,
   });
@@ -50,7 +52,7 @@ export async function GET(req: NextRequest) {
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
     const data = await prisma.subscriptionInvoice.aggregate({
-      where: { status: "paid", paidAt: { gte: start, lte: end } },
+      where: sinActivacionManual({ status: "paid", paidAt: { gte: start, lte: end } }),
       _sum: { amount: true },
       _count: true,
     });
@@ -169,7 +171,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "activate_clinic") {
-    const { clinicId, plan, months } = body;
+    const { clinicId, plan, months, method } = body;
     const nextBilling = new Date();
     nextBilling.setMonth(nextBilling.getMonth() + (months ?? 1));
     // Misma regla que verify_payment: las dos fechas se mueven juntas.
@@ -183,17 +185,42 @@ export async function POST(req: NextRequest) {
     // plan que la clínica ya tiene, va con el precio que conserva (Clínica de
     // antes de los planes nuevos: $1,719); con otro plan, el vigente de ese plan.
     const { monthlyPrice } = planToLimits(applyClinicOverrides(await getResolvedPlan(plan), current));
-    await prisma.clinic.update({
-      where: { id: clinicId },
-      data: {
-        subscriptionStatus: "active",
-        plan: plan as any,
-        // Otro plan = condiciones vigentes de ese plan; el mismo, conserva lo suyo.
-        ...(current && plan !== current.plan ? clearOverridesData() : {}),
-        ...manualPeriodFields(current, nextBilling),
-        monthlyPrice,
-      },
-    });
+    // RASTRO PARA EL WEBHOOK DE STRIPE (revisión t4, #1): esta activación no dejaba ninguna fila, y si se hacía
+    // durante la gracia de un cobro rechazado el siguiente reintento fallido de Stripe la volvía a suspender. Deja
+    // una fila de pago manual —pagada, de $0 (no se inventa un ingreso: aquí no se capturó ningún cobro), con
+    // `method` el que indique el admin (transfer, deposit, oxxo, paypal, cash) o «admin»— que el webhook lee
+    // (`pagoManualCubre`). Va en la MISMA transacción que la activación: o quedan las dos cosas o ninguna.
+    const metodo =
+      typeof method === "string" && (METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(method)
+        ? method
+        : METODO_ACTIVACION_ADMIN;
+    const ahora = new Date();
+    await prisma.$transaction([
+      prisma.clinic.update({
+        where: { id: clinicId },
+        data: {
+          subscriptionStatus: "active",
+          plan: plan as any,
+          // Otro plan = condiciones vigentes de ese plan; el mismo, conserva lo suyo.
+          ...(current && plan !== current.plan ? clearOverridesData() : {}),
+          ...manualPeriodFields(current, nextBilling),
+          monthlyPrice,
+        },
+      }),
+      prisma.subscriptionInvoice.create({
+        data: {
+          clinicId,
+          amount: 0,
+          currency: "MXN",
+          status: "paid",
+          method: metodo,
+          periodStart: ahora,
+          periodEnd: nextBilling,
+          paidAt: ahora,
+          notes: "Activación manual desde /admin (sin cobro registrado)",
+        },
+      }),
+    ]);
     await sincronizarSedesIncluidas(clinicId);
 
     await logAdminClinicMutation({

@@ -53,6 +53,7 @@ import {
   eraClinicaPagadora,
   esDeLaSuscripcionDelPlan,
   inicioDeNuevoPeriodo,
+  METODOS_DE_PAGO_MANUAL_DEL_PLAN,
   motivoParaNoSuspender,
   pagoManualCubreLaFactura,
 } from "@/lib/billing/cobro-rechazado";
@@ -1045,7 +1046,7 @@ async function reactivarSiStripeYaCobro(
 
 /**
  * Estado VIVO de la factura de este `invoice.payment_failed` en Stripe («open», «paid», «void»,
- * «uncollectible»). Si Stripe no contesta se LANZA el error: el webhook responde 5xx y Stripe reintenta el
+ * «uncollectible»; solo «open» e «uncollectible» suspenden). Si Stripe no contesta se LANZA el error: el webhook responde 5xx y Stripe reintenta el
  * evento (igual que `debeReintentarPorEstadoVivo`); asumir «no está pagada» suspendía a quien ya pagó.
  * Sin id de factura no hay nada que contrastar: null (no suspende).
  */
@@ -1091,7 +1092,8 @@ async function pagoManualCubre(
       clinicId,
       status: "paid",
       paidAt: { gt: creadaEn },
-      OR: [{ method: null }, { method: { not: "stripe" } }],
+      // Lista explícita de los métodos de pago MANUAL del plan (no «cualquiera que no sea Stripe»).
+      OR: [{ method: null }, { method: { in: [...METODOS_DE_PAGO_MANUAL_DEL_PLAN] } }],
     },
     select: { id: true },
   });

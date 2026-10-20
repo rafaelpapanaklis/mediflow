@@ -23,6 +23,7 @@ import type { ClinicRecurringCharge } from "@/components/admin/clinic-payment-me
 import { cargarOrigen } from "@/lib/admin/origen-clinica";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 import type { PlanOverridesDTO } from "./plan-overrides-card";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
 
@@ -164,7 +165,7 @@ export default async function AdminClinicDetailPage(props: { params: Promise<{ i
   try {
     const [agg, last] = await Promise.all([
       prisma.subscriptionInvoice.aggregate({
-        where:  { clinicId: params.id, status: "paid" },
+        where:  sinActivacionManual({ clinicId: params.id, status: "paid" }),
         _sum:   { amount: true },
         _count: { id: true },
       }),
@@ -172,7 +173,7 @@ export default async function AdminClinicDetailPage(props: { params: Promise<{ i
       // las pondría primero: filtrarlas es lo que hace que "último pago" sea el
       // último de verdad.
       prisma.subscriptionInvoice.findFirst({
-        where:   { clinicId: params.id, status: "paid", paidAt: { not: null } },
+        where:   sinActivacionManual({ clinicId: params.id, status: "paid", paidAt: { not: null } }),
         orderBy: { paidAt: "desc" },
         select:  { paidAt: true, amount: true, method: true },
       }),

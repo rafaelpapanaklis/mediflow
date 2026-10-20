@@ -41,6 +41,22 @@ let correoFalla = false;
 let correosSuspendida: any[];
 let pagosDeSubscripcion: any[];
 
+function coincideWhere(fila: any, where: any): boolean {
+  return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
+    if (k === "OR") return (v as any[]).some((w) => coincideWhere(fila, w));
+    if (k === "AND") return (v as any[]).every((w) => coincideWhere(fila, w));
+    const valor = fila[k];
+    if (v === null) return valor == null;
+    if (v && typeof v === "object" && !(v instanceof Date)) {
+      if ("gt" in v) return valor != null && valor > v.gt;
+      if ("in" in v) return v.in.includes(valor);
+      if ("not" in v) return valor != null && valor !== v.not;
+      throw new Error(`operador de where no soportado en el doble: ${JSON.stringify(v)}`);
+    }
+    return valor === v;
+  });
+}
+
 const prismaBase: any = {
   clinic: {
     findFirst: async ({ where }: any) => [...clinicas.values()].find((c) => c.stripeCustomerId === where.stripeCustomerId) ?? null,
@@ -58,16 +74,15 @@ const prismaBase: any = {
   },
   clinicModule: { findUnique: async () => null },
   subscriptionInvoice: {
-    // Lo justo del `where` que usa el webhook: clínica, pagada, pagada DESPUÉS de, y método null o distinto de «stripe».
-    findFirst: async ({ where }: any) =>
-      pagosDeSubscripcion.find(
-        (p) =>
-          p.clinicId === where.clinicId &&
-          p.status === where.status &&
-          p.paidAt > where.paidAt.gt &&
-          (p.method == null || p.method !== "stripe"),
-      ) ?? null,
+    // Evalúa el `where` REAL que manda el código (igualdad, gt, in, not y OR): si alguien rompe la consulta, el test lo ve.
+    findFirst: async ({ where }: any) => pagosDeSubscripcion.find((p) => coincideWhere(p, where)) ?? null,
+    create: async ({ data }: any) => {
+      const fila = { id: `inv${pagosDeSubscripcion.length + 1}`, ...data };
+      pagosDeSubscripcion.push(fila);
+      return fila;
+    },
   },
+  $transaction: async (ops: any[]) => Promise.all(ops),
   billingEmailLog: {
     create: async ({ data }: any) => {
       if (logsCorreo.some((l) => l.invoiceId === data.invoiceId)) throw Object.assign(new Error("dup"), { code: "P2002" });
@@ -125,6 +140,7 @@ Mod._load = function (req, parent, isMain) {
 };
 
 let POST: (req: any) => Promise<Response>;
+let POSTAdmin: (req: any) => Promise<Response>;
 let NextRequestCtor: any;
 
 before(async () => {
@@ -168,13 +184,22 @@ before(async () => {
   });
   dobles.set(path.join(RAIZ, "src/lib/plans.ts"), {
     getPlanLimits: async () => ({ aiTokensDefault: 5000, maxClinics: null }),
-    getResolvedPlan: async () => ({}),
+    getResolvedPlan: async (id: string) => ({
+      id, name: id, priceMxn: 689, priceMxnMonthly: 689, priceMxnAnnual: 5376, aiTokensDefault: 5000,
+      maxUsers: 6, maxClinics: 1, features: [], moduleFeatures: {},
+    }),
     getResolvedPlans: async () => [],
   });
+  dobles.set(path.join(RAIZ, "src/lib/admin-auth.ts"), {
+    getAdminSession: async () => ({ user: { id: "adm1", email: "admin@dalecontrol.com" } }),
+    isAdminAuthed: async () => true,
+  });
+  dobles.set(path.join(RAIZ, "src/lib/admin-audit.ts"), { logAdminClinicMutation: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/meta-capi.server.ts"), { enviarCompraMetaDeSesion: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/tiktok-capi.server.ts"), { enviarCompraTiktokDeSesion: async () => {} });
   ({ NextRequest: NextRequestCtor } = await import("next/server"));
   ({ POST } = await import("../route"));
+  ({ POST: POSTAdmin } = await import("../../../admin/billing/route"));
 });
 
 /* ── Fábricas ──────────────────────────────────────────────────────────── */
@@ -606,8 +631,8 @@ test("#2 Stripe caído al preguntar por la factura: 5xx (Stripe reintenta) y la 
   assert.equal(correos.length, 0);
 });
 
-test("#2 solo suspende si la factura viva está «open»: paid / void / uncollectible no", async () => {
-  for (const estado of ["paid", "void", "uncollectible"]) {
+test("#2 / N1 la factura viva «paid» o «void» no suspende; «open» e «uncollectible» sí", async () => {
+  for (const estado of ["paid", "void"]) {
     reiniciar();
     facturasVivas.set(FACTURA, { id: FACTURA, status: estado });
     assert.equal(await entregar(evento("invoice.payment_failed", facturaFallida())), 200, estado);
@@ -619,6 +644,17 @@ test("#2 solo suspende si la factura viva está «open»: paid / void / uncollec
   facturasVivas.set(FACTURA, { id: FACTURA, status: "open" });
   await entregar(evento("invoice.payment_failed", facturaFallida()));
   assert.equal(clinica().subscriptionStatus, "past_due", "open sí");
+});
+
+test("N1 el PRIMER payment_failed que se procesa ya ve la factura «uncollectible» (webhook caído hasta agotar reintentos): past_due + 24 h + correo", async () => {
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "uncollectible" });
+  const rechazo = Date.now();
+  assert.equal(await entregar(evento("invoice.payment_failed", facturaFallida(), rechazo)), 200);
+  assert.equal(clinica().subscriptionStatus, "past_due", "incobrable ≠ pagada");
+  assert.equal(clinica().trialEndsAt.getTime(), aSegundos(rechazo) * 1000 + 24 * HORA);
+  assert.equal(sinSuspender(), undefined);
+  await nada();
+  assert.equal(correos.length, 1, "y el correo de «no pudimos cobrar tu plan» sale");
 });
 
 test("#3 factura de OTRA suscripción de la misma cuenta de Stripe: solo bitácora, el plan no se recorta", async () => {
@@ -654,4 +690,66 @@ test("#9 una cuenta NUEVA cuyo primer pago falló no recibe el de «suspendido p
   await entregar(evento("invoice.payment_failed", facturaFallida({ billing_reason: "subscription_create" })));
   await nada();
   assert.equal(correosSuspendida.length + correos.length, 0);
+});
+
+test("N2 el doble evalúa el where real: el filtro de métodos es la lista explícita (cfdi_overage, stripe y desconocidos no cuentan)", async () => {
+  const hoy = Date.now();
+  const cubre = async (method: string | null) => {
+    reiniciar({ trialEndsAt: new Date(hoy + 30 * DIA), nextBillingDate: new Date(hoy + 30 * DIA) });
+    pagosDeSubscripcion = [{ clinicId: CLINIC, status: "paid", method, paidAt: new Date(hoy) }];
+    await entregar(evento("invoice.payment_failed", facturaFallida({ ...conPeriodo(hoy + 30 * DIA, hoy - DIA) }), hoy));
+    return clinica().subscriptionStatus === "active";
+  };
+  for (const m of ["transfer", "deposit", "oxxo", "paypal", "cash", "admin", null]) assert.equal(await cubre(m), true, `${m} es un pago manual del plan`);
+  for (const m of ["stripe", "cfdi_overage", "otra_cosa"]) assert.equal(await cubre(m), false, `${m} NO cubre`);
+  // Si se rompe la consulta (p. ej. sin el OR), el doble lo notaría: lanza ante operadores que no conoce.
+  assert.throws(() => coincideWhere({ method: "x" }, { method: { raro: 1 } }), /no soportado/);
+});
+
+test("#1 residual: activación del admin (activate_clinic) a las +2 h de la gracia → el reintento de las +12 h NO suspende ni manda correo", async () => {
+  const t0 = Date.now();
+  // Factura creada justo antes del primer rechazo, con un periodo que termina DESPUÉS de lo que da la activación
+  // (+45 d contra ~+31 d): así solo el rastro de la fila de pago manual puede cubrir a la clínica, no las fechas.
+  const fin = t0 + 45 * DIA;
+  const factura = (extra: Record<string, unknown> = {}) => facturaFallida({ ...conPeriodo(fin, t0 - HORA), ...extra });
+  await entregar(evento("invoice.payment_failed", factura(), t0));
+  assert.equal(clinica().subscriptionStatus, "past_due");
+  await nada();
+  assert.equal(correos.length, 1, "el aviso de la gracia salió");
+
+  // +2 h: el admin activa a mano (recibió la transferencia). Deja el rastro que el webhook lee.
+  const req = new NextRequestCtor("http://localhost/api/admin/billing", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1 }),
+  });
+  assert.equal((await POSTAdmin(req)).status, 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  const fila = pagosDeSubscripcion.find((p) => p.clinicId === CLINIC);
+  assert.ok(fila, "la activación dejó su fila de pago manual");
+  assert.deepEqual([fila.status, fila.method, fila.amount], ["paid", "admin", 0], "pagada, método «admin», $0 (no inventa ingreso)");
+  assert.match(fila.notes, /Activación manual desde \/admin/);
+  const accesoAdmin = clinica().trialEndsAt.getTime();
+
+  // +12 h: Stripe reintenta la factura vieja y vuelve a fallar. NO se la vuelve a suspender.
+  assert.equal(await entregar(evento("invoice.payment_failed", factura({ attempt_count: 2 }), t0 + 12 * HORA)), 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(clinica().trialEndsAt.getTime(), accesoAdmin, "el acceso que dejó el admin no se recorta");
+  assert.equal(isPlanExpired(clinica(), new Date(t0 + 30 * HORA)), false, "ni a las 30 h");
+  assert.equal(sinSuspender(), "pago_manual");
+  await nada();
+  assert.equal(correos.length + correosSuspendida.length, 1, "ningún correo nuevo");
+});
+
+test("#1 residual: la activación del admin con el método que él indique lo guarda; uno inválido cae a «admin»", async () => {
+  for (const [enviado, guardado] of [["cash", "cash"], ["paypal", "paypal"], ["stripe", "admin"], ["loquesea", "admin"]] as const) {
+    reiniciar();
+    const req = new NextRequestCtor("http://localhost/api/admin/billing", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1, method: enviado }),
+    });
+    assert.equal((await POSTAdmin(req)).status, 200);
+    assert.equal(pagosDeSubscripcion[0].method, guardado, enviado);
+  }
 });

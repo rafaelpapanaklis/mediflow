@@ -15,6 +15,15 @@
 // Cross-tenant a propósito: es la vista del dueño de la plataforma, la protege
 // el gate de /admin. Nunca lanza: una lectura que falla deja ese paso en null.
 
+import { Prisma } from "@prisma/client";
+import { sqlSinActivacionManual } from "@/lib/billing/pagos-reales";
+
+/**
+ * «Checkout iniciado» y «primer pago» no cuentan la fila de $0 que deja una activación manual de /admin (no hubo
+ * cobro): un solo criterio, el de `pagos-reales`, interpolado como SQL literal.
+ */
+const SIN_ACTIVACION_MANUAL = Prisma.raw(sqlSinActivacionManual("s"));
+
 export const DIAS_EMBUDO = 30;
 
 export type ClavePasoAdmin =
@@ -116,11 +125,11 @@ export async function leerConteosEmbudo(db: DbEmbudo, ahora: Date = new Date()):
       SELECT COUNT(*) AS n FROM clinics c WHERE c."createdAt" >= ${desde}
         AND (c."stripeCustomerId" IS NOT NULL OR c."stripeSubscriptionId" IS NOT NULL
              OR c."subscriptionId" IS NOT NULL
-             OR EXISTS (SELECT 1 FROM subscription_invoices s WHERE s."clinicId" = c.id))`),
+             OR EXISTS (SELECT 1 FROM subscription_invoices s WHERE s."clinicId" = c.id AND ${SIN_ACTIVACION_MANUAL}))`),
     uno(db, () => db.$queryRaw<{ n: bigint }[]>`
       SELECT COUNT(*) AS n FROM clinics c WHERE c."createdAt" >= ${desde}
         AND EXISTS (SELECT 1 FROM subscription_invoices s
-                    WHERE s."clinicId" = c.id AND s.status = 'paid' AND s.amount > 0)`),
+                    WHERE s."clinicId" = c.id AND s.status = 'paid' AND s.amount > 0 AND ${SIN_ACTIVACION_MANUAL})`),
   ]);
   return {
     landing_vista: landing, clic_empezar: clic, registro_vista: regVista, registro_enviado: regEnv,
@@ -248,14 +257,14 @@ function consultaClinicas(db: DbEmbudo, desde: Date, conOrigen: boolean, cohorte
         WHERE c."createdAt" >= ${desde}
           AND (c."stripeCustomerId" IS NOT NULL OR c."stripeSubscriptionId" IS NOT NULL
                OR c."subscriptionId" IS NOT NULL
-               OR EXISTS (SELECT 1 FROM subscription_invoices s WHERE s."clinicId" = c.id))
+               OR EXISTS (SELECT 1 FROM subscription_invoices s WHERE s."clinicId" = c.id AND ${SIN_ACTIVACION_MANUAL}))
         GROUP BY k."utmSourceFirst", k.platform`;
       case "pagaron": return db.$queryRaw<R>`
         SELECT k."utmSourceFirst", k.platform, COUNT(*) AS n
         FROM clinics c LEFT JOIN clinic_ads_clicks k ON k."clinicId" = c.id
         WHERE c."createdAt" >= ${desde}
           AND EXISTS (SELECT 1 FROM subscription_invoices s
-                      WHERE s."clinicId" = c.id AND s.status = 'paid' AND s.amount > 0)
+                      WHERE s."clinicId" = c.id AND s.status = 'paid' AND s.amount > 0 AND ${SIN_ACTIVACION_MANUAL})
         GROUP BY k."utmSourceFirst", k.platform`;
     }
   }
@@ -272,12 +281,12 @@ function consultaClinicas(db: DbEmbudo, desde: Date, conOrigen: boolean, cohorte
       FROM clinics c WHERE c."createdAt" >= ${desde}
         AND (c."stripeCustomerId" IS NOT NULL OR c."stripeSubscriptionId" IS NOT NULL
              OR c."subscriptionId" IS NOT NULL
-             OR EXISTS (SELECT 1 FROM subscription_invoices s WHERE s."clinicId" = c.id))`;
+             OR EXISTS (SELECT 1 FROM subscription_invoices s WHERE s."clinicId" = c.id AND ${SIN_ACTIVACION_MANUAL}))`;
     case "pagaron": return db.$queryRaw<R>`
       SELECT NULL::text AS "utmSourceFirst", NULL::text AS platform, COUNT(*) AS n
       FROM clinics c WHERE c."createdAt" >= ${desde}
         AND EXISTS (SELECT 1 FROM subscription_invoices s
-                    WHERE s."clinicId" = c.id AND s.status = 'paid' AND s.amount > 0)`;
+                    WHERE s."clinicId" = c.id AND s.status = 'paid' AND s.amount > 0 AND ${SIN_ACTIVACION_MANUAL})`;
   }
 }
 

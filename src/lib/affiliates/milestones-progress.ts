@@ -29,6 +29,7 @@ import { PRORATION_NOTE_PREFIX } from "./payout";
 // bonos por red lo necesitaron en sitios client-safe. Se re-exporta aquí para
 // que los callers históricos sigan importándolo de este archivo.
 import { MIN_PAID_INVOICES, clinicQualifies } from "./qualifying-clinic";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 export { MIN_PAID_INVOICES, clinicQualifies };
 
@@ -74,11 +75,12 @@ export async function paidInvoiceCountByClinic(clinicIds: string[]): Promise<Map
   try {
     const groups = await prisma.subscriptionInvoice.groupBy({
       by: ["clinicId"],
-      where: {
+      // Sin las activaciones manuales de /admin (filas de $0): no son un cobro y no acercan a ningún hito.
+      where: sinActivacionManual({
         clinicId: { in: clinicIds },
         status: "paid",
         OR: [{ notes: null }, { notes: { not: { startsWith: PRORATION_NOTE_PREFIX } } }],
-      },
+      }),
       _count: { _all: true },
     });
     for (const g of groups) {

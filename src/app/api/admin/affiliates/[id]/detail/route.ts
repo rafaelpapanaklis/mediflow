@@ -21,6 +21,7 @@ import {
   type PayoutMode,
   type ProgramMode,
 } from "@/lib/affiliates/payout";
+import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 
 export const dynamic = "force-dynamic";
 
@@ -331,7 +332,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
         ? prisma.subscriptionInvoice
             .groupBy({
               by: ["clinicId"],
-              where: { clinicId: { in: clinicIds }, status: "paid" },
+              where: sinActivacionManual({ clinicId: { in: clinicIds }, status: "paid" }),
               _count: { _all: true },
             })
             .catch(() => [] as Array<{ clinicId: string; _count: { _all: number } }>)
