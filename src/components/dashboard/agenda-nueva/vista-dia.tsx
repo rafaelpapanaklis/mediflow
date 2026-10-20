@@ -53,6 +53,9 @@ import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
 import { bandasDelDia } from "@/components/dashboard/bloqueos/fechas";
 import { useMinuto } from "./usar-minuto";
+import { useColoresDeCitas, useHorariosFlexibles } from "./usar-agenda-flexible";
+import { comidaDelDoctorEnFecha, horaDeMinutos } from "@/lib/horario-doctor/core";
+import { useT } from "@/i18n/i18n-provider";
 import s from "./agenda-nueva.module.css";
 
 export function VistaDia() {
@@ -69,6 +72,11 @@ export function VistaDia() {
   // Mientras su rama no esté integrada esto es una lista vacía y la rejilla se
   // pinta exactamente como hoy.
   const bloqueos = useBloqueosAgenda();
+  // WS1-T5 (grupo Salamanca) — color por procedimiento y hora de comida. Sin
+  // la bandera los dos son `null` y el Día se pinta exactamente como antes.
+  const colores = useColoresDeCitas();
+  const horariosFlexibles = useHorariosFlexibles();
+  const t = useT();
 
   const ventana = useMemo(
     () => ventanaDeRejilla(state.dayStart, state.dayEnd),
@@ -113,12 +121,36 @@ export function VistaDia() {
     return mapa;
   }, [bloqueos, responsablesVisibles, state.dayISO, state.timezone]);
 
+  // WS1-T5 — la comida de cada doctor ESTE día (de su horario propio).
+  const comidaPorResponsable = useMemo(() => {
+    const mapa = new Map<string, NonNullable<ColumnaCuadricula["comidas"]>>();
+    if (!horariosFlexibles) return mapa;
+    for (const r of responsablesVisibles) {
+      const c = comidaDelDoctorEnFecha(horariosFlexibles, r.id, state.dayISO, state.timezone);
+      if (!c) continue;
+      mapa.set(r.id, [
+        {
+          clave: `comida:${r.id}`,
+          desdeMin: c.abre,
+          hastaMin: c.cierra,
+          titulo: t("agenda.flexible.comida.titulo", {
+            doctor: r.nombre,
+            desde: horaDeMinutos(c.abre),
+            hasta: horaDeMinutos(c.cierra),
+          }),
+        },
+      ]);
+    }
+    return mapa;
+  }, [horariosFlexibles, responsablesVisibles, state.dayISO, state.timezone, t]);
+
   const columnas = useMemo<ColumnaCuadricula[]>(() => {
     const ctx = {
       timezone: state.timezone,
       doctores: state.doctors,
       unidades: state.resources,
       ahora,
+      colores,
     };
 
     return responsablesVisibles.map((r) => {
@@ -175,6 +207,7 @@ export function VistaDia() {
           : undefined,
         fondo: undefined,
         bloqueos: bandasPorResponsable.get(r.id),
+        comidas: comidaPorResponsable.get(r.id),
         cierreDesdeMin: horarioDelDia.cierra,
         aperturaHastaMin: horarioDelDia.abre,
         cerrada: horarioDelDia.cerrado,
@@ -228,6 +261,8 @@ export function VistaDia() {
     permissions.canEdit,
     ahora,
     bandasPorResponsable,
+    comidaPorResponsable,
+    colores,
     citasDelDia,
     horarioDelDia,
     state.dayISO,

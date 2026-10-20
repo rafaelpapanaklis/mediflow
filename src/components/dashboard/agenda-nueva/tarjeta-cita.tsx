@@ -18,12 +18,13 @@
  */
 
 import { inicialesDelResponsable } from "@/lib/agenda-nueva/carriles-semana";
-import { Armchair, Ban, Check, Circle, Clock, DollarSign, UserX, Wallet } from "lucide-react";
+import { Armchair, Ban, Check, Circle, Clock, DollarSign, Layers, UserX, Wallet } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { IconoEstado } from "@/lib/agenda-nueva/estados";
 import type { CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { AGENDA_SOMBRAS } from "@/lib/agenda-nueva/tokens";
+import { useT } from "@/i18n/i18n-provider";
 import s from "./agenda-nueva.module.css";
 
 /** Debajo de esto la segunda línea no cabe: el README la oculta bajo 30 min. */
@@ -70,6 +71,7 @@ export function TarjetaCita({
   conResponsable = false,
 }: TarjetaCitaProps) {
   const { pinta } = cita;
+  const t = useT();
 
   // El arrastre es el de la agenda de siempre: dnd-kit, con el mismo umbral de
   // distancia antes de empezar (un clic sigue siendo un clic) y los mismos
@@ -86,8 +88,11 @@ export function TarjetaCita({
   // El borde de 3 px del responsable es un `inset box-shadow`, como el diseño;
   // el anillo de selección se le SUMA (no lo sustituye) para que una cita
   // abierta siga enseñando de quién es.
+  // WS1-T5 — con «Colorear por: Procedimiento» la barra lleva el color del
+  // procedimiento (`colorCita`) y es más ancha, para que se lea de un vistazo
+  // aunque el fondo siga diciendo el estado. Sin bandera, la de siempre.
   const sombra = [
-    `inset 3px 0 0 ${cita.colorResponsable}`,
+    `inset ${cita.procedimiento ? 5 : 3}px 0 0 ${cita.colorCita}`,
     seleccionada ? AGENDA_SOMBRAS.seleccion : null,
   ]
     .filter(Boolean)
@@ -141,6 +146,8 @@ export function TarjetaCita({
           ? `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip} · Arrastra para moverla`
           : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`) +
         (cita.avisoMensualidadVencida ? " · Mensualidad de ortodoncia vencida" : "") +
+        (cita.sobreagendada ? ` · ${t("agenda.flexible.sobreagendada")}` : "") +
+        (cita.procedimiento ? ` · ${cita.procedimiento.nombre}` : "") +
         (conResponsable ? ` · ${cita.responsableNombre}` : "")
       }
       style={{
@@ -165,6 +172,13 @@ export function TarjetaCita({
         {cita.avisoMensualidadVencida && (
           <span className={s.tarjetaAvisoOrto} aria-hidden>
             <DollarSign size={11} strokeWidth={2.6} />
+          </span>
+        )}
+
+        {/* WS1-T5 — guardada encima de otra a propósito: que se note. */}
+        {cita.sobreagendada && (
+          <span className={s.tarjetaSobreagendada} aria-label={t("agenda.flexible.sobreagendada")}>
+            <Layers size={11} strokeWidth={2.4} aria-hidden />
           </span>
         )}
 

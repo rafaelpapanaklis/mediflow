@@ -29,6 +29,10 @@ export interface ApiError {
     endsAt: string;
     status: string;
   };
+  /** WS1-T5 — el 409 se puede sobreagendar (bandera `agenda-flexible`). */
+  sobreagendable?: boolean;
+  /** WS1-T5 — con `lunch_overlap`: la comida del doctor ese día. */
+  comida?: { lunchStart: string; lunchEnd: string } | null;
 }
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -42,6 +46,7 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
       count: body.count,
       sample: body.sample,
       conflictingAppointment: body.conflictingAppointment,
+      ...(body.sobreagendable === true ? { sobreagendable: true, comida: body.comida ?? null } : {}),
     };
     throw err;
   }
@@ -118,6 +123,13 @@ export interface RescheduleAppointmentInput {
    * «Avisar al paciente» desmarcada). Sin él, el servidor decide como siempre con el ajuste de la clínica.
    */
   notifyPatient?: boolean;
+  /**
+   * WS1-T5 — «ya confirmé que sobreagendo» (bandera `agenda-flexible`). Solo
+   * tras el «¿Seguro?»; el `overrideReason` lo escribe el servidor.
+   */
+  sobreagendar?: boolean;
+  /** WS1-T5 — la cita que se enseñó en el «¿Seguro?» (`null` = solo la comida). */
+  sobreagendarCita?: string | null;
 }
 
 /** Aviso de fuera-de-horario/día cerrado (P1-13): la API ya no bloquea, avisa. */

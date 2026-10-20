@@ -33,7 +33,17 @@ function matches(row: Row, where: Row = {}): boolean {
       if ("in" in v) return (v.in as any[]).includes(actual);
       if ("notIn" in v) return !(v.notIn as any[]).includes(actual);
       if ("not" in v) return actual !== v.not;
-      return true; // rangos y otros: la prueba no los usa
+      // WS1-T5: rangos de fecha y prefijos, como los evalúa Postgres. Antes el
+      // doble los daba por buenos y solo un `overrideReason: null` (que nunca
+      // casaba con filas sin esa llave) evitaba que toda cita contara como ocupada.
+      if ("lt" in v || "gt" in v) {
+        const t = actual instanceof Date ? actual.getTime() : new Date(actual).getTime();
+        if ("lt" in v && !(t < new Date(v.lt).getTime())) return false;
+        if ("gt" in v && !(t > new Date(v.gt).getTime())) return false;
+        return true;
+      }
+      if ("startsWith" in v) return typeof actual === "string" && actual.startsWith(v.startsWith);
+      return true; // otros: la prueba no los usa
     }
     if (v instanceof Date) return actual instanceof Date && actual.getTime() === v.getTime();
     return actual === v;

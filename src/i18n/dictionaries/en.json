@@ -2045,6 +2045,29 @@
           "other": "and {count} more"
         }
       }
+    },
+    "flexible": {
+      "comida": {
+        "rotulo": "Lunch",
+        "titulo": "Lunch break · {doctor} · {desde}–{hasta}"
+      },
+      "sobreagendada": "Double-booked",
+      "sobreagendadaGuardada": "The appointment was double-booked: there are two appointments at the same time.",
+      "sobreagendar": {
+        "titulo": "You're double-booking",
+        "cuerpoDoctor": "This doctor already has an appointment at that time ({paciente}, {hora}). You're double-booking: both appointments will be at the same time. Are you sure?",
+        "cuerpoSillon": "This chair already has an appointment at that time ({paciente}, {hora}). You're double-booking: both appointments will be at the same time. Are you sure?",
+        "cuerpoComida": "That time is the doctor's lunch break ({desde} to {hasta}). You're double-booking: the appointment will fall in their lunch break. Are you sure?",
+        "confirmar": "Yes, double-book",
+        "cancelar": "Cancel",
+        "otras": "There are also {n} more appointment(s) at that time.",
+        "tambienComida": "It also falls in the doctor's lunch break ({desde} to {hasta})."
+      },
+      "leyenda": {
+        "porDoctor": "Colors by doctor:",
+        "porProcedimiento": "Colors by procedure:",
+        "sinProcedimiento": "No procedure: doctor's color"
+      }
     }
   },
   "patients": {
@@ -4722,7 +4745,28 @@
         "dom": "Sun"
       },
       "tramoUno": "{dia} {abre}-{cierra}",
-      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}"
+      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}",
+      "comida": {
+        "de": "Lunch from",
+        "inicioAria": "Lunch start on {dia}",
+        "finAria": "Lunch end on {dia}",
+        "quitar": "Remove",
+        "quitarAria": "Remove lunch on {dia}",
+        "errorPar": "Lunch time on {dia} isn't clear. Enter both times (HH:MM) or leave both empty.",
+        "errorOrden": "On {dia}, lunch must end after it starts.",
+        "errorFuera": "On {dia}, lunch must fall within working hours ({abre} to {cierra})."
+      }
+    },
+    "agendaColor": {
+      "titulo": "Agenda colors",
+      "pregunta": "Color appointments by:",
+      "doctor": "Doctor",
+      "doctorAyuda": "Each appointment in its doctor's color, as always.",
+      "procedimiento": "Procedure",
+      "procedimientoAyuda": "Each appointment in the color of its catalog procedure; if the reason isn't a catalog procedure, in its doctor's color. Each procedure's color is chosen on its catalog page.",
+      "soloLectura": "Only people who can edit the clinic settings can change this.",
+      "guardadoToast": "Setting saved",
+      "guardarError": "Couldn't save the setting. Please try again."
     }
   },
   "procurement": {
@@ -10989,5 +11033,24 @@
     "cajaFacturasMes": "Invoices issued this month (clinic calendar), excluding drafts and cancelled ones: the same figure as Finance «Sales».",
     "cajaVencido": "Invoices past their due date, overdue installments of payment plans and orthodontic charges, for the whole clinic (orthodontics included). The breakdown is in Finance › Balances.",
     "ortoMensualidades": "Orthodontic installments that are overdue, due today or due in the next 7 days. «Overdue» is the same as Orthodontics Collections and is already included in Cash's «Overdue», which also has non-orthodontic debt."
+  },
+  "procedures": {
+    "agendaColor": {
+      "label": "Color in the calendar",
+      "hint": "With “Color appointments by: Procedure”, its appointments are painted this color in the calendar.",
+      "sinGuardar": "The color was not saved: the feature is not enabled in the database yet. Contact support.",
+      "colores": {
+        "morado": "Purple",
+        "azul": "Blue",
+        "cian": "Cyan",
+        "verde": "Green",
+        "oliva": "Olive",
+        "ambar": "Amber",
+        "naranja": "Orange",
+        "coral": "Coral",
+        "rosa": "Pink",
+        "gris": "Gray"
+      }
+    }
   }
 }

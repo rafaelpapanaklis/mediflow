@@ -40,7 +40,8 @@ import {
   type AvisoRecorte,
   type DiaHorario,
 } from "./core";
-import { esTablaAusente, leerHorarioDeDoctor } from "./consulta.server";
+import { agendaFlexibleEncendida } from "@/lib/agenda/agenda-flexible.server";
+import { columnasComidaExisten, esTablaAusente, leerHorarioDeDoctor } from "./consulta.server";
 
 /** Quién pide. Sale SIEMPRE de la sesión, nunca del cuerpo de la petición. */
 export interface HorarioCtx {
@@ -91,6 +92,12 @@ export interface RespuestaHorario {
    * agenda de verdad ese día. Vacío si todo cabe (o si hereda).
    */
   avisos: AvisoRecorte[];
+  /**
+   * WS1-T5 — `true` = la clínica tiene la bandera `agenda-flexible`: la
+   * pantalla enseña «Comida de __ a __» en cada día. Sin ella, ni se enseña
+   * ni se guarda.
+   */
+  comida: boolean;
 }
 
 /** Los roles que tienen agenda propia: a quien se le puede dar una cita. */
@@ -134,10 +141,10 @@ export async function resolverDoctor(ctx: HorarioCtx, doctorIdRaw: unknown): Pro
   return doctor.id;
 }
 
-function respuesta(ctx: HorarioCtx, filas: readonly DiaHorario[] | null): RespuestaHorario {
+function respuesta(ctx: HorarioCtx, filas: readonly DiaHorario[] | null, comida: boolean): RespuestaHorario {
   const clinica = semanaHeredada(ctx.clinica, ctx.clinica.schedules);
   if (!filas || filas.length === 0) {
-    return { horario: clinica, hereda: true, clinica, avisos: [] };
+    return { horario: clinica, hereda: true, clinica, avisos: [], comida };
   }
   const horario = semanaCompleta(filas);
   return {
@@ -145,14 +152,47 @@ function respuesta(ctx: HorarioCtx, filas: readonly DiaHorario[] | null): Respue
     hereda: false,
     clinica,
     avisos: avisosDeRecorte(horario, ctx.clinica, ctx.clinica.schedules),
+    comida,
   };
+}
+
+/**
+ * WS1-T5 — la semana tal como se puede guardar: sin bandera, la comida se
+ * descarta en silencio (la pantalla ni la enseña); con bandera pero sin las
+ * columnas (el SQL sin pegar) se dice claro en vez de perderla.
+ */
+async function semanaGuardable(
+  clinicId: string,
+  semana: DiaHorario[],
+): Promise<{ semana: DiaHorario[]; comida: boolean; conColumnas: boolean }> {
+  const comida = await agendaFlexibleEncendida(clinicId);
+  if (!comida) {
+    return {
+      semana: semana.map(({ lunchStart: _a, lunchEnd: _b, ...d }) => d),
+      comida: false,
+      conColumnas: false,
+    };
+  }
+  const conColumnas = await columnasComidaExisten(true);
+  if (!conColumnas && semana.some((d) => d.lunchStart && d.lunchEnd)) {
+    throw new HorarioError(
+      "La hora de comida todavía no está activada en esta base. " +
+        "Falta aplicar sql/salamanca-agenda.sql; avisa a soporte.",
+      503,
+      "SQL_PENDIENTE",
+    );
+  }
+  return { semana, comida: true, conColumnas };
 }
 
 /** GET — el horario del doctor, o el de la clínica si hereda. */
 export async function verHorario(ctx: HorarioCtx, doctorIdRaw: unknown): Promise<RespuestaHorario> {
   const doctorId = await resolverDoctor(ctx, doctorIdRaw);
-  const filas = await leerHorarioDeDoctor(ctx.clinicId, doctorId);
-  return respuesta(ctx, filas);
+  const [filas, comida] = await Promise.all([
+    leerHorarioDeDoctor(ctx.clinicId, doctorId),
+    agendaFlexibleEncendida(ctx.clinicId),
+  ]);
+  return respuesta(ctx, filas, comida);
 }
 
 /**
@@ -170,7 +210,8 @@ export async function guardarHorario(
 ): Promise<RespuestaHorario> {
   const clinicId = exigeClinica(ctx);
   const doctorId = await resolverDoctor(ctx, doctorIdRaw);
-  const semana = parseSemana(body?.horario);
+  const guardable = await semanaGuardable(clinicId, parseSemana(body?.horario));
+  const semana = guardable.semana;
 
   const antes = await leerHorarioDeDoctor(clinicId, doctorId);
 
@@ -178,14 +219,23 @@ export async function guardarHorario(
     // Un upsert por día, en UNA transacción: o se guarda la semana entera o
     // no se guarda nada. Mismo patrón que PATCH /api/settings/schedule.
     await prisma.$transaction(
-      semana.map((d) =>
-        prisma.doctorSchedule.upsert({
+      semana.map((d) => {
+        // WS1-T5 — la comida solo se escribe con la bandera y las columnas
+        // creadas; sin ellas el upsert es exactamente el de antes. Y el
+        // `select` mínimo: sin él Prisma devolvería TODAS las columnas del
+        // modelo, también las de la comida, y daría P2022 sin el SQL.
+        const comida = guardable.conColumnas
+          ? { lunchStart: d.lunchStart ?? null, lunchEnd: d.lunchEnd ?? null }
+          : {};
+        const dia = { enabled: d.enabled, openTime: d.openTime, closeTime: d.closeTime, ...comida };
+        return prisma.doctorSchedule.upsert({
           where: { doctorId_dayOfWeek: { doctorId, dayOfWeek: d.dayOfWeek } },
           // clinicId de la SESIÓN; el doctor ya se comprobó que es de ella.
-          create: { clinicId, doctorId, ...d },
-          update: { clinicId, enabled: d.enabled, openTime: d.openTime, closeTime: d.closeTime },
-        }),
-      ),
+          create: { clinicId, doctorId, dayOfWeek: d.dayOfWeek, ...dia },
+          update: { clinicId, ...dia },
+          select: { id: true },
+        });
+      }),
     );
   } catch (err) {
     throw traducirTablaAusente(err);
@@ -204,7 +254,7 @@ export async function guardarHorario(
     ...meta,
   });
 
-  return respuesta(ctx, semana);
+  return respuesta(ctx, semana, guardable.comida);
 }
 
 /**
@@ -239,7 +289,7 @@ export async function borrarHorario(
   // Sin horario propio que borrar no hay nada que auditar: la respuesta es la
   // misma (hereda) y repetir el DELETE no deja filas de ruido en la bitácora.
 
-  return respuesta(ctx, null);
+  return respuesta(ctx, null, await agendaFlexibleEncendida(clinicId));
 }
 
 /**

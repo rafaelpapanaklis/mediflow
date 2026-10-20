@@ -80,6 +80,26 @@ export interface ColumnaCuadricula {
    * pantalla que no contesta.
    */
   bloqueos?: BandaBloqueo[];
+  /**
+   * WS1-T5 (grupo Salamanca) — la HORA DE COMIDA de los doctores de esta
+   * columna, en gris con el rótulo «Comida». Mismo trato que los bloqueos:
+   * debajo de las tarjetas y sin capturar el puntero (el equipo puede agendar
+   * encima con la confirmación de sobreagendar; quien decide es el servidor).
+   * En Semana cada una va en el carril de su doctor (`left`/`width`).
+   */
+  comidas?: FranjaComidaColumna[];
+}
+
+/** Un tramo de comida dentro de una columna, en minutos de pared de la clínica. */
+export interface FranjaComidaColumna {
+  clave: string;
+  desdeMin: number;
+  hastaMin: number;
+  /** Carril dentro de la columna (Semana). Sin él, de lado a lado. */
+  left?: string;
+  width?: string;
+  /** «Comida · Dra. Díaz · 14:00–15:00», al pasar el puntero. */
+  titulo: string;
 }
 
 export interface CuadriculaProps {
@@ -446,6 +466,9 @@ function ColumnaRejilla({
       {c.bloqueos?.map((b) => (
         <FranjaBloqueo key={b.id} banda={b} ventana={ventana} />
       ))}
+      {c.comidas?.map((f) => (
+        <FranjaComida key={f.clave} franja={f} ventana={ventana} />
+      ))}
 
       {/* El hueco que crearía el clic, con su hora. Debajo de las tarjetas. */}
       {guia && (
@@ -558,6 +581,30 @@ function FranjaBloqueo({
         {banda.reason}
         {banda.sigueDespues ? " →" : ""}
       </span>
+    </div>
+  );
+}
+
+/**
+ * WS1-T5 — LA HORA DE COMIDA de un doctor, en gris con «Comida». Recortada a
+ * la ventana igual que un bloqueo, para que el rótulo no se pinte fuera.
+ */
+function FranjaComida({ franja, ventana }: { franja: FranjaComidaColumna; ventana: VentanaRejilla }) {
+  const t = useT();
+  const { minutoInicio, horaFin } = ventana;
+  const desde = Math.max(franja.desdeMin, minutoInicio);
+  const hasta = Math.min(franja.hastaMin, horaFin * 60);
+  const top = topDeLinea(desde, minutoInicio);
+  const alto = topDeLinea(hasta, minutoInicio) - top;
+  if (alto <= 0) return null;
+  return (
+    <div
+      className={s.franjaComida}
+      style={{ top, height: alto, ...(franja.left ? { left: franja.left, width: franja.width, right: "auto" } : {}) }}
+      title={franja.titulo}
+      data-comida
+    >
+      <span className={s.franjaComidaTexto}>{t("agenda.flexible.comida.rotulo")}</span>
     </div>
   );
 }

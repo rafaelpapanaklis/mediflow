@@ -2045,6 +2045,29 @@
           "other": "y {count} más"
         }
       }
+    },
+    "flexible": {
+      "comida": {
+        "rotulo": "Comida",
+        "titulo": "Comida · {doctor} · {desde}–{hasta}"
+      },
+      "sobreagendada": "Sobreagendada",
+      "sobreagendadaGuardada": "La cita quedó sobreagendada: hay dos citas a la misma hora.",
+      "sobreagendar": {
+        "titulo": "Estás sobreagendando",
+        "cuerpoDoctor": "Este doctor ya tiene una cita a esa hora ({paciente}, {hora}). Estás sobreagendando: las dos citas quedarán al mismo tiempo. ¿Seguro?",
+        "cuerpoSillon": "Este sillón ya tiene una cita a esa hora ({paciente}, {hora}). Estás sobreagendando: las dos citas quedarán al mismo tiempo. ¿Seguro?",
+        "cuerpoComida": "Esa hora es la comida del doctor (de {desde} a {hasta}). Estás sobreagendando: la cita quedará en su hora de comida. ¿Seguro?",
+        "confirmar": "Sí, sobreagendar",
+        "cancelar": "Cancelar",
+        "otras": "Además hay {n} cita(s) más encima a esa hora.",
+        "tambienComida": "Además, cae en la hora de comida del doctor (de {desde} a {hasta})."
+      },
+      "leyenda": {
+        "porDoctor": "Colores por doctor:",
+        "porProcedimiento": "Colores por procedimiento:",
+        "sinProcedimiento": "Sin procedimiento: color del doctor"
+      }
     }
   },
   "patients": {
@@ -4722,7 +4745,28 @@
         "dom": "Dom"
       },
       "tramoUno": "{dia} {abre}-{cierra}",
-      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}"
+      "tramoVarios": "{desde}-{hasta} {abre}-{cierra}",
+      "comida": {
+        "de": "Comida de",
+        "inicioAria": "Comida: inicio el {dia}",
+        "finAria": "Comida: fin el {dia}",
+        "quitar": "Quitar",
+        "quitarAria": "Quitar la comida del {dia}",
+        "errorPar": "La hora de comida del {dia} no se entiende. Escribe las dos horas (HH:MM) o deja las dos vacías.",
+        "errorOrden": "El {dia} la comida tiene que terminar después de empezar.",
+        "errorFuera": "El {dia} la comida tiene que caer dentro del horario (de {abre} a {cierra})."
+      }
+    },
+    "agendaColor": {
+      "titulo": "Colores de la agenda",
+      "pregunta": "Colorear las citas por:",
+      "doctor": "Doctor",
+      "doctorAyuda": "Cada cita con el color de su doctor, como siempre.",
+      "procedimiento": "Procedimiento",
+      "procedimientoAyuda": "Cada cita con el color de su procedimiento del catálogo; si el motivo no es un procedimiento del catálogo, con el de su doctor. El color de cada procedimiento se elige en su ficha del catálogo.",
+      "soloLectura": "Solo quien puede editar la configuración de la clínica cambia este ajuste.",
+      "guardadoToast": "Ajuste guardado",
+      "guardarError": "No se pudo guardar el ajuste. Inténtalo de nuevo."
     }
   },
   "procurement": {
@@ -10989,5 +11033,24 @@
     "cajaFacturasMes": "Facturas emitidas este mes (calendario de la clínica), sin borradores ni canceladas: la misma cifra que «Ventas» de Finanzas.",
     "cajaVencido": "Facturas con «Vence el» pasado, cuotas vencidas de planes a plazos y cargos de ortodoncia, de toda la clínica (ortodoncia incluida). El desglose está en Finanzas › Saldos.",
     "ortoMensualidades": "Cuotas de ortodoncia vencidas, que vencen hoy o en los próximos 7 días. «Vencido» es el mismo de Cobranza de Ortodoncia y ya va sumado en el «Vencido» de Caja, que además trae lo que no es de ortodoncia."
+  },
+  "procedures": {
+    "agendaColor": {
+      "label": "Color en la agenda",
+      "hint": "Con “Colorear las citas por: Procedimiento”, sus citas se pintan de este color en la agenda.",
+      "sinGuardar": "El color no se guardó: falta activar la función en la base. Avisa a soporte.",
+      "colores": {
+        "morado": "Morado",
+        "azul": "Azul",
+        "cian": "Cian",
+        "verde": "Verde",
+        "oliva": "Oliva",
+        "ambar": "Ámbar",
+        "naranja": "Naranja",
+        "coral": "Coral",
+        "rosa": "Rosa",
+        "gris": "Gris"
+      }
+    }
   }
 }

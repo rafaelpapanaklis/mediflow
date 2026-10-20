@@ -26,6 +26,8 @@ import type {
 import { citaContada, estadoNormalizado, pintaDeEstado, type PintaEstado } from "./estados";
 import { minutosEnTz } from "./geometria";
 import { AGENDA_TOKENS } from "./tokens";
+import { esSobreagendada, type ModoColorCitas } from "@/lib/agenda/agenda-flexible";
+import { colorDeCita, type IndiceProcedimientos, type ProcedimientoConColor } from "@/lib/agenda/color-procedimiento";
 
 /** Un responsable tal y como lo pintan las tres vistas. */
 export interface ResponsableVista {
@@ -64,7 +66,18 @@ export interface CitaVista {
   chip: string;
   responsableId: string | null;
   responsableNombre: string;
+  /** El color del DOCTOR (avatar, carril, leyenda de la ocupación). */
   colorResponsable: string;
+  /**
+   * WS1-T5 — el color que MARCA la tarjeta: el del doctor, o con «Colorear
+   * por: Procedimiento» el de su procedimiento del catálogo (si el motivo casa
+   * con uno). Sin la bandera es siempre `colorResponsable`.
+   */
+  colorCita: string;
+  /** WS1-T5 — el procedimiento que dio el color, o `null`. */
+  procedimiento: ProcedimientoConColor | null;
+  /** WS1-T5 — la cita se guardó encima de otra a propósito (sobreagendada). */
+  sobreagendada: boolean;
   unidadId: string | null;
   unidadNombre: string | null;
   esTeleconsulta: boolean;
@@ -101,6 +114,11 @@ export interface ContextoVista {
   unidades: readonly ResourceDTO[];
   /** El reloj. Se inyecta para poder probarlo; en la UI es `new Date()`. */
   ahora: Date;
+  /**
+   * WS1-T5 — cómo se colorean las citas. Sin él (o en «doctor»), como
+   * siempre: con el color del doctor.
+   */
+  colores?: { modo: ModoColorCitas; indice: IndiceProcedimientos | null } | null;
 }
 
 /** Los responsables visibles, en el orden en que los da el servidor. */
@@ -237,6 +255,16 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
       ? "Anticipo pagado"
       : null;
 
+  const colorResponsable = responsableId
+    ? doctorColorFor(responsableId, responsable?.color ?? null)
+    : AGENDA_TOKENS.texto2;
+  const { color: colorCita, procedimiento } = colorDeCita({
+    modo: ctx.colores?.modo ?? "doctor",
+    motivo: dto.reason,
+    indice: ctx.colores?.indice ?? null,
+    colorDoctor: colorResponsable,
+  });
+
   return {
     id: dto.id,
     inicioMin,
@@ -268,9 +296,10 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     chip: chipDe(estado, pinta, minutosEsperando),
     responsableId,
     responsableNombre: responsable?.displayName ?? dto.doctor?.shortName ?? "Sin responsable",
-    colorResponsable: responsableId
-      ? doctorColorFor(responsableId, responsable?.color ?? null)
-      : AGENDA_TOKENS.texto2,
+    colorResponsable,
+    colorCita,
+    procedimiento,
+    sobreagendada: esSobreagendada(dto.overrideReason),
     unidadId: dto.resourceId,
     unidadNombre: unidad?.name ?? null,
     esTeleconsulta: dto.isTeleconsult === true,

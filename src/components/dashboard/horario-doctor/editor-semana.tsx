@@ -20,6 +20,7 @@ import {
   horaCorta,
   LLAVES_DIA,
   rangoInvalido,
+  validarComida,
   type AvisoClinica,
   type Dia,
 } from "./tipos";
@@ -31,6 +32,7 @@ export function EditorSemana({
   onCambio,
   deshabilitado = false,
   idBase,
+  comida = false,
 }: {
   /** Los 7 días, de lunes (0) a domingo (6). */
   dias: Dia[];
@@ -40,6 +42,8 @@ export function EditorSemana({
   deshabilitado?: boolean;
   /** Prefijo de los `id` de los avisos: puede haber dos editores montados. */
   idBase: string;
+  /** WS1-T5: la clínica tiene agenda flexible → cada día abierto ofrece su comida. */
+  comida?: boolean;
 }) {
   const t = useT();
 
@@ -59,7 +63,10 @@ export function EditorSemana({
         const mal = rangoInvalido(d);
         const aviso = avisoFueraDeClinica(d, clinica);
         const idNota = `${idBase}-nota-${d.dayOfWeek}`;
+        const errorComida = comida ? validarComida(d) : null;
+        const idComida = `${idBase}-comida-${d.dayOfWeek}`;
         const hayNota = mal || aviso !== null;
+        const comidaLlena = !!(d.lunchStart || d.lunchEnd);
         return (
           <div key={d.dayOfWeek} className={`${s.fila} ${d.enabled ? s.filaAbierta : ""}`}>
             <label className={s.dia}>
@@ -102,6 +109,50 @@ export function EditorSemana({
                 </>
               )}
             </div>
+
+            {comida && d.enabled && (
+              <div className={s.comida}>
+                <span className={s.hasta}>{t("settings.horarioDoctor.comida.de")}</span>
+                <input
+                  type="time"
+                  className={`${s.hora} ${errorComida ? s.horaMal : ""}`}
+                  value={d.lunchStart ?? ""}
+                  disabled={deshabilitado}
+                  aria-label={t("settings.horarioDoctor.comida.inicioAria", { dia: nombre })}
+                  aria-invalid={errorComida ? true : undefined}
+                  aria-describedby={errorComida ? idComida : undefined}
+                  onChange={(e) => onCambio(d.dayOfWeek, { lunchStart: e.target.value })}
+                />
+                <span className={s.hasta}>{t("settings.client.hoursTo")}</span>
+                <input
+                  type="time"
+                  className={`${s.hora} ${errorComida ? s.horaMal : ""}`}
+                  value={d.lunchEnd ?? ""}
+                  disabled={deshabilitado}
+                  aria-label={t("settings.horarioDoctor.comida.finAria", { dia: nombre })}
+                  aria-invalid={errorComida ? true : undefined}
+                  aria-describedby={errorComida ? idComida : undefined}
+                  onChange={(e) => onCambio(d.dayOfWeek, { lunchEnd: e.target.value })}
+                />
+                {comidaLlena && (
+                  <button
+                    type="button"
+                    className={s.botonTexto}
+                    disabled={deshabilitado}
+                    aria-label={t("settings.horarioDoctor.comida.quitarAria", { dia: nombre })}
+                    onClick={() => onCambio(d.dayOfWeek, { lunchStart: "", lunchEnd: "" })}
+                  >
+                    {t("settings.horarioDoctor.comida.quitar")}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {errorComida && (
+              <p className={`${s.avisoDia} ${s.errorDia}`} id={idComida} role="alert">
+                {t(errorComida.clave, { dia: nombre.toLowerCase(), ...errorComida.vars })}
+              </p>
+            )}
 
             {mal ? (
               <p className={`${s.avisoDia} ${s.errorDia}`} id={idNota}>

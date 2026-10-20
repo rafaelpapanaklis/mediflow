@@ -7,6 +7,8 @@ import { costoDeRecetaPorProcedimiento } from "@/lib/inventory/costo-receta.serv
 import { hasActiveOrthodonticsModule } from "@/lib/orthodontics/access";
 import { listarProcedimientosDeOrtodoncia } from "@/lib/orthodontics/catalog-procedures";
 import { marcasDeLaClinica } from "@/lib/whatsapp/bot/servicios-agendables-db";
+import { agendaFlexibleEncendida } from "@/lib/agenda/agenda-flexible.server";
+import { coloresElegidos } from "@/lib/agenda/color-procedimiento.server";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 // ws1-t4, vuelta 2 (F-11 / F-08): clave SAT e IVA del CFDI por procedimiento (SQL crudo).
 import { fiscalDeProcedimientos, columnasFiscalesProcedimientos } from "@/lib/cfdi/fiscal-concepto.server";
@@ -41,6 +43,9 @@ export default async function ProceduresPage() {
   const fiscalDisponible = await columnasFiscalesProcedimientos(prisma);
   // ws1-t3 — «Se agenda por WhatsApp» (SQL crudo; sin la columna, ninguno).
   const botAgendables = await marcasDeLaClinica(user.clinicId);
+  // Salamanca — color de cada procedimiento en la agenda (solo con la bandera de la clínica).
+  const agendaFlexible = await agendaFlexibleEncendida(user.clinicId);
+  const coloresAgenda = agendaFlexible ? await coloresElegidos(user.clinicId) : {};
   const ortoIncluidos: Record<string, boolean | null> = Object.fromEntries(
     ortoFilas.map((f) => [f.id, f.orthoIncludedInTreatment]),
   );
@@ -56,6 +61,8 @@ export default async function ProceduresPage() {
       fiscal={fiscal}
       fiscalDisponible={fiscalDisponible}
       botAgendables={botAgendables}
+      agendaFlexible={agendaFlexible}
+      coloresAgenda={coloresAgenda}
     />
   );
 }

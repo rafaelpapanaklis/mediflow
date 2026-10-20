@@ -24,6 +24,7 @@ import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { rechazoPorBloqueo } from "@/lib/agenda-bloqueos/politica.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
@@ -269,11 +270,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           clinicId,
           doctorId: { in: candidatos.map(c => c.id) },
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
-          overrideReason: null,
           startsAt: { lt: endsAt },
           endsAt: { gt: startsAt },
           // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
-          AND: [sinApartadoVencido()],
+          // WS1-T5 (Salamanca) — y una SOBREAGENDADA sí ocupa (la constraint no la ve).
+          AND: [sinApartadoVencido(), ocupaElHueco()],
         },
         select: { doctorId: true },
       });

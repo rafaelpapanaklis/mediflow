@@ -156,6 +156,8 @@ export function reschedulePayload(
    * marcada (o sin casilla) el cuerpo es el de siempre y el servidor decide con el ajuste de la clínica.
    */
   notifyPatient?: boolean,
+  /** WS1-T5 — tras confirmar «Sí, sobreagendar»: la cita que se enseñó (`null` = solo la comida). */
+  sobreagendar?: { citaId: string | null } | null,
 ): RescheduleAppointmentInput {
   const currentDoctorId = plan.original.doctor?.id ?? null;
   const currentResourceId = plan.original.resourceId;
@@ -167,6 +169,10 @@ export function reschedulePayload(
   if (plan.newResourceId !== currentResourceId) payload.resourceId = plan.newResourceId;
   if (bloqueoConfirmado) payload.bloqueoConfirmado = true;
   if (notifyPatient === false) payload.notifyPatient = false;
+  if (sobreagendar) {
+    payload.sobreagendar = true;
+    payload.sobreagendarCita = sobreagendar.citaId;
+  }
   return payload;
 }
 
@@ -206,6 +212,8 @@ export interface CommitRescheduleDeps {
   bloqueoConfirmado?: boolean;
   /** ws1-t1 (F14) — `false` = «Avisar al paciente» desmarcada. Ver `reschedulePayload`. */
   notifyPatient?: boolean;
+  /** WS1-T5 — la persona confirmó sobreagendar (lo que se le enseñó). Ver `reschedulePayload`. */
+  sobreagendar?: { citaId: string | null } | null;
 }
 
 /**
@@ -231,7 +239,7 @@ export async function commitReschedule(
   try {
     const { appointment, scheduleWarning } = await reschedule(
       original.id,
-      reschedulePayload(plan, deps.bloqueoConfirmado, deps.notifyPatient),
+      reschedulePayload(plan, deps.bloqueoConfirmado, deps.notifyPatient, deps.sobreagendar),
     );
     deps.dispatch({ type: "REPLACE_APPOINTMENT", appointment });
     return { ok: true, appointment, scheduleWarning };

@@ -3507,6 +3507,10 @@ model ProcedureCatalog {
   // `invoices.orthodonticTreatmentPlanId` (cobro/extras-db.ts) y
   // `orthodontic_billing_configs` (cobro/config-db.ts): ver
   // src/lib/orthodontics/catalog-procedures.ts.
+  // WS1-T5 (grupo Salamanca): "agendaColor" (color del procedimiento en la
+  // agenda, una clave de la paleta) tampoco se declara, por la misma razón.
+  // Va por SQL crudo: src/lib/agenda/color-procedimiento.server.ts y
+  // sql/salamanca-agenda.sql.
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
@@ -19275,6 +19279,13 @@ model DoctorSchedule {
   enabled   Boolean @default(true)
   openTime  String  @default("09:00")
   closeTime String  @default("18:00")
+  /// WS1-T5 (grupo Salamanca) — hora de comida de ese día, "HH:MM", opcional
+  /// (las dos o ninguna). Solo cuenta con la bandera `agenda-flexible` de la
+  /// clínica. sql/salamanca-agenda.sql. 🔴 Toda lectura y escritura de esta
+  /// tabla lleva `select`: hasta que se pegue el SQL, pedir estas columnas
+  /// daría P2022 (ver horario-doctor/consulta.server.ts y service.ts).
+  lunchStart String?
+  lunchEnd   String?
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   doctor User   @relation(fields: [doctorId], references: [id], onDelete: Cascade)

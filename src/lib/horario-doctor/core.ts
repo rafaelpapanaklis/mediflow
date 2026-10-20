@@ -45,7 +45,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 import { getTzParts } from "@/lib/agenda/time-utils";
-import { scheduleDayOf, type ScheduleDay } from "@/lib/agenda/clinic-hours";
+import { scheduleDayOf, scheduleDayOfISO, type ScheduleDay } from "@/lib/agenda/clinic-hours";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · LOS TIPOS
@@ -55,8 +55,18 @@ import { scheduleDayOf, type ScheduleDay } from "@/lib/agenda/clinic-hours";
  * Un día del horario. La MISMA forma que `ClinicSchedule` (y que el `Dia` de
  * la API): `dayOfWeek` 0=Lunes … 6=Domingo (≠ JS getDay), horas "HH:MM" de
  * pared en la zona de la clínica.
+ *
+ * WS1-T5 (Salamanca) — más la HORA DE COMIDA de ese día, opcional. Solo llega
+ * con la bandera `agenda-flexible` encendida (el lector no la lee si está
+ * apagada), así que para el resto de las clínicas estos dos campos no existen
+ * y todo se calcula como antes. Ver §3b.
  */
-export type DiaHorario = ScheduleDay;
+export interface DiaHorario extends ScheduleDay {
+  /** "HH:MM" en que empieza la comida. `null`/ausente = ese día no hay comida. */
+  lunchStart?: string | null;
+  /** "HH:MM" en que termina la comida (exclusiva, como la salida). */
+  lunchEnd?: string | null;
+}
 
 /**
  * doctorId → sus filas. SOLO están los doctores CON horario propio: que un id
@@ -166,13 +176,18 @@ export interface FueraDeHorario {
    *  · `antes`       — el hueco empieza antes de su hora de entrada.
    *  · `despues`     — el hueco termina después de su hora de salida (o
    *                    cruza la medianoche).
+   *  · `comida`      — el hueco pisa su hora de comida (WS1-T5, solo con la
+   *                    bandera `agenda-flexible`).
    */
-  motivo: "dia_libre" | "antes" | "despues";
+  motivo: "dia_libre" | "antes" | "despues" | "comida";
   /** 0=Lunes … 6=Domingo, del INICIO del hueco en la zona de la clínica. */
   dayOfWeek: number;
   /** Su horario ese día, "HH:MM". `null` si ese día no atiende. */
   openTime: string | null;
   closeTime: string | null;
+  /** Con `motivo: "comida"`: la comida de ese día, "HH:MM". */
+  lunchStart?: string | null;
+  lunchEnd?: string | null;
 }
 
 /**
@@ -235,7 +250,73 @@ export function doctorNoAtiende(
   const closeTime = horaDeMinutos(ventana.cierra);
   if (inicioMin < ventana.abre) return { motivo: "antes", dayOfWeek, openTime, closeTime };
   if (finMin > ventana.cierra) return { motivo: "despues", dayOfWeek, openTime, closeTime };
+  // WS1-T5 — la comida es un hueco DENTRO de la jornada. Mismo semiabierto:
+  // con comida 14:00–15:00, una cita 13:30–14:00 cabe y una de 15:00 también.
+  const comida = comidaDeFila(fila, ventana);
+  if (comida && inicioMin < comida.cierra && finMin > comida.abre) {
+    return {
+      motivo: "comida",
+      dayOfWeek,
+      openTime,
+      closeTime,
+      lunchStart: horaDeMinutos(comida.abre),
+      lunchEnd: horaDeMinutos(comida.cierra),
+    };
+  }
   return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3b · LA HORA DE COMIDA (WS1-T5, grupo Salamanca)
+//
+// 🔴 VIVE EN LA FILA DEL DÍA, NO EN UN BLOQUEO. «Como de 14 a 15» se repite
+// cada semana, igual que el horario: por eso son dos columnas de
+// `doctor_schedules` y no 52 bloqueos al año (ver §«HORARIO NO ES BLOQUEO»).
+//
+// 🔴 LA MISMA FUNCIÓN PARA TODAS LAS PUERTAS. `doctorNoAtiende` devuelve
+// `motivo: "comida"` y cada consumidor que ya rechazaba el fuera-de-horario
+// (bot, web, portal, Sabina, «Buscar espacio») la rechaza igual sin cambiar
+// una línea. El staff es el único que puede agendar encima, y solo con la
+// confirmación de sobreagendar (ver `agenda/agenda-flexible.ts`).
+//
+// Solo cuenta si cae DENTRO de la jornada de ese día y termina después de
+// empezar: la API no guarda otra cosa (`parseSemana`), y una fila editada a
+// mano que no lo cumpla se ignora — una comida rota no cierra nada.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** La comida del día en minutos, si es válida y cae dentro de `ventana`. */
+export function comidaDeFila(fila: DiaHorario | undefined, ventana: Ventana | null): Ventana | null {
+  if (!fila || !ventana) return null;
+  const abre = minutosDeHora(fila.lunchStart ?? null);
+  const cierra = minutosDeHora(fila.lunchEnd ?? null);
+  if (abre === null || cierra === null || cierra <= abre) return null;
+  if (abre < ventana.abre || cierra > ventana.cierra) return null;
+  return { abre, cierra };
+}
+
+/**
+ * La comida del doctor un día de la semana, para PINTARLA en la rejilla y
+ * para quien barre huecos con la ventana del día. `null` = no tiene.
+ */
+export function comidaDelDoctor(
+  filas: readonly DiaHorario[] | null | undefined,
+  dayOfWeek: number,
+): Ventana | null {
+  if (!filas || filas.length === 0) return null;
+  const fila = filas.find((f) => f.dayOfWeek === dayOfWeek);
+  return comidaDeFila(fila, ventanaDeFila(fila));
+}
+
+/** La comida de un doctor un DÍA concreto (`YYYY-MM-DD` en la zona de la clínica). */
+export function comidaDelDoctorEnFecha(
+  horarios: HorariosDeDoctores | null | undefined,
+  doctorId: string | null | undefined,
+  dayISO: string,
+  timeZone: string,
+): Ventana | null {
+  const filas = horarioPropio(horarios, doctorId);
+  if (!filas) return null;
+  return comidaDelDoctor(filas, scheduleDayOfISO(dayISO, timeZone));
 }
 
 /**
@@ -337,6 +418,8 @@ export function avisoDeHorarioDoctor(f: FueraDeHorario): {
   const cuerpo =
     f.motivo === "dia_libre"
       ? `el doctor no atiende los ${dia}`
+      : f.motivo === "comida"
+        ? `la cita cae en la hora de comida del doctor (los ${dia} come de ${f.lunchStart} a ${f.lunchEnd})`
       : f.motivo === "antes"
         ? `la cita empieza antes de que entre el doctor (los ${dia} atiende de ${f.openTime} a ${f.closeTime})`
         : `la cita termina después de que salga el doctor (los ${dia} atiende de ${f.openTime} a ${f.closeTime})`;
@@ -472,10 +555,58 @@ export function parseSemana(raw: unknown): DiaHorario[] {
         "RANGO_INVERTIDO",
       );
     }
-    semana.push({ dayOfWeek, enabled, openTime, closeTime });
+    const comida = parseComida(item, { dayOfWeek, enabled, openTime, closeTime });
+    semana.push(comida ? { dayOfWeek, enabled, openTime, closeTime, ...comida } : { dayOfWeek, enabled, openTime, closeTime });
   }
   semana.sort((a, b) => a.dayOfWeek - b.dayOfWeek);
   return semana;
+}
+
+/**
+ * LA COMIDA de un día del PUT (WS1-T5). `null` = ese día no hay comida.
+ *
+ * Opcional y en pareja: sin `lunchStart` ni `lunchEnd` (o los dos vacíos) no
+ * hay comida; con uno solo es un error, no una comida «hasta cuando sea».
+ * Reglas del encargo: termina después de empezar y cae DENTRO del horario de
+ * ese día. Un día que no atiende no lleva comida (se descarta en silencio: la
+ * pantalla la conserva escrita mientras el día está apagado).
+ */
+function parseComida(
+  item: unknown,
+  dia: DiaHorario,
+): { lunchStart: string; lunchEnd: string } | null {
+  const raw = item as { lunchStart?: unknown; lunchEnd?: unknown };
+  const vacio = (v: unknown) => v === undefined || v === null || v === "";
+  if (vacio(raw.lunchStart) && vacio(raw.lunchEnd)) return null;
+  // Un día apagado no lleva comida, y lo que la pantalla tenga escrito a
+  // medias en él no es un error (la pantalla no lo valida tampoco).
+  if (!dia.enabled) return null;
+  const nombre = NOMBRES_DIA[dia.dayOfWeek];
+  if (
+    typeof raw.lunchStart !== "string" || !HORA_RE.test(raw.lunchStart) ||
+    typeof raw.lunchEnd !== "string" || !HORA_RE.test(raw.lunchEnd)
+  ) {
+    throw new HorarioError(
+      `La hora de comida del ${nombre} no se entiende. Escribe las dos horas (HH:MM) o deja las dos vacías.`,
+      400,
+      "COMIDA_INVALIDA",
+    );
+  }
+  if (raw.lunchStart >= raw.lunchEnd) {
+    throw new HorarioError(
+      `El ${nombre} la comida tiene que terminar después de empezar.`,
+      400,
+      "COMIDA_INVERTIDA",
+    );
+  }
+  if (raw.lunchStart < dia.openTime || raw.lunchEnd > dia.closeTime) {
+    throw new HorarioError(
+      `El ${nombre} la comida tiene que caer dentro del horario (de ${dia.openTime} a ${dia.closeTime}).`,
+      400,
+      "COMIDA_FUERA_DE_HORARIO",
+    );
+  }
+  return { lunchStart: raw.lunchStart, lunchEnd: raw.lunchEnd };
 }
 
 /**
@@ -486,9 +617,14 @@ export function parseSemana(raw: unknown): DiaHorario[] {
 export function semanaCompleta(filas: readonly DiaHorario[]): DiaHorario[] {
   return DIAS_SEMANA.map((d) => {
     const f = filas.find((x) => x.dayOfWeek === d);
-    return f
-      ? { dayOfWeek: d, enabled: f.enabled, openTime: f.openTime, closeTime: f.closeTime }
-      : { dayOfWeek: d, enabled: false, openTime: APERTURA_POR_DEFECTO, closeTime: CIERRE_POR_DEFECTO };
+    if (!f) return { dayOfWeek: d, enabled: false, openTime: APERTURA_POR_DEFECTO, closeTime: CIERRE_POR_DEFECTO };
+    const dia: DiaHorario = { dayOfWeek: d, enabled: f.enabled, openTime: f.openTime, closeTime: f.closeTime };
+    // La comida solo viaja si existe (WS1-T5): sin bandera la respuesta es la de siempre.
+    if (f.lunchStart && f.lunchEnd) {
+      dia.lunchStart = f.lunchStart;
+      dia.lunchEnd = f.lunchEnd;
+    }
+    return dia;
   });
 }
 

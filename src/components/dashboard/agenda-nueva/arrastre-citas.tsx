@@ -49,6 +49,7 @@ import {
 import toast from "react-hot-toast";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import type { AppointmentDragData, DroppableData } from "@/lib/agenda/drag-utils";
+import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import {
   DRAG_ACTIVATION_DISTANCE_PX,
   commitReschedule,
@@ -60,6 +61,13 @@ import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
 import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
 import { altoDeHueco, mensajeDeRechazo, rechazoIncierto } from "@/lib/agenda-nueva/interacciones";
 import { ConfirmarMovimiento } from "./confirmar-movimiento";
+import { useHorariosFlexibles } from "./usar-agenda-flexible";
+import { doctorNoAtiende } from "@/lib/horario-doctor/core";
+import {
+  avisoDesdeAgenda,
+  avisoDesdeRechazo,
+  type AvisoSobreagenda,
+} from "@/lib/agenda/agenda-flexible";
 
 export interface DestinoArrastre {
   /** El `data` de la columna sobre la que está el puntero. */
@@ -140,6 +148,14 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
   // junto a las citas.
   const bloqueos = useBloqueosAgenda();
 
+  // WS1-T5 (grupo Salamanca) — con la bandera `agenda-flexible`, soltar
+  // encima de otra cita o en la comida del doctor NO se rechaza: la ventana de
+  // mover pregunta «¿Seguro?» y el PATCH viaja con `sobreagendar: true`.
+  const flexEncendida = state.agendaFlexible?.encendida === true;
+  const horariosFlexibles = useHorariosFlexibles();
+  /** El aviso que mandó el servidor (409 `sobreagendable`) cuando la pantalla no lo vio venir. */
+  const [avisoServidor, setAvisoServidor] = useState<AvisoSobreagenda | null>(null);
+
   /**
    * ¿El destino del arrastre cae dentro de un bloqueo? Con la MISMA función
    * que usa el servidor. `null` en el 99 % de los movimientos, y entonces la
@@ -155,6 +171,53 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     );
     return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
   }, [pendiente, bloqueos]);
+
+  /**
+   * WS1-T5 — ¿el destino cae encima de otra cita (la que la pantalla tiene
+   * cargada) o en la comida del doctor? Con la MISMA función que el servidor
+   * para la comida (`doctorNoAtiende`). `null` sin bandera o con el hueco libre:
+   * entonces la ventana de mover sale exactamente como antes.
+   */
+  const sobreagendaDelDestino = useMemo<AvisoSobreagenda | null>(() => {
+    if (!pendiente) return null;
+    // Lo que dijo el servidor manda, aunque la bandera de esta pantalla esté
+    // vieja (se encendió con la agenda abierta): si no, el 409 se repetiría
+    // a cada clic sin enseñar nada.
+    if (avisoServidor) return avisoServidor;
+    if (!flexEncendida) return null;
+    const doctorId = pendiente.newDoctorId ?? pendiente.original.doctor?.id ?? null;
+    // El choque, contando también las citas YA sobreagendadas (`findOverlap`
+    // se las salta porque la constraint no las ve; aquí sí cuentan).
+    const encima = doctorId ? choquesEnPantalla(pendiente, doctorId, state.appointments) : [];
+    const choque = encima[0] ?? null;
+    const fuera = doctorNoAtiende(
+      horariosFlexibles,
+      new Date(pendiente.newStartsAt),
+      new Date(pendiente.newEndsAt),
+      doctorId,
+      state.timezone,
+    );
+    const comida = fuera?.motivo === "comida" ? fuera : null;
+    // Sin nada que enseñar se manda sin `sobreagendar`: si el servidor ve un
+    // choque, contesta 409 con la cita y ESA es la que se pregunta.
+    if (!choque && !comida) return null;
+    return avisoDesdeAgenda({
+      choque: choque
+        ? {
+            id: choque.id,
+            patientName: choque.patient?.name ?? null,
+            startsAt: choque.startsAt,
+            endsAt: choque.endsAt ?? null,
+            doctorId: choque.doctor?.id ?? null,
+            resourceId: choque.resourceId,
+          }
+        : null,
+      comida,
+      intento: { doctorId, resourceId: pendiente.newResourceId },
+      timeZone: state.timezone,
+      otras: encima.length - 1,
+    });
+  }, [pendiente, flexEncendida, avisoServidor, horariosFlexibles, state.appointments, state.timezone]);
 
   // La rejilla que se DIBUJA: la hora redondeada y el tope de abajo salen de
   // ella, igual que en la agenda de siempre salen de la suya.
@@ -224,13 +287,15 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
         return;
       }
       if (d.plan.unchanged) return;
-      if (d.plan.overlap) {
+      // WS1-T5 — con la bandera, el choque se pregunta en la ventana de mover.
+      if (d.plan.overlap && !flexEncendida) {
         toast.error("Ahí ya hay otra cita del mismo doctor o de la misma unidad. La cita no se movió.");
         return;
       }
+      setAvisoServidor(null);
       setPendiente(d.plan);
     },
-    [planear, limpiar, permissions.canEdit],
+    [planear, limpiar, permissions.canEdit, flexEncendida],
   );
 
   // Mientras se arrastra, el cursor dice «agarrado» en toda la pantalla.
@@ -246,6 +311,7 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
   const cancelar = useCallback(() => {
     if (guardando) return;
     setPendiente(null);
+    setAvisoServidor(null);
   }, [guardando]);
 
   const confirmar = useCallback(async (aviso: { notifyPatient?: false } = {}) => {
@@ -260,10 +326,33 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
         bloqueoConfirmado: bloqueoDelDestino !== null,
         // ws1-t1 (F14): «Avisar al paciente» desmarcada en la ventana de confirmar.
         ...aviso,
+        // WS1-T5 — solo si la ventana enseñaba el «¿Seguro?» de sobreagendar,
+        // con la cita que enseñaba (el servidor no acepta otra).
+        sobreagendar: sobreagendaDelDestino ? { citaId: sobreagendaDelDestino.citaId } : null,
       });
+      // WS1-T5 — el servidor vio un choque que la pantalla no tenía cargado:
+      // la cita ya volvió a su sitio; la misma ventana pregunta «¿Seguro?».
+      const avisoRecibido =
+        !r.ok
+          ? avisoDesdeRechazo(
+              r.error,
+              { doctorId: plan.newDoctorId ?? plan.original.doctor?.id ?? null, resourceId: plan.newResourceId },
+              state.timezone,
+            )
+          : null;
+      // Ya confirmado y el servidor insiste con LA MISMA = no hay nada nuevo
+      // que preguntar (se cuenta como rechazo). Con otra cita, se pregunta.
+      const yaConfirmado = sobreagendaDelDestino;
+      const avisoNuevo =
+        avisoRecibido && !(yaConfirmado && avisoRecibido.citaId === yaConfirmado.citaId) ? avisoRecibido : null;
+      if (avisoNuevo) {
+        setAvisoServidor(avisoNuevo);
+        return;
+      }
       if (r.ok) {
         // Fuera de horario o en día cerrado el servidor guarda y AVISA (P1-13).
         if (r.scheduleWarning?.message) toast(r.scheduleWarning.message, { duration: 6000 });
+        setAvisoServidor(null);
         // Igual que la agenda de siempre: sin router.refresh(), que rehidrata
         // con datos viejos y pisa el cambio; basta con vaciar la caché.
         invalidateRangeCache();
@@ -297,7 +386,9 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     invalidateRangeCache,
     refetchView,
     state.resources,
+    state.timezone,
     bloqueoDelDestino,
+    sobreagendaDelDestino,
   ]);
 
   const valor = useMemo<ArrastreValor>(
@@ -336,8 +427,34 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
           // corre al confirmar.
           bloqueo={bloqueoDelDestino}
           diaDestino={diaEnTz(pendiente.newStartsAt, state.timezone)}
+          sobreagenda={sobreagendaDelDestino}
         />
       )}
     </Ctx.Provider>
   );
+}
+
+/**
+ * WS1-T5 — las citas vivas del mismo doctor (o del mismo sillón) que pisan el
+ * destino, también las sobreagendadas, de la que empieza antes a la última.
+ * Mismo criterio que `buscarChoqueDeCita` del servidor (la primera se nombra,
+ * el resto se cuenta), sobre lo que la pantalla tiene cargado.
+ */
+function choquesEnPantalla(
+  plan: PlannedReschedule,
+  doctorId: string,
+  citas: readonly AgendaAppointmentDTO[],
+): AgendaAppointmentDTO[] {
+  const desde = new Date(plan.newStartsAt).getTime();
+  const hasta = new Date(plan.newEndsAt).getTime();
+  return citas
+    .filter((c) => {
+      if (c.id === plan.original.id) return false;
+      if (c.status === "CANCELLED" || c.status === "NO_SHOW") return false;
+      const ini = new Date(c.startsAt).getTime();
+      const fin = c.endsAt ? new Date(c.endsAt).getTime() : ini;
+      if (!(ini < hasta && fin > desde)) return false;
+      return c.doctor?.id === doctorId || (!!plan.newResourceId && c.resourceId === plan.newResourceId);
+    })
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 }

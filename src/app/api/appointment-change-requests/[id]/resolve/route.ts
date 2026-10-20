@@ -27,6 +27,8 @@ import { bookingRuleBody } from "@/lib/agenda/booking-rules";
 import { avisoDeHorarioDoctor, doctorNoAtiende } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { ocupaElHueco } from "@/lib/agenda/agenda-flexible";
+import { quitarMarcaDeSobreagenda } from "@/lib/agenda/sobreagendar.server";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
@@ -323,11 +325,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
               : []),
           ],
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
-          overrideReason: null,
           startsAt: { lt: proposedEndsAt },
           endsAt: { gt: proposedStartsAt },
           // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
-          AND: [sinApartadoVencido()],
+          // WS1-T5 (Salamanca) — y una SOBREAGENDADA sí ocupa (la constraint no la ve).
+          AND: [sinApartadoVencido(), ocupaElHueco()],
         },
         select: { id: true },
       });
@@ -344,6 +346,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           confirmedAt: null,
         },
       });
+      // WS1-T5 — si era una sobreagendada, en su hueco nuevo ya no lo es.
+      await quitarMarcaDeSobreagenda(tx, appointment.id, session.clinic.id);
 
       // M-22: dentro de la MISMA tx que mueve la cita. Antes se borraban fuera,
       // best-effort: si eso fallaba, la cita quedaba movida y el recordatorio

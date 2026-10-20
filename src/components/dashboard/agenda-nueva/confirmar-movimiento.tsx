@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { AlertTriangle, ArrowRight, Loader2, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Layers, Loader2, X } from "lucide-react";
 import { instrumentSans } from "@/fonts/menu";
 import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
@@ -31,6 +31,7 @@ import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import { rangoDePlan } from "@/lib/agenda-nueva/interacciones";
 import { CLASES_PORTAL_AGENDA } from "./ropa";
+import { textoDelAviso, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
 import s from "./agenda-nueva.module.css";
 
 /** Lo mínimo del bloqueo para avisar. Subconjunto del `BloqueoDTO`. */
@@ -58,6 +59,13 @@ export interface ConfirmarMovimientoProps {
   bloqueo?: BloqueoDelDestino | null;
   /** El día de destino, `YYYY-MM-DD` en la zona de la clínica. */
   diaDestino?: string;
+  /**
+   * WS1-T5 (grupo Salamanca) — el destino cae encima de otra cita o en la
+   * comida del doctor, y la clínica tiene la bandera `agenda-flexible`. Con
+   * él la ventana pregunta «¿Seguro?» ahí mismo y el botón dice «Sí,
+   * sobreagendar». Sin él (siempre, sin la bandera) sale como antes.
+   */
+  sobreagenda?: AvisoSobreagenda | null;
 }
 
 export function ConfirmarMovimiento({
@@ -67,6 +75,7 @@ export function ConfirmarMovimiento({
   onCancelar,
   bloqueo = null,
   diaDestino,
+  sobreagenda = null,
 }: ConfirmarMovimientoProps) {
   const { state } = useAgenda();
   // Solo para el aviso de bloqueo: el resto de esta ventana conserva sus
@@ -203,6 +212,23 @@ export function ConfirmarMovimiento({
             </div>
           )}
 
+          {/* ── El aviso de sobreagendar (WS1-T5) ── mismo marco que el del
+              bloqueo: icono + texto, el color solo refuerza. */}
+          {sobreagenda && (
+            <div className={s.moverBloqueo} role="alert">
+              <Layers size={17} strokeWidth={2.2} className={s.moverBloqueoIcono} aria-hidden />
+              <div className={s.moverBloqueoTextos}>
+                <span className={s.moverBloqueoTitulo}>{t("agenda.flexible.sobreagendar.titulo")}</span>
+                <span className={s.moverBloqueoNota}>
+                  {(() => {
+                    const { clave, vars, extras } = textoDelAviso(sobreagenda);
+                    return [t(clave, vars), ...extras.map((e) => t(e.clave, e.vars))].join(" ");
+                  })()}
+                </span>
+              </div>
+            </div>
+          )}
+
           {cambiaHora && (avisoClinica === "encendido" || avisoClinica === "apagado") && (
           <div style={{ margin: "14px 20px 0" }}>
             <CasillaAvisarPaciente
@@ -237,6 +263,8 @@ export function ConfirmarMovimiento({
                   <Loader2 size={16} className={s.girando} aria-hidden />
                   Moviendo…
                 </>
+              ) : sobreagenda ? (
+                t("agenda.flexible.sobreagendar.confirmar")
               ) : (
                 "Mover cita"
               )}

@@ -257,7 +257,8 @@ function accionDeAgenda(def: {
         propuesta.accion !== accion ||
         metodo !== permitida.metodo ||
         !id ||
-        (cuerpo && ("overrideReason" in cuerpo || "bloqueoConfirmado" in cuerpo))
+        // WS1-T5: y `sobreagendar`, por lo mismo — Sabina nunca sobreagenda.
+        (cuerpo && ("overrideReason" in cuerpo || "bloqueoConfirmado" in cuerpo || "sobreagendar" in cuerpo))
       ) {
         console.error("[sabina/agenda] propuesta guardada con una petición que no corresponde", { accion, metodo, ruta });
         return { ok: false, tipo: "error", frase: "Esa propuesta no se pudo ejecutar tal como estaba. No se hizo nada; pídemelo otra vez." };

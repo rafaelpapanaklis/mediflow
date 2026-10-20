@@ -11,6 +11,7 @@ import type {
   DoctorColumnDTO,
   ResourceDTO,
 } from "./types";
+import { AGENDA_FLEXIBLE_DTO_APAGADA } from "./types";
 import type { BloqueoDTO } from "@/lib/agenda-bloqueos/core";
 import type { ScheduleDay } from "./clinic-hours";
 
@@ -76,6 +77,7 @@ export function buildInitialState(payload: AgendaDayResponse, dayISO: string): A
     timezone: payload.timezone,
     bloqueos: payload.bloqueos ?? [],
     horariosDoctores: payload.horariosDoctores ?? {},
+    agendaFlexible: payload.agendaFlexible ?? AGENDA_FLEXIBLE_DTO_APAGADA,
     drag: {
       draggingId: null,
       ghostStartsAt: null,
@@ -117,6 +119,7 @@ export function agendaReducer(
         bloqueos: action.payload.bloqueos ?? state.bloqueos,
         // WS1-T2 · horario — mismo criterio: sin el campo, se conserva.
         horariosDoctores: action.payload.horariosDoctores ?? state.horariosDoctores,
+        agendaFlexible: action.payload.agendaFlexible ?? state.agendaFlexible,
         isLoading: false,
         error: null,
       };

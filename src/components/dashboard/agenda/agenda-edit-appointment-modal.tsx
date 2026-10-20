@@ -15,6 +15,8 @@ import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
 import { cambiaLaHoraDeLaCita, campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
 import { CasillaAvisarPaciente, useAvisoAlReprogramar } from "./aviso-al-reprogramar";
 import { useBloqueosDeDia } from "@/components/dashboard/bloqueos/usar-bloqueos-dia";
+import { avisoDesdeRechazo, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
+import { ConfirmarSobreagenda } from "@/components/dashboard/agenda-nueva/confirmar-sobreagenda";
 import {
   ConfirmarBloqueo,
   type BloqueoParaConfirmar,
@@ -149,6 +151,15 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
    * no sea `null` hay una confirmación en pantalla y NADA se ha guardado.
    */
   const [bloqueoPendiente, setBloqueoPendiente] = useState<BloqueoParaConfirmar | null>(null);
+  /**
+   * WS1-T5 (grupo Salamanca) — el «¿Seguro?» de sobreagendar al cambiar la
+   * hora o la DURACIÓN. Solo si el servidor contestó 409 con `sobreagendable`
+   * (bandera `agenda-flexible`). Lleva el bloqueo ya confirmado, si lo hubo.
+   */
+  const [sobreagendaPendiente, setSobreagendaPendiente] = useState<{
+    aviso: AvisoSobreagenda;
+    bloqueo: BloqueoParaConfirmar | null;
+  } | null>(null);
 
   /**
    * Los bloqueos del día ELEGIDO en el formulario, no los del día de la cita:
@@ -199,11 +210,12 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
     // también a esta ventana: si no, una sola tecla se llevaría por delante
     // todo lo que la persona acababa de escribir.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !bloqueoPendiente) onClose();
+      // WS1-T5: lo mismo con el «¿Seguro?» de sobreagendar.
+      if (e.key === "Escape" && !bloqueoPendiente && !sobreagendaPendiente) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose, bloqueoPendiente]);
+  }, [isOpen, onClose, bloqueoPendiente, sobreagendaPendiente]);
 
   if (!isOpen || !appt || !form) return null;
 
@@ -235,7 +247,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
    * `bloqueoConfirmado` lo pasa la ventana de confirmación al aceptar; en la
    * primera llamada es `null`.
    */
-  async function guardar(bloqueoConfirmado: BloqueoParaConfirmar | null) {
+  async function guardar(bloqueoConfirmado: BloqueoParaConfirmar | null, sobreagendar: AvisoSobreagenda | null = null) {
     if (!appt || !form || submitting) return;
     setConflict(null);
 
@@ -295,6 +307,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
         ...(bloqueoConfirmado ? { bloqueoConfirmado: true } : {}),
         // ws1-t1 (F14): solo `notifyPatient: false`, y solo si la casilla se ofreció y la desmarcaron.
         ...campoDelAviso(avisoClinica, cambiaLaHoraDeLaCita(appt.startsAt, startsAtIso), avisar),
+        // WS1-T5 — solo tras «Sí, sobreagendar».
+        ...(sobreagendar ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId } : {}),
       });
       if (prestado) prestado.onGuardada(updated);
       else agenda!.dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
@@ -304,8 +318,13 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       onClose();
     } catch (err) {
       const e = err as ApiError & { message?: string };
-      // overlap → mostrar conflict warning con copy descriptivo (doctor vs sillón vs ambos).
-      if (e?.error === "appointment_overlap") {
+      // WS1-T5 — con la bandera, el equipo puede sobreagendar: se pregunta
+      // ahí mismo (nada se guardó) en vez de pedir el motivo de administración.
+      // Ya confirmado y el servidor vuelve a preguntar = hay OTRA cita encima: se pregunta con ésa.
+      const aviso = avisoDesdeRechazo(e, { doctorId: form.doctorId, resourceId: form.resourceId || null }, state.timezone);
+      if (aviso && !(sobreagendar && aviso.citaId === sobreagendar.citaId)) {
+        setSobreagendaPendiente({ aviso, bloqueo: bloqueoConfirmado });
+      } else if (e?.error === "appointment_overlap") {
         setConflict({
           clave: claveDelHueco(form),
           texto: describeOverlapConflict(e.conflictingAppointment, {
@@ -556,6 +575,18 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
           void guardar(confirmado);
         }}
         onCancelar={() => setBloqueoPendiente(null)}
+      />
+    )}
+    {sobreagendaPendiente && (
+      <ConfirmarSobreagenda
+        aviso={sobreagendaPendiente.aviso}
+        guardando={submitting}
+        onConfirmar={() => {
+          const { aviso, bloqueo } = sobreagendaPendiente;
+          setSobreagendaPendiente(null);
+          void guardar(bloqueo, aviso);
+        }}
+        onCancelar={() => setSobreagendaPendiente(null)}
       />
     )}
     </>

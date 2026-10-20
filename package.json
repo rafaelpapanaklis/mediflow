@@ -64,6 +64,7 @@
     "test:agenda-metrics": "tsx --test src/lib/agenda/__tests__/slot-metrics.test.ts",
     "test:xrays-finding-regions": "tsx --test src/app/dashboard/xrays/__tests__/finding-regions.test.ts",
     "test:hover-slot": "tsx --test src/lib/agenda/__tests__/hover-slot.test.ts",
+    "test:salamanca-agenda": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/agenda/__tests__/agenda-flexible.test.ts src/components/dashboard/agenda-nueva/__tests__/agenda-flexible-pintada.test.tsx src/app/api/appointments/__tests__/sobreagendar.test.ts src/lib/agenda/__tests__/color-procedimiento-catalogo.test.ts src/components/dashboard/horario-doctor/__tests__/comida.test.ts src/lib/branches/__tests__/copia-sede.test.ts",
     "test:agenda-legend": "tsx --test src/lib/agenda/__tests__/doctor-legend.test.ts",
     "test:campos-nom004": "tsx --test src/lib/__tests__/campos-nom004.test.ts",
     "test:orto-acceso": "tsx --test src/lib/orthodontics/__tests__/acceso-doctor.test.ts",

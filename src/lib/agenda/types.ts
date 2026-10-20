@@ -4,6 +4,8 @@ import type {
 } from "@/lib/home/types";
 import type { ScheduleDay } from "./clinic-hours";
 import type { BloqueoDTO } from "@/lib/agenda-bloqueos/core";
+import type { ModoColorCitas } from "./agenda-flexible";
+import type { ProcedimientoConColor } from "./color-procedimiento";
 
 export type { AppointmentStatus } from "@/lib/home/types";
 
@@ -168,6 +170,25 @@ export interface WaitlistEntryDTO {
   createdAt: string;
 }
 
+/**
+ * WS1-T5 (grupo Salamanca) — lo que la agenda necesita de la bandera
+ * `agenda-flexible`: si está encendida (sobreagendar con aviso, comida en
+ * gris), cómo se colorean las citas y, con «Procedimiento», el catálogo
+ * activo con su color ya resuelto para casar el motivo de cada cita.
+ */
+export interface AgendaFlexibleDTO {
+  encendida: boolean;
+  modoColor: ModoColorCitas;
+  /** Vacío salvo con `modoColor: "procedimiento"`. */
+  procedimientos: ProcedimientoConColor[];
+}
+
+export const AGENDA_FLEXIBLE_DTO_APAGADA: AgendaFlexibleDTO = {
+  encendida: false,
+  modoColor: "doctor",
+  procedimientos: [],
+};
+
 export interface AgendaDayResponse {
   range: { from: string; to: string };
   timezone: string;
@@ -227,6 +248,12 @@ export interface AgendaDayResponse {
    * cerrado o de una hora fuera de horario ANTES de guardar. null = la clínica no tiene horario configurado.
    */
   horarioDelDia?: { abierto: boolean; aperturaMin: number | null; cierreMin: number | null } | null;
+  /**
+   * WS1-T5 — la bandera `agenda-flexible` de la clínica. Solo la manda la
+   * página (no depende del rango); sin él, la que ya tenga el estado, y si no
+   * hay ninguna, apagada.
+   */
+  agendaFlexible?: AgendaFlexibleDTO;
 }
 
 export interface CreateAppointmentInput {
@@ -254,6 +281,15 @@ export interface CreateAppointmentInput {
    */
   bloqueoConfirmado?: boolean;
   notifyPatient?: boolean;
+  /**
+   * WS1-T5 — «YA CONFIRMÉ QUE ESTOY SOBREAGENDANDO». Solo vale con la bandera
+   * `agenda-flexible` de la clínica; sin ella el servidor lo ignora y el
+   * choque da el 409 de siempre. Un booleano: el `overrideReason` lo escribe
+   * el servidor (`MARCA_SOBREAGENDADA`). Sabina nunca lo manda.
+   */
+  sobreagendar?: boolean;
+  /** WS1-T5 — la cita que se le enseñó a la persona (`null` = solo la comida). Ver `confirmacionValida`. */
+  sobreagendarCita?: string | null;
 }
 
 export interface UpdateAppointmentInput {
@@ -266,10 +302,18 @@ export interface UpdateAppointmentInput {
   /** WS1-T3 — ver `CreateAppointmentInput.bloqueoConfirmado`. */
   bloqueoConfirmado?: boolean;
   notifyPatient?: boolean;
+  /** WS1-T5 — ver `CreateAppointmentInput.sobreagendar`. */
+  sobreagendar?: boolean;
+  sobreagendarCita?: string | null;
 }
 
 export interface AppointmentConflictError {
   error: "appointment_overlap";
+  /**
+   * WS1-T5 — `true` = la clínica tiene la bandera `agenda-flexible` y quien
+   * pidió puede confirmar y reenviar con `sobreagendar: true`.
+   */
+  sobreagendable?: boolean;
   conflictingAppointment: {
     id: string;
     patientName: string;
@@ -371,6 +415,8 @@ export interface AgendaStoreState {
    * `AgendaDayResponse.horariosDoctores`. Vacío = nadie tiene horario propio.
    */
   horariosDoctores: Record<string, ScheduleDay[]>;
+  /** WS1-T5 — ver `AgendaDayResponse.agendaFlexible`. Apagada = la agenda de siempre. */
+  agendaFlexible: AgendaFlexibleDTO;
 
   drag: AgendaDragState;
   waitlistOpen: boolean;

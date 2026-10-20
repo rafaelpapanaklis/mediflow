@@ -39,6 +39,9 @@ import {
   ventanaDeRejilla,
 } from "@/lib/agenda-nueva/geometria";
 import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
+import { useColoresDeCitas, useHorariosFlexibles } from "./usar-agenda-flexible";
+import { comidaDelDoctorEnFecha, horaDeMinutos } from "@/lib/horario-doctor/core";
+import { useT } from "@/i18n/i18n-provider";
 import { carrilesConHuerfanos, horarioDelDia } from "@/lib/agenda-nueva/ocupacion";
 import { citaContada } from "@/lib/agenda-nueva/estados";
 import { diasDeLaSemana, type DiaSemana } from "@/lib/agenda-nueva/calendario";
@@ -95,6 +98,10 @@ export function VistaSemana(props: PropsVistaSemana) {
   const citas = useCitasDeLaSemana(ahora);
   // Los bloqueos del periodo, del mismo payload que las citas (ws1-t2).
   const bloqueos = useBloqueosAgenda();
+  // WS1-T5 (grupo Salamanca) — la hora de comida, en el carril de su doctor.
+  // `null` sin la bandera: la semana se pinta como siempre.
+  const horariosFlexibles = useHorariosFlexibles();
+  const t = useT();
 
   const irADia = (dayISO: string) => {
     setDay(dayISO);
@@ -163,6 +170,28 @@ export function VistaSemana(props: PropsVistaSemana) {
 
     if (carriles.length > maxCarriles) maxCarriles = carriles.length;
 
+    // WS1-T5 — la comida de cada doctor que tiene carril este día.
+    const comidas: NonNullable<ColumnaCuadricula["comidas"]> = [];
+    if (horariosFlexibles) {
+      const total = Math.max(1, carriles.length);
+      const ancho = 100 / total;
+      carriles.forEach((carril, i) => {
+        const c = comidaDelDoctorEnFecha(horariosFlexibles, carril.id, dia.iso, state.timezone);
+        if (!c) return;
+        comidas.push({
+          clave: `comida:${carril.id}`,
+          desdeMin: c.abre,
+          hastaMin: c.cierra,
+          ...(total > 1 ? { left: `calc(${i * ancho}% + 2px)`, width: `calc(${ancho}% - 4px)` } : {}),
+          titulo: t("agenda.flexible.comida.titulo", {
+            doctor: carril.nombre,
+            desde: horaDeMinutos(c.abre),
+            hasta: horaDeMinutos(c.cierra),
+          }),
+        });
+      });
+    }
+
     // La sombra de la cita que se arrastra, si el puntero está sobre ESTE día.
     // Va en el carril de su doctor: en la semana, soltar cambia el día y la
     // hora, nunca el doctor (igual que la semana de siempre).
@@ -209,6 +238,7 @@ export function VistaSemana(props: PropsVistaSemana) {
         : undefined,
       carriles: carriles.length,
       bloqueos: bandas.length > 0 ? bandas : undefined,
+      comidas: comidas.length > 0 ? comidas : undefined,
       superpuesto: sombra,
       encabezado: (
         <CabeceraDia
@@ -446,6 +476,8 @@ function ColumnaDeDia(props: {
 function useCitasDeLaSemana(ahora: Date): CitaVista[] {
   const { state } = useAgenda();
   const { citaVisible } = useAgendaNueva();
+  // WS1-T5 — con «Colorear por: Procedimiento», el color de cada cita.
+  const colores = useColoresDeCitas();
 
   return useMemo(
     () => {
@@ -454,6 +486,7 @@ function useCitasDeLaSemana(ahora: Date): CitaVista[] {
         doctores: state.doctors,
         unidades: state.resources,
         ahora,
+        colores,
       };
       return state.appointments
         .filter((a) => citaContada(a.status))
@@ -464,6 +497,6 @@ function useCitasDeLaSemana(ahora: Date): CitaVista[] {
     // propósito: solo alimenta los minutos de espera del detalle, que se
     // refrescan con el resto cuando llegan citas nuevas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.appointments, state.doctors, state.resources, state.timezone, citaVisible],
+    [state.appointments, state.doctors, state.resources, state.timezone, citaVisible, colores],
   );
 }

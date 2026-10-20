@@ -38,6 +38,7 @@ import { EditorSemana } from "./editor-semana";
 import {
   algunDiaAbierto,
   cuerpoPut,
+  hayComidaInvalida,
   hayRangoInvalido,
   mismoHorario,
   parseHorarioDoctor,
@@ -87,6 +88,8 @@ export function PanelHorarioDoctor({
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [hereda, setHereda] = useState(true);
+  /** WS1-T5: ¿la clínica tiene agenda flexible? Si sí, hay comida por día. */
+  const [comida, setComida] = useState(false);
   /** El horario propio tal y como está GUARDADO. `null` = hereda. */
   const [guardado, setGuardado] = useState<Dia[] | null>(null);
   /** Lo que se está editando. `null` = no se edita nada (heredando, sin borrador). */
@@ -122,6 +125,7 @@ export function PanelHorarioDoctor({
           return;
         }
         setHereda(dto.hereda);
+        setComida(dto.comida);
         setGuardado(dto.hereda ? null : dto.horario);
         setBorrador(dto.hereda ? null : dto.horario);
         setCarga("listo");
@@ -141,7 +145,7 @@ export function PanelHorarioDoctor({
 
   const resumenClinica = useMemo(() => (clinica ? resumenSemana(clinica, t) : null), [clinica, t]);
 
-  const invalido = borrador ? hayRangoInvalido(borrador) : false;
+  const invalido = borrador ? hayRangoInvalido(borrador) || (comida && hayComidaInvalida(borrador)) : false;
   const sucio = borrador !== null && (hereda || guardado === null || !mismoHorario(borrador, guardado));
   const idBase = `horario-${modo}-${doctorId}`;
   // En la ventana de Equipo el cuerpo lleva el relleno de la ventana y el pie
@@ -161,7 +165,7 @@ export function PanelHorarioDoctor({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(cuerpoPut(borrador)),
+        body: JSON.stringify(cuerpoPut(borrador, comida)),
       });
       const datos = await res.json().catch(() => null);
       if (!res.ok) {
@@ -175,6 +179,9 @@ export function PanelHorarioDoctor({
       const vuelta =
         Array.isArray(devuelto) && devuelto.length > 0 ? semanaCompleta(devuelto) : semanaCompleta(borrador);
       setHereda(false);
+      if (typeof (datos as { comida?: unknown } | null)?.comida === "boolean") {
+        setComida((datos as { comida: boolean }).comida);
+      }
       setGuardado(vuelta);
       setBorrador(vuelta);
       toast.success(t("settings.horarioDoctor.guardadoToast"));
@@ -343,6 +350,7 @@ export function PanelHorarioDoctor({
               onCambio={cambiar}
               deshabilitado={ocupado !== null}
               idBase={idBase}
+              comida={comida}
             />
             {sinDias && (
               <p className={`${s.nota} ${s.notaAviso}`}>

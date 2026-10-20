@@ -7,6 +7,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende, doctorNoAtiendeSlot, ventanaDelDoctor } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { apartadoVencido, sinApartadoVencido } from "@/lib/agenda/apartado";
+import { esSobreagendada, ocupaElHueco } from "@/lib/agenda/agenda-flexible";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { HECHOS_DENTRO_DEL_CONTROL, ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures";
@@ -73,14 +74,17 @@ async function hasConflict(
       clinicId,
       doctorId,
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      overrideReason: null,
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
       ...(excludeId ? { id: { not: excludeId } } : {}),
       // WS1-T5 — una cita apartada cuyo anticipo venció ya no ocupa el hueco.
       // Al crear encima, el trigger appt_liberar_apartado_vencido la cancela
       // antes de que la constraint mire.
-      AND: [sinApartadoVencido()],
+      // WS1-T5 (Salamanca) — `ocupaElHueco` en vez de `overrideReason: null`:
+      // una cita SOBREAGENDADA por el equipo también ocupa (la constraint no
+      // la ve; si la original se cancela, el bot la pisaría). El bot nunca
+      // sobreagenda.
+      AND: [sinApartadoVencido(), ocupaElHueco()],
     },
     select: { id: true },
   });
@@ -123,11 +127,11 @@ async function citasEnRecursos(
       clinicId,
       resourceId: { in: resourceIds },
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      overrideReason: null,
       startsAt: { lt: hasta },
       endsAt: { gt: desde },
       ...(excludeId ? { id: { not: excludeId } } : {}),
-      AND: [sinApartadoVencido()],
+      // WS1-T5 (Salamanca) — la sobreagendada también ocupa el sillón.
+      AND: [sinApartadoVencido(), ocupaElHueco()],
     },
     select: { resourceId: true, startsAt: true, endsAt: true },
   });
@@ -508,6 +512,8 @@ export async function rescheduleBotAppointment(params: {
       id: true,
       doctorId: true,
       resourceId: true,
+      // WS1-T5 — para quitarle la marca a una sobreagendada que se mueve.
+      overrideReason: true,
       startsAt: true,
       endsAt: true,
       status: true,
@@ -573,7 +579,18 @@ export async function rescheduleBotAppointment(params: {
     await prisma.$transaction(async (tx) => {
       await tx.appointment.update({
         where: { id: existing.id },
-        data: { startsAt, endsAt, status: "SCHEDULED", requiresValidation: true, ...(cambioDeSillon ?? {}) },
+        data: {
+          startsAt,
+          endsAt,
+          status: "SCHEDULED",
+          requiresValidation: true,
+          ...(cambioDeSillon ?? {}),
+          // WS1-T5 — una cita sobreagendada que el bot lleva a un hueco libre
+          // vuelve a ser normal: la constraint vuelve a verla.
+          ...(esSobreagendada(existing.overrideReason)
+            ? { overrideReason: null, overriddenBy: null, overriddenAt: null }
+            : {}),
+        },
       });
       if (existing.startsAt.getTime() !== startsAt.getTime()) {
         await applyReminderReschedule(tx, {

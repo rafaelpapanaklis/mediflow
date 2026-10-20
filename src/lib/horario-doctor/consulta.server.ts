@@ -26,13 +26,14 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { agendaFlexibleEncendida, type BanderasDb } from "@/lib/agenda/agenda-flexible.server";
 import type { DiaHorario, HorariosDeDoctores } from "./core";
 
 /**
  * La rendija de lectura, para que Sabina pase SU cliente y las pruebas uno de
  * mentira. Solo lectura, igual que `BloqueosDb`.
  */
-export interface HorariosDb {
+export interface HorariosDb extends BanderasDb {
   doctorSchedule?: { findMany(args: any): Promise<any[]> };
 }
 
@@ -69,10 +70,23 @@ export async function leerHorariosDeDoctores(
   // «findMany of undefined» que no dice nada.
   if (typeof db?.doctorSchedule?.findMany !== "function") return mapa;
 
+  // WS1-T5 — la hora de comida solo se lee con la bandera `agenda-flexible`
+  // de ESTA clínica Y con las columnas ya creadas (sql/salamanca-agenda.sql).
+  // Sin las dos cosas el `select` es el de siempre: pedir una columna que no
+  // existe daría P2022 y tumbaría a la vez el bot, la web y la agenda.
+  const conComida = await comidaActiva(clinicId, opciones.db);
+
   try {
     const filas = await db.doctorSchedule.findMany({
       where: { clinicId, ...(ids ? { doctorId: { in: ids } } : {}) },
-      select: { doctorId: true, dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
+      select: {
+        doctorId: true,
+        dayOfWeek: true,
+        enabled: true,
+        openTime: true,
+        closeTime: true,
+        ...(conComida ? { lunchStart: true, lunchEnd: true } : {}),
+      },
       orderBy: [{ doctorId: "asc" }, { dayOfWeek: "asc" }],
     });
     for (const f of filas) {
@@ -83,6 +97,10 @@ export async function leerHorariosDeDoctores(
         openTime: String(f.openTime ?? ""),
         closeTime: String(f.closeTime ?? ""),
       };
+      if (conComida && typeof f.lunchStart === "string" && typeof f.lunchEnd === "string") {
+        dia.lunchStart = f.lunchStart;
+        dia.lunchEnd = f.lunchEnd;
+      }
       const lista = mapa.get(doctorId);
       if (lista) lista.push(dia);
       else mapa.set(doctorId, [dia]);
@@ -120,6 +138,41 @@ export function horariosComoObjeto(
     out[doctorId] = [...filas].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
   });
   return out;
+}
+
+// ── La hora de comida (WS1-T5) ─────────────────────────────────────────
+
+const RECORDAR_AUSENCIA_MS = 10 * 60 * 1000;
+const CLAVE_COLUMNAS = Symbol.for("dalecontrol.horarioDoctor.columnasComida");
+type Sonda = { existe: boolean; at: number };
+const memoria = globalThis as unknown as Record<symbol, Sonda | undefined>;
+
+/**
+ * ¿Existen ya `doctor_schedules."lunchStart"/"lunchEnd"`? Por
+ * `information_schema` (nunca falla) y recordado en `globalThis`: una
+ * respuesta «no» se vuelve a preguntar a los 10 min, una «sí» ya no.
+ */
+export async function columnasComidaExisten(forzar = false): Promise<boolean> {
+  const s = memoria[CLAVE_COLUMNAS];
+  if (!forzar && s && (s.existe || Date.now() - s.at < RECORDAR_AUSENCIA_MS)) return s.existe;
+  try {
+    const filas = await prisma.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'doctor_schedules'
+         AND column_name IN ('lunchStart', 'lunchEnd')`;
+    const existe = Number(filas[0]?.n ?? 0) === 2;
+    memoria[CLAVE_COLUMNAS] = { existe, at: Date.now() };
+    return existe;
+  } catch (e) {
+    console.warn("[horario-doctor] no se pudo comprobar las columnas de la comida:", e);
+    return false;
+  }
+}
+
+/** Bandera de la clínica encendida Y columnas creadas. Ante cualquier duda, `false`. */
+export async function comidaActiva(clinicId: string, db?: BanderasDb): Promise<boolean> {
+  if (!(await agendaFlexibleEncendida(clinicId, db ? { db } : {}))) return false;
+  return columnasComidaExisten();
 }
 
 let yaAvisado = false;

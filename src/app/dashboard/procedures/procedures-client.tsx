@@ -8,6 +8,7 @@ import { mensajeDeQuitar, separarActivosYQuitados, textoConfirmarQuitar } from "
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT, useLocale } from "@/i18n/i18n-provider";
 import { procedimientoRepetido, textoRepetido } from "@/lib/procedures/duplicado";
+import { CLAVES_COLOR_PROCEDIMIENTO, claveDeProcedimiento, cssDeColor, type ClaveColorProcedimiento } from "@/lib/agenda/color-procedimiento";
 import styles from "./procedures.module.css";
 import { gastoDe, margenDe } from "./margen";
 import { ORTHO_CATALOG_CATEGORY } from "@/lib/orthodontics/catalog-procedures-constantes";
@@ -64,6 +65,10 @@ interface Props {
   /** «Incluido / con costo aparte» de cada procedimiento de ortodoncia (id → valor). */
   /** ws1-t3 — id → «Se agenda por WhatsApp». */
   botAgendables?: Record<string, boolean>;
+  /** Salamanca — bandera `agenda-flexible` de la clínica: sin ella no hay nada de color. */
+  agendaFlexible?: boolean;
+  /** Salamanca — id → clave de color elegida en la agenda. */
+  coloresAgenda?: Record<string, ClaveColorProcedimiento>;
   ortoIncluidos?: Record<string, boolean | null>;
   /** Clave SAT e IVA del CFDI guardados de cada procedimiento (id → datos). */
   fiscal?: Record<string, { claveSat: string | null; ivaCfdi: "exento" | "iva16" | null }>;
@@ -99,6 +104,9 @@ interface FormState {
   fiscal: FiscalDelFormulario;
   /** ws1-t3 — «Se agenda por WhatsApp»: el bot lo ofrece al agendar. */
   botAgendable: boolean;
+  /** Salamanca — color elegido en la agenda (null = el de siempre); solo viaja si `agendaColorTocado`. */
+  agendaColor: ClaveColorProcedimiento | null;
+  agendaColorTocado: boolean;
 }
 
 const EMPTY_FORM: FormState = {
@@ -112,18 +120,21 @@ const EMPTY_FORM: FormState = {
   orthoIncluded: null,
   fiscal: { claveSat: "", ivaCfdi: "" },
   botAgendable: false,
+  agendaColor: null,
+  agendaColorTocado: false,
 };
 
 /** Llave del grupo de inactivos (no es una categoría real). */
 const GRUPO_INACTIVOS = "__inactivos";
 
-export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {}, fiscal: fiscalInicial = {}, fiscalDisponible = false, botAgendables: botAgendablesIniciales = {} }: Props) {
+export function ProceduresClient({ initialProcedures, rediseno = false, costoReceta: costoRecetaInicial = {}, moduloOrtodoncia = false, ortoIncluidos: ortoIncluidosIniciales = {}, fiscal: fiscalInicial = {}, fiscalDisponible = false, botAgendables: botAgendablesIniciales = {}, agendaFlexible = false, coloresAgenda: coloresAgendaIniciales = {} }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
   const locale = useLocale();
   const [procedures, setProcedures] = useState<Procedure[]>(initialProcedures);
   const [botAgendablePorId, setBotAgendablePorId] = useState<Record<string, boolean>>(botAgendablesIniciales);
+  const [coloresPorId, setColoresPorId] = useState<Record<string, ClaveColorProcedimiento>>(coloresAgendaIniciales);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Procedure | null>(null);
@@ -179,6 +190,8 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
       orthoIncluded: ortoIncluidos[p.id] ?? null,
       fiscal: { claveSat: fiscalPorId[p.id]?.claveSat ?? "", ivaCfdi: fiscalPorId[p.id]?.ivaCfdi ?? "" },
       botAgendable: botAgendablePorId[p.id] === true,
+      agendaColor: claveDeProcedimiento({ id: p.id, color: coloresPorId[p.id] }),
+      agendaColorTocado: false,
     });
     setModalOpen(true);
   }
@@ -239,6 +252,7 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
         description: form.description.trim() || null,
         isActive: form.isActive,
         botAgendable: form.botAgendable,
+        ...(agendaFlexible && form.agendaColorTocado ? { agendaColor: form.agendaColor } : {}),
         ...(form.category === ORTHO_CATALOG_CATEGORY && !esControlEditado ? { orthoIncludedInTreatment: form.orthoIncluded } : {}),
         ...(fiscalDisponible ? fiscalParaGuardar(form.fiscal) : {}),
       };
@@ -253,7 +267,11 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error ?? t("pages.procedures.updateError"));
         }
-        const updated: Procedure & { fiscalSinGuardar?: boolean; botAgendableSinGuardar?: boolean } = await res.json();
+        const updated: Procedure & { fiscalSinGuardar?: boolean; botAgendableSinGuardar?: boolean; agendaColorSinGuardar?: boolean } = await res.json();
+        if (agendaFlexible && form.agendaColorTocado) {
+          if (updated.agendaColorSinGuardar) toast.error(t("procedures.agendaColor.sinGuardar"));
+          else setColoresPorId((prev) => { const n = { ...prev }; if (form.agendaColor) n[updated.id] = form.agendaColor; else delete n[updated.id]; return n; });
+        }
         setBotAgendablePorId((prev) => ({ ...prev, [updated.id]: form.botAgendable && !updated.botAgendableSinGuardar }));
         if (updated.botAgendableSinGuardar) toast.error("«Se agenda por WhatsApp» no se guardó: falta aplicar sql/ws1-t3-bot-servicios-agendables.sql.");
         if (fiscalDisponible) setFiscalPorId((prev) => ({ ...prev, [updated.id]: fiscalParaGuardar(form.fiscal) }));
@@ -276,7 +294,11 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error ?? t("pages.procedures.createError"));
         }
-        const created: Procedure & { fiscalSinGuardar?: boolean; botAgendableSinGuardar?: boolean } = await res.json();
+        const created: Procedure & { fiscalSinGuardar?: boolean; botAgendableSinGuardar?: boolean; agendaColorSinGuardar?: boolean } = await res.json();
+        if (agendaFlexible && form.agendaColorTocado) {
+          if (created.agendaColorSinGuardar) toast.error(t("procedures.agendaColor.sinGuardar"));
+          else setColoresPorId((prev) => { const n = { ...prev }; if (form.agendaColor) n[created.id] = form.agendaColor; else delete n[created.id]; return n; });
+        }
         setBotAgendablePorId((prev) => ({ ...prev, [created.id]: form.botAgendable && !created.botAgendableSinGuardar }));
         if (created.botAgendableSinGuardar) toast.error("«Se agenda por WhatsApp» no se guardó: falta aplicar sql/ws1-t3-bot-servicios-agendables.sql.");
         if (fiscalDisponible) setFiscalPorId((prev) => ({ ...prev, [created.id]: fiscalParaGuardar(form.fiscal) }));
@@ -472,6 +494,12 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
                       >
                         <td className={rediseno ? undefined : "px-5 py-3"}>
                           <div className={rediseno ? styles.procName : "font-semibold text-foreground"}>
+                            {agendaFlexible && (
+                              <span
+                                aria-hidden="true"
+                                style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", marginRight: 8, background: cssDeColor(claveDeProcedimiento({ id: p.id, color: coloresPorId[p.id] })) }}
+                              />
+                            )}
                             {p.name}
                           </div>
                           {p.category === ORTHO_CATALOG_CATEGORY && etiquetaDeCobro(ortoIncluidos[p.id]) ? (
@@ -813,6 +841,47 @@ export function ProceduresClient({ initialProcedures, rediseno = false, costoRec
               <p className={rediseno ? styles.fieldHint : "text-xs text-muted-foreground"}>
                 Marca los procedimientos que el bot ofrecerá al agendar (junto con las opciones generales que elijas en Configurar bot).
               </p>
+
+              {agendaFlexible && (
+                <div>
+                  <span id="agenda-color-label" className={rediseno ? styles.label : "block text-sm font-semibold text-muted-foreground mb-1.5"}>
+                    {t("procedures.agendaColor.label")}
+                  </span>
+                  <div role="radiogroup" aria-labelledby="agenda-color-label" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {CLAVES_COLOR_PROCEDIMIENTO.map((clave) => {
+                      const elegido = form.agendaColor === clave;
+                      return (
+                        <button
+                          key={clave}
+                          type="button"
+                          role="radio"
+                          aria-checked={elegido}
+                          aria-label={t(`procedures.agendaColor.colores.${clave}`)}
+                          title={t(`procedures.agendaColor.colores.${clave}`)}
+                          onClick={() => setForm({ ...form, agendaColor: clave, agendaColorTocado: true })}
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: "50%",
+                            border: "2px solid transparent",
+                            background: cssDeColor(clave),
+                            cursor: "pointer",
+                            color: "Canvas",
+                            fontSize: 14,
+                            lineHeight: 1,
+                            boxShadow: elegido ? "0 0 0 2px Canvas, 0 0 0 4px CanvasText" : "none",
+                          }}
+                        >
+                          {elegido ? "✓" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className={rediseno ? styles.fieldHint : "text-xs text-muted-foreground"}>
+                    {t("procedures.agendaColor.hint")}
+                  </p>
+                </div>
+              )}
               </div>
 
               <div className={rediseno ? styles.modalFoot : "flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0"}>
