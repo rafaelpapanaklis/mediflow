@@ -110,7 +110,7 @@ async function send(url: string, init: RequestInit, opts: WriteOptions | undefin
   if (!res.ok) throw await httpError(res, fallback);
 }
 
-export const SESION_VENCIDA = "Tu sesión venció, vuelve a entrar. Lo que marcaste sigue pendiente en esta pestaña (no la cierres) y se guardará al volver.";
+export const SESION_VENCIDA = "Tu sesión venció, vuelve a entrar. Lo que marcaste sigue pendiente en esta pestaña (no la cierres); al volver podrás guardarlo.";
 
 /** Códigos de la API del odontograma → lo que entiende la clínica. */
 const MENSAJES: Record<string, string> = {

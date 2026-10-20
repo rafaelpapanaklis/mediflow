@@ -36,6 +36,12 @@
  *  - V-O3: con `?quien=1` en 401 o con el reto de dos pasos, el aviso lo dice
  *    (no «sin conexión») y lo pendiente se queda.
  *  - V-O5, V-O6 y V-O7.
+ * Última verificación (t8):
+ *  - V2-O1: la relectura al volver a la pestaña no cambia el dueño de la
+ *    cola a la cookie de otra pestaña (otro usuario u otra sede vinculada):
+ *    se aparta como «otra sesión», ni se firma por otro ni se descarta.
+ *  - V2-O2: el aviso de 15 min también dice lo del «Limpiar todo» descartado.
+ *  - SESION_VENCIDA: «al volver podrás guardarlo».
  * t4 O2/O3: rótulo «Incisal» y errores en español.
  *
  * Los eventos de la página son `EventTarget`/`Event` reales de Node.
@@ -851,8 +857,8 @@ test("t8 V-O6: un 200 que no es nuestro (portal de un Wi-Fi de hotel) es «no se
 test("t8 V-O5: sin nada pendiente, la cola acepta la sesión nueva; con algo pendiente, se queda con la de quien lo marcó", async () => {
   const srv = server();
   const q = new SaveQueue({ send: srv.send, whoAmI: async () => DR_B, ...timers });
-  q.setOwner(DRA_A);
-  q.setOwner(DR_B); // el Dr. B vuelve al paciente en esta pestaña sin recargar
+  q.setOwner(DRA_A, { pagina: true });
+  q.setOwner(DR_B, { pagina: true }); // el Dr. B vuelve al paciente en esta pestaña sin recargar (la página se pinta con su sesión)
   assert.deepEqual(q.getOwner(), DR_B);
   q.enqueue(put(16, "O", "caries"));
   await tick();
@@ -861,7 +867,7 @@ test("t8 V-O5: sin nada pendiente, la cola acepta la sesión nueva; con algo pen
   srv.offline();
   q.enqueue(put(17, "O", "caries"));
   await tick();
-  q.setOwner(DRA_A);
+  q.setOwner(DRA_A, { pagina: true });
   assert.deepEqual(q.getOwner(), DR_B);
 });
 
@@ -896,4 +902,137 @@ test("t8 V-O7: con algo apartado y otra cosa esperando la red, «Descartar» no 
   assert.equal(q.getStatus().state, "error");
   renderPendingNotice(doc, () => [q]);
   assert.equal(aviso.children[2].style.display, "");
+});
+
+/* ======================= última verificación (t8) ======================= */
+
+/**
+ * El navegador con UNA cookie para todas las pestañas, y el servidor con sus
+ * reglas: 409 si la cabecera de la cola no es la sesión de la cookie (N4-O2);
+ * 404 `patient_not_found` si la sede activa no es la del paciente (la lectura
+ * sí entra por las sedes vinculadas).
+ */
+function navegadorConCookie(cookie: SessionInfo) {
+  const sedeDelPaciente = "cli_1";
+  const filas = new Map<string, string>(); // fila → quién la firmó
+  const estado = { cookie };
+  return {
+    filas, estado,
+    leer: async () => ({ records: {}, entries: [], clinicId: estado.cookie.clinicId, userId: estado.cookie.userId }),
+    whoAmI: async () => ({ ...estado.cookie }),
+    send: (op: SaveOp, o: { keepalive: boolean; sesion?: SessionInfo | null }) => {
+      const c = estado.cookie;
+      // (el adaptador real traduce el 409 al aviso de «otra sesión»)
+      if (o.sesion && (o.sesion.userId !== c.userId || o.sesion.clinicId !== c.clinicId)) return Promise.reject(Object.assign(new HttpErr(409, "otra_sesion"), { message: OTRA_SESION }));
+      if (c.clinicId !== sedeDelPaciente) return Promise.reject(new HttpErr(404, "patient_not_found"));
+      if (op.kind === "put") filas.set(`${op.toothNumber}:${op.surface ?? "-"}:${op.conditionId}`, c.userId);
+      return Promise.resolve();
+    },
+  };
+}
+
+test("t8 V2-O1: al volver a la pestaña, la relectura NO pasa la cola a la sesión de otra pestaña — (a) otro usuario: no se firma por B", async () => {
+  const nav = navegadorConCookie(DRA_A);
+  const q = new SaveQueue({ send: nav.send, whoAmI: nav.whoAmI, ...timers });
+  // la página se pintó con la Dra. A y el odontograma se cargó
+  await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DRA_A, leer: nav.leer, force: false });
+  assert.deepEqual(q.getOwner(), DRA_A);
+  // en otra pestaña entra el Dr. B; la Dra. A vuelve a la suya (nada pendiente) y la ficha relee sola
+  nav.estado.cookie = DR_B;
+  await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DRA_A, leer: nav.leer, force: false });
+  assert.deepEqual(q.getOwner(), DRA_A, "el GET (la cookie) no cambia al dueño");
+  // marca caries en el 16: no se guarda firmada por B; se aparta con el aviso
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  assert.equal(nav.filas.size, 0, "nada firmado por B");
+  assert.equal(q.getStatus().state, "error");
+  assert.equal(q.getStatus().error, OTRA_SESION);
+  assert.equal(q.getStatus().discarded, 0);
+  // vuelve a ser la Dra. A: «Reintentar» lo guarda con su firma
+  nav.estado.cookie = DRA_A;
+  assert.equal(await q.retryNow(), true);
+  await tick();
+  assert.deepEqual([...nav.filas], [["16:O:caries", "u_a"]]);
+});
+
+test("t8 V2-O1: (b) cambió a otra sede vinculada en otra pestaña — la marca se aparta, no se descarta ni sale del dibujo", async () => {
+  const nav = navegadorConCookie(DRA_A);
+  const q = new SaveQueue({ send: nav.send, whoAmI: nav.whoAmI, ...timers });
+  await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DRA_A, leer: nav.leer, force: false });
+  nav.estado.cookie = A_EN_SEDE_2; // la lectura entra (sede vinculada), la escritura no
+  const r = await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DRA_A, leer: nav.leer, force: false });
+  assert.equal(r.error, null);
+  assert.deepEqual(q.getOwner(), DRA_A);
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  assert.equal(q.getStatus().discarded, 0, "no se tira");
+  assert.deepEqual(q.descartadosDesde(0), []);
+  assert.equal(q.getStatus().error, OTRA_SESION);
+  assert.deepEqual(q.overlay({})[16]?.surfaces.O, ["caries"], "sigue en el dibujo");
+  // vuelve a la sede 1 y pulsa «Reintentar»
+  nav.estado.cookie = DRA_A;
+  assert.equal(await q.retryNow(), true);
+  await tick();
+  assert.deepEqual([...nav.filas], [["16:O:caries", "u_a"]]);
+});
+
+test("t8 V2-O1: V-O5 sigue — la PÁGINA pintada con el Dr. B (sin nada pendiente) sí cambia al dueño; con algo pendiente, no", async () => {
+  const nav = navegadorConCookie(DRA_A);
+  const q = new SaveQueue({ send: nav.send, whoAmI: nav.whoAmI, ...timers });
+  await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DRA_A, leer: nav.leer, force: false });
+  // B navega a la ficha en esta pestaña sin recargar: el servidor pinta la página con su sesión
+  nav.estado.cookie = DR_B;
+  await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DR_B, leer: nav.leer, force: false });
+  assert.deepEqual(q.getOwner(), DR_B);
+  q.enqueue(put(16, "O", "caries"));
+  await tick();
+  assert.deepEqual([...nav.filas], [["16:O:caries", "u_b"]], "lo de B se guarda con su firma");
+  // con algo pendiente de B, ni la página de A ni el GET le quitan la cola
+  nav.estado.cookie = DRA_A;
+  q.enqueue(put(17, "O", "caries"));
+  await tick();
+  assert.equal(q.hasPending(), true);
+  await cargarOdontograma({ patientId: "pat_1", queue: q, sesion: DRA_A, leer: nav.leer, force: false });
+  assert.deepEqual(q.getOwner(), DR_B);
+  // recuperar.ts marca la sesión de la página como tal y la del GET no
+  const src = fs.readFileSync(path.resolve(__dirname, "../recuperar.ts"), "utf8");
+  assert.match(src, /queue\.setOwner\(sesion, \{ pagina: true \}\)/);
+  assert.match(src, /queue\.setOwner\(\{ clinicId: r\.clinicId, userId: r\.userId \}\)/);
+});
+
+test("t8 V2-O2: con un «Limpiar todo» descartado y cambios viejos, el aviso de 15 min también lo dice", async () => {
+  let ahora = Date.parse("2026-10-20T20:00:00Z");
+  const fired: (() => void)[] = [];
+  const srv = servidorConDatos(["11:O:caries", "16:O:caries"]); srv.offline();
+  const q = new SaveQueue({ send: srv.send, now: () => ahora, setTimer: (fn) => { fired.push(fn); return fired.length; }, clearTimer: () => {} });
+  q.enqueue({ kind: "reset" });
+  q.enqueue(put(21, null, "crown"));
+  q.enqueue({ kind: "note", toothNumber: 11, text: "sensible" });
+  await tick();
+  ahora += 12 * 3600 * 1000; // 12 h sin red
+  srv.online();
+  fired.shift()!();
+  await tick();
+  assert.equal(q.getStatus().state, "error");
+  const err = q.getStatus().error ?? "";
+  assert.match(err, /más de 15 min sin poder guardarse/);
+  assert.match(err, /El «Limpiar todo» de hace 12 h no se aplicó; si lo quieres, vuelve a pulsarlo\./);
+  assert.match(textoAvisoPendiente([q]) ?? "", /El «Limpiar todo» de hace 12 h no se aplicó/, "también en el aviso fijo");
+  assert.deepEqual([...srv.filas].sort(), ["11:O:caries", "16:O:caries"], "nada se borró");
+  // «Reintentar»: salen la corona y la nota; el reset no
+  assert.equal(await q.retryNow(), true);
+  await tick();
+  assert.deepEqual([...srv.filas].sort(), ["11:O:caries", "16:O:caries", "21:-:crown"]);
+  assert.equal(q.hasPending(), false);
+  // un rechazo posterior, sin relación, ya no arrastra el aviso del reset
+  srv.fail(400, "invalid_payload");
+  q.enqueue(put(26, null, "crown"));
+  await tick();
+  assert.equal(q.getStatus().state, "error");
+  assert.doesNotMatch(q.getStatus().error ?? "", /Limpiar todo/);
+});
+
+test("t8 (nota): SESION_VENCIDA dice «al volver podrás guardarlo», no «se guardará al volver»", () => {
+  assert.match(SESION_VENCIDA, /al volver podrás guardarlo/);
+  assert.doesNotMatch(SESION_VENCIDA, /se guardará al volver/);
 });
