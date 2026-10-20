@@ -33,11 +33,14 @@ import {
   CREADOR_GOOGLE,
   direccionDelAviso,
   MOTIVO_GOOGLE,
+  avisoDeRetiro,
   TTL_CANAL_S,
+  type CausaRetiro,
   type DatosBloqueo,
 } from "./entrante-core";
 import {
   sincronizarEntrante,
+  TURNO_MS,
   type ClienteCalendarEntrante,
   type PuertosEntrante,
   type ResultadoEntrante,
@@ -407,10 +410,11 @@ const puertos: PuertosEntrante = {
   },
 
   async actualizarVinculo(clinicId, blockId, cambios, antes) {
-    await prisma.agendaBlockGoogle.updateMany({
+    const r = await prisma.agendaBlockGoogle.updateMany({
       where: { blockId, clinicId, ...(antes ? { eventStartsAt: antes.eventStartsAt, eventEndsAt: antes.eventEndsAt } : {}) },
       data: cambios,
     });
+    return r.count > 0;
   },
 
   async retirarNoVistos(clinicId, vistos, desde, hasta, ahora) {
@@ -525,21 +529,41 @@ export async function clinicasSinBanderaConBloqueos(): Promise<string[]> {
  * Google ya no los mantiene nadie al día y cerrarían horas que quizá ya no
  * están ocupadas. Se RETIRAN (deletedAt), no se borran. Las citas
  * convertidas no se tocan. Devuelve cuántos.
+ *
+ * `conTurno` (el retiro por antigüedad, con la bandera encendida): se hace
+ * con el TURNO de la clínica, como una pasada. Sin él, una pasada que
+ * corriera a la vez (un aviso de Google, abrir la agenda) guardaba SU
+ * syncToken encima del vacío y lo de antes quedaba abierto hasta la completa
+ * semanal (tercera vuelta, N3-G1). Si hay una pasada en curso, no se retira
+ * (devuelve 0): esa pasada pone la agenda al día, y si falla, el siguiente
+ * cron lo vuelve a mirar. Ya con el turno, la regla se mira OTRA vez: si una
+ * pasada acaba de salir bien, no se retira lo que ella puso al día.
  */
-export async function retirarBloqueosDeGoogle(clinicId: string): Promise<number> {
+export async function retirarBloqueosDeGoogle(clinicId: string, opts: { conTurno?: boolean } = {}): Promise<number> {
   if (!idValido(clinicId)) return 0;
   if (!(await tablasGoogleListas())) return 0;
-  const ahora = new Date();
-  const r = await prisma.agendaBlock.updateMany({
-    where: { clinicId, kind: "GOOGLE", deletedAt: null },
-    data: { deletedAt: ahora, deletedById: null },
-  });
-  // Sin syncToken: al volver a encender o a conectar, la siguiente pasada es
-  // COMPLETA y reactiva lo que siga ocupado en Google. Con el token, una
-  // incremental solo vería lo que cambió y lo demás quedaría abierto días.
-  // (Solo si hay token: el cron lo llama en cada pasada mientras dure el problema.)
-  await prisma.googleAgendaImport.updateMany({ where: { clinicId, syncToken: { not: null } }, data: { syncToken: null } });
-  return r.count;
+  if (opts.conTurno && !(await puertos.tomarTurno(clinicId, new Date(Date.now() + TURNO_MS)))) return 0;
+  try {
+    if (opts.conTurno && !(await bloqueosDeGoogleSinMantener(clinicId)).retirar) return 0;
+    const ahora = new Date();
+    const r = await prisma.agendaBlock.updateMany({
+      where: { clinicId, kind: "GOOGLE", deletedAt: null },
+      data: { deletedAt: ahora, deletedById: null },
+    });
+    // Sin syncToken NI última completa: al volver a encender o a conectar, la
+    // siguiente pasada es COMPLETA y reactiva lo que siga ocupado en Google,
+    // aunque alguna pasada llegara a guardar un token después (N3-G1). Con el
+    // token, una incremental solo vería lo que cambió y lo demás quedaría
+    // abierto días. (Solo si hace falta: el cron lo llama en cada pasada
+    // mientras dure el problema.)
+    await prisma.googleAgendaImport.updateMany({
+      where: { clinicId, OR: [{ syncToken: { not: null } }, { lastFullSyncAt: { not: null } }] },
+      data: { syncToken: null, lastFullSyncAt: null },
+    });
+    return r.count;
+  } finally {
+    if (opts.conTurno) await puertos.soltarTurno(clinicId).catch(() => false);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -641,6 +665,18 @@ export async function clinicaDelAviso(h: {
   return f.clinicId;
 }
 
+/** El último error de la entrada (antes de una pasada: el cron lo compara después). Nunca lanza. */
+export async function ultimoErrorEntrante(clinicId: string): Promise<string | null> {
+  if (!idValido(clinicId)) return null;
+  try {
+    if (!(await tablasGoogleListas())) return null;
+    const f = await prisma.googleAgendaImport.findUnique({ where: { clinicId }, select: { lastError: true } });
+    return f?.lastError ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** El estado para la pantalla (aviso de «vuelve a conectar»). Nunca lanza. */
 export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
   encendida: boolean;
@@ -649,17 +685,46 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
   ultimaSync: string | null;
   /** Último intento, bien o mal: frena que abrir la agenda martille a Google si falla. */
   ultimoIntento: string | null;
+  /**
+   * Los eventos de Google ya NO cierran la agenda: sus bloqueos SE RETIRARON
+   * y aún no se han repuesto (`avisoDeRetiro`). Desde cuándo (la fecha real
+   * del retiro), por qué y en qué zona pintar la hora; la agenda y
+   * Configuración lo dicen con qué hacer (tercera vuelta, N3-G2).
+   */
+  retiro: { desde: string; causa: CausaRetiro; zona: string } | null;
 }> {
-  const vacio = { encendida: false, conectada: false, error: null, ultimaSync: null, ultimoIntento: null };
+  const vacio = { encendida: false, conectada: false, error: null, ultimaSync: null, ultimoIntento: null, retiro: null };
   if (!idValido(clinicId)) return vacio;
   try {
     if (!(await tablasGoogleListas())) return vacio;
     const f = await prisma.googleAgendaImport.findUnique({
       where: { clinicId },
-      select: { enabled: true, lastError: true, lastErrorAt: true, lastSyncAt: true },
+      select: { enabled: true, lastError: true, lastErrorAt: true, lastSyncAt: true, createdAt: true, syncToken: true, lastFullSyncAt: true },
     });
     if (!f?.enabled) return vacio;
     const c = await leerConexion(clinicId);
+    // Solo si la fila está como la deja el retiro (sin token ni completa):
+    // el primer bloqueo retirado desde la última pasada buena da la fecha.
+    const sinToken = !f.syncToken && !f.lastFullSyncAt;
+    const base = f.lastSyncAt ?? f.createdAt;
+    const [primero] = c && sinToken
+      ? await prisma.agendaBlock.findMany({
+          where: { clinicId, kind: "GOOGLE", deletedById: null, deletedAt: { gte: base } },
+          select: { deletedAt: true },
+          orderBy: { deletedAt: "asc" },
+          take: 1,
+        })
+      : [];
+    const aviso = c
+      ? avisoDeRetiro(
+          {
+            conToken: !!c.refreshToken, conexionActiva: c.enabled, conCalendario: !!c.calendarId,
+            ultimaBuena: f.lastSyncAt, encendidaDesde: f.createdAt, ultimoError: f.lastError,
+            sinToken, retiradoDesde: primero?.deletedAt ?? null,
+          },
+          new Date(),
+        )
+      : null;
     const intentos = [f.lastSyncAt, f.lastErrorAt].filter((d): d is Date => !!d).map((d) => d.getTime());
     // Conexión CAÍDA (Google la rechazó; se guarda el token): ni se leen los
     // eventos ni se copian las citas. La pantalla lo dice tal cual (G3).
@@ -670,6 +735,7 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
       error: caida ? "conexion_caida" : f.lastError ?? null,
       ultimaSync: f.lastSyncAt ? f.lastSyncAt.toISOString() : null,
       ultimoIntento: intentos.length ? new Date(Math.max(...intentos)).toISOString() : null,
+      retiro: aviso ? { desde: aviso.desde.toISOString(), causa: aviso.causa, zona: c?.timezone || "America/Mexico_City" } : null,
     };
   } catch {
     return vacio;
@@ -696,14 +762,17 @@ export async function bloqueosDeGoogleSinMantener(
     leerConexion(clinicId),
     prisma.googleAgendaImport.findUnique({
       where: { clinicId },
-      select: { lastSyncAt: true, createdAt: true, lastError: true },
+      select: { lastSyncAt: true, createdAt: true, lastError: true, syncToken: true, lastFullSyncAt: true },
     }),
   ]);
   if (!c || !f) return no;
   const conToken = !!c.refreshToken;
   return {
     retirar: bloqueosSinMantener(
-      { conToken, conexionActiva: c.enabled, ultimaBuena: f.lastSyncAt, encendidaDesde: f.createdAt, ultimoError: f.lastError },
+      {
+        conToken, conexionActiva: c.enabled, ultimaBuena: f.lastSyncAt, encendidaDesde: f.createdAt, ultimoError: f.lastError,
+        reponiendo: !f.syncToken && !f.lastFullSyncAt,
+      },
       ahora,
     ),
     desconectada: !conToken,

@@ -39,9 +39,16 @@ class GoogleFalsa {
     if (!e) return;
     this.poner({ ...e, status: "cancelled" });
   }
+  gets: string[] = [];
   cliente() {
     return {
       events: {
+        get: async (p: { calendarId: string; eventId: string }) => {
+          this.gets.push(p.eventId);
+          const e = this.eventos.get(p.eventId);
+          if (!e) throw { response: { status: 404 } };
+          return { data: e };
+        },
         list: async (p: Record<string, unknown>) => {
           this.llamadas.push(p);
           if (this.fallo) throw this.fallo;
@@ -162,8 +169,9 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
     },
     actualizarVinculo: async (_c, id, cambios, antes) => {
       const v = vinculos.get(id)!;
-      if (antes && (v.eventStartsAt.getTime() !== antes.eventStartsAt.getTime() || v.eventEndsAt.getTime() !== antes.eventEndsAt.getTime())) return;
+      if (antes && (v.eventStartsAt.getTime() !== antes.eventStartsAt.getTime() || v.eventEndsAt.getTime() !== antes.eventEndsAt.getTime())) return false;
       Object.assign(v, cambios);
+      return true;
     },
     retirarNoVistos: async (_c, vistos, desde, hasta, ahora) => {
       let k = 0;
@@ -512,10 +520,125 @@ test("N-G1: si la salida anota otra hora entre que la entrada lee el vínculo y 
   const leerCita = a.p.leerCita;
   a.p.leerCita = async (...args) => {
     // …justo después de que la entrada leyó el vínculo (10:00) y el evento (11:00, viejo).
+    // En Google ya está la copia (12:00): la entrada la relee al perder la carrera (N3-G5).
+    if (a.google.eventos.get(id)?.start?.dateTime !== "2026-10-21T12:00:00-06:00") {
+      a.google.eventos.set(id, evento(id, { start: { dateTime: "2026-10-21T12:00:00-06:00" }, end: { dateTime: "2026-10-21T13:00:00-06:00" } }));
+    }
     Object.assign(a.vinculos.get("bc")!, { eventStartsAt: new Date("2026-10-21T18:00:00Z"), eventEndsAt: new Date("2026-10-21T19:00:00Z") });
     return leerCita(...args);
   };
   await sincronizarEntrante(a.p, "c1");
   assert.equal(a.vinculos.get("bc")!.avisoTipo, null, "sin «movido a 11:00» falso");
   assert.equal(a.vinculos.get("bc")!.eventStartsAt.toISOString(), "2026-10-21T18:00:00.000Z");
+});
+
+/* ═══ Tercera vuelta (t8) ══════════════════════════════════════════════════ */
+
+/** Una convertida a las 10:00 cuya cita se movió a las 12:00 en DaleControl. */
+function convertidaMovida() {
+  const a = montar();
+  const id = "conv";
+  const h = (hh: number) => new Date(`2026-10-21T${String(hh + 6).padStart(2, "0")}:00:00Z`); // hora de México → UTC
+  a.bloques.set("bc", { id: "bc", doctorId: "doc-ana", startsAt: h(10), endsAt: h(11), deletedAt: new Date(), kind: "GOOGLE" });
+  a.vinculos.set("bc", { blockId: "bc", calendarId: CAL, googleEventId: id, recurringEventId: null, title: "x", allDay: false, appointmentId: "cita-c", eventStartsAt: h(10), eventEndsAt: h(11), eventDeletedAt: null, avisoTipo: null });
+  a.citas.set("cita-c", { status: "SCHEDULED", startsAt: h(12), endsAt: h(13), googleCalendarEventId: id });
+  /** La salida copia la cita (12:00) a Google y lo anota en el vínculo, justo después de que la entrada leyó el vínculo. */
+  const salidaEntreMedias = () => {
+    const leerCita = a.p.leerCita;
+    let una = false;
+    a.p.leerCita = async (...args) => {
+      if (!una) {
+        una = true;
+        Object.assign(a.vinculos.get("bc")!, { eventStartsAt: h(12), eventEndsAt: h(13) });
+      }
+      return leerCita(...args);
+    };
+  };
+  return { a, id, h, salidaEntreMedias };
+}
+
+test("N3-G5: la salida anota su hora entre la lectura y la escritura, y en Google el evento YA está en otra hora (la movieron allí) → se relee y se avisa «movido», no se pierde", async () => {
+  const { a, id, h, salidaEntreMedias } = convertidaMovida();
+  // Lo que hay en Google ahora: alguien lo movió a las 14:00 después de la copia.
+  a.google.poner(evento(id, { start: { dateTime: "2026-10-21T14:00:00-06:00" }, end: { dateTime: "2026-10-21T15:00:00-06:00" } }));
+  salidaEntreMedias();
+  await sincronizarEntrante(a.p, "c1");
+  const v = a.vinculos.get("bc")!;
+  assert.equal(v.avisoTipo, "movido", "antes: la escritura condicionada no casaba y el cambio se descartaba hasta la completa");
+  assert.equal(v.avisoStartsAt?.toISOString(), h(14).toISOString());
+  assert.deepEqual(a.google.gets, [id], "el evento se vuelve a leer en Google, una vez");
+  assert.equal(a.citas.get("cita-c")!.startsAt.toISOString(), h(12).toISOString(), "la cita no se mueve sola");
+});
+
+test("N3-G5: …y si lo que hay en Google es la copia de la salida (la página traía el evento de ANTES) → sin aviso falso (N-G1 sigue)", async () => {
+  const { a, id, h, salidaEntreMedias } = convertidaMovida();
+  // La página trae el evento a las 11:00 (de antes de la copia)…
+  a.google.poner(evento(id, { start: { dateTime: "2026-10-21T11:00:00-06:00" }, end: { dateTime: "2026-10-21T12:00:00-06:00" } }));
+  salidaEntreMedias();
+  // …pero en Google ya está la copia de la salida, a las 12:00.
+  const get = a.google.cliente().events.get;
+  const abrir = a.p.abrirCalendar;
+  a.p.abrirCalendar = (cred) => {
+    const c = abrir(cred);
+    return { ...c, events: { ...c.events, get: async (p: { calendarId: string; eventId: string }) => {
+      await get(p);
+      return { data: evento(id, { start: { dateTime: "2026-10-21T12:00:00-06:00" }, end: { dateTime: "2026-10-21T13:00:00-06:00" } }) };
+    } } };
+  };
+  await sincronizarEntrante(a.p, "c1");
+  const v = a.vinculos.get("bc")!;
+  assert.equal(v.avisoTipo, null, "sin «movido a 11:00» falso");
+  assert.equal(v.eventStartsAt.toISOString(), h(12).toISOString());
+  assert.equal(a.google.gets.length, 1);
+});
+
+test("N3-G5: borrado del todo en Google (404 al releer) → aviso «eliminado»; la cita sigue", async () => {
+  const { a, id, salidaEntreMedias } = convertidaMovida();
+  a.google.poner(evento(id, { start: { dateTime: "2026-10-21T14:00:00-06:00" }, end: { dateTime: "2026-10-21T15:00:00-06:00" } }));
+  salidaEntreMedias();
+  const abrir = a.p.abrirCalendar;
+  a.p.abrirCalendar = (cred) => {
+    const c = abrir(cred);
+    return { ...c, events: { ...c.events, get: async () => { throw { response: { status: 404 } }; } } };
+  };
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(a.vinculos.get("bc")!.avisoTipo, "eliminado");
+  assert.equal(a.citas.get("cita-c")!.status, "SCHEDULED");
+});
+
+test("N3-G5: Google no deja releer (500) → no se inventa nada, pero NO se guarda el token: la siguiente pasada es completa y avisa", async () => {
+  const { a, id, h, salidaEntreMedias } = convertidaMovida();
+  a.google.poner(evento(id, { start: { dateTime: "2026-10-21T14:00:00-06:00" }, end: { dateTime: "2026-10-21T15:00:00-06:00" } }));
+  salidaEntreMedias();
+  const abrir = a.p.abrirCalendar;
+  a.p.abrirCalendar = (cred) => {
+    const c = abrir(cred);
+    return { ...c, events: { ...c.events, get: async () => { throw { response: { status: 500 } }; } } };
+  };
+  const r = await sincronizarEntrante(a.p, "c1");
+  assert.equal(r.estado, "ok");
+  assert.equal(a.vinculos.get("bc")!.avisoTipo, null);
+  assert.equal(a.estado.syncToken, null, "antes: se guardaba el token y el «movido» no volvía hasta la completa semanal");
+  // Google ya responde; la siguiente pasada es completa y ve el evento a las 14:00.
+  a.p.abrirCalendar = abrir;
+  await sincronizarEntrante(a.p, "c1");
+  assert.ok(a.google.llamadas.at(-1)!.timeMin, "completa");
+  assert.equal(a.vinculos.get("bc")!.avisoTipo, "movido");
+  assert.equal(a.vinculos.get("bc")!.avisoStartsAt?.toISOString(), h(14).toISOString());
+});
+
+test("N3-G4: tras desplegar, la firma guardada con la regla anterior ya no coincide → una completa que REASIGNA lo mal asignado por nombre", async () => {
+  const a = montar();
+  // Un bloqueo que la regla vieja dio al Dr. por el nombre visible de un paciente.
+  a.google.poner(evento("e1", { attendees: [{ email: "recepcion@clinica.mx" }, { email: "paciente@gmail.com", displayName: "Ana López" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  const b = [...a.bloques.values()][0];
+  b.doctorId = "doc-ana"; // como lo dejó la regla vieja
+  // La fila, como la dejó el código anterior: su firma (calculada con él) para este mismo equipo.
+  Object.assign(a.estado, { equipoFirma: "2-f75b1e45d3a05695", lastFullSyncAt: AHORA });
+  const antes = a.google.llamadas.length;
+  await sincronizarEntrante(a.p, "c1");
+  assert.ok(a.google.llamadas[antes].timeMin, "completa, aunque Google no cambió nada");
+  assert.equal(b.doctorId, null, "toda la clínica (no_reconocido), no la agenda de la Dra.");
+  assert.notEqual(a.estado.equipoFirma, "2-f75b1e45d3a05695");
 });

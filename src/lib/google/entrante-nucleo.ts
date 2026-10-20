@@ -49,6 +49,8 @@ export interface ClienteCalendarEntrante {
     list(p: Record<string, unknown>): Promise<{
       data: { items?: EventoGoogle[] | null; nextPageToken?: string | null; nextSyncToken?: string | null };
     }>;
+    /** Un evento, tal como está AHORA (N3-G5: solo si la salida escribió entre medias). */
+    get?(p: { calendarId: string; eventId: string }): Promise<{ data: EventoGoogle }>;
     watch(p: { calendarId: string; requestBody: Record<string, unknown> }): Promise<{
       data: { id?: string | null; resourceId?: string | null; expiration?: string | number | null };
     }>;
@@ -137,13 +139,14 @@ export interface PuertosEntrante {
    * Guarda los cambios SOLO si el vínculo sigue con la hora que se leyó
    * (`antes`): si la salida acaba de copiar otra hora (y la anotó), esta
    * lectura ya es vieja y no debe sacar un aviso falso (segunda vuelta, N-G1).
+   * Devuelve si escribió (false: el vínculo cambió entre medias; N3-G5).
    */
   actualizarVinculo(
     clinicId: string,
     blockId: string,
     cambios: CambiosVinculo,
     antes?: { eventStartsAt: Date; eventEndsAt: Date },
-  ): Promise<void>;
+  ): Promise<boolean>;
   /**
    * Retira los bloqueos SIN convertir y activos que no se vieron en la completa
    * y que caen dentro de lo que se le pidió a Google (terminan después de
@@ -178,6 +181,13 @@ interface Contadores {
   actualizados: number;
   retirados: number;
   avisos: number;
+  /**
+   * Un aviso de una convertida no se pudo decidir (N3-G5: Google no dejó
+   * releer el evento): no se guarda el syncToken, para que la siguiente
+   * pasada sea COMPLETA y lo vuelva a mirar. Con el token, ese «movido» no
+   * volvería a llegar hasta la completa semanal.
+   */
+  repasar?: boolean;
 }
 
 /**
@@ -330,7 +340,7 @@ async function pasada(
           const r = await cal.events.list(params);
           const items = (r.data.items ?? []).filter((e): e is EventoGoogle => !!e && typeof e.id === "string" && !!e.id);
           for (const e of items) vistos.add(e.id as string);
-          await procesarPagina(p, clinicId, calendarId, items, { zona, ahora: reloj(), usuarios }, total);
+          await procesarPagina(p, cal, clinicId, calendarId, items, { zona, ahora: reloj(), usuarios }, total);
           pageToken = r.data.nextPageToken ?? undefined;
           if (!pageToken) {
             nextSyncToken = r.data.nextSyncToken ?? null;
@@ -347,7 +357,7 @@ async function pasada(
       }
       if (pageToken) throw new SinTiempo(); // demasiadas páginas en una pasada: la siguiente sigue
       if (completa) total.retirados += await p.retirarNoVistos(clinicId, vistos, desde, hasta, reloj());
-      await p.guardarProgreso(clinicId, { calendarId, syncToken: nextSyncToken, completa, ahora: reloj(), equipoFirma });
+      await p.guardarProgreso(clinicId, { calendarId, syncToken: total.repasar ? null : nextSyncToken, completa, ahora: reloj(), equipoFirma });
       return { completa };
     }
     return { completa };
@@ -356,8 +366,21 @@ async function pasada(
   }
 }
 
+/** El evento tal como está ahora en Google; borrado del todo (404/410) = cancelado. null si no se pudo leer. */
+async function eventoActual(cal: ClienteCalendarEntrante, calendarId: string, eventId: string): Promise<EventoGoogle | null> {
+  try {
+    const r = await cal.events.get!({ calendarId, eventId });
+    return r.data?.id ? r.data : null;
+  } catch (err) {
+    const e = err as any;
+    const status = Number(e?.response?.status ?? e?.status ?? e?.code);
+    return status === 404 || status === 410 ? { id: eventId, status: "cancelled" } : null;
+  }
+}
+
 async function procesarPagina(
   p: PuertosEntrante,
+  cal: ClienteCalendarEntrante,
   clinicId: string,
   calendarId: string,
   eventos: EventoGoogle[],
@@ -392,14 +415,34 @@ async function procesarPagina(
 
     // ── Una cita convertida: se AVISA, la cita nunca se mueve ni se cancela sola.
     if (v?.appointmentId) {
-      const leida = await p.leerCita(clinicId, v.appointmentId);
-      // La cita ya va ligada a OTRO evento (se canceló, se reactivó y Google le
-      // dio uno nuevo): lo que le pase al viejo no le avisa de nada (G7).
-      const cita = leida && leida.googleEventId !== undefined && leida.googleEventId !== v.googleEventId ? null : leida;
-      const cambios = decidirAvisoCita(ev, v, cita, ctx);
-      if (Object.keys(cambios).length > 0) {
-        await p.actualizarVinculo(clinicId, v.blockId, cambios, { eventStartsAt: v.eventStartsAt, eventEndsAt: v.eventEndsAt });
-        if (cambios.avisoTipo) total.avisos++;
+      let vinculo: VinculoLeido = v;
+      let evento: EventoGoogle = ev;
+      for (let intento = 0; intento < 2; intento++) {
+        const leida = await p.leerCita(clinicId, vinculo.appointmentId as string);
+        // La cita ya va ligada a OTRO evento (se canceló, se reactivó y Google le
+        // dio uno nuevo): lo que le pase al viejo no le avisa de nada (G7).
+        const cita = leida && leida.googleEventId !== undefined && leida.googleEventId !== vinculo.googleEventId ? null : leida;
+        const cambios = decidirAvisoCita(evento, vinculo, cita, ctx);
+        if (Object.keys(cambios).length === 0) break;
+        const antes = { eventStartsAt: vinculo.eventStartsAt, eventEndsAt: vinculo.eventEndsAt };
+        if (await p.actualizarVinculo(clinicId, vinculo.blockId, cambios, antes)) {
+          if (cambios.avisoTipo) total.avisos++;
+          break;
+        }
+        // La salida anotó otra hora entre la lectura y la escritura: lo leído
+        // ya es viejo, y el evento de esta página quizá también (de antes de
+        // su copia: decidir con él sacaría el aviso falso de N-G1). Se relee
+        // el vínculo y el evento EN GOOGLE, y se decide otra vez, una sola:
+        // si no, un «se movió» o «se eliminó» hecho en Google en ese instante
+        // no se avisaría hasta la completa (tercera vuelta, N3-G5).
+        // Si no se puede decidir otra vez, la siguiente pasada es completa.
+        if (intento > 0 || !cal.events.get) { total.repasar = true; break; }
+        const releido = (await p.leerVinculos(clinicId, calendarId, [id])).find((x) => x.googleEventId === id);
+        if (!releido?.appointmentId) break;
+        const actual = await eventoActual(cal, calendarId, id);
+        if (!actual) { total.repasar = true; break; }
+        vinculo = releido;
+        evento = actual;
       }
       continue;
     }

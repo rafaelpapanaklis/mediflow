@@ -250,8 +250,8 @@ function gana(u: UsuarioClinica, previo: UsuarioClinica | undefined): boolean {
  *
  *   · Un solo doctor que recibe citas → suyo. También si llega por su otro
  *     correo (el Gmail con el que conectó Google), por una cuenta vieja suya
- *     (dada de baja, con su mismo nombre) o, si el correo no es de nadie, por
- *     el nombre que Google muestra del invitado. Los invitados de fuera
+ *     (dada de baja, con su mismo nombre). El nombre que Google muestra de
+ *     un correo que no es de nadie NO cuenta (N3-G4). Los invitados de fuera
  *     (un laboratorio, un proveedor) no le quitan el evento.
  *   · Varios doctores que reciben citas → toda la clínica («varios»).
  *   · Ningún doctor que reciba citas y TODOS los invitados son de la clínica
@@ -302,6 +302,8 @@ export function asignarEvento(
   }
 
   // Los que reciben citas, por nombre (solo si el nombre es de UNA persona).
+  // Solo para reconocer una cuenta VIEJA de la clínica (su correo es de aquí),
+  // nunca el nombre visible de un invitado (N3-G4).
   const atiendePorNombre = new Map<string, UsuarioClinica | null>();
   for (const u of usuarios) {
     if (!u.recibeCitas) continue;
@@ -329,8 +331,9 @@ export function asignarEvento(
         // («María Ruiz» → «María Ruiz Gómez»). No se sabe de quién es.
         u = actual ?? (u.activo === false ? null : u);
       }
-      // Un correo que no es de nadie: ¿el nombre que muestra Google es el de un doctor?
-      if (!u) u = porNombre(a.displayName);
+      // Un correo que no es de nadie NO se empareja por el nombre que muestra
+      // Google: un paciente que se llame igual que la doctora le quitaría el
+      // bloqueo al doctor de verdad (tercera vuelta, N3-G4). Solo el correo.
       if (!u) desconocidos++;
       else (u.recibeCitas ? atienden : otros).set(u.id, u);
     }
@@ -364,7 +367,13 @@ export function asignarEvento(
  * doctora, alguien enciende «Aparece en la agenda», cambia un correo), la
  * siguiente pasada es COMPLETA y reasigna los eventos que ya estaban; antes
  * seguían con el dueño viejo hasta una semana (segunda vuelta t8, N-G5).
+ *
+ * Lleva también la versión de la REGLA de `asignarEvento`: al cambiarla
+ * (N3-G4: el nombre visible ya no asigna), cada clínica hace una completa y
+ * los bloqueos que ya estaban mal asignados se corrigen en la primera pasada.
  */
+export const REGLA_ASIGNACION = "3";
+
 export function firmaEquipo(usuarios: readonly UsuarioClinica[]): string {
   const filas = usuarios
     .map((u) =>
@@ -382,7 +391,7 @@ export function firmaEquipo(usuarios: readonly UsuarioClinica[]): string {
   // cyrb53: corto, estable y sin `crypto` (este archivo también corre en pruebas puras).
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
-  const texto = filas.join("\n");
+  const texto = [`regla ${REGLA_ASIGNACION}`, ...filas].join("\n");
   for (let i = 0; i < texto.length; i++) {
     const ch = texto.charCodeAt(i);
     h1 = Math.imul(h1 ^ ch, 2654435761);
@@ -724,6 +733,13 @@ export function bloqueosSinMantener(
     ultimaBuena: Date | null;
     encendidaDesde: Date | null;
     ultimoError: string | null;
+    /**
+     * Ya se retiraron (sin syncToken ni última completa) y la completa está
+     * reponiendo: un «parcial» ahí es Google contestando, no se retira otra
+     * vez. Si no, cada 5 min se deshacía lo repuesto y la completa volvía a
+     * la página 0 para siempre (tercera vuelta, revisor).
+     */
+    reponiendo?: boolean;
   },
   ahora: Date,
 ): boolean {
@@ -731,8 +747,54 @@ export function bloqueosSinMantener(
   const base = e.ultimaBuena ?? e.encendidaDesde;
   if (!base) return false;
   const sinBuena = ahora.getTime() - base.getTime();
-  if (e.ultimoError === "parcial" && e.conexionActiva !== false && sinBuena < PARCIAL_TOPE_MS) return false;
+  const parcialConConexion = e.ultimoError === "parcial" && e.conexionActiva !== false;
+  if (parcialConConexion && (e.reponiendo || sinBuena < PARCIAL_TOPE_MS)) return false;
   return sinBuena >= SIN_MANTENER_RETIRA_MS;
+}
+
+/** Por qué los eventos de Google dejaron de cerrar la agenda (cada causa dice qué hacer). */
+export type CausaRetiro = "desconectada" | "conexion" | "permisos" | "calendario" | "parcial" | "google" | "reponiendo";
+
+/**
+ * El aviso del panel (tercera vuelta, N3-G2): los bloqueos de Google SE
+ * RETIRARON y todavía no se han repuesto. Sale de los hechos, no del reloj:
+ *
+ *   · `retiradoDesde`: el primer bloqueo de Google que el cron retiró desde
+ *     la última pasada buena (su `deletedAt`: la fecha REAL del retiro).
+ *   · `sinToken`: la fila sin syncToken ni última completa, como la deja
+ *     el retiro; la primera completa que termina lo vuelve a llenar y el
+ *     aviso se va (antes de eso, lo retirado sigue abierto).
+ *
+ * La causa es la de AHORA: si Google vuelve a contestar, «reponiendo»;
+ * si sigue sin poderse, el porqué (desconectada, conexión, permisos,
+ * calendario, parcial o un error de Google), cada una con su «qué hacer».
+ */
+export function avisoDeRetiro(
+  e: Parameters<typeof bloqueosSinMantener>[0] & {
+    sinToken: boolean;
+    retiradoDesde: Date | null;
+    /** La conexión tiene un calendario elegido. */
+    conCalendario?: boolean;
+  },
+  ahora: Date,
+): { desde: Date; causa: CausaRetiro } | null {
+  if (!e.retiradoDesde || !e.sinToken) return null;
+  const sigue = bloqueosSinMantener({ ...e, reponiendo: false }, ahora);
+  const causa: CausaRetiro = !e.conToken
+    ? "desconectada"
+    : e.conexionActiva === false || e.ultimoError === "autorizacion" || e.ultimoError === "conexion_caida"
+      ? "conexion"
+      : e.ultimoError === "permisos"
+        ? "permisos"
+        : e.conCalendario === false ||
+            e.ultimoError === "calendario" || e.ultimoError === "calendario_personal" || e.ultimoError === "calendario_compartido"
+          ? "calendario"
+          : !sigue
+            ? "reponiendo"
+            : e.ultimoError === "parcial"
+              ? "parcial"
+              : "google";
+  return { desde: e.retiradoDesde, causa };
 }
 
 /** Duración que se le pide a Google para un canal (7 días, el máximo habitual). */

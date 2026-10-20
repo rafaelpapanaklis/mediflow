@@ -249,7 +249,9 @@ test("G3: el cron parte de los bloqueos (no de las filas apagadas) y un fallo no
 
 test("G3/G12: el aviso de la agenda dice la verdad según el error; con la sesión vencida deja de preguntar", () => {
   const comp = leer("src/components/dashboard/agenda-nueva/google-calendario.tsx");
-  assert.match(comp, /if \(error === "autorizacion" \|\| error === "conexion_caida"\) return "agenda\.google\.reconectarCaida";/);
+  // `avisoDeConexion` vive en google-retiro-aviso.tsx (N3-G2; lo ejecuta tercera-vuelta.test.ts).
+  assert.match(leer("src/components/dashboard/agenda-nueva/google-retiro-aviso.tsx"), /if \(error === "autorizacion" \|\| error === "conexion_caida"\) return "agenda\.google\.reconectarCaida";/);
+  assert.match(comp, /const texto = textoAvisoAgenda\(estado, t, locale\);/);
   assert.match(comp, /if \(res\.status === 401 \|\| res\.status === 403\) \{ window\.clearInterval\(id\); return; \}/);
   const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
   assert.doesNotMatch(es.agenda.google.reconectarCaida, /se siguen copiando/);
@@ -353,7 +355,8 @@ test("el parser de la pantalla conserva el dato de Google y la banda lo lleva a 
 test("apagar/desconectar retira los bloqueos Y borra el syncToken (al volver, completa); encender también lo borra", () => {
   const s = leer("src/lib/google/entrante.server.ts");
   const f = s.slice(s.indexOf("export async function retirarBloqueosDeGoogle"), s.indexOf("// EL CANAL DE AVISOS"));
-  assert.match(f, /data: \{ syncToken: null \}/);
+  // Y la última completa (N3-G1; lo ejecuta segunda-vuelta-servidor.test.ts).
+  assert.match(f, /data: \{ syncToken: null, lastFullSyncAt: null \}/);
   assert.match(leer("sql/salamanca-encender-google.sql"), /"syncToken" = NULL/);
 });
 

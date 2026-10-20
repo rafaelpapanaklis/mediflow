@@ -374,15 +374,26 @@ test("N-G2: recepción + la cuenta VIEJA de la Dra. (mismo nombre) → la agenda
   assert.deepEqual(asignarEvento(inv("mruiz@correo-viejo.mx", "otro.gmail.suyo@gmail.com"), EQUIPO), { doctorId: "doc-ana", alcance: null });
 });
 
-test("N-G2: un correo desconocido cuyo nombre en Google es el de una doctora → suya; si el nombre es de dos, no", () => {
+test("N3-G4: el NOMBRE que Google muestra de un correo desconocido nunca basta: recepción + «Luis Pérez» (el Gmail de un paciente) → toda la clínica, no la agenda del Dr. Luis", () => {
+  // Antes: el bloqueo iba al Dr. Luis Pérez y la hora del doctor de verdad quedaba abierta.
   assert.deepEqual(
-    asignarEvento(inv("recepcion@clinica.mx", { email: "x123@gmail.com", displayName: "Dra. María Ruiz Gómez" }), EQUIPO),
+    asignarEvento(inv("recepcion@clinica.mx", { email: "luis.perez.paciente@gmail.com", displayName: "Luis Pérez" }), EQUIPO),
+    { doctorId: null, alcance: "no_reconocido" },
+  );
+  // Con la Dra. Ruiz invitada por su correo, el paciente con nombre de doctor no se la quita.
+  assert.deepEqual(
+    asignarEvento(inv("ana@clinica.mx", { email: "luis.perez.paciente@gmail.com", displayName: "Luis Pérez" }), EQUIPO),
     { doctorId: "doc-ana", alcance: null },
   );
-  const gemelos = [...EQUIPO, { id: "doc-otra", email: "otra@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Maria Ruiz Gomez" }];
+  // Tampoco con «Dra.» delante ni con el nombre exacto de la doctora: solo el correo cuenta.
   assert.deepEqual(
-    asignarEvento(inv("recepcion@clinica.mx", { email: "x123@gmail.com", displayName: "María Ruiz Gómez" }), gemelos),
+    asignarEvento(inv("recepcion@clinica.mx", { email: "x123@gmail.com", displayName: "Dra. María Ruiz Gómez" }), EQUIPO),
     { doctorId: null, alcance: "no_reconocido" },
+  );
+  // El mismo invitado, con el Gmail con el que la Dra. conectó Google: suya (correo, no nombre).
+  assert.deepEqual(
+    asignarEvento(inv("recepcion@clinica.mx", { email: "maria.ruiz.g@gmail.com", displayName: "Paciente Cualquiera" }), EQUIPO),
+    { doctorId: "doc-ana", alcance: null },
   );
 });
 

@@ -12,13 +12,26 @@
  *   · N-G10  — limpiar un «movido» resuelto no borra uno nuevo.
  *   · N-G12  — el cron encuentra y reintenta las convertidas sin firma al día.
  *
+ * Y de la TERCERA vuelta, con una Google falsa en los puertos:
+ *   · N3-G1  — el cron sincroniza primero; con Google sano no retira nada de
+ *     golpe, y el retiro va con el turno y deja la siguiente pasada completa.
+ *   · N3-G2  — el estado de la pantalla dice desde cuándo y por qué los
+ *     eventos de Google ya no cierran la agenda: cuando el cron los retiró de
+ *     verdad, hasta que la completa los repone; un «parcial» no deshace lo
+ *     repuesto.
+ *
  * `npm run test:google-entrante`
  */
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { firmaEquipo, type EventoGoogle } from "../entrante-core";
 
 type Fila = Record<string, any>;
 const llamadas: { op: string; args: any }[] = [];
+/** Lo que pasa justo DESPUÉS de soltar un turno (otra pasada que lo toma), una vez cada uno. */
+const trasSoltar: (() => void)[] = [];
+/** Lo que pasa justo ANTES de cada `tomarTurno` (en orden; `null` = nada esa vez). */
+const antesDeTomarTurno: ((() => void) | null)[] = [];
 const db = {
   clinics: new Map<string, Fila>(),
   imports: new Map<string, Fila>(),
@@ -29,6 +42,8 @@ const db = {
 };
 const reiniciar = () => {
   llamadas.length = 0;
+  trasSoltar.length = 0;
+  antesDeTomarTurno.length = 0;
   db.clinics.clear();
   db.imports.clear();
   db.bloques = [];
@@ -48,6 +63,7 @@ function cumple(f: Fila, w: Fila | undefined): boolean {
       if ("in" in v) return (v.in as unknown[]).includes(val);
       if ("not" in v) return v.not === null ? val != null : val !== v.not;
       if ("gt" in v) return val != null && val > v.gt;
+      if ("gte" in v) return val != null && val >= v.gte;
       if ("lt" in v) return val != null && val < v.lt;
       return true;
     }
@@ -75,6 +91,7 @@ function tabla(nombre: string, filas: () => Fila[]) {
     },
     updateMany: async (a: Fila) => {
       llamadas.push({ op: `${nombre}.updateMany`, args: a });
+      if (nombre === "googleAgendaImport" && a.data?.leaseUntil instanceof Date) antesDeTomarTurno.shift()?.();
       const r = filas().filter((f) => cumple(f, a.where));
       for (const f of r) Object.assign(f, a.data);
       return { count: r.length };
@@ -110,10 +127,20 @@ const prisma: Fila = {
   $transaction: async (fn: (tx: Fila) => Promise<unknown>) => fn(prisma),
   // Solo la sonda de tablas: cualquier otra consulta cruda (p. ej. la tabla
   // `clinic_google_status` de ws1-t12) falla como si no estuviera pegada.
-  $queryRaw: async (q: TemplateStringsArray) => {
+  $queryRaw: async (q: TemplateStringsArray, ...vals: unknown[]) => {
     const sql = q.join("?");
     llamadas.push({ op: "$queryRaw", args: sql });
     if (sql.includes("to_regclass")) return [{ existe: true }];
+    // `soltarTurno`: suelta el turno y devuelve «sucio» en una sentencia.
+    if (sql.includes('SET "leaseUntil" = NULL')) {
+      const f = db.imports.get(vals[0] as string);
+      if (!f) return [];
+      f.leaseUntil = null;
+      const fila = [{ dirtyAt: f.dirtyAt ?? null }];
+      const despues = trasSoltar.shift();
+      if (despues) despues();
+      return fila;
+    }
     throw Object.assign(new Error('relation "clinic_google_status" does not exist'), { code: "P2010", meta: { code: "42P01" } });
   },
 };
@@ -139,7 +166,7 @@ function bandera(clinicId: string, x: Fila = {}) {
   });
 }
 function bloqueo(id: string, clinicId: string, x: Fila = {}) {
-  db.bloques.push({ id, clinicId, kind: "GOOGLE", deletedAt: null, doctorId: null, startsAt: hace(-2), endsAt: hace(-3), ...x });
+  db.bloques.push({ id, clinicId, kind: "GOOGLE", deletedAt: null, deletedById: null, doctorId: null, startsAt: hace(-2), endsAt: hace(-3), ...x });
 }
 
 async function correrCron() {
@@ -421,4 +448,235 @@ test("N-G12: el reintento respeta el tiempo del cron, y el cron también repasa 
     llamadas.some((l) => l.op === "clinic.findUnique" && l.args.where.id === "c3" && l.args.select?.googleRefreshToken),
     "pasó por la salida de esa cita (que lee la conexión de SU clínica)",
   );
+});
+
+/* ═══ Tercera vuelta: N3-G1 (el cron sincroniza primero) ═══════════════════ */
+
+/** Una Google falsa en los puertos de la entrada (los mismos que usa el cron). */
+async function conGoogle(list: (p: Record<string, unknown>) => Promise<{ data: Fila }>) {
+  const { _puertosEntrante } = await servidor();
+  const pedidas: Record<string, unknown>[] = [];
+  const original = _puertosEntrante.abrirCalendar;
+  _puertosEntrante.abrirCalendar = () => ({
+    events: {
+      list: async (p: Record<string, unknown>) => { pedidas.push(p); return list(p) as any; },
+      get: async () => { throw { response: { status: 404 } }; },
+      watch: async () => { throw new Error("la prueba no crea canales"); },
+    },
+    channels: { stop: async () => undefined },
+  });
+  // Sin dirección pública: el canal de avisos no llama a la Google de verdad.
+  delete process.env.NEXT_PUBLIC_APP_URL;
+  return { pedidas, restaurar: () => { _puertosEntrante.abrirCalendar = original; } };
+}
+const enGoogle = (id: string, b: Fila): EventoGoogle => ({
+  id, status: "confirmed", summary: id, updated: hace(40).toISOString(),
+  start: { dateTime: b.startsAt.toISOString() }, end: { dateTime: b.endsAt.toISOString() },
+});
+/** Un bloqueo de Google con su vínculo, como lo deja la entrada. */
+function deGoogle(id: string, evento: string) {
+  bloqueo(id, "c1");
+  const b = db.bloques.at(-1)!;
+  db.vinculos.push({
+    blockId: id, clinicId: "c1", calendarId: CAL, googleEventId: evento, recurringEventId: null, title: evento,
+    allDay: false, alcance: "sin_invitados", appointmentId: null, eventStartsAt: b.startsAt, eventEndsAt: b.endsAt,
+    eventDeletedAt: null, avisoTipo: null,
+  });
+  return b;
+}
+const activos = () => db.bloques.filter((b) => b.deletedAt === null).map((b) => b.id).sort();
+
+test("N3-G1: Google SANO y el cron un día sin correr (última buena hace 30 h) → sincroniza primero y NO retira nada; lo que no cambió sigue cerrando", async () => {
+  reiniciar();
+  clinica("c1");
+  bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(30), equipoFirma: firmaEquipo([]) });
+  deGoogle("b1", "e1");
+  deGoogle("b2", "e2");
+  const g = await conGoogle(async () => ({ data: { items: [], nextSyncToken: "tok2" } }));
+  try {
+    const { bloqueosDeGoogleSinMantener } = await servidor();
+    assert.equal((await bloqueosDeGoogleSinMantener("c1")).retirar, true, "con la regla de antes, este cron retiraba todo primero");
+    const r = await correrCron();
+    assert.equal(r.sincronizadas, 1);
+    assert.equal(r.retirados, 0);
+    assert.deepEqual(activos(), ["b1", "b2"]);
+    assert.equal(g.pedidas[0].syncToken, "tok", "incremental, con el token de siempre");
+    const f = db.imports.get("c1")!;
+    assert.equal(f.syncToken, "tok2");
+    assert.ok(f.lastSyncAt.getTime() > hace(1).getTime(), "la pasada buena queda anotada");
+    assert.equal(f.leaseUntil, null, "el turno se suelta");
+  } finally {
+    g.restaurar();
+  }
+});
+
+test("N3-G1: Google SANO y toca la completa → retira SOLO lo que ya no existe en Google", async () => {
+  reiniciar();
+  clinica("c1");
+  bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(24 * 8), equipoFirma: firmaEquipo([]) });
+  const b1 = deGoogle("b1", "e1");
+  deGoogle("b2", "e2"); // borrado en Google
+  const g = await conGoogle(async () => ({ data: { items: [enGoogle("e1", b1)], nextSyncToken: "tok2" } }));
+  try {
+    const r = await correrCron();
+    assert.equal(r.sincronizadas, 1);
+    assert.equal(r.retirados, 0, "el cron no retiró en bloque");
+    assert.ok(g.pedidas[0].timeMin && !g.pedidas[0].syncToken, "completa");
+    assert.deepEqual(activos(), ["b1"]);
+    assert.equal(db.bloques.length, 2, "retirado (deletedAt), no borrado");
+  } finally {
+    g.restaurar();
+  }
+});
+
+test("N3-G1: Google FALLA un día y otra pasada toma el turno justo entonces → este cron no retira (antes: retiraba y la otra guardaba su token encima); el siguiente sí, con el turno", async () => {
+  reiniciar();
+  clinica("c1");
+  bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(30), lastError: "google", equipoFirma: firmaEquipo([]) });
+  deGoogle("b1", "e1");
+  deGoogle("b2", "e2");
+  const g = await conGoogle(async () => { throw { response: { status: 500 } }; });
+  try {
+    // Un aviso de Google (o abrir la agenda) toma el turno en cuanto esta pasada lo suelta.
+    trasSoltar.push(() => { db.imports.get("c1")!.leaseUntil = new Date(Date.now() + 60_000); });
+    const r1 = await correrCron();
+    assert.equal(r1.fallidas, 1);
+    assert.equal(r1.retirados, 0, "con una pasada en curso no se retira");
+    assert.deepEqual(activos(), ["b1", "b2"]);
+    assert.equal(db.imports.get("c1")!.syncToken, "tok");
+
+    // La otra pasada terminó (soltó el turno); Google sigue fallando.
+    db.imports.get("c1")!.leaseUntil = null;
+    const r2 = await correrCron();
+    assert.equal(r2.retirados, 2);
+    assert.deepEqual(activos(), []);
+    const f = db.imports.get("c1")!;
+    assert.equal(f.syncToken, null);
+    assert.equal(f.lastFullSyncAt, null, "la siguiente pasada será completa aunque alguien guarde un token");
+    assert.equal(f.leaseUntil, null, "el retiro suelta el turno");
+    assert.ok(llamadas.some((l) => l.op === "googleAgendaImport.updateMany" && l.args.data?.leaseUntil instanceof Date), "el retiro tomó el turno");
+  } finally {
+    g.restaurar();
+  }
+});
+
+test("N3-G1: tras el retiro, una pasada tardía guarda SU token… y aun así la siguiente es COMPLETA y vuelve a cerrar lo que sigue ocupado", async () => {
+  reiniciar();
+  clinica("c1");
+  bandera("c1", { lastSyncAt: hace(30), lastError: "google", equipoFirma: firmaEquipo([]) });
+  const b1 = deGoogle("b1", "e1");
+  deGoogle("b2", "e2");
+  const { retirarBloqueosDeGoogle } = await servidor();
+  assert.equal(await retirarBloqueosDeGoogle("c1", { conTurno: true }), 2);
+  // La pasada incremental que corría a la vez guarda su token (no toca lastFullSyncAt).
+  Object.assign(db.imports.get("c1")!, { syncToken: "tarde", lastSyncAt: hace(0.01), lastError: null });
+  const g = await conGoogle(async () => ({ data: { items: [enGoogle("e1", b1)], nextSyncToken: "tok3" } }));
+  try {
+    const r = await correrCron();
+    assert.equal(r.sincronizadas, 1);
+    assert.ok(g.pedidas[0].timeMin && !g.pedidas[0].syncToken, "completa, no incremental con el token tardío");
+    assert.deepEqual(activos(), ["b1"], "e1 sigue ocupado en Google: vuelve a cerrar; e2 ya no existe");
+    assert.ok(db.imports.get("c1")!.lastFullSyncAt instanceof Date);
+  } finally {
+    g.restaurar();
+  }
+});
+
+test("N3-G1: un 5xx SUELTO en la primera pasada tras un día sin cron (la anterior había salido bien) no retira; si sigue fallando en la siguiente, sí", async () => {
+  reiniciar();
+  clinica("c1");
+  bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(30), lastError: null, equipoFirma: firmaEquipo([]) });
+  deGoogle("b1", "e1");
+  const g = await conGoogle(async () => { throw { response: { status: 503 } }; });
+  try {
+    const r1 = await correrCron();
+    assert.equal(r1.fallidas, 1);
+    assert.equal(r1.retirados, 0, "un fallo suelto no retira todo de golpe");
+    assert.deepEqual(activos(), ["b1"]);
+    assert.equal(db.imports.get("c1")!.lastError, "google");
+    const r2 = await correrCron();
+    assert.equal(r2.retirados, 1, "falla seguido: se retira");
+  } finally {
+    g.restaurar();
+  }
+});
+
+test("N3-G1: la regla se vuelve a mirar YA con el turno: si otra pasada acaba de salir bien, no se retira lo que puso al día", async () => {
+  reiniciar();
+  clinica("c1");
+  bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(30), lastError: "google", equipoFirma: firmaEquipo([]) });
+  deGoogle("b1", "e1");
+  const g = await conGoogle(async () => { throw { response: { status: 500 } }; });
+  try {
+    // 1.º turno: la pasada del cron (falla). 2.º: el retiro; justo antes, otra pasada terminó bien.
+    antesDeTomarTurno.push(null, () => Object.assign(db.imports.get("c1")!, { lastSyncAt: new Date(), lastError: null }));
+    const r = await correrCron();
+    assert.equal(r.retirados, 0);
+    assert.deepEqual(activos(), ["b1"]);
+    assert.equal(db.imports.get("c1")!.syncToken, "tok", "ni se tocó el token");
+    assert.equal(db.imports.get("c1")!.leaseUntil, null, "y el turno se soltó");
+  } finally {
+    g.restaurar();
+  }
+});
+
+/* ═══ Tercera vuelta: N3-G2 (el aviso en el panel) ════════════════════════ */
+
+test("N3-G2: el aviso sale cuando el cron RETIRA de verdad (no antes), con la fecha real y la zona de la clínica; se va cuando la completa repone", async () => {
+  const { estadoEntranteParaPantalla } = await servidor();
+  reiniciar();
+  clinica("c1", { timezone: "America/Tijuana" });
+  bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(30), lastError: "google", equipoFirma: firmaEquipo([]) });
+  const b1 = deGoogle("b1", "e1");
+  deGoogle("b2", "e2");
+  // Un evento borrado en Google ANTES de la última pasada buena: no es un retiro.
+  bloqueo("viejo", "c1", { deletedAt: hace(31) });
+  assert.equal((await estadoEntranteParaPantalla("c1")).retiro, null, "regla cumplida, pero el cron aún no retiró: todavía cierran");
+
+  let google: "falla" | "parcial" | "sana" = "falla";
+  const g = await conGoogle(async () => {
+    if (google === "falla") throw { response: { status: 500 } };
+    if (google === "parcial") return { data: { items: [], nextPageToken: "sigue" } }; // nunca termina: 40 páginas → «parcial»
+    return { data: { items: [enGoogle("e1", b1)], nextSyncToken: "tok9" } };
+  });
+  try {
+    const antes = Date.now();
+    assert.equal((await correrCron()).retirados, 2);
+    const e1 = await estadoEntranteParaPantalla("c1");
+    assert.equal(e1.retiro?.causa, "google");
+    assert.equal(e1.retiro?.zona, "America/Tijuana");
+    assert.ok(Date.parse(e1.retiro!.desde) >= antes, "la fecha es la del retiro (ahora), no la del plazo (hace 6 h)");
+
+    // Google vuelve, pero la completa no cabe: «parcial». Antes: el cron volvía a retirar cada 5 min.
+    google = "parcial";
+    const r2 = await correrCron();
+    assert.equal(r2.retirados, 0, "lo repuesto no se deshace");
+    assert.equal(db.imports.get("c1")!.lastError, "parcial");
+    assert.equal((await estadoEntranteParaPantalla("c1")).retiro?.causa, "reponiendo", "el aviso sigue mientras falta reponer");
+
+    // La completa termina: e1 vuelve a cerrar, e2 ya no existe, y el aviso se va.
+    google = "sana";
+    assert.equal((await correrCron()).sincronizadas, 1);
+    assert.deepEqual(activos(), ["b1"]);
+    assert.equal((await estadoEntranteParaPantalla("c1")).retiro, null);
+  } finally {
+    g.restaurar();
+  }
+});
+
+test("N3-G2: las causas, contra la base (sin calendario elegido no es «error de Google»; caída; desconectada)", async () => {
+  const { estadoEntranteParaPantalla, retirarBloqueosDeGoogle } = await servidor();
+  const caso = async (c: Fila, b: Fila) => {
+    reiniciar();
+    clinica("c1", c);
+    bandera("c1", b);
+    deGoogle("b1", "e1");
+    await retirarBloqueosDeGoogle("c1");
+    return (await estadoEntranteParaPantalla("c1")).retiro?.causa ?? null;
+  };
+  assert.equal(await caso({ googleClinicCalendarId: null }, { lastSyncAt: hace(30) }), "calendario");
+  assert.equal(await caso({ googleCalendarEnabled: false }, { lastSyncAt: hace(30), lastError: "autorizacion" }), "conexion");
+  assert.equal(await caso({ googleRefreshToken: null, googleCalendarEnabled: false }, { lastSyncAt: hace(30) }), "desconectada");
+  assert.equal(await caso({}, { lastSyncAt: hace(30), lastError: "permisos" }), "permisos");
+  assert.equal(await caso({}, { lastSyncAt: hace(30), lastError: "google", enabled: false }), null, "sin la bandera, nada");
 });

@@ -42,6 +42,7 @@ import {
   preguntarOtraVez,
   type ConfirmacionSobreagenda,
 } from "./google-sobreagendar";
+import { leerRetiro, textoAvisoAgenda, type RetiroPantalla } from "./google-retiro-aviso";
 import s from "./agenda-nueva.module.css";
 import g from "./google-calendario.module.css";
 
@@ -72,6 +73,8 @@ interface EstadoPantalla {
   conectada: boolean;
   error: string | null;
   cambios?: boolean;
+  /** Los eventos de Google ya no cierran la agenda (N3-G2). */
+  retiro?: RetiroPantalla | null;
 }
 
 function leerEstado(raw: unknown): EstadoPantalla | null {
@@ -82,11 +85,13 @@ function leerEstado(raw: unknown): EstadoPantalla | null {
     conectada: r.conectada === true,
     error: typeof r.error === "string" ? r.error : null,
     cambios: r.cambios === true,
+    retiro: leerRetiro(r.retiro),
   };
 }
 
 export function SincronizarGoogleAlAbrir() {
   const t = useT();
+  const locale = useLocale();
   const { invalidateRangeCache, refetchView } = useAgenda();
   const [estado, setEstado] = useState<EstadoPantalla | null>(null);
 
@@ -121,29 +126,17 @@ export function SincronizarGoogleAlAbrir() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const texto = estado?.encendida ? avisoDeConexion(estado.error) : null;
+  const texto = textoAvisoAgenda(estado, t, locale);
   if (!texto) return null;
   return (
-    <div className={g.avisoReconectar} role="status">
+    <div className={g.avisoReconectar} role={estado?.retiro ? "alert" : "status"}>
       <RefreshCw size={16} aria-hidden className={g.avisoIcono} />
-      <span className={g.avisoTexto}>{t(texto)}</span>
+      <span className={g.avisoTexto}>{texto}</span>
       <a className={g.avisoEnlace} href="/dashboard/settings?tab=integraciones">
         {t("agenda.google.reconectarBoton")}
       </a>
     </div>
   );
-}
-
-/**
- * Qué aviso enseña la agenda según el error (revisión t8, G3). Con «permisos»
- * solo falla LEER (las citas sí se copian a Google); con la conexión caída o
- * rechazada no va nada en ningún sentido, y no se puede decir lo contrario.
- */
-export function avisoDeConexion(error: string | null): string | null {
-  if (error === "permisos") return "agenda.google.reconectar";
-  if (error === "autorizacion" || error === "conexion_caida") return "agenda.google.reconectarCaida";
-  if (error === "calendario_personal" || error === "calendario_compartido") return "agenda.google.calendarioNoValido";
-  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
