@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sincronizarEntrante, type PuertosEntrante, type VinculoLeido } from "../entrante-nucleo";
-import type { EventoGoogle } from "../entrante-core";
+import type { EventoGoogle, UsuarioClinica } from "../entrante-core";
 
 const AHORA = new Date("2026-10-20T15:00:00Z");
 const CAL = "cal-clinica@group.calendar.google.com";
@@ -88,7 +88,12 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
     lease: null as Date | null,
     dirty: null as Date | null,
     error: null as string | null,
+    equipoFirma: null as string | null,
   };
+  const usuarios: UsuarioClinica[] = [
+    { id: "doc-ana", email: "ana@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Ana López" },
+    { id: "rec-eva", email: "recepcion@clinica.mx", recibeCitas: false, rol: "RECEPTIONIST", nombre: "Eva Ruiz" },
+  ];
   let n = 0;
   const consultas = { series: 0 };
   const leer = (v: Vinc): VinculoLeido => {
@@ -124,14 +129,12 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
       estado.syncToken = d.syncToken;
       estado.lastSyncAt = d.ahora;
       if (d.completa) estado.lastFullSyncAt = d.ahora;
+      if (d.equipoFirma) estado.equipoFirma = d.equipoFirma;
     },
     guardarError: async (_c, e) => { estado.error = e; },
     abrirCalendar: () => google.cliente(),
     guardarAccessToken: async () => undefined,
-    leerUsuarios: async () => [
-      { id: "doc-ana", email: "ana@clinica.mx", recibeCitas: true },
-      { id: "rec-eva", email: "recepcion@clinica.mx", recibeCitas: false },
-    ],
+    leerUsuarios: async () => usuarios.map((u) => ({ ...u })),
     calendarioEnOtraClinica: async () => opts.calendarioEnOtra === true,
     leerVinculos: async (_c, cal, ids) => [...vinculos.values()].filter((v) => v.calendarId === cal && ids.includes(v.googleEventId)).map(leer),
     leerVinculosDeSeries: async (_c, cal, series) => {
@@ -157,18 +160,22 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
       const c = citas.get(id);
       return c ? { status: c.status, startsAt: c.startsAt, endsAt: c.endsAt, googleEventId: c.googleCalendarEventId } : null;
     },
-    actualizarVinculo: async (_c, id, cambios) => { Object.assign(vinculos.get(id)!, cambios); },
-    retirarNoVistos: async (_c, vistos, desde, ahora) => {
+    actualizarVinculo: async (_c, id, cambios, antes) => {
+      const v = vinculos.get(id)!;
+      if (antes && (v.eventStartsAt.getTime() !== antes.eventStartsAt.getTime() || v.eventEndsAt.getTime() !== antes.eventEndsAt.getTime())) return;
+      Object.assign(v, cambios);
+    },
+    retirarNoVistos: async (_c, vistos, desde, hasta, ahora) => {
       let k = 0;
       for (const v of vinculos.values()) {
         const b = bloques.get(v.blockId)!;
-        if (!v.appointmentId && !b.deletedAt && b.endsAt > desde && !vistos.has(v.googleEventId)) { b.deletedAt = ahora; k++; }
+        if (!v.appointmentId && !b.deletedAt && b.endsAt > desde && b.startsAt < hasta && !vistos.has(v.googleEventId)) { b.deletedAt = ahora; k++; }
       }
       return k;
     },
     ahora: () => AHORA,
   };
-  return { p, google, bloques, vinculos, citas, estado, consultas };
+  return { p, google, bloques, vinculos, citas, estado, consultas, usuarios };
 }
 
 const evento = (id: string, x: Partial<EventoGoogle> = {}): EventoGoogle => ({
@@ -423,4 +430,92 @@ test("G7: la cita convertida ya va ligada a OTRO evento → lo que le pase al vi
   await sincronizarEntrante(a.p, "c1");
   assert.equal(v.avisoTipo, null);
   assert.ok(v.eventDeletedAt, "el vínculo sí anota que el evento viejo se borró");
+});
+
+/* ═══ Segunda vuelta de la revisión t8 ════════════════════════════════════ */
+
+test("N-G2: recepción + el Gmail personal de la doctora → cierra TODA la clínica (nunca «a nadie»)", async () => {
+  const a = montar();
+  a.google.poner(evento("q1", { summary: "Quirófano", attendees: [{ email: "recepcion@clinica.mx" }, { email: "ana.lopez.83@gmail.com" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  const [b] = activos(a.bloques);
+  assert.equal(b.doctorId, null, "de toda la clínica: cierra también a la doctora");
+  assert.equal([...a.vinculos.values()][0].alcance, "no_reconocido");
+});
+
+test("N-G2: si ese Gmail es el que la doctora conectó a Google (users.googleCalendarEmail) → cierra SU agenda", async () => {
+  const a = montar();
+  a.usuarios[0].otrosCorreos = ["ana.lopez.83@gmail.com"];
+  a.google.poner(evento("q1", { summary: "Quirófano", attendees: [{ email: "recepcion@clinica.mx" }, { email: "Ana.Lopez.83@gmail.com" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques)[0].doctorId, "doc-ana");
+});
+
+test("N-G5: cambia el equipo → la siguiente pasada es COMPLETA y el evento que ya estaba cambia de dueño", async () => {
+  const a = montar();
+  a.google.poner(evento("e1", { attendees: [{ email: "nueva@clinica.mx" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques)[0].doctorId, null, "nadie de la clínica todavía: toda la clínica");
+  // Sin cambios en el equipo, la siguiente es incremental (no relee nada).
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(a.google.llamadas[1].syncToken, "v1");
+  // Entra la doctora con ese correo: el evento no cambió en Google, pero ya es suyo.
+  a.usuarios.push({ id: "doc-nueva", email: "nueva@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Sara Gil" });
+  const r = await sincronizarEntrante(a.p, "c1");
+  assert.equal(r.estado === "ok" && r.completa, true);
+  assert.equal(a.google.llamadas[2].syncToken, undefined);
+  assert.equal(activos(a.bloques)[0].doctorId, "doc-nueva");
+  // Y la que sigue vuelve a ser incremental.
+  await sincronizarEntrante(a.p, "c1");
+  assert.ok(a.google.llamadas[3].syncToken);
+});
+
+test("N-G6: un evento hecho a mano con el título y el pie de una cita (duplicado en Google) SÍ cierra la agenda; ligado a una cita, no", async () => {
+  const a = montar();
+  const copia = { summary: "🏥 Limpieza — Ana G.", description: "Paciente: Ana G.\nAgendado desde DaleControl" };
+  a.google.poner(evento("dup", { ...copia, attendees: [{ email: "ana@clinica.mx" }] }));
+  a.google.poner(evento("viejo", copia));
+  a.citas.set("cita-1", { status: "SCHEDULED", startsAt: new Date("2026-10-21T16:00:00Z"), endsAt: new Date("2026-10-21T17:00:00Z"), googleCalendarEventId: "viejo" });
+  await sincronizarEntrante(a.p, "c1");
+  const porEvento = new Map([...a.vinculos.values()].map((v) => [v.googleEventId, v]));
+  assert.ok(porEvento.has("dup"), "el duplicado cierra la agenda");
+  assert.equal(a.bloques.get(porEvento.get("dup")!.blockId)!.doctorId, "doc-ana");
+  assert.equal(porEvento.has("viejo"), false, "el evento de una cita es eco");
+});
+
+test("N-G8: la completa pide hasta el horizonte (timeMax) y solo retira lo que cae dentro; la incremental no lleva fechas", async () => {
+  const a = montar();
+  a.google.poner(evento("e1"));
+  await sincronizarEntrante(a.p, "c1");
+  const [primera] = a.google.llamadas;
+  assert.equal(primera.timeMin, new Date(AHORA.getTime() - 24 * 3600_000).toISOString());
+  assert.equal(primera.timeMax, new Date(AHORA.getTime() + 400 * 24 * 3600_000).toISOString());
+  // Un bloqueo más allá del horizonte (no lo pudo traer esta lista) no se retira por «no visto».
+  a.bloques.set("lejos", { id: "lejos", doctorId: null, startsAt: new Date("2028-01-01T00:00:00Z"), endsAt: new Date("2028-01-02T00:00:00Z"), deletedAt: null, kind: "GOOGLE" });
+  a.vinculos.set("lejos", { blockId: "lejos", calendarId: CAL, googleEventId: "lejos", recurringEventId: null, title: "x", allDay: true, appointmentId: null, eventStartsAt: new Date("2028-01-01T00:00:00Z"), eventEndsAt: new Date("2028-01-02T00:00:00Z"), eventDeletedAt: null, avisoTipo: null });
+  await sincronizarEntrante(a.p, "c1", { forzarCompleta: true });
+  assert.equal(a.bloques.get("lejos")!.deletedAt, null);
+  await sincronizarEntrante(a.p, "c1");
+  const ultima = a.google.llamadas[a.google.llamadas.length - 1];
+  assert.equal(ultima.timeMin, undefined);
+  assert.equal(ultima.timeMax, undefined);
+});
+
+test("N-G1: si la salida anota otra hora entre que la entrada lee el vínculo y lo guarda, la lectura vieja no saca un aviso falso", async () => {
+  const a = montar();
+  const id = "conv";
+  a.google.poner(evento(id, { start: { dateTime: "2026-10-21T11:00:00-06:00" }, end: { dateTime: "2026-10-21T12:00:00-06:00" } }));
+  a.bloques.set("bc", { id: "bc", doctorId: "doc-ana", startsAt: new Date("2026-10-21T16:00:00Z"), endsAt: new Date("2026-10-21T17:00:00Z"), deletedAt: new Date(), kind: "GOOGLE" });
+  a.vinculos.set("bc", { blockId: "bc", calendarId: CAL, googleEventId: id, recurringEventId: null, title: "x", allDay: false, appointmentId: "cita-c", eventStartsAt: new Date("2026-10-21T16:00:00Z"), eventEndsAt: new Date("2026-10-21T17:00:00Z"), eventDeletedAt: null, avisoTipo: null });
+  // La cita ya va a las 12:00 (segundo cambio) y la salida lo dejó en Google y lo anotó…
+  a.citas.set("cita-c", { status: "SCHEDULED", startsAt: new Date("2026-10-21T18:00:00Z"), endsAt: new Date("2026-10-21T19:00:00Z"), googleCalendarEventId: id });
+  const leerCita = a.p.leerCita;
+  a.p.leerCita = async (...args) => {
+    // …justo después de que la entrada leyó el vínculo (10:00) y el evento (11:00, viejo).
+    Object.assign(a.vinculos.get("bc")!, { eventStartsAt: new Date("2026-10-21T18:00:00Z"), eventEndsAt: new Date("2026-10-21T19:00:00Z") });
+    return leerCita(...args);
+  };
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(a.vinculos.get("bc")!.avisoTipo, null, "sin «movido a 11:00» falso");
+  assert.equal(a.vinculos.get("bc")!.eventStartsAt.toISOString(), "2026-10-21T18:00:00.000Z");
 });

@@ -271,20 +271,26 @@ export async function parcharEvento(
   cal: ClienteCalendar,
   d: DatosEvento,
   /**
-   * WS1-T9 · una cita que vino de un evento de Google (revisión t8, G6): el
-   * evento es de la clínica, no nuestro. Se le conservan la descripción y la
-   * ubicación que tenía (los invitados nunca viajan en el parche).
+   * WS1-T9 · una cita que vino de un evento de Google (revisión t8, G6, y
+   * segunda vuelta): el evento es de la clínica, no nuestro. Solo viajan la
+   * hora y el estado: se le conservan el título, la descripción, la
+   * ubicación (los invitados nunca viajan en el parche) y no se le pone la
+   * marca de DaleControl. `titulo` = cambiarle el título a ese (p. ej. quitar
+   * «Cancelada en DaleControl · » al reactivar); null/ausente = no tocarlo.
    */
-  opts: { conservarDescripcion?: boolean } = {},
+  opts: { conservarContenido?: boolean; titulo?: string | null; restaurar?: boolean } = {},
 ): Promise<"ok" | "no_existe"> {
-  const { description, location, ...sinDescripcion } = cuerpoBase(d);
-  const cuerpo = opts.conservarDescripcion ? sinDescripcion : { ...sinDescripcion, description, location };
+  const { description, location, summary, extendedProperties, ...horario } = cuerpoBase(d);
+  // En una convertida, «confirmed» solo para RESTAURARLA (`restaurar`): un evento «tentativo» de la clínica se queda así.
+  const cuerpo = opts.conservarContenido
+    ? { ...horario, ...(typeof opts.titulo === "string" ? { summary: opts.titulo } : {}), ...(opts.restaurar ? { status: "confirmed" } : {}) }
+    : { ...horario, summary, description, location, extendedProperties, status: "confirmed" };
   try {
     await cal.events.patch({
       calendarId: d.calendarId,
       eventId: d.eventId,
       sendUpdates: "none",
-      requestBody: { ...cuerpo, status: "confirmed" },
+      requestBody: cuerpo,
     });
     return "ok";
   } catch (err) {

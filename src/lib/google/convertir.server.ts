@@ -20,16 +20,19 @@
  * Con el id del evento ya en la cita, la sincronización de salida de siempre
  * (`sincronizarCitaEnSegundoPlano`) hace `events.patch` sobre ESE evento: no
  * crea uno nuevo, no hay duplicado en Google. Y lo trata distinto que a uno
- * suyo (`vinculoParaSalida`, revisión t8 G4/G6): no le pisa la descripción ni
- * los invitados, no lo mueve mientras haya un aviso sin decidir, y al cancelar
- * la cita NO lo borra: le antepone «Cancelada en DaleControl · » al título.
+ * suyo (`vinculoParaSalida`, revisión t8 G4/G6 y segunda vuelta): no le pisa
+ * el título, la descripción ni los invitados, no lo mueve mientras haya un
+ * aviso sin decidir, y al cancelar la cita NO lo borra: le antepone
+ * «Cancelada en DaleControl · » al título. Lo que no llegó a Google lo repone
+ * el cron (`reintentarSalidaDeConvertidas`).
  */
 
 import { prisma } from "@/lib/prisma";
 import { puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
 import { idEventoDeCita } from "@/lib/google-calendar";
+import { firmaSalidaConvertida, type SalidaConvertida } from "@/lib/agenda/google-sync-nucleo";
 import { tablasGoogleListas, tablasGoogleListasOLanzar } from "./tablas.server";
-import { avisoVigente, puedeVerTitulo, type AlcanceGoogle, type AvisoVigente } from "./entrante-core";
+import { avisoVigente, calendarioImportable, puedeVerTitulo, type AlcanceGoogle, type AvisoVigente } from "./entrante-core";
 
 /** Un evento más largo que esto no se convierte en UNA cita (G5). */
 export const CONVERTIR_MAX_HORAS = 12;
@@ -280,8 +283,13 @@ export async function avisoDeCitaGoogle(clinicId: string, appointmentId: string)
 export interface VinculoSalida {
   tituloOriginal: string;
   avisoPendiente: boolean;
-  /** La hora del evento en Google la última vez que se LEYÓ, y si se vio borrado. */
-  eventoVisto: { startsAt: Date; endsAt: Date; eliminado: boolean };
+  /**
+   * La hora del evento en Google la última vez que se leyó o escribió, y si se
+   * vio borrado. Ausente si la entrada no corre para esta clínica (N-G9).
+   */
+  eventoVisto?: { startsAt: Date; endsAt: Date; eliminado: boolean };
+  /** «Mantener la cita» tras «se eliminó» (y no hay un aviso nuevo). */
+  mantenerEliminado?: boolean;
 }
 
 /**
@@ -311,6 +319,18 @@ export async function vinculoParaSalida(
     },
   });
   if (!v) return null;
+  // ¿La entrada sigue leyendo este calendario? Si se apagó la bandera o el
+  // calendario ya no es uno que lea (G14), nadie pondría un aviso: la «última
+  // vista» se quedaría vieja y cada cambio de la cita solo tocaría el título,
+  // para siempre y sin aviso (N-G9). Entonces manda DaleControl: ni aviso ni
+  // última vista. Cancelar sigue siendo «solo el título».
+  const [imp, clinica] = await Promise.all([
+    prisma.googleAgendaImport.findUnique({ where: { clinicId }, select: { enabled: true } }),
+    prisma.clinic.findUnique({ where: { id: clinicId }, select: { googleClinicCalendarId: true } }),
+  ]);
+  if (!imp?.enabled || !calendarioImportable(clinica?.googleClinicCalendarId)) {
+    return { tituloOriginal: v.title, avisoPendiente: false };
+  }
   let avisoPendiente = !!v.avisoTipo && !v.avisoDescartadoAt;
   // «Mover la cita» (o alguien la movió) a la hora del aviso: el aviso ya se
   // resolvió. Se limpia aquí: si no, se quedaba pegado y, al mover la cita otra
@@ -321,8 +341,10 @@ export async function vinculoParaSalida(
     v.avisoStartsAt?.getTime() === cita.startsAt.getTime() &&
     v.avisoEndsAt?.getTime() === cita.endsAt.getTime()
   ) {
+    // Solo ESE aviso (sus horas): uno «movido» nuevo que la entrada acabe de
+    // guardar a otra hora no se borra sin que nadie lo vea (N-G10).
     await prisma.agendaBlockGoogle.updateMany({
-      where: { blockId: v.blockId, clinicId, avisoTipo: "movido" },
+      where: { blockId: v.blockId, clinicId, avisoTipo: "movido", avisoStartsAt: v.avisoStartsAt, avisoEndsAt: v.avisoEndsAt },
       data: { avisoTipo: null, avisoStartsAt: null, avisoEndsAt: null, avisoDesde: null, avisoDescartadoAt: null },
     });
     avisoPendiente = false;
@@ -331,6 +353,7 @@ export async function vinculoParaSalida(
     tituloOriginal: v.title,
     avisoPendiente,
     eventoVisto: { startsAt: v.eventStartsAt, endsAt: v.eventEndsAt, eliminado: !!v.eventDeletedAt },
+    mantenerEliminado: v.avisoTipo === "eliminado" && !!v.avisoDescartadoAt,
   };
 }
 
@@ -344,7 +367,112 @@ export async function descartarAvisoDeCitaGoogle(clinicId: string, appointmentId
   if (!(await tablasGoogleListas())) return false;
   const r = await prisma.agendaBlockGoogle.updateMany({
     where: { clinicId, appointmentId, avisoTipo: { not: null }, avisoDescartadoAt: null },
-    data: { avisoDescartadoAt: new Date() },
+    // Sin firma: si la copia que sigue falla, el cron la repite (N-G12).
+    data: { avisoDescartadoAt: new Date(), salidaFirma: null },
   });
   return r.count > 0;
+}
+
+/**
+ * Tras una salida buena de una cita convertida (lo llama la salida, ver
+ * `SalidaConvertida`): la firma de lo que quedó en Google y, si se copió la
+ * hora, esa hora como «la última vista». Esta última, solo si el vínculo
+ * sigue con la que se leyó: si la entrada vio otra cosa mientras, gana ella.
+ */
+export async function guardarSalidaConvertida(
+  clinicId: string,
+  appointmentId: string,
+  googleEventId: string,
+  d: SalidaConvertida,
+): Promise<void> {
+  if (!idValido(clinicId) || !idValido(appointmentId) || !idValido(googleEventId)) return;
+  const donde = { clinicId, appointmentId, googleEventId };
+  if (d.visto) {
+    await prisma.agendaBlockGoogle.updateMany({
+      where: { ...donde, ...(d.visto.antes ? { eventStartsAt: d.visto.antes.startsAt, eventEndsAt: d.visto.antes.endsAt } : {}) },
+      data: { eventStartsAt: d.visto.startsAt, eventEndsAt: d.visto.endsAt, eventDeletedAt: null },
+    });
+  }
+  if (d.firma) await prisma.agendaBlockGoogle.updateMany({ where: donde, data: { salidaFirma: d.firma } });
+}
+
+/** Cuántas convertidas se reintentan por clínica en una pasada del cron. */
+export const REINTENTOS_POR_PASADA = 20;
+
+/**
+ * Las citas convertidas cuya última copia a Google no llegó (la firma guardada
+ * no es la de la cita: un fallo de red, de Google o de base al cancelarla o
+ * moverla). Antes nada las reintentaba: el evento se quedaba sin «Cancelada en
+ * DaleControl» hasta el siguiente cambio de la cita (N-G12). Solo las que
+ * siguen ligadas a su evento y no terminaron hace más de un día.
+ */
+export async function convertidasPorReintentar(clinicId: string, ahora = new Date()): Promise<string[]> {
+  if (!idValido(clinicId)) return [];
+  if (!(await tablasGoogleListas())) return [];
+  const vinculos = await prisma.agendaBlockGoogle.findMany({
+    where: { clinicId, appointmentId: { not: null } },
+    select: { appointmentId: true, googleEventId: true, salidaFirma: true, avisoTipo: true, avisoDescartadoAt: true },
+    orderBy: { convertedAt: "desc" },
+    take: 500,
+  });
+  if (vinculos.length === 0) return [];
+  const citas = await prisma.appointment.findMany({
+    where: {
+      clinicId,
+      id: { in: vinculos.map((v) => v.appointmentId as string) },
+      endsAt: { gt: new Date(ahora.getTime() - 24 * 60 * 60 * 1000) },
+    },
+    select: { id: true, status: true, startsAt: true, endsAt: true, googleCalendarEventId: true },
+  });
+  const porId = new Map(citas.map((c) => [c.id, c]));
+  const out: string[] = [];
+  for (const v of vinculos) {
+    const c = porId.get(v.appointmentId as string);
+    if (!c || c.googleCalendarEventId !== v.googleEventId) continue;
+    if (v.salidaFirma === firmaSalidaConvertida(c)) continue;
+    // Con un aviso sin decidir la hora no se copia a propósito: no se reintenta
+    // (salvo que la cita ya esté cancelada: entonces el aviso no se enseña y
+    // el «Cancelada en DaleControl» sí tiene que llegar).
+    if (v.avisoTipo && !v.avisoDescartadoAt && !["CANCELLED", "NO_SHOW", "COMPLETED"].includes(c.status)) continue;
+    out.push(c.id);
+    if (out.length >= REINTENTOS_POR_PASADA) break;
+  }
+  return out;
+}
+
+/**
+ * Clínicas con citas convertidas (para que el cron también repase las que ya
+ * NO tienen la bandera: una cancelación cuya copia falló se repone igual).
+ */
+export async function clinicasConConvertidas(): Promise<string[]> {
+  if (!(await tablasGoogleListas())) return [];
+  const filas = await prisma.agendaBlockGoogle.groupBy({
+    by: ["clinicId"],
+    where: { appointmentId: { not: null } },
+    take: 500,
+    orderBy: { clinicId: "asc" },
+  });
+  return filas.map((f) => f.clinicId);
+}
+
+/** El cron: vuelve a copiar a Google las convertidas pendientes. Devuelve cuántas intentó. Nunca lanza. */
+export async function reintentarSalidaDeConvertidas(
+  clinicId: string,
+  sincronizar: (clinicId: string, appointmentId: string) => Promise<unknown>,
+  /** Hasta cuándo (ms) puede seguir: el presupuesto del cron. */
+  limite = Number.POSITIVE_INFINITY,
+): Promise<number> {
+  try {
+    const ids = await convertidasPorReintentar(clinicId);
+    let n = 0;
+    for (const id of ids) {
+      if (Date.now() >= limite) break;
+      await sincronizar(clinicId, id);
+      n++;
+    }
+    return n;
+  } catch (e) {
+    console.error("[google-entrante] no se pudieron reintentar las convertidas:", (e as any)?.message ?? e);
+    return 0;
+  }
 }

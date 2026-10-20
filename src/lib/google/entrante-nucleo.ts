@@ -29,6 +29,8 @@ import {
   decidirAvisoCita,
   decidirEvento,
   esEventoDeDaleControl,
+  firmaEquipo,
+  HORIZONTE_DIAS,
   tocaCompleta,
   VENTANA_PASADO_MS,
   type BloqueoExistente,
@@ -67,6 +69,8 @@ export interface EstadoEntrante {
   channelExpiresAt: Date | null;
   /** El calendario al que apunta el canal de avisos. */
   channelCalendarId: string | null;
+  /** `firmaEquipo` de la última pasada: si el equipo cambió, toca completa (N-G5). */
+  equipoFirma?: string | null;
 }
 
 export interface ConexionGoogle {
@@ -110,7 +114,7 @@ export interface PuertosEntrante {
   marcarSucio(clinicId: string): Promise<void>;
   guardarProgreso(
     clinicId: string,
-    d: { calendarId: string; syncToken: string | null; completa: boolean; ahora: Date },
+    d: { calendarId: string; syncToken: string | null; completa: boolean; ahora: Date; equipoFirma?: string },
   ): Promise<void>;
   guardarError(clinicId: string, error: ErrorEntrante | null): Promise<void>;
   abrirCalendar(cred: { accessToken: string | null; refreshToken: string; alRenovarToken: (t: string) => void }): ClienteCalendarEntrante;
@@ -129,9 +133,23 @@ export interface PuertosEntrante {
   actualizarBloqueo(clinicId: string, blockId: string, d: DatosBloqueo): Promise<void>;
   inactivarBloqueo(clinicId: string, blockId: string, ahora: Date): Promise<void>;
   leerCita(clinicId: string, appointmentId: string): Promise<CitaDelVinculo | null>;
-  actualizarVinculo(clinicId: string, blockId: string, cambios: CambiosVinculo): Promise<void>;
-  /** Retira los bloqueos SIN convertir y activos que no se vieron en la completa (y que no terminaron antes de `desde`). */
-  retirarNoVistos(clinicId: string, vistos: Set<string>, desde: Date, ahora: Date): Promise<number>;
+  /**
+   * Guarda los cambios SOLO si el vínculo sigue con la hora que se leyó
+   * (`antes`): si la salida acaba de copiar otra hora (y la anotó), esta
+   * lectura ya es vieja y no debe sacar un aviso falso (segunda vuelta, N-G1).
+   */
+  actualizarVinculo(
+    clinicId: string,
+    blockId: string,
+    cambios: CambiosVinculo,
+    antes?: { eventStartsAt: Date; eventEndsAt: Date },
+  ): Promise<void>;
+  /**
+   * Retira los bloqueos SIN convertir y activos que no se vieron en la completa
+   * y que caen dentro de lo que se le pidió a Google (terminan después de
+   * `desde` y empiezan antes de `hasta`). TODOS, por páginas (N-G8).
+   */
+  retirarNoVistos(clinicId: string, vistos: Set<string>, desde: Date, hasta: Date, ahora: Date): Promise<number>;
   ahora?(): Date;
   log?(...args: unknown[]): void;
 }
@@ -266,8 +284,14 @@ async function pasada(
   });
 
   const ahora = reloj();
+  const usuarios = await p.leerUsuarios(clinicId);
+  // El equipo cambió (una doctora nueva con ese correo, «Aparece en la agenda»
+  // encendido…): la incremental solo trae lo que cambió en Google y los
+  // eventos de antes seguirían con el dueño viejo. Completa (N-G5).
+  const equipoFirma = firmaEquipo(usuarios);
   let completa =
     forzar ||
+    (estado.equipoFirma ?? null) !== equipoFirma ||
     tocaCompleta({
       syncToken: estado.syncToken,
       calendarIdGuardado: estado.calendarId,
@@ -276,12 +300,15 @@ async function pasada(
       ahora,
     });
 
-  const usuarios = await p.leerUsuarios(clinicId);
   const zona = conexion.timezone || "America/Mexico_City";
 
   try {
     for (let intento = 0; intento < 2; intento++) {
       const desde = new Date(ahora.getTime() - VENTANA_PASADO_MS);
+      // Con tope: sin él, las series sin fin se expanden años y la pasada se
+      // queda «parcial» para siempre, sin syncToken (N-G8). Más allá del
+      // horizonte no se importa nada (`decidirEvento`).
+      const hasta = new Date(ahora.getTime() + HORIZONTE_DIAS * 24 * 60 * 60 * 1000);
       const vistos = new Set<string>();
       let pageToken: string | undefined;
       let nextSyncToken: string | null = null;
@@ -295,8 +322,10 @@ async function pasada(
             showDeleted: true,
             maxResults: 250,
           };
-          if (completa) params.timeMin = desde.toISOString();
-          else params.syncToken = estado.syncToken;
+          if (completa) {
+            params.timeMin = desde.toISOString();
+            params.timeMax = hasta.toISOString();
+          } else params.syncToken = estado.syncToken;
           if (pageToken) params.pageToken = pageToken;
           const r = await cal.events.list(params);
           const items = (r.data.items ?? []).filter((e): e is EventoGoogle => !!e && typeof e.id === "string" && !!e.id);
@@ -317,8 +346,8 @@ async function pasada(
         throw err;
       }
       if (pageToken) throw new SinTiempo(); // demasiadas páginas en una pasada: la siguiente sigue
-      if (completa) total.retirados += await p.retirarNoVistos(clinicId, vistos, desde, reloj());
-      await p.guardarProgreso(clinicId, { calendarId, syncToken: nextSyncToken, completa, ahora: reloj() });
+      if (completa) total.retirados += await p.retirarNoVistos(clinicId, vistos, desde, hasta, reloj());
+      await p.guardarProgreso(clinicId, { calendarId, syncToken: nextSyncToken, completa, ahora: reloj(), equipoFirma });
       return { completa };
     }
     return { completa };
@@ -369,7 +398,7 @@ async function procesarPagina(
       const cita = leida && leida.googleEventId !== undefined && leida.googleEventId !== v.googleEventId ? null : leida;
       const cambios = decidirAvisoCita(ev, v, cita, ctx);
       if (Object.keys(cambios).length > 0) {
-        await p.actualizarVinculo(clinicId, v.blockId, cambios);
+        await p.actualizarVinculo(clinicId, v.blockId, cambios, { eventStartsAt: v.eventStartsAt, eventEndsAt: v.eventEndsAt });
         if (cambios.avisoTipo) total.avisos++;
       }
       continue;

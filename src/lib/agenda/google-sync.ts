@@ -116,6 +116,9 @@ const puertos: PuertosEnBloque = {
   armarContenido: armarContenidoEventoGoogle,
   esErrorDeAutorizacion: esErrorDeAutorizacionGoogle,
   marcarCaido: (clinicId, motivo) => marcarGoogleCaido(clinicId, motivo),
+  // WS1-T9: solo lo llaman las citas convertidas (import dinámico, como `leerCita`).
+  marcarSalidaConvertida: async (clinicId, appointmentId, googleEventId, d) =>
+    (await import("@/lib/google/convertir.server")).guardarSalidaConvertida(clinicId, appointmentId, googleEventId, d),
   log: (...args) => console.error(...args),
 
   async listarFuturasSinEvento(clinicId, desde, tope) {

@@ -50,12 +50,15 @@ CREATE TABLE IF NOT EXISTS google_agenda_imports (
   -- El último fallo al crear/renovar el canal de avisos (no lo pisa la sincronización).
   "channelError"      VARCHAR(200),
   "channelErrorAt"    TIMESTAMPTZ(3),
+  -- Huella del equipo en la última pasada: si cambia, la siguiente es completa (N-G5).
+  "equipoFirma"       VARCHAR(40),
   "createdAt"         TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
   "updatedAt"         TIMESTAMPTZ(3) NOT NULL DEFAULT NOW()
 );
 -- Por si una versión anterior de este archivo ya creó la tabla sin ellas.
 ALTER TABLE google_agenda_imports ADD COLUMN IF NOT EXISTS "channelError"   VARCHAR(200);
 ALTER TABLE google_agenda_imports ADD COLUMN IF NOT EXISTS "channelErrorAt" TIMESTAMPTZ(3);
+ALTER TABLE google_agenda_imports ADD COLUMN IF NOT EXISTS "equipoFirma"    VARCHAR(40);
 CREATE UNIQUE INDEX IF NOT EXISTS "google_agenda_imports_channelId_key"
   ON google_agenda_imports ("channelId");
 COMMENT ON TABLE google_agenda_imports IS
@@ -86,12 +89,16 @@ CREATE TABLE IF NOT EXISTS agenda_block_google (
   "avisoEndsAt"       TIMESTAMPTZ(3),
   "avisoDesde"        TIMESTAMPTZ(3),
   "avisoDescartadoAt" TIMESTAMPTZ(3),
+  -- Cita convertida: lo último que quedó bien en Google («estado|inicio|fin»);
+  -- si no coincide con la cita, el cron lo repite (N-G12).
+  "salidaFirma"       VARCHAR(120),
   "createdAt"         TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
   "updatedAt"         TIMESTAMPTZ(3) NOT NULL DEFAULT NOW()
 );
 -- Un evento = un bloqueo por clínica y calendario: lo que hace idempotente
 -- que el aviso de Google, el cron y la agenda sincronicen a la vez.
-ALTER TABLE agenda_block_google ADD COLUMN IF NOT EXISTS "alcance" VARCHAR(20);
+ALTER TABLE agenda_block_google ADD COLUMN IF NOT EXISTS "alcance"     VARCHAR(20);
+ALTER TABLE agenda_block_google ADD COLUMN IF NOT EXISTS "salidaFirma" VARCHAR(120);
 CREATE UNIQUE INDEX IF NOT EXISTS agenda_block_google_evento_unico
   ON agenda_block_google ("clinicId", "calendarId", "googleEventId");
 CREATE INDEX IF NOT EXISTS agenda_block_google_cita_idx
@@ -130,8 +137,13 @@ END
 $rls$;
 
 -- Comprobación (solo lectura). El editor enseña solo el ÚLTIMO resultado:
--- una fila con tipo_google = GOOGLE y las dos tablas con nombre (no NULL).
+-- una fila con tipo_google = GOOGLE, las dos tablas con nombre (no NULL) y
+-- columnas_nuevas = true (las mismas que mira la app antes de usar las tablas).
 SELECT (SELECT enumlabel FROM pg_enum
          WHERE enumtypid = '"AgendaBlockKind"'::regtype AND enumlabel = 'GOOGLE') AS tipo_google,
        to_regclass('public.google_agenda_imports')::text AS tabla_bandera,
-       to_regclass('public.agenda_block_google')::text   AS tabla_vinculo;
+       to_regclass('public.agenda_block_google')::text   AS tabla_vinculo,
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND ((table_name = 'google_agenda_imports' AND column_name IN ('channelError', 'channelErrorAt', 'equipoFirma'))
+             OR (table_name = 'agenda_block_google' AND column_name IN ('alcance', 'salidaFirma')))) = 5 AS columnas_nuevas;

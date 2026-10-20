@@ -7,6 +7,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   asignarEvento,
+  bloqueosSinMantener,
+  firmaEquipo,
+  normalizarNombre,
+  SIN_MANTENER_RETIRA_MS,
   avisoVigente,
   calendarioImportable,
   canalPorRenovar,
@@ -71,12 +75,13 @@ test("el eco: los eventos de las citas de DaleControl se reconocen por la marca 
   assert.equal(esEventoDeDaleControl(ev({ extendedProperties: { private: { otraApp: "x" } } })), false);
 });
 
-test("el eco sin marca (eventos viejos o de citas borradas): por el pie «Agendado desde DaleControl» o el título «🏥 tipo — paciente» (G13)", () => {
-  assert.equal(esEventoDeDaleControl(ev({ description: "Tipo: Limpieza\nClínica: X\n\nAgendado desde DaleControl" })), true);
-  assert.equal(esEventoDeDaleControl(ev({ summary: "🏥 Limpieza — Ana G." })), true);
-  // Un 🏥 suelto o una descripción cualquiera no bastan.
-  assert.equal(esEventoDeDaleControl(ev({ summary: "🏥 Junta de quirófano" })), false);
-  assert.equal(esEventoDeDaleControl(ev({ description: "Llevar el contrato" })), false);
+test("N-G6: el título «🏥 tipo — paciente» o el pie «Agendado desde DaleControl» SOLOS ya no son eco (un duplicado a mano los copia)", () => {
+  // Lo que sí es eco lo decide quien llama: una cita ligada a ese evento (`eventosDeCitas`).
+  assert.equal(esEventoDeDaleControl(ev({ description: "Tipo: Limpieza\nClínica: X\n\nAgendado desde DaleControl" })), false);
+  assert.equal(esEventoDeDaleControl(ev({ summary: "🏥 Limpieza — Ana G." })), false);
+  const duplicado = ev({ summary: "🏥 Limpieza — Ana G.", description: "Agendado desde DaleControl", attendees: [{ email: "ana@clinica.mx" }] });
+  const d = decidirEvento(duplicado, { zona: ZONA, ahora: new Date("2026-10-20T00:00:00Z"), existente: null, usuarios: USUARIOS });
+  assert.equal(d.accion, "crear");
 });
 
 test("solo se lee el calendario PROPIO de la clínica: un primary o un correo personal no (G14)", () => {
@@ -337,4 +342,135 @@ test("errores: falta de permiso para LEER → «permisos» (pide reconectar); to
   assert.equal(clasificarErrorEntrante(g(404, "notFound")), "calendario");
   assert.equal(clasificarErrorEntrante(g(500, "backendError")), "google");
   assert.equal(clasificarErrorEntrante(g(403, "rateLimitExceeded")), "google");
+});
+
+/* ═══ Segunda vuelta de la revisión t8 ════════════════════════════════════ */
+
+const EQUIPO = [
+  { id: "doc-ana", email: "ana@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "María Ruiz Gómez", otrosCorreos: ["maria.ruiz.g@gmail.com"] },
+  { id: "doc-luis", email: "luis@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Luis Pérez" },
+  { id: "rec-eva", email: "recepcion@clinica.mx", recibeCitas: false, rol: "RECEPTIONIST", nombre: "Eva Soto", otrosCorreos: ["clinica.salamanca@gmail.com"] },
+  // La cuenta VIEJA de la Dra. Ruiz (dada de baja), con otro correo.
+  { id: "ana-vieja", email: "mruiz@correo-viejo.mx", recibeCitas: false, rol: "DOCTOR", nombre: "Dra. María Ruiz Gómez" },
+  // Un doctor que ya se fue (nadie con su nombre atiende hoy).
+  { id: "doc-ido", email: "ido@clinica.mx", recibeCitas: false, rol: "DOCTOR", nombre: "Pedro Ido" },
+];
+const inv = (...emails: (string | { email: string; displayName?: string; responseStatus?: string })[]) =>
+  ev({ attendees: emails.map((e) => (typeof e === "string" ? { email: e } : e)) });
+
+test("N-G2: recepción + un Gmail que no se sabe de quién es → toda la clínica (antes: «de recepción», no cerraba a nadie)", () => {
+  assert.deepEqual(asignarEvento(inv("recepcion@clinica.mx", "alguien.mas@gmail.com"), EQUIPO), { doctorId: null, alcance: "no_reconocido" });
+  // Solo recepción (todos de la clínica, nadie atiende): sigue siendo suyo.
+  assert.deepEqual(asignarEvento(inv("recepcion@clinica.mx"), EQUIPO), { doctorId: "rec-eva", alcance: null });
+});
+
+test("N-G2: recepción + el Gmail con el que la Dra. conectó Google → la agenda de la Dra.", () => {
+  assert.deepEqual(asignarEvento(inv("recepcion@clinica.mx", "Maria.Ruiz.G@gmail.com"), EQUIPO), { doctorId: "doc-ana", alcance: null });
+});
+
+test("N-G2: recepción + la cuenta VIEJA de la Dra. (mismo nombre) → la agenda de la Dra.", () => {
+  assert.deepEqual(asignarEvento(inv("recepcion@clinica.mx", "mruiz@correo-viejo.mx"), EQUIPO), { doctorId: "doc-ana", alcance: null });
+  // Cuenta vieja + su Gmail desconocido: igual de ella.
+  assert.deepEqual(asignarEvento(inv("mruiz@correo-viejo.mx", "otro.gmail.suyo@gmail.com"), EQUIPO), { doctorId: "doc-ana", alcance: null });
+});
+
+test("N-G2: un correo desconocido cuyo nombre en Google es el de una doctora → suya; si el nombre es de dos, no", () => {
+  assert.deepEqual(
+    asignarEvento(inv("recepcion@clinica.mx", { email: "x123@gmail.com", displayName: "Dra. María Ruiz Gómez" }), EQUIPO),
+    { doctorId: "doc-ana", alcance: null },
+  );
+  const gemelos = [...EQUIPO, { id: "doc-otra", email: "otra@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Maria Ruiz Gomez" }];
+  assert.deepEqual(
+    asignarEvento(inv("recepcion@clinica.mx", { email: "x123@gmail.com", displayName: "María Ruiz Gómez" }), gemelos),
+    { doctorId: null, alcance: "no_reconocido" },
+  );
+});
+
+test("N-G2: el Gmail de la clínica que conectó recepción NO vuelve «de recepción» un evento (otros correos solo para quien atiende)", () => {
+  assert.deepEqual(asignarEvento(inv("clinica.salamanca@gmail.com"), EQUIPO), { doctorId: null, alcance: "no_reconocido" });
+});
+
+test("N-G2: un doctor con la agenda apagada (cuenta activa) → a su nombre, como en G1; con un desconocido, toda la clínica", () => {
+  assert.deepEqual(asignarEvento(inv("ido@clinica.mx"), EQUIPO), { doctorId: "doc-ido", alcance: null });
+  assert.deepEqual(asignarEvento(inv("ido@clinica.mx", "pedro.ido@gmail.com"), EQUIPO), { doctorId: null, alcance: "no_reconocido" });
+});
+
+test("N-G2: una cuenta DADA DE BAJA de quien atendía, con un nombre que no es de nadie de hoy («María Ruiz» → «María Ruiz Gómez») → toda la clínica", () => {
+  const equipo = [...EQUIPO, { id: "vieja2", email: "maria@viejo.mx", recibeCitas: false, rol: "DOCTOR", nombre: "María Ruiz", activo: false }];
+  assert.deepEqual(asignarEvento(inv("recepcion@clinica.mx", "maria@viejo.mx"), equipo), { doctorId: null, alcance: "no_reconocido" });
+  assert.deepEqual(asignarEvento(inv("maria@viejo.mx"), equipo), { doctorId: null, alcance: "no_reconocido" });
+});
+
+test("N-G2: recepción RECHAZÓ y el Gmail de la Dra. no ha respondido → toda la clínica (no «de recepción»)", () => {
+  assert.deepEqual(
+    asignarEvento(inv({ email: "recepcion@clinica.mx", responseStatus: "declined" }, "dra.desconocida@gmail.com"), EQUIPO),
+    { doctorId: null, alcance: "no_reconocido" },
+  );
+});
+
+test("N-G2: un Gmail que conectaron DOS doctores no dice de quién es → toda la clínica", () => {
+  const equipo = EQUIPO.map((u) => (u.id === "doc-luis" ? { ...u, otrosCorreos: ["maria.ruiz.g@gmail.com"] } : u));
+  assert.deepEqual(asignarEvento(inv("recepcion@clinica.mx", "maria.ruiz.g@gmail.com"), equipo), { doctorId: null, alcance: "no_reconocido" });
+});
+
+test("N-G2: un invitado de fuera (laboratorio) no le quita el evento a la doctora", () => {
+  assert.deepEqual(asignarEvento(inv("luis@clinica.mx", "pedidos@laboratorio.mx"), EQUIPO), { doctorId: "doc-luis", alcance: null });
+});
+
+test("N-G5: con el correo repetido y empate en «recibe citas», gana el DOCTOR; luego el id menor", () => {
+  const dup = [
+    { id: "a-admin", email: "ana@clinica.mx", recibeCitas: true, rol: "ADMIN" },
+    { id: "z-doctor", email: "ana@clinica.mx", recibeCitas: true, rol: "DOCTOR" },
+  ];
+  assert.equal(asignarEvento(inv("ana@clinica.mx"), dup).doctorId, "z-doctor");
+  assert.equal(asignarEvento(inv("ana@clinica.mx"), [...dup].reverse()).doctorId, "z-doctor");
+});
+
+test("N-G5: la huella del equipo cambia con correos, roles y «recibe citas»; no con el orden", () => {
+  const base = firmaEquipo(EQUIPO);
+  assert.equal(firmaEquipo([...EQUIPO].reverse()), base);
+  assert.notEqual(firmaEquipo(EQUIPO.map((u) => (u.id === "doc-ido" ? { ...u, recibeCitas: true } : u))), base);
+  assert.notEqual(firmaEquipo([...EQUIPO, { id: "n", email: "nueva@clinica.mx", recibeCitas: true }]), base);
+  assert.notEqual(firmaEquipo(EQUIPO.map((u) => (u.id === "rec-eva" ? { ...u, email: "eva@clinica.mx" } : u))), base);
+  assert.ok(base.length <= 40, "cabe en la columna");
+  assert.equal(normalizarNombre("Dra.  María Ruiz-Gómez"), "maria ruiz gomez");
+});
+
+test("G3/N-G3: un día sin una pasada buena retira los bloqueos, sea cual sea la causa; «parcial» no; sin token, ya", () => {
+  const ahora = new Date("2026-10-20T12:00:00Z");
+  const hace = (h: number) => new Date(ahora.getTime() - h * 3_600_000);
+  const base = { conToken: true, ultimaBuena: hace(1), encendidaDesde: hace(500), ultimoError: null };
+  assert.equal(bloqueosSinMantener(base, ahora), false);
+  for (const ultimoError of [null, "autorizacion", "permisos", "calendario", "calendario_personal", "calendario_compartido", "google"]) {
+    assert.equal(bloqueosSinMantener({ ...base, ultimaBuena: hace(24), ultimoError }, ahora), true, String(ultimoError));
+    assert.equal(bloqueosSinMantener({ ...base, ultimaBuena: hace(23), ultimoError }, ahora), false, String(ultimoError));
+  }
+  // «parcial» indulta solo con la conexión activa y menos de 72 h sin una pasada buena.
+  assert.equal(bloqueosSinMantener({ ...base, conexionActiva: true, ultimaBuena: hace(48), ultimoError: "parcial" }, ahora), false);
+  assert.equal(bloqueosSinMantener({ ...base, conexionActiva: true, ultimaBuena: hace(72), ultimoError: "parcial" }, ahora), true);
+  assert.equal(bloqueosSinMantener({ ...base, conexionActiva: false, ultimaBuena: hace(25), ultimoError: "parcial" }, ahora), true, "caída: nadie reescribe «parcial»");
+  assert.equal(bloqueosSinMantener({ ...base, conToken: false }, ahora), true);
+  // Nunca sincronizó bien: cuenta desde que se encendió.
+  assert.equal(bloqueosSinMantener({ ...base, ultimaBuena: null, encendidaDesde: hace(30) }, ahora), true);
+  assert.equal(bloqueosSinMantener({ ...base, ultimaBuena: null, encendidaDesde: hace(2) }, ahora), false);
+  assert.equal(SIN_MANTENER_RETIRA_MS, 24 * 3_600_000);
+});
+
+test("segunda vuelta: el evento borrado VUELVE a su hora de antes pero la cita se movió mientras → aviso «movido» (no quedan distintos en silencio)", () => {
+  const ZONA_ = "America/Mexico_City";
+  const vinculo = { eventStartsAt: new Date("2026-10-21T16:00:00Z"), eventEndsAt: new Date("2026-10-21T17:00:00Z"), eventDeletedAt: new Date("2026-10-20T00:00:00Z"), avisoTipo: "eliminado" };
+  const cita = { status: "SCHEDULED", startsAt: new Date("2026-10-21T18:00:00Z"), endsAt: new Date("2026-10-21T19:00:00Z") };
+  const c = decidirAvisoCita(
+    ev({ start: { dateTime: "2026-10-21T10:00:00-06:00" }, end: { dateTime: "2026-10-21T11:00:00-06:00" } }),
+    vinculo, cita, { zona: ZONA_, ahora: new Date("2026-10-20T12:00:00Z") },
+  );
+  assert.equal(c.eventDeletedAt, null);
+  assert.equal(c.avisoTipo, "movido");
+  assert.equal(c.avisoStartsAt?.toISOString(), "2026-10-21T16:00:00.000Z");
+  // Si vuelve a la hora de la cita, sin aviso.
+  const igual = decidirAvisoCita(
+    ev({ start: { dateTime: "2026-10-21T12:00:00-06:00" }, end: { dateTime: "2026-10-21T13:00:00-06:00" } }),
+    { ...vinculo, eventStartsAt: cita.startsAt, eventEndsAt: cita.endsAt }, cita, { zona: ZONA_, ahora: new Date("2026-10-20T12:00:00Z") },
+  );
+  assert.equal(igual.avisoTipo, null);
 });

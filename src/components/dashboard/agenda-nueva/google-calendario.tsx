@@ -30,10 +30,18 @@ import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { PatientSearchField } from "@/components/dashboard/new-appointment/patient-search-field";
 import { MotivoField } from "@/components/dashboard/new-appointment/motivo-field";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
-import { rescheduleAppointment } from "@/lib/agenda/mutations";
+import { avisarResultadoWhatsApp, type ResultadoAvisoWhatsApp } from "@/lib/agenda/aviso-whatsapp";
+import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import type { BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import { CLASES_PORTAL_AGENDA } from "./ropa";
+import {
+  camposSobreagendar,
+  confirmacionDesde409,
+  moverCitaAlEvento,
+  preguntarOtraVez,
+  type ConfirmacionSobreagenda,
+} from "./google-sobreagendar";
 import s from "./agenda-nueva.module.css";
 import g from "./google-calendario.module.css";
 
@@ -234,44 +242,22 @@ function useFormatoRango() {
 /** Más que esto no se convierte en UNA cita (mismo tope que el servidor, `CONVERTIR_MAX_HORAS`). */
 const CONVERTIR_MAX_MS = 12 * 60 * 60 * 1000;
 
-/**
- * WS1-T5 · el «¿Seguro?» de sobreagendar, cuando la clínica además tiene la
- * agenda flexible: la API de citas contesta 409 con `sobreagendable` (otra cita
- * del doctor a esa hora, o su comida). Sin esa bandera nunca llega.
- */
-interface ConfirmacionSobreagenda {
-  tipo: "cita" | "comida";
-  citaId: string | null;
-  paciente: string | null;
-  hora: string | null;
-  comidaDesde: string | null;
-  comidaHasta: string | null;
-  otras: number;
-}
-
-function confirmacionDesde409(raw: unknown, zona: string, locale: string): ConfirmacionSobreagenda | null {
-  const b = raw as {
-    error?: unknown;
-    sobreagendable?: unknown;
-    conflictingAppointment?: { id?: unknown; patientName?: unknown; startsAt?: unknown; endsAt?: unknown; otras?: unknown } | null;
-    comida?: { lunchStart?: unknown; lunchEnd?: unknown } | null;
-  } | null;
-  if (!b || b.sobreagendable !== true || (b.error !== "appointment_overlap" && b.error !== "lunch_overlap")) return null;
-  const c = b.conflictingAppointment && typeof b.conflictingAppointment.id === "string" && b.conflictingAppointment.id !== "unknown"
-    ? b.conflictingAppointment
-    : null;
-  const fmt = new Intl.DateTimeFormat(locale, { timeZone: zona, hour: "2-digit", minute: "2-digit", hour12: false });
-  const hora = (iso: unknown) => (typeof iso === "string" && !Number.isNaN(Date.parse(iso)) ? fmt.format(new Date(iso)) : "");
-  return {
-    // Sin la otra cita (id «unknown») solo es «comida» si el servidor lo dijo.
-    tipo: c || b.error !== "lunch_overlap" ? "cita" : "comida",
-    citaId: c ? (c.id as string) : null,
-    paciente: c && typeof c.patientName === "string" ? c.patientName.trim() || null : null,
-    hora: c ? [hora(c.startsAt), hora(c.endsAt)].filter(Boolean).join("–") : null,
-    comidaDesde: typeof b.comida?.lunchStart === "string" ? b.comida.lunchStart : null,
-    comidaHasta: typeof b.comida?.lunchEnd === "string" ? b.comida.lunchEnd : null,
-    otras: c && typeof c.otras === "number" && c.otras > 0 ? c.otras : 0,
-  };
+/** El texto del «¿Seguro?» (otra cita del doctor, o su comida). */
+function TextoSobreagendar({ c }: { c: ConfirmacionSobreagenda }) {
+  const t = useT();
+  return (
+    <>
+      {c.tipo === "comida"
+        ? t("agenda.google.sobreagendar.cuerpoComida", { desde: c.comidaDesde ?? "", hasta: c.comidaHasta ?? "" })
+        : t("agenda.google.sobreagendar.cuerpoDoctor", { paciente: c.paciente ?? "—", hora: c.hora ?? "" })}
+      {c.tipo === "cita" && c.otras > 0 && (
+        <><br />{t("agenda.google.sobreagendar.otras", { n: String(c.otras) })}</>
+      )}
+      {c.tipo === "cita" && c.comidaDesde && c.comidaHasta && (
+        <><br />{t("agenda.google.sobreagendar.tambienComida", { desde: c.comidaDesde, hasta: c.comidaHasta })}</>
+      )}
+    </>
+  );
 }
 
 /** El código de error de la conversión → la frase (G8). `null` = no es de aquí. */
@@ -354,13 +340,11 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
           startsAt: detalle.inicio,
           endsAt: detalle.fin,
           reason: motivo.trim(),
+          // El servidor no cuenta ESTE bloqueo (es el hueco que se ocupa). Sin
+          // `bloqueoConfirmado`: otro bloqueo en esa hora nadie lo ha visto.
           googleBloqueoId: detalle.id,
-          // El único bloqueo encima es este, y el servidor ya no lo cuenta.
-          bloqueoConfirmado: true,
           // Ya se dijo «Sí, sobreagendar» a ESTA cita (o a la comida).
-          ...(sobreagendar
-            ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId, sobreagendarOtras: sobreagendar.otras }
-            : {}),
+          ...camposSobreagendar(sobreagendar),
         }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string; reason?: string } | null;
@@ -369,8 +353,7 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
         if (res.status === 409) {
           const aviso = confirmacionDesde409(body, state.timezone, locale);
           // Se vuelve a preguntar solo si es OTRA cita (o más) que la ya confirmada.
-          const repetido = !!sobreagendar && !!aviso && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras;
-          if (aviso && !repetido) {
+          if (preguntarOtraVez(aviso, sobreagendar)) {
             setConfirmar(aviso);
             return;
           }
@@ -425,17 +408,7 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
             <div className={g.cuerpo}>
               <p className={g.confirmacion} role="alert">
                 <Layers size={16} aria-hidden className={g.confirmacionIcono} />
-                <span>
-                  {confirmar.tipo === "comida"
-                    ? t("agenda.google.sobreagendar.cuerpoComida", { desde: confirmar.comidaDesde ?? "", hasta: confirmar.comidaHasta ?? "" })
-                    : t("agenda.google.sobreagendar.cuerpoDoctor", { paciente: confirmar.paciente ?? "—", hora: confirmar.hora ?? "" })}
-                  {confirmar.tipo === "cita" && confirmar.otras > 0 && (
-                    <><br />{t("agenda.google.sobreagendar.otras", { n: String(confirmar.otras) })}</>
-                  )}
-                  {confirmar.tipo === "cita" && confirmar.comidaDesde && confirmar.comidaHasta && (
-                    <><br />{t("agenda.google.sobreagendar.tambienComida", { desde: confirmar.comidaDesde, hasta: confirmar.comidaHasta })}</>
-                  )}
-                </span>
+                <span><TextoSobreagendar c={confirmar} /></span>
               </p>
             </div>
           ) : cargando ? (
@@ -574,6 +547,7 @@ export function AvisoGoogleCita({ citaId, onCancelar }: { citaId: string; onCanc
   const { state, dispatch, permissions, invalidateRangeCache } = useAgenda();
   const [aviso, setAviso] = useState<AvisoCita | null>(null);
   const [enVuelo, setEnVuelo] = useState(false);
+  const [confirmar, setConfirmar] = useState<ConfirmacionSobreagenda | null>(null);
   const cita = state.appointments.find((a) => a.id === citaId) ?? null;
   // Se vuelve a preguntar si la cita cambia (la movieron o cancelaron).
   const firma = cita ? `${cita.startsAt}|${cita.endsAt}|${cita.status}` : "";
@@ -583,7 +557,7 @@ export function AvisoGoogleCita({ citaId, onCancelar }: { citaId: string; onCanc
     let vivo = true;
     fetch(`/api/google/agenda/cita/${encodeURIComponent(citaId)}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((raw) => { if (vivo) setAviso(leerAviso(raw)); })
+      .then((raw) => { if (vivo) { setAviso(leerAviso(raw)); setConfirmar(null); } })
       .catch(() => { if (vivo) setAviso(null); });
     return () => { vivo = false; };
   }, [activo, citaId, firma]);
@@ -596,19 +570,36 @@ export function AvisoGoogleCita({ citaId, onCancelar }: { citaId: string; onCanc
       }).format(new Date(aviso.inicio))
     : "";
 
-  const mover = async () => {
+  // Con la agenda flexible, si la hora nueva cae sobre otra cita o en la
+  // comida, el mismo «¿Seguro?» que «Convertir en cita» (C5).
+  const mover = async (sobreagendar: ConfirmacionSobreagenda | null = null) => {
     if (!aviso.inicio || !aviso.fin) return;
     setEnVuelo(true);
     try {
-      const r = await rescheduleAppointment(citaId, { startsAt: aviso.inicio, endsAt: aviso.fin, bloqueoConfirmado: true });
-      dispatch({ type: "REPLACE_APPOINTMENT", appointment: r.appointment });
+      const r = await moverCitaAlEvento({
+        citaId, inicio: aviso.inicio, fin: aviso.fin, confirmada: sobreagendar, zona: state.timezone, locale,
+      });
+      if (r.estado === "confirmar") {
+        setConfirmar(r.confirmacion);
+        return;
+      }
+      setConfirmar(null);
+      if (r.estado === "error") {
+        const clave =
+          r.codigo === "appointment_overlap" ? "agenda.google.errorChoque"
+          : r.codigo === "lunch_overlap" ? "agenda.google.errorComida"
+          : null;
+        toast.error(clave ? t(clave) : bookingRuleMessage(r.body as { error?: unknown; reason?: unknown } | null) ?? t("agenda.google.errorMover"));
+        return;
+      }
+      if (r.body.appointment) dispatch({ type: "REPLACE_APPOINTMENT", appointment: r.body.appointment as AgendaAppointmentDTO });
+      avisarResultadoWhatsApp(r.body.whatsapp as ResultadoAvisoWhatsApp);
       invalidateRangeCache();
       setAviso(null);
       toast.success(t("agenda.google.movida"));
-      if (r.scheduleWarning?.message) toast(r.scheduleWarning.message, { duration: 6000 });
-    } catch (err) {
-      const e = err as { error?: string; message?: string };
-      toast.error(e?.error === "appointment_overlap" ? t("agenda.google.errorChoque") : t("agenda.google.errorMover"));
+      if (r.body.scheduleWarning?.message) toast(r.body.scheduleWarning.message, { duration: 6000 });
+    } catch {
+      toast.error(t("agenda.google.errorMover"));
     } finally {
       setEnVuelo(false);
     }
@@ -633,6 +624,28 @@ export function AvisoGoogleCita({ citaId, onCancelar }: { citaId: string; onCanc
     }
   };
 
+  if (confirmar) {
+    return (
+      <div className={g.avisoCita} role="alert">
+        <p className={g.avisoCitaTexto}>
+          <Layers size={15} aria-hidden />
+          <span>
+            <strong>{t("agenda.google.sobreagendar.titulo")}.</strong>{" "}
+            <TextoSobreagendar c={confirmar} />
+          </span>
+        </p>
+        <div className={g.avisoAcciones}>
+          <button type="button" className={g.botonAviso} onClick={() => mover(confirmar)} disabled={enVuelo}>
+            {enVuelo ? t("agenda.google.guardando") : t("agenda.google.sobreagendar.confirmar")}
+          </button>
+          <button type="button" className={g.botonAvisoSecundario} onClick={() => setConfirmar(null)} disabled={enVuelo}>
+            {t("agenda.google.sobreagendar.cancelar")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={g.avisoCita} role="status">
       <p className={g.avisoCitaTexto}>
@@ -641,7 +654,7 @@ export function AvisoGoogleCita({ citaId, onCancelar }: { citaId: string; onCanc
       </p>
       <div className={g.avisoAcciones}>
         {aviso.tipo === "movido" && permissions.canEdit && (
-          <button type="button" className={g.botonAviso} onClick={mover} disabled={enVuelo}>
+          <button type="button" className={g.botonAviso} onClick={() => mover()} disabled={enVuelo}>
             {t("agenda.google.moverCita")}
           </button>
         )}

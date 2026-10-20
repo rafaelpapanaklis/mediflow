@@ -2,8 +2,9 @@
 -- WS1-T9 · Comprobación ANTES de encender «Google Calendar → agenda»
 --
 -- SOLO LECTURA: no cambia nada. Se pega antes de sql/salamanca-encender-google.sql.
--- Una fila por cada una de las 6 clínicas del grupo Salamanca. Hay que encender
--- solo las que salgan con «listo» = true (revisión t8, G14 y G16):
+-- Una fila por cada una de las 6 clínicas del grupo Salamanca. Solo se deben
+-- encender las que salgan con «listo» = true (revisión t8, G14 y G16), y el
+-- archivo de encendido ya enciende SOLO esas, con la misma regla (N-G13):
 --
 --   · calendario_propio   — el calendario guardado es uno de la clínica
 --                           (…@group.calendar.google.com). Si es «primary» o un
@@ -45,5 +46,5 @@ SELECT c.slug,
    'clan-dental'
  )
  ORDER BY c.slug;
--- Deben salir 6 filas. Si alguna sale con listo = false, NO la enciendas: quita
--- su slug de sql/salamanca-encender-google.sql y avísanos.
+-- Deben salir 6 filas. Las que salgan con listo = false no se encienden (el
+-- archivo de encendido las salta y las nombra); avísanos para arreglarlas.

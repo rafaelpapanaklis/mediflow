@@ -2,7 +2,10 @@
  * ¿Ya se pegó sql/salamanca-google.sql? (WS1-T9)
  *
  * Mientras no: NINGUNA consulta toca `google_agenda_imports` ni
- * `agenda_block_google`. Se pregunta con `to_regclass` (no falla ni deja
+ * `agenda_block_google`. Se mira que existan las dos tablas Y las columnas
+ * que se añadieron después (`COLUMNAS_NUEVAS`): un SQL viejo aplicado a medias
+ * dejaría las tablas sin ellas y cada sincronización fallaría sin aviso
+ * (segunda vuelta t8, N-G7). Se pregunta con `to_regclass` (no falla ni deja
  * errores en el log de Postgres de producción, que es lo que pasaba al atrapar
  * el 42P01 en cada petición) y la respuesta vive 10 min en `globalThis`, que
  * sobrevive a las recargas de `next dev`. Mismo patrón que
@@ -16,6 +19,15 @@ export interface DbSonda {
 }
 
 const DIEZ_MIN = 10 * 60 * 1000;
+
+/** Las columnas que `sql/salamanca-google.sql` añade con ADD COLUMN IF NOT EXISTS. */
+export const COLUMNAS_NUEVAS = [
+  ["google_agenda_imports", "channelError"],
+  ["google_agenda_imports", "channelErrorAt"],
+  ["google_agenda_imports", "equipoFirma"],
+  ["agenda_block_google", "alcance"],
+  ["agenda_block_google", "salidaFirma"],
+] as const;
 const CLAVE = Symbol.for("dalecontrol.ws1-t9.tablas-google");
 
 type Memoria = { existe: boolean; at: number } | undefined;
@@ -24,6 +36,31 @@ function leerMemoria(): Memoria {
 }
 function fijarMemoria(m: Memoria): void {
   (globalThis as unknown as Record<symbol, Memoria>)[CLAVE] = m;
+}
+
+/**
+ * UNA consulta: las dos tablas (con `to_regclass`, que no falla) y las
+ * `COLUMNAS_NUEVAS` (en `information_schema`, que tampoco). Escrita a mano
+ * (no se arma con la lista: una plantilla de Prisma pasaría los nombres como
+ * parámetros); la prueba comprueba que coinciden.
+ */
+async function preguntar(db: DbSonda): Promise<boolean> {
+  const filas = (await db.$queryRaw`
+    SELECT (to_regclass('public.google_agenda_imports') IS NOT NULL
+        AND to_regclass('public.agenda_block_google') IS NOT NULL
+        AND (SELECT count(*) FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND ((table_name = 'google_agenda_imports' AND column_name IN ('channelError', 'channelErrorAt', 'equipoFirma'))
+                  OR (table_name = 'agenda_block_google' AND column_name IN ('alcance', 'salidaFirma')))) = 5) AS existe`) as { existe: boolean }[];
+  return Array.isArray(filas) && filas[0]?.existe === true;
+}
+
+/** Solo las dos tablas (sin las columnas nuevas). */
+async function preguntarTablas(db: DbSonda): Promise<boolean> {
+  const filas = (await db.$queryRaw`
+    SELECT (to_regclass('public.google_agenda_imports') IS NOT NULL
+        AND to_regclass('public.agenda_block_google') IS NOT NULL) AS existe`) as { existe: boolean }[];
+  return Array.isArray(filas) && filas[0]?.existe === true;
 }
 
 async function baseReal(): Promise<DbSonda> {
@@ -39,10 +76,7 @@ export async function tablasGoogleListas(opts: { db?: DbSonda; forzar?: boolean 
   if (!opts.forzar && m && Date.now() - m.at < DIEZ_MIN) return m.existe;
   try {
     const db = opts.db ?? (await baseReal());
-    const filas = (await db.$queryRaw`
-      SELECT (to_regclass('public.google_agenda_imports') IS NOT NULL
-          AND to_regclass('public.agenda_block_google') IS NOT NULL) AS existe`) as { existe: boolean }[];
-    const existe = Array.isArray(filas) && filas[0]?.existe === true;
+    const existe = await preguntar(db);
     fijarMemoria({ existe, at: Date.now() });
     return existe;
   } catch {
@@ -60,12 +94,11 @@ export async function tablasGoogleListasOLanzar(opts: { db?: DbSonda } = {}): Pr
   const m = leerMemoria();
   if (m?.existe && Date.now() - m.at < DIEZ_MIN) return true;
   const db = opts.db ?? (await baseReal());
-  const filas = (await db.$queryRaw`
-    SELECT (to_regclass('public.google_agenda_imports') IS NOT NULL
-        AND to_regclass('public.agenda_block_google') IS NOT NULL) AS existe`) as { existe: boolean }[];
-  const existe = Array.isArray(filas) && filas[0]?.existe === true;
-  fijarMemoria({ existe, at: Date.now() });
-  return existe;
+  // Aquí bastan las TABLAS: con un vínculo legible, la cita sí vino de Google
+  // aunque falte una columna nueva. Decir «no» por la columna haría que
+  // cancelarla BORRARA el evento de la clínica. (No se guarda en la memoria:
+  // ella responde a la pregunta completa.)
+  return preguntarTablas(db);
 }
 
 /** Solo pruebas. */

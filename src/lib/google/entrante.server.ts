@@ -10,8 +10,10 @@
  *   · asegurarCanalDeAvisos(clinicId)           — crea/renueva el canal de Google
  *   · clinicasConGoogleEntrante()               — para el cron
  *   · retirarBloqueosDeGoogle(clinicId)         — bandera apagada, Google desconectado
- *                                                 o caído más de un día
+ *                                                 o un día sin sincronizar bien
  *   · clinicasSinBanderaConBloqueos()           — para que el cron las limpie
+ *   · reintentarSalidaDeConvertidas(clinicId)   — repone en Google lo que no llegó
+ *                                                 de las citas convertidas
  *
  * 🔴 Regla (c): toda consulta lleva `clinicId`, y una función sin él corta
  * antes de consultar.
@@ -22,9 +24,11 @@ import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
 import { getOAuthClient, TIMEOUT_GOOGLE_MS } from "@/lib/google-calendar";
 import { puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
-import { leerAjustesGoogle, marcarGoogleCaido } from "@/lib/google-calendar-estado";
+import { marcarGoogleCaido } from "@/lib/google-calendar-estado";
 import { tablasGoogleListas } from "./tablas.server";
 import {
+  bloqueosSinMantener,
+  calendarioImportable,
   canalPorRenovar,
   CREADOR_GOOGLE,
   direccionDelAviso,
@@ -163,6 +167,7 @@ async function vinculosConBloqueo(clinicId: string, filas: any[]): Promise<Vincu
 }
 
 const esUnicoRepetido = (e: unknown) => (e as { code?: string })?.code === "P2002";
+const PAGINA_RETIRAR = 1000;
 
 const puertos: PuertosEntrante = {
   async leerEstado(clinicId) {
@@ -179,6 +184,7 @@ const puertos: PuertosEntrante = {
       channelResourceId: f.channelResourceId,
       channelExpiresAt: f.channelExpiresAt,
       channelCalendarId: f.channelCalendarId,
+      equipoFirma: f.equipoFirma ?? null,
     };
   },
 
@@ -219,6 +225,7 @@ const puertos: PuertosEntrante = {
         syncToken: d.syncToken,
         lastSyncAt: d.ahora,
         ...(d.completa ? { lastFullSyncAt: d.ahora } : {}),
+        ...(d.equipoFirma ? { equipoFirma: d.equipoFirma } : {}),
       },
     });
   },
@@ -237,12 +244,35 @@ const puertos: PuertosEntrante = {
     // TODAS las personas de la clínica (también recepción, dados de baja y con
     // la agenda apagada): si el invitado es una de ellas, el bloqueo es suyo y
     // no cierra la clínica entera (revisión t8, G1).
-    const us = await prisma.user.findMany({
-      where: { clinicId },
-      select: { id: true, email: true, role: true, isActive: true, agendaActive: true },
-      take: 1000,
+    // Con el Gmail con el que conectó Google y el nombre: reconocen a la
+    // doctora invitada con su correo personal o con una cuenta vieja (N-G2).
+    // El Gmail con el que se conectó la CLÍNICA no es «otro correo» de quien
+    // lo conectó: si no, todo evento con ese Gmail cerraría solo su agenda.
+    const [us, clinica] = await Promise.all([
+      prisma.user.findMany({
+        where: { clinicId },
+        select: {
+          id: true, email: true, googleCalendarEmail: true, firstName: true, lastName: true,
+          role: true, isActive: true, agendaActive: true,
+        },
+        orderBy: { id: "asc" },
+        take: 1000,
+      }),
+      prisma.clinic.findUnique({ where: { id: clinicId }, select: { googleCalendarEmail: true } }),
+    ]);
+    const deLaClinica = clinica?.googleCalendarEmail?.trim().toLowerCase() || null;
+    return us.map((u) => {
+      const otro = u.googleCalendarEmail?.trim().toLowerCase() || null;
+      return {
+        id: u.id,
+        email: u.email ?? null,
+        otrosCorreos: otro && otro !== deLaClinica ? [otro] : [],
+        recibeCitas: puedeRecibirCitas(u),
+        rol: u.role,
+        nombre: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || null,
+        activo: u.isActive !== false,
+      };
     });
-    return us.map((u) => ({ id: u.id, email: u.email ?? null, recibeCitas: puedeRecibirCitas(u) }));
   },
 
   async calendarioEnOtraClinica(clinicId, calendarId) {
@@ -376,28 +406,47 @@ const puertos: PuertosEntrante = {
     return c ? { status: c.status, startsAt: c.startsAt, endsAt: c.endsAt, googleEventId: c.googleCalendarEventId } : null;
   },
 
-  async actualizarVinculo(clinicId, blockId, cambios) {
-    await prisma.agendaBlockGoogle.updateMany({ where: { blockId, clinicId }, data: cambios });
+  async actualizarVinculo(clinicId, blockId, cambios, antes) {
+    await prisma.agendaBlockGoogle.updateMany({
+      where: { blockId, clinicId, ...(antes ? { eventStartsAt: antes.eventStartsAt, eventEndsAt: antes.eventEndsAt } : {}) },
+      data: cambios,
+    });
   },
 
-  async retirarNoVistos(clinicId, vistos, desde, ahora) {
-    const activos = await prisma.agendaBlock.findMany({
-      where: { clinicId, kind: "GOOGLE", deletedAt: null, endsAt: { gt: desde } },
-      select: { id: true },
-      take: 2000,
-    });
-    if (activos.length === 0) return 0;
-    const vinculos = await prisma.agendaBlockGoogle.findMany({
-      where: { clinicId, blockId: { in: activos.map((a) => a.id) }, appointmentId: null },
-      select: { blockId: true, googleEventId: true },
-    });
-    const sobran = vinculos.filter((v) => !vistos.has(v.googleEventId)).map((v) => v.blockId);
-    for (const id of sobran) await puertos.inactivarBloqueo(clinicId, id, ahora);
-    return sobran.length;
+  async retirarNoVistos(clinicId, vistos, desde, hasta, ahora) {
+    // TODOS, por páginas y en orden (antes 2000 sin orden: con más, algunos
+    // nunca se revisaban; N-G8). Solo lo que cae dentro de lo pedido a Google.
+    let total = 0;
+    let cursor: string | null = null;
+    for (;;) {
+      const activos: { id: string }[] = await prisma.agendaBlock.findMany({
+        where: {
+          clinicId, kind: "GOOGLE", deletedAt: null, endsAt: { gt: desde }, startsAt: { lt: hasta },
+          ...(cursor ? { id: { gt: cursor } } : {}),
+        },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: PAGINA_RETIRAR,
+      });
+      if (activos.length === 0) break;
+      cursor = activos[activos.length - 1].id;
+      const vinculos = await prisma.agendaBlockGoogle.findMany({
+        where: { clinicId, blockId: { in: activos.map((a) => a.id) }, appointmentId: null },
+        select: { blockId: true, googleEventId: true },
+      });
+      const sobran = vinculos.filter((v) => !vistos.has(v.googleEventId)).map((v) => v.blockId);
+      for (const id of sobran) await puertos.inactivarBloqueo(clinicId, id, ahora);
+      total += sobran.length;
+      if (activos.length < PAGINA_RETIRAR) break;
+    }
+    return total;
   },
 
   log: (...args) => console.error(...args),
 };
+
+/** Solo pruebas (con una base de mentira): los puertos tal cual. */
+export const _puertosEntrante = puertos;
 
 // ═══════════════════════════════════════════════════════════════════════
 // LO QUE USAN LAS RUTAS
@@ -470,13 +519,11 @@ export async function clinicasSinBanderaConBloqueos(): Promise<string[]> {
   return conBloqueos.map((c) => c.clinicId).filter((id) => !si.has(id));
 }
 
-/** Tras cuánto tiempo con la conexión caída se retiran los bloqueos de Google. */
-export const CAIDA_RETIRA_MS = 24 * 60 * 60 * 1000;
-
 /**
- * La bandera se apagó, o la clínica desconectó Google a propósito: sus
- * bloqueos de Google ya no los mantiene nadie al día y cerrarían horas que
- * quizá ya no están ocupadas. Se RETIRAN (deletedAt), no se borran. Las citas
+ * La bandera se apagó, la clínica desconectó Google a propósito o lleva un
+ * día sin sincronizar bien (`bloqueosDeGoogleSinMantener`): sus bloqueos de
+ * Google ya no los mantiene nadie al día y cerrarían horas que quizá ya no
+ * están ocupadas. Se RETIRAN (deletedAt), no se borran. Las citas
  * convertidas no se tocan. Devuelve cuántos.
  */
 export async function retirarBloqueosDeGoogle(clinicId: string): Promise<number> {
@@ -490,7 +537,8 @@ export async function retirarBloqueosDeGoogle(clinicId: string): Promise<number>
   // Sin syncToken: al volver a encender o a conectar, la siguiente pasada es
   // COMPLETA y reactiva lo que siga ocupado en Google. Con el token, una
   // incremental solo vería lo que cambió y lo demás quedaría abierto días.
-  await prisma.googleAgendaImport.updateMany({ where: { clinicId }, data: { syncToken: null } });
+  // (Solo si hay token: el cron lo llama en cada pasada mientras dure el problema.)
+  await prisma.googleAgendaImport.updateMany({ where: { clinicId, syncToken: { not: null } }, data: { syncToken: null } });
   return r.count;
 }
 
@@ -498,7 +546,8 @@ export async function retirarBloqueosDeGoogle(clinicId: string): Promise<number>
 // EL CANAL DE AVISOS (events.watch)
 // ═══════════════════════════════════════════════════════════════════════
 
-export type ResultadoCanal = "vigente" | "creado" | "renovado" | "sin_direccion" | "sin_conexion" | "apagado" | "fallo";
+export type ResultadoCanal =
+  | "vigente" | "creado" | "renovado" | "sin_direccion" | "sin_conexion" | "apagado" | "calendario_no_valido" | "fallo";
 
 /**
  * Deja un canal de avisos de Google vivo para el calendario de la clínica.
@@ -514,6 +563,11 @@ export async function asegurarCanalDeAvisos(clinicId: string, ahora = new Date()
     const conexion = await leerConexion(clinicId);
     if (!conexion?.enabled || !conexion.refreshToken || !conexion.calendarId) return "sin_conexion";
     const calendarId = conexion.calendarId;
+    // Un calendario que la entrada no lee (personal, o de otra sede) no lleva
+    // canal: sus avisos solo dispararían pasadas que fallan (N-G3).
+    if (!calendarioImportable(calendarId) || (await puertos.calendarioEnOtraClinica(clinicId, calendarId))) {
+      return "calendario_no_valido";
+    }
     // El calendario del CANAL (no el del syncToken): si el de la clínica cambia, se renueva.
     const calendarIdCanal = estado.channelCalendarId;
     if (!canalPorRenovar({ channelId: estado.channelId, channelExpiresAt: estado.channelExpiresAt, calendarIdCanal }, calendarId, ahora)) {
@@ -623,21 +677,35 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
 }
 
 /**
- * ¿Los bloqueos de Google de la clínica ya no los mantiene nadie al día?
- *   · Google se DESCONECTÓ a propósito (sin refresh token), o
- *   · la conexión está CAÍDA (Google la rechazó; el token se guarda) desde
- *     hace más de `CAIDA_RETIRA_MS`. Antes se esperaba a que reconectaran, y
- *     un evento borrado en Google seguía cerrando esa hora días o semanas
- *     sin que nadie pudiera retirarlo (revisión t8, G3). Al reconectar, la
- *     primera pasada es completa y vuelve a cerrar lo que siga ocupado.
- * Una caída sin fecha (sin la tabla de estado) no cuenta: no se sabe desde cuándo.
+ * ¿Hay que retirar los bloqueos de Google de la clínica? (revisión t8, G3;
+ * segunda vuelta, N-G3). La regla vive en `bloqueosSinMantener`: Google
+ * desconectado, o un día entero sin una pasada buena, por la causa que sea.
+ * Solo lee `clinics` y `google_agenda_imports` (de este mismo SQL): ya no
+ * depende de `sql/ws1-t12-google-calendar-estado.sql`.
+ *
+ * `desconectada`: sin refresh token no hay nada que sincronizar después.
  */
-export async function conexionDeGoogleRetirada(clinicId: string, ahora = new Date()): Promise<boolean> {
-  if (!idValido(clinicId)) return false;
-  const c = await leerConexion(clinicId);
-  if (!c) return false;
-  if (!c.refreshToken) return true;
-  if (c.enabled) return false;
-  const { caidoDesde } = await leerAjustesGoogle(clinicId);
-  return !!caidoDesde && ahora.getTime() - caidoDesde.getTime() >= CAIDA_RETIRA_MS;
+export async function bloqueosDeGoogleSinMantener(
+  clinicId: string,
+  ahora = new Date(),
+): Promise<{ retirar: boolean; desconectada: boolean }> {
+  const no = { retirar: false, desconectada: false };
+  if (!idValido(clinicId)) return no;
+  if (!(await tablasGoogleListas())) return no;
+  const [c, f] = await Promise.all([
+    leerConexion(clinicId),
+    prisma.googleAgendaImport.findUnique({
+      where: { clinicId },
+      select: { lastSyncAt: true, createdAt: true, lastError: true },
+    }),
+  ]);
+  if (!c || !f) return no;
+  const conToken = !!c.refreshToken;
+  return {
+    retirar: bloqueosSinMantener(
+      { conToken, conexionActiva: c.enabled, ultimaBuena: f.lastSyncAt, encendidaDesde: f.createdAt, ultimoError: f.lastError },
+      ahora,
+    ),
+    desconectada: !conToken,
+  };
 }

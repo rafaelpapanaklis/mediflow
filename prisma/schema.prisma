@@ -19551,6 +19551,9 @@ model GoogleAgendaImport {
   /// Último fallo al crear/renovar el canal de avisos (la sincronización no lo pisa).
   channelError      String?   @db.VarChar(200)
   channelErrorAt    DateTime? @db.Timestamptz(3)
+  /// Huella del equipo (correos, roles, «Aparece en la agenda») en la última
+  /// pasada: si cambia, la siguiente es completa y reasigna los eventos.
+  equipoFirma       String?   @db.VarChar(40)
   createdAt         DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
 
@@ -19592,6 +19595,9 @@ model AgendaBlockGoogle {
   avisoEndsAt      DateTime? @db.Timestamptz(3)
   avisoDesde       DateTime? @db.Timestamptz(3)
   avisoDescartadoAt DateTime? @db.Timestamptz(3)
+  /// Cita convertida: lo último que la salida dejó bien en Google
+  /// («estado|inicio|fin»). Si no coincide con la cita, el cron lo repite.
+  salidaFirma      String?   @db.VarChar(120)
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
 

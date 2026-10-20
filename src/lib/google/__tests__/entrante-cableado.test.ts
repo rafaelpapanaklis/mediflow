@@ -56,16 +56,26 @@ test("G14/G16: la comprobación previa es SOLO lectura y mira calendario propio,
   assert.match(sql, /'menu-dos-niveles'/);
 });
 
-test("encender: SOLO los 6 slugs de Salamanca, con RETURNING; nada más", () => {
+test("encender (N-G13): los 6 slugs, con freno (las 6, un solo dueño SUPER_ADMIN en las 6) y solo las «listo»; nada más", () => {
   const sql = leer("sql/salamanca-encender-google.sql");
-  const slugs = [...sql.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
+  const sinComentarios = sql.replace(/--.*$/gm, "");
+  const slugs = [...new Set([...sinComentarios.matchAll(/'([a-z]+(?:-[a-z]+)+|dental-bas|clan-dental)'/g)].map((m) => m[1]))]
+    .filter((x) => x !== "menu-dos-niveles");
   assert.deepEqual(slugs.sort(), [
     "centro-dental", "centro-dental-guanajuato", "centro-dental-san-felipe",
     "centro-dental-villagran", "clan-dental", "dental-bas",
   ]);
-  assert.match(sql, /WHERE c\.slug IN \(/);
-  assert.match(sql, /RETURNING/);
-  assert.doesNotMatch(sql.replace(/--.*$/gm, ""), /\bDROP\b|\bDELETE\b|UPDATE clinics/i);
+  assert.match(sinComentarios, /IF encontrados <> 6 THEN/);
+  assert.match(sinComentarios, /count\(DISTINCT c\.id\)/, "N-A4: las 6 con SUPER_ADMIN, no solo «un dueño»");
+  assert.match(sinComentarios, /IF con_dueno <> 6 THEN/);
+  assert.match(sinComentarios, /IF duenos <> 1 THEN/);
+  // La misma regla de «listo» que la verificación.
+  const verificar = leer("sql/salamanca-google-verificar.sql");
+  for (const trozo of ["@group\\.calendar\\.google\\.com$", "f.flag = 'menu-dos-niveles' AND f.enabled = false", "o.\"googleClinicCalendarId\" = c.\"googleClinicCalendarId\""]) {
+    assert.ok(verificar.includes(trozo) && sinComentarios.includes(trozo), trozo);
+  }
+  assert.doesNotMatch(sinComentarios, /\bDROP\b|\bDELETE\b|UPDATE clinics/i);
+  // Probado aparte en PGlite (×2 en transacción, freno con slug ajeno sin dueño): ver el reporte.
 });
 
 test("schema.prisma: tablas aparte, sin relaciones nuevas en Clinic ni columnas nuevas en agenda_blocks", () => {
@@ -223,17 +233,15 @@ test("G11: pasar controles de ortodoncia lee los bloqueos con el lector común (
   assert.doesNotMatch(s.replace(/\/\/.*$/gm, ""), /take: 500|catch\(\(\) => \[\]\)/);
 });
 
-test("G3: caída de más de un día = retirar; el cron limpia también las clínicas sin fila; un fallo no tumba a las demás", () => {
+test("G3: el cron parte de los bloqueos (no de las filas apagadas) y un fallo no tumba a las demás (lo demás se EJECUTA en segunda-vuelta-servidor)", () => {
   const s = leer("src/lib/google/entrante.server.ts");
-  assert.match(s, /export const CAIDA_RETIRA_MS = 24 \* 60 \* 60 \* 1000;/);
-  const f = s.slice(s.indexOf("export async function conexionDeGoogleRetirada"));
-  assert.match(f, /ahora\.getTime\(\) - caidoDesde\.getTime\(\) >= CAIDA_RETIRA_MS/);
-  const g = s.slice(s.indexOf("export async function clinicasSinBanderaConBloqueos"), s.indexOf("export const CAIDA_RETIRA_MS"));
+  const g = s.slice(s.indexOf("export async function clinicasSinBanderaConBloqueos"), s.indexOf("export async function retirarBloqueosDeGoogle"));
   assert.match(g, /agendaBlock\.groupBy/, "se parte de los bloqueos, no de las filas apagadas");
   assert.match(s, /error: caida \? "conexion_caida" : f\.lastError \?\? null/);
   // Un token rechazado al LEER marca la conexión caída (como al copiar una cita).
   assert.match(s, /r\.motivo === "autorizacion" && tokenAlEmpezar/);
   assert.match(s, /if \(ahora\?\.refreshToken === tokenAlEmpezar\) \{\s*await marcarGoogleCaido\(/, "no apaga una conexión recién reconectada");
+  assert.doesNotMatch(s, /leerAjustesGoogle/, "ya no depende de clinic_google_status (ws1-t12)");
   const cron = leer("src/app/api/cron/google-calendario/route.ts");
   assert.match(cron, /clinicasSinBanderaConBloqueos/);
   assert.ok((cron.match(/catch \(e\)/g) ?? []).length >= 3, "try/catch por clínica");
@@ -253,10 +261,11 @@ test("G15: el error del canal queda en la fila; series en lote", () => {
   assert.match(s, /recurringEventId: \{ in: recurringEventIds \}/);
 });
 
-test("C2: «Convertir» ofrece sobreagendar (ws1-t5) y traduce la comida", () => {
+test("C2/C5: «Convertir» y «Mover la cita» usan el mismo «¿Seguro?» (lo ejecuta sobreagendar-aviso) y traducen la comida", () => {
   const comp = leer("src/components/dashboard/agenda-nueva/google-calendario.tsx");
-  assert.match(comp, /sobreagendar: true, sobreagendarCita: sobreagendar\.citaId, sobreagendarOtras: sobreagendar\.otras/);
-  assert.match(comp, /b\.sobreagendable !== true/);
+  assert.match(comp, /\.\.\.camposSobreagendar\(sobreagendar\)/);
+  assert.match(comp, /moverCitaAlEvento\(\{/);
+  assert.doesNotMatch(comp, /rescheduleAppointment/, "el aviso lee el 409 entero");
   assert.match(comp, /case "lunch_overlap": return "agenda\.google\.errorComida";/);
   const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
   assert.equal(es.agenda.google.errorComida, "Ese horario es la comida del doctor.");
