@@ -18,6 +18,7 @@ import { DictationMic, appendDictado } from "@/components/clinical/shared/dictat
 import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
 import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 
 /**
  * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
@@ -113,7 +114,9 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     por: t("planTratamiento.texto.por"),
     fase: (f: Fase) => t(FASE_CLAVE[f]),
     pronosticoValor: (p: Exclude<Pronostico, "">) => t(PRONOSTICO_CLAVE[p]),
-    dinero: (n: number) => formatCurrency(n),
+    // Con centavos cuando los hay: el texto del plan es de donde los vuelven a leer el PDF y
+    // «Convertir en presupuesto»; redondeado a pesos, $500.50 se leía $501 (ws1-t12, P2).
+    dinero: (n: number) => dineroExacto(n),
   }), [t]);
 
   const total = totalProcedimientos(plan.renglones);

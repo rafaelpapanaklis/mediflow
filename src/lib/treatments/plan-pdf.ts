@@ -12,20 +12,29 @@
 // reconoce como procedimientos. Diagnóstico, pronóstico y alternativa tampoco salen
 // (no los pidió el encargo; ver «DECISIONES PARA RAFAEL» del reporte ws1-t12).
 //
-// Dinero:
-//  · subtotal = Σ renglones;
-//  · el TOTAL es siempre el costo del plan (`totalCost`), el mismo que enseña la
-//    ficha. Si alguien lo tecleó a mano y no cuadra con la suma, la diferencia sale
-//    como «Descuento» (menor) o «Ajuste» (mayor), para que el papel cuadre solo;
-//  · el plan no tiene IVA ni descuentos propios (`model TreatmentPlan` no tiene
-//    dónde): no se inventan;
-//  · lo pagado solo se sabe por los presupuestos ligados al plan
-//    (`quotes.treatmentPlanId`) y sus facturas; sin ellos, el PDF no habla de pagos.
+// Dinero (revisión t4, P1–P3):
+//  · cada precio sale TAL CUAL está en el plan: con centavos si los tiene, y un
+//    procedimiento sin precio en el plan (cortesía) sale en $0 — el tarifario NO lo
+//    rellena (eso es cosa de «Convertir en presupuesto», que avisa «sin precio»).
+//    Si NINGÚN renglón trae precio (el plan solo tiene costo total), la columna dice «—»
+//    y no hay subtotal;
+//  · el TOTAL es siempre el costo del plan (`totalCost`), el mismo que enseña la ficha;
+//  · si el costo no cuadra con la suma, la diferencia se explica con su nombre:
+//    «Redondeo» cuando cabe en el redondeo a pesos que hacían los planes viejos (el texto
+//    escribía $501 por $500.50: hasta 50 centavos por unidad de cada precio leído así),
+//    «Descuento» cuando el costo es menor, «Ajuste» cuando es mayor. Nunca un descuento
+//    que nadie dio;
+//  · el plan no tiene IVA ni descuentos propios (`model TreatmentPlan` no tiene dónde);
+//  · lo pagado solo se sabe por los presupuestos ligados al plan (`quotes.treatmentPlanId`)
+//    y sus facturas. El SALDO solo sale cuando es seguro: lo facturado de esos presupuestos
+//    es exactamente el costo del plan, y entonces es lo que falta pagar de esas facturas. Con
+//    un descuento del presupuesto, un presupuesto que mezcla otros conceptos o una parte sin
+//    facturar, no se puede saber: sale «Pagado» y nada más. Nunca un saldo que no se debe.
 
 import { armarPresupuestoDePlan, leerRenglonesDelPlan, type ProcedimientoTarifario } from "@/lib/quotes/desde-plan";
 
-/** Diferencias de hasta un peso son redondeo del texto (que escribe pesos enteros), no un descuento. */
-export const TOLERANCIA_AJUSTE = 1;
+/** Diferencias menores a medio centavo no son diferencias. */
+const CENTAVO = 0.005;
 
 export interface PlanParaPdf {
   name: string;
@@ -42,14 +51,16 @@ export interface RenglonPdf {
   /** El hallazgo que lo justifica («Caries»), o "". */
   motivo: string;
   cantidad: number;
-  precioUnitario: number;
-  importe: number;
+  /** null = el plan no trae precios por renglón (solo costo total): se pinta «—». */
+  precioUnitario: number | null;
+  importe: number | null;
 }
 
 export interface GrupoPdf {
   fase: string;
   renglones: RenglonPdf[];
-  subtotal: number;
+  /** null = sin precios por renglón. */
+  subtotal: number | null;
 }
 
 export interface PagosDelPlan {
@@ -57,18 +68,25 @@ export interface PagosDelPlan {
   pagado: number;
   /** Facturas encontradas. 0 = el sistema no sabe de pagos de este plan. */
   facturas: number;
+  /** Σ `total` de esas facturas (ya con el descuento del presupuesto, si lo hubo). */
+  facturado: number;
+  /** Σ lo que falta pagar de cada una (total − pagado, nunca negativo). */
+  porPagar: number;
 }
+
+export type TipoAjuste = "redondeo" | "descuento" | "ajuste";
 
 export interface DocumentoDelPlan {
   grupos: GrupoPdf[];
   /** El plan no traía procedimientos detallados: un solo renglón con su nombre y su costo. */
   sinDetalle: boolean;
-  subtotal: number;
-  /** total − subtotal cuando pasa de la tolerancia; 0 si no hay. Negativo = descuento. */
-  ajuste: number;
+  /** null = ningún renglón trae precio: no hay subtotal que enseñar. */
+  subtotal: number | null;
+  /** total − subtotal con su nombre; null si cuadra. */
+  ajuste: { tipo: TipoAjuste; monto: number } | null;
   total: number;
-  /** null = no se enseñan pagos (sin permiso o sin facturas del plan). */
-  pagos: { pagado: number; saldo: number } | null;
+  /** null = no se enseñan pagos (sin permiso o sin facturas del plan). `saldo` null = no se sabe con certeza. */
+  pagos: { pagado: number; saldo: number | null } | null;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -76,11 +94,27 @@ const num = (v: unknown) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+const tieneCentavos = (n: number) => Math.round(Math.abs(n) * 100) % 100 !== 0;
 
 function zonaDe(dientes: string, caras: string): string {
   const lista = dientes ? dientes.split(",").map((d) => d.trim()).filter(Boolean).join(", ") : "";
   if (!lista) return "";
   return caras ? `${lista} (${caras})` : lista;
+}
+
+/** Pagado y, solo si es seguro, saldo (ver arriba). */
+export function pagosParaElPapel(total: number, pagos: PagosDelPlan | null): DocumentoDelPlan["pagos"] {
+  if (!pagos || pagos.facturas <= 0) return null;
+  const pagado = r2(Math.max(0, num(pagos.pagado)));
+  const cuadra = Math.abs(r2(num(pagos.facturado)) - total) < CENTAVO;
+  return { pagado, saldo: cuadra ? r2(Math.max(0, num(pagos.porPagar))) : null };
+}
+
+/** El nombre de la diferencia entre la suma de los renglones y el costo del plan. */
+export function tipoDeAjuste(diferencia: number, toleranciaRedondeo: number): TipoAjuste | null {
+  if (Math.abs(diferencia) < CENTAVO) return null;
+  if (Math.abs(diferencia) <= toleranciaRedondeo + CENTAVO) return "redondeo";
+  return diferencia < 0 ? "descuento" : "ajuste";
 }
 
 /**
@@ -92,22 +126,47 @@ export function armarDocumentoDelPlan(
   tarifario: ProcedimientoTarifario[],
   pagos: PagosDelPlan | null = null,
 ): DocumentoDelPlan {
+  // El total es el costo del plan, el que enseña la ficha (también un plan confirmado «sin costo»).
+  const total = Math.max(0, r2(num(plan.totalCost)));
   const leidos = leerRenglonesDelPlan(plan.description);
-  const armado = armarPresupuestoDePlan(plan, tarifario);
 
-  // Los conceptos salen 1:1 y en orden de los renglones leídos (o uno solo, sin detalle).
-  const renglones: RenglonPdf[] = armado.conceptos.map((c, i) => {
-    const leido = armado.sinDetalle ? null : leidos[i];
-    const cantidad = num(c.quantity) || 1;
-    const precioUnitario = r2(num(c.unitPrice));
+  if (leidos.length === 0) {
+    // Plan sin detalle (o de los de antes, cuya descripción es la nota): su nombre y su costo.
+    const nombre = plan.name.trim() || "—";
     return {
-      nombre: c.name,
-      zona: leido ? zonaDe(leido.dientes, leido.caras) : "",
-      fase: leido?.faseNombre ?? "",
-      motivo: leido?.motivo ?? "",
+      grupos: [{ fase: "", renglones: [{ nombre, zona: "", fase: "", motivo: "", cantidad: 1, precioUnitario: total, importe: total }], subtotal: total }],
+      sinDetalle: true,
+      subtotal: total,
+      ajuste: null,
+      total,
+      pagos: pagosParaElPapel(total, pagos),
+    };
+  }
+
+  // Los conceptos salen 1:1 y en orden de los renglones leídos. Del armado del presupuesto
+  // solo se toma el precio EXACTO del tarifario cuando el texto lo traía redondeado.
+  const conceptos = armarPresupuestoDePlan(plan, tarifario).conceptos;
+  const conPrecio = leidos.some((l) => l.precio != null && l.precio > 0);
+  let toleranciaRedondeo = 0;
+  const renglones: RenglonPdf[] = leidos.map((leido, i) => {
+    const c = conceptos[i];
+    const cantidad = num(leido.cantidad) || 1;
+    let precioUnitario: number | null;
+    if (!conPrecio) precioUnitario = null;
+    else if (leido.precio == null || leido.precio <= 0) precioUnitario = 0; // cortesía: $0, como en el plan
+    else {
+      precioUnitario = r2(c?.origen === "tarifario" ? num(c.unitPrice) : leido.precio);
+      // Un precio entero leído del texto pudo ser $X.50 redondeado por la ventana vieja.
+      if (c?.origen !== "tarifario" && !tieneCentavos(leido.precio)) toleranciaRedondeo += cantidad * 0.5;
+    }
+    return {
+      nombre: leido.nombre,
+      zona: zonaDe(leido.dientes, leido.caras),
+      fase: leido.faseNombre,
+      motivo: leido.motivo,
       cantidad,
       precioUnitario,
-      importe: r2(cantidad * precioUnitario),
+      importe: precioUnitario == null ? null : r2(cantidad * precioUnitario),
     };
   });
 
@@ -115,22 +174,42 @@ export function armarDocumentoDelPlan(
   for (const r of renglones) {
     const ultimo = grupos[grupos.length - 1];
     if (ultimo && ultimo.fase === r.fase) ultimo.renglones.push(r);
-    else grupos.push({ fase: r.fase, renglones: [r], subtotal: 0 });
+    else grupos.push({ fase: r.fase, renglones: [r], subtotal: null });
   }
-  for (const g of grupos) g.subtotal = r2(g.renglones.reduce((a, r) => a + r.importe, 0));
+  for (const g of grupos) g.subtotal = conPrecio ? r2(g.renglones.reduce((a, r) => a + (r.importe ?? 0), 0)) : null;
 
-  const subtotal = r2(renglones.reduce((a, r) => a + r.importe, 0));
-  // El total es el costo del plan, el que enseña la ficha (también un plan confirmado «sin costo»).
-  const total = Math.max(0, r2(num(plan.totalCost)));
-  const diferencia = r2(total - subtotal);
-  const ajuste = Math.abs(diferencia) > TOLERANCIA_AJUSTE ? diferencia : 0;
+  const subtotal = conPrecio ? r2(renglones.reduce((a, r) => a + (r.importe ?? 0), 0)) : null;
+  const diferencia = subtotal == null ? 0 : r2(total - subtotal);
+  const tipo = subtotal == null ? null : tipoDeAjuste(diferencia, toleranciaRedondeo);
 
-  const pagosVisibles =
-    pagos && pagos.facturas > 0
-      ? { pagado: r2(Math.max(0, num(pagos.pagado))), saldo: r2(Math.max(0, total - Math.max(0, num(pagos.pagado)))) }
-      : null;
+  return {
+    grupos,
+    sinDetalle: false,
+    subtotal,
+    ajuste: tipo ? { tipo, monto: diferencia } : null,
+    total,
+    pagos: pagosParaElPapel(total, pagos),
+  };
+}
 
-  return { grupos, sinDetalle: armado.sinDetalle, subtotal, ajuste, total, pagos: pagosVisibles };
+// ── Texto que Helvetica sabe pintar (revisión t4, P5) ──────────────────────
+//
+// La Helvetica de @react-pdf solo trae WinAnsi (Windows-1252). Un emoji, el cirílico o el
+// chino no lanzan: salen como basura («Zoë 🙂» → «Zoë =B»). Registrar otra fuente es otra
+// tarea (lo vigila `tipografia-panel.test.ts`), así que se quitan limpiamente: acentos, ñ,
+// ü, «» y € se quedan; lo demás se va y los espacios se recogen.
+
+/** Los de 0x80–0x9F de Windows-1252 que sí tienen glifo. */
+const CP1252_EXTRA = new Set("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ");
+
+export function textoParaHelvetica(texto: string | null | undefined): string {
+  if (!texto) return "";
+  let salida = "";
+  for (const ch of texto.normalize("NFC").replace(/[\u2212\u2010\u2011]/g, "-").replace(/[\t\r\n\u00a0\u2000-\u200a\u202f\u205f]/g, " ")) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if ((cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || CP1252_EXTRA.has(ch)) salida += ch;
+  }
+  return salida.replace(/ {2,}/g, " ").replace(/\s+([,.;:)])/g, "$1").trim();
 }
 
 /** «plan-de-tratamiento-ana-lopez-2026-10-20.pdf»: sin acentos, espacios ni símbolos. */

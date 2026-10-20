@@ -1,6 +1,7 @@
+import type { ComponentProps } from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { ClinicLetterhead, type ClinicLetterheadClinic } from "./clinic-letterhead";
-import type { DocumentoDelPlan, RenglonPdf } from "@/lib/treatments/plan-pdf";
+import { textoParaHelvetica, type DocumentoDelPlan, type GrupoPdf, type RenglonPdf } from "@/lib/treatments/plan-pdf";
 
 /**
  * PlanTratamientoDocument — el plan de tratamiento del paciente, CON precios (ws1-t12).
@@ -34,6 +35,8 @@ export interface TextosPlanPdf {
   subtotalFase: string;
   subtotal: string;
   descuento: string;
+  /** Diferencia que cabe en el redondeo a pesos de los planes viejos (revisión P2). */
+  redondeo: string;
   ajuste: string;
   total: string;
   pagado: string;
@@ -46,6 +49,8 @@ export interface TextosPlanPdf {
   pie: string;
   /** Recibe número de página y total: «Página 1 de 2». */
   pagina: (n: number, total: number) => string;
+  /** Rótulo de la tabla en las hojas siguientes: «Procedimientos (continúa)». */
+  continua: string;
 }
 
 export interface PlanTratamientoDocumentProps extends ClinicLetterheadClinic {
@@ -64,12 +69,19 @@ export interface PlanTratamientoDocumentProps extends ClinicLetterheadClinic {
   dinero: (n: number) => string;
 }
 
+/** Alto del encabezado de tabla que se repite en las hojas 2 y siguientes (revisión P6). */
+const BANDA_REPETIDA = 34;
+/** Carta (612 pt) menos los 40 de margen a cada lado. */
+const ANCHO_UTIL = 532;
+
 const ACENTO = "#7c3aed";
 const TINTA = "#14101f";
 const GRIS = "#6b6b78";
 
 const styles = StyleSheet.create({
-  page: { padding: 40, paddingBottom: 64, fontFamily: "Helvetica", fontSize: 10, color: TINTA, lineHeight: 1.5 },
+  // paddingTop deja sitio, en TODAS las hojas, al encabezado de columnas que se repite desde
+  // la 2 (`EncabezadoRepetido`); en la 1 la cabecera lo recupera con un margen negativo.
+  page: { padding: 40, paddingTop: 40 + BANDA_REPETIDA, paddingBottom: 64, fontFamily: "Helvetica", fontSize: 10, color: TINTA, lineHeight: 1.5 },
   docTitle: { fontSize: 13, color: ACENTO, fontFamily: "Helvetica-Bold", textAlign: "right", textTransform: "uppercase" },
   metaRight: { fontSize: 8, color: GRIS, textAlign: "right", marginTop: 4 },
   metaValue: { fontSize: 10, color: TINTA, fontFamily: "Helvetica-Bold", textAlign: "right" },
@@ -123,36 +135,104 @@ const styles = StyleSheet.create({
   // `lineHeight: ""` NO es decorativo (ver consent-document / patient-document):
   // sin él @react-pdf 4.x pinta el «Página N de M» fuera del papel.
   pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2, lineHeight: "" },
+  primeraHoja: { marginTop: -BANDA_REPETIDA },
+  repetidoRotulo: { fontSize: 8, color: ACENTO, fontFamily: "Helvetica-Bold", textTransform: "uppercase", letterSpacing: 0.5 },
 });
 
 /** Negativos con guion ASCII: Helvetica de @react-pdf no pinta U+2212. */
 const conSigno = (n: number, dinero: (n: number) => string) => (n < 0 ? `-${dinero(-n)}` : dinero(n));
 
+/** Sin guiones: «implantes» baja entero al renglón siguiente en vez de partirse «im-plantes» (P6). */
+const sinGuiones = (palabra: string) => [palabra];
+
+/** Texto con lo que Helvetica sabe pintar (P5) y sin partir palabras (P6). */
+// El `style` de `Text` admite también el de SVG y no encaja; el de `View` es el mismo `Style | Style[]` de un texto.
+function T({ style, children }: { style?: ComponentProps<typeof View>["style"]; children: string | number | null | undefined }) {
+  const texto = typeof children === "number" ? String(children) : textoParaHelvetica(children ?? "");
+  return <Text style={style} hyphenationCallback={sinGuiones}>{texto}</Text>;
+}
+
 function Encabezado({ t }: { t: TextosPlanPdf }) {
   return (
     <View style={styles.tHead}>
-      <Text style={[styles.th, styles.cConcept]}>{t.concepto}</Text>
-      <Text style={[styles.th, styles.cZona]}>{t.zona}</Text>
-      <Text style={[styles.th, styles.cQty]}>{t.cantidad}</Text>
-      <Text style={[styles.th, styles.cUnit]}>{t.precio}</Text>
-      <Text style={[styles.th, styles.cTotal]}>{t.importe}</Text>
+      <T style={[styles.th, styles.cConcept]}>{t.concepto}</T>
+      <T style={[styles.th, styles.cZona]}>{t.zona}</T>
+      <T style={[styles.th, styles.cQty]}>{t.cantidad}</T>
+      <T style={[styles.th, styles.cUnit]}>{t.precio}</T>
+      <T style={[styles.th, styles.cTotal]}>{t.importe}</T>
     </View>
   );
 }
+
+/** Ancho de cada columna (fracción del ancho útil): las mismas que `cConcept`…`cTotal`. */
+const COLUMNAS = [
+  { clave: "concepto", ancho: 0.44, align: "left" },
+  { clave: "zona", ancho: 0.17, align: "left" },
+  { clave: "cantidad", ancho: 0.09, align: "center" },
+  { clave: "precio", ancho: 0.15, align: "right" },
+  { clave: "importe", ancho: 0.15, align: "right" },
+] as const;
+
+/**
+ * El encabezado de columnas en las hojas 2 y siguientes (P6). Son `Text` sueltos, `fixed` y
+ * absolutos en la banda que el padding superior reserva en todas las hojas, cada uno con
+ * `render` que en la hoja 1 no pinta nada (allí está el de siempre, bajo «Procedimientos»).
+ * Medido: una `View` con `render` no maqueta lo que devuelve anidado (salía el rótulo y no la
+ * fila); un `Text` con `render` sí, igual que «Página N de M». Como el último renglón viaja con
+ * los totales y las firmas (bloque final), toda hoja desde la 2 lleva procedimientos debajo.
+ */
+function EncabezadoRepetido({ t }: { t: TextosPlanPdf }) {
+  const desdeLa2 = (texto: string) => ({ pageNumber }: { pageNumber: number }) =>
+    pageNumber > 1 ? textoParaHelvetica(texto) : "";
+  let izquierda = 40;
+  return (
+    <>
+      <Text fixed style={[styles.repetidoRotulo, { position: "absolute", top: 40, left: 40, width: ANCHO_UTIL }]} render={desdeLa2(t.continua)} />
+      {COLUMNAS.map((c) => {
+        const ancho = Math.round(ANCHO_UTIL * c.ancho);
+        const left = izquierda;
+        izquierda += ancho;
+        return (
+          <Text
+            key={c.clave}
+            fixed
+            style={[styles.th, { position: "absolute", top: 56, left, width: ancho, textAlign: c.align, paddingRight: c.align === "left" ? 6 : 0 }]}
+            render={desdeLa2(t[c.clave])}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+const precio = (n: number | null, dinero: (n: number) => string) => (n == null ? "—" : dinero(n));
 
 function Renglon({ r, dinero }: { r: RenglonPdf; dinero: (n: number) => string }) {
   return (
     <View style={styles.tRow} wrap={false}>
       <View style={styles.cConcept}>
-        <Text style={styles.tdBold}>{r.nombre}</Text>
-        {r.motivo ? <Text style={styles.tdMutedSmall}>{r.motivo}</Text> : null}
+        <T style={styles.tdBold}>{r.nombre}</T>
+        {r.motivo ? <T style={styles.tdMutedSmall}>{r.motivo}</T> : null}
       </View>
-      <Text style={[styles.td, styles.cZona]}>{r.zona || "—"}</Text>
-      <Text style={[styles.td, styles.cQty]}>{r.cantidad}</Text>
-      <Text style={[styles.td, styles.cUnit]}>{dinero(r.precioUnitario)}</Text>
-      <Text style={[styles.tdBold, styles.cTotal]}>{dinero(r.importe)}</Text>
+      <T style={[styles.td, styles.cZona]}>{r.zona || "—"}</T>
+      <T style={[styles.td, styles.cQty]}>{r.cantidad}</T>
+      <T style={[styles.td, styles.cUnit]}>{precio(r.precioUnitario, dinero)}</T>
+      <T style={[styles.tdBold, styles.cTotal]}>{precio(r.importe, dinero)}</T>
     </View>
   );
+}
+
+function RotuloDeFase({ g }: { g: GrupoPdf }) {
+  return (
+    <View style={styles.faseRow} wrap={false} minPresenceAhead={40}>
+      <T style={styles.label}>{g.fase || "—"}</T>
+    </View>
+  );
+}
+
+function SubtotalDeFase({ g, t, dinero }: { g: GrupoPdf; t: TextosPlanPdf; dinero: (n: number) => string }) {
+  if (g.subtotal == null) return null;
+  return <T style={styles.faseSubtotal}>{`${t.subtotalFase}: ${dinero(g.subtotal)}`}</T>;
 }
 
 export function PlanTratamientoDocument(props: PlanTratamientoDocumentProps) {
@@ -160,127 +240,161 @@ export function PlanTratamientoDocument(props: PlanTratamientoDocumentProps) {
   const d = props.documento;
   const dinero = props.dinero;
   const conFases = d.grupos.some((g) => g.fase);
+  const subtotalesDeFase = conFases && d.grupos.length > 1;
+  const nombre = textoParaHelvetica(props.pacienteNombre) || "—";
+  const doctor = textoParaHelvetica(props.doctorNombre);
+
+  // El ÚLTIMO renglón viaja con los totales y las firmas en un bloque que no se parte (P6):
+  // las firmas nunca quedan solas en una hoja, y la hoja siguiente nunca empieza sin procedimientos.
+  const ultimoGrupo = d.grupos[d.grupos.length - 1];
+  const ultimoRenglon = ultimoGrupo.renglones[ultimoGrupo.renglones.length - 1];
+  const rotuloViajaAlFinal = conFases && ultimoGrupo.renglones.length === 1;
+
+  // Membrete: solo lo que Helvetica sabe pintar.
+  const membrete = {
+    clinicName: textoParaHelvetica(props.clinicName) || "—",
+    clinicAddress: textoParaHelvetica(props.clinicAddress) || null,
+    clinicCity: textoParaHelvetica(props.clinicCity) || null,
+    clinicState: textoParaHelvetica(props.clinicState) || null,
+    clinicPhone: textoParaHelvetica(props.clinicPhone) || null,
+    clinicEmail: textoParaHelvetica(props.clinicEmail) || null,
+    clinicTaxId: textoParaHelvetica(props.clinicTaxId) || null,
+    clinicLogoDataUrl: props.clinicLogoDataUrl ?? null,
+    clinicLogoAspect: props.clinicLogoAspect ?? null,
+  };
 
   return (
-    <Document title={`${t.titulo} · ${props.pacienteNombre}`}>
+    <Document title={`${t.titulo} · ${nombre}`}>
       <Page size="LETTER" style={styles.page} wrap>
-        <ClinicLetterhead
-          {...props}
-          accent={ACENTO}
-          right={
-            <View>
-              <Text style={styles.docTitle}>{t.titulo}</Text>
-              <Text style={styles.metaRight}>{t.fecha}</Text>
-              <Text style={styles.metaValue}>{props.fechaEmision}</Text>
-            </View>
-          }
-        />
+        <EncabezadoRepetido t={t} />
+        <View style={styles.primeraHoja}>
+          <ClinicLetterhead
+            {...membrete}
+            accent={ACENTO}
+            right={
+              <View>
+                <T style={styles.docTitle}>{t.titulo}</T>
+                <T style={styles.metaRight}>{t.fecha}</T>
+                <T style={styles.metaValue}>{props.fechaEmision}</T>
+              </View>
+            }
+          />
+        </View>
 
         {/* Paciente, doctor y plan */}
-        <View style={styles.block}>
+        <View style={styles.block} wrap={false}>
           <View style={styles.twoCol}>
             <View style={styles.col}>
-              <Text style={styles.label}>{t.paciente}</Text>
-              <Text style={styles.value}>{props.pacienteNombre}</Text>
-              {props.pacienteFolio ? <Text style={styles.sub}>{props.pacienteFolio}</Text> : null}
+              <T style={styles.label}>{t.paciente}</T>
+              <T style={styles.value}>{nombre}</T>
+              {props.pacienteFolio ? <T style={styles.sub}>{props.pacienteFolio}</T> : null}
             </View>
             <View style={styles.col}>
-              <Text style={styles.label}>{t.doctor}</Text>
-              <Text style={styles.value}>{props.doctorNombre || "—"}</Text>
-              {t.cedula ? <Text style={styles.sub}>{t.cedula}</Text> : null}
+              <T style={styles.label}>{t.doctor}</T>
+              <T style={styles.value}>{doctor || "—"}</T>
+              {t.cedula ? <T style={styles.sub}>{t.cedula}</T> : null}
             </View>
           </View>
           <View style={[styles.twoCol, { marginTop: 8 }]}>
             <View style={styles.col}>
-              <Text style={styles.label}>{t.plan}</Text>
-              <Text style={styles.value}>{props.planNombre}</Text>
+              <T style={styles.label}>{t.plan}</T>
+              <T style={styles.value}>{props.planNombre || "—"}</T>
             </View>
             <View style={styles.col}>
-              <Text style={styles.label}>{t.estado}</Text>
-              <Text style={styles.value}>{props.estadoPlan}</Text>
-              {props.fechaInicio ? <Text style={styles.sub}>{t.inicio}: {props.fechaInicio}</Text> : null}
+              <T style={styles.label}>{t.estado}</T>
+              <T style={styles.value}>{props.estadoPlan}</T>
+              {props.fechaInicio ? <T style={styles.sub}>{`${t.inicio}: ${props.fechaInicio}`}</T> : null}
             </View>
           </View>
         </View>
 
-        {/* Procedimientos */}
-        <Text style={styles.sectionTitle}>{t.procedimientos}</Text>
-        {/* Un solo encabezado de columnas; cada fase es un rótulo dentro de la tabla. */}
-        <Encabezado t={t} />
-        {d.grupos.map((g, gi) => (
-          <View key={gi}>
-            {conFases ? (
-              <View style={styles.faseRow} wrap={false} minPresenceAhead={40}>
-                <Text style={styles.label}>{g.fase || "—"}</Text>
-              </View>
-            ) : null}
-            {g.renglones.map((r, i) => (
-              <Renglon key={i} r={r} dinero={dinero} />
-            ))}
-            {conFases && d.grupos.length > 1 ? (
-              <Text style={styles.faseSubtotal}>
-                {t.subtotalFase}: {dinero(g.subtotal)}
-              </Text>
-            ) : null}
-          </View>
-        ))}
+        {/* Procedimientos: un solo encabezado de columnas; cada fase es un rótulo dentro de la tabla. */}
+        <View minPresenceAhead={60}>
+          <T style={styles.sectionTitle}>{t.procedimientos}</T>
+          <Encabezado t={t} />
+        </View>
+        {d.grupos.map((g, gi) => {
+          const esUltimo = gi === d.grupos.length - 1;
+          const renglones = esUltimo ? g.renglones.slice(0, -1) : g.renglones;
+          return (
+            <View key={gi}>
+              {conFases && !(esUltimo && rotuloViajaAlFinal) ? <RotuloDeFase g={g} /> : null}
+              {renglones.map((r, i) => (
+                <Renglon key={i} r={r} dinero={dinero} />
+              ))}
+              {subtotalesDeFase && !esUltimo ? <SubtotalDeFase g={g} t={t} dinero={dinero} /> : null}
+            </View>
+          );
+        })}
 
-        {/* Leyenda + totales */}
-        <View style={styles.bottomRow} wrap={false}>
-          <Text style={styles.legend}>{t.leyenda}</Text>
-          <View style={styles.totalsBox}>
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>{t.subtotal}</Text>
-              <Text style={styles.totalsValue}>{dinero(d.subtotal)}</Text>
-            </View>
-            {d.ajuste !== 0 ? (
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>{d.ajuste < 0 ? t.descuento : t.ajuste}</Text>
-                <Text style={styles.totalsValue}>{conSigno(d.ajuste, dinero)}</Text>
-              </View>
-            ) : null}
-            <View style={[styles.totalsRow, { marginTop: 3 }]}>
-              <Text style={styles.grandLabel}>{t.total}</Text>
-              <Text style={styles.grandValue}>{dinero(d.total)}</Text>
-            </View>
-            {d.pagos ? (
-              <>
-                <View style={[styles.totalsRow, { marginTop: 6 }]}>
-                  <Text style={styles.totalsLabel}>{t.pagado}</Text>
-                  <Text style={styles.totalsValue}>{dinero(d.pagos.pagado)}</Text>
-                </View>
+        {/* Bloque final, que no se parte: último renglón + totales + firmas. */}
+        <View wrap={false}>
+          {rotuloViajaAlFinal ? <RotuloDeFase g={ultimoGrupo} /> : null}
+          <Renglon r={ultimoRenglon} dinero={dinero} />
+          {subtotalesDeFase ? <SubtotalDeFase g={ultimoGrupo} t={t} dinero={dinero} /> : null}
+
+          <View style={styles.bottomRow}>
+            <T style={styles.legend}>{t.leyenda}</T>
+            <View style={styles.totalsBox}>
+              {d.subtotal != null ? (
                 <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>{t.saldo}</Text>
-                  <Text style={styles.totalsValue}>{dinero(d.pagos.saldo)}</Text>
+                  <T style={styles.totalsLabel}>{t.subtotal}</T>
+                  <T style={styles.totalsValue}>{dinero(d.subtotal)}</T>
                 </View>
-                <Text style={styles.pagosNota}>{t.notaPagos}</Text>
-              </>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Firmas */}
-        <View style={styles.sigRow} wrap={false}>
-          <View style={styles.sigBox}>
-            <View style={styles.sigSpace} />
-            <View style={styles.sigLine}>
-              <Text style={styles.sigRole}>{t.firmaPaciente}</Text>
-              <Text style={styles.sigName}>{props.pacienteNombre}</Text>
-              <Text style={styles.sigDate}>{t.fechaPorLlenar}</Text>
+              ) : null}
+              {d.ajuste ? (
+                <View style={styles.totalsRow}>
+                  <T style={styles.totalsLabel}>
+                    {d.ajuste.tipo === "redondeo" ? t.redondeo : d.ajuste.tipo === "descuento" ? t.descuento : t.ajuste}
+                  </T>
+                  <T style={styles.totalsValue}>{conSigno(d.ajuste.monto, dinero)}</T>
+                </View>
+              ) : null}
+              <View style={[styles.totalsRow, { marginTop: 3 }]}>
+                <T style={styles.grandLabel}>{t.total}</T>
+                <T style={styles.grandValue}>{dinero(d.total)}</T>
+              </View>
+              {d.pagos ? (
+                <>
+                  <View style={[styles.totalsRow, { marginTop: 6 }]}>
+                    <T style={styles.totalsLabel}>{t.pagado}</T>
+                    <T style={styles.totalsValue}>{dinero(d.pagos.pagado)}</T>
+                  </View>
+                  {d.pagos.saldo != null ? (
+                    <View style={styles.totalsRow}>
+                      <T style={styles.totalsLabel}>{t.saldo}</T>
+                      <T style={styles.totalsValue}>{dinero(d.pagos.saldo)}</T>
+                    </View>
+                  ) : null}
+                  <T style={styles.pagosNota}>{t.notaPagos}</T>
+                </>
+              ) : null}
             </View>
           </View>
-          <View style={styles.sigBox}>
-            <View style={styles.sigSpace} />
-            <View style={styles.sigLine}>
-              <Text style={styles.sigRole}>{t.firmaDoctor}</Text>
-              <Text style={styles.sigName}>{props.doctorNombre || " "}</Text>
-              {t.cedula ? <Text style={styles.sigDate}>{t.cedula}</Text> : null}
+
+          {/* Firmas */}
+          <View style={styles.sigRow}>
+            <View style={styles.sigBox}>
+              <View style={styles.sigSpace} />
+              <View style={styles.sigLine}>
+                <T style={styles.sigRole}>{t.firmaPaciente}</T>
+                <T style={styles.sigName}>{nombre}</T>
+                <T style={styles.sigDate}>{t.fechaPorLlenar}</T>
+              </View>
+            </View>
+            <View style={styles.sigBox}>
+              <View style={styles.sigSpace} />
+              <View style={styles.sigLine}>
+                <T style={styles.sigRole}>{t.firmaDoctor}</T>
+                <T style={styles.sigName}>{doctor || " "}</T>
+                {t.cedula ? <T style={styles.sigDate}>{t.cedula}</T> : null}
+              </View>
             </View>
           </View>
         </View>
 
         <View style={styles.footer} fixed>
-          <Text>{t.pie}</Text>
+          <T>{t.pie}</T>
           <Text style={styles.pageNum} render={({ pageNumber, totalPages }) => t.pagina(pageNumber, totalPages)} />
         </View>
       </Page>

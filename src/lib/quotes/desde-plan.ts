@@ -10,6 +10,9 @@
 // del tarifario redondea a lo escrito, se usa el del tarifario (el exacto); si no, el escrito.
 
 import type { QuoteItemInput } from "./types";
+import { FASES, FASE_CLAVE } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
+import { getDict } from "@/i18n/dictionaries";
+import { makeT } from "@/i18n/t";
 
 const MARCA = "▸ ";
 
@@ -104,23 +107,42 @@ function leerLinea(linea: string, fase: number, faseNombre: string): RenglonLeid
   return { nombre, dientes, cantidad, precio, fase, faseNombre, caras, motivo: motivos.join(" · ") };
 }
 
+const normalizar = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
 /** «▸ Fase I · Higiénica — $1,000» → «Fase I · Higiénica». */
 function nombreDeFase(encabezado: string): string {
   return encabezado.replace(/^▸\s*/, "").replace(/\s+—\s+[^—]*$/, "").trim();
 }
 
 /**
- * Los renglones que la ventana del plan escribió en `description`. Solo lee los bloques de fase
- * (un encabezado «▸ …» seguido de líneas «• …»); diagnóstico, pronóstico, total, alternativa y notas
- * se ignoran. Una descripción de las de antes (una frase) no trae renglones: devuelve [].
+ * Los nombres de fase que escribe la ventana del plan, en los dos idiomas del panel
+ * (`planTratamiento.fase.*` de es.json y en.json), ya normalizados. Solo un encabezado
+ * «▸ …» con uno de estos nombres abre una fase (ws1-t12, revisión P4).
+ */
+const FASES_CONOCIDAS: ReadonlySet<string> = new Set(
+  (["es", "en"] as const).flatMap((loc) => {
+    const t = makeT(getDict(loc));
+    return FASES.map((f) => normalizar(t(FASE_CLAVE[f])));
+  }),
+);
+
+/** ¿Es el encabezado de una fase escrito por la ventana? «▸ Fase I · Higiénica — $1,000» sí; «▸ Notas: …» no. */
+export function esEncabezadoDeFase(linea: string): boolean {
+  return linea.startsWith(MARCA.trim()) && FASES_CONOCIDAS.has(normalizar(nombreDeFase(linea)));
+}
+
+/**
+ * Los renglones que la ventana del plan escribió en `description`. Solo lee las viñetas «• …» que
+ * siguen a un encabezado de fase; diagnóstico, pronóstico, total, alternativa y notas se ignoran.
+ * Una descripción de las de antes (una frase) no trae renglones: devuelve [].
  *
- * Cómo se distingue una fase de lo demás (ws1-t12): el encabezado de una fase NO lleva «:»
- * («▸ Fase I · Higiénica — $1,000»); los demás bloques sí («▸ Diagnóstico: …», «▸ Total…: $…»,
- * «▸ Alternativa ofrecida: …», «▸ Notas: …»). Diagnóstico y pronóstico van ANTES de las fases;
- * total, alternativa y notas, DESPUÉS. Así que el primer bloque «con dos puntos» que aparece tras
- * una fase cierra la lectura: lo que venga detrás es texto libre del doctor y nunca un procedimiento.
- * Antes bastaba con que las notas trajeran una línea «• …» para que salieran como concepto del
- * presupuesto (y, en el PDF del plan, impresas para el paciente).
+ * Línea por línea y solo con fases CONOCIDAS (ws1-t12, revisiones P4 y anterior): un encabezado
+ * abre fase solo si su nombre es uno de los de la ventana (`FASES_CONOCIDAS`, es y en). Cualquier
+ * otro «▸ …» la cierra, y si ya hubo fases cierra la lectura entera: total, alternativa y notas
+ * van DESPUÉS de las fases, así que lo que siga es texto libre del doctor y nunca un procedimiento.
+ * No depende de las líneas en blanco: aunque alguien las borre a mano, «▸ Notas: …» y sus
+ * viñetas no salen como concepto del presupuesto ni impresas en el PDF del plan.
  */
 export function leerRenglonesDelPlan(description: string | null | undefined): RenglonLeido[] {
   if (!description || !description.startsWith(MARCA)) return [];
@@ -128,32 +150,26 @@ export function leerRenglonesDelPlan(description: string | null | undefined): Re
   let fase = 0;
   let faseNombre = "";
   let enFase = false;
-  for (const bloque of description.split(/\n\s*\n/)) {
-    const lineas = bloque.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (lineas.length === 0) continue;
-    const cabeza = lineas[0];
-    if (cabeza.startsWith(MARCA.trim())) {
-      if (cabeza.includes(":")) {
-        if (fase > 0) break; // total, alternativa o notas: aquí se acaban los procedimientos
-        enFase = false; // diagnóstico / pronóstico
+  for (const linea of description.split("\n").map((l) => l.trim())) {
+    if (!linea) continue;
+    if (linea.startsWith(MARCA.trim())) {
+      if (esEncabezadoDeFase(linea)) {
+        enFase = true;
+        fase += 1;
+        faseNombre = nombreDeFase(linea);
         continue;
       }
-      enFase = true;
-      fase += 1;
-      faseNombre = nombreDeFase(cabeza);
-    } else if (!enFase) {
-      continue; // texto suelto que sigue al diagnóstico
+      if (fase > 0) break; // total, alternativa o notas: aquí se acaban los procedimientos
+      enFase = false; // diagnóstico / pronóstico
+      continue;
     }
-    for (const l of lineas.filter((x) => x.startsWith("•"))) {
-      const r = leerLinea(l, fase, faseNombre);
-      if (r) renglones.push(r);
-    }
+    if (!enFase || !linea.startsWith("•")) continue;
+    const r = leerLinea(linea, fase, faseNombre);
+    if (r) renglones.push(r);
   }
   return renglones;
 }
 
-const normalizar = (s: string) =>
-  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
 const redondear2 = (n: number) => Math.round(n * 100) / 100;
 

@@ -7,7 +7,7 @@ import { consentTimeZone } from "@/lib/consent/dates";
 import { formatoEnZona } from "@/lib/fechas/fecha-en-zona";
 import { leerCargos } from "@/lib/quotes/aceptacion-db";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
-import { formatCurrency } from "@/lib/utils";
+import { dineroExacto } from "./dinero-exacto";
 import { getDict, resolveLocale } from "@/i18n/dictionaries";
 import { makeT } from "@/i18n/t";
 import { armarDocumentoDelPlan, nombreDeArchivo, type PagosDelPlan } from "./plan-pdf";
@@ -42,17 +42,28 @@ async function pagosDelPlan(clinicId: string, planId: string): Promise<PagosDelP
     select: { id: true, invoiceId: true },
     take: 50,
   });
-  if (quotes.length === 0) return { pagado: 0, facturas: 0 };
+  const nada: PagosDelPlan = { pagado: 0, facturas: 0, facturado: 0, porPagar: 0 };
+  if (quotes.length === 0) return nada;
   const ids = new Set<string>();
   for (const q of quotes) if (q.invoiceId) ids.add(q.invoiceId);
   const cargos = await leerCargos(prisma, clinicId, quotes.map((q) => q.id));
   for (const lista of cargos.porQuote.values()) for (const c of lista) ids.add(c.invoiceId);
-  if (ids.size === 0) return { pagado: 0, facturas: 0 };
+  if (ids.size === 0) return nada;
   const facturas = await prisma.invoice.findMany({
     where: { clinicId, id: { in: [...ids] }, status: { not: "CANCELLED" } },
-    select: { paid: true },
+    select: { paid: true, total: true },
   });
-  return { pagado: facturas.reduce((a, f) => a + (Number(f.paid) || 0), 0), facturas: facturas.length };
+  let pagado = 0;
+  let facturado = 0;
+  let porPagar = 0;
+  for (const f of facturas) {
+    const total = Number(f.total) || 0;
+    const paid = Number(f.paid) || 0;
+    pagado += paid;
+    facturado += total;
+    porPagar += Math.max(0, total - paid);
+  }
+  return { pagado, facturas: facturas.length, facturado, porPagar };
 }
 
 export async function buildPlanTratamientoPdf(args: {
@@ -124,6 +135,7 @@ export async function buildPlanTratamientoPdf(args: {
     subtotalFase: t("planTratamiento.pdf.subtotalFase"),
     subtotal: t("planTratamiento.pdf.subtotal"),
     descuento: t("planTratamiento.pdf.descuento"),
+    redondeo: t("planTratamiento.pdf.redondeo"),
     ajuste: t("planTratamiento.pdf.ajuste"),
     total: t("planTratamiento.pdf.total"),
     pagado: t("planTratamiento.pdf.pagado"),
@@ -135,6 +147,7 @@ export async function buildPlanTratamientoPdf(args: {
     fechaPorLlenar: t("planTratamiento.pdf.fechaPorLlenar"),
     pie: t("planTratamiento.pdf.pie", { clinica: clinicName }),
     pagina: (n, total) => t("planTratamiento.pdf.pagina", { n, total }),
+    continua: t("planTratamiento.pdf.continua"),
   };
 
   const element = createElement(PlanTratamientoDocument, {
@@ -148,7 +161,7 @@ export async function buildPlanTratamientoPdf(args: {
     fechaEmision: fechaLarga(ahora),
     fechaInicio: plan.startDate ? fechaLarga(plan.startDate) : null,
     documento,
-    dinero: (n: number) => formatCurrency(n),
+    dinero: dineroExacto,
   });
 
   const buffer = await renderToBuffer(element as any);

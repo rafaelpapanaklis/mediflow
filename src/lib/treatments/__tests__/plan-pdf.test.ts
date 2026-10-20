@@ -17,6 +17,7 @@ import { formatCurrency } from "@/lib/utils";
 import { writeFileSync } from "node:fs";
 import { textoVisiblePorPagina } from "@/lib/pdf/__tests__/_texto-del-pdf";
 import { makePng } from "@/lib/pdf/__tests__/_imagenes-de-prueba";
+import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 
 type Row = Record<string, any>;
 
@@ -64,7 +65,7 @@ test("armado: renglones con fase, zona (dientes y caras), cantidad, precio e imp
   assert.equal(limpieza.zona, "");
   assert.equal(corona.importe, 9000);
   assert.equal(d.subtotal, SUMA);
-  assert.equal(d.ajuste, 0);
+  assert.equal(d.ajuste, null);
   assert.equal(d.total, SUMA);
   assert.equal(d.pagos, null);
 });
@@ -81,10 +82,10 @@ test("armado: un costo tecleado a mano por debajo de la suma sale como descuento
   const { armarDocumentoDelPlan } = await import("../plan-pdf");
   const menos = armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 9800 }, []);
   assert.equal(menos.subtotal, SUMA);
-  assert.equal(menos.ajuste, -1000);
+  assert.deepEqual(menos.ajuste, { tipo: "descuento", monto: -1000 });
   assert.equal(menos.total, 9800);
-  assert.equal(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 11000 }, []).ajuste, 200);
-  assert.equal(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 10800.5 }, []).ajuste, 0);
+  assert.deepEqual(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 11000 }, []).ajuste, { tipo: "ajuste", monto: 200 });
+  assert.equal(armarDocumentoDelPlan({ name: "P", description: DESCRIPCION, totalCost: 10800 }, []).ajuste, null);
 });
 
 test("armado: el precio exacto del tarifario gana al redondeo del texto (como «Convertir en presupuesto»)", async () => {
@@ -93,7 +94,7 @@ test("armado: el precio exacto del tarifario gana al redondeo del texto (como «
   const d = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 3500.5 }, [{ id: "e", name: "Endodoncia", basePrice: 3500.5 }]);
   assert.equal(d.grupos[0].renglones[0].precioUnitario, 3500.5);
   assert.equal(d.subtotal, 3500.5);
-  assert.equal(d.ajuste, 0);
+  assert.equal(d.ajuste, null);
 });
 
 test("armado: un plan de los de antes (descripción libre = nota) sale con un solo renglón: su nombre y su costo", async () => {
@@ -107,9 +108,10 @@ test("armado: un plan de los de antes (descripción libre = nota) sale con un so
 test("armado: pagado y saldo solo cuando el sistema sabe de facturas del plan", async () => {
   const { armarDocumentoDelPlan } = await import("../plan-pdf");
   const plan = { name: "P", description: DESCRIPCION, totalCost: SUMA };
-  assert.equal(armarDocumentoDelPlan(plan, [], { pagado: 0, facturas: 0 }).pagos, null);
-  assert.deepEqual(armarDocumentoDelPlan(plan, [], { pagado: 3000, facturas: 2 }).pagos, { pagado: 3000, saldo: 7800 });
-  assert.deepEqual(armarDocumentoDelPlan(plan, [], { pagado: 20000, facturas: 1 }).pagos, { pagado: 20000, saldo: 0 });
+  assert.equal(armarDocumentoDelPlan(plan, [], { pagado: 0, facturas: 0, facturado: 0, porPagar: 0 }).pagos, null);
+  // Todo el plan facturado a su precio: el saldo es lo que falta de esas facturas.
+  assert.deepEqual(armarDocumentoDelPlan(plan, [], { pagado: 3000, facturas: 2, facturado: SUMA, porPagar: 7800 }).pagos, { pagado: 3000, saldo: 7800 });
+  assert.deepEqual(armarDocumentoDelPlan(plan, [], { pagado: SUMA, facturas: 1, facturado: SUMA, porPagar: 0 }).pagos, { pagado: SUMA, saldo: 0 });
 });
 
 test("nombre del archivo: sin acentos ni espacios, con el día", async () => {
@@ -119,7 +121,7 @@ test("nombre del archivo: sin acentos ni espacios, con el día", async () => {
 
 // ── 2 · La ruta, con dobles ─────────────────────────────────────────────────
 const db = {
-  plans: [] as Row[], quotes: [] as Row[], invoices: [] as Row[], cargos: [] as Row[], audit: [] as Row[],
+  plans: [] as Row[], quotes: [] as Row[], invoices: [] as Row[], cargos: [] as Row[], audit: [] as Row[], catalogo: [] as Row[],
   tablasDeCargos: false,
 };
 const ocultos = new Set<string>();
@@ -142,7 +144,7 @@ const CLINICAS: Record<string, Row> = {
 const prismaStub: any = {
   treatmentPlan: { findFirst: async ({ where }: any) => structuredClone(db.plans.find((p) => coincide(p, where)) ?? null) },
   clinic: { findUnique: async ({ where }: any) => structuredClone(CLINICAS[where.id] ?? null) },
-  procedureCatalog: { findMany: async () => [] },
+  procedureCatalog: { findMany: async () => db.catalogo.map((p) => structuredClone(p)) },
   quote: { findMany: async ({ where }: any) => db.quotes.filter((q) => coincide(q, where)).map((q) => structuredClone(q)) },
   invoice: { findMany: async ({ where }: any) => db.invoices.filter((i) => coincide(i, where)).map((i) => structuredClone(i)) },
   $queryRaw: async (partes: TemplateStringsArray, ...valores: unknown[]) => {
@@ -184,6 +186,7 @@ beforeEach(async () => {
   ];
   db.quotes = [];
   db.invoices = [];
+  db.catalogo = [];
   db.cargos = [];
   db.audit = [];
   db.tablasDeCargos = false;
@@ -278,7 +281,7 @@ test("ruta: el doctor descarga el plan de un colega del mismo paciente (lo ve en
   authCtx.userId = "doc-1";
   authCtx.permissionsOverride = ["treatments.view", "patients.view"];
   db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: "prueba-plan-02", invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 4000 }];
+  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 4000, total: SUMA }];
   const r = await GET("prueba-plan-02");
   assert.equal(r.status, 200);
   const texto = await textoDe(r);
@@ -299,10 +302,10 @@ test("ruta: con billing.view salen pagado y saldo de las facturas de los presupu
     { clinicId: "c1", quoteId: "q1", quoteItemId: null, invoiceId: "f1", tipo: "concepto", monto: 1000, invoiceNumber: "MF-1", status: "PARTIAL", createdAt: new Date() },
   ];
   db.invoices = [
-    { id: "f1", clinicId: "c1", status: "PARTIAL", paid: 1000 },
-    { id: "f2", clinicId: "c1", status: "PAID", paid: 2000 },
-    { id: "f3", clinicId: "c1", status: "CANCELLED", paid: 999 },
-    { id: "f-c2", clinicId: "c2", status: "PAID", paid: 50000 },
+    { id: "f1", clinicId: "c1", status: "PARTIAL", paid: 1000, total: 8800 },
+    { id: "f2", clinicId: "c1", status: "PAID", paid: 2000, total: 2000 },
+    { id: "f3", clinicId: "c1", status: "CANCELLED", paid: 999, total: 999 },
+    { id: "f-c2", clinicId: "c2", status: "PAID", paid: 50000, total: 50000 },
   ];
   const texto = await textoDe(await GET(id));
   assert.ok(tiene(texto, "Pagado"));
@@ -329,29 +332,212 @@ test("ruta: clínica en inglés → el PDF sale en inglés", async () => {
   }
 });
 
-test("muestra: con MUESTRA_PDF=<ruta> deja el PDF de muestra (datos inventados, logo, pagos y descuento)", async (t) => {
-  const destino = process.env.MUESTRA_PDF;
-  if (!destino) return t.skip("sin MUESTRA_PDF");
-  db.tablasDeCargos = false;
+// ── Arreglos de la revisión t4 (P1–P6): cada uno ejecuta su caso ─────────────
+
+/** 38 procedimientos en tres fases, con nombres largos: un plan que ocupa varias hojas. */
+function planLargo(): Renglon[] {
+  const fases = ["higienica", "correctiva", "restauradora"] as const;
+  return Array.from({ length: 38 }, (_, i) =>
+    reng({
+      fase: fases[Math.floor(i / 13)],
+      procedimiento: i === 37 ? "Último procedimiento del plan" : `Rehabilitación con implantes y prótesis provisional ${i + 1}`,
+      dientes: String(11 + (i % 7)),
+      precio: "1500",
+      motivo: "Ausencia dental con reabsorción ósea moderada",
+    }),
+  );
+}
+
+test("P1: presupuesto con 10 % de descuento → la factura trae menos que el plan: sale «Pagado» y NO un saldo que no se debe", async () => {
   const id = "cmabc123def456ghi789jkl0";
-  db.plans[0].totalCost = 10300;
+  db.plans[0].totalCost = 10000;
+  db.plans[0].description = descripcionDeVentana([reng({ procedimiento: "Corona", precio: "10000" })]);
   db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
-  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 3500 }];
+  db.invoices = [{ id: "f1", clinicId: "c1", status: "PAID", paid: 9000, total: 9000 }];
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "Pagado") && tiene(texto, "$9,000"));
+  assert.ok(!tiene(texto, "Saldo"), "con descuento del presupuesto no se puede saber el saldo: no se enseña");
+  assert.ok(!tiene(texto, "$1,000"), "el «saldo» de $1,000 que el paciente no debe");
+});
+
+test("P1: presupuesto mixto (general + ortodoncia) facturado de más → solo «Pagado»; y con todo facturado a su precio, el saldo de las facturas", async () => {
+  const id = "cmabc123def456ghi789jkl0";
+  db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
+  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 5000, total: SUMA + 25000 }];
+  assert.ok(!tiene(await textoDe(await GET(id)), "Saldo"));
+  db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 5000, total: SUMA }];
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "Saldo") && tiene(texto, "$5,800"));
+});
+
+test("P2: precios con centavos salen tal cual ($500.50), sin «Descuento» inventado; y $1,250 sin «.00»", async () => {
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  assert.equal(dineroExacto(1250.5), "$1,250.50");
+  assert.equal(dineroExacto(1250), "$1,250");
+  assert.equal(dineroExacto(0.1 + 0.2), "$0.30");
+  const desc = descripcionDeVentana([reng({ procedimiento: "Resina", precio: "500.50" }), reng({ procedimiento: "Sellador", precio: "500.50" }), reng({ procedimiento: "Pulido", precio: "500.50" })]);
+  assert.match(desc, /\$500\.50/, "la ventana escribe ya los centavos en el texto del plan");
+  const d = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 1501.5 }, []);
+  assert.deepEqual(d.grupos[0].renglones.map((r) => r.precioUnitario), [500.5, 500.5, 500.5]);
+  assert.equal(d.subtotal, 1501.5);
+  assert.equal(d.ajuste, null);
+
+  const id = "cmabc123def456ghi789jkl0";
+  db.plans[0].description = desc;
+  db.plans[0].totalCost = 1501.5;
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "$500.50") && tiene(texto, "$1,501.50"));
+  assert.ok(!tiene(texto, "Descuento"));
+  assert.ok(!tiene(texto, "$1,501.50.00") && !tiene(texto, "$1,501.00"));
+});
+
+test("P2: un plan VIEJO cuyo texto redondeó $500.50 a $501 → la diferencia sale como «Redondeo de precios», nunca como descuento", async () => {
+  const id = "cmabc123def456ghi789jkl0";
+  db.plans[0].description = componerDescripcion(
+    { ...PLAN_VACIO, renglones: [reng({ procedimiento: "Resina", precio: "500.50" }), reng({ procedimiento: "Sellador", precio: "500.50" }), reng({ procedimiento: "Pulido", precio: "500.50" })] },
+    rot, // formatCurrency: pesos enteros, como escribía la ventana antes
+  );
+  db.plans[0].totalCost = 1501.5;
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "Redondeo de precios") && tiene(texto, "-$1.50"));
+  assert.ok(!tiene(texto, "Descuento"));
+  assert.ok(tiene(texto, "$1,501.50"), "el total es el costo exacto del plan");
+});
+
+test("P3: una cortesía en $0 sale en $0 aunque el tarifario la tenga con precio, y no hay «Descuento»", async () => {
+  const id = "cmabc123def456ghi789jkl0";
+  db.catalogo = [{ id: "rev", name: "Revisión", basePrice: 500 }];
+  db.plans[0].description = descripcionDeVentana([reng({ procedimiento: "Revisión" }), reng({ procedimiento: "Resina", precio: "800" })]);
+  db.plans[0].totalCost = 800;
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  const d = armarDocumentoDelPlan({ name: "P", description: db.plans[0].description, totalCost: 800 }, db.catalogo as any);
+  assert.deepEqual(d.grupos[0].renglones.map((r) => [r.nombre, r.importe]), [["Revisión", 0], ["Resina", 800]]);
+  assert.equal(d.ajuste, null);
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "Revisión") && tiene(texto, "$0"));
+  assert.ok(!tiene(texto, "Descuento") && !tiene(texto, "$500"));
+});
+
+test("P3: un plan cuyos renglones no traen precio (solo costo total) no inventa $0 ni ajuste: «—» y el total", async () => {
+  const { armarDocumentoDelPlan } = await import("../plan-pdf");
+  const desc = descripcionDeVentana([reng({ procedimiento: "Extracción" }), reng({ procedimiento: "Puente" })]);
+  const d = armarDocumentoDelPlan({ name: "P", description: desc, totalCost: 9000 }, []);
+  assert.deepEqual(d.grupos[0].renglones.map((r) => r.precioUnitario), [null, null]);
+  assert.equal(d.subtotal, null);
+  assert.equal(d.ajuste, null);
+  assert.equal(d.total, 9000);
+});
+
+test("P4: sin la línea en blanco antes de «▸ Notas», la nota NO sale como procedimiento (presupuesto ni PDF)", async () => {
+  const { leerRenglonesDelPlan } = await import("@/lib/quotes/desde-plan");
+  const aMano = "▸ Diagnóstico: Caries\n\n▸ Fase I · Higiénica — $800\n• Resina · 1 × $800 = $800\n▸ Notas: interno\n• no cobrar rx\n• cliente moroso";
+  assert.deepEqual(leerRenglonesDelPlan(aMano).map((r) => r.nombre), ["Resina"]);
+  // Un encabezado que no es fase conocida tampoco abre una:
+  assert.deepEqual(leerRenglonesDelPlan("▸ Fase I · Higiénica\n• Resina\n▸ Pendiente de cobro\n• no cobrar rx").map((r) => r.nombre), ["Resina"]);
+  // En inglés también se reconocen las fases:
+  assert.deepEqual(leerRenglonesDelPlan("▸ Phase I · Hygienic — $800\n• Filling · 1 × $800 = $800\n▸ Notes: x\n• skip").map((r) => r.nombre), ["Filling"]);
+  const id = "cmabc123def456ghi789jkl0";
+  db.plans[0].description = aMano;
+  db.plans[0].totalCost = 800;
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "Resina"));
+  assert.ok(!tiene(texto, "no cobrar rx") && !tiene(texto, "moroso"));
+});
+
+test("P5: emoji, cirílico y chino se quitan limpiamente; acentos, ñ, ü, «» y € se quedan", async () => {
+  const { textoParaHelvetica } = await import("../plan-pdf");
+  assert.equal(textoParaHelvetica("Zoë Ñañez 🙂"), "Zoë Ñañez");
+  assert.equal(textoParaHelvetica("Иван Pérez"), "Pérez");
+  assert.equal(textoParaHelvetica("王 Lǐ «Güero» €"), "L «Güero» €");
+  assert.equal(textoParaHelvetica("e\u0301"), "é", "un acento escrito aparte se junta");
+  assert.equal(textoParaHelvetica("👨‍👩‍👧"), "");
+  const id = "cmabc123def456ghi789jkl0";
+  db.plans[0].patient = { firstName: "Zoë 🙂", lastName: "Ñañez", patientNumber: "P-1" };
+  db.plans[0].doctor = { firstName: "Иван", lastName: "Gómez ✨", cedulaProfesional: "7654321" };
+  db.plans[0].name = "Sonrisa 😁 nueva";
+  const texto = await textoDe(await GET(id));
+  assert.ok(tiene(texto, "Zoë Ñañez") && tiene(texto, "Gómez") && tiene(texto, "Sonrisa nueva"));
+  assert.ok(!/=b|ø=|þ/.test(texto), "sin basura de glifos");
+  assert.match(
+    (await GET(id)).headers.get("content-disposition") ?? "",
+    /filename="plan-de-tratamiento-zoe-nanez-\d{4}-\d{2}-\d{2}\.pdf"/,
+  );
+});
+
+test("P6: plan largo → el encabezado de columnas se repite en cada hoja, la última hoja trae procedimiento + totales + firmas, y nada de «im-plantes»", async () => {
+  const id = "cmabc123def456ghi789jkl0";
+  db.plans[0].description = descripcionDeVentana(planLargo());
+  db.plans[0].totalCost = 38 * 1500;
+  const paginas = (await paginasDe(await GET(id))).map((p) => p.toLowerCase());
+  assert.ok(paginas.length >= 3, `se esperaban varias hojas, salieron ${paginas.length}`);
+  assert.ok(!paginas[0].includes("(continúa)"));
+  for (const [i, p] of paginas.entries()) {
+    assert.ok(p.includes("procedimiento") && p.includes("importe"), `hoja ${i + 1} sin encabezado de columnas`);
+    assert.ok(p.includes("rehabilitación con implantes") || p.includes("último procedimiento"), `hoja ${i + 1} sin procedimientos`);
+    if (i > 0) assert.ok(p.includes("(continúa)"), `hoja ${i + 1} sin «Procedimientos (continúa)»`);
+  }
+  const ultima = paginas[paginas.length - 1];
+  assert.ok(ultima.includes("último procedimiento del plan") && ultima.includes("firma del paciente") && ultima.includes("total"));
+  assert.ok(!paginas.slice(0, -1).some((p) => p.includes("firma del paciente")), "las firmas van solo en la última hoja");
+  assert.ok(!/im-plantes|reha-bilitación|pró-tesis|provi-sional|reab-sorción/.test(paginas.join(" ")), "palabra partida con guion");
+  // Los 38 están, cada uno una vez.
+  for (let n = 1; n <= 37; n++) {
+    assert.equal(paginas.join(" ").split(`prótesis provisional ${n}`).length - 1 >= 1, true, `falta el renglón ${n}`);
+  }
+});
+
+/** Corre `fn` con el logo de prueba servido; lo demás (el wasm del maquetador de @react-pdf) sigue su camino. */
+async function conLogo<T>(fn: () => Promise<T>): Promise<T> {
   CLINICAS.c1.logoUrl = "https://logo.prueba/logo.png";
   const fetchReal = globalThis.fetch;
-  // Solo el logo: lo demás (el wasm del maquetador de @react-pdf) sigue su camino.
   globalThis.fetch = (async (url: unknown, init?: RequestInit) =>
     String(url).startsWith("https://logo.prueba/")
       ? new Response(new Uint8Array(makePng(240, 80)), { status: 200, headers: { "content-type": "image/png" } })
       : fetchReal(url as RequestInfo, init)) as typeof fetch;
   try {
-    const r = await GET(id);
-    assert.equal(r.status, 200);
-    writeFileSync(destino, Buffer.from(await r.arrayBuffer()));
+    return await fn();
   } finally {
     globalThis.fetch = fetchReal;
     CLINICAS.c1.logoUrl = null;
   }
+}
+
+/** Descripción escrita como la escribe HOY la ventana (dinero con centavos solo si los hay). */
+const descripcionDeVentana = (renglones: Renglon[], extra: Record<string, string> = {}) =>
+  componerDescripcion({ ...PLAN_VACIO, renglones, ...extra }, { ...rot, dinero: (n) => dineroExacto(n) });
+
+test("muestras: con MUESTRA_DIR=<carpeta> deja los PDF de muestra (datos inventados)", async (t) => {
+  const dir = process.env.MUESTRA_DIR;
+  if (!dir) return t.skip("sin MUESTRA_DIR");
+  const id = "cmabc123def456ghi789jkl0";
+  await conLogo(async () => {
+    // 1 · El de siempre: descuento a mano, todo facturado a su precio → pagado y saldo.
+    db.plans[0].totalCost = 10300;
+    db.quotes = [{ id: "q1", clinicId: "c1", treatmentPlanId: id, invoiceId: "f1" }];
+    db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 3500, total: 10300 }];
+    writeFileSync(`${dir}/plan-muestra-1-saldo.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+
+    // 2 · Centavos, una cortesía en $0 y un presupuesto con 10 % de descuento real → solo «Pagado».
+    db.plans[0].description = descripcionDeVentana([
+      reng({ fase: "higienica", procedimiento: "Revisión", motivo: "Control" }),
+      reng({ fase: "higienica", procedimiento: "Resina compuesta", dientes: "16", caras: ["O"], cantidad: "3", precio: "500.50", motivo: "Caries" }),
+      reng({ fase: "restauradora", procedimiento: "Incrustación de porcelana", dientes: "36", precio: "4250.75" }),
+    ]);
+    db.plans[0].totalCost = 5752.25;
+    db.catalogo = [{ id: "rev", name: "Revisión", basePrice: 500 }];
+    db.invoices = [{ id: "f1", clinicId: "c1", status: "PARTIAL", paid: 2000, total: 5177.03 }];
+    writeFileSync(`${dir}/plan-muestra-2-centavos-cortesia-descuento.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+
+    // 3 · Plan largo (varias hojas) con nombres con emoji y otros alfabetos.
+    db.plans[0].description = descripcionDeVentana(planLargo());
+    db.plans[0].totalCost = 38 * 1500;
+    db.plans[0].patient = { firstName: "Zoë 🙂", lastName: "Ñañez Иванова", patientNumber: "P-0099" };
+    db.plans[0].name = "Rehabilitación con implantes 🦷";
+    db.quotes = [];
+    db.invoices = [];
+    db.catalogo = [];
+    writeFileSync(`${dir}/plan-muestra-3-largo-emoji.pdf`, Buffer.from(await (await GET(id)).arrayBuffer()));
+  });
 });
 
 test("textos: es.json y en.json tienen las mismas llaves de planTratamiento.pdf, y en es van con tú", async () => {
