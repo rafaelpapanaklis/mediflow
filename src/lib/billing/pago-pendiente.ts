@@ -72,7 +72,7 @@ interface DescuentoStripe {
 export interface SuscripcionPago {
   id: string;
   status: string;
-  customer?: string | { id: string } | null;
+  customer?: string | { id: string; discount?: { id: string } | null } | null;
   metadata?: Record<string, string> | null;
   items: { data: Array<{ id: string; price?: { unit_amount?: number | null; recurring?: { interval?: string | null } | null } | null }> };
   /** API 2024-06-20: el descuento principal viene con su cupón. */
@@ -215,81 +215,35 @@ export function esPlanMasGrande(planActual: string | null | undefined, plan: str
 
 // ── Parámetros de Stripe de «subir» ─────────────────────────────────────────
 
-interface DescuentoListado {
-  id: string;
-  esPromo: boolean;
-  /** Solo si se conoce el cupón (suscripción pedida con `expand: ["discounts"]`). */
-  percentOff: number | null;
-  amountOffCents: number | null;
-  end: number | null;
-}
-
-/** Todos los descuentos de la suscripción, sin repetir (el principal y los de `discounts`). */
-function listarDescuentos(sub: Pick<SuscripcionPago, "discount" | "discounts">): DescuentoListado[] {
-  const todos = new Map<string, DescuentoListado>();
-  const anota = (d: DescuentoStripe) => {
-    const previo = todos.get(d.id);
-    const esPromo = !!d.coupon?.id?.startsWith(PREFIJO_CUPON_PROMO);
-    todos.set(d.id, {
-      id: d.id,
-      esPromo: (previo?.esPromo ?? false) || esPromo,
-      percentOff: d.coupon?.percent_off ?? previo?.percentOff ?? null,
-      amountOffCents: d.coupon?.amount_off ?? previo?.amountOffCents ?? null,
-      end: d.end ?? previo?.end ?? null,
-    });
-  };
-  if (sub.discount?.id) anota(sub.discount);
+/** Ids de TODOS los descuentos de la suscripción, sin repetir (el principal y los de `discounts`). */
+export function idsDeDescuentos(sub: Pick<SuscripcionPago, "discount" | "discounts">): string[] {
+  const ids = new Set<string>();
+  if (sub.discount?.id) ids.add(sub.discount.id);
   for (const d of sub.discounts ?? []) {
-    if (typeof d === "string") {
-      if (!todos.has(d)) todos.set(d, { id: d, esPromo: false, percentOff: null, amountOffCents: null, end: null });
-    } else if (d?.id) {
-      anota(d);
-    }
+    const id = typeof d === "string" ? d : d?.id;
+    if (id) ids.add(id);
   }
-  return [...todos.values()];
+  return [...ids];
+}
+
+/** Ids de los descuentos que son la promo del primer mes (informativo: la bitácora lo distingue). */
+export function idsDePromo(sub: Pick<SuscripcionPago, "discount" | "discounts">): string[] {
+  const promo = new Set<string>();
+  for (const d of [sub.discount, ...(sub.discounts ?? [])]) {
+    if (d && typeof d === "object" && d.id && d.coupon?.id?.startsWith(PREFIJO_CUPON_PROMO)) promo.add(d.id);
+  }
+  return [...promo];
 }
 
 /**
- * Los descuentos que quedan al subir de plan. `undefined` = no tocar los descuentos de la suscripción
- * (no traía la promo). Si traía la promo del primer mes se quita SOLO esa: un descuento que el admin le
- * puso a mano (otro cupón) se conserva. `""` = ya no queda ninguno (así lo pide Stripe para vaciarlos).
- *
- * ⚠️ Decisión pendiente de Rafael (revisión t4 #10): si al subir se quitan TODOS los cupones o se conservan.
- * Hoy se conservan; `descuentosConservados` + `aplicarDescuentos` hacen que el monto que se muestra
- * descuente lo mismo que Stripe va a descontar.
+ * Los descuentos de la suscripción al subir de plan. DECISIÓN DE RAFAEL (#10): al subir de plan se paga el
+ * precio normal del plan, sin cupones —ni la promo del primer mes ni uno que haya puesto un admin—, así que
+ * se quitan TODOS. `undefined` = la suscripción no trae ninguno (no se manda nada); `""` = vaciarlos
+ * (así lo pide Stripe). Por eso el «Vas a pagar» del GET es siempre lista + IVA, sin restar nada.
+ * «Pagar mi plan» no pasa por aquí: cobra la factura abierta tal cual.
  */
-export function descuentosParaSubir(sub: Pick<SuscripcionPago, "discount" | "discounts">): "" | Array<{ discount: string }> | undefined {
-  const todos = listarDescuentos(sub);
-  if (!todos.some((d) => d.esPromo)) return undefined;
-  const quedan = todos.filter((d) => !d.esPromo).map((d) => ({ discount: d.id }));
-  return quedan.length > 0 ? quedan : "";
-}
-
-/** Los descuentos que SIGUEN aplicando en la factura nueva de «subir» (todos menos la promo; sin los ya vencidos). */
-export function descuentosConservados(sub: Pick<SuscripcionPago, "discount" | "discounts">, ahora: Date = new Date()): DescuentoListado[] {
-  const todos = listarDescuentos(sub);
-  // Sin promo, `descuentosParaSubir` no toca nada: se conserva TODO lo que traiga la suscripción.
-  const ahoraS = Math.floor(ahora.getTime() / 1000);
-  return todos.filter((d) => !d.esPromo && (d.end === null || d.end > ahoraS));
-}
-
-/**
- * Subtotal (centavos, antes de IVA) tras los descuentos conservados, en el orden en que Stripe los aplica a
- * un mismo cobro: porcentaje sobre el importe y monto fijo restado, nunca por debajo de 0. Un descuento cuyo
- * cupón no se conoce no se puede valorar: se ignora (el llamador lo sabe con `descuentoSinValorar`).
- */
-export function aplicarDescuentos(subtotalCents: number, descuentos: DescuentoListado[]): number {
-  let t = Math.round(subtotalCents);
-  for (const d of descuentos) {
-    if (d.percentOff) t = Math.round(t * (1 - d.percentOff / 100));
-    if (d.amountOffCents) t = Math.max(0, t - d.amountOffCents);
-  }
-  return t;
-}
-
-/** ¿Hay un descuento conservado que no se pudo valorar (no vino su cupón)? */
-export function descuentoSinValorar(descuentos: DescuentoListado[]): boolean {
-  return descuentos.some((d) => d.percentOff === null && d.amountOffCents === null);
+export function descuentosParaSubir(sub: Pick<SuscripcionPago, "discount" | "discounts">): "" | undefined {
+  return idsDeDescuentos(sub).length > 0 ? "" : undefined;
 }
 
 export { subscriptionItemInterval };
