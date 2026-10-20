@@ -570,6 +570,9 @@ export function sugerenciaARenglon(s: Sugerencia, opciones: { id: string; motivo
     precio: s.precio != null ? String(s.precio) : "",
     precioDelTarifario: s.precio != null,
     minutos: s.minutos ?? 0,
+    origen: [...s.origen],
+    clave: s.clave,
+    revisar: s.revisar,
   };
 }
 

@@ -566,6 +566,8 @@
     "test:plan-filas": "tsx --test src/lib/treatments/__tests__/items.test.ts src/lib/treatments/__tests__/items-db.test.ts",
     "test:plan-sugerencias": "tsx --test src/lib/treatments/__tests__/sugerir-procedimiento.test.ts",
     "test:plan-hecho-odontograma": "tsx --test src/lib/odontogram/__tests__/aplicar-hecho.test.ts",
+    "test:plan-ventana": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/ventana-rapida.test.ts",
+    "test:plan-ventana-toques": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/ventana-toques.test.ts",
     "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts",
     "test:document-templates": "tsx --test src/lib/document-templates/__tests__/document-templates.test.ts",
     "test:plantillas": "tsx --test src/app/dashboard/plantillas/__tests__/plantillas-pulido.test.ts",

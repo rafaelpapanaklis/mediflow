@@ -1,0 +1,230 @@
+/**
+ * «Armar el plan» rápido (ws1-t5, fase 2 · P3): lo que la ventana hace con los hallazgos del
+ * odontograma, en funciones PURAS (sin React; lo prueban las pruebas).
+ *
+ *  · `chipsDelPlan`: un chip por hallazgo por tratar con el procedimiento que se le sugiere
+ *    (`sugerir-procedimiento.ts`); los de toda la boca (cálculo → limpieza) van juntos en UN chip
+ *    y los de un cuadrante (bolsa → raspado) en uno por cuadrante. Al poner un hallazgo en el
+ *    plan aparecen sus sugerencias encadenadas («36 · sugerido: Corona tras la endodoncia»).
+ *  · `agregarDesdeChip`: el toque. Un chip = un renglón con procedimiento, precio, minutos y fase
+ *    del tarifario; un segundo hallazgo del mismo diente que pide lo mismo se junta con el primero
+ *    (caries MO + restauración temporal D = una resina de 3 caras).
+ *  · `filasParaGuardar`: los renglones en el formato del contrato de filas (`items.ts`, t12).
+ */
+import {
+  CARAS, MINUTOS_POR_DEFECTO, cantidadDe, leerDientes, precioDe, renglonesUtiles, sesionesSugeridas,
+  type Fase, type Hallazgo, type Renglon,
+} from "./plan-clinico";
+import {
+  PROCEDIMIENTOS, sugerenciaARenglon, sugerirPlan, sugerirProcedimiento,
+  type ProcedimientoTarifario, type Sugerencia,
+} from "@/lib/treatments/sugerir-procedimiento";
+import { aCentavos } from "@/lib/treatments/items";
+
+type Entradas = { toothNumber: number; conditionId: string }[];
+
+export interface Chip {
+  /** Llave estable: `h:16:caries` (un hallazgo), `g:limpieza` (boca), `q:raspado:1` (cuadrante), `e:corona:36` (encadenada). */
+  clave: string;
+  tipo: "hallazgo" | "encadenada";
+  /** Las condiciones del chip, sin repetir (un chip de boca puede juntar cálculo y sangrado). */
+  condiciones: string[];
+  dientes: number[];
+  /** Caras del hallazgo (solo un chip de un diente). */
+  caras: string[];
+  hallazgos: Hallazgo[];
+  /** Lo que entra al tocarlo; null = el hallazgo no tiene sugerencia (entra un renglón para escribir). */
+  sugerencia: Sugerencia | null;
+  /** Ya está en el plan. */
+  puesto: boolean;
+}
+
+const cuadrante = (fdi: number) => Math.floor(fdi / 10);
+
+function llaveDeChip(h: Hallazgo, s: Sugerencia | null): string {
+  if (!s) return `h:${h.clave}`;
+  const alcance = PROCEDIMIENTOS[s.clave].alcance;
+  if (alcance === "boca") return `g:${s.clave}`;
+  if (alcance === "cuadrante") return `q:${s.clave}:${cuadrante(h.diente)}`;
+  return `h:${h.clave}`;
+}
+
+/** ¿El renglón trabaja ese diente? (o toda la boca, si no lleva dientes). */
+const enDiente = (r: Renglon, d: number) => leerDientes(r.dientes).dientes.includes(d);
+
+/**
+ * Los chips de la ventana. `renglones` es el plan como va: decide qué chip ya está puesto y qué
+ * sugerencias encadenadas salen.
+ */
+export function chipsDelPlan(hallazgos: Hallazgo[], tarifario: ProcedimientoTarifario[], entradas: Entradas, renglones: Renglon[]): Chip[] {
+  const usados = new Set(renglones.flatMap((r) => r.origen ?? []));
+  const grupos = new Map<string, { hallazgos: Hallazgo[]; base: Sugerencia | null }>();
+  const encadenadas: Chip[] = [];
+  const vistasEncadenadas = new Set<string>();
+
+  for (const h of hallazgos) {
+    const res = sugerirProcedimiento(h, tarifario, entradas);
+    const base = res.sugerencias.find((s) => s.encadenadaDe === null) ?? null;
+    const llave = llaveDeChip(h, base);
+    const g = grupos.get(llave);
+    if (g) g.hallazgos.push(h);
+    else grupos.set(llave, { hallazgos: [h], base });
+
+    // Lo que se sugiere DESPUÉS, solo cuando lo que lo pide ya está en el plan.
+    if (!usados.has(h.clave)) continue;
+    for (const s of res.sugerencias) {
+      if (s.encadenadaDe === null) continue;
+      const llaveE = `e:${s.clave}:${h.diente}`;
+      if (vistasEncadenadas.has(llaveE)) continue;
+      vistasEncadenadas.add(llaveE);
+      if (renglones.some((r) => r.clave === s.clave && enDiente(r, h.diente))) continue;
+      encadenadas.push({
+        clave: llaveE, tipo: "encadenada", condiciones: [h.conditionId], dientes: [h.diente], caras: [],
+        hallazgos: [h], sugerencia: s, puesto: false,
+      });
+    }
+  }
+
+  const chips: Chip[] = [];
+  for (const [clave, g] of grupos) {
+    const unSolo = g.hallazgos.length === 1;
+    const sugerencia = unSolo || !g.base
+      ? g.base
+      : sugerirPlan(g.hallazgos, tarifario, entradas).find((s) => s.encadenadaDe === null && s.clave === g.base!.clave) ?? g.base;
+    chips.push({
+      clave,
+      tipo: "hallazgo",
+      condiciones: [...new Set(g.hallazgos.map((h) => h.conditionId))],
+      dientes: [...new Set(g.hallazgos.map((h) => h.diente))].sort((a, b) => a - b),
+      caras: unSolo ? g.hallazgos[0].caras : [],
+      hallazgos: g.hallazgos,
+      sugerencia,
+      puesto: g.hallazgos.every((h) => usados.has(h.clave)),
+    });
+  }
+  return [...chips, ...encadenadas];
+}
+
+export interface ContextoAgregar {
+  tarifario: ProcedimientoTarifario[];
+  entradas: Entradas;
+  nuevoId: () => string;
+  /** El motivo que se escribe en el renglón («Caries», «Tras la endodoncia»). */
+  motivo: string;
+  idioma: "es" | "en";
+}
+
+/** El toque en un chip: el plan con el renglón nuevo (o con el renglón del mismo diente ampliado). */
+export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: ContextoAgregar): Renglon[] {
+  if (chip.puesto) return renglones;
+  const s = chip.sugerencia;
+  const primero = chip.hallazgos[0];
+  const hallazgo = {
+    condicion: primero.conditionId,
+    diente: chip.dientes.length === 1 ? chip.dientes[0] : null,
+    caras: chip.caras,
+    entryId: null,
+  };
+  const origen = chip.tipo === "hallazgo" ? chip.hallazgos.map((h) => h.clave) : [];
+
+  if (!s) {
+    // Sin sugerencia: el renglón de siempre, con fase, diente, caras y motivo, para escribir el procedimiento.
+    return [...renglones, {
+      id: ctx.nuevoId(), fase: primero.fase, procedimiento: "", procedimientoId: null, dientes: chip.dientes.join(", "),
+      caras: chip.caras, motivo: ctx.motivo, cantidad: "1", precio: "", precioDelTarifario: false, minutos: 0,
+      origen, clave: null, hallazgo, revisar: false,
+    }];
+  }
+
+  const alcance = PROCEDIMIENTOS[s.clave].alcance;
+  // Mismo diente y mismo procedimiento: se juntan (caras y hallazgos) en vez de repetir el renglón.
+  if (chip.tipo === "hallazgo" && alcance === "diente") {
+    const d = chip.dientes[0];
+    const i = renglones.findIndex((r) => r.clave === s.clave && leerDientes(r.dientes).dientes.length === 1 && enDiente(r, d));
+    if (i >= 0) {
+      const r = renglones[i];
+      const caras = CARAS.filter((c) => r.caras.includes(c) || chip.caras.includes(c));
+      const junto: Renglon = { ...r, caras, origen: [...new Set([...(r.origen ?? []), ...origen])] };
+      // Si el renglón sigue como lo dejó la sugerencia, la variante se ajusta a las caras nuevas.
+      if (r.precioDelTarifario) {
+        const otra = sugerirProcedimiento({ diente: d, caras, conditionId: primero.conditionId }, ctx.tarifario, ctx.entradas)
+          .sugerencias.find((x) => x.clave === s.clave && x.encadenadaDe === null);
+        if (otra?.procedimientoId) {
+          Object.assign(junto, {
+            procedimiento: otra.nombre, procedimientoId: otra.procedimientoId, precio: String(otra.precio),
+            minutos: otra.minutos ?? 0, revisar: otra.revisar,
+          });
+        }
+      }
+      return renglones.map((x, j) => (j === i ? junto : x));
+    }
+  }
+
+  const nuevo = sugerenciaARenglon(s, { id: ctx.nuevoId(), motivo: ctx.motivo, idioma: ctx.idioma });
+  return [...renglones, {
+    ...nuevo,
+    // Toda la boca no lleva dientes: el PDF y el presupuesto dicen «limpieza», no «31, 41».
+    dientes: alcance === "boca" ? "" : nuevo.dientes,
+    caras: alcance === "diente" ? nuevo.caras : [],
+    origen,
+    hallazgo,
+  }];
+}
+
+/* ─────── Lo que se llena solo ─────── */
+
+const MESES: Record<"es" | "en", string[]> = {
+  es: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+};
+
+/** «Plan 20 oct 2026» / «Plan Oct 20, 2026»: corto, porque viaja en el WhatsApp de seguimiento. */
+export function nombrePorDefecto(fecha: Date, idioma: "es" | "en"): string {
+  const d = fecha.getDate(), m = MESES[idioma][fecha.getMonth()], a = fecha.getFullYear();
+  return idioma === "en" ? `Plan ${m} ${d}, ${a}` : `Plan ${d} ${m} ${a}`;
+}
+
+/**
+ * Días entre sesiones que se mandan sin preguntarlos (la ventana ya no los pide). Es el valor de
+ * siempre del servidor; el seguimiento por WhatsApp sigue contando con él hasta que P8 lo cambie
+ * por «pendientes sin cita». DECISIÓN PARA RAFAEL (reporte ws1-t5, fase 2).
+ */
+export const DIAS_ENTRE_SESIONES = 30;
+
+/** Minutos de sillón y citas estimadas del plan (las mismas cuentas que «sesiones sugeridas»). */
+export function sillon(renglones: Renglon[]): { minutos: number; citas: number } {
+  const utiles = renglonesUtiles(renglones);
+  const minutos = utiles.reduce((a, r) => a + cantidadDe(r) * (r.minutos > 0 ? r.minutos : MINUTOS_POR_DEFECTO), 0);
+  return { minutos, citas: utiles.length > 0 ? sesionesSugeridas(renglones) : 0 };
+}
+
+/* ─────── Al guardar: las filas del contrato (items.ts) ─────── */
+
+export interface FilaParaGuardar {
+  nombre: string;
+  procedureId: string | null;
+  dientes: number[];
+  caras: string[];
+  fase: Fase;
+  cantidad: number;
+  precioCentavos: number;
+  motivo: string;
+  hallazgo: Renglon["hallazgo"] | null;
+  estado: "pendiente";
+}
+
+/** Los renglones con procedimiento, en orden de fase, como filas nuevas (sin `id`). */
+export function filasParaGuardar(renglones: Renglon[]): FilaParaGuardar[] {
+  return renglonesUtiles(renglones).map((r) => ({
+    nombre: r.procedimiento.trim(),
+    procedureId: r.procedimientoId,
+    dientes: leerDientes(r.dientes).dientes,
+    caras: CARAS.filter((c) => r.caras.includes(c)),
+    fase: r.fase,
+    cantidad: cantidadDe(r),
+    precioCentavos: aCentavos(precioDe(r)),
+    motivo: r.motivo.trim(),
+    hallazgo: r.hallazgo ?? null,
+    estado: "pendiente",
+  }));
+}

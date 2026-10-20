@@ -321,6 +321,7 @@ test("la sugerencia entra como renglón de la ventana de hoy y su importe es el 
   assert.deepEqual(r, {
     id: "r1", fase: "higienica", procedimiento: "Restauración resina 2 caras", procedimientoId: s.procedimientoId,
     dientes: "16", caras: ["M", "O"], motivo: "Caries", cantidad: "1", precio: "900", precioDelTarifario: true, minutos: 45,
+    origen: ["16:caries"], clave: "resina", revisar: false,
   });
   assert.equal(importeRenglon(r), 900);
   const [sin] = una({ diente: 16, caras: ["O"], conditionId: "caries" }, []).sugerencias;

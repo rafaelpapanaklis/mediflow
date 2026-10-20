@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { AlertTriangle, ClipboardList, Grid3x3, MessageCircle, Plus, Trash2, X } from "lucide-react";
-import { useT } from "@/i18n/i18n-provider";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { AlertTriangle, ChevronRight, ClipboardList, Grid3x3, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { useLocale, useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { COND_BY_ID, PERM, PRIMARY } from "@/components/dashboard/odontogram-v2/data";
 import {
   CARAS, FASES, FASE_CLAVE, PLAN_VACIO, PRONOSTICOS, PRONOSTICO_CLAVE,
   alternarDiente, avisosDeOrden, componerDescripcion, hallazgosPorTratar, importeRenglon,
-  leerDientes, letraCentro, sesionesSugeridas, soloEntero, subtotalesPorFase, totalProcedimientos,
+  leerDientes, letraCentro, soloEntero, subtotalesPorFase, totalProcedimientos,
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import s from "./plan.module.css";
@@ -16,24 +18,26 @@ import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
 import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
 import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
-import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { dineroExacto } from "@/lib/treatments/dinero-exacto";
+import { PROCEDIMIENTOS, type ProcedimientoTarifario } from "@/lib/treatments/sugerir-procedimiento";
+import { DIAS_ENTRE_SESIONES, agregarDesdeChip, chipsDelPlan, filasParaGuardar, nombrePorDefecto, sillon, type Chip } from "./armar-plan";
+import { guardarPlan, presentarDisponible, presentarPlan } from "./guardar-plan";
 
 /**
- * «Nuevo plan de tratamiento», con el lenguaje del menú de dos niveles.
+ * «Nuevo plan de tratamiento» rápido (ws1-t5, fase 2 · P3), con el lenguaje del menú de dos niveles.
  *
- * Los MISMOS campos que la ventana de siempre (doctor, nombre con sus cinco
- * sugerencias, descripción, sesiones, días entre sesiones y costo) siguen a
- * la vista y se guardan por el mismo `handleCreateTreatment` del padre, con
- * el mismo `POST /api/treatments`. Lo nuevo es lo clínico —diagnóstico,
- * procedimientos por diente y cara, fases, pronóstico y alternativa— que se
- * escribe como texto en `description` (ver `plan-clinico.ts`).
+ * Se arma tocando: doctor (el de la sesión) y nombre («Plan 20 oct 2026») vienen solos; cada chip
+ * del odontograma entra como un procedimiento con precio, minutos y fase del tarifario
+ * (`armar-plan.ts`, `sugerir-procedimiento.ts`); el procedimiento se corrige con el buscador del
+ * tarifario de siempre. Diagnóstico, pronóstico, alternativa y notas van plegados y son opcionales
+ * (el diagnóstico se precarga de la última consulta). Ya NO se piden sesiones, días entre sesiones
+ * ni costo: salen de los procedimientos.
  *
- * ⛔ No toca `nextExpectedDate` ni `lastFollowUpSent`: los calcula el
- * servidor con `totalSessions` y `sessionIntervalDays`, igual que hoy.
+ * Guarda ella misma (`guardar-plan.ts`): las FILAS del contrato de t12 y, como siempre, el plan
+ * como texto en `description`. Sin el SQL de filas la API guarda el texto y el plan queda como hoy.
  *
- * Se pinta dentro del apartado (no en un portal), pero monta `CLASES_MENU`
- * él mismo para no depender de quién lo abra.
+ * Se pinta dentro del apartado (no en un portal), pero monta `CLASES_MENU` él mismo para no
+ * depender de quién lo abra.
  */
 
 export interface FormPlan {
@@ -45,22 +49,29 @@ export interface FormPlan {
   totalCost: string;
 }
 
-interface Procedimiento { id: string; name: string; basePrice: number; duration: number | null; category: string }
-
 export interface VentanaNuevoPlanProps {
   paciente: { id: string; nombre: string; esNino: boolean };
   doctores: { id: string; firstName: string; lastName: string }[];
+  /** Doctor y nombre del plan (los pone la ficha al abrir: el doctor es el de la sesión). */
   form: FormPlan;
   setForm: Dispatch<SetStateAction<FormPlan>>;
+  /** Nombres comunes de plan (plegados en «Más detalles»). */
   sugerencias: string[];
   guardando: boolean;
   onCerrar: () => void;
-  onCrear: () => void;
+  /**
+   * Ya no se usa: la ventana guarda sus filas ella misma (ws1-t5, P3). Se queda en la interfaz
+   * para no tocar la ficha, que la sigue pasando.
+   */
+  onCrear?: () => void;
+  /** Al guardar, el plan que contestó la API. Sin él, la ventana refresca la página y se cierra. */
+  onGuardado?: (plan: Record<string, unknown>) => void;
 }
 
 let contador = 0;
+const nuevoId = () => `r${++contador}`;
 const renglonNuevo = (parcial: Partial<Renglon> = {}): Renglon => ({
-  id: `r${++contador}`,
+  id: nuevoId(),
   fase: "higienica",
   procedimiento: "",
   procedimientoId: null,
@@ -74,23 +85,33 @@ const renglonNuevo = (parcial: Partial<Renglon> = {}): Renglon => ({
   ...parcial,
 });
 
-export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencias, guardando, onCerrar, onCrear }: VentanaNuevoPlanProps) {
+type Accion = "guardar" | "presentar";
+
+export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencias, guardando: guardandoPadre, onCerrar, onGuardado }: VentanaNuevoPlanProps) {
   const t = useT();
+  const idioma: "es" | "en" = useLocale() === "en" ? "en" : "es";
+  const router = useRouter();
   const nombresDoctores = useMemo(() => etiquetasDeProfesionales(doctores), [doctores]);
   const [plan, setPlan] = useState<PlanClinico>(PLAN_VACIO);
-  const [tarifario, setTarifario] = useState<Procedimiento[]>([]);
-  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
+  const [tarifario, setTarifario] = useState<ProcedimientoTarifario[]>([]);
+  const [entradas, setEntradas] = useState<EntradaOdontograma[]>([]);
   const [selectorAbierto, setSelectorAbierto] = useState<string | null>(null);
   // ws1-t2 (F15): el renglón cuyo buscador del tarifario está abierto y la sugerencia marcada.
   const [buscando, setBuscando] = useState<string | null>(null);
   const [marcada, setMarcada] = useState(0);
-  // Mientras nadie los teclee, sesiones y costo siguen a los procedimientos.
-  const [sesionesAMano, setSesionesAMano] = useState(false);
-  const [costoAMano, setCostoAMano] = useState(false);
+  const [nombreTocado, setNombreTocado] = useState(false);
+  const [diagnosticoDe, setDiagnosticoDe] = useState<string | null>(null);
+  const [detalles, setDetalles] = useState(false);
+  const [guardandoPropio, setGuardandoPropio] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmar, setConfirmar] = useState<null | { tipo: "sinPrecio" | "sinCosto"; accion: Accion }>(null);
+  const [puedePresentar, setPuedePresentar] = useState<boolean | null>(null);
   const focoPendiente = useRef<string | null>(null);
+  const diagnosticoTocado = useRef(false);
+  const guardando = guardandoPadre || guardandoPropio;
 
-  // Tarifario y odontograma: las dos cosas que el repo ya sabe del paciente.
-  // Si alguna falla, la ventana sigue sirviendo: se teclea a mano como hoy.
+  // Tarifario, odontograma, última consulta y si ya existe «presentar»: lo que el repo ya sabe.
+  // Si algo falla, la ventana sigue sirviendo: se teclea a mano como hoy.
   useEffect(() => {
     let vivo = true;
     fetch("/api/procedures")
@@ -99,10 +120,30 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
       .catch(() => {});
     fetch(`/api/odontogram?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (vivo && d && Array.isArray(d.entries)) setHallazgos(hallazgosPorTratar(d.entries as EntradaOdontograma[])); })
+      .then((d) => { if (vivo && d && Array.isArray(d.entries)) setEntradas(d.entries as EntradaOdontograma[]); })
       .catch(() => {});
+    // El diagnóstico de la última consulta (sin `medicalRecord.view` la API dice 403 y no se precarga nada).
+    fetch(`/api/clinical?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const ultima = Array.isArray(d) ? d.find((x) => typeof x?.assessment === "string" && x.assessment.trim()) : null;
+        if (!vivo || !ultima || diagnosticoTocado.current) return;
+        setPlan((p) => (p.diagnostico.trim() ? p : { ...p, diagnostico: ultima.assessment.trim() }));
+        setDiagnosticoDe(typeof ultima.visitDate === "string" ? ultima.visitDate : null);
+      })
+      .catch(() => {});
+    presentarDisponible().then((ok) => { if (vivo) setPuedePresentar(ok); });
     return () => { vivo = false; };
   }, [paciente.id]);
+
+  // El nombre se llena solo mientras nadie lo escriba (la ficha lo deja vacío al abrir).
+  useEffect(() => {
+    if (nombreTocado || form.name.trim()) return;
+    setForm((f) => ({ ...f, name: nombrePorDefecto(new Date(), idioma) }));
+  }, [form.name, nombreTocado, idioma, setForm]);
+
+  const hallazgos: Hallazgo[] = useMemo(() => hallazgosPorTratar(entradas), [entradas]);
+  const chips = useMemo(() => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones), [hallazgos, tarifario, entradas, plan.renglones]);
 
   const rotulos = useMemo(() => ({
     diagnostico: t("planTratamiento.texto.diagnostico"),
@@ -113,47 +154,20 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     por: t("planTratamiento.texto.por"),
     fase: (f: Fase) => t(FASE_CLAVE[f]),
     pronosticoValor: (p: Exclude<Pronostico, "">) => t(PRONOSTICO_CLAVE[p]),
-    // Con centavos cuando los hay: el texto del plan es de donde los vuelven a leer el PDF y
-    // «Convertir en presupuesto»; redondeado a pesos, $500.50 se leía $501 (ws1-t12, P2).
+    // Con centavos cuando los hay, y con la marca de «precios exactos» (ws1-t12, t8 N3-P2).
     dinero: (n: number) => dineroExacto(n),
-    // …y lo deja dicho con la marca de «precios exactos» (t8, N3-P2): el PDF y «Convertir» se fían de ella.
     exacto: true,
   }), [t]);
 
   const total = totalProcedimientos(plan.renglones);
-  const sugeridas = sesionesSugeridas(plan.renglones);
   const fases = subtotalesPorFase(plan.renglones);
   const avisos = avisosDeOrden(plan.renglones);
   const hayRenglones = fases.length > 0;
-  // C-63 (auditoría de uso): un procedimiento sin precio ya no se guarda callado; se pregunta antes de crear.
+  const cuantos = fases.reduce((a, f) => a + f.renglones.length, 0);
+  const tiempo = sillon(plan.renglones);
+  // C-63 (auditoría de uso): un procedimiento sin precio no se guarda callado; se pregunta antes.
   const txSinPrecio = useTextosSinPrecio();
   const sinPrecio = renglonesDelPlanSinPrecio(plan.renglones);
-  const [confirmarSinPrecio, setConfirmarSinPrecio] = useState(false);
-  const crear = () => {
-    // N-33 (segunda auditoría): con el plan entero en $0 ya pregunta «¿Crear el plan en $0?» quien lo guarda; no se
-    // pregunta dos veces lo mismo. Solo con ALGÚN renglón en $0 dentro de un plan con costo.
-    if (sinPrecio > 0 && !confirmarSinPrecio && !planSinCosto(form.totalCost)) {
-      setConfirmarSinPrecio(true);
-      return;
-    }
-    setConfirmarSinPrecio(false);
-    onCrear();
-  };
-
-  // Lo clínico baja al formulario del padre, que es quien guarda.
-  const descripcion = componerDescripcion(plan, rotulos);
-  useEffect(() => {
-    setForm((f) => (f.description === descripcion ? f : { ...f, description: descripcion }));
-  }, [descripcion, setForm]);
-  useEffect(() => {
-    if (!hayRenglones) return;
-    setForm((f) => {
-      const sig = { ...f };
-      if (!sesionesAMano) sig.totalSessions = String(sugeridas);
-      if (!costoAMano && total > 0) sig.totalCost = String(total);
-      return sig.totalSessions === f.totalSessions && sig.totalCost === f.totalCost ? f : sig;
-    });
-  }, [hayRenglones, sugeridas, total, sesionesAMano, costoAMano, setForm]);
 
   useEffect(() => {
     if (!focoPendiente.current) return;
@@ -161,28 +175,46 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     focoPendiente.current = null;
   });
 
-  const cambiar = (id: string, parcial: Partial<Renglon>) =>
-    setPlan((p) => ({ ...p, renglones: p.renglones.map((r) => (r.id === id ? { ...r, ...parcial } : r)) }));
+  const cambiarPlan = (cambio: (p: PlanClinico) => PlanClinico) => {
+    setConfirmar(null);
+    setError(null);
+    setPlan(cambio);
+  };
 
-  const agregar = (parcial: Partial<Renglon> = {}) => {
-    const nuevo = renglonNuevo(parcial);
+  const cambiar = (id: string, parcial: Partial<Renglon>) =>
+    cambiarPlan((p) => ({ ...p, renglones: p.renglones.map((r) => (r.id === id ? { ...r, ...parcial } : r)) }));
+
+  const agregar = () => {
+    const nuevo = renglonNuevo();
     focoPendiente.current = `plan-proc-${nuevo.id}`;
-    setPlan((p) => ({ ...p, renglones: [...p.renglones, nuevo] }));
+    cambiarPlan((p) => ({ ...p, renglones: [...p.renglones, nuevo] }));
   };
 
   const quitar = (id: string) => {
-    setPlan((p) => ({ ...p, renglones: p.renglones.filter((r) => r.id !== id) }));
+    cambiarPlan((p) => ({ ...p, renglones: p.renglones.filter((r) => r.id !== id) }));
     if (selectorAbierto === id) setSelectorAbierto(null);
   };
 
+  const nombreCondicion = (id: string) => COND_BY_ID[id]?.[idioma] ?? id;
+  const nombreSugerido = (c: Chip) => (c.sugerencia ? (c.sugerencia.elegir ? c.sugerencia.nombreSugerido[idioma] : c.sugerencia.nombre) : "");
+  const motivoDe = (c: Chip) =>
+    c.tipo === "encadenada" && c.sugerencia?.encadenadaDe
+      ? t("planTratamiento.nuevo.motivoTras", { procedimiento: PROCEDIMIENTOS[c.sugerencia.encadenadaDe].nombre[idioma].toLowerCase() })
+      : c.condiciones.map(nombreCondicion).join(" · ");
+
+  // El toque en un chip: entra el procedimiento con su precio, sus minutos y su fase.
+  const tocarChip = (c: Chip) =>
+    cambiarPlan((p) => ({ ...p, renglones: agregarDesdeChip(p.renglones, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }) }));
+
   // Elegir del tarifario trae su nombre, su precio y su tiempo (el precio solo si el renglón no
   // tenía uno tecleado a mano).
-  const elegirDelTarifario = (r: Renglon, hit: Procedimiento, nombre = hit.name) => {
+  const elegirDelTarifario = (r: Renglon, hit: ProcedimientoTarifario, nombre = hit.name) => {
     const ponerPrecio = r.precio.trim() === "" || r.precioDelTarifario;
     cambiar(r.id, {
       procedimiento: nombre,
       procedimientoId: hit.id,
       minutos: hit.duration ?? 0,
+      revisar: false,
       ...(ponerPrecio ? { precio: String(hit.basePrice), precioDelTarifario: true } : {}),
     });
   };
@@ -205,21 +237,75 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     elegirDelTarifario(r, hit, nombre);
   };
 
-  const elegirSugerencia = (r: Renglon, hit: Procedimiento) => {
+  const elegirSugerencia = (r: Renglon, hit: ProcedimientoTarifario) => {
     elegirDelTarifario(r, hit);
     setBuscando(null);
   };
 
-  const nombreHallazgo = (h: Hallazgo) => COND_BY_ID[h.conditionId]?.es ?? h.conditionId;
-  const yaEnPlan = (h: Hallazgo) =>
-    plan.renglones.some((r) => r.motivo === nombreHallazgo(h) && leerDientes(r.dientes).dientes.includes(h.diente));
-
-  const etiquetaCaras = (h: Hallazgo) => {
-    const centro = letraCentro([h.diente]);
-    return CARAS.filter((c) => h.caras.includes(c)).map((c) => (c === "O" ? centro : c)).join("");
+  const etiquetaCaras = (c: Chip) => {
+    if (c.dientes.length !== 1) return "";
+    const centro = letraCentro(c.dientes);
+    return CARAS.filter((x) => c.caras.includes(x)).map((x) => (x === "O" ? centro : x)).join("");
   };
 
   const arcadas = [PERM.upper, PERM.lower, ...(paciente.esNino ? [PRIMARY.upper, PRIMARY.lower] : [])];
+
+  async function guardar(accion: Accion) {
+    setError(null);
+    if (!form.name.trim()) {
+      setError(t("patients.createTreatment.nameRequired"));
+      document.getElementById("plan-nombre")?.focus();
+      return;
+    }
+    if (!form.doctorId) {
+      setError(t("patients.createTreatment.doctorRequired"));
+      return;
+    }
+    // Plan en $0 y renglones sin precio se confirman ANTES de guardar (la API también pide lo primero).
+    if (total <= 0 && confirmar?.tipo !== "sinCosto") { setConfirmar({ tipo: "sinCosto", accion }); return; }
+    if (total > 0 && sinPrecio > 0 && confirmar?.tipo !== "sinPrecio") { setConfirmar({ tipo: "sinPrecio", accion }); return; }
+    setConfirmar(null);
+    setGuardandoPropio(true);
+    try {
+      const r = await guardarPlan({
+        patientId: paciente.id,
+        doctorId: form.doctorId,
+        name: form.name,
+        description: componerDescripcion(plan, rotulos),
+        totalSessions: Math.max(1, tiempo.citas),
+        sessionIntervalDays: DIAS_ENTRE_SESIONES,
+        totalCost: total,
+        confirmarSinCosto: total <= 0,
+        items: filasParaGuardar(plan.renglones),
+      });
+      if (!r.ok) {
+        setError(
+          r.claveError
+            ? `${t(r.claveError)}${r.fila ? ` (${t("planTratamiento.nuevo.filaN", { n: r.fila })})` : ""}`
+            : r.error ?? (r.status === 0 ? t("planTratamiento.nuevo.sinConexion") : t("patients.createTreatment.error")),
+        );
+        return;
+      }
+      toast.success(t("patients.createTreatment.success"));
+      if (accion === "presentar") {
+        const p = await presentarPlan(r.plan!.id);
+        if (p.ok) toast.success(t("planTratamiento.nuevo.presentado", { folio: p.folio ?? "" }));
+        else if (p.pronto) toast(t("planTratamiento.nuevo.presentarPronto"));
+        else toast.error(p.error ?? t("planTratamiento.nuevo.presentarFallo"));
+      }
+      if (onGuardado) onGuardado(r.plan!);
+      else {
+        router.refresh();
+        onCerrar();
+      }
+    } finally {
+      setGuardandoPropio(false);
+    }
+  }
+
+  const diagnosticoFecha = diagnosticoDe
+    ? new Date(diagnosticoDe).toLocaleDateString(idioma === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric" })
+    : null;
 
   return (
     <div className={`${CLASES_MENU} ${s.velo}`} onClick={() => !guardando && onCerrar()}>
@@ -228,6 +314,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
         role="dialog"
         aria-modal="true"
         aria-labelledby="plan-nuevo-titulo"
+        data-plan-nuevo
         onClick={(e) => e.stopPropagation()}
       >
         <header className={s.cabecera}>
@@ -242,20 +329,18 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
         </header>
 
         <div className={s.cuerpo}>
-          {/* ── 1 · Quién y qué ─────────────────────────────────────────── */}
+          {/* ── 1 · Quién y cómo se llama (vienen solos) ───────────────────── */}
           <section className={s.seccion}>
             <div className={s.dosColumnas}>
               <div className={s.campo}>
                 <label className={s.rotulo} htmlFor="plan-doctor">{t("patients.treatment.doctorLabel")}</label>
+                {/* El nombre visible completo, único en la lista: el mismo formateador que la Agenda. */}
                 <select
                   id="plan-doctor"
                   className={s.entrada}
                   value={form.doctorId}
                   onChange={(e) => setForm((f) => ({ ...f, doctorId: e.target.value }))}
                 >
-                  {/* El nombre visible completo, único en la lista: el mismo formateador que los selectores de la
-                      Agenda (etiqueta-profesional.ts). Con «Dr/a. » delante salía «Dr/a. Dr Import…» (menores de
-                      la revisión final, ws1-t10); el título que alguien escribió en su nombre se respeta. */}
                   {doctores.map((d) => (
                     <option key={d.id} value={d.id}>{nombresDoctores.get(d.id)?.nombre}</option>
                   ))}
@@ -269,79 +354,53 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                   className={s.entrada}
                   placeholder={t("patients.treatment.namePlaceholder")}
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  title={t("planTratamiento.nuevo.nombrePista")}
+                  onChange={(e) => { setNombreTocado(true); setForm((f) => ({ ...f, name: e.target.value })); }}
                 />
               </div>
             </div>
-            <div className={s.sugerencias}>
-              {sugerencias.map((sug) => (
-                <button key={sug} type="button" className={s.ficha} onClick={() => setForm((f) => ({ ...f, name: sug }))}>
-                  {sug}
-                </button>
-              ))}
-            </div>
-            <p className={s.pista}>
-              <MessageCircle size={12} strokeWidth={1.75} aria-hidden /> {t("planTratamiento.nuevo.nombrePista")}
-            </p>
           </section>
 
-          {/* ── 2 · Diagnóstico ─────────────────────────────────────────── */}
-          <section className={s.seccion}>
-            <h4 className={s.seccionTitulo}>{t("planTratamiento.nuevo.diagnostico")}</h4>
-            <div className={s.dosColumnasAncha}>
-              <div className={s.campo}>
-                <div className={s.rotuloFila}>
-                  <label className={s.rotulo} htmlFor="plan-diagnostico">{t("planTratamiento.nuevo.diagnosticoRotulo")}</label>
-                  <DictationMic onText={(txt) => setPlan((p) => ({ ...p, diagnostico: appendDictado(p.diagnostico, txt) }))} />
-                </div>
-                <textarea
-                  id="plan-diagnostico"
-                  className={s.area}
-                  rows={2}
-                  placeholder={t("planTratamiento.nuevo.diagnosticoEjemplo")}
-                  value={plan.diagnostico}
-                  onChange={(e) => setPlan((p) => ({ ...p, diagnostico: e.target.value }))}
-                />
+          {/* ── 2 · Hallazgos → procedimientos (un toque cada uno) ─────────── */}
+          {chips.length > 0 && (
+            <section className={s.seccion} aria-labelledby="plan-hallazgos-titulo">
+              <h4 id="plan-hallazgos-titulo" className={s.seccionTitulo}>{t("planTratamiento.nuevo.hallazgos")}</h4>
+              <div className={s.sugerencias}>
+                {chips.map((c) => {
+                  const sug = nombreSugerido(c);
+                  const caras = etiquetaCaras(c);
+                  return (
+                    <button
+                      key={c.clave}
+                      type="button"
+                      data-chip={c.clave}
+                      className={`${s.ficha} ${s.fichaHallazgo} ${c.tipo === "encadenada" ? s.fichaEncadenada : ""} ${c.puesto ? s.fichaPuesta : ""}`}
+                      disabled={c.puesto || guardando}
+                      onClick={() => tocarChip(c)}
+                      title={t("planTratamiento.nuevo.hallazgoAgregar")}
+                    >
+                      {c.tipo === "encadenada" && <Sparkles size={12} strokeWidth={1.75} aria-hidden />}
+                      {c.dientes.length === 1 && <span className={s.fichaDiente}>{c.dientes[0]}</span>}
+                      {caras && <span className={s.fichaCaras}>{caras}</span>}
+                      {c.tipo === "encadenada" ? (
+                        <span>{t("planTratamiento.nuevo.sugeridoTras", { procedimiento: sug })}</span>
+                      ) : (
+                        <>
+                          <span>{c.condiciones.map(nombreCondicion).join(" · ")}</span>
+                          {c.dientes.length > 1 && <span className={s.fichaCuenta}>{t("planTratamiento.nuevo.nDientes", { count: c.dientes.length })}</span>}
+                          {sug && (
+                            <span className={`${s.fichaSugerido} ${c.sugerencia?.elegir ? s.fichaSugeridoSinTarifario : ""}`}>
+                              <ChevronRight size={11} strokeWidth={2} aria-hidden />{sug}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-pronostico">{t("planTratamiento.texto.pronostico")}</label>
-                <select
-                  id="plan-pronostico"
-                  className={s.entrada}
-                  value={plan.pronostico}
-                  onChange={(e) => setPlan((p) => ({ ...p, pronostico: e.target.value as Pronostico }))}
-                >
-                  <option value="">{t("planTratamiento.pronostico.sinDefinir")}</option>
-                  {PRONOSTICOS.map((p) => <option key={p} value={p}>{t(PRONOSTICO_CLAVE[p])}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {hallazgos.length > 0 && (
-              <div className={s.hallazgos}>
-                <div className={s.rotulo}>{t("planTratamiento.nuevo.hallazgos")}</div>
-                <div className={s.sugerencias}>
-                  {hallazgos.map((h) => {
-                    const puesto = yaEnPlan(h);
-                    return (
-                      <button
-                        key={h.clave}
-                        type="button"
-                        className={`${s.ficha} ${s.fichaHallazgo} ${puesto ? s.fichaPuesta : ""}`}
-                        disabled={puesto}
-                        onClick={() => agregar({ fase: h.fase, dientes: String(h.diente), caras: h.caras, motivo: nombreHallazgo(h) })}
-                        title={t("planTratamiento.nuevo.hallazgoAgregar")}
-                      >
-                        <span className={s.fichaDiente}>{h.diente}</span>
-                        {etiquetaCaras(h) && <span className={s.fichaCaras}>{etiquetaCaras(h)}</span>}
-                        {nombreHallazgo(h)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
+            </section>
+          )}
 
           {/* ── 3 · Procedimientos ──────────────────────────────────────── */}
           <section className={s.seccion}>
@@ -363,11 +422,11 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                   const leidos = leerDientes(r.dientes);
                   const centro = letraCentro(leidos.dientes);
                   // Sugerencias visibles mientras se escribe (no una lista del navegador, que hay navegadores que no enseñan).
-                  const sugerencias = buscando === r.id && !r.procedimientoId ? buscarEnTarifario(tarifario, r.procedimiento) : [];
-                  const abiertas = sugerencias.length > 0;
+                  const deTarifario = buscando === r.id && !r.procedimientoId ? buscarEnTarifario(tarifario, r.procedimiento) : [];
+                  const abiertas = deTarifario.length > 0;
                   const fueraDelTarifario = !abiertas && buscando !== r.id && r.procedimiento.trim() !== "" && !r.procedimientoId && r.precio.trim() === "";
                   return (
-                    <div key={r.id} className={s.renglonCaja}>
+                    <div key={r.id} className={s.renglonCaja} data-renglon={r.clave ?? "manual"}>
                       <div className={s.renglon}>
                         <select
                           className={s.entrada}
@@ -384,7 +443,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                           aria-autocomplete="list"
                           aria-expanded={abiertas}
                           aria-controls={`plan-sug-${r.id}`}
-                          aria-activedescendant={abiertas ? `plan-sug-${r.id}-${Math.min(marcada, sugerencias.length - 1)}` : undefined}
+                          aria-activedescendant={abiertas ? `plan-sug-${r.id}-${Math.min(marcada, deTarifario.length - 1)}` : undefined}
                           autoComplete="off"
                           aria-label={t("planTratamiento.nuevo.colProcedimiento")}
                           placeholder={r.motivo ? t("planTratamiento.nuevo.procedimientoPara", { motivo: r.motivo }) : t("planTratamiento.nuevo.procedimientoEjemplo")}
@@ -394,9 +453,9 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                           onBlur={() => setBuscando((b) => (b === r.id ? null : b))}
                           onKeyDown={(e) => {
                             if (!abiertas) return;
-                            if (e.key === "ArrowDown") { e.preventDefault(); setMarcada((m) => (m + 1) % sugerencias.length); }
-                            else if (e.key === "ArrowUp") { e.preventDefault(); setMarcada((m) => (m - 1 + sugerencias.length) % sugerencias.length); }
-                            else if (e.key === "Enter") { e.preventDefault(); elegirSugerencia(r, sugerencias[Math.min(marcada, sugerencias.length - 1)]); }
+                            if (e.key === "ArrowDown") { e.preventDefault(); setMarcada((m) => (m + 1) % deTarifario.length); }
+                            else if (e.key === "ArrowUp") { e.preventDefault(); setMarcada((m) => (m - 1 + deTarifario.length) % deTarifario.length); }
+                            else if (e.key === "Enter") { e.preventDefault(); elegirSugerencia(r, deTarifario[Math.min(marcada, deTarifario.length - 1)]); }
                             else if (e.key === "Escape") { e.stopPropagation(); setBuscando(null); }
                           }}
                         />
@@ -405,7 +464,8 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                             className={`${s.entrada} ${leidos.invalidos.length > 0 ? s.entradaMal : ""}`}
                             aria-label={t("planTratamiento.nuevo.colDientes")}
                             aria-invalid={leidos.invalidos.length > 0 || undefined}
-                            placeholder="16, 26"
+                            placeholder={r.clave && r.dientes === "" ? t("planTratamiento.nuevo.todaLaBoca") : "16, 26"}
+                            title={r.clave && r.dientes === "" ? t("planTratamiento.nuevo.todaLaBocaTitulo") : undefined}
                             inputMode="numeric"
                             value={r.dientes}
                             onChange={(e) => cambiar(r.id, { dientes: e.target.value })}
@@ -438,8 +498,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                             );
                           })}
                         </div>
-                        {/* Solo enteros (revisión t8, N-P4): «1.5» se guardaba «1.5 ×» y el presupuesto
-                            (QuoteItem.quantity es Int) lo redondeaba a 2. */}
+                        {/* Solo enteros (revisión t8, N-P4): QuoteItem.quantity es Int. */}
                         <input
                           type="number"
                           min={1}
@@ -475,7 +534,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                         <div className={s.tarifarioSug}>
                           <span className={s.tarifarioSugTitulo}>{t("planTratamiento.nuevo.sugerencias")}</span>
                           <ul id={`plan-sug-${r.id}`} role="listbox" aria-label={t("planTratamiento.nuevo.sugerencias")} className={s.tarifarioSugLista}>
-                            {sugerencias.map((p, i) => (
+                            {deTarifario.map((p, i) => (
                               <li
                                 key={p.id}
                                 id={`plan-sug-${r.id}-${i}`}
@@ -496,6 +555,11 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       {fueraDelTarifario && (
                         <div className={s.avisoRenglon}>
                           <AlertTriangle size={12} strokeWidth={1.75} aria-hidden /> {t("planTratamiento.nuevo.sinTarifario")}
+                        </div>
+                      )}
+                      {r.revisar && !fueraDelTarifario && !abiertas && (
+                        <div className={s.pistaRenglon}>
+                          <Sparkles size={12} strokeWidth={1.75} aria-hidden /> {t("planTratamiento.nuevo.revisar")}
                         </div>
                       )}
                       {leidos.invalidos.length > 0 && (
@@ -530,10 +594,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
             )}
 
             <div className={s.bajoRenglones}>
-              <button type="button" className={s.boton} onClick={() => agregar()}>
+              <button type="button" className={s.boton} onClick={agregar}>
                 <Plus size={14} strokeWidth={2} aria-hidden /> {t("planTratamiento.nuevo.agregar")}
               </button>
-              {plan.renglones.length === 0 && <span className={s.pistaLinea}>{t("planTratamiento.nuevo.procedimientosPista")}</span>}
+              {plan.renglones.length === 0 && <span className={s.pistaLinea}>{t("planTratamiento.nuevo.procedimientosPistaRapida")}</span>}
             </div>
 
             {avisos.length > 0 && (
@@ -547,7 +611,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
               </ul>
             )}
 
-            {hayRenglones && (
+            {fases.length > 1 && (
               <div className={s.resumen}>
                 {fases.map((f) => (
                   <div key={f.fase} className={s.resumenFila}>
@@ -565,131 +629,148 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
             )}
           </section>
 
-          {/* ── 4 · Sesiones, seguimiento y costo (lo de siempre) ───────── */}
+          {/* ── 4 · Más detalles (opcionales, plegados) ─────────────────── */}
           <section className={s.seccion}>
-            <h4 className={s.seccionTitulo}>{t("planTratamiento.nuevo.seguimiento")}</h4>
-            <div className={s.tresColumnas}>
-              <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-sesiones">{t("patients.treatment.totalSessions")}</label>
-                <input
-                  id="plan-sesiones"
-                  type="number"
-                  min={1}
-                  max={100}
-                  className={`${s.entrada} ${s.num}`}
-                  value={form.totalSessions}
-                  onChange={(e) => { setSesionesAMano(true); setForm((f) => ({ ...f, totalSessions: e.target.value })); }}
-                />
-                {hayRenglones && (
-                  sesionesAMano && String(sugeridas) !== form.totalSessions ? (
-                    <button type="button" className={s.enlace} onClick={() => { setSesionesAMano(false); }}>
-                      {t("planTratamiento.nuevo.usarSesiones", { count: sugeridas })}
-                    </button>
-                  ) : !sesionesAMano ? <span className={s.pistaLinea}>{t("planTratamiento.nuevo.calculado")}</span> : null
+            <button
+              type="button"
+              className={s.plegable}
+              aria-expanded={detalles}
+              aria-controls="plan-detalles"
+              onClick={() => setDetalles((d) => !d)}
+            >
+              <ChevronRight size={14} strokeWidth={2} aria-hidden className={detalles ? s.plegableAbierto : undefined} />
+              <span>{t("planTratamiento.nuevo.detalles")}</span>
+              {!detalles && diagnosticoFecha && <span className={s.plegableNota}>{t("planTratamiento.nuevo.diagnosticoPrecargado")}</span>}
+            </button>
+            {detalles && (
+              <div id="plan-detalles" className={s.detalles}>
+                <div className={s.dosColumnasAncha}>
+                  <div className={s.campo}>
+                    <div className={s.rotuloFila}>
+                      <label className={s.rotulo} htmlFor="plan-diagnostico">{t("planTratamiento.nuevo.diagnosticoRotulo")}</label>
+                      <DictationMic onText={(txt) => { diagnosticoTocado.current = true; setPlan((p) => ({ ...p, diagnostico: appendDictado(p.diagnostico, txt) })); }} />
+                    </div>
+                    <textarea
+                      id="plan-diagnostico"
+                      className={s.area}
+                      rows={2}
+                      placeholder={t("planTratamiento.nuevo.diagnosticoEjemplo")}
+                      value={plan.diagnostico}
+                      onChange={(e) => { diagnosticoTocado.current = true; setPlan((p) => ({ ...p, diagnostico: e.target.value })); }}
+                    />
+                    {diagnosticoFecha && <span className={s.pistaLinea}>{t("planTratamiento.nuevo.diagnosticoDeConsulta", { fecha: diagnosticoFecha })}</span>}
+                  </div>
+                  <div className={s.campo}>
+                    <label className={s.rotulo} htmlFor="plan-pronostico">{t("planTratamiento.texto.pronostico")}</label>
+                    <select
+                      id="plan-pronostico"
+                      className={s.entrada}
+                      value={plan.pronostico}
+                      onChange={(e) => setPlan((p) => ({ ...p, pronostico: e.target.value as Pronostico }))}
+                    >
+                      <option value="">{t("planTratamiento.pronostico.sinDefinir")}</option>
+                      {PRONOSTICOS.map((p) => <option key={p} value={p}>{t(PRONOSTICO_CLAVE[p])}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className={s.dosColumnas}>
+                  <div className={s.campo}>
+                    <div className={s.rotuloFila}>
+                      <label className={s.rotulo} htmlFor="plan-alternativa">{t("planTratamiento.nuevo.alternativa")}</label>
+                      <DictationMic onText={(txt) => setPlan((p) => ({ ...p, alternativa: appendDictado(p.alternativa, txt) }))} />
+                    </div>
+                    <textarea
+                      id="plan-alternativa"
+                      className={s.area}
+                      rows={2}
+                      placeholder={t("planTratamiento.nuevo.alternativaEjemplo")}
+                      value={plan.alternativa}
+                      onChange={(e) => setPlan((p) => ({ ...p, alternativa: e.target.value }))}
+                    />
+                  </div>
+                  <div className={s.campo}>
+                    <div className={s.rotuloFila}>
+                      <label className={s.rotulo} htmlFor="plan-notas">{t("patients.treatment.descLabel")}</label>
+                      <DictationMic onText={(txt) => setPlan((p) => ({ ...p, notas: appendDictado(p.notas, txt) }))} />
+                    </div>
+                    <textarea
+                      id="plan-notas"
+                      className={s.area}
+                      rows={2}
+                      placeholder={t("patients.treatment.descPlaceholder")}
+                      value={plan.notas}
+                      onChange={(e) => setPlan((p) => ({ ...p, notas: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                {sugerencias.length > 0 && (
+                  <div className={s.campo}>
+                    <span className={s.rotulo}>{t("planTratamiento.nuevo.otrosNombres")}</span>
+                    <div className={s.sugerencias}>
+                      {sugerencias.map((sug) => (
+                        <button key={sug} type="button" className={s.ficha} onClick={() => { setNombreTocado(true); setForm((f) => ({ ...f, name: sug })); }}>
+                          {sug}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-              <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-intervalo">{t("patients.treatment.daysBetween")}</label>
-                <input
-                  id="plan-intervalo"
-                  type="number"
-                  min={1}
-                  max={365}
-                  className={`${s.entrada} ${s.num}`}
-                  value={form.sessionIntervalDays}
-                  onChange={(e) => setForm((f) => ({ ...f, sessionIntervalDays: e.target.value }))}
-                />
-              </div>
-              <div className={s.campo}>
-                <label className={s.rotulo} htmlFor="plan-costo">{t("patients.treatment.totalCost")}</label>
-                <input
-                  id="plan-costo"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className={`${s.entrada} ${s.num}`}
-                  placeholder="0.00"
-                  value={form.totalCost}
-                  onChange={(e) => { setCostoAMano(true); setForm((f) => ({ ...f, totalCost: e.target.value })); }}
-                />
-                {hayRenglones && total > 0 && (
-                  costoAMano && Number(form.totalCost) !== total ? (
-                    <button type="button" className={s.enlace} onClick={() => setCostoAMano(false)}>
-                      {t("planTratamiento.nuevo.usarCosto", { total: dineroExacto(total) })}
-                    </button>
-                  ) : !costoAMano ? <span className={s.pistaLinea}>{t("planTratamiento.nuevo.calculado")}</span> : null
-                )}
-              </div>
-            </div>
-            <p className={s.pista}>
-              <MessageCircle size={12} strokeWidth={1.75} aria-hidden /> {t("planTratamiento.nuevo.seguimientoPista")}
-            </p>
-          </section>
-
-          {/* ── 5 · Alternativa y notas ─────────────────────────────────── */}
-          <section className={s.seccion}>
-            <div className={s.dosColumnas}>
-              <div className={s.campo}>
-                <div className={s.rotuloFila}>
-                  <label className={s.rotulo} htmlFor="plan-alternativa">{t("planTratamiento.nuevo.alternativa")}</label>
-                  <DictationMic onText={(txt) => setPlan((p) => ({ ...p, alternativa: appendDictado(p.alternativa, txt) }))} />
-                </div>
-                <textarea
-                  id="plan-alternativa"
-                  className={s.area}
-                  rows={2}
-                  placeholder={t("planTratamiento.nuevo.alternativaEjemplo")}
-                  value={plan.alternativa}
-                  onChange={(e) => setPlan((p) => ({ ...p, alternativa: e.target.value }))}
-                />
-              </div>
-              <div className={s.campo}>
-                <div className={s.rotuloFila}>
-                  <label className={s.rotulo} htmlFor="plan-notas">{t("patients.treatment.descLabel")}</label>
-                  <DictationMic onText={(txt) => setPlan((p) => ({ ...p, notas: appendDictado(p.notas, txt) }))} />
-                </div>
-                <textarea
-                  id="plan-notas"
-                  className={s.area}
-                  rows={2}
-                  placeholder={t("patients.treatment.descPlaceholder")}
-                  value={plan.notas}
-                  onChange={(e) => setPlan((p) => ({ ...p, notas: e.target.value }))}
-                />
-              </div>
-            </div>
-            <p className={s.pista}>{t("planTratamiento.nuevo.firmaPista")}</p>
+            )}
           </section>
         </div>
 
-        {confirmarSinPrecio && sinPrecio > 0 && (
-          <div className={s.aviso} role="alert" data-plan-sin-precio style={{ margin: "0 20px 10px", flex: "none" }}>
+        {confirmar && (
+          <div className={`${s.aviso} ${s.avisoPie}`} role="alert" data-plan-confirmar={confirmar.tipo}>
             <AlertTriangle size={14} strokeWidth={2} aria-hidden />
             <span>
-              <strong>{txSinPrecio.planTitulo(sinPrecio)}.</strong> {txSinPrecio.planTexto}
+              {confirmar.tipo === "sinCosto" ? (
+                <><strong>{t("planTratamiento.nuevo.sinCostoTitulo")}</strong> {t("planTratamiento.nuevo.sinCostoTexto")}</>
+              ) : (
+                <><strong>{txSinPrecio.planTitulo(sinPrecio)}.</strong> {txSinPrecio.planTexto}</>
+              )}
             </span>
-            <button type="button" className={s.enlace} onClick={() => setConfirmarSinPrecio(false)}>
-              {txSinPrecio.volver}
+            <button type="button" className={s.enlace} onClick={() => setConfirmar(null)}>
+              {confirmar.tipo === "sinCosto" ? t("planTratamiento.nuevo.sinCostoVolver") : txSinPrecio.volver}
             </button>
           </div>
         )}
+        {error && (
+          <div className={`${s.error} ${s.errorPie}`} role="alert" data-plan-error>{error}</div>
+        )}
         <footer className={s.pie}>
-          {hayRenglones && (
-            <div className={s.pieResumen}>
-              <span>{t("planTratamiento.nuevo.nProcedimientos", { count: fases.reduce((a, f) => a + f.renglones.length, 0) })}</span>
-              <strong>{dineroExacto(total)}</strong>
-            </div>
-          )}
-          <button type="button" className={s.boton} onClick={onCerrar} disabled={guardando}>
-            {t("common.cancel")}
-          </button>
-          <button type="button" className={`${s.boton} ${s.botonPrincipal}`} onClick={crear} disabled={guardando}>
-            {guardando
-              ? t("patients.treatment.creating")
-              : confirmarSinPrecio && sinPrecio > 0
-                ? txSinPrecio.planSeguir
-                : t("planTratamiento.nuevo.crear")}
-          </button>
+          <div className={s.pieResumen} aria-live="polite">
+            <span>{t("planTratamiento.nuevo.nProcedimientos", { count: cuantos })}</span>
+            <strong data-plan-total>{dineroExacto(total)}</strong>
+            {tiempo.citas > 0 && (
+              <span className={s.pieCitas}>{t("planTratamiento.nuevo.citasEstimadas", { count: tiempo.citas, minutos: tiempo.minutos })}</span>
+            )}
+          </div>
+          <div className={s.pieBotones}>
+            <button type="button" className={s.boton} onClick={onCerrar} disabled={guardando}>
+              {t("common.cancel")}
+            </button>
+            <button type="button" className={s.boton} data-plan-guardar onClick={() => guardar("guardar")} disabled={guardando}>
+              {guardando
+                ? t("planTratamiento.nuevo.guardando")
+                : confirmar?.accion === "guardar"
+                  ? (confirmar.tipo === "sinCosto" ? t("planTratamiento.nuevo.sinCostoCrear") : txSinPrecio.planSeguir)
+                  : t("planTratamiento.nuevo.guardar")}
+            </button>
+            <button
+              type="button"
+              className={`${s.boton} ${s.botonPrincipal}`}
+              data-plan-presentar
+              onClick={() => guardar("presentar")}
+              disabled={guardando || puedePresentar === false}
+              title={puedePresentar === false ? t("planTratamiento.nuevo.presentarNoDisponible") : undefined}
+            >
+              {confirmar?.accion === "presentar" && !guardando
+                ? (confirmar.tipo === "sinCosto" ? t("planTratamiento.nuevo.sinCostoCrear") : txSinPrecio.planSeguir)
+                : t("planTratamiento.nuevo.guardarPresentar")}
+              {puedePresentar === false && <span className={s.pronto}>{t("planTratamiento.nuevo.pronto")}</span>}
+            </button>
+          </div>
         </footer>
       </div>
     </div>

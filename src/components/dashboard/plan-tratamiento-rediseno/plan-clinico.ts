@@ -58,6 +58,17 @@ export interface Renglon {
   precioDelTarifario: boolean;
   /** Minutos de sillón (del tarifario); 0 = no se sabe. */
   minutos: number;
+  /**
+   * Ventana rápida (ws1-t5, P3): el renglón que nació de un chip del odontograma guarda qué
+   * hallazgos consume («16:caries»), qué procedimiento se sugirió (`ClaveProcedimiento`) y el
+   * hallazgo de origen de la fila (`HallazgoDeOrigen` del contrato). Un renglón tecleado a mano
+   * no los lleva; el texto de `description` no los usa.
+   */
+  origen?: string[];
+  clave?: string | null;
+  hallazgo?: { condicion: string; diente: number | null; caras: string[]; entryId: string | null } | null;
+  /** La sugerencia es una de varias razonables: la ventana lo dice junto al renglón. */
+  revisar?: boolean;
 }
 
 export interface PlanClinico {
