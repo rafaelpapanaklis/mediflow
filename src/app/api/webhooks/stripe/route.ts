@@ -44,6 +44,7 @@ import {
 import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
+import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
 import { avisarCobroRechazado, type ClinicaParaAvisoDeCobro } from "@/lib/billing/aviso-cobro-rechazado.server";
 import {
   accesoTrasCobroRechazado,
@@ -629,6 +630,30 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        // FACTURA PAGADA FUERA DE STRIPE (decisión de Rafael, #1(a)): el admin confirmó un pago MANUAL y marcó la factura
+        // de tarjeta como pagada fuera de Stripe para que no la reintente. El cobro real es el manual (ya está en
+        // `subscription_invoices`): este evento NO crea otro registro de cobro, ni correo de «plan renovado», ni comisión
+        // de afiliado, y no duplica ingresos. Solo se limpia la fila de «cobro fallido» de esa factura (sale de «por
+        // cobrar») y la suscripción queda viva y al corriente.
+        if (clinic && (await esFacturaFueraDeStripe(stripe, invoice))) {
+          await reactivarSiStripeYaCobro(stripe, invoice, clinic);
+          await prisma.subscriptionInvoice.updateMany({
+            where: { reference: invoiceId, status: { in: ["failed", "pending"] } },
+            data: { status: "void", notes: "Pagada fuera de Stripe (pago manual confirmado)" },
+          });
+          await logAudit({
+            clinicId: clinic.id,
+            userId: clinic.id,
+            entityType: "subscription",
+            entityId: invoiceId,
+            action: "update",
+            changes: {
+              _source: { before: null, after: { event: event.type, invoiceId, pagadaFueraDeStripe: true, registradoComoCobro: false } },
+            },
+          }).catch(() => {});
+          break;
+        }
+
         // ──────────────────────────────────────────────────────────────────
         // REGISTRO DEL COBRO — va ANTES del break por afiliado para que TODA
         // factura pagada quede en subscription_invoices (la fuente de
@@ -1045,6 +1070,23 @@ async function reactivarSiStripeYaCobro(
 }
 
 /**
+ * ¿Esta factura se pagó FUERA de Stripe (`paid_out_of_band`)? El evento la trae según la versión de API del webhook;
+ * si no trae el campo se lee la factura con la versión fija de nuestro cliente. Si Stripe no contesta se asume que NO
+ * (se procesa como siempre y queda el aviso en el log): un reintento infinito del evento sería peor.
+ */
+async function esFacturaFueraDeStripe(stripe: Stripe, invoice: Stripe.Invoice): Promise<boolean> {
+  const enEvento = (invoice as { paid_out_of_band?: boolean | null }).paid_out_of_band;
+  if (typeof enEvento === "boolean") return enEvento;
+  if (!invoice.id) return false;
+  try {
+    return (await stripe.invoices.retrieve(invoice.id) as { paid_out_of_band?: boolean | null }).paid_out_of_band === true;
+  } catch (e) {
+    console.warn("[stripe webhook] no se pudo leer paid_out_of_band de", invoice.id, (e as Error)?.message ?? e);
+    return false;
+  }
+}
+
+/**
  * Estado VIVO de la factura de este `invoice.payment_failed` en Stripe («open», «paid», «void»,
  * «uncollectible»; solo «open» e «uncollectible» suspenden). Si Stripe no contesta se LANZA el error: el webhook responde 5xx y Stripe reintenta el
  * evento (igual que `debeReintentarPorEstadoVivo`); asumir «no está pagada» suspendía a quien ya pagó.
@@ -1289,6 +1331,12 @@ async function activatePlatformSubscription(
   // A1 (ws1-t5): las sedes incluidas siguen a la madre también al reactivar/renovar.
   await sincronizarSedesIncluidas(clinicId);
 
+  // SPEI/OXXO de Stripe (pago único, sin suscripción nueva): es un pago manual. Si la clínica tiene una suscripción de
+  // tarjeta viva con la factura del plan abierta o incobrable, esa factura queda pagada fuera de Stripe para que no la
+  // reintente. No lanza ni deshace la activación; si falla, queda en la bitácora.
+  let facturaTarjeta: Awaited<ReturnType<typeof marcarFacturasDeLaClinica>> | null = null;
+  if (subscriptionId === null) facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+
   await logAudit({
     clinicId,
     userId: clinicId, // sin user en webhook context — usamos clinicId como placeholder
@@ -1300,7 +1348,7 @@ async function activatePlatformSubscription(
       stripeSubscriptionId: { before: before?.stripeSubscriptionId ?? null, after: subscriptionId },
       trialEndsAt: { before: before?.trialEndsAt ?? null, after: next },
       nextBillingDate: { before: before?.nextBillingDate ?? null, after: next },
-      _source: { before: null, after: source },
+      _source: { before: null, after: { ...source, ...(facturaTarjeta ? { facturaTarjeta } : {}) } },
     },
   });
 }

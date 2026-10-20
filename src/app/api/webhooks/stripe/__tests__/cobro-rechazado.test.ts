@@ -39,6 +39,13 @@ let suscripcionesVivas: Map<string, any>;
 let facturasVivas: Map<string, any>;
 let stripeRespondeSuscripciones = true;
 let correoFalla = false;
+let stripeListaFalla = false;
+let stripePagoFalla = false;
+let facturasDeLista: any[];
+let llamadasPay: Array<{ id: string; params: any; opciones: any }>;
+let filasAnuladas: any[];
+let bitacoraAdmin: any[];
+let correosRenovacion: any[];
 let correosSuspendida: any[];
 let pagosDeSubscripcion: any[];
 
@@ -81,6 +88,15 @@ const prismaBase: any = {
       const f = pagosDeSubscripcion.find((p) => p.id === where.id);
       return f ? { ...f, clinic: { id: f.clinicId, name: "BEVADENT", plan: "PRO" } } : null;
     },
+    update: async ({ where, data }: any) => {
+      const f = pagosDeSubscripcion.find((p) => p.id === where.id);
+      if (f) Object.assign(f, data);
+      return f;
+    },
+    updateMany: async ({ where, data }: any) => {
+      filasAnuladas.push({ where, data });
+      return { count: 1 };
+    },
     create: async ({ data }: any) => {
       const fila = { id: `inv${pagosDeSubscripcion.length + 1}`, ...data };
       pagosDeSubscripcion.push(fila);
@@ -111,7 +127,7 @@ const stripeDoble: any = {
     retrieve: async (id: string) => {
       if (!stripeRespondeSuscripciones) throw new Error("Stripe no responde");
       const s = suscripcionesVivas.get(id);
-      if (!s) throw new Error("No such subscription");
+      if (!s) throw Object.assign(new Error("No such subscription"), { code: "resource_missing" });
       return s;
     },
   },
@@ -120,6 +136,18 @@ const stripeDoble: any = {
       const f = facturasVivas.get(id);
       if (!f) throw new Error("No such invoice");
       return f;
+    },
+    // Las facturas de la suscripción que ve el admin al confirmar un pago manual (abiertas / incobrables).
+    list: async ({ subscription, status }: any) => {
+      if (stripeListaFalla) throw new Error("Stripe no contesta");
+      return { data: facturasDeLista.filter((f) => f.subscription === subscription && f.status === status) };
+    },
+    pay: async (id: string, params: any, opciones: any) => {
+      if (stripePagoFalla) throw new Error("Stripe no contesta");
+      llamadasPay.push({ id, params, opciones });
+      const f = facturasDeLista.find((x) => x.id === id);
+      if (f) f.status = "paid"; // una segunda pasada ya no la ve abierta
+      return f ?? { id, status: "paid" };
     },
   },
 };
@@ -166,7 +194,9 @@ before(async () => {
   dobles.set(path.join(RAIZ, "src/lib/email.ts"), {
     sendEmail: async () => ({ delivered: true }),
     sendPlanActivatedEmail: async () => {},
-    sendPlanRenewedEmail: async () => {},
+    sendPlanRenewedEmail: async (m: any) => {
+      correosRenovacion.push(m);
+    },
     sendPlanSuspendedEmail: async (m: any) => {
       correosSuspendida.push(m);
     },
@@ -205,7 +235,7 @@ before(async () => {
     cfdiNotConfiguredInstructions: () => "",
     getCFDIProvider: () => ({ generateInvoice: async () => { throw new Error("no debería timbrar"); } }),
   });
-  dobles.set(path.join(RAIZ, "src/lib/admin-audit.ts"), { logAdminClinicMutation: async () => {} });
+  dobles.set(path.join(RAIZ, "src/lib/admin-audit.ts"), { logAdminClinicMutation: async (a: any) => { bitacoraAdmin.push(a); } });
   dobles.set(path.join(RAIZ, "src/lib/analytics/meta-capi.server.ts"), { enviarCompraMetaDeSesion: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/tiktok-capi.server.ts"), { enviarCompraTiktokDeSesion: async () => {} });
   ({ NextRequest: NextRequestCtor } = await import("next/server"));
@@ -254,6 +284,13 @@ function reiniciar(sobre: Record<string, unknown> = {}) {
   facturasVivas = new Map([[FACTURA, { id: FACTURA, status: "open" }]]);
   stripeRespondeSuscripciones = true;
   correoFalla = false;
+  stripeListaFalla = false;
+  stripePagoFalla = false;
+  facturasDeLista = [];
+  llamadasPay = [];
+  filasAnuladas = [];
+  bitacoraAdmin = [];
+  correosRenovacion = [];
   idEvento = 0;
 }
 beforeEach(() => reiniciar());
@@ -784,4 +821,171 @@ test("N8 /api/admin/payments/[id]/cfdi: una activación manual responde 400 «no
   assert.equal((await llamar("no_existe")).status, 404);
   // Un cobro real NO recibe el 400 (llega al proveedor, que aquí es un doble que falla → 503 del propio flujo).
   assert.equal((await llamar("inv_real")).status, 503);
+});
+
+/* ── Decisión #1(a) de Rafael: pago manual confirmado ⇒ la factura de tarjeta queda pagada FUERA de Stripe ── */
+
+const FACTURA_ABIERTA = () => ({ id: FACTURA, status: "open", subscription: SUB, billing_reason: "subscription_cycle" });
+const llamarAdmin = (cuerpo: Record<string, unknown>) =>
+  POSTAdmin(new NextRequestCtor("http://localhost/api/admin/billing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cuerpo) }));
+const activar = () => llamarAdmin({ action: "activate_clinic", clinicId: CLINIC, plan: "PRO", months: 1 });
+
+function conTarjetaRechazada() {
+  reiniciar({ subscriptionStatus: "past_due", trialEndsAt: new Date(Date.now() + 20 * HORA), nextBillingDate: new Date(Date.now() + 30 * DIA) });
+  suscripcionesVivas.set(SUB, suscripcion("past_due", Date.now() + 30 * DIA));
+  facturasDeLista = [FACTURA_ABIERTA()];
+}
+
+test("#1(a) confirmar un pago manual con la factura de tarjeta ABIERTA: se marca pagada fuera de Stripe UNA sola vez, sin cancelar nada", async () => {
+  conTarjetaRechazada();
+  const r = await activar();
+  assert.equal(r.status, 200);
+  const cuerpo = await r.json();
+  assert.deepEqual(cuerpo.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
+  assert.equal(llamadasPay.length, 1);
+  assert.deepEqual(llamadasPay[0].params, { paid_out_of_band: true });
+  assert.equal(llamadasPay[0].opciones.idempotencyKey, `fuera-de-stripe:${FACTURA}`, "con clave de idempotencia");
+  assert.equal(clinica().subscriptionStatus, "active");
+  assert.equal(clinica().stripeSubscriptionId, SUB, "la suscripción de tarjeta NO se toca");
+  // Una segunda confirmación (doble clic, reintento) ya no la ve abierta: no vuelve a marcar nada.
+  const otra = await (await activar()).json();
+  assert.deepEqual(otra.facturaTarjeta, { tipo: "nada" });
+  assert.equal(llamadasPay.length, 1, "UNA sola vez");
+  assert.equal(bitacoraAdmin.some((b) => b.after?.op === "activate_clinic" && b.after.facturaTarjeta?.tipo === "marcadas"), true, "queda en bitácora");
+});
+
+test("#1(a) también una factura INCOBRABLE del plan; los prorrateos de un cambio de plan no se tocan", async () => {
+  conTarjetaRechazada();
+  facturasDeLista = [
+    { id: "in_incobrable", status: "uncollectible", subscription: SUB, billing_reason: "subscription_cycle" },
+    { id: "in_prorrateo", status: "open", subscription: SUB, billing_reason: "subscription_update" },
+    { id: "in_de_otra_sub", status: "open", subscription: "sub_otra", billing_reason: "subscription_cycle" },
+  ];
+  const cuerpo = await (await activar()).json();
+  assert.deepEqual(cuerpo.facturaTarjeta, { tipo: "marcadas", facturas: ["in_incobrable"] });
+  assert.deepEqual(llamadasPay.map((l) => l.id), ["in_incobrable"]);
+});
+
+test("#1(a) sin factura abierta, sin suscripción de tarjeta viva o con la suscripción cancelada: no hace nada", async () => {
+  conTarjetaRechazada();
+  facturasDeLista = [];
+  assert.deepEqual((await (await activar()).json()).facturaTarjeta, { tipo: "nada" });
+  // Sin suscripción de tarjeta (pagador a mano de siempre).
+  reiniciar({ stripeSubscriptionId: null });
+  assert.deepEqual((await (await activar()).json()).facturaTarjeta, { tipo: "sin_tarjeta" });
+  // La suscripción ya no existe en Stripe (resource_missing) o está cancelada.
+  reiniciar();
+  facturasDeLista = [FACTURA_ABIERTA()];
+  assert.deepEqual((await (await activar()).json()).facturaTarjeta, { tipo: "sin_tarjeta" });
+  suscripcionesVivas.set(SUB, suscripcion("canceled", Date.now()));
+  assert.deepEqual((await (await activar()).json()).facturaTarjeta, { tipo: "sin_tarjeta" });
+  assert.equal(llamadasPay.length, 0);
+});
+
+test("#1(a) Stripe falla al marcar: la activación NO se deshace, queda en bitácora, el admin ve el aviso y puede reintentar", async () => {
+  conTarjetaRechazada();
+  stripePagoFalla = true;
+  const r = await activar();
+  assert.equal(r.status, 200, "la activación sigue en pie");
+  const cuerpo = await r.json();
+  assert.equal(cuerpo.success, true);
+  assert.equal(cuerpo.facturaTarjeta.tipo, "fallo");
+  assert.equal(cuerpo.facturaTarjeta.mensaje, "No pudimos marcar la factura de tarjeta como pagada; Stripe podría reintentar el cobro. Reintenta o márcala a mano en Stripe.");
+  assert.equal(clinica().subscriptionStatus, "active", "la clínica sigue activa");
+  assert.equal(pagosDeSubscripcion.some((p) => p.method === "admin"), true, "y su rastro de pago manual quedó");
+  assert.equal(bitacoraAdmin.some((b) => b.after?.op === "activate_clinic" && b.after.facturaTarjeta?.tipo === "fallo"), true);
+  // Stripe tampoco lista las facturas: igual no se cae nada.
+  stripePagoFalla = false;
+  stripeListaFalla = true;
+  const sinLista = await (await activar()).json();
+  assert.equal(sinLista.facturaTarjeta.tipo, "fallo");
+  assert.equal(clinica().subscriptionStatus, "active");
+  stripeListaFalla = false;
+  // «Reintentar» (botón del aviso): vuelve a marcar, sin tocar el estado de la clínica.
+  const antes = { ...clinica() };
+  const re = await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC });
+  const cuerpoRe = await re.json();
+  assert.equal(cuerpoRe.success, true);
+  assert.deepEqual(cuerpoRe.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
+  assert.equal(llamadasPay.length, 1);
+  assert.equal(clinica().trialEndsAt.getTime(), antes.trialEndsAt.getTime());
+  // Y si sigue caído, el reintento lo dice (success false) sin lanzar.
+  facturasDeLista = [FACTURA_ABIERTA()];
+  stripePagoFalla = true;
+  const otra = await (await llamarAdmin({ action: "marcar_factura_fuera_de_stripe", clinicId: CLINIC })).json();
+  assert.equal(otra.success, false);
+  assert.equal((await llamarAdmin({ action: "marcar_factura_fuera_de_stripe" })).status, 400);
+});
+
+test("#1(a) «verificar pago» y registrar un pago pagado en /admin/subscriptions también la marcan (salvo un pago hecho en Stripe)", async () => {
+  conTarjetaRechazada();
+  pagosDeSubscripcion = [{ id: "inv_pendiente", clinicId: CLINIC, status: "pending", method: "transfer", amount: 689, currency: "MXN", periodStart: new Date(), periodEnd: new Date() }];
+  const v = await (await llamarAdmin({ action: "verify_payment", invoiceId: "inv_pendiente" })).json();
+  assert.equal(v.success, true);
+  assert.deepEqual(v.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
+  assert.equal(llamadasPay.length, 1);
+
+  const { POST: POSTSubs } = await import("../../../admin/subscriptions/route");
+  const registrar = (method: string) =>
+    POSTSubs(new NextRequestCtor("http://localhost/api/admin/subscriptions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clinicId: CLINIC, amount: 689, method, periodStart: new Date().toISOString(), periodEnd: new Date(Date.now() + 30 * DIA).toISOString(), status: "paid" }),
+    }));
+  conTarjetaRechazada();
+  const s = await (await registrar("transfer")).json();
+  assert.deepEqual(s.facturaTarjeta, { tipo: "marcadas", facturas: [FACTURA] });
+  conTarjetaRechazada();
+  const enStripe = await (await registrar("stripe")).json();
+  assert.equal(enStripe.facturaTarjeta, null, "un pago registrado como hecho en Stripe no se marca fuera de Stripe");
+  assert.equal(llamadasPay.length, 0);
+});
+
+test("#1(a) invoice.paid de esa factura pagada fuera de Stripe: NO crea otro cobro, ni correo de renovación, ni duplica ingresos; limpia su «cobro fallido» y deja la suscripción al corriente", async () => {
+  conTarjetaRechazada();
+  await entregar(evento("invoice.payment_failed", facturaFallida(), Date.now()));
+  assert.equal(facturasRegistradas.length, 1, "el rechazo quedó registrado como cobro fallido");
+  const fallidoAntes = facturasRegistradas.length;
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid", paid_out_of_band: true });
+  facturasRegistradas = [];
+  // (a) el evento trae paid_out_of_band; (b) no lo trae y se lee la factura viva.
+  for (const payload of [{ paid_out_of_band: true }, {}]) {
+    facturasRegistradas = [];
+    filasAnuladas = [];
+    correosRenovacion = [];
+    const codigo = await entregar(evento("invoice.paid", facturaPagada({ ...payload, billing_reason: "subscription_cycle" })));
+    assert.equal(codigo, 200);
+    assert.deepEqual(facturasRegistradas, [], "no se registra otro cobro (el cobro real es el manual)");
+    assert.equal(correosRenovacion.length, 0, "ni «plan renovado»");
+    assert.equal(filasAnuladas.length, 1, "la fila de cobro fallido de esa factura sale de «por cobrar»");
+    assert.deepEqual(filasAnuladas[0].where, { reference: FACTURA, status: { in: ["failed", "pending"] } });
+    assert.equal(filasAnuladas[0].data.status, "void");
+  }
+  assert.ok(fallidoAntes >= 1);
+  // Contraste: un invoice.paid NORMAL sí se registra como cobro.
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid", paid_out_of_band: false });
+  facturasRegistradas = [];
+  await entregar(evento("invoice.paid", facturaPagada({ paid_out_of_band: false })));
+  assert.equal(facturasRegistradas.length, 1, "un cobro real de tarjeta sigue registrándose");
+});
+
+test("#1(a) con la tarjeta VIVA el mes siguiente: un payment_failed NUEVO sí aplica la gracia de 24 h", async () => {
+  conTarjetaRechazada();
+  assert.equal((await activar()).status, 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid", paid_out_of_band: true });
+  await entregar(evento("invoice.paid", facturaPagada({ paid_out_of_band: true })));
+  // Un mes después Stripe cobra la renovación siguiente y la tarjeta vuelve a fallar: otra factura, otro ciclo.
+  const siguiente = "in_renovacion_nov";
+  const inicioMes = Date.now() + 31 * DIA;
+  facturasVivas.set(siguiente, { id: siguiente, status: "open" });
+  const rechazo = inicioMes;
+  const r = await entregar(
+    evento("invoice.payment_failed", facturaFallida({ id: siguiente, ...conPeriodo(inicioMes + 31 * DIA, inicioMes - HORA) }), rechazo),
+  );
+  assert.equal(r, 200);
+  assert.equal(clinica().subscriptionStatus, "past_due", "la gracia vuelve a aplicar");
+  assert.equal(clinica().trialEndsAt.getTime(), aSegundos(rechazo) * 1000 + 24 * HORA, "24 h desde ESE rechazo");
+  await nada();
+  assert.equal(correos.length >= 1, true, "y el aviso de «no pudimos cobrar tu plan» sale");
 });

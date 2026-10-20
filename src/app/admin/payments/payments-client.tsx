@@ -17,6 +17,12 @@ import { fechaHoraAdmin } from "@/lib/admin/zona-horaria";
 import { ETIQUETA_VIA_RECARGA } from "@/lib/ai-billing/recargas";
 import type { PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
 import { ROTULO_ACTIVACION_MANUAL, esActivacionManual } from "@/lib/billing/pagos-reales";
+import {
+  AvisoFacturaTarjeta,
+  avisarSiSeMarcoLaFacturaTarjeta,
+  fallóElMarcadoDeLaFacturaTarjeta,
+  type AvisoFacturaTarjetaDatos,
+} from "./aviso-factura-tarjeta";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
@@ -121,6 +127,8 @@ export function PaymentsClient({
 
   // Activate clinic form
   const [activateClinicId, setActivateClinicId] = useState<string | null>(null);
+  // Si al confirmar un pago manual no se pudo marcar la factura de tarjeta como pagada (Stripe no contestó).
+  const [avisoTarjeta, setAvisoTarjeta] = useState<AvisoFacturaTarjetaDatos | null>(null);
   const [activatePlan, setActivatePlan] = useState("PRO");
   const [activateMonths, setActivateMonths] = useState(1);
 
@@ -184,7 +192,11 @@ export function PaymentsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "verify_payment", invoiceId }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Error al verificar");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Error al verificar");
+      const fila = pending.find((p: any) => p.id === invoiceId);
+      if (fallóElMarcadoDeLaFacturaTarjeta(data)) setAvisoTarjeta({ clinicId: fila?.clinicId ?? fila?.clinic?.id, clinicName: fila?.clinic?.name });
+      else avisarSiSeMarcoLaFacturaTarjeta(data);
       setPending(prev => prev.filter((p: any) => p.id !== invoiceId));
       setPayments(prev =>
         prev.map((p: any) => (p.id === invoiceId ? { ...p, status: "paid", paidAt: new Date().toISOString() } : p))
@@ -228,7 +240,11 @@ export function PaymentsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "activate_clinic", clinicId, plan: activatePlan, months: activateMonths }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Error al activar");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Error al activar");
+      if (fallóElMarcadoDeLaFacturaTarjeta(data)) {
+        setAvisoTarjeta({ clinicId, clinicName: overdue.find((c: any) => c.id === clinicId)?.name });
+      } else avisarSiSeMarcoLaFacturaTarjeta(data);
       setOverdue(prev => prev.filter((c: any) => c.id !== clinicId));
       setActivateClinicId(null);
       toast.success("Clinica activada correctamente");
@@ -304,7 +320,9 @@ export function PaymentsClient({
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      const inv = await res.json();
+      const { facturaTarjeta, ...inv } = await res.json();
+      if (fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta })) setAvisoTarjeta({ clinicId: form.clinicId, clinicName: inv.clinic?.name });
+      else avisarSiSeMarcoLaFacturaTarjeta({ facturaTarjeta });
       setPayments(prev => [inv, ...prev]);
       setShowNewPayment(false);
       setForm({ clinicId: "", amount: "", method: "transfer", reference: "", periodStart: "", periodEnd: "", notes: "", paypalEmail: "", paypalRecurring: false });
@@ -436,6 +454,13 @@ export function PaymentsClient({
           </ButtonNew>
         </div>
       </div>
+
+      {/* Aviso: no se pudo marcar la factura de tarjeta como pagada fuera de Stripe (la activación sigue en pie). */}
+      {avisoTarjeta && (
+        <div style={{ marginBottom: 16 }}>
+          <AvisoFacturaTarjeta aviso={avisoTarjeta} onResuelto={() => setAvisoTarjeta(null)} onCerrar={() => setAvisoTarjeta(null)} />
+        </div>
+      )}
 
       {/* ── KPI row ─────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>

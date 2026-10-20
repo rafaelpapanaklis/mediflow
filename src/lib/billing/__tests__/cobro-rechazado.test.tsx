@@ -831,3 +831,40 @@ test("chargeFailureMessage (tras el merge con ws1-t2): un solo texto por caso, s
   assert.doesNotMatch(fuente, /<<<<<<<|>>>>>>>/);
   assert.equal((fuente.match(/Tu banco pidió autenticación del cargo/g) ?? []).length, 1, "un solo texto");
 });
+
+/* ── Decisión #1(a) de Rafael: aviso del admin cuando no se pudo marcar la factura de tarjeta ── */
+
+test("el aviso del admin dice exactamente el mensaje pedido, con «Reintentar», y solo salta cuando FALLÓ el marcado", () => {
+  const { AvisoFacturaTarjeta, MENSAJE_AVISO_FACTURA_TARJETA, fallóElMarcadoDeLaFacturaTarjeta } = require("../../../app/admin/payments/aviso-factura-tarjeta");
+  assert.equal(MENSAJE_AVISO_FACTURA_TARJETA, "No pudimos marcar la factura de tarjeta como pagada; Stripe podría reintentar el cobro. Reintenta o márcala a mano en Stripe.");
+  const html = renderToStaticMarkup(<AvisoFacturaTarjeta aviso={{ clinicId: "c1", clinicName: "BEVADENT" }} onResuelto={() => {}} onCerrar={() => {}} />);
+  assert.match(html, /role="alert"/);
+  assert.match(html, /BEVADENT: /);
+  assert.match(html, /No pudimos marcar la factura de tarjeta como pagada; Stripe podría reintentar el cobro\. Reintenta o márcala a mano en Stripe\./);
+  assert.match(html, /<button[^>]*>.*Reintentar/s);
+  assert.equal(renderToStaticMarkup(<AvisoFacturaTarjeta aviso={null} onResuelto={() => {}} onCerrar={() => {}} />), "");
+  assert.equal(fallóElMarcadoDeLaFacturaTarjeta({ facturaTarjeta: { tipo: "fallo" } }), true);
+  for (const ok of [{ facturaTarjeta: { tipo: "marcadas" } }, { facturaTarjeta: { tipo: "nada" } }, { facturaTarjeta: { tipo: "sin_tarjeta" } }, { facturaTarjeta: null }, null, undefined]) {
+    assert.equal(fallóElMarcadoDeLaFacturaTarjeta(ok as any), false);
+  }
+});
+
+test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al marcado; el aviso sale en /admin › Pagos y en SPEI pendientes", () => {
+  for (const [archivo, marca] of [
+    ["src/app/api/admin/billing/route.ts", "marcarFacturasDeLaClinica(invoice.clinicId)"],
+    ["src/app/api/admin/billing/route.ts", "const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
+    ["src/app/api/admin/subscriptions/route.ts", "marcarFacturasDeLaClinica(clinicId)"],
+    ["src/lib/billing/spei-directo.ts", "marcarFacturasDeLaClinica(sol.clinicId)"],
+    ["src/app/api/webhooks/stripe/route.ts", "if (subscriptionId === null) facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
+  ] as const) {
+    assert.ok(sinComentarios(leer(archivo)).includes(marca), `${archivo}: ${marca}`);
+  }
+  assert.match(sinComentarios(leer("src/app/admin/payments/payments-client.tsx")), /<AvisoFacturaTarjeta aviso=\{avisoTarjeta\}/);
+  assert.match(sinComentarios(leer("src/app/admin/payments/spei-pendientes.tsx")), /<AvisoFacturaTarjeta aviso=\{avisoTarjeta\}/);
+  assert.match(sinComentarios(leer("src/app/api/admin/spei-transferencias/[id]/confirmar/route.ts")), /facturaTarjeta: r\.facturaTarjeta/);
+  // El marcado nunca deshace nada: el helper no lanza y el comentario del contrato lo dice.
+  const h = sinComentarios(leer("src/lib/billing/factura-fuera-de-stripe.server.ts"));
+  assert.match(h, /paid_out_of_band: true/);
+  assert.match(h, /idempotencyKey: claveFueraDeStripe/);
+  assert.doesNotMatch(h, /subscriptions\.(cancel|del|update)/, "la suscripción de tarjeta NUNCA se cancela");
+});
