@@ -80,6 +80,12 @@ interface Escenario {
   pausaCobro?: { behavior: string; resumes_at: number };
   /** La factura del cambio de plan nace ANULADA (cobro en pausa que no se vio). */
   facturaNuevaAnulada?: boolean;
+  /** Estado de cobro que `releerEstadoClinica` devuelve (la clínica cambió mientras «Pagar» esperaba el candado). */
+  estadoReleido?: { subscriptionStatus?: string | null; trialEndsAt?: Date | string | null };
+  /** Qué hace la espera entre intentos del candado (por defecto cede el turno a los demás; así la otra petición avanza). */
+  alEsperar?: () => void | Promise<void>;
+  /** La suscripción ya trae este plan en su metadata (el cambio llegó a Stripe antes). */
+  planEnSuscripcion?: string;
   /** Excedente de CFDI ya sumado «a la próxima mensualidad» (items pendientes del cliente). */
   excedentePendiente?: boolean;
   /** `invoiceItems.list` falla de red. */
@@ -105,7 +111,7 @@ function montar(e: Escenario = {}) {
   const registra = (op: string, ...args: any[]) => llamadas.push({ op, args });
   const facturas = new Map<string, any>((e.abiertas ?? [FACTURA_VIEJA]).map((f) => [f.id, { ...f }]));
   let planLocal: string | null = null;
-  let planSub = e.plan ?? "BASIC"; // el plan que Stripe tiene en la metadata de la suscripción
+  let planSub = e.planEnSuscripcion ?? e.plan ?? "BASIC"; // el plan que Stripe tiene en la metadata de la suscripción
   let fallasAntes = e.updateFallaAntes ?? 0;
   let fallasVoid = e.voidFalla ?? 0;
   let descuentoCliente: any = e.descuentoCliente ?? null; // el que Stripe aplicaría a la factura nueva
@@ -346,6 +352,12 @@ function montar(e: Escenario = {}) {
     auditar: async (ev) => { auditorias.push(ev); },
     avisoSedeIncluida: (n) => `paga ${n}`,
     avisarAlAdmin: async (a) => { avisos.push(a); },
+    // Entre intentos del candado cede el turno (macrotarea): la otra petición, que solo espera promesas, avanza.
+    esperar: async () => {
+      registra("esperar");
+      await (e.alEsperar ? e.alEsperar() : new Promise<void>((r) => setImmediate(r)));
+    },
+    ...(e.estadoReleido ? { releerEstadoClinica: async () => e.estadoReleido! } : {}),
     candado: e.candadoReal
       ? {
           // Como failban: SET NX con caducidad y DUEÑO (aquí en memoria); soltar solo si sigue siendo suyo.
@@ -1527,8 +1539,8 @@ test("V2(a) — «Subir» con el cobro EN PAUSA: bloqueado con mensaje claro (si
   const m = montar({ descuentoCliente: CUPON_CLIENTE, pausaCobro: { behavior: "void", resumes_at: resumes }, candadoReal: true });
   const r = await subirYPagar(m.deps, "PRO");
   assert.equal(r.status, 409);
-  assert.equal(r.body.code, "PAGADO_POR_ADELANTADO");
-  assert.equal(r.body.error, MENSAJES.pagadoPorAdelantado);
+  assert.equal(r.body.code, "COBRO_EN_PAUSA");
+  assert.equal(r.body.error, MENSAJES.cobroEnPausa);
   assert.doesNotMatch(r.body.error as string, /stripe/i);
   assert.match(r.body.error as string, /soporte/);
   for (const op of ["customers.deleteDiscount", "customers.update", "prices.create", "invoices.update", "invoices.voidInvoice", "subscriptions.update"]) {
@@ -1541,7 +1553,7 @@ test("V2(a) — «Subir» con el cobro EN PAUSA: bloqueado con mensaje claro (si
   // El GET no ofrece planes para subir, y lo explica.
   const g = await consultarPendiente(m.deps);
   assert.deepEqual(g.body.opcionesSubir, []);
-  assert.equal(g.body.subirNoDisponible, MENSAJES.pagadoPorAdelantado);
+  assert.equal(g.body.subirNoDisponible, MENSAJES.cobroEnPausa);
   // «Pagar mi plan» no se bloquea: paga la factura abierta tal cual.
   assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
 });
@@ -1557,6 +1569,139 @@ test("V2(a) — red de seguridad: si la factura del cambio NACE ANULADA (pausa n
   assert.ok(m.auditorias.some((x) => x.event === "pago-pendiente-subir-sin-cobro"));
   assert.equal(m.avisos.length, 1);
   assert.match(m.avisos[0].asunto, /SIN cobro/);
+});
+
+// ── Undécima vuelta t4: X2 (candado también en «Pagar»), B2, B1 y M7 ───────────────────────────────────
+
+test("X2 — «Subir» en una pestaña y «Pagar» en otra a la vez: UN solo cobro (nunca los dos), y «Pagar» espera y ve «Tu pago ya se registró»", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
+  const [subir, pagar] = await Promise.all([subirYPagar(m.deps, "PRO"), pagarPendiente(m.deps)]);
+  assert.deepEqual(subir, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(pagar.status, 409);
+  assert.equal(pagar.body.code, "PAGO_YA_REGISTRADO");
+  assert.equal(pagar.body.error, "Tu pago ya se registró.");
+  // Un solo cobro en total: el del cambio de plan (799.24). «Pagar» no cobró nada.
+  assert.equal(m.cobros(), 1);
+  assert.equal(m.cobrosDeTarjeta(), 0);
+  assert.equal(m.ops("invoices.pay").length, 0);
+  assert.ok(m.ops("esperar").length >= 1, "«Pagar» esperó el candado");
+  for (const f of MESES) assert.equal(m.facturas.get(f.id).status, "void", f.id);
+  assert.equal(m.candados.size, 0);
+});
+
+test("X2 — «Pagar» en una pestaña y «Subir» en otra: «Subir» recibe «ya hay un cambio en curso» sin tocar nada; un solo cobro y el plan no sube gratis", async () => {
+  filasFactura.length = 0;
+  const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
+  const [pagar, subir] = await Promise.all([pagarPendiente(m.deps), subirYPagar(m.deps, "PRO")]);
+  assert.deepEqual(pagar, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(subir.status, 409);
+  assert.equal(subir.body.code, "CAMBIO_EN_CURSO");
+  assert.equal(m.cobrosDeTarjeta(), 1); // el de «Pagar»
+  assert.equal(m.cobros(), 0); // «Subir» no cambió el plan ni cobró el plan nuevo
+  assert.equal(m.planSub(), "BASIC");
+  assert.equal(m.planLocal(), null);
+  assert.equal(m.ops("subscriptions.update").filter((l) => l.args[1].metadata).length, 0);
+  assert.equal(m.ops("customers.deleteDiscount").length, 0);
+  assert.equal(m.candados.size, 0);
+});
+
+test("B2 — dos «Pagar» a la vez: un solo cobro y la segunda pestaña ve «Tu pago ya se registró» (no un 502 falso)", async () => {
+  const m = montar({ suspendida: true, abiertas: MESES, candadoReal: true });
+  const [a, b] = await Promise.all([pagarPendiente(m.deps), pagarPendiente(m.deps)]);
+  assert.deepEqual(a, { status: 200, body: { ok: true, pagado: true } });
+  assert.equal(b.status, 409);
+  assert.equal(b.body.code, "PAGO_YA_REGISTRADO");
+  assert.equal(b.body.error, MENSAJES.pagoYaRegistrado);
+  assert.doesNotMatch(JSON.stringify(b.body), /No pudimos completar/);
+  assert.equal(m.cobrosDeTarjeta(), 1);
+  assert.equal(m.reinicios(), 1);
+  assert.equal(m.ops("invoices.pay").length, 1);
+  // Y sin pestañas dobles, «sin pendiente» sigue diciendo lo de siempre.
+  const solo = montar({ abiertas: [], candadoReal: true });
+  const r = await pagarPendiente(solo.deps);
+  assert.deepEqual([r.status, r.body.code], [409, "SIN_PENDIENTE"]);
+});
+
+test("X2 — el candado de «Pagar»: se suelta siempre, no deja pasar a un rol sin permiso, y si sigue tomado tras esperar responde «cambio en curso» sin tocar nada", async () => {
+  const falla = montar({ candadoReal: true, tarjetaFalla: true });
+  assert.equal((await pagarPendiente(falla.deps)).body.pagado, false);
+  assert.equal(falla.candados.size, 0);
+
+  const sinPermiso = montar({ candadoReal: true, role: "DOCTOR" });
+  assert.equal((await pagarPendiente(sinPermiso.deps)).status, 403);
+  assert.equal(sinPermiso.ops("candado.tomar").length, 0);
+
+  const ocupado = montar({ candadoReal: true });
+  ocupado.candados.set(claves.candadoSubir("clin_1"), { hasta: Date.now() + 60_000, dueno: "otro-proceso" });
+  const r = await pagarPendiente(ocupado.deps);
+  assert.deepEqual([r.status, r.body.code], [409, "CAMBIO_EN_CURSO"]);
+  assert.ok(ocupado.ops("esperar").length >= 10, "esperó varios intentos antes de rendirse");
+  assert.equal(ocupado.ops("invoices.pay").length + ocupado.ops("subscriptions.retrieve").length, 0);
+  assert.equal(ocupado.candados.get(claves.candadoSubir("clin_1"))?.dueno, "otro-proceso"); // no soltó el del otro
+  // «Pagar» y «Subir» comparten la MISMA clave.
+  assert.equal(ocupado.ops("candado.tomar")[0].args[0], claves.candadoSubir("clin_1"));
+});
+
+test("X2 — si «Pagar» tuvo que esperar y aún hay una factura abierta, relee el estado de la clínica: si ya no está suspendida no aplica la regla de la suspensión", async () => {
+  filasFactura.length = 0;
+  const clave = claves.candadoSubir("clin_1");
+  const m = montar({
+    suspendida: true,
+    abiertas: MESES,
+    candadoReal: true,
+    estadoReleido: { subscriptionStatus: "active", trialEndsAt: new Date(Date.now() + 20 * 86_400_000) },
+    alEsperar: () => { m.candados.delete(clave); }, // la otra operación termina mientras «Pagar» espera
+  });
+  m.candados.set(clave, { hasta: Date.now() + 60_000, dueno: "otra" });
+  const r = await pagarPendiente(m.deps);
+  assert.equal(r.body.pagado, true);
+  assert.equal(m.cobrosDeTarjeta(), 1);
+  assert.equal(m.auditorias.find((x) => x.event === "pago-pendiente-pagar").estabaSuspendida, false);
+  assert.equal(m.ops("subscriptions.update").length, 0);
+  assert.equal(m.ops("invoices.voidInvoice").length, 0);
+});
+
+test("B1 — «Subir» con el cobro en pausa: el bloqueo va ANTES del atajo «ya está en el plan destino» (no aplica el plan ni quita cupones)", async () => {
+  const resumes = Math.floor(Date.now() / 1000) + 26 * 86_400;
+  const m = montar({
+    planEnSuscripcion: "PRO", // el cambio ya llegó a Stripe (p. ej. tras una subida sin cobro)
+    pausaCobro: { behavior: "void", resumes_at: resumes },
+    descuentoCliente: CUPON_CLIENTE,
+    abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio", billing_reason: "subscription_update" }],
+  });
+  const r = await subirYPagar(m.deps, "PRO");
+  assert.deepEqual([r.status, r.body.code], [409, "COBRO_EN_PAUSA"]);
+  assert.equal(m.planLocal(), null, "el atajo no aplicó el plan");
+  assert.equal(m.ops("customers.deleteDiscount").length, 0, "ni quitó cupones");
+  assert.equal(m.ops("invoices.voidInvoice").length + m.ops("subscriptions.update").length, 0);
+  // Sin pausa, el atajo sigue funcionando como antes.
+  const sinPausa = montar({ planEnSuscripcion: "PRO", abiertas: [{ ...FACTURA_VIEJA, id: "in_cambio" }] });
+  const ok = await subirYPagar(sinPausa.deps, "PRO");
+  assert.equal(ok.status, 200);
+  assert.equal(sinPausa.planLocal(), "PRO");
+});
+
+test("M7 — la pausa que deja reactivar con UN mes (no es un prepago) no se explica con «meses pagados por adelantado»: el texto es verdadero en los dos casos", async () => {
+  // La pausa de un solo mes tras una suspensión: ~26 días, la deja la propia regla de la suspensión.
+  const m = montar({ suspendida: true, abiertas: MESES });
+  assert.equal((await pagarPendiente(m.deps)).body.pagado, true);
+  const pausaReal = m.pausa();
+  assert.equal(pausaReal.behavior, "void");
+  // Un cobro rechazado posterior con esa pausa puesta: «Subir» se bloquea y lo dice sin falsedades.
+  const despues = montar({ pausaCobro: pausaReal });
+  const r = await subirYPagar(despues.deps, "PRO");
+  assert.equal(r.status, 409);
+  const texto = r.body.error as string;
+  assert.doesNotMatch(texto, /adelantado|prepag/i);
+  assert.match(texto, /ya está pagado/);
+  assert.match(texto, /soporte/);
+  assert.doesNotMatch(texto, /stripe/i);
+  // El GET no ofrece planes y da el mismo texto.
+  const g = await consultarPendiente(despues.deps);
+  assert.deepEqual(g.body.opcionesSubir, []);
+  assert.equal(g.body.subirNoDisponible, texto);
+  assert.doesNotMatch(MENSAJES.cobroEnPausa, /adelantado|prepag/i);
 });
 
 // ── N4 (segunda vuelta t4): nada de «Stripe», inglés ni jerga en lo que lee la clínica ──

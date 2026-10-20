@@ -104,7 +104,12 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
       }).catch(() => {});
     },
     avisoSedeIncluida,
-    // Candado por clínica de «subir»: failban (Upstash, o memoria de la instancia), con caducidad.
+    esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
+    releerEstadoClinica: async () => {
+      const c = await prisma.clinic.findUnique({ where: { id: clinic.id }, select: { subscriptionStatus: true, trialEndsAt: true } });
+      return c ?? {};
+    },
+    // Candado por clínica de «Pagar» y «Subir»: failban (Upstash, o memoria de la instancia), con caducidad.
     candado: {
       tomar: async (clave, ttlSec, dueno) => (await import("@/lib/failban")).acquireLock(clave, ttlSec, dueno),
       soltar: async (clave, dueno) => (await import("@/lib/failban")).releaseLock(clave, dueno),

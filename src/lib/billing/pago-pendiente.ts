@@ -292,7 +292,10 @@ export const MENSAJES = {
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
   stripeNoContesto: MENSAJES_CHECKOUT.proveedorNoContesto,
   cambioEnCurso: "Ya hay un cambio de plan en curso, espera unos segundos.",
-  pagadoPorAdelantado: "Tienes meses pagados por adelantado, así que no podemos cambiarte de plan desde aquí. Escríbenos a soporte y lo hacemos contigo.",
+  // Verdadero en los dos casos en que el cobro está en pausa: meses pagados por adelantado, o el mes que se pagó al
+  // reactivarse tras una suspensión (revisión t4, M7). No dice «por adelantado».
+  cobroEnPausa: "Tu plan ya está pagado por ahora, así que no podemos cambiártelo desde aquí. Escríbenos a soporte y lo hacemos contigo.",
+  pagoYaRegistrado: "Tu pago ya se registró.",
   subidaSinCobro: "No pudimos completar el cobro del cambio de plan. Escríbenos a soporte y lo revisamos contigo.",
   facturaNoSePuedePagar: "Esta factura ya no se puede pagar. Recarga la página para ver tu estado actual.",
   noHayUrl: MENSAJES_CHECKOUT.noPudimosAbrirPago,
