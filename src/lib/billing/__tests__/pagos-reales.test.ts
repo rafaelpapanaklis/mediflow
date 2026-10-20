@@ -229,6 +229,8 @@ const PERMITIDAS: Array<{ archivo: string; funcion: string; max: number; razon: 
   { archivo: "src/app/admin/payments/page.tsx", funcion: "renderPaymentsPage", max: 3, razon: "listas de /admin › Pagos (recientes, sin cobrar, pendientes): se ven, rotuladas" },
   { archivo: "src/app/admin/payments/[id]/cfdi/page.tsx", funcion: "CfdiPaymentPage", max: 1, razon: "una fila por id" },
   { archivo: "src/app/api/webhooks/stripe/route.ts", funcion: "pagoManualCubre", max: 1, razon: "el webhook la lee a propósito: es el rastro" },
+  { archivo: "src/lib/billing/factura-fuera-de-stripe.server.ts", funcion: "ultimoPagoManualDelPlan", max: 1, razon: "lee a propósito el último pago MANUAL (incluida la activación) para cortar las facturas que ya existían" },
+  { archivo: "src/lib/billing/facturas-tarjeta-pendientes.server.ts", funcion: "clinicasConFacturaPendienteTrasPagoManual", max: 1, razon: "lee a propósito los pagos MANUALES recientes (incluida la activación) para el aviso y el reintento" },
   { archivo: "src/app/api/cfdi/usage/route.ts", funcion: "GET", max: 1, razon: "adeudos de excedente de CFDI (method cfdi_overage)" },
   { archivo: "src/app/api/admin/subscriptions/route.ts", funcion: "GET", max: 1, razon: "lista de pagos del admin: se ve, rotulada" },
   { archivo: "src/app/api/admin/billing/route.ts", funcion: "GET", max: 2, razon: "pagos recientes (se ven, rotulados) y transferencias pendientes" },

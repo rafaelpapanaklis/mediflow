@@ -54,9 +54,11 @@ import {
   eraClinicaPagadora,
   esDeLaSuscripcionDelPlan,
   inicioDeNuevoPeriodo,
+  METODO_ACTIVACION_ADMIN,
   METODOS_DE_PAGO_MANUAL_DEL_PLAN,
   motivoParaNoSuspender,
   pagoManualCubreLaFactura,
+  trialEndsAtSinRetroceder,
 } from "@/lib/billing/cobro-rechazado";
 import { PLAN_MARKETING } from "@/lib/plan-shared";
 import { isPaymentFailed } from "@/lib/plan-status";
@@ -356,7 +358,7 @@ export async function POST(req: NextRequest) {
           const estadoVivo: string | null = suscripcionViva?.status ?? null;
           const antes = await prisma.clinic.findUnique({
             where: { id: clinicId },
-            select: { subscriptionStatus: true, stripeSubscriptionId: true },
+            select: { subscriptionStatus: true, stripeSubscriptionId: true, trialEndsAt: true },
           });
           // Cobro rechazado + un «active» del evento que no se pudo contrastar con Stripe: no se adivina.
           // Se responde 5xx y Stripe reintenta el evento (si no, un «active» viejo regalaría el periodo).
@@ -390,6 +392,9 @@ export async function POST(req: NextRequest) {
             ...(suscripcionViva ?? sub),
             status: estadoEfectivoDeSuscripcion({ evento: sub.status, vivo: estadoVivo }),
           });
+          // Nunca por debajo de lo que ya tiene la clínica: al marcar una factura pagada fuera de Stripe, Stripe manda un
+          // `updated` → active, y el fin de SU ciclo recortaba un pago manual de varios meses.
+          const trialEndsAtFinal = trialEndsAtSinRetroceder(periodFields.trialEndsAt, antes?.trialEndsAt);
           await prisma.clinic.update({
             where: { id: clinicId },
             data: {
@@ -397,6 +402,7 @@ export async function POST(req: NextRequest) {
               ...(estadoNuevo !== undefined ? { subscriptionStatus: estadoNuevo } : {}),
               subscriptionId:       sub.id,
               ...periodFields,
+              ...(trialEndsAtFinal ? { trialEndsAt: trialEndsAtFinal } : {}),
               ...subPlanFields,
             },
           });
@@ -413,8 +419,8 @@ export async function POST(req: NextRequest) {
               ...(periodFields.nextBillingDate
                 ? { nextBillingDate: { before: null, after: periodFields.nextBillingDate } }
                 : {}),
-              ...(periodFields.trialEndsAt
-                ? { trialEndsAt: { before: null, after: periodFields.trialEndsAt } }
+              ...(trialEndsAtFinal
+                ? { trialEndsAt: { before: null, after: trialEndsAtFinal } }
                 : {}),
               _source: { before: null, after: { event: event.type, subscriptionId: sub.id } },
             },
@@ -638,7 +644,7 @@ export async function POST(req: NextRequest) {
         if (clinic && (await esFacturaFueraDeStripe(stripe, invoice))) {
           await reactivarSiStripeYaCobro(stripe, invoice, clinic);
           await prisma.subscriptionInvoice.updateMany({
-            where: { reference: invoiceId, status: { in: ["failed", "pending"] } },
+            where: { clinicId: clinic.id, reference: invoiceId, status: { in: ["failed", "pending"] } },
             data: { status: "void", notes: "Pagada fuera de Stripe (pago manual confirmado)" },
           });
           await logAudit({
@@ -1071,19 +1077,15 @@ async function reactivarSiStripeYaCobro(
 
 /**
  * ¿Esta factura se pagó FUERA de Stripe (`paid_out_of_band`)? El evento la trae según la versión de API del webhook;
- * si no trae el campo se lee la factura con la versión fija de nuestro cliente. Si Stripe no contesta se asume que NO
- * (se procesa como siempre y queda el aviso en el log): un reintento infinito del evento sería peor.
+ * si no trae el campo se lee la factura con la versión fija de nuestro cliente. Si Stripe no contesta se LANZA el error
+ * (5xx → Stripe reintenta el evento, igual que `estadoVivoDeFactura`): asumir «no» registraría el cobro de tarjeta de una
+ * factura que se pagó a mano, duplicando el ingreso, la comisión y el correo.
  */
 async function esFacturaFueraDeStripe(stripe: Stripe, invoice: Stripe.Invoice): Promise<boolean> {
   const enEvento = (invoice as { paid_out_of_band?: boolean | null }).paid_out_of_band;
   if (typeof enEvento === "boolean") return enEvento;
   if (!invoice.id) return false;
-  try {
-    return (await stripe.invoices.retrieve(invoice.id) as { paid_out_of_band?: boolean | null }).paid_out_of_band === true;
-  } catch (e) {
-    console.warn("[stripe webhook] no se pudo leer paid_out_of_band de", invoice.id, (e as Error)?.message ?? e);
-    return false;
-  }
+  return ((await stripe.invoices.retrieve(invoice.id)) as { paid_out_of_band?: boolean | null }).paid_out_of_band === true;
 }
 
 /**
@@ -1335,7 +1337,33 @@ async function activatePlatformSubscription(
   // tarjeta viva con la factura del plan abierta o incobrable, esa factura queda pagada fuera de Stripe para que no la
   // reintente. No lanza ni deshace la activación; si falla, queda en la bitácora.
   let facturaTarjeta: Awaited<ReturnType<typeof marcarFacturasDeLaClinica>> | null = null;
-  if (subscriptionId === null) facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+  if (subscriptionId === null) {
+    facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);
+    // Con suscripción de tarjeta de por medio, este pago único no deja ninguna fila de pago manual: sin ella, si el
+    // marcado falló y el reintento de Stripe vuelve a fallar dentro de la gracia, la clínica que pagó se suspendería, y
+    // el aviso persistente de /admin no la vería. Se deja el mismo rastro de $0 que la activación de /admin (el pago real
+    // ya lo cuenta Stripe; esta fila no suma ingresos ni comisiones, ver pagos-reales).
+    if (facturaTarjeta.tipo !== "sin_tarjeta") {
+      await prisma.subscriptionInvoice
+        .create({
+          data: {
+            clinicId,
+            amount: 0,
+            currency: "MXN",
+            status: "paid",
+            method: METODO_ACTIVACION_ADMIN,
+            reference: source.sessionId ? `pago-unico:${source.sessionId}` : undefined,
+            periodStart: new Date(),
+            periodEnd: next,
+            paidAt: new Date(),
+            notes: "Pago único de Stripe (SPEI/OXXO) acreditado · rastro para la factura de tarjeta (sin cobro registrado aquí)",
+          },
+        })
+        .catch((e: { code?: string }) => {
+          if (e?.code !== "P2002") console.error("[stripe webhook] no se pudo dejar el rastro del pago único:", e);
+        });
+    }
+  }
 
   await logAudit({
     clinicId,

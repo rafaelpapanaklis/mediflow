@@ -27,8 +27,10 @@ import {
   inicioDeNuevoPeriodo,
   METODOS_DE_PAGO_MANUAL_DEL_PLAN,
   METODO_ACTIVACION_ADMIN,
+  esPagoManualDelPlan,
   motivoParaNoSuspender,
   pagoManualCubreLaFactura,
+  trialEndsAtSinRetroceder,
 } from "../cobro-rechazado";
 import {
   getPlanStatus,
@@ -855,7 +857,7 @@ test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al mar
     ["src/app/api/admin/billing/route.ts", "const facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
     ["src/app/api/admin/subscriptions/route.ts", "marcarFacturasDeLaClinica(clinicId)"],
     ["src/lib/billing/spei-directo.ts", "marcarFacturasDeLaClinica(sol.clinicId)"],
-    ["src/app/api/webhooks/stripe/route.ts", "if (subscriptionId === null) facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
+    ["src/app/api/webhooks/stripe/route.ts", "facturaTarjeta = await marcarFacturasDeLaClinica(clinicId);"],
   ] as const) {
     assert.ok(sinComentarios(leer(archivo)).includes(marca), `${archivo}: ${marca}`);
   }
@@ -867,4 +869,42 @@ test("las cuatro confirmaciones de pago manual y el SPEI de Stripe llaman al mar
   assert.match(h, /paid_out_of_band: true/);
   assert.match(h, /idempotencyKey: claveFueraDeStripe/);
   assert.doesNotMatch(h, /subscriptions\.(cancel|del|update)/, "la suscripción de tarjeta NUNCA se cancela");
+});
+
+/* ── Quinta vuelta (t4): puro y pantallas ──────────────────────────────── */
+
+test("Q2/Q3 reglas puras: el acceso del `updated` nunca baja; solo un pago manual DEL PLAN marca la factura", () => {
+  const a = new Date("2026-11-19T00:00:00.000Z");
+  const b = new Date("2027-01-19T00:00:00.000Z");
+  assert.equal(trialEndsAtSinRetroceder(a, b)?.getTime(), b.getTime(), "acceso manual mayor: se queda");
+  assert.equal(trialEndsAtSinRetroceder(b, a)?.getTime(), b.getTime(), "periodo de Stripe mayor: manda");
+  assert.equal(trialEndsAtSinRetroceder(a, null)?.getTime(), a.getTime());
+  assert.equal(trialEndsAtSinRetroceder(undefined, b), undefined, "sin periodo no se toca nada");
+  for (const m of [null, undefined, "transfer", "deposit", "oxxo", "paypal", "cash", "admin"]) assert.equal(esPagoManualDelPlan(m), true, String(m));
+  for (const m of ["stripe", "cfdi_overage", "mercadopago", "otra"]) assert.equal(esPagoManualDelPlan(m), false, m);
+  const w = sinComentarios(leer("src/app/api/webhooks/stripe/route.ts"));
+  assert.match(w, /trialEndsAtSinRetroceder\(periodFields\.trialEndsAt, antes\?\.trialEndsAt\)/);
+  const f = w.slice(w.indexOf("async function esFacturaFueraDeStripe"), w.indexOf("async function estadoVivoDeFactura"));
+  assert.doesNotMatch(f, /catch/, "Q5: si Stripe no contesta, lanza (5xx → reintento)");
+  assert.match(w, /where: \{ clinicId: clinic\.id, reference: invoiceId, status: \{ in: \["failed", "pending"\] \} \}/);
+  const adm = sinComentarios(leer("src/app/api/admin/billing/route.ts"));
+  assert.match(adm, /if \(invoice\.method === CFDI_OVERAGE_METHOD\) \{/);
+  assert.match(adm, /esPagoManualDelPlan\(invoice\.method\) \? await marcarFacturasDeLaClinica/);
+});
+
+test("Q6 el aviso persistente de /admin › Pagos: título pedido, una fila por clínica con «Reintentar», nada si no hay", () => {
+  const { FacturasTarjetaPendientes, TITULO_FACTURAS_TARJETA_PENDIENTES } = require("../../../app/admin/payments/facturas-tarjeta-pendientes");
+  assert.equal(TITULO_FACTURAS_TARJETA_PENDIENTES, "Clínicas con la tarjeta viva y una factura del plan abierta después de un pago manual");
+  const html = renderToStaticMarkup(<FacturasTarjetaPendientes items={[{ clinicId: "c1", clinicName: "BEVADENT", pagoManualEn: "2026-10-18T12:00:00.000Z", facturas: ["in_1"] }]} />);
+  assert.match(html, /role="alert"/);
+  assert.match(html, /Clínicas con la tarjeta viva y una factura del plan abierta después de un pago manual \(1\)/);
+  assert.match(html, /BEVADENT/);
+  assert.match(html, /in_1/);
+  assert.match(html, /<button[^>]*>.*Reintentar/s);
+  assert.equal(renderToStaticMarkup(<FacturasTarjetaPendientes items={[]} />), "");
+  const p = sinComentarios(leer("src/app/admin/payments/page.tsx"));
+  assert.match(p, /<FacturasTarjetaPendientes items=\{JSON\.parse\(JSON\.stringify\(facturasTarjetaPendientes\)\)\} \/>/);
+  assert.match(p, /safe\(clinicasConFacturaPendienteTrasPagoManual\(\), \[\]\)/);
+  // El cron diario de vencimiento lo reintenta solo.
+  assert.match(sinComentarios(leer("src/app/api/cron/subscription-lapse/route.ts")), /const facturasTarjeta = await reintentarMarcadoPendiente\(\);/);
 });

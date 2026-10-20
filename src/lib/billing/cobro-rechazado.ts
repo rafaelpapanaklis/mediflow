@@ -142,6 +142,31 @@ export function inicioDeNuevoPeriodo(args: {
  */
 export const METODOS_DE_PAGO_MANUAL_DEL_PLAN = ["transfer", "deposit", "oxxo", "paypal", "cash", "admin"] as const;
 
+/**
+ * ¿Un pago con este `method` es un pago MANUAL DEL PLAN? Solo esos pueden dar por pagada la factura de tarjeta del
+ * plan. Un `method` nulo cuenta (pago sin método capturado); `stripe` (ya se cobró en Stripe) y `cfdi_overage` (el
+ * excedente de CFDI no paga el plan) no.
+ */
+export function esPagoManualDelPlan(method: string | null | undefined): boolean {
+  if (method === null || method === undefined) return true;
+  return (METODOS_DE_PAGO_MANUAL_DEL_PLAN as readonly string[]).includes(method);
+}
+
+/**
+ * El «acceso hasta» que escribe un `customer.subscription.updated` que concede periodo (active / trialing): el fin del
+ * periodo de Stripe, pero NUNCA por debajo de lo que ya tiene la clínica. Al marcar una factura pagada fuera de Stripe,
+ * Stripe pasa la suscripción a `active` y manda ese evento: sin esto recortaba un pago manual de varios meses al fin del
+ * ciclo de Stripe (misma regla que `manualPeriodFields`: nunca hacia atrás).
+ */
+export function trialEndsAtSinRetroceder(
+  nuevo: Date | undefined,
+  actual: Date | string | null | undefined,
+): Date | undefined {
+  if (!nuevo) return undefined;
+  const d = aFecha(actual);
+  return d && d.getTime() > nuevo.getTime() ? d : nuevo;
+}
+
 /** `method` de la fila que deja la activación manual de /admin (`activate_clinic`): es su rastro para el webhook. */
 export const METODO_ACTIVACION_ADMIN = "admin";
 
