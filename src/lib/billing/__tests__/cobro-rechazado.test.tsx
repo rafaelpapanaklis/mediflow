@@ -977,11 +977,13 @@ describe("Q1 pagadoHastaPorPrepago", () => {
 test("Q1 el aviso de SPEI pendiente es verdad en los dos casos: 1 mes (la tarjeta se cobra el mes siguiente) y un año (el cobro se pausa)", () => {
   const { textoTarjetaViva } = require("../../../app/admin/payments/spei-pendientes");
   const mensual = textoTarjetaViva(false);
-  assert.match(mensual, /el mes siguiente se cobra la tarjeta como siempre/);
+  assert.match(mensual, /la tarjeta se cobra en su fecha de siempre/);
+  assert.doesNotMatch(mensual, /mes siguiente/);
   assert.doesNotMatch(mensual, /PAUSA/);
   const anual = textoTarjetaViva(true);
   assert.match(anual, /PAUSA hasta que termine lo prepagado/);
   assert.doesNotMatch(anual, /mes siguiente se cobra/);
+  assert.match(anual, /puede diferir unos días/);
   // Octava vuelta: ya no existe «adeudo» de meses suspendidos; se dice que sus facturas se anulan.
   for (const t of [mensual, anual]) {
     assert.match(t, /NO se cancela/);

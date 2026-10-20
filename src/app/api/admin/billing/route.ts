@@ -9,7 +9,7 @@ import { getAdminMrr } from "@/lib/admin/mrr";
 import { isAdminAuthed, getAdminSession } from "@/lib/admin-auth";
 import { logAdminClinicMutation } from "@/lib/admin-audit";
 import { manualPeriodFields } from "@/lib/billing/proration";
-import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, clinicaEstabaSuspendida, esPagoManualDelPlan } from "@/lib/billing/cobro-rechazado";
+import { METODOS_DE_PAGO_MANUAL_DEL_PLAN, METODO_ACTIVACION_ADMIN, clinicaEstabaSuspendida, esPagoManualDelPlan, finDeLoPagado, mesesDeUnPeriodo } from "@/lib/billing/cobro-rechazado";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import { CFDI_OVERAGE_METHOD } from "@/lib/cfdi-overage";
 import { marcarFacturasDeLaClinica } from "@/lib/billing/factura-fuera-de-stripe.server";
@@ -144,8 +144,11 @@ export async function POST(req: NextRequest) {
     // gate) se mueve JUNTO con nextBillingDate: antes se quedaba como estaba y
     // /admin pintaba "vencida" a una clínica recién verificada. Nunca acorta
     // una cortesía anterior (ver manualPeriodFields).
-    const nextBilling = new Date();
-    nextBilling.setMonth(nextBilling.getMonth() + 1);
+    // El acceso cubre el PERIODO de la fila (1 mes, 3, 12…) contado desde la verificación —el día y hora en que se
+    // confirma el pago—, no un mes fijo (décima vuelta de t4, V5). Si la fila trae un periodo ya pasado (se verifica tarde),
+    // cuenta igual su duración desde hoy, nunca una fecha vencida.
+    const mesesPagados = mesesDeUnPeriodo(invoice.periodStart, invoice.periodEnd);
+    const nextBilling = finDeLoPagado(new Date(), mesesPagados);
     const current = await prisma.clinic.findUnique({
       where: { id: invoice.clinicId },
       select: { trialEndsAt: true, subscriptionStatus: true },

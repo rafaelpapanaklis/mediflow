@@ -46,7 +46,7 @@ const DIAS_DE_VENTANA = 60;
 const TOPE_CLINICAS = 100;
 
 export async function clinicasConFacturaPendienteTrasPagoManual(
-  opciones: { stripe?: Pick<Stripe, "subscriptions" | "invoices"> | null; ahora?: Date } = {},
+  opciones: { stripe?: Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems"> | null; ahora?: Date } = {},
 ): Promise<ClinicaConFacturaPendiente[]> {
   const stripe = opciones.stripe === undefined ? getStripeSafe() : opciones.stripe;
   if (!stripe) return [];
@@ -129,7 +129,7 @@ export interface ResumenReintento {
  * anula las de meses suspendidos, re-alinea el ciclo y pausa el cobro si lo prepagado rebasa el ciclo. Nunca lanza.
  */
 export async function reintentarMarcadoPendiente(
-  opciones: { stripe?: Pick<Stripe, "subscriptions" | "invoices"> | null; ahora?: Date } = {},
+  opciones: { stripe?: Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems"> | null; ahora?: Date } = {},
 ): Promise<ResumenReintento> {
   const resumen: ResumenReintento = { revisadas: 0, marcadas: [], anuladas: [], fallos: [] };
   try {

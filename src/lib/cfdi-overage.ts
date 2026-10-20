@@ -87,11 +87,50 @@ export async function resolveOverageBilling(clinic: {
     if (interval === "year") {
       return { mode: "annual_card", customerId, paymentMethodId, subscriptionId: sub.id };
     }
+    // Meses prepagados (`pause_collection`): con la pausa en `void` Stripe anula las facturas de la mensualidad y el
+    // InvoiceItem del excedente se perdería con ellas. Se cobra como adeudo manual `cfdi_overage` (décima vuelta de t4, V3).
+    if (sub.pause_collection) return base;
     // month (o cualquier otro intervalo recurrente) → InvoiceItem en la mensualidad.
     return { mode: "monthly_sub", customerId, paymentMethodId, subscriptionId: sub.id };
   } catch {
     return base;
   }
+}
+
+/**
+ * Antes de pausar el cobro de una suscripción (o de reiniciar su ciclo) los InvoiceItems PENDIENTES del cliente —el
+ * excedente de CFDI que ya se había sumado «a la próxima mensualidad»— se pasan a una factura APARTE que se cobra sola:
+ * si no, quedarían en la primera factura que nace durante la pausa, que se anula, y el excedente se perdería (V3). No se
+ * borra nada: el item solo cambia de factura. Solo toma los items sueltos del cliente o de ESTA suscripción (los de otra,
+ * p. ej. un módulo, no son de aquí). Devuelve el id de la factura aparte, o null si no había nada pendiente. Lanza si
+ * Stripe falla (quien llama no debe pausar entonces).
+ */
+export async function cobrarAparteExcedentePendiente(
+  stripe: Pick<Stripe, "invoiceItems" | "invoices">,
+  customerId: string,
+  subscriptionId: string,
+): Promise<string | null> {
+  const pendientes = await stripe.invoiceItems.list({ customer: customerId, pending: true, limit: 100 });
+  const mios = pendientes.data
+    .filter((i) => {
+      const s = (i as { subscription?: string | { id?: string } | null }).subscription;
+      const sid = typeof s === "string" ? s : s?.id ?? null;
+      return sid === null || sid === subscriptionId;
+    })
+    .map((i) => i.id)
+    .sort();
+  if (mios.length === 0) return null;
+  const factura = await stripe.invoices.create(
+    {
+      customer: customerId,
+      auto_advance: true,
+      collection_method: "charge_automatically",
+      pending_invoice_items_behavior: "include",
+      metadata: { kind: "cfdi-overage-aparte" },
+    },
+    { idempotencyKey: `excedente-aparte:${customerId}:${mios.join(",")}` },
+  );
+  return factura.id ?? null;
 }
 
 export interface OffSessionResult {

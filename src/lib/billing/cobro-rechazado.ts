@@ -248,6 +248,27 @@ export function reanudarCobroTrasRealinear(finDeLoPagado: Date): Date {
   return new Date(finDeLoPagado.getTime() - MARGEN_REANUDACION_DIAS * DIA_MS);
 }
 
+/** Cuántos MESES cubre un pago manual registrado con su periodo (mínimo 1). 45 días cuentan como 1; 1 año, 12. */
+export function mesesDeUnPeriodo(inicio: Date | string, fin: Date | string): number {
+  const a = aFecha(inicio);
+  const b = aFecha(fin);
+  if (!a || !b) return 1;
+  return Math.max(1, Math.round((b.getTime() - a.getTime()) / (30.44 * DIA_MS)));
+}
+
+/**
+ * Cambiar de plan con el cobro de la tarjeta PAUSADO (`pause_collection`, meses prepagados) no puede hacerse en
+ * autoservicio: con la pausa en `void` Stripe anula toda factura que nazca, incluida la del prorrateo, y el plan nuevo
+ * quedaría aplicado sin cobrarse (décima vuelta de t4, V2). Se bloquea con este texto (sin nombrar al proveedor de pagos).
+ */
+export const MENSAJE_PLAN_PREPAGADO =
+  "Tienes meses pagados por adelantado. Para cambiar de plan escríbenos a soporte@dalecontrol.com y lo hacemos contigo, para no cobrarte de más ni de menos.";
+
+/** ¿El cobro de esta suscripción de tarjeta está pausado por un prepago? (`sub.pause_collection`). */
+export function cobroPausado(sub: { pause_collection?: { behavior?: string | null } | null } | null | undefined): boolean {
+  return !!sub?.pause_collection;
+}
+
 /** Tolerancia al alinear el prepago con los ciclos de Stripe: una renovación se salta si la mayor parte de su periodo ya estaba pagada. */
 const TOLERANCIA_PREPAGO_MS = 16 * DIA_MS;
 
@@ -264,8 +285,13 @@ const TOLERANCIA_PREPAGO_MS = 16 * DIA_MS;
  *   · cada renovación posterior (P, P+1 mes, P+2…) se salta mientras su periodo quede cubierto por el prepago
  *     (`finPrepago`, con 16 días de tolerancia por el desfase entre el ciclo de Stripe y la fecha del pago manual);
  *   · se reanuda un día ANTES de la primera renovación que sí se cobra, para que esa se cobre.
- * Un pago de 1 mes tarde (ciclo cubierto por la factura marcada) no pausa nada: el mes siguiente se cobra como siempre.
+ * Un pago de 1 mes cuyo ciclo ya cubre la factura marcada no pausa nada y el ciclo sigue igual.
  * Solo para suscripciones mensuales.
+ *
+ * ⚠️ Es una aproximación al ciclo MÁS CERCANO (el ancla de Stripe no se mueve): el primer cobro cae entre 14 días antes y 16
+ * después del fin de lo prepagado. Antes: se cobra un tramo ya pagado (hasta ~14 días). Después: la suscripción sigue `active`,
+ * así que la clínica conserva el acceso esos días sin que se le cobre. Solo se usa cuando la clínica NO estaba suspendida
+ * (p. ej. prepagar con la tarjeta al corriente); tras una suspensión el ciclo se re-alinea EXACTO (reactivacion-tras-suspension).
  */
 export function reanudarCobroDespuesDelPrepago(args: {
   finDelPeriodoStripe: Date;

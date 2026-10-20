@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { NOTA_SERVICIO_SUSPENDIDO, reanudarCobroTrasRealinear } from "@/lib/billing/cobro-rechazado";
 import { subscriptionItemInterval } from "@/lib/billing/proration";
+import { cobrarAparteExcedentePendiente } from "@/lib/cfdi-overage";
 
 /**
  * PAGO TRAS UNA SUSPENSIÓN POR FALTA DE PAGO (ws1-t1, octava vuelta — corrección de Q4 de Rafael).
@@ -38,13 +39,15 @@ import { subscriptionItemInterval } from "@/lib/billing/proration";
  * llama: devuelve los fallos para que el admin vea el aviso con «Reintentar». Nunca borra ni cancela nada.
  */
 
-export type StripeParaSuspension = Pick<Stripe, "subscriptions" | "invoices">;
+export type StripeParaSuspension = Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">;
 
 /** Las facturas que de verdad son el cobro del plan; un prorrateo (subscription_update) no se toca. */
 export const MOTIVOS_DEL_PLAN = new Set(["subscription_cycle", "subscription_create"]);
 
 export const MENSAJE_FALLO_ANULAR =
   "No pudimos anular en Stripe las facturas de los meses sin servicio; Stripe podría cobrarlas. Reintenta o anúlalas a mano en Stripe.";
+export const MENSAJE_FALLO_EXCEDENTE =
+  "No pudimos separar el excedente de facturas CFDI antes de mover el cobro de la tarjeta; se perdería en una factura anulada. Reintenta.";
 export const MENSAJE_FALLO_REALINEAR =
   "No pudimos mover el siguiente cobro de la tarjeta a la nueva fecha; Stripe podría cobrar antes de tiempo. Reintenta o ajústalo a mano en Stripe.";
 export function mensajeCobroInesperado(facturaId: string): string {
@@ -161,7 +164,7 @@ export type ResultadoRealineo =
  * `finDeLoPagado`: hasta cuándo quedó pagada la clínica (hoy + N meses desde el pago).
  */
 export async function realinearCiclo(
-  stripe: Pick<Stripe, "subscriptions">,
+  stripe: Pick<Stripe, "subscriptions" | "invoices" | "invoiceItems">,
   sub: Stripe.Subscription,
   args: { pagadoEn: Date; finDeLoPagado: Date },
 ): Promise<ResultadoRealineo> {
@@ -173,6 +176,14 @@ export async function realinearCiclo(
   const yaHasta = sub.pause_collection?.resumes_at ?? 0;
   if (sub.pause_collection && yaHasta >= reanuda - 86_400) return { tipo: "ya_estaba", hasta: new Date(yaHasta * 1000).toISOString() };
   try {
+    // El excedente de CFDI ya sumado a «la próxima mensualidad» se pasa a su propia factura: la que nace al reiniciar el
+    // ancla se anula y se lo llevaría (V3).
+    try {
+      await cobrarAparteExcedentePendiente(stripe, typeof sub.customer === "string" ? sub.customer : sub.customer.id, sub.id);
+    } catch (err) {
+      console.error("[reactivacion-tras-suspension] no se pudo separar el excedente de CFDI:", sub.id, (err as Error)?.message ?? err);
+      return { tipo: "fallo", mensaje: MENSAJE_FALLO_EXCEDENTE };
+    }
     const actualizada = await stripe.subscriptions.update(
       sub.id,
       {
