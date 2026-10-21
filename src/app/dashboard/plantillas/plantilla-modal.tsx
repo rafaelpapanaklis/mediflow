@@ -7,6 +7,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { MAX_NAME_LENGTH, type DocumentTemplateKindValue } from "@/lib/document-templates/kinds";
 import { marcadoresPara } from "@/lib/document-templates/markers";
 import { HOJA_CARTA, PPP } from "@/lib/documentos/hoja-carta";
+import { subirImagenDocumento } from "@/lib/documentos/subir-imagen.client";
 import {
   EditorDocumento, type EditorDocumentoApi, type EstadoEditor, type MarcadorEditor, type MembreteDocumento,
 } from "@/components/dashboard/editor-documento";
@@ -113,6 +114,9 @@ export function PlantillaModal({ kind, editing, membrete, onClose, onSaved, mens
   useEffect(() => {
     if (!editing) nombreRef.current?.focus();
   }, [editing]);
+
+  // Estable entre renders: el editor la guarda en una ref y no hace falta remontarlo.
+  const subirImagen = useCallback((archivo: File) => subirImagenDocumento(archivo), []);
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -233,7 +237,8 @@ export function PlantillaModal({ kind, editing, membrete, onClose, onSaved, mens
               alListo={(a) => {
                 api.current = a;
               }}
-              // P4 (ws1-t6) conecta aquí la subida real (`onSubirImagen`); sin ella el botón de imagen no sale.
+              // P4: comprime en el navegador (o sube el original) y devuelve la clave; la imagen se guarda por ella.
+              onSubirImagen={subirImagen}
               desactivado={saving}
               autoFoco={Boolean(editing)}
               idEtiqueta="plantilla-editor-label"

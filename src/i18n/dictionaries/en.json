@@ -10886,7 +10886,12 @@
       "tipoNoValido": "Only JPG, PNG, WebP or HEIC images are accepted.",
       "demasiadoGrande": "The image is larger than {mb} MB.",
       "tope": "This document already has {n} images, which is the maximum.",
-      "errorSubida": "The image could not be uploaded. Try again."
+      "errorSubida": "The image could not be uploaded. Try again.",
+      "heicNoLegible": "This browser can't open HEIC photos. Upload it from the iPhone or Safari, or save it as JPG.",
+      "noSePudoLeer": "We couldn't read that image. It may be damaged; save it again as JPG or PNG.",
+      "demasiadosPixeles": "The image has too many pixels. Make it smaller and try again.",
+      "sesion": "Your session ended. Sign in again and try once more.",
+      "red": "The connection dropped. Try again."
     },
     "firma": {
       "titulo": "Signature line",

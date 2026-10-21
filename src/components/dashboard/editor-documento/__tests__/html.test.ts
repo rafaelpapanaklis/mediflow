@@ -156,3 +156,40 @@ test("texto plano pegado: cada renglón es un párrafo y el HTML se escapa", () 
   assert.equal(textoPlanoAHtml("uno\r\n\r\ndos <b>"), "<p>uno</p><p>dos &lt;b&gt;</p>");
   assert.equal(textoPlanoAHtml(""), "");
 });
+
+/* ─── la subida de imágenes conectada a P4: qué aviso ve la persona ─────── */
+
+test("cada fallo de subirImagenDocumento (P4) llega como su aviso traducido, y lo del servidor en su texto", async () => {
+  const { mensajeDeSubida } = await import("../subida");
+  const { makeT } = await import("@/i18n/t");
+  const { ErrorImagenDocumento, SubidaImagenCancelada } = await import("@/lib/documentos/subir-imagen.client");
+  const { MENSAJES_IMAGEN } = await import("@/lib/documentos/imagenes");
+  const es = makeT((await import("@/i18n/dictionaries/es.json")).default as never);
+  const en = makeT((await import("@/i18n/dictionaries/en.json")).default as never);
+
+  // Los códigos de P4 con aviso propio salen traducidos en los dos idiomas (ninguno cae a la clave cruda).
+  for (const codigo of ["muy_pesada", "tipo_no_permitido", "tope_por_documento", "heic_no_legible", "no_se_pudo_leer", "vacia", "demasiados_pixeles", "sesion", "red"]) {
+    const err = new ErrorImagenDocumento("x", codigo);
+    for (const [nombre, t, loc] of [["es", es, "es"], ["en", en, "en"]] as const) {
+      const m = mensajeDeSubida(err, t, loc);
+      assert.ok(m && !m.startsWith("editorDocumento."), `${codigo} en ${nombre}: «${m}»`);
+    }
+  }
+  assert.equal(mensajeDeSubida(new ErrorImagenDocumento("x", "heic_no_legible"), es, "es"), MENSAJES_IMAGEN.heic_no_legible);
+  assert.match(mensajeDeSubida(new ErrorImagenDocumento("x", "muy_pesada"), es, "es"), /40 MB/);
+  // Lo que explica el servidor (cuota, permiso): su texto en español; en inglés, el genérico.
+  const cuota = new ErrorImagenDocumento("Ya no hay espacio en tu plan.", "sin_espacio", 402);
+  assert.equal(mensajeDeSubida(cuota, es, "es"), "Ya no hay espacio en tu plan.");
+  assert.equal(mensajeDeSubida(cuota, en, "en"), en("editorDocumento.imagen.errorSubida"));
+  // Un 500 o algo raro: el genérico.
+  assert.equal(mensajeDeSubida(new ErrorImagenDocumento("detalle interno", "servidor", 500), es, "es"), es("editorDocumento.imagen.errorSubida"));
+  assert.equal(mensajeDeSubida(new Error("boom"), es, "es"), es("editorDocumento.imagen.errorSubida"));
+  assert.equal(new SubidaImagenCancelada().name, "AbortError", "cancelar no se enseña como error");
+});
+
+test("el modal de Plantillas pasa la subida real de P4 al editor", async () => {
+  const { readFileSync } = await import("node:fs");
+  const fuente = readFileSync("src/app/dashboard/plantillas/plantilla-modal.tsx", "utf8");
+  assert.match(fuente, /import \{ subirImagenDocumento \} from "@\/lib\/documentos\/subir-imagen\.client";/);
+  assert.match(fuente, /onSubirImagen=\{subirImagen\}/);
+});

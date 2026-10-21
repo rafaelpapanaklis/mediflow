@@ -10886,7 +10886,12 @@
       "tipoNoValido": "Solo se aceptan imágenes JPG, PNG, WebP o HEIC.",
       "demasiadoGrande": "La imagen pesa más de {mb} MB.",
       "tope": "Este documento ya tiene {n} imágenes, que es el máximo.",
-      "errorSubida": "No se pudo subir la imagen. Inténtalo de nuevo."
+      "errorSubida": "No se pudo subir la imagen. Inténtalo de nuevo.",
+      "heicNoLegible": "Este navegador no puede abrir fotos HEIC. Súbela desde el iPhone o desde Safari, o guárdala como JPG.",
+      "noSePudoLeer": "No pudimos leer esa imagen. Puede estar dañada; guárdala otra vez como JPG o PNG.",
+      "demasiadosPixeles": "La imagen tiene demasiados píxeles. Redúcela e inténtalo otra vez.",
+      "sesion": "Tu sesión terminó. Vuelve a entrar e inténtalo otra vez.",
+      "red": "Se cortó la conexión. Inténtalo otra vez."
     },
     "firma": {
       "titulo": "Línea de firma",

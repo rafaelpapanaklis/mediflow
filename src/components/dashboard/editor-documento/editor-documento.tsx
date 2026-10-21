@@ -17,11 +17,13 @@ import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
 import { textoParaInsertar } from "@/components/dashboard/nota-evolucion/dictado";
 import { HOJA_CARTA, variablesCssHoja } from "@/lib/documentos/hoja-carta";
-import { IMAGEN_MAX_BYTES, IMAGEN_MAX_POR_DOCUMENTO, IMAGEN_TIPOS } from "@/lib/documentos/limites-imagen";
+import { IMAGEN_MAX_BYTES, IMAGEN_MAX_POR_DOCUMENTO } from "@/lib/documentos/limites-imagen";
+import { tipoDeclarado } from "@/lib/documentos/imagenes";
 import { Barra } from "./barra";
 import { contarImagenes, extensionesDocumento, type MedidaPaginacion } from "./extensiones";
 import { estaVacioHtml, htmlParaEditor, normalizarParaGuardar } from "./html";
 import { cerrarCorteSiBloqueVacio, limpiarPegado } from "./pegado";
+import { mensajeDeSubida } from "./subida";
 import type { EditorDocumentoApi, EditorDocumentoProps, EstadoEditor, MembreteDocumento } from "./tipos";
 import s from "./editor-documento.module.css";
 
@@ -75,8 +77,8 @@ export function EditorDocumentoInterno(props: EditorDocumentoProps) {
   const locale = useLocale();
 
   // Lo último de todo, para que las extensiones (creadas una vez) lean siempre lo de ahora.
-  const ultimo = useRef({ membrete, tipoDocumento, t, onChange, onPaginas, alListo, onSubirImagen });
-  ultimo.current = { membrete, tipoDocumento, t, onChange, onPaginas, alListo, onSubirImagen };
+  const ultimo = useRef({ membrete, tipoDocumento, t, onChange, onPaginas, alListo, onSubirImagen, locale });
+  ultimo.current = { membrete, tipoDocumento, t, onChange, onPaginas, alListo, onSubirImagen, locale };
 
   const cabeceraRef = useRef<HTMLDivElement>(null);
   const primeraExtraRef = useRef<HTMLDivElement>(null);
@@ -156,7 +158,8 @@ export function EditorDocumentoInterno(props: EditorDocumentoProps) {
     const subir = ultimo.current.onSubirImagen;
     const tt = ultimo.current.t;
     if (!subir) return;
-    if (!(IMAGEN_TIPOS as readonly string[]).includes(archivo.type)) {
+    // El tipo que DECLARA el archivo, como lo mira P4: un HEIC de Windows llega sin `type` y vale por su extensión.
+    if (!tipoDeclarado(archivo)) {
       toast.error(tt("editorDocumento.imagen.tipoNoValido"));
       return;
     }
@@ -176,15 +179,16 @@ export function EditorDocumentoInterno(props: EditorDocumentoProps) {
         toast.error(tt("editorDocumento.imagen.errorSubida"));
       }
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return; // la persona canceló
       console.error("[editor-documento] subir imagen:", err);
-      toast.error(tt("editorDocumento.imagen.errorSubida"));
+      toast.error(mensajeDeSubida(err, tt, ultimo.current.locale));
     } finally {
       setSubiendo(false);
     }
   }, []);
 
   const archivosDeImagen = (lista: FileList | File[] | null | undefined): File[] =>
-    Array.from(lista ?? []).filter((f) => f.type.startsWith("image/"));
+    Array.from(lista ?? []).filter((f) => f.type.startsWith("image/") || tipoDeclarado(f) !== null);
 
   const editor = useEditor(
     {
@@ -344,3 +348,4 @@ export function EditorDocumentoInterno(props: EditorDocumentoProps) {
     </div>
   );
 }
+
