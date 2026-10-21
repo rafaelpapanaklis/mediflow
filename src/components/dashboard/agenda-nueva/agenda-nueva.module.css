@@ -368,6 +368,30 @@
   text-overflow: ellipsis;
 }
 
+/* ws1-t6: el título abreviado del Día solo existe en teléfono (ver abajo). */
+.tituloCorto {
+  display: none;
+}
+
+@media (max-width: 479.98px) {
+  /* Fuera de la vista pero no del lector: el h1 sigue diciendo la fecha larga. */
+  .tituloLargo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .tituloCorto {
+    display: inline;
+  }
+}
+
 .chipHoy {
   font-size: 10.5px;
   font-weight: 700;
@@ -1221,6 +1245,14 @@
   pointer-events: none;
 }
 
+/* ws1-t6: la columna tiene una comida o un bloqueo donde iría el centro;
+   el rótulo se coloca (por `top`) en el hueco libre más grande. */
+.columnaVaciaEnHueco {
+  inset: auto 0;
+  height: 20px;
+  transform: translateY(-50%);
+}
+
 .sinColumnas {
   flex: 1;
   display: grid;
@@ -1484,6 +1516,40 @@
   .tarjetaHoraEstrecha {
     display: inline;
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ws1-t6 (QA del push): dos o más citas lado a lado en el Día (sobreagenda).
+   Con muchas columnas cada una quedaba en ~54 px y, con el relleno de siempre,
+   el nombre se reducía a «M» o «J..». Menos relleno siempre que se reparten el
+   ancho y, si de verdad no cabe, el nombre baja hasta en tres renglones y el
+   punto de estado se va (el estado sigue en el `title` y en el color). */
+.tarjetaEncimada {
+  padding: 5px 6px 5px 9px;
+}
+
+@container (max-width: 120px) {
+  .tarjetaEncimada .tarjetaFila1 {
+    align-items: flex-start;
+    gap: 3px;
+  }
+
+  .tarjetaEncimada .tarjetaChip {
+    display: none;
+  }
+
+  .tarjetaEncimada .tarjetaNombre {
+    font-size: 12px;
+    line-height: 15px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .tarjetaEncimada.tarjetaCorta .tarjetaNombre {
+    -webkit-line-clamp: 1;
   }
 }
 

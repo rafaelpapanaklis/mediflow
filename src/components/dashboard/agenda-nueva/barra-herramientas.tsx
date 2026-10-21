@@ -25,7 +25,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Plus, Search, ShieldAlert } f
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { todayInTz } from "@/lib/agenda/time-utils";
-import { esHoy, moverPeriodo, tituloDePeriodo } from "@/lib/agenda-nueva/fechas";
+import { esHoy, fechaCorta, moverPeriodo, tituloDePeriodo } from "@/lib/agenda-nueva/fechas";
 import { esSinConfirmar } from "@/lib/agenda-nueva/estados";
 import { useT } from "@/i18n/i18n-provider";
 import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
@@ -48,6 +48,15 @@ export function BarraHerramientas() {
 
   const hoy = esHoy(state.dayISO, state.timezone);
   const titulo = tituloDePeriodo(ag.vista, state.dayISO);
+  // ws1-t6: a 390 px «Martes 20 de octubre de 2026» se cortaba en «Martes 20
+  // de o…». En teléfono el Día se lee abreviado («Mar 20 oct»), con el año
+  // solo si no es el de hoy; el largo sigue para el lector y en el `title`.
+  const tituloCorto =
+    ag.vista === "dia"
+      ? state.dayISO.slice(0, 4) === todayInTz(state.timezone).slice(0, 4)
+        ? fechaCorta(state.dayISO)
+        : `${fechaCorta(state.dayISO)} ${state.dayISO.slice(0, 4)}`
+      : null;
 
   // ═══════════════════════════════════════════════════════════════════════
   // EL DÍA BLOQUEADO SE TIENE QUE VER (WS1-T3)
@@ -150,7 +159,18 @@ export function BarraHerramientas() {
       {/* ── Título del periodo ── El aviso del día bloqueado ya no va aquí
           dentro (ws1-t5): tiene su franja debajo de la barra, ver abajo. */}
       <div className={s.titulo}>
-        <h1 className={s.tituloTexto}>{titulo}</h1>
+        <h1 className={s.tituloTexto} title={titulo}>
+          {tituloCorto ? (
+            <>
+              <span className={s.tituloLargo}>{titulo}</span>
+              <span className={s.tituloCorto} aria-hidden>
+                {tituloCorto}
+              </span>
+            </>
+          ) : (
+            titulo
+          )}
+        </h1>
         {/* El chip «Hoy» es del diseño solo para la vista Día. */}
         {ag.vista === "dia" && hoy && <span className={s.chipHoy}>Hoy</span>}
       </div>

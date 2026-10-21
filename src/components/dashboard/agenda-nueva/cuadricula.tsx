@@ -33,6 +33,7 @@ import type { BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
 import s from "./agenda-nueva.module.css";
 import sg from "./google-calendario.module.css";
 import { AccionBloqueoGoogle } from "./google-calendario";
+import { minutoDelRotuloVacio } from "./rotulo-vacio";
 
 export interface ColumnaCuadricula {
   /** Identificador estable (id del responsable en Día, `YYYY-MM-DD` en Semana). */
@@ -490,9 +491,33 @@ function ColumnaRejilla({
 
       {c.contenido}
 
-      {!c.cerrada && c.vacia && !guia && <div className={s.columnaVacia}>{c.vacia}</div>}
+      {!c.cerrada && c.vacia && !guia && <RotuloVacio columna={c} ventana={ventana} />}
 
       {c.superpuesto}
+    </div>
+  );
+}
+
+/**
+ * «Sin citas», centrado en la columna salvo que ahí caiga una comida o un
+ * bloqueo: entonces va al hueco libre más grande (`minutoDelRotuloVacio`).
+ * Antes salía encima del rótulo «Comida» y no se leía ninguno (ws1-t6).
+ */
+function RotuloVacio({ columna: c, ventana }: { columna: ColumnaCuadricula; ventana: VentanaRejilla }) {
+  const { minutoInicio, horaFin, alto } = ventana;
+  const abierto = {
+    desdeMin: Math.max(minutoInicio, c.aperturaHastaMin ?? minutoInicio),
+    hastaMin: Math.min(horaFin * 60, c.cierreDesdeMin ?? horaFin * 60),
+  };
+  const franjas = [...(c.comidas ?? []), ...(c.bloqueos ?? [])];
+  // El centro del lienzo, en minutos: donde el CSS pone el rótulo por defecto.
+  const centroMin = minutoInicio + ((alto / 2) / topDeLinea(minutoInicio + 60, minutoInicio)) * 60;
+  const donde = minutoDelRotuloVacio(abierto, franjas, centroMin);
+  if (donde === null) return null;
+  if (donde === "centro") return <div className={s.columnaVacia}>{c.vacia}</div>;
+  return (
+    <div className={`${s.columnaVacia} ${s.columnaVaciaEnHueco}`} style={{ top: topDeLinea(donde, minutoInicio) }}>
+      {c.vacia}
     </div>
   );
 }
