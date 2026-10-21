@@ -30,7 +30,10 @@
 import type { PrismaClient } from "@prisma/client";
 import { formatConsentDate, consentTimeZone } from "@/lib/consent/dates";
 import { interpolateDocumentHtml } from "@/lib/document-templates/interpolate";
-import { isBlankHtml, MAX_BODY_LENGTH, MAX_INPUT_LENGTH } from "@/lib/document-templates/sanitize";
+import {
+  informeVacio, isBlankHtml, problemaDeImagenes, MAX_BODY_LENGTH, MAX_INPUT_LENGTH, type InformeDeImagenes,
+} from "@/lib/document-templates/sanitize";
+import { IMAGEN_MAX_POR_DOCUMENTO } from "@/lib/documentos/limites-imagen";
 import { getTemplate, listTemplates } from "@/lib/document-templates/service";
 // Mismo helper de edad que las cartas de consentimiento: [EDAD_PACIENTE] no
 // puede decir una cosa en la carta y otra en la nota.
@@ -101,7 +104,9 @@ export type NotaErrorCode =
   | "BODY_TOO_LONG"
   | "NOT_FOUND"
   | "NOT_AUTHOR"
-  | "ALREADY_SIGNED";
+  | "ALREADY_SIGNED"
+  | "IMAGEN_AJENA"
+  | "DEMASIADAS_IMAGENES";
 
 const MENSAJES: Record<NotaErrorCode, { status: number; error: string }> = {
   PATIENT_NOT_FOUND: { status: 404, error: "Paciente no encontrado" },
@@ -112,6 +117,8 @@ const MENSAJES: Record<NotaErrorCode, { status: number; error: string }> = {
   NOT_FOUND: { status: 404, error: "Nota no encontrada" },
   NOT_AUTHOR: { status: 403, error: "Solo quien redactó la nota puede editarla o firmarla" },
   ALREADY_SIGNED: { status: 409, error: "La nota ya está firmada y no se puede modificar" },
+  IMAGEN_AJENA: { status: 400, error: "La nota trae una imagen de otra clínica. Quítala y vuelve a guardar" },
+  DEMASIADAS_IMAGENES: { status: 400, error: `Una nota admite hasta ${IMAGEN_MAX_POR_DOCUMENTO} imágenes` },
 };
 
 export type NotaFallo = { ok: false; code: NotaErrorCode; status: number; error: string };
@@ -243,8 +250,12 @@ async function cargarContexto(
   });
 }
 
-/** Rellena los marcadores con los mismos datos de la cabecera. Sanea siempre. */
-function rellenar(html: string, c: Contexto): string {
+/**
+ * Rellena los marcadores con los mismos datos de la cabecera. Sanea siempre, con
+ * la clínica de la SESIÓN: una imagen de otra clínica no llega a guardarse, y con
+ * `informe` quien guarda sabe que tiene que rechazar.
+ */
+function rellenar(html: string, c: Contexto, clinicId: string, informe?: InformeDeImagenes): string {
   return interpolateDocumentHtml(html, {
     clinicName: c.encabezado.clinicaNombre,
     patientName: c.encabezado.pacienteNombre,
@@ -255,7 +266,7 @@ function rellenar(html: string, c: Contexto): string {
     doctorLicense: c.encabezado.cedula,
     date: c.encabezado.fecha,
     timezone: c.timezone,
-  });
+  }, { clinicId, informe });
 }
 
 /**
@@ -443,7 +454,7 @@ export async function previewNota(
     templateId: plantilla.id,
     title: plantilla.name,
     tituloPorDefecto: porDefecto,
-    body: rellenar(plantilla.body, c.value),
+    body: rellenar(plantilla.body, c.value, clinicId),
     encabezado: c.value.encabezado,
     faltantes: faltantesDe(c.value.encabezado),
   });
@@ -479,7 +490,10 @@ export async function createNota(
   if (largo) return largo;
   const origen = typeof input.body === "string" ? input.body : plantilla?.body ?? "";
   // Libre o de plantilla, el texto pasa por el MISMO saneado de lista blanca.
-  const body = rellenar(origen, c.value);
+  const informe = informeVacio();
+  const body = rellenar(origen, c.value, clinicId, informe);
+  const imagenes = problemaDeImagenes(informe);
+  if (imagenes) return falla(imagenes);
   const malo = validarCuerpo(body);
   if (malo) return malo;
 
@@ -542,7 +556,10 @@ async function guardarBorrador(
   const c = await cargarContexto(db, clinicId, actual.value.patientId, doctorId, ahora);
   if (c.ok === false) return c;
 
-  const body = rellenar(typeof bodyNuevo === "string" ? bodyNuevo : actual.value.body, c.value);
+  const informe = informeVacio();
+  const body = rellenar(typeof bodyNuevo === "string" ? bodyNuevo : actual.value.body, c.value, clinicId, informe);
+  const imagenes = problemaDeImagenes(informe);
+  if (imagenes) return falla(imagenes);
   const malo = validarCuerpo(body);
   if (malo) return malo;
 

@@ -154,7 +154,7 @@ export async function editarPlantillaConPrevias(
   const actual = await getTemplate(db, clinicId, id);
   if (!actual || actual.kind !== "CONSENTIMIENTO" || resto.body === undefined) return updateTemplate(db, clinicId, id, resto);
 
-  const nuevo = validarCuerpo(resto.body);
+  const nuevo = validarCuerpo(resto.body, clinicId);
   if ("code" in nuevo) return updateTemplate(db, clinicId, id, resto); // que conteste el mismo error de siempre
   const sinTexto = { name: resto.name, isActive: resto.isActive };
 

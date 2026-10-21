@@ -33,7 +33,7 @@
 //   span            SOLO con data-tamano ∈ TAMANOS_LETRA; sin él la etiqueta se
 //                   va y el texto se queda. `span[data-marcador=CLAVE]` (la ficha
 //                   del editor) se escribe como el texto `[CLAVE]` de siempre.
-//   img             SOLO con data-archivo = documentos/<clínica>/<id>.webp, más
+//   img             SOLO con data-archivo = documentos/<clínica>/<32 hex>.webp, más
 //                   data-ancho ∈ ANCHOS_IMAGEN, data-alineacion ∈
 //                   ALINEACIONES_IMAGEN y alt. Sin `src` jamás: la imagen se
 //                   firma al pintarla. Como mucho IMAGEN_MAX_POR_DOCUMENTO.
@@ -54,6 +54,7 @@
 //   td/th fuera de un tr, tr fuera de una tabla  → la etiqueta se va, el texto se queda
 
 import { IMAGEN_MAX_POR_DOCUMENTO } from "@/lib/documentos/limites-imagen";
+import { leerClave } from "@/lib/documentos/imagenes";
 
 /** Las únicas etiquetas que pueden salir. Cada una, solo con lo que dice la tabla de arriba. */
 export const ALLOWED_TAGS: readonly string[] = [
@@ -74,13 +75,9 @@ export const COLUMNAS: readonly string[] = ["2", "3"];
 /** Una carta no tiene sitio para más columnas que esto, ni una tabla para más filas unidas. */
 export const MAX_SPAN_COLUMNAS = 20;
 export const MAX_SPAN_FILAS = 100;
-/**
- * La clave de una imagen del editor: `documentos/<clinicId>/<id>.webp`. Los ids
- * de la base no siempre son uuid (cuid, importados, siembras), así que se admite
- * cualquier id de letras, cifras, `_` y `-`; nunca un punto ni una barra, así
- * que `..` u otra carpeta no caben.
- */
-export const PATRON_ARCHIVO_IMAGEN = /^documentos\/([A-Za-z0-9_-]{1,64})\/[A-Za-z0-9_-]{1,128}\.webp$/;
+// La clave de una imagen del editor la decide P4 (`leerClave` de
+// `@/lib/documentos/imagenes`): `documentos/<clinicId>/<32 hex>.webp`. Una sola
+// fuente: lo que la ruta sabe servir es exactamente lo que aquí se guarda.
 
 /** Tope del cuerpo ya saneado. Una plantilla es una carta, no un libro. */
 export const MAX_BODY_LENGTH = 100_000;
@@ -346,6 +343,31 @@ export interface OpcionesSaneado {
    * pero así ni siquiera se guarda la referencia).
    */
   clinicId?: string;
+  /**
+   * Si llega, el saneado anota aquí lo que descartó de las imágenes, para que
+   * quien guarda RECHACE en vez de guardar a medias en silencio (ver
+   * `problemaDeImagenes`). Se cuenta en la misma pasada: nada de regex sobre la
+   * entrada cruda, que con `<img<img<img…` costaría tiempo cuadrático.
+   */
+  informe?: InformeDeImagenes;
+}
+
+export interface InformeDeImagenes {
+  /** Claves bien formadas, pero de otra clínica (solo se cuentan con `clinicId`). */
+  ajenas: number;
+  /** Las que pasaban de IMAGEN_MAX_POR_DOCUMENTO. */
+  deMas: number;
+}
+
+export const informeVacio = (): InformeDeImagenes => ({ ajenas: 0, deMas: 0 });
+
+export type ProblemaDeImagenes = "IMAGEN_AJENA" | "DEMASIADAS_IMAGENES";
+
+/** Lo que un guardado tiene que rechazar, según el informe del saneado. */
+export function problemaDeImagenes(informe: InformeDeImagenes): ProblemaDeImagenes | null {
+  if (informe.ajenas > 0) return "IMAGEN_AJENA";
+  if (informe.deMas > 0) return "DEMASIADAS_IMAGENES";
+  return null;
 }
 
 interface Abierta {
@@ -430,10 +452,16 @@ export function sanitizeTemplateHtml(entrada: unknown, opciones: OpcionesSaneado
   };
   const abrirImagen = (a: Map<string, string>) => {
     const archivo = decodificar(a.get("data-archivo") ?? "");
-    const m = PATRON_ARCHIVO_IMAGEN.exec(archivo);
-    if (!m) return; // sin clave válida no hay imagen: ni src, ni data:, ni otra carpeta
-    if (clinica !== null && m[1] !== clinica) return;
-    if (imagenes >= IMAGEN_MAX_POR_DOCUMENTO) return;
+    const clave = leerClave(archivo);
+    if (!clave) return; // sin clave válida no hay imagen: ni src, ni data:, ni otra carpeta
+    if (clinica !== null && clave.clinicId !== clinica) {
+      if (opciones.informe) opciones.informe.ajenas++;
+      return;
+    }
+    if (imagenes >= IMAGEN_MAX_POR_DOCUMENTO) {
+      if (opciones.informe) opciones.informe.deMas++;
+      return;
+    }
     imagenes++;
     let s = ` data-archivo="${archivo}"`;
     const ancho = enumerado(a, "data-ancho", SET_ANCHOS);
@@ -594,3 +622,4 @@ export function isBlankHtml(html: string): boolean {
   if (/<img\s/i.test(html)) return false;
   return decodificar(html.replace(/<[^>]*>/g, "")).replace(/[\s\u00a0]/g, "").length === 0;
 }
+

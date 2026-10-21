@@ -21,7 +21,7 @@ import { sanitizeTemplateHtml } from "@/lib/document-templates/sanitize";
 import { textoVisiblePorPagina } from "@/lib/pdf/__tests__/_texto-del-pdf";
 import { MAQUETA_CONSENTIMIENTO, MAQUETA_NOTA, MAQUETA_PLANTILLA } from "@/lib/document-templates/__tests__/_maqueta-lo-que-se-guardaria";
 
-const ARCHIVO = "documentos/clinica_qa_prueba/img_1.webp";
+const ARCHIVO = "documentos/clinica_qa_prueba/0123456789abcdef0123456789abcdef.webp";
 const conClave = (html: string) => html.replace(/<img src="[^"]*"/g, `<img data-archivo="${ARCHIVO}"`);
 
 const texto = (b: Bloque) => ("tramos" in b ? b.tramos.map((t) => t.texto).join("") : "");
@@ -167,7 +167,7 @@ describe("el PDF de respaldo pinta lo nuevo", () => {
   });
 
   it("las tres de la maqueta, y un documento con 40 imágenes, se generan sin reventar", async () => {
-    const cuarenta = Array.from({ length: 40 }, (_, n) => `<img data-archivo="documentos/c1/i_${n}.webp" alt="Foto ${n}"><p>Pie ${n}</p>`).join("");
+    const cuarenta = Array.from({ length: 40 }, (_, n) => `<img data-archivo="documentos/c1/${String(n).padStart(32, "0")}.webp" alt="Foto ${n}"><p>Pie ${n}</p>`).join("");
     for (const html of [MAQUETA_PLANTILLA, MAQUETA_NOTA, MAQUETA_CONSENTIMIENTO, cuarenta]) {
       const pdf = await renderizarPdf({ ...DOC, cuerpoHtml: sanitizeTemplateHtml(conClave(html)) }, null);
       assert.ok(pdf.subarray(0, 5).toString() === "%PDF-");

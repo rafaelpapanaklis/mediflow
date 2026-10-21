@@ -1,5 +1,5 @@
 import { interpolateConsent, type ConsentTemplateVars } from "@/lib/consent/templates";
-import { escapeHtml, sanitizeTemplateHtml } from "./sanitize";
+import { escapeHtml, sanitizeTemplateHtml, type OpcionesSaneado } from "./sanitize";
 
 export type { ConsentTemplateVars as DocumentTemplateVars };
 
@@ -11,8 +11,11 @@ export type { ConsentTemplateVars as DocumentTemplateVars };
  * Aquí el destino es HTML, así que los valores se ESCAPAN antes: un paciente
  * que se llame `<img onerror=…>` no puede convertirse en una etiqueta. Y el
  * resultado vuelve a pasar por la lista blanca, por si acaso.
+ *
+ * `opciones.clinicId` (la de la SESIÓN) descarta las imágenes de otra clínica;
+ * `opciones.informe` cuenta lo descartado en la primera pasada, para rechazar.
  */
-export function interpolateDocumentHtml(html: string, vars: ConsentTemplateVars): string {
+export function interpolateDocumentHtml(html: string, vars: ConsentTemplateVars, opciones: OpcionesSaneado = {}): string {
   const seguras = { ...vars } as Record<string, unknown>;
   for (const [k, v] of Object.entries(seguras)) {
     if (typeof v === "string") seguras[k] = escapeHtml(v);
@@ -20,6 +23,7 @@ export function interpolateDocumentHtml(html: string, vars: ConsentTemplateVars)
   // `timezone` no se pinta: es un identificador IANA y se usa tal cual.
   seguras.timezone = vars.timezone;
   return sanitizeTemplateHtml(
-    interpolateConsent(sanitizeTemplateHtml(html), seguras as unknown as ConsentTemplateVars),
+    interpolateConsent(sanitizeTemplateHtml(html, opciones), seguras as unknown as ConsentTemplateVars),
+    { clinicId: opciones.clinicId },
   );
 }

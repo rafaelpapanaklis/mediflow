@@ -462,7 +462,11 @@ test("al rellenar, los datos del paciente se escapan: un nombre no se vuelve eti
 // lector ESTRICTO (abajo): cualquier etiqueta, atributo o valor fuera de la
 // tabla, o un `<`, `>`, `"` o `'` crudo en el texto, tumba la prueba.
 
-const ARCHIVO = "documentos/clinica_qa_prueba/img_1.webp";
+/** Un id de imagen como los que genera P4 (32 hex). */
+const H = "0123456789abcdef0123456789abcdef";
+const ARCHIVO = `documentos/clinica_qa_prueba/${H}.webp`;
+/** La imagen n, con su id de 32 hex. */
+const idN = (n: number) => String(n).padStart(32, "0");
 
 const TEXTO_ATRS = {
   "data-sangria": /^[1-6]$/,
@@ -531,14 +535,17 @@ const ATAQUES: [string, string][] = [
   ['<img data-archivo="documentos/clinica/../otra.webp">', ""],
   ['<img data-archivo="documentos/clinica/sub/img.webp">', ""],
   ['<img data-archivo="clinical-photos/clinica/img.webp">', ""],
-  ['<img data-archivo="documentos/clinica/img.svg">', ""],
-  ['<img data-archivo="documentos/clinica/img.webp?x=1">', ""],
-  ['<img data-archivo="https://evil.example/documentos/clinica/img.webp">', ""],
-  ['<img data-archivo="/documentos/clinica/img.webp">', ""],
-  ['<img data-archivo="documentos/clinica/img.webp ">', ""],
-  ['<img data-archivo="documentos%2Fclinica%2Fimg.webp">', ""],
-  ['<img data-archivo="documentos/clinica/img.WEBP">', ""],
-  ['<img data-archivo="documentos&#47;clinica&#x2f;img&#46;webp">', '<img data-archivo="documentos/clinica/img.webp">'],
+  [`<img data-archivo="documentos/clinica/${H}.svg">`, ""],
+  // la clave la decide P4: id de 32 hex en minúsculas, nada de nombres
+  ['<img data-archivo="documentos/clinica/img_1.webp">', ""],
+  [`<img data-archivo="documentos/clinica/${H.toUpperCase()}.webp">`, ""],
+  [`<img data-archivo="documentos/clinica/${H}.webp?x=1">`, ""],
+  [`<img data-archivo="https://evil.example/documentos/clinica/${H}.webp">`, ""],
+  [`<img data-archivo="/documentos/clinica/${H}.webp">`, ""],
+  [`<img data-archivo="documentos/clinica/${H}.webp ">`, ""],
+  [`<img data-archivo="documentos%2Fclinica%2F${H}.webp">`, ""],
+  [`<img data-archivo="documentos/clinica/${H}.WEBP">`, ""],
+  [`<img data-archivo="documentos&#47;clinica&#x2f;${H}&#46;webp">`, `<img data-archivo="documentos/clinica/${H}.webp">`],
   // atributo repetido: gana el PRIMERO, como en el navegador
   [`<img data-archivo="${ARCHIVO}" data-archivo="javascript:alert(1)">`, `<img data-archivo="${ARCHIVO}">`],
   [`<img data-archivo="javascript:alert(1)" data-archivo="${ARCHIVO}">`, ""],
@@ -686,15 +693,15 @@ test("v2: lo demás que escribe Tiptap 3.32 se normaliza a la tabla", () => {
 });
 
 test("v2: como mucho 40 imágenes por documento; las de más se van", () => {
-  const una = (n: number) => `<img data-archivo="documentos/c1/img_${n}.webp">`;
+  const una = (n: number) => `<img data-archivo="documentos/c1/${idN(n)}.webp">`;
   const out = sanitizeTemplateHtml(Array.from({ length: 45 }, (_, n) => una(n)).join(""));
   assert.equal(out.match(/<img /g)?.length, 40);
-  assert.ok(out.includes("img_39.webp") && !out.includes("img_40.webp"), "se quedan las primeras 40");
+  assert.ok(out.includes(`${idN(39)}.webp`) && !out.includes(`${idN(40)}.webp`), "se quedan las primeras 40");
 });
 
 test("v2: con la clínica de la sesión, una imagen de otra clínica no se guarda", () => {
-  const html = '<img data-archivo="documentos/clinica_a/x.webp"><img data-archivo="documentos/clinica_b/y.webp">';
-  assert.equal(sanitizeTemplateHtml(html, { clinicId: "clinica_a" }), '<img data-archivo="documentos/clinica_a/x.webp">');
+  const html = `<img data-archivo="documentos/clinica_a/${idN(1)}.webp"><img data-archivo="documentos/clinica_b/${idN(2)}.webp">`;
+  assert.equal(sanitizeTemplateHtml(html, { clinicId: "clinica_a" }), `<img data-archivo="documentos/clinica_a/${idN(1)}.webp">`);
   assert.equal(sanitizeTemplateHtml(html, { clinicId: "" }), "");
   assert.equal(sanitizeTemplateHtml(html).match(/<img /g)?.length, 2, "sin clínica, solo el patrón");
 });
@@ -890,3 +897,45 @@ test("maqueta: lo que el editor enseña en «Lo que se guardaría» pasa entero 
   // La alineación del título de la carta (style de TextAlign) se conserva como data-alineacion.
   assert.ok(sanitizeTemplateHtml(MAQUETA_CONSENTIMIENTO).startsWith('<p data-alineacion="centro"><strong>CARTA DE CONSENTIMIENTO INFORMADO</strong></p>'));
 });
+
+/* ─── 10. al guardar: la clínica de la sesión decide qué imágenes caben ── */
+
+const img = (clinica: string, n: number) => `<img data-archivo="documentos/${clinica}/${idN(n)}.webp">`;
+
+test("una plantilla con una imagen de OTRA clínica se RECHAZA (alta y edición), sin escribir nada", async () => {
+  const alta = await createTemplate(db, A, "u_1", { kind: "NOTA_EVOLUCION", name: "Con foto ajena", body: `<p>x</p>${img(B, 1)}` });
+  assert.equal(templateErrorCode(alta), "IMAGEN_AJENA");
+  assert.equal(alta.ok === false && alta.status, 400);
+  assert.equal(filas.length, 0);
+
+  const propia = await crear(A, "Con foto propia", "NOTA_EVOLUCION", `<p>x</p>${img(A, 1)}`);
+  assert.equal(propia.body, `<p>x</p>${img(A, 1)}`);
+  const edicion = await updateTemplate(db, A, propia.id, { body: `<p>y</p>${img(A, 1)}${img(B, 2)}` });
+  assert.equal(templateErrorCode(edicion), "IMAGEN_AJENA");
+  assert.equal(filas[0].body, `<p>x</p>${img(A, 1)}`, "lo guardado no cambió");
+});
+
+test("más de 40 imágenes en una plantilla se RECHAZA; 40 entran", async () => {
+  const cuarenta = Array.from({ length: 40 }, (_, n) => img(A, n)).join("");
+  assert.ok((await createTemplate(db, A, "u_1", { kind: "NOTA_EVOLUCION", name: "Cuarenta", body: cuarenta })).ok);
+  const r = await createTemplate(db, A, "u_1", { kind: "NOTA_EVOLUCION", name: "Cuarenta y una", body: cuarenta + img(A, 40) });
+  assert.equal(templateErrorCode(r), "DEMASIADAS_IMAGENES");
+});
+
+test("editar un consentimiento de fábrica también rechaza la imagen de otra clínica", async () => {
+  const { editarPlantillaConPrevias } = await import("@/lib/plantillas-fabrica/consentimiento");
+  const tpl = await crear(A, "Endodoncia", "CONSENTIMIENTO", "<p>Acepto</p>");
+  const sinVersiones = { disponible: async () => false } as any;
+  const r = await editarPlantillaConPrevias(db, sinVersiones, A, tpl.id, { body: `<p>Acepto</p>${img(B, 3)}` }, "u_1");
+  assert.equal(templateErrorCode(r), "IMAGEN_AJENA");
+  assert.equal(filas[0].body, "<p>Acepto</p>");
+});
+
+test("interpolateDocumentHtml con la clínica: tira las ajenas y lo cuenta en el informe", async () => {
+  const { informeVacio } = await import("../sanitize");
+  const informe = informeVacio();
+  const out = interpolateDocumentHtml(`<p>[NOMBRE_PACIENTE]</p>${img(A, 1)}${img(B, 2)}`, { clinicName: "C", patientName: "Ana" }, { clinicId: A, informe });
+  assert.equal(out, `<p>Ana</p>${img(A, 1)}`);
+  assert.deepEqual(informe, { ajenas: 1, deMas: 0 });
+});
+

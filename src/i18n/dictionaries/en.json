@@ -9713,6 +9713,8 @@
         "NOT_MODIFIED": "That template already has the factory text.",
         "CAMBIO_CONCURRENTE": "Someone just saved a change to this template. Reload the page to see it before going back to the factory version.",
         "VERSIONES_NO_DISPONIBLES": "This feature isn't enabled on your account yet.",
+        "IMAGEN_AJENA": "This template has an image from another clinic. Remove it and save again.",
+        "DEMASIADAS_IMAGENES": "A template can hold up to 40 images. Remove some and save again.",
         "generico": "Could not save. Please try again."
       },
       "tabOrto": "Orthodontics notes",

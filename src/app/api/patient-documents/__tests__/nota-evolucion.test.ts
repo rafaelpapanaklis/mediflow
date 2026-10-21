@@ -409,3 +409,29 @@ test("el aviso enlaza a donde se rellena lo que falta: Equipo (cédula) y Config
   assert.ok(comun.includes('"/dashboard/settings"'));
   assert.ok(panel.startsWith('"use client";'));
 });
+
+/* ─── imágenes del editor nuevo: solo las de ESTA clínica, y como mucho 40 ─ */
+
+const imagen = (clinica: string, n: number) =>
+  `<img data-archivo="documentos/${clinica}/${String(n).padStart(32, "0")}.webp" alt="Rx ${n}">`;
+
+test("una nota con una imagen de OTRA clínica no se guarda: ni al crear, ni el borrador, ni al firmar", async () => {
+  const ajena = `<p>Control</p>${imagen("cB", 1)}`;
+  assert.equal(codigo(await firmar({ body: ajena })), "IMAGEN_AJENA");
+  assert.equal(tablas.patientDocument.length, 0);
+
+  const borrador = valor(await createNota(db, "cA", { patientId: "p1", doctorId: "dA", templateId: "t_endo" }, NOCHE_MX));
+  const antes = tablas.patientDocument[0].body;
+  assert.equal(codigo(await updateNotaDraft(db, "cA", borrador.id, "dA", ajena, new Date())), "IMAGEN_AJENA");
+  assert.equal(codigo(await signNota(db, "cA", borrador.id, "dA", ajena, new Date())), "IMAGEN_AJENA");
+  assert.equal(tablas.patientDocument[0].body, antes, "lo guardado no cambió");
+  assert.equal(tablas.patientDocument[0].status, "DRAFT");
+});
+
+test("las imágenes propias se guardan con su clave y sin src; la 41.ª rechaza el guardado", async () => {
+  const propia = valor(await firmar({ body: `<p>Rx de control</p><img src="/api/x" data-archivo="documentos/cA/${"a".repeat(32)}.webp" alt="Rx">` }));
+  assert.equal(propia.body, `<p>Rx de control</p><img data-archivo="documentos/cA/${"a".repeat(32)}.webp" alt="Rx">`);
+  const cuarenta = Array.from({ length: 40 }, (_, n) => imagen("cA", n)).join("");
+  valor(await firmar({ body: `<p>x</p>${cuarenta}` }));
+  assert.equal(codigo(await firmar({ body: `<p>x</p>${cuarenta}${imagen("cA", 40)}` })), "DEMASIADAS_IMAGENES");
+});

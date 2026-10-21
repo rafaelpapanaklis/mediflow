@@ -9713,6 +9713,8 @@
         "NOT_MODIFIED": "Esa plantilla ya tiene el texto de fábrica.",
         "CAMBIO_CONCURRENTE": "Alguien guardó un cambio en esta plantilla justo ahora. Recarga la página para verlo antes de volver a la de fábrica.",
         "VERSIONES_NO_DISPONIBLES": "Esta función todavía no está activada en tu cuenta.",
+        "IMAGEN_AJENA": "La plantilla trae una imagen de otra clínica. Quítala y vuelve a guardar.",
+        "DEMASIADAS_IMAGENES": "Una plantilla admite hasta 40 imágenes. Quita alguna y vuelve a guardar.",
         "generico": "No se pudo guardar. Inténtalo de nuevo."
       },
       "tabOrto": "Notas de ortodoncia",

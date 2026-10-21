@@ -18,7 +18,10 @@ import {
   MAX_NAME_LENGTH,
   type DocumentTemplateKindValue,
 } from "./kinds";
-import { sanitizeTemplateHtml, isBlankHtml, MAX_BODY_LENGTH, MAX_INPUT_LENGTH } from "./sanitize";
+import {
+  sanitizeTemplateHtml, isBlankHtml, informeVacio, problemaDeImagenes, MAX_BODY_LENGTH, MAX_INPUT_LENGTH,
+} from "./sanitize";
+import { IMAGEN_MAX_POR_DOCUMENTO } from "@/lib/documentos/limites-imagen";
 
 export type TemplateDb = Pick<PrismaClient, "documentTemplate">;
 
@@ -30,7 +33,9 @@ export type TemplateErrorCode =
   | "BODY_TOO_LONG"
   | "NAME_TAKEN"
   | "NOT_FOUND"
-  | "CAMBIO_CONCURRENTE";
+  | "CAMBIO_CONCURRENTE"
+  | "IMAGEN_AJENA"
+  | "DEMASIADAS_IMAGENES";
 
 const MENSAJES: Record<TemplateErrorCode, { status: number; error: string }> = {
   KIND_INVALID: { status: 400, error: "Tipo de plantilla inválido" },
@@ -41,6 +46,8 @@ const MENSAJES: Record<TemplateErrorCode, { status: number; error: string }> = {
   NAME_TAKEN: { status: 409, error: "Ya existe una plantilla de este tipo con ese nombre" },
   NOT_FOUND: { status: 404, error: "Plantilla no encontrada" },
   CAMBIO_CONCURRENTE: { status: 409, error: "Alguien guardó un cambio en esta plantilla mientras la editabas" },
+  IMAGEN_AJENA: { status: 400, error: "La plantilla trae una imagen de otra clínica. Quítala y vuelve a guardar" },
+  DEMASIADAS_IMAGENES: { status: 400, error: `Una plantilla admite hasta ${IMAGEN_MAX_POR_DOCUMENTO} imágenes` },
 };
 
 export type TemplateResult =
@@ -106,10 +113,17 @@ export function validarNombre(v: unknown): { name: string } | { code: TemplateEr
   return { name };
 }
 
-export function validarCuerpo(v: unknown): { body: string } | { code: TemplateErrorCode } {
+/**
+ * `clinicId` es el de la SESIÓN: una imagen de otra clínica o más de las que
+ * caben RECHAZAN el guardado (no se guarda a medias en silencio).
+ */
+export function validarCuerpo(v: unknown, clinicId: string): { body: string } | { code: TemplateErrorCode } {
   // El tamaño de la ENTRADA se mira antes de gastar CPU en sanearla.
   if (typeof v === "string" && v.length > MAX_INPUT_LENGTH) return { code: "BODY_TOO_LONG" };
-  const body = sanitizeTemplateHtml(v);
+  const informe = informeVacio();
+  const body = sanitizeTemplateHtml(v, { clinicId, informe });
+  const imagenes = problemaDeImagenes(informe);
+  if (imagenes) return { code: imagenes };
   if (isBlankHtml(body)) return { code: "BODY_REQUIRED" };
   if (body.length > MAX_BODY_LENGTH) return { code: "BODY_TOO_LONG" };
   return { body };
@@ -150,7 +164,7 @@ export async function createTemplate(
   if (!isDocumentTemplateKind(input.kind)) return falla("KIND_INVALID");
   const n = validarNombre(input.name);
   if ("code" in n) return falla(n.code);
-  const b = validarCuerpo(input.body);
+  const b = validarCuerpo(input.body, clinicId);
   if ("code" in b) return falla(b.code);
 
   if (await nombreOcupado(db, clinicId, input.kind, n.name)) return falla("NAME_TAKEN");
@@ -194,7 +208,7 @@ export async function updateTemplate(
     }
   }
   if (input.body !== undefined) {
-    const b = validarCuerpo(input.body);
+    const b = validarCuerpo(input.body, clinicId);
     if ("code" in b) return falla(b.code);
     data.body = b.body;
   }
