@@ -79,6 +79,20 @@ const escapar = (s: string): string =>
  * se escapa aquí. Un dato que falte (cédula) se omite: en un correo no hay
  * raya que llenar a mano. Colores fijos: un cliente de correo no lee tokens.
  */
+/**
+ * En el correo una imagen del documento no se puede ver: su ruta pide la sesión
+ * del panel, y una URL firmada caduca en minutos y viajaría fuera del sistema.
+ * Va su descripción en su lugar, igual que en el texto plano («[Imagen: …]»).
+ * El HTML viene saneado: el `alt` ya está escapado y no lleva `>`.
+ */
+export function imagenesComoTexto(html: string): string {
+  if (!html.includes("<img ")) return html;
+  return html.replace(/<img [^>]*>/g, (img) => {
+    const alt = / alt="([^"]*)"/.exec(img)?.[1]?.trim();
+    return `<em style="color:#7f7c90;">${alt ? `[Imagen: ${alt}]` : "[Imagen]"}</em>`;
+  });
+}
+
 export function correoDelDocumento(d: DocumentoParaEnviar): { subject: string; html: string; text: string } {
   const clinica = d.clinicaNombre.trim() || "Tu clínica";
   const subject = `${d.titulo} — ${clinica}`;
@@ -93,7 +107,7 @@ export function correoDelDocumento(d: DocumentoParaEnviar): { subject: string; h
     <hr style="border:none;border-top:1px solid #ebeaf0;margin:16px 0 20px;">
     <p style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#7f7c90;margin:0;">${escapar(d.tipo)} · ${escapar(d.pacienteNombre)}</p>
     <h1 style="font-size:22px;margin:6px 0 20px;">${escapar(d.titulo)}</h1>
-    <div style="font-size:16px;line-height:1.7;">${d.cuerpoHtml}</div>
+    <div style="font-size:16px;line-height:1.7;">${imagenesComoTexto(d.cuerpoHtml)}</div>
     <p style="margin:36px 0 0;padding-top:10px;border-top:1px solid #1a1826;display:inline-block;min-width:240px;">
       <strong>${escapar(d.doctorNombre)}</strong>${cedula}
     </p>

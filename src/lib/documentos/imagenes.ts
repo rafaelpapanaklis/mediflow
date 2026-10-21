@@ -86,6 +86,19 @@ export function rutaDeImagen(clave: string): string {
 }
 
 /**
+ * Para PINTAR un HTML ya saneado (visor de documentos): a cada
+ * `<img data-archivo="…">` le pone su `src` por `rutaDeImagen`. Solo a claves
+ * con la forma exacta (la ruta comprueba además la clínica de la sesión). El
+ * HTML guardado no cambia: esto es solo para mostrarlo.
+ */
+export function conSrcDeImagenes(html: string): string {
+  if (!html.includes("data-archivo")) return html;
+  return html.replace(/<img data-archivo="([^"]*)"/g, (todo, clave: string) =>
+    leerClave(clave) ? `<img src="${rutaDeImagen(clave)}" data-archivo="${clave}"` : todo,
+  );
+}
+
+/**
  * La clave a partir de los segmentos del catch-all `[...clave]`, que Next YA
  * entrega decodificados (cada segmento pasa por decodeURIComponent en su
  * route-matcher). Aquí no se decodifica otra vez: la clave codificada en un

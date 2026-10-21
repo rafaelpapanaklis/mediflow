@@ -184,3 +184,38 @@ describe("el PDF de respaldo pinta lo nuevo", () => {
     }
   });
 });
+
+describe("pintar lo guardado: imágenes en el visor y en el correo", () => {
+  it("el visor pone la src de la ruta a cada clave válida, y a ninguna otra cosa", async () => {
+    const { conSrcDeImagenes, rutaDeImagen } = await import("@/lib/documentos/imagenes");
+    const guardado = sanitizeTemplateHtml(`<p>a</p><img data-archivo="${ARCHIVO}" data-ancho="chico" alt="Rx">`);
+    assert.equal(
+      conSrcDeImagenes(guardado),
+      `<p>a</p><img src="${rutaDeImagen(ARCHIVO)}" data-archivo="${ARCHIVO}" data-ancho="chico" alt="Rx">`,
+    );
+    assert.equal(rutaDeImagen(ARCHIVO), `/api/documentos/imagenes/${encodeURIComponent(ARCHIVO)}`);
+    // Un documento viejo (sin imágenes) sale tal cual, sin tocar.
+    const viejo = "<p>Hola</p><ul><li>x</li></ul>";
+    assert.equal(conSrcDeImagenes(viejo), viejo);
+    // Una clave que no tiene la forma exacta no recibe src (aunque llegara a estar guardada).
+    assert.equal(conSrcDeImagenes('<img data-archivo="documentos/x/../y.webp">'), '<img data-archivo="documentos/x/../y.webp">');
+  });
+
+  it("DocumentoCuerpo pinta con conSrcDeImagenes (el visor de notas y el de consentimientos)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("src/components/dashboard/documentos-paciente/documento-hoja.tsx", "utf8");
+    assert.match(fuente, /dangerouslySetInnerHTML=\{\{ __html: conSrcDeImagenes\(html\) \}\}/);
+  });
+
+  it("en el correo la imagen va como su descripción, en el HTML y en el texto plano", async () => {
+    const { correoDelDocumento } = await import("../envio");
+    const cuerpoHtml = sanitizeTemplateHtml(`<p>Control</p><img data-archivo="${ARCHIVO}" alt="Rx &quot;inicial&quot;"><img data-archivo="${ARCHIVO}">`);
+    const c = correoDelDocumento({
+      tipo: "Nota de evolución", titulo: "Control", fecha: "21 de octubre", clinicaNombre: "Sol",
+      pacienteNombre: "Ana", doctorNombre: "Laura", cedula: null, cuerpoHtml,
+    });
+    assert.ok(!c.html.includes("<img"), "ninguna <img> rota en el correo");
+    assert.ok(c.html.includes("[Imagen: Rx &quot;inicial&quot;]") && c.html.includes("[Imagen]"));
+    assert.ok(c.text.includes('[Imagen: Rx "inicial"]') && c.text.includes("[Imagen]"));
+  });
+});

@@ -17,6 +17,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import s from "./documento.module.css";
 import type { EncabezadoDocumento } from "./tipos";
+import { conSrcDeImagenes } from "@/lib/documentos/imagenes";
 
 /** Tokens + tipografía. Todo lo de esta carpeta tiene que colgar de aquí. */
 export const CLASES_DOCUMENTO = [CLASES_MENU, s.raiz].join(" ");
@@ -125,7 +126,10 @@ export const clasesDocumento = s;
  * reconstruye con la lista blanca de `@/lib/document-templates/sanitize`
  * (etiquetas sin ningún atributo + texto escapado) ANTES de guardarlo. Por eso,
  * y solo por eso, se puede inyectar.
+ *
+ * Las imágenes se guardan sin `src` (solo su clave): aquí se les pone la de la
+ * ruta que firma la URL tras comprobar la clínica de la sesión.
  */
 export function DocumentoCuerpo({ html }: { html: string }) {
-  return <div className={s.cuerpo} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={s.cuerpo} dangerouslySetInnerHTML={{ __html: conSrcDeImagenes(html) }} />;
 }
