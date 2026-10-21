@@ -1,0 +1,530 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   EditorDocumento: la hoja Carta en la que se escribe (plantillas, notas,
+   consentimientos), su barra y los saltos de hoja.
+
+   Todo cuelga de `.raiz`, que se monta junto a `CLASES_MENU`: de ahí salen
+   los `--m2-*` con su versión oscura y la tipografía (Instrument Sans). Los
+   `--doc-*` se derivan igual que en documentos-paciente/documento.module.css
+   (la hoja de lectura), para que escribir y leer se vean iguales. Las medidas
+   de la hoja (`--hoja-*`) las pone el componente desde
+   src/lib/documentos/hoja-carta.ts: aquí NUNCA se escribe un número de la hoja.
+   No hay ningún hex.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  --doc-mesa: var(--m2-n1-fondo);
+  --doc-papel: var(--m2-tarjeta);
+  --doc-tinta: var(--m2-texto);
+  --doc-tinta-2: var(--m2-texto-2);
+  --doc-tinta-3: var(--m2-texto-3);
+  --doc-filete: var(--m2-tarjeta-borde);
+  --doc-acento: var(--m2-activo);
+  --doc-acento-texto: var(--m2-iniciales-texto);
+  --doc-acento-suave: color-mix(in srgb, var(--m2-activo) 9%, transparent);
+  --doc-acento-medio: color-mix(in srgb, var(--m2-activo) 16%, transparent);
+  /* Las piezas compartidas (DictationMic, .btn-new) leen estas globales. */
+  --brand: var(--m2-activo);
+  --text-1: var(--m2-texto);
+  --text-2: var(--m2-texto-2);
+  --text-3: var(--m2-texto-3);
+  --bg-elev: var(--m2-tarjeta);
+  --bg-hover: var(--m2-hover);
+  --border-soft: var(--m2-tarjeta-borde);
+  --border-strong: var(--m2-borde);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--m2-texto);
+  background: var(--doc-mesa);
+  border: 1px solid var(--m2-borde);
+  border-radius: 14px;
+}
+
+/* En oscuro la hoja NO se invierte a negro: la tarjeta del menú aclarada con un poco de tinta. */
+:global(.dark) .raiz {
+  --doc-papel: color-mix(in srgb, var(--m2-tarjeta) 88%, var(--m2-texto));
+  --doc-filete: color-mix(in srgb, var(--m2-tarjeta) 78%, var(--m2-texto));
+}
+
+/* ── La barra ─────────────────────────────────────────────────────────── */
+
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 10px;
+  background: var(--m2-tarjeta);
+  border-bottom: 1px solid var(--m2-borde);
+  border-radius: 14px 14px 0 0;
+}
+.grupo {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 0 4px;
+  border-right: 1px solid var(--m2-borde);
+}
+.grupo:last-child { border-right: 0; }
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.boton:hover:not(:disabled) { background: var(--m2-hover); color: var(--m2-texto); }
+.boton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.boton:disabled { opacity: 0.4; cursor: default; }
+.botonActivo,
+.botonActivo:hover:not(:disabled) { background: var(--doc-acento-suave); color: var(--m2-activo); }
+.botonTexto { padding: 0 9px; }
+.girando svg { animation: girar 1s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
+.selector {
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.selector:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.selectorTamano { width: 58px; }
+
+.menu { position: relative; }
+.desplegable {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 25;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-borde);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--m2-texto) 14%, transparent);
+}
+.opcion {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.opcion:hover:not(:disabled) { background: var(--m2-hover); }
+.opcion:disabled { opacity: 0.4; cursor: default; }
+.opcion small { margin-left: auto; padding-left: 12px; color: var(--m2-texto-3); font-size: 11.5px; }
+.separador { height: 1px; margin: 4px 0; background: var(--m2-borde); }
+.separadorVertical { width: 1px; height: 18px; margin: 0 4px; background: var(--m2-borde); }
+
+.rejillaTexto { padding: 4px 6px 6px; font-size: 12px; color: var(--m2-texto-3); }
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  gap: 3px;
+  padding: 0 6px 4px;
+}
+.rejillaCelda {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--m2-borde);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.rejillaOn { background: var(--doc-acento-suave); border-color: var(--m2-activo); }
+
+.dictado { display: inline-flex; align-items: center; min-height: 32px; padding: 0 2px; }
+
+.contextual {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--doc-acento-suave);
+  border-bottom: 1px solid var(--m2-borde);
+  font-size: 12.5px;
+  color: var(--m2-activo);
+}
+.contextual b { margin-right: 6px; font-weight: 700; }
+.contextual .boton { height: 28px; min-width: 28px; color: var(--m2-activo); }
+.contextualAyuda { margin-left: auto; font-size: 11.5px; opacity: 0.8; }
+
+.avisoAngosto {
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--doc-acento-suave);
+  color: var(--m2-activo);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ── La pila de hojas ─────────────────────────────────────────────────── */
+
+.pila {
+  flex: 1;
+  min-height: 0;
+  padding: 24px 16px 48px;
+  overflow: auto;
+}
+.hoja {
+  box-sizing: border-box;
+  width: var(--hoja-ancho);
+  min-height: var(--hoja-alto);
+  margin: 0 auto;
+  background: var(--doc-papel);
+  color: var(--doc-tinta);
+  border: 1px solid var(--doc-filete);
+  box-shadow: var(--m2-sombra), 0 12px 36px color-mix(in srgb, var(--m2-texto) 10%, transparent);
+  overflow-wrap: anywhere;
+}
+.hojaEsqueleto { min-height: var(--hoja-alto); animation: latir 1.4s ease-in-out infinite; }
+@keyframes latir { 50% { opacity: 0.6; } }
+
+/* El membrete: en la primera hoja y, clonado, en cada salto de hoja. */
+.cabecera { padding: var(--hoja-m-sup) var(--hoja-m-lat) 0; }
+.membrete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  height: var(--hoja-cab-alto);
+}
+.membreteIzq { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.membreteTextos { min-width: 0; }
+.logo { width: 56px; height: 56px; flex: none; border-radius: 10px; object-fit: contain; }
+.logoIniciales {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+.clinica { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.15; color: var(--doc-tinta); }
+.clinicaDato { margin: 2px 0 0; font-size: 11.5px; line-height: 1.35; color: var(--doc-tinta-2); }
+.fecha { flex: none; text-align: right; }
+.etiqueta {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--doc-tinta-3);
+}
+.valor { display: block; font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--doc-tinta); }
+.filete { height: 2px; background: var(--doc-acento); }
+
+/* Lo que solo va en la primera hoja: paciente/doctor, el sello y el título. */
+.primeraExtra { padding: 18px var(--hoja-m-lat) 0; }
+.sello {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--doc-tinta-3);
+}
+.separa { height: 1px; margin: 14px 0 18px; background: var(--doc-filete); }
+
+.cuerpo { padding: 0 var(--hoja-m-lat); }
+.esqueletoCuerpo { min-height: 200px; }
+.rellenoFinal { height: 0; }
+
+/* El pie de cada hoja: «clínica · tipo» y «Página n de m», dentro del margen inferior. */
+.pieHoja {
+  display: flex;
+  align-items: flex-end;
+  height: var(--hoja-m-inf);
+  padding: 0 var(--hoja-m-lat) 20px;
+  font-size: 10.5px;
+  color: var(--doc-tinta-3);
+}
+.pieRenglon {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px solid var(--doc-filete);
+}
+/* El salto de hoja automático (decoración): pie de la n, mesa, membrete de la n+1. */
+.saltoAuto {
+  width: calc(100% + 2 * var(--hoja-m-lat));
+  margin: 0 calc(-1 * var(--hoja-m-lat));
+  user-select: none;
+  pointer-events: none;
+}
+.mesaEntre {
+  height: var(--hoja-mesa-entre);
+  background: var(--doc-mesa);
+  box-shadow:
+    inset 0 8px 10px -8px color-mix(in srgb, var(--m2-texto) 18%, transparent),
+    inset 0 -8px 10px -8px color-mix(in srgb, var(--m2-texto) 18%, transparent);
+}
+.saltoAuto .cabecera { padding-bottom: 18px; }
+/* El membrete clonado vive dentro del texto: que no herede los márgenes de párrafo del cuerpo. */
+.prose .saltoAuto p { margin: 0; }
+.prose .saltoAuto .clinicaDato { margin-top: 2px; }
+
+/* ── El texto: la misma tipografía en pantalla y en papel (12 pt = 16 px) ── */
+
+.prose {
+  min-height: 200px;
+  outline: none;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--doc-tinta);
+  caret-color: var(--doc-acento);
+}
+.prose p { margin: 0 0 10px; }
+.prose h1 { margin: 16px 0 8px; font-size: 22px; font-weight: 700; line-height: 1.2; }
+.prose h2 { margin: 14px 0 6px; font-size: 18px; font-weight: 700; line-height: 1.25; }
+.prose h3 {
+  margin: 12px 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.prose ul,
+.prose ol { margin: 0 0 10px; padding-left: 28px; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li p { margin: 0 0 3px; }
+.prose strong, .prose b { font-weight: 700; }
+.prose em, .prose i { font-style: italic; }
+.prose u { text-decoration: underline; }
+
+.prose [data-sangria="1"] { margin-left: 36px; }
+.prose [data-sangria="2"] { margin-left: 72px; }
+.prose [data-sangria="3"] { margin-left: 108px; }
+.prose [data-sangria="4"] { margin-left: 144px; }
+.prose [data-sangria="5"] { margin-left: 180px; }
+.prose [data-sangria="6"] { margin-left: 216px; }
+.prose [data-alineacion="centro"] { text-align: center; }
+.prose [data-alineacion="derecha"] { text-align: right; }
+.prose [data-alineacion="justificado"] { text-align: justify; }
+.prose [data-tamano="10"] { font-size: 10pt; }
+.prose [data-tamano="11"] { font-size: 11pt; }
+.prose [data-tamano="14"] { font-size: 14pt; }
+.prose [data-tamano="16"] { font-size: 16pt; }
+.prose [data-tamano="18"] { font-size: 18pt; }
+.prose [data-tamano="24"] { font-size: 24pt; }
+
+.prose :global(p.is-editor-empty:first-child)::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--doc-tinta-3);
+  pointer-events: none;
+}
+
+/* tabla */
+.prose table {
+  width: 100%;
+  margin: 4px 0 12px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.prose th,
+.prose td {
+  position: relative;
+  min-width: 40px;
+  padding: 5px 8px;
+  border: 1px solid var(--doc-tinta-3);
+  vertical-align: top;
+}
+.prose th { background: var(--doc-acento-suave); font-weight: 700; text-align: left; }
+.prose td p,
+.prose th p { margin: 0; }
+.prose :global(.selectedCell)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--doc-acento-medio);
+  pointer-events: none;
+}
+
+/* columnas */
+.prose [data-tipo="columnas"] { display: grid; gap: 22px; margin: 0 0 10px; }
+.prose [data-tipo="columnas"][data-n="2"] { grid-template-columns: 1fr 1fr; }
+.prose [data-tipo="columnas"][data-n="3"] { grid-template-columns: 1fr 1fr 1fr; }
+.prose [data-tipo="columna"] {
+  min-width: 0;
+  padding: 0 2px;
+  border-radius: 4px;
+  outline: 1px dashed transparent;
+}
+.prose [data-tipo="columnas"]:hover [data-tipo="columna"] { outline-color: var(--doc-filete); }
+
+/* imagen */
+.imagen {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+.imagen[data-ancho="chico"] { width: 33%; }
+.imagen[data-ancho="medio"] { width: 60%; }
+.imagen[data-ancho="completo"] { width: 100%; }
+.imagen[data-alineacion="izquierda"] { margin: 4px auto 10px 0; }
+.imagen[data-alineacion="centro"] { margin: 4px auto 10px; }
+.imagen[data-alineacion="derecha"] { margin: 4px 0 10px auto; }
+.imagen:global(.ProseMirror-selectednode) { outline: 3px solid var(--doc-acento); outline-offset: 2px; }
+
+/* línea de firma: la raya y, debajo, el renglón editable */
+.prose [data-tipo="linea-firma"] {
+  width: 300px;
+  max-width: 100%;
+  margin: 44px 0 14px;
+  padding-top: 6px;
+  border-top: 1px solid var(--doc-tinta);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.prose [data-tipo="linea-firma"][data-lado="derecha"] { margin-left: auto; }
+.prose [data-tipo="linea-firma"][data-lado="centro"] { margin-left: auto; margin-right: auto; text-align: center; }
+
+/* marcador = ficha */
+.marcador {
+  display: inline-block;
+  padding: 0 7px;
+  border: 1px solid var(--doc-acento);
+  border-radius: 999px;
+  background: var(--doc-acento-suave);
+  color: var(--doc-acento-texto);
+  font-size: 0.86em;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: baseline;
+  cursor: default;
+}
+.marcador::before { content: attr(data-etiqueta); }
+.conDatos .marcador {
+  padding: 0;
+  border-color: transparent;
+  border-bottom: 1px dotted var(--doc-acento);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1em;
+  font-weight: inherit;
+}
+.conDatos .marcador::before { content: attr(data-ejemplo); }
+.marcador:global(.ProseMirror-selectednode) { box-shadow: 0 0 0 2px var(--doc-acento); }
+
+/* salto de página manual («Nueva página») */
+.saltoManual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  margin: 14px calc(-1 * var(--hoja-m-lat));
+  color: var(--doc-tinta-3);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: default;
+  user-select: none;
+}
+.saltoManual::before {
+  content: "";
+  position: absolute;
+  left: var(--hoja-m-lat);
+  right: var(--hoja-m-lat);
+  top: 50%;
+  border-top: 2px dashed var(--doc-acento);
+  opacity: 0.6;
+}
+.saltoRotulo {
+  position: relative;
+  padding: 0 10px;
+  background: var(--doc-papel);
+  color: var(--doc-acento-texto);
+}
+.saltoManual:global(.ProseMirror-selectednode) .saltoRotulo { border-radius: 6px; box-shadow: 0 0 0 2px var(--doc-acento); }
+
+/* Para que el cursor pueda pasar por encima de un nodo atómico (gapcursor). */
+.prose :global(.ProseMirror-gapcursor) { display: none; position: relative; }
+.prose :global(.ProseMirror-gapcursor)::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid var(--doc-tinta);
+  animation: parpadeo 1.1s steps(2, start) infinite;
+}
+.prose:global(.ProseMirror-focused) :global(.ProseMirror-gapcursor) { display: block; }
+@keyframes parpadeo { to { visibility: hidden; } }
+
+/* ── Teléfono y pantallas angostas: la hoja es fluida y no hay saltos ──── */
+
+.angosto .barra {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 6px 8px;
+}
+.angosto .grupo { flex: none; }
+.angosto .pila { padding: 12px 0 24px; overflow-x: hidden; }
+.angosto .hoja {
+  --hoja-m-lat: 18px;
+  --hoja-m-sup: 16px;
+  --hoja-cab-alto: auto;
+  width: 100%;
+  min-height: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.angosto .membrete { flex-direction: column; gap: 8px; height: auto; padding-bottom: 10px; }
+.angosto .fecha { text-align: left; }
+.angosto .saltoAuto,
+.angosto .rellenoFinal { display: none !important; }
+.angosto .saltoManual { margin: 12px calc(-1 * var(--hoja-m-lat)); }
+.angosto .prose [data-tipo="columnas"] { grid-template-columns: 1fr !important; }
+.angosto .prose [data-tipo="linea-firma"] { width: 100%; }
+.angosto .contextualAyuda { display: none; }
