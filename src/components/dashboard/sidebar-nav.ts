@@ -112,6 +112,9 @@ export interface NavItemDef {
   // en reposo, hover y activo. Hoy solo lo usa "Soporte Técnico" para
   // destacarlo del gris del resto.
   iconColor?: string;
+  // Solo en el menú de dos niveles (rediseño): el menú de siempre no la pinta, así una clínica sin
+  // el rediseño ve su barra exactamente como hoy. Hoy solo «Planes de tratamiento» (ws1-t5, P10).
+  soloMenuNuevo?: boolean;
 }
 
 export const NAV_ITEMS: NavItemDef[] = [
@@ -237,6 +240,10 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog,        permission: "team.view" },
   { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe,          permission: "landing.view", moduleKey: "landing" },
   { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList,  permission: "procedures.view" },
+  // Planes de tratamiento de TODA la clínica (ws1-t5, P10): activos, atrasados, en riesgo y
+  // «Registrar sesión». Hasta aquí no tenía enlace en ningún menú (solo por URL). Mismo permiso
+  // que la página y que GET /api/treatments. Solo en el menú nuevo (`soloMenuNuevo`).
+  { id: "treatments",     section: "admin", label: "Planes de tratamiento", href: "/dashboard/treatments", icon: ClipboardList, permission: "treatments.view", soloMenuNuevo: true },
   // Plantillas de nota de evolución y de consentimiento (WS1-T1). El permiso es
   // el de quien las escribe — doctor o (super)admin —, el mismo que exige la API:
   // ver src/lib/document-templates/permissions.ts.

@@ -32,6 +32,8 @@ const prismaStub: any = {
   treatmentPlan: { findFirst: async ({ where }: any) => { const p = db.plans.find((x) => coincide(x, where)); return p ? copia(p) : null; } },
   procedureCatalog: { findMany: async ({ where }: any) => db.catalogo.filter((x) => coincide(x, where)).map(copia) },
   $queryRaw: async () => [{ max: db.quotes.filter((q) => q.clinicId === "c1").length ? db.quotes.length : null }],
+  // ws1-t12 · fase 2: crear el presupuesto del plan va con el plan bloqueado (una transacción).
+  $transaction: async (fn: (tx: any) => Promise<unknown>) => fn(prismaStub),
   quote: {
     findFirst: async ({ where }: any) => {
       const hits = db.quotes.filter((x) => coincide(x, where)).sort((a, b) => b.createdAt - a.createdAt);

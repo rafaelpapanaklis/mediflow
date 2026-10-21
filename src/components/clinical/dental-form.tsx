@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { ClipboardList, FileText, Lock, Stethoscope } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -30,6 +31,8 @@ import {
   type Pronostico,
 } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { pickSingleAppointmentOfDay } from "@/lib/clinical/note-appointment-link";
+import { VentanaNuevoPlan, type FormPlan, type VentanaNuevoPlanProps } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
+import { precargaDeConsulta } from "@/components/dashboard/plan-tratamiento-rediseno/armar-plan";
 
 /**
  * La cita de HOY de este paciente, o null si no hay exactamente una. Con dos
@@ -99,6 +102,21 @@ interface Props {
    * consulta en el borrador de esa cita: una nota por visita y «Completar consulta» la encuentra llena.
    */
   citaEnCursoId?: string | null;
+  /**
+   * Consulta → plan (ws1-t5, P9): «Armar el plan» junto a «Plan de tratamiento futuro» abre la
+   * ventana rápida del plan con el diagnóstico, el pronóstico y el odontograma de ESTA consulta.
+   * Solo lo pasa la ficha en la Nueva consulta del rediseño y con `treatments.edit`; sin él, el
+   * formulario es el de siempre. El texto libre del plan futuro no se toca.
+   */
+  armarPlan?: {
+    paciente: { id: string; nombre: string; esNino: boolean };
+    doctores: { id: string; firstName: string; lastName: string }[];
+    /** El doctor del plan por omisión (el de la sesión). */
+    doctorId: string;
+    sugerencias?: string[];
+    /** El plan recién guardado (la ficha lo enseña en su pestaña sin esperar al refresco). */
+    onGuardado?: (plan: Record<string, unknown>) => void;
+  };
   initialRecord?: {
     id: string;
     subjective: string | null;
@@ -132,12 +150,12 @@ function readAddenda(spec: any): Addendum[] {
     }));
 }
 
-export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null, armarPlan }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
   // expediente existente; consulta nueva: local y se vuelca tras crear el record.
-  const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx } = useCodedDiagnoses(initialRecord?.id ?? null);
+  const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx, summary: dxResumen } = useCodedDiagnoses(initialRecord?.id ?? null);
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   /**
    * NOTA FIRMADA = SOLO LECTURA — hallazgo 25.
@@ -402,6 +420,31 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   const [pronostico, setPronostico] = useState<Pronostico>(
     () => normalizePronostico(initialSpec.pronostico, PRONOSTICOS) as Pronostico,
   );
+
+  // ── CONSULTA → PLAN (ws1-t5, P9) ──────────────────────────────────────────
+  // «Armar el plan» abre la ventana rápida del plan con lo que esta consulta YA sabe: el
+  // diagnóstico (observaciones y CIE-10), el pronóstico (no se pide dos veces) y el odontograma
+  // tal como lo ve el doctor, con lo que marcó y aún no guardó. Se fija al abrir. La ventana va en
+  // un portal: dentro del <form> un Enter en sus campos guardaría la consulta, y dentro del
+  // <fieldset disabled> de una nota firmada saldría apagada.
+  const [planAbierto, setPlanAbierto] = useState(false);
+  const [planCreado, setPlanCreado] = useState<string | null>(null);
+  const [formPlan, setFormPlan] = useState<FormPlan>({
+    doctorId: "", name: "", description: "", totalSessions: "1", sessionIntervalDays: "30", totalCost: "",
+  });
+  const [precargaPlan, setPrecargaPlan] = useState<NonNullable<VentanaNuevoPlanProps["precarga"]>>({});
+  const abrirPlan = () => {
+    if (!armarPlan) return;
+    setPrecargaPlan(precargaDeConsulta({
+      observaciones: form.assessment,
+      cie10: dxResumen,
+      pronostico,
+      odontograma: odontogram,
+      odontogramaListo: odoStatus === "ready",
+    }));
+    setFormPlan({ doctorId: armarPlan.doctorId, name: "", description: "", totalSessions: "1", sessionIntervalDays: "30", totalCost: "" });
+    setPlanAbierto(true);
+  };
 
   // ── BORRADOR LOCAL DE LA CONSULTA EN CURSO — hallazgo 29 ──────────────────
   //
@@ -740,11 +783,15 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         } else {
           toast("El odontograma del paciente no se actualizó: no se pudo cargar su estado actual antes de guardar.", { icon: "⚠️", duration: 7000 });
         }
-        if (selectedProcs.length > 0) {
-          toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(proceduresTotal) })}`);
+        // ws1-t12 · fase 2: lo que ya es del plan de tratamiento no entra al borrador (se cobra en la
+        // nota del plan); el aviso dice qué se apartó y el total es el del borrador que de verdad nació.
+        const delPlan: string[] = Array.isArray(record?.procedimientosDelPlan) ? record.procedimientosDelPlan : [];
+        if (selectedProcs.length > 0 && record?.draftInvoice) {
+          toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(Number(record.draftInvoice.total) || 0) })}`);
         } else {
           toast.success(t("clinical.dentalForm.savedToast"));
         }
+        if (delPlan.length > 0) toast(t("planTratamiento.cobro.consultaAlPlan", { lista: delPlan.join(", ") }), { duration: 9000 });
         // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado y
         // mergea el aiAssist devuelto a `record` para que onSaved(record) deje la
         // cajita morada ✨ en el estado del padre sin esperar un reload.
@@ -1380,11 +1427,32 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         <div className="field-new">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             <label className="field-new__label">{t("clinical.dentalForm.futurePlanLabel")}</label>
-            <DictationMic disabled={saving} onText={appendDictation("plan", "\n")} />
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {armarPlan && !isLocked && (
+                <ButtonNew
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  icon={<ClipboardList size={14} />}
+                  onClick={abrirPlan}
+                  disabled={saving}
+                  title={t("clinical.dentalForm.armarPlanTitulo")}
+                  data-armar-plan
+                >
+                  {t("clinical.dentalForm.armarPlan")}
+                </ButtonNew>
+              )}
+              <DictationMic disabled={saving} onText={appendDictation("plan", "\n")} />
+            </div>
           </div>
           <textarea className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
             placeholder={t("clinical.dentalForm.futurePlanPlaceholder")} value={form.plan} onChange={e => set("plan", e.target.value)} />
+          {planCreado && (
+            <p className="text-[11px] text-muted-foreground mt-1" role="status" data-plan-creado>
+              {t("clinical.dentalForm.planCreado", { nombre: planCreado })}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1494,6 +1562,24 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         onClose={() => setRxOpen(false)}
         onCreated={(rx) => setRxResult(rx)}
       />
+      {planAbierto && armarPlan && typeof document !== "undefined" && createPortal(
+        <VentanaNuevoPlan
+          paciente={armarPlan.paciente}
+          doctores={armarPlan.doctores}
+          form={formPlan}
+          setForm={setFormPlan}
+          sugerencias={armarPlan.sugerencias ?? []}
+          guardando={false}
+          precarga={precargaPlan}
+          onCerrar={() => setPlanAbierto(false)}
+          onGuardado={(plan) => {
+            setPlanAbierto(false);
+            setPlanCreado(typeof plan.name === "string" ? plan.name : formPlan.name);
+            armarPlan.onGuardado?.(plan);
+          }}
+        />,
+        document.body,
+      )}
     </form>
   );
 }

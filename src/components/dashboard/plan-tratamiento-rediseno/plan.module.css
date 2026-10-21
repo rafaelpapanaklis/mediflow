@@ -816,3 +816,140 @@
   .pie { flex-wrap: wrap; }
   .pdfError { flex-basis: 100%; }
 }
+
+/* ── Ventana rápida (ws1-t5, fase 2 · P3) ─────────────────────────────
+   Cada chip del odontograma dice qué entra al tocarlo («→ Resina 2 caras»);
+   las sugerencias encadenadas («sugerido: Corona») van punteadas. Los
+   detalles opcionales se pliegan; el pie lleva cuenta, total y sillón. */
+.fichaSugerido {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--m2-texto-3);
+  font-weight: 500;
+}
+
+.fichaSugeridoSinTarifario { font-style: italic; }
+
+.fichaCuenta { color: var(--m2-texto-3); }
+
+.fichaEncadenada {
+  border-style: dashed;
+  border-color: var(--m2-activo);
+  color: var(--m2-activo);
+  background: var(--m2-tarjeta);
+}
+
+.pistaRenglon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.plegable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plegable:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+.plegable svg { flex: none; transition: transform 0.15s; }
+
+.plegableAbierto { transform: rotate(90deg); }
+
+.plegableNota {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--m2-texto-3);
+}
+
+.detalles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.avisoPie { margin: 0 20px 10px; flex: none; }
+
+.errorPie { margin: 0 20px 10px; flex: none; }
+
+.pieBotones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pieCitas { font-size: 12px; }
+
+.pronto {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--m2-tarjeta) 25%, transparent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+@media (hover: hover) {
+  .plegable:hover { background: var(--m2-hover); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plegable svg { transition: none; }
+}
+
+/* En el celular el pie se parte: cuenta y total arriba, los botones abajo a lo
+   ancho y «Guardar y presentar» en su propio renglón. Alineado a la izquierda: a
+   la derecha, lo que no cabe se salía por el borde izquierdo de la ventana. */
+@media (max-width: 640px) {
+  .pie { justify-content: flex-start; }
+  .pieResumen { flex-basis: 100%; flex-wrap: wrap; row-gap: 2px; }
+  .pieBotones { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; }
+  .pieBotones > .boton { flex: 1 1 auto; height: auto; min-height: 38px; white-space: normal; text-align: center; }
+  .pieBotones > .botonPrincipal { flex-basis: 100%; }
+  .plegableNota { display: none; }
+
+  /* El renglón en un teléfono: procedimiento a lo ancho; fase y dientes; caras;
+     cantidad, precio e importe. */
+  .renglon {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 32px;
+    grid-template-areas:
+      "proc proc proc quitar"
+      "fase fase dientes dientes"
+      "caras caras caras caras"
+      "cantidad precio importe importe";
+  }
+}
+
+/* Pronóstico que ya puso la consulta (P9): se enseña, no se vuelve a pedir. */
+.valorFijo {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+  font-weight: 600;
+}

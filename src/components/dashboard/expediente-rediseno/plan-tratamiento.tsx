@@ -7,6 +7,7 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { esDescripcionDePlan, MARCA_PLAN } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { RaizExpediente } from "./raiz";
+import { CuentaDelPlan, type CuentasDelPaciente } from "./cuenta-del-plan";
 import s from "./expediente.module.css";
 
 /**
@@ -37,6 +38,14 @@ export interface PlanTratamientoProps {
    */
   casoOrtodoncia?: ResumenOrtoParaFicha | null;
   onAbrirCaso?: () => void;
+  /**
+   * ws1-t12 · fase 2: la cuenta de cada plan (GET /api/treatments/cuentas), solo con `billing.view`.
+   * `undefined` = no se pide (sin permiso): no se pinta nada de dinero más que el costo de siempre.
+   */
+  cuentas?: CuentasDelPaciente | null;
+  cargandoCuentas?: boolean;
+  /** «Abonar al plan»: abre «Cobrar hoy», que abona a la nota del plan. */
+  onCobrarPlan?: () => void;
 }
 
 const ESTADO_PLAN: Record<string, { labelKey: string; tono: string }> = {
@@ -60,6 +69,7 @@ const sesionesHechas = (sesiones: any[] | undefined) =>
 
 export function PlanTratamiento({
   tratamientos, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
+  cuentas, cargandoCuentas, onCobrarPlan,
 }: PlanTratamientoProps) {
   const t = useT();
   const locale = useLocale();
@@ -230,6 +240,10 @@ export function PlanTratamiento({
                   </span>
                 )}
               </div>
+              {/* Un plan cancelado conserva su nota: su saldo se sigue viendo (y abonando). */}
+              {cuentas !== undefined && (
+                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} />
+              )}
             </div>
           );
         })}

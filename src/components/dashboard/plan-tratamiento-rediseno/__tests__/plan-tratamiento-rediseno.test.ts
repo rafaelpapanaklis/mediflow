@@ -13,7 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   PLAN_VACIO, alternarDiente, avisosDeOrden, componerDescripcion, esDescripcionDePlan, esFdi,
-  hallazgosPorTratar, importeRenglon, leerDientes, letraCentro, sesionesSugeridas, subtotalesPorFase,
+  HALLAZGO_FASE, hallazgosPorTratar, importeRenglon, leerDientes, letraCentro, sesionesSugeridas, subtotalesPorFase,
   totalProcedimientos, type Renglon, type Rotulos,
 } from "../plan-clinico";
 
@@ -121,11 +121,18 @@ test("patient-detail-client conserva las tres ventanas de siempre y elige con `r
 // ═══════════════════════════════════════════════════════════════════════════
 // ⛔ El seguimiento por WhatsApp no se toca
 // ═══════════════════════════════════════════════════════════════════════════
-test("la carpeta nueva no escribe nada: solo LEE tarifario y odontograma", () => {
+// ws1-t5 (fase 2 · P3): la ventana rápida guarda FILAS y la ficha no sabe de ellas, así que la
+// ventana guarda ella misma. Sigue habiendo UN solo sitio que escribe: `guardar-plan.ts`.
+test("en la carpeta solo escribe guardar-plan.ts; las ventanas solo leen", () => {
   for (const a of archivosNuevos.filter((x) => x.nombre.endsWith(".tsx"))) {
     assert.ok(!/method\s*:/.test(a.texto), `${a.nombre} hace una petición que no es GET`);
-    assert.ok(!/fetch\(\s*["'`]\/api\/treatments/.test(a.texto), `${a.nombre} llama a /api/treatments: guardar es cosa del padre`);
+    assert.ok(!/fetch\(\s*["'`]\/api\/treatments/.test(a.texto), `${a.nombre} llama a /api/treatments: guardar es cosa de guardar-plan.ts`);
   }
+  const escriben = archivosNuevos.filter((a) => /method\s*:\s*"(POST|PATCH|PUT|DELETE)"/.test(a.texto)).map((a) => a.nombre);
+  assert.deepEqual(escriben, ["guardar-plan.ts"]);
+  const guardar = archivosNuevos.find((a) => a.nombre === "guardar-plan.ts")!.texto;
+  assert.equal((guardar.match(/f\("\/api\/treatments"/g) ?? []).length, 1, "un solo POST de planes");
+  assert.ok(!/method\s*:\s*"(PATCH|PUT|DELETE)"/.test(guardar), "la ventana nueva solo da de alta");
   // Lo que alimenta al cron sigue saliendo de los mismos campos y del mismo sitio.
   const api = leer("app/api/treatments/route.ts");
   assert.match(api, /const \{ patientId, doctorId, name, description, totalSessions, sessionIntervalDays, totalCost \} = body;/);
@@ -234,11 +241,11 @@ test("del odontograma salen los hallazgos por tratar, con sus caras juntas", () 
     [36, "missing", "restauradora", ""],
   ]);
   // Cada id que se da por «problema» existe en el catálogo del odontograma.
+  // (HALLAZGO_FASE sale de la lista compartida de sugerir-procedimiento.ts desde ws1-t5: se revisan sus claves de verdad.)
   const catalogo = leer("components/dashboard/odontogram-v2/data.ts");
-  const clinico = leer("components/dashboard/plan-tratamiento-rediseno/plan-clinico.ts");
-  const bloque = clinico.slice(clinico.indexOf("export const HALLAZGO_FASE"), clinico.indexOf("export interface EntradaOdontograma"));
-  for (const m of bloque.matchAll(/^\s{2}([a-z0-9_]+):/gm)) {
-    assert.ok(catalogo.includes(`C("${m[1]}"`), `${m[1]} no existe en odontogram-v2/data.ts`);
+  assert.ok(Object.keys(HALLAZGO_FASE).length >= 20);
+  for (const id of Object.keys(HALLAZGO_FASE)) {
+    assert.ok(catalogo.includes(`C("${id}"`), `${id} no existe en odontogram-v2/data.ts`);
   }
 });
 

@@ -82,18 +82,20 @@ export async function aceptarPresupuesto(args: {
   signatureUrl?: string | null;
   /** Estados desde los que se acepta (el panel admite DRAFT y EXPIRED; la liga solo PRESENTED). */
   desde: string[];
-}): Promise<{ status: string; renglones: RenglonAceptado[] | null }> {
+}): Promise<{ status: string; renglones: RenglonAceptado[] | null; notaDelPlan?: unknown }> {
   const encendida = await aceptacionEncendida();
-  return prisma.$transaction(async (tx) => {
+  let planId: string | null = null;
+  const aceptado = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "quotes" WHERE id = ${args.quoteId} AND "clinicId" = ${args.clinicId} FOR UPDATE`;
     const q = await tx.quote.findFirst({
       where: { id: args.quoteId, clinicId: args.clinicId },
       select: {
-        status: true, discountAmount: true,
+        status: true, discountAmount: true, treatmentPlanId: true,
         items: { select: { id: true, name: true, toothFdi: true, quantity: true, unitPrice: true, discount: true, lineTotal: true }, orderBy: { sortOrder: "asc" } },
       },
     });
     if (!q) throw new PresupuestoError("Presupuesto no encontrado", 404);
+    planId = q.treatmentPlanId ?? null;
     if (q.status === "ACCEPTED") throw new PresupuestoError("El presupuesto ya fue aceptado");
     if (q.status === "REJECTED") throw new PresupuestoError("El presupuesto fue rechazado");
     if (args.desde.indexOf(q.status) === -1) {
@@ -128,6 +130,18 @@ export async function aceptarPresupuesto(args: {
     });
     return { status: q.status, renglones };
   });
+  if (!planId) return aceptado;
+  // El plan ES el presupuesto (ws1-t12 · P6): al aceptarlo nace la nota de cobro del plan con lo
+  // aceptado. FUERA de la transacción y sin tumbar la aceptación: si falla, la nota se crea en el
+  // siguiente intento (es idempotente) y la aceptación ya quedó.
+  try {
+    const { asegurarNotaDelPlan } = await import("@/lib/treatments/cobro.server");
+    const notaDelPlan = await asegurarNotaDelPlan({ clinicId: args.clinicId, planId, userId: args.userId, origen: "aceptacion" });
+    return { ...aceptado, notaDelPlan };
+  } catch (e) {
+    console.error("[presupuesto:aceptar] no se pudo crear la nota de cobro del plan:", e);
+    return { ...aceptado, notaDelPlan: { estado: "error" } };
+  }
 }
 
 /** Frase de Movimientos al aceptar. */

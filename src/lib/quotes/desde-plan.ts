@@ -31,6 +31,10 @@ export interface RenglonLeido {
   /** Caras tal como se escribieron («MO»); "" si no traía. */
   caras: string;
   motivo: string;
+  /** Solo de una FILA del plan (ws1-t12, lector dual): su procedimiento del tarifario. El texto no lo sabe. */
+  procedureId?: string | null;
+  /** Solo de una FILA del plan: su id, para ligar el concepto del presupuesto a la fila. */
+  filaId?: string;
 }
 
 export interface ProcedimientoTarifario {
@@ -44,6 +48,8 @@ export interface ConceptoDePlan extends QuoteItemInput {
   origen: "plan" | "tarifario" | "sinPrecio";
   /** El nombre coincidió con un procedimiento del tarifario. */
   deTarifario: boolean;
+  /** La fila del plan de la que sale (solo si el plan tiene filas). */
+  filaId?: string;
 }
 
 export interface PlanParaPresupuesto {
@@ -246,6 +252,12 @@ export interface OpcionesDelArmado {
    * (`textoPuedeEstarRedondeado`): sin marca, sí (revisión t8, N-P2 / N3-P2).
    */
   textoRedondeado?: boolean;
+  /**
+   * Los renglones ya leídos de las FILAS del plan (`lib/treatments/leer-plan.ts`, ws1-t12). Con
+   * ellos no se lee el texto: sus precios son exactos y su procedimiento del tarifario es el de la
+   * fila, no el que coincida por nombre.
+   */
+  renglones?: RenglonLeido[];
 }
 
 /** Arma los conceptos del presupuesto a partir del plan y del tarifario de la clínica. */
@@ -254,14 +266,16 @@ export function armarPresupuestoDePlan(
   tarifario: ProcedimientoTarifario[],
   opciones: OpcionesDelArmado = {},
 ): PresupuestoDePlan {
-  const textoRedondeado = opciones.textoRedondeado ?? textoPuedeEstarRedondeado(plan);
+  const deFilas = Array.isArray(opciones.renglones) && opciones.renglones.length > 0;
+  const textoRedondeado = deFilas ? false : opciones.textoRedondeado ?? textoPuedeEstarRedondeado(plan);
+  const porId = new Map(tarifario.map((p) => [p.id, p] as const));
   const porNombre = new Map<string, ProcedimientoTarifario>();
   for (const p of tarifario) {
     const k = normalizar(p.name);
     if (k && !porNombre.has(k)) porNombre.set(k, p);
   }
 
-  const leidos = leerRenglonesDelPlan(plan.description);
+  const leidos = deFilas ? opciones.renglones! : leerRenglonesDelPlan(plan.description);
   const costo = Number.isFinite(plan.totalCost) && plan.totalCost > 0 ? redondear2(plan.totalCost) : 0;
   const sinDetalle = leidos.length === 0;
   const base: RenglonLeido[] = sinDetalle
@@ -276,7 +290,7 @@ export function armarPresupuestoDePlan(
   const costeaConTarifario = !conPrecio && costo > 0;
 
   const conceptos: ConceptoDePlan[] = base.map((r) => {
-    const t = porNombre.get(normalizar(r.nombre)) ?? null;
+    const t = (r.procedureId ? porId.get(r.procedureId) : undefined) ?? porNombre.get(normalizar(r.nombre)) ?? null;
     // Un texto viejo redondeó a pesos: si el tarifario redondea a lo mismo, vale el exacto. En un
     // texto exacto (o con centavos en este precio) manda SIEMPRE el precio del plan.
     const tarifarioExacto =
@@ -308,6 +322,7 @@ export function armarPresupuestoDePlan(
       notes: notas || null,
       origen,
       deTarifario: !!t,
+      ...(r.filaId ? { filaId: r.filaId } : {}),
     };
   });
 

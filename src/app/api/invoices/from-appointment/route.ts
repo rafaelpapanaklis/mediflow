@@ -8,6 +8,8 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { crearFacturaDesdeCita } from "@/lib/invoices/crear-desde-cita.server";
 import { facturaOcupaLaCita } from "@/lib/invoices/cita-factura-cancelada";
+import { emparejarConElPlan, nombresApartados } from "@/lib/treatments/sin-doble-cobro";
+import { filasDelPaciente } from "@/lib/treatments/sin-doble-cobro.server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,8 @@ const LineItemSchema = z
     description: z.string().optional(),
     toothNumber: z.number().int().optional(),
     surface: z.string().optional().nullable(),
+    // ws1-t12 · fase 2: el procedimiento del tarifario, para reconocer lo que ya es de un plan.
+    procedureCatalogId: z.string().optional().nullable(),
     unitPrice: z.number().nonnegative(),
     quantity: z.number().int().positive().default(1),
   })
@@ -35,6 +39,9 @@ const Schema = z.object({
   lineItems: z.array(LineItemSchema).min(1),
   discount: z.number().nonnegative().optional().default(0),
   notes: z.string().optional(),
+  // ws1-t12 · fase 2: filas del plan que «Tratamientos detectados» ya usó para lo que apartó de esta
+  // cita (no viene en la factura): aquí no se vuelven a contar contra lo que sí viene.
+  filasApartadas: z.array(z.string().max(100)).max(200).optional(),
 });
 
 /**
@@ -96,6 +103,40 @@ export async function POST(req: NextRequest) {
       { error: "invoice_already_exists", invoice: existing },
       { status: 409 },
     );
+  }
+
+  // ws1-t12 · fase 2 (P5): lo que ya es de un plan de tratamiento del paciente se cobra en la nota
+  // del plan (decisión de Rafael, 20-oct-2026), no en una factura suelta de la cita. «Tratamientos
+  // detectados» ya lo aparta (lo marca hecho); si aun así llega, aquí no se cobra otra vez.
+  if (appt.patientId) {
+    // Una fila con diente se descuenta solo si nada de lo que viene es de ese diente: con su diente en la
+    // factura, el aviso del cliente no basta (sería cobrarla dos veces).
+    const yaUsadas = new Set(parsed.data.filasApartadas ?? []);
+    const dientesQueVienen = new Set(parsed.data.lineItems.map((li) => li.toothNumber).filter((d): d is number => d != null));
+    const filas = (await filasDelPaciente(session.clinic.id, appt.patientId)).filter(
+      (f) => !yaUsadas.has(f.id) || f.dientes.some((d) => dientesQueVienen.has(d)),
+    );
+    if (filas.length > 0) {
+      const cosas = parsed.data.lineItems.map((li) => ({
+        nombre: String(li.description ?? li.name ?? ""),
+        codigo: li.code ?? null,
+        procedureId: li.procedureCatalogId ?? null,
+        diente: li.toothNumber ?? null,
+        cantidad: li.quantity,
+      }));
+      const e = emparejarConElPlan(cosas, filas);
+      if (e.delPlan.length > 0) {
+        const nombres = nombresApartados(cosas, e);
+        return NextResponse.json(
+          {
+            error: `Ya está en el plan de tratamiento del paciente y se cobra en su nota: ${nombres.join(", ")}. Márcalo como hecho y abónalo al plan.`,
+            code: "en_el_plan",
+            conceptos: nombres,
+          },
+          { status: 409 },
+        );
+      }
+    }
   }
 
   // Conceptos como se PERSISTEN: `description` + importe de línea. El code /
