@@ -179,11 +179,17 @@ function CuerpoCobrarHoy({
   const [confirmaFuera, setConfirmaFuera] = useState(false);
   // Si no se pudo saber (error, sin permiso), no se cobra a ciegas: se avisa y se pide confirmar.
   const [planesError, setPlanesError] = useState(false);
-  const leerPlanes = async (): Promise<PlanConCuenta[] | null> => {
+  // Al unir la fase 2 (REPORTE-ws1-t1 §6): los planes con filas AGENDADAS en esta cita. Lo dicen las
+  // filas ligadas (servidor), no el «Plan: » del motivo, que se puede borrar al editar la cita.
+  const [planesDeLaCita, setPlanesDeLaCita] = useState<string[]>([]);
+  const leerPlanes = async (): Promise<{ planes: PlanConCuenta[]; deLaCita: string[] } | null> => {
     try {
-      const r = await fetch(`/api/treatments/cuentas?patientId=${encodeURIComponent(patientId)}`);
+      const deCita = cita?.id ? `&appointmentId=${encodeURIComponent(cita.id)}` : "";
+      const r = await fetch(`/api/treatments/cuentas?patientId=${encodeURIComponent(patientId)}${deCita}`);
       const d = r.ok ? await r.json() : null;
-      return Array.isArray(d?.planes) ? (d.planes as PlanConCuenta[]) : null;
+      if (!Array.isArray(d?.planes)) return null;
+      const deLaCita = Array.isArray(d.planesDeLaCita) ? d.planesDeLaCita.filter((x: unknown): x is string => typeof x === "string") : [];
+      return { planes: d.planes as PlanConCuenta[], deLaCita };
     } catch {
       return null;
     }
@@ -192,11 +198,12 @@ function CuerpoCobrarHoy({
     let vivo = true;
     leerPlanes().then((leida) => {
       if (!vivo) return;
-      const lista = leida ?? [];
+      const lista = leida?.planes ?? [];
       setPlanesError(leida === null);
       setPlanes(lista);
+      setPlanesDeLaCita(leida?.deLaCita ?? []);
       if (modoTocado.current) return;
-      const inicial = modoInicialCobroHoy(lista);
+      const inicial = modoInicialCobroHoy(lista, leida?.deLaCita ?? []);
       setModo(inicial.modo);
       setPlanElegido(inicial.planId);
     });
@@ -212,7 +219,9 @@ function CuerpoCobrarHoy({
   const yaDelPlan = planes && nota === null ? conceptosQueYaSonDelPlan(conceptos, planes) : [];
   // Mientras no se sabe si el paciente tiene plan, no se cobra (revisión, hallazgo 2): la nota nueva
   // podría ser lo que su nota del plan ya cobra.
-  const bloqueoDelPlan = nota === null && (planes === null || ((yaDelPlan.length > 0 || planesError) && !confirmaFuera));
+  // La cita misma es del plan: la nota nueva solo si es OTRO procedimiento (el servidor lo exige igual).
+  const citaDelPlan = planesDeLaCita.length > 0;
+  const bloqueoDelPlan = nota === null && (planes === null || ((yaDelPlan.length > 0 || planesError || citaDelPlan) && !confirmaFuera));
   // Mientras no se toque, «paga hoy» sigue al total: lo normal es que pague todo.
   // Sin "billing.charge" el pago es 0: solo se crea el cargo (revisión ws1-t1, fallo 1).
   const vista = vistaCobroHoy({ conceptos, puedeCobrar, pagoTocado, pago, clinicTaxMode });
@@ -252,6 +261,7 @@ function CuerpoCobrarHoy({
             patientId, appointmentId: cita?.id ?? null, conceptos, clinicTaxMode, conPagoHoy: pagoEfectivo > 0,
             // C-07: lo elegido a mano viaja (null = «Sin asignar» a propósito); si no, hereda.
             ...(doctorTocado ? { doctorId: doctorId || null } : {}),
+            fueraDelPlan: confirmaFuera,
           })),
         });
         const out = await res.json().catch(() => ({}));
@@ -360,9 +370,9 @@ function CuerpoCobrarHoy({
         puedeCobrar={puedeCobrar}
         puedeEnviarComprobante={puedeEnviarComprobante}
         releer={async () => {
-          const lista = await leerPlanes();
-          if (lista) setPlanes(lista);
-          return lista?.find((p) => p.planId === planSel.planId) ?? null;
+          const leida = await leerPlanes();
+          if (leida) setPlanes(leida.planes);
+          return leida?.planes.find((p) => p.planId === planSel.planId) ?? null;
         }}
         ocupado={ocupado}
         onClose={onClose}
@@ -632,6 +642,26 @@ function CuerpoCobrarHoy({
             <span>{t("planTratamiento.cobro.planSinLeer")}</span>
             <label className={c.casilla}>
               <input type="checkbox" checked={confirmaFuera} onChange={(e) => setConfirmaFuera(e.target.checked)} disabled={guardando} />
+              <span>{t("planTratamiento.cobro.esOtro")}</span>
+            </label>
+          </div>
+        )}
+        {/* Al unir la fase 2: la CITA es del plan (tiene sus procedimientos agendados): lo de hoy se abona. */}
+        {citaDelPlan && nota === null && yaDelPlan.length === 0 && (
+          <div className={`${c.aviso} ${c.avisoAlerta}`} role="alert" data-cobrar-hoy-cita-del-plan>
+            <span>
+              {t("planTratamiento.cobro.citaDelPlan", {
+                plan: (planes ?? []).filter((p) => planesDeLaCita.includes(p.planId)).map((p) => p.nombre).join(", "),
+              })}
+            </span>
+            {opcionesPlan.some((p) => planesDeLaCita.includes(p.planId)) && (
+              <button type="button" className={`${c.enlace} ${h.enlaceAviso}`} disabled={guardando}
+                onClick={() => { const p = opcionesPlan.find((x) => planesDeLaCita.includes(x.planId))!; elegir(p.saldo > 0.005 ? "abono" : "nota_del_plan", p.planId); }}>
+                {t("planTratamiento.cobro.irAlAbono")}
+              </button>
+            )}
+            <label className={c.casilla}>
+              <input type="checkbox" checked={confirmaFuera} onChange={(e) => setConfirmaFuera(e.target.checked)} disabled={guardando} data-cobrar-hoy-confirma-fuera />
               <span>{t("planTratamiento.cobro.esOtro")}</span>
             </label>
           </div>

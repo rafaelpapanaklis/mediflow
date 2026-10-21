@@ -99,6 +99,11 @@ export function cuerpoNotaCobroHoy(input: {
    * siempre (cita, citas de hoy, plan, cabecera — lib/invoices/doctor-de-factura).
    */
   doctorId?: string | null;
+  /**
+   * La persona confirmó que es OTRO procedimiento, no el del plan: POST /api/invoices deja crear
+   * la nota aunque la cita tenga filas del plan agendadas (sin esto contesta 409 `cita_del_plan`).
+   */
+  fueraDelPlan?: boolean;
 }) {
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(input.clinicTaxMode);
   return {
@@ -110,6 +115,7 @@ export function cuerpoNotaCobroHoy(input: {
     taxIncluded,
     ...(input.conPagoHoy ? { conPagoHoy: true as const } : {}),
     ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
+    ...(input.fueraDelPlan === true ? { fueraDelPlan: true as const } : {}),
   };
 }
 

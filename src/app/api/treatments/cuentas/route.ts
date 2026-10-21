@@ -7,6 +7,7 @@ import { esIdDeLaBase, MENSAJE_ID_INVALIDO } from "@/lib/validation/id";
 import { leerCuentaDelPlan } from "@/lib/treatments/cobro.server";
 import { repoFilas } from "@/lib/treatments/items-db";
 import { planesDelPaciente } from "@/lib/treatments/sin-doble-cobro.server";
+import { filasAgendadasEnCita } from "@/lib/treatments/citas-del-plan-db";
 import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,10 @@ const MAX_PLANES = 10;
  * `GET /api/treatments/[id]/cuenta` (`leerCuentaDelPlan`); además van las notas por cobrar (para
  * repartir el abono) y las filas vivas (para reconocer lo que la hoja va a cobrar).
  *
+ * Con `&appointmentId=` (la hoja abierta desde una cita) responde además `planesDeLaCita`: los planes
+ * de ESTE paciente con filas agendadas en esa cita (`filasAgendadasEnCita`), para que la hoja abone
+ * a ese plan y no proponga cobrar aparte. Al unir la fase 2 (REPORTE-ws1-t1 §6).
+ *
  * Permisos: `treatments.view` + `billing.view`, los de `…/cuenta`. Tenant y paciente: los de la
  * sesión; un plan cancelado (ABANDONED) entra solo por su nota viva (la hoja no le ofrece crear una). Las cuentas se leen en serie (el pooler no aguanta
  * muchas a la vez) y como mucho `MAX_PLANES`.
@@ -32,8 +37,11 @@ export async function GET(req: NextRequest) {
   const denied = denyIfMissingPermission(ctx, "treatments.view") ?? denyIfMissingPermission(ctx, "billing.view");
   if (denied) return denied;
 
-  const patientId = new URL(req.url).searchParams.get("patientId") ?? "";
+  const params = new URL(req.url).searchParams;
+  const patientId = params.get("patientId") ?? "";
   if (!patientId || !esIdDeLaBase(patientId)) return NextResponse.json({ error: MENSAJE_ID_INVALIDO }, { status: 400 });
+  const appointmentId = params.get("appointmentId");
+  if (appointmentId !== null && !esIdDeLaBase(appointmentId)) return NextResponse.json({ error: MENSAJE_ID_INVALIDO }, { status: 400 });
   const paciente = await prisma.patient.findFirst({ where: { id: patientId, clinicId: ctx.clinicId }, select: { id: true } });
   if (!paciente) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
   const oculto = await assertPatientVisible(paciente.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
@@ -68,5 +76,10 @@ export async function GET(req: NextRequest) {
       })),
     });
   }
-  return NextResponse.json({ planes: salida });
+  // Solo planes de ESTE paciente (los de la lista): una cita de otro paciente no dice nada aquí.
+  const delPaciente = new Set(planes.map((p) => p.id));
+  const planesDeLaCita = appointmentId
+    ? Array.from(new Set((await filasAgendadasEnCita(ctx.clinicId, appointmentId)).map((f) => f.planId))).filter((id) => delPaciente.has(id))
+    : [];
+  return NextResponse.json({ planes: salida, planesDeLaCita });
 }

@@ -24,6 +24,7 @@ import { montoParaTexto } from "@/lib/movimientos-paciente/textos";
 import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { doctorPedido } from "@/lib/invoices/doctor-de-factura";
 import { doctorDeFacturaNueva } from "@/lib/invoices/doctor-de-factura.server";
+import { filasAgendadasEnCita } from "@/lib/treatments/citas-del-plan-db";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -232,6 +233,23 @@ export async function POST(req: NextRequest) {
           { error: "La cita seleccionada es de otro paciente" },
           { status: 400 },
         );
+      }
+      // Plan de tratamiento, fase 2 (al unir, REPORTE-ws1-t1 §6): una cita con procedimientos del plan
+      // agendados se cobra ABONANDO a la nota del plan, no con una nota propia (sería cobrarlos dos
+      // veces). Lo dicen las filas ligadas a la cita, no el «Plan: » del motivo, que se puede borrar.
+      // Solo pasa si la persona confirmó que es OTRO procedimiento (`fueraDelPlan`, «Cobrar hoy»).
+      if (body.fueraDelPlan !== true) {
+        const delPlan = await filasAgendadasEnCita(clinicId, data.appointmentId);
+        if (delPlan.length > 0) {
+          return NextResponse.json(
+            {
+              error: "Esta cita es del plan de tratamiento: lo de hoy se abona a la nota del plan. Si es otro procedimiento, confírmalo en «Cobrar hoy».",
+              code: "cita_del_plan",
+              planIds: Array.from(new Set(delPlan.map((f) => f.planId))),
+            },
+            { status: 409 },
+          );
+        }
       }
       // H1 (revisión final, ws1-t4): si la factura que tenía la cita está
       // CANCELADA, suelta la cita (con nota y bitácora) para que quepa esta.

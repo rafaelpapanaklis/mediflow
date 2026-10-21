@@ -46,7 +46,7 @@ const TARIFARIO = [{ id: "proc-r", name: "Resina", basePrice: 1250.5, isActive: 
 
 interface Pedida { metodo: string; ruta: string; cuerpo: any }
 
-async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, escena: string, opciones: { cuentas: () => unknown[]; viewport?: { width: number; height: number } }) {
+async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, escena: string, opciones: { cuentas: () => unknown[]; planesDeLaCita?: string[]; viewport?: { width: number; height: number } }) {
   const navegador = await chromium.launch();
   const pagina = await navegador.newPage({ viewport: opciones.viewport ?? { width: 1280, height: 900 } });
   const pedidas: Pedida[] = [];
@@ -64,7 +64,7 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     if (url.pathname === "/paquete.js") return ruta.fulfill({ status: 200, contentType: "text/javascript", body: paquete });
     if (url.pathname === "/api/treatments/cuentas") {
       lecturasDeCuentas++;
-      return json(200, { planes: opciones.cuentas() });
+      return json(200, { planes: opciones.cuentas(), planesDeLaCita: opciones.planesDeLaCita ?? [] });
     }
     if (url.pathname === "/api/treatments" && req.method() === "GET") {
       return json(200, [{ id: "plan1", name: "Plan Ana", status: "ACTIVE", items: FILAS.map((f) => ({ ...f, importe: f.nombre === "Resina" ? 1250.5 : 800, precio: 0, precioCentavos: 0 })) }]);
@@ -235,5 +235,43 @@ test("a 390 px: Cobrar hoy (abono), Hoy en el sillón y la Cuenta del plan sin s
     } finally {
       await navegador.close();
     }
+  }
+});
+
+// Al unir la fase 2 (REPORTE-ws1-t1 §6): la cita DESDE la que se cobra tiene procedimientos del plan
+// agendados. Lo dicen las filas ligadas (servidor), no el motivo.
+test("Cobrar hoy desde una cita del plan: abre en el abono de ESE plan, y «Otra cosa» solo confirmando (viaja fueraDelPlan)", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const paquete = await empaquetar("src/components/dashboard/cobrar-hoy/__tests__/arnes-cobro-plan.tsx");
+  // Otro plan que debe MÁS y va primero; el de la cita es plan1, y sus filas no se parecen al motivo
+  // («Resina»): sin la liga de la cita, la hoja no sabría que esta cita es del plan.
+  const otro = { ...planConNota(), planId: "plan-otro", nombre: "Plan ortodoncia", saldo: 9000, notas: [{ ...NOTA, invoiceId: "n-otro", invoiceNumber: "F-0050" }], filas: [] };
+  const delaCita = { ...planConNota(), filas: FILAS.filter((f) => f.nombre === "Limpieza") };
+  const { navegador, pagina, pedidas } = await abrir(chromium, paquete, "cobrar", { cuentas: () => [otro, delaCita], planesDeLaCita: ["plan1"] });
+  try {
+    await pagina.waitForSelector('[data-abono-plan="plan1"]');
+    assert.ok(pedidas.some((p) => p.ruta.startsWith("/api/treatments/cuentas?") && p.ruta.includes("appointmentId=cita1")), "pregunta por la cita");
+    await pagina.click("[data-cobrar-hoy-otra]");
+    await pagina.waitForSelector("[data-cobrar-hoy-cita-del-plan]");
+    assert.match(await pagina.textContent("[data-cobrar-hoy-cita-del-plan]") ?? "", /Esta cita es del plan «Plan Ana»/);
+    assert.equal(await pagina.locator("[data-cobrar-hoy-ya-del-plan]").count(), 0, "el motivo no coincide con el plan: avisa la CITA");
+    const boton = pagina.locator("button", { hasText: "Cobrar $" });
+    assert.equal(await boton.isDisabled(), true, "sin confirmar que es OTRO procedimiento no se cobra aparte");
+    await pagina.check("[data-cobrar-hoy-confirma-fuera]");
+    await boton.click();
+    const alta = await (async () => {
+      for (let i = 0; i < 100; i++) {
+        const p = pedidas.find((x) => x.metodo === "POST" && x.ruta === "/api/invoices");
+        if (p) return p;
+        await pagina.waitForTimeout(50);
+      }
+      return null;
+    })();
+    assert.ok(alta, "con la confirmación sí se crea la nota nueva");
+    assert.equal(alta!.cuerpo.appointmentId, "cita1");
+    assert.equal(alta!.cuerpo.fueraDelPlan, true, "y el servidor recibe la confirmación");
+  } finally {
+    await navegador.close();
   }
 });

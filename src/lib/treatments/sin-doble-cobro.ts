@@ -199,7 +199,19 @@ export type ModoCobroHoy = "abono" | "nota_del_plan" | "nota_nueva";
  * nueva). Con un plan sin nota pero con algo por facturar: crear la nota del plan y abonar. Sin
  * planes: la nota nueva de siempre.
  */
-export function modoInicialCobroHoy(planes: PlanConCuenta[]): { modo: ModoCobroHoy; planId: string | null } {
+export function modoInicialCobroHoy(
+  planes: PlanConCuenta[],
+  /**
+   * Los planes con filas agendadas en la cita desde la que se cobra (`filasAgendadasEnCita`): si los
+   * hay, la hoja abre en ESE plan, no en el primero que deba. Al unir la fase 2 (REPORTE-ws1-t1 §6).
+   */
+  planesDeLaCita: readonly string[] = [],
+): { modo: ModoCobroHoy; planId: string | null } {
+  const deLaCita = planes.filter((p) => p.conFilas && planesDeLaCita.includes(p.planId));
+  if (deLaCita.length > 0) {
+    const r = modoInicialCobroHoy(deLaCita);
+    if (r.planId) return r;
+  }
   const nuevos = planes.filter((p) => p.conFilas);
   const conSaldo = nuevos.find((p) => p.saldo > 0.005);
   if (conSaldo) return { modo: "abono", planId: conSaldo.planId };

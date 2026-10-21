@@ -10748,6 +10748,7 @@
       "planSinLeer": "No se pudo comprobar si esto ya está en un plan de tratamiento del paciente (y en su nota de cobro). Revisa su plan antes de cobrarlo aparte.",
       "irAlAbono": "Abonar al plan",
       "esOtro": "Es otro procedimiento, no el del plan: cobrarlo aparte.",
+      "citaDelPlan": "Esta cita es del plan «{plan}»: lo de hoy se abona a su nota. Cobrarlo aquí aparte sería cobrarlo dos veces.",
       "consultaAlPlan": "No va en la factura de esta consulta porque ya es del plan de tratamiento (se cobra en su nota): {lista}."
     },
     "citas": {
