@@ -58,7 +58,7 @@ const DDL_ODONTOGRAMA = `
     "createdAt" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" timestamp(3) NOT NULL);
   CREATE UNIQUE INDEX "odontogram_entries_patientId_toothNumber_surface_conditionId_key"
     ON "odontogram_entries" ("patientId", "toothNumber", "surface", "conditionId");
-  ALTER TABLE "appointments" ADD COLUMN "patientId" text;
+  ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "patientId" text; -- el arnés de A ya la trae; sin él, la pone esta
   ALTER TABLE "procedure_catalog" ADD COLUMN "code" text, ADD COLUMN "category" text;
 `;
 

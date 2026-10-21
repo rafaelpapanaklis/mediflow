@@ -46,7 +46,7 @@ const HORA = 60 * 60 * 1000;
 async function completarEsquema(db: any) {
   await db.exec(`
     CREATE TYPE "AppointmentStatus" AS ENUM ('PENDING','SCHEDULED','CONFIRMED','CHECKED_IN','IN_CHAIR','IN_PROGRESS','COMPLETED','CHECKED_OUT','CANCELLED','NO_SHOW');
-    ALTER TABLE "appointments" ADD COLUMN "patientId" text, ADD COLUMN "startsAt" timestamp(3), ADD COLUMN "endsAt" timestamp(3),
+    ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "patientId" text, ADD COLUMN "startsAt" timestamp(3), ADD COLUMN "endsAt" timestamp(3),
       ADD COLUMN "status" "AppointmentStatus" NOT NULL DEFAULT 'SCHEDULED';
     ALTER TABLE "procedure_catalog" ADD COLUMN "duration" integer;
   `);
