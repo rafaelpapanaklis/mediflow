@@ -479,6 +479,124 @@
 .editor em { font-style: italic; }
 .editor u { text-decoration: underline; }
 
+/* ─── El editor nuevo: la hoja a pantalla completa (ws1-t10) ─── */
+.lienzo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+}
+.lienzoCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+.lienzoTitulos { min-width: 0; }
+.lienzoAcciones { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.lienzoError { margin: 10px 16px 0; }
+.lienzoCuerpo {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 272px;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+}
+.lienzoMesa { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.lienzoMesa > * { flex: 1; min-height: 0; }
+.lienzoRail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+.railTarjeta {
+  padding: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+.railTitulo {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.fichas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px dashed var(--brand);
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ficha:hover:not(:disabled) { border-style: solid; }
+.ficha:focus-visible { outline: none; box-shadow: var(--ring); }
+.ficha:disabled { opacity: 0.5; cursor: default; }
+.dato {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border-soft);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.dato:first-of-type { border-top: 0; }
+.dato b { color: var(--text-1); font-weight: 600; text-align: right; }
+/* El nombre de la plantilla es el TÍTULO de la hoja: se escribe sobre el papel. */
+.tituloHoja {
+  display: block;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  outline: none;
+}
+.tituloHoja::placeholder { opacity: 0.45; color: inherit; }
+.tituloHoja:focus { box-shadow: inset 0 -2px 0 var(--brand); }
+@media (max-width: 1180px) {
+  .lienzoCuerpo { grid-template-columns: minmax(0, 1fr); }
+  .lienzoRail { display: none; }
+}
+@media (max-width: 640px) {
+  .modalOverlay:has(.lienzo) { padding: 0; }
+  .lienzo { border-radius: 0; }
+  .lienzoCabecera { padding: 8px 10px; }
+  .lienzoCuerpo { padding: 8px; }
+  .lienzoAcciones .btnGhost { display: none; }
+  .tituloHoja { font-size: 21px; }
+}
+
 /* ─── Marcadores ─── */
 .markers {
   padding: 12px 14px;

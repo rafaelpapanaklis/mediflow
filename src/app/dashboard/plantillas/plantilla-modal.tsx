@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Bold, Italic, List, ListOrdered, Underline, X, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Tag, X } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import { MAX_NAME_LENGTH, type DocumentTemplateKindValue } from "@/lib/document-templates/kinds";
 import { marcadoresPara } from "@/lib/document-templates/markers";
-import { sanitizeTemplateHtml } from "@/lib/document-templates/sanitize";
+import { HOJA_CARTA, PPP } from "@/lib/documentos/hoja-carta";
+import {
+  EditorDocumento, type EditorDocumentoApi, type EstadoEditor, type MarcadorEditor, type MembreteDocumento,
+} from "@/components/dashboard/editor-documento";
 import type { PlantillaFila } from "./plantillas-client";
 import { esPrecargada } from "./tarjeta";
 import styles from "./plantillas.module.css";
@@ -13,41 +17,24 @@ import styles from "./plantillas.module.css";
 interface Props {
   kind: DocumentTemplateKindValue;
   editing: PlantillaFila | null;
+  /** El membrete de la clínica (nombre, logo, dirección, teléfono, fecha de hoy), para la hoja. */
+  membrete: MembreteDocumento;
   onClose: () => void;
   onSaved: (guardada: PlantillaFila, eraNueva: boolean) => void;
   mensajeDeError: (data: unknown) => string;
 }
 
-// Un recuadro de texto con lo básico, y nada más: no es un procesador de
-// textos. Cada botón es una orden de edición del navegador sobre el
-// contenteditable. Lo que salga de aquí NO es de fiar por sí mismo: el
-// servidor lo vuelve a pasar por la lista blanca al guardar
-// (src/lib/document-templates/sanitize.ts) y devuelve lo que de verdad guardó.
-interface Herramienta {
-  id: string;
-  /** Sin icono = el botón lleva su nombre escrito (`barraCorta`), con el tamaño de lo que pone. */
-  icon?: LucideIcon;
-  comando: string;
-  valor?: string;
-  /** Para `queryCommandState`; los de bloque se miran con `formatBlock`. */
-  estado?: boolean;
-}
-
-const HERRAMIENTAS: readonly (Herramienta | "sep")[] = [
-  { id: "negrita", icon: Bold, comando: "bold", estado: true },
-  { id: "cursiva", icon: Italic, comando: "italic", estado: true },
-  { id: "subrayado", icon: Underline, comando: "underline", estado: true },
-  "sep",
-  // H1, H2, H3 y ¶ son jerga de quien hace webs: un dentista no los lee. Estos
-  // cuatro van con su nombre escrito, cada uno con el peso de lo que pone.
-  { id: "titulo1", comando: "formatBlock", valor: "h1" },
-  { id: "titulo2", comando: "formatBlock", valor: "h2" },
-  { id: "titulo3", comando: "formatBlock", valor: "h3" },
-  { id: "parrafo", comando: "formatBlock", valor: "p" },
-  "sep",
-  { id: "lista", icon: List, comando: "insertUnorderedList", estado: true },
-  { id: "listaNumerada", icon: ListOrdered, comando: "insertOrderedList", estado: true },
-];
+// El editor de una plantilla es la HOJA en que va a salir (ws1-t10, editor de
+// texto nuevo): pantalla completa, membrete de la clínica en todas las páginas,
+// barra completa y marcadores como fichas. Lo que viaja al servidor es el HTML
+// normalizado al contrato (`[NOMBRE_PACIENTE]` en texto, etiquetas de la lista
+// blanca); el servidor lo vuelve a pasar por su lista blanca al guardar y
+// devuelve lo que de verdad guardó. Las plantillas viejas (p/h1-h3/listas/b/i/u)
+// abren idénticas: son el mismo formato.
+//
+// Salamanca (ws1-t6/t8): `body` solo viaja si cambió respecto a lo que se cargó,
+// acompañado de `baseBody` (el servidor lo compara con lo vigente para que una
+// pestaña vieja no pise lo de otra persona). Eso se conserva tal cual.
 
 const TITULO_KEY: Record<DocumentTemplateKindValue, string> = {
   NOTA_EVOLUCION: "pages.plantillas.nuevaNota",
@@ -58,115 +45,74 @@ const KIND_KEY: Record<DocumentTemplateKindValue, string> = {
   CONSENTIMIENTO: "pages.plantillas.kindConsentimiento",
 };
 
-export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError }: Props) {
+const cm = (px: number) => ((px / PPP) * 2.54).toFixed(1);
+
+export function PlantillaModal({ kind, editing, membrete, onClose, onSaved, mensajeDeError }: Props) {
   const t = useT();
-  const editorRef = useRef<HTMLDivElement>(null);
+  const askConfirm = useConfirm();
   const nombreRef = useRef<HTMLInputElement>(null);
-  const seleccion = useRef<Range | null>(null);
-  // Cómo quedó el editor al abrirlo: solo si cambia se manda el texto (una pestaña vieja no pisa lo de otra persona).
-  const inicialRef = useRef<string>("");
+  const api = useRef<EditorDocumentoApi | null>(null);
+  // Lo último que el editor serializó, normalizado; y cómo estaba al abrir:
+  // solo si cambia se manda el texto (una pestaña vieja no pisa lo de otra persona).
+  const estado = useRef<EstadoEditor>({ html: "", vacio: !editing });
+  const inicialRef = useRef<string | null>(null);
   const [name, setName] = useState(editing?.name ?? "");
-  const [vacio, setVacio] = useState(!editing);
-  const [activos, setActivos] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paginas, setPaginas] = useState(1);
 
-  // El cuerpo inicial viene del servidor, ya saneado al guardarse; se vuelve a
-  // sanear aquí porque esto es un innerHTML y una fila puede haber llegado a la
-  // base por otro camino (un seed, una migración). Se pone una sola vez:
-  // después manda lo que la persona escribe, no React.
-  useEffect(() => {
-    const el = editorRef.current;
-    if (!el) return;
-    el.innerHTML = sanitizeTemplateHtml(editing?.body ?? "");
-    inicialRef.current = el.innerHTML;
-    try {
-      document.execCommand("defaultParagraphSeparator", false, "p");
-      // <b>/<i>/<u> y no <span style>: la lista blanca tira los atributos, y el
-      // formato se perdería al guardar sin que nadie lo notara.
-      document.execCommand("styleWithCSS", false, "false");
-    } catch {
-      /* navegadores que no lo conocen: el servidor convierte <div> en <p> */
-    }
-    nombreRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tipoKind = editing?.kind ?? kind;
+  const ejemplos: Record<string, string> = {
+    NOMBRE_CLINICA: membrete.clinicaNombre,
+    FECHA: membrete.fecha,
+  };
+  const marcadores: MarcadorEditor[] = marcadoresPara(tipoKind).map((m) => {
+    const clave = m.token.replace(/^\[|\]$/g, "");
+    return {
+      clave,
+      etiqueta: t(`pages.plantillas.marcadores.${m.labelKey}`),
+      ejemplo: ejemplos[clave] ?? t(`editorDocumento.ejemplos.${clave}`),
+    };
+  });
+
+  const alCambiar = useCallback((e: EstadoEditor) => {
+    estado.current = e;
+    if (inicialRef.current === null) inicialRef.current = e.html;
   }, []);
+
+  const hayCambios = () =>
+    name !== (editing?.name ?? "") || (inicialRef.current !== null && estado.current.html !== inicialRef.current);
+
+  const cerrar = useCallback(async () => {
+    if (saving) return;
+    if (hayCambios()) {
+      const ok = await askConfirm({
+        title: t("pages.plantillas.cerrarSinGuardar"),
+        description: t("pages.plantillas.cerrarSinGuardarTexto"),
+        confirmText: t("pages.plantillas.cerrarDeTodosModos"),
+        variant: "warning",
+      });
+      if (!ok) return;
+    }
+    onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saving, name, editing, onClose, askConfirm, t]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !saving) onClose();
+      if (e.key === "Escape" && !saving) {
+        // Un desplegable del editor abierto se cierra con su propio Escape; aquí solo si no hay ninguno.
+        if (document.querySelector('[role="menu"]')) return;
+        void cerrar();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, saving]);
+  }, [cerrar, saving]);
 
-  function leerEstado() {
-    const el = editorRef.current;
-    if (!el) return;
-    setVacio((el.textContent ?? "").trim().length === 0 && !el.querySelector("li"));
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-      seleccion.current = sel.getRangeAt(0).cloneRange();
-    }
-    const nuevo: Record<string, boolean> = {};
-    let bloque = "";
-    try {
-      bloque = String(document.queryCommandValue("formatBlock") || "").toLowerCase();
-    } catch {
-      /* sin soporte: los botones de bloque no se marcan, pero funcionan */
-    }
-    for (const h of HERRAMIENTAS) {
-      if (h === "sep") continue;
-      try {
-        nuevo[h.id] = h.estado ? document.queryCommandState(h.comando) : bloque === h.valor;
-      } catch {
-        nuevo[h.id] = false;
-      }
-    }
-    setActivos(nuevo);
-  }
-
-  function devolverSeleccion() {
-    const el = editorRef.current;
-    if (!el) return;
-    el.focus();
-    const sel = window.getSelection();
-    if (!sel) return;
-    if (seleccion.current && el.contains(seleccion.current.startContainer)) {
-      sel.removeAllRanges();
-      sel.addRange(seleccion.current);
-    } else {
-      // Nunca se ha puesto el cursor: se escribe al final.
-      const fin = document.createRange();
-      fin.selectNodeContents(el);
-      fin.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(fin);
-    }
-  }
-
-  function ejecutar(h: Herramienta) {
-    devolverSeleccion();
-    // Pulsar un título que ya está puesto lo devuelve a texto normal.
-    const valor = h.comando === "formatBlock" && activos[h.id] && h.valor !== "p" ? "p" : h.valor;
-    document.execCommand(h.comando, false, valor);
-    leerEstado();
-  }
-
-  function insertarMarcador(token: string) {
-    devolverSeleccion();
-    document.execCommand("insertText", false, token);
-    leerEstado();
-  }
-
-  // Pegar desde Word o una web trae estilos, tablas e imágenes. Aquí entra
-  // solo el texto; el formato se pone con los botones.
-  function alPegar(e: React.ClipboardEvent<HTMLDivElement>) {
-    e.preventDefault();
-    const texto = e.clipboardData.getData("text/plain");
-    if (texto) document.execCommand("insertText", false, texto);
-    leerEstado();
-  }
+  useEffect(() => {
+    if (!editing) nombreRef.current?.focus();
+  }, [editing]);
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -177,21 +123,23 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
       nombreRef.current?.focus();
       return;
     }
+    const body = api.current?.obtenerHtml() ?? estado.current.html;
+    const vacio = api.current?.estaVacio() ?? estado.current.vacio;
     if (vacio) {
       setError(t("pages.plantillas.errores.BODY_REQUIRED"));
-      editorRef.current?.focus();
+      api.current?.enfocar();
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const body = editorRef.current?.innerHTML ?? "";
+      const cambioTexto = inicialRef.current === null || body !== inicialRef.current;
       const res = await fetch(editing ? `/api/document-templates/${editing.id}` : "/api/document-templates", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           editing
-            ? { name: nombre, ...(body !== inicialRef.current ? { body, baseBody: editing.body } : {}) }
+            ? { name: nombre, ...(cambioTexto ? { body, baseBody: editing.body } : {}) }
             : { kind, name: nombre, body },
         ),
       });
@@ -223,126 +171,111 @@ export function PlantillaModal({ kind, editing, onClose, onSaved, mensajeDeError
   }
 
   const titulo = editing ? t("pages.plantillas.editar") : t(TITULO_KEY[kind]);
+  const tipoDocumento = t(KIND_KEY[tipoKind]);
 
   return (
     <div className={styles.modalOverlay}>
-      <div className={styles.modalBackdrop} onClick={() => !saving && onClose()} aria-hidden />
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="plantilla-modal-titulo">
-        <div className={styles.modalHead}>
-          <div>
+      <div className={styles.modalBackdrop} aria-hidden />
+      <div className={styles.lienzo} role="dialog" aria-modal="true" aria-labelledby="plantilla-modal-titulo">
+        <header className={styles.lienzoCabecera}>
+          <div className={styles.lienzoTitulos}>
             <h2 id="plantilla-modal-titulo" className={styles.modalTitle}>{titulo}</h2>
-            {editing && <p className={styles.modalKind}>{t(KIND_KEY[kind])}</p>}
+            <p className={styles.modalKind}>{tipoDocumento}</p>
           </div>
-          <button type="button" className={styles.modalClose} onClick={onClose} disabled={saving} aria-label={t("pages.plantillas.cerrar")}>
-            <X size={18} aria-hidden />
-          </button>
-        </div>
-
-        <form className={styles.modalForm} onSubmit={guardar}>
-          <div className={styles.modalBody}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>{t("pages.plantillas.campoNombre")}</span>
-              <input
-                ref={nombreRef}
-                className={styles.input}
-                value={name}
-                maxLength={MAX_NAME_LENGTH}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t("pages.plantillas.campoNombrePlaceholder")}
-              />
-            </label>
-
-            <div className={styles.field}>
-              <span className={styles.fieldLabel} id="plantilla-editor-label">{t("pages.plantillas.campoTexto")}</span>
-              <div className={styles.editorBox}>
-                <div className={styles.toolbar} role="toolbar" aria-label={t("pages.plantillas.campoTexto")}>
-                  {HERRAMIENTAS.map((h, i) =>
-                    h === "sep" ? (
-                      <span key={`sep-${i}`} className={styles.toolbarSep} aria-hidden />
-                    ) : (
-                      <button
-                        key={h.id}
-                        type="button"
-                        className={`${styles.toolBtn} ${h.icon ? "" : styles.toolBtnTexto} ${activos[h.id] ? styles.toolBtnActive : ""}`}
-                        data-herramienta={h.id}
-                        // mousedown y no click: así el recuadro no pierde el cursor.
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          ejecutar(h);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            ejecutar(h);
-                          }
-                        }}
-                        aria-pressed={Boolean(activos[h.id])}
-                        title={t(`pages.plantillas.barra.${h.id}`)}
-                        aria-label={t(`pages.plantillas.barra.${h.id}`)}
-                      >
-                        {h.icon ? <h.icon size={16} aria-hidden /> : t(`pages.plantillas.barraCorta.${h.id}`)}
-                      </button>
-                    ),
-                  )}
-                </div>
-                <div
-                  ref={editorRef}
-                  className={`${styles.editor} ${vacio ? styles.editorEmpty : ""}`}
-                  contentEditable
-                  suppressContentEditableWarning
-                  role="textbox"
-                  aria-multiline="true"
-                  aria-labelledby="plantilla-editor-label"
-                  data-placeholder={t("pages.plantillas.editorPlaceholder")}
-                  onInput={leerEstado}
-                  onKeyUp={leerEstado}
-                  onMouseUp={leerEstado}
-                  onBlur={leerEstado}
-                  onPaste={alPegar}
-                />
-              </div>
-            </div>
-
-            <div className={styles.markers}>
-              <p className={styles.markersTitle}>{t("pages.plantillas.marcadoresTitulo")}</p>
-              <p className={styles.markersHelp}>{t("pages.plantillas.marcadoresAyuda")}</p>
-              <ul className={styles.markerList}>
-                {marcadoresPara(editing?.kind ?? kind).map((m) => (
-                  <li key={m.token}>
-                    <button
-                      type="button"
-                      className={styles.markerBtn}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        insertarMarcador(m.token);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          insertarMarcador(m.token);
-                        }
-                      }}
-                      title={t(`pages.plantillas.marcadores.${m.labelKey}`)}
-                    >
-                      <span className={styles.markerToken}>{m.token}</span>
-                      <span className={styles.markerLabel}>{t(`pages.plantillas.marcadores.${m.labelKey}`)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {error && <p className={styles.error} role="alert">{error}</p>}
-          </div>
-
-          <div className={styles.modalFoot}>
-            <button type="button" className={styles.btnGhost} onClick={onClose} disabled={saving}>
+          <div className={styles.lienzoAcciones}>
+            <button type="button" className={styles.btnGhost} onClick={() => void cerrar()} disabled={saving}>
               {t("pages.plantillas.cancelar")}
             </button>
-            <button type="submit" className={styles.btnPrimary} disabled={saving}>
+            <button type="submit" form="plantilla-form" className={styles.btnPrimary} disabled={saving}>
               {t(saving ? "pages.plantillas.guardando" : "pages.plantillas.guardar")}
             </button>
+            <button
+              type="button"
+              className={styles.modalClose}
+              onClick={() => void cerrar()}
+              disabled={saving}
+              aria-label={t("pages.plantillas.cerrar")}
+            >
+              <X size={18} aria-hidden />
+            </button>
           </div>
+        </header>
+
+        {error && (
+          <p className={`${styles.error} ${styles.lienzoError}`} role="alert">
+            {error}
+          </p>
+        )}
+
+        <form id="plantilla-form" className={styles.lienzoCuerpo} onSubmit={guardar}>
+          <div className={styles.lienzoMesa}>
+            <span className="sr-only" id="plantilla-editor-label">{t("pages.plantillas.campoTexto")}</span>
+            <EditorDocumento
+              contexto="plantilla"
+              html={editing?.body ?? ""}
+              membrete={membrete}
+              tipoDocumento={tipoDocumento}
+              titulo={
+                <input
+                  ref={nombreRef}
+                  className={styles.tituloHoja}
+                  value={name}
+                  maxLength={MAX_NAME_LENGTH}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t("pages.plantillas.campoNombrePlaceholder")}
+                  aria-label={t("pages.plantillas.nombreEnHoja")}
+                  disabled={saving}
+                />
+              }
+              marcadores={marcadores}
+              onChange={alCambiar}
+              onPaginas={setPaginas}
+              alListo={(a) => {
+                api.current = a;
+              }}
+              // P4 (ws1-t6) conecta aquí la subida real (`onSubirImagen`); sin ella el botón de imagen no sale.
+              desactivado={saving}
+              autoFoco={Boolean(editing)}
+              idEtiqueta="plantilla-editor-label"
+            />
+          </div>
+
+          <aside className={styles.lienzoRail}>
+            <section className={styles.railTarjeta}>
+              <h3 className={styles.railTitulo}>{t("pages.plantillas.marcadoresTitulo")}</h3>
+              <p className={styles.markersHelp}>{t("pages.plantillas.marcadoresAyuda")}</p>
+              <div className={styles.fichas}>
+                {marcadores.map((m) => (
+                  <button
+                    type="button"
+                    key={m.clave}
+                    className={styles.ficha}
+                    data-marcador={m.clave}
+                    title={`[${m.clave}] · ${m.ejemplo}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => api.current?.insertarMarcador(m.clave)}
+                    disabled={saving}
+                  >
+                    <Tag size={13} aria-hidden />
+                    {m.etiqueta}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className={styles.railTarjeta}>
+              <h3 className={styles.railTitulo}>{t("pages.plantillas.hojaTitulo")}</h3>
+              <div className={styles.dato}><span>{t("pages.plantillas.hojaTamano")}</span><b>{t("pages.plantillas.hojaTamanoValor")}</b></div>
+              <div className={styles.dato}>
+                <span>{t("pages.plantillas.hojaMargenes")}</span>
+                <b>{t("pages.plantillas.hojaMargenesValor", { arriba: cm(HOJA_CARTA.margenSuperior), lados: cm(HOJA_CARTA.margenLateral) })}</b>
+              </div>
+              <div className={styles.dato}>
+                <span>{t("pages.plantillas.hojaPaginas")}</span>
+                <b data-paginas={paginas}>{paginas > 0 ? paginas : t("pages.plantillas.hojaPaginasFluida")}</b>
+              </div>
+            </section>
+            <p className={styles.markerNota}>{t("pages.plantillas.editorAyuda")}</p>
+          </aside>
         </form>
       </div>
     </div>

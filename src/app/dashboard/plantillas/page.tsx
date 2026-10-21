@@ -12,6 +12,9 @@ import { listarHojas } from "@/lib/indicaciones/servicio";
 import type { HojaDTO, ProcedimientoLigable } from "@/lib/indicaciones/tipos";
 import { repoVersiones } from "@/lib/plantillas-fabrica/db";
 import { restaurableDe } from "@/lib/plantillas-fabrica/consentimiento";
+import { direccionDeClinica } from "@/lib/consent/documento";
+import { formatConsentDate } from "@/lib/consent/dates";
+import type { MembreteDocumento } from "@/components/dashboard/editor-documento/tipos";
 import { PlantillasClient } from "./plantillas-client";
 import { esPrecargada } from "./tarjeta";
 
@@ -22,6 +25,30 @@ export default async function PlantillasPage() {
   requirePermissionOrRedirect(user, TEMPLATES_WRITE_PERMISSION);
 
   const templates = await listTemplates(prisma, user.clinicId, { includeInactive: true });
+
+  // El membrete de la hoja del editor (ws1-t10): la clínica de la sesión, nunca
+  // del cliente. Si no se puede leer, la hoja sale con el nombre y sin lo demás.
+  let membrete: MembreteDocumento = {
+    clinicaNombre: "", logoUrl: null, clinicaDireccion: null, clinicaTelefono: null,
+    fecha: formatConsentDate(new Date(), null),
+  };
+  try {
+    const clinica = await prisma.clinic.findUnique({
+      where: { id: user.clinicId },
+      select: { name: true, logoUrl: true, address: true, city: true, phone: true, timezone: true },
+    });
+    if (clinica) {
+      membrete = {
+        clinicaNombre: clinica.name,
+        logoUrl: clinica.logoUrl ?? null,
+        clinicaDireccion: direccionDeClinica(clinica.address ?? null, clinica.city ?? null),
+        clinicaTelefono: clinica.phone?.trim() || null,
+        fecha: formatConsentDate(new Date(), clinica.timezone),
+      };
+    }
+  } catch (err) {
+    console.error("[plantillas] membrete de la clínica:", err);
+  }
 
   // Plantillas de fábrica editables (ws1-t6): la versión de cada clínica vive en
   // `clinic_template_versions` (sql/salamanca-plantillas-orto-versiones.sql). Sin la
@@ -73,6 +100,7 @@ export default async function PlantillasPage() {
       initialHojas={hojas}
       versionesDisponibles={versionesDisponibles}
       procedimientos={procedimientos}
+      membrete={membrete}
       initialTemplates={templates.map((t) => ({
         id: t.id,
         kind: t.kind,

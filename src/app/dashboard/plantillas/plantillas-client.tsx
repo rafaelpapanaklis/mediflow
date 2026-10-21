@@ -15,6 +15,7 @@ import { PlantillasOrto } from "./plantillas-orto";
 import { PlantillasIndicaciones } from "./plantillas-indicaciones";
 import { useTextosIndicaciones } from "@/lib/indicaciones/textos";
 import type { HojaDTO, ProcedimientoLigable } from "@/lib/indicaciones/tipos";
+import type { MembreteDocumento } from "@/components/dashboard/editor-documento/tipos";
 import { fueEditada, ordenarPlantillas } from "./tarjeta";
 import styles from "./plantillas.module.css";
 
@@ -49,6 +50,8 @@ interface Props {
   procedimientos?: ProcedimientoLigable[];
   /** Existe la tabla de versiones por clínica: las de fábrica se editan y se puede volver a ellas. */
   versionesDisponibles?: boolean;
+  /** El membrete de la clínica para la hoja del editor de plantillas (ws1-t10). */
+  membrete: MembreteDocumento;
 }
 
 // Pestañas y no dos listas: en la ficha del paciente cada sitio enseña SOLO las
@@ -69,6 +72,7 @@ export function PlantillasClient({
   initialHojas = null,
   procedimientos = [],
   versionesDisponibles = false,
+  membrete,
 }: Props) {
   const t = useT();
   const locale = useLocale();
@@ -411,6 +415,7 @@ export function PlantillasClient({
         <PlantillaModal
           kind={modal.editing?.kind ?? kind}
           editing={modal.editing}
+          membrete={membrete}
           onClose={() => setModal(null)}
           onSaved={alGuardar}
           mensajeDeError={mensajeDeError}
