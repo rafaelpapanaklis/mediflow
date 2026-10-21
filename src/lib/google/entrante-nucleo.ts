@@ -28,6 +28,7 @@ import {
   clasificarErrorEntrante,
   decidirAvisoCita,
   decidirEvento,
+  duenoDeLaCuenta,
   esEventoDeDaleControl,
   firmaEquipo,
   HORIZONTE_DIAS,
@@ -81,6 +82,8 @@ export interface ConexionGoogle {
   refreshToken: string | null;
   calendarId: string | null;
   timezone: string;
+  /** La cuenta de Google conectada (`clinics.googleCalendarEmail`): si es de un doctor, el calendario es suyo (WS1-T3). */
+  cuentaEmail?: string | null;
 }
 
 /** Un vínculo leído de la base (bloqueo GOOGLE ↔ evento). */
@@ -121,7 +124,7 @@ export interface PuertosEntrante {
   guardarError(clinicId: string, error: ErrorEntrante | null): Promise<void>;
   abrirCalendar(cred: { accessToken: string | null; refreshToken: string; alRenovarToken: (t: string) => void }): ClienteCalendarEntrante;
   guardarAccessToken(clinicId: string, refreshToken: string, accessToken: string): Promise<void>;
-  /** TODAS las personas de la clínica con correo (para saber de quién es cada evento). */
+  /** TODAS las personas de la clínica con sus correos (para saber de quién es la cuenta conectada). */
   leerUsuarios(clinicId: string): Promise<UsuarioClinica[]>;
   /** ¿Otra clínica con la bandera encendida lee ese mismo calendario? */
   calendarioEnOtraClinica(clinicId: string, calendarId: string): Promise<boolean>;
@@ -297,8 +300,11 @@ async function pasada(
   const usuarios = await p.leerUsuarios(clinicId);
   // El equipo cambió (una doctora nueva con ese correo, «Aparece en la agenda»
   // encendido…): la incremental solo trae lo que cambió en Google y los
-  // eventos de antes seguirían con el dueño viejo. Completa (N-G5).
-  const equipoFirma = firmaEquipo(usuarios);
+  // eventos de antes seguirían con el dueño viejo. Completa (N-G5). La
+  // cuenta conectada también entra: sus eventos bloquean SOLO a su dueño
+  // (WS1-T3), y al reconectar con otra se reasigna (o se retira) todo.
+  const equipoFirma = firmaEquipo(usuarios, conexion.cuentaEmail);
+  const dueno = duenoDeLaCuenta(conexion.cuentaEmail, usuarios);
   let completa =
     forzar ||
     (estado.equipoFirma ?? null) !== equipoFirma ||
@@ -340,7 +346,7 @@ async function pasada(
           const r = await cal.events.list(params);
           const items = (r.data.items ?? []).filter((e): e is EventoGoogle => !!e && typeof e.id === "string" && !!e.id);
           for (const e of items) vistos.add(e.id as string);
-          await procesarPagina(p, cal, clinicId, calendarId, items, { zona, ahora: reloj(), usuarios }, total);
+          await procesarPagina(p, cal, clinicId, calendarId, items, { zona, ahora: reloj(), dueno }, total);
           pageToken = r.data.nextPageToken ?? undefined;
           if (!pageToken) {
             nextSyncToken = r.data.nextSyncToken ?? null;
@@ -384,7 +390,7 @@ async function procesarPagina(
   clinicId: string,
   calendarId: string,
   eventos: EventoGoogle[],
-  ctx: { zona: string; ahora: Date; usuarios: UsuarioClinica[] },
+  ctx: { zona: string; ahora: Date; dueno: string | null },
   total: Contadores,
 ): Promise<void> {
   if (eventos.length === 0) return;

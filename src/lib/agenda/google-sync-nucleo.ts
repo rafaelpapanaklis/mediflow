@@ -21,6 +21,7 @@
 // para probarlo con una Google falsa.
 
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { esLaCuentaDelCalendario } from "@/lib/google-calendar-contenido";
 import {
   borrarEvento,
   asegurarCalendarioDeClinica,
@@ -29,6 +30,7 @@ import {
   insertarEvento,
   parcharEvento,
   parcharTitulo,
+  quitarInvitadoDuplicado,
   razonDeError,
   type ClienteCalendar,
   type ContenidoEvento,
@@ -49,6 +51,8 @@ export interface ClinicaGoogle {
   accessToken: string | null;
   refreshToken: string | null;
   calendarId: string | null;
+  /** La cuenta de Google conectada (`clinics.googleCalendarEmail`): nunca se la invita (WS1-T3). */
+  cuentaEmail?: string | null;
 }
 
 export interface CitaParaGoogle {
@@ -132,6 +136,8 @@ export interface EntradaContenido {
   doctorEmail: string | null;
   patientEmail: string | null;
   invitarPaciente: boolean;
+  /** La cuenta dueña del calendario: no se invita (ya ve la cita ahí; WS1-T3). */
+  cuentaDelCalendario?: string | null;
 }
 
 export interface Puertos {
@@ -302,6 +308,7 @@ export async function sincronizarCita(
       doctorEmail: cita.doctorEmail,
       patientEmail: cita.patientEmail,
       invitarPaciente: ajustes.invitarPaciente,
+      cuentaDelCalendario: clinica.cuentaEmail ?? null,
     });
     // Una convertida solo llega aquí para volver a CREAR su evento tras
     // «Mantener»: uno nuevo, sin invitados (nadie recibe invitación ahora ni
@@ -318,10 +325,29 @@ export async function sincronizarCita(
       appointmentId,
     });
 
+    // WS1-T3 · eventos creados antes de que la cuenta dueña dejara de
+    // invitarse: si el doctor (o el paciente) ES esa cuenta, la cita le sale
+    // dos veces en su Google. Se le quita de los invitados sin avisar a nadie
+    // y sin tocar la cita. Solo entonces se lee el evento (una lectura más).
+    // Si falla, la cita ya quedó al día: se reintenta en su siguiente cambio.
+    const cuenta = clinica.cuentaEmail ?? null;
+    const sobraInvitado = !!cuenta && [cita.doctorEmail, cita.patientEmail].some((c) => esLaCuentaDelCalendario(c, cuenta));
+    const quitarDuplicado = async (cid: string, eventId: string) => {
+      if (!sobraInvitado || !cuenta) return;
+      try {
+        await quitarInvitadoDuplicado(cal, { calendarId: cid, eventId, correo: cuenta });
+      } catch (e) {
+        p.log?.(`Google Calendar: no se pudo quitar el invitado duplicado de la cita ${appointmentId}`, e);
+      }
+    };
+
     if (cita.googleEventId && !cita.desdeGoogle) {
       const cid = await asegurarCalendario();
       const r = await parcharEvento(cal, datos(cid, cita.googleEventId));
-      if (r === "ok") return { estado: "actualizado" };
+      if (r === "ok") {
+        await quitarDuplicado(cid, cita.googleEventId);
+        return { estado: "actualizado" };
+      }
       // Google ya no tiene ese evento (o ese calendario): se vuelve a crear, con id determinista.
     }
 
@@ -333,16 +359,19 @@ export async function sincronizarCita(
     // Una convertida que se vuelve a crear no manda invitaciones (N-G11).
     const invitar = avisarInvitados && !cita.desdeGoogle;
     let cid = await asegurarCalendario();
+    let insertado: "creado" | "reanudado";
     try {
-      await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar });
+      insertado = await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar });
     } catch (err) {
       // 404 al insertar = el calendario guardado ya no existe en Google: se crea uno nuevo y se repite una vez.
       // (Un 403 de permisos NO entra aquí: es un calendario fuera del alcance del permiso; cae en
       // clasificarYMarcar → «permisos» y la clínica ve «Reconectar».)
       if (estadoHttpDeError(err) !== 404) throw err;
       cid = await asegurarCalendario(true);
-      await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar });
+      insertado = await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar });
     }
+    // Ya existía (409): el parche no toca invitados, y quizá lo tenía invitado.
+    if (insertado === "reanudado") await quitarDuplicado(cid, eventId);
     await p.guardarEventoId(clinicId, appointmentId, eventId);
     return { estado: "creado" };
   };

@@ -363,6 +363,43 @@ export async function insertarEvento(
 }
 
 /**
+ * WS1-T3 · quita de los invitados de un evento la cuenta DUEÑA del calendario
+ * (la cita ya está en su Google: la invitación la duplicaba). Lee el evento y
+ * solo si esa cuenta está invitada lo parcha con los demás invitados TAL CUAL
+ * (con su respuesta), sin avisar a nadie: ni correo de cancelación ni se
+ * toca nada más del evento. Para los eventos creados antes de esta regla.
+ */
+export async function quitarInvitadoDuplicado(
+  cal: ClienteCalendar,
+  d: { calendarId: string; eventId: string; correo: string },
+): Promise<"quitado" | "no_estaba" | "no_existe"> {
+  if (!cal.events.get) return "no_estaba";
+  const correo = d.correo.trim().toLowerCase();
+  let invitados: Record<string, any>[];
+  try {
+    const r = await cal.events.get({ calendarId: d.calendarId, eventId: d.eventId });
+    invitados = Array.isArray(r.data?.attendees) ? r.data.attendees : [];
+  } catch (err) {
+    if (esNoExiste(err)) return "no_existe";
+    throw err;
+  }
+  const quedan = invitados.filter((a) => String(a?.email ?? "").trim().toLowerCase() !== correo);
+  if (quedan.length === invitados.length) return "no_estaba";
+  try {
+    await cal.events.patch({
+      calendarId: d.calendarId,
+      eventId: d.eventId,
+      sendUpdates: "none",
+      requestBody: { attendees: quedan },
+    });
+    return "quitado";
+  } catch (err) {
+    if (esNoExiste(err)) return "no_existe";
+    throw err;
+  }
+}
+
+/**
  * Borra el evento. Que Google ya no lo tenga (404/410) cuenta como borrado:
  * el resultado que se quería ya está.
  */

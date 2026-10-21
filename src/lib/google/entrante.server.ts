@@ -34,6 +34,7 @@ import {
   direccionDelAviso,
   MOTIVO_GOOGLE,
   avisoDeRetiro,
+  duenoDeLaCuenta,
   TTL_CANAL_S,
   type CausaRetiro,
   type DatosBloqueo,
@@ -106,6 +107,7 @@ async function leerConexion(clinicId: string) {
       googleCalendarToken: true,
       googleRefreshToken: true,
       googleClinicCalendarId: true,
+      googleCalendarEmail: true,
     },
   });
   if (!c) return null;
@@ -115,6 +117,7 @@ async function leerConexion(clinicId: string) {
     refreshToken: c.googleRefreshToken,
     calendarId: c.googleClinicCalendarId,
     timezone: c.timezone,
+    cuentaEmail: c.googleCalendarEmail ?? null,
   };
 }
 
@@ -244,38 +247,20 @@ const puertos: PuertosEntrante = {
   guardarAccessToken,
 
   async leerUsuarios(clinicId) {
-    // TODAS las personas de la clínica (también recepción, dados de baja y con
-    // la agenda apagada): si el invitado es una de ellas, el bloqueo es suyo y
-    // no cierra la clínica entera (revisión t8, G1).
-    // Con el Gmail con el que conectó Google y el nombre: reconocen a la
-    // doctora invitada con su correo personal o con una cuenta vieja (N-G2).
-    // El Gmail con el que se conectó la CLÍNICA no es «otro correo» de quien
-    // lo conectó: si no, todo evento con ese Gmail cerraría solo su agenda.
-    const [us, clinica] = await Promise.all([
-      prisma.user.findMany({
-        where: { clinicId },
-        select: {
-          id: true, email: true, googleCalendarEmail: true, firstName: true, lastName: true,
-          role: true, isActive: true, agendaActive: true,
-        },
-        orderBy: { id: "asc" },
-        take: 1000,
-      }),
-      prisma.clinic.findUnique({ where: { id: clinicId }, select: { googleCalendarEmail: true } }),
-    ]);
-    const deLaClinica = clinica?.googleCalendarEmail?.trim().toLowerCase() || null;
-    return us.map((u) => {
-      const otro = u.googleCalendarEmail?.trim().toLowerCase() || null;
-      return {
-        id: u.id,
-        email: u.email ?? null,
-        otrosCorreos: otro && otro !== deLaClinica ? [otro] : [],
-        recibeCitas: puedeRecibirCitas(u),
-        rol: u.role,
-        nombre: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || null,
-        activo: u.isActive !== false,
-      };
+    // TODAS las personas de la clínica: `duenoDeLaCuenta` busca entre las que
+    // reciben citas la que entra con la cuenta conectada (o la conectó).
+    const us = await prisma.user.findMany({
+      where: { clinicId },
+      select: { id: true, email: true, googleCalendarEmail: true, role: true, isActive: true, agendaActive: true },
+      orderBy: { id: "asc" },
+      take: 1000,
     });
+    return us.map((u) => ({
+      id: u.id,
+      email: u.email ?? null,
+      correoGoogle: u.googleCalendarEmail ?? null,
+      recibeCitas: puedeRecibirCitas(u),
+    }));
   },
 
   async calendarioEnOtraClinica(clinicId, calendarId) {
@@ -723,8 +708,14 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
    * Configuración lo dicen con qué hacer (tercera vuelta, N3-G2).
    */
   retiro: { desde: string; causa: CausaRetiro; zona: string } | null;
+  /**
+   * La cuenta de Google conectada no es de nadie que reciba citas (cuenta
+   * general): sus eventos no bloquean a nadie (WS1-T3). La agenda y
+   * Configuración lo dicen con qué hacer.
+   */
+  sinDueno: boolean;
 }> {
-  const vacio = { encendida: false, conectada: false, error: null, ultimaSync: null, ultimoIntento: null, retiro: null };
+  const vacio = { encendida: false, conectada: false, error: null, ultimaSync: null, ultimoIntento: null, retiro: null, sinDueno: false };
   if (!idValido(clinicId)) return vacio;
   try {
     if (!(await tablasGoogleListas())) return vacio;
@@ -760,13 +751,16 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
     // Conexión CAÍDA (Google la rechazó; se guarda el token): ni se leen los
     // eventos ni se copian las citas. La pantalla lo dice tal cual (G3).
     const caida = !!c && !c.enabled && !!c.refreshToken;
+    const conectada = !!(c?.enabled && c.refreshToken);
+    const sinDueno = conectada && duenoDeLaCuenta(c?.cuentaEmail, await puertos.leerUsuarios(clinicId)) === null;
     return {
       encendida: true,
-      conectada: !!(c?.enabled && c.refreshToken),
+      conectada,
       error: caida ? "conexion_caida" : f.lastError ?? null,
       ultimaSync: f.lastSyncAt ? f.lastSyncAt.toISOString() : null,
       ultimoIntento: intentos.length ? new Date(Math.max(...intentos)).toISOString() : null,
       retiro: aviso ? { desde: aviso.desde.toISOString(), causa: aviso.causa, zona: c?.timezone || "America/Mexico_City" } : null,
+      sinDueno,
     };
   } catch {
     return vacio;

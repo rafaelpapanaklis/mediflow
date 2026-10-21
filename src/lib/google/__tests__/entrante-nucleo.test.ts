@@ -79,7 +79,12 @@ class GoogleFalsa {
   }
 }
 
-function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: string; calendarioEnOtra?: boolean } = {}) {
+/**
+ * `cuenta`: la cuenta de Google conectada a la clínica. Por defecto la de la
+ * Dra. Ana (que recibe citas): sus eventos la bloquean a ella (WS1-T3).
+ */
+function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: string; calendarioEnOtra?: boolean; cuenta?: string | null } = {}) {
+  const cuenta = opts.cuenta === undefined ? "ana@clinica.mx" : opts.cuenta;
   const cal = opts.calendario ?? CAL;
   const google = new GoogleFalsa();
   const bloques = new Map<string, Bloque>();
@@ -98,8 +103,8 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
     equipoFirma: null as string | null,
   };
   const usuarios: UsuarioClinica[] = [
-    { id: "doc-ana", email: "ana@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Ana López" },
-    { id: "rec-eva", email: "recepcion@clinica.mx", recibeCitas: false, rol: "RECEPTIONIST", nombre: "Eva Ruiz" },
+    { id: "doc-ana", email: "ana@clinica.mx", recibeCitas: true },
+    { id: "rec-eva", email: "recepcion@clinica.mx", recibeCitas: false },
   ];
   let n = 0;
   const consultas = { series: 0 };
@@ -116,8 +121,8 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
     leerEstado: async () => ({ ...estado }),
     leerConexion: async () =>
       opts.conectada === false
-        ? { enabled: false, accessToken: null, refreshToken: null, calendarId: cal, timezone: "America/Mexico_City" }
-        : { enabled: true, accessToken: "at", refreshToken: "rt", calendarId: cal, timezone: "America/Mexico_City" },
+        ? { enabled: false, accessToken: null, refreshToken: null, calendarId: cal, timezone: "America/Mexico_City", cuentaEmail: cuenta }
+        : { enabled: true, accessToken: "at", refreshToken: "rt", calendarId: cal, timezone: "America/Mexico_City", cuentaEmail: cuenta },
     tomarTurno: async (_c, hasta) => {
       if (estado.lease && estado.lease > AHORA) return false;
       estado.lease = hasta;
@@ -400,16 +405,14 @@ test("G14: otra clínica con la bandera usa el MISMO calendario → no se lee (u
   assert.equal(a.bloques.size, 0);
 });
 
-test("G1: el porqué de «toda la clínica» se guarda; un invitado de recepción deja el bloqueo a su nombre", async () => {
+test("WS1-T3: con la cuenta de la Dra., todo evento la bloquea a ELLA, invite a quien invite (nunca toda la clínica)", async () => {
   const a = montar();
   a.google.poner(evento("e1", { attendees: [{ email: "dra.ruiz@gmail.com" }] }));
   a.google.poner(evento("e2", { attendees: [{ email: "recepcion@clinica.mx" }] }));
+  a.google.poner(evento("e3"));
   await sincronizarEntrante(a.p, "c1");
-  const porEvento = new Map([...a.vinculos.values()].map((v) => [v.googleEventId, v]));
-  assert.equal(porEvento.get("e1")!.alcance, "no_reconocido");
-  assert.equal(a.bloques.get(porEvento.get("e1")!.blockId)!.doctorId, null);
-  assert.equal(porEvento.get("e2")!.alcance, null);
-  assert.equal(a.bloques.get(porEvento.get("e2")!.blockId)!.doctorId, "rec-eva");
+  assert.deepEqual(activos(a.bloques).map((b) => b.doctorId), ["doc-ana", "doc-ana", "doc-ana"]);
+  assert.ok([...a.vinculos.values()].every((v) => v.alcance === null));
 });
 
 test("G15: los borrados de citas de DaleControl no disparan consultas de series; los padres de serie, UNA por página", async () => {
@@ -442,33 +445,38 @@ test("G7: la cita convertida ya va ligada a OTRO evento → lo que le pase al vi
 
 /* ═══ Segunda vuelta de la revisión t8 ════════════════════════════════════ */
 
-test("N-G2: recepción + el Gmail personal de la doctora → cierra TODA la clínica (nunca «a nadie»)", async () => {
-  const a = montar();
-  a.google.poner(evento("q1", { summary: "Quirófano", attendees: [{ email: "recepcion@clinica.mx" }, { email: "ana.lopez.83@gmail.com" }] }));
-  await sincronizarEntrante(a.p, "c1");
-  const [b] = activos(a.bloques);
-  assert.equal(b.doctorId, null, "de toda la clínica: cierra también a la doctora");
-  assert.equal([...a.vinculos.values()][0].alcance, "no_reconocido");
+test("WS1-T3: con una cuenta GENERAL (la de recepción), ningún evento bloquea a nadie, ni a toda la clínica", async () => {
+  const a = montar({ cuenta: "recepcion@clinica.mx" });
+  a.google.poner(evento("q1", { summary: "Quirófano", attendees: [{ email: "ana@clinica.mx" }] }));
+  a.google.poner(evento("q2"));
+  const r = await sincronizarEntrante(a.p, "c1");
+  assert.equal(r.estado, "ok");
+  assert.equal(a.bloques.size, 0);
+  // Sin cuenta conectada guardada (conexiones viejas), igual.
+  const b = montar({ cuenta: null });
+  b.google.poner(evento("q2"));
+  await sincronizarEntrante(b.p, "c1");
+  assert.equal(b.bloques.size, 0);
 });
 
-test("N-G2: si ese Gmail es el que la doctora conectó a Google (users.googleCalendarEmail) → cierra SU agenda", async () => {
-  const a = montar();
-  a.usuarios[0].otrosCorreos = ["ana.lopez.83@gmail.com"];
-  a.google.poner(evento("q1", { summary: "Quirófano", attendees: [{ email: "recepcion@clinica.mx" }, { email: "Ana.Lopez.83@gmail.com" }] }));
+test("WS1-T3: la cuenta es el Google que conectó la doctora (users.googleCalendarEmail) → sus eventos la bloquean a ella", async () => {
+  const a = montar({ cuenta: "ana.lopez.83@gmail.com" });
+  a.usuarios[0].correoGoogle = "Ana.Lopez.83@gmail.com";
+  a.google.poner(evento("q1", { summary: "Quirófano" }));
   await sincronizarEntrante(a.p, "c1");
   assert.equal(activos(a.bloques)[0].doctorId, "doc-ana");
 });
 
-test("N-G5: cambia el equipo → la siguiente pasada es COMPLETA y el evento que ya estaba cambia de dueño", async () => {
-  const a = montar();
-  a.google.poner(evento("e1", { attendees: [{ email: "nueva@clinica.mx" }] }));
+test("N-G5/WS1-T3: cambia el equipo → la siguiente pasada es COMPLETA y el evento que ya estaba cambia de dueño", async () => {
+  const a = montar({ cuenta: "nueva@clinica.mx" });
+  a.google.poner(evento("e1"));
   await sincronizarEntrante(a.p, "c1");
-  assert.equal(activos(a.bloques)[0].doctorId, null, "nadie de la clínica todavía: toda la clínica");
+  assert.equal(a.bloques.size, 0, "la cuenta no es de nadie todavía: no bloquea a nadie");
   // Sin cambios en el equipo, la siguiente es incremental (no relee nada).
   await sincronizarEntrante(a.p, "c1");
   assert.equal(a.google.llamadas[1].syncToken, "v1");
   // Entra la doctora con ese correo: el evento no cambió en Google, pero ya es suyo.
-  a.usuarios.push({ id: "doc-nueva", email: "nueva@clinica.mx", recibeCitas: true, rol: "DOCTOR", nombre: "Sara Gil" });
+  a.usuarios.push({ id: "doc-nueva", email: "nueva@clinica.mx", recibeCitas: true });
   const r = await sincronizarEntrante(a.p, "c1");
   assert.equal(r.estado === "ok" && r.completa, true);
   assert.equal(a.google.llamadas[2].syncToken, undefined);
@@ -476,6 +484,11 @@ test("N-G5: cambia el equipo → la siguiente pasada es COMPLETA y el evento que
   // Y la que sigue vuelve a ser incremental.
   await sincronizarEntrante(a.p, "c1");
   assert.ok(a.google.llamadas[3].syncToken);
+  // Apaga «Aparece en la agenda»: completa, y su bloqueo se retira (no se borra).
+  a.usuarios.at(-1)!.recibeCitas = false;
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques).length, 0);
+  assert.equal(a.bloques.size, 1);
 });
 
 test("N-G6: un evento hecho a mano con el título y el pie de una cita (duplicado en Google) SÍ cierra la agenda; ligado a una cita, no", async () => {
@@ -627,18 +640,20 @@ test("N3-G5: Google no deja releer (500) → no se inventa nada, pero NO se guar
   assert.equal(a.vinculos.get("bc")!.avisoStartsAt?.toISOString(), h(14).toISOString());
 });
 
-test("N3-G4: tras desplegar, la firma guardada con la regla anterior ya no coincide → una completa que REASIGNA lo mal asignado por nombre", async () => {
+test("WS1-T3: tras desplegar, la firma guardada con la regla anterior ya no coincide → una completa que REASIGNA al dueño lo que era de toda la clínica", async () => {
   const a = montar();
-  // Un bloqueo que la regla vieja dio al Dr. por el nombre visible de un paciente.
-  a.google.poner(evento("e1", { attendees: [{ email: "recepcion@clinica.mx" }, { email: "paciente@gmail.com", displayName: "Ana López" }] }));
+  a.google.poner(evento("e1", { attendees: [{ email: "recepcion@clinica.mx" }, { email: "paciente@gmail.com" }] }));
   await sincronizarEntrante(a.p, "c1");
   const b = [...a.bloques.values()][0];
-  b.doctorId = "doc-ana"; // como lo dejó la regla vieja
+  b.doctorId = null; // como lo dejó la regla vieja («no_reconocido»: toda la clínica)
+  [...a.vinculos.values()][0].alcance = "no_reconocido";
   // La fila, como la dejó el código anterior: su firma (calculada con él) para este mismo equipo.
   Object.assign(a.estado, { equipoFirma: "2-f75b1e45d3a05695", lastFullSyncAt: AHORA });
   const antes = a.google.llamadas.length;
   await sincronizarEntrante(a.p, "c1");
   assert.ok(a.google.llamadas[antes].timeMin, "completa, aunque Google no cambió nada");
-  assert.equal(b.doctorId, null, "toda la clínica (no_reconocido), no la agenda de la Dra.");
+  assert.equal(b.doctorId, "doc-ana", "de la dueña de la cuenta, no de toda la clínica");
+  assert.equal(b.deletedAt, null);
+  assert.equal([...a.vinculos.values()][0].alcance, null);
   assert.notEqual(a.estado.equipoFirma, "2-f75b1e45d3a05695");
 });

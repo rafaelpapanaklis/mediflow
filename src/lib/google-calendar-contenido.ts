@@ -13,6 +13,10 @@
  *    el título que se ve en listas, notificaciones y correos.
  *  · El paciente solo es invitado si la clínica lo permite
  *    («Enviar invitación por correo al paciente», por defecto sí = como antes).
+ *  · Nadie es invitado con la cuenta DUEÑA del calendario donde se copia la
+ *    cita (WS1-T3): ya la ve ahí. Si no, al doctor que conectó la clínica
+ *    con su Gmail la cita le salía DOS veces en su Google (la copia y la
+ *    invitación). Una cita, una vez en el Google de cada persona.
  *
  * Sin dependencias: pura y probada.
  */
@@ -27,6 +31,8 @@ export interface DatosContenidoEvento {
   clinicAddress?: string | null;
   /** Default true (el comportamiento de antes de existir el interruptor). */
   invitarPaciente?: boolean;
+  /** La cuenta de Google dueña del calendario donde se copia (`clinics.googleCalendarEmail`): nunca se invita. */
+  cuentaDelCalendario?: string | null;
 }
 
 export interface ContenidoEventoGoogle {
@@ -49,13 +55,22 @@ function correoValido(e: string | null | undefined): e is string {
   return typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 }
 
+/** ¿Ese correo es la cuenta dueña del calendario? (sin mayúsculas ni espacios) */
+export function esLaCuentaDelCalendario(correo: string | null | undefined, cuenta: string | null | undefined): boolean {
+  const a = correo?.trim().toLowerCase();
+  const b = cuenta?.trim().toLowerCase();
+  return !!a && !!b && a === b;
+}
+
 export function armarContenidoEventoGoogle(d: DatosContenidoEvento): ContenidoEventoGoogle {
   const attendees: { email: string }[] = [];
-  if (correoValido(d.doctorEmail)) attendees.push({ email: d.doctorEmail.trim() });
-  if (d.invitarPaciente !== false && correoValido(d.patientEmail)) {
-    const correo = d.patientEmail.trim();
-    if (!attendees.some((a) => a.email.toLowerCase() === correo.toLowerCase())) attendees.push({ email: correo });
-  }
+  const invitar = (correo: string) => {
+    const c = correo.trim();
+    if (esLaCuentaDelCalendario(c, d.cuentaDelCalendario)) return;
+    if (!attendees.some((a) => a.email.toLowerCase() === c.toLowerCase())) attendees.push({ email: c });
+  };
+  if (correoValido(d.doctorEmail)) invitar(d.doctorEmail);
+  if (d.invitarPaciente !== false && correoValido(d.patientEmail)) invitar(d.patientEmail);
 
   const direccion = d.clinicAddress?.trim() || "";
   const description = [

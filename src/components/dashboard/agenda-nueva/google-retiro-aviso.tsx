@@ -64,7 +64,7 @@ export function textoRetiro(
  * hacer (tercera vuelta, N3-G2); si no, el de la conexión.
  */
 export function textoAvisoAgenda(
-  estado: { encendida: boolean; error: string | null; retiro?: RetiroPantalla | null } | null,
+  estado: { encendida: boolean; error: string | null; retiro?: RetiroPantalla | null; sinDueno?: boolean } | null,
   t: (clave: string, vars?: Record<string, string | number>) => string,
   locale: string,
   zona?: string,
@@ -74,7 +74,10 @@ export function textoAvisoAgenda(
   // la agenda (no se puede descartar); lo dice Configuración, junto a «Conectar».
   if (estado.retiro && estado.retiro.causa !== "desconectada") return textoRetiro(estado.retiro, t, locale, zona);
   const clave = avisoDeConexion(estado.error);
-  return clave ? t(clave) : null;
+  if (clave) return t(clave);
+  // La cuenta conectada no es de nadie que reciba citas: sus eventos no
+  // bloquean a nadie (WS1-T3). Que no lo descubran con una cita encima.
+  return estado.sinDueno ? t("agenda.google.sinDueno") : null;
 }
 
 /**
@@ -105,31 +108,43 @@ export function AvisoRetiroVista({ texto }: { texto: string }) {
  * Lo que pide Configuración: como la agenda al abrirse, sincroniza primero
  * (con el freno de 60 s de la ruta) y luego dice el estado. Así, recién
  * reconectado Google, no enseña el aviso viejo hasta que pase el cron.
- * Sin permiso, sin red o sin retiro: null.
+ * Sin la bandera, sin permiso o sin red: null.
  */
-export async function cargarRetiro(f: typeof fetch = fetch): Promise<RetiroPantalla | null> {
+export async function cargarAvisoGoogle(
+  f: typeof fetch = fetch,
+): Promise<{ retiro: RetiroPantalla | null; sinDueno: boolean } | null> {
   try {
     const res = await f("/api/google/agenda/sincronizar", { method: "POST", credentials: "include", cache: "no-store" });
     if (!res.ok) return null;
-    const b = (await res.json()) as { encendida?: unknown; retiro?: unknown } | null;
-    return b?.encendida === true ? leerRetiro(b.retiro) : null;
+    const b = (await res.json()) as { encendida?: unknown; retiro?: unknown; sinDueno?: unknown } | null;
+    return b?.encendida === true ? { retiro: leerRetiro(b.retiro), sinDueno: b.sinDueno === true } : null;
   } catch {
     return null;
   }
 }
 
-/** Para Configuración → Integraciones. Sin la bandera, sin permiso o sin retiro, no pinta nada. */
+/** Solo el retiro (N3-G2). Sin permiso, sin red o sin retiro: null. */
+export async function cargarRetiro(f: typeof fetch = fetch): Promise<RetiroPantalla | null> {
+  return (await cargarAvisoGoogle(f))?.retiro ?? null;
+}
+
+/**
+ * Para Configuración → Integraciones: el retiro y, si no lo hay, que la
+ * cuenta conectada no es de nadie que reciba citas (WS1-T3). Sin la bandera,
+ * sin permiso o sin nada que decir, no pinta nada.
+ */
 export function AvisoRetiroGoogle() {
   const t = useT();
   const locale = useLocale();
-  const [retiro, setRetiro] = useState<RetiroPantalla | null>(null);
+  const [aviso, setAviso] = useState<{ retiro: RetiroPantalla | null; sinDueno: boolean } | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    void cargarRetiro().then((r) => { if (vivo) setRetiro(r); });
+    void cargarAvisoGoogle().then((r) => { if (vivo) setAviso(r); });
     return () => { vivo = false; };
   }, []);
 
-  if (!retiro) return null;
-  return <AvisoRetiroVista texto={textoRetiro(retiro, t, locale)} />;
+  if (aviso?.retiro) return <AvisoRetiroVista texto={textoRetiro(aviso.retiro, t, locale)} />;
+  if (aviso?.sinDueno) return <AvisoRetiroVista texto={t("agenda.google.sinDueno")} />;
+  return null;
 }
