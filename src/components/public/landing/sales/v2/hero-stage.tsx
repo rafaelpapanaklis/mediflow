@@ -14,9 +14,10 @@ import { useRef, type ReactNode } from "react";
  * no puede mover nada al montar: CLS 0.
  *
  * Es decorativo (`aria-hidden`): las caras son maquetas del panel, no texto
- * que un lector de pantalla deba leer. `.dch3-stage` (hero-3d-v2.css) pausa
- * el giro mientras el ratón está encima; con prefers-reduced-motion no gira
- * ni sigue al ratón (landing-v2.css + `isReduced`).
+ * que un lector de pantalla deba leer. El giro NUNCA se detiene (ni con el
+ * ratón encima ni con un toque): el paralaje solo inclina el escenario
+ * (`rotateY/rotateX` en el contenedor, no toca `.dcv4-prism`); con
+ * prefers-reduced-motion no gira ni sigue al ratón (landing-v2.css + `isReduced`).
  */
 export function HeroStage({ children }: { children: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);
