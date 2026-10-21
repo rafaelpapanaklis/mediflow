@@ -82,7 +82,7 @@ export function PlanTratamiento({
           <span className={s.cabeceraIcono}>
             <ListChecks size={16} strokeWidth={1.75} aria-hidden />
           </span>
-          <h2 className={s.titulo}>{t("planTratamiento.lista.titulo")}</h2>
+          <h2 className={`${s.titulo} ${s.tituloConAccionAncha}`}>{t("planTratamiento.lista.titulo")}</h2>
           {puedeEditar && (
             <div className={s.acciones}>
               <button type="button" className={`${s.boton} ${s.botonPrincipal}`} onClick={onNuevo}>
