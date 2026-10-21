@@ -66,8 +66,11 @@ export function ConditionSwatch({ cond }: ConditionSwatchProps) {
       : cond.render === "fill"
         ? { surfaces: { O: [cond.id], M: [cond.id] }, tooth: [] }
         : { surfaces: { O: [cond.id] }, tooth: [] };
+  // Solo es un dibujo: sin `pointerEvents: "none"`, las caras del Surface2D
+  // (que paran la propagación del clic) se tragaban el clic del botón y el
+  // hallazgo no se elegía al tocar el icono (QA de Chrome, F1)
   return (
-    <span style={{ display: "inline-flex" }}>
+    <span style={{ display: "inline-flex", pointerEvents: "none" }} aria-hidden="true">
       <Surface2D meta={meta} record={record} size={30} onSurface={() => {}} />
     </span>
   );

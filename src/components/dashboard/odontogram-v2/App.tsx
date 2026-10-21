@@ -220,6 +220,9 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
 
   const pickBrush = useCallback((id: string) => { setEraser(false); setBrush((b) => (b === id ? null : id)); }, []);
   const pickEraser = useCallback(() => { setBrush(null); setEraser((e) => !e); }, []);
+  // En el panel del diente el hallazgo se ELIGE, no se alterna: volver a tocar
+  // el que ya estaba elegido lo apagaba y la cara siguiente no marcaba nada (F1)
+  const pickBrushInPanel = useCallback((id: string) => { setEraser(false); setBrush(id); }, []);
   const handleSelect = useCallback((fdi: number) => setSelected(fdi), []);
 
   const apply = useCallback((fdi: number, kind: ApplyKind, letter?: SurfaceLetter | string) => {
@@ -439,7 +442,7 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
           onNoteDraft={handleNoteDraft}
           onNoteFlush={handleNoteFlush}
           onRemove={removeFinding}
-          onPick={pickBrush}
+          onPick={pickBrushInPanel}
         />
       )}
     </div>
