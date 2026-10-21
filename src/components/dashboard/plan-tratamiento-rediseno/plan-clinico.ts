@@ -14,6 +14,7 @@
  * Nada de esto cambia lo que recibe `POST /api/treatments`: los mismos siete
  * campos de siempre, con los mismos tipos.
  */
+import { fasesDeHallazgos } from "@/lib/treatments/sugerir-procedimiento";
 
 /** Las fases con las que se ordena un plan dental, en su orden clínico. */
 export const FASES = ["urgencia", "sistemica", "higienica", "correctiva", "restauradora", "mantenimiento"] as const;
@@ -57,6 +58,17 @@ export interface Renglon {
   precioDelTarifario: boolean;
   /** Minutos de sillón (del tarifario); 0 = no se sabe. */
   minutos: number;
+  /**
+   * Ventana rápida (ws1-t5, P3): el renglón que nació de un chip del odontograma guarda qué
+   * hallazgos consume («16:caries»), qué procedimiento se sugirió (`ClaveProcedimiento`) y el
+   * hallazgo de origen de la fila (`HallazgoDeOrigen` del contrato). Un renglón tecleado a mano
+   * no los lleva; el texto de `description` no los usa.
+   */
+  origen?: string[];
+  clave?: string | null;
+  hallazgo?: { condicion: string; diente: number | null; caras: string[]; entryId: string | null } | null;
+  /** La sugerencia es una de varias razonables: la ventana lo dice junto al renglón. */
+  revisar?: boolean;
 }
 
 export interface PlanClinico {
@@ -169,6 +181,15 @@ export function subtotalesPorFase(renglones: Renglon[]): { fase: Fase; renglones
 
 export function totalProcedimientos(renglones: Renglon[]): number {
   return Math.round(renglonesUtiles(renglones).reduce((a, r) => a + importeRenglon(r), 0) * 100) / 100;
+}
+
+/**
+ * Sesiones HECHAS de un plan: las que tienen fecha de realizado (`completedAt`). Una sesión sin
+ * ella está agendada (planes importados, N8), no hecha: contar `sessions.length` decía «18/18»
+ * de un plan con 4 hechas. La usan el Resumen y la pestaña del plan de la ficha (ws1-t5, P10).
+ */
+export function sesionesHechas(sesiones: ReadonlyArray<{ completedAt?: unknown } | null | undefined> | null | undefined): number {
+  return (sesiones ?? []).filter((s) => !!s && !!s.completedAt).length;
 }
 
 /** Sin duración en el tarifario se supone una cita corta de sillón. */
@@ -317,32 +338,13 @@ export function componerDescripcion(plan: PlanClinico, rot: Rotulos): string {
 
 /**
  * Los hallazgos del odontograma que PIDEN tratamiento (la lista de problemas
- * de la que nace un plan) y la fase en la que de entrada se atienden. Los ids
- * son los de `odontogram-v2/data.ts`; lo que no está aquí es trabajo ya hecho
- * (restauraciones, coronas, implantes) o un dato que no se trata por sí solo.
+ * de la que nace un plan) y la fase en la que de entrada se atienden. Sale de
+ * LA lista compartida (`CONDICIONES_CLINICAS` de `sugerir-procedimiento.ts`),
+ * la misma de la que sale lo que cobra «Completar consulta» (ws1-t5): lo que
+ * no está aquí es trabajo ya hecho (restauraciones, coronas, implantes) o un
+ * dato que no se trata por sí solo.
  */
-export const HALLAZGO_FASE: Record<string, Fase> = {
-  pulpitis: "urgencia",
-  fracture: "urgencia",
-  caries: "higienica",
-  caries_inc: "higienica",
-  necrosis: "higienica",
-  periapical1: "higienica",
-  periapical2: "higienica",
-  periapical3: "higienica",
-  ext_indicated: "higienica",
-  root_remnant: "higienica",
-  temp_rest: "higienica",
-  calculus: "higienica",
-  pocket: "higienica",
-  bleeding: "higienica",
-  impacted: "correctiva",
-  recession: "correctiva",
-  furcation: "correctiva",
-  mobility: "correctiva",
-  perio_mobility: "correctiva",
-  missing: "restauradora",
-};
+export const HALLAZGO_FASE: Record<string, Fase> = fasesDeHallazgos();
 
 export interface EntradaOdontograma { toothNumber: number; surface: string | null; conditionId: string }
 

@@ -235,6 +235,8 @@ export function Sidebar(props: SidebarProps) {
   const visibleItems = useMemo(() => {
     return conCandados(
       NAV_ITEMS.filter((item) =>
+        // `soloMenuNuevo`: opciones que solo pinta el menú de dos niveles (ws1-t5, P10).
+        !item.soloMenuNuevo &&
         shouldShowItem(item, props.user, props.clinicCategory, clinicModuleKeys, lockedModuleKeys),
       ),
       lockedModuleKeys,

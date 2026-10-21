@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { cobrosAlMarcar } from "@/lib/treatments/sugerir-procedimiento";
 
 /* ─────── Tipos ───────────────────────────────────────────── */
 
@@ -120,15 +121,11 @@ export const DENTAL_CATALOG_SEED: CatalogSeedItem[] = [
 ];
 
 /** Mapping conditionId → código del catálogo facturable. Los diagnósticos
- *  (caries, …) y los ~37 hallazgos nuevos no facturan (devuelven null). */
-const CONDITION_TREATMENT_CODE: Record<string, string> = {
-  restoration: "ODO_RESINA",
-  crown: "ODO_CORONA",
-  rct: "ODO_ENDODONCIA",
-  implant: "ODO_IMPLANTE",
-  missing: "ODO_EXTRACCION",
-  ext_done: "ODO_EXTRACCION",
-};
+ *  (caries, …) y los ~37 hallazgos nuevos no facturan (devuelven null). Sale
+ *  de LA lista compartida con el plan (`CONDICIONES_CLINICAS`, ws1-t5): ahí
+ *  queda dicho que «Ausente» es hueco por reponer para el plan y, al aparecer
+ *  en una consulta, «Extracción dental» para este cobro (lo de siempre). */
+const CONDITION_TREATMENT_CODE: Record<string, string> = cobrosAlMarcar();
 
 /** conditionId → código del catálogo. null = no facturable. */
 export function conditionToTreatmentCode(conditionId: string): string | null {
