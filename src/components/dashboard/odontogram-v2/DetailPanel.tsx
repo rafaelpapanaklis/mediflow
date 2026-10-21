@@ -28,7 +28,7 @@ const TYPE_NAMES: Record<string, Record<"es" | "en", string>> = {
  * onApply / onRemove / onNote / onPick / onClose (DetailPanelProps).
  */
 export function DetailPanel({
-  fdi, lang, numbering, record, brush,
+  fdi, lang, numbering, record, brush, eraser,
   onApply, onClose, onClearTooth, onNote, onNoteDraft, onNoteFlush, onRemove, onPick,
 }: DetailPanelProps) {
   const t = I18N[lang];
@@ -149,6 +149,8 @@ export function DetailPanel({
 
           {/* surfaces */}
           <div className="odo-section-t">{t.surfaces}</div>
+          {/* sin hallazgo elegido, tocar una cara no marca nada: se dice */}
+          {!brush && !eraser && <div className="odo-dt-pick" role="note">{t.pickFirst}</div>}
           <div className="odo-surf-grid">
             {surfaceLetters.map((letter) => {
               const col = surfaceColor(letter);
