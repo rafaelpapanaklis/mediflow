@@ -3,7 +3,8 @@
    #1a1826, Instrument Sans (var(--font-menu)), íconos Material Symbols
    (`.dcv4-mi`, declarado en landing-v2.css) y tarjetas como las del panel.
    El giro (`.dcv4-prism`, dcSpinB) y el paralaje (hero-stage.tsx) siguen
-   siendo los de landing-v2.css; aquí sólo se añade la pausa al pasar el ratón.
+   siendo los de landing-v2.css. El prisma NUNCA se detiene: ni con el ratón encima ni
+   con un toque (21-oct-2026, pedido de Rafael; ver la nota de abajo).
    Archivo propio de la tarea: NO se toca landing-v2.css. Prefijo `dch3-`. */
 
 /* Contraste AA (13-oct-2026, ws1-t4, encargo de ws7): Lighthouse marcaba en las
@@ -14,9 +15,11 @@
    #8696a0 → #6c7880, #53bdeb → #347793, blanco .85 → .95. Los grises sobre las
    caras oscuras (#a8a5b8, #858295 sobre #1a1826) ya pasaban y no se tocan. */
 
-/* Al pasar el ratón por el escenario el prisma se detiene para poder leer la
-   cara; al salir sigue girando desde donde estaba. */
-.dch3-stage:hover .dcv4-prism { animation-play-state: paused; }
+/* (21-oct-2026) Aquí había `.dch3-stage:hover .dcv4-prism { animation-play-state: paused; }`.
+   Se quitó: el prisma gira SIEMPRE. En iOS un toque deja el `:hover` «pegado» y la regla
+   lo detenía también en el teléfono. Nadie debe volver a pausar `.dcv4-prism` (ni con
+   :hover, :active, :focus-within ni con JS); el único freno es prefers-reduced-motion
+   (landing-v2.css). */
 
 .dch3-face {
   position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
