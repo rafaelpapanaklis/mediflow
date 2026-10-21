@@ -108,6 +108,7 @@ export function TarjetaCita({
     variante === "semana" ? s.tarjetaSemana : "",
     corta && variante === "dia" ? s.tarjetaCorta : "",
     corta || (variante === "dia" && estrecha) ? s.tarjetaSinFila2 : "",
+    estrecha ? s.tarjetaEncimada : "",
     arrastrable ? s.tarjetaArrastrable : "",
     isDragging ? s.tarjetaArrastrada : "",
   ]
