@@ -17,7 +17,7 @@ import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { DictationMic } from "@/components/clinical/shared/dictation-mic";
 import { textoParaInsertar } from "@/components/dashboard/nota-evolucion/dictado";
 import { HOJA_CARTA, variablesCssHoja } from "@/lib/documentos/hoja-carta";
-import { IMAGEN_MAX_BYTES, IMAGEN_MAX_POR_DOCUMENTO } from "@/lib/documentos/limites-imagen";
+import { IMAGEN_MAX_BYTES, IMAGEN_MAX_POR_DOCUMENTO, IMAGEN_TIPOS } from "@/lib/documentos/limites-imagen";
 import { tipoDeclarado } from "@/lib/documentos/imagenes";
 import { Barra } from "./barra";
 import { contarImagenes, extensionesDocumento, type MedidaPaginacion } from "./extensiones";
@@ -305,7 +305,8 @@ export function EditorDocumentoInterno(props: EditorDocumentoProps) {
         <input
           ref={archivoRef}
           type="file"
-          accept={IMAGEN_TIPOS.join(",")}
+          // Con extensiones también: en Windows el HEIC no trae tipo y el selector lo escondería.
+          accept={[...IMAGEN_TIPOS, ".heic", ".heif"].join(",")}
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
