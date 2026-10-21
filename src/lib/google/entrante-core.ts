@@ -20,14 +20,19 @@
  *     a sí misma su propio hueco: el eco. El título «🏥 … — …» o el pie
  *     «Agendado desde DaleControl» solos NO bastan: un evento duplicado a mano
  *     en Google los copia y debe cerrar la agenda (segunda vuelta t8, N-G6).
- *   · ¿A quién bloquea? (WS1-T3, decisión de Rafael del 21-oct-2026: «NO
- *     quiero que se cierre toda la clínica nunca desde Google Calendar… para
- *     eso tenemos Bloquear horarios»). SOLO a la persona dueña de la cuenta
- *     de Google conectada (`duenoDeLaCuenta`), si recibe citas. Los
- *     invitados (pacientes, otros doctores, externos) no cambian a quién se
- *     bloquea. Con una cuenta general (de nadie que reciba citas) no se
- *     bloquea a nadie, y la agenda y Configuración lo dicen (`sinDueno`).
- *     Un evento de Google NUNCA cierra toda la clínica.
+ *   · ¿A quién bloquea? (WS1-T3, decisiones de Rafael del 21-oct-2026:
+ *     «NO quiero que se cierre toda la clínica nunca desde Google Calendar…
+ *     para eso tenemos Bloquear horarios», y el agente de marketing que
+ *     agenda para el Dr. X desde SU Google invitando al Dr. X y a la
+ *     dirección del calendario de la clínica). `doctoresDelEvento`:
+ *       1. Invita a personas de la clínica que reciben citas y no
+ *          rechazaron → a CADA una (un bloqueo por doctor).
+ *       2. No invita a ningún doctor → al dueño de la cuenta conectada
+ *          (`duenoDeLaCuenta`), si recibe citas.
+ *       3. Tampoco hay dueño que atienda → a nadie; la agenda y
+ *          Configuración lo dicen (`sinDueno`).
+ *       4. NUNCA a toda la clínica.
+ *     Pacientes, externos y la dirección del propio calendario no cuentan.
  *
  * 🔴 EL TÍTULO NO VA EN `reason`. El bot de WhatsApp le dice al paciente el
  * `reason` de un día cerrado (`bot-booking-service.ts`), y el título de un
@@ -239,6 +244,51 @@ export function duenoDeLaCuenta(
 }
 
 /**
+ * A quién bloquea UN evento del calendario de la clínica (ver la cabecera):
+ * las personas de la clínica que reciben citas invitadas y que no
+ * rechazaron, cada una; si no hay ninguna, el dueño de la cuenta conectada;
+ * si tampoco, nadie (lista vacía). Nunca `null` = toda la clínica.
+ *
+ * Se reconoce a cada invitado por su correo de acceso o por el Google que
+ * conectó. La dirección del propio calendario (el `…@group.calendar.google.com`
+ * que el agente invita para que el evento entre aquí), el calendario mismo
+ * (`self`) y las salas (`resource`) no son personas. Un nombre visible nunca
+ * basta: solo el correo. Ordenados por id (estable entre pasadas).
+ */
+export function doctoresDelEvento(
+  ev: EventoGoogle,
+  usuarios: readonly UsuarioClinica[],
+  ctx: { dueno: string | null; calendarId?: string | null },
+): string[] {
+  const cal = correo(ctx.calendarId);
+  const atienden = usuarios.filter((u) => u.recibeCitas);
+  const ids = new Set<string>();
+  for (const a of ev.attendees ?? []) {
+    if (!a || a.self || a.resource || a.responseStatus === "declined") continue;
+    const c = correo(a.email);
+    if (!c || c === cal) continue;
+    for (const u of atienden) if (correo(u.email) === c || correo(u.correoGoogle) === c) ids.add(u.id);
+  }
+  if (ids.size > 0) return [...ids].sort();
+  return ctx.dueno && atienden.some((u) => u.id === ctx.dueno) ? [ctx.dueno] : [];
+}
+
+/**
+ * La clave del vínculo de cada doctor con el evento (`agenda_block_google.calendarId`).
+ * El índice único es (clínica, calendario, evento): un evento, un vínculo. Con
+ * un bloqueo por doctor, el PRIMER doctor usa el calendario tal cual (los
+ * bloqueos que ya existían siguen siendo el mismo) y cada uno de los demás
+ * `<calendario>#<doctorId>`. El `googleEventId` es SIEMPRE el del evento real:
+ * «Convertir en cita» y la salida no cambian. Sin SQL ni columnas nuevas.
+ */
+export const SEPARADOR_DOCTOR = "#";
+export const claveDeDoctor = (calendarId: string, doctorId: string) => `${calendarId}${SEPARADOR_DOCTOR}${doctorId}`;
+/** ¿Esa clave de vínculo es de ese calendario (la principal o la de un doctor)? */
+export function esClaveDelCalendario(clave: string, calendarId: string): boolean {
+  return clave === calendarId || clave.startsWith(calendarId + SEPARADOR_DOCTOR);
+}
+
+/**
  * La «huella» del equipo tal como la ve `duenoDeLaCuenta`. Si cambia (alguien
  * enciende «Aparece en la agenda», cambia un correo, se reconecta con otra
  * cuenta), la siguiente pasada es COMPLETA y reasigna los eventos que ya
@@ -246,11 +296,11 @@ export function duenoDeLaCuenta(
  *
  * Lleva también la versión de la REGLA: al cambiarla cada clínica hace una
  * completa y los bloqueos que ya estaban se corrigen en la primera pasada.
- * Regla 4 (WS1-T3): un evento de Google bloquea SOLO al dueño de la cuenta
- * conectada; los de toda la clínica que quedaban se reasignan a él o, con
- * una cuenta general, se retiran (deletedAt, sin borrar).
+ * Regla 4 (WS1-T3): nunca toda la clínica; regla 5: un bloqueo por cada
+ * doctor invitado, o el dueño de la cuenta (`doctoresDelEvento`). Los que
+ * quedaban se reasignan o se retiran (deletedAt, sin borrar).
  */
-export const REGLA_ASIGNACION = "4";
+export const REGLA_ASIGNACION = "5";
 
 export function firmaEquipo(usuarios: readonly UsuarioClinica[], cuenta?: string | null): string {
   const filas = usuarios
@@ -293,6 +343,8 @@ export function fechaGoogle(s: string | null | undefined): Date | null {
 /** Lo que ya hay en la base para ese evento (un bloqueo SIN convertir). */
 export interface BloqueoExistente {
   blockId: string;
+  /** La clave del vínculo (`claveDeDoctor`); ausente = la principal. */
+  clave?: string;
   activo: boolean;
   doctorId: string | null;
   alcance?: AlcanceGoogle | null;
@@ -327,8 +379,8 @@ const mismoInstante = (a: Date, b: Date) => a.getTime() === b.getTime();
 /**
  * La decisión para UN evento del calendario de la clínica.
  *
- *   · Sin dueño (cuenta general) → no bloquea a nadie: se retira el que hubiera
- *     (los de toda la clínica de la regla anterior, sin borrarse).
+ *   · Sin doctor (`doctoresDelEvento` no dio nadie para este vínculo) → se
+ *     retira el que hubiera (los de toda la clínica de antes, sin borrarse).
  *   · De DaleControl (eco) → si por lo que sea había un bloqueo, se retira; si no, nada.
  *   · No ocupa (cancelado / disponible / sin fecha legible) → se retira el que hubiera.
  *   · Ocupa y no hay bloqueo → se crea, salvo que ya terminó o queda fuera del horizonte.
@@ -340,22 +392,22 @@ export function decidirEvento(
     zona: string;
     ahora: Date;
     existente: BloqueoExistente | null;
-    /** El dueño de la cuenta conectada (`duenoDeLaCuenta`); null = cuenta general. */
-    dueno: string | null;
+    /** El doctor de ESTE bloqueo (`doctoresDelEvento`); null = no le toca a nadie. */
+    doctorId: string | null;
   },
 ): DecisionEvento {
   const { existente } = ctx;
   const retirar = (): DecisionEvento =>
     existente && existente.activo ? { accion: "inactivar", blockId: existente.blockId } : { accion: "nada" };
 
-  if (!ctx.dueno) return retirar();
+  if (!ctx.doctorId) return retirar();
   if (esEventoDeDaleControl(ev)) return retirar();
   if (!eventoOcupa(ev)) return retirar();
   const rango = rangoDeEvento(ev, ctx.zona);
   if (!rango) return retirar();
 
   const datos: DatosBloqueo = {
-    doctorId: ctx.dueno,
+    doctorId: ctx.doctorId,
     alcance: null,
     startsAt: rango.startsAt,
     endsAt: rango.endsAt,
@@ -382,6 +434,38 @@ export function decidirEvento(
     existente.title === datos.title &&
     existente.allDay === datos.allDay;
   return igual ? { accion: "nada" } : { accion: "actualizar", blockId: existente.blockId, datos };
+}
+
+/** Lo que hay que hacer con UN vínculo del evento (`clave` para crearlo). */
+export type DecisionVinculo = { clave: string; decision: DecisionEvento };
+
+/**
+ * Las decisiones de UN evento con un bloqueo por doctor (regla 5). El primer
+ * doctor va en la clave principal (reutiliza el bloqueo que ya existía, de
+ * toda la clínica o de otro doctor) y cada uno de los demás en la suya. Lo
+ * que sobra (un doctor que ya no está invitado, o todos si ya no le toca a
+ * nadie) se RETIRA, no se borra. Los vínculos de citas convertidas no entran
+ * aquí (los atiende el aviso).
+ */
+export function decidirEventoPorDoctor(
+  ev: EventoGoogle,
+  ctx: { zona: string; ahora: Date; calendarId: string; doctores: readonly string[]; existentes: readonly BloqueoExistente[] },
+): DecisionVinculo[] {
+  const quiero = new Map<string, string>();
+  ctx.doctores.forEach((d, i) => quiero.set(i === 0 ? ctx.calendarId : claveDeDoctor(ctx.calendarId, d), d));
+  const out: DecisionVinculo[] = [];
+  const vistas = new Set<string>();
+  for (const e of ctx.existentes) {
+    const clave = e.clave ?? ctx.calendarId;
+    vistas.add(clave);
+    const doctorId = quiero.get(clave) ?? null;
+    out.push({ clave, decision: decidirEvento(ev, { zona: ctx.zona, ahora: ctx.ahora, existente: e, doctorId }) });
+  }
+  for (const [clave, doctorId] of quiero) {
+    if (vistas.has(clave)) continue;
+    out.push({ clave, decision: decidirEvento(ev, { zona: ctx.zona, ahora: ctx.ahora, existente: null, doctorId }) });
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════

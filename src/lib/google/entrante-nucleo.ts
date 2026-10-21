@@ -27,7 +27,8 @@ import {
   calendarioImportable,
   clasificarErrorEntrante,
   decidirAvisoCita,
-  decidirEvento,
+  decidirEventoPorDoctor,
+  doctoresDelEvento,
   duenoDeLaCuenta,
   esEventoDeDaleControl,
   firmaEquipo,
@@ -89,6 +90,8 @@ export interface ConexionGoogle {
 /** Un vínculo leído de la base (bloqueo GOOGLE ↔ evento). */
 export interface VinculoLeido {
   blockId: string;
+  /** La clave del vínculo: el calendario, o `<calendario>#<doctorId>` (`claveDeDoctor`). Ausente = el calendario. */
+  calendarId?: string;
   googleEventId: string;
   recurringEventId: string | null;
   /** El bloqueo, tal como está. */
@@ -128,13 +131,14 @@ export interface PuertosEntrante {
   leerUsuarios(clinicId: string): Promise<UsuarioClinica[]>;
   /** ¿Otra clínica con la bandera encendida lee ese mismo calendario? */
   calendarioEnOtraClinica(clinicId: string, calendarId: string): Promise<boolean>;
-  /** Los vínculos de esos eventos en ESE calendario. */
+  /** Los vínculos de esos eventos en ESE calendario: TODOS los de cada evento (uno por doctor; `esClaveDelCalendario`). */
   leerVinculos(clinicId: string, calendarId: string, eventIds: string[]): Promise<VinculoLeido[]>;
-  /** Los vínculos SIN convertir de esas series (cuando Google borra la serie entera). Una lectura por página. */
+  /** Los vínculos SIN convertir de esas series, de todos sus doctores (cuando Google borra la serie entera). Una lectura por página. */
   leerVinculosDeSeries(clinicId: string, calendarId: string, recurringEventIds: string[]): Promise<VinculoLeido[]>;
   /** Eventos que ya son de una cita (por `googleCalendarEventId`): nunca se bloquean. */
   eventosDeCitas(clinicId: string, eventIds: string[]): Promise<Set<string>>;
-  crearBloqueo(clinicId: string, calendarId: string, googleEventId: string, d: DatosBloqueo): Promise<void>;
+  /** `clave`: el calendario, o `<calendario>#<doctorId>` para el 2.º doctor en adelante. */
+  crearBloqueo(clinicId: string, clave: string, googleEventId: string, d: DatosBloqueo): Promise<void>;
   actualizarBloqueo(clinicId: string, blockId: string, d: DatosBloqueo): Promise<void>;
   inactivarBloqueo(clinicId: string, blockId: string, ahora: Date): Promise<void>;
   leerCita(clinicId: string, appointmentId: string): Promise<CitaDelVinculo | null>;
@@ -301,8 +305,8 @@ async function pasada(
   // El equipo cambió (una doctora nueva con ese correo, «Aparece en la agenda»
   // encendido…): la incremental solo trae lo que cambió en Google y los
   // eventos de antes seguirían con el dueño viejo. Completa (N-G5). La
-  // cuenta conectada también entra: sus eventos bloquean SOLO a su dueño
-  // (WS1-T3), y al reconectar con otra se reasigna (o se retira) todo.
+  // cuenta conectada también entra: sin doctores invitados, sus eventos
+  // bloquean a su dueño (WS1-T3), y al reconectar se reasigna todo.
   const equipoFirma = firmaEquipo(usuarios, conexion.cuentaEmail);
   const dueno = duenoDeLaCuenta(conexion.cuentaEmail, usuarios);
   let completa =
@@ -346,7 +350,7 @@ async function pasada(
           const r = await cal.events.list(params);
           const items = (r.data.items ?? []).filter((e): e is EventoGoogle => !!e && typeof e.id === "string" && !!e.id);
           for (const e of items) vistos.add(e.id as string);
-          await procesarPagina(p, cal, clinicId, calendarId, items, { zona, ahora: reloj(), dueno }, total);
+          await procesarPagina(p, cal, clinicId, calendarId, items, { zona, ahora: reloj(), dueno, usuarios }, total);
           pageToken = r.data.nextPageToken ?? undefined;
           if (!pageToken) {
             nextSyncToken = r.data.nextSyncToken ?? null;
@@ -390,15 +394,26 @@ async function procesarPagina(
   clinicId: string,
   calendarId: string,
   eventos: EventoGoogle[],
-  ctx: { zona: string; ahora: Date; dueno: string | null },
+  ctx: { zona: string; ahora: Date; dueno: string | null; usuarios: UsuarioClinica[] },
   total: Contadores,
 ): Promise<void> {
   if (eventos.length === 0) return;
   const ids = eventos.map((e) => e.id as string);
-  // Dos lecturas por página (no por evento): el pooler agradece.
-  const vinculos = new Map((await p.leerVinculos(clinicId, calendarId, ids)).map((v) => [v.googleEventId, v]));
+  // Dos lecturas por página (no por evento): el pooler agradece. Un evento
+  // puede tener varios vínculos: uno por doctor (regla 5).
+  const vinculos = new Map<string, VinculoLeido[]>();
+  for (const v of await p.leerVinculos(clinicId, calendarId, ids)) {
+    vinculos.set(v.googleEventId, [...(vinculos.get(v.googleEventId) ?? []), v]);
+  }
   const deCitas = await p.eventosDeCitas(clinicId, ids);
   const esDeCita = (ev: EventoGoogle) => deCitas.has(ev.id as string) || esEventoDeDaleControl(ev);
+  const retirar = async (vs: readonly VinculoLeido[]) => {
+    for (const v of vs) {
+      if (!v.activo || v.appointmentId) continue;
+      await p.inactivarBloqueo(clinicId, v.blockId, ctx.ahora);
+      total.retirados++;
+    }
+  };
 
   // La serie entera se borró: Google puede mandar solo el evento «padre»
   // cancelado. Los candidatos se leen en UNA consulta por página (antes, una
@@ -417,10 +432,11 @@ async function procesarPagina(
 
   for (const ev of eventos) {
     const id = ev.id as string;
-    const v = vinculos.get(id) ?? null;
+    const vs = vinculos.get(id) ?? [];
+    const convertidos = vs.filter((v) => !!v.appointmentId);
 
     // ── Una cita convertida: se AVISA, la cita nunca se mueve ni se cancela sola.
-    if (v?.appointmentId) {
+    for (const v of convertidos) {
       let vinculo: VinculoLeido = v;
       let evento: EventoGoogle = ev;
       for (let intento = 0; intento < 2; intento++) {
@@ -443,52 +459,56 @@ async function procesarPagina(
         // no se avisaría hasta la completa (tercera vuelta, N3-G5).
         // Si no se puede decidir otra vez, la siguiente pasada es completa.
         if (intento > 0 || !cal.events.get) { total.repasar = true; break; }
-        const releido = (await p.leerVinculos(clinicId, calendarId, [id])).find((x) => x.googleEventId === id);
+        const releido = (await p.leerVinculos(clinicId, calendarId, [id])).find((x) => x.blockId === vinculo.blockId);
         if (!releido?.appointmentId) break;
         const actual = await eventoActual(cal, calendarId, id);
         if (!actual) { total.repasar = true; break; }
         vinculo = releido;
         evento = actual;
       }
+    }
+    // El evento ya es una cita: los bloqueos de los demás doctores se retiran
+    // (como cualquier evento de cita: no se cierra su propio hueco).
+    if (convertidos.length > 0) {
+      await retirar(vs);
       continue;
     }
 
     // ── La serie entera se borró: Google puede mandar solo el evento «padre».
-    if (ev.status === "cancelled" && !ev.recurringEventId && !v && !esDeCita(ev)) {
-      for (const hijo of hijosPorSerie.get(id) ?? []) {
-        if (hijo.activo && !hijo.appointmentId) {
-          await p.inactivarBloqueo(clinicId, hijo.blockId, ctx.ahora);
-          total.retirados++;
-        }
-      }
+    if (ev.status === "cancelled" && !ev.recurringEventId && vs.length === 0 && !esDeCita(ev)) {
+      await retirar(hijosPorSerie.get(id) ?? []);
       continue;
     }
 
     // ── El eco: un evento que es de una cita (marca, id determinista o ya ligado a una).
-    const existente: BloqueoExistente | null = v
-      ? { blockId: v.blockId, activo: v.activo, doctorId: v.doctorId, alcance: v.alcance ?? null, startsAt: v.startsAt, endsAt: v.endsAt, title: v.title, allDay: v.allDay }
-      : null;
-    const decision = esDeCita(ev)
-      ? existente?.activo
-        ? { accion: "inactivar" as const, blockId: existente.blockId }
-        : { accion: "nada" as const }
-      : decidirEvento(ev, { ...ctx, existente });
+    if (esDeCita(ev)) {
+      await retirar(vs);
+      continue;
+    }
 
-    switch (decision.accion) {
-      case "crear":
-        await p.crearBloqueo(clinicId, calendarId, id, decision.datos);
-        total.creados++;
-        break;
-      case "actualizar":
-        await p.actualizarBloqueo(clinicId, decision.blockId, decision.datos);
-        total.actualizados++;
-        break;
-      case "inactivar":
-        await p.inactivarBloqueo(clinicId, decision.blockId, ctx.ahora);
-        total.retirados++;
-        break;
-      default:
-        break;
+    // ── Un bloqueo por doctor (regla 5): los invitados, o el dueño de la cuenta.
+    const existentes: BloqueoExistente[] = vs.map((v) => ({
+      blockId: v.blockId, clave: v.calendarId ?? calendarId, activo: v.activo, doctorId: v.doctorId, alcance: v.alcance ?? null,
+      startsAt: v.startsAt, endsAt: v.endsAt, title: v.title, allDay: v.allDay,
+    }));
+    const doctores = doctoresDelEvento(ev, ctx.usuarios, { dueno: ctx.dueno, calendarId });
+    for (const { clave, decision } of decidirEventoPorDoctor(ev, { zona: ctx.zona, ahora: ctx.ahora, calendarId, doctores, existentes })) {
+      switch (decision.accion) {
+        case "crear":
+          await p.crearBloqueo(clinicId, clave, id, decision.datos);
+          total.creados++;
+          break;
+        case "actualizar":
+          await p.actualizarBloqueo(clinicId, decision.blockId, decision.datos);
+          total.actualizados++;
+          break;
+        case "inactivar":
+          await p.inactivarBloqueo(clinicId, decision.blockId, ctx.ahora);
+          total.retirados++;
+          break;
+        default:
+          break;
+      }
     }
   }
 }

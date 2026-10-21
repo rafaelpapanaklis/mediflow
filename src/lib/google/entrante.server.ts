@@ -33,6 +33,7 @@ import {
   CREADOR_GOOGLE,
   direccionDelAviso,
   MOTIVO_GOOGLE,
+  SEPARADOR_DOCTOR,
   avisoDeRetiro,
   duenoDeLaCuenta,
   TTL_CANAL_S,
@@ -127,6 +128,7 @@ async function leerConexion(clinicId: string) {
 
 const SELECT_VINCULO = {
   blockId: true,
+  calendarId: true,
   googleEventId: true,
   recurringEventId: true,
   title: true,
@@ -153,6 +155,7 @@ async function vinculosConBloqueo(clinicId: string, filas: any[]): Promise<Vincu
     if (!b) continue;
     out.push({
       blockId: f.blockId,
+      calendarId: f.calendarId,
       googleEventId: f.googleEventId,
       recurringEventId: f.recurringEventId ?? null,
       activo: b.deletedAt === null,
@@ -171,6 +174,14 @@ async function vinculosConBloqueo(clinicId: string, filas: any[]): Promise<Vincu
   }
   return out;
 }
+
+/**
+ * Los vínculos de ESE calendario: la clave principal y las de cada doctor
+ * (`<calendario>#<doctorId>`, regla 5). El `#` no sale en ids de Google.
+ */
+const delCalendario = (calendarId: string) => ({
+  OR: [{ calendarId }, { calendarId: { startsWith: calendarId + SEPARADOR_DOCTOR } }],
+});
 
 const esUnicoRepetido = (e: unknown) => (e as { code?: string })?.code === "P2002";
 const PAGINA_RETIRAR = 1000;
@@ -279,7 +290,7 @@ const puertos: PuertosEntrante = {
   async leerVinculos(clinicId, calendarId, eventIds) {
     if (eventIds.length === 0) return [];
     const filas = await prisma.agendaBlockGoogle.findMany({
-      where: { clinicId, calendarId, googleEventId: { in: eventIds } },
+      where: { clinicId, ...delCalendario(calendarId), googleEventId: { in: eventIds } },
       select: SELECT_VINCULO,
     });
     return vinculosConBloqueo(clinicId, filas);
@@ -288,7 +299,7 @@ const puertos: PuertosEntrante = {
   async leerVinculosDeSeries(clinicId, calendarId, recurringEventIds) {
     if (recurringEventIds.length === 0) return [];
     const filas = await prisma.agendaBlockGoogle.findMany({
-      where: { clinicId, calendarId, recurringEventId: { in: recurringEventIds }, appointmentId: null },
+      where: { clinicId, ...delCalendario(calendarId), recurringEventId: { in: recurringEventIds }, appointmentId: null },
       select: SELECT_VINCULO,
       take: 2000,
     });
@@ -304,7 +315,7 @@ const puertos: PuertosEntrante = {
     return new Set(citas.map((c) => c.googleCalendarEventId).filter((x): x is string => !!x));
   },
 
-  async crearBloqueo(clinicId, calendarId, googleEventId, d: DatosBloqueo) {
+  async crearBloqueo(clinicId, clave, googleEventId, d: DatosBloqueo) {
     try {
       await prisma.$transaction(async (tx) => {
         const b = await tx.agendaBlock.create({
@@ -324,7 +335,8 @@ const puertos: PuertosEntrante = {
           data: {
             blockId: b.id,
             clinicId,
-            calendarId,
+            // El calendario, o `<calendario>#<doctorId>` del 2.º doctor en adelante (`claveDeDoctor`).
+            calendarId: clave,
             googleEventId,
             recurringEventId: d.recurringEventId,
             title: d.title,

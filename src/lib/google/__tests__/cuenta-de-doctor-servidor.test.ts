@@ -7,6 +7,8 @@
  *   · El caso de Rafael: la clínica está conectada con el Gmail de «rafa
  *     papa» (SUPER_ADMIN que atiende); un «Evento Social - Comida» con un
  *     PACIENTE invitado cierra solo su agenda, no la de los 4.
+ *   · v2: el agente de marketing invita al Dr. y a la dirección del
+ *     calendario → solo ese Dr.; varios doctores → un bloqueo cada uno.
  *   · Cuenta general (recepción): no bloquea a nadie, y la pantalla lo dice.
  *   · E: los bloqueos que la regla anterior dejó de toda la clínica se
  *     reasignan (el mismo bloqueo) o se retiran (deletedAt), sin borrar.
@@ -71,23 +73,44 @@ test("caso de Rafael: cuenta de la clínica = rafa papa, invitado un PACIENTE �
   assert.equal(db.vinculos[0].title, "Evento Social - Comida");
 });
 
-test("caso de Rafael sin invitados o invitando a OTROS doctores → igual, solo rafa papa (nunca toda la clínica)", async () => {
+test("caso de Rafael sin invitados → solo rafa papa; invitando a OTROS doctores → un bloqueo para cada invitado (nunca toda la clínica)", async () => {
   reiniciar();
   rafaelClinica();
   bandera("c1", { syncToken: null, lastFullSyncAt: null });
   await sincronizar([
     comida({ id: "sin-invitados", attendees: undefined }),
-    comida({ id: "con-doctores", attendees: [{ email: "D@gmail.com" }, { email: "jg@gmail.com", responseStatus: "accepted" }] }),
+    comida({ id: "con-doctores", attendees: [{ email: "D@gmail.com" }, { email: "jg@gmail.com", responseStatus: "accepted" }, { email: "jorgemar@gmail.com", responseStatus: "declined" }] }),
   ]);
-  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-rafa", "u-rafa"]);
+  const de = (ev: string) => db.vinculos.filter((v) => v.googleEventId === ev).map((v) => db.bloques.find((b) => b.id === v.blockId)!.doctorId).sort();
+  assert.deepEqual(de("sin-invitados"), ["u-rafa"]);
+  assert.deepEqual(de("con-doctores"), ["u-d", "u-jg"], "jorgemar rechazó: no");
+  assert.ok(vivos().every((b) => b.doctorId !== null));
 });
 
-test("cuenta GENERAL (Gmail de recepción) → no se bloquea a nadie, y la agenda y Configuración lo dicen (sinDueno)", async () => {
+test("v2 · el agente de marketing (sin cuenta en DaleControl) agenda desde SU Google invitando al Dr. D y a la dirección del calendario de la clínica → solo el Dr. D", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([
+    comida({
+      id: "del-agente", summary: "Valoración — Juan P.",
+      attendees: [
+        { email: "agente.mkt@gmail.com", organizer: true, responseStatus: "accepted" },
+        { email: "d@gmail.com", responseStatus: "needsAction" },
+        { email: CAL, self: true, responseStatus: "accepted" },
+        { email: "paciente.juan@hotmail.com" },
+      ],
+    }),
+  ]);
+  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-d"], "ni rafa (el dueño), ni el agente, ni el paciente");
+});
+
+test("cuenta GENERAL (Gmail de recepción) sin doctores invitados → no se bloquea a nadie, y la agenda y Configuración lo dicen (sinDueno); con un doctor invitado, a él", async () => {
   reiniciar();
   rafaelClinica("recepcion.rafaelclinica@gmail.com");
   bandera("c1", { syncToken: null, lastFullSyncAt: null });
   await sincronizar([comida({ attendees: undefined }), comida({ id: "con-doctor", attendees: [{ email: "jg@gmail.com" }] })]);
-  assert.equal(db.bloques.length, 0, "ni toda la clínica ni el doctor invitado");
+  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-jg"], "solo el del doctor invitado; el otro, nadie (ni toda la clínica)");
   const { estadoEntranteParaPantalla } = await servidor();
   assert.equal((await estadoEntranteParaPantalla("c1")).sinDueno, true);
 });

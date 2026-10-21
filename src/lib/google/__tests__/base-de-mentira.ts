@@ -60,6 +60,7 @@ export function cumple(f: Fila, w: Fila | undefined): boolean {
       if ("gt" in v) return val != null && val > v.gt;
       if ("gte" in v) return val != null && val >= v.gte;
       if ("lt" in v) return val != null && val < v.lt;
+      if ("startsWith" in v) return typeof val === "string" && val.startsWith(v.startsWith);
       return true;
     }
     if (v instanceof Date) return val instanceof Date && val.getTime() === v.getTime();

@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sincronizarEntrante, type PuertosEntrante, type VinculoLeido } from "../entrante-nucleo";
-import type { EventoGoogle, UsuarioClinica } from "../entrante-core";
+import { esClaveDelCalendario, type EventoGoogle, type UsuarioClinica } from "../entrante-core";
 
 const AHORA = new Date("2026-10-20T15:00:00Z");
 const CAL = "cal-clinica@group.calendar.google.com";
@@ -111,7 +111,7 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
   const leer = (v: Vinc): VinculoLeido => {
     const b = bloques.get(v.blockId)!;
     return {
-      blockId: v.blockId, googleEventId: v.googleEventId, recurringEventId: v.recurringEventId,
+      blockId: v.blockId, calendarId: v.calendarId, googleEventId: v.googleEventId, recurringEventId: v.recurringEventId,
       activo: b.deletedAt === null, doctorId: b.doctorId, alcance: (v.alcance ?? null) as VinculoLeido["alcance"], startsAt: b.startsAt, endsAt: b.endsAt,
       title: v.title, allDay: v.allDay, appointmentId: v.appointmentId,
       eventStartsAt: v.eventStartsAt, eventEndsAt: v.eventEndsAt, eventDeletedAt: v.eventDeletedAt, avisoTipo: v.avisoTipo,
@@ -148,10 +148,10 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
     guardarAccessToken: async () => undefined,
     leerUsuarios: async () => usuarios.map((u) => ({ ...u })),
     calendarioEnOtraClinica: async () => opts.calendarioEnOtra === true,
-    leerVinculos: async (_c, cal, ids) => [...vinculos.values()].filter((v) => v.calendarId === cal && ids.includes(v.googleEventId)).map(leer),
+    leerVinculos: async (_c, cal, ids) => [...vinculos.values()].filter((v) => esClaveDelCalendario(v.calendarId, cal) && ids.includes(v.googleEventId)).map(leer),
     leerVinculosDeSeries: async (_c, cal, series) => {
       consultas.series++;
-      return [...vinculos.values()].filter((v) => v.calendarId === cal && !!v.recurringEventId && series.includes(v.recurringEventId) && !v.appointmentId).map(leer);
+      return [...vinculos.values()].filter((v) => esClaveDelCalendario(v.calendarId, cal) && !!v.recurringEventId && series.includes(v.recurringEventId) && !v.appointmentId).map(leer);
     },
     eventosDeCitas: async (_c, ids) => new Set([...citas.values()].map((c) => c.googleCalendarEventId).filter((x): x is string => !!x && ids.includes(x))),
     crearBloqueo: async (_c, cal, eventId, d) => {
@@ -445,18 +445,64 @@ test("G7: la cita convertida ya va ligada a OTRO evento → lo que le pase al vi
 
 /* ═══ Segunda vuelta de la revisión t8 ════════════════════════════════════ */
 
-test("WS1-T3: con una cuenta GENERAL (la de recepción), ningún evento bloquea a nadie, ni a toda la clínica", async () => {
+test("WS1-T3: con una cuenta GENERAL (la de recepción), un evento sin doctores invitados no bloquea a nadie; con la Dra. invitada, a ella", async () => {
   const a = montar({ cuenta: "recepcion@clinica.mx" });
   a.google.poner(evento("q1", { summary: "Quirófano", attendees: [{ email: "ana@clinica.mx" }] }));
   a.google.poner(evento("q2"));
   const r = await sincronizarEntrante(a.p, "c1");
   assert.equal(r.estado, "ok");
-  assert.equal(a.bloques.size, 0);
+  assert.deepEqual([...a.vinculos.values()].map((v) => [v.googleEventId, a.bloques.get(v.blockId)!.doctorId]), [["q1", "doc-ana"]]);
   // Sin cuenta conectada guardada (conexiones viejas), igual.
   const b = montar({ cuenta: null });
   b.google.poner(evento("q2"));
   await sincronizarEntrante(b.p, "c1");
   assert.equal(b.bloques.size, 0);
+});
+
+test("WS1-T3 v2: el agente de marketing invita al Dr. Luis y a la dirección del calendario → solo el Dr. Luis; dos doctores → un bloqueo cada uno; repetir no duplica", async () => {
+  const a = montar({ cuenta: "recepcion@clinica.mx" });
+  a.usuarios.push({ id: "doc-luis", email: "luis@clinica.mx", recibeCitas: true });
+  a.google.poner(evento("agente1", { summary: "Valoración Juan P.", attendees: [{ email: "agente@gmail.com", responseStatus: "accepted" }, { email: "luis@clinica.mx" }, { email: CAL, self: true }, { email: "juan@hotmail.com" }] }));
+  a.google.poner(evento("junta", { attendees: [{ email: "ana@clinica.mx" }, { email: "luis@clinica.mx" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  const de = (evId: string) => [...a.vinculos.values()].filter((v) => v.googleEventId === evId)
+    .map((v) => [v.calendarId, a.bloques.get(v.blockId)!.doctorId, !a.bloques.get(v.blockId)!.deletedAt]);
+  assert.deepEqual(de("agente1"), [[CAL, "doc-luis", true]]);
+  assert.deepEqual(de("junta"), [[CAL, "doc-ana", true], [`${CAL}#doc-luis`, "doc-luis", true]]);
+  // Otra completa: nada nuevo.
+  const r = await sincronizarEntrante(a.p, "c1", { forzarCompleta: true });
+  assert.equal(r.estado === "ok" && r.creados + r.actualizados + r.retirados, 0);
+  assert.equal(a.vinculos.size, 3);
+  // Luis rechaza la junta: su bloqueo se RETIRA (no se borra); el de Ana sigue.
+  a.google.poner(evento("junta", { attendees: [{ email: "ana@clinica.mx" }, { email: "luis@clinica.mx", responseStatus: "declined" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.deepEqual(de("junta"), [[CAL, "doc-ana", true], [`${CAL}#doc-luis`, "doc-luis", false]]);
+  // Mueven la junta: el bloqueo (de quien queda) la sigue.
+  a.google.poner(evento("junta", { start: { dateTime: "2026-10-21T12:00:00-06:00" }, end: { dateTime: "2026-10-21T13:00:00-06:00" }, attendees: [{ email: "ana@clinica.mx" }, { email: "luis@clinica.mx" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.deepEqual(de("junta"), [[CAL, "doc-ana", true], [`${CAL}#doc-luis`, "doc-luis", true]], "Luis vuelve a aceptar: el MISMO bloqueo se reactiva");
+  assert.ok([...a.vinculos.values()].filter((v) => v.googleEventId === "junta").every((v) => a.bloques.get(v.blockId)!.startsAt.toISOString() === "2026-10-21T18:00:00.000Z"));
+  // Borran la junta: se retiran los dos.
+  a.google.borrar("junta");
+  await sincronizarEntrante(a.p, "c1");
+  assert.deepEqual(de("junta").map((x) => x[2]), [false, false]);
+});
+
+test("WS1-T3 v2: convertir en cita el bloqueo de un doctor → los de los demás doctores de ese evento se retiran (el evento ya es una cita)", async () => {
+  const a = montar();
+  a.usuarios.push({ id: "doc-luis", email: "luis@clinica.mx", recibeCitas: true });
+  a.google.poner(evento("e1", { attendees: [{ email: "ana@clinica.mx" }, { email: "luis@clinica.mx" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques).length, 2);
+  // «Convertir en cita» sobre el de Ana: vínculo convertido y bloqueo retirado; la cita queda ligada al evento.
+  const vAna = [...a.vinculos.values()].find((v) => v.calendarId === CAL)!;
+  vAna.appointmentId = "cita1";
+  a.bloques.get(vAna.blockId)!.deletedAt = AHORA;
+  a.citas.set("cita1", { status: "SCHEDULED", startsAt: vAna.eventStartsAt, endsAt: vAna.eventEndsAt, googleCalendarEventId: "e1" });
+  a.google.poner(evento("e1", { summary: "Otro título", attendees: [{ email: "ana@clinica.mx" }, { email: "luis@clinica.mx" }] }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques).length, 0, "el de Luis también: el evento ya es la cita");
+  assert.equal(a.bloques.size, 2, "nada se borra");
 });
 
 test("WS1-T3: la cuenta es el Google que conectó la doctora (users.googleCalendarEmail) → sus eventos la bloquean a ella", async () => {
