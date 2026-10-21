@@ -417,6 +417,85 @@
 
 .planDatoActivo { color: var(--m2-activo); font-weight: 600; }
 
+/* Cuenta del plan (ws1-t12 · fase 2): total, abonado, saldo y por facturar. */
+.cuentaPlan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-hover);
+  cursor: default;
+  min-width: 0;
+}
+
+.cuentaPlanCabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.cuentaPlanTitulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.cuentaPlanNota {
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.cuentaPlanCifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.cuentaPlanCifras dt {
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+.cuentaPlanCifras dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto);
+}
+
+.cuentaPlanCifras dd.cuentaPlanExito { color: var(--pr-exito); }
+.cuentaPlanCifras dd.cuentaPlanPeligro { color: var(--pr-peligro); }
+
+.cuentaPlanAyuda {
+  margin: 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.cuentaPlan .botonChico { align-self: flex-start; }
+
+.cuentaPlanEsqueleto {
+  height: 58px;
+  margin-top: 12px;
+  border-radius: 10px;
+  background: var(--m2-borde);
+  opacity: 0.5;
+}
+
 /* ── Tablas (Citas, Facturación) ───────────────────────────────────── */
 
 .tablaCaja {

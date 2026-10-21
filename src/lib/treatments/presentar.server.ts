@@ -19,7 +19,7 @@ import { logAudit } from "@/lib/audit";
 import { armarPresupuestoDePlan, ESTADOS_QUE_YA_CUENTAN, type ConceptoDePlan } from "@/lib/quotes/desde-plan";
 import { createQuoteWithFolio, parseValidUntil, replaceQuoteContent } from "@/lib/quotes/service";
 import { presentQuote } from "@/lib/quotes/present";
-import { repoFilas } from "./items-db";
+import { bloquearPlan, repoFilas } from "./items-db";
 import { leerPlan } from "./leer-plan";
 
 export interface PlanParaPresentar {
@@ -124,6 +124,8 @@ export async function presupuestoDesdeElPlan(args: {
   userId: string;
   plan: PlanParaPresentar;
   presentar: boolean;
+  /** Interno: ya se reintentó tras perder la carrera de crear (otro clic lo creó en medio). */
+  _reintento?: boolean;
 }): Promise<ResultadoPresentar> {
   const { clinicId, userId, plan } = args;
   const leido = leerPlan(plan, await repoFilas.leer(clinicId, plan.id));
@@ -191,16 +193,31 @@ export async function presupuestoDesdeElPlan(args: {
   }
 
   const armado = await armar();
-  const quote = await createQuoteWithFolio({
-    clinicId,
-    patientId: plan.patientId,
-    createdById: userId,
-    title: plan.name.trim().slice(0, 160) || "Presupuesto",
-    items: armado.conceptos,
-    validUntil: parseValidUntil(null),
-    notes: null,
-    treatmentPlanId: plan.id,
-  });
+  // Con el plan BLOQUEADO (FOR UPDATE) y releído: dos clics o dos pestañas a la vez no crean dos
+  // presupuestos vivos del mismo plan (revisión fase 2, hallazgo 8). Quien llega segundo espera al
+  // candado, ve el que creó el primero y sigue por el camino de «ya existe».
+  const quote = await prisma.$transaction(async (tx) => {
+    await bloquearPlan(tx, clinicId, plan.id);
+    const ya = await tx.quote.findFirst({
+      where: { clinicId, treatmentPlanId: plan.id, status: { in: [...ESTADOS_QUE_YA_CUENTAN] } },
+      select: { id: true },
+    });
+    if (ya) return null;
+    return createQuoteWithFolio({
+      clinicId,
+      patientId: plan.patientId,
+      createdById: userId,
+      title: plan.name.trim().slice(0, 160) || "Presupuesto",
+      items: armado.conceptos,
+      validUntil: parseValidUntil(null),
+      notes: null,
+      treatmentPlanId: plan.id,
+    });
+  }, { maxWait: 10_000, timeout: 15_000 });
+  if (!quote) {
+    if (args._reintento) throw new Error("plan:presentar: el presupuesto del plan apareció y desapareció en medio");
+    return presupuestoDesdeElPlan({ ...args, _reintento: true });
+  }
   if (deFilas) await ligarFilas(clinicId, plan.id, armado.conceptos, quote.id);
   await logAudit({
     patientId: quote.patientId,

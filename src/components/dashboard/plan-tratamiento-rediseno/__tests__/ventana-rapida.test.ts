@@ -177,10 +177,13 @@ test("el POST lleva los siete campos de siempre, el texto del plan y las filas",
 });
 
 test("la API dice si guardó filas; sin SQL guarda el texto y no es un error", async () => {
-  const conFilas = await guardarPlan(ALTA, async () => respuesta(201, { id: "plan1", items: [] }));
+  const conFilas = await guardarPlan(ALTA, async () => respuesta(201, { id: "plan1", items: [], filasGuardadas: true }));
   assert.equal(conFilas.modo, "filas");
   const sinFilas = await guardarPlan(ALTA, async () => respuesta(201, { id: "plan1" }));
   assert.deepEqual([sinFilas.ok, sinFilas.modo], [true, "texto"]);
+  // ws1-t12 · fase 2: P2 sin el SQL contesta `items: []` y `filasGuardadas: false` — eso es texto.
+  const sinSql = await guardarPlan(ALTA, async () => respuesta(201, { id: "plan1", items: [], filasGuardadas: false }));
+  assert.equal(sinSql.modo, "texto");
 });
 
 test("errores: el de una fila dice cuál; el de la API se enseña tal cual; sin red, status 0", async () => {

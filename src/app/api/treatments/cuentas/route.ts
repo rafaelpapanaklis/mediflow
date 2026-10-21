@@ -1,0 +1,72 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { getAuthContext } from "@/lib/auth-context";
+import { prisma } from "@/lib/prisma";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { assertPatientVisible } from "@/lib/patient-visibility";
+import { esIdDeLaBase, MENSAJE_ID_INVALIDO } from "@/lib/validation/id";
+import { leerCuentaDelPlan } from "@/lib/treatments/cobro.server";
+import { repoFilas } from "@/lib/treatments/items-db";
+import { planesDelPaciente } from "@/lib/treatments/sin-doble-cobro.server";
+import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
+
+export const dynamic = "force-dynamic";
+
+/** Planes por paciente que se cuentan (un paciente real tiene 1–3; las cuentas se leen de una en una). */
+const MAX_PLANES = 10;
+
+/**
+ * GET /api/treatments/cuentas?patientId= — la cuenta de CADA plan vivo del paciente (ws1-t12 ·
+ * fase 2), en una sola llamada: lo que pintan la tarjeta «Cuenta del plan» de la ficha y la hoja
+ * «Cobrar hoy» (abono a la nota del plan en vez de una factura nueva). Cada cuenta es la misma de
+ * `GET /api/treatments/[id]/cuenta` (`leerCuentaDelPlan`); además van las notas por cobrar (para
+ * repartir el abono) y las filas vivas (para reconocer lo que la hoja va a cobrar).
+ *
+ * Permisos: `treatments.view` + `billing.view`, los de `…/cuenta`. Tenant y paciente: los de la
+ * sesión; un plan cancelado (ABANDONED) entra solo por su nota viva (la hoja no le ofrece crear una). Las cuentas se leen en serie (el pooler no aguanta
+ * muchas a la vez) y como mucho `MAX_PLANES`.
+ */
+export async function GET(req: NextRequest) {
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ctx.clinicId) return NextResponse.json({ planes: [] });
+  const denied = denyIfMissingPermission(ctx, "treatments.view") ?? denyIfMissingPermission(ctx, "billing.view");
+  if (denied) return denied;
+
+  const patientId = new URL(req.url).searchParams.get("patientId") ?? "";
+  if (!patientId || !esIdDeLaBase(patientId)) return NextResponse.json({ error: MENSAJE_ID_INVALIDO }, { status: 400 });
+  const paciente = await prisma.patient.findFirst({ where: { id: patientId, clinicId: ctx.clinicId }, select: { id: true } });
+  if (!paciente) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+  const oculto = await assertPatientVisible(paciente.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
+  if (oculto) return oculto;
+
+  // También los cancelados: su nota viva se sigue abonando (cancelar no la cambia).
+  const planes = (await planesDelPaciente(ctx.clinicId, paciente.id)).slice(0, MAX_PLANES);
+  const filasPorPlan = await repoFilas.leerDePlanes(ctx.clinicId, planes.map((p) => p.id));
+
+  const salida: PlanConCuenta[] = [];
+  for (const p of planes) {
+    const cuenta = await leerCuentaDelPlan({ clinicId: ctx.clinicId, planId: p.id });
+    if (!cuenta) continue;
+    const filas = filasPorPlan.get(p.id) ?? [];
+    salida.push({
+      planId: p.id,
+      nombre: p.name,
+      estado: p.status,
+      conFilas: filas.length > 0,
+      total: cuenta.total,
+      facturado: cuenta.facturado,
+      pagado: cuenta.pagado,
+      soloDelPlan: cuenta.soloDelPlan,
+      saldo: cuenta.saldo,
+      porFacturar: cuenta.porFacturar,
+      notas: cuenta.notas.map((n) => ({
+        invoiceId: n.id, invoiceNumber: n.invoiceNumber, status: n.status, total: n.total, paid: n.paid, createdAt: n.createdAt ?? "",
+      })),
+      filas: filas.map((f) => ({
+        id: f.id, planId: f.planId, nombre: f.nombre, procedureId: f.procedureId, dientes: f.dientes, cantidad: f.cantidad,
+        estado: f.estado, hechoEn: f.hechoEn ? f.hechoEn.toISOString() : null, invoiceId: f.invoiceId,
+      })),
+    });
+  }
+  return NextResponse.json({ planes: salida });
+}

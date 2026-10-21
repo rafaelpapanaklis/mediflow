@@ -783,11 +783,15 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         } else {
           toast("El odontograma del paciente no se actualizó: no se pudo cargar su estado actual antes de guardar.", { icon: "⚠️", duration: 7000 });
         }
-        if (selectedProcs.length > 0) {
-          toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(proceduresTotal) })}`);
+        // ws1-t12 · fase 2: lo que ya es del plan de tratamiento no entra al borrador (se cobra en la
+        // nota del plan); el aviso dice qué se apartó y el total es el del borrador que de verdad nació.
+        const delPlan: string[] = Array.isArray(record?.procedimientosDelPlan) ? record.procedimientosDelPlan : [];
+        if (selectedProcs.length > 0 && record?.draftInvoice) {
+          toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(Number(record.draftInvoice.total) || 0) })}`);
         } else {
           toast.success(t("clinical.dentalForm.savedToast"));
         }
+        if (delPlan.length > 0) toast(t("planTratamiento.cobro.consultaAlPlan", { lista: delPlan.join(", ") }), { duration: 9000 });
         // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado y
         // mergea el aiAssist devuelto a `record` para que onSaved(record) deje la
         // cajita morada ✨ en el estado del padre sin esperar un reload.

@@ -32,6 +32,7 @@ import {
   nextInvoiceNumber,
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
+import { procedimientosParaElBorrador } from "@/lib/treatments/sin-doble-cobro.server";
 
 export const dynamic = "force-dynamic";
 
@@ -295,9 +296,28 @@ async function finishCreate(
 ) {
   // ── Auto-create draft invoice from procedures (if any had prices) ──────────
   let draftInvoice = null;
+  // ws1-t12 · fase 2 (P5): lo que es de un plan de tratamiento del paciente se cobra en la nota del
+  // plan (decisión de Rafael, 20-oct-2026), no en este borrador: aquí se queda solo lo de fuera.
+  let procedimientosDelPlan: string[] = [];
   if (data.autoInvoice && Array.isArray((cleanSpec as any).procedures) && (cleanSpec as any).procedures.length > 0) {
     try {
-      const procedures = (cleanSpec as any).procedures as Array<{ id?: string; name: string; price: number; quantity: number }>;
+      const todos = (cleanSpec as any).procedures as Array<{ id?: string; name: string; price: number; quantity: number }>;
+      let procedures = todos;
+      try {
+        const apartado = await procedimientosParaElBorrador(dbUser.clinicId, data.patientId, todos);
+        procedures = apartado.procedures;
+        procedimientosDelPlan = apartado.delPlan;
+        // La consulta recuerda qué filas apartó: otra consulta no las vuelve a usar para no cobrar lo suyo.
+        if (apartado.filaIds.length > 0 && record?.id) {
+          await prisma.medicalRecord.updateMany({
+            where: { id: record.id, clinicId: dbUser.clinicId },
+            data: { specialtyData: { ...(record.specialtyData ?? {}), planItemsApartados: apartado.filaIds } as any },
+          });
+        }
+      } catch (err) {
+        // Sin poder leer el plan, el borrador sale como siempre (es un BORRADOR: se confirma a mano).
+        console.error("[clinical] no se pudo leer el plan del paciente para el borrador:", err);
+      }
 
       // `procedures` viaja dentro de specialtyData (z.record(z.any())): NADA lo
       // valida. Se sanea aquí con la MISMA regla que itemQuantity() del
@@ -368,5 +388,5 @@ async function finishCreate(
   revalidatePath("/dashboard/clinical");
   revalidatePath("/dashboard/patients");
   revalidatePath("/dashboard/billing");
-  return NextResponse.json({ ...record, draftInvoice }, { status: 201 });
+  return NextResponse.json({ ...record, draftInvoice, procedimientosDelPlan }, { status: 201 });
 }

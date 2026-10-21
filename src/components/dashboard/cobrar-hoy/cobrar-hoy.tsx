@@ -35,6 +35,8 @@ import { METHODS, type PaymentMethod } from "@/components/dashboard/billing/paym
 import { useFrenoCajaCerrada } from "@/components/dashboard/billing/aviso-caja-cerrada";
 import { AvisoCajaCerrada, AvisoCajaDeOtraPersona } from "@/components/dashboard/billing/aviso-caja-cerrada.component";
 import { AvisoPresupuestoPorCargar } from "./aviso-presupuesto-por-cargar";
+import { AbonoAlPlan } from "./abono-al-plan";
+import { conceptosQueYaSonDelPlan, modoInicialCobroHoy, type ModoCobroHoy, type PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
 import {
   conceptoDeLaCita,
   cuerpoNotaCobroHoy,
@@ -167,7 +169,50 @@ function CuerpoCobrarHoy({
     return () => { vivo = false; };
   }, [cita?.motivo]);
 
+  // ws1-t12 · fase 2: con un plan de tratamiento que tiene (o debe tener) nota de cobro, lo de hoy es un
+  // ABONO a esa nota, no una factura nueva (decisión de Rafael, 20-oct-2026). Sin permiso para ver
+  // planes o dinero, o sin planes con filas, la hoja es la de siempre.
+  const [planes, setPlanes] = useState<PlanConCuenta[] | null>(null);
+  const [modo, setModo] = useState<ModoCobroHoy>("nota_nueva");
+  const [planElegido, setPlanElegido] = useState<string | null>(null);
+  const modoTocado = useRef(false);
+  const [confirmaFuera, setConfirmaFuera] = useState(false);
+  // Si no se pudo saber (error, sin permiso), no se cobra a ciegas: se avisa y se pide confirmar.
+  const [planesError, setPlanesError] = useState(false);
+  const leerPlanes = async (): Promise<PlanConCuenta[] | null> => {
+    try {
+      const r = await fetch(`/api/treatments/cuentas?patientId=${encodeURIComponent(patientId)}`);
+      const d = r.ok ? await r.json() : null;
+      return Array.isArray(d?.planes) ? (d.planes as PlanConCuenta[]) : null;
+    } catch {
+      return null;
+    }
+  };
+  useEffect(() => {
+    let vivo = true;
+    leerPlanes().then((leida) => {
+      if (!vivo) return;
+      const lista = leida ?? [];
+      setPlanesError(leida === null);
+      setPlanes(lista);
+      if (modoTocado.current) return;
+      const inicial = modoInicialCobroHoy(lista);
+      setModo(inicial.modo);
+      setPlanElegido(inicial.planId);
+    });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId]);
+  const opcionesPlan = (planes ?? []).filter((p) => p.conFilas && (p.saldo > 0.005 || (p.porFacturar > 0.005 && p.notas.length === 0 && p.estado !== "ABANDONED")));
+  const planSel = opcionesPlan.find((p) => p.planId === planElegido) ?? null;
+  const elegir = (m: ModoCobroHoy, planId: string | null) => { modoTocado.current = true; setModo(m); setPlanElegido(planId); };
+
   const conceptos: ConceptoCobroHoy[] = lineas.map((l) => ({ nombre: l.nombre, importe: l.texto === "" ? NaN : Number(l.texto), procedureId: l.procedureId }));
+  // Conceptos de la nota nueva que ya son de un plan: cobrarlos aparte sería cobrarlos dos veces.
+  const yaDelPlan = planes && nota === null ? conceptosQueYaSonDelPlan(conceptos, planes) : [];
+  // Mientras no se sabe si el paciente tiene plan, no se cobra (revisión, hallazgo 2): la nota nueva
+  // podría ser lo que su nota del plan ya cobra.
+  const bloqueoDelPlan = nota === null && (planes === null || ((yaDelPlan.length > 0 || planesError) && !confirmaFuera));
   // Mientras no se toque, «paga hoy» sigue al total: lo normal es que pague todo.
   // Sin "billing.charge" el pago es 0: solo se crea el cargo (revisión ws1-t1, fallo 1).
   const vista = vistaCobroHoy({ conceptos, puedeCobrar, pagoTocado, pago, clinicTaxMode });
@@ -184,7 +229,7 @@ function CuerpoCobrarHoy({
   const ponLinea = (key: string, cambio: Partial<Linea>) => setLineas((prev) => prev.map((l) => (l.key === key ? { ...l, ...cambio } : l)));
 
   async function guardar(sinAvisoCaja?: unknown) {
-    if (guardando || vista.falta) return;
+    if (guardando || vista.falta || bloqueoDelPlan) return;
     // C-15: transferencia sin referencia no (misma regla que el anticipo recibido).
     if (pagoEfectivo > 0 && metodo === "transfer" && !referencia.trim()) {
       toast.error(textosDinero(locale).cobro.faltaReferencia);
@@ -280,6 +325,53 @@ function CuerpoCobrarHoy({
 
   const titulo = patientName ? t("cobrarHoy.tituloCon", { patient: patientName }) : t("cobrarHoy.titulo");
 
+  // «¿Qué se cobra hoy?»: abono a un plan (o crear su nota) u otra cosa (la nota nueva de siempre).
+  const selector = opcionesPlan.length > 0 && nota === null && !hecho ? (
+    <div className={c.bloque} role="radiogroup" aria-label={t("planTratamiento.cobro.queSeCobra")} data-cobrar-hoy-modo>
+      <h3 className={c.bloqueTitulo}>{t("planTratamiento.cobro.queSeCobra")}</h3>
+      <div className={h.opciones}>
+        {opcionesPlan.map((p) => {
+          const m: ModoCobroHoy = p.saldo > 0.005 ? "abono" : "nota_del_plan";
+          const activo = modo === m && planElegido === p.planId;
+          return (
+            <button key={p.planId} type="button" role="radio" aria-checked={activo} className={`${c.metodo} ${activo ? c.metodoActivo : ""}`}
+              onClick={() => elegir(m, p.planId)} disabled={guardando} data-cobrar-hoy-plan={p.planId}>
+              {m === "abono"
+                ? t("planTratamiento.cobro.opcionAbono", { plan: p.nombre, saldo: fmtMXNdec(p.saldo) })
+                : t("planTratamiento.cobro.opcionNota", { plan: p.nombre, monto: fmtMXNdec(p.porFacturar) })}
+            </button>
+          );
+        })}
+        <button type="button" role="radio" aria-checked={modo === "nota_nueva"} className={`${c.metodo} ${modo === "nota_nueva" ? c.metodoActivo : ""}`}
+          onClick={() => elegir("nota_nueva", null)} disabled={guardando} data-cobrar-hoy-otra>
+          {t("planTratamiento.cobro.opcionOtra")}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  if (modo !== "nota_nueva" && planSel) {
+    return (
+      <AbonoAlPlan
+        key={`${planSel.planId}:${modo}`}
+        titulo={titulo}
+        plan={planSel}
+        modo={modo}
+        puedeCobrar={puedeCobrar}
+        puedeEnviarComprobante={puedeEnviarComprobante}
+        releer={async () => {
+          const lista = await leerPlanes();
+          if (lista) setPlanes(lista);
+          return lista?.find((p) => p.planId === planSel.planId) ?? null;
+        }}
+        ocupado={ocupado}
+        onClose={onClose}
+        onListo={onListo}
+        selector={selector}
+      />
+    );
+  }
+
   if (hecho) {
     return (
       <>
@@ -321,6 +413,7 @@ function CuerpoCobrarHoy({
 
       <div className={c.cuerpo}>
         <p className={c.ayuda}>{t("cobrarHoy.intro")}</p>
+        {selector}
         {/* ws1-t5 (F10): presupuesto aceptado con conceptos sin cargar → no cobrarlo dos veces. */}
         {nota === null && <AvisoPresupuestoPorCargar patientId={patientId} />}
 
@@ -533,6 +626,38 @@ function CuerpoCobrarHoy({
           </div>
         </div>
 
+        {/* ws1-t12 · fase 2: no se pudo comprobar el plan del paciente: confirmar antes de cobrar aparte. */}
+        {planesError && nota === null && yaDelPlan.length === 0 && (
+          <div className={`${c.aviso} ${c.avisoAlerta}`} role="alert" data-cobrar-hoy-plan-sin-leer>
+            <span>{t("planTratamiento.cobro.planSinLeer")}</span>
+            <label className={c.casilla}>
+              <input type="checkbox" checked={confirmaFuera} onChange={(e) => setConfirmaFuera(e.target.checked)} disabled={guardando} />
+              <span>{t("planTratamiento.cobro.esOtro")}</span>
+            </label>
+          </div>
+        )}
+        {/* ws1-t12 · fase 2: lo que ya es de un plan se abona a su nota; aparte, solo si es OTRO procedimiento. */}
+        {yaDelPlan.length > 0 && (
+          <div className={`${c.aviso} ${c.avisoAlerta}`} role="alert" data-cobrar-hoy-ya-del-plan>
+            <span>
+              {t("planTratamiento.cobro.yaDelPlan", {
+                conceptos: yaDelPlan.map((x) => conceptos[x.indice]?.nombre).filter(Boolean).join(", "),
+                plan: Array.from(new Set(yaDelPlan.map((x) => x.plan))).join(", "),
+              })}
+            </span>
+            {opcionesPlan.length > 0 && (
+              <button type="button" className={`${c.enlace} ${h.enlaceAviso}`} disabled={guardando}
+                onClick={() => { const p = opcionesPlan[0]; elegir(p.saldo > 0.005 ? "abono" : "nota_del_plan", p.planId); }}>
+                {t("planTratamiento.cobro.irAlAbono")}
+              </button>
+            )}
+            <label className={c.casilla}>
+              <input type="checkbox" checked={confirmaFuera} onChange={(e) => setConfirmaFuera(e.target.checked)} disabled={guardando} data-cobrar-hoy-confirma-fuera />
+              <span>{t("planTratamiento.cobro.esOtro")}</span>
+            </label>
+          </div>
+        )}
+
         {vista.falta && lineas.length > 0 && (
           <p className={`${c.ayuda} ${c.cifraPeligro}`} role="alert">
             {t(LLAVE_FALTA[vista.falta], { total: fmtMXNdec(vista.total) })}
@@ -561,7 +686,7 @@ function CuerpoCobrarHoy({
         <ButtonNew variant="ghost" onClick={onClose} disabled={guardando}>
           {nota ? t("cobrarHoy.cerrar") : t("common.cancel")}
         </ButtonNew>
-        <ButtonNew variant="primary" onClick={() => guardar()} disabled={guardando || vista.falta !== null}>
+        <ButtonNew variant="primary" onClick={() => guardar()} disabled={guardando || vista.falta !== null || bloqueoDelPlan}>
           {guardando ? t("cobrarHoy.guardando") : (
             <>
               <Check size={14} aria-hidden />{" "}

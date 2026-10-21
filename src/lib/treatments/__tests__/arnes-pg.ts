@@ -38,7 +38,8 @@ export const DDL_BASE = `
   CREATE TABLE "clinics" ("id" text PRIMARY KEY, "name" text, "cfdiTaxMode" text, "timezone" text, "locale" text);
   CREATE TABLE "users" ("id" text PRIMARY KEY, "clinicId" text, "role" text, "firstName" text, "lastName" text, "isActive" boolean NOT NULL DEFAULT true, "agendaActive" boolean NOT NULL DEFAULT true);
   CREATE TABLE "patients" ("id" text PRIMARY KEY, "clinicId" text NOT NULL, "firstName" text, "lastName" text, "primaryDoctorId" text);
-  CREATE TABLE "appointments" ("id" text PRIMARY KEY, "clinicId" text);
+  CREATE TABLE "appointments" ("id" text PRIMARY KEY, "clinicId" text, "patientId" text);
+  CREATE TABLE "medical_records" ("id" text PRIMARY KEY, "clinicId" text NOT NULL, "patientId" text NOT NULL, "specialtyData" jsonb);
   CREATE TABLE "procedure_catalog" ("id" text PRIMARY KEY, "clinicId" text NOT NULL, "name" text NOT NULL, "basePrice" float8 NOT NULL DEFAULT 0, "isActive" boolean NOT NULL DEFAULT true);
   CREATE TABLE "treatment_plans" (
     "id" text PRIMARY KEY, "clinicId" text NOT NULL REFERENCES "clinics"("id") ON DELETE CASCADE,
@@ -126,6 +127,7 @@ const TABLAS: Record<string, string> = {
   clinic: "clinics",
   patient: "patients",
   user: "users",
+  appointment: "appointments",
 };
 const JSONB = new Set(["items"]);
 const ENUMS: Record<string, Record<string, string>> = {

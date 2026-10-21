@@ -270,6 +270,8 @@ export interface FacturaDeLaCuenta {
   status: string;
   total: number;
   paid: number;
+  /** ISO. Para abonar de la más vieja a la más nueva («Cobrar hoy»). */
+  createdAt?: string;
 }
 
 export interface CuentaDelPlan {

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { cuerpoPlanConNota } from "@/lib/treatments/borrar-plan";
+import { notasQueImpidenBorrar } from "@/lib/treatments/borrar-plan.server";
 import { consumeFefoTx, esErrorDeLotesNoAplicados, InsufficientStockError } from "@/lib/inventory/lots.server";
 import { consumeRecipeForSession } from "@/lib/inventory/recipe.server";
 import { aPesos, conProcedimientosValidos, filaDto, leerFilas, planearCambios, totalCentavos, type FilaDelPlan, type FilaEntrante } from "@/lib/treatments/items";
@@ -341,7 +343,15 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   if (ctx.isDoctor && plan.doctorId !== ctx.userId) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
-  await prisma.treatmentPlan.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+  // ws1-t12 · fase 2: con nota de cobro no se borra (lib/treatments/borrar-plan.ts); se cancela. Con
+  // el plan bloqueado: «Aceptar el plan» en otra pestaña no cuela su nota entre la comprobación y el borrado.
+  const notas = await prisma.$transaction(async (tx) => {
+    await bloquearPlan(tx, ctx.clinicId, params.id);
+    const conNota = await notasQueImpidenBorrar(ctx.clinicId, params.id, tx);
+    if (conNota.length === 0) await tx.treatmentPlan.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+    return conNota;
+  }, { maxWait: 10_000, timeout: 15_000 });
+  if (notas.length > 0) return NextResponse.json(cuerpoPlanConNota(notas), { status: 409 });
 
   // NOM-024 §6.3.5 — bitácora: borrado del plan de tratamiento.
   await logMutation({

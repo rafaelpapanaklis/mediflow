@@ -9,8 +9,8 @@
  *  · si no (API de antes de P2, o el SQL de filas sin aplicar), ignora `items` y guarda el texto:
  *    el plan queda como hoy, sin error. El lector dual de t12 lee filas si hay y texto si no.
  *
- * «Guardar y presentar» llama a P4 de t12 en `RUTA_PRESENTAR`. Mientras no exista (404), el botón
- * dice «Pronto».
+ * «Guardar y presentar» llama a P4 de t12 en `RUTA_PRESENTAR` (ws1-t12 · fase 2: ya existe,
+ * `api/treatments/[id]/presentar`). Si una versión sin esa ruta contesta 404, el botón dice «Pronto».
  */
 import { CLAVE_DE_CODIGO, type CodigoDeFila, type FilaDto } from "@/lib/treatments/items";
 import type { FilaParaGuardar } from "./armar-plan";
@@ -95,7 +95,8 @@ export async function guardarPlan(a: AltaDePlan, f: Fetch = fetch): Promise<Resu
     ok: true,
     status: res.status,
     plan: data as ResultadoGuardar["plan"],
-    modo: Array.isArray(data.items) ? "filas" : "texto",
+    // La API de P2 contesta `items: []` también cuando NO guardó filas (sin el SQL): lo dice `filasGuardadas`.
+    modo: data.filasGuardadas === true || (data.filasGuardadas === undefined && Array.isArray(data.items) && data.items.length > 0) ? "filas" : "texto",
   };
 }
 

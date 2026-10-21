@@ -74,6 +74,8 @@ import { citaParaReagendar, doctorParaNuevoPlan, dtoParaMoverCita, prellenadoDeN
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { CODIGO_PLAN_CON_NOTA } from "@/lib/treatments/borrar-plan";
+import { useCuentasDelPaciente } from "@/components/dashboard/expediente-rediseno/cuenta-del-plan";
 import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm }          from "@/components/clinical/dental-form";
@@ -607,6 +609,10 @@ export function PatientDetailClient({
   useEffect(() => {
     setPlanesRecienCreados((prev) => purgarRecienCreados(planesDelServidor, prev));
   }, [planesDelServidor]);
+  // ws1-t12 · fase 2: la cuenta de cada plan (total, abonado, saldo), solo para quien ve dinero. Se
+  // relee al cambiar los planes, al cobrar y al marcar hechos (`refrescoCuentas`).
+  const [refrescoCuentas, setRefrescoCuentas] = useState(0);
+  const cuentasDePlanes = useCuentasDelPaciente(patient.id, canViewBilling && treatments.length > 0, `${treatments.length}:${refrescoCuentas}:${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -923,6 +929,12 @@ export function PatientDetailClient({
       const res = await fetch(`/api/treatments/${plan.id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        // ws1-t12 · fase 2: un plan con nota de cobro no se borra (la nota y sus pagos se quedarían
+        // sin plan); se ofrece cancelarlo, que lo saca de los activos y deja la nota como está.
+        if (res.status === 409 && data.code === CODIGO_PLAN_CON_NOTA) {
+          await ofrecerCancelarPlan(plan, Array.isArray(data.notas) ? data.notas : []);
+          return;
+        }
         throw new Error(data.error ?? t("patients.deleteTreatment.failed"));
       }
       toast.success(t("patients.deleteTreatment.success"));
@@ -930,6 +942,32 @@ export function PatientDetailClient({
       router.refresh();
     } catch (err: any) {
       toast.error(mensajeDeError(err, t, { porDefecto: t("patients.toast.deleteError") }));
+    }
+  }
+
+  async function ofrecerCancelarPlan(plan: { id: string; name: string }, notas: string[]) {
+    const cancelar = await confirmar({
+      title: t("planTratamiento.cobro.noBorrarTitulo"),
+      description: t("planTratamiento.cobro.noBorrarTexto", { name: plan.name, folios: notas.join(", ") || "—" }),
+      confirmText: t("planTratamiento.cobro.noBorrarCancelar"),
+      cancelText: t("planTratamiento.cobro.noBorrarVolver"),
+      variant: "warning",
+    });
+    if (!cancelar) return;
+    try {
+      const res = await fetch(`/api/treatments/${plan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ABANDONED" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? t("patients.treatment.updateFailed"));
+      }
+      toast.success(t("planTratamiento.cobro.planCancelado", { name: plan.name }));
+      router.refresh();
+    } catch (err: any) {
+      toast.error(mensajeDeError(err, t, { porDefecto: t("patients.treatment.updateFailed") }));
     }
   }
 
@@ -1789,9 +1827,12 @@ export function PatientDetailClient({
       // la cita recién completada hasta recargar. El servidor ya la cerró: se pinta al momento, como al cancelar.
       marcarEstadoDeCita(activeAppointment.id, "COMPLETED");
       setCitaTerminada(activeAppointment.id);
-      // Si el server detectó tratamientos, abrir el modal de facturación.
+      // Si el server detectó tratamientos, abrir el modal de facturación. ws1-t12 · fase 2 («Hoy en el
+      // sillón»): también con un plan activo, para marcar lo que se hizo de él (el modal lee sus filas
+      // y se cierra solo si no hay nada que decidir).
       const suggested: SuggestedTreatment[] = data.suggestedTreatments ?? [];
-      if (suggested.length > 0) {
+      const conPlanActivo = canViewTreatments && treatments.some((p: any) => p.status === "ACTIVE");
+      if (suggested.length > 0 || conPlanActivo) {
         setTreatmentsModal({
           open: true,
           appointmentId: activeAppointment.id,
@@ -1809,7 +1850,7 @@ export function PatientDetailClient({
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : window.location.pathname);
     router.refresh();
-  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router, orthoData?.plan?.id, orthoRedesignVM?.treatmentCards, textosFirma, marcarEstadoDeCita]);
+  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router, orthoData?.plan?.id, orthoRedesignVM?.treatmentCards, textosFirma, marcarEstadoDeCita, canViewTreatments, treatments]);
 
   // ws1-t8 (ticket BEVADENT, punto 3): firmar la hoja de control de la cita en curso YA cerró la cita y su nota
   // (la hoja adoptó el borrador de esta consulta). La consulta se cierra aquí sin volver a pedir nota.
@@ -2805,6 +2846,9 @@ export function PatientDetailClient({
                   <PlanTratamientoRediseno
                     tratamientos={treatments}
                     puedeEditar={canEditTreatments}
+                    cuentas={canViewBilling ? cuentasDePlanes.cuentas : undefined}
+                    cargandoCuentas={cuentasDePlanes.cargando}
+                    onCobrarPlan={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
                     onNuevo={() => setShowNewTreatment(true)}
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}
@@ -3755,6 +3799,10 @@ export function PatientDetailClient({
           setTreatmentsModal((m) => ({ ...m, open: false }));
           router.refresh();
         }}
+        patientId={canViewTreatments ? patient.id : undefined}
+        puedeMarcarHecho={canEditTreatments}
+        onCobrarHoy={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
+        onHechos={() => { setRefrescoCuentas((n) => n + 1); router.refresh(); }}
       />
 
       {/* Eliminar paciente — archivar (seguro) vs. borrado definitivo. */}
@@ -3989,6 +4037,7 @@ export function PatientDetailClient({
         onCobrarPendientes={() => { setCobrarHoyAbierto(false); openChargeShortcut(); }}
         // C-14 (auditoría de uso): la nota nueva entra a la lista al instante (sin esperar al refresco).
         onListo={(nota) => {
+          setRefrescoCuentas((n) => n + 1);
           fetch(`/api/invoices/${nota.id}`)
             .then((r) => (r.ok ? r.json() : null))
             .then((f) => { if (f?.id) setInvoices((prev: any[]) => (prev.some((i: any) => i.id === f.id) ? prev.map((i: any) => (i.id === f.id ? { ...i, ...f } : i)) : [f, ...prev])); })

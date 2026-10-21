@@ -395,10 +395,13 @@ export async function leerCuentaDelPlan(args: { clinicId: string; planId: string
     ? (
         await prisma.invoice.findMany({
           where: { clinicId, id: { in: Array.from(ids) }, status: { not: "CANCELLED" } },
-          select: { id: true, invoiceNumber: true, status: true, total: true, paid: true },
+          select: { id: true, invoiceNumber: true, status: true, total: true, paid: true, createdAt: true },
           orderBy: { createdAt: "asc" },
         })
-      ).map((f) => ({ id: f.id, invoiceNumber: f.invoiceNumber, status: f.status, total: Number(f.total) || 0, paid: Number(f.paid) || 0 }))
+      ).map((f) => ({
+        id: f.id, invoiceNumber: f.invoiceNumber, status: f.status, total: Number(f.total) || 0, paid: Number(f.paid) || 0,
+        createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : String(f.createdAt ?? ""),
+      }))
     : [];
   // Plan con filas: lo que falta por facturar son las filas sin nota viva (a su precio), y el total es
   // lo facturado más eso — así un descuento firmado no sale como «por facturar» (revisión ws1-t12).

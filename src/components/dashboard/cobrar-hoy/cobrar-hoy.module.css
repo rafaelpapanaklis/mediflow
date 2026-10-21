@@ -19,3 +19,10 @@
 .enlaceAviso {
   align-self: flex-start;
 }
+
+/* ws1-t12 · fase 2: «¿Qué se cobra hoy?» — abono a un plan u otra cosa, una opción por renglón. */
+.opciones {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}

@@ -675,6 +675,36 @@
 }
 .treatmentsCreate:hover:not(:disabled) { background: var(--violet-700); }
 .treatmentsCreate:disabled { opacity: 0.5; cursor: not-allowed; }
+/* «Hoy en el sillón» (ws1-t12 · fase 2): lo del plan se marca hecho y se abona; no se factura aquí. */
+.hoyPlan {
+  flex: 0 1 auto;
+  display: flex; flex-direction: column; gap: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.hoyPlanTitulo {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0;
+  font-size: 12px; font-weight: 700;
+  color: var(--text-1);
+}
+.hoyPlanTitulo svg { color: var(--brand); }
+.hoyPlanLista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.hoyPlanFila {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+.hoyPlanFila input { width: 16px; height: 16px; accent-color: var(--brand); flex-shrink: 0; }
+.hoyPlanDato { color: var(--text-3); font-size: 11px; overflow-wrap: anywhere; }
+.hoyPlanImporte { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-2); font-weight: 600; }
+.hoyPlanAcciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.hoyFuera { padding: 10px 18px 0; }
+.treatmentsFoot { flex-wrap: wrap; }
+.treatmentsTablaCaja { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 @media (max-width: 1024px) {
   /* `:not([hidden])` y no `.mobileTabBar` a secas: el rediseño de Pacientes
      apaga esta tira poniéndole `hidden`, y un `display: flex` de clase pura
