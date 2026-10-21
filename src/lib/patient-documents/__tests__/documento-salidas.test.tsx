@@ -250,6 +250,7 @@ describe("el aviso de faltantes es uno solo", () => {
 describe("piezas sueltas", () => {
   it("htmlABloques entiende la lista blanca del saneado y decodifica entidades", () => {
     const b = htmlABloques("<p>a &amp; b &lt;c&gt;<br>d</p><ul><li>uno<ul><li>dentro</li></ul></li></ul>suelto");
+    assert.ok(b[0].tipo === "parrafo");
     assert.equal(b[0].tramos.map((t) => t.texto).join(""), "a & b <c>\nd");
     assert.deepEqual(b.slice(1).map((x) => (x.tipo === "item" ? [x.marca, x.nivel] : x.tipo)), [["•", 0], ["•", 1], "parrafo"]);
     assert.deepEqual(htmlABloques("<p><br></p>"), []);
