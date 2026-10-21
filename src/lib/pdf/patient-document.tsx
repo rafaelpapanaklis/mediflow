@@ -53,6 +53,8 @@ export interface PatientDocumentProps extends ClinicLetterheadClinic {
 const ACCENT = "#7c3aed";
 const TINTA = "#14101f";
 const GRIS = "#6b6b78";
+/** El fondo de las celdas de encabezado: el acento muy rebajado, como en la hoja. */
+const FONDO_ENCABEZADO = "#f1eff8";
 
 const styles = StyleSheet.create({
   // Márgenes de carta: 56 pt a los lados dejan 500 pt de renglón; el cuerpo se
@@ -87,6 +89,20 @@ const styles = StyleSheet.create({
   itemMark: { width: 16 },
   itemText: { flex: 1 },
 
+  // Lo del editor nuevo. Un respaldo legible: el PDF fiel lo hará Chromium con la misma hoja.
+  tabla: { marginBottom: 10, borderTopWidth: 0.7, borderLeftWidth: 0.7, borderColor: GRIS },
+  tablaFila: { flexDirection: "row" },
+  tablaCelda: { borderRightWidth: 0.7, borderBottomWidth: 0.7, borderColor: GRIS, paddingVertical: 3, paddingHorizontal: 5 },
+  tablaEncabezado: { backgroundColor: FONDO_ENCABEZADO },
+  columnas: { flexDirection: "row", gap: 16, marginBottom: 8 },
+  columna: { flex: 1 },
+  imagen: {
+    height: 64, marginVertical: 6, borderWidth: 0.7, borderStyle: "dashed", borderColor: GRIS,
+    justifyContent: "center", alignItems: "center", paddingHorizontal: 8,
+  },
+  imagenTexto: { fontSize: 8.5, color: GRIS, textAlign: "center" },
+  lineaFirma: { width: 220, marginTop: 30, marginBottom: 10, borderTopWidth: 0.8, borderTopColor: TINTA, paddingTop: 4, fontSize: 9.5 },
+
   signature: { marginTop: 36, width: 260 },
   signatureLine: { borderTopWidth: 0.8, borderTopColor: TINTA, paddingTop: 6 },
   signatureName: { fontSize: 11.5, fontFamily: "Helvetica-Bold", lineHeight: 1.25 },
@@ -110,6 +126,14 @@ function fuente(t: Tramo): string {
   return "Helvetica";
 }
 
+// El editor mide en puntos con 12 de cuerpo; aquí el cuerpo es 10.5.
+const ESCALA_LETRA = 10.5 / 12;
+/** Un paso de sangría del editor (36 px) a la escala del PDF. */
+const PASO_SANGRIA = 24;
+const ALINEACION_PDF = { izquierda: "left", centro: "center", derecha: "right", justificado: "justify" } as const;
+const LADO_PDF = { izquierda: "flex-start", centro: "center", derecha: "flex-end" } as const;
+const ANCHO_IMAGEN = { chico: "33%", medio: "60%", completo: "100%" } as const;
+
 function Tramos({ tramos, negrita }: { tramos: Tramo[]; negrita?: boolean }) {
   return (
     <>
@@ -119,6 +143,7 @@ function Tramos({ tramos, negrita }: { tramos: Tramo[]; negrita?: boolean }) {
           style={{
             fontFamily: fuente(negrita ? { ...t, negrita: true } : t),
             textDecoration: t.subrayado ? "underline" : "none",
+            ...(t.tamano ? { fontSize: t.tamano * ESCALA_LETRA } : {}),
           }}
         >
           {t.texto}
@@ -128,27 +153,97 @@ function Tramos({ tramos, negrita }: { tramos: Tramo[]; negrita?: boolean }) {
   );
 }
 
-function BloquePdf({ bloque }: { bloque: Bloque }) {
+/** `enCelda`: dentro de una celda de tabla, sin el aire de abajo del párrafo; en un encabezado, en negrita. */
+interface EnCelda {
+  enCelda?: "normal" | "encabezado";
+}
+
+function Bloques({ bloques, enCelda }: { bloques: Bloque[] } & EnCelda) {
+  return (
+    <>
+      {bloques.map((b, i) => (
+        <BloquePdf key={i} bloque={b} enCelda={enCelda} />
+      ))}
+    </>
+  );
+}
+
+function BloquePdf({ bloque, enCelda }: { bloque: Bloque } & EnCelda) {
+  const negrita = enCelda === "encabezado";
   if (bloque.tipo === "item") {
     return (
-      <View style={[styles.item, { marginLeft: 6 + bloque.nivel * 16 }]} wrap={false}>
+      <View style={[styles.item, { marginLeft: 6 + bloque.nivel * 16 }, enCelda ? { marginBottom: 1 } : {}]} wrap={false}>
         <Text style={styles.itemMark}>{bloque.marca}</Text>
         <Text style={styles.itemText}>
+          <Tramos tramos={bloque.tramos} negrita={negrita} />
+        </Text>
+      </View>
+    );
+  }
+  if (bloque.tipo === "tabla") {
+    return (
+      <View style={styles.tabla}>
+        {bloque.filas.map((fila, i) => (
+          <View key={i} style={styles.tablaFila} wrap={false}>
+            {fila.map((c, j) => (
+              // rowspan no se reproduce aquí: la celda ocupa su fila. El PDF fiel (Chromium) sí lo hace.
+              <View key={j} style={[styles.tablaCelda, { flex: c.colspan }, c.encabezado ? styles.tablaEncabezado : {}]}>
+                <Bloques bloques={c.bloques} enCelda={c.encabezado ? "encabezado" : "normal"} />
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }
+  if (bloque.tipo === "columnas") {
+    return (
+      <View style={styles.columnas}>
+        {bloque.columnas.map((col, i) => (
+          <View key={i} style={styles.columna}>
+            <Bloques bloques={col} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+  if (bloque.tipo === "imagen") {
+    // Hueco con su descripción: @react-pdf no lee webp y el respaldo no puede fallar por una foto.
+    return (
+      <View
+        style={[styles.imagen, { width: ANCHO_IMAGEN[bloque.ancho], alignSelf: LADO_PDF[bloque.alineacion] }]}
+        wrap={false}
+      >
+        <Text style={styles.imagenTexto}>{bloque.alt ? `Imagen: ${bloque.alt}` : "Imagen"}</Text>
+      </View>
+    );
+  }
+  if (bloque.tipo === "firma") {
+    return (
+      <View style={[styles.lineaFirma, { alignSelf: LADO_PDF[bloque.lado] }]} wrap={false}>
+        <Text style={bloque.lado === "centro" ? { textAlign: "center" } : {}}>
           <Tramos tramos={bloque.tramos} />
         </Text>
       </View>
     );
   }
+  if (bloque.tipo === "salto") return <View break />;
+
+  const forma = {
+    ...(bloque.sangria ? { marginLeft: bloque.sangria * PASO_SANGRIA } : {}),
+    ...(bloque.alineacion ? { textAlign: ALINEACION_PDF[bloque.alineacion] } : {}),
+    ...(enCelda ? { marginBottom: 2 } : {}),
+  };
   if (bloque.tipo === "parrafo") {
     return (
-      <Text style={styles.p}>
-        <Tramos tramos={bloque.tramos} />
+      <Text style={[styles.p, forma]}>
+        <Tramos tramos={bloque.tramos} negrita={negrita} />
       </Text>
     );
   }
   return (
     // Un título no se queda solo al pie de la hoja.
-    <Text style={styles[bloque.tipo]} minPresenceAhead={40}>
+    <Text style={[styles[bloque.tipo], forma]} minPresenceAhead={40}>
       <Tramos tramos={bloque.tramos} negrita />
     </Text>
   );
@@ -205,9 +300,7 @@ export function PatientDocument(props: PatientDocumentProps) {
         <View style={styles.rule} />
 
         <View style={styles.body}>
-          {bloques.map((b, i) => (
-            <BloquePdf key={i} bloque={b} />
-          ))}
+          <Bloques bloques={bloques} />
         </View>
 
         <View style={styles.signature} wrap={false}>
